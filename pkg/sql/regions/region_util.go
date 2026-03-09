@@ -87,29 +87,38 @@ func ZoneConfigForMultiRegionTable(
 			return zc, nil
 		}
 
-		numVoters, numReplicas := GetNumVotersAndNumReplicas(regionConfig)
-		zc.NumVoters = &numVoters
-
+		// Use the effective region config for voter constraints: when the
+		// affinity region belongs to a super region with its own survival
+		// goal, the voter constraints must reflect that goal rather than the
+		// database-level one.
+		effectiveRegionConfig := regionConfig
 		if regionConfig.IsMemberOfSuperRegion(affinityRegion) {
 			err := AddConstraintsForSuperRegion(&zc, regionConfig, affinityRegion)
 			if err != nil {
 				return zonepb.ZoneConfig{}, err
 			}
-		} else if !regionConfig.RegionalInTablesInheritDatabaseConstraints(affinityRegion) {
-			// If the database constraints can't be inherited to serve as the
-			// constraints for this table, define the constraints ourselves.
-			zc.NumReplicas = &numReplicas
+			effectiveGoal := regionConfig.EffectiveSurvivalGoalForRegion(affinityRegion)
+			regions, _ := regionConfig.GetSuperRegionRegionsForRegion(affinityRegion)
+			effectiveRegionConfig = regionConfig.WithRegions(regions)
+			effectiveRegionConfig = effectiveRegionConfig.WithSurvivalGoal(effectiveGoal)
+		} else {
+			numVoters, numReplicas := GetNumVotersAndNumReplicas(regionConfig)
+			zc.NumVoters = &numVoters
+			if !regionConfig.RegionalInTablesInheritDatabaseConstraints(affinityRegion) {
+				// If the database constraints can't be inherited to serve as the
+				// constraints for this table, define the constraints ourselves.
+				zc.NumReplicas = &numReplicas
 
-			constraints, err := SynthesizeReplicaConstraints(regionConfig.Regions(), regionConfig.Placement())
-			if err != nil {
-				return zonepb.ZoneConfig{}, err
+				constraints, err := SynthesizeReplicaConstraints(regionConfig.Regions(), regionConfig.Placement())
+				if err != nil {
+					return zonepb.ZoneConfig{}, err
+				}
+				zc.Constraints = constraints
+				zc.InheritedConstraints = false
 			}
-			zc.Constraints = constraints
-			zc.InheritedConstraints = false
 		}
 
-		// If the table has a user-specified affinity region, use it.
-		voterConstraints, err := SynthesizeVoterConstraints(affinityRegion, regionConfig)
+		voterConstraints, err := SynthesizeVoterConstraints(affinityRegion, effectiveRegionConfig)
 		if err != nil {
 			return zonepb.ZoneConfig{}, err
 		}
@@ -152,25 +161,34 @@ func ZoneConfigForMultiRegionPartition(
 ) (zonepb.ZoneConfig, error) {
 	zc := *zonepb.NewZoneConfig()
 
-	numVoters, numReplicas := GetNumVotersAndNumReplicas(regionConfig)
-	zc.NumVoters = &numVoters
-
+	// Use the effective region config for voter constraints: when the
+	// partition region belongs to a super region with its own survival
+	// goal, the voter constraints must reflect that goal.
+	effectiveRegionConfig := regionConfig
 	if regionConfig.IsMemberOfSuperRegion(partitionRegion) {
 		err := AddConstraintsForSuperRegion(&zc, regionConfig, partitionRegion)
 		if err != nil {
 			return zonepb.ZoneConfig{}, err
 		}
-	} else if !regionConfig.RegionalInTablesInheritDatabaseConstraints(partitionRegion) {
-		// If the database constraints can't be inherited to serve as the
-		// constraints for this partition, define the constraints ourselves.
-		zc.NumReplicas = &numReplicas
+		effectiveGoal := regionConfig.EffectiveSurvivalGoalForRegion(partitionRegion)
+		regions, _ := regionConfig.GetSuperRegionRegionsForRegion(partitionRegion)
+		effectiveRegionConfig = regionConfig.WithRegions(regions)
+		effectiveRegionConfig = effectiveRegionConfig.WithSurvivalGoal(effectiveGoal)
+	} else {
+		numVoters, numReplicas := GetNumVotersAndNumReplicas(regionConfig)
+		zc.NumVoters = &numVoters
+		if !regionConfig.RegionalInTablesInheritDatabaseConstraints(partitionRegion) {
+			// If the database constraints can't be inherited to serve as the
+			// constraints for this partition, define the constraints ourselves.
+			zc.NumReplicas = &numReplicas
 
-		constraints, err := SynthesizeReplicaConstraints(regionConfig.Regions(), regionConfig.Placement())
-		if err != nil {
-			return zonepb.ZoneConfig{}, err
+			constraints, err := SynthesizeReplicaConstraints(regionConfig.Regions(), regionConfig.Placement())
+			if err != nil {
+				return zonepb.ZoneConfig{}, err
+			}
+			zc.Constraints = constraints
+			zc.InheritedConstraints = false
 		}
-		zc.Constraints = constraints
-		zc.InheritedConstraints = false
 	}
 
 	// For partitions that are confined to a super region, the secondary region
@@ -178,7 +196,7 @@ func ZoneConfigForMultiRegionPartition(
 	// outside the super region, because all replicas are confined to the super
 	// region. We clear the secondary region for both.
 	secondaryOutside := SecondaryRegionOutsideSuperRegion(partitionRegion, regionConfig)
-	voterConstraints, err := SynthesizeVoterConstraints(partitionRegion, regionConfig)
+	voterConstraints, err := SynthesizeVoterConstraints(partitionRegion, effectiveRegionConfig)
 	if err != nil {
 		return zonepb.ZoneConfig{}, err
 	}
@@ -849,7 +867,16 @@ func AddConstraintsForSuperRegion(
 	if !ok {
 		return errors.AssertionFailedf("region %s is not part of a super region", affinityRegion)
 	}
+	// Scope to the super region's regions AND its effective survival goal.
+	effectiveGoal := regionConfig.EffectiveSurvivalGoalForRegion(affinityRegion)
 	srConfig := regionConfig.WithRegions(regions)
+	srConfig = srConfig.WithSurvivalGoal(effectiveGoal)
+	// Clear the secondary region if it's not a member of this super region,
+	// so that GetNumVotersAndNumReplicas does not inflate the replica count
+	// for a region that has no constraint target.
+	if SecondaryRegionOutsideSuperRegion(affinityRegion, regionConfig) {
+		srConfig = srConfig.WithoutSecondaryRegion()
+	}
 	numVoters, numReplicas := GetNumVotersAndNumReplicas(srConfig)
 
 	// If a zone config extension will override num_replicas, use the
@@ -876,6 +903,7 @@ func AddConstraintsForSuperRegion(
 	}
 
 	zc.NumReplicas = &numReplicas
+	zc.NumVoters = &numVoters
 
 	var minAffinity int32
 	if srConfig.SurvivalGoal() == descpb.SurvivalGoal_ZONE_FAILURE {

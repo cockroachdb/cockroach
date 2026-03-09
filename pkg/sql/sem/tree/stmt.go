@@ -414,6 +414,21 @@ func (*AlterDatabaseAlterSuperRegion) StatementTag() string {
 func (*AlterDatabaseAlterSuperRegion) hiddenFromShowQueries() {}
 
 // StatementReturnType implements the Statement interface.
+func (*AlterDatabaseAlterSuperRegionSurvivalGoal) StatementReturnType() StatementReturnType {
+	return DDL
+}
+
+// StatementType implements the Statement interface.
+func (*AlterDatabaseAlterSuperRegionSurvivalGoal) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterDatabaseAlterSuperRegionSurvivalGoal) StatementTag() string {
+	return "ALTER DATABASE"
+}
+
+func (*AlterDatabaseAlterSuperRegionSurvivalGoal) hiddenFromShowQueries() {}
+
+// StatementReturnType implements the Statement interface.
 func (*AlterDatabaseSecondaryRegion) StatementReturnType() StatementReturnType { return DDL }
 
 // StatementType implements the Statement interface.
@@ -2577,23 +2592,26 @@ func (*AlterFunctionDepExtension) StatementType() StatementType { return TypeDDL
 // StatementTag returns a short string identifying the type of statement.
 func (*AlterFunctionDepExtension) StatementTag() string { return "ALTER FUNCTION" }
 
-func (n *AlterChangefeed) String() string                     { return AsString(n) }
-func (n *AlterChangefeedCmds) String() string                 { return AsString(n) }
-func (n *AlterBackup) String() string                         { return AsString(n) }
-func (n *AlterBackupSchedule) String() string                 { return AsString(n) }
-func (n *AlterBackupScheduleCmds) String() string             { return AsString(n) }
-func (n *AlterIndex) String() string                          { return AsString(n) }
-func (n *AlterIndexVisible) String() string                   { return AsString(n) }
-func (n *AlterJobOwner) String() string                       { return AsString(n) }
-func (n *AlterDatabaseOwner) String() string                  { return AsString(n) }
-func (n *AlterDatabaseAddRegion) String() string              { return AsString(n) }
-func (n *AlterDatabaseDropRegion) String() string             { return AsString(n) }
-func (n *AlterDatabaseSurvivalGoal) String() string           { return AsString(n) }
-func (n *AlterDatabasePlacement) String() string              { return AsString(n) }
-func (n *AlterDatabasePrimaryRegion) String() string          { return AsString(n) }
-func (n *AlterDatabaseAddSuperRegion) String() string         { return AsString(n) }
-func (n *AlterDatabaseDropSuperRegion) String() string        { return AsString(n) }
-func (n *AlterDatabaseAlterSuperRegion) String() string       { return AsString(n) }
+func (n *AlterChangefeed) String() string               { return AsString(n) }
+func (n *AlterChangefeedCmds) String() string           { return AsString(n) }
+func (n *AlterBackup) String() string                   { return AsString(n) }
+func (n *AlterBackupSchedule) String() string           { return AsString(n) }
+func (n *AlterBackupScheduleCmds) String() string       { return AsString(n) }
+func (n *AlterIndex) String() string                    { return AsString(n) }
+func (n *AlterIndexVisible) String() string             { return AsString(n) }
+func (n *AlterJobOwner) String() string                 { return AsString(n) }
+func (n *AlterDatabaseOwner) String() string            { return AsString(n) }
+func (n *AlterDatabaseAddRegion) String() string        { return AsString(n) }
+func (n *AlterDatabaseDropRegion) String() string       { return AsString(n) }
+func (n *AlterDatabaseSurvivalGoal) String() string     { return AsString(n) }
+func (n *AlterDatabasePlacement) String() string        { return AsString(n) }
+func (n *AlterDatabasePrimaryRegion) String() string    { return AsString(n) }
+func (n *AlterDatabaseAddSuperRegion) String() string   { return AsString(n) }
+func (n *AlterDatabaseDropSuperRegion) String() string  { return AsString(n) }
+func (n *AlterDatabaseAlterSuperRegion) String() string { return AsString(n) }
+func (n *AlterDatabaseAlterSuperRegionSurvivalGoal) String() string {
+	return AsString(n)
+}
 func (n *AlterDatabaseSecondaryRegion) String() string        { return AsString(n) }
 func (n *AlterDatabaseDropSecondaryRegion) String() string    { return AsString(n) }
 func (n *AlterDatabaseSetZoneConfigExtension) String() string { return AsString(n) }
