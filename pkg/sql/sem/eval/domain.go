@@ -48,6 +48,12 @@ func ValidateDomainConstraints(
 // evalDomainCheckConstraint evaluates a single CHECK constraint expression
 // against the given datum. The expression is parsed, VALUE references are
 // substituted with the datum, and the result is evaluated as a boolean.
+//
+// TODO(#27796): this re-parses and type-checks the CHECK expression on every
+// call, which is expensive for bulk INSERT/UPDATE operations. Cache the parsed
+// and type-checked expression (with a placeholder for VALUE) in DomainMetadata
+// during type hydration, so only VALUE substitution and evaluation happen at
+// runtime.
 func evalDomainCheckConstraint(
 	ctx context.Context,
 	evalCtx *Context,

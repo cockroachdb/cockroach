@@ -557,11 +557,32 @@ func (p *planner) createDomainWithID(
 		return err
 	}
 
-	// Build CHECK constraints, serializing expressions as strings.
+	// Build CHECK constraints. Each expression is validated by substituting
+	// VALUE with a typed null of the base type and type-checking as boolean.
+	// This catches invalid expressions (e.g., referencing nonexistent
+	// functions) at CREATE DOMAIN time rather than at INSERT/UPDATE time.
 	checks := make(
 		[]descpb.TypeDescriptor_Domain_CheckConstraint, len(n.DomainConstraints),
 	)
 	for i, c := range n.DomainConstraints {
+		// Validate the CHECK expression by substituting VALUE with a typed
+		// null of the base type and type-checking as boolean.
+		validationExpr, err := tree.SimpleVisit(c.Expr, func(e tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+			if n, ok := e.(*tree.UnresolvedName); ok {
+				if n.NumParts == 1 && strings.EqualFold(n.Parts[0], "value") {
+					return false, tree.NewTypedCastExpr(tree.DNull, baseType), nil
+				}
+			}
+			return true, e, nil
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := tree.TypeCheck(params.ctx, validationExpr, params.p.SemaCtx(), types.Bool); err != nil {
+			return pgerror.Wrapf(err, pgcode.InvalidObjectDefinition,
+				"invalid CHECK expression for domain %s", typeName.Type())
+		}
+
 		name := string(c.Name)
 		if name == "" {
 			name = fmt.Sprintf("%s_check", typeName.Type())
@@ -608,7 +629,12 @@ func (p *planner) createDomainWithID(
 		Privileges: privs,
 	}).BuildCreatedMutableType()
 
-	return p.finishCreateType(params.ctx, params.EvalContext(), typeName, typeDesc, dbDesc, schema)
+	if err := p.finishCreateType(params.ctx, params.EvalContext(), typeName, typeDesc, dbDesc, schema); err != nil {
+		return err
+	}
+	// Install back references to types used by this domain (e.g., if the base
+	// type is a user-defined type like an enum).
+	return p.addBackRefsFromAllTypesInType(params.ctx, typeDesc)
 }
 
 func (p *planner) finishCreateType(

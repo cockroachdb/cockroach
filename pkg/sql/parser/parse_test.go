@@ -410,7 +410,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`DROP CAST a`, 0, `drop cast`, ``},
 		{`DROP COLLATION a`, 0, `drop collation`, ``},
 		{`DROP CONVERSION a`, 0, `drop conversion`, ``},
-		// DROP DOMAIN is now implemented.
 		{`DROP EXTENSION a`, 74777, `drop extension`, ``},
 		{`DROP EXTENSION IF EXISTS a`, 74777, `drop extension if exists`, ``},
 		{`DROP FOREIGN TABLE a`, 0, `drop foreign table`, ``},
@@ -468,8 +467,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TYPE a AS RANGE b`, 27791, ``, ``},
 		{`CREATE TYPE a (b)`, 27793, `base`, ``},
 		{`CREATE TYPE a`, 27793, `shell`, ``},
-		// CREATE DOMAIN is now implemented.
-
 		{`ALTER TYPE db.t RENAME ATTRIBUTE foo TO bar`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
 		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
 		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar COLLATE hello`, 48701, `ALTER TYPE ATTRIBUTE`, ``},

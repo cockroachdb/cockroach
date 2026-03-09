@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -3194,6 +3195,23 @@ func writeCreateTypeDescRow(
 		}
 		node.DomainType = baseType
 		node.DomainNotNull = d.IsNotNull()
+		if defExpr := d.GetDefaultExpr(); defExpr != "" {
+			parsedExpr, err := parserutils.ParseExpr(defExpr)
+			if err != nil {
+				return false, err
+			}
+			node.DomainDefault = parsedExpr
+		}
+		for i := 0; i < d.NumCheckConstraints(); i++ {
+			parsedExpr, err := parserutils.ParseExpr(d.GetCheckConstraintExpr(i))
+			if err != nil {
+				return false, err
+			}
+			node.DomainConstraints = append(node.DomainConstraints, tree.DomainConstraintDef{
+				Name: tree.Name(d.GetCheckConstraintName(i)),
+				Expr: parsedExpr,
+			})
+		}
 	}
 
 	createStatement := tree.AsString(node)

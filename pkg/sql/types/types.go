@@ -1412,7 +1412,11 @@ func NewCompositeType(typeOID, arrayTypeOID oid.Oid, contents []*T, labels []str
 // functions to work on domain values without special-casing.
 func MakeDomain(baseType *T, typeOID, arrayTypeOID oid.Oid) *T {
 	// Copy the internal type from the base type to inherit Family, Width,
-	// Precision, etc.
+	// Precision, etc. This is a shallow copy: pointer fields like Locale,
+	// TupleContents, and ArrayContents are shared with the original. This is
+	// safe for scalar base types (where these fields are nil or package-level
+	// constants), but would need revisiting if domain-of-array or
+	// domain-of-composite is supported in the future.
 	it := baseType.InternalType
 	it.Oid = typeOID
 	it.UDTMetadata = &PersistentUserDefinedTypeMetadata{
