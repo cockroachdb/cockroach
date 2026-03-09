@@ -90,6 +90,11 @@ type OperationSpec struct {
 	// --wait-before-cleanup.
 	WaitBeforeCleanup time.Duration
 
+	// WaitBeforeNextExecution specifies the minimum duration between
+	// consecutive runs of this operation. This overrides the global
+	// --wait-before-next-execution flag. If zero, the global value is used.
+	WaitBeforeNextExecution time.Duration
+
 	// Run is the operation function. It returns an OperationCleanup if this
 	// operation requires additional cleanup steps afterwards (eg. dropping an
 	// extra column that was created). A nil return value indicates no cleanup

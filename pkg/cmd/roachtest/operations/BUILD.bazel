@@ -11,6 +11,7 @@ go_library(
         "backup_restore.go",
         "cancel_job.go",
         "cluster_settings.go",
+        "consistency_checks.go",
         "debug_zip.go",
         "disk_stall.go",
         "grant_revoke_all.go",
