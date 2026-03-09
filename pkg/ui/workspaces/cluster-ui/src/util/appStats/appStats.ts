@@ -270,6 +270,10 @@ export function addStatementStats(
     indexes: indexes,
     latency_info: aggregateLatencyInfo(a, b),
     last_error_code: "",
+    vectorized_count: a.vectorized_count.add(b.vectorized_count),
+    full_scan_count: a.full_scan_count.add(b.full_scan_count),
+    dist_sql_count: a.dist_sql_count.add(b.dist_sql_count),
+    implicit_txn_count: a.implicit_txn_count.add(b.implicit_txn_count),
   };
 }
 

@@ -147,6 +147,18 @@ message StatementStatistics {
   // (ex/ not replication related work).
   optional NumericStat kv_cpu_time_nanos = 38 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVCPUTimeNanos"];
 
+  // vectorized_count is the count of executions that used vectorized execution.
+  optional int64 vectorized_count = 39 [(gogoproto.nullable) = false];
+
+  // full_scan_count is the count of executions that performed a full table or index scan.
+  optional int64 full_scan_count = 40 [(gogoproto.nullable) = false];
+
+  // dist_sql_count is the count of executions that used the distributed SQL engine.
+  optional int64 dist_sql_count = 41 [(gogoproto.nullable) = false, (gogoproto.customname) = "DistSQLCount"];
+
+  // implicit_txn_count is the count of executions that ran in an implicit transaction.
+  optional int64 implicit_txn_count = 42 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
   reserved 13, 14, 17, 18, 19, 20;

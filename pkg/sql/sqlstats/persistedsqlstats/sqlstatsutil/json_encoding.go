@@ -184,6 +184,10 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //		        "usedFollowerRead":  { "type": "boolean" },
 //		        "indexes":           { "type": "indexes" },
 //		        "lastErrorCode":     { "type": "string" },
+//		        "vectorizedCount":   { "type": "number" },
+//		        "fullScanCount":     { "type": "number" },
+//		        "distSQLCount":      { "type": "number" },
+//		        "implicitTxnCount":  { "type": "number" },
 //		      },
 //		      "required": [
 //		        "firstAttemptCnt",

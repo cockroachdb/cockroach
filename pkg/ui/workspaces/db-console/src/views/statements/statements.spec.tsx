@@ -299,6 +299,10 @@ function makeStats(): Required<StatementStatistics> {
     generic_count: Long.fromNumber(0),
     stmt_hints_count: Long.fromNumber(0),
     kv_cpu_time_nanos: makeStat(),
+    vectorized_count: Long.fromNumber(0),
+    full_scan_count: Long.fromNumber(0),
+    dist_sql_count: Long.fromNumber(0),
+    implicit_txn_count: Long.fromNumber(0),
   };
 }
 

@@ -348,6 +348,10 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"failureCount", (*jsonInt)(&s.FailureCount)},
 		{"genericCount", (*jsonInt)(&s.GenericCount)},
 		{"stmtHintsCount", (*jsonInt)(&s.StmtHintsCount)},
+		{"vectorizedCount", (*jsonInt)(&s.VectorizedCount)},
+		{"fullScanCount", (*jsonInt)(&s.FullScanCount)},
+		{"distSQLCount", (*jsonInt)(&s.DistSQLCount)},
+		{"implicitTxnCount", (*jsonInt)(&s.ImplicitTxnCount)},
 		{"sqlType", (*jsonString)(&s.SQLType)},
 	}
 }

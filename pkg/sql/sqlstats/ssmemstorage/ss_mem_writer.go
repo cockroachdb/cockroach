@@ -83,6 +83,18 @@ func (s *Container) RecordStatement(ctx context.Context, value *sqlstats.Recorde
 	if value.AppliedStmtHints {
 		stats.mu.data.StmtHintsCount++
 	}
+	if value.Vec {
+		stats.mu.data.VectorizedCount++
+	}
+	if value.DistSQL {
+		stats.mu.data.DistSQLCount++
+	}
+	if value.FullScan {
+		stats.mu.data.FullScanCount++
+	}
+	if value.ImplicitTxn {
+		stats.mu.data.ImplicitTxnCount++
+	}
 	if value.AutoRetryCount == 0 {
 		stats.mu.data.FirstAttemptCount++
 	} else if int64(value.AutoRetryCount) > stats.mu.data.MaxRetries {
