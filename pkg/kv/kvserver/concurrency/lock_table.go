@@ -2631,22 +2631,6 @@ func (kl *keyLocks) claimantTxnFor(g *lockTableGuardImpl) (_ *enginepb.TxnMeta, 
 	return qg.guard.txnMeta(), false
 }
 
-// releaseLockingRequestsFromTxn removes all locking requests waiting on the
-// key, referenced in the receiver, that are part of the specified transaction.
-//
-// REQUIRES: kl.mu is locked.
-func (kl *keyLocks) releaseLockingRequestsFromTxn(txn *enginepb.TxnMeta) {
-	for e := kl.queuedLockingRequests.Front(); e != nil; {
-		qg := e.Value
-		curr := e
-		e = e.Next()
-		g := qg.guard
-		if g.isSameTxn(txn) {
-			kl.removeLockingRequest(curr)
-		}
-	}
-}
-
 // Returns true iff the keyLocks is empty, i.e., there is no lock holder and no
 // waiters.
 //
@@ -2796,23 +2780,11 @@ func (kl *keyLocks) releaseLock(txn *enginepb.TxnMeta) {
 	// There may be requests in the wait queue that belong to the supplied
 	// transaction. They were considered promoters while the lock was held, but
 	// that's no longer the case. As such, their queueOrder.isPromoting flag is
-	// incorrect, and so is their spot in the lock's wait queue. We can fix this
-	// in two different ways:
-	// 1. Recompute queueOrder.isPromoting for waiting requests that belong to the
-	// transaction that just released its lock and then reorder the wait queue (if
-	// needed).
-	// 2. Release any locking requests that belong to the transaction that just
-	// released its lock. They'll re-scan, re-determine whether they're promoting
-	// or not, and be inserted in the correct spot.
+	// incorrect, and so is their spot in the lock's wait queue.
 	//
-	// We choose option 2.
-	//
-	// TODO(arul): Option 1, where we push this complexity into
-	// recomputeWaitQueues, is better. We should switch to that, and in doing
-	// so, get rid of all calls to releaseLockingRequestsFromTxn and replace
-	// them with recomputeWaitQueues. Notably, this includes the call to that
-	// method in the lock acquisition path as well.
-	kl.releaseLockingRequestsFromTxn(txn)
+	// The caller is responsible for passing the released transaction to
+	// recomputeWaitQueues via the releaseTxn parameter, which will remove
+	// these requests from the queue.
 }
 
 // lockAcquiredOrDiscovered is called when the supplied lock is successfully
@@ -2920,7 +2892,7 @@ func (kl *keyLocks) scanAndMaybeEnqueue(g *lockTableGuardImpl, notify bool) (wai
 	// behind this request may be able to proceed by establishing a joint claim if
 	// they are compatible. recomputeWaitQueues will also inform active waiters
 	// that may need to be made aware that this request has acquired a claim.
-	kl.recomputeWaitQueues(g.lt.settings)
+	kl.recomputeWaitQueues(g.lt.settings, nil)
 	return false /* wait */, nil
 }
 
@@ -3330,7 +3302,7 @@ func (kl *keyLocks) acquireLock(
 		if beforeTs.Less(afterTs) {
 			// If the lock's timestamp has increased as a result of this lock
 			// acquisition, the queue of waiting readers might need to be recomputed.
-			kl.recomputeWaitQueues(st)
+			kl.recomputeWaitQueues(st, nil)
 		}
 		return nil
 	}
@@ -3350,19 +3322,6 @@ func (kl *keyLocks) acquireLock(
 	// they do so without re-acquiring latches. So it is possible for requests to
 	// break claims of requests that hold latches without holding latches
 	// themselves.
-
-	// NB: The lock may have been acquired with a lower strength than the strength
-	// with which other requests from the (now) lock holder transaction are trying
-	// to access this key. Put another way, some requests may now lock promoters
-	// as a result of this lock acquisition. Instead of marking them as inactive,
-	// we simply release them from the lock's wait queue and have them re-scan.
-	// This ensures they enqueue in the correct place (promoters get preference)
-	// and correctly determine whether they need to wait or not at this key.
-	//
-	// TODO(arul): Replace the call to releaseLockingRequestsFromTxn with
-	// recomputeWaitQueue, and push the responsibility of re-ordering the wait
-	// queue into there. Ditto for the call in addDiscoveredLock.
-	kl.releaseLockingRequestsFromTxn(&acq.Txn)
 
 	// Sanity check that there aren't any waiting readers on this lock. There
 	// shouldn't be any, as the lock wasn't held.
@@ -3395,17 +3354,13 @@ func (kl *keyLocks) acquireLock(
 	}
 	// Update the tracking to include this transaction's lock.
 	kl.lockAcquiredOrDiscovered(tl)
-	// We may need to recompute wait queues after removing locking requests that
-	// belong to the transaction that acquired the lock
-	// (releaseLockingRequestsFromTxn), as doing so could allow requests that were
-	// actively waiting previously to now proceed. Such cases are rare while lock
-	// promotion is disallowed, but still possible.
-	//
-	// recomputeWaitQueues will also call informActiveWaiters, letting them know
-	// that the lock has transitioned to held. In cases where the lock is acquired
-	// by a different transaction than the one which holds the claim, this call to
-	// informActiveWaiters will also cause them to push the new lock holder.
-	kl.recomputeWaitQueues(st)
+	// Recompute wait queues, releasing any queued requests belonging to the
+	// acquiring transaction (they're now redundant — the transaction holds the
+	// lock directly). Removing those requests may also allow requests behind
+	// them to proceed, and informActiveWaiters (called within
+	// recomputeWaitQueues) lets remaining waiters know they should push the new
+	// lock holder.
+	kl.recomputeWaitQueues(st, &acq.Txn)
 	return nil
 }
 
@@ -3479,7 +3434,7 @@ func (kl *keyLocks) discoveredLock(
 		tl.replicatedInfo.acquire(foundLock.Strength, foundLock.Txn.WriteTimestamp)
 
 		if beforeTs.Less(tl.writeTS()) {
-			kl.recomputeWaitQueues(st)
+			kl.recomputeWaitQueues(st, nil)
 		}
 		// TODO(arul): If the discovered lock indicates a newer epoch than what's
 		// being tracked, should we clear out unreplicatedLockInfo here?
@@ -3532,11 +3487,11 @@ func (kl *keyLocks) discoveredLock(
 		g.mu.Unlock()
 	}
 
-	// If there are waiting requests from the same txn, they no longer need to wait.
-	kl.releaseLockingRequestsFromTxn(&foundLock.Txn)
-
-	// Active waiters need to be told about who they are waiting for.
-	kl.informActiveWaiters()
+	// Recompute wait queues, releasing any queued requests belonging to the lock
+	// holder's transaction (they're now redundant). This also re-evaluates
+	// whether remaining waiters still conflict with the (now tracked) lock
+	// holder, and updates their wait targets.
+	kl.recomputeWaitQueues(st, &foundLock.Txn)
 	return nil
 }
 
@@ -3645,7 +3600,7 @@ func (kl *keyLocks) tryUpdateLockLocked(
 		if !kl.isLocked() {
 			// The lock transitioned from held to unheld as a result of this lock
 			// update.
-			gc = kl.releaseWaitersOnKeyUnlocked()
+			gc = kl.releaseWaitersOnKeyUnlocked(st, &up.Txn)
 		} else {
 			// If we're in this branch, it must be the case that there were multiple
 			// shared locks held on this key.
@@ -3658,17 +3613,11 @@ func (kl *keyLocks) tryUpdateLockLocked(
 			// shared lock that were waiting to promote their lock to something
 			// stronger might be able to do so now.
 			//
-			// As such, we need to recompute the wait queue for the lock. However, [2]
-			// is only possible if there's only one shared lock left on this key.
-			// Otherwise, the promoting request (if present) will conflict with the
-			// other shared lock. Moreover, for [1], simply calling
-			// informActiveWaiters will do. As recomputeWaitQueues is O(number of lock
-			// holder), we can optimize this to the if condition below:
-			if kl.holders.Len() == 1 {
-				kl.recomputeWaitQueues(st)
-			} else {
-				kl.informActiveWaiters()
-			}
+			// recomputeWaitQueues handles both cases: if 2+ holders remain, only
+			// the push target is updated; if only 1 remains, a full conflict
+			// re-evaluation runs (which may unblock a promoter).
+			kl.recomputeWaitQueues(st, &up.Txn)
+
 		}
 		return true, gc
 	}
@@ -3751,17 +3700,13 @@ func (kl *keyLocks) tryUpdateLockLocked(
 	if !isLocked {
 		kl.releaseLock(txn)
 		if !kl.isLocked() {
-			gc = kl.releaseWaitersOnKeyUnlocked()
+			gc = kl.releaseWaitersOnKeyUnlocked(st, txn)
 		} else {
 			// See the handling of finalized transactions that release a shared lock
 			// above for an explanation. Releasing a lock due to ignored sequence
 			// numbers is no different than releasing a lock because the holder's
 			// transaction has been finalized.
-			if kl.holders.Len() == 1 {
-				kl.recomputeWaitQueues(st)
-			} else {
-				kl.informActiveWaiters()
-			}
+			kl.recomputeWaitQueues(st, txn)
 		}
 		return true, gc
 	}
@@ -3769,7 +3714,7 @@ func (kl *keyLocks) tryUpdateLockLocked(
 	afterStr := tl.getLockMode().Strength
 
 	if beforeStr != afterStr || advancedTs {
-		kl.recomputeWaitQueues(st)
+		kl.recomputeWaitQueues(st, nil)
 	}
 	// Else no change for waiters. This can happen due to a race between different
 	// callers of UpdateLocks().
@@ -3806,11 +3751,38 @@ func (kl *keyLocks) tryUpdateLockLocked(
 // this can only happen if there's one shared lock (the one belonging to the
 // promoting transaction) left.
 //
-// TODO(arul): We could optimize this function if we had information about the
-// context it was being called in.
+// recomputeWaitQueues goes through the receiver's wait queues and recomputes
+// whether actively waiting requests should continue to do so, given the key's
+// lock holders and other waiting requests.
+//
+// If releaseTxn is non-nil, all queued locking requests belonging to that
+// transaction are removed from the queue as part of the recomputation. This
+// is used when a transaction acquires or discovers a lock — its queued
+// requests are now redundant and should be released.
 //
 // REQUIRES: kl.mu to be locked.
-func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
+func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings, releaseTxn *enginepb.TxnMeta) {
+	// Remove queued requests belonging to releaseTxn before any recomputation.
+	if releaseTxn != nil {
+		for e := kl.queuedLockingRequests.Front(); e != nil; {
+			curr := e
+			e = e.Next()
+			if curr.Value.guard.isSameTxn(releaseTxn) {
+				kl.removeLockingRequest(curr)
+			}
+		}
+	}
+
+	// If a lock holder was released but 2+ holders remain, only the push target
+	// (claimant identity) may have changed — the conflict set is unchanged
+	// because any promoter still conflicts with the remaining holders. Skip
+	// full conflict re-evaluation. We detect a release (vs. an acquisition) by
+	// checking that the txn no longer holds a lock on this key.
+	if releaseTxn != nil && !kl.isLockedBy(releaseTxn.ID) &&
+		kl.isLocked() && kl.holders.Len() > 1 {
+		kl.informActiveWaiters()
+		return
+	}
 	// Determine and maintain strongest mode for this key. Note that this logic is
 	// generalized for Update locks already -- things could be tightened if we
 	// only considered None, Shared, Exclusive, and Intent locking strengths
@@ -3965,7 +3937,7 @@ func (kl *keyLocks) requestDone(g *lockTableGuardImpl) (gc bool) {
 		// the request we just removed, and they are compatible with all lock
 		// holders (if any), we need to let them go. A call to recomputeWaitQueues
 		// will do exactly that, and will be a no-op otherwise.
-		kl.recomputeWaitQueues(g.lt.settings)
+		kl.recomputeWaitQueues(g.lt.settings, nil)
 	}
 
 	if !doneRemoval {
@@ -4001,7 +3973,7 @@ func (kl *keyLocks) requestDone(g *lockTableGuardImpl) (gc bool) {
 //
 // Acquires kl.mu.
 func (kl *keyLocks) tryFreeLockOnReplicatedAcquire(
-	acq *roachpb.LockAcquisition,
+	acq *roachpb.LockAcquisition, st *cluster.Settings,
 ) (freed bool, mustGC bool) {
 	kl.mu.Lock()
 	defer kl.mu.Unlock()
@@ -4099,7 +4071,7 @@ func (kl *keyLocks) tryFreeLockOnReplicatedAcquire(
 	//
 	// [*] Waiting readers are only possible if exclusive locks block non-locking
 	// reads.
-	mustGC = kl.releaseWaitersOnKeyUnlocked()
+	mustGC = kl.releaseWaitersOnKeyUnlocked(st, &acq.Txn)
 	return true /* freed */, mustGC
 }
 
@@ -4110,7 +4082,9 @@ func (kl *keyLocks) tryFreeLockOnReplicatedAcquire(
 // returned, indicating the receiver can be GC-ed by the caller.
 //
 // REQUIRES: kl.mu is locked.
-func (kl *keyLocks) releaseWaitersOnKeyUnlocked() (gc bool) {
+func (kl *keyLocks) releaseWaitersOnKeyUnlocked(
+	st *cluster.Settings, releaseTxn *enginepb.TxnMeta,
+) (gc bool) {
 	assert(!kl.isLocked(), "releaseWaitersOnKeyUnlocked should only be called on unheld locks")
 
 	// All waiting readers don't need to wait here anymore.
@@ -4121,7 +4095,13 @@ func (kl *keyLocks) releaseWaitersOnKeyUnlocked() (gc bool) {
 		kl.removeReader(curr)
 	}
 
-	kl.maybeReleaseCompatibleLockingRequests()
+	// Recompute the wait queues for any remaining locking requests. Since the
+	// lock is no longer held, requests that were actively waiting because they
+	// conflicted with the (now released) lock holder may be able to proceed.
+	// Compatible requests at the head of the queue will establish a (possibly
+	// joint) claim; non-transactional writers will be released. If releaseTxn
+	// is non-nil, its queued requests are also removed.
+	kl.recomputeWaitQueues(st, releaseTxn)
 
 	// We've already cleared waiting readers above. The lock can be released if
 	// there are no waiting locking requests, active or otherwise.
@@ -4130,92 +4110,6 @@ func (kl *keyLocks) releaseWaitersOnKeyUnlocked() (gc bool) {
 		return true
 	}
 	return false
-}
-
-// maybeReleaseCompatibleLockingRequests goes through the list of locking
-// requests waiting in the receiver's wait queue and releases all requests from
-// the head of the queue that are compatible with each other. Releasing[1] a
-// locking request entails marking it as inactive and nudging it by calling
-// notify(). The released request(s) are said to have established a (possibly
-// joint) claim.
-//
-// Any non-transactional writers at the head of the queue are also released.
-//
-// [1] If the request is not actively waiting in the lock wait queue, it's a
-// noop for the request.
-//
-// REQUIRES: kl.mu is locked.
-// REQUIRES: the (receiver) lock must not be held.
-// REQUIRES: there should not be any waitingReaders in the lock's wait queues.
-//
-// TODO(arul): There's a lot of overlap between this method and
-// recomputeWaitQueues. We should simplify things by trying to replace all
-// usages of this method with recomputeWaitQueues.
-func (kl *keyLocks) maybeReleaseCompatibleLockingRequests() {
-	if kl.isLocked() {
-		panic("maybeReleaseCompatibleLockingRequests called when lock is held")
-	}
-	if kl.waitingReaders.Len() != 0 {
-		panic("there cannot be waiting readers")
-	}
-
-	// The prefix of the queue that is non-transactional writers is done waiting.
-	// As non-transactional writers have lock.Intent locking strength, they will
-	// be incompatible with any (possibly joint) claim that transactional
-	// request(s) will establish by the time we're done with this method. This
-	// means we only need special case handling for non-transactional requests
-	// just once -- for the ones that are at the head of the queue.
-	for e := kl.queuedLockingRequests.Front(); e != nil; {
-		qg := e.Value
-		g := qg.guard
-		if g.txn != nil { // (transactional) locking request
-			break
-		}
-		curr := e
-		e = e.Next()
-		kl.removeLockingRequest(curr)
-	}
-
-	if kl.queuedLockingRequests.Len() == 0 {
-		return // no locking requests
-	}
-
-	// Mark all compatible locking requests as inactive. While doing so, we check
-	// if they were actively waiting at this key -- if they were, and we
-	// transitioned them to inactive, a call to doneActivelyWaitingAtLock should
-	// nudge the request to pick up its scan from where it left off.
-
-	var mode lock.Mode
-	for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
-		qg := e.Value
-		g := qg.guard
-
-		if mode.Empty() {
-			mode = qg.mode
-		} else {
-			if lock.Conflicts(mode, qg.mode, &qg.guard.lt.settings.SV) {
-				break
-			}
-			// NB: Once we add support for UPDATE locking strength, this logic
-			// will need to accumulate the strongest lock mode seen so far. For
-			// example, consider the following:
-			// waitQueue: [Shared, Update, Shared, Update, Exclusive]
-			//
-			// We want to release the first 3 requests (as they're compatible with
-			// each other), not the first 4.
-		}
-
-		if qg.active {
-			qg.active = false // mark as inactive
-			g.mu.Lock()
-			g.doneActivelyWaitingAtLock()
-			g.mu.Unlock()
-		}
-		// Else the waiter is already inactive.
-	}
-
-	// Tell the active waiters who they are waiting for.
-	kl.informActiveWaiters()
 }
 
 // testingAssertCompatibleLockMode ensures the supplied lock mode is compatible
@@ -4766,7 +4660,7 @@ func (t *lockTableImpl) AcquireLock(ctx context.Context, acq *roachpb.LockAcquis
 	} else {
 		kl = iter.Cur()
 		if acq.Durability == lock.Replicated {
-			if freed, mustGC := kl.tryFreeLockOnReplicatedAcquire(acq); freed {
+			if freed, mustGC := kl.tryFreeLockOnReplicatedAcquire(acq, t.settings); freed {
 				// Don't remember uncontended replicated locks. Just like in the case
 				// where the lock is initially added as replicated, we drop replicated
 				// locks from the lockTable when being upgraded from Unreplicated to
@@ -5086,7 +4980,7 @@ func (t *lockTableImpl) maybeWakeReadersForPushedTxn(
 			kl.mu.Unlock()
 			continue
 		}
-		kl.recomputeWaitQueues(t.settings)
+		kl.recomputeWaitQueues(t.settings, nil)
 		kl.mu.Unlock()
 	}
 }

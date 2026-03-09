@@ -574,6 +574,10 @@ acquire r=req23 k=b durability=r strength=shared
 num=2
  lock: "a"
   holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Exclusive]
+   queued locking requests:
+    active: false req: 19, strength: Intent, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 20, strength: Exclusive, txn: 00000000-0000-0000-0000-000000000002
+    active: true req: 21, strength: Shared, txn: 00000000-0000-0000-0000-000000000002
  lock: "b"
   holders: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, info: repl [Shared]
            txn: 00000000-0000-0000-0000-000000000002 epoch: 0, iso: Serializable, info: repl [Shared]

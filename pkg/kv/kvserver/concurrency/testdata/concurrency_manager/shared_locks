@@ -759,13 +759,13 @@ on-txn-updated txn=txn1 status=committed
 [4] sequence req22: scanning lock table for conflicting locks
 [4] sequence req22: sequencing complete, returned guard
 [5] sequence req23: resolving intent ‹"a"› for txn 00000001 with COMMITTED status
-[5] sequence req23: lock wait-queue event: wait for txn 00000002 running request @ key ‹"a"› (queuedLockingRequests: 5, queuedReaders: 0)
+[5] sequence req23: lock wait-queue event: wait for txn 00000002 running request @ key ‹"a"› (queuedLockingRequests: 4, queuedReaders: 0)
 [5] sequence req23: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
 [5] sequence req23: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [5] sequence req23: pushing txn 00000002 to detect request deadlock
 [5] sequence req23: blocked on select in concurrency_test.(*cluster).PushTransaction
 [6] sequence req24: resolving intent ‹"a"› for txn 00000001 with COMMITTED status
-[6] sequence req24: lock wait-queue event: wait for txn 00000002 running request @ key ‹"a"› (queuedLockingRequests: 5, queuedReaders: 0)
+[6] sequence req24: lock wait-queue event: wait for txn 00000002 running request @ key ‹"a"› (queuedLockingRequests: 4, queuedReaders: 0)
 [6] sequence req24: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"a"› for 0.000s
 [6] sequence req24: pushing after 0s for: deadlock/liveness detection = true, timeout enforcement = false, priority enforcement = false, wait policy error = false
 [6] sequence req24: pushing txn 00000002 to detect request deadlock
