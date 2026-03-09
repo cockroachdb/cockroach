@@ -544,9 +544,14 @@ func removeFKForBackReferenceFromTable(
 			"for backreference %v on table %q", backref, originTableDesc.Name)
 	}
 	// Delete our match.
+	removedFK := originTableDesc.OutboundFKs[matchIdx]
 	originTableDesc.OutboundFKs = append(
 		originTableDesc.OutboundFKs[:matchIdx],
 		originTableDesc.OutboundFKs[matchIdx+1:]...)
+	// If the removed FK was referenced by RBRUsingConstraint, clear it.
+	if originTableDesc.RBRUsingConstraint == removedFK.ConstraintID {
+		originTableDesc.RBRUsingConstraint = 0
+	}
 	return nil
 }
 

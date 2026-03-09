@@ -12,17 +12,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam"
@@ -30,14 +35,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// validateStorageParamKey validates a storage param key and panics with
-// NotImplementedError if the param is not yet supported in the declarative
-// schema changer.
-func validateStorageParamKey(t tree.NodeFormatter, key string) {
-	loweredKey := strings.ToLower(key)
-	if loweredKey == catpb.RBRUsingConstraintTableSettingName {
-		panic(scerrors.NotImplementedErrorf(t, "infer_rbr_region_col_using_constraint not implemented yet"))
-	}
+// isRBRUsingConstraintParam returns true if the key matches the RBR using
+// constraint storage parameter name.
+func isRBRUsingConstraintParam(key string) bool {
+	return strings.ToLower(key) == catpb.RBRUsingConstraintTableSettingName
 }
 
 // buildTTLColumnExpr builds the expression: current_timestamp() + interval_expr.
@@ -415,11 +416,12 @@ func AlterTableSetStorageParams(
 	stmt tree.Statement,
 	t *tree.AlterTableSetStorageParams,
 ) {
-	var ttlParams, otherParams tree.StorageParams
+	var ttlParams, rbrConstraintParams, otherParams tree.StorageParams
 	for _, param := range t.StorageParams {
-		validateStorageParamKey(t, param.Key)
 		if isTTLParam(param.Key) {
 			ttlParams = append(ttlParams, param)
+		} else if isRBRUsingConstraintParam(param.Key) {
+			rbrConstraintParams = append(rbrConstraintParams, param)
 		} else {
 			otherParams = append(otherParams, param)
 		}
@@ -427,6 +429,11 @@ func AlterTableSetStorageParams(
 
 	// Handle TTL params first, using the RowLevelTTL element.
 	applyTTLStorageParamsSet(b, tbl, tn, stmt, t, ttlParams)
+
+	// Handle RBR using constraint param.
+	if len(rbrConstraintParams) > 0 {
+		setRBRUsingConstraint(b, tbl, rbrConstraintParams)
+	}
 
 	if err := storageparam.StorageParamPreChecks(
 		b,
@@ -545,10 +552,12 @@ func AlterTableResetStorageParams(
 	t *tree.AlterTableResetStorageParams,
 ) {
 	var ttlParams, otherParams []string
+	hasRBRConstraintReset := false
 	for _, param := range t.Params {
-		validateStorageParamKey(t, param)
 		if isTTLParam(param) {
 			ttlParams = append(ttlParams, param)
+		} else if isRBRUsingConstraintParam(param) {
+			hasRBRConstraintReset = true
 		} else {
 			otherParams = append(otherParams, param)
 		}
@@ -556,6 +565,11 @@ func AlterTableResetStorageParams(
 
 	// Handle TTL params first, using the RowLevelTTL element.
 	applyTTLStorageParamsReset(b, tn, tbl, stmt, t, ttlParams)
+
+	// Handle RBR using constraint reset.
+	if hasRBRConstraintReset {
+		resetRBRUsingConstraint(b, tbl)
+	}
 
 	if err := storageparam.StorageParamPreChecks(
 		b,
@@ -605,6 +619,240 @@ func AlterTableResetStorageParams(
 			}
 			b.Add(&newElem)
 		}
+	}
+}
+
+// setRBRUsingConstraint handles SET infer_rbr_region_col_using_constraint. It
+// validates the table is RBR, extracts the constraint name, validates the
+// constraint is a suitable FK, and adds a TableLocalityRegionalByRowUsingConstraint
+// element.
+func setRBRUsingConstraint(b BuildCtx, tbl *scpb.Table, params tree.StorageParams) {
+	// Check that the feature is enabled.
+	if !sqlclustersettings.InferRegionUsingConstraintEnabled.Get(&b.ClusterSettings().SV) {
+		panic(pgerror.Newf(
+			pgcode.FeatureNotSupported,
+			`storage parameter "%s" is not enabled; set the cluster setting`+
+				` "feature.infer_rbr_region_col_using_constraint.enabled" to true to enable it`,
+			catpb.RBRUsingConstraintTableSettingName,
+		))
+	}
+
+	// Validate table is REGIONAL BY ROW.
+	if !isTableLocalityRegionalByRow(b, tbl.TableID) {
+		panic(pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			`storage parameter "%s" can only be set on REGIONAL BY ROW tables`,
+			catpb.RBRUsingConstraintTableSettingName,
+		))
+	}
+
+	// Extract the constraint name from the param value.
+	constraintName := extractRBRConstraintName(b, params)
+	if constraintName == "" {
+		return
+	}
+
+	// Resolve the constraint by name using the standard constraint resolution
+	// mechanism, which finds both index-backed and non-index constraints.
+	tableElts := b.QueryByID(tbl.TableID)
+	constraintElems := b.ResolveConstraint(tbl.TableID, constraintName, ResolveParams{
+		IsExistenceOptional: false,
+		RequiredPrivilege:   privilege.CREATE,
+	})
+	// Find the constraint ID from the resolved elements.
+	var constraintID catid.ConstraintID
+	constraintWithoutIndexName := constraintElems.FilterConstraintWithoutIndexName().
+		MustGetZeroOrOneElement()
+	if constraintWithoutIndexName != nil {
+		constraintID = constraintWithoutIndexName.ConstraintID
+	}
+
+	// If we found a constraint ID, check if it's a FK (validated or unvalidated).
+	var fkColumnIDs []catid.ColumnID
+	if constraintID != 0 {
+		tableElts.FilterForeignKeyConstraint().ForEach(
+			func(_ scpb.Status, target scpb.TargetStatus, e *scpb.ForeignKeyConstraint) {
+				if target == scpb.ToAbsent {
+					return
+				}
+				if e.ConstraintID == constraintID {
+					fkColumnIDs = e.ColumnIDs
+				}
+			},
+		)
+		if fkColumnIDs == nil {
+			tableElts.FilterForeignKeyConstraintUnvalidated().ForEach(
+				func(
+					_ scpb.Status, target scpb.TargetStatus, e *scpb.ForeignKeyConstraintUnvalidated,
+				) {
+					if target == scpb.ToAbsent {
+						return
+					}
+					if e.ConstraintID == constraintID {
+						fkColumnIDs = e.ColumnIDs
+					}
+				},
+			)
+		}
+	}
+	if fkColumnIDs == nil {
+		panic(pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"constraint %q is not a foreign key constraint",
+			constraintName,
+		))
+	}
+
+	// Get the region column name and ID.
+	rbrElem := tableElts.FilterTableLocalityRegionalByRow().MustGetOneElement()
+	regionColName := tree.Name(rbrElem.As)
+	if regionColName == tree.RegionalByRowRegionNotSpecifiedName {
+		regionColName = tree.RegionalByRowRegionDefaultColName
+	}
+	var regionColID catid.ColumnID
+	tableElts.FilterColumnName().ForEach(
+		func(_ scpb.Status, target scpb.TargetStatus, e *scpb.ColumnName) {
+			if target == scpb.ToAbsent {
+				return
+			}
+			if tree.Name(e.Name) == regionColName {
+				regionColID = e.ColumnID
+			}
+		},
+	)
+	if regionColID == 0 {
+		panic(pgerror.Newf(
+			pgcode.UndefinedColumn,
+			`column %q does not exist`,
+			regionColName,
+		))
+	}
+
+	// Validate: region column must not be computed.
+	tableElts.FilterColumnComputeExpression().ForEach(
+		func(_ scpb.Status, target scpb.TargetStatus, e *scpb.ColumnComputeExpression) {
+			if target == scpb.ToAbsent {
+				return
+			}
+			if e.ColumnID == regionColID {
+				panic(pgerror.Newf(
+					pgcode.InvalidTableDefinition,
+					"cannot use computed column %q as the region column in a REGIONAL BY ROW table with "+
+						"the %q storage parameter specified",
+					regionColName, catpb.RBRUsingConstraintTableSettingName,
+				))
+			}
+		},
+	)
+
+	// Validate: FK must include the region column.
+	fkHasRegionCol := false
+	for _, colID := range fkColumnIDs {
+		if colID == regionColID {
+			fkHasRegionCol = true
+			break
+		}
+	}
+	if !fkHasRegionCol {
+		panic(pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"cannot use constraint %q to determine the region column for REGIONAL BY ROW "+
+				"as it does not include the region column %q",
+			constraintName, regionColName,
+		))
+	}
+
+	// Validate: FK must have more than just the region column.
+	if len(fkColumnIDs) == 1 {
+		panic(pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"cannot use constraint %q to determine the region column for REGIONAL BY ROW "+
+				"as it only includes the region column",
+			constraintName,
+		))
+	}
+
+	// Validate: no computed columns may reference the region column.
+	tableElts.FilterColumnComputeExpression().ForEach(
+		func(_ scpb.Status, target scpb.TargetStatus, e *scpb.ColumnComputeExpression) {
+			if target == scpb.ToAbsent {
+				return
+			}
+			if e.ColumnID == regionColID {
+				// Already checked above.
+				return
+			}
+			for _, refColID := range e.Expression.ReferencedColumnIDs {
+				if refColID == regionColID {
+					colName := mustRetrieveColumnName(b, tbl.TableID, e.ColumnID)
+					panic(pgerror.Newf(
+						pgcode.InvalidTableDefinition,
+						`computed column %q cannot reference the region column %q; the region `+
+							`column value must be able to be determined from the non-region FK columns`,
+						colName.Name, regionColName,
+					))
+				}
+			}
+		},
+	)
+
+	// Drop any existing element.
+	existingElem := tableElts.FilterTableLocalityRegionalByRowUsingConstraint().MustGetZeroOrOneElement()
+	if existingElem != nil {
+		b.Drop(existingElem)
+	}
+
+	// Add the new element.
+	b.Add(&scpb.TableLocalityRegionalByRowUsingConstraint{
+		TableID:      tbl.TableID,
+		ConstraintID: constraintID,
+	})
+}
+
+// extractRBRConstraintName extracts the constraint name string from the
+// infer_rbr_region_col_using_constraint storage parameter value.
+func extractRBRConstraintName(b BuildCtx, params tree.StorageParams) tree.Name {
+	paramVal := params.GetVal(catpb.RBRUsingConstraintTableSettingName)
+	if paramVal == nil {
+		return ""
+	}
+	if paramVal == tree.DNull {
+		panic(pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			`storage parameter "%s" cannot be NULL`, catpb.RBRUsingConstraintTableSettingName,
+		))
+	}
+	// The expressions may be an unresolved name. Cast it as a string.
+	paramVal = paramparse.UnresolvedNameToStrVal(paramVal)
+	typedExpr, err := schemaexpr.SanitizeVarFreeExpr(
+		b, paramVal, types.String, "RBR_USING_CONSTRAINT_NAME", b.SemaCtx(),
+		volatility.Volatile, false, /* allowAssignmentCast */
+	)
+	if err != nil {
+		panic(err)
+	}
+	d, err := eval.Expr(b, b.EvalCtx(), typedExpr)
+	if err != nil {
+		panic(err)
+	}
+	constraintName, isStringVal := tree.AsDString(d)
+	if !isStringVal {
+		panic(pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			`storage parameter "%s" must be a string`, catpb.RBRUsingConstraintTableSettingName,
+		))
+	}
+	return tree.Name(constraintName)
+}
+
+// resetRBRUsingConstraint handles RESET infer_rbr_region_col_using_constraint.
+// It drops the existing TableLocalityRegionalByRowUsingConstraint element if
+// present.
+func resetRBRUsingConstraint(b BuildCtx, tbl *scpb.Table) {
+	existingElem := b.QueryByID(tbl.TableID).
+		FilterTableLocalityRegionalByRowUsingConstraint().MustGetZeroOrOneElement()
+	if existingElem != nil {
+		b.Drop(existingElem)
 	}
 }
 

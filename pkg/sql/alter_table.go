@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging/auditevents"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -2548,14 +2547,7 @@ func maybeGetRBRTableUsingConstraint(
 // inferRegionUsingConstraintEnabled is used to enable and disable setting a
 // foreign key constraint for looking up the region column in a REGIONAL BY ROW
 // table.
-var inferRegionUsingConstraintEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"feature.infer_rbr_region_col_using_constraint.enabled",
-	"set to true to enable looking up the region column via a foreign key constraint in a "+
-		"REGIONAL BY ROW table, false to disable; default is false",
-	false,
-	settings.WithPublic,
-)
+var inferRegionUsingConstraintEnabled = sqlclustersettings.InferRegionUsingConstraintEnabled
 
 func extractRBRTableUsingConstraint(
 	ctx context.Context,

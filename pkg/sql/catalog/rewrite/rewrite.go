@@ -187,6 +187,22 @@ func TableDescs(
 			// we update the FK to point to it?
 			table.OutboundFKs = append(table.OutboundFKs, *fk)
 		}
+
+		// If the table has an RBRUsingConstraint, check that the referenced FK
+		// constraint still exists after dropping FKs with missing referenced tables.
+		if table.RBRUsingConstraint != 0 {
+			found := false
+			for i := range table.OutboundFKs {
+				if table.OutboundFKs[i].ConstraintID == table.RBRUsingConstraint {
+					found = true
+					break
+				}
+			}
+			if !found {
+				table.RBRUsingConstraint = 0
+			}
+		}
+
 		origMutations := table.Mutations
 		table.Mutations = table.Mutations[:0]
 		for idx := range origMutations {
