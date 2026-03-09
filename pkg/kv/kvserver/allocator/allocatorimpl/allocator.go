@@ -2367,8 +2367,11 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 	allExistingReplicas []roachpb.ReplicaDescriptor,
 	exclReplsInNeedOfSnapshots bool,
 ) bool {
-	// Defensive check to ensure that this is never called with a replica set that
-	// does not contain the leaseholder.
+	// Callers pass VoterDescriptors(), which excludes demoting voters,
+	// non-voters, and learners - none of which can hold a lease. The
+	// leaseholder should always be present, but the descriptor and lease are
+	// not loaded under a consistent lock, so they may drift. As defense in
+	// depth, we verify that the leaseholder is in the provided replica set.
 	var leaseholderInExisting bool
 	for _, repl := range allExistingReplicas {
 		if repl.StoreID == leaseRepl.StoreID() {
@@ -2376,12 +2379,10 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 			break
 		}
 	}
-	// If the leaseholder is not in the descriptor, then we should not move the
-	// lease since we don't know who the leaseholder is. This normally doesn't
-	// happen, but can occasionally since the loading of the leaseholder and of
-	// the existing replicas aren't always under a consistent lock.
 	if !leaseholderInExisting {
-		log.KvDistribution.Info(ctx, "expected leaseholder store to be in the slice of existing replicas")
+		log.KvDistribution.VEventf(ctx, 2,
+			"expected leaseholder s%d to be in the slice of existing replicas %s",
+			leaseRepl.StoreID(), roachpb.MakeReplicaSet(allExistingReplicas))
 		return false
 	}
 
