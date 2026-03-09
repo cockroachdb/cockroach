@@ -832,9 +832,9 @@ const (
 )
 
 type loggingOpt struct {
-	// l is the test runner logger.
+	// runnerL is the test runner logger.
 	// Note that individual test runs will use a different logger.
-	l *logger.Logger
+	runnerL *logger.Logger
 	// tee controls whether test logs (not test runner logs) also go to stdout or
 	// not.
 	tee            logger.TeeOptType

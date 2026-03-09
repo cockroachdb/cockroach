@@ -93,7 +93,7 @@ func clusterOptWithProvisioningError() clustersOpt {
 
 func defaultLoggingOpt(buf *syncedBuffer) loggingOpt {
 	return loggingOpt{
-		l:            nilLogger(),
+		runnerL:      nilLogger(),
 		tee:          logger.NoTee,
 		stdout:       buf,
 		stderr:       buf,
@@ -342,7 +342,7 @@ func setupRunnerTest(t *testing.T, r testRegistryImpl, testFilters []string) *ru
 	var stdout syncedBuffer
 	var stderr syncedBuffer
 	lopt := loggingOpt{
-		l: func() *logger.Logger {
+		runnerL: func() *logger.Logger {
 			l, err := logger.RootLogger(filepath.Join(t.TempDir(), "test.log"), logger.NoTee)
 			if err != nil {
 				panic(err)
@@ -675,7 +675,7 @@ func TestNewCluster(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			createCallsCounter = 0
 			create = c.createMock
-			_, _, err := factory.newCluster(ctx, cfg, setStatus, true)
+			_, _, err := factory.newCluster(ctx, cfg, setStatus)
 			require.Error(t, err)
 			require.Equal(t, c.expectedCreateCalls, createCallsCounter)
 		})
@@ -725,7 +725,7 @@ func TestGCESameDefaultZone(t *testing.T) {
 		cfg.spec.Geo = c.geo
 		t.Run(c.name, func(t *testing.T) {
 			for i := 0; i < 100; i++ {
-				_, _, _ = factory.newCluster(ctx, cfg, setStatus, true)
+				_, _, _ = factory.newCluster(ctx, cfg, setStatus)
 			}
 		})
 	}
