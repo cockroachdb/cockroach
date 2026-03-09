@@ -1302,6 +1302,14 @@ type SetTableSchemaLocked struct {
 	Locked  bool
 }
 
+// SetTableRBRUsingConstraint sets or clears the RBRUsingConstraint field on the
+// table descriptor. A ConstraintID of 0 clears the field.
+type SetTableRBRUsingConstraint struct {
+	immediateMutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
 // SetTableStorageParam sets a storage parameter on a table.
 type SetTableStorageParam struct {
 	immediateMutationOp
