@@ -1506,9 +1506,18 @@ func (p *Provider) Delete(l *logger.Logger, vms vm.List) error {
 		l.Printf("Warning: failed to delete load balancers: %v", err)
 	}
 
-	// For managed clusters, delete the ASG and launch template in addition to instances.
+	// For managed clusters, delete the ASG and launch template in addition to
+	// instances. For empty cluster placeholders (synthetic entries representing
+	// orphaned launch templates/ASGs), this is the only cleanup needed since
+	// there are no real instances to terminate.
 	if isManaged(vms) {
 		return p.deleteManagedCluster(l, vms)
+	}
+
+	// Empty cluster placeholders with no managed resources have nothing
+	// further to clean up.
+	if vms[0].EmptyCluster {
+		return nil
 	}
 
 	byRegion, err := regionMap(vms)
@@ -1729,6 +1738,47 @@ func (p *Provider) listRegionsFiltered(
 
 	if err := g.Wait(); err != nil {
 		return nil, err
+	}
+
+	if listOpts.IncludeEmptyClusters {
+		// Find managed launch templates that have no active instances and create
+		// placeholder EmptyCluster VMs for them. This allows GC to discover and
+		// clean up orphaned ASGs and launch templates when instances have already
+		// been terminated.
+		clusterSeen := make(map[string]struct{})
+		for i := range ret {
+			clusterName, err := ret[i].ClusterName()
+			if err == nil {
+				clusterSeen[clusterName] = struct{}{}
+			}
+		}
+
+		for _, r := range regions {
+			clusterNames, err := p.listManagedLaunchTemplates(l, r)
+			if err != nil {
+				l.Printf("Failed to list managed launch templates in region %s: %v", r, err)
+				continue
+			}
+			for _, clusterName := range clusterNames {
+				if _, ok := clusterSeen[clusterName]; ok {
+					continue
+				}
+				clusterSeen[clusterName] = struct{}{}
+				ret = append(ret, vm.VM{
+					Name:     vm.Name(clusterName, 0),
+					Provider: ProviderName,
+					// Use region + "a" as a synthetic availability zone so that
+					// regionMap() can derive the region during deletion.
+					Zone: r + "a",
+					Labels: map[string]string{
+						vm.TagCluster:   clusterName,
+						vm.TagManaged:   "true",
+						vm.TagRoachprod: "true",
+					},
+					EmptyCluster: true,
+				})
+			}
+		}
 	}
 
 	return ret, nil
@@ -3360,6 +3410,41 @@ func isManaged(vms vm.List) bool {
 		return false
 	}
 	return vms[0].Labels[vm.TagManaged] == "true"
+}
+
+// describeLaunchTemplatesOutput represents the output of describe-launch-templates.
+type describeLaunchTemplatesOutput struct {
+	LaunchTemplates []struct {
+		LaunchTemplateName string `json:"LaunchTemplateName"`
+		Tags               Tags   `json:"Tags"`
+	} `json:"LaunchTemplates"`
+}
+
+// listManagedLaunchTemplates returns the cluster names that have managed
+// launch templates in the given region. This is used during GC to discover
+// orphaned launch templates that no longer have active instances.
+func (p *Provider) listManagedLaunchTemplates(l *logger.Logger, region string) ([]string, error) {
+	args := []string{
+		"ec2", "describe-launch-templates",
+		"--filters",
+		fmt.Sprintf("Name=tag:%s,Values=true", vm.TagRoachprod),
+		fmt.Sprintf("Name=tag:%s,Values=true", vm.TagManaged),
+		"--region", region,
+	}
+
+	var output describeLaunchTemplatesOutput
+	if err := p.runJSONCommand(l, args, &output); err != nil {
+		return nil, errors.Wrap(err, "listing managed launch templates")
+	}
+
+	var clusterNames []string
+	for _, lt := range output.LaunchTemplates {
+		tagMap := lt.Tags.MakeMap()
+		if name, ok := tagMap[vm.TagCluster]; ok && name != "" {
+			clusterNames = append(clusterNames, name)
+		}
+	}
+	return clusterNames, nil
 }
 
 // createLaunchTemplateOutput represents the output of create-launch-template.

@@ -255,7 +255,11 @@ func regionMap(vms vm.List) (map[string]vm.List, error) {
 	return byRegion, nil
 }
 
-// zoneToRegion converts an availability zone like us-east-2a to the zone name us-east-2
+// zoneToRegion converts an availability zone like us-east-2a to the region
+// name us-east-2 by stripping the trailing availability zone letter.
 func zoneToRegion(zone string) (string, error) {
+	if len(zone) == 0 {
+		return "", errors.New("empty zone")
+	}
 	return zone[0 : len(zone)-1], nil
 }

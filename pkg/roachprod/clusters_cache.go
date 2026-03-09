@@ -118,7 +118,10 @@ func loadCluster(name string) (*cloudcluster.Cluster, error) {
 // deleteCluster deletes the file in config.ClusterDir for a given cluster name.
 func deleteCluster(name string) error {
 	filename := clusterFilename(name)
-	return os.Remove(filename)
+	if err := os.Remove(filename); err != nil && !oserror.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 // shouldIgnoreCluster returns true if the cluster references a project that is
