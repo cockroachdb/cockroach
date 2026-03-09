@@ -1,0 +1,185 @@
+name: Blathers Backport
+
+on:
+  repository_dispatch:
+    types: [backport]
+
+jobs:
+  backport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.BLATHERS_APP_ID }}
+          private-key: ${{ secrets.BLATHERS_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "blathers-crl[bot]"
+          git config user.email "blathers-crl[bot]@users.noreply.github.com"
+
+      - name: Backport PR
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.client_payload.pr_number }}
+          BRANCHES: ${{ github.event.client_payload.branches }}
+          PR_AUTHOR: ${{ github.event.client_payload.pr_author }}
+        run: |
+          set -euo pipefail
+
+          # Fetch PR title and body for use in backport PRs.
+          PR_TITLE=$(gh pr view "$PR_NUMBER" --json title --jq '.title')
+          PR_BODY=$(gh pr view "$PR_NUMBER" --json body --jq '.body')
+
+          # Get commit SHAs from the merged PR.
+          COMMIT_SHAS=$(gh pr view "$PR_NUMBER" --json commits --jq '.commits[].oid')
+          COMMIT_COUNT=$(echo "$COMMIT_SHAS" | wc -l | tr -d ' ')
+
+          # Collect reviewers from the original PR.
+          REVIEWERS=$(gh pr view "$PR_NUMBER" --json reviews --jq '[.reviews[].author.login] | unique | join(",")')
+
+          FAILED_BRANCHES=""
+          SUCCEEDED_BRANCHES=""
+
+          for BRANCH in $BRANCHES; do
+            echo "=== Backporting to $BRANCH ==="
+
+            # Normalize branch name: try as-is first, then with release- prefix.
+            # Also strip .x suffix (backport labels use e.g. "24.1.x").
+            TARGET_BRANCH="${BRANCH%.x}"
+            if ! git rev-parse --verify "origin/$TARGET_BRANCH" >/dev/null 2>&1; then
+              TARGET_BRANCH="release-$TARGET_BRANCH"
+              if ! git rev-parse --verify "origin/$TARGET_BRANCH" >/dev/null 2>&1; then
+                echo "::error::Branch $BRANCH not found (tried $BRANCH and release-${BRANCH%.x})"
+                FAILED_BRANCHES="$FAILED_BRANCHES $BRANCH"
+                continue
+              fi
+            fi
+
+            BACKPORT_BRANCH="blathers/backport-${TARGET_BRANCH}-${PR_NUMBER}"
+
+            # Clean up any existing backport branch.
+            git branch -D "$BACKPORT_BRANCH" 2>/dev/null || true
+            git push origin --delete "$BACKPORT_BRANCH" 2>/dev/null || true
+
+            # Create backport branch from target.
+            git checkout -b "$BACKPORT_BRANCH" "origin/$TARGET_BRANCH"
+
+            # Cherry-pick all commits from the PR.
+            CHERRY_PICK_FAILED=false
+            for SHA in $COMMIT_SHAS; do
+              if ! git cherry-pick "$SHA"; then
+                echo "::error::Cherry-pick of $SHA failed on branch $TARGET_BRANCH"
+                git cherry-pick --abort 2>/dev/null || true
+                CHERRY_PICK_FAILED=true
+                break
+              fi
+            done
+
+            if [ "$CHERRY_PICK_FAILED" = "true" ]; then
+              FAILED_BRANCHES="$FAILED_BRANCHES $BRANCH"
+              git checkout -f HEAD 2>/dev/null || true
+              continue
+            fi
+
+            # Push the backport branch.
+            if ! git push origin "$BACKPORT_BRANCH"; then
+              echo "::error::Failed to push branch $BACKPORT_BRANCH"
+              FAILED_BRANCHES="$FAILED_BRANCHES $BRANCH"
+              continue
+            fi
+
+            # Transform version-specific closing keywords.
+            # e.g. "Fixes-26.1 #159676" -> "Fixes #159676" when targeting release-26.1.
+            VERSION="${TARGET_BRANCH#release-}"
+            ESCAPED_VERSION=$(echo "$VERSION" | sed 's/\./\\./g')
+            TRANSFORMED_BODY=$(echo "$PR_BODY" | sed -E "s/(Fixes|Closes|Resolves|Addresses)-${ESCAPED_VERSION}:?[[:space:]]+/\1 /gi")
+
+            # Create backport PR.
+            BACKPORT_PR_URL=$(gh pr create \
+              --base "$TARGET_BRANCH" \
+              --head "$BACKPORT_BRANCH" \
+              --title "${TARGET_BRANCH}: ${PR_TITLE}" \
+              --body "$(cat <<EOF
+          Backport ${COMMIT_COUNT}/${COMMIT_COUNT} commits from #${PR_NUMBER} on behalf of @${PR_AUTHOR}.
+
+          ----
+
+          ${TRANSFORMED_BODY}
+
+          ----
+
+          Release justification:
+          EOF
+          )")
+
+            if [ -z "$BACKPORT_PR_URL" ]; then
+              echo "::error::Failed to create PR for branch $TARGET_BRANCH"
+              FAILED_BRANCHES="$FAILED_BRANCHES $BRANCH"
+              continue
+            fi
+
+            BACKPORT_PR_NUMBER=$(echo "$BACKPORT_PR_URL" | grep -oE '[0-9]+$')
+
+            # Add labels.
+            gh pr edit "$BACKPORT_PR_NUMBER" --add-label "O-robot,blathers-backport"
+
+            # Remove "backport-failed" label if it was previously added by a failed attempt.
+            gh pr edit "$PR_NUMBER" --remove-label "backport-failed" || true
+
+            # Add assignee (original PR author).
+            gh pr edit "$BACKPORT_PR_NUMBER" --add-assignee "$PR_AUTHOR" || true
+
+            # Request reviewers from the original PR.
+            if [ -n "$REVIEWERS" ]; then
+              gh pr edit "$BACKPORT_PR_NUMBER" --add-reviewer "$REVIEWERS" || true
+            fi
+
+            SUCCEEDED_BRANCHES="$SUCCEEDED_BRANCHES $BRANCH"
+            echo "=== Successfully created backport PR: $BACKPORT_PR_URL ==="
+          done
+
+          # Post results on the original PR.
+          if [ -n "$(echo "$SUCCEEDED_BRANCHES" | xargs)" ]; then
+            SUCCESS_MSG="Successfully created backport PRs for:$SUCCEEDED_BRANCHES"
+            if [ -n "$(echo "$FAILED_BRANCHES" | xargs)" ]; then
+              SUCCESS_MSG="$SUCCESS_MSG
+
+          Failed to backport to:$FAILED_BRANCHES
+          Please create these backports manually using the [backport tool](https://github.com/cockroachdb/backport)."
+            fi
+            gh pr comment "$PR_NUMBER" --body "$SUCCESS_MSG"
+          fi
+
+          if [ -n "$(echo "$FAILED_BRANCHES" | xargs)" ]; then
+            if [ -z "$(echo "$SUCCEEDED_BRANCHES" | xargs)" ]; then
+              gh pr comment "$PR_NUMBER" --body "$(cat <<EOF
+          Encountered an error creating backports. Some common things that can go wrong:
+          1. The backport branch might have already existed.
+          2. There was a merge conflict.
+          3. The backport branch contained merge commits.
+
+          You might need to create your backport manually using the [backport](https://github.com/cockroachdb/backport) tool.
+
+          ----
+
+          Failed branches:$FAILED_BRANCHES
+          EOF
+          )"
+            fi
+            gh issue edit "$PR_NUMBER" --add-label "backport-failed" || true
+            exit 1
+          fi
