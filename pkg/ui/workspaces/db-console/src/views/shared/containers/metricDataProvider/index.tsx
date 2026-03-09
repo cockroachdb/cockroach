@@ -11,7 +11,6 @@ import {
   defaultTimeScaleOptions,
 } from "@cockroachlabs/cluster-ui";
 import { History } from "history";
-import isEqual from "lodash/isEqual";
 import isNil from "lodash/isNil";
 import isObject from "lodash/isObject";
 import map from "lodash/map";
@@ -21,6 +20,7 @@ import React, { useEffect, useMemo } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { createSelector } from "reselect";
 
+import { useMetrics } from "src/hooks/useMetrics";
 import { PayloadAction } from "src/interfaces/action";
 import * as protos from "src/js/protos";
 import { refreshSettings } from "src/redux/apiReducers";
@@ -28,7 +28,6 @@ import {
   selectResolution10sStorageTTL,
   selectResolution30mStorageTTL,
 } from "src/redux/clusterSettings";
-import { requestMetrics as requestMetricsAction } from "src/redux/metrics";
 import { AdminUIState } from "src/redux/state";
 import { adjustTimeScale, selectMetricsTime } from "src/redux/timeScale";
 import { findChildrenOfType } from "src/util/find";
@@ -95,7 +94,10 @@ function queryFromProps(
  * MetricsDataProvider object via React (i.e. setting an attribute in JSX).
  */
 interface MetricsDataProviderProps {
-  id: string;
+  // id is no longer used internally (the Redux metrics store key was removed
+  // when switching to SWR). Kept optional for backwards compatibility with
+  // existing call sites; can be removed in a follow-up cleanup.
+  id?: string;
   // If current is true, uses the current time instead of the global timewindow.
   current?: boolean;
   children?: React.ReactElement<{}>;
@@ -166,7 +168,7 @@ const current = () => {
  * component; the metric set becomes responsible for querying the server
  * required by that LineGraph.
  *
- * <MetricsDataProvider id="series-x-graph">
+ * <MetricsDataProvider>
  *  <LineGraph data="[]">
  *    <Axis label="Series X over time.">
  *      <Metric title="" name="series.x" sources="node.1" />
@@ -174,17 +176,11 @@ const current = () => {
  *  </LineGraph>
  * </MetricsDataProvider>;
  *
- * Each MetricsDataProvider must have an ID field, which identifies this
- * particular set of metrics to the metrics query reducer. Currently queries
- * metrics from the reducer will be provided to the metric set via the
- * react-redux connection.
- *
  * Additionally, each MetricsDataProvider has a single, externally set TimeSpan
  * property, that determines the window over which time series should be
  * queried. This property is also currently intended to be set via react-redux.
  */
 function MetricsDataProvider({
-  id,
   current: isCurrent,
   children,
   adjustTimeScaleOnChange,
@@ -193,9 +189,6 @@ function MetricsDataProvider({
   history,
 }: MetricsDataProviderProps): React.ReactElement {
   const dispatch = useDispatch();
-  const metrics = useSelector(
-    (state: AdminUIState) => state.metrics.queries[id],
-  );
   const timeInfo = useSelector((state: AdminUIState) =>
     isCurrent ? current() : timeInfoSelector(state),
   );
@@ -230,39 +223,15 @@ function MetricsDataProvider({
     });
   }, [timeInfo, queries]);
 
-  // Refresh metrics if the current request is stale. Runs on mount and
-  // whenever the request message, metrics state, or id changes.
-  useEffect(() => {
-    if (!requestMsg) {
-      return;
-    }
-    const nextRequest = metrics && metrics.nextRequest;
-    if (!nextRequest || !isEqual(nextRequest, requestMsg)) {
-      dispatch(requestMetricsAction(id, requestMsg));
-    }
-  }, [requestMsg, metrics, dispatch, id]);
+  // Fetch metrics data via SWR with request batching. Multiple
+  // MetricsDataProviders rendering in the same cycle have their
+  // requests coalesced into a single API call.
+  const { data } = useMetrics(requestMsg);
 
   // Refresh node settings on mount.
   useEffect(() => {
     dispatch(refreshSettings());
   }, [dispatch]);
-
-  // Compute data to pass to the child component. Only attach data if the
-  // stored queries match the current request queries.
-  const data = useMemo(() => {
-    if (metrics) {
-      const { data: metricsData, request } = metrics;
-      if (
-        metricsData &&
-        request &&
-        requestMsg &&
-        isEqual(request.queries, requestMsg.queries)
-      ) {
-        return metricsData;
-      }
-    }
-    return undefined;
-  }, [metrics, requestMsg]);
 
   const dataProps: MetricsDataComponentProps = {
     data,

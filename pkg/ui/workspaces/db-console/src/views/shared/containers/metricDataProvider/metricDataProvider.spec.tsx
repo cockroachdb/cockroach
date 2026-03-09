@@ -9,8 +9,8 @@ import Long from "long";
 import React from "react";
 import * as reactRedux from "react-redux";
 
+import { UseMetricsResult } from "src/hooks/useMetrics";
 import * as protos from "src/js/protos";
-import { MetricsQuery, requestMetrics } from "src/redux/metrics";
 import {
   Axis,
   Metric,
@@ -20,8 +20,7 @@ import {
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 
 // Mock react-redux hooks so the component can render without a real store.
-// useSelector is mocked per-test to return controlled metrics and timeInfo.
-// useDispatch returns a jest.fn() to capture dispatched actions.
+// useSelector now only returns timeInfo (no longer used for metrics state).
 const mockDispatch = jest.fn();
 jest.mock("react-redux", () => ({
   ...jest.requireActual("react-redux"),
@@ -29,15 +28,12 @@ jest.mock("react-redux", () => ({
   useDispatch: () => mockDispatch,
 }));
 
-// Spy on requestMetrics so we can verify the action creator was called
-// with the right arguments, independent of the dispatch mock.
-jest.mock("src/redux/metrics", () => {
-  const actual = jest.requireActual("src/redux/metrics");
-  return {
-    ...actual,
-    requestMetrics: jest.fn(actual.requestMetrics),
-  };
-});
+// Mock useMetrics so we can control what data the component receives and
+// verify what request it passes to the hook.
+const mockUseMetrics = jest.fn<UseMetricsResult, [any]>();
+jest.mock("src/hooks/useMetrics", () => ({
+  useMetrics: (req: any) => mockUseMetrics(req),
+}));
 
 // Mock refreshSettings to return a simple action (avoid loading the full
 // apiReducers dependency tree).
@@ -71,31 +67,8 @@ const childrenJSX = (
   </TextGraph>
 );
 
-/**
- * Set up useSelector to return the given metrics and timeInfo values.
- * The component calls useSelector twice per render:
- *   1. state => state.metrics.queries[id]  — returns metrics
- *   2. state => timeInfoSelector(state)    — returns timeInfo
- */
-function mockSelectorValues(
-  metricsVal: MetricsQuery | null | undefined,
-  timeInfoVal: QueryTimeInfo,
-) {
-  (reactRedux.useSelector as jest.Mock)
-    .mockReturnValueOnce(metricsVal)
-    .mockReturnValueOnce(timeInfoVal);
-}
-
-function renderDataProvider(
-  id: string,
-  metrics: MetricsQuery | null | undefined,
-  timeInfo: QueryTimeInfo,
-) {
-  capturedProps = null;
-  mockSelectorValues(metrics, timeInfo);
-  return render(
-    <MetricsDataProvider id={id}>{childrenJSX}</MetricsDataProvider>,
-  );
+function mockTimeInfo(timeInfoVal: QueryTimeInfo | null) {
+  (reactRedux.useSelector as jest.Mock).mockReturnValue(timeInfoVal);
 }
 
 function makeMetricsRequest(
@@ -145,27 +118,29 @@ function makeMetricsRequest(
   });
 }
 
-function makeMetricsQuery(
-  id: string,
-  timeSpan: QueryTimeInfo,
-  sources?: string[],
-  tenantSource?: string,
-): MetricsQuery {
-  const request = makeMetricsRequest(timeSpan, sources, tenantSource);
-  const data = new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
-    results: map(request.queries, q => {
-      return {
-        query: q,
-        datapoints: [],
-      };
-    }),
+function makeResponse(timeInfo: QueryTimeInfo) {
+  const request = makeMetricsRequest(timeInfo);
+  return new protos.cockroach.ts.tspb.TimeSeriesQueryResponse({
+    results: map(request.queries, q => ({
+      query: q,
+      datapoints: [],
+    })),
   });
+}
+
+const noData: UseMetricsResult = {
+  data: undefined,
+  error: undefined,
+  isLoading: true,
+  isValidating: true,
+};
+
+function withData(timeInfo: QueryTimeInfo): UseMetricsResult {
   return {
-    id,
-    request,
-    data,
-    nextRequest: request,
+    data: makeResponse(timeInfo),
     error: undefined,
+    isLoading: false,
+    isValidating: false,
   };
 }
 
@@ -184,127 +159,80 @@ describe("<MetricsDataProvider>", () => {
 
   beforeEach(() => {
     mockDispatch.mockReset();
-    (requestMetrics as jest.Mock).mockClear();
+    mockUseMetrics.mockReset();
     (reactRedux.useSelector as jest.Mock).mockReset();
     capturedProps = null;
   });
 
-  describe("refresh", () => {
-    it("refreshes query data when mounted", () => {
-      renderDataProvider(graphid, null, timespan1);
-      expect(requestMetrics).toHaveBeenCalledWith(
-        graphid,
-        makeMetricsRequest(timespan1),
-      );
-    });
-
-    it("does nothing when mounted if current request fulfilled", () => {
-      renderDataProvider(
-        graphid,
-        makeMetricsQuery(graphid, timespan1),
-        timespan1,
-      );
-      expect(requestMetrics).not.toHaveBeenCalled();
-    });
-
-    it("does nothing when mounted if current request is in flight", () => {
-      const query = makeMetricsQuery(graphid, timespan1);
-      query.request = null;
-      query.data = null;
-      renderDataProvider(graphid, query, timespan1);
-      expect(requestMetrics).not.toHaveBeenCalled();
-    });
-
-    it("refreshes query data when receiving props", () => {
-      const { rerender } = renderDataProvider(
-        graphid,
-        makeMetricsQuery(graphid, timespan1),
-        timespan1,
-      );
-      expect(requestMetrics).not.toHaveBeenCalled();
-      // Rerender with metrics cleared — triggers a refresh.
-      mockSelectorValues(undefined, timespan1);
-      rerender(
+  describe("request construction", () => {
+    it("passes correct request to useMetrics on mount", () => {
+      mockTimeInfo(timespan1);
+      mockUseMetrics.mockReturnValue(noData);
+      render(
         <MetricsDataProvider id={graphid}>{childrenJSX}</MetricsDataProvider>,
       );
-      expect(requestMetrics).toHaveBeenCalledWith(
-        graphid,
+      expect(mockUseMetrics).toHaveBeenCalledWith(
         makeMetricsRequest(timespan1),
       );
     });
 
-    it("refreshes if timespan changes", () => {
-      const { rerender } = renderDataProvider(
-        graphid,
-        makeMetricsQuery(graphid, timespan1),
-        timespan1,
+    it("passes undefined request when timeInfo is null", () => {
+      mockTimeInfo(null);
+      mockUseMetrics.mockReturnValue(noData);
+      render(
+        <MetricsDataProvider id={graphid}>{childrenJSX}</MetricsDataProvider>,
       );
-      expect(requestMetrics).not.toHaveBeenCalled();
+      expect(mockUseMetrics).toHaveBeenCalledWith(undefined);
+    });
+
+    it("passes updated request when timespan changes", () => {
+      mockTimeInfo(timespan1);
+      mockUseMetrics.mockReturnValue(noData);
+      const { rerender } = render(
+        <MetricsDataProvider id={graphid}>{childrenJSX}</MetricsDataProvider>,
+      );
+      expect(mockUseMetrics).toHaveBeenLastCalledWith(
+        makeMetricsRequest(timespan1),
+      );
+
       // Rerender with a different timespan.
-      mockSelectorValues(makeMetricsQuery(graphid, timespan1), timespan2);
+      mockTimeInfo(timespan2);
       rerender(
         <MetricsDataProvider id={graphid}>{childrenJSX}</MetricsDataProvider>,
       );
-      expect(requestMetrics).toHaveBeenCalledWith(
-        graphid,
+      expect(mockUseMetrics).toHaveBeenLastCalledWith(
         makeMetricsRequest(timespan2),
-      );
-    });
-
-    it("refreshes if query changes", () => {
-      const { rerender } = renderDataProvider(
-        graphid,
-        makeMetricsQuery(graphid, timespan1),
-        timespan1,
-      );
-      expect(requestMetrics).not.toHaveBeenCalled();
-      // Rerender with different sources in the metrics query.
-      mockSelectorValues(
-        makeMetricsQuery(graphid, timespan1, ["1"]),
-        timespan1,
-      );
-      rerender(
-        <MetricsDataProvider id={graphid}>{childrenJSX}</MetricsDataProvider>,
-      );
-      expect(requestMetrics).toHaveBeenCalledWith(
-        graphid,
-        makeMetricsRequest(timespan1),
       );
     });
   });
 
   describe("attach", () => {
     it("attaches metrics data to contained component", () => {
-      renderDataProvider(
-        graphid,
-        makeMetricsQuery(graphid, timespan1),
-        timespan1,
+      mockTimeInfo(timespan1);
+      mockUseMetrics.mockReturnValue(withData(timespan1));
+      render(
+        <MetricsDataProvider id={graphid}>{childrenJSX}</MetricsDataProvider>,
       );
       expect(capturedProps.data).toBeDefined();
-      expect(capturedProps.data).toEqual(
-        makeMetricsQuery(graphid, timespan1).data,
-      );
+      expect(capturedProps.data).toEqual(makeResponse(timespan1));
     });
 
-    it("attaches metrics data if timespan doesn't match", () => {
-      renderDataProvider(
-        graphid,
-        makeMetricsQuery(graphid, timespan1),
-        timespan2,
-      );
-      expect(capturedProps.data).toBeDefined();
-      expect(capturedProps.data).toEqual(
-        makeMetricsQuery(graphid, timespan1).data,
-      );
-    });
-
-    it("does not attach metrics data if query doesn't match", () => {
-      renderDataProvider(
-        graphid,
-        makeMetricsQuery(graphid, timespan1, ["1"]),
-        timespan1,
+    it("passes undefined data when loading", () => {
+      mockTimeInfo(timespan1);
+      mockUseMetrics.mockReturnValue(noData);
+      render(
+        <MetricsDataProvider id={graphid}>{childrenJSX}</MetricsDataProvider>,
       );
       expect(capturedProps.data).toBeUndefined();
+    });
+
+    it("passes timeInfo to contained component", () => {
+      mockTimeInfo(timespan1);
+      mockUseMetrics.mockReturnValue(noData);
+      render(
+        <MetricsDataProvider id={graphid}>{childrenJSX}</MetricsDataProvider>,
+      );
+      expect(capturedProps.timeInfo).toEqual(timespan1);
     });
 
     it("throws error if it contains multiple graph components", () => {
@@ -312,7 +240,8 @@ describe("<MetricsDataProvider>", () => {
       const consoleSpy = jest
         .spyOn(console, "error")
         .mockImplementation(() => {});
-      mockSelectorValues(null, timespan1);
+      mockTimeInfo(timespan1);
+      mockUseMetrics.mockReturnValue(noData);
       expect(() => {
         render(
           // @ts-expect-error: intentionally passing multiple children to test runtime error
