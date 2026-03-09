@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/jwtauth"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	secuser "github.com/cockroachdb/cockroach/pkg/security/username"
@@ -119,13 +120,11 @@ var WebSessionTimeout = settings.RegisterDurationSetting(
 	settings.WithName("server.web_session.timeout"),
 	settings.WithPublic)
 
-// jwtVerifier is a duplicate of the singleton global pgwire object which gets
-// initialized from VerifyJWT method whenever a JWT auth attempt for accessing
-// DB console APIs happens. It depends on jwtauth module to be imported
-// properly to override its default ConfigureJWTAuth constructor.
+// jwtVerifier is a singleton initialized from VerifyJWT on the first JWT auth
+// attempt for DB console API access.
 var jwtVerifier = struct {
 	sync.Once
-	j pgwire.JWTVerifier
+	j jwtauth.JWTVerifier
 }{}
 
 type authenticationServer struct {
@@ -690,7 +689,7 @@ func (s *authenticationServer) VerifyJWT(
 	execCfg := s.sqlServer.ExecutorConfig()
 	jwtVerifier.Do(func() {
 		if jwtVerifier.j == nil {
-			jwtVerifier.j = pgwire.ConfigureJWTAuth(
+			jwtVerifier.j = jwtauth.ConfigureJWTAuth(
 				ctx,
 				execCfg.AmbientCtx,
 				execCfg.Settings,

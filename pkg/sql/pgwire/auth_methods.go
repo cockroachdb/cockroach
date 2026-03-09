@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
+	"github.com/cockroachdb/cockroach/pkg/security/jwtauth"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/sessionrevival"
@@ -727,84 +728,7 @@ func authSessionRevivalToken(token []byte) AuthMethod {
 	}
 }
 
-// JWTVerifier is an interface for the `jwtauth` library to add JWT login support.
-// This interface has a method that validates whether a given JWT token is a proper
-// credential for a given user to login.
-type JWTVerifier interface {
-	ValidateJWTLogin(_ context.Context, _ *cluster.Settings,
-		_ username.SQLUsername,
-		_ []byte,
-		_ *identmap.Conf,
-	) (detailedErrorMsg redact.RedactableString, authError error)
-
-	// RetrieveIdentity retrieves the user identity from the JWT.
-	//
-	// If a user identity is provided as input, it matches it against the token
-	// principals. In case of a match, it returns the matched user and no
-	// error. Otherwise, it returns the input user along with the error.
-	//
-	// If a user identity is not provided as input, and there is a single token
-	// principal to match against, it returns this user identity and no error.
-	// If there are multiple matches, then it returns an error.
-	RetrieveIdentity(
-		_ context.Context, st *cluster.Settings, _ username.SQLUsername, _ []byte, _ *identmap.Conf,
-	) (retrievedUser username.SQLUsername, authError error)
-
-	ExtractGroups(ctx context.Context, st *cluster.Settings, token []byte) ([]string, error)
-
-	// Combined minimal check used by the provisioner:
-	//   - verifies signature with the configured key set
-	//   - confirms the `iss` claim is configured
-	//   - returns the verified issuer string
-	//
-	//   issuer       – verified `iss` string (empty on failure)
-	//   detailedErr  – redactable diagnostics for LogAuthFailed
-	//   authErr      – high-level error shown to the client
-	VerifyAndExtractIssuer(
-		_ context.Context,
-		_ *cluster.Settings,
-		_ []byte,
-	) (issuer string, detailedErr redact.RedactableString, authErr error)
-}
-
-var jwtVerifier JWTVerifier
-
-type noJWTConfigured struct{}
-
-func (c *noJWTConfigured) ValidateJWTLogin(
-	_ context.Context, _ *cluster.Settings, _ username.SQLUsername, _ []byte, _ *identmap.Conf,
-) (detailedErrorMsg redact.RedactableString, authError error) {
-	return "", errors.New("JWT token authentication requires CCL features")
-}
-
-func (c *noJWTConfigured) RetrieveIdentity(
-	_ context.Context, _ *cluster.Settings, u username.SQLUsername, _ []byte, _ *identmap.Conf,
-) (retrievedUser username.SQLUsername, authError error) {
-	return u, errors.New("JWT token authentication requires CCL features")
-}
-
-func (c *noJWTConfigured) ExtractGroups(
-	ctx context.Context, _ *cluster.Settings, _ []byte,
-) ([]string, error) {
-	return nil, errors.New("JWT authorization requires CCL features")
-}
-
-func (c *noJWTConfigured) VerifyAndExtractIssuer(
-	_ context.Context, _ *cluster.Settings, _ []byte,
-) (issuer string, detailedErr redact.RedactableString, authErr error) {
-	return "", "", errors.New("JWT token authentication has not been configured")
-}
-
-// ConfigureJWTAuth is a hook for the `jwtauth` library to add JWT login support. It's called to
-// setup the JWTVerifier just as it is needed.
-var ConfigureJWTAuth = func(
-	serverCtx context.Context,
-	ambientCtx log.AmbientContext,
-	st *cluster.Settings,
-	clusterUUID uuid.UUID,
-) JWTVerifier {
-	return &noJWTConfigured{}
-}
+var jwtVerifier jwtauth.JWTVerifier
 
 // authJwtToken is the AuthMethod constructor for the CRDB-specific
 // jwt auth token.
@@ -825,7 +749,7 @@ func authJwtToken(
 ) (*AuthBehaviors, error) {
 	// Initialize the jwt verifier if it hasn't been already.
 	if jwtVerifier == nil {
-		jwtVerifier = ConfigureJWTAuth(sctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
+		jwtVerifier = jwtauth.ConfigureJWTAuth(sctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
 	}
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
@@ -945,7 +869,7 @@ func authJwtToken(
 	b.SetAuthorizer(func(ctx context.Context, systemIdentity string, clientConnection bool) error {
 		c.LogAuthInfof(ctx, "JWT authentication succeeded; attempting authorization")
 
-		// Ask the CCL verifier for groups (nil slice means feature disabled).
+		// Ask the verifier for groups (nil slice means feature disabled).
 		groups, err := jwtVerifier.ExtractGroups(ctx, execCfg.Settings, []byte(token))
 		if err != nil {
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_AUTHORIZATION_ERROR, err)
@@ -1065,7 +989,7 @@ func (c *noLDAPConfigured) FetchLDAPGroups(
 	return nil, "", errors.New("LDAP based authorization requires CCL features")
 }
 
-// ConfigureLDAPAuth is a hook for the `ldapauthccl` library to add LDAP login
+// ConfigureLDAPAuth is a hook for the `ldapauth` library to add LDAP login
 // support. It's called to setup the LDAPManager just as it is needed.
 var ConfigureLDAPAuth = func(
 	serverCtx context.Context,

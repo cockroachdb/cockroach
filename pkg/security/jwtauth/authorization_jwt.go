@@ -92,7 +92,7 @@ func parseUserinfoGroups(
 	return groups, nil
 }
 
-// ExtractGroups is part of the JWTVerifier interface in pgwire.
+// ExtractGroups is part of the JWTVerifier interface.
 //   - If server.jwt_authentication.authorization.enabled is FALSE -> return (nil, nil)
 //   - Else return the groups list from jwt
 //     if groups field is absent from jwt, try fetching it from userinfo endpoint
