@@ -9,6 +9,8 @@ export * from "./transactionDiagnosticsApi";
 export * from "./statementsApi";
 export * from "./basePath";
 export * from "./nodesApi";
+export * from "./livenessApi";
+export * from "./nodesSummaryApi";
 export * from "./clusterLocksApi";
 export * from "./stmtInsightsApi";
 export * from "./txnInsightsApi";
