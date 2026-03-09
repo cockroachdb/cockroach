@@ -730,8 +730,17 @@ func synthesizeLeasePreferencesForTable(
 // regions, ensuring all replicas are constrained within the region set. The
 // affinityRegion receives priority for any extra replicas beyond an even
 // distribution. The affinityRegion must be a member of the regions slice.
+//
+// When minAffinityReplicas > 0, at least that many replicas are reserved for
+// the affinity region (clamped to numReplicas). The remainder is distributed
+// evenly across the other regions. This is used for zone survival in super
+// regions, where voter_constraints pin all voters to the home region and
+// constraints must not demand more non-home replicas than non-voters available.
 func distributeReplicasAcrossRegions(
-	numReplicas int32, regions catpb.RegionNames, affinityRegion catpb.RegionName,
+	numReplicas int32,
+	regions catpb.RegionNames,
+	affinityRegion catpb.RegionName,
+	minAffinityReplicas int32,
 ) ([]zonepb.ConstraintsConjunction, error) {
 	numRegions := int32(len(regions))
 	if numRegions == 0 {
@@ -740,25 +749,64 @@ func distributeReplicasAcrossRegions(
 	if !regions.Contains(affinityRegion) {
 		return nil, errors.AssertionFailedf("affinity region %s must be a member of the region set %v", affinityRegion, regions)
 	}
-	base := numReplicas / numRegions
-	extra := numReplicas % numRegions
 
-	// Determine which regions get an extra replica. The affinity region gets
-	// first priority, then remaining extras go to other regions in their
-	// original order.
-	getsExtra := make(map[catpb.RegionName]bool)
-	remaining := extra
-	if remaining > 0 {
-		getsExtra[affinityRegion] = true
-		remaining--
+	// Clamp the affinity minimum to the total replica count.
+	if minAffinityReplicas > numReplicas {
+		minAffinityReplicas = numReplicas
 	}
-	for _, r := range regions {
-		if remaining == 0 {
-			break
+
+	// replicasPerRegion maps each region to its assigned replica count.
+	replicasPerRegion := make(map[catpb.RegionName]int32, numRegions)
+
+	if minAffinityReplicas > 0 {
+		// Reserve minAffinityReplicas for the affinity region and distribute
+		// the rest evenly across the remaining regions.
+		replicasPerRegion[affinityRegion] = minAffinityReplicas
+		remainder := numReplicas - minAffinityReplicas
+		otherRegions := numRegions - 1
+		if otherRegions > 0 && remainder > 0 {
+			base := remainder / otherRegions
+			extra := remainder % otherRegions
+			idx := int32(0)
+			for _, r := range regions {
+				if r == affinityRegion {
+					continue
+				}
+				n := base
+				if idx < extra {
+					n++
+				}
+				if n > 0 {
+					replicasPerRegion[r] = n
+				}
+				idx++
+			}
 		}
-		if r != affinityRegion {
-			getsExtra[r] = true
+	} else {
+		// Even distribution: affinity region gets first priority for extras.
+		base := numReplicas / numRegions
+		extra := numReplicas % numRegions
+		getsExtra := make(map[catpb.RegionName]bool)
+		remaining := extra
+		if remaining > 0 {
+			getsExtra[affinityRegion] = true
 			remaining--
+		}
+		for _, r := range regions {
+			if remaining == 0 {
+				break
+			}
+			if r != affinityRegion {
+				getsExtra[r] = true
+				remaining--
+			}
+		}
+		for _, r := range regions {
+			n := base
+			if getsExtra[r] {
+				n++
+			}
+			replicasPerRegion[r] = n
 		}
 	}
 
@@ -766,10 +814,7 @@ func distributeReplicasAcrossRegions(
 	// deterministic and predictable across runs.
 	var constraints []zonepb.ConstraintsConjunction
 	for _, region := range regions {
-		n := base
-		if getsExtra[region] {
-			n++
-		}
+		n := replicasPerRegion[region]
 		if n > 0 {
 			constraints = append(constraints, zonepb.ConstraintsConjunction{
 				NumReplicas: n,
@@ -782,9 +827,21 @@ func distributeReplicasAcrossRegions(
 
 // AddConstraintsForSuperRegion updates the ZoneConfig.Constraints field such
 // that every replica is guaranteed to be constrained to a region within the
-// super region. Replicas are distributed evenly across regions with the
-// affinity region receiving priority for any remainder. An error is returned
-// if the affinity region is not a member of a super region.
+// super region. An error is returned if the affinity region is not a member of
+// a super region.
+//
+// The distribution strategy depends on the survival goal:
+//
+//   - Zone survival: voter_constraints pin ALL voters to the affinity (home)
+//     region, so the only replicas available for non-home regions are
+//     non-voters. We pass numVoters as minAffinityReplicas so the home region
+//     gets at least that many, and the remaining replicas spread across
+//     other regions. For restricted placement (no non-voters), numReplicas
+//     equals numVoters so all replicas go to the home region.
+//
+//   - Region survival: replicas are distributed evenly across all super-region
+//     members (minAffinityReplicas == 0) with the affinity region receiving
+//     priority for any remainder.
 func AddConstraintsForSuperRegion(
 	zc *zonepb.ZoneConfig, regionConfig multiregion.RegionConfig, affinityRegion catpb.RegionName,
 ) error {
@@ -792,13 +849,22 @@ func AddConstraintsForSuperRegion(
 	if !ok {
 		return errors.AssertionFailedf("region %s is not part of a super region", affinityRegion)
 	}
-	_, numReplicas := GetNumVotersAndNumReplicas(regionConfig.WithRegions(regions))
+	srConfig := regionConfig.WithRegions(regions)
+	numVoters, numReplicas := GetNumVotersAndNumReplicas(srConfig)
 
 	zc.NumReplicas = &numReplicas
-	constraints, err := distributeReplicasAcrossRegions(numReplicas, regions, affinityRegion)
+
+	var minAffinity int32
+	if srConfig.SurvivalGoal() == descpb.SurvivalGoal_ZONE_FAILURE {
+		minAffinity = numVoters
+	}
+	constraints, err := distributeReplicasAcrossRegions(
+		numReplicas, regions, affinityRegion, minAffinity,
+	)
 	if err != nil {
 		return err
 	}
+
 	zc.Constraints = constraints
 	zc.InheritedConstraints = false
 	return nil

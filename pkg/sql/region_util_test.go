@@ -1925,10 +1925,10 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 				NumReplicas: proto.Int32(5),
 				NumVoters:   proto.Int32(3),
 				Constraints: []zonepb.ConstraintsConjunction{
-					{NumReplicas: 2, Constraints: []zonepb.Constraint{
+					{NumReplicas: 3, Constraints: []zonepb.Constraint{
 						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
 					}},
-					{NumReplicas: 2, Constraints: []zonepb.Constraint{
+					{NumReplicas: 1, Constraints: []zonepb.Constraint{
 						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
 					}},
 					{NumReplicas: 1, Constraints: []zonepb.Constraint{
@@ -2012,10 +2012,10 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 				NumReplicas: proto.Int32(5),
 				NumVoters:   proto.Int32(3),
 				Constraints: []zonepb.ConstraintsConjunction{
-					{NumReplicas: 2, Constraints: []zonepb.Constraint{
+					{NumReplicas: 3, Constraints: []zonepb.Constraint{
 						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
 					}},
-					{NumReplicas: 2, Constraints: []zonepb.Constraint{
+					{NumReplicas: 1, Constraints: []zonepb.Constraint{
 						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
 					}},
 					{NumReplicas: 1, Constraints: []zonepb.Constraint{
@@ -2054,14 +2054,8 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 				NumReplicas: proto.Int32(3),
 				NumVoters:   proto.Int32(3),
 				Constraints: []zonepb.ConstraintsConjunction{
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{
+					{NumReplicas: 3, Constraints: []zonepb.Constraint{
 						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
-					}},
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{
-						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
-					}},
-					{NumReplicas: 1, Constraints: []zonepb.Constraint{
-						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_c"},
 					}},
 				},
 				NullVoterConstraintsIsEmpty: true,
@@ -2097,10 +2091,10 @@ func TestZoneConfigForMultiRegionPartition(t *testing.T) {
 				NumReplicas: proto.Int32(5),
 				NumVoters:   proto.Int32(3),
 				Constraints: []zonepb.ConstraintsConjunction{
-					{NumReplicas: 2, Constraints: []zonepb.Constraint{
+					{NumReplicas: 3, Constraints: []zonepb.Constraint{
 						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_a"},
 					}},
-					{NumReplicas: 2, Constraints: []zonepb.Constraint{
+					{NumReplicas: 1, Constraints: []zonepb.Constraint{
 						{Type: zonepb.Constraint_REQUIRED, Key: "region", Value: "region_b"},
 					}},
 					{NumReplicas: 1, Constraints: []zonepb.Constraint{
