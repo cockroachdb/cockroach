@@ -109,7 +109,7 @@ func fieldSetterJulianDate(fe *fieldExtract, s string) (bool, error) {
 		return true, inputErrorf("could not parse julian date")
 	}
 
-	year, month, day := julianDayToDate(date)
+	year, month, day := JulianDayToDate(date)
 
 	if err := fe.Set(fieldYear, year); err != nil {
 		return true, err

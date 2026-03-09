@@ -601,6 +601,13 @@ func TestLogic_datetime(
 	runLogicTest(t, "datetime")
 }
 
+func TestLogic_datetime_parsing(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "datetime_parsing")
+}
+
 func TestLogic_decimal(
 	t *testing.T,
 ) {
@@ -1495,6 +1502,13 @@ func TestLogic_notice(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "notice")
+}
+
+func TestLogic_numeric_formatting(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "numeric_formatting")
 }
 
 func TestLogic_numeric_references(

@@ -28,6 +28,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
@@ -2556,6 +2557,72 @@ var regularBuiltins = map[string]builtinDefinition{
 			Info:       "Convert a timestamp with time zone to a string using the given format.",
 			Volatility: volatility.Stable,
 		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "number", Typ: types.Int}, {Name: "format", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				val := int64(tree.MustBeDInt(args[0]))
+				f := string(tree.MustBeDString(args[1]))
+				d := new(apd.Decimal)
+				d.SetInt64(val)
+				s, err := tochar.DecimalToChar(d, ctx.ToCharFormatCache, f)
+				return tree.NewDString(s), err
+			},
+			Info:       "Convert an integer to a string using the given format.",
+			Volatility: volatility.Stable,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "number", Typ: types.Float}, {Name: "format", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				val := float64(tree.MustBeDFloat(args[0]))
+				f := string(tree.MustBeDString(args[1]))
+				d := new(apd.Decimal)
+				if _, err := d.SetFloat64(val); err != nil {
+					return nil, err
+				}
+				s, err := tochar.DecimalToChar(d, ctx.ToCharFormatCache, f)
+				return tree.NewDString(s), err
+			},
+			Info:       "Convert a float to a string using the given format.",
+			Volatility: volatility.Stable,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "number", Typ: types.Decimal}, {Name: "format", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				dd := tree.MustBeDDecimal(args[0])
+				f := string(tree.MustBeDString(args[1]))
+				s, err := tochar.DecimalToChar(&dd.Decimal, ctx.ToCharFormatCache, f)
+				return tree.NewDString(s), err
+			},
+			Info:       "Convert a decimal to a string using the given format.",
+			Volatility: volatility.Stable,
+		},
+	),
+
+	"to_number": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "value", Typ: types.String}, {Name: "format", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Decimal),
+			Fn: func(_ context.Context, ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				val := string(tree.MustBeDString(args[0]))
+				f := string(tree.MustBeDString(args[1]))
+				d, err := tochar.CharToDecimal(val, ctx.ToCharFormatCache, f)
+				if err != nil {
+					return nil, err
+				}
+				if d == nil {
+					return tree.DNull, nil
+				}
+				dd := &tree.DDecimal{}
+				dd.Set(d)
+				return dd, nil
+			},
+			Info:       "Convert a string to a numeric using the given format.",
+			Volatility: volatility.Stable,
+		},
 	),
 
 	"to_char_with_style": makeBuiltin(
@@ -2732,6 +2799,40 @@ var regularBuiltins = map[string]builtinDefinition{
 			},
 			Info:       "Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone.",
 			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "date_string", Typ: types.String}, {Name: "format", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.TimestampTZ),
+			Fn: func(_ context.Context, ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				dateStr := string(tree.MustBeDString(args[0]))
+				fmtStr := string(tree.MustBeDString(args[1]))
+				t, err := tochar.CharToTimestamp(dateStr, ctx.ToCharFormatCache, fmtStr, ctx.GetLocation())
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDTimestampTZ(t, time.Microsecond)
+			},
+			Info:       "Convert a string to a timestamp with time zone using the given format.",
+			Volatility: volatility.Stable,
+		},
+	),
+
+	"to_date": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "date_string", Typ: types.String}, {Name: "format", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Date),
+			Fn: func(_ context.Context, ctx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				dateStr := string(tree.MustBeDString(args[0]))
+				fmtStr := string(tree.MustBeDString(args[1]))
+				year, month, day, err := tochar.CharToDate(dateStr, ctx.ToCharFormatCache, fmtStr)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDDateFromTime(time.Date(year, month, day, 0, 0, 0, 0, time.UTC))
+			},
+			Info:       "Convert a string to a date using the given format.",
+			Volatility: volatility.Stable,
 		},
 	),
 

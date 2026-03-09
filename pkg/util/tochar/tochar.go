@@ -19,14 +19,65 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// date2isoweek returns the ISO week number of year for the given date.
+// Matches the date2isoweek function in PostgreSQL.
+func date2isoweek(year, mon, mday int) int {
+	dayn := pgdate.DateToJulianDay(year, mon, mday)
+	day4 := pgdate.DateToJulianDay(year, 1, 4)
+	day0 := j2day(day4 - 1)
+
+	if dayn < day4-day0 {
+		day4 = pgdate.DateToJulianDay(year-1, 1, 4)
+		day0 = j2day(day4 - 1)
+	}
+
+	result := (dayn-(day4-day0))/7 + 1
+
+	if result >= 52 {
+		day4 = pgdate.DateToJulianDay(year+1, 1, 4)
+		day0 = j2day(day4 - 1)
+		if dayn >= day4-day0 {
+			result = (dayn-(day4-day0))/7 + 1
+		}
+	}
+
+	return result
+}
+
+// date2isoyear returns the ISO 8601 year number for the given date.
+// Matches the date2isoyear function in PostgreSQL.
+func date2isoyear(year, mon, mday int) int {
+	dayn := pgdate.DateToJulianDay(year, mon, mday)
+	day4 := pgdate.DateToJulianDay(year, 1, 4)
+	day0 := j2day(day4 - 1)
+
+	if dayn < day4-day0 {
+		day4 = pgdate.DateToJulianDay(year-1, 1, 4)
+		day0 = j2day(day4 - 1)
+		year--
+	}
+
+	result := (dayn-(day4-day0))/7 + 1
+
+	if result >= 52 {
+		day4 = pgdate.DateToJulianDay(year+1, 1, 4)
+		day0 = j2day(day4 - 1)
+		if dayn >= day4-day0 {
+			year++
+		}
+	}
+
+	return year
+}
+
 // TimeToChar converts a time and a `to_char` format string to a string.
 func TimeToChar(t time.Time, c *FormatCache, f string) (string, error) {
-	return timeToChar(timeWrapper{t}, c.lookup(f))
+	return timeToChar(timeWrapper{t}, c.lookupDCH(f))
 }
 
 // DurationToChar converts a duration and a `to_char` format string to a string.
 func DurationToChar(d duration.Duration, c *FormatCache, f string) (string, error) {
-	return timeToChar(makeToCharDuration(d), c.lookup(f))
+	return timeToChar(makeToCharDuration(d), c.lookupDCH(f))
 }
 
 // timeInterface is intended as a pass through to timeToChar.
@@ -348,7 +399,7 @@ func timeToChar(t timeInterface, formatNodes []formatNode) (string, error) {
 			d := t.Weekday().String()
 			switch fn.key.id {
 			case DCH_DAY:
-				d = strings.ToLower(d)
+				d = strings.ToUpper(d)
 			case DCH_day:
 				d = strings.ToLower(d)
 			}
@@ -360,7 +411,7 @@ func timeToChar(t timeInterface, formatNodes []formatNode) (string, error) {
 			d := t.Weekday().String()[:3]
 			switch fn.key.id {
 			case DCH_DY:
-				d = strings.ToLower(d)
+				d = strings.ToUpper(d)
 			case DCH_dy:
 				d = strings.ToLower(d)
 			}
@@ -406,11 +457,12 @@ func timeToChar(t timeInterface, formatNodes []formatNode) (string, error) {
 			sb.WriteString(fmt.Sprintf("%0*d", fn.suffix.zeroPad(2), val))
 			sb.WriteString(fn.suffix.thVal(val))
 		case DCH_IW:
-			// Added by us, as ISOWeek() does not work.
+			var val int
 			if t.isInterval() {
-				return "", makeIntervalUnsupportedError(fn.key.name)
+				val = date2isoweek(t.Year(), int(t.Month()), t.Day())
+			} else {
+				_, val = t.ISOWeek()
 			}
-			_, val := t.ISOWeek()
 			sb.WriteString(fmt.Sprintf("%0*d", fn.suffix.zeroPad(2), val))
 			sb.WriteString(fn.suffix.thVal(val))
 		case DCH_Q:
@@ -451,11 +503,11 @@ func timeToChar(t timeInterface, formatNodes []formatNode) (string, error) {
 			val := t.Year()
 			switch fn.key.id {
 			case DCH_IYYY, DCH_IYY, DCH_IY, DCH_I:
-				// Added by us, as ISOWeek() does not work.
 				if t.isInterval() {
-					return "", makeIntervalUnsupportedError(fn.key.name)
+					val = date2isoyear(t.Year(), int(t.Month()), t.Day())
+				} else {
+					val, _ = t.ISOWeek()
 				}
-				val, _ = t.ISOWeek()
 			}
 			if !t.isInterval() && val < 0 {
 				val = -val + 1
@@ -481,8 +533,12 @@ func timeToChar(t timeInterface, formatNodes []formatNode) (string, error) {
 			case DCH_I, DCH_Y:
 				val %= 10
 			}
-			// For intervals, negative values get an extra digit.
-			if t.isInterval() && val < 0 {
+			// For intervals, negative values get an extra digit for the minus
+			// sign. Following Postgres, the padding is based on the interval's
+			// year component, not the potentially different ISO year value.
+			// DCH_Y and DCH_I use fixed width 1 with no extra negative padding.
+			if t.isInterval() && t.Year() < 0 &&
+				fn.key.id != DCH_Y && fn.key.id != DCH_I {
 				zeroPad++
 			}
 			sb.WriteString(fmt.Sprintf("%0*d", zeroPad, val))
@@ -501,7 +557,7 @@ func timeToChar(t timeInterface, formatNodes []formatNode) (string, error) {
 					idx = 11
 				}
 			} else if t.Month() < 0 {
-				idx = -1 * int(t.Month())
+				idx = -1 * (int(t.Month()) + 1)
 			} else {
 				idx = 12 - int(t.Month())
 			}
