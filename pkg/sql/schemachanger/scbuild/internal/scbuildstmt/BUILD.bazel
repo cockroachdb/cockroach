@@ -30,6 +30,7 @@ go_library(
         "alter_table_set_storage_param.go",
         "alter_table_set_trigger.go",
         "alter_table_validate_constraint.go",
+        "alter_type.go",
         "comment_on.go",
         "configure_zone.go",
         "create_database.go",

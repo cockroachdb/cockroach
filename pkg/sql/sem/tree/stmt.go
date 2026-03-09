@@ -90,6 +90,7 @@ const (
 const (
 	AlterSequenceTag       = "ALTER SEQUENCE"
 	AlterTableTag          = "ALTER TABLE"
+	AlterTypeTag           = "ALTER TYPE"
 	AlterPolicyTag         = "ALTER POLICY"
 	BackupTag              = "BACKUP"
 	CreateIndexTag         = "CREATE INDEX"
