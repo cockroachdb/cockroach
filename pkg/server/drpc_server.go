@@ -47,12 +47,12 @@ func newDRPCServer(
 		rpc.WithDRPCMetricsUnaryServerInterceptor(
 			rpc.NewDRPCUnaryServerRequestMetricsInterceptor(&reportable,
 				func(method string) bool {
-					return shouldRecordRequestDuration(rpcCtx.Settings, method)
+					return shouldRecordRequestDurationDrpc(rpcCtx.Settings)
 				})),
 		rpc.WithDRPCMetricsStreamServerInterceptor(
 			rpc.NewDRPCStreamServerRequestMetricsInterceptor(&reportable,
 				func(method string) bool {
-					return shouldRecordRequestDuration(rpcCtx.Settings, method)
+					return shouldRecordRequestDurationDrpc(rpcCtx.Settings)
 				})),
 	)
 	if err != nil {
