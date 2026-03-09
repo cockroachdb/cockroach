@@ -10,6 +10,9 @@ package task
 // complete.
 type Group interface {
 	Tasker
+	// Cancel cancels the group's context, which propagates to all tasks in
+	// the group. Cancel is idempotent and safe to call multiple times.
+	Cancel()
 	// Wait waits for all tasks in the group to complete. Errors from tasks are
 	// reported to the test framework automatically and will cause the test to
 	// fail, which also cancels the context passed to the group.
@@ -22,6 +25,9 @@ type Group interface {
 // Errors are returned through the WaitE method.
 type ErrorGroup interface {
 	Tasker
+	// Cancel cancels the group's context, which propagates to all tasks in
+	// the group. Cancel is idempotent and safe to call multiple times.
+	Cancel()
 	// WaitE waits for all tasks in the group to complete. Any errors from tasks
 	// are returned and will cancel the context passed to the group. If the group
 	// contains multiple subgroups, the errors from the groups will be combined

@@ -410,17 +410,16 @@ func runFollowerReadsTest(
 
 	l.Printf("starting read load")
 	const loadDuration = 4 * time.Minute
-	timeoutCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	time.AfterFunc(loadDuration, func() {
-		l.Printf("stopping load")
-		cancel()
-	})
-	g = t.NewGroup(task.WithContext(timeoutCtx), task.ErrorHandler(
+	g = t.NewGroup(task.ErrorHandler(
 		func(_ context.Context, name string, l *logger.Logger, err error) error {
 			return errors.Wrapf(err, "error reading data")
 		},
 	))
+	defer g.Cancel()
+	time.AfterFunc(loadDuration, func() {
+		l.Printf("stopping load")
+		g.Cancel()
+	})
 	const concurrency = 32
 	var cur int
 	for i := 0; cur < concurrency; i++ {

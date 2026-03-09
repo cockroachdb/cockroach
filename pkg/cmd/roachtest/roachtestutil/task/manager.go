@@ -45,10 +45,11 @@ type (
 	}
 
 	group struct {
-		manager  *manager
-		options  []Option
-		ctxGroup ctxgroup.Group
-		groupMu  struct {
+		manager    *manager
+		options    []Option
+		ctxGroup   ctxgroup.Group
+		cancelFunc context.CancelFunc
+		groupMu    struct {
 			syncutil.Mutex
 			groups []*group
 		}
@@ -69,9 +70,10 @@ func NewManager(ctx context.Context, l *logger.Logger) Manager {
 		events: make(chan Event),
 	}
 	m.group = &group{
-		manager:  m,
-		options:  m.defaultOptions(),
-		ctxGroup: ctxgroup.WithContext(ctx),
+		manager:    m,
+		options:    m.defaultOptions(),
+		ctxGroup:   ctxgroup.WithContext(ctx),
+		cancelFunc: func() {},
 	}
 	return m
 }
@@ -161,10 +163,12 @@ func (t *group) newGroupInternal(opts ...Option) *group {
 	if ctx == nil {
 		ctx = t.manager.ctx
 	}
+	ctx, cancel := context.WithCancel(ctx)
 	subgroup := &group{
-		manager:  t.manager,
-		options:  newOpts,
-		ctxGroup: ctxgroup.WithContext(ctx),
+		manager:    t.manager,
+		options:    newOpts,
+		ctxGroup:   ctxgroup.WithContext(ctx),
+		cancelFunc: cancel,
 	}
 	t.groupMu.Lock()
 	defer t.groupMu.Unlock()
@@ -277,6 +281,14 @@ func (t *group) cancelAll() {
 	for _, g := range t.groupMu.groups {
 		g.cancelAll()
 	}
+}
+
+// Cancel cancels the group's context, which propagates to all tasks in the
+// group. Cancel is idempotent and safe to call multiple times. It marks all
+// tasks as expecting cancellation so that errors from context cancellation are
+// not reported as test failures.
+func (t *group) Cancel() {
+	t.cancelAll()
 }
 
 // Wait implements the Group interface.
