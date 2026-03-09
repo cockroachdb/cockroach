@@ -1662,8 +1662,8 @@ func (og *operationGenerator) createView(ctx context.Context, tx pgx.Tx) (*opStm
 	})
 	// Descriptor ID generator may be temporarily unavailable, so
 	// allow uncategorized errors temporarily.
-	opStmt.sql = fmt.Sprintf(`CREATE VIEW %s AS %s`,
-		destViewName, selectStatement.String())
+	opStmt.sql = fmt.Sprintf(`CREATE VIEW %s%s AS %s`,
+		destViewName, og.randSecurityInvokerClause(), selectStatement.String())
 	return opStmt, nil
 }
 
@@ -2499,6 +2499,50 @@ func (og *operationGenerator) renameView(ctx context.Context, tx pgx.Tx) (*opStm
 	})
 
 	stmt.sql = fmt.Sprintf(`ALTER VIEW %s RENAME TO %s`, srcViewName, destViewName)
+	return stmt, nil
+}
+
+func (og *operationGenerator) alterViewSetViewOption(
+	ctx context.Context, tx pgx.Tx,
+) (*opStmt, error) {
+	viewName, err := og.randView(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+	viewExists, err := og.viewExists(ctx, tx, viewName)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+	stmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.UndefinedTable, condition: !viewExists},
+	})
+	value := "true"
+	if og.params.rng.Intn(2) == 0 {
+		value = "false"
+	}
+	stmt.sql = fmt.Sprintf(`ALTER VIEW %s SET (security_invoker = %s)`, viewName, value)
+	return stmt, nil
+}
+
+func (og *operationGenerator) alterViewResetViewOption(
+	ctx context.Context, tx pgx.Tx,
+) (*opStmt, error) {
+	viewName, err := og.randView(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+	viewExists, err := og.viewExists(ctx, tx, viewName)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+	stmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.UndefinedTable, condition: !viewExists},
+	})
+	stmt.sql = fmt.Sprintf(`ALTER VIEW %s RESET (security_invoker)`, viewName)
 	return stmt, nil
 }
 
@@ -3792,6 +3836,22 @@ func (og *operationGenerator) randReferenceActions(
 		acts.Update = tree.NoAction
 	}
 	return acts
+}
+
+// randSecurityInvokerClause randomly returns a WITH (security_invoker) clause
+// for use in CREATE VIEW statements. It returns one of:
+// - " WITH (security_invoker = true)"
+// - " WITH (security_invoker = false)"
+// - "" (no clause)
+func (og *operationGenerator) randSecurityInvokerClause() string {
+	switch og.params.rng.Intn(3) {
+	case 0:
+		return " WITH (security_invoker = true)"
+	case 1:
+		return " WITH (security_invoker = false)"
+	default:
+		return ""
+	}
 }
 
 // randParentColumnForFkRelation fetches a column and table to use as the parent in a single-column foreign key relation.
