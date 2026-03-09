@@ -512,9 +512,12 @@ func (ec *Context) SessionData() *sessiondata.SessionData {
 	return ec.SessionDataStack.Top()
 }
 
-// Copy returns a deep copy of ctx.
+// Copy returns a copy of the EvalCtx that can safely be used concurrently with
+// the original.
 func (ec *Context) Copy() *Context {
 	ctxCopy := *ec
+	// CollationEnvironment is not thread safe.
+	ctxCopy.CollationEnv = tree.CollationEnvironment{}
 	ctxCopy.iVarContainerStack = make([]tree.IndexedVarContainer, len(ec.iVarContainerStack), cap(ec.iVarContainerStack))
 	copy(ctxCopy.iVarContainerStack, ec.iVarContainerStack)
 	return &ctxCopy
