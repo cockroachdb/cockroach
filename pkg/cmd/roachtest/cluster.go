@@ -891,7 +891,7 @@ var create = roachprod.Create
 //
 // NOTE: setTest() needs to be called before a test can use this cluster.
 func (f *clusterFactory) newCluster(
-	ctx context.Context, cfg clusterConfig, setStatus func(string), teeOpt logger.TeeOptType,
+	ctx context.Context, cfg clusterConfig, setStatus func(string),
 ) (*clusterImpl, *vm.CreateOpts, error) {
 	if ctx.Err() != nil {
 		return nil, nil, errors.Wrap(ctx.Err(), "newCluster")
@@ -979,7 +979,7 @@ func (f *clusterFactory) newCluster(
 			retryStr = "-retry" + strconv.Itoa(i-1)
 		}
 		logPath := filepath.Join(f.artifactsDir, runnerLogsDir, clusterCreateDir, genName+retryStr+".log")
-		l, err := logger.RootLogger(logPath, teeOpt)
+		l, err := logger.RootLogger(logPath, logger.NoTee)
 		if err != nil {
 			log.Fatalf("%v", err)
 		}

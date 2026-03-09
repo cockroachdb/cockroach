@@ -659,8 +659,8 @@ func (r *testRunner) allocateOrAttachToCluster(
 	existingClusterName := clustersOpt.clusterName
 	if existingClusterName != "" {
 		// Logs for attaching to a cluster go to a dedicated log file.
-		logPath := filepath.Join(lopt.artifactsDir, runnerLogsDir, "cluster-create", existingClusterName+".log")
-		clusterL, err := logger.RootLogger(logPath, lopt.tee)
+		logPath := filepath.Join(lopt.artifactsDir, runnerLogsDir, clusterCreateDir, existingClusterName+".log")
+		clusterL, err := logger.RootLogger(logPath, logger.NoTee)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -671,7 +671,9 @@ func (r *testRunner) allocateOrAttachToCluster(
 		// TODO(srosenberg): we need to think about validation here. Attaching to an incompatible cluster, e.g.,
 		// using arm64 AMI with amd64 binary, would result in obscure errors. The test runner ensures compatibility
 		// during cluster reuse, whereas attachment via CLI (e.g., via roachprod) does not.
-		lopt.l.PrintfCtx(ctx, "Attaching to existing cluster %s for test %s", existingClusterName, t.Name)
+		shout(ctx, lopt.l, lopt.stdout, "Attaching to existing cluster %s for test %s (logs: %s)",
+			existingClusterName, t.Name,
+			filepath.Join(runnerLogsDir, clusterCreateDir, existingClusterName+".log"))
 		if c, err := attachToExistingCluster(ctx, existingClusterName, clusterL, t.Cluster, opt, r.cr); err != nil {
 			// If the cluster is not found, we fall through to create a new cluster. Otherwise, we bail out.
 			if errors.Is(err, errClusterNotFound) {
@@ -708,7 +710,7 @@ func (r *testRunner) allocateOrAttachToCluster(
 		arch:         arch,
 		os:           clusterOS,
 	}
-	return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus, lopt.tee)
+	return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus)
 }
 
 // runWorker runs tests in a loop until work is exhausted.
@@ -920,8 +922,8 @@ func (r *testRunner) runWorker(
 
 			if clusterCreateErr != nil {
 				atomic.AddInt32(&r.numClusterErrs, 1)
-				shout(ctx, l, stdout, "Unable to create (or reuse) cluster for test %s due to: %s.",
-					testToRun.spec.Name, clusterCreateErr)
+				shout(ctx, l, stdout, "Unable to create (or reuse) cluster for test %s (cluster logs: %s): %s.",
+					testToRun.spec.Name, filepath.Join(runnerLogsDir, clusterCreateDir), clusterCreateErr)
 			} else {
 				if c.arch != arch {
 					// N.B. this can happen if requested machine type is not feasible/available.
@@ -929,7 +931,9 @@ func (r *testRunner) runWorker(
 						testToRun.spec.Name, c.Name(), c.arch, arch)
 					arch = c.arch
 				}
-				l.PrintfCtx(ctx, "Created new cluster for test %s: %s (arch=%q)", testToRun.spec.Name, c.Name(), arch)
+				shout(ctx, l, stdout, "Cluster %s created for test %s (arch=%q, logs: %s)",
+					c.Name(), testToRun.spec.Name, arch,
+					filepath.Join(runnerLogsDir, clusterCreateDir, c.Name()+".log"))
 			}
 		}
 
@@ -1019,15 +1023,38 @@ func (r *testRunner) runWorker(
 
 			c.setTest(t)
 
+			// Create a test-level cluster setup logger with NoTee to reduce
+			// noise in stdout when TeeToStdout is set (when parallelism is 1)
+			setupLogPath := filepath.Join(testArtifactsDir, "cluster_setup.log")
+			setupL, setupLogErr := logger.RootLogger(setupLogPath, logger.NoTee)
+			if setupLogErr != nil {
+				// Fall back to the worker logger if we can't create cluster_setup.log.
+				setupL = l
+			}
+
+			shout(ctx, l, stdout, "Setting up cluster %s for test %s", c.Name(), testToRun.spec.Name)
+
+			// Temporarily swap c.l so that downstream cluster and roachprod
+			// operations write to the setup logger instead of the test
+			// logger that tees to stdout.
+			savedL := c.l
+			c.l = setupL
+
 			var setupErr error
 			if c.spec.NodeCount > 0 { // skip during tests
-				setupErr = c.PutCockroach(ctx, l, t)
+				setupErr = c.PutCockroach(ctx, c.l, t)
 			}
 			if setupErr == nil {
 				setupErr = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
 			}
 			if setupErr == nil {
-				setupErr = c.PutDeprecatedWorkload(ctx, l, t)
+				setupErr = c.PutDeprecatedWorkload(ctx, c.l, t)
+			}
+
+			// Restore the test logger on the cluster.
+			c.l = savedL
+			if setupL != l {
+				setupL.Close()
 			}
 
 			if setupErr != nil {
@@ -1035,8 +1062,11 @@ func (r *testRunner) runWorker(
 				// initial files), we treat the error just like a cluster
 				// creation failure: the error is reported as an
 				// infrastructure flake, and we continue with the next test.
+				shout(ctx, l, stdout, "Cluster setup failed for test %s (setup logs: %s): %s",
+					testToRun.spec.Name, setupLogPath, setupErr)
 				handleClusterCreationFailure(setupErr)
 			} else {
+				shout(ctx, l, stdout, "Cluster %s ready for test %s.", c.Name(), testToRun.spec.Name)
 				// Tell the cluster that, from now on, it will be run "on behalf of this
 				// test".
 				c.status("running test")
