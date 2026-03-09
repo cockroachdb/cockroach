@@ -2173,25 +2173,26 @@ func TestExportImportRoundTrip(t *testing.T) {
 	}
 }
 
-// TODO(adityamaru): Tests still need to be added incrementally as
-// relevant IMPORT INTO logic is added. Some of them include:
-// -> FK and constraint violation
-// -> CSV containing keys which will shadow existing data
-// -> Rollback of a failed IMPORT INTO
-func TestImportIntoCSV(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+// importIntoCSVTestFixture holds the shared state for TestImportIntoCSV,
+// TestImportIntoCSVExtended, and TestImportIntoCSVCollisions.
+type importIntoCSVTestFixture struct {
+	tc          serverutils.TestClusterInterface
+	sqlDB       *sqlutils.SQLRunner
+	conn        *gosql.DB
+	testFiles   csvTestFiles
+	numFiles    int
+	rowsPerFile int
+}
 
+func setupImportIntoCSVTest(t *testing.T) *importIntoCSVTestFixture {
 	skip.UnderShort(t)
 	skip.UnderRace(t, "takes >1min under race")
 
 	const nodes = 3
-
 	numFiles := nodes + 2
 	rowsPerFile := 1000
 	rowsPerRaceFile := 16
 
-	ctx := context.Background()
 	baseDir := datapathutils.TestDataPath(t, "csv")
 	tc := serverutils.StartCluster(t, nodes, base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -2203,48 +2204,8 @@ func TestImportIntoCSV(t *testing.T) {
 		// only allow running in the single-tenant mode.
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 	}})
-	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
-
-	ctx, cancel := tc.Stopper().WithCancelOnQuiesce(context.Background())
-	defer cancel()
-
-	var forceFailure bool
-	var importBodyFinished chan struct{}
-	var delayImportFinish chan struct{}
-
-	for i := 0; i < tc.NumServers(); i++ {
-		tc.ApplicationLayer(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
-			jobspb.TypeImport,
-			func(raw jobs.Resumer) jobs.Resumer {
-				r := raw.(*importResumer)
-				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
-					if importBodyFinished != nil {
-						select {
-						case <-ctx.Done():
-							return ctx.Err()
-						case importBodyFinished <- struct{}{}:
-						}
-					}
-					if delayImportFinish != nil {
-						select {
-						case <-ctx.Done():
-							return ctx.Err()
-						case <-delayImportFinish:
-						}
-					}
-
-					if forceFailure {
-						return errors.New("testing injected failure")
-					}
-					return nil
-				}
-				return r
-			})
-	}
-
 	sqlDB := sqlutils.MakeSQLRunner(conn)
-
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 	// 'import-into-no-glob-wildcard' hits an error that the file doesn't exist
 	// in external storage. When run with test tenants, that error also happens
@@ -2256,51 +2217,60 @@ func TestImportIntoCSV(t *testing.T) {
 
 	testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
 	if util.RaceEnabled {
-		// This test takes a while with the race detector, so reduce the number of
-		// files and rows per file in an attempt to speed it up.
 		numFiles = nodes
 		rowsPerFile = rowsPerRaceFile
 	}
+
+	return &importIntoCSVTestFixture{
+		tc:          tc,
+		sqlDB:       sqlDB,
+		conn:        conn,
+		testFiles:   testFiles,
+		numFiles:    numFiles,
+		rowsPerFile: rowsPerFile,
+	}
+}
+
+// dropTableAfterJobComplete handles dropping a table after ensuring any
+// in-progress import job has completed or been cancelled.
+func (f *importIntoCSVTestFixture) dropTableAfterJobComplete(t *testing.T, tableName string) {
+	var jobID int
+	row := f.conn.QueryRow("SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT' AND status IN ('paused', 'pause-requested', 'reverting')")
+	err := row.Scan(&jobID)
+	if err != nil && !errors.Is(err, gosql.ErrNoRows) {
+		t.Fatal(err)
+	}
+	if jobID != 0 {
+		testutils.SucceedsSoon(t, func() error {
+			r := f.sqlDB.QueryRow(t, "SELECT status FROM [SHOW JOBS] WHERE job_id = $1", jobID)
+			var status string
+			r.Scan(&status)
+			if status == string(jobs.StatePauseRequested) {
+				return errors.New("still has pause-requested status")
+			}
+			return nil
+		})
+		f.sqlDB.Exec(t, "CANCEL JOB $1", jobID)
+		f.sqlDB.Exec(t, "SHOW JOB WHEN COMPLETE $1", jobID)
+	}
+	f.sqlDB.Exec(t, fmt.Sprintf("DROP TABLE %s", tableName))
+}
+
+func TestImportIntoCSV(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	f := setupImportIntoCSVTest(t)
+	defer f.tc.Stopper().Stop(context.Background())
+
+	sqlDB := f.sqlDB
+	testFiles := f.testFiles
 
 	empty := []string{"'nodelocal://1/empty.csv'"}
 
 	// Support subtests by keeping track of the number of jobs that are executed.
 	testNum := -1
-	insertedRows := numFiles * rowsPerFile
-
-	// Some of the tests result in a failing import. In this case, the table
-	// won't be able to drop until IMPORT's OnFailOrCancel brings the table back
-	// online.
-	//
-	// Depending on which node that the import started on, we may have paused
-	// rather than failed. This is because _all_ errors that "rpc error" are
-	// retriable. If we end up with a cross-node nodelocal request, we get a
-	// pause.
-	dropTableAfterJobComplete := func(t *testing.T, tableName string) {
-		var jobID int
-		row := conn.QueryRow("SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'IMPORT' AND status IN ('paused', 'pause-requested', 'reverting')")
-		err := row.Scan(&jobID)
-		if err != nil && !errors.Is(err, gosql.ErrNoRows) {
-			t.Fatal(err)
-		}
-		if jobID != 0 {
-			// If the job has the "pause-requested" status, we must block until
-			// it transitions to the "paused" status (because we cannot cancel
-			// the job otherwise).
-			testutils.SucceedsSoon(t, func() error {
-				r := sqlDB.QueryRow(t, "SELECT status FROM [SHOW JOBS] WHERE job_id = $1", jobID)
-				var status string
-				r.Scan(&status)
-				if status == string(jobs.StatePauseRequested) {
-					return errors.New("still has pause-requested status")
-				}
-				return nil
-			})
-			sqlDB.Exec(t, "CANCEL JOB $1", jobID)
-			sqlDB.Exec(t, "SHOW JOB WHEN COMPLETE $1", jobID)
-		}
-		sqlDB.Exec(t, fmt.Sprintf("DROP TABLE %s", tableName))
-	}
+	insertedRows := f.numFiles * f.rowsPerFile
 
 	for _, tc := range []struct {
 		name    string
@@ -2472,7 +2442,7 @@ func TestImportIntoCSV(t *testing.T) {
 				skip.IgnoreLint(t, "bzip2 not available on PATH?")
 			}
 			sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
-			defer dropTableAfterJobComplete(t, "t")
+			defer f.dropTableAfterJobComplete(t, "t")
 
 			var tableID int64
 			sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 't'`).Scan(&tableID)
@@ -2541,11 +2511,60 @@ func TestImportIntoCSV(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestImportIntoCSVExtended(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	f := setupImportIntoCSVTest(t)
+	defer f.tc.Stopper().Stop(context.Background())
+
+	sqlDB := f.sqlDB
+	testFiles := f.testFiles
+	ctx, cancel := f.tc.Stopper().WithCancelOnQuiesce(context.Background())
+	defer cancel()
+	numFiles := f.numFiles
+	rowsPerFile := f.rowsPerFile
+
+	var forceFailure bool
+	var importBodyFinished chan struct{}
+	var delayImportFinish chan struct{}
+
+	for i := 0; i < f.tc.NumServers(); i++ {
+		f.tc.ApplicationLayer(i).JobRegistry().(*jobs.Registry).TestingWrapResumerConstructor(
+			jobspb.TypeImport,
+			func(raw jobs.Resumer) jobs.Resumer {
+				r := raw.(*importResumer)
+				r.testingKnobs.afterImport = func(_ roachpb.RowCount) error {
+					if importBodyFinished != nil {
+						select {
+						case <-ctx.Done():
+							return ctx.Err()
+						case importBodyFinished <- struct{}{}:
+						}
+					}
+					if delayImportFinish != nil {
+						select {
+						case <-ctx.Done():
+							return ctx.Err()
+						case <-delayImportFinish:
+						}
+					}
+
+					if forceFailure {
+						return errors.New("testing injected failure")
+					}
+					return nil
+				}
+				return r
+			})
+	}
 
 	// Verify unique_rowid is replaced for tables without primary keys.
 	t.Run("import-into-unique_rowid", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
-		defer dropTableAfterJobComplete(t, "t")
+		defer f.dropTableAfterJobComplete(t, "t")
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -2579,7 +2598,7 @@ func TestImportIntoCSV(t *testing.T) {
 			}
 			t.Run(subtestName, func(t *testing.T) {
 				sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-				defer dropTableAfterJobComplete(t, "t")
+				defer f.dropTableAfterJobComplete(t, "t")
 
 				if emptyTable != false {
 					// Insert the test data
@@ -2611,7 +2630,7 @@ func TestImportIntoCSV(t *testing.T) {
 	t.Run("offline-state", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
 		sqlDB.Exec(t, `ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 89999, num_replicas = 5;`)
-		defer dropTableAfterJobComplete(t, "t")
+		defer f.dropTableAfterJobComplete(t, "t")
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -2666,7 +2685,7 @@ func TestImportIntoCSV(t *testing.T) {
 		if err := g.Wait(); err != nil {
 			t.Fatal(err)
 		}
-		waitForJobResult(t, tc, jobspb.JobID(jobID), jobs.StateSucceeded)
+		waitForJobResult(t, f.tc, jobspb.JobID(jobID), jobs.StateSucceeded)
 
 		// Expect it to succeed on re-attempt.
 		sqlDB.QueryRow(t, `SELECT 1 FROM t`).Scan(&unused)
@@ -2694,7 +2713,7 @@ func TestImportIntoCSV(t *testing.T) {
 
 		t.Run(data, func(t *testing.T) {
 			sqlDB.Exec(t, createQuery)
-			defer dropTableAfterJobComplete(t, "t")
+			defer f.dropTableAfterJobComplete(t, "t")
 
 			data = "1"
 			sqlDB.Exec(t, `IMPORT INTO t (a) CSV DATA ($1)`, srv.URL)
@@ -2704,7 +2723,7 @@ func TestImportIntoCSV(t *testing.T) {
 		})
 		t.Run(data, func(t *testing.T) {
 			sqlDB.Exec(t, createQuery)
-			defer dropTableAfterJobComplete(t, "t")
+			defer f.dropTableAfterJobComplete(t, "t")
 
 			data = "1,teststr"
 			sqlDB.Exec(t, `IMPORT INTO t (a, f) CSV DATA ($1)`, srv.URL)
@@ -2714,7 +2733,7 @@ func TestImportIntoCSV(t *testing.T) {
 		})
 		t.Run(data, func(t *testing.T) {
 			sqlDB.Exec(t, createQuery)
-			defer dropTableAfterJobComplete(t, "t")
+			defer f.dropTableAfterJobComplete(t, "t")
 
 			data = "7,12,teststr"
 			sqlDB.Exec(t, `IMPORT INTO t (d, e, f) CSV DATA ($1)`, srv.URL)
@@ -2727,7 +2746,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// Tests IMPORT INTO with a target column set, and an explicit PK.
 	t.Run("target-cols-with-explicit-pk", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-		defer dropTableAfterJobComplete(t, "t")
+		defer f.dropTableAfterJobComplete(t, "t")
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -2766,7 +2785,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// get an error indicating the error.
 	t.Run("csv-with-more-than-targeted-columns", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-		defer dropTableAfterJobComplete(t, "t")
+		defer f.dropTableAfterJobComplete(t, "t")
 
 		// Expect an error if attempting to IMPORT INTO with CSV having more columns
 		// than targeted.
@@ -2781,7 +2800,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// until we support DEFAULT expressions.
 	t.Run("target-cols-excluding-explicit-pk", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-		defer dropTableAfterJobComplete(t, "t")
+		defer f.dropTableAfterJobComplete(t, "t")
 
 		// Expect an error if attempting to IMPORT INTO a target list which does
 		// not include all the PKs of the table.
@@ -2795,7 +2814,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// in its schema then the source CSV file.
 	t.Run("more-table-cols-than-csv", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING, c INT)`)
-		defer dropTableAfterJobComplete(t, "t")
+		defer f.dropTableAfterJobComplete(t, "t")
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -2815,7 +2834,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// defines in what order columns should be imported to align with table definition
 	t.Run("target-cols-reordered", func(t *testing.T) {
 		sqlDB.Exec(t, "CREATE TABLE t (a INT PRIMARY KEY, b INT, c STRING NOT NULL, d DECIMAL NOT NULL)")
-		defer dropTableAfterJobComplete(t, "t")
+		defer f.dropTableAfterJobComplete(t, "t")
 
 		const data = "3.14,c is a string,1\n2.73,another string,2"
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2831,11 +2850,25 @@ func TestImportIntoCSV(t *testing.T) {
 		)
 	})
 
+}
+
+func TestImportIntoCSVCollisions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	f := setupImportIntoCSVTest(t)
+	defer f.tc.Stopper().Stop(context.Background())
+
+	sqlDB := f.sqlDB
+	testFiles := f.testFiles
+	ctx := context.Background()
+	rowsPerFile := f.rowsPerFile
+
 	// Tests that we can import into the table even if the table has columns named with
 	// reserved keywords.
 	t.Run("cols-named-with-reserved-keywords", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t ("select" INT PRIMARY KEY, "from" INT, "Some-c,ol-'Name'" STRING NOT NULL)`)
-		defer dropTableAfterJobComplete(t, "t")
+		defer f.dropTableAfterJobComplete(t, "t")
 
 		const data = "today,1,2"
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -2854,7 +2887,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// in its schema then the source CSV file.
 	t.Run("fewer-table-cols-than-csv", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT)`)
-		defer dropTableAfterJobComplete(t, "t")
+		defer f.dropTableAfterJobComplete(t, "t")
 
 		sqlDB.ExpectErr(
 			t, "row 1: expected 1 fields, got 2",
@@ -2866,7 +2899,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// import of all columns in the exisiting table.
 	t.Run("no-target-cols-specified", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-		defer dropTableAfterJobComplete(t, "t")
+		defer f.dropTableAfterJobComplete(t, "t")
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -2900,7 +2933,7 @@ func TestImportIntoCSV(t *testing.T) {
 			}
 		}))
 		defer srv.Close()
-		defer dropTableAfterJobComplete(t, "t")
+		defer f.dropTableAfterJobComplete(t, "t")
 		sqlDB.ExpectErr(t, `violated by column "b"`,
 			fmt.Sprintf(`IMPORT INTO t (a) CSV DATA ("%s")`, srv.URL),
 		)
@@ -2911,7 +2944,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// exercises the row_id generation in IMPORT.
 	t.Run("multiple-import-into-without-pk", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
-		defer dropTableAfterJobComplete(t, "t")
+		defer f.dropTableAfterJobComplete(t, "t")
 
 		// Insert the test data
 		insert := []string{"''", "'text'", "'a'", "'e'", "'l'", "'t'", "'z'"}
@@ -2940,7 +2973,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// row_id generation logic.
 	t.Run("multiple-file-import-into-without-pk", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT, b STRING)`)
-		defer dropTableAfterJobComplete(t, "t")
+		defer f.dropTableAfterJobComplete(t, "t")
 
 		sqlDB.Exec(t,
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s, %s)`, testFiles.files[0], testFiles.files[0]),
@@ -2962,7 +2995,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// collision.
 	t.Run("import-into-same-file-diff-imports", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-		defer dropTableAfterJobComplete(t, "t")
+		defer f.dropTableAfterJobComplete(t, "t")
 
 		sqlDB.Exec(t,
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]),
@@ -2985,7 +3018,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// value, and succeeds in doing so.
 	t.Run("import-into-dups-in-sst", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-		defer dropTableAfterJobComplete(t, "t")
+		defer f.dropTableAfterJobComplete(t, "t")
 
 		sqlDB.Exec(t,
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.fileWithDupKeySameValue[0]),
@@ -3003,7 +3036,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// colliding key sandwiched between valid keys.
 	t.Run("import-into-key-collision", func(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
-		defer dropTableAfterJobComplete(t, "t")
+		defer f.dropTableAfterJobComplete(t, "t")
 
 		sqlDB.Exec(t,
 			fmt.Sprintf(`IMPORT INTO t (a, b) CSV DATA (%s)`, testFiles.files[0]),
@@ -3022,7 +3055,7 @@ func TestImportIntoCSV(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE ref (b STRING PRIMARY KEY)`)
 		defer sqlDB.Exec(t, `DROP TABLE ref`)
 		sqlDB.Exec(t, `CREATE TABLE t (a INT CHECK (a >= 0), b STRING, CONSTRAINT fk_ref FOREIGN KEY (b) REFERENCES ref)`)
-		defer dropTableAfterJobComplete(t, "t")
+		defer f.dropTableAfterJobComplete(t, "t")
 
 		var checkValidated, fkValidated bool
 		sqlDB.QueryRow(t, `SELECT validated from [SHOW CONSTRAINT FROM t] WHERE constraint_name = 'check_a'`).Scan(&checkValidated)
@@ -3047,7 +3080,7 @@ func TestImportIntoCSV(t *testing.T) {
 	// Test userfile IMPORT INTO CSV.
 	t.Run("import-into-userfile-simple", func(t *testing.T) {
 		userfileURI := "userfile://defaultdb.public.root/test.csv"
-		userfileStorage, err := tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
+		userfileStorage, err := f.tc.ApplicationLayer(0).ExecutorConfig().(sql.ExecutorConfig).DistSQLSrv.
 			ExternalStorageFromURI(ctx, userfileURI, username.RootUserName())
 		require.NoError(t, err)
 
