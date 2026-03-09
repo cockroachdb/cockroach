@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -174,12 +173,6 @@ var VirtualIntentResolution = settings.RegisterBoolSetting(
 	// solved.
 	// metamorphic.ConstantWithTestBool("kv.concurrency.virtual_intent_resolution.enabled",
 	// false),
-	settings.WithValidateBool(func(_ *settings.Values, b bool) error {
-		if b && !buildutil.CrdbTestBuild {
-			return errors.New("kv.concurrency.virtual_intent_resolution.enabled is not supported in production builds")
-		}
-		return nil
-	}),
 )
 
 // PushUsingCachedClockObservation controls whether we allow intents from
