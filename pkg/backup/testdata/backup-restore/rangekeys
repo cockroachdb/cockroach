@@ -91,7 +91,7 @@ exec-sql
 RESTORE DATABASE orig FROM LATEST IN 'nodelocal://1/test-root/' with new_db_name='orig1';
 ----
 
-exec-sql expect-error-regex=(failed to ingest into remote files: online restore of range keys not supported)
+exec-sql expect-error-regex=(online restore of range keys not supported)
 RESTORE DATABASE orig FROM LATEST IN 'nodelocal://1/test-root/' with new_db_name='orig2', experimental deferred copy;
 ----
 regex matches error
