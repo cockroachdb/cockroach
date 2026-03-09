@@ -179,7 +179,8 @@ func checkRaftLog(
 			Settings: st,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
-					DisableGCQueue: true,
+					DisableGCQueue:      true,
+					DisableRaftLogQueue: true,
 				},
 			},
 			StoreSpecs: []base.StoreSpec{{InMemory: true}},
@@ -193,6 +194,7 @@ func checkRaftLog(
 					Store: &kvserver.StoreTestingKnobs{
 						TestingPostApplyFilter: raftFilter,
 						DisableGCQueue:         true,
+						DisableRaftLogQueue:    true,
 					},
 				},
 				StoreSpecs: []base.StoreSpec{{InMemory: true}},
@@ -219,8 +221,8 @@ func checkRaftLog(
 		tc.Server(0).DB().Put(ctx, testutils.MakeKey(skey, []byte("second")), "some data"),
 		"failed to put test value")
 	reader := <-snapshots
-	assertRaftLog(t, ctx, reader)
 	defer reader.Close()
+	assertRaftLog(t, ctx, reader)
 }
 
 func requireContainsDescriptor(
