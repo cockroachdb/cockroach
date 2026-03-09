@@ -11,7 +11,6 @@ go_library(
         "//pkg/ccl/gssapiccl",
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multitenantccl",
-        "//pkg/ccl/oidcccl",
         "//pkg/ccl/workloadccl",
         "//pkg/ccl/workloadccl/cliccl",
         "//pkg/cloud/impl:cloudimpl",
@@ -20,5 +19,6 @@ go_library(
         "//pkg/crosscluster/producer",
         "//pkg/security/jwtauth",
         "//pkg/security/ldapauth",
+        "//pkg/security/oidcauth",
     ],
 )

@@ -14,7 +14,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/oidcccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/cliccl" // registers fixtures command
 	// TODO(ssd): Many test packages require this implicitly but have failed to
@@ -26,6 +25,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/producer"
 	_ "github.com/cockroachdb/cockroach/pkg/security/jwtauth"
 	_ "github.com/cockroachdb/cockroach/pkg/security/ldapauth"
+	_ "github.com/cockroachdb/cockroach/pkg/security/oidcauth"
 )
 
 // TestingEnableEnterprise is a no-op. It was deprecated when the core license
