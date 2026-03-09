@@ -512,6 +512,13 @@ type Planner interface {
 	// fingerprint, and raw hint protobuf bytes of all deleted rows.
 	DeleteStatementHint(ctx context.Context, rowID int64, statementFingerprint string) (rowIDs []int64, fingerprints []string, hintBytes [][]byte, err error)
 
+	// SetStatementHintEnabled updates the enabled status of statement hints
+	// in system.statement_hints, filtered by row ID or fingerprint. If the
+	// provided rowID is zero, we don't filter on row ID. If the fingerprint
+	// is empty string, we don't filter on fingerprint. Returns the number
+	// of affected rows.
+	SetStatementHintEnabled(ctx context.Context, rowID int64, statementFingerprint string, enabled bool) (int64, error)
+
 	// ValidateSessionVariableHint checks that a session variable with the given
 	// name exists, is writable, and is allowed to be overridden via statement
 	// hints. It also validates the value by attempting a dry-run set. Variables

@@ -300,6 +300,61 @@ func DeleteHintFromDB(
 	return rowIDs, fingerprints, hintBytes, nil
 }
 
+// SetHintEnabledInDB updates the enabled status of statement hints in
+// system.statement_hints, filtered by row ID or fingerprint. If the provided
+// rowID is zero, we don't filter on row ID. If the fingerprint is empty string,
+// we don't filter on fingerprint. Returns the number of affected rows.
+func SetHintEnabledInDB(
+	ctx context.Context,
+	settings *cluster.Settings,
+	txn isql.Txn,
+	rowID int64,
+	fingerprint string,
+	enabled bool,
+) (int64, error) {
+	const opName = "set-statement-hint-enabled"
+	if !settings.Version.IsActive(ctx, clusterversion.V26_2_StatementHintsTypeNameEnabledColumnsAdded) {
+		return 0, errors.New("cannot set statement hint enabled: enabled column not yet available")
+	}
+	filterCols := make([]string, 0, 2)
+	vals := make([]interface{}, 0, 3)
+	vals = append(vals, enabled)
+	if rowID != 0 {
+		filterCols = append(filterCols, `"row_id"`)
+		vals = append(vals, rowID)
+	}
+	if fingerprint != "" {
+		filterCols = append(filterCols, `"fingerprint"`)
+		vals = append(vals, fingerprint)
+	}
+
+	if len(filterCols) == 0 {
+		return 0, errors.New(
+			"set statement hint enabled must specify at least one of row_id or fingerprint",
+		)
+	}
+
+	var b strings.Builder
+	b.WriteString(`UPDATE system.statement_hints SET enabled = $1 WHERE `)
+	for i, filterCol := range filterCols {
+		if i > 0 {
+			b.WriteString(" AND ")
+		}
+		if _, err := fmt.Fprintf(&b, "%s = $%d", filterCol, i+2); err != nil {
+			return 0, err
+		}
+	}
+	res, err := txn.ExecEx(
+		ctx, opName, txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		b.String(),
+		vals...,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return int64(res), nil
+}
+
 // Size returns an estimate of the memory usage of the Hint in bytes.
 func (hint *Hint) Size() int64 {
 	res := int64(unsafe.Sizeof(*hint))

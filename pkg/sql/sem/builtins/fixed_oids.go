@@ -2889,6 +2889,8 @@ var builtinOidsArray = []string{
 	2934: `information_schema.crdb_set_session_variable_hint(statement_fingerprint: string, variable_name: string, variable_value: string, database: string) -> int`,
 	2935: `pg_get_triggerdef(trigger_oid: oid) -> string`,
 	2936: `pg_get_triggerdef(trigger_oid: oid, pretty_bool: bool) -> string`,
+	2937: `information_schema.crdb_enable_statement_hints(enabled: bool, rowid: int) -> int`,
+	2938: `information_schema.crdb_enable_statement_hints(enabled: bool, statement_fingerprint: string) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

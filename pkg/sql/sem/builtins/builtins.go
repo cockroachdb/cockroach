@@ -10005,6 +10005,14 @@ WHERE object_id = table_descriptor_id
 			Volatility: volatility.Volatile,
 		},
 	),
+	"information_schema.crdb_enable_statement_hints": makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemRepair,
+			DistsqlBlocklist: true,
+		},
+		setStatementHintEnabledByRowIDOverload,
+		setStatementHintEnabledByFingerprintOverload,
+	),
 	"information_schema.crdb_set_session_variable_hint": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategorySystemRepair,
@@ -13329,6 +13337,75 @@ var rewriteInlineHintsWithDatabaseOverload = tree.Overload{
 		`rewrite rule only applies to matching statement fingerprints when the current database ` +
 		`matches the specified database. It first removes all inline hints from the target ` +
 		`statement, and then copies inline hints from the donor statement.`,
+	Volatility: volatility.Volatile,
+}
+
+var setStatementHintEnabledByRowIDOverload = tree.Overload{
+	Types: tree.ParamTypes{
+		{Name: "enabled", Typ: types.Bool},
+		{Name: "rowid", Typ: types.Int},
+	},
+	ReturnType: tree.FixedReturnType(types.Int),
+	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+		if err := evalCtx.SessionAccessor.CheckPrivilege(
+			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+		); err != nil {
+			return nil, err
+		}
+		enabled := bool(tree.MustBeDBool(args[0]))
+		rowID := int64(tree.MustBeDInt(args[1]))
+		numAffected, err := evalCtx.Planner.SetStatementHintEnabled(
+			ctx, rowID, "" /* statementFingerprint */, enabled,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDInt(tree.DInt(numAffected)), nil
+	},
+	Info: `This function enables or disables the statement hint with the given row ID. ` +
+		`It returns the number of affected rows.`,
+	Volatility: volatility.Volatile,
+}
+
+var setStatementHintEnabledByFingerprintOverload = tree.Overload{
+	Types: tree.ParamTypes{
+		{Name: "enabled", Typ: types.Bool},
+		{Name: "statement_fingerprint", Typ: types.String},
+	},
+	ReturnType: tree.FixedReturnType(types.Int),
+	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+		if err := evalCtx.SessionAccessor.CheckPrivilege(
+			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+		); err != nil {
+			return nil, err
+		}
+		enabled := bool(tree.MustBeDBool(args[0]))
+		arg := string(tree.MustBeDString(args[1]))
+		fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
+			&evalCtx.Settings.SV,
+		))
+		fingerprintArg, err := parserutils.FingerprintStatement(
+			parserutils.FingerprintTagStatementFingerprint, arg, fingerprintFlags,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if fingerprintArg != arg {
+			evalCtx.ClientNoticeSender.BufferClientNotice(
+				ctx, pgnotice.Newf("statement fingerprint changed to: %s", fingerprintArg),
+			)
+		}
+		numAffected, err := evalCtx.Planner.SetStatementHintEnabled(
+			ctx, 0 /* rowID */, fingerprintArg, enabled,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDInt(tree.DInt(numAffected)), nil
+	},
+	Info: `This function enables or disables all statement hints matching the given ` +
+		`statement fingerprint. The statement fingerprint argument is normalized ` +
+		`before matching. It returns the number of affected rows.`,
 	Volatility: volatility.Volatile,
 }
 
