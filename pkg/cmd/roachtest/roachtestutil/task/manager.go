@@ -279,6 +279,13 @@ func (t *group) cancelAll() {
 	}
 }
 
+// Cancel cancels all tasks in the group and its subgroups. Cancel is idempotent
+// and safe to call multiple times. It marks all tasks as expecting cancellation
+// so that errors from context cancellation are not reported as test failures.
+func (t *group) Cancel() {
+	t.cancelAll()
+}
+
 // Wait implements the Group interface.
 func (t *group) Wait() {
 	_ = t.WaitE()

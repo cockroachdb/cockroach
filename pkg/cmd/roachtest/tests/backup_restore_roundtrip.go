@@ -284,18 +284,7 @@ func initBackgroundWorkloads(
 			return nil, err
 		}
 
-		groupCtx, cancel := context.WithCancel(ctx)
-		runGroup := t.NewGroup(
-			task.WithContext(groupCtx),
-			task.ErrorHandler(func(_ context.Context, _ string, _ *logger.Logger, err error) error {
-				// We expect the workloads to be canceled via context cancellation,
-				// so we want to ignore those errors.
-				if errors.Is(err, context.Canceled) {
-					return nil
-				}
-				return err
-			}),
-		)
+		runGroup := t.NewGroup()
 		runGroup.Go(func(ctx context.Context, l *logger.Logger) error {
 			return c.RunE(ctx, option.WithNodes(workloadNode), bankRun.String())
 		}, task.Name("run-bank"))
@@ -316,7 +305,7 @@ func initBackgroundWorkloads(
 			return testUtils.systemTableWriter(ctx, l, systemTableRNG, dbs, tables)
 		}, task.Name("run-system-table-writer"))
 
-		return cancel, nil
+		return runGroup.Cancel, nil
 	}
 
 	return runWorkloadTasks, nil
