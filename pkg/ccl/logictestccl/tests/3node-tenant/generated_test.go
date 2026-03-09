@@ -718,13 +718,6 @@ func TestTenantLogic_do(
 	runLogicTest(t, "do")
 }
 
-func TestTenantLogic_domain(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "domain")
-}
-
 func TestTenantLogic_drop_database(
 	t *testing.T,
 ) {

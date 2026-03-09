@@ -270,6 +270,7 @@ var validationMap = []struct {
 			"RegionConfig":                  {status: iSolemnlySwearThisFieldIsValidated},
 			"DeclarativeSchemaChangerState": {status: thisFieldReferencesNoObjects},
 			"Composite":                     {status: iSolemnlySwearThisFieldIsValidated},
+			"Domain":                        {status: iSolemnlySwearThisFieldIsValidated},
 			"ReplicatedPCRVersion":          {status: thisFieldReferencesNoObjects},
 		},
 	},

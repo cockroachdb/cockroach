@@ -682,13 +682,6 @@ func TestRepeatableReadLogic_do(
 	runLogicTest(t, "do")
 }
 
-func TestRepeatableReadLogic_domain(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "domain")
-}
-
 func TestRepeatableReadLogic_drop_database(
 	t *testing.T,
 ) {

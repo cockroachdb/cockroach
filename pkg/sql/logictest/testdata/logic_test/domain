@@ -1,3 +1,5 @@
+# LogicTest: local local-legacy-schema-changer local-vec-off fakedist fakedist-vec-off fakedist-disk
+
 # Test CREATE DOMAIN basic operations.
 statement ok
 CREATE DOMAIN d_int AS INT

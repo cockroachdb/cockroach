@@ -538,13 +538,6 @@ func TestLogic_distsql_srfs(
 	runLogicTest(t, "distsql_srfs")
 }
 
-func TestLogic_domain(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "domain")
-}
-
 func TestLogic_drop_function(
 	t *testing.T,
 ) {

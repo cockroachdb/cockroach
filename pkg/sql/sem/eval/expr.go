@@ -177,10 +177,10 @@ func (e *evaluator) EvalCastExpr(ctx context.Context, expr *tree.CastExpr) (tree
 	}
 
 	// NULL cast to anything is NULL, but domain NOT NULL constraints must
-	// still be checked.
+	// still be checked. Use expr.Type to access the target type since
+	// ResolvedType() panics on un-type-checked expressions.
 	if d == tree.DNull {
-		t := expr.ResolvedType()
-		if t.TypeMeta.DomainData != nil {
+		if t, ok := expr.Type.(*types.T); ok && t.TypeMeta.DomainData != nil {
 			if err := ValidateDomainConstraints(ctx, e.ctx(), d, t); err != nil {
 				return nil, err
 			}

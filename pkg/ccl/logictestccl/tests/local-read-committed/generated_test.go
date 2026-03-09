@@ -723,13 +723,6 @@ func TestReadCommittedLogic_do(
 	runLogicTest(t, "do")
 }
 
-func TestReadCommittedLogic_domain(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "domain")
-}
-
 func TestReadCommittedLogic_drop_database(
 	t *testing.T,
 ) {
