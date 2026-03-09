@@ -3732,9 +3732,9 @@ func (m *mockSpanConfigReader) ComputeSplitKey(
 
 func (m *mockSpanConfigReader) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
+) (roachpb.SpanConfig, error) {
 	if e, ok := m.overrides[string(key)]; ok {
-		return e.conf, roachpb.Span{}, nil
+		return e.conf, nil
 	}
 	return m.GetSpanConfigForKey(ctx, key)
 }

@@ -11258,7 +11258,7 @@ func TestStrictLocalityAwareBackup(t *testing.T) {
 	// Wait for span config to be applied correctly.
 	checkSpanConfig := func() error {
 		kvSubscriber := srv.SpanConfigKVSubscriber().(spanconfig.KVSubscriber)
-		conf, _, err := kvSubscriber.GetSpanConfigForKey(ctx, roachpb.RKey(tableDesc.PrimaryIndexSpan(codec).Key))
+		conf, err := kvSubscriber.GetSpanConfigForKey(ctx, roachpb.RKey(tableDesc.PrimaryIndexSpan(codec).Key))
 		if err != nil {
 			return err
 		}
@@ -11451,7 +11451,7 @@ func TestStrictPartitionedBackup(t *testing.T) {
 		kvSubscriber := srv.SpanConfigKVSubscriber().(spanconfig.KVSubscriber)
 
 		for _, part := range partitions {
-			conf, _, err := kvSubscriber.GetSpanConfigForKey(ctx, roachpb.RKey(part.startKey))
+			conf, err := kvSubscriber.GetSpanConfigForKey(ctx, roachpb.RKey(part.startKey))
 			if err != nil {
 				return errors.Wrapf(err, "partition %s", part.name)
 			}

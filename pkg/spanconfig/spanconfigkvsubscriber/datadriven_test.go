@@ -274,7 +274,7 @@ func TestDataDriven(t *testing.T) {
 				case "key":
 					var keyStr string
 					d.ScanArgs(t, cmdArg.Key, &keyStr)
-					config, _, err := kvSubscriber.GetSpanConfigForKey(ctx, roachpb.RKey(keyStr))
+					config, err := kvSubscriber.GetSpanConfigForKey(ctx, roachpb.RKey(keyStr))
 					require.NoError(t, err)
 					return fmt.Sprintf("conf=%s", spanconfigtestutils.PrintSpanConfig(config))
 

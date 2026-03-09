@@ -698,16 +698,9 @@ type Replica struct {
 		//
 		// NB: Span configuration is applied asyncronously. After a span
 		// configuration change but before the replica has been split
-		// based on the new span configuration, the span stored here may
+		// based on the new span configuration, the config stored here may
 		// not represent the span configuration for the entire replica.
-		//
-		// Use of this span configuration that may affect correct
-		// responses should be guarded by a check to confSpan below.
 		conf roachpb.SpanConfig
-		// The bounds of the span configuration. This may not match the
-		// replica's bounds in the case where a span configuration was
-		// recently updated.
-		confSpan roachpb.Span
 		// spanConfigExplicitlySet tracks whether a span config was explicitly set
 		// on this replica (as opposed to it having initialized with the default
 		// span config).
@@ -1160,7 +1153,7 @@ func (r *Replica) GetMaxBytes(_ context.Context) int64 {
 // to the span config was "significant". For significant changes, the caller
 // should queue up the span to all the relevant queues since they may not decide
 // to process this replica.
-func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig, sp roachpb.Span) bool {
+func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	oldConf := r.mu.conf
@@ -1190,7 +1183,6 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig, sp roachpb.Span) bool {
 	}
 	r.mu.conf = conf
 	r.mu.spanConfigExplicitlySet = true
-	r.mu.confSpan = sp
 	r.store.policyRefresher.EnqueueReplicaForRefresh(r)
 	// Inform mma when the span config changes.
 	(*mmaReplica)(r).markSpanConfigNeedsUpdateLocked()
@@ -1509,7 +1501,7 @@ func excludeReplicaFromBackup(
 // replica's cached config does not have ExcludeDataFromBackup, we can
 // skip the iteration entirely. When span config coalescing is enabled,
 // a single range may cover multiple span config entries, so we must
-// check all of them rather than relying on a single cached confSpan.
+// check all of them rather than relying on the replica's cached config.
 func entireSpanExcludedFromBackup(
 	ctx context.Context,
 	sp roachpb.Span,

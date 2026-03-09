@@ -267,11 +267,8 @@ type StoreWriter interface {
 type StoreReader interface {
 	NeedsSplit(ctx context.Context, start, end roachpb.RKey) (bool, error)
 	ComputeSplitKey(ctx context.Context, start, end roachpb.RKey) (roachpb.RKey, error)
-	// GetSpanConfigForKey returns the span configuration for the
-	// given key and the span that the retruened configuration
-	// applies to. Callers can use the returned span to check if a
-	// request is completely contained by the returned config.
-	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, roachpb.Span, error)
+	// GetSpanConfigForKey returns the span config for the given key.
+	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, error)
 	// ForEachOverlappingSpanConfig invokes the supplied callback on each span
 	// config that overlaps with the supplied span. The config is combined with
 	// all the system span configs that also apply to this span. In addition to

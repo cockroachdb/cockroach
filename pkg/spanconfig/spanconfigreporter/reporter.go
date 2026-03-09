@@ -140,7 +140,7 @@ func (r *Reporter) SpanConfigConformance(
 			span,
 			func(descriptors ...roachpb.RangeDescriptor) error {
 				for _, desc := range descriptors {
-					conf, _, err := r.dep.StoreReader.GetSpanConfigForKey(ctx, desc.StartKey)
+					conf, err := r.dep.StoreReader.GetSpanConfigForKey(ctx, desc.StartKey)
 					if err != nil {
 						return err
 					}

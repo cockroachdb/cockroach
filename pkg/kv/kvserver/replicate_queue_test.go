@@ -2268,11 +2268,11 @@ WHERE range_id IN (SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1);`
 			// be contained in the start key's span config. If this is not the
 			// case, it can explain why the replication changes are not being made.
 			iterateOverAllStores(t, tc, func(s *kvserver.Store) error {
-				cfg, sp, err := s.GetStoreConfig().SpanConfigSubscriber.GetSpanConfigForKey(ctx, desc.StartKey)
+				cfg, err := s.GetStoreConfig().SpanConfigSubscriber.GetSpanConfigForKey(ctx, desc.StartKey)
 				if err != nil {
 					return err
 				}
-				t.Logf("s%d: r%d %s -> span config %s %s", s.StoreID(), desc.RangeID, desc.RSpan(), sp, &cfg)
+				t.Logf("s%d: r%d %s -> span config %s", s.StoreID(), desc.RangeID, desc.RSpan(), &cfg)
 				return nil
 			})
 		}

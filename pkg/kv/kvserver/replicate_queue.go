@@ -687,7 +687,7 @@ func (rq *replicateQueue) shouldQueue(
 ) (shouldQueue bool, priority float64) {
 	// TODO(baptist): Change to Replica.SpanConfig() once the refactor is done to
 	// have that use the confReader.
-	conf, _, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
+	conf, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
 	if err != nil {
 		return false, 0
 	}
@@ -720,7 +720,7 @@ func (rq *replicateQueue) process(
 	}
 	// TODO(baptist): Change to Replica.SpanConfig() once the refactor is done to
 	// have that use the confReader.
-	conf, _, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
+	conf, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
 	if err != nil {
 		return false, err
 	}

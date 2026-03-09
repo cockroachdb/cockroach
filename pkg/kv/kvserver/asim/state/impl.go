@@ -1391,15 +1391,12 @@ func (s *state) ForEachOverlappingSpanConfig(
 // SpanConfigConformanceReport.
 func (s *state) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
+) (roachpb.SpanConfig, error) {
 	rng := s.rangeFor(ToKey(key.AsRawKey()))
 	if rng == nil {
 		panic(fmt.Sprintf("programming error: range for key %s doesn't exist", key))
 	}
-	return *rng.config, roachpb.Span{
-		Key:    rng.startKey.ToRKey().AsRawKey(),
-		EndKey: rng.endKey.ToRKey().AsRawKey(),
-	}, nil
+	return *rng.config, nil
 }
 
 // Scan is added for the rangedesc.Scanner interface, required for

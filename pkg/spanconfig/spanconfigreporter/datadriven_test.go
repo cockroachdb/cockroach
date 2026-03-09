@@ -276,7 +276,7 @@ func (s *mockCluster) ComputeSplitKey(
 // GetSpanConfigForKey implements spanconfig.StoreReader.
 func (s *mockCluster) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
+) (roachpb.SpanConfig, error) {
 	return s.store.GetSpanConfigForKey(ctx, key)
 }
 

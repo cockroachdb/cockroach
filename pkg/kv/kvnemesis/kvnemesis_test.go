@@ -933,7 +933,7 @@ func setAndVerifyZoneConfigs(
 					desc := replica.Desc()
 					confReader, err := store.GetConfReader(ctx)
 					require.NoError(t, err)
-					spanConfig, _, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
+					spanConfig, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
 					require.NoError(t, err)
 					if len(spanConfig.Constraints) == 0 {
 						return errors.Errorf("range %d has no constraints in span config yet", desc.RangeID)

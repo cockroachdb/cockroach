@@ -366,7 +366,7 @@ func (s *KVSubscriber) ComputeSplitKey(
 // GetSpanConfigForKey is part of the spanconfig.KVSubscriber interface.
 func (s *KVSubscriber) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
+) (roachpb.SpanConfig, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
