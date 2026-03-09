@@ -158,7 +158,7 @@ func (is Server) GetTableMetrics(
 	resp := &GetTableMetricsResponse{}
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
 		func(ctx context.Context, s *Store) error {
-			metricsInfo, err := s.TODOEngine().GetTableMetrics(req.Span.Key, req.Span.EndKey)
+			metricsInfo, err := s.TODOBothEngines().GetTableMetrics(req.Span.Key, req.Span.EndKey)
 
 			if err != nil {
 				return err
@@ -176,7 +176,7 @@ func (is Server) ScanStorageInternalKeys(
 	resp := &ScanStorageInternalKeysResponse{}
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
 		func(ctx context.Context, s *Store) error {
-			metrics, err := s.TODOEngine().ScanStorageInternalKeys(req.Span.Key, req.Span.EndKey, req.MegabytesPerSecond)
+			metrics, err := s.TODOBothEngines().ScanStorageInternalKeys(req.Span.Key, req.Span.EndKey, req.MegabytesPerSecond)
 
 			if err != nil {
 				return err
@@ -200,12 +200,12 @@ func (is Server) SetCompactionConcurrency(
 	resp := &CompactionConcurrencyResponse{}
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
 		func(ctx context.Context, s *Store) error {
-			s.TODOEngine().SetCompactionConcurrency(req.CompactionConcurrency)
+			s.TODOBothEngines().SetCompactionConcurrency(req.CompactionConcurrency)
 
 			// Wait for cancellation, and once cancelled, reset the compaction
 			// concurrency.
 			<-ctx.Done()
-			s.TODOEngine().SetCompactionConcurrency(0)
+			s.TODOBothEngines().SetCompactionConcurrency(0)
 			return nil
 		})
 	return resp, err
