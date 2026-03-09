@@ -202,6 +202,17 @@ func (e *Engines) TODOEngine() storage.Engine {
 	return e.todoEngine
 }
 
+// TODOBothEngines returns the StateEngine, and indicates that the caller must
+// support a certain operation over both engines. For example, introspection and
+// metrics should eventually be per-engine, or combined from information
+// returned by both.
+//
+// TODO(sep-raft-log): the callers must migrate off as part of separated engines
+// productionization.
+func (e *Engines) TODOBothEngines() storage.Engine {
+	return e.stateEngine
+}
+
 // Separated returns true iff the engines are logically or physically separated.
 // Can return true only in tests, until separated engines are supported.
 func (e *Engines) Separated() bool {
