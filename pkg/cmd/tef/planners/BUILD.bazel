@@ -26,6 +26,7 @@ go_test(
         "planner_test.go",
         "status_test.go",
         "tasks_test.go",
+        "utils_generate_plan_test.go",
         "utils_test.go",
         ":mock_plan_executor",  # keep
         ":mock_planner",  # keep
@@ -36,6 +37,7 @@ go_test(
     embed = [":planners"],
     deps = [
         "@com_github_golang_mock//gomock",
+        "@com_github_spf13_cobra//:cobra",
         "@com_github_stretchr_testify//require",
     ],
 )
