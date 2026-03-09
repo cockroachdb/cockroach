@@ -121,7 +121,7 @@ var WebSessionTimeout = settings.RegisterDurationSetting(
 
 // jwtVerifier is a duplicate of the singleton global pgwire object which gets
 // initialized from VerifyJWT method whenever a JWT auth attempt for accessing
-// DB console APIs happens. It depends on jwtauthccl module to be imported
+// DB console APIs happens. It depends on jwtauth module to be imported
 // properly to override its default ConfigureJWTAuth constructor.
 var jwtVerifier = struct {
 	sync.Once
