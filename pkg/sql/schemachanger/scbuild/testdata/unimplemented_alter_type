@@ -1,0 +1,27 @@
+setup
+CREATE TYPE defaultdb.climes AS ENUM ('tropical', 'arctic', 'mediterranean');
+----
+
+unimplemented
+ALTER TYPE defaultdb.climes ADD VALUE 'desert'
+----
+
+unimplemented
+ALTER TYPE defaultdb.climes RENAME VALUE 'tropical' TO 'equatorial'
+----
+
+unimplemented
+ALTER TYPE defaultdb.climes DROP VALUE 'arctic'
+----
+
+unimplemented
+ALTER TYPE defaultdb.climes RENAME TO environs
+----
+
+unimplemented
+ALTER TYPE defaultdb.climes SET SCHEMA public
+----
+
+unimplemented
+ALTER TYPE defaultdb.climes OWNER TO weatherman
+----
