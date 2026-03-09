@@ -3091,6 +3091,12 @@ func (s *Store) TODOEngine() storage.Engine {
 	return s.internalEngines.TODOEngine()
 }
 
+// TODOBothEngines is a placeholder for cases in which the caller needs to be
+// updated because it likely needs to handle both engines.
+func (s *Store) TODOBothEngines() storage.Engine {
+	return s.internalEngines.TODOBothEngines()
+}
+
 // LogEngine returns the raft/log engine.
 func (s *Store) LogEngine() storage.Engine {
 	return s.internalEngines.LogEngine()
@@ -3127,8 +3133,7 @@ func (s *Store) Attrs() roachpb.Attributes {
 
 // Properties returns the properties of the underlying store.
 func (s *Store) Properties() roachpb.StoreProperties {
-	// TODO(sep-raft-log): see if this needs to exist for the logEngine too.
-	return s.TODOEngine().Properties()
+	return s.TODOBothEngines().Properties()
 }
 
 // Capacity returns the capacity of the underlying storage engine. Note that
@@ -3143,7 +3148,7 @@ func (s *Store) Capacity(ctx context.Context, useCached bool) (roachpb.StoreCapa
 		}
 	}
 
-	capacity, err := s.TODOEngine().Capacity()
+	capacity, err := s.TODOBothEngines().Capacity()
 	if err != nil {
 		return roachpb.StoreCapacity{}, err
 	}
@@ -3718,19 +3723,19 @@ func (s *Store) computeMetricsLocked(ctx context.Context) (m storage.Metrics, er
 	}
 
 	// Get the latest engine metrics.
-	m = s.TODOEngine().GetMetrics()
-	_ = s.TODOEngine() // TODO(sep-raft-log): log engine should also have metrics
+	eng := s.TODOBothEngines()
+	m = eng.GetMetrics()
 	s.metrics.updateEngineMetrics(m)
 
 	// Get engine Env stats.
-	envStats, err := s.TODOEngine().GetEnvStats()
+	envStats, err := eng.GetEnvStats()
 	if err != nil {
 		return m, err
 	}
 	s.metrics.updateEnvStats(*envStats)
 
 	{
-		dirs, err := s.TODOEngine().Env().List(s.checkpointsDir())
+		dirs, err := eng.Env().List(s.checkpointsDir())
 		if err != nil { // skip NotFound or any other error
 			dirs = nil
 		}

@@ -233,11 +233,11 @@ func (ds *Server) RegisterWorkloadCollector(stores *kvserver.Stores) error {
 func GetLSMStats(engines []kvstorage.Engines) (map[roachpb.StoreID]string, error) {
 	stats := make(map[roachpb.StoreID]string, len(engines))
 	for _, eng := range engines {
-		storeID, err := eng.TODOEngine().GetStoreID()
+		storeID, err := eng.TODOBothEngines().GetStoreID()
 		if err != nil {
 			return nil, err
 		}
-		stats[roachpb.StoreID(storeID)] = eng.TODOEngine().GetMetrics().String()
+		stats[roachpb.StoreID(storeID)] = eng.TODOBothEngines().GetMetrics().String()
 	}
 	return stats, nil
 }
@@ -261,14 +261,15 @@ func (ds *Server) RegisterEngines(engines []kvstorage.Engines) error {
 		fmt.Fprint(w, FormatLSMStats(stats))
 	})
 
-	for _, eng := range engines {
-		dir := eng.TODOEngine().Env().Dir
+	for _, e := range engines {
+		eng := e.TODOBothEngines()
+		dir := eng.Env().Dir
 		if dir == "" {
 			// TODO(yevgeniy): Add plumbing to support LSM visualization for in memory engines.
 			continue
 		}
 
-		storeID, err := eng.TODOEngine().GetStoreID()
+		storeID, err := eng.GetStoreID()
 		if err != nil {
 			return err
 		}
@@ -293,7 +294,7 @@ func (ds *Server) RegisterEngines(engines []kvstorage.Engines) error {
 				ctx := req.Context()
 				ctx, cancel := context.WithTimeout(ctx, dur)
 				defer cancel()
-				profile, err := eng.TODOEngine().ProfileSeparatedValueRetrievals(ctx)
+				profile, err := eng.ProfileSeparatedValueRetrievals(ctx)
 				if err != nil {
 					http.Error(w, "error profiling separated value retrievals", http.StatusInternalServerError)
 					return
