@@ -90,7 +90,9 @@ func (r *Replica) MaybeGossipNodeLivenessRaftMuLocked(
 		kvpb.AdmissionHeader{},
 	)
 	defer rec.Release()
-	rw := r.store.TODOEngine().NewReadOnly(storage.StandardDurability)
+
+	// NB: gossip reads from state machine spans, inside keys.NodeLivenessPrefix.
+	rw := r.store.StateEngine().NewReadOnly(storage.StandardDurability)
 	defer rw.Close()
 
 	br, result, pErr :=
