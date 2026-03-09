@@ -46,14 +46,9 @@ func ValidateDomainConstraints(
 }
 
 // evalDomainCheckConstraint evaluates a single CHECK constraint expression
-// against the given datum. The expression is parsed, VALUE references are
-// substituted with the datum, and the result is evaluated as a boolean.
-//
-// TODO(#27796): this re-parses and type-checks the CHECK expression on every
-// call, which is expensive for bulk INSERT/UPDATE operations. Cache the parsed
-// and type-checked expression (with a placeholder for VALUE) in DomainMetadata
-// during type hydration, so only VALUE substitution and evaluation happen at
-// runtime.
+// against the given datum. VALUE references are substituted with the datum,
+// and the result is evaluated as a boolean. The parsed expression is cached
+// during type hydration to avoid re-parsing on every call.
 func evalDomainCheckConstraint(
 	ctx context.Context,
 	evalCtx *Context,
@@ -61,15 +56,21 @@ func evalDomainCheckConstraint(
 	domainType *types.T,
 	chk *types.DomainCheckConstraint,
 ) error {
-	expr, err := parserutils.ParseExpr(chk.Expr)
-	if err != nil {
-		return err
+	var expr tree.Expr
+	if cached, ok := chk.ParsedExpr.(tree.Expr); ok {
+		expr = cached
+	} else {
+		var err error
+		expr, err = parserutils.ParseExpr(chk.Expr)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Replace VALUE references with the actual datum. In the parsed expression,
 	// VALUE appears as an UnresolvedName with a single part named "value"
 	// (case-insensitive).
-	expr, err = tree.SimpleVisit(expr, func(e tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+	expr, err := tree.SimpleVisit(expr, func(e tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		if n, ok := e.(*tree.UnresolvedName); ok {
 			if n.NumParts == 1 && strings.EqualFold(n.Parts[0], "value") {
 				return false, d, nil
