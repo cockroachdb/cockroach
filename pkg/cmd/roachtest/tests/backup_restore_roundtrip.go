@@ -285,7 +285,17 @@ func initBackgroundWorkloads(
 		}
 
 		groupCtx, cancel := context.WithCancel(ctx)
-		runGroup := t.NewGroup(task.WithContext(groupCtx))
+		runGroup := t.NewGroup(
+			task.WithContext(groupCtx),
+			task.ErrorHandler(func(_ context.Context, _ string, _ *logger.Logger, err error) error {
+				// We expect the workloads to be canceled via context cancellation,
+				// so we want to ignore those errors.
+				if errors.Is(err, context.Canceled) {
+					return nil
+				}
+				return err
+			}),
+		)
 		runGroup.Go(func(ctx context.Context, l *logger.Logger) error {
 			return c.RunE(ctx, option.WithNodes(workloadNode), bankRun.String())
 		}, task.Name("run-bank"))
