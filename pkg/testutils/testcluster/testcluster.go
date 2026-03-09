@@ -1894,9 +1894,9 @@ func (tc *TestCluster) ToggleLeaseQueues(active bool) {
 	}
 }
 
-// ReadIntFromStores reads the current integer value at the given key
-// from all configured engines on un-stopped servers, filling in zeros
-// when the value is not found.
+// ReadIntFromStores reads the current integer value at the given key from all
+// configured state machine engines on un-stopped servers, filling in zeros when
+// the value is not found.
 func (tc *TestCluster) ReadIntFromStores(key roachpb.Key) []int64 {
 	results := make([]int64, len(tc.Servers))
 	for i, server := range tc.Servers {
@@ -1907,8 +1907,8 @@ func (tc *TestCluster) ReadIntFromStores(key roachpb.Key) []int64 {
 		sl := server.StorageLayer()
 		clock := server.SystemLayer().Clock()
 		err := sl.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
-			valRes, err := storage.MVCCGet(context.Background(), s.TODOEngine(), key,
-				clock.Now(), storage.MVCCGetOptions{})
+			valRes, err := storage.MVCCGet(context.Background(), s.StateEngine(),
+				key, clock.Now(), storage.MVCCGetOptions{})
 			if err != nil {
 				log.VEventf(context.Background(), 1, "store %d: error reading from key %s: %s", s.StoreID(), key, err)
 			} else if !valRes.Value.Exists() {
@@ -1928,9 +1928,9 @@ func (tc *TestCluster) ReadIntFromStores(key roachpb.Key) []int64 {
 	return results
 }
 
-// WaitForValues waits up to the given duration for the integer values
-// at the given key to match the expected slice (across all stores).
-// Fails the test if they do not match.
+// WaitForValues waits up to the given duration for the integer values at the
+// given state machine engine key to match the expected slice (across all
+// stores). Fails the test if they do not match.
 func (tc *TestCluster) WaitForValues(t serverutils.TestFataler, key roachpb.Key, expected []int64) {
 	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
