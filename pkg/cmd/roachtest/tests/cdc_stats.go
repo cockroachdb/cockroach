@@ -34,4 +34,14 @@ var (
 		Query: "avg(sys_cpu_combined_percent_normalized) * 100",
 		Tag:   "CPU Utilization (%)",
 	}
+
+	// maxBehindNanos is the changefeed_max_behind_nanos prometheus metric per node.
+	maxBehindNanos = clusterstats.ClusterStat{LabelName: "node", Query: "changefeed_max_behind_nanos"}
+	// maxBehindNanosAgg is the max of changefeed_max_behind_nanos across all
+	// nodes, converted to seconds.
+	maxBehindNanosAgg = clusterstats.AggQuery{
+		Stat:  maxBehindNanos,
+		Query: "max(changefeed_max_behind_nanos) / (1000*1000*1000)",
+		Tag:   "Max Behind (s)",
+	}
 )

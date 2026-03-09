@@ -1329,6 +1329,19 @@ func runCDCRollingRestart(
 	racks.Env = append(racks.Env, `COCKROACH_CHANGEFEED_TESTING_INITIAL_RETRY_BACKOFF=32s`)
 	c.Start(ctx, t.L(), startOpts, racks)
 
+	// Set up prometheus on the workload node for roachperf export. The
+	// workload node is never restarted, so prometheus scraping is stable.
+	workloadNode := c.Spec().NodeCount
+	promCfg := (&prometheus.Config{}).
+		WithPrometheusNode(c.Node(workloadNode).InstallNodes()[0]).
+		WithCluster(c.All().InstallNodes()).
+		WithNodeExporter(c.All().InstallNodes()).
+		WithGrafanaDashboardJSON(grafana.ChangefeedRoachtestGrafanaDashboardJSON)
+	promCfg.Grafana.Enabled = true
+	if err := c.StartGrafana(ctx, t.L(), promCfg); err != nil {
+		t.Errorf("error starting prometheus/grafana: %s", err)
+	}
+
 	restart := func(n int) error {
 		t.L().Printf("draining and restarting node %d", n)
 		cmd := fmt.Sprintf("./cockroach node drain --certs-dir=%s --port={pgport:%d} --self", install.CockroachNodeCertsDir, n)
@@ -1347,7 +1360,6 @@ func runCDCRollingRestart(
 
 	// Connect to the workload node for queries since we'll be restarting the
 	// other nodes during the test.
-	workloadNode := c.Spec().NodeCount
 	db := c.Conn(ctx, t.L(), workloadNode)
 	defer db.Close()
 	t.L().Printf("setting up test with maxBackoff=%s, doRestarts=%t",
@@ -1405,6 +1417,7 @@ func runCDCRollingRestart(
 			l.Printf("starting rolling drain+restarts of nodes %v at %s interval for %s...", restartNodes, restartInterval, params.restartDuration)
 
 			timer := time.NewTimer(0)
+			defer timer.Stop()
 			restartDeadline := beginTime.Add(params.restartDuration)
 			for {
 				for _, n := range restartNodes {
@@ -1430,9 +1443,46 @@ func runCDCRollingRestart(
 		})
 	}
 
-	// TODO(#164040): Instead of polling the highwater via SHOW CHANGEFEED JOB,
-	// measure the lag using metrics (max_behind_nanos).
-	getCurrentJobInfo := func() (time.Duration, string, string, error) {
+	type changefeedInfo struct {
+		metricLag    time.Duration
+		highwaterLag time.Duration
+		status       string
+		runStatus    string
+	}
+
+	// getMaxBehindNanos queries each CockroachDB node for the
+	// changefeed.max_behind_nanos metric and returns the max across all
+	// reachable nodes. Nodes that are mid-restart are skipped gracefully.
+	// We open a fresh connection per node per poll rather than maintaining
+	// persistent connections, since nodes cycle through restarts and
+	// persistent connections would need reconnect logic.
+	crdbNodes := workloadNode - 1
+	getMaxBehindNanos := func() time.Duration {
+		var maxLag time.Duration
+		var reachable int
+		for n := 1; n <= crdbNodes; n++ {
+			conn := c.Conn(ctx, t.L(), n)
+			var nanos float64
+			err := conn.QueryRow(
+				`SELECT value FROM crdb_internal.node_metrics WHERE name = 'changefeed.max_behind_nanos'`,
+			).Scan(&nanos)
+			conn.Close()
+			if err != nil {
+				continue
+			}
+			reachable++
+			lag := time.Duration(int64(nanos))
+			if lag > maxLag {
+				maxLag = lag
+			}
+		}
+		if reachable == 0 {
+			t.L().Printf("warning: no nodes reachable for max_behind_nanos, reporting 0")
+		}
+		return maxLag
+	}
+
+	getCurrentJobInfo := func() (changefeedInfo, error) {
 		var status string
 		var hwNanos gosql.NullFloat64
 		var runningStatus gosql.NullString
@@ -1440,15 +1490,21 @@ func runCDCRollingRestart(
 			`SELECT status, running_status, high_water_timestamp FROM [SHOW CHANGEFEED JOB $1]`, jobID,
 		).Scan(&status, &runningStatus, &hwNanos)
 		if err != nil {
-			return 0, "", "", err
+			return changefeedInfo{}, err
 		}
 
-		var currentLag time.Duration
+		var highwaterLag time.Duration
 		if hwNanos.Valid {
 			highwater := timeutil.Unix(0, int64(hwNanos.Float64))
-			currentLag = timeutil.Since(highwater)
+			highwaterLag = timeutil.Since(highwater)
 		}
-		return currentLag, status, runningStatus.String, nil
+
+		return changefeedInfo{
+			metricLag:    getMaxBehindNanos(),
+			highwaterLag: highwaterLag,
+			status:       status,
+			runStatus:    runningStatus.String,
+		}, nil
 	}
 
 	// Run the monitoring loop every 10 seconds until the end of the test
@@ -1457,6 +1513,7 @@ func runCDCRollingRestart(
 	testDeadline := beginTime.Add(params.testDuration)
 	const maxAllowedLag = 5 * time.Minute
 
+	var maxHighwaterLag, maxMetricLag time.Duration
 	ticker := time.NewTicker(lagPollInterval)
 	defer ticker.Stop()
 	for range ticker.C {
@@ -1464,32 +1521,83 @@ func runCDCRollingRestart(
 			break
 		}
 
-		currentLag, status, runningStatus, err := getCurrentJobInfo()
+		info, err := getCurrentJobInfo()
 		if err != nil {
 			t.L().Printf("[%s] error querying changefeed status: %v", timeutil.Since(beginTime), err)
 			continue
 		}
-		t.L().Printf("[%s] changefeed lag: %s, status: %s, running_status: %s",
-			timeutil.Since(beginTime), currentLag, status, runningStatus)
-		if status == "failed" {
-			t.Fatalf("changefeed entered failed status: %s", runningStatus)
+		t.L().Printf("[%s] lag=%s status=%s running_status=%s",
+			timeutil.Since(beginTime), info.highwaterLag, info.status, info.runStatus)
+		if info.highwaterLag > maxHighwaterLag {
+			maxHighwaterLag = info.highwaterLag
 		}
-		if currentLag > maxAllowedLag {
+		if info.metricLag > maxMetricLag {
+			maxMetricLag = info.metricLag
+		}
+		if info.status == "failed" {
+			t.Fatalf("changefeed entered failed status: %s", info.runStatus)
+		}
+		// We use highwater lag for threshold checks because max_behind_nanos
+		// reads 0 whenever the changefeed is in retry backoff (no active
+		// processors), which is exactly when lag accumulates. Highwater lag
+		// grows continuously since it's based on the persisted checkpoint.
+		if info.highwaterLag > maxAllowedLag {
 			t.Fatalf("changefeed lag %s exceeded maximum allowed (%s) during rolling restarts",
-				currentLag, maxAllowedLag)
+				info.highwaterLag, maxAllowedLag)
 		}
 	}
 
 	// After the test, verify lag has recovered below a tighter threshold.
-	finalLag, _, _, err := getCurrentJobInfo()
+	finalInfo, err := getCurrentJobInfo()
 	if err != nil {
 		t.Fatalf("error querying final changefeed status: %v", err)
 	}
-	t.L().Printf("[%s] changefeed %d completed %s test run, final lag=%s", timeutil.Since(beginTime), jobID, params.testDuration, finalLag)
+	t.L().Printf("[%s] changefeed %d completed %s test run, final_lag=%s max_lag=%s max_metric_lag=%s",
+		timeutil.Since(beginTime), jobID, params.testDuration,
+		finalInfo.highwaterLag, maxHighwaterLag, maxMetricLag)
 	const maxLagAfterRecovery = 2 * time.Minute
-	if finalLag > maxLagAfterRecovery {
+	if finalInfo.highwaterLag > maxLagAfterRecovery {
 		t.Fatalf("changefeed lag %s exceeded maximum allowed (%s) after recovery period",
-			finalLag, maxLagAfterRecovery)
+			finalInfo.highwaterLag, maxLagAfterRecovery)
+	}
+
+	// Export metrics to roachperf.
+	promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
+	if err != nil {
+		t.Errorf("error creating prometheus client for stats collector: %s", err)
+		return
+	}
+	statsCollector := clusterstats.NewStatsCollector(ctx, promClient)
+	if _, err := statsCollector.Exporter().Export(ctx, c, t, false, /* dryRun */
+		beginTime,
+		timeutil.Now(),
+		[]clusterstats.AggQuery{maxBehindNanosAgg},
+		func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+			return &roachtestutil.AggregatedMetric{
+				Name:           "Max highwater lag (s)",
+				Value:          roachtestutil.MetricPoint(maxHighwaterLag.Seconds()),
+				Unit:           "seconds",
+				IsHigherBetter: false,
+			}
+		},
+		func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+			return &roachtestutil.AggregatedMetric{
+				Name:           "Max metric lag (s)",
+				Value:          roachtestutil.MetricPoint(maxMetricLag.Seconds()),
+				Unit:           "seconds",
+				IsHigherBetter: false,
+			}
+		},
+		func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+			return &roachtestutil.AggregatedMetric{
+				Name:           "Final highwater lag (s)",
+				Value:          roachtestutil.MetricPoint(finalInfo.highwaterLag.Seconds()),
+				Unit:           "seconds",
+				IsHigherBetter: false,
+			}
+		},
+	); err != nil {
+		t.Errorf("error exporting stats to roachperf: %s", err)
 	}
 }
 
@@ -2402,6 +2510,7 @@ CONFIGURE ZONE USING
 	r.Add(registry.TestSpec{
 		Name:             "cdc/rolling-restart",
 		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(4),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
@@ -2422,6 +2531,7 @@ CONFIGURE ZONE USING
 	r.Add(registry.TestSpec{
 		Name:             "cdc/no-rolling-restart",
 		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(4),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
