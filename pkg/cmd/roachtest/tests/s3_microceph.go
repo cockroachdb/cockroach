@@ -28,7 +28,8 @@ import (
 // disks.
 const cephDisksScript = `
 #!/bin/bash
-for l in  a b c; do
+set -e
+for l in a b c; do
   mkdir -p /mnt/data1/disks
   loop_file="$(sudo mktemp -p /mnt/data1/disks XXXX.img)"
   sudo truncate -s 4G "${loop_file}"
@@ -37,9 +38,46 @@ for l in  a b c; do
   # devices so we make those same devices available under alternate
   # names (/dev/sdiY)
   minor="${loop_dev##/dev/loop}"
-  sudo mknod -m 0660 "/dev/sdi${l}" b 7 "${minor}"
-  sudo microceph disk add --wipe "/dev/sdi${l}"
-done`
+  dev="/dev/sdi${l}"
+  sudo mknod -m 0660 "${dev}" b 7 "${minor}"
+
+  # Retry disk add as the OSD service restart can fail sporadically
+  # when multiple disks are added in quick succession.
+  max_attempts=5
+  attempt=0
+  while ! sudo microceph disk add --wipe "${dev}"; do
+    attempt=$((attempt+1))
+    if [ $attempt -ge $max_attempts ]; then
+      echo "failed to add disk ${dev} after $max_attempts attempts"
+      exit 1
+    fi
+    echo "retrying disk add for ${dev} (attempt $attempt)..."
+    sleep 5
+  done
+  # Allow the OSD to settle before adding the next disk.
+  sleep 2
+done
+`
+
+// cephInit initializes microceph.
+const cephInit = `
+#!/bin/bash
+
+# Wait for the daemon socket to be available.
+max_attempts=30
+attempt=0
+while ! sudo test -S /var/snap/microceph/common/state/control.socket; do
+	attempt=$((attempt+1))
+	if [ $attempt -ge $max_attempts ]; then
+		echo "timed out waiting for microceph daemon socket"
+		exit 1
+	fi
+	echo "Waiting for microceph daemon..."
+	sleep 2
+done
+
+sudo microceph cluster bootstrap
+`
 
 // cephCleanup remove microceph and the loop devices.
 const cephCleanup = `
@@ -100,25 +138,20 @@ func (m cephManager) getBackupURI(ctx context.Context, dest string) (string, err
 }
 
 func (m cephManager) cleanup(ctx context.Context) {
-	tmpDir := "/tmp/"
-	cephCleanupPath := filepath.Join(tmpDir, "cleanup.sh")
-	m.put(ctx, cephCleanup, cephCleanupPath)
-	m.run(ctx, "removing ceph", cephCleanupPath, tmpDir)
+	m.runScript(ctx, "cleanup.sh", cephCleanup)
 }
 
 // install a single node microCeph cluster.
 // See https://canonical-microceph.readthedocs-hosted.com/en/squid-stable/how-to/single-node/
 // It is fatal on errors.
 func (m cephManager) install(ctx context.Context) {
-	tmpDir := "/tmp/"
+
 	m.run(ctx, `installing microceph`,
 		fmt.Sprintf(`sudo snap install microceph --channel %s/stable`, m.version))
 	m.run(ctx, `preventing upgrades`, `sudo snap refresh --hold microceph`)
-	m.run(ctx, `initialize microceph`, `sudo microceph cluster bootstrap`)
 
-	cephDisksScriptPath := filepath.Join(tmpDir, "cephDisks.sh")
-	m.put(ctx, cephDisksScript, cephDisksScriptPath)
-	m.run(ctx, "adding disks", cephDisksScriptPath, tmpDir)
+	m.runScript(ctx, "cephInit.sh", cephInit)
+	m.runScript(ctx, "cephDisks.sh", cephDisksScript)
 
 	// Start the Ceph Object Gateway, also known as RADOS Gateway (RGW). RGW is
 	// an object storage interface to provide applications with a RESTful
@@ -194,6 +227,13 @@ func (m cephManager) run(ctx context.Context, msg string, cmd ...string) {
 	m.t.Status(cmd)
 	m.c.Run(ctx, option.WithNodes(m.cephNodes), cmd...)
 	m.t.Status(msg, " done")
+}
+
+// run the given script on the ceph node.
+func (m cephManager) runScript(ctx context.Context, name string, script string) {
+	scriptPath := filepath.Join("/tmp/", name)
+	m.put(ctx, script, scriptPath)
+	m.run(ctx, fmt.Sprintf("running %s", name), scriptPath)
 }
 
 // checkRGW verifies that the Ceph Object Gateway is up.
