@@ -6266,7 +6266,7 @@ CREATE TABLE crdb_internal.invalid_objects (
 
 		// Validate database & schema descriptors, and namespace entries.
 		{
-			lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext)
+			lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext, p.Descriptors().GetLookupContextFallbackFn(ctx, p.Txn()))
 
 			if err := c.ForEachDescriptor(func(desc catalog.Descriptor) error {
 				switch d := desc.(type) {
