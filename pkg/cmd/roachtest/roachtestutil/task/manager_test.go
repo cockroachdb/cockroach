@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -256,6 +257,111 @@ func TestErrorGroups(t *testing.T) {
 	}
 
 	m.Terminate(nilLogger())
+}
+
+// TestDeadlockTerminateNewGroup_PostCancel verifies that no deadlock
+// occurs when a task calls NewGroup on the manager after its context
+// has been canceled by Terminate.
+func TestDeadlockTerminateNewGroup_PostCancel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := NewManager(ctx, nilLogger())
+
+	ready := make(chan struct{})
+	m.Go(func(ctx context.Context, l *logger.Logger) error {
+		close(ready)
+		<-ctx.Done()
+		// After Terminate cancels this task's context, attempt to create
+		// a subgroup. This routes through m.group.newGroupInternal which
+		// tries to lock m.group.groupMu — the same lock WaitE holds.
+		m.NewGroup()
+		return nil
+	})
+
+	// Drain events so they don't block the task goroutine. Cancel the
+	// parent context after Terminate completes to unblock the drain
+	// goroutine.
+	go func() {
+		for {
+			select {
+			case <-m.CompletedEvents():
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	<-ready
+
+	done := make(chan struct{})
+	go func() {
+		m.Terminate(nilLogger())
+		cancel()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// No deadlock.
+	case <-time.After(5 * time.Second):
+		t.Fatal("DEADLOCK: Terminate did not complete within 5 seconds")
+	}
+}
+
+// TestDeadlockTerminateNewGroup_DuringWork verifies that no deadlock
+// occurs when Terminate races with a task that calls NewGroup as part
+// of its normal work.
+func TestDeadlockTerminateNewGroup_DuringWork(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := NewManager(ctx, nilLogger())
+
+	ready := make(chan struct{})
+	proceed := make(chan struct{})
+	m.Go(func(ctx context.Context, l *logger.Logger) error {
+		close(ready)
+		// Block until Terminate has acquired groupMu.
+		<-proceed
+		// This call needs m.group.groupMu, which WaitE already holds.
+		m.NewGroup()
+		return nil
+	})
+
+	// Drain events so they don't block the task goroutine. Cancel the
+	// parent context after Terminate completes to unblock the drain
+	// goroutine.
+	go func() {
+		for {
+			select {
+			case <-m.CompletedEvents():
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	<-ready
+
+	done := make(chan struct{})
+	go func() {
+		m.Terminate(nilLogger())
+		cancel()
+		close(done)
+	}()
+
+	// Give Terminate time to cancel tasks and enter WaitE.
+	time.Sleep(50 * time.Millisecond)
+	// Let the task proceed to call NewGroup while WaitE is waiting.
+	close(proceed)
+
+	select {
+	case <-done:
+		// No deadlock.
+	case <-time.After(5 * time.Second):
+		t.Fatal("DEADLOCK: Terminate did not complete within 5 seconds")
+	}
 }
 
 func nilLogger() *logger.Logger {
