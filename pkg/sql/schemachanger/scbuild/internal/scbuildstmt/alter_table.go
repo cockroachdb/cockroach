@@ -85,7 +85,6 @@ var alterTableSubcommandNames = map[reflect.Type]string{
 }
 
 func init() {
-	boolType := reflect.TypeOf((*bool)(nil)).Elem()
 	// Check function signatures inside the supportedAlterTableStatements map.
 	for statementType, statementEntry := range supportedAlterTableStatements {
 		callBackType := reflect.TypeOf(statementEntry.fn)
@@ -103,19 +102,10 @@ func init() {
 				"does not have a valid signature; got %v", statementType, callBackType))
 		}
 		if statementEntry.checks != nil {
-			checks := reflect.TypeOf(statementEntry.checks)
-			if checks.Kind() != reflect.Func {
-				panic(errors.AssertionFailedf("%v checks for statement is "+
-					"not a function", statementType))
-			}
-			if checks.NumIn() != 3 ||
-				(checks.In(0) != statementType && !statementType.Implements(checks.In(0))) ||
-				checks.In(1) != reflect.TypeOf(sessiondatapb.UseNewSchemaChangerOff) ||
-				checks.In(2) != reflect.TypeOf((*clusterversion.ClusterVersion)(nil)).Elem() ||
-				checks.NumOut() != 1 ||
-				checks.Out(0) != boolType {
-				panic(errors.AssertionFailedf("%v checks does not have a valid signature; got %v",
-					statementType, checks))
+			if _, ok := statementEntry.checks.(isVersionActiveFunc); !ok {
+				panic(errors.AssertionFailedf(
+					"%v checks is not an isVersionActiveFunc; got %T",
+					statementType, statementEntry.checks))
 			}
 		}
 		// Validate that every entry in supportedAlterTableStatements has a
