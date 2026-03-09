@@ -61,6 +61,10 @@ var replanFrequency = settings.RegisterDurationSetting(
 // import job progress.
 const importProgressDebugName = `import_progress`
 
+// importSSTManifestsInfoKey is the job info key used to store SST manifests
+// produced during the map phase of distributed merge import.
+const importSSTManifestsInfoKey = "~import/sst-manifests.binpb"
+
 // distImport is used by IMPORT to run a DistSQL flow to ingest data by starting
 // reader processes on many nodes that each read and ingest their assigned files
 // and then send back a summary of what they ingested. The combined summary is
@@ -207,11 +211,16 @@ func distImport(
 	var manifestBuf *backfill.SSTManifestBuffer
 
 	updateJobProgress := func() error {
-		return job.DebugNameNoTxn(importProgressDebugName).FractionProgressed(ctx, func(
-			ctx context.Context, details jobspb.ProgressDetails,
-		) float32 {
+		return job.DebugNameNoTxn(importProgressDebugName).Update(ctx, func(
+			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		) error {
+			if err := md.CheckRunningOrReverting(); err != nil {
+				return err
+			}
+
+			prog := md.Progress.GetImport()
+
 			var overall float32
-			prog := details.(*jobspb.Progress_Import).Import
 			for i := range rowProgress {
 				prog.ResumePos[i] = atomic.LoadInt64(&rowProgress[i])
 			}
@@ -225,21 +234,34 @@ func distImport(
 			prog.Summary = accumulatedBulkSummary.BulkOpSummary.DeepCopy()
 			accumulatedBulkSummary.Unlock()
 
-			// Persist complete SST manifest snapshot for distributed merge, following
-			// the index backfiller pattern. This replaces the entire list rather than
-			// appending deltas, ensuring job state is always complete and eliminating
-			// the timing window for orphaned SSTs.
-			if useDistributedMerge && manifestBuf != nil {
-				if manifestBuf.Dirty() {
-					prog.CompletedMapWork = manifestBuf.SnapshotAndMarkClean()
-				} else {
-					prog.CompletedMapWork = manifestBuf.Snapshot()
+			// Persist SST manifests to job info keys for distributed merge.
+			// Only write when the buffer has new data to avoid unnecessary I/O.
+			if useDistributedMerge && manifestBuf != nil && manifestBuf.Dirty() {
+				manifests := manifestBuf.SnapshotAndMarkClean()
+				data, err := protoutil.Marshal(&jobspb.BulkSSTManifests{Manifests: manifests})
+				if err != nil {
+					return errors.Wrap(err, "marshaling SST manifests")
+				}
+				if err := jobs.WriteChunkedFileToJobInfo(
+					ctx, importSSTManifestsInfoKey, data, txn, job.ID(),
+				); err != nil {
+					return errors.Wrap(err, "writing SST manifests to job info")
 				}
 			}
 
-			return overall / float32(len(from))
-		},
-		)
+			fractionCompleted := overall / float32(len(from))
+			// Clamp to [0.0, 1.0].
+			if fractionCompleted > 1.0 {
+				fractionCompleted = 1.0
+			} else if fractionCompleted < 0.0 {
+				fractionCompleted = 0
+			}
+			md.Progress.Progress = &jobspb.Progress_FractionCompleted{
+				FractionCompleted: fractionCompleted,
+			}
+			ju.UpdateProgress(md.Progress)
+			return nil
+		})
 	}
 
 	var res kvpb.BulkOpSummary
@@ -249,11 +271,30 @@ func distImport(
 	// written in previous attempts, ensuring already-written SSTs are not lost.
 	processorOutput := make([]bulksst.SSTFiles, 0)
 	var resumeManifests []jobspb.BulkSSTManifest
-	if importProgress := job.Progress().Details.(*jobspb.Progress_Import).Import; importProgress != nil && len(importProgress.CompletedMapWork) > 0 {
-		resumeManifests = importProgress.CompletedMapWork
-		processorOutput = append(processorOutput, bulksst.ManifestsToSSTFiles(importProgress.CompletedMapWork))
-	}
 	if useDistributedMerge {
+		if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(
+			ctx context.Context, txn isql.Txn,
+		) error {
+			data, err := jobs.ReadChunkedFileToJobInfo(
+				ctx, importSSTManifestsInfoKey, txn, job.ID(),
+			)
+			if err != nil {
+				return err
+			}
+			if len(data) > 0 {
+				var stored jobspb.BulkSSTManifests
+				if err := protoutil.Unmarshal(data, &stored); err != nil {
+					return errors.Wrap(err, "unmarshaling SST manifests from job info")
+				}
+				resumeManifests = stored.Manifests
+				processorOutput = append(
+					processorOutput, bulksst.ManifestsToSSTFiles(resumeManifests),
+				)
+			}
+			return nil
+		}); err != nil {
+			return kvpb.BulkOpSummary{}, err
+		}
 		manifestBuf = backfill.NewSSTManifestBuffer(resumeManifests)
 	}
 
