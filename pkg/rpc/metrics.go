@@ -811,14 +811,18 @@ type monitoredDRPCServerStream struct {
 func (s *monitoredDRPCServerStream) MsgSend(msg drpc.Message, enc drpc.Encoding) error {
 	start := timeutil.Now()
 	err := s.Stream.MsgSend(msg, enc)
-	s.reporter.PostMsgSend(timeutil.Since(start))
+	if err == nil {
+		s.reporter.PostMsgSend(timeutil.Since(start))
+	}
 	return err
 }
 
 func (s *monitoredDRPCServerStream) MsgRecv(msg drpc.Message, enc drpc.Encoding) error {
 	start := timeutil.Now()
 	err := s.Stream.MsgRecv(msg, enc)
-	s.reporter.PostMsgReceive(timeutil.Since(start))
+	if err == nil {
+		s.reporter.PostMsgReceive(timeutil.Since(start))
+	}
 	return err
 }
 
@@ -916,7 +920,9 @@ func NewDRPCUnaryServerRequestMetricsInterceptor(
 		reporter := reportable.serverReporter(r.callMeta)
 		reporter.PostMsgReceive(timeutil.Since(r.startTime))
 		resp, err := handler(ctx, req)
-		reporter.PostMsgSend(timeutil.Since(r.startTime))
+		if err == nil {
+			reporter.PostMsgSend(timeutil.Since(r.startTime))
+		}
 		reporter.PostCall(err, timeutil.Since(r.startTime))
 		return resp, err
 	}

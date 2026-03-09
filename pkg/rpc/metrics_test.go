@@ -348,18 +348,24 @@ func TestDRPCServerUnaryInterceptorAllMetrics(t *testing.T) {
 	require.Equal(t, int64(2), requestMetrics.ServerStarted.Count(baseLabels))
 	require.Equal(t, int64(2), requestMetrics.ServerHandled.Count(baseLabels))
 	require.Equal(t, int64(1), requestMetrics.ServerErrors.Count(codeLabelsInternal))
+	// MsgReceived increments unconditionally (before handler), but MsgSent
+	// should not increment on error.
+	require.Equal(t, int64(2), requestMetrics.ServerMsgReceived.Count(baseLabels))
+	require.Equal(t, int64(1), requestMetrics.ServerMsgSent.Count(baseLabels))
 }
 
 // mockDRPCStream is a minimal drpc.Stream implementation for testing.
 type mockDRPCStream struct {
-	ctx context.Context
+	ctx     context.Context
+	sendErr error
+	recvErr error
 }
 
 var _ drpc.Stream = (*mockDRPCStream)(nil)
 
 func (s *mockDRPCStream) Context() context.Context                  { return s.ctx }
-func (s *mockDRPCStream) MsgSend(drpc.Message, drpc.Encoding) error { return nil }
-func (s *mockDRPCStream) MsgRecv(drpc.Message, drpc.Encoding) error { return nil }
+func (s *mockDRPCStream) MsgSend(drpc.Message, drpc.Encoding) error { return s.sendErr }
+func (s *mockDRPCStream) MsgRecv(drpc.Message, drpc.Encoding) error { return s.recvErr }
 func (s *mockDRPCStream) CloseSend() error                          { return nil }
 func (s *mockDRPCStream) Close() error                              { return nil }
 
@@ -431,6 +437,26 @@ func TestDRPCStreamServerRequestInterceptor(t *testing.T) {
 	require.NoError(t, err)
 	// Counts should not have changed.
 	require.Equal(t, int64(2), requestMetrics.ServerStarted.Count(baseLabels))
+
+	// Stream call where MsgSend and MsgRecv return errors. The metrics should
+	// not increment for failed send/recv operations.
+	streamErr := &mockDRPCStream{
+		ctx:     context.Background(),
+		sendErr: errors.New("send failed"),
+		recvErr: errors.New("recv failed"),
+	}
+	_, err = interceptor(streamErr, rpc, func(s drpc.Stream) (interface{}, error) {
+		recvErr := s.MsgRecv(nil, nil)
+		sendErr := s.MsgSend(nil, nil)
+		return nil, errors.CombineErrors(recvErr, sendErr)
+	})
+	require.Error(t, err)
+
+	require.Equal(t, int64(3), requestMetrics.ServerStarted.Count(baseLabels))
+	require.Equal(t, int64(3), requestMetrics.ServerHandled.Count(baseLabels))
+	// MsgReceived/MsgSent should not have incremented from failed stream ops.
+	require.Equal(t, int64(1), requestMetrics.ServerMsgReceived.Count(baseLabels))
+	require.Equal(t, int64(1), requestMetrics.ServerMsgSent.Count(baseLabels))
 }
 
 func assertRpcMetrics(
