@@ -26,7 +26,7 @@ func (np *cleanupNetworkPartition) Cleanup(
 	ctx context.Context, o operation.Operation, c cluster.Cluster,
 ) {
 	o.Status(fmt.Sprintf("remove the partition on node n%d", np.nodeID))
-	c.Run(ctx, option.WithNodes(c.Node(np.nodeID)), `sudo iptables -F`)
+	c.Run(ctx, option.WithNodes(c.Node(np.nodeID)), `sudo iptables -w -F`)
 }
 
 // createNetworkPartition creates a network partition between two random nodes.
@@ -57,8 +57,8 @@ func createNetworkPartialPartition(
 	otherNodeIP := ips[0]
 	o.Status(fmt.Sprintf("creating a partition between nodes n%d and n%d", nodeID, otherNodeID))
 	// Block all input and output traffic between the two nodes.
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT  -p tcp -s %s -j DROP`, otherNodeIP))
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp -d %s -j DROP`, otherNodeIP))
+	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -w -A INPUT  -p tcp -s %s -j DROP`, otherNodeIP))
+	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -w -A OUTPUT -p tcp -d %s -j DROP`, otherNodeIP))
 
 	return &cleanupNetworkPartition{nodeID: nodeID}
 }
@@ -77,10 +77,10 @@ func createNetworkFullPartition(
 	// Drop bi-directional traffic between the node and all other nodes on the
 	// pgport.
 	o.Status(fmt.Sprintf("partition node n%d from the cluster", nodeID))
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT  -p tcp --sport {pgport:%d} -j DROP`, nodeID))
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --sport {pgport:%d} -j DROP`, nodeID))
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT  -p tcp --dport {pgport:%d} -j DROP`, nodeID))
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --dport {pgport:%d} -j DROP`, nodeID))
+	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -w -A INPUT  -p tcp --sport {pgport:%d} -j DROP`, nodeID))
+	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -w -A OUTPUT -p tcp --sport {pgport:%d} -j DROP`, nodeID))
+	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -w -A INPUT  -p tcp --dport {pgport:%d} -j DROP`, nodeID))
+	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -w -A OUTPUT -p tcp --dport {pgport:%d} -j DROP`, nodeID))
 
 	return &cleanupNetworkPartition{nodeID: nodeID}
 }
