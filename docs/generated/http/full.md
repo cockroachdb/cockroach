@@ -2609,6 +2609,7 @@ ASHSample represents a single active session history sample.
 | work_event | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | WorkEvent is a more specific identifier for the work (e.g., "DistSenderLocal"). | [reserved](#support-status) |
 | goroutine_id | [int64](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-int64) |  | GoroutineID is the ID of the goroutine that was sampled. | [reserved](#support-status) |
 | tenant_id | [cockroach.roachpb.TenantID](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.roachpb.TenantID) |  | TenantID identifies which tenant this sample belongs to. | [reserved](#support-status) |
+| app_name | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | AppName is the application name string. Set when the sample corresponds to SQL execution. | [reserved](#support-status) |
 
 
 
@@ -2689,6 +2690,7 @@ ASHSample represents a single active session history sample.
 | work_event | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | WorkEvent is a more specific identifier for the work (e.g., "DistSenderLocal"). | [reserved](#support-status) |
 | goroutine_id | [int64](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-int64) |  | GoroutineID is the ID of the goroutine that was sampled. | [reserved](#support-status) |
 | tenant_id | [cockroach.roachpb.TenantID](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.roachpb.TenantID) |  | TenantID identifies which tenant this sample belongs to. | [reserved](#support-status) |
+| app_name | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | AppName is the application name string. Set when the sample corresponds to SQL execution. | [reserved](#support-status) |
 
 
 
@@ -2703,6 +2705,66 @@ An error wrapper for ListActiveSessionHistory fan-out.
 | ----- | ---- | ----- | ----------- | -------------- |
 | node_id | [int32](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-int32) |  | ID of node that was being contacted when this error occurred. | [reserved](#support-status) |
 | message | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | Error message. | [reserved](#support-status) |
+
+
+
+
+
+
+## AppNameMappings
+
+
+
+AppNameMappings retrieves app name ID to string mappings from
+this node's local cache for the requested IDs.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+Request object for retrieving app name ID to string mappings from
+a node's local cache.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| ids | [uint64](#cockroach.server.serverpb.AppNameMappingsRequest-uint64) | repeated | ids is the set of app name IDs to resolve. Only mappings for these IDs are returned in the response. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+Response object for AppNameMappings.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| mappings | [AppNameMappingsResponse.MappingsEntry](#cockroach.server.serverpb.AppNameMappingsResponse-cockroach.server.serverpb.AppNameMappingsResponse.MappingsEntry) | repeated | mappings is a map from app name ID to the original app name string. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.AppNameMappingsResponse-cockroach.server.serverpb.AppNameMappingsResponse.MappingsEntry"></a>
+#### AppNameMappingsResponse.MappingsEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [uint64](#cockroach.server.serverpb.AppNameMappingsResponse-uint64) |  |  |  |
+| value | [string](#cockroach.server.serverpb.AppNameMappingsResponse-string) |  |  |  |
 
 
 

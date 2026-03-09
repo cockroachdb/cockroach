@@ -9842,6 +9842,7 @@ CREATE TABLE crdb_internal.node_active_session_history (
   node_id          INT NOT NULL,
   tenant_id        INT NOT NULL,
   workload_id      STRING,
+  app_name         STRING,
   work_event_type  STRING NOT NULL,
   work_event       STRING NOT NULL,
   goroutine_id     INT NOT NULL
@@ -9870,6 +9871,7 @@ CREATE TABLE crdb_internal.node_active_session_history (
 				tree.NewDInt(tree.DInt(sample.NodeID)),
 				tree.NewDInt(tree.DInt(sample.TenantID.ToUint64())),
 				tree.NewDString(sample.WorkloadID),
+				tree.NewDString(sample.AppName),
 				tree.NewDString(ash.WorkEventType(sample.WorkEventType).String()),
 				tree.NewDString(sample.WorkEvent),
 				tree.NewDInt(tree.DInt(sample.GoroutineID)),
@@ -9894,6 +9896,7 @@ CREATE TABLE crdb_internal.cluster_active_session_history (
   node_id          INT NOT NULL,
   tenant_id        INT NOT NULL,
   workload_id      STRING,
+  app_name         STRING,
   work_event_type  STRING NOT NULL,
   work_event       STRING NOT NULL,
   goroutine_id     INT NOT NULL
@@ -9922,6 +9925,7 @@ CREATE TABLE crdb_internal.cluster_active_session_history (
 				tree.NewDInt(tree.DInt(sample.NodeID)),
 				tree.NewDInt(tree.DInt(sample.TenantID.ToUint64())),
 				tree.NewDString(sample.WorkloadID),
+				tree.NewDString(sample.AppName),
 				tree.NewDString(ash.WorkEventType(sample.WorkEventType).String()),
 				tree.NewDString(sample.WorkEvent),
 				tree.NewDInt(tree.DInt(sample.GoroutineID)),

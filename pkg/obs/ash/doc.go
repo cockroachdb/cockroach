@@ -30,7 +30,8 @@
 // register their current activity. SetWorkState returns a cleanup
 // function that must be deferred:
 //
-//	cleanup := ash.SetWorkState(tenantID, fingerprintID, ash.WorkLock, "LockWait")
+//	info := ash.WorkloadInfo{WorkloadID: fingerprintID, AppNameID: appNameID}
+//	cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "LockWait")
 //	defer cleanup()
 //
 // Each call pushes a new WorkState onto a per-goroutine stack (stored
@@ -71,6 +72,27 @@
 // called during server startup after the node ID is known. In a
 // shared-process multi-tenant environment, multiple SQL servers share
 // the single sampler instance.
+//
+// # App Name Resolution
+//
+// To correlate samples with applications, the SQL layer hashes each
+// session's application name to a uint64 ID (via GetOrStoreAppNameID)
+// and stores the ID-to-string mapping in a process-wide cache. The ID
+// is propagated through BatchRequest headers and DistSQL
+// SetupFlowRequests, avoiding string copies on the hot path.
+//
+// During sampling, the sampler resolves app name IDs in two phases:
+//
+//  1. Local resolution: look up the ID in the process-wide cache.
+//     This succeeds for work originating from the local node and for
+//     DistSQL flows, which eagerly store their mapping on the remote
+//     node during flow setup.
+//  2. Remote resolution: for cache misses where the work state has a
+//     non-zero GatewayNodeID different from the local node, the
+//     sampler fetches mappings from the gateway via the
+//     AppNameMappings RPC. RPCs are batched and deduplicated by
+//     gateway node, with a 250ms timeout to avoid stalling the
+//     sampling loop.
 //
 // # Ring Buffer
 //
@@ -113,6 +135,33 @@
 // string allocations on the hot path. The sampler converts these IDs
 // to hex-encoded strings when writing samples, caching the conversion
 // to avoid repeated allocations.
+//
+// # Multi-Tenancy
+//
+// The sampler and app name cache are process-wide singletons, not
+// per-tenant. Tenant isolation is enforced at the read path: each
+// ASHSample records a TenantID, and the ListLocalActiveSessionHistory
+// RPC filters samples so secondary tenants only see their own data.
+//
+// Shared-process (in-process) tenants: multiple SQL servers in the
+// same process share the sampler and app name cache. The sampler
+// observes work states from all tenants and can resolve app names
+// for any of them, since all SQL servers populate the same cache.
+// When a SQL statement executes on a remote node via DistSQL, the
+// app name mapping is eagerly stored on the remote node during flow
+// setup, so the remote sampler can resolve it without an RPC.
+//
+// Separate-process (out-of-process) tenants: each SQL pod runs its
+// own process with its own sampler and app name cache. App names are
+// always resolved locally on the SQL pod because the SQL execution
+// path calls GetOrStoreAppNameID before any work states are
+// registered. On KV nodes, BatchRequests from SQL pods carry the
+// app name ID but have GatewayNodeID set to 0 (since the gateway is
+// not a KV node). The sampler skips remote resolution for
+// GatewayNodeID 0, so KV-side samples from SQL pod workloads will
+// not have app names. This is acceptable because out-of-process
+// tenants only observe samples from their own SQL pods, not from KV
+// nodes.
 //
 // # Performance
 //

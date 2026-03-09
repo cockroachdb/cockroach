@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
@@ -282,7 +283,7 @@ func (ds *ServerImpl) setupFlow(
 		// Txn to heartbeat the transaction.
 		nodeID := roachpb.NodeID(req.Flow.Gateway)
 		leafTxn := kv.NewLeafTxn(ctx, ds.DB.KV(), nodeID, tis, &req.LeafTxnAdmissionHeader)
-		leafTxn.SetWorkloadID(req.EvalContext.WorkloadID)
+		leafTxn.SetWorkloadInfo(req.EvalContext.WorkloadID, req.EvalContext.AppNameID)
 		return leafTxn, nil
 	}
 
@@ -388,6 +389,16 @@ func (ds *ServerImpl) setupFlow(
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
 		evalCtx.TestingKnobs.ForceProductionValues = req.EvalContext.TestingKnobsForceProductionValues
 		evalCtx.WorkloadID = req.EvalContext.WorkloadID
+		evalCtx.AppNameID = req.EvalContext.AppNameID
+
+		// In DistSQL flows, we eagerly store the app name on remote nodes to reduce
+		// cache misses when the local ASH sampler resolves the app name ID.
+		if req.EvalContext.AppNameID != 0 {
+			ash.StoreAppNameMapping(
+				req.EvalContext.AppNameID,
+				req.EvalContext.SessionData.ApplicationName,
+			)
+		}
 
 		if ds.SQLCPUProvider != nil {
 			var cpuHandle *admission.SQLCPUHandle

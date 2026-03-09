@@ -159,7 +159,7 @@ func TestWorkloadIDPropagation(t *testing.T) {
 			hexFPs, capturedIDsString(captured))
 	}
 
-	// Verify that txn.SetWorkloadID propagates to KV BatchRequest headers.
+	// Verify that txn.SetWorkloadInfo propagates to KV BatchRequest headers.
 	// All fetcher/streamer variants share this same txn-level path, so a
 	// single SELECT suffices.
 	t.Run("batch_request", func(t *testing.T) {

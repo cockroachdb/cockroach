@@ -1884,13 +1884,28 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 
 	// Initialize the process-global ASH sampler now that the node ID is
 	// known. The sampler is a process-wide singleton tied to the
-	// process-level stopper.
-	if err := ash.InitGlobalSampler(ctx, state.nodeID, s.st, s.stopper); err != nil {
+	// process-level stopper. This path handles KV+SQL nodes (the system
+	// tenant). Standalone SQL pods (out-of-process tenants) are handled by
+	// SQLServerWrapper.PreStart in tenant.go.
+	if _, err := ash.InitGlobalSampler(ctx, state.nodeID, s.st, s.stopper); err != nil {
 		return err
 	}
 	if m := ash.GlobalSamplerMetrics(); m != nil {
 		s.sysRegistry.AddMetricStruct(m)
 	}
+	ash.SetGlobalAppNameResolver(func(
+		ctx context.Context, nodeID roachpb.NodeID, ids []uint64,
+	) (map[uint64]string, error) {
+		client, err := s.status.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := client.AppNameMappings(ctx, &serverpb.AppNameMappingsRequest{Ids: ids})
+		if err != nil {
+			return nil, err
+		}
+		return resp.Mappings, nil
+	})
 
 	// TODO(irfansharif): Now that we have our node ID, we should run another
 	// check here to make sure we've not been decommissioned away (if we're here

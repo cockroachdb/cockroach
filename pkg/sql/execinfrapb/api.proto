@@ -90,6 +90,12 @@ message EvalContext {
   // WorkloadID for ASH sampling.
   optional uint64 workload_id = 17 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "WorkloadID"];
+  // AppNameID is the hash of the application name, for ASH sampling.
+  // Note(alyshan): This will eventually be replaced by a general
+  // enrichment_id field which will enable the ASH sampler to
+  // enrich samples with more workload context.
+  optional uint64 app_name_id = 18 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "AppNameID"];
 }
 
 message SimpleResponse {
