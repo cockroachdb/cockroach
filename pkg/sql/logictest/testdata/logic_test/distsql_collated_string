@@ -1,0 +1,73 @@
+# LogicTest: 5node
+
+# Regression test for #110322: data race in CollationEnvironment when multiple
+# outboxes share the same evalCtx on the gateway and evaluate COLLATE
+# expressions concurrently.
+
+statement ok
+CREATE TABLE t1 (c0 STRING PRIMARY KEY)
+
+statement ok
+INSERT INTO t1 VALUES ('a'), ('b'), ('c'), ('d'), ('e')
+
+statement ok
+ALTER TABLE t1 SPLIT AT VALUES ('b'), ('c'), ('d'), ('e')
+
+retry
+statement ok
+ALTER TABLE t1 EXPERIMENTAL_RELOCATE VALUES
+  (ARRAY[1], 'a'),
+  (ARRAY[2], 'b'),
+  (ARRAY[3], 'c'),
+  (ARRAY[4], 'd'),
+  (ARRAY[5], 'e')
+
+# Force DistSQL so the query creates multiple outboxes sharing the same
+# evalCtx on the gateway.
+statement ok
+SET distsql = on
+
+# This TLP-style UNION query creates three filter processors, each evaluating
+# a COLLATE expression. When distributed, the gateway runs multiple outbox
+# goroutines concurrently that all call NewDCollatedString through the shared
+# CollationEnvironment, triggering a data race.
+query T rowsort
+SELECT * FROM t1 WHERE (t1.c0 COLLATE en) > ('_' COLLATE en)
+UNION
+SELECT * FROM t1 WHERE NOT ((t1.c0 COLLATE en) > ('_' COLLATE en))
+UNION
+SELECT * FROM t1 WHERE ((t1.c0 COLLATE en) > ('_' COLLATE en)) IS NULL
+----
+a
+b
+c
+d
+e
+
+# Run the same query pattern several more times to increase the chance of
+# triggering the race under the race detector.
+query T rowsort
+SELECT * FROM t1 WHERE (t1.c0 COLLATE en) > ('b' COLLATE en)
+UNION
+SELECT * FROM t1 WHERE NOT ((t1.c0 COLLATE en) > ('b' COLLATE en))
+UNION
+SELECT * FROM t1 WHERE ((t1.c0 COLLATE en) > ('b' COLLATE en)) IS NULL
+----
+a
+b
+c
+d
+e
+
+query T rowsort
+SELECT * FROM t1 WHERE (t1.c0 COLLATE en) > ('c' COLLATE en)
+UNION
+SELECT * FROM t1 WHERE NOT ((t1.c0 COLLATE en) > ('c' COLLATE en))
+UNION
+SELECT * FROM t1 WHERE ((t1.c0 COLLATE en) > ('c' COLLATE en)) IS NULL
+----
+a
+b
+c
+d
+e
