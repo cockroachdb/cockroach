@@ -39,8 +39,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 		// Disabled on IBM only because the Azure test suite was used as a base
 		// for IBM tests, and this test was disabled on Azure as of 05/2025.
 		CompatibleClouds: registry.AllExceptAzure,
-		// TODO(aaditya): change to weekly once the test stabilizes.
-		Suites: registry.Suites(registry.Nightly),
+		Suites:           registry.Suites(registry.Nightly),
 		// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
 		Cluster: r.MakeClusterSpec(
 			2,
@@ -104,20 +103,17 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 
 			// Run foreground kv workload, QoS="regular".
 			duration := 45 * time.Minute
+			var monitoringStart, monitoringEnd time.Time
+			var totalBWValues []float64
 			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				t.Status(fmt.Sprintf("starting foreground kv workload thread (<%s)", time.Minute))
 				dur := " --duration=" + duration.String()
-				labels := map[string]string{
-					"concurrency":  "2",
-					"splits":       "1000",
-					"read-percent": "50",
-				}
 				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
-				cmd := fmt.Sprintf("./cockroach workload run kv %s --concurrency=2 "+
+				cmd := fmt.Sprintf("./cockroach workload run kv --concurrency=2 "+
 					"--splits=1000 --read-percent=50 --min-block-bytes=256 --max-block-bytes=256 "+
 					"--txn-qos='regular' --tolerate-errors %s %s %s",
-					roachtestutil.GetWorkloadHistogramArgs(t, c, labels), foregroundDB, dur, url)
+					foregroundDB, dur, url)
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 				return nil
 			})
@@ -127,13 +123,10 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				t.Status(fmt.Sprintf("starting background kv workload thread (<%s)", time.Minute))
 				dur := " --duration=" + duration.String()
 				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
-				labels := map[string]string{
-					"concurrency":  "1024",
-					"read-percent": "0",
-				}
-				cmd := fmt.Sprintf("./cockroach workload run kv %s --concurrency=1024 "+
+				cmd := fmt.Sprintf("./cockroach workload run kv --concurrency=1024 "+
 					"--read-percent=0 --min-block-bytes=4096 --max-block-bytes=4096 "+
-					"--txn-qos='background' --tolerate-errors %s %s %s", roachtestutil.GetWorkloadHistogramArgs(t, c, labels), backgroundDB, dur, url)
+					"--txn-qos='background' --tolerate-errors %s %s %s",
+					backgroundDB, dur, url)
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 				return nil
 			})
@@ -164,6 +157,8 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			time.Sleep(5 * time.Minute)
 
 			m.Go(func(ctx context.Context) error {
+				monitoringStart = timeutil.Now()
+				defer func() { monitoringEnd = timeutil.Now() }()
 				t.Status(fmt.Sprintf("starting monitoring thread (<%s)", time.Minute))
 				writeBWMetric := divQuery("rate(sys_host_disk_write_bytes[1m])", 1<<20 /* 1MiB */)
 				readBWMetric := divQuery("rate(sys_host_disk_read_bytes[1m])", 1<<20 /* 1MiB */)
@@ -198,7 +193,6 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				// Loop for ~20 minutes.
 				const numIterations = int(20 / (collectionIntervalSeconds / 60))
 				var writeBWValues []float64
-				var totalBWValues []float64
 				numErrors := 0
 				numSuccesses := 0
 				for i := 0; i < numIterations; i++ {
@@ -248,18 +242,34 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				if numErrors > numSuccesses {
 					t.Fatalf("too many errors retrieving metrics")
 				}
-				// Export mean total bandwidth to roachperf.
-				if len(totalBWValues) > 0 {
-					finalMeanTotalBW := roachtestutil.GetMeanOverLastN(len(totalBWValues), totalBWValues)
-					c.Run(ctx, option.WithNodes(c.CRDBNodes()), "mkdir", "-p", t.PerfArtifactsDir())
-					perfResult := fmt.Sprintf(`{"mean_total_bandwidth_mbs": %.1f}`, finalMeanTotalBW)
-					c.Run(ctx, option.WithNodes(c.CRDBNodes()),
-						fmt.Sprintf(`echo '%s' > %s/stats.json`, perfResult, t.PerfArtifactsDir()))
-				}
 				return nil
 			})
 
 			m.Wait()
+
+			// Export mean total bandwidth as a scalar metric for roachperf,
+			// derived from the values collected during monitoring.
+			if !monitoringStart.IsZero() && !monitoringEnd.IsZero() {
+				_, err := statCollector.Exporter().Export(
+					ctx, c, t, false, /* dryRun */
+					monitoringStart, monitoringEnd,
+					[]clusterstats.AggQuery{},
+					func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+						if len(totalBWValues) == 0 {
+							return nil
+						}
+						return &roachtestutil.AggregatedMetric{
+							Name:           "mean_total_bandwidth",
+							Value:          roachtestutil.MetricPoint(roachtestutil.GetMeanOverLastN(len(totalBWValues), totalBWValues)),
+							Unit:           "MiB/s",
+							IsHigherBetter: true,
+						}
+					},
+				)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
 		},
 	})
 }

@@ -69,7 +69,7 @@ func registerSingleNodeIndexBackfill(r registry.Registry) {
 			Timeout:          12 * time.Hour,
 			Benchmark:        true,
 			CompatibleClouds: registry.OnlyGCE,
-			Suites:           registry.Suites(registry.Weekly),
+			Suites:           registry.Suites(registry.Nightly),
 			Cluster: r.MakeClusterSpec(
 				2, // 1 CRDB node + 1 workload node
 				// 16vCPUs so that CPU is not the bottleneck.
@@ -245,6 +245,7 @@ func runSingleNodeIndexBackfill(
 	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	var backfillDuration time.Duration
 	var totalBWSamples []float64
+	var metricsStart, metricsEnd time.Time
 
 	// Goroutine 1: Run TPC-E workload.
 	m.Go(func(ctx context.Context) error {
@@ -314,6 +315,8 @@ func runSingleNodeIndexBackfill(
 		metricsDone := make(chan struct{})
 		t.Go(func(context.Context, *logger.Logger) error {
 			defer close(metricsDone)
+			metricsStart = timeutil.Now()
+			defer func() { metricsEnd = timeutil.Now() }()
 			writeBWQuery := divQuery("rate(sys_host_disk_write_bytes[1m])", 1<<20)
 			readBWQuery := divQuery("rate(sys_host_disk_read_bytes[1m])", 1<<20)
 
@@ -379,12 +382,52 @@ func runSingleNodeIndexBackfill(
 
 	m.Wait()
 
-	// Export index backfill duration to roachperf.
-	c.Run(ctx, option.WithNodes(c.CRDBNodes()), "mkdir", "-p", t.PerfArtifactsDir())
-	perfResult := fmt.Sprintf(`{"index_backfill_duration_secs": %.1f}`, backfillDuration.Seconds())
-	c.Run(ctx, option.WithNodes(c.CRDBNodes()),
-		fmt.Sprintf(`echo '%s' > %s/stats.json`, perfResult, t.PerfArtifactsDir()))
-	t.L().Printf("roachperf stats: %s", perfResult)
+	t.L().Printf("index backfill duration: %s", backfillDuration)
+
+	// Compute mean total bandwidth from the samples collected during
+	// index backfill.
+	var avgTotalBW float64
+	if len(totalBWSamples) > 0 {
+		var sum float64
+		for _, s := range totalBWSamples {
+			sum += s
+		}
+		avgTotalBW = sum / float64(len(totalBWSamples))
+		t.L().Printf("average total disk bandwidth during backfill: %.2f MiB/s (%d samples)",
+			avgTotalBW, len(totalBWSamples))
+	}
+
+	// Export backfill duration and mean total bandwidth as scalar metrics
+	// for roachperf.
+	if !metricsStart.IsZero() && !metricsEnd.IsZero() {
+		_, err := statCollector.Exporter().Export(
+			ctx, c, t, false, /* dryRun */
+			metricsStart, metricsEnd,
+			[]clusterstats.AggQuery{},
+			func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+				return &roachtestutil.AggregatedMetric{
+					Name:           "index_backfill_duration",
+					Value:          roachtestutil.MetricPoint(backfillDuration.Seconds()),
+					Unit:           "s",
+					IsHigherBetter: false,
+				}
+			},
+			func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+				if avgTotalBW == 0 {
+					return nil
+				}
+				return &roachtestutil.AggregatedMetric{
+					Name:           "mean_total_bandwidth",
+					Value:          roachtestutil.MetricPoint(avgTotalBW),
+					Unit:           "MiB/s",
+					IsHigherBetter: true,
+				}
+			},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	// Validate pass/fail criteria. Thresholds are intentionally loose to
 	// tolerate run-to-run variance while catching severe regressions (e.g.,
@@ -397,18 +440,9 @@ func runSingleNodeIndexBackfill(
 		t.Fatalf("index backfill took %s, exceeding maximum of %s",
 			backfillDuration, maxBackfillDuration)
 	}
-	if len(totalBWSamples) > 0 {
-		var sum float64
-		for _, s := range totalBWSamples {
-			sum += s
-		}
-		avgTotalBW := sum / float64(len(totalBWSamples))
-		t.L().Printf("average total disk bandwidth during backfill: %.2f MiB/s (%d samples)",
-			avgTotalBW, len(totalBWSamples))
-		if avgTotalBW < minAvgTotalBW {
-			t.Fatalf("average total disk bandwidth %.2f MiB/s is below minimum of %.0f MiB/s",
-				avgTotalBW, minAvgTotalBW)
-		}
+	if avgTotalBW > 0 && avgTotalBW < minAvgTotalBW {
+		t.Fatalf("average total disk bandwidth %.2f MiB/s is below minimum of %.0f MiB/s",
+			avgTotalBW, minAvgTotalBW)
 	}
 
 	t.Status("test completed successfully")
