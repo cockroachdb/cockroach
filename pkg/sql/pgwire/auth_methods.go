@@ -1026,7 +1026,7 @@ type LDAPManager interface {
 }
 
 // ldapManager is a singleton global pgwire object which gets initialized from
-// authLDAP method whenever an LDAP auth attempt happens. It depends on ldapccl
+// authLDAP method whenever an LDAP auth attempt happens. It depends on ldapauth
 // module to be imported properly to override its default ConfigureLDAPAuth
 // constructor.
 var ldapManager = struct {

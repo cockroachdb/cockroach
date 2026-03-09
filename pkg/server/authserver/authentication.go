@@ -152,7 +152,7 @@ func (s *authenticationServer) RegisterGateway(
 
 // ldapManager is a duplicate of singleton global pgwire object which gets
 // initialized from UserLogin method whenever an LDAP auth attempt happens. It
-// depends on ldapccl module to be imported properly to override its default
+// depends on ldapauth module to be imported properly to override its default
 // ConfigureLDAPAuth constructor.
 var ldapManager = struct {
 	sync.Once

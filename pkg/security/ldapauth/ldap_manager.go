@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package ldapccl
+package ldapauth
 
 import (
 	"context"
@@ -48,7 +48,7 @@ var (
 // privilege resolution.
 //
 // The implementation uses the `go-ldap/ldap/` client package and is supported
-// through a number of cluster settings defined in `ldapccl/settings.go`. These
+// through a number of cluster settings defined in `ldapauth/settings.go`. These
 // settings specify how the ldap auth attempt should be executed and if this
 // feature is enabled. A common ldapAuthManager object is used for both authN
 // and authZ to reduce redundancy of cluster settings listeners and auth

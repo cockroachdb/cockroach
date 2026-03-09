@@ -1,7 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "ldapccl",
+    name = "ldapauth",
     srcs = [
         "authentication_ldap.go",
         "authorization_ldap.go",
@@ -10,7 +10,7 @@ go_library(
         "ldap_util.go",
         "settings.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/ldapccl",
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/ldapauth",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/security",
@@ -33,16 +33,14 @@ go_library(
 )
 
 go_test(
-    name = "ldapccl_test",
-    size = "large",
+    name = "ldapauth_test",
     srcs = [
         "authentication_ldap_test.go",
         "authorization_ldap_test.go",
         "main_test.go",
         "settings_test.go",
     ],
-    data = glob(["testdata/**"]),
-    embed = [":ldapccl"],
+    embed = [":ldapauth"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",

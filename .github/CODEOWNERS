@@ -412,7 +412,6 @@
 /pkg/ccl/gssapiccl/          @cockroachdb/product-security
 #!/pkg/ccl/kvccl/              @cockroachdb/kv-noreview
 /pkg/ccl/kvccl/kvtenantccl/  @cockroachdb/server-prs
-/pkg/ccl/ldapccl/            @cockroachdb/security-engineering @cockroachdb/product-security
 #!/pkg/ccl/upgradeccl/       @cockroachdb/release-eng-prs @cockroachdb/upgrade-prs
 #!/pkg/ccl/logictestccl/       @cockroachdb/sql-queries-noreview
 #!/pkg/ccl/sqlitelogictestccl/ @cockroachdb/sql-queries-noreview
@@ -601,6 +600,7 @@
 /pkg/security/distinguishedname/ @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/jwtauth/       @cockroachdb/cloud-identity @cockroachdb/product-security
 /pkg/security/jwthelper/     @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/ldapauth/      @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/password/      @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/provisioning/  @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/username/      @cockroachdb/security-engineering @cockroachdb/product-security
