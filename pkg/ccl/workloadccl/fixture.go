@@ -402,7 +402,8 @@ func ImportFixture(
 		}); err != nil {
 			return 0, err
 		}
-		currentTable += maxTableBatchSize
+		currentTable = batchEnd
+		log.Dev.Infof(ctx, "created %d/%d tables", currentTable, len(tables))
 	}
 
 	pathPrefix := csvServer
