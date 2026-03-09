@@ -105,6 +105,7 @@ BNF_SRCS = [
     "//docs/generated/sql/bnf:create_changefeed_stmt.bnf",
     "//docs/generated/sql/bnf:create_database_stmt.bnf",
     "//docs/generated/sql/bnf:create_ddl_stmt.bnf",
+    "//docs/generated/sql/bnf:create_domain_stmt.bnf",
     "//docs/generated/sql/bnf:create_extension_stmt.bnf",
     "//docs/generated/sql/bnf:create_external_connection.bnf",
     "//docs/generated/sql/bnf:create_func.bnf",
