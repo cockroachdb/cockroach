@@ -41,6 +41,10 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 			if c.IsLocal() {
 				maxOps = 10
 				concurrency = 2
+			} else if t.RuntimeAssertionsCockroach() != "" {
+				// When runtime assertions are enabled, produce fewer operations
+				// to avoid risk of timeouts.
+				maxOps = maxOps / 4
 			}
 			runSchemaChangeMixedVersions(ctx, t, c, maxOps, concurrency)
 		},
