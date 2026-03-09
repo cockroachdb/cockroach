@@ -30,6 +30,10 @@ type Hint struct {
 	// The hint should only be applied to statements if Enabled is true.
 	Enabled bool
 
+	// Database is the database to which this hint is scoped. If empty, the hint
+	// applies regardless of the current database.
+	Database string
+
 	// If Err is not nil it was an error encountered while loading the hint from
 	// system.statement_hints, and Enabled will be false.
 	Err error
@@ -74,14 +78,30 @@ func CheckForStatementHintsInDB(
 // error. If one of the hints cannot be unmarshalled, the hint (and associated
 // fingerprint and ID) will be skipped but no error will be returned.
 func GetStatementHintsFromDB(
-	ctx context.Context, ex isql.Executor, statementHash int64, fingerprintFlags tree.FmtFlags,
+	ctx context.Context,
+	settings *cluster.Settings,
+	ex isql.Executor,
+	statementHash int64,
+	fingerprintFlags tree.FmtFlags,
 ) (hintIDs []int64, fingerprints []string, hints []Hint, retErr error) {
 	const opName = "get-plan-hints"
-	const getHintsStmt = `
-    SELECT "row_id", "fingerprint", "hint"
+	var getHintsStmt string
+	hasEnabledCol := settings.Version.IsActive(
+		ctx, clusterversion.V26_2_StatementHintsTypeNameEnabledColumnsAdded,
+	)
+	if hasEnabledCol {
+		getHintsStmt = `
+    SELECT "row_id", "fingerprint", "hint", "enabled", "database"
     FROM system.statement_hints
     WHERE "hash" = $1
     ORDER BY "created_at" DESC, "row_id" DESC`
+	} else {
+		getHintsStmt = `
+    SELECT "row_id", "fingerprint", "hint", true AS "enabled", NULL AS "database"
+    FROM system.statement_hints
+    WHERE "hash" = $1
+    ORDER BY "created_at" DESC, "row_id" DESC`
+	}
 	it, queryErr := ex.QueryIteratorEx(
 		ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride,
 		getHintsStmt, statementHash,
@@ -170,7 +190,10 @@ func parseHint(
 			return hintID, fingerprint, hint
 		}
 	}
-	hint.Enabled = true
+	hint.Enabled = bool(tree.MustBeDBool(datums[3]))
+	if datums[4] != tree.DNull {
+		hint.Database = string(tree.MustBeDString(datums[4]))
+	}
 	return hintID, fingerprint, hint
 }
 
@@ -281,6 +304,7 @@ func DeleteHintFromDB(
 func (hint *Hint) Size() int64 {
 	res := int64(unsafe.Sizeof(*hint))
 	res += int64(hint.StatementHintUnion.Size())
+	res += int64(len(hint.Database))
 	if hint.HintInjectionDonor != nil {
 		res += hint.HintInjectionDonor.Size()
 	}

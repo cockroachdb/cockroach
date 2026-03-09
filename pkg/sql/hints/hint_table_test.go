@@ -67,7 +67,7 @@ func TestHintTableOperations(t *testing.T) {
 
 	// Retrieve nonexistent hints.
 	hintIDs, fingerprints, hintsFromDB, err := hints.GetStatementHintsFromDB(
-		ctx, ex, hash1, fingerprintFlags,
+		ctx, ts.ClusterSettings(), ex, hash1, fingerprintFlags,
 	)
 	require.NoError(t, err)
 	require.Empty(t, hintIDs)
@@ -90,7 +90,7 @@ func TestHintTableOperations(t *testing.T) {
 
 	// Fetch the inserted hint.
 	hintIDs, fingerprints, hintsFromDB, err = hints.GetStatementHintsFromDB(
-		ctx, ex, hash1, fingerprintFlags,
+		ctx, ts.ClusterSettings(), ex, hash1, fingerprintFlags,
 	)
 	require.NoError(t, err)
 	require.Len(t, hintIDs, 1)
@@ -112,7 +112,7 @@ func TestHintTableOperations(t *testing.T) {
 
 	// Fetch all hints for the fingerprint.
 	hintIDs, fingerprints, hintsFromDB, err = hints.GetStatementHintsFromDB(
-		ctx, ex, hash1, fingerprintFlags,
+		ctx, ts.ClusterSettings(), ex, hash1, fingerprintFlags,
 	)
 	require.NoError(t, err)
 	require.Len(t, hintIDs, 2)
@@ -133,7 +133,7 @@ func TestHintTableOperations(t *testing.T) {
 
 	// Retrieve hint for the new fingerprint.
 	hintIDs2, fingerprints2, hintsFromDB2, err := hints.GetStatementHintsFromDB(
-		ctx, ex, hash2, fingerprintFlags,
+		ctx, ts.ClusterSettings(), ex, hash2, fingerprintFlags,
 	)
 	require.NoError(t, err)
 	require.Len(t, hintIDs2, 1)

@@ -178,6 +178,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			ctx, stmt, clusterunique.ID{},
 			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&execCfg.Settings.SV)),
 			nil, /* statementHintsCache */
+			"",  /* currentDB */
 		)
 		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)
@@ -300,6 +301,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			ctx, stmt, clusterunique.ID{},
 			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&s.ClusterSettings().SV)),
 			nil, /* statementHintsCache */
+			"",  /* currentDB */
 		)
 		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)

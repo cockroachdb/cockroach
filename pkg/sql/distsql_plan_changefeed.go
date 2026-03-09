@@ -86,6 +86,7 @@ func PlanCDCExpression(
 		}, clusterunique.ID{}, /* queryID */
 		tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV)),
 		nil, /* statementHintsCache */
+		"",  /* currentDB */
 	)
 
 	p.curPlan.init(&p.stmt, &p.instrumentation)

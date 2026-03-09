@@ -457,6 +457,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			ctx, stmt, clusterunique.ID{}, /* queryID */
 			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&localPlanner.execCfg.Settings.SV)),
 			nil, /* statementHintsCache */
+			"",  /* currentDB */
 		)
 		localPlanner.optPlanningCtx.init(localPlanner)
 
