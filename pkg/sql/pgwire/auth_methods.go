@@ -727,7 +727,7 @@ func authSessionRevivalToken(token []byte) AuthMethod {
 	}
 }
 
-// JWTVerifier is an interface for the `jwtauthccl` library to add JWT login support.
+// JWTVerifier is an interface for the `jwtauth` library to add JWT login support.
 // This interface has a method that validates whether a given JWT token is a proper
 // credential for a given user to login.
 type JWTVerifier interface {
@@ -795,7 +795,7 @@ func (c *noJWTConfigured) VerifyAndExtractIssuer(
 	return "", "", errors.New("JWT token authentication has not been configured")
 }
 
-// ConfigureJWTAuth is a hook for the `jwtauthccl` library to add JWT login support. It's called to
+// ConfigureJWTAuth is a hook for the `jwtauth` library to add JWT login support. It's called to
 // setup the JWTVerifier just as it is needed.
 var ConfigureJWTAuth = func(
 	serverCtx context.Context,

@@ -410,7 +410,6 @@
 /pkg/ccl/cmdccl/clusterrepl/ @cockroachdb/disaster-recovery
 /pkg/ccl/gqpccl/             @cockroachdb/sql-queries-prs
 /pkg/ccl/gssapiccl/          @cockroachdb/product-security
-/pkg/ccl/jwtauthccl/         @cockroachdb/cloud-identity @cockroachdb/product-security
 #!/pkg/ccl/kvccl/              @cockroachdb/kv-noreview
 /pkg/ccl/kvccl/kvtenantccl/  @cockroachdb/server-prs
 /pkg/ccl/ldapccl/            @cockroachdb/security-engineering @cockroachdb/product-security
@@ -600,6 +599,7 @@
 /pkg/security/x509.go        @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/clientsecopts/ @cockroachdb/sql-foundations @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/distinguishedname/ @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/jwtauth/       @cockroachdb/cloud-identity @cockroachdb/product-security
 /pkg/security/jwthelper/     @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/password/      @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/provisioning/  @cockroachdb/security-engineering @cockroachdb/product-security

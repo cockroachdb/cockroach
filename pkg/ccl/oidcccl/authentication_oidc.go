@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/jwtauth"
 	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	secuser "github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -786,7 +786,7 @@ var ConfigureOIDC = func(
 			return
 		}
 
-		claim := jwtauthccl.JWTAuthClaim.Get(&st.SV)
+		claim := jwtauth.JWTAuthClaim.Get(&st.SV)
 
 		if log.V(1) {
 			log.Dev.Infof(

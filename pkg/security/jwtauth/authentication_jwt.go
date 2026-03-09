@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package jwtauthccl
+package jwtauth
 
 import (
 	"context"
@@ -46,7 +46,7 @@ var (
 // the CRDB SSO login flow.
 //
 // The implementation uses the `lestrrat-go` JWK and JWT packages and is supported through a number of
-// cluster settings defined in `jwtauthccl/settings.go`. These settings specify how the JWTs should be
+// cluster settings defined in `jwtauth/settings.go`. These settings specify how the JWTs should be
 // validated and if this feature is enabled.
 type jwtAuthenticator struct {
 	mu struct {
