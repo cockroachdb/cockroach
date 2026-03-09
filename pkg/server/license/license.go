@@ -194,14 +194,13 @@ func registerCallbackOnLicenseChange(
 		}
 		licenseEnforcer.RefreshForLicenseChange(ctx, licenseType, licenseExpiry)
 
-		expiry, err := licenseEnforcer.UpdateTrialLicenseExpiry(
+		err = licenseEnforcer.UpdateTrialLicenseExpiry(
 			ctx, licenseType, isChange, licenseExpiry.Unix())
 		if err != nil {
 			log.Dev.Errorf(ctx,
 				"unable to update trial license expiry: %v", err)
 			return
 		}
-		trialLicenseExpiryTimestamp.Store(expiry)
 	}
 	// Install the hook so that we refresh license details when the license
 	// changes.

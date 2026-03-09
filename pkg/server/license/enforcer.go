@@ -82,11 +82,6 @@ type Enforcer struct {
 	// are bypassed. This is typically used to disable enforcement for single-node deployments.
 	isDisabled atomic.Bool
 
-	// trialUsageExpiry records the expiration timestamp, in seconds, of any
-	// trial license on this cluster (past or present). A value of 0 indicates
-	// that no trial license has ever been installed.
-	trialUsageExpiry atomic.Int64
-
 	// db is a pointer to the database for use for KV read/writes. This is only
 	// set for the system tenant.
 	db isql.DB
@@ -255,12 +250,12 @@ func (e *Enforcer) initClusterMetadata(ctx context.Context, options options) err
 			return err
 		}
 		if trialUsageCount.Value == nil {
-			e.trialUsageExpiry.Store(0)
+			trialLicenseExpiryTimestamp.Store(0)
 		} else {
-			e.trialUsageExpiry.Store(trialUsageCount.ValueInt())
+			trialLicenseExpiryTimestamp.Store(trialUsageCount.ValueInt())
 		}
 		log.Dev.Infof(ctx, "trial license expiry initialized to %s",
-			timeutil.Unix(e.trialUsageExpiry.Load(), 0))
+			timeutil.Unix(trialLicenseExpiryTimestamp.Load(), 0))
 
 		// Cache and maybe set the cluster init grace period timestamp. This is the
 		// grace period we will use if the cluster does not have a license installed.
@@ -498,20 +493,20 @@ func (e *Enforcer) RefreshForLicenseChange(
 	log.Dev.Infof(ctx, "%s", sb.RedactableString())
 }
 
-// UpdateTrialLicenseExpiry returns the expiration timestamp of any trial license
-// used on the cluster, including the new trial license if a change is being applied.
-// This function updates the expiry if the current license is changing and is a trial.
+// UpdateTrialLicenseExpiry updates the expiration timestamp of trial license
+// usage on the cluster. This function updates the expiry if the current license
+// is changing and is a trial.
 func (e *Enforcer) UpdateTrialLicenseExpiry(
 	ctx context.Context, currentLicense LicType, isLicenseChange bool, expiry int64,
-) (curExpiry int64, err error) {
-	// If we aren't setting a new trial license, return the cached copy. The e.db
-	// check is necessary as that's needed to read/write to the KV. This will be
-	// set for the system tenant, which is where the license can ever be set anyway.
+) error {
+	// If we aren't setting a new trial license, return early. The e.db check is
+	// necessary as that's needed to read/write to the KV. This will be set for
+	// the system tenant, which is where the license can ever be set anyway.
 	if currentLicense != LicTypeTrial || !isLicenseChange || e.db == nil {
-		return e.trialUsageExpiry.Load(), nil
+		return nil
 	}
 
-	err = e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// We only allow a single trial license to be installed. If one is
 		// already set in the KV, exit and return that expiry value.
 		oldVal, err := txn.KV().Get(ctx, keys.TrialLicenseExpiry)
@@ -519,22 +514,23 @@ func (e *Enforcer) UpdateTrialLicenseExpiry(
 			return err
 		}
 		if oldVal.Value != nil && oldVal.ValueInt() > 0 {
-			e.trialUsageExpiry.Store(oldVal.ValueInt())
+			trialLicenseExpiryTimestamp.Store(oldVal.ValueInt())
 			return nil
 		}
 		err = txn.KV().Put(ctx, keys.TrialLicenseExpiry, expiry)
 		if err != nil {
 			return err
 		}
-		e.trialUsageExpiry.Store(expiry)
+		trialLicenseExpiryTimestamp.Store(expiry)
 		return nil
 	})
 	if err != nil {
-		return
+		return err
 	}
-	curExpiry = e.trialUsageExpiry.Load()
-	log.Dev.Infof(ctx, "trial license expiry timestamp is %s", timeutil.Unix(curExpiry, 0))
-	return
+	curExpiry := trialLicenseExpiryTimestamp.Load()
+	log.Dev.Infof(ctx, "trial license expiry timestamp is %s",
+		timeutil.Unix(curExpiry, 0))
+	return nil
 }
 
 // TestingResetTrialUsage is an API to clear the license expiry in the KV. This is only used
@@ -548,7 +544,6 @@ func (e *Enforcer) TestingResetTrialUsage(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		e.trialUsageExpiry.Store(0)
 		trialLicenseExpiryTimestamp.Store(0)
 		log.Dev.Infof(ctx, "trial license expiry was reset")
 		return nil
@@ -558,7 +553,7 @@ func (e *Enforcer) TestingResetTrialUsage(ctx context.Context) error {
 // TestingGetTrialUsageExpiry returns the trial usage expiry timestamp for
 // testing purposes.
 func (e *Enforcer) TestingGetTrialUsageExpiry() int64 {
-	return e.trialUsageExpiry.Load()
+	return trialLicenseExpiryTimestamp.Load()
 }
 
 // TestingMaybeFailIfThrottled is a helper that runs MaybeFailIfThrottled in a separate goroutine.
