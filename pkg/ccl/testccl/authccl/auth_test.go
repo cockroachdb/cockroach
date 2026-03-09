@@ -25,9 +25,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/ldapccl"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/jwtauth"
+	"github.com/cockroachdb/cockroach/pkg/security/ldapauth"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -184,9 +184,9 @@ func authCCLRunTest(t *testing.T, insecure bool) {
 		defer cleanup()
 
 		// Intercept the call to NewLDAPUtil and return the mocked NewLDAPUtil function
-		mockLDAP, newMockLDAPUtil := ldapccl.LDAPMocks()
+		mockLDAP, newMockLDAPUtil := ldapauth.LDAPMocks()
 		if strings.Contains(path, "ldap") {
-			defer testutils.TestingHook(&ldapccl.NewLDAPUtil, newMockLDAPUtil)()
+			defer testutils.TestingHook(&ldapauth.NewLDAPUtil, newMockLDAPUtil)()
 		}
 
 		srv := serverutils.StartServerOnly(t,

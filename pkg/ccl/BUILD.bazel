@@ -9,7 +9,6 @@ go_library(
         "//pkg/backup",
         "//pkg/ccl/changefeedccl",
         "//pkg/ccl/gssapiccl",
-        "//pkg/ccl/ldapccl",
         "//pkg/ccl/multiregionccl",
         "//pkg/ccl/multitenantccl",
         "//pkg/ccl/oidcccl",
@@ -20,5 +19,6 @@ go_library(
         "//pkg/crosscluster/physical",
         "//pkg/crosscluster/producer",
         "//pkg/security/jwtauth",
+        "//pkg/security/ldapauth",
     ],
 )
