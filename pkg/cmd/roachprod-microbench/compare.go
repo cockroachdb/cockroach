@@ -285,7 +285,7 @@ func (c *compare) postToSlack(
 				metric := result.Metric
 
 				threshold := c.benchmarkThreshold(detail.BenchmarkName)
-				if !isRegression(comparison.Delta, threshold, metric.Better) {
+				if !isRegression(comparison.Delta, threshold/2, metric.Better) {
 					continue
 				}
 				nameSplit := strings.Split(detail.BenchmarkName, util.PackageSeparator)
@@ -297,7 +297,7 @@ func (c *compare) postToSlack(
 					highestPercentChange = math.Abs(comparison.Delta)
 				}
 				ci.ChangeSymbol = ":small_orange_diamond:"
-				if math.Abs(comparison.Delta) > defaultPercentageThreshold {
+				if math.Abs(comparison.Delta) >= threshold {
 					ci.ChangeSymbol = ":small_red_triangle:"
 				}
 				mi.Changes = append(mi.Changes, ci)
