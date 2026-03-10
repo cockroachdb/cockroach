@@ -2288,6 +2288,18 @@ func (ex *connExecutor) handleAOST(ctx context.Context, stmt tree.Statement) err
 		return nil
 	}
 
+	// On a PCR reader tenant, explicit AOST is not allowed unless the session
+	// variable bypass_pcr_reader_catalog_aost is set.
+	if ex.isPCRReaderCatalog && !ex.sessionData().BypassPCRReaderCatalogAOST {
+		return errors.WithHint(
+			pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"explicit AS OF SYSTEM TIME is not allowed on a physical cluster replication reader virtual cluster",
+			),
+			"use SET bypass_pcr_reader_catalog_aost = true to override, after reaching out to support for guidance",
+		)
+	}
+
 	// Implicit transactions can have multiple statements, so we need to check
 	// if one has already been executed.
 	if ex.implicitTxn() && !ex.extraTxnState.firstStmtExecuted {
@@ -3707,6 +3719,17 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 			}
 		}
 		return rwMode, now, nil, nil
+	}
+	// On a PCR reader tenant, explicit AOST is not allowed unless the session
+	// variable bypass_pcr_reader_catalog_aost is set.
+	if ex.isPCRReaderCatalog && !ex.sessionData().BypassPCRReaderCatalogAOST {
+		return 0, time.Time{}, nil, errors.WithHint(
+			pgerror.Newf(
+				pgcode.FeatureNotSupported,
+				"explicit AS OF SYSTEM TIME is not allowed on a physical cluster replication reader virtual cluster",
+			),
+			"use SET bypass_pcr_reader_catalog_aost = true to override, after reaching out to support for guidance",
+		)
 	}
 	ex.statsCollector.Reset(ex.applicationStats, ex.phaseTimes)
 	asOf, err := p.EvalAsOfTimestamp(ctx, asOfClause)

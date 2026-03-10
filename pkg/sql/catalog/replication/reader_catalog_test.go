@@ -309,6 +309,26 @@ INSERT INTO t3(n) VALUES (3);
 	r.destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER SEQUENCE sq1 RENAME TO sq4")
 	r.destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER TYPE status ADD VALUE 'newval' ")
 
+	// Validate that DML mutations are blocked on external row data tables,
+	// with and without the bypass session variable.
+	r.destRunner.ExpectErr(t, "cannot mutate materialized view", "INSERT INTO t1(val) VALUES('open')")
+	r.destRunner.Exec(t, "SET bypass_pcr_reader_catalog_aost = 'true'")
+	r.destRunner.ExpectErr(t, "cannot mutate materialized view", "INSERT INTO t1(val) VALUES('open')")
+	r.destRunner.Exec(t, "SET bypass_pcr_reader_catalog_aost = 'false'")
+
+	// Validate that explicit AOST is blocked on reader tenants.
+	r.destRunner.ExpectErr(t,
+		"explicit AS OF SYSTEM TIME is not allowed on a physical cluster replication reader virtual cluster",
+		"SELECT * FROM t1 AS OF SYSTEM TIME '-1s'")
+	r.destRunner.ExpectErr(t,
+		"explicit AS OF SYSTEM TIME is not allowed on a physical cluster replication reader virtual cluster",
+		"BEGIN AS OF SYSTEM TIME '-1s'")
+
+	// Validate that the bypass session variable allows explicit AOST.
+	r.destRunner.Exec(t, "SET bypass_pcr_reader_catalog_aost = 'true'")
+	r.destRunner.Exec(t, "SELECT * FROM t1 AS OF SYSTEM TIME '-1s'")
+	r.destRunner.Exec(t, "SET bypass_pcr_reader_catalog_aost = 'false'")
+
 	// As a final test intentionally drop dependencies between descriptors. If we
 	// don't batch descriptor updates this will cause a validation error, since
 	// the sequence and table depend on each other.
