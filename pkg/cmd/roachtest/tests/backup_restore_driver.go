@@ -401,26 +401,6 @@ func (d *BackupRestoreTestDriver) getRestoredTablesAndDB(bc *backupCollection) (
 	return restoredTables, restoreDB
 }
 
-// newBackupScope chooses a random backup type (table, database,
-// cluster) with equal probability.
-func (d *BackupRestoreTestDriver) newBackupScope(rng *rand.Rand, isMultitenant bool) backupScope {
-	possibleTypes := []backupScope{
-		newTableBackup(rng, d.dbs, d.tables),
-		newDatabaseBackup(rng, d.dbs, d.tables),
-	}
-	if !d.cluster.IsLocal() && !isMultitenant {
-		// Cluster backups cannot be restored on nodelocal because the
-		// cluster is wiped before cluster restore. Cluster restores in
-		// multitenant deployments are also not supported by this test at
-		// the moment.
-		possibleTypes = append(
-			possibleTypes, newClusterBackup(rng, d.dbs, d.tables),
-		)
-	}
-
-	return possibleTypes[rng.Intn(len(possibleTypes))]
-}
-
 // randomWait waits from 1s to 3m, to allow for the background
 // workloads to update the databases we are backing up.
 func (d *BackupRestoreTestDriver) randomWait(l *logger.Logger, rng *rand.Rand) {
@@ -726,6 +706,7 @@ type CollectionBuilder struct {
 	incBackupSpec      backupSpec
 	internalSystemJobs bool
 	isMultitenant      bool
+	cfg                collCfg
 
 	// Mutable state tracking backup progress.
 
@@ -761,6 +742,7 @@ func (d *BackupRestoreTestDriver) NewCollectionBuilder(
 	incBackupSpec backupSpec,
 	internalSystemJobs bool,
 	isMultitenant bool,
+	cfgs ...CollectionConfig,
 ) *CollectionBuilder {
 	cb := &CollectionBuilder{
 		driver:             d,
@@ -773,6 +755,7 @@ func (d *BackupRestoreTestDriver) NewCollectionBuilder(
 		internalSystemJobs: internalSystemJobs,
 		isMultitenant:      isMultitenant,
 	}
+	cb.initCollCfg(cfgs...)
 	return cb
 }
 
@@ -1049,10 +1032,8 @@ func (cb *CollectionBuilder) executeBackup(
 	var collection backupCollection
 	switch b := bType.(type) {
 	case fullBackup:
-		btype := cb.driver.newBackupScope(cb.rng, cb.isMultitenant)
-		name := cb.backupCollectionName(btype)
-		createOptions := newBackupOptions(cb.rng, cb.driver.testUtils.onlineRestore)
-		collection = newBackupCollection(name, btype, createOptions, cb.driver.cluster.IsLocal())
+		name := cb.backupCollectionName(cb.cfg.scope)
+		collection = newBackupCollection(name, cb.cfg.scope, cb.cfg.options, cb.driver.cluster.IsLocal())
 		cb.l.Printf("creating full backup for %s", collection.name)
 	case incrementalBackup:
 		collection = b.collection
@@ -1183,6 +1164,58 @@ func (cb *CollectionBuilder) maybePauseResumeLoop(
 		task.Logger(cb.l),
 		task.Name(fmt.Sprintf("pause-resume monitor for job %d", jobID)),
 	)
+}
+
+// newBackupScope chooses a random backup type (table, database, cluster) with
+// equal probability.
+func (cb *CollectionBuilder) newBackupScope(isMultitenant bool) backupScope {
+	possibleTypes := []backupScope{
+		newTableBackup(cb.rng, cb.driver.dbs, cb.driver.tables),
+		newDatabaseBackup(cb.rng, cb.driver.dbs, cb.driver.tables),
+	}
+	if !cb.driver.cluster.IsLocal() && !isMultitenant {
+		// Cluster backups cannot be restored on nodelocal because the
+		// cluster is wiped before cluster restore. Cluster restores in
+		// multitenant deployments are also not supported by this test at
+		// the moment.
+		possibleTypes = append(
+			possibleTypes, newClusterBackup(cb.rng, cb.driver.dbs, cb.driver.tables),
+		)
+	}
+
+	return possibleTypes[cb.rng.Intn(len(possibleTypes))]
+}
+
+// initCollCfg applies the provided backup collection configuration
+// along with defaults for any missing configuration.
+func (cb *CollectionBuilder) initCollCfg(cfgs ...CollectionConfig) {
+	for _, c := range cfgs {
+		c(cb)
+	}
+
+	// Set defaults
+	if cb.cfg.scope == nil {
+		cb.cfg.scope = cb.newBackupScope(cb.isMultitenant)
+	}
+
+	if cb.cfg.options == nil {
+		cb.cfg.options = newBackupOptions(cb.rng, cb.driver.testUtils.onlineRestore)
+	}
+}
+
+// collCfg holds the backup configuration for the backup collection and is used
+// to build the BACKUP statement when taking backups.
+type collCfg struct {
+	scope   backupScope
+	options []backupOption
+}
+
+type CollectionConfig func(*CollectionBuilder)
+
+func WithClusterScope() CollectionConfig {
+	return func(cb *CollectionBuilder) {
+		cb.cfg.scope = newClusterBackup(cb.rng, cb.driver.dbs, cb.driver.tables)
+	}
 }
 
 type (
