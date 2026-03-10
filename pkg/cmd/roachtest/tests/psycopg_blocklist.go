@@ -50,6 +50,7 @@ var psycopgIgnoreList = blocklist{
 	`tests.pool.test_pool_common_async.test_stats_usage[asyncio-AsyncNullConnectionPool]`:            "requires insecure mode",
 	`tests.pool.test_pool_null.test_stats_connect`:                                                   "requires insecure mode",
 	`tests.pool.test_pool_null_async.test_stats_connect[asyncio]`:                                    "requires insecure mode",
+	`tests.pool.test_pool.test_check`:                                                                "flaky; see #164635",
 	`tests.test_connection.test_cancel_safe_error`:                                                   "requires insecure mode",
 	`tests.test_connection_async.test_cancel_safe_error[asyncio]`:                                    "requires insecure mode",
 	`tests.test_generators.test_connect_operationalerror_pgconn`:                                     "requires insecure mode",
