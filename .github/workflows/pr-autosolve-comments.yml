@@ -95,6 +95,13 @@ jobs:
           # Reviewable review fields
           echo "review_user=$(jq -r '.review.user.login // empty' "$EVENT_FILE")" >> "$GITHUB_OUTPUT"
 
+          # Extract author_association for permission checking. This field is set
+          # by GitHub on the comment/review object and indicates the commenter's
+          # relationship to the repo (MEMBER, COLLABORATOR, OWNER, etc.).
+          # Using this avoids an API call that requires scopes the GITHUB_TOKEN lacks.
+          ASSOC=$(jq -r '.comment.author_association // .review.author_association // "NONE"' "$EVENT_FILE")
+          echo "author_association=$ASSOC" >> "$GITHUB_OUTPUT"
+
           {
             echo "review_body<<$DELIM"
             jq -r '.review.body // empty' "$EVENT_FILE"
@@ -112,19 +119,18 @@ jobs:
 
       - name: Verify commenter has write permissions
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COMMENTER: ${{ steps.context.outputs.actor }}
+          AUTHOR_ASSOCIATION: ${{ steps.context.outputs.author_association }}
         run: |
-          # Check that the user who left the comment has write access to the repository
-          # This prevents unauthorized users from influencing the autosolver via comments
-          PERMISSION=$(gh api repos/${{ github.repository }}/collaborators/${COMMENTER}/permission --jq '.permission' 2>/dev/null || echo "none")
-
-          case "$PERMISSION" in
-            admin|maintain|write)
-              echo "User ${COMMENTER} has ${PERMISSION} permission - authorized to provide review feedback"
+          # Check that the commenter is affiliated with the repo/org. This uses
+          # the author_association field from the GitHub event payload, which
+          # avoids an API call that requires scopes the GITHUB_TOKEN lacks.
+          case "$AUTHOR_ASSOCIATION" in
+            OWNER|MEMBER|COLLABORATOR)
+              echo "User ${COMMENTER} has association ${AUTHOR_ASSOCIATION} - authorized to provide review feedback"
               ;;
             *)
-              echo "::error::User ${COMMENTER} does not have write permission (has: ${PERMISSION}). Only collaborators with write access can provide feedback to the autosolver."
+              echo "::error::User ${COMMENTER} is not a repo collaborator or org member (association: ${AUTHOR_ASSOCIATION}). Only collaborators can provide feedback to the autosolver."
               exit 1
               ;;
           esac
