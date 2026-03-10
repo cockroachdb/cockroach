@@ -112,7 +112,16 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "max": {{.Float}}
          },
          "lastErrorCode": "{{.String}}",
-				 "sqlType": "{{.String}}" 
+				 "sqlType": "{{.String}}",
+				 "canaryCount": {{.Int64}},
+				 "canaryRunLat": {
+				   "mean": {{.Float}},
+				   "sqDiff": {{.Float}}
+				 },
+				 "canaryPlanLat": {
+				   "mean": {{.Float}},
+				   "sqDiff": {{.Float}}
+				 }
        },
        "execution_statistics": {
          "cnt": {{.Int64}},

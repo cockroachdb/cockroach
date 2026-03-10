@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxrecommendations"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -231,6 +232,15 @@ func (ex *connExecutor) recordStatementSummary(
 
 		if len(stmt.Hints) > 0 {
 			b.AppliedStatementHints()
+		}
+
+		if planner.EvalContext().CanaryAndStableStatsDiffer {
+			switch planner.EvalContext().StatsRollout {
+			case eval.StatsRolloutCanary:
+				b.CanaryStats()
+			case eval.StatsRolloutStable:
+				b.StableStats()
+			}
 		}
 
 		ex.statsCollector.RecordStatement(ctx, b.Build())

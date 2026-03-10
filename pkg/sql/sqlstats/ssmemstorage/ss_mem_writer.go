@@ -83,6 +83,20 @@ func (s *Container) RecordStatement(ctx context.Context, value *sqlstats.Recorde
 	if value.AppliedStmtHints {
 		stats.mu.data.StmtHintsCount++
 	}
+	// Track canary and stable stats separately: these latencies use their own
+	// counts (not the overall Count) for Welford's running average, since they
+	// represent only the subsets of executions that participated in the canary
+	// experiment. Executions where the experiment is off (canary_fraction = 0)
+	// are counted in neither bucket.
+	if value.UsedCanaryStats {
+		stats.mu.data.CanaryStats.Count++
+		stats.mu.data.CanaryStats.RunLat.Record(stats.mu.data.CanaryStats.Count, value.RunLatencySec)
+		stats.mu.data.CanaryStats.PlanLat.Record(stats.mu.data.CanaryStats.Count, value.PlanLatencySec)
+	} else if value.UsedStableStats {
+		stats.mu.data.StableStats.Count++
+		stats.mu.data.StableStats.RunLat.Record(stats.mu.data.StableStats.Count, value.RunLatencySec)
+		stats.mu.data.StableStats.PlanLat.Record(stats.mu.data.StableStats.Count, value.PlanLatencySec)
+	}
 	if value.AutoRetryCount == 0 {
 		stats.mu.data.FirstAttemptCount++
 	} else if int64(value.AutoRetryCount) > stats.mu.data.MaxRetries {

@@ -349,6 +349,9 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"genericCount", (*jsonInt)(&s.GenericCount)},
 		{"stmtHintsCount", (*jsonInt)(&s.StmtHintsCount)},
 		{"sqlType", (*jsonString)(&s.SQLType)},
+		{"canaryCount", (*jsonInt)(&s.CanaryCount)},
+		{"canaryRunLat", (*numericStats)(&s.CanaryRunLat)},
+		{"canaryPlanLat", (*numericStats)(&s.CanaryPlanLat)},
 	}
 }
 

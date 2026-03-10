@@ -530,7 +530,7 @@ func (e *cacheEntry) getStableStatsLocked(
 // "canary" or "stable" would only add noise to the "canary vs stable" metrics.
 //
 // Note: this does NOT affect which stats the optimizer uses — that is
-// controlled by canaryStatsRollout (the dice roll) and getStableStatsLocked.
+// controlled by canaryRollDice (the dice roll) and getStableStatsLocked.
 func (e *cacheEntry) canaryAndStableStatsDiffer(
 	canaryWindowSize time.Duration, asOf hlc.Timestamp,
 ) bool {
