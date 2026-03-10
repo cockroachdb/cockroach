@@ -51,6 +51,22 @@ import (
 
 var ErrNilTxnInClusterContext = errors.New("nil txn in cluster context")
 
+// StatsRolloutSelection describes the role of a query execution in the
+// canary stats rollout experiment.
+type StatsRolloutSelection int
+
+const (
+	// StatsRolloutDefault means the canary experiment is not active for
+	// this execution. The optimizer uses default stats.
+	StatsRolloutDefault StatsRolloutSelection = iota
+	// StatsRolloutCanary means this execution uses canary (newest) table
+	// statistics as part of the canary experiment.
+	StatsRolloutCanary
+	// StatsRolloutStable means this execution uses stable (second-newest)
+	// table statistics while the canary experiment is active.
+	StatsRolloutStable
+)
+
 // Context defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 //
@@ -326,40 +342,36 @@ type Context struct {
 	// ExecutedStatementCounters contains metrics for successfully executed
 	// statements defined within the body of a UDF/SP.
 	ExecutedRoutineStatementCounters RoutineStatementCounters
-	// UseCanaryStats indicates whether this query participates in the canary
-	// statistics rollout feature. When set to true, the optimizer attempts to use
-	// "canary statistics" for all tables referenced by the query.
+	// StatsRollout records the outcome of the canary stats rollout dice
+	// roll for this query execution. It has three possible values:
 	//
-	// This flag is determined probabilistically during query planning based on the
-	// sql.stats.canary_fraction cluster setting. The selection is atomic per query:
-	// either all tables use canary stats (when available) or all use stable stats.
+	//   - StatsRolloutDefault: the canary experiment is not active
+	//     (sql.stats.canary_fraction = 0 or mode is off). The optimizer
+	//     uses whatever stats are available (default behavior). The
+	//     execution is not classified as canary or stable.
 	//
-	// Canary statistics are newly collected table statistics that are still within
-	// their configured "canary window" (sql_stats_canary_window storage parameter).
-	// These stats provide a controlled way to gradually roll out new statistics
-	// before promoting them to stable, allowing for manual intervention if
-	// performance regressions are detected.
+	//   - StatsRolloutCanary: the canary experiment is active and this
+	//     execution was selected to use canary (newest) table statistics.
+	//     The optimizer attempts to use canary stats for all tables
+	//     referenced by the query. If a table lacks distinct canary stats
+	//     (e.g., only one version exists or canary stats have expired),
+	//     the optimizer falls back to stable stats for that table.
 	//
-	// Stable statistics are the previously established statistics that have either
-	// been promoted from canary status or were collected before canary mode was
-	// enabled for the table.
+	//   - StatsRolloutStable: the canary experiment is active but this
+	//     execution was not selected for canary — it uses stable
+	//     (second-newest) table statistics.
 	//
-	// Fallback behavior: If a table lacks distinct canary statistics (e.g., only
-	// one statistics version exists, or canary stats have expired), the optimizer
-	// will use the available stable statistics even when this flag is true.
+	// The selection is determined probabilistically during query planning
+	// based on the sql.stats.canary_fraction cluster setting. It is
+	// atomic per query: all tables use the same rollout path.
 	//
-	// UseCanaryStats should only be set True for non-internal and when creating
-	// a not-prepared stmt. In other words, internal queries and prepared statements
-	// will always use stable statistics.
+	// Only set for non-internal, non-prepared queries. Internal queries
+	// and prepared statements always use StatsRolloutDefault.
 	//
-	// When UseCanaryStats is true, the optimizer will bypass query cache or
-	// the cached memo within a prepared stmt, but rather build a one-off memo
-	// only for this query execution. This is because we roll the dice for
-	// query execution to decide whether to use canary stats or not, and
-	// we'd like to avoid frequently invalidating cached plans. The rule of
-	// thumb is: the cached memo, either in query cache or prepared stmt,
-	// are always for stable stats.
-	UseCanaryStats bool
+	// When StatsRolloutCanary, the optimizer bypasses the query cache and
+	// the cached memo within a prepared stmt, building a one-off memo for
+	// this execution. Cached memos are always built with stable stats.
+	StatsRollout StatsRolloutSelection
 
 	// CanaryAndStableStatsDiffer is set to true during planning if at least
 	// one table referenced by the query has genuinely different canary
@@ -368,11 +380,11 @@ type Context struct {
 	//
 	// This flag gates experiment metric recording only. When false, the
 	// execution is not recorded in canary/stable experiment buckets even if
-	// UseCanaryStats is set, because both paths used the same statistics
-	// and recording would only add noise.
+	// StatsRollout is Canary or Stable, because both paths used the same
+	// statistics and recording would only add noise.
 	//
-	// This flag is independent of UseCanaryStats: UseCanaryStats is decided
-	// by the dice roll (canaryRollDice) before planning; this flag is
+	// This flag is independent of StatsRollout: StatsRollout is decided by
+	// the dice roll (canaryRollDice) before planning; this flag is
 	// determined during planning by inspecting each table's cache entry.
 	CanaryAndStableStatsDiffer bool
 
