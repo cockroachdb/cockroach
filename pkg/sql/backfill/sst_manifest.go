@@ -80,6 +80,15 @@ func (b *SSTManifestBuffer) SnapshotAndMarkClean() []jobspb.BulkSSTManifest {
 	return b.snapshotLocked()
 }
 
+// MarkDirty sets the dirty flag, indicating that the buffer contains
+// manifests that have not yet been persisted. This is used to re-mark
+// the buffer after a failed checkpoint transaction.
+func (b *SSTManifestBuffer) MarkDirty() {
+	b.Lock()
+	defer b.Unlock()
+	b.dirty = true
+}
+
 // StripTenantPrefixFromSSTManifests normalizes SST manifest metadata by
 // removing tenant prefixes before persisting it in job state. This matches the
 // CompletedSpans handling and keeps job progress tenant-agnostic.
