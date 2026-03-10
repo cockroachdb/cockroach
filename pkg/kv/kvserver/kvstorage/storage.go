@@ -245,6 +245,26 @@ func (e *Engines) SetStoreID(ctx context.Context, id roachpb.StoreID) error {
 	return nil
 }
 
+// Sync ensures that everything written to the engine(s) up to this point is
+// durable.
+func (e *Engines) Sync() error {
+	// Flush the state machine engine first. Use the Flush method since
+	// StateEngine does not support WAL / incremental syncs.
+	if e.Separated() {
+		// TODO(sep-raft-log): ensure that StateEngine uses the DisableWAL option,
+		// otherwise we would need to WriteSyncNoop here.
+		if err := e.StateEngine().Flush(); err != nil {
+			return err
+		}
+	}
+	// Sync the LogEngine second, to ensure that the state machine engine
+	// doesn't run in front of it. Latest updates are captured by the LogEngine,
+	// before they are written to the state machine.
+	//
+	// NB: if engines are not separated, this syncs the entire engine.
+	return storage.WriteSyncNoop(e.LogEngine())
+}
+
 // NewWriteBatch creates a new write batch to storage. If engines are separated,
 // it consists of two batches, one per engine.
 // TODO(sep-raft-log): generalize this so that the LogEngine batch is lazy.

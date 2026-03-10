@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -156,32 +155,14 @@ func (m *migrationServer) SyncAllEngines(
 	defer span.Finish()
 	ctx = logtags.AddTag(ctx, opName, nil)
 
-	// TODO(pav-kv): make this a method of kvstorage.Engines.
-	sync := func(eng kvstorage.Engines) error {
-		// Flush the state machine engine first. Use the Flush method since
-		// StateEngine does not support WAL / incremental syncs.
-		if eng.Separated() {
-			if err := eng.StateEngine().Flush(); err != nil {
-				return err
-			}
-		}
-		// Sync the LogEngine second, to ensure that the state machine engine
-		// doesn't run in front of it. Latest updates are captured by the LogEngine,
-		// before they are written to the state machine.
-		//
-		// NB: if engines are not separated, this syncs the entire engine.
-		return storage.WriteSyncNoop(eng.LogEngine())
-	}
-
 	if err := m.server.stopper.RunTaskWithErr(ctx, opName, func(
 		ctx context.Context,
 	) error {
-		// Let's be paranoid here and ensure that all stores have been fully
-		// initialized.
+		// Ensure that all stores have been fully initialized.
 		m.server.node.waitForAdditionalStoreInit()
-
+		// Sync all engines on all stores.
 		for _, eng := range m.server.engines {
-			if err := sync(eng); err != nil {
+			if err := eng.Sync(); err != nil {
 				return err
 			}
 		}
