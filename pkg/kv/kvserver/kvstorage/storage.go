@@ -378,12 +378,18 @@ func (b *Batch[B]) Commit(sync bool) error {
 	return b.state.Commit(false /* sync */)
 }
 
-// Close closes the batch.
+// Close closes the batch. It is idempotent, but the batch must not be used
+// after the first call to Close.
 func (b *Batch[B]) Close() {
+	if any(b.state) == nil {
+		return
+	}
 	b.state.Close()
 	if b.separated() && b.raft != nil {
 		b.raft.Close()
 	}
+	var zero B
+	b.state = zero
 }
 
 // validateIsStateEngineSpan asserts that the provided span only overlaps with
