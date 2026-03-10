@@ -22,6 +22,7 @@ CREATE VIEW information_schema.crdb_node_active_session_history AS
            node_id,
            tenant_id,
            workload_id,
+           app_name,
            work_event_type,
            work_event,
            goroutine_id
@@ -35,6 +36,7 @@ CREATE VIEW information_schema.crdb_cluster_active_session_history AS
            node_id,
            tenant_id,
            workload_id,
+           app_name,
            work_event_type,
            work_event,
            goroutine_id
