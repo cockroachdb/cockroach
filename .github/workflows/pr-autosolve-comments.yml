@@ -95,6 +95,13 @@ jobs:
           # Reviewable review fields
           echo "review_user=$(jq -r '.review.user.login // empty' "$EVENT_FILE")" >> "$GITHUB_OUTPUT"
 
+          # Extract author_association for permission checking. This field is set
+          # by GitHub on the comment/review object and indicates the commenter's
+          # relationship to the repo (MEMBER, COLLABORATOR, OWNER, etc.).
+          # Using this avoids an API call that requires scopes the GITHUB_TOKEN lacks.
+          ASSOC=$(jq -r '.comment.author_association // .review.author_association // "NONE"' "$EVENT_FILE")
+          echo "author_association=$ASSOC" >> "$GITHUB_OUTPUT"
+
           {
             echo "review_body<<$DELIM"
             jq -r '.review.body // empty' "$EVENT_FILE"
@@ -112,19 +119,18 @@ jobs:
 
       - name: Verify commenter has write permissions
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COMMENTER: ${{ steps.context.outputs.actor }}
+          AUTHOR_ASSOCIATION: ${{ steps.context.outputs.author_association }}
         run: |
-          # Check that the user who left the comment has write access to the repository
-          # This prevents unauthorized users from influencing the autosolver via comments
-          PERMISSION=$(gh api repos/${{ github.repository }}/collaborators/${COMMENTER}/permission --jq '.permission' 2>/dev/null || echo "none")
-
-          case "$PERMISSION" in
-            admin|maintain|write)
-              echo "User ${COMMENTER} has ${PERMISSION} permission - authorized to provide review feedback"
+          # Check that the commenter is affiliated with the repo/org. This uses
+          # the author_association field from the GitHub event payload, which
+          # avoids an API call that requires scopes the GITHUB_TOKEN lacks.
+          case "$AUTHOR_ASSOCIATION" in
+            OWNER|MEMBER|COLLABORATOR)
+              echo "User ${COMMENTER} has association ${AUTHOR_ASSOCIATION} - authorized to provide review feedback"
               ;;
             *)
-              echo "::error::User ${COMMENTER} does not have write permission (has: ${PERMISSION}). Only collaborators with write access can provide feedback to the autosolver."
+              echo "::error::User ${COMMENTER} is not a repo collaborator or org member (association: ${AUTHOR_ASSOCIATION}). Only collaborators can provide feedback to the autosolver."
               exit 1
               ;;
           esac
@@ -135,7 +141,7 @@ jobs:
           repository: ${{ steps.context.outputs.head_repo }}
           ref: ${{ steps.context.outputs.head_ref }}
           fetch-depth: 0
-          token: ${{ secrets.AUTOSOLVER_PAT }}
+          token: ${{ secrets.AUTOSOLVER_PUSH_TO_FORK_PAT }}
 
       - name: Squash bot fixup commits
         run: |
@@ -409,7 +415,7 @@ jobs:
         id: commit
         if: steps.claude_result.outputs.changes_status == 'SUCCESS'
         env:
-          AUTOSOLVER_PAT: ${{ secrets.AUTOSOLVER_PAT }}
+          AUTOSOLVER_PUSH_TO_FORK_PAT: ${{ secrets.AUTOSOLVER_PUSH_TO_FORK_PAT }}
         run: |
           git config user.name "cockroach-teamcity"
           git config user.email "cockroach-teamcity@users.noreply.github.com"
@@ -487,7 +493,7 @@ jobs:
           # 2. The claude-code-action step may overwrite the extraheader credentials
           # The PAT value is masked in logs by GitHub Actions since it's a registered secret.
           HEAD_REF="${{ steps.context.outputs.head_ref }}"
-          git push --force "https://x-access-token:${AUTOSOLVER_PAT}@github.com/${AUTOSOLVER_FORK_OWNER}/${AUTOSOLVER_FORK_REPO}.git" "$HEAD_REF"
+          git push --force "https://x-access-token:${AUTOSOLVER_PUSH_TO_FORK_PAT}@github.com/${AUTOSOLVER_FORK_OWNER}/${AUTOSOLVER_FORK_REPO}.git" "$HEAD_REF"
 
           echo "pushed=true" >> "$GITHUB_OUTPUT"
 

@@ -189,7 +189,7 @@ jobs:
           repository: ${{ env.AUTOSOLVER_FORK_OWNER }}/${{ env.AUTOSOLVER_FORK_REPO }}
           ref: ${{ github.event.workflow_run.head_branch }}
           fetch-depth: 0
-          token: ${{ secrets.AUTOSOLVER_PAT }}
+          token: ${{ secrets.AUTOSOLVER_PUSH_TO_FORK_PAT }}
 
       - name: Fetch upstream master
         if: steps.loop_check.outputs.proceed == 'true'
@@ -335,7 +335,7 @@ jobs:
         id: commit
         if: steps.claude_result.outputs.fix_status == 'SUCCESS'
         env:
-          AUTOSOLVER_PAT: ${{ secrets.AUTOSOLVER_PAT }}
+          AUTOSOLVER_PUSH_TO_FORK_PAT: ${{ secrets.AUTOSOLVER_PUSH_TO_FORK_PAT }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
           git config user.name "cockroach-teamcity"
@@ -413,7 +413,7 @@ jobs:
           # 1. In workflow_run context, origin points to the base repo
           # 2. The claude-code-action step may overwrite the extraheader credentials
           # The PAT value is masked in logs by GitHub Actions since it's a registered secret.
-          git push --force "https://x-access-token:${AUTOSOLVER_PAT}@github.com/${AUTOSOLVER_FORK_OWNER}/${AUTOSOLVER_FORK_REPO}.git" "$HEAD_BRANCH"
+          git push --force "https://x-access-token:${AUTOSOLVER_PUSH_TO_FORK_PAT}@github.com/${AUTOSOLVER_FORK_OWNER}/${AUTOSOLVER_FORK_REPO}.git" "$HEAD_BRANCH"
 
           echo "pushed=true" >> "$GITHUB_OUTPUT"
 
