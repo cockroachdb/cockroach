@@ -656,13 +656,15 @@ distribution: local
 └── • render
     │
     └── • virtual table lookup join
-        │ table: pg_class@pg_class_oid_idx
-        │ equality: (indexrelid) = (oid)
-        │ pred: (relname = index_name) AND (relnamespace = relnamespace)
+        │ table: pg_index@pg_index_indrelid_idx
+        │ equality: (oid) = (indrelid)
+        │ pred: indexrelid = oid
         │
-        └── • virtual table lookup join
-            │ table: pg_index@pg_index_indrelid_idx
-            │ equality: (oid) = (indrelid)
+        └── • hash join
+            │ equality: (relname, relnamespace) = (index_name, relnamespace)
+            │
+            ├── • virtual table
+            │     table: pg_class@primary
             │
             └── • hash join
                 │ equality: (relname, nspname) = (table_name, index_schema)
@@ -687,6 +689,126 @@ distribution: local
                     │
                     └── • virtual table
                           table: statistics@primary
+
+# Verify that SHOW INDEX FROM DATABASE also avoids virtual table lookup join
+# on pg_class for the index-OID alias (c), using a hash join instead.
+query T
+EXPLAIN SHOW INDEX FROM DATABASE test
+----
+distribution: local
+·
+• sort
+│ order: +table_name,+index_name,+non_unique
+│
+└── • render
+    │
+    └── • hash join
+        │ equality: (oid, nspname) = (relnamespace, index_schema)
+        │
+        ├── • virtual table
+        │     table: pg_namespace@primary
+        │
+        └── • hash join
+            │ equality: (index_name, table_name) = (relname, relname)
+            │
+            ├── • virtual table
+            │     table: statistics@primary
+            │
+            └── • hash join
+                │ equality: (relnamespace, indexrelid) = (relnamespace, oid)
+                │
+                ├── • merge join
+                │   │ equality: (oid) = (indrelid)
+                │   │
+                │   ├── • virtual table
+                │   │     table: pg_class@pg_class_oid_idx
+                │   │
+                │   └── • virtual table
+                │         table: pg_index@pg_index_indrelid_idx
+                │
+                └── • virtual table
+                      table: pg_class@primary
+
+# Verify that pg_get_indexdef (3-arg) avoids virtual table lookup join on
+# pg_attribute for the index-OID join (a.attrelid = i.indexrelid).
+query T
+EXPLAIN SELECT pg_get_indexdef(oid, 1, true) FROM pg_class WHERE relkind = 'i' LIMIT 1
+----
+distribution: local
+·
+• render
+│
+└── • limit
+    │ count: 1
+    │
+    └── • filter
+        │ filter: relkind = 'i'
+        │
+        └── • virtual table
+              table: pg_class@primary
+
+# Verify that the Smither's extractIndexes query avoids a virtual table lookup
+# join on pg_class for the index-OID alias (c). This query previously caused
+# timeouts when the database had many objects.
+statement ok
+CREATE TABLE table_2 (a INT PRIMARY KEY, b INT, INDEX idx_b(b))
+
+query T
+EXPLAIN SELECT si.index_name, column_name, storing, direction = 'ASC', is_inverted
+FROM [SHOW INDEXES FROM test.public.table_2] AS si
+JOIN "".crdb_internal.table_indexes AS ti
+  ON (si.table_name = ti.descriptor_name) AND (si.index_name = ti.index_name)
+WHERE column_name != 'rowid'
+----
+distribution: local
+·
+• render
+│
+└── • hash join
+    │ equality: (descriptor_name, index_name) = (table_name, index_name)
+    │
+    ├── • virtual table
+    │     table: table_indexes@primary
+    │
+    └── • filter
+        │ filter: column_name != 'rowid'
+        │
+        └── • render
+            │
+            └── • virtual table lookup join
+                │ table: pg_index@pg_index_indrelid_idx
+                │ equality: (oid) = (indrelid)
+                │ pred: indexrelid = oid
+                │
+                └── • hash join
+                    │ equality: (relname, relnamespace) = (index_name, relnamespace)
+                    │
+                    ├── • virtual table
+                    │     table: pg_class@primary
+                    │
+                    └── • hash join
+                        │ equality: (nspname, oid) = (index_schema, relnamespace)
+                        │
+                        ├── • virtual table
+                        │     table: pg_namespace@primary
+                        │
+                        └── • merge join
+                            │ equality: (relname) = (table_name)
+                            │
+                            ├── • filter
+                            │   │ filter: relname = 'table_2'
+                            │   │
+                            │   └── • virtual table
+                            │         table: pg_class@primary
+                            │
+                            └── • filter
+                                │ filter: ((table_name = 'table_2') AND (table_catalog = 'test')) AND (table_schema = 'public')
+                                │
+                                └── • virtual table
+                                      table: statistics@primary
+
+statement ok
+DROP TABLE table_2
 
 query T
 EXPLAIN SHOW CONSTRAINTS FROM foo
