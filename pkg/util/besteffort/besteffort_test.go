@@ -97,3 +97,42 @@ func TestWarningAndError(t *testing.T) {
 		})
 	}
 }
+
+func TestCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	const opName = "cleanup"
+	failingCleanup := func() error {
+		return errors.New("test error")
+	}
+
+	t.Run("cleanup never skips", func(t *testing.T) {
+		// We don't expose provide a way to force a skip, so we just run this enough
+		// times to probabilistically ensure that it shouldn't skip.
+		for range 10 {
+			require.Panics(t, func() {
+				Cleanup(ctx, opName, failingCleanup)
+			})
+		}
+	})
+
+	t.Run("TestAllowFailure prevents panic", func(t *testing.T) {
+		defer TestAllowFailure(opName)()
+		require.NotPanics(t, func() {
+			Cleanup(ctx, opName, failingCleanup)
+		})
+	})
+
+	t.Run("TestAllowFailure cleanup restores panic", func(t *testing.T) {
+		forbidFailures := TestAllowFailure(opName)
+		require.NotPanics(t, func() {
+			Cleanup(ctx, opName, failingCleanup)
+		})
+
+		forbidFailures()
+		require.Panics(t, func() {
+			Cleanup(ctx, opName, failingCleanup)
+		})
+	})
+}
