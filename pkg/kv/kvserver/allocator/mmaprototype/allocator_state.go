@@ -511,6 +511,7 @@ func sortTargetCandidateSetAndPick(
 	maxFractionPendingThreshold float64,
 	failLogger func(shedResult),
 ) roachpb.StoreID {
+	// TODO(tbg): allocates 382x/op (candidate slice filtering and logging).
 	var buf redact.StringBuilder
 	var formatCandidatesLog = func(candidates []candidateInfo) redact.RedactableString {
 		buf.Reset()
