@@ -28,10 +28,16 @@ jobs:
     steps:
       - name: Validate required secrets and configuration
         env:
-          AUTOSOLVER_PAT: ${{ secrets.AUTOSOLVER_PAT }}
+          AUTOSOLVER_PUSH_TO_FORK_PAT: ${{ secrets.AUTOSOLVER_PUSH_TO_FORK_PAT }}
+          AUTOSOLVER_CREATE_PRS_PAT: ${{ secrets.AUTOSOLVER_CREATE_PRS_PAT }}
         run: |
-          if [ -z "${AUTOSOLVER_PAT:-}" ]; then
-            echo "::error::AUTOSOLVER_PAT secret is not configured"
+          if [ -z "${AUTOSOLVER_PUSH_TO_FORK_PAT:-}" ]; then
+            echo "::error::AUTOSOLVER_PUSH_TO_FORK_PAT secret is not configured"
+            exit 1
+          fi
+
+          if [ -z "${AUTOSOLVER_CREATE_PRS_PAT:-}" ]; then
+            echo "::error::AUTOSOLVER_CREATE_PRS_PAT secret is not configured"
             exit 1
           fi
 
@@ -350,7 +356,7 @@ jobs:
         id: push
         if: steps.implement_result.outputs.implementation == 'SUCCESS'
         env:
-          AUTOSOLVER_PAT: ${{ secrets.AUTOSOLVER_PAT }}
+          AUTOSOLVER_PUSH_TO_FORK_PAT: ${{ secrets.AUTOSOLVER_PUSH_TO_FORK_PAT }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "cockroach-teamcity"
@@ -358,7 +364,7 @@ jobs:
 
           # Configure git credential helper to use PAT for the fork
           # Using a script-based helper avoids writing credentials to disk
-          git config --local credential.helper '!f() { echo "username=${AUTOSOLVER_FORK_OWNER}"; echo "password=${AUTOSOLVER_PAT}"; }; f'
+          git config --local credential.helper '!f() { echo "username=${AUTOSOLVER_FORK_OWNER}"; echo "password=${AUTOSOLVER_PUSH_TO_FORK_PAT}"; }; f'
 
           # Add the fork as a remote (handle case where it already exists)
           FORK_URL="https://github.com/${AUTOSOLVER_FORK_OWNER}/${AUTOSOLVER_FORK_REPO}.git"
@@ -374,9 +380,7 @@ jobs:
           BRANCH_NAME="fix/issue-${{ github.event.issue.number }}"
           git checkout -b "$BRANCH_NAME"
 
-          # Security check: Block workflow file modifications BEFORE staging
-          # This allows AUTOSOLVER_PAT to be created without the 'workflow' scope,
-          # reducing the security risk if the token is compromised.
+          # Security check: Block workflow file modifications BEFORE staging.
           # Check modified files, untracked files, and symlinks pointing to workflow files
           # Use -i for case-insensitive matching to catch bypass attempts like .github/Workflows/
           if git diff --name-only | grep -qiE '^\.github/workflows/' || \
@@ -448,8 +452,7 @@ jobs:
 
           # Sync the fork's default branch with upstream so the push doesn't
           # include upstream workflow file changes that the fork hasn't seen yet.
-          # Without this, GitHub rejects the push if the PAT lacks 'workflow' scope.
-          GH_TOKEN="${AUTOSOLVER_PAT}" gh api \
+          GH_TOKEN="${AUTOSOLVER_PUSH_TO_FORK_PAT}" gh api \
             "repos/${AUTOSOLVER_FORK_OWNER}/${AUTOSOLVER_FORK_REPO}/merge-upstream" \
             --method POST --field branch=master 2>/dev/null \
             || echo "::warning::Failed to sync fork with upstream (may already be in sync)"
@@ -465,7 +468,7 @@ jobs:
         id: create_pr
         if: steps.push.conclusion == 'success'
         env:
-          GH_TOKEN: ${{ secrets.AUTOSOLVER_PAT }}
+          GH_TOKEN: ${{ secrets.AUTOSOLVER_CREATE_PRS_PAT }}
         run: |
           # Get issue title and sanitize for safe use in PR body
           ISSUE_TITLE=$(gh issue view ${{ github.event.issue.number }} --repo ${{ github.repository }} --json title -q '.title' 2>/dev/null || echo "Issue #${{ github.event.issue.number }}")

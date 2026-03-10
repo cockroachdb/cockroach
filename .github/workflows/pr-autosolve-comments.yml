@@ -135,7 +135,7 @@ jobs:
           repository: ${{ steps.context.outputs.head_repo }}
           ref: ${{ steps.context.outputs.head_ref }}
           fetch-depth: 0
-          token: ${{ secrets.AUTOSOLVER_PAT }}
+          token: ${{ secrets.AUTOSOLVER_PUSH_TO_FORK_PAT }}
 
       - name: Squash bot fixup commits
         run: |
@@ -409,7 +409,7 @@ jobs:
         id: commit
         if: steps.claude_result.outputs.changes_status == 'SUCCESS'
         env:
-          AUTOSOLVER_PAT: ${{ secrets.AUTOSOLVER_PAT }}
+          AUTOSOLVER_PUSH_TO_FORK_PAT: ${{ secrets.AUTOSOLVER_PUSH_TO_FORK_PAT }}
         run: |
           git config user.name "cockroach-teamcity"
           git config user.email "cockroach-teamcity@users.noreply.github.com"
@@ -487,7 +487,7 @@ jobs:
           # 2. The claude-code-action step may overwrite the extraheader credentials
           # The PAT value is masked in logs by GitHub Actions since it's a registered secret.
           HEAD_REF="${{ steps.context.outputs.head_ref }}"
-          git push --force "https://x-access-token:${AUTOSOLVER_PAT}@github.com/${AUTOSOLVER_FORK_OWNER}/${AUTOSOLVER_FORK_REPO}.git" "$HEAD_REF"
+          git push --force "https://x-access-token:${AUTOSOLVER_PUSH_TO_FORK_PAT}@github.com/${AUTOSOLVER_FORK_OWNER}/${AUTOSOLVER_FORK_REPO}.git" "$HEAD_REF"
 
           echo "pushed=true" >> "$GITHUB_OUTPUT"
 
