@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/errors"
@@ -82,6 +83,21 @@ func (s *Container) RecordStatement(ctx context.Context, value *sqlstats.Recorde
 	}
 	if value.AppliedStmtHints {
 		stats.mu.data.StmtHintsCount++
+	}
+	// Track canary and stable stats separately: these latencies use their own
+	// counts (not the overall Count) for Welford's running average, since they
+	// represent only the subsets of executions that participated in the canary
+	// experiment. Executions where the experiment is off (canary_fraction = 0)
+	// are counted in neither bucket.
+	switch value.StatsRollout {
+	case eval.StatsRolloutCanary:
+		stats.mu.data.CanaryStats.Count++
+		stats.mu.data.CanaryStats.RunLat.Record(stats.mu.data.CanaryStats.Count, value.RunLatencySec)
+		stats.mu.data.CanaryStats.PlanLat.Record(stats.mu.data.CanaryStats.Count, value.PlanLatencySec)
+	case eval.StatsRolloutStable:
+		stats.mu.data.StableStats.Count++
+		stats.mu.data.StableStats.RunLat.Record(stats.mu.data.StableStats.Count, value.RunLatencySec)
+		stats.mu.data.StableStats.PlanLat.Record(stats.mu.data.StableStats.Count, value.PlanLatencySec)
 	}
 	if value.AutoRetryCount == 0 {
 		stats.mu.data.FirstAttemptCount++
