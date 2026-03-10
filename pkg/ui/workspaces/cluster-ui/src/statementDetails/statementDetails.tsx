@@ -1038,12 +1038,31 @@ export function StatementDetails(
       ],
     };
 
+    // Build a map from plan_gist → average run latency (seconds)
+    // for heat map coloring. If multiple plan_hashes share a gist,
+    // use a count-weighted average.
+    const latencyByGist = new Map<string, number>();
+    const countByGist = new Map<string, number>();
+    (statementStatisticsPerPlanHash || []).forEach(plan => {
+      const gist = plan.stats?.plan_gists?.[0] || "unknown";
+      const count = longToInt(plan.stats?.count) || 1;
+      const lat = plan.stats?.run_lat?.mean || 0;
+      latencyByGist.set(gist, (latencyByGist.get(gist) || 0) + count * lat);
+      countByGist.set(gist, (countByGist.get(gist) || 0) + count);
+    });
+    latencyByGist.forEach((totalLat, gist) => {
+      latencyByGist.set(gist, totalLat / (countByGist.get(gist) || 1));
+    });
+
     const {
       alignedData: canaryPlanDistData,
       planGists: canaryPlanGists,
       groupSize: canaryPlanGroupSize,
+      colourPalette: canaryColourPalette,
+      latencyRange: canaryLatencyRange,
     } = generateCanaryVsStablePlanDistributionTimeseries(
       statementStatisticsPerAggregatedTsAndPlanHash || [],
+      latencyByGist,
     );
     const hasCanaryPlanData = canaryPlanDistData[0].length > 0;
     const canaryPlanDistOps: Partial<Options> = {
@@ -1052,13 +1071,14 @@ export function StatementDetails(
         {},
         // Canary group: one series per plan gist
         ...canaryPlanGists.map(gist => ({
-          label: `Canary ${gist}`,
+          label: gist,
         })),
         // Stable group: one series per plan gist
         ...canaryPlanGists.map(gist => ({
-          label: `Stable ${gist}`,
+          label: gist,
         })),
       ],
+      legend: { show: true },
     };
 
     const [chartsStart, chartsEnd] = toRoundedDateRange(timeScale);
@@ -1124,22 +1144,70 @@ export function StatementDetails(
           {hasCanaryPlanData && (
             <Row gutter={24}>
               <Col className="gutter-row" span={24}>
-                <GroupedStackedBarGraphTimeSeries
-                  title="Canary vs Stable Plan Distribution"
-                  tooltip={
-                    <>
-                      Compares plan distribution between canary (newest table
-                      statistics) and stable (second-newest) executions. Left
-                      bars show canary execution counts, right bars show stable.
-                      Each color represents a different plan gist.
-                    </>
-                  }
-                  alignedData={canaryPlanDistData}
-                  uPlotOptions={canaryPlanDistOps}
-                  groupSize={canaryPlanGroupSize}
-                  yAxisUnits={AxisUnits.Count}
-                  xScale={xScale}
-                />
+                <div style={{ display: "inline-flex", alignItems: "stretch" }}>
+                  <div>
+                    <GroupedStackedBarGraphTimeSeries
+                      title="Canary vs Stable Plan Distribution"
+                      tooltip={
+                        <>
+                          Compares plan distribution between canary (newest
+                          table statistics) and stable (second-newest)
+                          executions. Left bars show canary execution counts,
+                          right bars show stable. Color intensity indicates
+                          average execution latency: darker purple = higher
+                          latency, lighter purple = lower latency.
+                        </>
+                      }
+                      alignedData={canaryPlanDistData}
+                      uPlotOptions={canaryPlanDistOps}
+                      colourPalette={canaryColourPalette}
+                      gistLabels={canaryPlanGists}
+                      groupLabels={["Canary", "Stable"]}
+                      groupStrokeColors={["#c62828", "#1565c0"]}
+                      groupSize={canaryPlanGroupSize}
+                      yAxisUnits={AxisUnits.Count}
+                      xScale={xScale}
+                    />
+                  </div>
+                  {canaryLatencyRange && (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginLeft: 12,
+                        paddingTop: 40,
+                        paddingBottom: 24,
+                        fontSize: 11,
+                        color: "#475872",
+                      }}
+                    >
+                      <span>{Duration(canaryLatencyRange.max * 1e9)}</span>
+                      <div
+                        style={{
+                          width: 14,
+                          flex: 1,
+                          minHeight: 60,
+                          margin: "4px 0",
+                          borderRadius: 3,
+                          background:
+                            "linear-gradient(to bottom, hsl(261,97%,35%), hsl(261,97%,85%))",
+                        }}
+                      />
+                      <span>{Duration(canaryLatencyRange.min * 1e9)}</span>
+                      <span
+                        style={{
+                          marginTop: 4,
+                          fontSize: 10,
+                          color: "#8b96a9",
+                        }}
+                      >
+                        Avg Latency
+                      </span>
+                    </div>
+                  )}
+                </div>
               </Col>
             </Row>
           )}
