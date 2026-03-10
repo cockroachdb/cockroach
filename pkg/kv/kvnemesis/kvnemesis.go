@@ -138,7 +138,7 @@ func RunNemesis(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = w.Finish() }()
+	defer func() { _ = w.Finish(ctx) }()
 
 	var stepsStartedAtomic int64
 	stepsByWorker := make([][]Step, concurrency)
@@ -211,7 +211,7 @@ func RunNemesis(
 	if err := w.WaitForFrontier(ctx, allSteps.After()); err != nil {
 		return nil, err
 	}
-	kvs := w.Finish()
+	kvs := w.Finish(ctx)
 	defer kvs.Close()
 
 	failures := Validate(allSteps, kvs, env.Tracker)

@@ -28,12 +28,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -52,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -243,6 +249,7 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 	// because the keyspace kvnemesis writes to does not correspond to a SQL
 	// descriptor. We can change this and make kvnemesis fit better with the SQL
 	// layer, which will let us change zone configs more easily.
+
 	if mode == Liveness {
 		n1Constraint := roachpb.ConstraintsConjunction{
 			NumReplicas: 1,
@@ -789,10 +796,13 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 		cfg.testGeneratorConfig(&config)
 	}
 
-	// If there are MVCC GC operations then set up the MVCC GC controller.
+	// If there are MVCC GC operations then set up the MVCC GC and protected
+	// timestamp controllers.
 	var mvccGCController MvccGCController
+	var ptsController PtsController
 	if config.Ops.MvccGC.MvccGC > 0 {
 		mvccGCController = testClusterGCController{tc}
+		ptsController = makePtsController(t, tc)
 	}
 
 	logger := newTBridge(t)
@@ -804,6 +814,7 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 		Partitioner:      &partitioner,
 		ServerController: tc,
 		MvccGCController: mvccGCController,
+		PtsController:    ptsController,
 	}
 	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, cfg.mode, dbs...)
 
@@ -1051,4 +1062,66 @@ func (c testClusterGCController) MvccGCRangeForKey(key []byte) error {
 		return qErr
 	}
 	return pErr
+}
+
+type testClusterPtsController struct {
+	t       testutils.TestFataler
+	tc      *testcluster.TestCluster
+	storage protectedts.Storage
+	id      uuid.UUID
+}
+
+func makePtsController(t testutils.TestFataler, tc *testcluster.TestCluster) PtsController {
+	cfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	storage := ptstorage.WithDatabase(cfg.ProtectedTimestampProvider, cfg.InternalDB)
+	return &testClusterPtsController{
+		t:       t,
+		tc:      tc,
+		storage: storage,
+		id:      uuid.MakeV4(),
+	}
+}
+
+// Start implements the PtsController interface.
+func (t *testClusterPtsController) Start(ctx context.Context, timestamp hlc.Timestamp) error {
+	rec := &ptpb.Record{
+		ID:        t.id.GetBytesMut(),
+		Timestamp: timestamp,
+		Mode:      ptpb.PROTECT_AFTER,
+		MetaType:  "kvnemesis",
+		Target:    ptpb.MakeClusterTarget(),
+	}
+	if err := t.storage.Protect(ctx, rec); err != nil {
+		return err
+	}
+
+	// Wait for the protected timestamp to become visible on all the stores.
+	for i := 0; i < t.tc.NumServers(); i++ {
+		srv := t.tc.Server(i)
+		store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
+		if err != nil {
+			return err
+		}
+		reader := store.GetStoreConfig().ProtectedTimestampReader
+		ptutil.TestingWaitForProtectedTimestampToExistOnSpans(
+			ctx,
+			t.t,
+			srv,
+			reader,
+			timestamp,
+			roachpb.Spans{GeneratorDataSpan()},
+		)
+	}
+
+	return nil
+}
+
+// Advance implements the PtsController interface.
+func (t *testClusterPtsController) Advance(ctx context.Context, timestamp hlc.Timestamp) error {
+	return t.storage.UpdateTimestamp(ctx, t.id, timestamp)
+}
+
+// Finish implements the PtsController interface.
+func (t *testClusterPtsController) Finish(ctx context.Context) error {
+	return t.storage.Release(ctx, t.id)
 }
