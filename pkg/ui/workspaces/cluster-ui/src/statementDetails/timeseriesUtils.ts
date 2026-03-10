@@ -199,15 +199,41 @@ export function generatePlanDistributionTimeseries(
   return { alignedData, planGists };
 }
 
+// latencyToColor maps a latency value to a purple-tone HSL color.
+// Lower latency → lighter (higher lightness), higher → darker.
+function latencyToColor(
+  lat: number,
+  min: number,
+  max: number,
+): string {
+  const t = max === min ? 0.5 : (lat - min) / (max - min);
+  // Lightness ranges from 85% (light purple) to 35% (dark purple).
+  const lightness = 85 - t * 50;
+  return `hsl(261, 97%, ${lightness}%)`;
+}
+
 // generateCanaryVsStablePlanDistributionTimeseries builds a grouped bar
 // chart with two bars per timestamp: canary (left) and stable (right).
 // Each bar is stacked by plan gist, showing execution counts.
+//
+// When latencyByGist is provided, plan gists are sorted by latency
+// ascending (lowest latency at the bottom of the stack) and each gist
+// is assigned a heat-map color (light purple = low latency, dark
+// purple = high latency). The colour palette and latency range are
+// returned so the caller can render a legend.
 //
 // Returns data as [timestamps, gist1_canary, gist2_canary, ..., gist1_stable, gist2_stable, ...]
 // along with the plan gist list and the number of gists (groupSize).
 export function generateCanaryVsStablePlanDistributionTimeseries(
   stats: StatementStatisticsPerAggregatedTsAndPlanHash[],
-): { alignedData: AlignedData; planGists: string[]; groupSize: number } {
+  latencyByGist?: Map<string, number>,
+): {
+  alignedData: AlignedData;
+  planGists: string[];
+  groupSize: number;
+  colourPalette: string[];
+  latencyRange?: { min: number; max: number };
+} {
   // Two maps: one for canary counts, one for stable counts.
   const canaryMap = new Map<number, Map<string, number>>();
   const stableMap = new Map<number, Map<string, number>>();
@@ -244,11 +270,50 @@ export function generateCanaryVsStablePlanDistributionTimeseries(
   });
 
   if (!hasCanary) {
-    return { alignedData: [[]], planGists: [], groupSize: 0 };
+    return { alignedData: [[]], planGists: [], groupSize: 0, colourPalette: [] };
   }
 
   const timestamps = Array.from(canaryMap.keys()).sort((a, b) => a - b);
-  const planGists = Array.from(planGistSet).sort();
+
+  // Sort plan gists by latency ascending when a latency map is
+  // provided, so lower-latency plans sit at the bottom of the stack
+  // and receive lighter colors. Always generate a purple heat-map
+  // palette — if no latency data is available, use evenly-spaced
+  // purple shades so the chart never falls back to the default
+  // multi-colour palette.
+  let planGists: string[];
+  let colourPalette: string[];
+  let latencyRange: { min: number; max: number } | undefined;
+
+  // Check whether latencyByGist has entries that actually match gists
+  // in this chart's data.
+  const hasLatencyData =
+    latencyByGist &&
+    latencyByGist.size > 0 &&
+    Array.from(planGistSet).some(g => latencyByGist.has(g));
+
+  if (hasLatencyData) {
+    planGists = Array.from(planGistSet).sort((a, b) => {
+      return (latencyByGist.get(a) || 0) - (latencyByGist.get(b) || 0);
+    });
+    const lats = planGists.map(g => latencyByGist.get(g) || 0);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    colourPalette = planGists.map(g =>
+      latencyToColor(latencyByGist.get(g) || 0, minLat, maxLat),
+    );
+    latencyRange = { min: minLat, max: maxLat };
+  } else {
+    planGists = Array.from(planGistSet).sort();
+    // Evenly-spaced purple shades as fallback.
+    const n = planGists.length;
+    colourPalette = planGists.map((_, i) => {
+      const t = n <= 1 ? 0.5 : i / (n - 1);
+      const lightness = 85 - t * 50;
+      return `hsl(261, 97%, ${lightness}%)`;
+    });
+  }
+
   const groupSize = planGists.length;
 
   // Data layout: [timestamps, ...canary_gists, ...stable_gists]
@@ -268,5 +333,5 @@ export function generateCanaryVsStablePlanDistributionTimeseries(
     );
   });
 
-  return { alignedData, planGists, groupSize };
+  return { alignedData, planGists, groupSize, colourPalette, latencyRange };
 }
