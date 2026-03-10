@@ -9,6 +9,21 @@ distribution: local
   table: pg_class@pg_class_oid_idx
   spans: [/50 - /50]
 
+# The @primary hint forces a full scan, preventing the optimizer from using
+# the virtual index. This is useful when the virtual index is incomplete and
+# lookups with certain OIDs (e.g. hashed index OIDs) fall back to a full
+# scan anyway, making the optimizer's O(1) cost estimate incorrect.
+query T
+EXPLAIN SELECT * FROM pg_catalog.pg_class@primary WHERE oid = 50
+----
+distribution: local
+·
+• filter
+│ filter: oid = 50
+│
+└── • virtual table
+      table: pg_class@primary
+
 query T
 EXPLAIN SELECT * FROM pg_catalog.pg_class WHERE relname = 'blah'
 ----

@@ -517,7 +517,7 @@ func TestingEnableFamilyIndexHint() func() {
 // Format implements the NodeFormatter interface.
 func (ih *IndexFlags) Format(ctx *FmtCtx) {
 	ctx.WriteByte('@')
-	if ih.indexOnlyHint() {
+	if ih.IndexOnlyHint() {
 		if ih.Index != "" {
 			ctx.FormatNode(&ih.Index)
 		} else {
@@ -608,7 +608,7 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 	}
 }
 
-func (ih *IndexFlags) indexOnlyHint() bool {
+func (ih *IndexFlags) IndexOnlyHint() bool {
 	return !ih.NoIndexJoin && !ih.NoZigzagJoin && !ih.NoFullScan && !ih.AvoidFullScan &&
 		!ih.IgnoreForeignKeys && !ih.IgnoreUniqueWithoutIndexKeys && ih.Direction == 0 &&
 		!ih.ForceInvertedIndex && !ih.zigzagForced() && ih.FamilyID == nil
