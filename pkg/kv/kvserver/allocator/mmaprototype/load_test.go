@@ -53,6 +53,191 @@ func (p *testLoadInfoProvider) computeLoadSummary(
 	}
 }
 
+func TestLoadSummaryForDimension(t *testing.T) {
+	ctx := context.Background()
+	const (
+		dummyStoreID roachpb.StoreID = 1
+		dummyNodeID  roachpb.NodeID  = 1
+
+		kib  LoadValue = 1 << 10
+		mib  LoadValue = 1 << 20
+		vCPU LoadValue = 1_000_000_000 // 1 vCPU = 1e9 ns/s
+	)
+	testCases := []struct {
+		name     string
+		dim      LoadDimension
+		load     LoadValue
+		capacity LoadValue
+		meanLoad LoadValue
+		meanUtil float64
+		expected loadSummary
+	}{
+		//
+		// WriteBandwidth (UnknownCapacity, significance floor = 5 mib).
+		// Tests the denominator clamp: denom = max(meanLoad, 5 mib).
+		// With denom = 5 mib, the fraction thresholds translate to:
+		//   5% (loadNoChange) = 256 kib,  10% (overloadSlow) = 512 kib.
+		//
+		{
+			// Just below the 5% boundary (loadNoChange requires >= 5%):
+			// (256 kib - 1) / 5 mib < 0.05 → loadNormal.
+			name:     "WB below 5pct loadNormal",
+			dim:      WriteBandwidth,
+			load:     1*mib + 256*kib - 1,
+			capacity: UnknownCapacity,
+			meanLoad: 1 * mib,
+			expected: loadNormal,
+		},
+		{
+			// At the 5% boundary:
+			// 256 kib / 5 mib = 0.05 exactly → loadNoChange.
+			name:     "WB at 5pct loadNoChange",
+			dim:      WriteBandwidth,
+			load:     1*mib + 256*kib,
+			capacity: UnknownCapacity,
+			meanLoad: 1 * mib,
+			expected: loadNoChange,
+		},
+		{
+			// Just above the 10% boundary (overloadSlow requires > 10%):
+			// (512 kib + 1) / 5 mib > 0.1 → overloadSlow.
+			name:     "WB above 10pct overloadSlow",
+			dim:      WriteBandwidth,
+			load:     1*mib + 512*kib + 1,
+			capacity: UnknownCapacity,
+			meanLoad: 1 * mib,
+			expected: overloadSlow,
+		},
+		{
+			// Just below the -10% boundary (loadLow requires < -10%):
+			// -(512 kib + 1) / 5 mib < -0.1 → loadLow.
+			name:     "WB below -10pct loadLow",
+			dim:      WriteBandwidth,
+			load:     2*mib - 512*kib - 1,
+			capacity: UnknownCapacity,
+			meanLoad: 2 * mib,
+			expected: loadLow,
+		},
+		{
+			// Mean above floor, clamp inactive (denom = meanLoad, not floor).
+			// Just above 10%: (10 mib + 1) / 100 mib > 0.1 → overloadSlow.
+			name:     "WB high mean clamp inactive",
+			dim:      WriteBandwidth,
+			load:     100*mib + 10*mib + 1,
+			capacity: UnknownCapacity,
+			meanLoad: 100 * mib,
+			expected: overloadSlow,
+		},
+		{
+			// Mean = 0: denominator falls back to floor (no division by zero).
+			// 100 kib / 5 mib ≈ 0.019 → loadNormal.
+			name:     "WB mean zero floor fallback",
+			dim:      WriteBandwidth,
+			load:     100 * kib,
+			capacity: UnknownCapacity,
+			meanLoad: 0,
+			expected: loadNormal,
+		},
+		//
+		// CPURate (capacity = 2 vCPU).
+		// CPU below 5% utilization is not worth rebalancing, so the
+		// result is capped at loadNormal. Above 90% is overloadUrgent.
+		//
+		{
+			// Using < 5% of CPU capacity → not worth rebalancing.
+			name:     "CPU below 5pct capped",
+			dim:      CPURate,
+			load:     vCPU/10 - 1,
+			capacity: 2 * vCPU,
+			meanLoad: vCPU / 20,
+			meanUtil: 0.04,
+			expected: loadNormal,
+		},
+		{
+			// Using exactly 5% of CPU capacity → rebalancing allowed.
+			// 50ms/s above mean on a 100ms/s floor → overloadSlow.
+			name:     "CPU at 5pct uncapped",
+			dim:      CPURate,
+			load:     vCPU / 10,
+			capacity: 2 * vCPU,
+			meanLoad: vCPU / 20,
+			meanUtil: 0.05,
+			expected: overloadSlow,
+		},
+		{
+			// Using > 90% of CPU capacity → overloadUrgent.
+			name:     "CPU above 90pct overloadUrgent",
+			dim:      CPURate,
+			load:     9*vCPU/5 + 1,
+			capacity: 2 * vCPU,
+			meanLoad: vCPU,
+			meanUtil: 0.5,
+			expected: overloadUrgent,
+		},
+		//
+		// ByteSize (capacity = 100 mib).
+		// Disk below 50% full is not worth rebalancing for ByteSize,
+		// so the result is capped at loadNormal. Above 90% is
+		// overloadUrgent.
+		//
+		{
+			// Disk < 50% full → not worth rebalancing.
+			name:     "ByteSize below 50pct capped",
+			dim:      ByteSize,
+			load:     50*mib - 1,
+			capacity: 100 * mib,
+			meanLoad: 20 * mib,
+			meanUtil: 0.2,
+			expected: loadNormal,
+		},
+		{
+			// Disk exactly 50% full → rebalancing allowed.
+			// 10 mib above mean on a 40 mib denom → overloadSlow.
+			name:     "ByteSize at 50pct uncapped",
+			dim:      ByteSize,
+			load:     50 * mib,
+			capacity: 100 * mib,
+			meanLoad: 40 * mib,
+			meanUtil: 0.5,
+			expected: overloadSlow,
+		},
+		{
+			// Disk > 90% full → overloadUrgent.
+			name:     "ByteSize above 90pct overloadUrgent",
+			dim:      ByteSize,
+			load:     90*mib + 1,
+			capacity: 100 * mib,
+			meanLoad: 50 * mib,
+			meanUtil: 0.5,
+			expected: overloadUrgent,
+		},
+		//
+		// Edge cases.
+		//
+		{
+			// Adjusted load can be negative. -512 kib is 2.5 mib below
+			// the 2 mib mean: -2.5 mib / 5 mib = -0.50 → loadLow.
+			name:     "WB negative load",
+			dim:      WriteBandwidth,
+			load:     -512 * kib,
+			capacity: UnknownCapacity,
+			meanLoad: 2 * mib,
+			expected: loadLow,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := loadSummaryForDimension(
+				ctx, dummyStoreID, dummyNodeID,
+				tc.dim, tc.load, tc.capacity, tc.meanLoad, tc.meanUtil,
+			)
+			require.Equal(t, tc.expected, got,
+				"dim=%v load=%d meanLoad=%d capacity=%d",
+				tc.dim, tc.load, tc.meanLoad, tc.capacity)
+		})
+	}
+}
+
 func TestMeansMemo(t *testing.T) {
 	interner := newStringInterner()
 	cm := newConstraintMatcher(interner)

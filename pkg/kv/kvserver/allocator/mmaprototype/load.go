@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
@@ -590,6 +591,31 @@ func (ls loadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
 	}
 }
 
+// significanceFloor returns the minimum meaningful denominator for computing
+// fractionAbove in loadSummaryForDimension, preventing small mean loads from
+// amplifying small absolute differences into large fractions. When capacity is
+// known, it is derived as 5% of capacity. For dimensions with unknown capacity,
+// a per-dimension fallback constant is used.
+func significanceFloor(dim LoadDimension, capacity LoadValue) LoadValue {
+	if capacity != UnknownCapacity {
+		return LoadValue(float64(capacity) * 0.05)
+	}
+	// NB: We never expect to reach these fallbacks for CPURate or ByteSize
+	// since they should always have a known capacity. These are purely defensive.
+	if buildutil.CrdbTestBuild && (dim == CPURate || dim == ByteSize) {
+		panic(fmt.Sprintf("unexpected UnknownCapacity for dimension %v", dim))
+	}
+	switch dim {
+	case WriteBandwidth:
+		return 5 << 20 // 5 MiB/s
+	case CPURate:
+		return 100_000_000 // 100ms/s = 5% of 2 vCPU
+	case ByteSize:
+		return 100 << 20 // 100 MiB
+	}
+	panic(fmt.Sprintf("unknown dimension: %v", dim))
+}
+
 // Computes the loadSummary for a particular load dimension.
 //
 // NB: load can be negative since it may be adjusted load.
@@ -624,7 +650,16 @@ func loadSummaryForDimension(
 	// currently consider how far we are from the mean. But the mean isn't very
 	// useful when there are heterogeneous nodes/stores, so this computation
 	// will need to be revisited.
-	fractionAbove := float64(load)/float64(meanLoad) - 1.0
+	//
+	// Clamp the denominator to a significance floor so that when mean load
+	// is small, small absolute differences don't look like large percentages.
+	// For example, 50 KiB/s above the mean is 25% at a 200 KiB/s mean,
+	// enough to trigger overloadSlow and cause unnecessary replica moves.
+	// Clamping the denominator to 5 MiB/s for WriteBandwidth makes that same
+	// 50 KiB/s only 1%. At high loads (mean > floor), the clamp has no
+	// effect.
+	denominator := max(meanLoad, significanceFloor(dim, capacity))
+	fractionAbove := float64(load-meanLoad) / float64(denominator)
 	var fractionUsed float64
 	if capacity != UnknownCapacity {
 		// NB: capacity can be 0 if nodeCPURateUsage >> nodeCPURateCapacity.
@@ -643,8 +678,6 @@ func loadSummaryForDimension(
 	if dim == CPURate && capacity != UnknownCapacity && fractionUsed < 0.05 {
 		summaryUpperBound = loadNormal
 	}
-	// TODO(sumeer): consider adding a summaryUpperBound for small
-	// WriteBandwidth values too.
 	const (
 		meanFractionSlow     = 0.1
 		meanFractionLow      = -0.1
@@ -678,6 +711,9 @@ func loadSummaryForDimension(
 			buf.Printf("s%v", storeID)
 		}
 		buf.Printf("): %v, reason: %v [load=%v meanLoad=%v", summary, redact.SafeString(reason), load, meanLoad)
+		if denominator != meanLoad {
+			buf.Printf(" denom=%v", denominator)
+		}
 		if capacity != UnknownCapacity {
 			buf.Printf(" fractionUsed=%.2f%% meanUtil=%.2f%% capacity=%v",
 				redact.SafeFloat(fractionUsed*100), redact.SafeFloat(meanUtil*100), capacity)
