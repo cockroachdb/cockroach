@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/jwtauth"
 	"github.com/cockroachdb/cockroach/pkg/security/ldapauth"
@@ -31,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/settings/rulebasedscanner"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
@@ -39,11 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -81,36 +77,16 @@ const (
 	UsernameHeader = "X-Cockroach-User"
 )
 
-type noOIDCConfigured struct{}
-
-var _ ui.OIDCUI = &noOIDCConfigured{}
-
-func (c *noOIDCConfigured) GetOIDCConf() ui.OIDCUIConf {
-	return ui.OIDCUIConf{
-		Enabled: false,
-	}
-}
-
-// OIDC is an interface that an OIDC-based authentication module should implement to integrate with
-// the rest of the node's functionality
-type OIDC interface {
-	ui.OIDCUI
-}
-
-// ConfigureOIDC is a hook for the `oidcauth` library to add OIDC login support. It's called during
-// server startup to initialize a client for OIDC support.
-var ConfigureOIDC = func(
-	ctx context.Context,
-	st *cluster.Settings,
-	locality roachpb.Locality,
-	handleHTTP func(pattern string, handler http.Handler),
-	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
-	ambientCtx log.AmbientContext,
-	cluster uuid.UUID,
-	execCfg *sql.ExecutorConfig,
-) (OIDC, error) {
-	return &noOIDCConfigured{}, nil
-}
+// ServerHTTPBasePath is a cluster setting that contains the path to
+// route the user to after successful login. It is intended to be
+// overridden in cases where DB Console is being proxied.
+var ServerHTTPBasePath = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	"server.http.base_path",
+	"path to redirect the user to upon succcessful login",
+	"/",
+	settings.WithPublic,
+)
 
 // WebSessionTimeout is the cluster setting for web session TTL.
 var WebSessionTimeout = settings.RegisterDurationSetting(

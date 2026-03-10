@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/jwtauth"
 	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	secuser "github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -410,7 +409,7 @@ func reloadConfigLocked(
 		principalRegex: regexp.MustCompile(OIDCPrincipalRegex.Get(&st.SV)),
 		buttonText:     OIDCButtonText.Get(&st.SV),
 		autoLogin:      OIDCAutoLogin.Get(&st.SV),
-		successPath:    server.ServerHTTPBasePath.Get(&st.SV),
+		successPath:    authserver.ServerHTTPBasePath.Get(&st.SV),
 
 		generateJWTAuthTokenEnabled:  OIDCGenerateClusterSSOTokenEnabled.Get(&st.SV),
 		generateJWTAuthTokenUseToken: OIDCGenerateClusterSSOTokenUseToken.Get(&st.SV),
@@ -565,7 +564,7 @@ func maybeProvisionUserLocked(
 // The login and callback handlers also support an alternative
 // flow that, rather than logging the user in, produces a JWT
 // auth token that may be used for cluster SSO.
-var ConfigureOIDC = func(
+func ConfigureOIDC(
 	serverCtx context.Context,
 	st *cluster.Settings,
 	locality roachpb.Locality,
@@ -574,7 +573,7 @@ var ConfigureOIDC = func(
 	ambientCtx log.AmbientContext,
 	cluster uuid.UUID,
 	execCfg *sql.ExecutorConfig,
-) (authserver.OIDC, error) {
+) (ui.OIDCUI, error) {
 	oidcAuthentication := &oidcAuthenticationServer{
 		execCfg: execCfg,
 	}
@@ -978,7 +977,7 @@ var ConfigureOIDC = func(
 	OIDCAutoLogin.SetOnChange(&st.SV, func(ctx context.Context) {
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
-	server.ServerHTTPBasePath.SetOnChange(&st.SV, func(ctx context.Context) {
+	authserver.ServerHTTPBasePath.SetOnChange(&st.SV, func(ctx context.Context) {
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 	OIDCGenerateClusterSSOTokenEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
@@ -1010,8 +1009,4 @@ var ConfigureOIDC = func(
 	})
 
 	return oidcAuthentication, nil
-}
-
-func init() {
-	authserver.ConfigureOIDC = ConfigureOIDC
 }

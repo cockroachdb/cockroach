@@ -23,7 +23,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/logical"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/physical"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/producer"
-	_ "github.com/cockroachdb/cockroach/pkg/security/oidcauth"
 )
 
 // TestingEnableEnterprise is a no-op. It was deprecated when the core license
