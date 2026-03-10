@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -150,13 +151,6 @@ func (p *planner) maybeSetupConstraintForShard(
 func makeIndexDescriptor(
 	params runParams, n tree.CreateIndex, tableDesc *tabledesc.Mutable,
 ) (*descpb.IndexDescriptor, error) {
-	if n.Sharded == nil && n.StorageParams.GetVal(`bucket_count`) != nil {
-		return nil, pgerror.New(
-			pgcode.InvalidParameterValue,
-			`"bucket_count" storage param should only be set with "USING HASH" for hash sharded index`,
-		)
-	}
-
 	// Since we mutate the columns below, we make copies of them
 	// here so that on retry we do not attempt to validate the
 	// mutated columns.
@@ -314,7 +308,7 @@ func makeIndexDescriptor(
 		params.p.SemaCtx(),
 		params.EvalContext(),
 		n.StorageParams,
-		&indexstorageparam.Setter{IndexDesc: &indexDesc},
+		&indexstorageparam.Setter{IndexDesc: &indexDesc, NewObject: true},
 	); err != nil {
 		return nil, err
 	}
@@ -805,6 +799,20 @@ func (n *createIndexNode) startExec(params runParams) error {
 		n.n.PartitionByIndex,
 	)
 	if err != nil {
+		return err
+	}
+
+	// Validate storage params from the WITH clause.
+	if err := paramparse.ValidateIndexStorageParams(
+		params.ctx,
+		n.n.StorageParams,
+		paramparse.IndexStorageParamContext{
+			IsUnique:                indexDesc.Unique,
+			IsSharded:               n.n.Sharded != nil,
+			HasImplicitPartitioning: indexDesc.Partitioning.NumImplicitColumns > 0,
+			Version:                 params.EvalContext().Settings.Version,
+		},
+	); err != nil {
 		return err
 	}
 

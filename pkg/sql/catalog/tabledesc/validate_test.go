@@ -190,6 +190,7 @@ var validationMap = []struct {
 			"CreatedAtNanos":              {status: thisFieldReferencesNoObjects},
 			"VecConfig":                   {status: thisFieldReferencesNoObjects},
 			"HideForPrimaryKeyRecreate":   {status: iSolemnlySwearThisFieldIsValidated},
+			"SkipUniqueChecks":            {status: thisFieldReferencesNoObjects},
 		},
 	},
 	{

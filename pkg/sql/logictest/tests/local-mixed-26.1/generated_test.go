@@ -153,6 +153,13 @@ func TestLogic_alter_default_privileges_with_grant_option(
 	runLogicTest(t, "alter_default_privileges_with_grant_option")
 }
 
+func TestLogic_alter_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_index")
+}
+
 func TestLogic_alter_primary_key(
 	t *testing.T,
 ) {
@@ -1278,6 +1285,13 @@ func TestLogic_merge_join(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "merge_join")
+}
+
+func TestLogic_mixed_version_skip_unique_checks(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_skip_unique_checks")
 }
 
 func TestLogic_multi_statement(

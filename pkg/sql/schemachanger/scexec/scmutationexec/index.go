@@ -96,6 +96,7 @@ func addNewIndexMutation(
 	if opIndex.VecConfig != nil {
 		idx.VecConfig = *opIndex.VecConfig
 	}
+	idx.SkipUniqueChecks = opIndex.SkipUniqueChecks
 	return enqueueIndexMutation(tbl, idx, state, descpb.DescriptorMutation_ADD)
 }
 

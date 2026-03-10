@@ -12,11 +12,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
+	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
@@ -40,8 +43,31 @@ func (p *planner) AlterIndex(ctx context.Context, n *tree.AlterIndex) (planNode,
 		return nil, err
 	}
 
-	_, tableDesc, index, err := p.GetTableAndIndex(ctx, &n.Index, privilege.CREATE, true /* skipCache */)
+	// Check if the table actually exists. expandMutableIndexName returns the
+	// underlying table.
+	_, tableDesc, err := expandMutableIndexName(ctx, p, &n.Index, !n.IfExists /* requireTable */)
 	if err != nil {
+		// Error if no table is found and IfExists is false.
+		return nil, err
+	}
+
+	if tableDesc == nil {
+		// No error if no table but IfExists is true.
+		return newZeroNode(nil /* columns */), nil
+	}
+
+	// Check if the index actually exists.
+	index := catalog.FindIndexByName(tableDesc, string(n.Index.Index))
+	if index == nil {
+		if n.IfExists {
+			// Nothing needed if no index exists and IfExists is true.
+			return newZeroNode(nil /* columns */), nil
+		}
+		return nil, pgerror.Newf(pgcode.UndefinedObject,
+			"index %q does not exist", string(n.Index.Index))
+	}
+
+	if err := p.CheckPrivilege(ctx, tableDesc, privilege.CREATE); err != nil {
 		return nil, err
 	}
 
@@ -138,6 +164,60 @@ func (n *alterIndexNode) startExec(params runParams) error {
 					return err
 				}
 			}
+		case *tree.AlterIndexSetStorageParams:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("index", "set_storage_params"))
+			indexDesc := n.index.IndexDescDeepCopy()
+			setter := indexstorageparam.Setter{IndexDesc: &indexDesc, NewObject: false}
+			if err := storageparam.Set(
+				params.ctx,
+				params.p.SemaCtx(),
+				params.EvalContext(),
+				t.StorageParams,
+				&setter,
+			); err != nil {
+				return err
+			}
+			if err := paramparse.ValidateIndexStorageParams(
+				params.ctx,
+				t.StorageParams,
+				paramparse.IndexStorageParamContext{
+					IsPrimaryKey:            n.index.Primary(),
+					IsUnique:                indexDesc.Unique,
+					IsSharded:               indexDesc.Sharded.IsSharded,
+					HasImplicitPartitioning: indexDesc.Partitioning.NumImplicitColumns > 0,
+					Version:                 params.EvalContext().Settings.Version,
+				},
+			); err != nil {
+				return err
+			}
+			if n.index.Primary() {
+				n.tableDesc.SetPrimaryIndex(*setter.IndexDesc)
+			} else {
+				n.tableDesc.SetPublicNonPrimaryIndex(n.index.Ordinal(), *setter.IndexDesc)
+			}
+			n.index = n.tableDesc.ActiveIndexes()[n.index.Ordinal()]
+			descriptorChanged = true
+
+		case *tree.AlterIndexResetStorageParams:
+			telemetry.Inc(sqltelemetry.SchemaChangeAlterCounterWithExtra("index", "reset_storage_params"))
+			indexDesc := n.index.IndexDescDeepCopy()
+			setter := indexstorageparam.Setter{IndexDesc: &indexDesc, NewObject: false}
+			if err := storageparam.Reset(
+				params.ctx,
+				params.EvalContext(),
+				t.Params,
+				&setter,
+			); err != nil {
+				return err
+			}
+			if n.index.Primary() {
+				n.tableDesc.SetPrimaryIndex(*setter.IndexDesc)
+			} else {
+				n.tableDesc.SetPublicNonPrimaryIndex(n.index.Ordinal(), *setter.IndexDesc)
+			}
+			n.index = n.tableDesc.ActiveIndexes()[n.index.Ordinal()]
+			descriptorChanged = true
+
 		default:
 			return errors.AssertionFailedf(
 				"unsupported alter command: %T", cmd)
