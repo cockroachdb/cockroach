@@ -501,6 +501,30 @@ func (i ignoreLevel) String() string {
 // caller should set loadThreshold to overloadSlow and ignoreLevel to
 // ignoreHigherThanLoadThreshold, to maximize the probability of finding a
 // candidate.
+
+func formatCandidatesLog(
+	ctx context.Context, candidates []candidateInfo, overloadedDim LoadDimension,
+) redact.RedactableString {
+	if !log.ExpensiveLogEnabled(ctx, 2) {
+		return ""
+	}
+	var buf redact.StringBuilder
+	for _, c := range candidates {
+		if overloadedDim != NumLoadDimensions {
+			buf.Printf(
+				" s%v(SLS:%v, overloadedDimLoadSummary:%v)",
+				c.StoreID, c.sls, c.dimSummary[overloadedDim],
+			)
+		} else {
+			buf.Printf(" s%v(SLS:%v)", c.StoreID, c.storeLoadSummary)
+		}
+	}
+	if len(candidates) > 0 {
+		buf.Printf(", overloadedDim:%v", overloadedDim)
+	}
+	return buf.RedactableString()
+}
+
 func sortTargetCandidateSetAndPick(
 	ctx context.Context,
 	cands candidateSet,
@@ -511,23 +535,6 @@ func sortTargetCandidateSetAndPick(
 	maxFractionPendingThreshold float64,
 	failLogger func(shedResult),
 ) roachpb.StoreID {
-	// TODO(tbg): allocates 382x/op (candidate slice filtering and logging).
-	var buf redact.StringBuilder
-	var formatCandidatesLog = func(candidates []candidateInfo) redact.RedactableString {
-		buf.Reset()
-		for _, c := range candidates {
-			if overloadedDim != NumLoadDimensions {
-				buf.Printf(" s%v(SLS:%v, overloadedDimLoadSummary:%v)", c.StoreID, c.sls, c.dimSummary[overloadedDim])
-			} else {
-				buf.Printf(" s%v(SLS:%v)", c.StoreID, c.storeLoadSummary)
-			}
-		}
-		if len(candidates) > 0 {
-			buf.Printf(", overloadedDim:%v", overloadedDim)
-		}
-		return buf.RedactableString()
-	}
-
 	if loadThreshold <= loadNoChange {
 		panic("loadThreshold must be > loadNoChange")
 	}
@@ -567,7 +574,7 @@ func sortTargetCandidateSetAndPick(
 	for i, cand := range cands.candidates {
 		if !diversityScoresAlmostEqual(bestDiversity, cand.diversityScore) {
 			// Have a set of candidates with the best diversity.
-			if s := formatCandidatesLog(cands.candidates[i:]); s != "" {
+			if s := formatCandidatesLog(ctx, cands.candidates[i:], overloadedDim); s != "" {
 				log.KvDistribution.VEventf(ctx, 2, "discarding candidates due to lower diversity score: %s", s)
 			}
 			break
@@ -599,7 +606,7 @@ func sortTargetCandidateSetAndPick(
 				// Never go to the next set if we have discarded candidates that have
 				// pending changes. We will wait for those to have no pending changes
 				// before we consider later sets.
-				if s := formatCandidatesLog(cands.candidates[i:]); s != "" {
+				if s := formatCandidatesLog(ctx, cands.candidates[i:], overloadedDim); s != "" {
 					log.KvDistribution.VEventf(ctx, 2,
 						"candidate with pending changes was discarded, discarding remaining candidates with higher load: %s", s)
 				}
@@ -613,7 +620,7 @@ func sortTargetCandidateSetAndPick(
 				lowestLoadSet = cand.sls
 			} else if ignoreLevel < ignoreHigherThanLoadThreshold || overloadedDim == NumLoadDimensions {
 				// Past the lowestLoad set. We don't care about these.
-				if s := formatCandidatesLog(cands.candidates[i:]); s != "" {
+				if s := formatCandidatesLog(ctx, cands.candidates[i:], overloadedDim); s != "" {
 					log.KvDistribution.VEventf(ctx, 2,
 						"discarding candidates with higher load than lowestLoadSet(%v): %s", lowestLoadSet, s)
 				}
@@ -624,7 +631,7 @@ func sortTargetCandidateSetAndPick(
 			// cand.sls <= loadThreshold.
 		}
 		if cand.sls > loadThreshold {
-			if s := formatCandidatesLog(cands.candidates[i:]); s != "" {
+			if s := formatCandidatesLog(ctx, cands.candidates[i:], overloadedDim); s != "" {
 				log.KvDistribution.VEventf(ctx, 2,
 					"discarding candidates with higher load than loadThreshold(%v): %s", loadThreshold, s)
 			}
@@ -640,9 +647,11 @@ func sortTargetCandidateSetAndPick(
 			if cand.maxFractionPendingIncrease > epsilon && discardedCandsHadNoPendingChanges {
 				discardedCandsHadNoPendingChanges = false
 			}
-			log.KvDistribution.VEventf(ctx, 2,
-				"candidate store %v was discarded due to (nls=%t overloadDim=%t pending_thresh=%t): sls=%v", cand.StoreID,
-				candDiscardedByNLS, candDiscardedByOverloadDim, candDiscardedByPendingThreshold, cand.storeLoadSummary)
+			if log.ExpensiveLogEnabled(ctx, 2) {
+				log.KvDistribution.VEventf(ctx, 2,
+					"candidate store %v was discarded due to (nls=%t overloadDim=%t pending_thresh=%t): sls=%v", cand.StoreID,
+					candDiscardedByNLS, candDiscardedByOverloadDim, candDiscardedByPendingThreshold, cand.storeLoadSummary)
+			}
 			continue
 		}
 		cands.candidates[j] = cand
@@ -773,14 +782,15 @@ func sortTargetCandidateSetAndPick(
 			}
 			j++
 		}
-		if s := formatCandidatesLog(cands.candidates[j:]); s != "" {
+		if s := formatCandidatesLog(ctx, cands.candidates[j:], overloadedDim); s != "" {
 			log.KvDistribution.VEventf(ctx, 2, "discarding candidates due to overloadedDim: %s", s)
 		}
 		cands.candidates = cands.candidates[:j]
 	}
-	s := formatCandidatesLog(cands.candidates)
 	j = rng.Intn(j)
-	log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: candidates:%s, picked s%v", s, cands.candidates[j].StoreID)
+	if s := formatCandidatesLog(ctx, cands.candidates, overloadedDim); s != "" {
+		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: candidates:%s, picked s%v", s, cands.candidates[j].StoreID)
+	}
 	if ignoreLevel == ignoreLoadNoChangeAndHigher && cands.candidates[j].sls >= loadNoChange ||
 		ignoreLevel == ignoreLoadThresholdAndHigher && cands.candidates[j].sls >= loadThreshold ||
 		ignoreLevel == ignoreHigherThanLoadThreshold && cands.candidates[j].sls > loadThreshold {
