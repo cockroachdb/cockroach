@@ -191,6 +191,11 @@ type WorkInfo struct {
 	ReplicatedWorkInfo ReplicatedWorkInfo
 	// WorkloadID is used for ASH sampling.
 	WorkloadID uint64
+	// AppNameID is the hash of the application name. Used for ASH sampling.
+	AppNameID uint64
+	// GatewayNodeID is the node that initiated the workload. Used for ASH
+	// sampling.
+	GatewayNodeID roachpb.NodeID
 }
 
 // ReplicatedWorkInfo groups everything needed to admit replicated writes, done
