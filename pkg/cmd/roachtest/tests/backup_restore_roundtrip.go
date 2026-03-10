@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -21,12 +22,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -109,6 +112,23 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 			},
 		})
 	}
+
+	r.Add(registry.TestSpec{
+		Name:                       "backup-restore/chaos",
+		Timeout:                    4 * time.Hour,
+		Owner:                      registry.OwnerDisasterRecovery,
+		Cluster:                    r.MakeClusterSpec(4, spec.WorkloadNode()),
+		EncryptionSupport:          registry.EncryptionMetamorphic,
+		NativeLibs:                 registry.LibGEOS,
+		CompatibleClouds:           registry.Clouds(spec.GCE, spec.AWS, spec.Azure, spec.Local),
+		Suites:                     registry.Suites(registry.Nightly),
+		TestSelectionOptOutSuites:  registry.Suites(registry.Nightly),
+		Randomized:                 true,
+		RequiresDeprecatedWorkload: true, // uses schemachange
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			backupRestoreChaos(ctx, t, c)
+		},
+	})
 }
 
 // backup-restore/round-trip tests that a round trip of creating a backup and
@@ -135,7 +155,7 @@ func backupRestoreRoundTrip(
 
 	m.Go(func(ctx context.Context) error {
 		testUtils, err := setupBackupRestoreTestUtils(
-			ctx, t, c, testRNG,
+			ctx, t, c, c.CRDBNodes(), testRNG,
 			withMock(sp.mock), withOnlineRestore(sp.onlineRestore), withCompaction(!sp.onlineRestore),
 		)
 		if err != nil {
@@ -145,7 +165,7 @@ func backupRestoreRoundTrip(
 
 		dbs := []string{"bank", "tpcc", schemaChangeDB}
 		d, runBackgroundWorkload, _, err := createDriversForBackupRestore(
-			ctx, t, c, testRNG, workloadSeed, testUtils, dbs,
+			ctx, t, c, c.CRDBNodes(), testRNG, workloadSeed, testUtils, dbs,
 		)
 		if err != nil {
 			return err
@@ -230,6 +250,185 @@ func backupRestoreRoundTrip(
 	})
 
 	m.Wait()
+}
+
+func backupRestoreChaos(ctx context.Context, t test.Test, c cluster.Cluster) {
+	testRNG, seed := randutil.NewLockedPseudoRand()
+	t.L().Printf("random seed: %d", seed)
+
+	workloadSeed := testRNG.Int63()
+	t.L().Printf("workload seed: %d", workloadSeed)
+
+	envOption := install.EnvOption([]string{
+		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
+	})
+	startOpts := roachtestutil.MaybeUseMemoryBudget(t, 50)
+	startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=split_queue=3,cloud_logging_transport=1"}
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(envOption), c.CRDBNodes())
+
+	grp := t.NewGroup()
+	grp.Go(func(ctx context.Context, l *logger.Logger) error {
+		const numToKill = 1
+		failureNodes := c.CRDBNodes()[:numToKill]
+		liveNodes := c.CRDBNodes()[numToKill:] // The set of nodes that will not be failure injected
+		isGraceful := testRNG.Intn(2) == 0
+		l.Printf("process kill failure isGraceful: %t", isGraceful)
+		failure, args, err := roachtestutil.MakeProcessKillFailer(
+			l, c, failureNodes, isGraceful, 5*time.Minute, /* gracePeriod */
+		)
+		require.NoError(t, err)
+		require.NoError(t, failure.Setup(ctx, l, args))
+		defer func() {
+			if err := failure.Cleanup(ctx, l); err != nil {
+				l.Printf("failed to clean up failure: %v", err)
+			}
+		}()
+
+		doOnlineRestore := testRNG.Intn(2) == 0
+		// TODO (kev-cao): Running this test with withMock(true) causes the
+		// backups to complete too quickly, but the default workload sizes also take
+		// quite a while to backup. Considering the goal of this test, it'd be good
+		// to add some options to provide the caller with more flexibility over the
+		// workload.
+		testUtils, err := setupBackupRestoreTestUtils(
+			ctx, t, c, liveNodes, testRNG, withCompaction(true), withOnlineRestore(doOnlineRestore),
+		)
+		require.NoError(t, err)
+		defer testUtils.CloseConnections()
+
+		dbs := []string{"bank", "tpcc", schemaChangeDB}
+		d, runWorkloads, _, err := createDriversForBackupRestore(
+			ctx, t, c, liveNodes, testRNG, workloadSeed, testUtils, dbs,
+		)
+		require.NoError(t, err)
+		stopWorkloads, err := runWorkloads()
+		require.NoError(t, err)
+		defer stopWorkloads()
+
+		bspec := backupSpec{
+			// We query for job progress via plannodes, so we don't want to use nodes
+			// subject to failure injection in the Plan spec.
+			Plan:    labeledNodes{Nodes: liveNodes, Version: clusterupgrade.CurrentVersion().String()},
+			Execute: labeledNodes{Nodes: c.CRDBNodes(), Version: clusterupgrade.CurrentVersion().String()},
+		}
+		builder := d.NewCollectionBuilder(
+			l, t, testRNG, "backup-restore-chaos", bspec, bspec, true /* internalSystemsJobs */, false, /* isMultitenant */
+			WithClusterScope(),
+		)
+		jobID, err := builder.TakeFull(ctx)
+		require.NoError(t, err)
+		require.NoError(t, testUtils.waitForJobClaimed(ctx, l, testRNG, jobID))
+		recover, err := waitAndInjectFailure(
+			ctx, t, l, testRNG, failure, args,
+			[2]time.Duration{10 * time.Second, time.Minute},
+			[2]time.Duration{30 * time.Second, 3 * time.Minute},
+		)
+		require.NoError(t, err)
+		require.NoError(t, builder.WaitForLastJob(ctx))
+		require.NoError(t, recover())
+
+		for i := 0; i < 2; i++ {
+			jobID, err = builder.TakeInc(ctx)
+			require.NoError(t, err)
+			require.NoError(t, testUtils.waitForJobClaimed(ctx, l, testRNG, jobID))
+			recover, err = waitAndInjectFailure(
+				ctx, t, l, testRNG, failure, args,
+				[2]time.Duration{0, 5 * time.Second}, // Incrementals complete sooner so fail sooner.
+				[2]time.Duration{5 * time.Second, 1 * time.Minute},
+			)
+			require.NoError(t, err)
+			require.NoError(t, builder.WaitForLastJob(ctx))
+			require.NoError(t, recover())
+		}
+
+		jobID, err = builder.TakeCompacted(ctx, 1, 3)
+		require.NoError(t, err)
+		require.NoError(t, testUtils.waitForJobClaimed(ctx, l, testRNG, jobID))
+		recover, err = waitAndInjectFailure(
+			ctx, t, l, testRNG, failure, args,
+			[2]time.Duration{time.Second, 10 * time.Second},
+			[2]time.Duration{5 * time.Second, 30 * time.Second},
+		)
+		require.NoError(t, err)
+		require.NoError(t, builder.WaitForLastJob(ctx))
+		require.NoError(t, recover())
+		collection, err := builder.Finalize(ctx)
+		require.NoError(t, err)
+
+		testUtils.takeDebugZip(ctx, l)
+		err = testUtils.resetCluster(ctx, t.L(), clusterupgrade.CurrentVersion(), nil, nil)
+		require.NoError(t, err)
+
+		// TODO (kev-cao): Make restores asynchronous in backup restore driver so
+		// that we can inject failures there as well.
+		err = d.verifyBackupCollection(
+			ctx, t.L(), testRNG, collection,
+			true /* checkFiles */, true /* internalSystemJobs */, nil, /* mvHelper */
+		)
+		require.NoError(t, err)
+		return nil
+	})
+
+	grp.Wait()
+}
+
+// waitAndInjectFailure synchronously waits for a random duration within
+// waitInterval, and then injects the provided failure. After waiting for a
+// random duration within the bounds of killInterval, it will recover from the
+// failure. The caller may also choose to recover from the failure sooner by
+// calling the returned function.
+func waitAndInjectFailure(
+	ctx context.Context,
+	t test.Test,
+	l *logger.Logger,
+	rng *rand.Rand,
+	failer *failures.Failer,
+	args failures.FailureArgs,
+	waitInterval [2]time.Duration,
+	killInterval [2]time.Duration,
+) (func() error, error) {
+	wait := time.Duration(rng.Int63n(int64(waitInterval[1]-waitInterval[0])) + int64(waitInterval[0]))
+	l.Printf("waiting for %s before injecting failure", wait.Round(time.Second))
+	time.Sleep(wait)
+
+	l.Printf("injecting failure")
+	if err := failer.Inject(ctx, l, args); err != nil {
+		return nil, err
+	}
+	if err := failer.WaitForFailureToPropagate(ctx, l); err != nil {
+		return nil, err
+	}
+
+	var recovered atomic.Bool
+	recover := func() error {
+		if !recovered.CompareAndSwap(false, true) {
+			// Already recovered.
+			return nil
+		}
+		l.Printf("recovering from failure")
+		if err := failer.Recover(ctx, l); err != nil {
+			return err
+		}
+		return failer.WaitForFailureToRecover(ctx, l)
+	}
+
+	cancel := t.GoWithCancel(func(ctx context.Context, l *logger.Logger) error {
+		killWait := time.Duration(rng.Int63n(int64(killInterval[1]-killInterval[0])) + int64(killInterval[0]))
+		l.Printf("waiting for %s before recovering from failure", killWait.Round(time.Second))
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(killWait):
+			require.NoError(t, recover())
+			return nil
+		}
+	}, task.Name("wait-failure-injection-recovery"))
+
+	return func() error {
+		cancel()
+		return recover()
+	}, nil
 }
 
 // initBackgroundWorkloads returns a function that starts a TPCC, bank, and a
@@ -326,7 +525,7 @@ func initBackgroundWorkloads(
 func (u *CommonTestUtils) Connect(node int) *gosql.DB {
 	u.connCache.mu.Lock()
 	defer u.connCache.mu.Unlock()
-	return u.connCache.cache[node-1]
+	return u.connCache.cache[node]
 }
 
 // RandomNode returns a random nodeID in the cluster.
@@ -373,8 +572,16 @@ func (u *CommonTestUtils) CloseConnections() {
 
 // setupBackupRestoreTestUtils sets up a CommonTestUtils instance for backup and
 // restore tests and initializes some useful settings.
+//
+// NB: queryNodes should exclude any nodes that can potentially be taken down by
+// failure injection, as they are used to perform queries.
 func setupBackupRestoreTestUtils(
-	ctx context.Context, t test.Test, c cluster.Cluster, rng *rand.Rand, testOpts ...commonTestOption,
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	queryNodes option.NodeListOption,
+	rng *rand.Rand,
+	testOpts ...commonTestOption,
 ) (*CommonTestUtils, error) {
 	connectFunc := func(node int) (*gosql.DB, error) {
 		conn, err := c.ConnE(ctx, t.L(), node)
@@ -385,7 +592,7 @@ func setupBackupRestoreTestUtils(
 		return conn, err
 	}
 	// TODO (msbutler): enable compaction for online restore test once inc layer limit is increased.
-	testUtils, err := newCommonTestUtils(ctx, t, c, connectFunc, c.CRDBNodes(), testOpts...)
+	testUtils, err := newCommonTestUtils(ctx, t, c, connectFunc, queryNodes, testOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -402,17 +609,22 @@ func setupBackupRestoreTestUtils(
 // and restore tests, a handler to trigger background workloads, and the tables
 // that are used in the test. The tables are mapped to the databases that were
 // passed in.
+//
+// NB: queryNodes should exclude any nodes that can potentially be taken down by
+// failure injection. The workloads run against these nodes and expect them to be
+// alive, as well as the test driver, which uses these nodes to perform queries.
 func createDriversForBackupRestore(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
+	queryNodes option.NodeListOption,
 	rng *rand.Rand,
 	workloadSeed int64,
 	testUtils *CommonTestUtils,
 	dbs []string,
 ) (*BackupRestoreTestDriver, func() (func(), error), [][]string, error) {
 	runBackgroundWorkload, err := initBackgroundWorkloads(
-		ctx, t, t.L(), c, rng, workloadSeed, c.CRDBNodes(), c.WorkloadNode(), testUtils, dbs,
+		ctx, t, t.L(), c, rng, workloadSeed, queryNodes, c.WorkloadNode(), testUtils, dbs,
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -421,7 +633,7 @@ func createDriversForBackupRestore(
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	d, err := newBackupRestoreTestDriver(ctx, t, c, testUtils, c.CRDBNodes(), dbs, tables)
+	d, err := newBackupRestoreTestDriver(ctx, t, c, testUtils, queryNodes, dbs, tables)
 	if err != nil {
 		return nil, nil, nil, err
 	}

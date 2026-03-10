@@ -80,6 +80,22 @@ var (
 		return names
 	}()
 
+	// retry options while waiting for a backup to complete
+	backupCompletionRetryOptions = retry.Options{
+		InitialBackoff: 10 * time.Second,
+		MaxBackoff:     1 * time.Minute,
+		Multiplier:     1.5,
+		MaxRetries:     80,
+	}
+
+	// retry options while waiting for a job to be claimed
+	jobClaimRetryOptions = retry.Options{
+		InitialBackoff: 1 * time.Second,
+		MaxBackoff:     5 * time.Second,
+		Multiplier:     1.5,
+		MaxRetries:     10,
+	}
+
 	fewBankRows      = 100
 	bankPossibleRows = []int{
 		fewBankRows, // creates keys with long revision history (not valid with largeBankPayload)
@@ -100,8 +116,11 @@ var (
 )
 
 type CommonTestUtils struct {
-	t                 test.Test
-	cluster           cluster.Cluster
+	t       test.Test
+	cluster cluster.Cluster
+	// The set of nodes that can be connected to and used for running queries. If
+	// the test is running failure injections, this should generally exclude the
+	// nodes subject to failure.
 	roachNodes        option.NodeListOption
 	mock              bool
 	onlineRestore     bool
@@ -109,7 +128,7 @@ type CommonTestUtils struct {
 
 	connCache struct {
 		mu    syncutil.Mutex
-		cache []*gosql.DB
+		cache map[int]*gosql.DB
 	}
 }
 
@@ -142,13 +161,13 @@ func newCommonTestUtils(
 	nodes option.NodeListOption,
 	opts ...commonTestOption,
 ) (*CommonTestUtils, error) {
-	cc := make([]*gosql.DB, len(nodes))
+	cc := make(map[int]*gosql.DB)
 	for _, node := range nodes {
 		conn, err := connectFunc(node)
 		if err != nil {
 			return nil, err
 		}
-		cc[node-1] = conn
+		cc[node] = conn
 	}
 
 	if len(cc) == 0 {
@@ -409,7 +428,7 @@ func (u *CommonTestUtils) setClusterSettings(
 	}
 	defer systemDB.Close()
 
-	appDB := u.Connect(1) // no need to Close() this as it's a cached connection
+	appDB := u.Connect(u.RandomNode(rng, u.roachNodes)) // no need to Close() this as it's a cached connection
 
 	for j := 0; j < numCustomSettings; j++ {
 		settingName := clusterSettingNames[rng.Intn(len(clusterSettingNames))]
@@ -498,6 +517,45 @@ func (u *CommonTestUtils) waitForJobSuccess(
 	}
 
 	return fmt.Errorf("error waiting for job to finish: %w", lastErr)
+}
+
+func (u *CommonTestUtils) waitForJobClaimed(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, jobID int,
+) (resErr error) {
+	node := u.RandomNode(rng, u.roachNodes)
+	l.Printf("querying job claim status through node %d", node)
+
+	db, err := u.cluster.ConnE(ctx, l, node, option.DBName("system"))
+	if err != nil {
+		l.Printf("error connecting to node %d: %v", node, err)
+		return err
+	}
+	defer func() {
+		err := db.Close()
+		resErr = errors.CombineErrors(resErr, err)
+	}()
+
+	const claimQuery = `SELECT claim_instance_id FROM system.jobs WHERE id = $1`
+	for r := retry.StartWithCtx(ctx, jobClaimRetryOptions); r.Next(); {
+		var claimInstanceID gosql.NullInt64
+		err := db.QueryRowContext(ctx, claimQuery, jobID).Scan(&claimInstanceID)
+		if err != nil {
+			resErr = fmt.Errorf("error querying claim status for job %d: %w", jobID, err)
+			l.Printf("%v", resErr)
+			continue
+		}
+
+		if claimInstanceID.Valid {
+			l.Printf("job %d claimed by instance %d", jobID, claimInstanceID.Int64)
+			return nil
+		}
+
+		l.Printf("waiting for job %d to be claimed", jobID)
+	}
+
+	return fmt.Errorf(
+		"error waiting for job %d to be claimed, last err: %w", jobID, resErr,
+	)
 }
 
 // runJobOnOneOf disables job adoption on cockroach nodes that are not
@@ -665,6 +723,16 @@ func (u *CommonTestUtils) collectFailureArtifacts(
 	return fmt.Errorf("%w (artifacts collected in %s)", restoreErr, dirName), nil
 }
 
+// takeDebugZip fetches a debug.zip from the cluster and saves it with the
+// current timestamp in the test artifacts.
+func (u *CommonTestUtils) takeDebugZip(ctx context.Context, l *logger.Logger) {
+	zipPath := fmt.Sprintf("debug-%d.zip", timeutil.Now().Unix())
+	err := u.cluster.FetchDebugZip(ctx, l, zipPath)
+	if err != nil {
+		l.Printf("failed to fetch debug zip: %v", err)
+	}
+}
+
 // resetCluster wipes the entire cluster and starts it again with the
 // specified version binary. This is done before we attempt restoring a
 // full cluster backup.
@@ -676,7 +744,11 @@ func (u *CommonTestUtils) resetCluster(
 	settings []install.ClusterSettingOption,
 ) error {
 	l.Printf("resetting cluster using version %q", version.String())
-	expectDeathsFn(len(u.roachNodes))
+	// TODO (kev-cao): Once we've migrated off of the deprecated cluster Monitor,
+	// we can remove expectDeathsFn entirely.
+	if expectDeathsFn != nil {
+		expectDeathsFn(len(u.roachNodes))
+	}
 	if err := u.cluster.WipeE(ctx, l, u.roachNodes); err != nil {
 		return fmt.Errorf("failed to wipe cluster: %w", err)
 	}
