@@ -125,6 +125,15 @@ export type GroupedStackedBarGraphProps = {
   alignedData?: AlignedData;
   colourPalette?: string[];
   groupSize?: number;
+  // Text labels drawn above each bar stack (e.g. ["Canary","Stable"]).
+  // When set, the built-in uPlot legend is hidden.
+  groupLabels?: [string, string];
+  // Distinct border colours for group 1 / group 2 bars
+  // (e.g. ["#c62828", "#1565c0"] for canary vs stable).
+  groupStrokeColors?: [string, string];
+  // Layer labels (e.g. plan gist IDs). When provided together with
+  // groupLabels, the tooltip shows only the hovered sub-bar layer.
+  gistLabels?: string[];
   preCalcGraphSize?: boolean;
   title: string;
   tooltip?: React.ReactNode;
@@ -138,7 +147,10 @@ export const GroupedStackedBarGraphTimeSeries: React.FC<
 > = ({
   alignedData,
   colourPalette,
+  gistLabels,
+  groupLabels,
   groupSize,
+  groupStrokeColors,
   preCalcGraphSize = true,
   title,
   tooltip,
@@ -193,23 +205,44 @@ export const GroupedStackedBarGraphTimeSeries: React.FC<
       colourPalette,
       timezone,
       groupSize,
+      groupStrokeColors,
+      groupLabels,
+      gistLabels,
     );
 
     // When groupLabels is set but the caller overrides the legend to be
-    // visible (e.g. for the Statement Times chart), hide group 2's
-    // duplicate legend entries so only one set of layer labels appears.
+    // visible (e.g. for the Statement Times or Plan Distribution chart),
+    // hide group 2's duplicate legend entries so only one set of labels
+    // appears, and sync group 2 visibility with group 1 so that
+    // click-to-isolate toggles both canary and stable bars together.
     if (groupLabels && opts.legend?.show) {
       const nn = groupSize ?? Math.floor((alignedData.length - 1) / 2);
+      let syncing = false;
       opts.plugins.push({
         hooks: {
           init: (u: uPlot) => {
             const rows = u.root.querySelectorAll(".u-legend .u-series");
-            // Legend rows: 0=x-axis, 1..n=group1, n+1..2n=group2
+            // Legend rows: 0=x-axis, 1..nn=group1, nn+1..2*nn=group2
             for (let i = nn + 1; i <= 2 * nn; i++) {
               if (rows[i]) {
                 (rows[i] as HTMLElement).style.display = "none";
               }
             }
+          },
+          setSeries: (u: uPlot) => {
+            if (syncing) return;
+            syncing = true;
+            // Mirror group 1 visibility to group 2 so both canary and
+            // stable bars for a given layer toggle together.
+            queueMicrotask(() => {
+              for (let i = 1; i <= nn; i++) {
+                const g1Show = u.series[i].show;
+                if (u.series[nn + i].show !== g1Show) {
+                  u.setSeries(nn + i, { show: g1Show });
+                }
+              }
+              syncing = false;
+            });
           },
         },
       });
@@ -223,7 +256,10 @@ export const GroupedStackedBarGraphTimeSeries: React.FC<
   }, [
     alignedData,
     colourPalette,
+    gistLabels,
+    groupLabels,
     groupSize,
+    groupStrokeColors,
     uPlotOptions,
     yAxisUnits,
     samplingIntervalMillis,

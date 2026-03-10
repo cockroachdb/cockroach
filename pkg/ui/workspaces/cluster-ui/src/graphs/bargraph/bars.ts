@@ -8,7 +8,10 @@ import uPlot, { Options, Band, AlignedData } from "uplot";
 
 import { AxisUnits, AxisDomain } from "../utils/domain";
 
-import { barTooltipPlugin } from "./plugins";
+import {
+  barTooltipPlugin,
+  groupedStackedBarTooltipPlugin,
+} from "./plugins";
 
 const seriesPalette = [
   "#003EBD",
@@ -134,11 +137,188 @@ export const getStackedBarOpts = (
   return options;
 };
 
+// Horizontally translate a Path2D by the given offset.
+function offsetPath2D(
+  path: Path2D | null | undefined,
+  transform: DOMMatrix2DInit,
+): Path2D | undefined {
+  if (!path) return undefined;
+  const p = new Path2D();
+  p.addPath(path, transform);
+  return p;
+}
+
+// Wraps a standard bars builder and shifts the resulting paths by
+// offsetCssPx CSS pixels horizontally, creating a visible gap
+// between grouped bar pairs.
+const getOffsetBarsBuilder = (
+  barWidthFactor: number,
+  maxWidth: number,
+  minWidth: number,
+  align: 0 | 1 | -1,
+  offsetCssPx: number,
+): uPlot.Series.PathBuilder => {
+  const baseBars = getBarsBuilder(
+    barWidthFactor,
+    maxWidth,
+    minWidth,
+    align,
+  );
+  if (offsetCssPx === 0) return baseBars;
+
+  return (u, seriesIdx, idx0, idx1) => {
+    const result = baseBars(u, seriesIdx, idx0, idx1);
+    if (!result) return result;
+
+    // Paths are in device-pixel space.
+    const offset =
+      offsetCssPx * (window.devicePixelRatio || 1);
+    const tx: DOMMatrix2DInit = {
+      a: 1, b: 0, c: 0, d: 1, e: offset, f: 0,
+    };
+
+    return {
+      flags: result.flags,
+      fill:
+        result.fill instanceof Path2D
+          ? offsetPath2D(result.fill, tx)
+          : result.fill,
+      stroke:
+        result.stroke instanceof Path2D
+          ? offsetPath2D(result.stroke, tx)
+          : result.stroke,
+      clip:
+        result.clip instanceof Path2D
+          ? offsetPath2D(result.clip, tx)
+          : result.clip,
+      band:
+        result.band instanceof Path2D
+          ? offsetPath2D(result.band, tx)
+          : result.band,
+    };
+  };
+};
+
+// pairGroupingPlugin draws alternating light background bands behind
+// every other timestamp bin so that each {group1 + group2} pair is
+// visually grouped together.
+function pairGroupingPlugin(): uPlot.Plugin {
+  return {
+    hooks: {
+      drawClear: (u: uPlot) => {
+        const ctx = u.ctx;
+        const timestamps = u.data[0] as number[];
+        if (!timestamps || timestamps.length < 2) return;
+
+        const { top, height } = u.bbox;
+
+        // Bin width in canvas-pixel space.
+        const x0 = u.valToPos(timestamps[0], "x", true);
+        const x1 = u.valToPos(timestamps[1], "x", true);
+        const binWidth = Math.abs(x1 - x0);
+        const halfBin = binWidth / 2;
+
+        ctx.save();
+        ctx.fillStyle = "rgba(0, 0, 0, 0.04)";
+
+        for (let i = 1; i < timestamps.length; i += 2) {
+          const cx = u.valToPos(timestamps[i], "x", true);
+          ctx.fillRect(cx - halfBin, top, binWidth, height);
+        }
+
+        ctx.restore();
+      },
+    },
+  };
+}
+
+// groupLabelsPlugin draws text labels (e.g. "Canary", "Stable")
+// above each bar stack so the user can tell the two groups apart
+// without relying on the legend.
+function groupLabelsPlugin(
+  labels: [string, string],
+  labelColors: [string, string],
+  n: number,
+  unstackedData: AlignedData,
+  barWidthFactor: number,
+  gapCssPx: number,
+): uPlot.Plugin {
+  return {
+    hooks: {
+      draw: (u: uPlot) => {
+        const ctx = u.ctx;
+        const timestamps = u.data[0] as number[];
+        if (!timestamps || timestamps.length < 1) return;
+
+        const pxr = window.devicePixelRatio || 1;
+
+        // Approximate bar width in device pixels.
+        const colWid =
+          timestamps.length > 1
+            ? Math.abs(
+                u.valToPos(timestamps[1], "x", true) -
+                  u.valToPos(timestamps[0], "x", true),
+              )
+            : u.bbox.width;
+        const barWid = Math.min(
+          Math.max(colWid * barWidthFactor, 4 * pxr),
+          40 * pxr,
+        );
+        const gap = gapCssPx * pxr;
+
+        ctx.save();
+        ctx.font = `bold ${9 * pxr}px sans-serif`;
+        ctx.textAlign = "center";
+
+        for (let t = 0; t < timestamps.length; t++) {
+          const cx = u.valToPos(timestamps[t], "x", true);
+
+          // Sum unstacked values for each group at this ts.
+          let g1Total = 0;
+          for (let i = 0; i < n; i++) {
+            g1Total += unstackedData[1 + i]?.[t] || 0;
+          }
+          let g2Total = 0;
+          for (let i = 0; i < n; i++) {
+            g2Total += unstackedData[1 + n + i]?.[t] || 0;
+          }
+
+          // Bar centres: align=-1 shifts by -barWid/2,
+          // then the gap offset shifts further out.
+          const leftCX = cx - barWid / 2 - gap;
+          const rightCX = cx + barWid / 2 + gap;
+
+          if (g1Total > 0) {
+            const topY = u.valToPos(g1Total, "yAxis", true);
+            ctx.fillStyle = labelColors[0];
+            ctx.fillText(labels[0], leftCX, topY - 4 * pxr);
+          }
+          if (g2Total > 0) {
+            const topY = u.valToPos(g2Total, "yAxis", true);
+            ctx.fillStyle = labelColors[1];
+            ctx.fillText(labels[1], rightCX, topY - 4 * pxr);
+          }
+        }
+
+        ctx.restore();
+      },
+    },
+  };
+}
+
 // getGroupedStackedBarOpts creates options for a chart with two groups of
 // stacked bars side by side. Data layout:
 //   [timestamps, ...group1_series(N), ...group2_series(N)]
 // where groupSize = N is the number of stacked layers per group.
 // group1 bars are left-aligned, group2 bars are right-aligned.
+//
+// groupStrokeColors optionally provides distinct border colors for each
+// group (e.g. ["#c62828", "#1565c0"]) so the user can tell group1 from
+// group2 at a glance. Fill colors still come from colourPalette.
+//
+// groupLabels optionally provides text labels (e.g. ["Canary","Stable"])
+// drawn above each bar stack. When set, the built-in uPlot legend is
+// hidden (the caller should render its own gist-only legend).
 export const getGroupedStackedBarOpts = (
   unstackedData: AlignedData,
   userOptions: Partial<Options>,
@@ -148,19 +328,33 @@ export const getGroupedStackedBarOpts = (
   colourPalette = seriesPalette,
   timezone: string,
   groupSize?: number,
+  groupStrokeColors?: [string, string],
+  groupLabels?: [string, string],
+  gistLabels?: string[],
 ): { opts: Options; stackedData: AlignedData } => {
   const { series, ...providedOpts } = userOptions;
-  const leftBars = getBarsBuilder(0.4, 40, 4, -1);
-  const rightBars = getBarsBuilder(0.4, 40, 4, 1);
 
   // Default: half the data series belong to each group.
   const n = groupSize ?? Math.floor((unstackedData.length - 1) / 2);
+
+  const barWidthFactor = 0.3;
+  const gapCssPx = 2;
+
+  // Offset bars so each group is shifted away from the centre,
+  // creating a visible gap between the two bars in every pair.
+  const leftBars = getOffsetBarsBuilder(
+    barWidthFactor, 40, 4, -1, -gapCssPx,
+  );
+  const rightBars = getOffsetBarsBuilder(
+    barWidthFactor, 40, 4, 1, gapCssPx,
+  );
 
   const opts: Options = {
     width: 947,
     height: 300,
     ms: 1,
     legend: {
+      show: !groupLabels,
       isolate: true,
       live: false,
     },
@@ -191,28 +385,28 @@ export const getGroupedStackedBarOpts = (
       {
         value: (_u, millis) => xAxisDomain.guideFormat(millis),
       },
-      // Group 1: left-aligned bars
+      // Group 1: left-aligned bars, white stroke for layer division
       ...series.slice(1, 1 + n).map((s, i) => ({
         fill: colourPalette[i % colourPalette.length],
-        stroke: colourPalette[i % colourPalette.length],
-        width: 2,
+        stroke: "#fff",
+        width: 1,
         paths: leftBars,
         points: { show: false },
         scale: "yAxis",
         ...s,
       })),
-      // Group 2: right-aligned bars
+      // Group 2: right-aligned bars, white stroke for layer division
       ...series.slice(1 + n, 1 + 2 * n).map((s, i) => ({
         fill: colourPalette[i % colourPalette.length],
-        stroke: colourPalette[i % colourPalette.length],
-        width: 2,
+        stroke: "#fff",
+        width: 1,
         paths: rightBars,
         points: { show: false },
         scale: "yAxis",
         ...s,
       })),
     ],
-    plugins: [barTooltipPlugin(yAxisUnits, timezone)],
+    plugins: [], // populated below after stackedData is computed
   };
 
   const combinedOpts = merge(opts, providedOpts);
@@ -245,6 +439,39 @@ export const getGroupedStackedBarOpts = (
     }
   }
 
+  // Build plugins now that stackedData is available.
+  const plugins: uPlot.Plugin[] = [];
+  if (gistLabels && groupLabels) {
+    plugins.push(
+      groupedStackedBarTooltipPlugin(
+        yAxisUnits,
+        timezone,
+        unstackedData,
+        stackedData,
+        n,
+        gistLabels,
+        groupLabels,
+        colourPalette,
+      ),
+    );
+  } else {
+    plugins.push(barTooltipPlugin(yAxisUnits, timezone));
+  }
+  plugins.push(pairGroupingPlugin());
+  if (groupLabels && groupStrokeColors) {
+    plugins.push(
+      groupLabelsPlugin(
+        groupLabels,
+        groupStrokeColors,
+        n,
+        unstackedData,
+        barWidthFactor,
+        gapCssPx,
+      ),
+    );
+  }
+  combinedOpts.plugins = plugins;
+
   // Bands fill between adjacent stacked layers within each group.
   combinedOpts.bands = [];
   for (let i = 1; i < n; i++) {
@@ -271,6 +498,65 @@ export const getGroupedStackedBarOpts = (
         return pts;
       }
     };
+  });
+
+  // Restack each group independently when series are toggled via the
+  // legend (click-to-isolate). This mirrors what getStackedBarOpts
+  // does for single-group stacked bars.
+  combinedOpts.hooks = combinedOpts.hooks || {};
+  combinedOpts.hooks.setSeries = combinedOpts.hooks.setSeries || [];
+  combinedOpts.hooks.setSeries.push((u: uPlot) => {
+    const newData: AlignedData = [unstackedData[0]];
+    // Restack group 1 (series 1..n), skipping hidden series.
+    const accum1 = new Array(unstackedData[0].length).fill(0);
+    for (let i = 0; i < n; i++) {
+      if (u.series[1 + i].show) {
+        newData.push(
+          unstackedData[1 + i].map((v, j) => (accum1[j] += v)),
+        );
+      } else {
+        newData.push(unstackedData[1 + i]);
+      }
+    }
+    // Restack group 2 (series n+1..2n), skipping hidden series.
+    const accum2 = new Array(unstackedData[0].length).fill(0);
+    for (let i = 0; i < n; i++) {
+      if (u.series[1 + n + i].show) {
+        newData.push(
+          unstackedData[1 + n + i].map((v, j) => (accum2[j] += v)),
+        );
+      } else {
+        newData.push(unstackedData[1 + n + i]);
+      }
+    }
+
+    // Rebuild bands between consecutive visible series in each group.
+    u.delBand(null);
+    // Group 1: find pairs of adjacent visible series.
+    for (let i = 1; i < n; i++) {
+      if (!u.series[1 + i].show) continue;
+      // Find the nearest visible series below in group 1.
+      for (let j = i - 1; j >= 0; j--) {
+        if (u.series[1 + j].show) {
+          u.addBand({ series: [1 + i, 1 + j] as Band.Bounds });
+          break;
+        }
+      }
+    }
+    // Group 2: same logic.
+    for (let i = 1; i < n; i++) {
+      if (!u.series[1 + n + i].show) continue;
+      for (let j = i - 1; j >= 0; j--) {
+        if (u.series[1 + n + j].show) {
+          u.addBand({
+            series: [1 + n + i, 1 + n + j] as Band.Bounds,
+          });
+          break;
+        }
+      }
+    }
+
+    u.setData(newData as AlignedData);
   });
 
   return { opts: combinedOpts, stackedData };

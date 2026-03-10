@@ -168,10 +168,7 @@ func canaryRollDice(evalCtx *eval.Context, rng *rand.Rand) eval.StatsRolloutSele
 	threshold := stats.CanaryFraction.Get(&evalCtx.Settings.SV)
 	switch m := evalCtx.SessionData().CanaryStatsMode; m {
 	case sessiondatapb.CanaryStatsModeOff:
-		if threshold > 0 {
-			return eval.StatsRolloutStable
-		}
-		return eval.StatsRolloutDefault
+		return eval.StatsRolloutStable
 	case sessiondatapb.CanaryStatsModeOn:
 		return eval.StatsRolloutCanary
 	case sessiondatapb.CanaryStatsModeAuto:
