@@ -13,6 +13,8 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
@@ -268,6 +270,16 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 			if cpuHandle := admission.SQLCPUHandleFromContext(ctx); cpuHandle != nil {
 				gh := cpuHandle.RegisterGoroutine()
 				defer gh.Close(ctx)
+			}
+			if s.flowCtx.EvalCtx != nil {
+				cleanup := ash.SetWorkState(
+					s.flowCtx.Codec().TenantID, ash.WorkloadInfo{
+						WorkloadID:    s.flowCtx.EvalCtx.WorkloadID,
+						AppNameID:     s.flowCtx.EvalCtx.AppNameID,
+						GatewayNodeID: roachpb.NodeID(s.flowCtx.NodeID.SQLInstanceID()),
+					},
+					ash.WorkOther, "ColExecSync")
+				defer cleanup()
 			}
 			defer func() {
 				if int(atomic.AddUint32(&s.numFinishedInputs, 1)) == len(s.inputs) {
