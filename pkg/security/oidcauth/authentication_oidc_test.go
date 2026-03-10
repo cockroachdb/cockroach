@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -161,7 +160,7 @@ func TestOIDCEnabled(t *testing.T) {
 	OIDCRedirectURL.Override(ctx, &s.ClusterSettings().SV, "https://cockroachlabs.com/oidc/v1/callback")
 	OIDCClaimJSONKey.Override(ctx, &s.ClusterSettings().SV, "email")
 	OIDCPrincipalRegex.Override(ctx, &s.ClusterSettings().SV, "^([^@]+)@[^@]+$")
-	server.ServerHTTPBasePath.Override(ctx, &s.ClusterSettings().SV, basePath)
+	authserver.ServerHTTPBasePath.Override(ctx, &s.ClusterSettings().SV, basePath)
 	OIDCEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 
 	testCertsContext := s.NewClientRPCContext(ctx, username.TestUserName())
@@ -485,7 +484,7 @@ func TestOIDCManagerInitialisationUnderNetworkAvailability(t *testing.T) {
 	OIDCRedirectURL.Override(ctx, &s.ClusterSettings().SV, "https://cockroachlabs.com/oidc/v1/callback")
 	OIDCClaimJSONKey.Override(ctx, &s.ClusterSettings().SV, "email")
 	OIDCPrincipalRegex.Override(ctx, &s.ClusterSettings().SV, "^([^@]+)@[^@]+$")
-	server.ServerHTTPBasePath.Override(ctx, &s.ClusterSettings().SV, basePath)
+	authserver.ServerHTTPBasePath.Override(ctx, &s.ClusterSettings().SV, basePath)
 	OIDCEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 
 	for _, tc := range []struct {
@@ -749,11 +748,7 @@ func TestOIDCProvisioning(t *testing.T) {
 	ctx := context.Background()
 	// Start a full server to get access to the ExecutorConfig, which is
 	// necessary for the provisioning logic to execute.
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			Server: &server.TestingKnobs{},
-		},
-	})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	ts := s.ApplicationLayer()
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -787,7 +782,7 @@ func TestOIDCProvisioning(t *testing.T) {
 	OIDCRedirectURL.Override(ctx, &ts.ClusterSettings().SV, "https://cockroachlabs.com/oidc/v1/callback")
 	OIDCClaimJSONKey.Override(ctx, &ts.ClusterSettings().SV, "email")
 	OIDCPrincipalRegex.Override(ctx, &ts.ClusterSettings().SV, "^([^@]+)@[^@]+$")
-	server.ServerHTTPBasePath.Override(ctx, &ts.ClusterSettings().SV, basePath)
+	authserver.ServerHTTPBasePath.Override(ctx, &ts.ClusterSettings().SV, basePath)
 	OIDCEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
 
 	// Setup an HTTP client to make requests to the server.
@@ -1026,7 +1021,7 @@ func TestOIDCExchangeVerifyFailure(t *testing.T) {
 	OIDCRedirectURL.Override(ctx, &s.ClusterSettings().SV, "https://cockroachlabs.com/oidc/v1/callback")
 	OIDCClaimJSONKey.Override(ctx, &s.ClusterSettings().SV, "email")
 	OIDCPrincipalRegex.Override(ctx, &s.ClusterSettings().SV, "^([^@]+)@[^@]+$")
-	server.ServerHTTPBasePath.Override(ctx, &s.ClusterSettings().SV, basePath)
+	authserver.ServerHTTPBasePath.Override(ctx, &s.ClusterSettings().SV, basePath)
 	OIDCEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 
 	testCtx := s.NewClientRPCContext(ctx, username.TestUserName())

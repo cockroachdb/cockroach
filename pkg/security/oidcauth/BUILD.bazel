@@ -97,7 +97,6 @@ go_library(
         "//pkg/security/jwthelper",
         "//pkg/security/provisioning",
         "//pkg/security/username",
-        "//pkg/server",
         "//pkg/server/authserver",
         "//pkg/server/serverpb",
         "//pkg/server/telemetry",
