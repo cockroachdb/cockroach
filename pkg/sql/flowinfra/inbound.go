@@ -9,6 +9,7 @@ import (
 	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -131,8 +132,18 @@ func processInboundStreamHelper(
 	f.GetWaitGroup().Add(1)
 	go func() {
 		defer f.GetWaitGroup().Done()
+		admissionInfo := f.GetAdmissionInfo()
 		for {
+			recvCleanup := ash.SetWorkState(
+				admissionInfo.TenantID,
+				ash.WorkloadInfo{
+					WorkloadID:    admissionInfo.WorkloadID,
+					AppNameID:     admissionInfo.AppNameID,
+					GatewayNodeID: admissionInfo.GatewayNodeID,
+				},
+				ash.WorkNetwork, "InboxRecv")
 			msg, err := stream.Recv()
+			recvCleanup()
 			if err != nil {
 				if err != io.EOF {
 					// Communication error.
