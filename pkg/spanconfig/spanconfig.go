@@ -225,18 +225,6 @@ type Reconciler interface {
 type Store interface {
 	StoreWriter
 	StoreReader
-	// ForEachOverlappingSpanConfig invokes the supplied callback on each span
-	// config that overlaps with the supplied span. The config is combined with
-	// all the system span configs that also apply to this span. In addition to
-	// the SpanConfig, the span it applies over is passed into the callback as
-	// well.
-	//
-	// If there are no overlapping configs for the supplied span, the supplied
-	// callback is invoked on the fallback config combined with any applicable
-	// system span configs
-	ForEachOverlappingSpanConfig(
-		context.Context, roachpb.Span, func(roachpb.Span, roachpb.SpanConfig) error,
-	) error
 }
 
 // StoreWriter is the write-only portion of the Store interface.
@@ -284,6 +272,18 @@ type StoreReader interface {
 	// applies to. Callers can use the returned span to check if a
 	// request is completely contained by the returned config.
 	GetSpanConfigForKey(ctx context.Context, key roachpb.RKey) (roachpb.SpanConfig, roachpb.Span, error)
+	// ForEachOverlappingSpanConfig invokes the supplied callback on each span
+	// config that overlaps with the supplied span. The config is combined with
+	// all the system span configs that also apply to this span. In addition to
+	// the SpanConfig, the span it applies over is passed into the callback as
+	// well.
+	//
+	// If there are no overlapping configs for the supplied span, the supplied
+	// callback is invoked on the fallback config combined with any applicable
+	// system span configs.
+	ForEachOverlappingSpanConfig(
+		context.Context, roachpb.Span, func(roachpb.Span, roachpb.SpanConfig) error,
+	) error
 }
 
 // Limiter is used to limit the number of span configs installed by secondary

@@ -698,6 +698,16 @@ func (s *SystemConfig) tenantBoundarySplitKey(
 	return roachpb.RKey(keys.MakeTenantPrefix(splitTenID))
 }
 
+// ForEachOverlappingSpanConfig implements spanconfig.StoreReader.
+// SystemConfig is only used as a StoreReader in the legacy fallback
+// path (when span configs are disabled); no callers invoke
+// ForEachOverlappingSpanConfig through that path.
+func (s *SystemConfig) ForEachOverlappingSpanConfig(
+	context.Context, roachpb.Span, func(roachpb.Span, roachpb.SpanConfig) error,
+) error {
+	panic("not implemented")
+}
+
 // NeedsSplit returns whether the range [startKey, endKey) needs a split due
 // to zone configs.
 func (s *SystemConfig) NeedsSplit(

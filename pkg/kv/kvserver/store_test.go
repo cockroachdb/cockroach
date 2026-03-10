@@ -3401,6 +3401,12 @@ func (m *mockSpanConfigReader) GetSpanConfigForKey(
 	return m.GetSpanConfigForKey(ctx, key)
 }
 
+func (m *mockSpanConfigReader) ForEachOverlappingSpanConfig(
+	context.Context, roachpb.Span, func(roachpb.Span, roachpb.SpanConfig) error,
+) error {
+	panic("unimplemented")
+}
+
 var _ spanconfig.StoreReader = &mockSpanConfigReader{}
 
 // TestAllocatorCheckRangeUnconfigured tests evaluating the allocation decisions
