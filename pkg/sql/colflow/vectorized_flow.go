@@ -513,10 +513,6 @@ type admissionOptions struct {
 
 // remoteComponentCreator is an interface that abstracts the constructors for
 // several components in a remote flow. Mostly for testing purposes.
-// TODO(alyshan): #164542 Will need to plumb workload info through to these
-// interface methods so remote components can instrument their work. Why does
-// outbox get the flowCtx but not inbox? Workload info will be present in
-// flowCtx.EvalCtx.
 type remoteComponentCreator interface {
 	newOutbox(
 		flowCtx *execinfra.FlowCtx,

@@ -335,6 +335,12 @@ func (s *Sampler) resolveRemoteAppNames(ctx context.Context, unresolvedIndices [
 	}
 }
 
+// TakeSample forces the sampler to take an immediate sample. This is
+// intended for use in tests to avoid timing dependencies.
+func (s *Sampler) TakeSample(ctx context.Context) {
+	s.takeSample(ctx)
+}
+
 // GetSamples returns all samples currently in the Sampler's buffer.
 func (s *Sampler) GetSamples(result []ASHSample) []ASHSample {
 	return s.buffer.GetAll(result)
