@@ -28,6 +28,7 @@ go_library(
         "//pkg/kv/kvserver/spanlatch",
         "//pkg/kv/kvserver/spanset",
         "//pkg/kv/kvserver/txnwait",
+        "//pkg/obs/ash",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
