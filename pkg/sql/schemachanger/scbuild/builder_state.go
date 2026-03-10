@@ -1190,6 +1190,7 @@ func (b *builderState) checkOwnershipOrPrivilegesOnSchemaDesc(
 }
 
 // ResolveUserDefinedTypeType implements the scbuildstmt.NameResolver interface.
+// The type must be owned to be resolved.
 func (b *builderState) ResolveUserDefinedTypeType(
 	name *tree.UnresolvedObjectName, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
@@ -1214,10 +1215,8 @@ func (b *builderState) ResolveUserDefinedTypeType(
 			"try ALTER DATABASE %s DROP REGION %s", prefix.Database.GetName(), typ.GetName()))
 	case descpb.TypeDescriptor_ENUM:
 		b.ensureDescriptor(typ.GetID())
-		b.mustOwn(typ.GetID())
 	case descpb.TypeDescriptor_COMPOSITE:
 		b.ensureDescriptor(typ.GetID())
-		b.mustOwn(typ.GetID())
 	case descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE:
 		// Implicit record types are not directly modifiable.
 		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
@@ -1225,9 +1224,7 @@ func (b *builderState) ResolveUserDefinedTypeType(
 	default:
 		panic(errors.AssertionFailedf("unknown type kind %s", typ.GetKind()))
 	}
-	if p.RequireOwnership {
-		b.mustOwn(typ.GetID())
-	}
+	b.mustOwn(typ.GetID())
 	return b.QueryByID(typ.GetID())
 }
 
