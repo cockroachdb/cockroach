@@ -16,7 +16,7 @@ import {
 import { Visualization } from "../visualization";
 
 import styles from "./bargraph.module.scss";
-import { getStackedBarOpts, stack } from "./bars";
+import { getStackedBarOpts, getGroupedStackedBarOpts, stack } from "./bars";
 import { categoricalBarTooltipPlugin, BarMetadata } from "./plugins";
 
 const cx = classNames.bind(styles);
@@ -79,6 +79,100 @@ export const BarGraphTimeSeries: React.FC<BarGraphTimeSeriesProps> = ({
     const yAxisDomain = calculateYAxisDomain(yAxisUnits, allYDomainPoints);
 
     const opts = getStackedBarOpts(
+      alignedData,
+      uPlotOptions,
+      xAxisDomain,
+      yAxisDomain,
+      yAxisUnits,
+      colourPalette,
+      timezone,
+    );
+
+    const plot = new uPlot(opts, stackedData, graphRef.current);
+
+    return () => {
+      plot?.destroy();
+    };
+  }, [
+    alignedData,
+    colourPalette,
+    uPlotOptions,
+    yAxisUnits,
+    samplingIntervalMillis,
+    timezone,
+    xScale,
+  ]);
+
+  return (
+    <Visualization
+      title={title}
+      loading={!alignedData}
+      preCalcGraphSize={preCalcGraphSize}
+      tooltip={tooltip}
+    >
+      <div className={cx("bargraph")}>
+        <div ref={graphRef} />
+      </div>
+    </Visualization>
+  );
+};
+
+// GroupedStackedBarGraphTimeSeries renders two groups of stacked bars
+// side by side per timestamp. The data must have 5 series:
+// [timestamps, group1_bottom, group1_top, group2_bottom, group2_top].
+export type GroupedStackedBarGraphProps = {
+  alignedData?: AlignedData;
+  colourPalette?: string[];
+  preCalcGraphSize?: boolean;
+  title: string;
+  tooltip?: React.ReactNode;
+  uPlotOptions: Partial<Options>;
+  yAxisUnits: AxisUnits;
+  xScale?: XScale;
+};
+
+export const GroupedStackedBarGraphTimeSeries: React.FC<
+  GroupedStackedBarGraphProps
+> = ({
+  alignedData,
+  colourPalette,
+  preCalcGraphSize = true,
+  title,
+  tooltip,
+  uPlotOptions,
+  yAxisUnits,
+  xScale,
+}) => {
+  const graphRef = useRef<HTMLDivElement>(null);
+  const samplingIntervalMillis =
+    alignedData[0].length > 1 ? alignedData[0][1] - alignedData[0][0] : 1e3;
+  const timezone = useContext(TimezoneContext);
+
+  useEffect(() => {
+    if (!alignedData) return;
+
+    const start = xScale.graphTsStartMillis
+      ? xScale.graphTsStartMillis
+      : alignedData[0][0];
+    const end = xScale.graphTsEndMillis
+      ? xScale.graphTsEndMillis
+      : alignedData[0][alignedData[0].length - 1];
+    const xAxisDomain = calculateXAxisDomainBarChart(
+      start,
+      end,
+      samplingIntervalMillis,
+      timezone,
+    );
+
+    // Pre-compute stacked values for y-axis domain calculation.
+    // Group 1 (series 1+2) and group 2 (series 3+4) stack independently.
+    const preStackedTops = [
+      ...alignedData[1].map((v, i) => v + alignedData[2][i]),
+      ...alignedData[3].map((v, i) => v + alignedData[4][i]),
+    ];
+    const yAxisDomain = calculateYAxisDomain(yAxisUnits, preStackedTops);
+
+    const { opts, stackedData } = getGroupedStackedBarOpts(
       alignedData,
       uPlotOptions,
       xAxisDomain,

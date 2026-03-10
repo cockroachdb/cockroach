@@ -60,7 +60,11 @@ import {
 import { CockroachCloudContext } from "../contexts";
 import { Delayed } from "../delayed";
 import { AxisUnits } from "../graphs";
-import { BarGraphTimeSeries, XScale } from "../graphs/bargraph";
+import {
+  BarGraphTimeSeries,
+  GroupedStackedBarGraphTimeSeries,
+  XScale,
+} from "../graphs/bargraph";
 import {
   getStmtInsightRecommendations,
   InsightType,
@@ -99,6 +103,7 @@ import {
   generateRowsProcessedTimeseries,
   generateCPUTimeseries,
   generateClientWaitTimeseries,
+  generateCanaryVsStableTimeseries,
   generatePlanDistributionTimeseries,
 } from "./timeseriesUtils";
 
@@ -667,6 +672,22 @@ export function StatementDetails(
       width: cardWidth,
     };
 
+    const canaryVsStableTimeseries: AlignedData =
+      generateCanaryVsStableTimeseries(statsPerAggregatedTs);
+    const canaryVsStableOps: Partial<Options> = {
+      axes: [{}, { label: "Time Spent" }],
+      series: [
+        {},
+        { label: "Execution" },
+        { label: "Planning" },
+        { label: "Execution" },
+        { label: "Planning" },
+      ],
+      legend: { show: true },
+      width: cardWidth,
+    };
+    const hasCanaryData = canaryVsStableTimeseries[0].length > 0;
+
     const insightsColumns = makeInsightsColumns(
       isCockroachCloud,
       hasAdminRole,
@@ -886,6 +907,32 @@ export function StatementDetails(
               />
             </Col>
           </Row>
+          {hasCanaryData && (
+            <Row gutter={24}>
+              <Col className="gutter-row" span={12}>
+                <GroupedStackedBarGraphTimeSeries
+                  title="Canary vs Stable Statement Times"
+                  alignedData={canaryVsStableTimeseries}
+                  uPlotOptions={canaryVsStableOps}
+                  yAxisUnits={AxisUnits.Duration}
+                  xScale={xScale}
+                  gistLabels={["Execution", "Planning"]}
+                  groupLabels={["Canary", "Stable"]}
+                  groupStrokeColors={["#c62828", "#1565c0"]}
+                  tooltip={
+                    <>
+                      Compares execution latency between canary (newest table
+                      statistics) and stable (second-newest table statistics)
+                      paths. Each bar is split into execution (bottom) and
+                      planning (top) time, matching the Statement Times chart
+                      colors. This helps identify performance regressions
+                      caused by newly collected table statistics.
+                    </>
+                  }
+                />
+              </Col>
+            </Row>
+          )}
           <Row gutter={24}>
             <Col className="gutter-row" span={12}>
               <BarGraphTimeSeries
