@@ -339,6 +339,7 @@ type Batch[B storage.WriteBatch] struct {
 	// logEngine is a reference to the LogEngine, used for lazy raft batch
 	// creation. Only set when engines are separated.
 	logEngine storage.Engine
+	closed    bool
 }
 
 // separated returns true if the log and state machine engines are separated.
@@ -378,8 +379,12 @@ func (b *Batch[B]) Commit(sync bool) error {
 	return b.state.Commit(false /* sync */)
 }
 
-// Close closes the batch.
+// Close closes the batch. It is idempotent.
 func (b *Batch[B]) Close() {
+	if b.closed {
+		return
+	}
+	b.closed = true
 	b.state.Close()
 	if b.separated() && b.raft != nil {
 		b.raft.Close()
