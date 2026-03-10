@@ -15666,6 +15666,30 @@ layers:
       unit: CONST
       aggregation: AVG
       derivative: NONE
+    - name: obs.metric_export.child.count
+      exported_name: obs_metric_export_child_count
+      description: 'Exported-line-weighted child count per parent metric: histogram children count their expanded Prometheus lines, others count 1'
+      y_axis_label: Child Instances
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: obs.metric_export.line.count
+      exported_name: obs_metric_export_line_count
+      description: Total individual time series (all label combinations) in the most recent Prometheus scrape
+      y_axis_label: Time Series
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: obs.metric_export.name.count
+      exported_name: obs_metric_export_name_count
+      description: Number of metric families (unique metric names) in the most recent Prometheus scrape
+      y_axis_label: Metric Names
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: queue.consistency.pending
       exported_name: queue_consistency_pending
       description: Number of pending replicas in the consistency checker queue
