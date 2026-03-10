@@ -75,8 +75,7 @@ func newClearableMapMemo[K mapKey, T mapEntry](
 	return &clearableMemoMap[K, T]{
 		entryAlloc: entryAlloc,
 		slicePool:  slicePool,
-		// TODO(tbg): allocates 11x/op.
-		entryMap: map[uint64]*mapEntrySlice[T]{},
+		entryMap:   map[uint64]*mapEntrySlice[T]{},
 	}
 }
 
