@@ -45,6 +45,7 @@ export { util, api };
 export { useNodes } from "./api/nodesApi";
 export { useNodesSummary } from "./api/nodesSummaryApi";
 export type { NodesSummary } from "./api/nodesSummaryApi";
+export { useConnectivity } from "./api/connectivityApi";
 export * from "./sessions";
 export * from "./timeScaleDropdown";
 export * from "./activeExecutions";

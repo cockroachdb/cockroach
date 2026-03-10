@@ -24,3 +24,4 @@ export * from "./eventsApi";
 export * from "./types";
 export * from "./jobProfilerApi";
 export * from "./txnInsightDetailsApi";
+export * from "./connectivityApi";

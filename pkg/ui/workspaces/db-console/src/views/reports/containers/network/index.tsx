@@ -3,7 +3,13 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { util, Loading } from "@cockroachlabs/cluster-ui";
+import {
+  util,
+  Loading,
+  useNodesSummary,
+  useConnectivity,
+  NodesSummary,
+} from "@cockroachlabs/cluster-ui";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { deviation as d3Deviation, mean as d3Mean } from "d3-array";
@@ -20,30 +26,13 @@ import union from "lodash/union";
 import values from "lodash/values";
 import moment from "moment-timezone";
 import { common } from "protobufjs";
-import React, { Fragment, useEffect, useState } from "react";
+import React, { Fragment, useState } from "react";
 import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
-import { withRouter, RouteComponentProps } from "react-router-dom";
-import { createSelector } from "reselect";
+import { useParams, useLocation } from "react-router-dom";
 
 import { InlineAlert } from "src/components";
-import {
-  CachedDataReducerState,
-  refreshConnectivity,
-  refreshLiveness,
-  refreshNodes,
-} from "src/redux/apiReducers";
-import { connectivitySelector } from "src/redux/connectivity";
-import {
-  NodesSummary,
-  nodesSummarySelector,
-  selectLivenessRequestStatus,
-  selectNodeRequestStatus,
-} from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
 import { trackFilter, trackCollapseNodes } from "src/util/analytics";
 import { getDataFromServer } from "src/util/dataFromServer";
-import { getMatchParamByName } from "src/util/query";
 import {
   getFilters,
   localityToString,
@@ -61,15 +50,6 @@ import IConnectivity = cockroach.server.serverpb.NetworkConnectivityResponse.ICo
 import IPeer = cockroach.server.serverpb.NetworkConnectivityResponse.IPeer;
 import IDuration = common.IDuration;
 
-interface NetworkOwnProps {
-  nodesSummary: NodesSummary;
-  nodeSummaryErrors: Error[];
-  connectivity: CachedDataReducerState<cockroach.server.serverpb.NetworkConnectivityResponse>;
-  refreshNodes: typeof refreshNodes;
-  refreshLiveness: typeof refreshLiveness;
-  refreshConnectivity: typeof refreshConnectivity;
-}
-
 export type Identity = {
   nodeID: number;
   address: string;
@@ -83,8 +63,6 @@ export interface NoConnection {
   from: Identity;
   to: Identity;
 }
-
-type NetworkProps = NetworkOwnProps & RouteComponentProps;
 
 export interface NetworkFilter {
   [key: string]: Array<string>;
@@ -146,26 +124,24 @@ export function getValueFromString(
 /**
  * Renders the Network Report page.
  */
-export function Network({
-  nodesSummary,
-  nodeSummaryErrors,
-  connectivity,
-  refreshNodes: refreshNodesAction,
-  refreshLiveness: refreshLivenessAction,
-  refreshConnectivity: refreshConnectivityAction,
-  match,
-  location,
-}: NetworkProps): React.ReactElement {
+export default function Network(): React.ReactElement {
+  const { node_id: nodeIdParam } = useParams<{ node_id: string }>();
+  const location = useLocation();
+  const {
+    isLoading: nodesSummaryLoading,
+    error: nodesSummaryError,
+    ...nodesSummary
+  } = useNodesSummary();
+  const {
+    connections,
+    isLoading: connectivityLoading,
+    error: connectivityError,
+  } = useConnectivity();
+
   const [collapsed, setCollapsed] = useState(false);
   const [networkFilter, setNetworkFilter] = useState<NetworkFilter | null>(
     null,
   );
-
-  useEffect(() => {
-    refreshLivenessAction();
-    refreshNodesAction();
-    refreshConnectivityAction();
-  });
 
   const onChangeCollapse = (newCollapsed: boolean) => {
     trackCollapseNodes(newCollapsed);
@@ -295,15 +271,14 @@ export function Network({
   const getDisplayIdentities = (
     identityByID: Map<number, Identity>,
   ): Identity[] => {
-    const nodeId = getMatchParamByName(match, "node_id");
     const identityContent = sortBy(
       Array.from(identityByID.values()),
       identity => identity.nodeID,
     );
     const sort = getSortParams(identityContent);
-    if (sort.some(x => x.id === nodeId)) {
+    if (sort.some(x => x.id === nodeIdParam)) {
       return sortBy(identityContent, identity =>
-        getValueFromString(nodeId, identity.locality, true),
+        getValueFromString(nodeIdParam, identity.locality, true),
       );
     }
     return identityContent;
@@ -313,7 +288,6 @@ export function Network({
     latencies: number[],
     displayIdentities: Identity[],
   ) => {
-    const nodeId = getMatchParamByName(match, "node_id");
     const mean = d3Mean(latencies);
     const sortParams = getSortParams(displayIdentities);
     let stddev = d3Deviation(latencies);
@@ -329,8 +303,8 @@ export function Network({
     const latencyTable = (
       <Latency
         displayIdentities={filteredDisplayIdentities(displayIdentities)}
-        multipleHeader={nodeId !== "cluster"}
-        node_id={nodeId}
+        multipleHeader={nodeIdParam !== "cluster"}
+        node_id={nodeIdParam}
         collapsed={collapsed}
         std={{
           stddev,
@@ -374,7 +348,7 @@ export function Network({
   const renderContent = (
     summary: NodesSummary,
     filters: NodeFilterListProps,
-    connections: protos.cockroach.server.serverpb.NetworkConnectivityResponse["connections"],
+    conns: protos.cockroach.server.serverpb.NetworkConnectivityResponse["connections"],
   ) => {
     if (!contentAvailable(summary)) {
       return null;
@@ -387,7 +361,7 @@ export function Network({
     // Nodes api to make sure we show all known nodes.
     const knownNodeIds = union(
       Object.keys(summary.livenessByNodeID),
-      Object.keys(connections),
+      Object.keys(conns),
     );
 
     // List of node identities.
@@ -405,7 +379,7 @@ export function Network({
           summary.livenessStatusByNodeID[nodeId] ||
           protos.cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
             .NODE_STATUS_UNKNOWN,
-        connectivity: connections[nodeId],
+        connectivity: conns[nodeId],
       });
     });
 
@@ -429,7 +403,7 @@ export function Network({
       (vals: IPeer[]) => flatMap(vals, v => v.latency),
       (vals: IDuration[]) => filter(vals, v => v && v.nanos),
       (vals: IDuration[]) => map(vals, v => util.NanoToMilli(v.nanos)),
-    ])(connections);
+    ])(conns);
 
     if (isEmpty(identityByID)) {
       return <h2 className="base-heading">No nodes match the filters</h2>;
@@ -447,6 +421,7 @@ export function Network({
   const filters = getFilters(location);
   const canShowPage =
     !getDataFromServer().FeatureFlags.disable_kv_level_advanced_debug;
+  const errors = [nodesSummaryError, connectivityError].filter(Boolean);
 
   return (
     <Fragment>
@@ -463,10 +438,12 @@ export function Network({
       {canShowPage && (
         <Loading
           loading={
-            !contentAvailable(nodesSummary) || !connectivity?.data?.connections
+            nodesSummaryLoading ||
+            !contentAvailable(nodesSummary) ||
+            (connectivityLoading && isEmpty(connections))
           }
           page={"network"}
-          error={nodeSummaryErrors}
+          error={errors}
           className="loading-image loading-image__spinner-left loading-image__spinner-left__padded"
           render={() => (
             <div>
@@ -474,11 +451,7 @@ export function Network({
                 nodeIDs={filters.nodeIDs}
                 localityRegex={filters.localityRegex}
               />
-              {renderContent(
-                nodesSummary,
-                filters,
-                connectivity?.data?.connections,
-              )}
+              {renderContent(nodesSummary, filters, connections)}
             </div>
           )}
         />
@@ -486,25 +459,3 @@ export function Network({
     </Fragment>
   );
 }
-
-const nodeSummaryErrors = createSelector(
-  selectNodeRequestStatus,
-  selectLivenessRequestStatus,
-  (nodes, liveness) => [nodes.lastError, liveness.lastError],
-);
-
-const mapStateToProps = (state: AdminUIState) => ({
-  nodesSummary: nodesSummarySelector(state),
-  nodeSummaryErrors: nodeSummaryErrors(state),
-  connectivity: connectivitySelector(state),
-});
-
-const mapDispatchToProps = {
-  refreshNodes,
-  refreshLiveness,
-  refreshConnectivity,
-};
-
-export default withRouter(
-  connect(mapStateToProps, mapDispatchToProps)(Network),
-);
