@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -159,14 +158,11 @@ func (m *migrationServer) SyncAllEngines(
 	if err := m.server.stopper.RunTaskWithErr(ctx, opName, func(
 		ctx context.Context,
 	) error {
-		// Let's be paranoid here and ensure that all stores have been fully
-		// initialized.
+		// Ensure that all stores have been fully initialized.
 		m.server.node.waitForAdditionalStoreInit()
-
+		// Sync all engines on all stores.
 		for _, eng := range m.server.engines {
-			// TODO(sep-raft-log): figure out whether StateEngine needs a sync, or we
-			// can only sync LogEngine here.
-			if err := storage.WriteSyncNoop(eng.TODOEngine()); err != nil {
+			if err := eng.Sync(); err != nil {
 				return err
 			}
 		}

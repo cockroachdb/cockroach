@@ -1100,6 +1100,7 @@ func (nl *NodeLiveness) updateLiveness(
 // verifyDiskHealth does a sync write to all disks before updating liveness, so
 // that a faulty or stalled disk will cause us to fail liveness and lose our
 // leases. All disks are written concurrently.
+//
 // We do this asynchronously in order to respect the caller's context, and
 // coalesce concurrent writes onto an in-flight one. This is particularly
 // relevant for a stalled disk during a lease acquisition heartbeat, where we
@@ -1116,7 +1117,10 @@ func (nl *NodeLiveness) verifyDiskHealth(ctx context.Context) error {
 				InheritCancelation: false,
 			},
 			func(ctx context.Context) (interface{}, error) {
-				return nil, diskStorage.WriteSyncNoop(eng.TODOEngine())
+				// NB: sync only the LogEngine. It is the engine through which all
+				// writes pass first. Also, the StateEngine does not support timely /
+				// incremental syncs, and forcing its Flush here would be too expensive.
+				return nil, diskStorage.WriteSyncNoop(eng.LogEngine())
 			})
 	}
 	for _, resultC := range resultCs {
