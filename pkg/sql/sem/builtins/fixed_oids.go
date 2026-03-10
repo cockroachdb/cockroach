@@ -2881,6 +2881,7 @@ var builtinOidsArray = []string{
 	2926: `to_date(date_string: string, format: string) -> date`,
 	2927: `to_timestamp(date_string: string, format: string) -> timestamptz`,
 	2928: `information_schema.crdb_set_session_variable_hint(statement_fingerprint: string, variable_name: string, variable_value: string) -> int`,
+	2929: `information_schema.crdb_set_session_variable_hint(statement_fingerprint: string, variable_name: string, variable_value: string, database: string) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

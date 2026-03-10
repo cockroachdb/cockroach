@@ -1702,3 +1702,42 @@ distribution: local
       missing stats
       table: abc@abc_b_idx
       spans: [/5 - /5]
+
+# Test the 4-arg overload that sets the database column.
+
+# Insert a session variable hint scoped to the "test" database.
+let $sv_db_hint_id
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM abc WHERE b = _',
+  'disable_optimizer_rules',
+  'GenerateConstrainedScans',
+  'test'
+)
+
+query TTT
+SELECT database, '|', fingerprint
+FROM system.statement_hints
+WHERE row_id = $sv_db_hint_id
+----
+test  |  SELECT * FROM abc WHERE b = _
+
+# Insert a session variable hint without specifying a database.
+let $sv_no_db_hint_id
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM abc WHERE b = _',
+  'disable_optimizer_rules',
+  'GenerateConstrainedScans'
+)
+
+query TTT
+SELECT database, '|', fingerprint
+FROM system.statement_hints
+WHERE row_id = $sv_no_db_hint_id
+----
+NULL  |  SELECT * FROM abc WHERE b = _
+
+# Clean up the session variable hints.
+statement ok
+SELECT information_schema.crdb_delete_statement_hints(
+  'SELECT * FROM abc WHERE b = _'
+)
