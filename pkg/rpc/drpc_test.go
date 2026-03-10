@@ -37,6 +37,7 @@ func (d dummyStream) MsgSend(drpc.Message, drpc.Encoding) error { return nil }
 func (d dummyStream) MsgRecv(drpc.Message, drpc.Encoding) error { return nil }
 func (d dummyStream) CloseSend() error                          { return nil }
 func (d dummyStream) Close() error                              { return nil }
+func (d dummyStream) Kind() drpc.StreamKind                     { return drpc.StreamKindUnknown }
 
 // TestMakeStopperInterceptors verifies that the stopper interceptors allow RPCs
 // to run before the stopper quiesces and reject them afterward.

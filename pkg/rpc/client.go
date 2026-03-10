@@ -130,6 +130,7 @@ func NewClientContext(ctx context.Context, cfg ClientConnConfig) (*Context, *sto
 		Knobs:                          cfg.TestingKnobs,
 		AdvertiseAddrH:                 &base.AdvertiseAddrH{},
 		SQLAdvertiseAddrH:              &base.SQLAdvertiseAddrH{},
+		UseDRPC:                        cfg.UseDRPC,
 	}
 
 	if cfg.Clock == nil {
