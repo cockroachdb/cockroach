@@ -92,6 +92,7 @@ func (r *Replica) executeReadOnlyBatch(
 	defer rw.Close()
 
 	if len(intentsToResolveVirtually) > 0 {
+		r.store.metrics.VirtualResolveBatches.Inc(1)
 		log.Eventf(
 			ctx, "resolving %d intents virtually before executing read",
 			len(intentsToResolveVirtually),
@@ -126,6 +127,7 @@ func (r *Replica) executeReadOnlyBatch(
 					ClockWhilePending: intent.ClockWhilePending,
 				}
 				reply = &kvpb.ResolveIntentRangeResponse{}
+				r.store.metrics.VirtualResolveIntentRangeCount.Inc(1)
 			} else {
 				req = &kvpb.ResolveIntentRequest{
 					RequestHeader:     kvpb.RequestHeaderFromSpan(intent.Span),
@@ -135,12 +137,14 @@ func (r *Replica) executeReadOnlyBatch(
 					ClockWhilePending: intent.ClockWhilePending,
 				}
 				reply = &kvpb.ResolveIntentResponse{}
+				r.store.metrics.VirtualResolveIntentCount.Inc(1)
 			}
 			_, err = evaluateCommand(
 				ctx, rwNoAssert, rec, nil /* ms */, nil /* ss */, h, req,
 				reply, g, &st, ui, readWrite, false, /* omitInRangefeeds */
 			)
 			if err != nil {
+				r.store.metrics.VirtualResolveBatchErrors.Inc(1)
 				return nil, g, nil, kvpb.NewError(err)
 			}
 		}

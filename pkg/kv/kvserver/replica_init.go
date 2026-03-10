@@ -141,6 +141,8 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 			LatchWaitDurations:                store.metrics.LatchWaitDurations,
 			LocksShedDueToMemoryLimit:         store.metrics.LocksShedDueToMemoryLimit,
 			NumLockShedDueToMemoryLimitEvents: store.metrics.NumLockShedDueToMemoryLimitEvents,
+			VirtualResolveCondenseCount:       store.metrics.VirtualResolveCondenseCount,
+			VirtualResolveDisabledCount:       store.metrics.VirtualResolveDisabledCount,
 
 			DisableTxnPushing: store.TestingKnobs().DontPushOnLockConflictError,
 			TxnWaitKnobs:      store.TestingKnobs().TxnWaitKnobs,

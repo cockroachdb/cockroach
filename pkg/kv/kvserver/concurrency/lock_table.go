@@ -298,6 +298,13 @@ type lockTableImpl struct {
 	// The number of times the lock table ran into memory limits and shed locks as
 	// a result.
 	numLockShedDueToMemoryLimitEvents *metric.Counter
+
+	// The number of times point intent resolutions were condensed into range
+	// resolutions during VIR scanning.
+	virtualResolveCondenseCount *metric.Counter
+	// The number of times VIR was disabled for a request because too many
+	// distinct transactions accumulated range resolves.
+	virtualResolveDisabledCount *metric.Counter
 }
 
 var _ lockTable = &lockTableImpl{}
@@ -309,6 +316,8 @@ func newLockTable(
 	settings *cluster.Settings,
 	locksShedDueToMemoryLimit *metric.Counter,
 	numLockShedDueToMemoryLimitEvents *metric.Counter,
+	virtualResolveCondenseCount *metric.Counter,
+	virtualResolveDisabledCount *metric.Counter,
 ) *lockTableImpl {
 	lt := &lockTableImpl{
 		rID:                               rangeID,
@@ -316,6 +325,8 @@ func newLockTable(
 		settings:                          settings,
 		locksShedDueToMemoryLimit:         locksShedDueToMemoryLimit,
 		numLockShedDueToMemoryLimitEvents: numLockShedDueToMemoryLimitEvents,
+		virtualResolveCondenseCount:       virtualResolveCondenseCount,
+		virtualResolveDisabledCount:       virtualResolveDisabledCount,
 	}
 	lt.setMaxKeysLocked(maxLocks)
 	return lt
@@ -1336,7 +1347,9 @@ func (g *lockTableGuardImpl) PrepareForLockConflictRetry(_ context.Context) {
 	// have alternatively handled this by keep toResolve across invocations of
 	// ScanAndEnqueue. If we find that overzealous range resolutions are a
 	// problem, we can re-consider that decision.
-	g.toResolve.maybeCondense(0)
+	if g.toResolve.maybeCondense(0) {
+		g.lt.virtualResolveCondenseCount.Inc(1)
+	}
 }
 
 func (g *lockTableGuardImpl) maybeDisableVIR(ctx context.Context) {
@@ -1346,6 +1359,7 @@ func (g *lockTableGuardImpl) maybeDisableVIR(ctx context.Context) {
 			l, g.maxToResolveRangeTxns)
 		g.virtuallyResolveIntents = false
 		g.toResolve.reset(g.virtuallyResolveIntents)
+		g.lt.virtualResolveDisabledCount.Inc(1)
 	}
 }
 
@@ -4537,7 +4551,9 @@ func (t *lockTableImpl) ScanAndEnqueue(
 			//
 			// If we've also accumulated too many range resolves, give up trying to
 			// virtually resolve.
-			g.toResolve.maybeCondense(g.condenseOnScanThreshold)
+			if g.toResolve.maybeCondense(g.condenseOnScanThreshold) {
+				g.lt.virtualResolveCondenseCount.Inc(1)
+			}
 			g.maybeDisableVIR(ctx)
 		}
 		g.toResolve.clear()

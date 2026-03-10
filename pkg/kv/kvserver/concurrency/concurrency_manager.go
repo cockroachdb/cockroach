@@ -226,6 +226,8 @@ type Config struct {
 	LatchWaitDurations                metric.IHistogram
 	LocksShedDueToMemoryLimit         *metric.Counter
 	NumLockShedDueToMemoryLimitEvents *metric.Counter
+	VirtualResolveCondenseCount       *metric.Counter
+	VirtualResolveDisabledCount       *metric.Counter
 	// Configs + Knobs.
 	MaxLockTableSize  int64
 	DisableTxnPushing bool
@@ -246,6 +248,7 @@ func NewManager(cfg Config) Manager {
 		newLockTable(
 			cfg.MaxLockTableSize, cfg.RangeDesc.RangeID, cfg.Clock, cfg.Settings,
 			cfg.LocksShedDueToMemoryLimit, cfg.NumLockShedDueToMemoryLimitEvents,
+			cfg.VirtualResolveCondenseCount, cfg.VirtualResolveDisabledCount,
 		),
 	)
 	*m = managerImpl{

@@ -748,6 +748,8 @@ func (c *cluster) makeConfig() concurrency.Config {
 		TxnWaitMetrics:                    txnwait.NewMetrics(time.Minute),
 		LocksShedDueToMemoryLimit:         m.LocksShedDueToMemoryLimit,
 		NumLockShedDueToMemoryLimitEvents: m.NumLockShedDueToMemoryLimitEvents,
+		VirtualResolveCondenseCount:       m.VirtualResolveCondenseCount,
+		VirtualResolveDisabledCount:       m.VirtualResolveDisabledCount,
 	}
 }
 
