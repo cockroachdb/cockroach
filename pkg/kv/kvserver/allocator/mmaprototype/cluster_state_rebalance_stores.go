@@ -54,6 +54,20 @@ var candidateInfoSlicePool = sync.Pool{
 	},
 }
 
+var nodeLoadMapPool = sync.Pool{
+	New: func() interface{} {
+		m := make(map[roachpb.NodeID]*NodeLoad, 8)
+		return m
+	},
+}
+
+var storeIDStructMapPool = sync.Pool{
+	New: func() interface{} {
+		m := make(map[roachpb.StoreID]struct{}, 8)
+		return m
+	},
+}
+
 // rebalanceEnv tracks the state and outcomes of a rebalanceStores invocation.
 // Recall that such an invocation is on behalf of a local store, but will
 // iterate over a slice of shedding stores - these are not necessarily local
@@ -96,15 +110,6 @@ type rebalanceEnv struct {
 	// passObs is used to collect gauge metrics and logging for this rebalancing
 	// pass. Can be nil.
 	passObs *rebalancingPassMetricsAndLogger
-	// Scratch variables reused across iterations.
-	// TODO(tbg): these are a potential source of errors (imagine two nested
-	// calls using the same scratch variable). Just make a global variable
-	// that wraps a bunch of sync.Pools for the types we need.
-	scratch struct {
-		postMeansExclusions storeSet
-		nodes               map[roachpb.NodeID]*NodeLoad
-		stores              map[roachpb.StoreID]struct{}
-	}
 }
 
 // passObv can be nil.
@@ -149,8 +154,6 @@ func newRebalanceEnv(
 		fractionPendingIncreaseOrDecreaseThreshold: fractionPendingIncreaseOrDecreaseThreshold,
 		lastFailedChangeDelayDuration:              lastFailedChangeDelayDuration,
 	}
-	re.scratch.nodes = map[roachpb.NodeID]*NodeLoad{}
-	re.scratch.stores = map[roachpb.StoreID]struct{}{}
 	return re
 }
 
@@ -478,6 +481,12 @@ func (re *rebalanceEnv) rebalanceReplicas(
 	topKRanges := ss.adjusted.topKRanges[localStoreID]
 	n := topKRanges.len()
 	loadDim := topKRanges.dim
+	pPostMeansExcl := storeIDSlicePool.Get().(*[]roachpb.StoreID)
+	pExistingReplicas := storeIDSlicePool.Get().(*[]roachpb.StoreID)
+	defer func() {
+		storeIDSlicePool.Put(pPostMeansExcl)
+		storeIDSlicePool.Put(pExistingReplicas)
+	}()
 	for i := 0; i < n; i++ {
 		if re.rangeMoveCount >= re.maxRangeMoveCount {
 			log.KvDistribution.VEventf(ctx, 2,
@@ -553,21 +562,21 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		// NB: to prevent placing replicas on multiple CRDB nodes sharing a
 		// host, we'd need to make changes here.
 		// See: https://github.com/cockroachdb/cockroach/issues/153863
-		re.scratch.postMeansExclusions = re.scratch.postMeansExclusions[:0]
-		existingReplicas := storeSet{} // TODO(tbg): avoid allocation
+		postMeansExclusions := storeSet((*pPostMeansExcl)[:0])
+		existingReplicas := storeSet((*pExistingReplicas)[:0])
 		for _, replica := range rstate.replicas {
 			storeID := replica.StoreID
 			existingReplicas.insert(storeID)
 			if storeID == store.StoreID {
 				// Exclude the shedding store (we're moving away from it), but not
 				// other stores on its node (within-node rebalance is allowed).
-				re.scratch.postMeansExclusions.insert(storeID)
+				postMeansExclusions.insert(storeID)
 				continue
 			}
 			// Exclude all stores on nodes with other existing replicas.
 			nodeID := re.stores[storeID].NodeID
 			for _, storeID := range re.nodes[nodeID].stores {
-				re.scratch.postMeansExclusions.insert(storeID)
+				postMeansExclusions.insert(storeID)
 			}
 		}
 
@@ -577,7 +586,9 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		// be included in the mean, but are never considered as candidates.
 		//
 		// TODO(sumeer): eliminate cands allocations by passing a scratch slice.
-		cands, ssSLS := re.computeCandidatesForReplicaTransfer(ctx, conj, existingReplicas, re.scratch.postMeansExclusions, store.StoreID, re.passObs)
+		*pPostMeansExcl = []roachpb.StoreID(postMeansExclusions)
+		*pExistingReplicas = []roachpb.StoreID(existingReplicas)
+		cands, ssSLS := re.computeCandidatesForReplicaTransfer(ctx, conj, existingReplicas, postMeansExclusions, store.StoreID, re.passObs)
 		log.KvDistribution.VEventf(ctx, 2, "considering replica-transfer r%v from s%v: store load %v",
 			rangeID, store.StoreID, ss.adjusted.load)
 		if log.ExpensiveLogEnabled(ctx, 3) {
@@ -686,10 +697,14 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 	pLeasePrefs := storeAndLeasePreferenceSlicePool.Get().(*[]storeAndLeasePreference)
 	pCandsPL := storeIDSlicePool.Get().(*[]roachpb.StoreID)
 	pCandInfos := candidateInfoSlicePool.Get().(*[]candidateInfo)
+	scratchNodes := nodeLoadMapPool.Get().(map[roachpb.NodeID]*NodeLoad)
+	scratchStores := storeIDStructMapPool.Get().(map[roachpb.StoreID]struct{})
 	defer func() {
 		storeAndLeasePreferenceSlicePool.Put(pLeasePrefs)
 		storeIDSlicePool.Put(pCandsPL)
 		candidateInfoSlicePool.Put(pCandInfos)
+		nodeLoadMapPool.Put(scratchNodes)
+		storeIDStructMapPool.Put(scratchStores)
 	}()
 	for i := 0; i < n; i++ {
 		if leaseTransferCount >= re.maxLeaseTransferCount {
@@ -814,10 +829,10 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		// INVARIANT: candsPL has at least one candidate other than store.StoreID,
 		// which is also in cands.
 
-		clear(re.scratch.nodes)
+		clear(scratchNodes)
 		// NB: candsPL is not empty - it includes at least the current leaseholder
 		// and one additional candidate.
-		means := computeMeansForStoreSet(re, candsPL, re.scratch.nodes, re.scratch.stores)
+		means := computeMeansForStoreSet(re, candsPL, scratchNodes, scratchStores)
 		sls := re.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad)
 		if sls.dimSummary[CPURate] < overloadSlow {
 			// This store is not cpu overloaded relative to these candidates for
