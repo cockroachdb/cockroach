@@ -105,6 +105,7 @@ import {
   generateClientWaitTimeseries,
   generateCanaryVsStableTimeseries,
   generatePlanDistributionTimeseries,
+  generateCanaryVsStablePlanDistributionTimeseries,
 } from "./timeseriesUtils";
 
 type StatementDetailsResponse =
@@ -1037,6 +1038,29 @@ export function StatementDetails(
       ],
     };
 
+    const {
+      alignedData: canaryPlanDistData,
+      planGists: canaryPlanGists,
+      groupSize: canaryPlanGroupSize,
+    } = generateCanaryVsStablePlanDistributionTimeseries(
+      statementStatisticsPerAggregatedTsAndPlanHash || [],
+    );
+    const hasCanaryPlanData = canaryPlanDistData[0].length > 0;
+    const canaryPlanDistOps: Partial<Options> = {
+      axes: [{}, { label: "Execution Count" }],
+      series: [
+        {},
+        // Canary group: one series per plan gist
+        ...canaryPlanGists.map(gist => ({
+          label: `Canary ${gist}`,
+        })),
+        // Stable group: one series per plan gist
+        ...canaryPlanGists.map(gist => ({
+          label: `Stable ${gist}`,
+        })),
+      ],
+    };
+
     const [chartsStart, chartsEnd] = toRoundedDateRange(timeScale);
     const xScale = {
       graphTsStartMillis: chartsStart.valueOf(),
@@ -1096,6 +1120,28 @@ export function StatementDetails(
                 </Col>
               </Row>
             </>
+          )}
+          {hasCanaryPlanData && (
+            <Row gutter={24}>
+              <Col className="gutter-row" span={24}>
+                <GroupedStackedBarGraphTimeSeries
+                  title="Canary vs Stable Plan Distribution"
+                  tooltip={
+                    <>
+                      Compares plan distribution between canary (newest table
+                      statistics) and stable (second-newest) executions. Left
+                      bars show canary execution counts, right bars show stable.
+                      Each color represents a different plan gist.
+                    </>
+                  }
+                  alignedData={canaryPlanDistData}
+                  uPlotOptions={canaryPlanDistOps}
+                  groupSize={canaryPlanGroupSize}
+                  yAxisUnits={AxisUnits.Count}
+                  xScale={xScale}
+                />
+              </Col>
+            </Row>
           )}
           <PlanDetails
             statementFingerprintID={statementFingerprintID}

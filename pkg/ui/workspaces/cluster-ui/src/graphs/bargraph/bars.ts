@@ -135,8 +135,9 @@ export const getStackedBarOpts = (
 };
 
 // getGroupedStackedBarOpts creates options for a chart with two groups of
-// stacked bars side by side. The data series are expected in order:
-// [timestamps, group1_bottom, group1_top, group2_bottom, group2_top].
+// stacked bars side by side. Data layout:
+//   [timestamps, ...group1_series(N), ...group2_series(N)]
+// where groupSize = N is the number of stacked layers per group.
 // group1 bars are left-aligned, group2 bars are right-aligned.
 export const getGroupedStackedBarOpts = (
   unstackedData: AlignedData,
@@ -146,10 +147,14 @@ export const getGroupedStackedBarOpts = (
   yAxisUnits: AxisUnits,
   colourPalette = seriesPalette,
   timezone: string,
+  groupSize?: number,
 ): { opts: Options; stackedData: AlignedData } => {
   const { series, ...providedOpts } = userOptions;
   const leftBars = getBarsBuilder(0.4, 40, 4, -1);
   const rightBars = getBarsBuilder(0.4, 40, 4, 1);
+
+  // Default: half the data series belong to each group.
+  const n = groupSize ?? Math.floor((unstackedData.length - 1) / 2);
 
   const opts: Options = {
     width: 947,
@@ -186,8 +191,8 @@ export const getGroupedStackedBarOpts = (
       {
         value: (_u, millis) => xAxisDomain.guideFormat(millis),
       },
-      // Group 1 (canary): left-aligned bars
-      ...series.slice(1, 3).map((s, i) => ({
+      // Group 1: left-aligned bars
+      ...series.slice(1, 1 + n).map((s, i) => ({
         fill: colourPalette[i % colourPalette.length],
         stroke: colourPalette[i % colourPalette.length],
         width: 2,
@@ -196,10 +201,10 @@ export const getGroupedStackedBarOpts = (
         scale: "yAxis",
         ...s,
       })),
-      // Group 2 (stable): right-aligned bars
-      ...series.slice(3, 5).map((s, i) => ({
-        fill: colourPalette[(i + 2) % colourPalette.length],
-        stroke: colourPalette[(i + 2) % colourPalette.length],
+      // Group 2: right-aligned bars
+      ...series.slice(1 + n, 1 + 2 * n).map((s, i) => ({
+        fill: colourPalette[i % colourPalette.length],
+        stroke: colourPalette[i % colourPalette.length],
         width: 2,
         paths: rightBars,
         points: { show: false },
@@ -213,20 +218,45 @@ export const getGroupedStackedBarOpts = (
   const combinedOpts = merge(opts, providedOpts);
   combinedOpts.axes[1].label += ` ${yAxisDomain.label}`;
 
-  // Pre-stack each group independently: series 2 += series 1, series 4 += series 3.
-  const stackedData: AlignedData = [
-    unstackedData[0],
-    unstackedData[1],
-    unstackedData[1].map((v, i) => v + unstackedData[2][i]),
-    unstackedData[3],
-    unstackedData[3].map((v, i) => v + unstackedData[4][i]),
-  ];
+  // Pre-stack each group independently by cumulatively summing layers.
+  const stackedData: AlignedData = [unstackedData[0]];
+  // Group 1 (series indices 1..n)
+  for (let i = 0; i < n; i++) {
+    if (i === 0) {
+      stackedData.push([...unstackedData[1]]);
+    } else {
+      stackedData.push(
+        unstackedData[1 + i].map(
+          (v, j) => v + (stackedData[i] as number[])[j],
+        ),
+      );
+    }
+  }
+  // Group 2 (series indices n+1..2n)
+  for (let i = 0; i < n; i++) {
+    if (i === 0) {
+      stackedData.push([...unstackedData[1 + n]]);
+    } else {
+      stackedData.push(
+        unstackedData[1 + n + i].map(
+          (v, j) => v + (stackedData[n + i] as number[])[j],
+        ),
+      );
+    }
+  }
 
-  // Bands fill between the top and bottom of each group.
-  combinedOpts.bands = [
-    { series: [2, 1] as Band.Bounds }, // canary: execution on top of planning
-    { series: [4, 3] as Band.Bounds }, // stable: execution on top of planning
-  ];
+  // Bands fill between adjacent stacked layers within each group.
+  combinedOpts.bands = [];
+  for (let i = 1; i < n; i++) {
+    // Group 1: series i+1 on top of series i (1-indexed in uPlot)
+    combinedOpts.bands.push({ series: [i + 1, i] as Band.Bounds });
+  }
+  for (let i = 1; i < n; i++) {
+    // Group 2: series n+i+1 on top of series n+i
+    combinedOpts.bands.push({
+      series: [n + i + 1, n + i] as Band.Bounds,
+    });
+  }
 
   // Show unstacked values in tooltip/legend.
   combinedOpts.series.forEach((s, si) => {

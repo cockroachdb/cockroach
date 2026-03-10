@@ -118,11 +118,13 @@ export const BarGraphTimeSeries: React.FC<BarGraphTimeSeriesProps> = ({
 };
 
 // GroupedStackedBarGraphTimeSeries renders two groups of stacked bars
-// side by side per timestamp. The data must have 5 series:
-// [timestamps, group1_bottom, group1_top, group2_bottom, group2_top].
+// side by side per timestamp. Data layout:
+//   [timestamps, ...group1_series(N), ...group2_series(N)]
+// groupSize specifies N (layers per group). Defaults to half the data series.
 export type GroupedStackedBarGraphProps = {
   alignedData?: AlignedData;
   colourPalette?: string[];
+  groupSize?: number;
   preCalcGraphSize?: boolean;
   title: string;
   tooltip?: React.ReactNode;
@@ -136,6 +138,7 @@ export const GroupedStackedBarGraphTimeSeries: React.FC<
 > = ({
   alignedData,
   colourPalette,
+  groupSize,
   preCalcGraphSize = true,
   title,
   tooltip,
@@ -164,13 +167,22 @@ export const GroupedStackedBarGraphTimeSeries: React.FC<
       timezone,
     );
 
-    // Pre-compute stacked values for y-axis domain calculation.
-    // Group 1 (series 1+2) and group 2 (series 3+4) stack independently.
-    const preStackedTops = [
-      ...alignedData[1].map((v, i) => v + alignedData[2][i]),
-      ...alignedData[3].map((v, i) => v + alignedData[4][i]),
-    ];
-    const yAxisDomain = calculateYAxisDomain(yAxisUnits, preStackedTops);
+    // Compute y-axis domain from stacked tops of both groups.
+    const n = groupSize ?? Math.floor((alignedData.length - 1) / 2);
+    const group1Top = alignedData[1].map((_, j) => {
+      let sum = 0;
+      for (let i = 0; i < n; i++) sum += alignedData[1 + i][j];
+      return sum;
+    });
+    const group2Top = alignedData[1].map((_, j) => {
+      let sum = 0;
+      for (let i = 0; i < n; i++) sum += alignedData[1 + n + i][j];
+      return sum;
+    });
+    const yAxisDomain = calculateYAxisDomain(yAxisUnits, [
+      ...group1Top,
+      ...group2Top,
+    ]);
 
     const { opts, stackedData } = getGroupedStackedBarOpts(
       alignedData,
@@ -180,6 +192,7 @@ export const GroupedStackedBarGraphTimeSeries: React.FC<
       yAxisUnits,
       colourPalette,
       timezone,
+      groupSize,
     );
 
     // When groupLabels is set but the caller overrides the legend to be
@@ -210,6 +223,7 @@ export const GroupedStackedBarGraphTimeSeries: React.FC<
   }, [
     alignedData,
     colourPalette,
+    groupSize,
     uPlotOptions,
     yAxisUnits,
     samplingIntervalMillis,
