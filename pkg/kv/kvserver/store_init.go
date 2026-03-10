@@ -267,7 +267,7 @@ func WriteInitialClusterData(
 				return err
 			}
 
-			return batch.CommitAndSync()
+			return batch.Commit(true /* syncStateEngine */)
 		}()
 		if err != nil {
 			return err
