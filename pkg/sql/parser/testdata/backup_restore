@@ -570,6 +570,15 @@ RESTORE DATABASE _ FROM 'latest' IN '*****' WITH OPTIONS (experimental copy) -- 
 RESTORE DATABASE foo FROM 'latest' IN 'bar' WITH OPTIONS (experimental copy) -- passwords exposed
 
 parse
+RESTORE DATABASE foo FROM LATEST IN 'bar' WITH GRANTS
+----
+RESTORE DATABASE foo FROM 'latest' IN '*****' WITH OPTIONS (grants) -- normalized!
+RESTORE DATABASE foo FROM ('latest') IN ('*****') WITH OPTIONS (grants) -- fully parenthesized
+RESTORE DATABASE foo FROM '_' IN '_' WITH OPTIONS (grants) -- literals removed
+RESTORE DATABASE _ FROM 'latest' IN '*****' WITH OPTIONS (grants) -- identifiers removed
+RESTORE DATABASE foo FROM 'latest' IN 'bar' WITH OPTIONS (grants) -- passwords exposed
+
+parse
 RESTORE DATABASE foo, baz FROM LATEST IN 'bar' AS OF SYSTEM TIME '1'
 ----
 RESTORE DATABASE foo, baz FROM 'latest' IN '*****' AS OF SYSTEM TIME '1' -- normalized!

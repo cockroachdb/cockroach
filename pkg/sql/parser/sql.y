@@ -4252,6 +4252,10 @@ restore_options:
   {
     $$.val = &tree.RestoreOptions{RemoveRegions: true, SkipLocalitiesCheck: true}
   }
+| GRANTS
+  {
+    $$.val = &tree.RestoreOptions{Grants: true}
+  }
 
 virtual_cluster_opt:
   TENANT  { /* SKIP DOC */ }
