@@ -1313,20 +1313,31 @@ func runCDCRollingRestart(
 		t.Fatal("restartDuration must be less than or equal to testDuration")
 	}
 
+	// Node topology:
+	// - Nodes 1 through N-2: CRDB (subject to rolling restarts)
+	// - Node N-1: CRDB + workload runner + SQL queries (not restarted)
+	// - Node N: Kafka
+	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
+	kafkaNode := c.Node(c.Spec().NodeCount)
+
 	startOpts := option.DefaultStartOpts()
-	racks := install.MakeClusterSettings(install.NumRacksOption(c.Spec().NodeCount))
 	// Override the initial retry backoff so it doesn't take many retries to
 	// reach the max backoff behavior.
-	racks.Env = append(racks.Env, `COCKROACH_CHANGEFEED_TESTING_INITIAL_RETRY_BACKOFF=32s`)
-	c.Start(ctx, t.L(), startOpts, racks)
+	settings := install.MakeClusterSettings(
+		install.EnvOption{`COCKROACH_CHANGEFEED_TESTING_INITIAL_RETRY_BACKOFF=10s`},
+	)
+	c.Start(ctx, t.L(), startOpts, settings, crdbNodes)
+
+	kafka, kafkaCleanup := setupKafka(ctx, t, c, kafkaNode)
+	defer kafkaCleanup()
 
 	// Set up prometheus on the workload node for roachperf export. The
 	// workload node is never restarted, so prometheus scraping is stable.
-	workloadNode := c.Spec().NodeCount
+	workloadNode := c.Spec().NodeCount - 1
 	promCfg := (&prometheus.Config{}).
 		WithPrometheusNode(c.Node(workloadNode).InstallNodes()[0]).
-		WithCluster(c.All().InstallNodes()).
-		WithNodeExporter(c.All().InstallNodes())
+		WithCluster(crdbNodes.InstallNodes()).
+		WithNodeExporter(crdbNodes.InstallNodes())
 	if err := c.StartGrafana(ctx, t.L(), promCfg); err != nil {
 		t.Fatal(err)
 	}
@@ -1341,7 +1352,7 @@ func runCDCRollingRestart(
 		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(n))
 		opts := startOpts
 		opts.RoachprodOpts.IsRestart = true
-		c.Start(ctx, t.L(), opts, racks, c.Node(n))
+		c.Start(ctx, t.L(), opts, settings, c.Node(n))
 		t.Monitor().ExpectProcessAlive(c.Node(n))
 		t.L().Printf("node %d restarted successfully", n)
 		return nil
@@ -1365,23 +1376,62 @@ func runCDCRollingRestart(
 		}
 	}
 
-	cmd := fmt.Sprintf("./cockroach workload init kv --splits 50 {pgurl:%d}", c.Spec().NodeCount)
-	if err := c.RunE(ctx, option.WithNodes(c.Node(c.Spec().NodeCount)), cmd); err != nil {
+	cmd := fmt.Sprintf("./cockroach workload init kv --splits 50 {pgurl:%d}", workloadNode)
+	if err := c.RunE(ctx, option.WithNodes(c.Node(workloadNode)), cmd); err != nil {
 		t.Fatal(err)
 	}
 
-	// Run the kv workload for the full test duration.
+	// Run the kv workload for the full test duration. The kafka sink can
+	// sustain ~5k updates/s. With a 30s backoff and 2m between restarts,
+	// the changefeed is productive ~75% of the time, so 3k keeps us just
+	// within what the sink can handle during catch-up.
 	t.Go(func(ctx context.Context, l *logger.Logger) error {
-		cmd := fmt.Sprintf("./cockroach workload run kv --zipfian --duration=%s {pgurl:%d} --tolerate-errors",
-			params.testDuration, c.Spec().NodeCount)
-		return c.RunE(ctx, option.WithNodes(c.Node(c.Spec().NodeCount)), cmd)
+		cmd := fmt.Sprintf("./cockroach workload run kv --zipfian --duration=%s --max-rate=3000 {pgurl:%d} --tolerate-errors",
+			params.testDuration, workloadNode)
+		return c.RunE(ctx, option.WithNodes(c.Node(workloadNode)), cmd)
 	})
 
 	var jobID int
-	if err := db.QueryRow(`CREATE CHANGEFEED FOR TABLE kv.kv INTO 'null://' WITH initial_scan='no'`).Scan(&jobID); err != nil {
+	if err := db.QueryRow(fmt.Sprintf(
+		`CREATE CHANGEFEED FOR TABLE kv.kv INTO '%s'`+
+			` WITH updated, resolved, initial_scan='no', min_checkpoint_frequency='2s'`,
+		kafka.sinkURL(ctx),
+	)).Scan(&jobID); err != nil {
 		t.Fatal(err)
 	}
 	t.L().Printf("changefeed %d will run for %s", jobID, params.testDuration)
+
+	// Set up Kafka consumer with duplicate counting.
+	dupV := cdctest.NewDuplicateCountingValidator(cdctest.NoOpValidator)
+	consumerStopper := make(chan struct{})
+	kafkaAddrs := []string{kafka.consumerURL(ctx)}
+	saramaConsumer, err := sarama.NewConsumer(kafkaAddrs, sarama.NewConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// newTopicConsumer takes ownership of saramaConsumer; tc.close() will
+	// close it. If newTopicConsumer fails, we must close it ourselves.
+	tc, err := newTopicConsumer(t, saramaConsumer, "kv", dupV, consumerStopper)
+	if err != nil {
+		_ = saramaConsumer.Close()
+		t.Fatal(err)
+	}
+	defer tc.close()
+	t.L().Printf("topic consumer for kv has partitions: %s", tc.partitions)
+
+	consumerDone := make(chan struct{})
+	t.Go(func(ctx context.Context, l *logger.Logger) error {
+		defer close(consumerDone)
+		for {
+			m, err := tc.next(ctx)
+			if err != nil {
+				return err
+			}
+			if m == nil {
+				return nil
+			}
+		}
+	})
 
 	beginTime := timeutil.Now()
 
@@ -1470,11 +1520,22 @@ func runCDCRollingRestart(
 			t.L().Printf("[%s] error querying changefeed status: %v", timeutil.Since(beginTime), err)
 			continue
 		}
-		t.L().Printf("[%s] changefeed lag: %s, status: %s, running_status: %s",
-			timeutil.Since(beginTime), currentLag, status, runningStatus)
 		if currentLag > maxHighwaterLag {
 			maxHighwaterLag = currentLag
 		}
+		// Read duplicate stats from dupV's atomic counters rather than
+		// tc.validator.NumRows, which isn't safe to read cross-goroutine.
+		numTotal := dupV.NumTotal.Load()
+		numDuplicates := dupV.NumDuplicates.Load()
+		var dupPctStr string
+		if numTotal > 0 {
+			dupPctStr = fmt.Sprintf("%.2f%%", 100.0*float64(numDuplicates)/float64(numTotal))
+		} else {
+			dupPctStr = "n/a"
+		}
+		t.L().Printf("[%s] lag=%s status=%s running_status=%s total_msgs=%d dupes=%d dupe_pct=%s",
+			timeutil.Since(beginTime), currentLag, status, runningStatus,
+			numTotal, numDuplicates, dupPctStr)
 		if status == "failed" {
 			t.Fatalf("changefeed entered failed status: %s", runningStatus)
 		}
@@ -1482,6 +1543,19 @@ func runCDCRollingRestart(
 			t.Fatalf("changefeed lag %s exceeded maximum allowed (%s) during rolling restarts",
 				currentLag, maxAllowedLag)
 		}
+	}
+
+	// Stop Kafka consumer and report duplicate counts.
+	close(consumerStopper)
+	<-consumerDone
+	numTotal := dupV.NumTotal.Load()
+	numDuplicates := dupV.NumDuplicates.Load()
+	if numTotal > 0 {
+		dupPct := 100.0 * float64(numDuplicates) / float64(numTotal)
+		t.L().Printf("duplicate counting: total_messages=%d unique=%d duplicates=%d duplicate_pct=%.2f%%",
+			numTotal, numTotal-numDuplicates, numDuplicates, dupPct)
+	} else {
+		t.L().Printf("duplicate counting: no messages consumed")
 	}
 
 	// After the test, verify lag has recovered below a tighter threshold.
@@ -1545,6 +1619,18 @@ func runCDCRollingRestart(
 				Name:           "Final highwater lag (s)",
 				Value:          roachtestutil.MetricPoint(finalLag.Seconds()),
 				Unit:           "seconds",
+				IsHigherBetter: false,
+			}
+		},
+		func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+			var dupPct float64
+			if numTotal > 0 {
+				dupPct = 100.0 * float64(numDuplicates) / float64(numTotal)
+			}
+			return &roachtestutil.AggregatedMetric{
+				Name:           "Duplicate percentage",
+				Value:          roachtestutil.MetricPoint(dupPct),
+				Unit:           "percent",
 				IsHigherBetter: false,
 			}
 		},
@@ -2451,14 +2537,14 @@ CONFIGURE ZONE USING
 		Name:             "cdc/rolling-restart",
 		Owner:            registry.OwnerCDC,
 		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(4),
+		Cluster:          r.MakeClusterSpec(5),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Timeout:          30 * time.Minute,
 		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCRollingRestart(ctx, t, c, rollingRestartParams{
-				maxBackoff:      "1m",
+				maxBackoff:      "30s",
 				doRestarts:      true,
 				testDuration:    20 * time.Minute,
 				restartDuration: 15 * time.Minute,
@@ -2472,14 +2558,14 @@ CONFIGURE ZONE USING
 		Name:             "cdc/no-rolling-restart",
 		Owner:            registry.OwnerCDC,
 		Benchmark:        true,
-		Cluster:          r.MakeClusterSpec(4),
+		Cluster:          r.MakeClusterSpec(5),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Timeout:          30 * time.Minute,
 		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCRollingRestart(ctx, t, c, rollingRestartParams{
-				maxBackoff:   "1m",
+				maxBackoff:   "30s",
 				doRestarts:   false,
 				testDuration: 20 * time.Minute,
 			})
