@@ -79,6 +79,49 @@ func TestAddNumericStats(t *testing.T) {
 	}
 }
 
+func TestAddCanaryStatsInfo(t *testing.T) {
+	numericStatA := NumericStat{Mean: 0.5, SquaredDiffs: 0.1}
+	numericStatB := NumericStat{Mean: 1.5, SquaredDiffs: 0.3}
+
+	a := CanaryStatsInfo{
+		Count:      3,
+		PlanLat:    numericStatA,
+		ParseLat:   numericStatA,
+		RunLat:     numericStatA,
+		ServiceLat: numericStatA,
+	}
+	b := CanaryStatsInfo{
+		Count:      2,
+		PlanLat:    numericStatB,
+		ParseLat:   numericStatB,
+		RunLat:     numericStatB,
+		ServiceLat: numericStatB,
+	}
+
+	expectedPlanLat := AddNumericStats(a.PlanLat, b.PlanLat, a.Count, b.Count)
+	expectedParseLat := AddNumericStats(a.ParseLat, b.ParseLat, a.Count, b.Count)
+	expectedRunLat := AddNumericStats(a.RunLat, b.RunLat, a.Count, b.Count)
+	expectedServiceLat := AddNumericStats(a.ServiceLat, b.ServiceLat, a.Count, b.Count)
+
+	a.Add(b)
+
+	require.Equal(t, int64(5), a.Count)
+	epsilon := 0.00000001
+	require.True(t, expectedPlanLat.AlmostEqual(a.PlanLat, epsilon),
+		"expected PlanLat %+v, but found %+v", expectedPlanLat, a.PlanLat)
+	require.True(t, expectedParseLat.AlmostEqual(a.ParseLat, epsilon),
+		"expected ParseLat %+v, but found %+v", expectedParseLat, a.ParseLat)
+	require.True(t, expectedRunLat.AlmostEqual(a.RunLat, epsilon),
+		"expected RunLat %+v, but found %+v", expectedRunLat, a.RunLat)
+	require.True(t, expectedServiceLat.AlmostEqual(a.ServiceLat, epsilon),
+		"expected ServiceLat %+v, but found %+v", expectedServiceLat, a.ServiceLat)
+
+	// Verify adding zero-count CanaryStatsInfo is a no-op on counts.
+	before := a
+	a.Add(CanaryStatsInfo{})
+	require.Equal(t, before.Count, a.Count)
+}
+
 func TestAddExecStats(t *testing.T) {
 	numericStatA := NumericStat{Mean: 354.123, SquaredDiffs: 34.34123}
 	numericStatB := NumericStat{Mean: 9.34354, SquaredDiffs: 75.321}

@@ -14,6 +14,7 @@ export type StatementStatistics = cockroach.sql.IStatementStatistics;
 export type ExecStats = cockroach.sql.IExecStats;
 export type CollectedStatementStatistics =
   cockroach.server.serverpb.StatementsResponse.ICollectedStatementStatistics;
+export type CanaryStatsInfo = cockroach.sql.ICanaryStatsInfo;
 
 export interface NumericStat {
   mean?: number;
@@ -162,6 +163,32 @@ export function addExecStats(a: ExecStats, b: ExecStats): ExecStats {
   };
 }
 
+export function addCanaryStatsInfo(
+  a: CanaryStatsInfo,
+  b: CanaryStatsInfo,
+): CanaryStatsInfo {
+  let countA = FixLong(a.count).toInt();
+  const countB = FixLong(b.count).toInt();
+  if (countA === 0 && countB === 0) {
+    // If both counts are zero, artificially set the one count to one to avoid
+    // division by zero when calculating the mean in addNumericStats.
+    countA = 1;
+  }
+
+  return {
+    count: a.count.add(b.count),
+    parse_lat: aggregateNumericStats(a.parse_lat, b.parse_lat, countA, countB),
+    plan_lat: aggregateNumericStats(a.plan_lat, b.plan_lat, countA, countB),
+    run_lat: aggregateNumericStats(a.run_lat, b.run_lat, countA, countB),
+    service_lat: aggregateNumericStats(
+      a.service_lat,
+      b.service_lat,
+      countA,
+      countB,
+    ),
+  };
+}
+
 export function addStatementStats(
   a: StatementStatistics,
   b: StatementStatistics,
@@ -270,6 +297,10 @@ export function addStatementStats(
     indexes: indexes,
     latency_info: aggregateLatencyInfo(a, b),
     last_error_code: "",
+    canary_stats_info: addCanaryStatsInfo(
+      a.canary_stats_info,
+      b.canary_stats_info,
+    ),
   };
 }
 

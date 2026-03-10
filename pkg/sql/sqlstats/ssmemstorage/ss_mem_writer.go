@@ -119,6 +119,15 @@ func (s *Container) RecordStatement(ctx context.Context, value *sqlstats.Recorde
 	}
 	stats.mu.data.LatencyInfo.MergeMaxMin(latencyInfo)
 
+	if value.UsedCanaryStats {
+		canaryStats := &stats.mu.data.CanaryStatsInfo
+		canaryStats.Count++
+		canaryStats.ServiceLat.Record(canaryStats.Count, value.ServiceLatencySec)
+		canaryStats.ParseLat.Record(canaryStats.Count, value.ParseLatencySec)
+		canaryStats.RunLat.Record(canaryStats.Count, value.RunLatencySec)
+		canaryStats.PlanLat.Record(canaryStats.Count, value.PlanLatencySec)
+	}
+
 	// Note that some fields derived from tracing statements (such as
 	// BytesSentOverNetwork) are not updated here because they are collected
 	// on-demand.

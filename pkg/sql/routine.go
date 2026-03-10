@@ -386,6 +386,9 @@ func (g *routineGenerator) startInternal(ctx context.Context, txn *kv.Txn) (err 
 						log.Dev.Error(ctx, "No stats collector exists on the planner, cannot record statement stats")
 						return
 					}
+					if g.p.ExtendedEvalContext().UseCanaryStats {
+						statsBuilder.UsedCanaryStats()
+					}
 					stmtStats := statsBuilder.
 						SessionID(g.p.ExtendedEvalContext().SessionID).
 						QueryID(g.p.execCfg.GenerateID()).

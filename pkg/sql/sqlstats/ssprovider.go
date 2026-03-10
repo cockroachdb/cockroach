@@ -101,6 +101,7 @@ type RecordedStmtStats struct {
 	Indexes                  []string
 	QueryTags                []sqlcommenter.QueryTag
 	UnderOuterTxn            bool
+	UsedCanaryStats          bool
 }
 
 var recordedStmtStatsSize = int64(unsafe.Sizeof(RecordedStmtStats{}))
@@ -410,6 +411,14 @@ func (b *RecordedStatementStatsBuilder) AppliedStatementHints() *RecordedStateme
 		return b
 	}
 	b.stmtStats.AppliedStmtHints = true
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) UsedCanaryStats() *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.UsedCanaryStats = true
 	return b
 }
 

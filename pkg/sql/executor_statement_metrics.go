@@ -233,6 +233,10 @@ func (ex *connExecutor) recordStatementSummary(
 			b.AppliedStatementHints()
 		}
 
+		if ex.planner.EvalContext().UseCanaryStats {
+			b.UsedCanaryStats()
+		}
+
 		ex.statsCollector.RecordStatement(ctx, b.Build())
 	}
 

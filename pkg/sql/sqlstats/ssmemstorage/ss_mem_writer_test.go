@@ -287,6 +287,71 @@ func verifyTxnStatsReduced(
 	require.InEpsilon(t, float64(txnStats.KVCPUTimeNanos.Nanoseconds())/cnt, destTxnStats.mu.data.KVCPUTimeNanos.Mean, epsilon)
 }
 
+// TestRecordStatementCanaryStats verifies that canary stats are only recorded
+// into CanaryStatsInfo when UsedCanaryStats is true, and that non-canary
+// statements do not affect CanaryStatsInfo.
+func TestRecordStatementCanaryStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+
+	container := New(settings,
+		nil, /* uniqueServerCount */
+		testMonitor(ctx, "test-mon", settings),
+		"test-app",
+		nil,
+	)
+
+	// Record a non-canary statement — should not affect CanaryStatsInfo.
+	require.NoError(t, container.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
+		FingerprintID:     1,
+		Query:             "SELECT 1",
+		ServiceLatencySec: 0.1,
+		ParseLatencySec:   0.01,
+		PlanLatencySec:    0.02,
+		RunLatencySec:     0.03,
+		UsedCanaryStats:   false,
+	}))
+
+	// Record a canary statement with the same fingerprint.
+	require.NoError(t, container.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
+		FingerprintID:     1,
+		Query:             "SELECT 1",
+		ServiceLatencySec: 0.5,
+		ParseLatencySec:   0.05,
+		PlanLatencySec:    0.06,
+		RunLatencySec:     0.07,
+		UsedCanaryStats:   true,
+	}))
+
+	// Record another non-canary statement.
+	require.NoError(t, container.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
+		FingerprintID:     1,
+		Query:             "SELECT 1",
+		ServiceLatencySec: 0.2,
+		ParseLatencySec:   0.02,
+		PlanLatencySec:    0.03,
+		RunLatencySec:     0.04,
+		UsedCanaryStats:   false,
+	}))
+
+	stats := container.getStatsForStmtWithKey(stmtKey{fingerprintID: 1})
+	require.NotNil(t, stats)
+
+	// CanaryStatsInfo should only contain the single canary recording.
+	require.Equal(t, int64(1), stats.mu.data.CanaryStatsInfo.Count)
+	require.InEpsilon(t, 0.5, stats.mu.data.CanaryStatsInfo.ServiceLat.Mean, epsilon)
+	require.InEpsilon(t, 0.05, stats.mu.data.CanaryStatsInfo.ParseLat.Mean, epsilon)
+	require.InEpsilon(t, 0.06, stats.mu.data.CanaryStatsInfo.PlanLat.Mean, epsilon)
+	require.InEpsilon(t, 0.07, stats.mu.data.CanaryStatsInfo.RunLat.Mean, epsilon)
+
+	// The overall stats should reflect all 3 recordings (both canary and
+	// non-canary). Non-canary latencies can be derived from overall minus
+	// canary when needed.
+	require.Equal(t, int64(3), stats.mu.data.Count)
+}
+
 func testMonitor(
 	ctx context.Context, name redact.SafeString, settings *cluster.Settings,
 ) *mon.BytesMonitor {

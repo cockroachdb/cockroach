@@ -147,6 +147,11 @@ message StatementStatistics {
   // (ex/ not replication related work).
   optional NumericStat kv_cpu_time_nanos = 38 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVCPUTimeNanos"];
 
+  // canary_stats_info contains stats for statements executed with canary
+  // stats. Non-canary stats can be derived from the overall stats minus the
+  // canary stats.
+  optional CanaryStatsInfo canary_stats_info = 39 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
   reserved 13, 14, 17, 18, 19, 20;
@@ -200,6 +205,23 @@ message TransactionStatistics {
   optional NumericStat kv_cpu_time_nanos = 12 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVCPUTimeNanos"];
 }
 
+// CanaryStatsInfo contains the subset of statistics that are used to differentiate
+// between statements executed with and without canary stats.
+message CanaryStatsInfo {
+  optional int64 count = 1 [(gogoproto.nullable) = false];
+
+  // ParseLat is the time in seconds to transform the SQL string into an AST.
+  optional NumericStat parse_lat = 2 [(gogoproto.nullable) = false];
+
+  // PlanLat is the time spent in seconds to transform the AST into a logical query plan.
+  optional NumericStat plan_lat = 3 [(gogoproto.nullable) = false];
+
+  // RunLat is the time in seconds to run the query and fetch/compute the result rows.
+  optional NumericStat run_lat = 4 [(gogoproto.nullable) = false];
+
+  // ServiceLat is the time in seconds to service the query, from start of parse to end of execute.
+  optional NumericStat service_lat = 5 [(gogoproto.nullable) = false];
+}
 
 message SensitiveInfo {
   option (gogoproto.equal) = true;
