@@ -72,17 +72,17 @@ setting split_queue_enabled=false
 eval duration=25m samples=1 seed=42 cfgs=(sma-count,mma-only,mma-count) metrics=(cpu_util,write_bytes_per_second,replicas,leases)
 ----
 sma-count:
-cpu_util#1: last:  [s1=0.17, s2=0.17, s3=0.19, s4=0.17, s5=0.17, s6=0.14] (stddev=0.02, mean=0.17, sum=1)
-cpu_util#1: thrash_pct: [s1=317%, s2=139%, s3=420%, s4=230%, s5=181%, s6=204%]  (sum=1490%)
+cpu_util#1: last:  [s1=0.17, s2=0.17, s3=0.17, s4=0.17, s5=0.17, s6=0.17] (stddev=0.00, mean=0.17, sum=1)
+cpu_util#1: thrash_pct: [s1=184%, s2=118%, s3=267%, s4=242%, s5=83%, s6=89%]  (sum=983%)
 leases#1: first: [s1=136, s2=0, s3=0, s4=136, s5=0, s6=0] (stddev=64.11, mean=45.33, sum=272)
-leases#1: last:  [s1=42, s2=44, s3=41, s4=51, s5=48, s6=46] (stddev=3.45, mean=45.33, sum=272)
-leases#1: thrash_pct: [s1=86%, s2=49%, s3=103%, s4=68%, s5=46%, s6=49%]  (sum=401%)
+leases#1: last:  [s1=43, s2=42, s3=42, s4=51, s5=48, s6=46] (stddev=3.35, mean=45.33, sum=272)
+leases#1: thrash_pct: [s1=42%, s2=29%, s3=61%, s4=68%, s5=20%, s6=23%]  (sum=242%)
 replicas#1: first: [s1=136, s2=136, s3=136, s4=136, s5=136, s6=136] (stddev=0.00, mean=136.00, sum=816)
-replicas#1: last:  [s1=135, s2=129, s3=135, s4=138, s5=139, s6=140] (stddev=3.65, mean=136.00, sum=816)
-replicas#1: thrash_pct: [s1=0%, s2=245%, s3=13%, s4=115%, s5=103%, s6=66%]  (sum=543%)
-write_bytes_per_second#1: last:  [s1=0, s2=2772297, s3=0, s4=18336933, s5=20000880, s6=18892529] (stddev=9136363.37, mean=10000439.83, sum=60002639)
-write_bytes_per_second#1: thrash_pct: [s1=0%, s2=2%, s3=0%, s4=89%, s5=100%, s6=101%]  (sum=292%)
-hash: bbe8bd0a4c78e7a1
+replicas#1: last:  [s1=134, s2=132, s3=131, s4=140, s5=140, s6=139] (stddev=3.79, mean=136.00, sum=816)
+replicas#1: thrash_pct: [s1=0%, s2=73%, s3=64%, s4=73%, s5=43%, s6=52%]  (sum=306%)
+write_bytes_per_second#1: last:  [s1=0, s2=0, s3=1107261, s4=18891348, s5=18891855, s6=19445232] (stddev=9362627.10, mean=9722616.00, sum=58335696)
+write_bytes_per_second#1: thrash_pct: [s1=0%, s2=0%, s3=13%, s4=95%, s5=94%, s6=100%]  (sum=302%)
+hash: b675d1f910d5192
 ==========================
 mma-only:
 cpu_util#1: last:  [s1=0.17, s2=0.17, s3=0.17, s4=0.17, s5=0.17, s6=0.17] (stddev=0.00, mean=0.17, sum=1)

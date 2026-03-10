@@ -1529,7 +1529,11 @@ func bestStoreToMinimizeLoadDelta(
 	// load delta.
 	domain := append(candidates, existing)
 	storeDescs := make([]roachpb.StoreDescriptor, 0, len(domain))
-	for _, desc := range storeDescMap {
+	for _, store := range domain {
+		desc, ok := storeDescMap[store]
+		if !ok {
+			continue
+		}
 		storeDescs = append(storeDescs, *desc)
 	}
 	domainStoreList := storepool.MakeStoreList(storeDescs)
