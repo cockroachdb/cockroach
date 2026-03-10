@@ -9,7 +9,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -27,7 +26,6 @@ func DropType(b BuildCtx, n *tree.DropType) {
 	for _, name := range n.Names {
 		elts := b.ResolveUserDefinedTypeType(name, ResolveParams{
 			IsExistenceOptional: n.IfExists,
-			RequiredPrivilege:   privilege.DROP,
 		})
 		var typ scpb.Element
 		var typeID, arrayTypeID catid.DescID
