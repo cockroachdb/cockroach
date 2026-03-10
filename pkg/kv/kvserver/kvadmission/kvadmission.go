@@ -727,6 +727,8 @@ func workInfoForBatch(
 		CreateTime:      createTime,
 		BypassAdmission: bypassAdmission,
 		WorkloadID:      ba.Header.WorkloadID,
+		AppNameID:       ba.Header.AppNameID,
+		GatewayNodeID:   ba.Header.GatewayNodeID,
 	}
 	return admissionInfo
 }
