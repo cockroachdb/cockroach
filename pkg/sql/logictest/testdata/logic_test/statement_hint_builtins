@@ -642,12 +642,67 @@ skipif config local-mixed-25.4 local-mixed-26.1
 statement error transaction control statements cannot be used as hint targets
 SELECT information_schema.crdb_set_session_variable_hint('ROLLBACK TO SAVEPOINT s', 'distsql', 'off')
 
+# Verify that set_session_variable_hint events were logged.
+skipif config local-mixed-25.4 local-mixed-26.1
+query ITT
+SELECT "reportingID",
+       info::JSONB->>'StatementFingerprint',
+       info::JSONB->>'VariableName'
+FROM system.eventlog
+WHERE "eventType" = 'set_session_variable_hint'
+ORDER BY "timestamp"
+----
+1  SELECT * FROM xy WHERE x = _  reorder_joins_limit
+1  SELECT * FROM xy WHERE x = _  distsql
+
+# Verify the HintID matches the returned hint ID.
+skipif config local-mixed-25.4 local-mixed-26.1
+query B
+SELECT (info::JSONB->>'HintID')::INT = $sh1
+FROM system.eventlog
+WHERE "eventType" = 'set_session_variable_hint'
+ORDER BY "timestamp"
+LIMIT 1
+----
+true
+
+# Test the 4-arg overload with database and verify the event includes it.
+skipif config local-mixed-25.4 local-mixed-26.1
+let $sh3
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE x = 1',
+  'vectorize',
+  'off',
+  'mydb'
+);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT
+SELECT info::JSONB->>'VariableName',
+       info::JSONB->>'Database'
+FROM system.eventlog
+WHERE "eventType" = 'set_session_variable_hint'
+  AND (info::JSONB->>'HintID')::INT = $sh3
+----
+vectorize  mydb
+
+# Verify the 3-arg overload does not include a Database field.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT
+SELECT info::JSONB->>'VariableName',
+       COALESCE(info::JSONB->>'Database', 'NULL')
+FROM system.eventlog
+WHERE "eventType" = 'set_session_variable_hint'
+  AND (info::JSONB->>'HintID')::INT = $sh1
+----
+reorder_joins_limit  NULL
+
 skipif config local-mixed-25.4 local-mixed-26.1
 subtest end
 
 # Clean up all hints (rewrite inline + session setting) for other tests.
 skipif config local-mixed-25.4 local-mixed-26.1
-statement count 5
+statement count 6
 DELETE FROM system.statement_hints WHERE true
 
 skipif config local-mixed-25.4 local-mixed-26.1

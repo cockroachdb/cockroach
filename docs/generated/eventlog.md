@@ -811,6 +811,7 @@ added via information_schema.crdb_set_session_variable_hint.
 | `VariableName` | The name of the session variable being overridden. | no |
 | `VariableValue` | The value of the session variable override. | yes |
 | `HintID` | The hint ID of the newly created statement hint. | no |
+| `Database` | The database to which the hint is scoped, if any. | no |
 
 
 #### Common fields
