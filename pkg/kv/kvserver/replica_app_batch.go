@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -43,15 +42,9 @@ type replicaAppBatch struct {
 	r          *Replica
 	applyStats *applyCommittedEntriesStats
 
-	// batch accumulates writes implied by the raft entries in this batch. If
-	// engines are separated, only contains the StateEngine writes.
-	batch storage.Batch
-	// raftBatch accumulates writes to the raft log engine. It is lazily
-	// initialized when RaftBatch() is called.
-	//
-	// NB: This is currently only non-nil in tests, as that's the only scenario
-	// where we run with separated engines.
-	raftBatch storage.WriteBatch
+	// batch accumulates writes implied by the raft entries in this batch, across
+	// both the state and raft engines. It is engine separation aware.
+	batch kvstorage.Batch[storage.Batch]
 	// state is this batch's view of the replica's state. It is copied from
 	// under the Replica.mu when the batch is initialized and is updated in
 	// stageTrivialReplicatedEvalResult.
@@ -80,11 +73,6 @@ type replicaAppBatch struct {
 
 	start                   time.Time // time at NewBatch()
 	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
-
-	// wagWriter stages WAG nodes for this batch. Lifecycle triggers (splits,
-	// merges, etc.) populate it during command processing, and it's flushed to
-	// the raft engine before the command is applied to the state machine.
-	wagWriter wag.Writer
 
 	// Reused by addAppliedStateToBatch to avoid heap allocations.
 	asAlloc kvserverpb.RangeAppliedState
@@ -155,7 +143,7 @@ func (b *replicaAppBatch) Stage(
 	}
 
 	// Stage the command's write batch in the application batch.
-	if err := b.ab.addWriteBatch(ctx, b.batch, cmd); err != nil {
+	if err := b.ab.addWriteBatch(ctx, b.batch.State(), cmd); err != nil {
 		return nil, err
 	}
 
@@ -197,7 +185,7 @@ func (b *replicaAppBatch) Stage(
 
 func (b *replicaAppBatch) ReadWriter() kvstorage.ReadWriter {
 	return kvstorage.ReadWriter{
-		State: kvstorage.WrapState(b.batch),
+		State: kvstorage.WrapState(b.batch.State()),
 		Raft:  b.RaftRW(),
 	}
 }
@@ -226,7 +214,7 @@ func (b *replicaAppBatch) runPreAddTriggersReplicaOnly(
 		// application there are no listening rangefeeds. So we do this only
 		// in Replica application.
 		if p, filter := b.r.getRangefeedProcessorAndFilter(); p != nil {
-			if err := populatePrevValsInLogicalOpLog(ctx, filter, ops, b.batch); err != nil {
+			if err := populatePrevValsInLogicalOpLog(ctx, filter, ops, b.batch.State()); err != nil {
 				b.r.disconnectRangefeedWithErr(p, kvpb.NewError(err))
 			}
 		}
@@ -351,7 +339,10 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 			log.KvExec.Fatalf(ctx, "unable to validate split: %s", err)
 		}
 
-		splitPreApply(ctx, kvstorage.StateRW(b.batch), b.RaftRW(), &b.wagWriter, in)
+		// TODO(arul): consider passing in a kvstorage.Batch to splitPreApply
+		// instead. That way, we don't need to get the WagWriter out of the batch
+		// here, and can instead just have an AddEvent method on the type instead.
+		splitPreApply(ctx, kvstorage.StateRW(b.batch.State()), b.RaftRW(), b.batch.WagWriter(), in)
 
 		// The rangefeed processor will no longer be provided logical ops for
 		// its entire range, so it needs to be shut down and all registrations
@@ -495,7 +486,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	// shutdown of the rangefeed in that situation, so we don't pass anything to
 	// the rangefeed. If no rangefeed is running at all, this call will be a noop.
 	if ops := cmd.Cmd.LogicalOpLog; cmd.Cmd.WriteBatch != nil {
-		b.r.handleLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
+		b.r.handleLogicalOpLogRaftMuLocked(ctx, ops, b.batch.State())
 	} else if ops != nil {
 		log.KvExec.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.Cmd)
 	}
@@ -540,7 +531,7 @@ func (b *replicaAppBatch) stageTruncation(
 	// for now only to enable experimental testing.
 	if err := handleTruncatedStateBelowRaftPreApply(
 		ctx, b.truncState, *truncatedState,
-		b.r.raftMu.stateLoader.StateLoader, b.RaftBatch(),
+		b.r.raftMu.stateLoader.StateLoader, b.batch.Raft(),
 	); err != nil {
 		return errors.Wrap(err, "unable to handle truncated state")
 	}
@@ -633,31 +624,14 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 		}
 	}
 
-	// Flush any staged WAG nodes to the raft batch. This must happen after the
-	// state batch is fully prepared (so Repr() captures everything) but before
-	// the raft batch is committed. The Empty() guard avoids eagerly creating a
-	// raft batch and computing Repr() when no WAG nodes were staged.
-	if !b.wagWriter.Empty() {
-		if err := b.wagWriter.Flush(b.RaftBatch(), b.batch.Repr()); err != nil {
-			return err
-		}
-	}
-
-	// Commit the Raft batch to Pebble, if it exists. Note that unlike batches
-	// to the State engine, we always sync writes to the Raft engine.
-	if b.raftBatch != nil {
-		if err := b.raftBatch.Commit(true /* sync */); err != nil {
-			return errors.Wrapf(err, "unable to commit Raft entry batch to raft engine")
-		}
-		b.raftBatch.Close()
-		b.raftBatch = nil
-	}
-
-	// Apply the write batch to Pebble. Entry application is done without syncing
-	// to disk. The atomicity guarantees of the batch, and the fact that the
-	// applied state is stored in this batch, ensure that if the batch ends up not
-	// being durably committed then the entries in this batch will be applied
-	// again upon startup. However, there are a couple of exceptions.
+	// Commit the batch to Pebble. When engines are separated, this also flushes
+	// any staged WAG nodes and commits the raft batch.
+	//
+	// Entry application is done without syncing the state engine to disk. The
+	// atomicity guarantees of the batch, and the fact that the applied state is
+	// stored in this batch, ensure that if the batch ends up not being durably
+	// committed then the entries in this batch will be applied again upon
+	// startup. However, there are a couple of exceptions.
 	//
 	// If we're removing the replica's data then we sync this batch as it is not
 	// safe to call postDestroyRaftMuLocked before ensuring that the replica's
@@ -679,12 +653,11 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// asynchronously when sure that the state machine engine has synced the
 	// application of this command. I.e. the loosely coupled truncation migration
 	// mentioned above likely needs to be done first.
-	sync := b.changeRemovesReplica || b.changeTruncatesSideloadedFiles
-	if err := b.batch.Commit(sync); err != nil {
+	syncStateEngine := b.changeRemovesReplica || b.changeTruncatesSideloadedFiles
+	if err := b.batch.Commit(syncStateEngine); err != nil {
 		return errors.Wrapf(err, "unable to commit Raft entry batch")
 	}
 	b.batch.Close()
-	b.batch = nil
 
 	// Update the replica's applied indexes, mvcc stats and closed timestamp.
 	r := b.r
@@ -769,14 +742,14 @@ func (b *replicaAppBatch) addAppliedStateToBatch(ctx context.Context) error {
 	if b.state.ForceFlushIndex != b.r.shMu.state.ForceFlushIndex {
 		// NB: this branch goes first, so that MVCC stats are accurate below.
 		if err := b.r.raftMu.stateLoader.SetForceFlushIndex(
-			ctx, b.batch, b.state.Stats, &b.state.ForceFlushIndex); err != nil {
+			ctx, b.batch.State(), b.state.Stats, &b.state.ForceFlushIndex); err != nil {
 			return err
 		}
 	}
 	// Set the range applied state, which includes the last applied raft and lease
 	// index along with the MVCC stats, all in one key.
 	b.asAlloc = b.state.ToRangeAppliedState()
-	return b.r.raftMu.stateLoader.SetRangeAppliedState(ctx, b.batch, &b.asAlloc)
+	return b.r.raftMu.stateLoader.SetRangeAppliedState(ctx, b.batch.State(), &b.asAlloc)
 }
 
 func (b *replicaAppBatch) recordStatsOnCommit() {
@@ -863,34 +836,16 @@ func (b *replicaAppBatch) verifySysBytes(ctx context.Context) error {
 
 // Close implements the apply.Batch interface.
 func (b *replicaAppBatch) Close() {
-	if b.batch != nil {
-		b.batch.Close()
-	}
-	if b.raftBatch != nil {
-		b.raftBatch.Close()
-	}
+	b.batch.Close()
 	*b = replicaAppBatch{}
 }
 
-// RaftBatch returns a batch from the Raft engine.
-func (b *replicaAppBatch) RaftBatch() storage.WriteBatch {
-	if !b.r.store.internalEngines.Separated() {
-		// We're not running with separated engines; simply return the batch
-		// that was created for the one and only engine.
-		return b.batch
-	}
-	if b.raftBatch == nil {
-		b.raftBatch = b.r.store.LogEngine().NewWriteBatch()
-	}
-	return b.raftBatch
-}
-
 // RaftRW returns a read/write accessor to the LogEngine. Reads from the engine,
-// writes to the RaftBatch.
+// writes to the batch's raft writer.
 func (b *replicaAppBatch) RaftRW() kvstorage.Raft {
 	return kvstorage.Raft{
 		RO: b.r.LogEngine(),
-		WO: b.RaftBatch(),
+		WO: b.batch.Raft(),
 	}
 }
 
