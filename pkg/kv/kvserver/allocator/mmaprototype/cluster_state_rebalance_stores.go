@@ -346,24 +346,25 @@ func (re *rebalanceEnv) rebalanceStore(
 	topKRanges := ss.adjusted.topKRanges[localStoreID]
 	n := topKRanges.len()
 	// Debug logging.
-	if n > 0 {
-		var buf redact.StringBuilder
-		buf.Printf("top-K[%d] ranges for s%d with lease on local s%d:", topKRanges.dim,
-			store.StoreID, localStoreID)
-		for i := 0; i < n; i++ {
-			rangeID := topKRanges.index(i)
-			rstate := re.ranges[rangeID]
-			load := rstate.load.Load
-			if !ss.adjusted.replicas[rangeID].IsLeaseholder {
-				load[CPURate] = rstate.load.RaftCPU
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		if n > 0 {
+			var buf redact.StringBuilder
+			buf.Printf("top-K[%d] ranges for s%d with lease on local s%d:", topKRanges.dim,
+				store.StoreID, localStoreID)
+			for i := 0; i < n; i++ {
+				rangeID := topKRanges.index(i)
+				rstate := re.ranges[rangeID]
+				load := rstate.load.Load
+				if !ss.adjusted.replicas[rangeID].IsLeaseholder {
+					load[CPURate] = rstate.load.RaftCPU
+				}
+				buf.Printf(" r%d:%v", rangeID, load)
 			}
-			// TODO(tbg): allocates 22x/op (top-K logging).
-			buf.Printf(" r%d:%v", rangeID, load)
+			log.KvDistribution.VEventf(ctx, 2, "%s", buf.RedactableString())
+		} else {
+			log.KvDistribution.VEventf(ctx, 2, "no top-K[%s] ranges found for s%d with lease on local s%d",
+				topKRanges.dim, store.StoreID, localStoreID)
 		}
-		log.KvDistribution.VEventf(ctx, 2, "%s", buf.RedactableString())
-	} else {
-		log.KvDistribution.VEventf(ctx, 2, "no top-K[%s] ranges found for s%d with lease on local s%d",
-			topKRanges.dim, store.StoreID, localStoreID)
 	}
 	if n == 0 {
 		return
