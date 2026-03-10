@@ -1768,7 +1768,8 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 		}
 	}
 
-	// TODO(tbg): allocates 21x/op (locality tier slices).
+	// NB: these slices are captured by makeReplicasLocalityTiers and thus
+	// cannot be pooled.
 	var replicaLocalityTiers, voterLocalityTiers []localityTiers
 	for i := range rac.replicas[voterIndex] {
 		replicaLocalityTiers = append(replicaLocalityTiers, rac.replicas[voterIndex][i].localityTiers)
@@ -2100,15 +2101,14 @@ type storeAndLeasePreference struct {
 //
 // This would require restructuring to pass a health-filtered store set into
 // this function.
-func (rac *rangeAnalyzedConstraints) candidatesToMoveLease() (
-	cands []storeAndLeasePreference,
-	curLeasePreferenceIndex int32,
-) {
-	curLeasePreferenceIndex = rac.leaseholderPreferenceIndex
+func (rac *rangeAnalyzedConstraints) candidatesToMoveLease(
+	buf []storeAndLeasePreference,
+) ([]storeAndLeasePreference, int32) {
+	cands := buf[:0]
+	curLeasePreferenceIndex := rac.leaseholderPreferenceIndex
 	for i := range rac.leasePreferenceIndices {
 		if rac.leasePreferenceIndices[i] <= curLeasePreferenceIndex &&
 			rac.replicas[voterIndex][i].StoreID != rac.leaseholderID {
-			// TODO(tbg): allocates 197x/op.
 			cands = append(cands, storeAndLeasePreference{
 				leasePreferenceIndex: rac.leasePreferenceIndices[i],
 				storeID:              rac.replicas[voterIndex][i].StoreID,
