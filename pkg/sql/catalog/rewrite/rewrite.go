@@ -187,13 +187,38 @@ func TableDescs(
 			// we update the FK to point to it?
 			table.OutboundFKs = append(table.OutboundFKs, *fk)
 		}
-		for idx := range table.Mutations {
-			if c := table.Mutations[idx].GetConstraint(); c != nil &&
+		origMutations := table.Mutations
+		table.Mutations = table.Mutations[:0]
+		for idx := range origMutations {
+			if c := origMutations[idx].GetConstraint(); c != nil &&
 				c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY {
 				fk := &c.ForeignKey
 				if rewriteOfReferencedTable, ok := descriptorRewrites[fk.ReferencedTableID]; ok {
 					fk.ReferencedTableID = rewriteOfReferencedTable.ID
 					fk.OriginTableID = tableRewrite.ID
+				} else {
+					// The referenced table is not being restored. If the user
+					// specified skip_missing_foreign_keys, drop this mutation.
+					// Error checking for the case where the user did not specify
+					// the option has already been done in allocateDescriptorRewrites.
+					continue
+				}
+			}
+			table.Mutations = append(table.Mutations, origMutations[idx])
+		}
+		// Clean up MutationJobs entries for mutation IDs that no longer
+		// have any corresponding mutations (e.g. because we dropped FK
+		// mutations above).
+		if len(table.Mutations) < len(origMutations) {
+			remainingMutIDs := make(map[descpb.MutationID]struct{})
+			for i := range table.Mutations {
+				remainingMutIDs[table.Mutations[i].MutationID] = struct{}{}
+			}
+			origMutJobs := table.MutationJobs
+			table.MutationJobs = table.MutationJobs[:0]
+			for i := range origMutJobs {
+				if _, ok := remainingMutIDs[origMutJobs[i].MutationID]; ok {
+					table.MutationJobs = append(table.MutationJobs, origMutJobs[i])
 				}
 			}
 		}
@@ -1068,6 +1093,22 @@ func rewriteSchemaChangerState(
 				_, scExists := descriptorRewrites[el.SchemaID]
 				if !scExists && state.CurrentStatuses[i] == scpb.Status_ABSENT {
 					removeElementAtCurrentIdx()
+					continue
+				}
+			case *scpb.ForeignKeyConstraint:
+				// If the referenced table is missing, drop this FK constraint
+				// element. This mirrors the skip_missing_foreign_keys handling
+				// for legacy schema changer mutations in TableDescs.
+				if el.ReferencedTableID == missingID {
+					removeElementAtCurrentIdx()
+					droppedConstraints.Add(el.ConstraintID)
+					continue
+				}
+			case *scpb.ForeignKeyConstraintUnvalidated:
+				// Same handling as ForeignKeyConstraint for unvalidated FKs.
+				if el.ReferencedTableID == missingID {
+					removeElementAtCurrentIdx()
+					droppedConstraints.Add(el.ConstraintID)
 					continue
 				}
 			case *scpb.CheckConstraint:
