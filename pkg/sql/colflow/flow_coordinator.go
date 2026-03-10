@@ -10,6 +10,8 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -259,9 +261,30 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 
 	ctx, span := execinfra.ProcessorSpan(ctx, f.flowCtx, "batch flow coordinator", f.processorID)
 
+	// Set the ASH work state for this goroutine so that active sampling
+	// can attribute CPU work to the correct workload identity.
+	var ashCleanup func()
+	if f.flowCtx != nil && f.flowCtx.EvalCtx != nil {
+		var gatewayNodeID roachpb.NodeID
+		if f.flowCtx.NodeID != nil {
+			gatewayNodeID = roachpb.NodeID(f.flowCtx.NodeID.SQLInstanceID())
+		}
+		ashCleanup = ash.SetWorkState(
+			f.flowCtx.Codec().TenantID,
+			ash.WorkloadInfo{
+				WorkloadID:    f.flowCtx.EvalCtx.WorkloadID,
+				AppNameID:     f.flowCtx.EvalCtx.AppNameID,
+				GatewayNodeID: gatewayNodeID,
+			},
+			ash.WorkCPU, "BatchFlowCoordinator")
+	}
+
 	// Make sure that we close the coordinator and notify the batch receiver in
 	// all cases.
 	defer func() {
+		if ashCleanup != nil {
+			ashCleanup()
+		}
 		f.cancelFlow()
 		f.output.ProducerDone()
 		span.Finish()

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -335,7 +336,16 @@ func (i *Inbox) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	defer i.deserializationStopWatch.Stop()
 	for {
 		i.deserializationStopWatch.Stop()
+		cleanup := ash.SetWorkState(
+			i.admissionInfo.TenantID,
+			ash.WorkloadInfo{
+				WorkloadID:    i.admissionInfo.WorkloadID,
+				AppNameID:     i.admissionInfo.AppNameID,
+				GatewayNodeID: i.admissionInfo.GatewayNodeID,
+			},
+			ash.WorkNetwork, "InboxRecv")
 		m, err := i.stream.Recv()
+		cleanup()
 		i.deserializationStopWatch.Start()
 		atomic.AddInt64(&i.statsAtomics.numMessages, 1)
 		if err != nil {
