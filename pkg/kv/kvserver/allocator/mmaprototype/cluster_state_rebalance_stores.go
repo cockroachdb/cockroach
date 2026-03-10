@@ -357,6 +357,7 @@ func (re *rebalanceEnv) rebalanceStore(
 			if !ss.adjusted.replicas[rangeID].IsLeaseholder {
 				load[CPURate] = rstate.load.RaftCPU
 			}
+			// TODO(tbg): allocates 22x/op (top-K logging).
 			buf.Printf(" r%d:%v", rangeID, load)
 		}
 		log.KvDistribution.VEventf(ctx, 2, "%s", buf.RedactableString())
@@ -759,6 +760,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		}
 		// NB: intentionally log before re-adding the current leaseholder so
 		// we don't list it as a candidate.
+		// TODO(tbg): allocates 207x/op (logging and candidate building).
 		log.KvDistribution.VEventf(ctx, 3, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
 		// Now candsPL is ready for computing the means.
 		candsPL.insert(store.StoreID)
@@ -803,6 +805,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 				continue
 			}
 			candSls := re.computeLoadSummary(ctx, cand.storeID, &means.storeLoad, &means.nodeLoad)
+			// TODO(tbg): allocates 87x/op (candidateInfo slice growth).
 			candsSet.candidates = append(candsSet.candidates, candidateInfo{
 				StoreID:              cand.storeID,
 				storeLoadSummary:     candSls,
