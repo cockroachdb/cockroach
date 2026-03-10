@@ -221,6 +221,7 @@ go_library(
         "ycsb.go",
     ],
     embedsrcs = [
+        "psycopg_crdb_skip.py",
         "ruby_pg_helpers.rb",
         "knexfile.js",
         "create-msk-topic/main.go.txt",

@@ -7,6 +7,7 @@ package tests
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"regexp"
 
@@ -20,6 +21,12 @@ import (
 
 var psycopgReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)(?:\.(?P<minor>\d+)(?:\.(?P<point>\d+)(?:\.(?P<subpoint>\d+))?)?)?$`)
 var supportedPsycopgTag = "3.2.8"
+
+// psycopgCrdbSkipPlugin is a pytest plugin that skips tests marked with
+// @pytest.mark.crdb_skip("reason") when running the psycopg suite against CockroachDB.
+//
+//go:embed psycopg_crdb_skip.py
+var psycopgCrdbSkipPlugin string
 
 // This test runs psycopg full test suite against a single cockroach node.
 func registerPsycopg(r registry.Registry) {
@@ -149,13 +156,18 @@ func registerPsycopg(r registry.Registry) {
 
 		t.Status("running psycopg test suite")
 
+		if err := c.PutString(ctx, psycopgCrdbSkipPlugin, "/mnt/data1/psycopg/psycopg_crdb_skip.py", 0644, node); err != nil {
+			t.Fatal(err)
+		}
+
 		const testResultsXML = "/mnt/data1/psycopg/test_results.xml"
 		result, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(node), fmt.Sprintf(
 			`source venv/bin/activate &&
 			cd /mnt/data1/psycopg/ &&
+			export PYTHONPATH=/mnt/data1/psycopg &&
 			export PSYCOPG_TEST_DSN="host=localhost port={pgport:1} user=%[1]s password=%[2]s dbname=defaultdb" &&
 			export PGPASSWORD=%[2]s
-			pytest -vv -m "not timing" --junit-xml=%[3]s`,
+			pytest -vv -m "not timing" -p psycopg_crdb_skip --junit-xml=%[3]s`,
 			install.DefaultUser, install.DefaultPassword, testResultsXML))
 
 		// Fatal for a roachprod or transient error. A roachprod error is when result.Err==nil.
