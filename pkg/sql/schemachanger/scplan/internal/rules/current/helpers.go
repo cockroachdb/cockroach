@@ -81,14 +81,42 @@ func IsDescriptor(e scpb.Element) bool {
 }
 
 func isSubjectTo2VersionInvariant(e scpb.Element) bool {
-	if isIndex(e) ||
-		isColumn(e) ||
-		isValidatedNonIndexBackedConstraint(e) {
+	// All type descriptor child elements are subject.
+	if isTypeDescriptorChildElement(e) {
+		return true
+	}
+
+	// All table descriptor child elements are subject except unvalidated
+	// constraints.
+	if isTableDescriptorChildElement(e) {
+		if isUnvalidatedConstraint(e) {
+			return false
+		}
+		return true
+	}
+
+	return false
+}
+
+func isTableDescriptorChildElement(e scpb.Element) bool {
+	if isColumn(e) || isConstraint(e) {
 		return true
 	}
 
 	switch e.(type) {
 	case *scpb.TableSchemaLocked:
+		return true
+	}
+	return false
+}
+
+// isTypeDescriptorChildElement returns true for child elements of a type
+// descriptor.
+func isTypeDescriptorChildElement(e scpb.Element) bool {
+	// TODO(bghal): Add composites here when they are added to
+	// isSubjectTo2VersionInvariant.
+	switch e.(type) {
+	case *scpb.EnumTypeValue:
 		return true
 	}
 	return false

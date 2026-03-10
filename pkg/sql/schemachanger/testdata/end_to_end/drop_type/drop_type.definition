@@ -1,8 +1,7 @@
 setup
-CREATE DATABASE db;
-CREATE TYPE db.blue_fish AS ENUM('salmon');
+CREATE TYPE blue_fish AS ENUM('salmon');
 ----
 
 test
-DROP TYPE db.blue_fish;
+DROP TYPE blue_fish;
 ----

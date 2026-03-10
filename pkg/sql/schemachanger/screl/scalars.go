@@ -107,7 +107,7 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		*scpb.SchemaParent, *scpb.SchemaComment, *scpb.SchemaChild:
 		// These elements need v22.1 so they can be used without checking any version gates.
 		return true
-	case *scpb.IndexColumn, *scpb.EnumTypeValue, *scpb.TableZoneConfig:
+	case *scpb.IndexColumn, *scpb.TableZoneConfig:
 		// These elements need v22.2 so they can be used without checking any version gates.
 		return true
 	case *scpb.DatabaseData, *scpb.TableData, *scpb.IndexData, *scpb.TablePartitioning,
@@ -143,7 +143,7 @@ func VersionSupportsElementUse(el scpb.Element, version clusterversion.ClusterVe
 		return version.IsActive(clusterversion.V26_1)
 	case *scpb.FunctionParams:
 		return version.IsActive(clusterversion.V26_2)
-	case *scpb.DomainType:
+	case *scpb.DomainType, *scpb.EnumTypeValue:
 		return version.IsActive(clusterversion.V26_3)
 	default:
 		panic(errors.AssertionFailedf("unknown element %T", el))

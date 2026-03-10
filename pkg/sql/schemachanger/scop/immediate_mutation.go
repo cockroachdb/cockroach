@@ -1329,3 +1329,39 @@ type UpsertRowLevelTTL struct {
 	RowLevelTTL catpb.RowLevelTTL
 	TTLExpr     *scpb.Expression
 }
+
+// AddEnumTypeValue adds an enum value to the type descriptor in the READ_ONLY
+// capability with ADD direction.
+type AddEnumTypeValue struct {
+	immediateMutationOp
+	TypeID                 descpb.ID
+	PhysicalRepresentation []byte
+	LogicalRepresentation  string
+}
+
+// PromoteEnumTypeValue promotes a READ_ONLY/ADD enum value to ALL/NONE, making
+// it fully writable.
+type PromoteEnumTypeValue struct {
+	immediateMutationOp
+	TypeID                 descpb.ID
+	PhysicalRepresentation []byte
+	LogicalRepresentation  string
+}
+
+// DemoteEnumTypeValue demotes a public enum value to READ_ONLY capability
+// with REMOVE direction.
+type DemoteEnumTypeValue struct {
+	immediateMutationOp
+	TypeID                 descpb.ID
+	PhysicalRepresentation []byte
+	LogicalRepresentation  string
+}
+
+// RemoveEnumTypeValue removes an READ_ONLY/REMOVE enum value from the type
+// descriptor.
+type RemoveEnumTypeValue struct {
+	immediateMutationOp
+	TypeID                 descpb.ID
+	PhysicalRepresentation []byte
+	LogicalRepresentation  string
+}
