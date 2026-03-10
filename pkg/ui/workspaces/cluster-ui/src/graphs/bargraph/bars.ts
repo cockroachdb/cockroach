@@ -134,6 +134,118 @@ export const getStackedBarOpts = (
   return options;
 };
 
+// getGroupedStackedBarOpts creates options for a chart with two groups of
+// stacked bars side by side. The data series are expected in order:
+// [timestamps, group1_bottom, group1_top, group2_bottom, group2_top].
+// group1 bars are left-aligned, group2 bars are right-aligned.
+export const getGroupedStackedBarOpts = (
+  unstackedData: AlignedData,
+  userOptions: Partial<Options>,
+  xAxisDomain: AxisDomain,
+  yAxisDomain: AxisDomain,
+  yAxisUnits: AxisUnits,
+  colourPalette = seriesPalette,
+  timezone: string,
+): { opts: Options; stackedData: AlignedData } => {
+  const { series, ...providedOpts } = userOptions;
+  const leftBars = getBarsBuilder(0.4, 40, 4, -1);
+  const rightBars = getBarsBuilder(0.4, 40, 4, 1);
+
+  const opts: Options = {
+    width: 947,
+    height: 300,
+    ms: 1,
+    legend: {
+      isolate: true,
+      live: false,
+    },
+    scales: {
+      x: {
+        range: () => [xAxisDomain.extent[0], xAxisDomain.extent[1]],
+      },
+      yAxis: {
+        range: () => [yAxisDomain.extent[0], yAxisDomain.extent[1]],
+      },
+    },
+    axes: [
+      {
+        values: (_u, vals) => vals.map(xAxisDomain.tickFormat),
+        splits: () => xAxisDomain.ticks,
+      },
+      {
+        values: (_u, vals) => vals.map(yAxisDomain.tickFormat),
+        splits: () => [
+          yAxisDomain.extent[0],
+          ...yAxisDomain.ticks,
+          yAxisDomain.extent[1],
+        ],
+        scale: "yAxis",
+      },
+    ],
+    series: [
+      {
+        value: (_u, millis) => xAxisDomain.guideFormat(millis),
+      },
+      // Group 1 (canary): left-aligned bars
+      ...series.slice(1, 3).map((s, i) => ({
+        fill: colourPalette[i % colourPalette.length],
+        stroke: colourPalette[i % colourPalette.length],
+        width: 2,
+        paths: leftBars,
+        points: { show: false },
+        scale: "yAxis",
+        ...s,
+      })),
+      // Group 2 (stable): right-aligned bars
+      ...series.slice(3, 5).map((s, i) => ({
+        fill: colourPalette[(i + 2) % colourPalette.length],
+        stroke: colourPalette[(i + 2) % colourPalette.length],
+        width: 2,
+        paths: rightBars,
+        points: { show: false },
+        scale: "yAxis",
+        ...s,
+      })),
+    ],
+    plugins: [barTooltipPlugin(yAxisUnits, timezone)],
+  };
+
+  const combinedOpts = merge(opts, providedOpts);
+  combinedOpts.axes[1].label += ` ${yAxisDomain.label}`;
+
+  // Pre-stack each group independently: series 2 += series 1, series 4 += series 3.
+  const stackedData: AlignedData = [
+    unstackedData[0],
+    unstackedData[1],
+    unstackedData[1].map((v, i) => v + unstackedData[2][i]),
+    unstackedData[3],
+    unstackedData[3].map((v, i) => v + unstackedData[4][i]),
+  ];
+
+  // Bands fill between the top and bottom of each group.
+  combinedOpts.bands = [
+    { series: [2, 1] as Band.Bounds }, // canary: execution on top of planning
+    { series: [4, 3] as Band.Bounds }, // stable: execution on top of planning
+  ];
+
+  // Show unstacked values in tooltip/legend.
+  combinedOpts.series.forEach((s, si) => {
+    s.value = (_u, _v, _si, i) => unstackedData[si]?.[i];
+    s.points = s.points || { show: false };
+    s.points.filter = (_u, seriesIdx, show) => {
+      if (show) {
+        const pts: number[] = [];
+        unstackedData[seriesIdx]?.forEach((v, i) => {
+          v && pts.push(i);
+        });
+        return pts;
+      }
+    };
+  });
+
+  return { opts: combinedOpts, stackedData };
+};
+
 export const getBarChartOpts = (
   userOptions: Partial<Options>,
   xAxisDomain: AxisDomain,

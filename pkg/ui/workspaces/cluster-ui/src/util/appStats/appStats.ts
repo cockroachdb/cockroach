@@ -162,6 +162,32 @@ export function addExecStats(a: ExecStats, b: ExecStats): ExecStats {
   };
 }
 
+export function addExperimentStatsInfo(
+  a: cockroach.sql.IExperimentStatsInfo,
+  b: cockroach.sql.IExperimentStatsInfo,
+): cockroach.sql.IExperimentStatsInfo {
+  if (!a && !b) return {};
+  if (!a) return b;
+  if (!b) return a;
+  const countA = FixLong(a.count).toInt();
+  const countB = FixLong(b.count).toInt();
+  return {
+    count: FixLong(a.count).add(FixLong(b.count)),
+    run_lat: aggregateNumericStats(
+      a.run_lat,
+      b.run_lat,
+      countA || 1,
+      countB || 1,
+    ),
+    plan_lat: aggregateNumericStats(
+      a.plan_lat,
+      b.plan_lat,
+      countA || 1,
+      countB || 1,
+    ),
+  };
+}
+
 export function addStatementStats(
   a: StatementStatistics,
   b: StatementStatistics,
@@ -270,6 +296,8 @@ export function addStatementStats(
     indexes: indexes,
     latency_info: aggregateLatencyInfo(a, b),
     last_error_code: "",
+    canary_stats: addExperimentStatsInfo(a.canary_stats, b.canary_stats),
+    stable_stats: addExperimentStatsInfo(a.stable_stats, b.stable_stats),
   };
 }
 
