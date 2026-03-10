@@ -512,6 +512,7 @@
 #!/pkg/cmd/roachtest/tests     @cockroachdb/test-eng-noreview
 /pkg/cmd/roachtest/tests/activerecord.go  @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
 /pkg/cmd/roachtest/tests/asyncpg.go       @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
+/pkg/cmd/roachtest/tests/cdc*.go          @cockroachdb/cdc-prs
 /pkg/cmd/roachtest/tests/django.go        @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
 /pkg/cmd/roachtest/tests/gopg.go	        @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
 /pkg/cmd/roachtest/tests/gorm.go	        @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
