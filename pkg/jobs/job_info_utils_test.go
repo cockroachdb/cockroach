@@ -72,10 +72,61 @@ func TestReadWriteChunkedFileToJobInfo(t *testing.T) {
 					return err
 				}
 				require.Equal(t, tt.data, got)
+
+				// Delete and verify the file is gone.
+				err = DeleteChunkedFile(ctx, tt.name, txn, jobspb.JobID(123))
+				if err != nil {
+					return err
+				}
+				got, err = ReadChunkedFileToJobInfo(ctx, tt.name, txn, jobspb.JobID(123))
+				if err != nil {
+					return err
+				}
+				require.Empty(t, got)
 				return nil
 			}))
 		})
 	}
+}
+
+func TestReadWriteChunkedProto(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	params := base.TestServerArgs{}
+	params.Knobs.JobsTestingKnobs = NewTestingKnobsWithShortIntervals()
+	s := serverutils.StartServerOnly(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	db := s.InternalDB().(isql.DB)
+	jobID := jobspb.JobID(789)
+
+	t.Run("write and read proto", func(t *testing.T) {
+		msg := &jobspb.Payload{Description: "test chunked proto"}
+		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return WriteChunkedProto(ctx, "test-proto", msg, txn, jobID)
+		}))
+
+		var got jobspb.Payload
+		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			found, err := ReadChunkedProto(ctx, "test-proto", txn, jobID, &got)
+			require.NoError(t, err)
+			require.True(t, found)
+			return nil
+		}))
+		require.Equal(t, msg.Description, got.Description)
+	})
+
+	t.Run("read nonexistent proto", func(t *testing.T) {
+		var got jobspb.Payload
+		require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			found, err := ReadChunkedProto(ctx, "nonexistent", txn, jobID, &got)
+			require.NoError(t, err)
+			require.False(t, found)
+			return nil
+		}))
+	})
 }
 
 func TestOverwriteChunkingWithVariableLengths(t *testing.T) {

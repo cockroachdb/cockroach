@@ -23,6 +23,16 @@ import (
 const bundleChunkSize = 1 << 20 // 1 MiB
 const finalChunkSuffix = "#_final"
 
+// DeleteChunkedFile deletes all chunks associated with the given filename from
+// the job_info table. Chunks are stored with info keys in [filename,
+// filename#_final~), and this function removes all of them.
+func DeleteChunkedFile(
+	ctx context.Context, filename string, txn isql.Txn, jobID jobspb.JobID,
+) error {
+	finalChunkName := filename + finalChunkSuffix
+	return InfoStorageForJob(txn, jobID).DeleteRange(ctx, filename, finalChunkName+"~", 0)
+}
+
 // WriteChunkedFileToJobInfo will break up data into chunks of a fixed size, and
 // gzip compress them before writing them to the job_info table. This method
 // clears any existing chunks with the same filename before writing the new
@@ -34,11 +44,8 @@ func WriteChunkedFileToJobInfo(
 	finalChunkName := filename + finalChunkSuffix
 	jobInfo := InfoStorageForJob(txn, jobID)
 
-	// Clear any existing chunks with the same filename before writing new chunks.
-	// We clear all rows that with info keys in [filename, filename#_final~). The
-	// trailing "~" makes the exclusive end-key inclusive of all possible chunks
-	// as "~" sorts after all digit.
-	if err := jobInfo.DeleteRange(ctx, filename, finalChunkName+"~", 0); err != nil {
+	// Clear any existing chunks with the same filename before writing new ones.
+	if err := DeleteChunkedFile(ctx, filename, txn, jobID); err != nil {
 		return err
 	}
 
@@ -148,6 +155,37 @@ func (i InfoStorage) GetProto(
 	data, found, err := i.Get(ctx, "get-proto", infoKey)
 	if err != nil || !found {
 		return found, err
+	}
+	if err := protoutil.Unmarshal(data, msg); err != nil {
+		return false, errors.Wrap(err, "failed to unmarshal proto")
+	}
+	return true, nil
+}
+
+// WriteChunkedProto marshals a protobuf message and writes it as a chunked
+// file to the job_info table.
+func WriteChunkedProto(
+	ctx context.Context, filename string, msg protoutil.Message, txn isql.Txn, jobID jobspb.JobID,
+) error {
+	data, err := protoutil.Marshal(msg)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal proto")
+	}
+	return WriteChunkedFileToJobInfo(ctx, filename, data, txn, jobID)
+}
+
+// ReadChunkedProto reads a chunked file from the job_info table and unmarshals
+// it into the provided protobuf message. Returns true if data was found and
+// unmarshaled successfully.
+func ReadChunkedProto(
+	ctx context.Context, filename string, txn isql.Txn, jobID jobspb.JobID, msg protoutil.Message,
+) (bool, error) {
+	data, err := ReadChunkedFileToJobInfo(ctx, filename, txn, jobID)
+	if err != nil {
+		return false, err
+	}
+	if len(data) == 0 {
+		return false, nil
 	}
 	if err := protoutil.Unmarshal(data, msg); err != nil {
 		return false, errors.Wrap(err, "failed to unmarshal proto")

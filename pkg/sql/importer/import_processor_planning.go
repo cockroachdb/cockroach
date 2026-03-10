@@ -233,12 +233,10 @@ func distImport(
 			// Only write when the buffer has new data to avoid unnecessary I/O.
 			if useDistributedMerge && manifestBuf != nil && manifestBuf.Dirty() {
 				manifests := manifestBuf.SnapshotAndMarkClean()
-				data, err := protoutil.Marshal(&jobspb.BulkSSTManifests{Manifests: manifests})
-				if err != nil {
-					return errors.Wrap(err, "marshaling SST manifests")
-				}
-				if err := jobs.WriteChunkedFileToJobInfo(
-					ctx, importSSTManifestsInfoKey, data, txn, job.ID(),
+				if err := jobs.WriteChunkedProto(
+					ctx, importSSTManifestsInfoKey,
+					&jobspb.BulkSSTManifests{Manifests: manifests},
+					txn, job.ID(),
 				); err != nil {
 					return errors.Wrap(err, "writing SST manifests to job info")
 				}
@@ -270,17 +268,14 @@ func distImport(
 		if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(
 			ctx context.Context, txn isql.Txn,
 		) error {
-			data, err := jobs.ReadChunkedFileToJobInfo(
-				ctx, importSSTManifestsInfoKey, txn, job.ID(),
+			var stored jobspb.BulkSSTManifests
+			found, err := jobs.ReadChunkedProto(
+				ctx, importSSTManifestsInfoKey, txn, job.ID(), &stored,
 			)
 			if err != nil {
 				return err
 			}
-			if len(data) > 0 {
-				var stored jobspb.BulkSSTManifests
-				if err := protoutil.Unmarshal(data, &stored); err != nil {
-					return errors.Wrap(err, "unmarshaling SST manifests from job info")
-				}
+			if found {
 				resumeManifests = stored.Manifests
 				processorOutput = append(
 					processorOutput, bulksst.ManifestsToSSTFiles(resumeManifests),
