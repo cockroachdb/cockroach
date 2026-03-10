@@ -85,7 +85,7 @@ func makeInspectThroughputTest(
 		Owner:               registry.OwnerSQLFoundations,
 		Benchmark:           true,
 		Cluster:             r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.CPU(numCPUs)),
-		CompatibleClouds:    registry.AllExceptAWS,
+		CompatibleClouds:    registry.OnlyGCE,
 		Suites:              registry.Suites(registry.Nightly),
 		Leases:              registry.LeaderLeases,
 		Timeout:             length,
