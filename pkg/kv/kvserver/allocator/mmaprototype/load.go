@@ -102,7 +102,6 @@ func (lv LoadVector) SafeFormat(w redact.SafePrinter, _ rune) {
 			panic(fmt.Sprintf("unknown LoadDimension: %d", dim))
 		}
 	}
-	// TODO(tbg): allocates 513x/op via formatVal closures and redact printing.
 	w.Printf(
 		"[cpu:%s/s, write-bandwidth:%s/s, byte-size:%s]",
 		formatVal(CPURate),
