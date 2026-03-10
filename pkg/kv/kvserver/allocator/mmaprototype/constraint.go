@@ -2101,6 +2101,7 @@ type storeAndLeasePreference struct {
 //
 // This would require restructuring to pass a health-filtered store set into
 // this function.
+// buf, if non-nil, is reused for the returned slice to avoid allocation.
 func (rac *rangeAnalyzedConstraints) candidatesToMoveLease(
 	buf []storeAndLeasePreference,
 ) ([]storeAndLeasePreference, int32) {
