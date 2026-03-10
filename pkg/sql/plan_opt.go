@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -293,6 +295,14 @@ func (p *planner) prepareUsingOptimizerInternal(
 func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 	ctx, sp := tracing.ChildSpan(ctx, "optimizer")
 	defer sp.Finish()
+	cleanup := ash.SetWorkState(
+		p.extendedEvalCtx.Codec.TenantID, ash.WorkloadInfo{
+			WorkloadID:    p.extendedEvalCtx.WorkloadID,
+			AppNameID:     p.extendedEvalCtx.AppNameID,
+			GatewayNodeID: roachpb.NodeID(p.extendedEvalCtx.NodeID.SQLInstanceID()),
+		},
+		ash.WorkCPU, "Optimize")
+	defer cleanup()
 	p.curPlan.init(&p.stmt, &p.instrumentation)
 
 	opc := &p.optPlanningCtx

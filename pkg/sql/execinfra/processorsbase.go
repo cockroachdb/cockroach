@@ -10,6 +10,8 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -414,6 +416,9 @@ type ProcessorBaseNoHelper struct {
 	// curInputToDrain is the index into inputsToDrain that needs to be drained
 	// next.
 	curInputToDrain int
+
+	// ashCleanup clears the ASH work state set during StartInternal.
+	ashCleanup func()
 }
 
 // MustBeStreaming implements the Processor interface.
@@ -930,6 +935,16 @@ func (pb *ProcessorBaseNoHelper) StartInternal(
 	if !noSpan {
 		pb.ctx, pb.span = ProcessorSpan(ctx, pb.FlowCtx, name, pb.ProcessorID, eventListeners...)
 	}
+	if pb.FlowCtx != nil && pb.FlowCtx.EvalCtx != nil && pb.FlowCtx.NodeID != nil {
+		pb.ashCleanup = ash.SetWorkState(
+			pb.FlowCtx.Codec().TenantID,
+			ash.WorkloadInfo{
+				WorkloadID:    pb.FlowCtx.EvalCtx.WorkloadID,
+				AppNameID:     pb.FlowCtx.EvalCtx.AppNameID,
+				GatewayNodeID: roachpb.NodeID(pb.FlowCtx.NodeID.SQLInstanceID()),
+			},
+			ash.WorkCPU, name)
+	}
 	return pb.ctx
 }
 
@@ -963,6 +978,10 @@ func (pb *ProcessorBaseNoHelper) InternalClose() bool {
 		input.ConsumerClosed()
 	}
 
+	if pb.ashCleanup != nil {
+		pb.ashCleanup()
+		pb.ashCleanup = nil
+	}
 	pb.Closed = true
 	pb.span.Finish()
 	pb.span = nil

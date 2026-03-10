@@ -13,6 +13,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -128,6 +130,43 @@ func (o *Outbox) close(ctx context.Context) {
 	// the deselector).
 	o.Input = nil
 	o.unlimitedAllocator.ReleaseAll()
+}
+
+// tenantID returns the TenantID from the flow context's codec, or the
+// system tenant ID if the flow context is nil (which happens in tests).
+func (o *Outbox) tenantID() roachpb.TenantID {
+	if o.flowCtx != nil {
+		return o.flowCtx.Codec().TenantID
+	}
+	return roachpb.SystemTenantID
+}
+
+// workloadID returns the WorkloadID from the flow context's EvalCtx,
+// or 0 if EvalCtx is nil (which happens in tests).
+func (o *Outbox) workloadID() uint64 {
+	if o.flowCtx != nil && o.flowCtx.EvalCtx != nil {
+		return o.flowCtx.EvalCtx.WorkloadID
+	}
+	return 0
+}
+
+// appNameID returns the AppNameID from the flow context's EvalCtx, or
+// 0 if EvalCtx is nil (which happens in tests).
+func (o *Outbox) appNameID() uint64 {
+	if o.flowCtx != nil && o.flowCtx.EvalCtx != nil {
+		return o.flowCtx.EvalCtx.AppNameID
+	}
+	return 0
+}
+
+// gatewayNodeID returns the GatewayNodeID derived from the flow
+// context's NodeID, or 0 if the flow context is nil (which happens in
+// tests).
+func (o *Outbox) gatewayNodeID() roachpb.NodeID {
+	if o.flowCtx != nil {
+		return roachpb.NodeID(o.flowCtx.NodeID.SQLInstanceID())
+	}
+	return 0
 }
 
 // Run starts an outbox by connecting to the provided node and pushing
@@ -277,7 +316,17 @@ func (o *Outbox) sendBatches(
 				// message that we'll send with the next batch, if we ever need
 				// to reduce the number of DistSQL messages. We'll need to teach
 				// the Inbox about that too.
-				if err := stream.Send(o.scratch.msg); err != nil {
+				sendCleanup := ash.SetWorkState(
+					o.tenantID(),
+					ash.WorkloadInfo{
+						WorkloadID:    o.workloadID(),
+						AppNameID:     o.appNameID(),
+						GatewayNodeID: o.gatewayNodeID(),
+					},
+					ash.WorkNetwork, "OutboxSend")
+				err := stream.Send(o.scratch.msg)
+				sendCleanup()
+				if err != nil {
 					flowinfra.HandleStreamErr(ctx, "Send (streaming metadata)", err, flowCtxCancel, outboxCtxCancel)
 					return
 				}
@@ -316,7 +365,17 @@ func (o *Outbox) sendBatches(
 			// soon as the message is written to the control buffer. The message is
 			// marshaled (bytes are copied) before writing.
 			log.VEvent(ctx, 2, "Outbox sending batch")
-			if err := stream.Send(o.scratch.msg); err != nil {
+			sendCleanup := ash.SetWorkState(
+				o.tenantID(),
+				ash.WorkloadInfo{
+					WorkloadID:    o.workloadID(),
+					AppNameID:     o.appNameID(),
+					GatewayNodeID: o.gatewayNodeID(),
+				},
+				ash.WorkNetwork, "OutboxSend")
+			err = stream.Send(o.scratch.msg)
+			sendCleanup()
+			if err != nil {
 				flowinfra.HandleStreamErr(ctx, "Send (batches)", err, flowCtxCancel, outboxCtxCancel)
 				return
 			}
