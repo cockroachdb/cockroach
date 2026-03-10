@@ -41,25 +41,25 @@ asserting: |leases(t)/mean_{T}(leases) - 1| ≤ 0.15 ∀ t∈T and each store (T
 eval duration=10m samples=1 seed=42 cfgs=(sma-count,mma-count) metrics=(cpu,cpu_util,leases,lease_moves,replica_moves)
 ----
 sma-count:
-cpu#1: last:  [s1=1031735064, s2=528633298, s3=778685297, s4=778189140, s5=2025375171, s6=0, s7=0, s8=0] (stddev=647320358.34, mean=642827246.25, sum=5142617970)
-cpu#1: thrash_pct: [s1=362%, s2=312%, s3=403%, s4=489%, s5=258%, s6=0%, s7=0%, s8=1%]  (sum=1826%)
-cpu_util#1: last:  [s1=0.13, s2=0.07, s3=0.10, s4=0.10, s5=0.25, s6=0.00, s7=0.00, s8=0.00] (stddev=0.08, mean=0.08, sum=1)
-cpu_util#1: thrash_pct: [s1=362%, s2=312%, s3=403%, s4=489%, s5=258%, s6=0%, s7=0%, s8=1%]  (sum=1826%)
-lease_moves#1: last:  [s1=10, s2=6, s3=13, s4=13, s5=5, s6=0, s7=0, s8=0] (stddev=5.28, mean=5.88, sum=47)
+cpu#1: last:  [s1=1021125911, s2=1032023266, s3=1276387237, s4=1037438154, s5=779305821, s6=0, s7=0, s8=0] (stddev=513566546.59, mean=643285048.62, sum=5146280389)
+cpu#1: thrash_pct: [s1=471%, s2=362%, s3=319%, s4=434%, s5=339%, s6=0%, s7=0%, s8=1%]  (sum=1926%)
+cpu_util#1: last:  [s1=0.13, s2=0.13, s3=0.16, s4=0.13, s5=0.10, s6=0.00, s7=0.00, s8=0.00] (stddev=0.06, mean=0.08, sum=1)
+cpu_util#1: thrash_pct: [s1=471%, s2=362%, s3=319%, s4=434%, s5=339%, s6=0%, s7=0%, s8=1%]  (sum=1926%)
+lease_moves#1: last:  [s1=15, s2=4, s3=4, s4=11, s5=8, s6=0, s7=0, s8=0] (stddev=5.26, mean=5.25, sum=42)
 lease_moves#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%]  (sum=0%)
 leases#1: first: [s1=3, s2=2, s3=2, s4=3, s5=2, s6=2, s7=3, s8=4] (stddev=0.70, mean=2.62, sum=21)
-leases#1: last:  [s1=4, s2=2, s3=3, s4=3, s5=8, s6=0, s7=0, s8=1] (stddev=2.45, mean=2.62, sum=21)
-leases#1: thrash_pct: [s1=302%, s2=260%, s3=322%, s4=460%, s5=210%, s6=0%, s7=0%, s8=0%]  (sum=1554%)
-replica_moves#1: last:  [s1=14, s2=13, s3=13, s4=22, s5=14, s6=2, s7=3, s8=5] (stddev=6.40, mean=10.75, sum=86)
+leases#1: last:  [s1=4, s2=4, s3=5, s4=4, s5=3, s6=0, s7=0, s8=1] (stddev=1.87, mean=2.62, sum=21)
+leases#1: thrash_pct: [s1=442%, s2=304%, s3=225%, s4=342%, s5=262%, s6=0%, s7=0%, s8=0%]  (sum=1575%)
+replica_moves#1: last:  [s1=16, s2=17, s3=19, s4=21, s5=16, s6=2, s7=3, s8=5] (stddev=7.21, mean=12.38, sum=99)
 replica_moves#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%, s8=0%]  (sum=0%)
-hash: 3b6ebc370a99142f
+hash: 63e91911e65572c3
 failed assertion sample 1
   steady state stat=leases threshold=(≤0.15) ticks=100
-	store=1 min/mean=0.23 max/mean=0.54
-	store=2 min/mean=0.11 max/mean=0.33
-	store=3 min/mean=0.08 max/mean=0.84
-	store=4 min/mean=0.05 max/mean=0.59
-	store=5 min/mean=0.87 max/mean=0.08
+	store=1 min/mean=0.29 max/mean=0.42
+	store=2 min/mean=0.22 max/mean=0.04
+	store=3 min/mean=0.38 max/mean=0.04
+	store=4 min/mean=0.25 max/mean=0.25
+	store=5 min/mean=0.04 max/mean=0.61
 ==========================
 mma-count:
 cpu#1: last:  [s1=1030717382, s2=1034178068, s3=1028156073, s4=1028552503, s5=1027707110, s6=0, s7=0, s8=0] (stddev=498583495.61, mean=643663892.00, sum=5149311136)
