@@ -47,6 +47,7 @@ var (
 	_ jsonMarshaler = (*int64Array)(nil)
 	_ jsonMarshaler = (*int32Array)(nil)
 	_ jsonMarshaler = &latencyInfo{}
+	_ jsonMarshaler = &canaryStatsInfo{}
 )
 
 type txnStats appstatspb.TransactionStatistics
@@ -349,6 +350,7 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 		{"genericCount", (*jsonInt)(&s.GenericCount)},
 		{"stmtHintsCount", (*jsonInt)(&s.StmtHintsCount)},
 		{"sqlType", (*jsonString)(&s.SQLType)},
+		{"canaryStatsInfo", (*canaryStatsInfo)(&s.CanaryStatsInfo)},
 	}
 }
 
@@ -444,6 +446,24 @@ func (l *latencyInfo) decodeJSON(js json.JSON) error {
 
 func (l *latencyInfo) encodeJSON() (json.JSON, error) {
 	return l.jsonFields().encodeJSON()
+}
+
+type canaryStatsInfo appstatspb.CanaryStatsInfo
+
+func (c *canaryStatsInfo) jsonFields() jsonFields {
+	return jsonFields{
+		{"count", (*jsonInt)(&c.Count)},
+		{"parseLat", (*numericStats)(&c.ParseLat)},
+		{"planLat", (*numericStats)(&c.PlanLat)},
+		{"runLat", (*numericStats)(&c.RunLat)},
+		{"svcLat", (*numericStats)(&c.ServiceLat)},
+	}
+}
+func (c *canaryStatsInfo) decodeJSON(js json.JSON) error {
+	return c.jsonFields().decodeJSON(js)
+}
+func (c *canaryStatsInfo) encodeJSON() (json.JSON, error) {
+	return c.jsonFields().encodeJSON()
 }
 
 type jsonFields []jsonField

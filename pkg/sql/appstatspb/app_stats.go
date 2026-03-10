@@ -202,6 +202,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.Indexes = util.CombineUnique(s.Indexes, other.Indexes)
 	s.ExecStats.Add(other.ExecStats)
 	s.LatencyInfo.MergeMaxMin(other.LatencyInfo)
+	s.CanaryStatsInfo.Add(other.CanaryStatsInfo)
 
 	if s.SensitiveInfo.MostRecentPlanTimestamp.Before(other.SensitiveInfo.MostRecentPlanTimestamp) {
 		s.SensitiveInfo = other.SensitiveInfo
@@ -294,4 +295,14 @@ func (s *LatencyInfo) MergeMaxMin(other LatencyInfo) {
 	if other.Max > s.Max {
 		s.Max = other.Max
 	}
+}
+
+// Add combines other into this CanaryStatsInfo
+func (c *CanaryStatsInfo) Add(other CanaryStatsInfo) {
+	currentCount := c.Count
+	c.Count += other.Count
+	c.PlanLat.Add(other.PlanLat, currentCount, other.Count)
+	c.ParseLat.Add(other.ParseLat, currentCount, other.Count)
+	c.RunLat.Add(other.RunLat, currentCount, other.Count)
+	c.ServiceLat.Add(other.ServiceLat, currentCount, other.Count)
 }
