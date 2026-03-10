@@ -200,6 +200,7 @@ go_library(
         "status_server.go",
         "stop_and_copy.go",
         "store_metrics.go",
+        "super_region_failover.go",
         "sysbench.go",
         "tlp.go",
         "tombstones.go",
