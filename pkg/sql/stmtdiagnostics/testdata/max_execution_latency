@@ -1,0 +1,70 @@
+# Test that max_execution_latency requires min_execution_latency to be set.
+request min=0s max=500ms
+SELECT pg_sleep(_)
+----
+error: max_execution_latency requires min_execution_latency to be set
+
+# Test that max must be greater than min.
+request min=500ms max=100ms
+SELECT pg_sleep(_)
+----
+error: max_execution_latency (100ms) must be greater than min_execution_latency (500ms)
+
+# Test that a request with a valid range is created successfully.
+# Execution within range [100ms, 1s] — should be collected.
+request min=100ms max=1s
+SELECT pg_sleep(_)
+----
+ok
+
+exec
+SELECT pg_sleep(0.2)
+----
+completed: true
+
+reset
+----
+ok
+
+# Request with a tight upper bound.
+# Execution exceeds max of 200ms — should NOT be collected.
+request min=100ms max=200ms
+SELECT pg_sleep(_)
+----
+ok
+
+exec
+SELECT pg_sleep(0.5)
+----
+completed: false
+
+reset
+----
+ok
+
+# Backward compatibility: max=0 means no upper bound.
+# Execution above min with no upper bound — should be collected.
+request min=100ms max=0s
+SELECT pg_sleep(_)
+----
+ok
+
+exec
+SELECT pg_sleep(0.2)
+----
+completed: true
+
+reset
+----
+ok
+
+# Execution below min — should NOT be collected regardless of max.
+request min=500ms max=1s
+SELECT pg_sleep(_)
+----
+ok
+
+exec
+SELECT pg_sleep(0.2)
+----
+completed: false

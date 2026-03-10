@@ -843,6 +843,7 @@ The last argument is a JSONB object containing the following optional fields:
 			Category:         builtinconstants.CategorySystemInfo,
 			DistsqlBlocklist: true,
 		},
+		// Original overload without max_execution_latency (backward compatible).
 		makeGeneratorOverload(
 			tree.ParamTypes{
 				{Name: "transaction_fingerprint_id", Typ: types.String},
@@ -854,6 +855,23 @@ The last argument is a JSONB object containing the following optional fields:
 			txnDiagnosticsRequestGeneratorType,
 			makeTxnDiagnosticsRequestGenerator,
 			"Starts a transaction diagnostic for the transaction fingerprint id",
+			volatility.Volatile,
+		),
+		// New overload with max_execution_latency.
+		makeGeneratorOverload(
+			tree.ParamTypes{
+				{Name: "transaction_fingerprint_id", Typ: types.String},
+				{Name: "sampling_probability", Typ: types.Float},
+				{Name: "min_execution_latency", Typ: types.Interval},
+				{Name: "max_execution_latency", Typ: types.Interval},
+				{Name: "expires_after", Typ: types.Interval},
+				{Name: "redacted", Typ: types.Bool},
+			},
+			txnDiagnosticsRequestGeneratorType,
+			makeTxnDiagnosticsRequestGenerator,
+			"Starts a transaction diagnostic for the transaction fingerprint id. "+
+				"If 'max_execution_latency' is set, only executions with latency between "+
+				"min_execution_latency and max_execution_latency will be collected",
 			volatility.Volatile,
 		),
 	),
@@ -4244,8 +4262,15 @@ func makeTxnDiagnosticsRequestGenerator(
 	txnFingerprintIdStr := string(tree.MustBeDString(args[0]))
 	samplingProbability := float64(tree.MustBeDFloat(args[1]))
 	minExecutionLatency := tree.MustBeDInterval(args[2])
-	expiresAfter := tree.MustBeDInterval(args[3])
-	redacted := bool(tree.MustBeDBool(args[4]))
+	// The 5-arg overload omits max_execution_latency; the 6-arg overload includes it.
+	var maxExecutionLatency *tree.DInterval
+	idx := 3
+	if len(args) == 6 {
+		maxExecutionLatency = tree.MustBeDInterval(args[idx])
+		idx++
+	}
+	expiresAfter := tree.MustBeDInterval(args[idx])
+	redacted := bool(tree.MustBeDBool(args[idx+1]))
 	txnFingerprintId, err := strconv.ParseUint(txnFingerprintIdStr, 16, 64)
 	if err != nil {
 		return nil, errors.New("invalid transaction fingerprint id: must be a hex encoded representation of a transaction fingerprint id")
@@ -4296,6 +4321,10 @@ FROM (
 	if sd := evalCtx.SessionData(); sd != nil {
 		username = sd.User().Normalized()
 	}
+	var maxExecLatencyDuration time.Duration
+	if maxExecutionLatency != nil {
+		maxExecLatencyDuration = time.Duration(maxExecutionLatency.Duration.Nanos())
+	}
 	reqId, err := evalCtx.TxnDiagnosticsRequestInserter(
 		ctx,
 		txnFingerprintId,
@@ -4303,6 +4332,7 @@ FROM (
 		username,
 		samplingProbability,
 		time.Duration(minExecutionLatency.Duration.Nanos()),
+		maxExecLatencyDuration,
 		time.Duration(expiresAfter.Duration.Nanos()),
 		redacted)
 	if err != nil {

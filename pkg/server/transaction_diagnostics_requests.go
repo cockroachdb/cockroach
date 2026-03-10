@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
@@ -36,6 +37,7 @@ type TxnDiagnosticsRequester interface {
 		stmtFingerprintIDs []appstatspb.StmtFingerprintID,
 		samplingProbability float64,
 		minExecutionLatency time.Duration,
+		maxExecutionLatency time.Duration,
 		expiresAfter time.Duration,
 		redacted bool,
 		username string,
@@ -58,6 +60,8 @@ type txnDiagnosticsRequest struct {
 	RequestedAt              time.Time
 	// Zero value indicates that there is no minimum latency set on the request.
 	MinExecutionLatency time.Duration
+	// Zero value indicates that there is no maximum latency set on the request.
+	MaxExecutionLatency time.Duration
 	// Zero value indicates that the request never expires.
 	ExpiresAt time.Time
 }
@@ -76,6 +80,7 @@ func (request *txnDiagnosticsRequest) toProto() serverpb.TransactionDiagnosticsR
 		TransactionDiagnosticsId: int64(request.TransactionDiagnosticsID),
 		RequestedAt:              request.RequestedAt,
 		MinExecutionLatency:      request.MinExecutionLatency,
+		MaxExecutionLatency:      request.MaxExecutionLatency,
 		ExpiresAt:                request.ExpiresAt,
 	}
 	return resp
@@ -123,6 +128,7 @@ func (s *statusServer) CreateTransactionDiagnosticsReport(
 		stmtFingerprintIDs,
 		req.SamplingProbability,
 		req.MinExecutionLatency,
+		req.MaxExecutionLatency,
 		req.ExpiresAt,
 		req.Redacted,
 		username,
@@ -173,9 +179,16 @@ func (s *statusServer) TransactionDiagnosticsRequests(
 		return nil, err
 	}
 
+	hasMaxExecLatency := s.st.Version.IsActive(ctx, clusterversion.V26_2_AddMaxExecutionLatencyToStmtDiag)
+
+	maxExecLatencyCol := ""
+	if hasMaxExecLatency {
+		maxExecLatencyCol = ",\n\t\t\ttdr.max_execution_latency"
+	}
+
 	it, err := s.internalExecutor.QueryIteratorEx(ctx, "txn-diag-get-all", nil, /* txn */
 		sessiondata.NodeUserSessionDataOverride,
-		`SELECT
+		fmt.Sprintf(`SELECT
 			tdr.id,
 			tdr.completed,
 			tdr.transaction_fingerprint_id,
@@ -184,10 +197,11 @@ func (s *statusServer) TransactionDiagnosticsRequests(
 			tdr.requested_at,
 			tdr.min_execution_latency,
 			tdr.expires_at,
-			td.transaction_fingerprint
+			td.transaction_fingerprint%s
 		FROM
 			system.transaction_diagnostics_requests tdr LEFT JOIN
-			system.transaction_diagnostics td ON tdr.transaction_diagnostics_id = td.id`)
+			system.transaction_diagnostics td ON tdr.transaction_diagnostics_id = td.id`,
+			maxExecLatencyCol))
 	if err != nil {
 		return nil, err
 	}
@@ -240,6 +254,11 @@ func (s *statusServer) TransactionDiagnosticsRequests(
 		}
 		if txnFingerprint, ok := row[8].(*tree.DString); ok {
 			req.TransactionFingerprint = string(*txnFingerprint)
+		}
+		if hasMaxExecLatency && len(row) > 9 {
+			if maxExecutionLatency, ok := row[9].(*tree.DInterval); ok {
+				req.MaxExecutionLatency = time.Duration(maxExecutionLatency.Duration.Nanos())
+			}
 		}
 		requests = append(requests, req)
 	}

@@ -214,6 +214,7 @@ func TestTxnRegistry_InsertTxnRequest(t *testing.T) {
 				"testuser",
 				tc.samplingProbability,
 				tc.minExecutionLatency,
+				0, // no max latency threshold
 				tc.expiresAfter,
 				tc.redacted,
 			)
@@ -329,6 +330,7 @@ func TestTxnRegistry_InsertTxnDiagnostic(t *testing.T) {
 			request.username,
 			request.samplingProbability,
 			request.minExecutionLatency,
+			0, // no max latency threshold
 			0, // no expiration
 			request.redacted,
 		)
@@ -436,6 +438,7 @@ func TestTxnRegistry_InsertTxnDiagnostic(t *testing.T) {
 			request.username,
 			request.samplingProbability,
 			request.minExecutionLatency,
+			0, // no max latency threshold
 			0, // no expiration
 			request.redacted,
 		)
@@ -606,6 +609,7 @@ func TestTxnRegistry_CancelRequest_MultiNode(t *testing.T) {
 					},
 					tc.samplingProbability,
 					tc.minExecutionLatency,
+					0, // no max latency threshold
 					tc.expiresAfter,
 					false, // not redacted
 					"testuser",

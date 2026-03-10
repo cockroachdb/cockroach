@@ -2880,6 +2880,13 @@ var builtinOidsArray = []string{
 	2925: `to_char(number: decimal, format: string) -> string`,
 	2926: `to_date(date_string: string, format: string) -> date`,
 	2927: `to_timestamp(date_string: string, format: string) -> timestamptz`,
+	2928: `crdb_internal.request_statement_bundle(stmtFingerprint: string, samplingProbability: float, minExecutionLatency: interval, maxExecutionLatency: interval, expiresAfter: interval) -> bool`,
+	2929: `crdb_internal.request_statement_bundle(stmtFingerprint: string, planGist: string, samplingProbability: float, minExecutionLatency: interval, maxExecutionLatency: interval, expiresAfter: interval) -> bool`,
+	2930: `crdb_internal.request_statement_bundle(stmtFingerprint: string, planGist: string, antiPlanGist: bool, samplingProbability: float, minExecutionLatency: interval, maxExecutionLatency: interval, expiresAfter: interval) -> bool`,
+	2931: `crdb_internal.request_statement_bundle(stmtFingerprint: string, samplingProbability: float, minExecutionLatency: interval, maxExecutionLatency: interval, expiresAfter: interval, redacted: bool) -> bool`,
+	2932: `crdb_internal.request_statement_bundle(stmtFingerprint: string, planGist: string, samplingProbability: float, minExecutionLatency: interval, maxExecutionLatency: interval, expiresAfter: interval, redacted: bool) -> bool`,
+	2933: `crdb_internal.request_statement_bundle(stmtFingerprint: string, planGist: string, antiPlanGist: bool, samplingProbability: float, minExecutionLatency: interval, maxExecutionLatency: interval, expiresAfter: interval, redacted: bool) -> bool`,
+	2934: `crdb_internal.request_transaction_bundle(transaction_fingerprint_id: string, sampling_probability: float, min_execution_latency: interval, max_execution_latency: interval, expires_after: interval, redacted: bool) -> tuple{int AS request_id, bool AS created}`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
@@ -35,6 +36,8 @@ type stmtDiagnosticsRequest struct {
 	RequestedAt            time.Time
 	// Zero value indicates that there is no minimum latency set on the request.
 	MinExecutionLatency time.Duration
+	// Zero value indicates that there is no maximum latency set on the request.
+	MaxExecutionLatency time.Duration
 	// Zero value indicates that the request never expires.
 	ExpiresAt time.Time
 }
@@ -53,6 +56,7 @@ func (request *stmtDiagnosticsRequest) toProto() serverpb.StatementDiagnosticsRe
 		StatementDiagnosticsId: int64(request.StatementDiagnosticsID),
 		RequestedAt:            request.RequestedAt,
 		MinExecutionLatency:    request.MinExecutionLatency,
+		MaxExecutionLatency:    request.MaxExecutionLatency,
 		ExpiresAt:              request.ExpiresAt,
 	}
 	return resp
@@ -97,6 +101,7 @@ func (s *statusServer) CreateStatementDiagnosticsReport(
 		req.AntiPlanGist,
 		req.SamplingProbability,
 		req.MinExecutionLatency,
+		req.MaxExecutionLatency,
 		req.ExpiresAfter,
 		req.Redacted,
 		username,
@@ -146,19 +151,26 @@ func (s *statusServer) StatementDiagnosticsRequests(
 		return nil, err
 	}
 
+	hasMaxExecLatency := s.st.Version.IsActive(ctx, clusterversion.V26_2_AddMaxExecutionLatencyToStmtDiag)
+
+	maxExecLatencyCol := ""
+	if hasMaxExecLatency {
+		maxExecLatencyCol = ",\n\t\t\tmax_execution_latency"
+	}
+
 	// TODO(davidh): Add pagination to this request.
 	it, err := s.internalExecutor.QueryIteratorEx(ctx, "stmt-diag-get-all", nil, /* txn */
 		sessiondata.NodeUserSessionDataOverride,
-		`SELECT
+		fmt.Sprintf(`SELECT
 			id,
 			statement_fingerprint,
 			completed,
 			statement_diagnostics_id,
 			requested_at,
 			min_execution_latency,
-			expires_at
+			expires_at%s
 		FROM
-			system.statement_diagnostics_requests`)
+			system.statement_diagnostics_requests`, maxExecLatencyCol))
 	if err != nil {
 		return nil, err
 	}
@@ -190,6 +202,11 @@ func (s *statusServer) StatementDiagnosticsRequests(
 			// Don't return already expired requests.
 			if !completed && req.ExpiresAt.Before(timeutil.Now()) {
 				continue
+			}
+		}
+		if hasMaxExecLatency && len(row) > 7 {
+			if maxExecutionLatency, ok := row[7].(*tree.DInterval); ok {
+				req.MaxExecutionLatency = time.Duration(maxExecutionLatency.Duration.Nanos())
 			}
 		}
 		requests = append(requests, req)

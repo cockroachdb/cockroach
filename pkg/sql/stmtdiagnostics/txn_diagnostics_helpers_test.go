@@ -40,10 +40,13 @@ func (r *TxnRegistry) InsertTxnRequestInternal(
 	username string,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
+	maxExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 	redacted bool,
 ) (RequestID, error) {
 	id, err := r.insertTxnRequestInternal(
-		ctx, txnFingerprintId, stmtFingerprintIds, username, samplingProbability, minExecutionLatency, expiresAfter, redacted)
+		ctx, txnFingerprintId, stmtFingerprintIds, username, samplingProbability,
+		minExecutionLatency, maxExecutionLatency, expiresAfter, redacted,
+	)
 	return id, err
 }

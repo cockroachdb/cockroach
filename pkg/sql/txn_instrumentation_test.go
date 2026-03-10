@@ -294,6 +294,7 @@ func TestTxnInstrumentationHelper_MaybeContinueDiagnostics(t *testing.T) {
 			time.Time{},
 			0,
 			0,
+			0,
 		)
 		requestID := stmtdiagnostics.RequestID(42)
 		tracer := tracing.NewTracer()
@@ -322,7 +323,7 @@ func TestTxnInstrumentationHelper_ShouldRedact(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "shouldRedact", func(t *testing.T, shouldRedact bool) {
 		helper := &txnInstrumentationHelper{}
 
-		request := stmtdiagnostics.NewTxnRequest(0, nil, shouldRedact, "", time.Time{}, 0, 0)
+		request := stmtdiagnostics.NewTxnRequest(0, nil, shouldRedact, "", time.Time{}, 0, 0, 0)
 		requestID := stmtdiagnostics.RequestID(42)
 		helper.StartDiagnostics(request, requestID, nil)
 
@@ -409,6 +410,7 @@ func TestTxnDiagnosticsCollector_collectTrace_RedactedRequest(t *testing.T) {
 		time.Time{},
 		0,
 		0,
+		0,
 	)
 	collector := newTxnDiagnosticsCollector(request, stmtdiagnostics.RequestID(42), nil)
 	collector.collectTrace()
@@ -442,6 +444,7 @@ func TestTxnDiagnosticsCollector_collectTrace(t *testing.T) {
 		false,
 		"testuser",
 		time.Time{},
+		0,
 		0,
 		0,
 	)
@@ -482,6 +485,7 @@ func TestTxnDiagnosticsCollector_collectTrace_emptyRecordings(t *testing.T) {
 		false,
 		"testuser",
 		time.Time{},
+		0,
 		0,
 		0,
 	)
@@ -555,7 +559,7 @@ func TestTxnDiagnosticsCollector_MaybeStartDiagnostics(t *testing.T) {
 				helper := baseHelper
 				helper.TxnDiagnosticsRecorder = stmtdiagnostics.NewTxnRegistry(ts.InternalDB().(isql.DB), nil, nil, timeutil.DefaultTimeSource{})
 
-				_, err := helper.TxnDiagnosticsRecorder.InsertTxnRequest(ctx, 1, []uint64{123}, "testuser", 0, 0, 0, false)
+				_, err := helper.TxnDiagnosticsRecorder.InsertTxnRequest(ctx, 1, []uint64{123}, "testuser", 0, 0, 0, 0, false)
 				require.NoError(t, err)
 				helper.diagnosticsCollector.UpdateState(state)
 				testTxnID := uuid.MakeV4()
@@ -576,7 +580,7 @@ func TestTxnDiagnosticsCollector_MaybeStartDiagnostics(t *testing.T) {
 			helper.diagnosticsCollector.UpdateState(txnDiagnosticsNotStarted)
 			helper.TxnDiagnosticsRecorder = stmtdiagnostics.NewTxnRegistry(ts.InternalDB().(isql.DB), nil, nil, timeutil.DefaultTimeSource{})
 
-			_, err := helper.TxnDiagnosticsRecorder.InsertTxnRequest(ctx, 1, []uint64{123}, "testuser", 0, 0, 0, redacted)
+			_, err := helper.TxnDiagnosticsRecorder.InsertTxnRequest(ctx, 1, []uint64{123}, "testuser", 0, 0, 0, 0, redacted)
 			require.NoError(t, err)
 
 			testTxnID := uuid.MakeV4()
