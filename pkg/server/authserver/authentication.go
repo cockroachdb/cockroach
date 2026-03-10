@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/jwtauth"
+	"github.com/cockroachdb/cockroach/pkg/security/ldapauth"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	secuser "github.com/cockroachdb/cockroach/pkg/security/username"
@@ -149,13 +150,11 @@ func (s *authenticationServer) RegisterGateway(
 	return serverpb.RegisterLogOutHandler(ctx, mux, conn)
 }
 
-// ldapManager is a duplicate of singleton global pgwire object which gets
-// initialized from UserLogin method whenever an LDAP auth attempt happens. It
-// depends on ldapauth module to be imported properly to override its default
-// ConfigureLDAPAuth constructor.
+// ldapManager is a singleton global object which gets initialized from
+// UserLogin method whenever an LDAP auth attempt happens.
 var ldapManager = struct {
 	sync.Once
-	m pgwire.LDAPManager
+	m ldapauth.LDAPManager
 }{}
 
 // UserLogin is part of the Server interface.
@@ -213,7 +212,7 @@ func (s *authenticationServer) userLogin(
 		execCfg := s.sqlServer.ExecutorConfig()
 		ldapManager.Do(func() {
 			if ldapManager.m == nil {
-				ldapManager.m = pgwire.ConfigureLDAPAuth(ctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
+				ldapManager.m = ldapauth.ConfigureLDAPAuth(ctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
 			}
 		})
 		var detailedErrors redact.RedactableString
