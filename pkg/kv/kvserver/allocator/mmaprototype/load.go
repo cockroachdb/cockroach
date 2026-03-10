@@ -605,15 +605,7 @@ func loadSummaryForDimension(
 ) (summary loadSummary) {
 	summ := loadLow
 	reason := ""
-	if dim == WriteBandwidth && capacity == UnknownCapacity {
-		// Ignore smaller than 1MiB differences in write bandwidth. This 1MiB
-		// value is somewhat arbitrary, but is based on EBS gp3 having a default
-		// provisioned bandwidth of 125 MiB/s, and assuming that a write amp of
-		// ~20, will inflate 1MiB to ~20 MiB/s.
-		const minWriteBandwidthGranularity = 128 << 10 // 128 KiB
-		load /= minWriteBandwidthGranularity
-		meanLoad /= minWriteBandwidthGranularity
-	}
+
 	// Heuristics (and very much subject to revision): There are two uses for
 	// this loadSummary: to find source stores to shed load and to decide
 	// whether the added load on a target store is acceptable (without driving
