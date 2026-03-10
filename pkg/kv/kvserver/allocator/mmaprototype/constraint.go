@@ -1768,6 +1768,7 @@ func (rac *rangeAnalyzedConstraints) finishInit(
 		}
 	}
 
+	// TODO(tbg): allocates 21x/op (locality tier slices).
 	var replicaLocalityTiers, voterLocalityTiers []localityTiers
 	for i := range rac.replicas[voterIndex] {
 		replicaLocalityTiers = append(replicaLocalityTiers, rac.replicas[voterIndex][i].localityTiers)
@@ -2107,6 +2108,7 @@ func (rac *rangeAnalyzedConstraints) candidatesToMoveLease() (
 	for i := range rac.leasePreferenceIndices {
 		if rac.leasePreferenceIndices[i] <= curLeasePreferenceIndex &&
 			rac.replicas[voterIndex][i].StoreID != rac.leaseholderID {
+			// TODO(tbg): allocates 197x/op.
 			cands = append(cands, storeAndLeasePreference{
 				leasePreferenceIndex: rac.leasePreferenceIndices[i],
 				storeID:              rac.replicas[voterIndex][i].StoreID,
