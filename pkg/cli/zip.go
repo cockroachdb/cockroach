@@ -55,7 +55,7 @@ const (
 )
 
 type debugZipContext struct {
-	z              *zipper
+	z              zipOutput
 	clusterPrinter *zipReporter
 	timeout        time.Duration
 	admin          serverpb.RPCAdminClient
@@ -387,7 +387,7 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 			// the profiles.
 			{
 				s = zc.clusterPrinter.start("pprof summary script")
-				if err := z.createRaw(s, zc.prefix+"/pprof-summary.sh", []byte(`#!/bin/sh
+				if err := zc.z.createRaw(s, zc.prefix+"/pprof-summary.sh", []byte(`#!/bin/sh
 find . -name cpu.pprof -print0 | xargs -0 go tool pprof -tags
 `)); err != nil {
 					return err
@@ -397,7 +397,7 @@ find . -name cpu.pprof -print0 | xargs -0 go tool pprof -tags
 			// A script to summarize the hottest ranges for a storage server's range reports.
 			if zipCtx.includeRangeInfo {
 				s = zc.clusterPrinter.start("hot range summary script")
-				if err := z.createRaw(s, zc.prefix+"/hot-ranges.sh", []byte(`#!/bin/sh
+				if err := zc.z.createRaw(s, zc.prefix+"/hot-ranges.sh", []byte(`#!/bin/sh
 for stat in "queries" "writes" "reads" "write_bytes" "read_bytes" "cpu_time"; do
 	echo "$stat"
 	find . -path './nodes/*/ranges/*.json' -print0 | xargs -0 grep "$stat"_per_second | sort -rhk3 | head -n 10
@@ -410,7 +410,7 @@ done
 			// A script to summarize the hottest ranges for a tenant's range report.
 			if zipCtx.includeRangeInfo {
 				s = zc.clusterPrinter.start("tenant hot range summary script")
-				if err := z.createRaw(s, zc.prefix+"/hot-ranges-tenant.sh", []byte(`#!/bin/sh
+				if err := zc.z.createRaw(s, zc.prefix+"/hot-ranges-tenant.sh", []byte(`#!/bin/sh
 for stat in "queries" "writes" "reads" "write_bytes" "read_bytes" "cpu_time"; do
     echo "$stat"_per_second
     find . -path './tenant_ranges/*/*.json' -print0 | xargs -0 grep "$stat"_per_second | sort -rhk3 | head -n 10
@@ -426,7 +426,7 @@ done
 				return filter
 			})
 
-			if err := z.createRaw(s, zc.prefix+"/"+debugZipCommandFlagsFileName, []byte(flags)); err != nil {
+			if err := zc.z.createRaw(s, zc.prefix+"/"+debugZipCommandFlagsFileName, []byte(flags)); err != nil {
 				return err
 			}
 

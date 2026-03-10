@@ -2361,6 +2361,56 @@ message GetThrottlingMetadataResponse {
   repeated string nodeIdsWithTelemetryProblems = 8;
 }
 
+// UploadDebugDataRequest is sent from the CLI/SQL to the coordinator
+// node to initiate a debug data upload session.
+message UploadDebugDataRequest {
+  string server_url = 1;
+  string api_key = 2;
+  bool redact = 3;
+  int32 cpu_prof_seconds = 4;
+  map<string, string> labels = 5;
+  // node_ids limits which nodes participate. Empty means all nodes.
+  repeated int32 node_ids = 6;
+  bool include_range_info = 7;
+  bool include_goroutine_stacks = 8;
+}
+
+// NodeUploadStatus reports the upload outcome for a single node.
+message NodeUploadStatus {
+  int32 node_id = 1;
+  int32 artifacts_uploaded = 2;
+  repeated string errors = 3;
+}
+
+// UploadDebugDataResponse is the aggregated result of the upload
+// across all nodes.
+message UploadDebugDataResponse {
+  string session_id = 1;
+  int32 artifacts_uploaded = 2;
+  int32 nodes_succeeded = 3;
+  int32 nodes_failed = 4;
+  repeated NodeUploadStatus node_statuses = 5 [(gogoproto.nullable) = false];
+  string cloud_path = 6;
+}
+
+// UploadNodeDebugDataRequest is sent from the coordinator to each
+// node via iterateNodes fan-out.
+message UploadNodeDebugDataRequest {
+  string server_url = 1;
+  string session_id = 2;
+  string upload_token = 3;
+  bool redact = 4;
+  int32 cpu_prof_seconds = 5;
+  bool include_range_info = 6;
+  bool include_goroutine_stacks = 7;
+}
+
+// UploadNodeDebugDataResponse is the per-node upload result.
+message UploadNodeDebugDataResponse {
+  int32 artifacts_uploaded = 1;
+  repeated string errors = 2;
+}
+
 service Status {
   // Certificates retrieves a copy of the TLS certificates.
   rpc Certificates(CertificatesRequest) returns (CertificatesResponse) {
@@ -2886,4 +2936,16 @@ service Status {
       get: "/_status/throttling"
     };
   }
+
+  // UploadDebugData initiates a debug data upload session. The
+  // coordinator creates a session on the upload server, collects
+  // cluster-wide data, fans out to all nodes, and completes the
+  // session.
+  // This RPC does not have a corresponding HTTP endpoint on purpose.
+  rpc UploadDebugData(UploadDebugDataRequest) returns (UploadDebugDataResponse) {}
+
+  // UploadNodeDebugData collects and uploads debug data from a single
+  // node directly to the upload server.
+  // This RPC does not have a corresponding HTTP endpoint on purpose.
+  rpc UploadNodeDebugData(UploadNodeDebugDataRequest) returns (UploadNodeDebugDataResponse) {}
 }

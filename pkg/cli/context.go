@@ -49,6 +49,7 @@ func initCLIDefaults() {
 	setSQLExecContextDefaults()
 	setSQLContextDefaults()
 	setZipContextDefaults()
+	setUploadServerContextDefaults()
 	setDumpContextDefaults()
 	setDebugContextDefaults()
 	setStartContextDefaults()
@@ -405,6 +406,28 @@ func setZipContextDefaults() {
 	now := timeutil.Now()
 	zipCtx.files.startTimestamp = timestampValue(now.Add(-48 * time.Hour))
 	zipCtx.files.endTimestamp = timestampValue(now.Add(24 * time.Hour))
+}
+
+// uploadServerCtx captures the command-line parameters of the
+// `debug zip upload-server` command.
+// See below for defaults.
+var uploadServerCtx uploadServerContext
+
+type uploadServerContext struct {
+	serverURL string
+	apiKey    string
+	labels    []string
+	fromFile  string
+}
+
+// setUploadServerContextDefaults sets the default values in
+// uploadServerCtx. This function is called by initCLIDefaults() and
+// thus re-called in every test that exercises command-line parsing.
+func setUploadServerContextDefaults() {
+	uploadServerCtx.serverURL = ""
+	uploadServerCtx.apiKey = ""
+	uploadServerCtx.labels = nil
+	uploadServerCtx.fromFile = ""
 }
 
 // dumpCtx captures the command-line parameters of the `dump` command.

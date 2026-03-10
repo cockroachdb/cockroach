@@ -1905,6 +1905,39 @@ whether the generated zip file is valid and not corrupted.
 `,
 	}
 
+	UploadServerURL = FlagInfo{
+		Name: "upload-server-url",
+		Description: `
+URL of the CRL upload server to stream debug data to.
+`,
+	}
+
+	UploadServerAPIKey = FlagInfo{
+		Name:   "upload-server-api-key",
+		EnvVar: "COCKROACH_UPLOAD_SERVER_API_KEY",
+		Description: `
+API key for authenticating with the upload server. Can also be set via
+the COCKROACH_UPLOAD_SERVER_API_KEY environment variable.
+`,
+	}
+
+	UploadServerLabels = FlagInfo{
+		Name: "upload-server-labels",
+		Description: `
+Comma-separated key=value labels to attach to the upload session.
+For example: --upload-server-labels="ticket=CRL-12345,env=prod"
+`,
+	}
+
+	UploadServerFromFile = FlagInfo{
+		Name: "from-file",
+		Description: `
+Path to an existing debug.zip file to upload to the upload server.
+When set, the command uploads the zip contents directly without
+connecting to the cluster.
+`,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,
