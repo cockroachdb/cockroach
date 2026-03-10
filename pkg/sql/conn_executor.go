@@ -156,35 +156,34 @@ var detailedLatencyMetrics = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
-// canaryRollDice performs the probabilistic check to determine if a query
-// should use the "canary path" for statistics.
-// This selection is atomic per query, meaning that if a query is chosen to use
-// canary stats, all the tables involved in this query will use canary stats for
-// planning, if applicable.
-// This canary stats decision is made only for non-internal queries.
-func canaryRollDice(evalCtx *eval.Context, rng *rand.Rand) bool {
-	switch m := evalCtx.SessionData().CanaryStatsMode; m {
-	case sessiondatapb.CanaryStatsModeAuto:
-		threshold := stats.CanaryFraction.Get(&evalCtx.Settings.SV)
-		// If the fraction is 0, never use canary stats.
-		if threshold == 0 {
-			return false
-		}
-		// If the fraction is 1, always use canary stats.
-		if threshold == 1 {
-			return true
-		}
-
-		actual := rng.Float64()
-		return actual < threshold
-	case sessiondatapb.CanaryStatsModeOff:
-		return false
-	case sessiondatapb.CanaryStatsModeOn:
-		return true
+// canaryRollDice determines the stats rollout selection for a query.
+// The result is one of:
+//   - StatsRolloutDefault: experiment not active, use default stats.
+//   - StatsRolloutCanary:  experiment active, dice selected canary (newest) stats.
+//   - StatsRolloutStable:  experiment active, dice selected stable (second-newest) stats.
+//
+// The selection is atomic per query — all tables in the query use the same
+// rollout path. Only called for non-internal queries.
+func canaryRollDice(evalCtx *eval.Context, rng *rand.Rand) eval.StatsRolloutSelection {
+	threshold := stats.CanaryFraction.Get(&evalCtx.Settings.SV)
+	if threshold == 0 {
+		return eval.StatsRolloutDefault
 	}
-	// This should not happen but just in case of an unknown mode, we
-	// default to not using canary stats.
-	return false
+	switch m := evalCtx.SessionData().CanaryStatsMode; m {
+	case sessiondatapb.CanaryStatsModeOff:
+		return eval.StatsRolloutStable
+	case sessiondatapb.CanaryStatsModeOn:
+		return eval.StatsRolloutCanary
+	case sessiondatapb.CanaryStatsModeAuto:
+		if threshold == 1 {
+			return eval.StatsRolloutCanary
+		}
+		if rng.Float64() < threshold {
+			return eval.StatsRolloutCanary
+		}
+		return eval.StatsRolloutStable
+	}
+	return eval.StatsRolloutDefault
 }
 
 // The metric label name we'll use to facet latency metrics by statement fingerprint.
@@ -4026,7 +4025,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.SkipNormalize = false
 	evalCtx.SchemaChangerState = ex.extraTxnState.schemaChangerState
 	evalCtx.DescIDGenerator = ex.getDescIDGenerator()
-	evalCtx.UseCanaryStats = false
+	evalCtx.StatsRollout = eval.StatsRolloutDefault
 
 	// See resetPlanner for more context on setting the maximum timestamp for
 	// AOST read retries.

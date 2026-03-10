@@ -37,6 +37,8 @@ func GetRandomizedCollectedStatementStatisticsForTest(
 	data := sqlstatsutil.GenRandomData()
 	sqlstatsutil.FillObject(t, reflect.ValueOf(&result), &data)
 	result.Stats.Count = 1
+	result.Stats.CanaryStats.Count = 1
+	result.Stats.StableStats.Count = 1
 
 	return result
 }
