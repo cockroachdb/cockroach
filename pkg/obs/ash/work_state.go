@@ -82,6 +82,9 @@ func SetWorkState(
 	if !enabled.Load() {
 		return noop
 	}
+	if !tenantID.IsSet() {
+		tenantID = roachpb.SystemTenantID
+	}
 	gid := goid.Get()
 	state := workStatePool.Get().(*WorkState)
 	state.TenantID = tenantID
