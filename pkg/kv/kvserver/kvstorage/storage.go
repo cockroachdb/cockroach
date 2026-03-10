@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -336,11 +337,17 @@ type Batch[B storage.WriteBatch] struct {
 	state B
 	// raft is the LogEngine batch. When engines are not separated, it points to
 	// the same underlying batch as state. When separated, it is lazily
-	// initialized on the first call to Raft().
+	// initialized on the first call to Raft() or WagWriter().
 	raft storage.WriteBatch
 	// logEngine is a reference to the LogEngine, used for lazy raft batch
 	// creation. Only set when engines are separated.
 	logEngine storage.Engine
+	// w is the WAG writer for staging lifecycle events. Lazily initialized
+	// alongside the raft batch when engines are separated and seq is non-nil.
+	w wag.Writer
+	// seq is the WAG sequence number allocator. Non-nil only when engines are
+	// separated and the caller opted into WAG writing.
+	seq       *wag.Seq
 	separated bool
 	closed    bool
 }
@@ -351,12 +358,35 @@ func (b *Batch[B]) State() B {
 }
 
 // Raft returns the LogEngine writer. When engines are separated, the raft
-// batch is lazily created on first access.
+// batch and WAG writer are lazily created on first access.
 func (b *Batch[B]) Raft() RaftWO {
+	b.maybeInitRaft()
+	return b.raft
+}
+
+// WagWriter returns a pointer to the batch's WAG writer. Returns nil when
+// engines are not separated, since WAG is only used with separated engines.
+// The nil *Writer is safe to use — all methods on it are no-ops.
+//
+// When engines are separated, lazily initializes the raft batch and WAG
+// writer if they haven't been created yet.
+func (b *Batch[B]) WagWriter() *wag.Writer {
+	if !b.separated {
+		return nil
+	}
+	b.maybeInitRaft()
+	return &b.w
+}
+
+// maybeInitRaft lazily initializes the raft batch and WAG writer when engines
+// are separated.
+func (b *Batch[B]) maybeInitRaft() {
 	if b.separated && b.raft == nil {
 		b.raft = b.logEngine.NewWriteBatch()
+		if b.seq != nil {
+			b.w = wag.MakeWriter(b.seq)
+		}
 	}
-	return b.raft
 }
 
 // Commit commits the batch to storage. syncStateEngine controls whether the
@@ -364,9 +394,19 @@ func (b *Batch[B]) Raft() RaftWO {
 // controls the sync behavior of the singular batch commit. If they are, it
 // applies only to the state engine batch; the raft engine's batch is always
 // synced.
+//
+// When engines are separated, any staged WAG events are flushed to the raft
+// batch before committing.
 func (b *Batch[B]) Commit(syncStateEngine bool) error {
 	if !b.separated {
 		return b.state.Commit(syncStateEngine)
+	}
+	// Avoid eagerly creating a raft batch and computing Repr() when no WAG
+	// events were staged.
+	if !b.w.Empty() {
+		if err := b.w.Flush(b.Raft(), b.state.Repr()); err != nil {
+			return err
+		}
 	}
 	if b.raft != nil {
 		if err := b.raft.Commit(true /* sync */); err != nil {
