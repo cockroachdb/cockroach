@@ -125,6 +125,15 @@ export type GroupedStackedBarGraphProps = {
   alignedData?: AlignedData;
   colourPalette?: string[];
   groupSize?: number;
+  // Text labels drawn above each bar stack (e.g. ["Canary","Stable"]).
+  // When set, the built-in uPlot legend is hidden.
+  groupLabels?: [string, string];
+  // Distinct border colours for group 1 / group 2 bars
+  // (e.g. ["#c62828", "#1565c0"] for canary vs stable).
+  groupStrokeColors?: [string, string];
+  // Layer labels (e.g. plan gist IDs). When provided together with
+  // groupLabels, the tooltip shows only the hovered sub-bar layer.
+  gistLabels?: string[];
   preCalcGraphSize?: boolean;
   title: string;
   tooltip?: React.ReactNode;
@@ -138,7 +147,10 @@ export const GroupedStackedBarGraphTimeSeries: React.FC<
 > = ({
   alignedData,
   colourPalette,
+  gistLabels,
+  groupLabels,
   groupSize,
+  groupStrokeColors,
   preCalcGraphSize = true,
   title,
   tooltip,
@@ -193,7 +205,48 @@ export const GroupedStackedBarGraphTimeSeries: React.FC<
       colourPalette,
       timezone,
       groupSize,
+      groupStrokeColors,
+      groupLabels,
+      gistLabels,
     );
+
+    // When groupLabels is set but the caller overrides the legend to be
+    // visible (e.g. for the Statement Times or Plan Distribution chart),
+    // hide group 2's duplicate legend entries so only one set of labels
+    // appears. Visibility syncing between groups is handled by the
+    // setSeries hook in getGroupedStackedBarOpts.
+    if (groupLabels && opts.legend?.show) {
+      const nn = groupSize ?? Math.floor((alignedData.length - 1) / 2);
+      opts.plugins.push({
+        hooks: {
+          init: (u: uPlot) => {
+            const rows = u.root.querySelectorAll(".u-legend .u-series");
+            // Legend rows: 0=x-axis, 1..nn=group1, nn+1..2*nn=group2.
+            // Hide the x-axis row and all group 2 (duplicate) rows so
+            // only the layer entries from group 1 are shown.
+            if (rows[0]) {
+              (rows[0] as HTMLElement).style.display = "none";
+            }
+            for (let i = nn + 1; i <= 2 * nn; i++) {
+              if (rows[i]) {
+                (rows[i] as HTMLElement).style.display = "none";
+              }
+            }
+            // Remove the group-stroke border from legend markers so
+            // they show only the fill colour.
+            for (let i = 1; i <= nn; i++) {
+              const marker = rows[i]?.querySelector(
+                ".u-marker",
+              ) as HTMLElement | null;
+              if (marker) {
+                marker.style.borderColor = "transparent";
+              }
+            }
+          },
+        },
+      });
+    }
+
 
     const plot = new uPlot(opts, stackedData, graphRef.current);
 
@@ -203,7 +256,10 @@ export const GroupedStackedBarGraphTimeSeries: React.FC<
   }, [
     alignedData,
     colourPalette,
+    gistLabels,
+    groupLabels,
     groupSize,
+    groupStrokeColors,
     uPlotOptions,
     yAxisUnits,
     samplingIntervalMillis,
