@@ -12,6 +12,7 @@ import (
 
 	envmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/environments"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/environments/types"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -77,7 +78,7 @@ func TestPrepareCredentialFiles_NoSecretFileVars(t *testing.T) {
 
 	// No credential files should be created.
 	_, statErr := os.Stat(filepath.Join(workingDir, credentialsDir))
-	assert.True(t, os.IsNotExist(statErr))
+	assert.True(t, oserror.IsNotExist(statErr))
 
 	// Env vars unchanged.
 	assert.Equal(t, "AKIA...", updated["AWS_ACCESS_KEY_ID"])
@@ -108,7 +109,7 @@ func TestPrepareCredentialFiles_CleanupRemovesFiles(t *testing.T) {
 	// After cleanup, the credentials directory is removed.
 	require.NoError(t, cleanup())
 	_, statErr = os.Stat(filepath.Join(workingDir, credentialsDir))
-	assert.True(t, os.IsNotExist(statErr))
+	assert.True(t, oserror.IsNotExist(statErr))
 }
 
 func TestPrepareCredentialFiles_MultipleSecretFiles(t *testing.T) {

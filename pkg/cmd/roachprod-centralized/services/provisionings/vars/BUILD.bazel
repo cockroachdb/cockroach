@@ -28,6 +28,7 @@ go_test(
         "//pkg/cmd/roachprod-centralized/models/environments",
         "//pkg/cmd/roachprod-centralized/models/provisionings",
         "//pkg/cmd/roachprod-centralized/services/environments/types",
+        "@com_github_cockroachdb_errors//oserror",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

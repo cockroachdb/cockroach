@@ -7,9 +7,11 @@ package memory
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"reflect"
 	"sort"
+	"time"
 
 	provmodels "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/provisionings"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/repositories/provisionings"
@@ -19,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 // MemProvisioningsRepo is an in-memory implementation of the provisionings
@@ -47,6 +50,43 @@ func (r *MemProvisioningsRepo) GetProvisioning(
 		return provmodels.Provisioning{}, provisionings.ErrProvisioningNotFound
 	}
 	return copyProvisioning(p), nil
+}
+
+// GetProvisioningSummary retrieves a provisioning by ID without
+// TemplateSnapshot or PlanOutput.
+func (r *MemProvisioningsRepo) GetProvisioningSummary(
+	ctx context.Context, l *logger.Logger, id uuid.UUID,
+) (provmodels.Provisioning, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	p, ok := r.data[id]
+	if !ok {
+		return provmodels.Provisioning{}, provisionings.ErrProvisioningNotFound
+	}
+	c := copyProvisioning(p)
+	c.TemplateSnapshot = nil
+	c.TemplateSnapshotRef = ""
+	c.PlanOutput = nil
+	c.PlanOutputRef = ""
+	return c, nil
+}
+
+// GetProvisioningForExecution retrieves a provisioning by ID with
+// TemplateSnapshot but without PlanOutput.
+func (r *MemProvisioningsRepo) GetProvisioningForExecution(
+	ctx context.Context, l *logger.Logger, id uuid.UUID,
+) (provmodels.Provisioning, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	p, ok := r.data[id]
+	if !ok {
+		return provmodels.Provisioning{}, provisionings.ErrProvisioningNotFound
+	}
+	c := copyProvisioning(p)
+	c.PlanOutput = nil
+	return c, nil
 }
 
 // GetProvisionings retrieves provisionings, optionally filtered. Uses the
@@ -88,6 +128,24 @@ func (r *MemProvisioningsRepo) GetProvisionings(
 	})
 
 	return result, len(result), nil
+}
+
+// GetProvisioningsSummary retrieves provisionings matching the given filters
+// without TemplateSnapshot or PlanOutput.
+func (r *MemProvisioningsRepo) GetProvisioningsSummary(
+	ctx context.Context, l *logger.Logger, filterSet filtertypes.FilterSet,
+) ([]provmodels.Provisioning, int, error) {
+	provs, count, err := r.GetProvisionings(ctx, l, filterSet)
+	if err != nil {
+		return nil, 0, err
+	}
+	for i := range provs {
+		provs[i].TemplateSnapshot = nil
+		provs[i].TemplateSnapshotRef = ""
+		provs[i].PlanOutput = nil
+		provs[i].PlanOutputRef = ""
+	}
+	return provs, count, nil
 }
 
 // StoreProvisioning persists a new provisioning.
@@ -150,6 +208,87 @@ func (r *MemProvisioningsRepo) UpdateProvisioning(
 	return nil
 }
 
+// UpdateProvisioningProgress updates only the operational fields that change
+// during provisioning lifecycle: state, last_step, error, outputs. Plan data
+// is persisted separately via StorePlanData. All other fields are preserved
+// from the existing record.
+func (r *MemProvisioningsRepo) UpdateProvisioningProgress(
+	ctx context.Context, l *logger.Logger, p provmodels.Provisioning,
+) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	existing, ok := r.data[p.ID]
+	if !ok {
+		return provisionings.ErrProvisioningNotFound
+	}
+
+	// Preserve all non-progress fields from the existing record.
+	existing.State = p.State
+	existing.LastStep = p.LastStep
+	existing.Error = p.Error
+	existing.Outputs = p.Outputs
+	existing.UpdatedAt = timeutil.Now()
+
+	if existing.Outputs == nil {
+		existing.Outputs = make(map[string]interface{})
+	}
+
+	r.data[p.ID] = copyProvisioning(existing)
+	return nil
+}
+
+// UpdateProvisioningExpiration updates only ExpiresAt and UpdatedAt.
+func (r *MemProvisioningsRepo) UpdateProvisioningExpiration(
+	ctx context.Context, l *logger.Logger, id uuid.UUID, expiresAt *time.Time,
+) error {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	existing, ok := r.data[id]
+	if !ok {
+		return provisionings.ErrProvisioningNotFound
+	}
+
+	if expiresAt != nil {
+		t := *expiresAt
+		existing.ExpiresAt = &t
+	} else {
+		existing.ExpiresAt = nil
+	}
+	existing.UpdatedAt = timeutil.Now()
+	r.data[id] = copyProvisioning(existing)
+	return nil
+}
+
+// StorePlanData persists the plan output JSON and/or external ref for a
+// provisioning.
+func (r *MemProvisioningsRepo) StorePlanData(
+	ctx context.Context,
+	l *logger.Logger,
+	id uuid.UUID,
+	planOutput json.RawMessage,
+	planOutputRef string,
+) error {
+	if planOutput != nil && planOutputRef != "" {
+		return errors.New("planOutput and planOutputRef are mutually exclusive")
+	}
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	existing, ok := r.data[id]
+	if !ok {
+		return provisionings.ErrProvisioningNotFound
+	}
+
+	existing.PlanOutput = planOutput
+	existing.PlanOutputRef = planOutputRef
+	existing.UpdatedAt = timeutil.Now()
+	r.data[id] = copyProvisioning(existing)
+	return nil
+}
+
 // DeleteProvisioning removes a provisioning by ID.
 func (r *MemProvisioningsRepo) DeleteProvisioning(
 	ctx context.Context, l *logger.Logger, id uuid.UUID,
@@ -165,7 +304,8 @@ func (r *MemProvisioningsRepo) DeleteProvisioning(
 }
 
 // GetExpiredProvisionings returns provisionings where expires_at <= now()
-// and state is not destroyed or destroying.
+// and state is not destroyed or destroying. Excludes template_snapshot
+// and plan_output since GC only needs metadata.
 func (r *MemProvisioningsRepo) GetExpiredProvisionings(
 	ctx context.Context, l *logger.Logger,
 ) ([]provmodels.Provisioning, error) {
@@ -178,7 +318,12 @@ func (r *MemProvisioningsRepo) GetExpiredProvisionings(
 		if p.ExpiresAt != nil && !p.ExpiresAt.After(now) &&
 			p.State != provmodels.ProvisioningStateDestroyed &&
 			p.State != provmodels.ProvisioningStateDestroying {
-			result = append(result, copyProvisioning(p))
+			c := copyProvisioning(p)
+			c.TemplateSnapshot = nil
+			c.TemplateSnapshotRef = ""
+			c.PlanOutput = nil
+			c.PlanOutputRef = ""
+			result = append(result, c)
 		}
 	}
 

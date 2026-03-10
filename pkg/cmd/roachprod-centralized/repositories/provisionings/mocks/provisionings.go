@@ -9,6 +9,8 @@ package provisioningsrepmock
 
 import (
 	context "context"
+	json "encoding/json"
+	time "time"
 
 	modelsprovisionings "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/models/provisionings"
 	types "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/filters/types"
@@ -104,6 +106,66 @@ func (_m *IProvisioningsRepository) GetProvisioning(
 	return r0, r1
 }
 
+// GetProvisioningForExecution provides a mock function with given fields: ctx, l, id
+func (_m *IProvisioningsRepository) GetProvisioningForExecution(
+	ctx context.Context, l *logger.Logger, id uuid.UUID,
+) (modelsprovisionings.Provisioning, error) {
+	ret := _m.Called(ctx, l, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetProvisioningForExecution")
+	}
+
+	var r0 modelsprovisionings.Provisioning
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID) (modelsprovisionings.Provisioning, error)); ok {
+		return rf(ctx, l, id)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID) modelsprovisionings.Provisioning); ok {
+		r0 = rf(ctx, l, id)
+	} else {
+		r0 = ret.Get(0).(modelsprovisionings.Provisioning)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, uuid.UUID) error); ok {
+		r1 = rf(ctx, l, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// GetProvisioningSummary provides a mock function with given fields: ctx, l, id
+func (_m *IProvisioningsRepository) GetProvisioningSummary(
+	ctx context.Context, l *logger.Logger, id uuid.UUID,
+) (modelsprovisionings.Provisioning, error) {
+	ret := _m.Called(ctx, l, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetProvisioningSummary")
+	}
+
+	var r0 modelsprovisionings.Provisioning
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID) (modelsprovisionings.Provisioning, error)); ok {
+		return rf(ctx, l, id)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID) modelsprovisionings.Provisioning); ok {
+		r0 = rf(ctx, l, id)
+	} else {
+		r0 = ret.Get(0).(modelsprovisionings.Provisioning)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, uuid.UUID) error); ok {
+		r1 = rf(ctx, l, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // GetProvisionings provides a mock function with given fields: ctx, l, filters
 func (_m *IProvisioningsRepository) GetProvisionings(
 	ctx context.Context, l *logger.Logger, filters types.FilterSet,
@@ -143,6 +205,69 @@ func (_m *IProvisioningsRepository) GetProvisionings(
 	return r0, r1, r2
 }
 
+// GetProvisioningsSummary provides a mock function with given fields: ctx, l, filters
+func (_m *IProvisioningsRepository) GetProvisioningsSummary(
+	ctx context.Context, l *logger.Logger, filters types.FilterSet,
+) ([]modelsprovisionings.Provisioning, int, error) {
+	ret := _m.Called(ctx, l, filters)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetProvisioningsSummary")
+	}
+
+	var r0 []modelsprovisionings.Provisioning
+	var r1 int
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, types.FilterSet) ([]modelsprovisionings.Provisioning, int, error)); ok {
+		return rf(ctx, l, filters)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, types.FilterSet) []modelsprovisionings.Provisioning); ok {
+		r0 = rf(ctx, l, filters)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]modelsprovisionings.Provisioning)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, types.FilterSet) int); ok {
+		r1 = rf(ctx, l, filters)
+	} else {
+		r1 = ret.Get(1).(int)
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, *logger.Logger, types.FilterSet) error); ok {
+		r2 = rf(ctx, l, filters)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// StorePlanData provides a mock function with given fields: ctx, l, id, planOutput, planOutputRef
+func (_m *IProvisioningsRepository) StorePlanData(
+	ctx context.Context,
+	l *logger.Logger,
+	id uuid.UUID,
+	planOutput json.RawMessage,
+	planOutputRef string,
+) error {
+	ret := _m.Called(ctx, l, id, planOutput, planOutputRef)
+
+	if len(ret) == 0 {
+		panic("no return value specified for StorePlanData")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID, json.RawMessage, string) error); ok {
+		r0 = rf(ctx, l, id, planOutput, planOutputRef)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // StoreProvisioning provides a mock function with given fields: ctx, l, provisioning
 func (_m *IProvisioningsRepository) StoreProvisioning(
 	ctx context.Context, l *logger.Logger, provisioning modelsprovisionings.Provisioning,
@@ -171,6 +296,46 @@ func (_m *IProvisioningsRepository) UpdateProvisioning(
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpdateProvisioning")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, modelsprovisionings.Provisioning) error); ok {
+		r0 = rf(ctx, l, provisioning)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// UpdateProvisioningExpiration provides a mock function with given fields: ctx, l, id, expiresAt
+func (_m *IProvisioningsRepository) UpdateProvisioningExpiration(
+	ctx context.Context, l *logger.Logger, id uuid.UUID, expiresAt *time.Time,
+) error {
+	ret := _m.Called(ctx, l, id, expiresAt)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateProvisioningExpiration")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, uuid.UUID, *time.Time) error); ok {
+		r0 = rf(ctx, l, id, expiresAt)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// UpdateProvisioningProgress provides a mock function with given fields: ctx, l, provisioning
+func (_m *IProvisioningsRepository) UpdateProvisioningProgress(
+	ctx context.Context, l *logger.Logger, provisioning modelsprovisionings.Provisioning,
+) error {
+	ret := _m.Called(ctx, l, provisioning)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateProvisioningProgress")
 	}
 
 	var r0 error

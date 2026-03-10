@@ -166,9 +166,15 @@ func ParseMetadataFromDir(dir string) (provisionings.TemplateMetadata, error) {
 
 // ParseMetadataFromSnapshot extracts and parses template.yaml from a tar.gz
 // archive in memory without writing to disk. Used by HandleSetupSSHKeys
-// (Commit 12) where no working directory exists.
+// where no working directory exists.
 func ParseMetadataFromSnapshot(archive []byte) (provisionings.TemplateMetadata, error) {
-	gz, err := gzip.NewReader(bytes.NewReader(archive))
+	return ParseMetadataFromReader(bytes.NewReader(archive))
+}
+
+// ParseMetadataFromReader extracts and parses template.yaml from a tar.gz
+// archive stream without writing to disk.
+func ParseMetadataFromReader(r io.Reader) (provisionings.TemplateMetadata, error) {
+	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return provisionings.TemplateMetadata{}, errors.Wrap(
 			err, "open gzip reader for metadata extraction",

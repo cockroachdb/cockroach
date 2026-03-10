@@ -35,10 +35,25 @@ func NewProvisioningsRepository(db *gosql.DB) *CRDBProvisioningsRepo {
 	return &CRDBProvisioningsRepo{db: db}
 }
 
-// allColumns is the ordered list of columns used in SELECT queries (19 total).
+// allColumns is the ordered list of columns used in SELECT queries.
 // Every scan helper must use this exact order.
 const allColumns = "id, name, environment, template_type, template_checksum, " +
-	"template_snapshot, state, identifier, variables, outputs, plan_output, " +
+	"template_snapshot, template_snapshot_ref, state, identifier, variables, outputs, plan_output, plan_output_ref, " +
+	"error, owner, cluster_name, lifetime_seconds, created_at, updated_at, " +
+	"expires_at, last_step"
+
+// summaryColumns excludes template_snapshot and plan_output to avoid loading
+// multi-MB blobs into memory when they are not needed.
+const summaryColumns = "id, name, environment, template_type, template_checksum, " +
+	"state, identifier, variables, outputs, " +
+	"error, owner, cluster_name, lifetime_seconds, created_at, updated_at, " +
+	"expires_at, last_step"
+
+// executionColumns includes template_snapshot (needed to extract to disk) but
+// excludes plan_output (never used by provision/destroy handlers). This avoids
+// loading the multi-MB plan JSON blob during execution flows.
+const executionColumns = "id, name, environment, template_type, template_checksum, " +
+	"template_snapshot, template_snapshot_ref, state, identifier, variables, outputs, plan_output_ref, " +
 	"error, owner, cluster_name, lifetime_seconds, created_at, updated_at, " +
 	"expires_at, last_step"
 
@@ -53,7 +68,9 @@ func scanProvisioning(
 
 	var variables []byte
 	var outputs []byte
+	var templateSnapshotRef gosql.NullString
 	var planOutput gosql.NullString
+	var planOutputRef gosql.NullString
 	var clusterName gosql.NullString
 	var lifetimeSeconds int64
 	var expiresAt gosql.NullTime
@@ -67,11 +84,13 @@ func scanProvisioning(
 		&p.TemplateType,
 		&p.TemplateChecksum,
 		&p.TemplateSnapshot, // BYTEA scans into []byte directly
+		&templateSnapshotRef,
 		&p.State,
 		&p.Identifier,
 		&variables,
 		&outputs,
 		&planOutput,
+		&planOutputRef,
 		&errorStr,
 		&p.Owner,
 		&clusterName,
@@ -104,8 +123,14 @@ func scanProvisioning(
 	}
 
 	// Nullable columns.
+	if templateSnapshotRef.Valid {
+		p.TemplateSnapshotRef = templateSnapshotRef.String
+	}
 	if planOutput.Valid {
 		p.PlanOutput = json.RawMessage(planOutput.String)
+	}
+	if planOutputRef.Valid {
+		p.PlanOutputRef = planOutputRef.String
 	}
 	if clusterName.Valid {
 		p.ClusterName = clusterName.String
@@ -137,6 +162,101 @@ func (r *CRDBProvisioningsRepo) GetProvisioning(
 	}
 	if err != nil {
 		return provmodels.Provisioning{}, errors.Wrap(err, "query provisioning")
+	}
+	return p, nil
+}
+
+// scanProvisioningSummary scans a row using summaryColumns order (no
+// template_snapshot, no plan_output). The resulting Provisioning has nil
+// TemplateSnapshot and PlanOutput.
+func scanProvisioningSummary(
+	scanner interface {
+		Scan(dest ...interface{}) error
+	},
+) (provmodels.Provisioning, error) {
+	var p provmodels.Provisioning
+
+	var variables []byte
+	var outputs []byte
+	var clusterName gosql.NullString
+	var lifetimeSeconds int64
+	var expiresAt gosql.NullTime
+	var errorStr gosql.NullString
+	var lastStep gosql.NullString
+
+	err := scanner.Scan(
+		&p.ID,
+		&p.Name,
+		&p.Environment,
+		&p.TemplateType,
+		&p.TemplateChecksum,
+		// template_snapshot excluded
+		&p.State,
+		&p.Identifier,
+		&variables,
+		&outputs,
+		// plan_output excluded
+		&errorStr,
+		&p.Owner,
+		&clusterName,
+		&lifetimeSeconds,
+		&p.CreatedAt,
+		&p.UpdatedAt,
+		&expiresAt,
+		&lastStep,
+	)
+	if err != nil {
+		return provmodels.Provisioning{}, err
+	}
+
+	if len(variables) > 0 {
+		if err := json.Unmarshal(variables, &p.Variables); err != nil {
+			return provmodels.Provisioning{}, errors.Wrap(err, "unmarshal variables")
+		}
+	}
+	if p.Variables == nil {
+		p.Variables = make(map[string]interface{})
+	}
+	if len(outputs) > 0 {
+		if err := json.Unmarshal(outputs, &p.Outputs); err != nil {
+			return provmodels.Provisioning{}, errors.Wrap(err, "unmarshal outputs")
+		}
+	}
+	if p.Outputs == nil {
+		p.Outputs = make(map[string]interface{})
+	}
+
+	if clusterName.Valid {
+		p.ClusterName = clusterName.String
+	}
+	if expiresAt.Valid {
+		p.ExpiresAt = &expiresAt.Time
+	}
+	if errorStr.Valid {
+		p.Error = errorStr.String
+	}
+	if lastStep.Valid {
+		p.LastStep = lastStep.String
+	}
+
+	p.Lifetime = time.Duration(lifetimeSeconds) * time.Second
+
+	return p, nil
+}
+
+// GetProvisioningSummary retrieves a provisioning by ID without loading
+// template_snapshot or plan_output.
+func (r *CRDBProvisioningsRepo) GetProvisioningSummary(
+	ctx context.Context, l *logger.Logger, id uuid.UUID,
+) (provmodels.Provisioning, error) {
+	query := `SELECT ` + summaryColumns + ` FROM provisionings WHERE id = $1`
+
+	p, err := scanProvisioningSummary(r.db.QueryRowContext(ctx, query, id))
+	if errors.Is(err, gosql.ErrNoRows) {
+		return provmodels.Provisioning{}, provisionings.ErrProvisioningNotFound
+	}
+	if err != nil {
+		return provmodels.Provisioning{}, errors.Wrap(err, "query provisioning summary")
 	}
 	return p, nil
 }
@@ -193,6 +313,163 @@ func (r *CRDBProvisioningsRepo) GetProvisionings(
 	return result, len(result), nil
 }
 
+// scanProvisioningForExecution scans a row using executionColumns order (no
+// plan_output). The resulting Provisioning has nil PlanOutput but includes
+// TemplateSnapshot.
+func scanProvisioningForExecution(
+	scanner interface {
+		Scan(dest ...interface{}) error
+	},
+) (provmodels.Provisioning, error) {
+	var p provmodels.Provisioning
+
+	var variables []byte
+	var outputs []byte
+	var templateSnapshotRef gosql.NullString
+	var planOutputRef gosql.NullString
+	var clusterName gosql.NullString
+	var lifetimeSeconds int64
+	var expiresAt gosql.NullTime
+	var errorStr gosql.NullString
+	var lastStep gosql.NullString
+
+	err := scanner.Scan(
+		&p.ID,
+		&p.Name,
+		&p.Environment,
+		&p.TemplateType,
+		&p.TemplateChecksum,
+		&p.TemplateSnapshot, // BYTEA scans into []byte directly
+		&templateSnapshotRef,
+		&p.State,
+		&p.Identifier,
+		&variables,
+		&outputs,
+		&planOutputRef,
+		&errorStr,
+		&p.Owner,
+		&clusterName,
+		&lifetimeSeconds,
+		&p.CreatedAt,
+		&p.UpdatedAt,
+		&expiresAt,
+		&lastStep,
+	)
+	if err != nil {
+		return provmodels.Provisioning{}, err
+	}
+
+	if len(variables) > 0 {
+		if err := json.Unmarshal(variables, &p.Variables); err != nil {
+			return provmodels.Provisioning{}, errors.Wrap(err, "unmarshal variables")
+		}
+	}
+	if p.Variables == nil {
+		p.Variables = make(map[string]interface{})
+	}
+	if len(outputs) > 0 {
+		if err := json.Unmarshal(outputs, &p.Outputs); err != nil {
+			return provmodels.Provisioning{}, errors.Wrap(err, "unmarshal outputs")
+		}
+	}
+	if p.Outputs == nil {
+		p.Outputs = make(map[string]interface{})
+	}
+
+	if templateSnapshotRef.Valid {
+		p.TemplateSnapshotRef = templateSnapshotRef.String
+	}
+	if planOutputRef.Valid {
+		p.PlanOutputRef = planOutputRef.String
+	}
+	if clusterName.Valid {
+		p.ClusterName = clusterName.String
+	}
+	if expiresAt.Valid {
+		p.ExpiresAt = &expiresAt.Time
+	}
+	if errorStr.Valid {
+		p.Error = errorStr.String
+	}
+	if lastStep.Valid {
+		p.LastStep = lastStep.String
+	}
+
+	p.Lifetime = time.Duration(lifetimeSeconds) * time.Second
+
+	return p, nil
+}
+
+// GetProvisioningForExecution retrieves a provisioning by ID with
+// template_snapshot but without plan_output.
+func (r *CRDBProvisioningsRepo) GetProvisioningForExecution(
+	ctx context.Context, l *logger.Logger, id uuid.UUID,
+) (provmodels.Provisioning, error) {
+	query := `SELECT ` + executionColumns + ` FROM provisionings WHERE id = $1`
+
+	p, err := scanProvisioningForExecution(r.db.QueryRowContext(ctx, query, id))
+	if errors.Is(err, gosql.ErrNoRows) {
+		return provmodels.Provisioning{}, provisionings.ErrProvisioningNotFound
+	}
+	if err != nil {
+		return provmodels.Provisioning{}, errors.Wrap(err, "query provisioning for execution")
+	}
+	return p, nil
+}
+
+// GetProvisioningsSummary retrieves provisionings matching the given filters
+// without loading template_snapshot or plan_output.
+func (r *CRDBProvisioningsRepo) GetProvisioningsSummary(
+	ctx context.Context, l *logger.Logger, filterSet filtertypes.FilterSet,
+) ([]provmodels.Provisioning, int, error) {
+	baseQuery := `SELECT ` + summaryColumns + ` FROM provisionings`
+
+	qb := filters.NewSQLQueryBuilderWithTypeHint(
+		reflect.TypeOf(provmodels.Provisioning{}),
+	)
+	whereClause, args, err := qb.BuildWhere(&filterSet)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "build query filters")
+	}
+
+	query := baseQuery
+	if whereClause != "" {
+		query += " " + whereClause
+	}
+	query += " ORDER BY created_at DESC"
+
+	l.Debug("querying provisionings summary from database",
+		slog.String("query", query),
+		slog.Int("args_count", len(args)),
+	)
+
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "query provisionings summary")
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			l.Warn("failed to close database rows",
+				slog.String("operation", "GetProvisioningsSummary"),
+				slog.Any("error", err))
+		}
+	}()
+
+	var result []provmodels.Provisioning
+	for rows.Next() {
+		p, err := scanProvisioningSummary(rows)
+		if err != nil {
+			return nil, 0, errors.Wrap(err, "scan provisioning summary row")
+		}
+		result = append(result, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, errors.Wrap(err, "iterate provisioning summary rows")
+	}
+
+	return result, len(result), nil
+}
+
 // StoreProvisioning persists a new provisioning.
 func (r *CRDBProvisioningsRepo) StoreProvisioning(
 	ctx context.Context, l *logger.Logger, p provmodels.Provisioning,
@@ -210,6 +487,14 @@ func (r *CRDBProvisioningsRepo) StoreProvisioning(
 	if p.PlanOutput != nil {
 		planOutputVal = string(p.PlanOutput)
 	}
+	var templateSnapshotRefVal interface{}
+	if p.TemplateSnapshotRef != "" {
+		templateSnapshotRefVal = p.TemplateSnapshotRef
+	}
+	var planOutputRefVal interface{}
+	if p.PlanOutputRef != "" {
+		planOutputRefVal = p.PlanOutputRef
+	}
 
 	var clusterNameVal interface{}
 	if p.ClusterName != "" {
@@ -225,14 +510,14 @@ func (r *CRDBProvisioningsRepo) StoreProvisioning(
 
 	query := `INSERT INTO provisionings (
 		id, name, environment, template_type, template_checksum,
-		template_snapshot, state, identifier, variables, outputs,
-		plan_output, error, owner, cluster_name, lifetime_seconds,
+		template_snapshot, template_snapshot_ref, state, identifier, variables, outputs,
+		plan_output, plan_output_ref, error, owner, cluster_name, lifetime_seconds,
 		expires_at, last_step
 	) VALUES (
 		$1, $2, $3, $4, $5,
-		$6, $7, $8, $9, $10,
-		$11, $12, $13, $14, $15,
-		$16, $17
+		$6, $7, $8, $9, $10, $11,
+		$12, $13, $14, $15, $16, $17,
+		$18, $19
 	)`
 
 	_, err = r.db.ExecContext(ctx, query,
@@ -242,11 +527,13 @@ func (r *CRDBProvisioningsRepo) StoreProvisioning(
 		p.TemplateType,
 		p.TemplateChecksum,
 		p.TemplateSnapshot, // []byte → BYTEA
+		templateSnapshotRefVal,
 		p.State,
 		p.Identifier,
 		variablesJSON,
 		outputsJSON,
 		planOutputVal,
+		planOutputRefVal,
 		p.Error,
 		p.Owner,
 		clusterNameVal,
@@ -283,6 +570,14 @@ func (r *CRDBProvisioningsRepo) UpdateProvisioning(
 	if p.PlanOutput != nil {
 		planOutputVal = string(p.PlanOutput)
 	}
+	var templateSnapshotRefVal interface{}
+	if p.TemplateSnapshotRef != "" {
+		templateSnapshotRefVal = p.TemplateSnapshotRef
+	}
+	var planOutputRefVal interface{}
+	if p.PlanOutputRef != "" {
+		planOutputRefVal = p.PlanOutputRef
+	}
 
 	var clusterNameVal interface{}
 	if p.ClusterName != "" {
@@ -302,18 +597,20 @@ func (r *CRDBProvisioningsRepo) UpdateProvisioning(
 		template_type = $4,
 		template_checksum = $5,
 		template_snapshot = $6,
-		state = $7,
-		identifier = $8,
-		variables = $9,
-		outputs = $10,
-		plan_output = $11,
-		error = $12,
-		owner = $13,
-		cluster_name = $14,
-		lifetime_seconds = $15,
+		template_snapshot_ref = $7,
+		state = $8,
+		identifier = $9,
+		variables = $10,
+		outputs = $11,
+		plan_output = $12,
+		plan_output_ref = $13,
+		error = $14,
+		owner = $15,
+		cluster_name = $16,
+		lifetime_seconds = $17,
 		updated_at = now(),
-		expires_at = $16,
-		last_step = $17
+		expires_at = $18,
+		last_step = $19
 	WHERE id = $1`
 
 	result, err := r.db.ExecContext(ctx, query,
@@ -323,11 +620,13 @@ func (r *CRDBProvisioningsRepo) UpdateProvisioning(
 		p.TemplateType,
 		p.TemplateChecksum,
 		p.TemplateSnapshot,
+		templateSnapshotRefVal,
 		p.State,
 		p.Identifier,
 		variablesJSON,
 		outputsJSON,
 		planOutputVal,
+		planOutputRefVal,
 		p.Error,
 		p.Owner,
 		clusterNameVal,
@@ -337,6 +636,119 @@ func (r *CRDBProvisioningsRepo) UpdateProvisioning(
 	)
 	if err != nil {
 		return errors.Wrap(err, "update provisioning")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return errors.Wrap(err, "affected rows")
+	}
+	if rowsAffected == 0 {
+		return provisionings.ErrProvisioningNotFound
+	}
+	return nil
+}
+
+// UpdateProvisioningProgress updates only the operational fields that change
+// during provisioning lifecycle: state, last_step, error, outputs. Plan data
+// is persisted separately via StorePlanData. This avoids re-writing large
+// immutable fields like template_snapshot.
+func (r *CRDBProvisioningsRepo) UpdateProvisioningProgress(
+	ctx context.Context, l *logger.Logger, p provmodels.Provisioning,
+) error {
+	outputsJSON, err := json.Marshal(p.Outputs)
+	if err != nil {
+		return errors.Wrap(err, "marshal outputs")
+	}
+
+	query := `UPDATE provisionings SET
+		state = $2,
+		last_step = $3,
+		error = $4,
+		outputs = $5,
+		updated_at = now()
+	WHERE id = $1`
+
+	result, err := r.db.ExecContext(ctx, query,
+		p.ID,
+		p.State,
+		p.LastStep,
+		p.Error,
+		outputsJSON,
+	)
+	if err != nil {
+		return errors.Wrap(err, "update provisioning progress")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return errors.Wrap(err, "affected rows")
+	}
+	if rowsAffected == 0 {
+		return provisionings.ErrProvisioningNotFound
+	}
+	return nil
+}
+
+// UpdateProvisioningExpiration updates only expires_at and updated_at.
+func (r *CRDBProvisioningsRepo) UpdateProvisioningExpiration(
+	ctx context.Context, l *logger.Logger, id uuid.UUID, expiresAt *time.Time,
+) error {
+	var val interface{}
+	if expiresAt != nil {
+		val = *expiresAt
+	}
+
+	query := `UPDATE provisionings SET
+		expires_at = $2,
+		updated_at = now()
+	WHERE id = $1`
+
+	result, err := r.db.ExecContext(ctx, query, id, val)
+	if err != nil {
+		return errors.Wrap(err, "update provisioning expiration")
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return errors.Wrap(err, "affected rows")
+	}
+	if rowsAffected == 0 {
+		return provisionings.ErrProvisioningNotFound
+	}
+	return nil
+}
+
+// StorePlanData persists the plan output JSON and external ref for a
+// provisioning. Pass zero values to clear them.
+func (r *CRDBProvisioningsRepo) StorePlanData(
+	ctx context.Context,
+	l *logger.Logger,
+	id uuid.UUID,
+	planOutput json.RawMessage,
+	planOutputRef string,
+) error {
+	if planOutput != nil && planOutputRef != "" {
+		return errors.New("planOutput and planOutputRef are mutually exclusive")
+	}
+
+	var planOutputVal interface{}
+	if planOutput != nil {
+		planOutputVal = string(planOutput)
+	}
+	var planOutputRefVal interface{}
+	if planOutputRef != "" {
+		planOutputRefVal = planOutputRef
+	}
+
+	query := `UPDATE provisionings SET
+		plan_output = $2,
+		plan_output_ref = $3,
+		updated_at = now()
+	WHERE id = $1`
+
+	result, err := r.db.ExecContext(ctx, query, id, planOutputVal, planOutputRefVal)
+	if err != nil {
+		return errors.Wrap(err, "store plan data")
 	}
 
 	rowsAffected, err := result.RowsAffected()
@@ -370,11 +782,12 @@ func (r *CRDBProvisioningsRepo) DeleteProvisioning(
 }
 
 // GetExpiredProvisionings returns provisionings where expires_at <= now()
-// and state is not destroyed or destroying.
+// and state is not destroyed or destroying. Uses summaryColumns to avoid
+// loading template_snapshot and plan_output — GC only needs metadata.
 func (r *CRDBProvisioningsRepo) GetExpiredProvisionings(
 	ctx context.Context, l *logger.Logger,
 ) ([]provmodels.Provisioning, error) {
-	query := `SELECT ` + allColumns + ` FROM provisionings
+	query := `SELECT ` + summaryColumns + ` FROM provisionings
 		WHERE expires_at IS NOT NULL
 		AND expires_at <= now()
 		AND state NOT IN ($1, $2)
@@ -397,7 +810,7 @@ func (r *CRDBProvisioningsRepo) GetExpiredProvisionings(
 
 	var result []provmodels.Provisioning
 	for rows.Next() {
-		p, err := scanProvisioning(rows)
+		p, err := scanProvisioningSummary(rows)
 		if err != nil {
 			return nil, errors.Wrap(err, "scan expired provisioning row")
 		}

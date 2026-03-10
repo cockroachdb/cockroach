@@ -30,6 +30,7 @@ type Options struct {
 	TemplatesDir      string
 	WorkingDirBase    string
 	TofuBinary        string
+	ArtifactBackend   string
 	WorkersEnabled    bool
 	DefaultLifetime   time.Duration
 	LifetimeExtension time.Duration

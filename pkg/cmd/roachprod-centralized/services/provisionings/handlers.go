@@ -6,6 +6,7 @@
 package provisionings
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -33,7 +34,7 @@ const failurePersistTimeout = 5 * time.Second
 func (s *Service) HandleProvision(
 	ctx context.Context, l *logger.Logger, provisioningID uuid.UUID,
 ) error {
-	prov, err := s.repo.GetProvisioning(ctx, l, provisioningID)
+	prov, err := s.repo.GetProvisioningForExecution(ctx, l, provisioningID)
 	if err != nil {
 		return errors.Wrap(err, "load provisioning")
 	}
@@ -54,12 +55,20 @@ func (s *Service) HandleProvision(
 			)
 		}
 	}()
-	if err := templates.ExtractSnapshot(prov.TemplateSnapshot, workingDir); err != nil {
+	archiveReader, err := s.openTemplateArchive(ctx, prov)
+	if err != nil {
+		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "open template snapshot"))
+	}
+	defer archiveReader.Close()
+	if err := templates.ExtractSnapshotFromReader(archiveReader, workingDir); err != nil {
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "extract snapshot"))
 	}
+	// Release snapshot bytes now that they are extracted to disk. Safe
+	// because UpdateProvisioningProgress does not write this field.
+	prov.TemplateSnapshot = nil
 
 	// Write backend.tf for state storage.
-	statePrefix := "provisionings/" + prov.ID.String()
+	statePrefix := "provisionings/" + prov.ID.String() + "/state"
 	backendContent, err := s.backend.GenerateTF(ctx, statePrefix)
 	if err != nil {
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "generate backend.tf"))
@@ -117,7 +126,7 @@ func (s *Service) HandleProvision(
 	prov.SetState(provmodels.ProvisioningStateInitializing, l)
 	prov.LastStep = "init"
 	prov.UpdatedAt = timeutil.Now().UTC()
-	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+	if err := s.repo.UpdateProvisioningProgress(ctx, l, prov); err != nil {
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "update state to initializing"))
 	}
 	if err := s.executor.Init(ctx, l, workingDir, envVars); err != nil {
@@ -128,24 +137,73 @@ func (s *Service) HandleProvision(
 	prov.SetState(provmodels.ProvisioningStatePlanning, l)
 	prov.LastStep = "plan"
 	prov.UpdatedAt = timeutil.Now().UTC()
-	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+	if err := s.repo.UpdateProvisioningProgress(ctx, l, prov); err != nil {
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "update state to planning"))
 	}
-	_, planJSON, err := s.executor.Plan(ctx, l, workingDir, varMap, envVars)
+	currentPlanRef := prov.PlanOutputRef
+	storePlanData := func(oldPlanRef string) (string, error) {
+		if s.usesExternalArtifacts() {
+			newPlanRef, err := s.storePlanArtifact(ctx, l, prov.ID, workingDir, envVars)
+			if err != nil {
+				return oldPlanRef, err
+			}
+			if err := s.repo.StorePlanData(ctx, l, prov.ID, nil, newPlanRef); err != nil {
+				if cleanupErr := s.deleteArtifactIfPresent(context.WithoutCancel(ctx), newPlanRef); cleanupErr != nil {
+					l.Warn("failed to clean up uploaded plan artifact after repository error",
+						slog.String("provisioning_id", prov.ID.String()),
+						slog.String("plan_output_ref", newPlanRef),
+						slog.Any("error", cleanupErr),
+					)
+				}
+				return oldPlanRef, err
+			}
+			if oldPlanRef != "" && oldPlanRef != newPlanRef && s.artifactStore != nil {
+				if err := s.deleteArtifactIfPresent(context.WithoutCancel(ctx), oldPlanRef); err != nil {
+					l.Warn("failed to delete replaced plan artifact",
+						slog.String("provisioning_id", prov.ID.String()),
+						slog.String("plan_output_ref", oldPlanRef),
+						slog.Any("error", err),
+					)
+				}
+			}
+			return newPlanRef, nil
+		}
+
+		var planJSON bytes.Buffer
+		if err := s.executor.WritePlanJSON(ctx, l, workingDir, envVars, &planJSON); err != nil {
+			return oldPlanRef, err
+		}
+		if err := s.repo.StorePlanData(
+			ctx, l, prov.ID, json.RawMessage(bytes.Clone(planJSON.Bytes())), "",
+		); err != nil {
+			return oldPlanRef, err
+		}
+		if oldPlanRef != "" && s.artifactStore != nil {
+			if err := s.deleteArtifactIfPresent(context.WithoutCancel(ctx), oldPlanRef); err != nil {
+				l.Warn("failed to delete replaced plan artifact after inline plan write",
+					slog.String("provisioning_id", prov.ID.String()),
+					slog.String("plan_output_ref", oldPlanRef),
+					slog.Any("error", err),
+				)
+			}
+		}
+		return "", nil
+	}
+	_, err = s.executor.Plan(ctx, l, workingDir, varMap, envVars)
 	if err != nil {
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "tofu plan"))
 	}
-	prov.PlanOutput = planJSON
-	prov.UpdatedAt = timeutil.Now().UTC()
-	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+	currentPlanRef, err = storePlanData(currentPlanRef)
+	if err != nil {
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "store plan output"))
 	}
+	prov.PlanOutputRef = currentPlanRef
 
 	// Step: Apply
 	prov.SetState(provmodels.ProvisioningStateProvisioning, l)
 	prov.LastStep = "apply"
 	prov.UpdatedAt = timeutil.Now().UTC()
-	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+	if err := s.repo.UpdateProvisioningProgress(ctx, l, prov); err != nil {
 		return s.failProvision(ctx, l, &prov, errors.Wrap(err, "update state to provisioning"))
 	}
 
@@ -155,10 +213,14 @@ func (s *Service) HandleProvision(
 		l.Info("plan file missing, re-running plan for idempotency",
 			slog.String("provisioning_id", prov.ID.String()),
 		)
-		if _, planJSON, err = s.executor.Plan(ctx, l, workingDir, varMap, envVars); err != nil {
+		if _, err = s.executor.Plan(ctx, l, workingDir, varMap, envVars); err != nil {
 			return s.failProvision(ctx, l, &prov, errors.Wrap(err, "tofu re-plan"))
 		}
-		prov.PlanOutput = planJSON
+		currentPlanRef, err = storePlanData(currentPlanRef)
+		if err != nil {
+			return s.failProvision(ctx, l, &prov, errors.Wrap(err, "store re-plan output"))
+		}
+		prov.PlanOutputRef = currentPlanRef
 	}
 
 	if err := s.executor.Apply(ctx, l, workingDir, varMap, envVars); err != nil {
@@ -178,7 +240,7 @@ func (s *Service) HandleProvision(
 	if s.hookOrchestrator != nil {
 		prov.LastStep = "hooks"
 		prov.UpdatedAt = timeutil.Now().UTC()
-		if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+		if err := s.repo.UpdateProvisioningProgress(ctx, l, prov); err != nil {
 			return s.failProvision(ctx, l, &prov, errors.Wrap(err, "update last_step to hooks"))
 		}
 		if err := s.hookOrchestrator.RunPostApply(ctx, l, prov, workingDir, resolvedEnv); err != nil {
@@ -190,7 +252,7 @@ func (s *Service) HandleProvision(
 	prov.SetState(provmodels.ProvisioningStateProvisioned, l)
 	prov.LastStep = "done"
 	prov.UpdatedAt = timeutil.Now().UTC()
-	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+	if err := s.repo.UpdateProvisioningProgress(ctx, l, prov); err != nil {
 		return errors.Wrap(err, "update state to provisioned")
 	}
 
@@ -206,7 +268,7 @@ func (s *Service) HandleProvision(
 func (s *Service) HandleDestroy(
 	ctx context.Context, l *logger.Logger, provisioningID uuid.UUID,
 ) error {
-	prov, err := s.repo.GetProvisioning(ctx, l, provisioningID)
+	prov, err := s.repo.GetProvisioningForExecution(ctx, l, provisioningID)
 	if err != nil {
 		return errors.Wrap(err, "load provisioning")
 	}
@@ -227,12 +289,18 @@ func (s *Service) HandleDestroy(
 			)
 		}
 	}()
-	if err := templates.ExtractSnapshot(prov.TemplateSnapshot, workingDir); err != nil {
+	archiveReader, err := s.openTemplateArchive(ctx, prov)
+	if err != nil {
+		return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "open template snapshot"))
+	}
+	defer archiveReader.Close()
+	if err := templates.ExtractSnapshotFromReader(archiveReader, workingDir); err != nil {
 		return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "extract snapshot"))
 	}
+	prov.TemplateSnapshot = nil
 
 	// Write backend.tf.
-	statePrefix := "provisionings/" + prov.ID.String()
+	statePrefix := "provisionings/" + prov.ID.String() + "/state"
 	backendContent, err := s.backend.GenerateTF(ctx, statePrefix)
 	if err != nil {
 		return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "generate backend.tf"))
@@ -288,7 +356,7 @@ func (s *Service) HandleDestroy(
 	// Step: Init
 	prov.LastStep = "init"
 	prov.UpdatedAt = timeutil.Now().UTC()
-	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+	if err := s.repo.UpdateProvisioningProgress(ctx, l, prov); err != nil {
 		return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "update last_step to init"))
 	}
 	if err := s.executor.Init(ctx, l, workingDir, envVars); err != nil {
@@ -299,7 +367,7 @@ func (s *Service) HandleDestroy(
 	if s.hookOrchestrator != nil {
 		prov.LastStep = "pre_destroy_hooks"
 		prov.UpdatedAt = timeutil.Now().UTC()
-		if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+		if err := s.repo.UpdateProvisioningProgress(ctx, l, prov); err != nil {
 			return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "update last_step to pre_destroy_hooks"))
 		}
 		if err := s.hookOrchestrator.RunPreDestroy(ctx, l, prov, workingDir, resolvedEnv); err != nil {
@@ -310,7 +378,7 @@ func (s *Service) HandleDestroy(
 	// Step: Destroy
 	prov.LastStep = "destroy"
 	prov.UpdatedAt = timeutil.Now().UTC()
-	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+	if err := s.repo.UpdateProvisioningProgress(ctx, l, prov); err != nil {
 		return s.failDestroy(ctx, l, &prov, errors.Wrap(err, "update last_step to destroy"))
 	}
 	if err := s.executor.Destroy(ctx, l, workingDir, varMap, envVars); err != nil {
@@ -323,13 +391,24 @@ func (s *Service) HandleDestroy(
 			slog.String("prefix", statePrefix), slog.Any("error", err))
 	}
 
-	// Done
+	// Done — clear plan output in DB and mark destroyed.
+	if prov.PlanOutputRef != "" {
+		if err := s.deleteArtifactIfPresent(context.WithoutCancel(ctx), prov.PlanOutputRef); err != nil {
+			l.Warn("failed to delete plan artifact after destroy",
+				slog.String("provisioning_id", prov.ID.String()),
+				slog.String("plan_output_ref", prov.PlanOutputRef),
+				slog.Any("error", err),
+			)
+		}
+	}
+	if err := s.repo.StorePlanData(ctx, l, prov.ID, nil, ""); err != nil {
+		return errors.Wrap(err, "clear plan output")
+	}
 	prov.SetState(provmodels.ProvisioningStateDestroyed, l)
 	prov.LastStep = "done"
-	prov.PlanOutput = nil
 	prov.Outputs = make(map[string]interface{}) // stores as {} in JSONB
 	prov.UpdatedAt = timeutil.Now().UTC()
-	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+	if err := s.repo.UpdateProvisioningProgress(ctx, l, prov); err != nil {
 		return errors.Wrap(err, "update state to destroyed")
 	}
 
@@ -408,7 +487,7 @@ func (s *Service) failProvision(
 	prov.UpdatedAt = timeutil.Now().UTC()
 	repoCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), failurePersistTimeout)
 	defer cancel()
-	if updateErr := s.repo.UpdateProvisioning(repoCtx, l, *prov); updateErr != nil {
+	if updateErr := s.repo.UpdateProvisioningProgress(repoCtx, l, *prov); updateErr != nil {
 		l.Error("failed to update provisioning state to failed",
 			slog.String("provisioning_id", prov.ID.String()),
 			slog.Any("update_error", updateErr),
@@ -427,7 +506,7 @@ func (s *Service) failDestroy(
 	prov.UpdatedAt = timeutil.Now().UTC()
 	repoCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), failurePersistTimeout)
 	defer cancel()
-	if updateErr := s.repo.UpdateProvisioning(repoCtx, l, *prov); updateErr != nil {
+	if updateErr := s.repo.UpdateProvisioningProgress(repoCtx, l, *prov); updateErr != nil {
 		l.Error("failed to update provisioning state to destroy_failed",
 			slog.String("provisioning_id", prov.ID.String()),
 			slog.Any("update_error", updateErr),

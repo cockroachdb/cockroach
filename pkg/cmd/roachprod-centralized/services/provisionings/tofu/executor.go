@@ -41,7 +41,13 @@ type IExecutor interface {
 	Plan(
 		ctx context.Context, l *logger.Logger, workingDir string,
 		vars map[string]string, envVars map[string]string,
-	) (hasChanges bool, planJSON json.RawMessage, err error)
+	) (hasChanges bool, err error)
+
+	// WritePlanJSON streams the saved plan file as structured JSON to dst.
+	WritePlanJSON(
+		ctx context.Context, l *logger.Logger, workingDir string,
+		envVars map[string]string, dst io.Writer,
+	) error
 
 	// Apply applies infrastructure changes. If a saved plan file exists in
 	// the working directory (from a prior Plan call), it is used directly.
@@ -114,7 +120,7 @@ func (e *Executor) Plan(
 	workingDir string,
 	vars map[string]string,
 	envVars map[string]string,
-) (bool, json.RawMessage, error) {
+) (bool, error) {
 	// Step 1: Run tofu plan to detect changes and save the plan file.
 	args := []string{"plan", "-out=" + planFileName, "-no-color", "-detailed-exitcode"}
 	args = appendVarArgs(args, vars)
@@ -128,17 +134,43 @@ func (e *Executor) Plan(
 	case 2:
 		hasChanges = true
 	default:
-		return false, nil, errors.Wrapf(err, "tofu plan: %s", strings.TrimSpace(stderr))
+		return false, errors.Wrapf(err, "tofu plan: %s", strings.TrimSpace(stderr))
 	}
 
-	// Step 2: Run tofu show -json to get the structured plan output.
-	showArgs := []string{"show", "-json", planFileName, "-no-color"}
-	stdout, stderr, _, showErr := e.run(ctx, l, workingDir, showArgs, envVars, false)
-	if showErr != nil {
-		return false, nil, errors.Wrapf(showErr, "tofu show: %s", strings.TrimSpace(stderr))
-	}
+	return hasChanges, nil
+}
 
-	return hasChanges, json.RawMessage(stdout), nil
+// WritePlanJSON streams the saved plan file as structured JSON to dst.
+func (e *Executor) WritePlanJSON(
+	ctx context.Context,
+	l *logger.Logger,
+	workingDir string,
+	envVars map[string]string,
+	dst io.Writer,
+) error {
+	args := []string{"show", "-json", planFileName, "-no-color"}
+	cmd := e.buildCommand(ctx, workingDir, args, envVars)
+
+	stderrTail := newTailBuffer(64 << 10)
+	stderrLW := l.NewLineWriter(slog.LevelWarn, slog.String("source", "tofu"), slog.String("stream", "stderr"))
+	defer func() {
+		err := stderrLW.Close()
+		if err != nil {
+			l.Error("failed to close stderr line writer", slog.Any("error", err))
+		}
+	}()
+
+	cmd.Stdout = dst
+	cmd.Stderr = io.MultiWriter(stderrTail, stderrLW)
+
+	l.Info("executing tofu command",
+		slog.String("command", e.binaryPath+" "+strings.Join(args, " ")),
+	)
+
+	if err := cmd.Run(); err != nil {
+		return errors.Wrapf(err, "tofu show: %s", strings.TrimSpace(stderrTail.String()))
+	}
+	return nil
 }
 
 // Apply applies infrastructure changes. If a saved plan file (plan.tfplan)
@@ -224,6 +256,33 @@ func (e *Executor) Output(
 	return result, nil
 }
 
+type tailBuffer struct {
+	data  []byte
+	limit int
+}
+
+func newTailBuffer(limit int) *tailBuffer {
+	return &tailBuffer{limit: limit}
+}
+
+func (b *tailBuffer) Write(p []byte) (int, error) {
+	if len(p) >= b.limit {
+		b.data = append(b.data[:0], p[len(p)-b.limit:]...)
+		return len(p), nil
+	}
+	total := len(b.data) + len(p)
+	if total > b.limit {
+		drop := total - b.limit
+		b.data = append(b.data[:0], b.data[drop:]...)
+	}
+	b.data = append(b.data, p...)
+	return len(p), nil
+}
+
+func (b *tailBuffer) String() string {
+	return string(b.data)
+}
+
 // buildCommand constructs an exec.Cmd for the tofu binary with the given
 // arguments. The command's working directory is set to workingDir, and its
 // environment is built from the current process environment with envVars
@@ -285,6 +344,10 @@ func (e *Executor) run(
 	}()
 
 	if logStdout {
+		// Stream stdout directly to the logger without buffering. Callers
+		// that pass logStdout=true (Init, Apply, Destroy) never use the
+		// returned stdout string, so buffering it wastes memory — especially
+		// for long-running apply/destroy on large templates.
 		stdoutLW := l.NewLineWriter(slog.LevelInfo, slog.String("source", "tofu"), slog.String("stream", "stdout"))
 		defer func() {
 			err := stdoutLW.Close()
@@ -292,7 +355,7 @@ func (e *Executor) run(
 				l.Error("failed to close stdout line writer", slog.Any("error", err))
 			}
 		}()
-		cmd.Stdout = io.MultiWriter(&stdoutBuf, stdoutLW)
+		cmd.Stdout = stdoutLW
 	} else {
 		cmd.Stdout = &stdoutBuf
 	}

@@ -242,6 +242,15 @@ func resolveSymlink(link, templatesRoot string) (string, error) {
 // the marker (e.g., a previous extraction was interrupted), the directory is
 // removed and extraction starts fresh.
 func ExtractSnapshot(archive []byte, workingDir string) error {
+	return ExtractSnapshotFromReader(bytes.NewReader(archive), workingDir)
+}
+
+// ExtractSnapshotFromReader extracts a tar.gz archive stream into workingDir.
+// The extraction is idempotent: a completion marker is written after
+// successful extraction. If the marker is present, extraction is skipped. If
+// the directory exists without the marker (e.g., a previous extraction was
+// interrupted), the directory is removed and extraction starts fresh.
+func ExtractSnapshotFromReader(r io.Reader, workingDir string) error {
 	marker := filepath.Join(workingDir, extractCompleteMarker)
 
 	// If the marker exists, a previous extraction completed successfully.
@@ -258,7 +267,7 @@ func ExtractSnapshot(archive []byte, workingDir string) error {
 		return errors.Wrapf(err, "create working directory %s", workingDir)
 	}
 
-	gz, err := gzip.NewReader(bytes.NewReader(archive))
+	gz, err := gzip.NewReader(r)
 	if err != nil {
 		return errors.Wrap(err, "open gzip reader")
 	}

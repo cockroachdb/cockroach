@@ -49,6 +49,7 @@ go_library(
         "//pkg/cmd/roachprod-centralized/services/provisionings/hooks",
         "//pkg/cmd/roachprod-centralized/services/provisionings/ssh",
         "//pkg/cmd/roachprod-centralized/services/provisionings/templates",
+        "//pkg/cmd/roachprod-centralized/services/provisionings/tf-artifacts",
         "//pkg/cmd/roachprod-centralized/services/provisionings/types",
         "//pkg/cmd/roachprod-centralized/services/public-dns",
         "//pkg/cmd/roachprod-centralized/services/public-dns/types",

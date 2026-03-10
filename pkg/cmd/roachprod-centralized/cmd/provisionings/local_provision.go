@@ -6,6 +6,7 @@
 package provisionings
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -222,9 +223,13 @@ func runLocalProvision(cmd *cobra.Command, _ []string) error {
 	// Step 9: Run plan.
 	fmt.Println()
 	fmt.Println("Running tofu plan...")
-	hasChanges, planJSON, err := executor.Plan(ctx, l, workingDir, tfVars, envVars)
+	hasChanges, err := executor.Plan(ctx, l, workingDir, tfVars, envVars)
 	if err != nil {
 		return errors.Wrap(err, "tofu plan")
+	}
+	var planJSON bytes.Buffer
+	if err := executor.WritePlanJSON(ctx, l, workingDir, envVars, &planJSON); err != nil {
+		return errors.Wrap(err, "tofu show")
 	}
 
 	if hasChanges {
@@ -234,7 +239,7 @@ func runLocalProvision(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Print a summary of the plan if available.
-	printPlanSummary(planJSON)
+	printPlanSummary(planJSON.Bytes())
 
 	// Step 10: If --plan-only, exit.
 	if planOnly {

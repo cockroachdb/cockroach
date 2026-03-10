@@ -18,6 +18,7 @@ go_library(
         "//pkg/cmd/roachprod-centralized/services/provisionings/hooks",
         "//pkg/cmd/roachprod-centralized/services/provisionings/tasks",
         "//pkg/cmd/roachprod-centralized/services/provisionings/templates",
+        "//pkg/cmd/roachprod-centralized/services/provisionings/tf-artifacts",
         "//pkg/cmd/roachprod-centralized/services/provisionings/tofu",
         "//pkg/cmd/roachprod-centralized/services/provisionings/types",
         "//pkg/cmd/roachprod-centralized/services/provisionings/vars",

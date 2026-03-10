@@ -191,6 +191,8 @@ func TestMemProvisioningsRepo(t *testing.T) {
 		p.PlanOutput = nil
 		p.ExpiresAt = nil
 		p.ClusterName = ""
+		p.TemplateSnapshotRef = ""
+		p.PlanOutputRef = ""
 		require.NoError(t, repo.StoreProvisioning(ctx, l, p))
 
 		got, err := repo.GetProvisioning(ctx, l, p.ID)
@@ -198,10 +200,14 @@ func TestMemProvisioningsRepo(t *testing.T) {
 		require.Nil(t, got.PlanOutput)
 		require.Nil(t, got.ExpiresAt)
 		require.Empty(t, got.ClusterName)
+		require.Empty(t, got.TemplateSnapshotRef)
+		require.Empty(t, got.PlanOutputRef)
 
 		// Now set them and update.
 		now := timeutil.Now()
 		p.PlanOutput = json.RawMessage(`{"changes": true}`)
+		p.TemplateSnapshotRef = "gs://bucket/template.tar.gz"
+		p.PlanOutputRef = "gs://bucket/plan.json"
 		p.ExpiresAt = &now
 		p.ClusterName = "my-cluster"
 		require.NoError(t, repo.UpdateProvisioning(ctx, l, p))
@@ -209,8 +215,173 @@ func TestMemProvisioningsRepo(t *testing.T) {
 		got, err = repo.GetProvisioning(ctx, l, p.ID)
 		require.NoError(t, err)
 		require.JSONEq(t, `{"changes": true}`, string(got.PlanOutput))
+		require.Equal(t, "gs://bucket/template.tar.gz", got.TemplateSnapshotRef)
+		require.Equal(t, "gs://bucket/plan.json", got.PlanOutputRef)
 		require.NotNil(t, got.ExpiresAt)
 		require.Equal(t, "my-cluster", got.ClusterName)
+	})
+
+	t.Run("GetSummaryExcludesHeavyFields", func(t *testing.T) {
+		repo := NewProvisioningsRepository()
+		p := newTestProvisioning(t)
+		p.PlanOutput = json.RawMessage(`{"changes": true}`)
+		p.TemplateSnapshotRef = "gs://bucket/template.tar.gz"
+		p.PlanOutputRef = "gs://bucket/plan.json"
+		require.NoError(t, repo.StoreProvisioning(ctx, l, p))
+
+		got, err := repo.GetProvisioningSummary(ctx, l, p.ID)
+		require.NoError(t, err)
+		require.Equal(t, p.ID, got.ID)
+		require.Equal(t, "test-prov", got.Name)
+		require.Nil(t, got.TemplateSnapshot)
+		require.Empty(t, got.TemplateSnapshotRef)
+		require.Nil(t, got.PlanOutput)
+		require.Empty(t, got.PlanOutputRef)
+
+		// Full query must still return the heavy fields.
+		full, err := repo.GetProvisioning(ctx, l, p.ID)
+		require.NoError(t, err)
+		require.Equal(t, []byte("fake-snapshot-data"), full.TemplateSnapshot)
+		require.JSONEq(t, `{"changes": true}`, string(full.PlanOutput))
+	})
+
+	t.Run("GetSummaryNotFound", func(t *testing.T) {
+		repo := NewProvisioningsRepository()
+		_, err := repo.GetProvisioningSummary(ctx, l, uuid.MakeV4())
+		require.ErrorIs(t, err, provisionings.ErrProvisioningNotFound)
+	})
+
+	t.Run("UpdateProgressOnly", func(t *testing.T) {
+		repo := NewProvisioningsRepository()
+		p := newTestProvisioning(t)
+		p.PlanOutput = json.RawMessage(`{"v": 1}`)
+		require.NoError(t, repo.StoreProvisioning(ctx, l, p))
+
+		// Update only progress fields (plan_output is NOT included).
+		update := provmodels.Provisioning{
+			ID:       p.ID,
+			State:    provmodels.ProvisioningStateProvisioned,
+			LastStep: "apply",
+			Outputs:  map[string]interface{}{"ip": "1.2.3.4"},
+		}
+		require.NoError(t, repo.UpdateProvisioningProgress(ctx, l, update))
+
+		got, err := repo.GetProvisioning(ctx, l, p.ID)
+		require.NoError(t, err)
+		// Progress fields are updated.
+		require.Equal(t, provmodels.ProvisioningStateProvisioned, got.State)
+		require.Equal(t, "apply", got.LastStep)
+		require.Equal(t, "1.2.3.4", got.Outputs["ip"])
+		// PlanOutput is preserved (not touched by UpdateProvisioningProgress).
+		require.JSONEq(t, `{"v": 1}`, string(got.PlanOutput))
+		// Non-progress fields are preserved.
+		require.Equal(t, "test-prov", got.Name)
+		require.Equal(t, "test-env", got.Environment)
+		require.Equal(t, []byte("fake-snapshot-data"), got.TemplateSnapshot)
+		require.Equal(t, "us-east1", got.Variables["region"])
+	})
+
+	t.Run("StorePlanData", func(t *testing.T) {
+		repo := NewProvisioningsRepository()
+		p := newTestProvisioning(t)
+		require.NoError(t, repo.StoreProvisioning(ctx, l, p))
+
+		// Store plan output.
+		planJSON := json.RawMessage(`{"changes": true}`)
+		require.NoError(t, repo.StorePlanData(ctx, l, p.ID, planJSON, ""))
+
+		got, err := repo.GetProvisioning(ctx, l, p.ID)
+		require.NoError(t, err)
+		require.JSONEq(t, `{"changes": true}`, string(got.PlanOutput))
+		require.Empty(t, got.PlanOutputRef)
+
+		// Clear plan output.
+		require.NoError(t, repo.StorePlanData(ctx, l, p.ID, nil, ""))
+
+		got, err = repo.GetProvisioning(ctx, l, p.ID)
+		require.NoError(t, err)
+		require.Nil(t, got.PlanOutput)
+		require.Empty(t, got.PlanOutputRef)
+	})
+
+	t.Run("StorePlanDataRef", func(t *testing.T) {
+		repo := NewProvisioningsRepository()
+		p := newTestProvisioning(t)
+		require.NoError(t, repo.StoreProvisioning(ctx, l, p))
+
+		require.NoError(t, repo.StorePlanData(ctx, l, p.ID, nil, "gs://bucket/plan.json"))
+
+		got, err := repo.GetProvisioning(ctx, l, p.ID)
+		require.NoError(t, err)
+		require.Nil(t, got.PlanOutput)
+		require.Equal(t, "gs://bucket/plan.json", got.PlanOutputRef)
+	})
+
+	t.Run("StorePlanDataNotFound", func(t *testing.T) {
+		repo := NewProvisioningsRepository()
+		err := repo.StorePlanData(ctx, l, uuid.MakeV4(), nil, "")
+		require.ErrorIs(t, err, provisionings.ErrProvisioningNotFound)
+	})
+
+	t.Run("StorePlanDataRejectsInlineAndRefTogether", func(t *testing.T) {
+		repo := NewProvisioningsRepository()
+		p := newTestProvisioning(t)
+		require.NoError(t, repo.StoreProvisioning(ctx, l, p))
+
+		err := repo.StorePlanData(ctx, l, p.ID, json.RawMessage(`{"changes": true}`), "gs://bucket/plan.json")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "mutually exclusive")
+	})
+
+	t.Run("GetProvisioningForExecution", func(t *testing.T) {
+		repo := NewProvisioningsRepository()
+		p := newTestProvisioning(t)
+		p.PlanOutput = json.RawMessage(`{"changes": true}`)
+		p.TemplateSnapshotRef = "gs://bucket/template.tar.gz"
+		p.PlanOutputRef = "gs://bucket/plan.json"
+		require.NoError(t, repo.StoreProvisioning(ctx, l, p))
+
+		got, err := repo.GetProvisioningForExecution(ctx, l, p.ID)
+		require.NoError(t, err)
+		require.Equal(t, p.ID, got.ID)
+		// TemplateSnapshot is included.
+		require.Equal(t, []byte("fake-snapshot-data"), got.TemplateSnapshot)
+		require.Equal(t, "gs://bucket/template.tar.gz", got.TemplateSnapshotRef)
+		// PlanOutput is excluded.
+		require.Nil(t, got.PlanOutput)
+		require.Equal(t, "gs://bucket/plan.json", got.PlanOutputRef)
+	})
+
+	t.Run("GetProvisioningForExecutionNotFound", func(t *testing.T) {
+		repo := NewProvisioningsRepository()
+		_, err := repo.GetProvisioningForExecution(ctx, l, uuid.MakeV4())
+		require.ErrorIs(t, err, provisionings.ErrProvisioningNotFound)
+	})
+
+	t.Run("UpdateProgressNotFound", func(t *testing.T) {
+		repo := NewProvisioningsRepository()
+		p := newTestProvisioning(t)
+		err := repo.UpdateProvisioningProgress(ctx, l, p)
+		require.ErrorIs(t, err, provisionings.ErrProvisioningNotFound)
+	})
+
+	t.Run("UpdateProvisioningExpiration", func(t *testing.T) {
+		repo := NewProvisioningsRepository()
+		p := newTestProvisioning(t)
+		p.TemplateSnapshotRef = "gs://bucket/template.tar.gz"
+		p.PlanOutputRef = "gs://bucket/plan.json"
+		require.NoError(t, repo.StoreProvisioning(ctx, l, p))
+
+		expiresAt := timeutil.Now().Add(2 * time.Hour)
+		require.NoError(t, repo.UpdateProvisioningExpiration(ctx, l, p.ID, &expiresAt))
+
+		got, err := repo.GetProvisioning(ctx, l, p.ID)
+		require.NoError(t, err)
+		require.NotNil(t, got.ExpiresAt)
+		require.Equal(t, expiresAt.Unix(), got.ExpiresAt.Unix())
+		require.Equal(t, "gs://bucket/template.tar.gz", got.TemplateSnapshotRef)
+		require.Equal(t, "gs://bucket/plan.json", got.PlanOutputRef)
+		require.Equal(t, []byte("fake-snapshot-data"), got.TemplateSnapshot)
 	})
 
 	t.Run("JSONBVariablesRoundTrip", func(t *testing.T) {
@@ -302,6 +473,22 @@ func TestMemProvisioningsRepoGetAll(t *testing.T) {
 		require.Len(t, result, 1)
 		require.Equal(t, 1, count)
 		require.Equal(t, "prod", result[0].Environment)
+	})
+
+	t.Run("GetSummaryExcludesHeavyFields", func(t *testing.T) {
+		repo := NewProvisioningsRepository()
+
+		p := newTestProvisioning(t)
+		p.PlanOutput = json.RawMessage(`{"changes": true}`)
+		require.NoError(t, repo.StoreProvisioning(ctx, l, p))
+
+		result, count, err := repo.GetProvisioningsSummary(ctx, l, *filters.NewFilterSet())
+		require.NoError(t, err)
+		require.Len(t, result, 1)
+		require.Equal(t, 1, count)
+		require.Equal(t, p.ID, result[0].ID)
+		require.Nil(t, result[0].TemplateSnapshot)
+		require.Nil(t, result[0].PlanOutput)
 	})
 
 	t.Run("FilterByOwner", func(t *testing.T) {

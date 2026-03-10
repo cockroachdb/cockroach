@@ -83,6 +83,11 @@ type Config struct {
 		TofuBinary        string `env:"TOFU_BINARY" default:"tofu" description:"Path to OpenTofu binary"`
 		GCSStateBucket    string `env:"GCS_STATE_BUCKET" default:"" description:"GCS bucket for terraform state backend"`
 		GCSStateSAKeyPath string `env:"GCS_STATE_SA_KEY_PATH" default:"" description:"Path to SA key JSON for GCS state backend auth"`
+		Artifacts         struct {
+			Backend   string `env:"BACKEND" default:"repository" description:"Provisioning artifact storage backend (repository, gcs)"`
+			GCSBucket string `env:"GCS_BUCKET" default:"" description:"GCS bucket for provisioning artifacts"`
+			GCSPrefix string `env:"GCS_PREFIX" default:"artifacts/provisionings" description:"GCS object prefix for provisioning artifacts"`
+		} `env:"ARTIFACTS" description:"Provisioning artifact storage configuration"`
 		DefaultLifetime   string `env:"DEFAULT_LIFETIME" default:"12h" description:"Default provisioning lifetime when template doesn't specify one"`
 		LifetimeExtension string `env:"LIFETIME_EXTENSION" default:"12h" description:"Amount to extend lifetime by"`
 		GCWatcherInterval string `env:"GC_WATCHER_INTERVAL" default:"5m" description:"Interval for GC watcher polling"`

@@ -46,5 +46,16 @@ func GetProvisioningsMigrations() []database.Migration {
 				);
 			`,
 		},
+		{
+			Version:     2,
+			Description: "Add artifact reference columns to provisionings table",
+			SQL: `
+				ALTER TABLE provisionings
+				ADD COLUMN IF NOT EXISTS template_snapshot_ref STRING NULL;
+
+				ALTER TABLE provisionings
+				ADD COLUMN IF NOT EXISTS plan_output_ref STRING NULL;
+			`,
+		},
 	}
 }

@@ -6,6 +6,7 @@
 package tofu
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -86,6 +87,20 @@ func testLogger() *logger.Logger {
 	return logger.NewLogger("error")
 }
 
+func writePlanJSON(
+	t *testing.T,
+	e *Executor,
+	ctx context.Context,
+	l *logger.Logger,
+	dir string,
+	envVars map[string]string,
+) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	require.NoError(t, e.WritePlanJSON(ctx, l, dir, envVars, &buf))
+	return buf.Bytes()
+}
+
 // TestInitPlanApplyOutputDestroy exercises the complete lifecycle:
 // init -> plan (changes) -> apply -> output -> plan (no changes) -> destroy.
 func TestInitPlanApplyOutputDestroy(t *testing.T) {
@@ -102,9 +117,10 @@ func TestInitPlanApplyOutputDestroy(t *testing.T) {
 	require.NoError(t, err)
 
 	// Plan — should detect changes (new resources).
-	hasChanges, planJSON, err := e.Plan(ctx, l, dir, vars, nil)
+	hasChanges, err := e.Plan(ctx, l, dir, vars, nil)
 	require.NoError(t, err)
 	assert.True(t, hasChanges, "expected changes on first plan")
+	planJSON := writePlanJSON(t, e, ctx, l, dir, nil)
 	assert.NotEmpty(t, planJSON, "plan JSON should not be empty")
 
 	// Validate plan JSON is valid terraform-json format.
@@ -123,7 +139,7 @@ func TestInitPlanApplyOutputDestroy(t *testing.T) {
 	assert.Equal(t, "default_value", outputs["test_var_output"])
 
 	// Plan again — should detect no changes.
-	hasChanges, _, err = e.Plan(ctx, l, dir, vars, nil)
+	hasChanges, err = e.Plan(ctx, l, dir, vars, nil)
 	require.NoError(t, err)
 	assert.False(t, hasChanges, "expected no changes after apply")
 
@@ -146,9 +162,10 @@ func TestPlanWithChanges(t *testing.T) {
 	err := e.Init(ctx, l, dir, nil)
 	require.NoError(t, err)
 
-	hasChanges, planJSON, err := e.Plan(ctx, l, dir, vars, nil)
+	hasChanges, err := e.Plan(ctx, l, dir, vars, nil)
 	require.NoError(t, err)
 	assert.True(t, hasChanges)
+	planJSON := writePlanJSON(t, e, ctx, l, dir, nil)
 
 	// Plan JSON should be parseable and non-empty.
 	assert.True(t, json.Valid(planJSON), "plan JSON should be valid JSON")
@@ -176,7 +193,7 @@ func TestVarsPassed(t *testing.T) {
 	err := e.Init(ctx, l, dir, nil)
 	require.NoError(t, err)
 
-	_, _, err = e.Plan(ctx, l, dir, vars, nil)
+	_, err = e.Plan(ctx, l, dir, vars, nil)
 	require.NoError(t, err)
 
 	err = e.Apply(ctx, l, dir, vars, nil)
@@ -207,7 +224,7 @@ func TestEnvVarsPassed(t *testing.T) {
 	err := e.Init(ctx, l, dir, nil)
 	require.NoError(t, err)
 
-	_, _, err = e.Plan(ctx, l, dir, vars, envVars)
+	_, err = e.Plan(ctx, l, dir, vars, envVars)
 	require.NoError(t, err)
 
 	err = e.Apply(ctx, l, dir, vars, envVars)
@@ -255,10 +272,9 @@ func TestPlanFailsWithUnknownVariable(t *testing.T) {
 		"identifier":      "test1",
 		"nonexistent_var": "value",
 	}
-	hasChanges, planJSON, err := e.Plan(ctx, l, dir, vars, nil)
+	hasChanges, err := e.Plan(ctx, l, dir, vars, nil)
 	assert.Error(t, err, "plan with undeclared variable should fail")
 	assert.False(t, hasChanges)
-	assert.Nil(t, planJSON)
 	assert.Contains(t, err.Error(), "tofu plan:")
 }
 
@@ -287,7 +303,7 @@ func TestOutputParsing(t *testing.T) {
 	vars := map[string]string{"identifier": "outtest1"}
 
 	require.NoError(t, e.Init(ctx, l, dir, nil))
-	_, _, err := e.Plan(ctx, l, dir, vars, nil)
+	_, err := e.Plan(ctx, l, dir, vars, nil)
 	require.NoError(t, err)
 	require.NoError(t, e.Apply(ctx, l, dir, vars, nil))
 
@@ -316,7 +332,7 @@ func TestDestroyCleanup(t *testing.T) {
 	vars := map[string]string{"identifier": "destroy1"}
 
 	require.NoError(t, e.Init(ctx, l, dir, nil))
-	_, _, err := e.Plan(ctx, l, dir, vars, nil)
+	_, err := e.Plan(ctx, l, dir, vars, nil)
 	require.NoError(t, err)
 	require.NoError(t, e.Apply(ctx, l, dir, vars, nil))
 
@@ -325,7 +341,7 @@ func TestDestroyCleanup(t *testing.T) {
 	require.NoError(t, err)
 
 	// After destroy, plan should show changes (resources need to be recreated).
-	hasChanges, _, err := e.Plan(ctx, l, dir, vars, nil)
+	hasChanges, err := e.Plan(ctx, l, dir, vars, nil)
 	require.NoError(t, err)
 	assert.True(t, hasChanges, "plan after destroy should show changes")
 }

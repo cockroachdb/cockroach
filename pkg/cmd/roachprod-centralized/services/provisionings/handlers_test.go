@@ -7,8 +7,8 @@ package provisionings
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -110,11 +110,12 @@ func TestHandleProvision_CanceledContextStillPersistsFailure(t *testing.T) {
 		TemplatesDir:      templatesDir,
 		WorkingDirBase:    t.TempDir(),
 		TofuBinary:        "tofu",
+		ArtifactBackend:   "repository",
 		WorkersEnabled:    true,
 		DefaultLifetime:   12 * time.Hour,
 		LifetimeExtension: 12 * time.Hour,
 		GCWatcherInterval: 5 * time.Minute,
-	}, templates.NewLocalBackend(), nil)
+	}, templates.NewLocalBackend(), nil, nil)
 	svc.executor = exec
 
 	provID := uuid.MakeV4()
@@ -132,12 +133,12 @@ func TestHandleProvision_CanceledContextStillPersistsFailure(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	repo.On("GetProvisioning", ctx, mock.Anything, provID).Return(prov, nil).Once()
+	repo.On("GetProvisioningForExecution", ctx, mock.Anything, provID).Return(prov, nil).Once()
 	envSvc.On("GetEnvironmentResolved", ctx, mock.Anything, "env-a").
 		Return(envtypes.ResolvedEnvironment{Name: "env-a"}, nil).Once()
 
 	// First state update happens with original canceled context.
-	repo.On("UpdateProvisioning", mock.MatchedBy(func(c context.Context) bool {
+	repo.On("UpdateProvisioningProgress", mock.MatchedBy(func(c context.Context) bool {
 		return c.Err() != nil
 	}), mock.Anything, mock.MatchedBy(func(p provmodels.Provisioning) bool {
 		return p.ID == provID &&
@@ -146,7 +147,7 @@ func TestHandleProvision_CanceledContextStillPersistsFailure(t *testing.T) {
 	})).Return(nil).Once()
 
 	// Failure persistence must use context.WithoutCancel(ctx), so context isn't canceled.
-	repo.On("UpdateProvisioning", mock.MatchedBy(func(c context.Context) bool {
+	repo.On("UpdateProvisioningProgress", mock.MatchedBy(func(c context.Context) bool {
 		return c.Err() == nil
 	}), mock.Anything, mock.MatchedBy(func(p provmodels.Provisioning) bool {
 		return p.ID == provID &&
@@ -174,6 +175,21 @@ func newHandlerTestService(
 	*environmensmock.IService,
 	*provisioningsmock.IExecutor,
 ) {
+	return newHandlerTestServiceWithArtifacts(t, templatesDir, orch, "repository", nil)
+}
+
+func newHandlerTestServiceWithArtifacts(
+	t *testing.T,
+	templatesDir string,
+	orch hooks.IOrchestrator,
+	artifactBackend string,
+	artifactStore *fakeArtifactStore,
+) (
+	*Service,
+	*provisioningsrepmock.IProvisioningsRepository,
+	*environmensmock.IService,
+	*provisioningsmock.IExecutor,
+) {
 	t.Helper()
 	repo := provisioningsrepmock.NewIProvisioningsRepository(t)
 	envSvc := environmensmock.NewIService(t)
@@ -183,11 +199,12 @@ func newHandlerTestService(
 		TemplatesDir:      templatesDir,
 		WorkingDirBase:    t.TempDir(),
 		TofuBinary:        "tofu",
+		ArtifactBackend:   artifactBackend,
 		WorkersEnabled:    true,
 		DefaultLifetime:   12 * time.Hour,
 		LifetimeExtension: 12 * time.Hour,
 		GCWatcherInterval: 5 * time.Minute,
-	}, templates.NewLocalBackend(), orch)
+	}, templates.NewLocalBackend(), artifactStore, orch)
 	svc.executor = exec
 	return svc, repo, envSvc, exec
 }
@@ -217,12 +234,13 @@ func setupProvisionMocks(
 
 	// Use mock.Anything for context because failProvision uses
 	// context.WithoutCancel + WithTimeout, producing a different ctx type.
-	repo.On("GetProvisioning", mock.Anything, mock.Anything, provID).Return(prov, nil).Once()
+	repo.On("GetProvisioningForExecution", mock.Anything, mock.Anything, provID).Return(prov, nil).Once()
 	envSvc.On("GetEnvironmentResolved", mock.Anything, mock.Anything, "env-a").
 		Return(envtypes.ResolvedEnvironment{Name: "env-a"}, nil).Once()
 
-	// Allow all state updates throughout the lifecycle.
-	repo.On("UpdateProvisioning", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	// Allow all state updates and plan output storage throughout the lifecycle.
+	repo.On("UpdateProvisioningProgress", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	repo.On("StorePlanData", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 
 	// Tofu steps: init, plan, apply, output — all succeed.
 	// Plan is called twice: once for the initial plan, and once for
@@ -230,7 +248,9 @@ func setupProvisionMocks(
 	exec.On("Init", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil).Once()
 	exec.On("Plan", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(true, json.RawMessage(nil), nil)
+		Return(true, nil)
+	exec.On("WritePlanJSON", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
 	exec.On("Apply", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil).Once()
 	exec.On("Output", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -252,7 +272,7 @@ func TestHandleProvision_HookFailure_FailsProvisioning(t *testing.T) {
 
 	// Verify the final state update was to failed.
 	lastCall := repo.Calls[len(repo.Calls)-1]
-	assert.Equal(t, "UpdateProvisioning", lastCall.Method)
+	assert.Equal(t, "UpdateProvisioningProgress", lastCall.Method)
 	finalProv := lastCall.Arguments.Get(2).(provmodels.Provisioning)
 	assert.Equal(t, provmodels.ProvisioningStateFailed, finalProv.State)
 	assert.Contains(t, finalProv.Error, "post-apply hooks")
@@ -270,10 +290,59 @@ func TestHandleProvision_HooksSucceed_Provisioned(t *testing.T) {
 
 	// Verify the final state update was to provisioned.
 	lastCall := repo.Calls[len(repo.Calls)-1]
-	assert.Equal(t, "UpdateProvisioning", lastCall.Method)
+	assert.Equal(t, "UpdateProvisioningProgress", lastCall.Method)
 	finalProv := lastCall.Arguments.Get(2).(provmodels.Provisioning)
 	assert.Equal(t, provmodels.ProvisioningStateProvisioned, finalProv.State)
 	assert.Equal(t, "done", finalProv.LastStep)
+}
+
+func TestHandleProvision_GCSArtifacts(t *testing.T) {
+	archive, checksum, templatesDir := makeSnapshotFixture(t)
+	artifactStore := newFakeArtifactStore()
+	orch := &mockOrchestrator{}
+	svc, repo, envSvc, exec := newHandlerTestServiceWithArtifacts(
+		t, templatesDir, orch, "gcs", artifactStore,
+	)
+
+	provID := uuid.MakeV4()
+	templateRef := "gs://test-bucket/" + provID.String() + "/artifacts/template.tar.gz"
+	planRef := "gs://test-bucket/" + provID.String() + "/artifacts/plan.json"
+	artifactStore.objects[templateRef] = archive
+	prov := provmodels.Provisioning{
+		ID:                  provID,
+		Environment:         "env-a",
+		TemplateType:        "tmpl-meta",
+		TemplateChecksum:    checksum,
+		TemplateSnapshotRef: templateRef,
+		Identifier:          "abc123de",
+		Owner:               "owner@example.com",
+		State:               provmodels.ProvisioningStateNew,
+	}
+
+	repo.On("GetProvisioningForExecution", mock.Anything, mock.Anything, provID).Return(prov, nil).Once()
+	envSvc.On("GetEnvironmentResolved", mock.Anything, mock.Anything, "env-a").
+		Return(envtypes.ResolvedEnvironment{Name: "env-a"}, nil).Once()
+	repo.On("UpdateProvisioningProgress", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	repo.On("StorePlanData", mock.Anything, mock.Anything, provID, mock.Anything, planRef).Return(nil).Twice()
+
+	exec.On("Init", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil).Once()
+	exec.On("Plan", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Twice()
+	exec.On("WritePlanJSON", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			_, _ = args.Get(4).(io.Writer).Write([]byte(`{"changes":true}`))
+		}).Return(nil).Twice()
+	exec.On("Apply", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil).Once()
+	exec.On("Output", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(map[string]interface{}{"ip": "1.2.3.4"}, nil).Once()
+
+	err := svc.HandleProvision(context.Background(), logger.DefaultLogger, provID)
+	require.NoError(t, err)
+	assert.True(t, orch.called, "orchestrator should have been called")
+	require.Contains(t, artifactStore.objects, planRef)
+	require.JSONEq(t, `{"changes":true}`, string(artifactStore.objects[planRef]))
 }
 
 // setupDestroyMocks configures mock expectations for a HandleDestroy flow
@@ -299,12 +368,15 @@ func setupDestroyMocks(
 		State:            provmodels.ProvisioningStateProvisioned,
 	}
 
-	repo.On("GetProvisioning", mock.Anything, mock.Anything, provID).Return(prov, nil).Once()
+	repo.On("GetProvisioningForExecution", mock.Anything, mock.Anything, provID).Return(prov, nil).Once()
 	envSvc.On("GetEnvironmentResolved", mock.Anything, mock.Anything, "env-a").
 		Return(envtypes.ResolvedEnvironment{Name: "env-a"}, nil).Once()
 
-	// Allow all state updates throughout the lifecycle.
-	repo.On("UpdateProvisioning", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	// Allow all state updates and plan output storage throughout the lifecycle.
+	// StorePlanData is Maybe() because error flows may abort before the
+	// "Done" block that clears plan_output.
+	repo.On("UpdateProvisioningProgress", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	repo.On("StorePlanData", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	// Init succeeds.
 	exec.On("Init", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -338,7 +410,7 @@ func TestHandleDestroy_PreDestroyHookCalledBeforeDestroy(t *testing.T) {
 
 	// Verify the final state update was to destroyed.
 	lastCall := repo.Calls[len(repo.Calls)-1]
-	assert.Equal(t, "UpdateProvisioning", lastCall.Method)
+	assert.Equal(t, "UpdateProvisioningProgress", lastCall.Method)
 	finalProv := lastCall.Arguments.Get(2).(provmodels.Provisioning)
 	assert.Equal(t, provmodels.ProvisioningStateDestroyed, finalProv.State)
 }
@@ -361,7 +433,7 @@ func TestHandleDestroy_PreDestroyHookErrorAbortsFlow(t *testing.T) {
 
 	// Verify the final state update was to destroy_failed.
 	lastCall := repo.Calls[len(repo.Calls)-1]
-	assert.Equal(t, "UpdateProvisioning", lastCall.Method)
+	assert.Equal(t, "UpdateProvisioningProgress", lastCall.Method)
 	finalProv := lastCall.Arguments.Get(2).(provmodels.Provisioning)
 	assert.Equal(t, provmodels.ProvisioningStateDestroyFailed, finalProv.State)
 	assert.Contains(t, finalProv.Error, "pre-destroy hooks")

@@ -62,26 +62,28 @@ var expectedTransitions = map[ProvisioningState][]ProvisioningState{
 // declare variable "identifier" { type = string } and use it for resource
 // naming to ensure uniqueness.
 type Provisioning struct {
-	ID               uuid.UUID              `json:"id"`
-	Name             string                 `json:"name"`
-	Environment      string                 `json:"environment"`
-	TemplateType     string                 `json:"template_type"`
-	TemplateChecksum string                 `json:"template_checksum"`
-	TemplateSnapshot []byte                 `json:"-"`
-	State            ProvisioningState      `json:"state"`
-	Identifier       string                 `json:"identifier"`
-	Variables        map[string]interface{} `json:"variables"`
-	Outputs          map[string]interface{} `json:"outputs"`
-	PlanOutput       json.RawMessage        `json:"plan_output,omitempty"`
-	Error            string                 `json:"error,omitempty"`
-	Owner            string                 `json:"owner"`
-	ClusterName      string                 `json:"cluster_name,omitempty"`
-	Lifetime         time.Duration          `json:"lifetime"`
-	CreatedAt        time.Time              `json:"created_at"`
-	UpdatedAt        time.Time              `json:"updated_at"`
-	ExpiresAt        *time.Time             `json:"expires_at,omitempty"`
-	LastStep         string                 `json:"last_step"`
-	WorkingDir       string                 `json:"-"`
+	ID                  uuid.UUID              `json:"id"`
+	Name                string                 `json:"name"`
+	Environment         string                 `json:"environment"`
+	TemplateType        string                 `json:"template_type"`
+	TemplateChecksum    string                 `json:"template_checksum"`
+	TemplateSnapshot    []byte                 `json:"-"`
+	TemplateSnapshotRef string                 `json:"-"`
+	State               ProvisioningState      `json:"state"`
+	Identifier          string                 `json:"identifier"`
+	Variables           map[string]interface{} `json:"variables"`
+	Outputs             map[string]interface{} `json:"outputs"`
+	PlanOutput          json.RawMessage        `json:"plan_output,omitempty"`
+	PlanOutputRef       string                 `json:"-"`
+	Error               string                 `json:"error,omitempty"`
+	Owner               string                 `json:"owner"`
+	ClusterName         string                 `json:"cluster_name,omitempty"`
+	Lifetime            time.Duration          `json:"lifetime"`
+	CreatedAt           time.Time              `json:"created_at"`
+	UpdatedAt           time.Time              `json:"updated_at"`
+	ExpiresAt           *time.Time             `json:"expires_at,omitempty"`
+	LastStep            string                 `json:"last_step"`
+	WorkingDir          string                 `json:"-"`
 }
 
 // SetState transitions the provisioning to a new state. If the transition is

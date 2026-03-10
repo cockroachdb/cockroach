@@ -9,7 +9,7 @@ package provisioningsmock
 
 import (
 	context "context"
-	json "encoding/json"
+	io "io"
 
 	logger "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/logger"
 	mock "github.com/stretchr/testify/mock"
@@ -127,7 +127,7 @@ func (_m *IExecutor) Plan(
 	workingDir string,
 	vars map[string]string,
 	envVars map[string]string,
-) (bool, json.RawMessage, error) {
+) (bool, error) {
 	ret := _m.Called(ctx, l, workingDir, vars, envVars)
 
 	if len(ret) == 0 {
@@ -135,9 +135,8 @@ func (_m *IExecutor) Plan(
 	}
 
 	var r0 bool
-	var r1 json.RawMessage
-	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, string, map[string]string, map[string]string) (bool, json.RawMessage, error)); ok {
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, string, map[string]string, map[string]string) (bool, error)); ok {
 		return rf(ctx, l, workingDir, vars, envVars)
 	}
 	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, string, map[string]string, map[string]string) bool); ok {
@@ -146,21 +145,37 @@ func (_m *IExecutor) Plan(
 		r0 = ret.Get(0).(bool)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, string, map[string]string, map[string]string) json.RawMessage); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, *logger.Logger, string, map[string]string, map[string]string) error); ok {
 		r1 = rf(ctx, l, workingDir, vars, envVars)
 	} else {
-		if ret.Get(1) != nil {
-			r1 = ret.Get(1).(json.RawMessage)
-		}
+		r1 = ret.Error(1)
 	}
 
-	if rf, ok := ret.Get(2).(func(context.Context, *logger.Logger, string, map[string]string, map[string]string) error); ok {
-		r2 = rf(ctx, l, workingDir, vars, envVars)
+	return r0, r1
+}
+
+// WritePlanJSON provides a mock function with given fields: ctx, l, workingDir, envVars, dst
+func (_m *IExecutor) WritePlanJSON(
+	ctx context.Context,
+	l *logger.Logger,
+	workingDir string,
+	envVars map[string]string,
+	dst io.Writer,
+) error {
+	ret := _m.Called(ctx, l, workingDir, envVars, dst)
+
+	if len(ret) == 0 {
+		panic("no return value specified for WritePlanJSON")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *logger.Logger, string, map[string]string, io.Writer) error); ok {
+		r0 = rf(ctx, l, workingDir, envVars, dst)
 	} else {
-		r2 = ret.Error(2)
+		r0 = ret.Error(0)
 	}
 
-	return r0, r1, r2
+	return r0
 }
 
 // NewIExecutor creates a new instance of IExecutor. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

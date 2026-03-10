@@ -6,8 +6,10 @@
 package provisionings
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"sync"
 	"time"
@@ -20,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/hooks"
 	ptasks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/tasks"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/templates"
+	artifacts "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/tf-artifacts"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/tofu"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/types"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/vars"
@@ -52,6 +55,7 @@ type Service struct {
 	templateMgr      *templates.Manager
 	options          types.Options
 	backend          templates.Backend // GCS or local state backend
+	artifactStore    artifacts.Store
 	hookOrchestrator hooks.IOrchestrator
 
 	// autoStartupScripts holds precomputed startup scripts for GCE and AWS.
@@ -70,6 +74,7 @@ func NewService(
 	taskService stasks.IService,
 	opts types.Options,
 	backend templates.Backend,
+	artifactStore artifacts.Store,
 	hookOrchestrator hooks.IOrchestrator,
 ) *Service {
 	return &Service{
@@ -80,6 +85,7 @@ func NewService(
 		templateMgr:      templates.NewManager(opts.TemplatesDir),
 		options:          opts,
 		backend:          backend,
+		artifactStore:    artifactStore,
 		hookOrchestrator: hookOrchestrator,
 	}
 }
@@ -113,6 +119,106 @@ func (s *Service) StartService(ctx context.Context, l *logger.Logger) error {
 	}
 
 	return nil
+}
+
+func (s *Service) usesExternalArtifacts() bool {
+	return s.options.ArtifactBackend == "gcs"
+}
+
+func (s *Service) artifactRefReader(
+	ctx context.Context, ref string, kind string,
+) (io.ReadCloser, error) {
+	if s.artifactStore == nil {
+		return nil, errors.Newf("%s artifact store is not configured for ref %q", kind, ref)
+	}
+	return s.artifactStore.NewReader(ctx, ref)
+}
+
+func (s *Service) openTemplateArchive(
+	ctx context.Context, prov provmodels.Provisioning,
+) (io.ReadCloser, error) {
+	if prov.TemplateSnapshotRef != "" {
+		return s.artifactRefReader(ctx, prov.TemplateSnapshotRef, "template snapshot")
+	}
+	return io.NopCloser(bytes.NewReader(prov.TemplateSnapshot)), nil
+}
+
+func (s *Service) loadPlanData(
+	ctx context.Context, prov provmodels.Provisioning,
+) (json.RawMessage, error) {
+	if prov.PlanOutputRef == "" {
+		return prov.PlanOutput, nil
+	}
+	rc, err := s.artifactRefReader(ctx, prov.PlanOutputRef, "plan output")
+	if err != nil {
+		return nil, err
+	}
+	defer rc.Close()
+
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		return nil, errors.Wrap(err, "read plan output artifact")
+	}
+	return json.RawMessage(data), nil
+}
+
+func (s *Service) storeTemplateArtifact(
+	ctx context.Context, provID uuid.UUID, archive []byte,
+) (string, error) {
+	if s.artifactStore == nil {
+		return "", errors.New("artifact store is not configured")
+	}
+	return s.artifactStore.Put(
+		ctx,
+		provID.String()+"/artifacts/template.tar.gz",
+		bytes.NewReader(archive),
+		"application/gzip",
+	)
+}
+
+func (s *Service) storePlanArtifact(
+	ctx context.Context,
+	l *logger.Logger,
+	provID uuid.UUID,
+	workingDir string,
+	envVars map[string]string,
+) (string, error) {
+	if s.artifactStore == nil {
+		return "", errors.New("artifact store is not configured")
+	}
+
+	pr, pw := io.Pipe()
+	errCh := make(chan error, 1)
+	go func() {
+		err := s.executor.WritePlanJSON(ctx, l, workingDir, envVars, pw)
+		_ = pw.CloseWithError(err)
+		errCh <- err
+	}()
+
+	ref, putErr := s.artifactStore.Put(
+		ctx,
+		provID.String()+"/artifacts/plan.json",
+		pr,
+		"application/json",
+	)
+	writeErr := <-errCh
+	if putErr != nil {
+		return "", putErr
+	}
+	if writeErr != nil {
+		return "", writeErr
+	}
+	return ref, nil
+}
+
+func (s *Service) deleteArtifactIfPresent(ctx context.Context, ref string) error {
+	if ref == "" {
+		return nil
+	}
+	if s.artifactStore == nil {
+		return errors.Newf("artifact store is not configured for ref %q", ref)
+	}
+	return s.artifactStore.Delete(ctx, ref)
 }
 
 // StartBackgroundWork starts background goroutines for the service.
@@ -211,7 +317,7 @@ func (s *Service) HandleGC(ctx context.Context, l *logger.Logger) error {
 			// No infra created — mark destroyed immediately.
 			prov.SetState(provmodels.ProvisioningStateDestroyed, l)
 			prov.UpdatedAt = timeutil.Now().UTC()
-			if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+			if err := s.repo.UpdateProvisioningProgress(ctx, l, prov); err != nil {
 				l.Warn("GC: failed to mark new provisioning as destroyed",
 					slog.String("id", prov.ID.String()), slog.Any("error", err))
 			}
@@ -248,7 +354,7 @@ func (s *Service) gcScheduleDestroy(
 
 	prov.SetState(provmodels.ProvisioningStateDestroying, l)
 	prov.UpdatedAt = timeutil.Now().UTC()
-	if err := s.repo.UpdateProvisioning(ctx, l, *prov); err != nil {
+	if err := s.repo.UpdateProvisioningProgress(ctx, l, *prov); err != nil {
 		l.Warn("GC: failed to update state to destroying",
 			slog.String("id", prov.ID.String()), slog.Any("error", err))
 		return
@@ -284,27 +390,27 @@ func (s *Service) GetTemplate(
 }
 
 // GetProvisioning returns a provisioning by ID, subject to access control.
-// PlanOutput and Outputs are stripped from the response — use the dedicated
-// GetProvisioningPlan and GetProvisioningOutputs endpoints instead.
+// PlanOutput, Outputs, and TemplateSnapshot are excluded — use the
+// dedicated GetProvisioningPlan and GetProvisioningOutputs endpoints.
 func (s *Service) GetProvisioning(
 	ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID,
 ) (provmodels.Provisioning, error) {
-	prov, err := s.getProvisioningWithAccess(ctx, l, principal, id, types.PermissionViewAll, types.PermissionViewOwn)
+	prov, err := s.getProvisioningSummaryWithAccess(ctx, l, principal, id, types.PermissionViewAll, types.PermissionViewOwn)
 	if err != nil {
 		return provmodels.Provisioning{}, err
 	}
-	prov.PlanOutput = nil
 	prov.Outputs = nil
 	return prov, nil
 }
 
 // GetProvisionings returns provisionings matching the given filters.
 // Principals with :all see everything; principals with :own see only
-// their own provisionings. PlanOutput and Outputs are stripped.
+// their own provisionings. Uses summary queries to avoid loading
+// template_snapshot and plan_output.
 func (s *Service) GetProvisionings(
 	ctx context.Context, l *logger.Logger, principal *auth.Principal, input types.InputGetAllDTO,
 ) ([]provmodels.Provisioning, int, error) {
-	provs, _, err := s.repo.GetProvisionings(ctx, l, input.Filters)
+	provs, _, err := s.repo.GetProvisioningsSummary(ctx, l, input.Filters)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -312,7 +418,6 @@ func (s *Service) GetProvisionings(
 	var result []provmodels.Provisioning
 	for _, p := range provs {
 		if viewAll || (principal.HasPermission(types.PermissionViewOwn) && s.isOwner(principal, p)) {
-			p.PlanOutput = nil
 			p.Outputs = nil
 			result = append(result, p)
 		}
@@ -328,14 +433,14 @@ func (s *Service) GetProvisioningPlan(
 	if err != nil {
 		return nil, err
 	}
-	return prov.PlanOutput, nil
+	return s.loadPlanData(ctx, prov)
 }
 
 // GetProvisioningOutputs returns the outputs for a provisioning.
 func (s *Service) GetProvisioningOutputs(
 	ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID,
 ) (map[string]interface{}, error) {
-	prov, err := s.getProvisioningWithAccess(ctx, l, principal, id, types.PermissionViewAll, types.PermissionViewOwn)
+	prov, err := s.getProvisioningSummaryWithAccess(ctx, l, principal, id, types.PermissionViewAll, types.PermissionViewOwn)
 	if err != nil {
 		return nil, err
 	}
@@ -347,7 +452,7 @@ func (s *Service) GetProvisioningOutputs(
 func (s *Service) ExtendLifetime(
 	ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID,
 ) (provmodels.Provisioning, error) {
-	prov, err := s.getProvisioningWithAccess(ctx, l, principal, id,
+	prov, err := s.getProvisioningSummaryWithAccess(ctx, l, principal, id,
 		types.PermissionUpdateAll, types.PermissionUpdateOwn)
 	if err != nil {
 		return provmodels.Provisioning{}, err
@@ -367,11 +472,10 @@ func (s *Service) ExtendLifetime(
 	}
 	prov.UpdatedAt = now
 
-	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+	if err := s.repo.UpdateProvisioningExpiration(ctx, l, prov.ID, prov.ExpiresAt); err != nil {
 		return provmodels.Provisioning{}, err
 	}
 
-	prov.PlanOutput = nil
 	prov.Outputs = nil
 	return prov, nil
 }
@@ -387,6 +491,28 @@ func (s *Service) getProvisioningWithAccess(
 	allPerm, ownPerm string,
 ) (provmodels.Provisioning, error) {
 	prov, err := s.repo.GetProvisioning(ctx, l, id)
+	if err != nil {
+		if errors.Is(err, provrepo.ErrProvisioningNotFound) {
+			return provmodels.Provisioning{}, types.ErrProvisioningNotFound
+		}
+		return provmodels.Provisioning{}, err
+	}
+	if !s.checkAccess(principal, prov, allPerm, ownPerm) {
+		return provmodels.Provisioning{}, types.ErrProvisioningNotFound
+	}
+	return prov, nil
+}
+
+// getProvisioningSummaryWithAccess is like getProvisioningWithAccess but uses
+// GetProvisioningSummary, which excludes template_snapshot and plan_output.
+func (s *Service) getProvisioningSummaryWithAccess(
+	ctx context.Context,
+	l *logger.Logger,
+	principal *auth.Principal,
+	id uuid.UUID,
+	allPerm, ownPerm string,
+) (provmodels.Provisioning, error) {
+	prov, err := s.repo.GetProvisioningSummary(ctx, l, id)
 	if err != nil {
 		if errors.Is(err, provrepo.ErrProvisioningNotFound) {
 			return provmodels.Provisioning{}, types.ErrProvisioningNotFound
@@ -492,6 +618,29 @@ func (s *Service) CreateProvisioning(
 		UpdatedAt:        now,
 	}
 
+	if s.usesExternalArtifacts() {
+		ref, err := s.storeTemplateArtifact(ctx, prov.ID, archive)
+		if err != nil {
+			return provmodels.Provisioning{}, nil, errors.Wrap(err, "store template artifact")
+		}
+		prov.TemplateSnapshot = nil
+		prov.TemplateSnapshotRef = ref
+	}
+
+	stored := false
+	defer func() {
+		if stored || prov.TemplateSnapshotRef == "" {
+			return
+		}
+		if err := s.deleteArtifactIfPresent(context.WithoutCancel(ctx), prov.TemplateSnapshotRef); err != nil {
+			l.Warn("failed to clean up template artifact after provisioning create error",
+				slog.String("provisioning_id", prov.ID.String()),
+				slog.String("template_snapshot_ref", prov.TemplateSnapshotRef),
+				slog.Any("error", err),
+			)
+		}
+	}()
+
 	// Generate identifier and store provisioning (retry on collision).
 	for attempt := range types.MaxIdentifierRetries {
 
@@ -506,6 +655,7 @@ func (s *Service) CreateProvisioning(
 
 		storeErr := s.repo.StoreProvisioning(ctx, l, prov)
 		if storeErr == nil {
+			stored = true
 			break
 		}
 		if !errors.Is(storeErr, provrepo.ErrProvisioningAlreadyExists) {
@@ -543,16 +693,14 @@ func (s *Service) CreateProvisioning(
 func (s *Service) DestroyProvisioning(
 	ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID,
 ) (provmodels.Provisioning, *uuid.UUID, error) {
-	prov, err := s.getProvisioningWithAccess(ctx, l, principal, id, types.PermissionDestroyAll, types.PermissionDestroyOwn)
+	prov, err := s.getProvisioningSummaryWithAccess(ctx, l, principal, id, types.PermissionDestroyAll, types.PermissionDestroyOwn)
 	if err != nil {
 		return provmodels.Provisioning{}, nil, err
 	}
 
-	// Clear plan output and outputs because if successful, we will return the provisioning,
-	// and we have dedicated paths for these fields that should be used instead of overloading
-	// the main provisioning object.
+	// Clear outputs because we have dedicated endpoints for these fields.
+	// PlanOutput and TemplateSnapshot are already excluded by the summary query.
 	resp := prov
-	resp.PlanOutput = nil
 	resp.Outputs = nil
 
 	switch prov.State {
@@ -560,15 +708,13 @@ func (s *Service) DestroyProvisioning(
 		// No infra was created — mark destroyed immediately.
 		prov.SetState(provmodels.ProvisioningStateDestroyed, l)
 		prov.UpdatedAt = timeutil.Now().UTC()
-		if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+		if err := s.repo.UpdateProvisioningProgress(ctx, l, prov); err != nil {
 			return provmodels.Provisioning{}, nil, err
 		}
 		return resp, nil, nil
 
 	case provmodels.ProvisioningStateDestroyed:
 		// Already destroyed — no-op.
-		prov.PlanOutput = nil
-		prov.Outputs = nil
 		return resp, nil, nil
 
 	case provmodels.ProvisioningStateInitializing,
@@ -592,7 +738,7 @@ func (s *Service) DestroyProvisioning(
 		// Schedule tofu destroy.
 		prov.SetState(provmodels.ProvisioningStateDestroying, l)
 		prov.UpdatedAt = timeutil.Now().UTC()
-		if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+		if err := s.repo.UpdateProvisioningProgress(ctx, l, prov); err != nil {
 			return provmodels.Provisioning{}, nil, err
 		}
 		task, err := ptasks.NewTaskDestroy(prov.ID)
@@ -625,8 +771,15 @@ func (s *Service) DeleteProvisioning(
 		return types.ErrInvalidState
 	}
 
+	if err := s.deleteArtifactIfPresent(ctx, prov.TemplateSnapshotRef); err != nil {
+		return errors.Wrap(err, "delete template artifact")
+	}
+	if err := s.deleteArtifactIfPresent(ctx, prov.PlanOutputRef); err != nil {
+		return errors.Wrap(err, "delete plan artifact")
+	}
+
 	// Best-effort backend state cleanup.
-	statePrefix := "provisioning-" + prov.ID.String()
+	statePrefix := "provisionings/" + prov.ID.String() + "/state"
 	if err := s.backend.CleanupState(ctx, l, statePrefix); err != nil {
 		l.Warn("failed to clean up backend state during delete",
 			slog.String("prefix", statePrefix), slog.Any("error", err))
@@ -677,7 +830,7 @@ func (s *Service) isOwner(principal *auth.Principal, prov provmodels.Provisionin
 func (s *Service) SetupSSHKeys(
 	ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID,
 ) (provmodels.Provisioning, *uuid.UUID, error) {
-	prov, err := s.getProvisioningWithAccess(
+	prov, err := s.getProvisioningSummaryWithAccess(
 		ctx, l, principal, id,
 		types.PermissionUpdateAll, types.PermissionUpdateOwn,
 	)
@@ -703,7 +856,6 @@ func (s *Service) SetupSSHKeys(
 	}
 
 	taskID := task.GetID()
-	prov.PlanOutput = nil
 	prov.Outputs = nil
 	return prov, &taskID, nil
 }
@@ -720,7 +872,7 @@ func (s *Service) SetupSSHKeys(
 func (s *Service) RetriggerProvisioning(
 	ctx context.Context, l *logger.Logger, principal *auth.Principal, id uuid.UUID,
 ) (provmodels.Provisioning, *uuid.UUID, error) {
-	prov, err := s.getProvisioningWithAccess(ctx, l, principal, id,
+	prov, err := s.getProvisioningSummaryWithAccess(ctx, l, principal, id,
 		types.PermissionUpdateAll, types.PermissionUpdateOwn)
 	if err != nil {
 		return provmodels.Provisioning{}, nil, err
@@ -746,7 +898,7 @@ func (s *Service) RetriggerProvisioning(
 	prov.Error = ""
 	prov.LastStep = ""
 	prov.UpdatedAt = timeutil.Now().UTC()
-	if err := s.repo.UpdateProvisioning(ctx, l, prov); err != nil {
+	if err := s.repo.UpdateProvisioningProgress(ctx, l, prov); err != nil {
 		return provmodels.Provisioning{}, nil, err
 	}
 
@@ -759,7 +911,6 @@ func (s *Service) RetriggerProvisioning(
 	}
 
 	taskID := task.GetID()
-	prov.PlanOutput = nil
 	prov.Outputs = nil
 	return prov, &taskID, nil
 }
@@ -769,7 +920,7 @@ func (s *Service) RetriggerProvisioning(
 func (s *Service) HandleSetupSSHKeys(
 	ctx context.Context, l *logger.Logger, provisioningID uuid.UUID,
 ) error {
-	prov, err := s.repo.GetProvisioning(ctx, l, provisioningID)
+	prov, err := s.repo.GetProvisioningForExecution(ctx, l, provisioningID)
 	if err != nil {
 		return errors.Wrap(err, "get provisioning")
 	}
@@ -781,7 +932,13 @@ func (s *Service) HandleSetupSSHKeys(
 		return errors.Wrap(err, "resolve environment")
 	}
 
-	meta, err := templates.ParseMetadataFromSnapshot(prov.TemplateSnapshot)
+	archiveReader, err := s.openTemplateArchive(ctx, prov)
+	if err != nil {
+		return errors.Wrap(err, "open template snapshot")
+	}
+	defer archiveReader.Close()
+
+	meta, err := templates.ParseMetadataFromReader(archiveReader)
 	if err != nil {
 		return errors.Wrap(err, "parse template metadata from snapshot")
 	}
@@ -820,6 +977,3 @@ func (s *Service) GetOptions() types.Options {
 func (s *Service) GetBackend() templates.Backend {
 	return s.backend
 }
-
-// clusterNameFromOwner derives a roachprod-compatible cluster name from the
-

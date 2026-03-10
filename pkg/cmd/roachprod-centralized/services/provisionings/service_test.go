@@ -6,9 +6,10 @@
 package provisionings
 
 import (
+	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,6 +38,49 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
+
+type fakeArtifactStore struct {
+	objects   map[string][]byte
+	putErr    error
+	deleteErr error
+	deletes   []string
+}
+
+func newFakeArtifactStore() *fakeArtifactStore {
+	return &fakeArtifactStore{objects: make(map[string][]byte)}
+}
+
+func (s *fakeArtifactStore) Put(
+	ctx context.Context, objectKey string, r io.Reader, contentType string,
+) (string, error) {
+	if s.putErr != nil {
+		return "", s.putErr
+	}
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return "", err
+	}
+	ref := "gs://test-bucket/" + objectKey
+	s.objects[ref] = data
+	return ref, nil
+}
+
+func (s *fakeArtifactStore) NewReader(ctx context.Context, ref string) (io.ReadCloser, error) {
+	data, ok := s.objects[ref]
+	if !ok {
+		return nil, fmt.Errorf("artifact %s not found", ref)
+	}
+	return io.NopCloser(bytes.NewReader(data)), nil
+}
+
+func (s *fakeArtifactStore) Delete(ctx context.Context, ref string) error {
+	if s.deleteErr != nil {
+		return s.deleteErr
+	}
+	delete(s.objects, ref)
+	s.deletes = append(s.deletes, ref)
+	return nil
+}
 
 func makePrincipal(email string, perms ...string) *auth.Principal {
 	permissions := make([]authmodels.Permission, 0, len(perms))
@@ -89,15 +133,30 @@ func newTestService(
 	taskSvc stasktypes.IService,
 	workingDirBase string,
 ) *Service {
+	return newTestServiceWithArtifactStore(
+		templatesDir, repo, envSvc, taskSvc, workingDirBase, "repository", nil,
+	)
+}
+
+func newTestServiceWithArtifactStore(
+	templatesDir string,
+	repo provrepo.IProvisioningsRepository,
+	envSvc envtypes.IService,
+	taskSvc stasktypes.IService,
+	workingDirBase string,
+	artifactBackend string,
+	artifactStore *fakeArtifactStore,
+) *Service {
 	return NewService(repo, envSvc, taskSvc, provtypes.Options{
 		TemplatesDir:      templatesDir,
 		WorkingDirBase:    workingDirBase,
 		TofuBinary:        "tofu",
+		ArtifactBackend:   artifactBackend,
 		WorkersEnabled:    true,
 		DefaultLifetime:   12 * time.Hour,
 		LifetimeExtension: 12 * time.Hour,
 		GCWatcherInterval: 5 * time.Minute,
-	}, templates.NewLocalBackend(), nil)
+	}, templates.NewLocalBackend(), artifactStore, nil)
 }
 
 func TestCreateProvisioning_SchedulesTask(t *testing.T) {
@@ -155,6 +214,58 @@ output "identifier" { value = var.identifier }
 	assert.Equal(t, "tmpl-meta", prov.TemplateType)
 	assert.Equal(t, provmodels.ProvisioningStateNew, prov.State)
 	assert.Equal(t, "owner@example.com", prov.Owner)
+}
+
+func TestCreateProvisioning_GCSArtifactsStoresTemplateRef(t *testing.T) {
+	ctx := context.Background()
+	l := logger.DefaultLogger
+
+	templatesDir := t.TempDir()
+	writeTemplateFixture(t, templatesDir, "tmpl-dir", "tmpl-meta", `
+variable "identifier" { type = string }
+output "identifier" { value = var.identifier }
+`)
+
+	repo := provisioningsrepmock.NewIProvisioningsRepository(t)
+	envSvc := environmensmock.NewIService(t)
+	taskSvc := tasksmock.NewIService(t)
+	artifactStore := newFakeArtifactStore()
+	svc := newTestServiceWithArtifactStore(
+		templatesDir, repo, envSvc, taskSvc, t.TempDir(), "gcs", artifactStore,
+	)
+
+	principal := makePrincipal("owner@example.com", provtypes.PermissionCreate)
+	input := provtypes.InputCreateDTO{
+		Environment:  "env-a",
+		TemplateType: "tmpl-meta",
+	}
+
+	envSvc.On("GetEnvironment", ctx, mock.Anything, principal, "env-a").
+		Return(envmodels.Environment{Name: "env-a"}, nil).Once()
+	envSvc.On("GetEnvironmentResolved", ctx, mock.Anything, "env-a").
+		Return(envtypes.ResolvedEnvironment{Name: "env-a"}, nil).Once()
+
+	repo.On("StoreProvisioning", ctx, mock.Anything, mock.MatchedBy(func(p provmodels.Provisioning) bool {
+		return p.Environment == "env-a" &&
+			p.TemplateType == "tmpl-meta" &&
+			p.TemplateSnapshot == nil &&
+			strings.HasPrefix(p.TemplateSnapshotRef, "gs://test-bucket/") &&
+			p.TemplateChecksum != ""
+	})).Return(nil).Once()
+
+	createdTaskID := uuid.MakeV4()
+	taskSvc.On("CreateTask", ctx, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		task := args.Get(2).(taskmodels.ITask)
+		task.SetID(createdTaskID)
+	}).Return(nil, nil).Once()
+
+	prov, taskID, err := svc.CreateProvisioning(ctx, l, principal, input)
+	require.NoError(t, err)
+	require.NotNil(t, taskID)
+	require.NotEmpty(t, prov.TemplateSnapshotRef)
+	require.Nil(t, prov.TemplateSnapshot)
+	_, ok := artifactStore.objects[prov.TemplateSnapshotRef]
+	require.True(t, ok, "expected template snapshot to be stored externally")
 }
 
 func TestCreateProvisioning_MissingRequiredVariable(t *testing.T) {
@@ -242,12 +353,9 @@ func TestDestroyProvisioning_InFlightActiveTaskBlocks(t *testing.T) {
 		Owner:   "owner@example.com",
 		State:   provmodels.ProvisioningStatePlanning,
 		Outputs: map[string]interface{}{"k": "v"},
-		PlanOutput: json.RawMessage(`{
-			"format_version":"1.0"
-		}`),
 	}
 
-	repo.On("GetProvisioning", ctx, mock.Anything, provID).Return(prov, nil).Once()
+	repo.On("GetProvisioningSummary", ctx, mock.Anything, provID).Return(prov, nil).Once()
 	taskSvc.On("GetTasks", ctx, mock.Anything, (*auth.Principal)(nil), mock.MatchedBy(func(input stasktypes.InputGetAllTasksDTO) bool {
 		if len(input.Filters.Filters) != 2 {
 			return false
@@ -288,7 +396,7 @@ func TestDestroyProvisioning_InFlightActiveTaskBlocks(t *testing.T) {
 	assert.ErrorIs(t, err, provtypes.ErrTaskInProgress)
 	assert.Nil(t, taskID)
 	assert.Equal(t, uuid.Nil, got.ID)
-	repo.AssertNotCalled(t, "UpdateProvisioning", mock.Anything, mock.Anything, mock.Anything)
+	repo.AssertNotCalled(t, "UpdateProvisioningProgress", mock.Anything, mock.Anything, mock.Anything)
 	taskSvc.AssertNotCalled(t, "CreateTask", mock.Anything, mock.Anything, mock.Anything)
 }
 
@@ -307,15 +415,12 @@ func TestDestroyProvisioning_StaleInFlightSchedulesDestroy(t *testing.T) {
 		Owner:   "owner@example.com",
 		State:   provmodels.ProvisioningStatePlanning,
 		Outputs: map[string]interface{}{"k": "v"},
-		PlanOutput: json.RawMessage(`{
-			"format_version":"1.0"
-		}`),
 	}
 
-	repo.On("GetProvisioning", ctx, mock.Anything, provID).Return(prov, nil).Once()
+	repo.On("GetProvisioningSummary", ctx, mock.Anything, provID).Return(prov, nil).Once()
 	taskSvc.On("GetTasks", ctx, mock.Anything, (*auth.Principal)(nil), mock.Anything).
 		Return([]taskmodels.ITask{}, 0, nil).Once()
-	repo.On("UpdateProvisioning", ctx, mock.Anything, mock.MatchedBy(func(p provmodels.Provisioning) bool {
+	repo.On("UpdateProvisioningProgress", ctx, mock.Anything, mock.MatchedBy(func(p provmodels.Provisioning) bool {
 		return p.ID == provID && p.State == provmodels.ProvisioningStateDestroying
 	})).Return(nil).Once()
 
@@ -348,15 +453,14 @@ func TestDestroyProvisioning_NewStateImmediateDestroy(t *testing.T) {
 	principal := makePrincipal("owner@example.com", provtypes.PermissionDestroyAll)
 	provID := uuid.MakeV4()
 	prov := provmodels.Provisioning{
-		ID:         provID,
-		Owner:      "owner@example.com",
-		State:      provmodels.ProvisioningStateNew,
-		PlanOutput: json.RawMessage(`{"format_version":"1.0"}`),
-		Outputs:    map[string]interface{}{"k": "v"},
+		ID:      provID,
+		Owner:   "owner@example.com",
+		State:   provmodels.ProvisioningStateNew,
+		Outputs: map[string]interface{}{"k": "v"},
 	}
 
-	repo.On("GetProvisioning", ctx, mock.Anything, provID).Return(prov, nil).Once()
-	repo.On("UpdateProvisioning", ctx, mock.Anything, mock.MatchedBy(func(p provmodels.Provisioning) bool {
+	repo.On("GetProvisioningSummary", ctx, mock.Anything, provID).Return(prov, nil).Once()
+	repo.On("UpdateProvisioningProgress", ctx, mock.Anything, mock.MatchedBy(func(p provmodels.Provisioning) bool {
 		return p.ID == provID && p.State == provmodels.ProvisioningStateDestroyed
 	})).Return(nil).Once()
 
@@ -381,19 +485,45 @@ func TestGetProvisioning_StripsPlanAndOutputs(t *testing.T) {
 	principal := makePrincipal("owner@example.com", provtypes.PermissionViewAll)
 	provID := uuid.MakeV4()
 	prov := provmodels.Provisioning{
-		ID:         provID,
-		Owner:      "owner@example.com",
-		State:      provmodels.ProvisioningStateProvisioned,
-		PlanOutput: json.RawMessage(`{"format_version":"1.0"}`),
-		Outputs:    map[string]interface{}{"ip": "1.2.3.4"},
+		ID:      provID,
+		Owner:   "owner@example.com",
+		State:   provmodels.ProvisioningStateProvisioned,
+		Outputs: map[string]interface{}{"ip": "1.2.3.4"},
 	}
-	repo.On("GetProvisioning", ctx, mock.Anything, provID).Return(prov, nil).Once()
+	repo.On("GetProvisioningSummary", ctx, mock.Anything, provID).Return(prov, nil).Once()
 
 	got, err := svc.GetProvisioning(ctx, l, principal, provID)
 	require.NoError(t, err)
 	assert.Equal(t, provID, got.ID)
 	assert.Nil(t, got.PlanOutput)
 	assert.Nil(t, got.Outputs)
+}
+
+func TestGetProvisioningPlan_LoadsExternalArtifact(t *testing.T) {
+	ctx := context.Background()
+	l := logger.DefaultLogger
+	repo := provisioningsrepmock.NewIProvisioningsRepository(t)
+	envSvc := environmensmock.NewIService(t)
+	taskSvc := tasksmock.NewIService(t)
+	artifactStore := newFakeArtifactStore()
+	svc := newTestServiceWithArtifactStore(
+		t.TempDir(), repo, envSvc, taskSvc, t.TempDir(), "repository", artifactStore,
+	)
+
+	principal := makePrincipal("owner@example.com", provtypes.PermissionViewAll)
+	provID := uuid.MakeV4()
+	ref := "gs://test-bucket/" + provID.String() + "/plan.json"
+	artifactStore.objects[ref] = []byte(`{"changes":true}`)
+
+	repo.On("GetProvisioning", ctx, mock.Anything, provID).Return(provmodels.Provisioning{
+		ID:            provID,
+		Owner:         "owner@example.com",
+		PlanOutputRef: ref,
+	}, nil).Once()
+
+	plan, err := svc.GetProvisioningPlan(ctx, l, principal, provID)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"changes":true}`, string(plan))
 }
 
 func TestGetProvisionings_ViewOwnFiltersAndStrips(t *testing.T) {
@@ -405,18 +535,16 @@ func TestGetProvisionings_ViewOwnFiltersAndStrips(t *testing.T) {
 	svc := newTestService(t.TempDir(), repo, envSvc, taskSvc, t.TempDir())
 
 	principal := makePrincipal("alice@example.com", provtypes.PermissionViewOwn)
-	repo.On("GetProvisionings", ctx, mock.Anything, mock.Anything).Return([]provmodels.Provisioning{
+	repo.On("GetProvisioningsSummary", ctx, mock.Anything, mock.Anything).Return([]provmodels.Provisioning{
 		{
-			ID:         uuid.MakeV4(),
-			Owner:      "alice@example.com",
-			PlanOutput: json.RawMessage(`{"format_version":"1.0"}`),
-			Outputs:    map[string]interface{}{"k": "v"},
+			ID:      uuid.MakeV4(),
+			Owner:   "alice@example.com",
+			Outputs: map[string]interface{}{"k": "v"},
 		},
 		{
-			ID:         uuid.MakeV4(),
-			Owner:      "bob@example.com",
-			PlanOutput: json.RawMessage(`{"format_version":"1.0"}`),
-			Outputs:    map[string]interface{}{"k": "v"},
+			ID:      uuid.MakeV4(),
+			Owner:   "bob@example.com",
+			Outputs: map[string]interface{}{"k": "v"},
 		},
 	}, 2, nil).Once()
 
@@ -427,6 +555,40 @@ func TestGetProvisionings_ViewOwnFiltersAndStrips(t *testing.T) {
 	assert.Equal(t, "alice@example.com", got[0].Owner)
 	assert.Nil(t, got[0].PlanOutput)
 	assert.Nil(t, got[0].Outputs)
+}
+
+func TestDeleteProvisioning_DeletesArtifactsBeforeRowDelete(t *testing.T) {
+	ctx := context.Background()
+	l := logger.DefaultLogger
+	repo := provisioningsrepmock.NewIProvisioningsRepository(t)
+	envSvc := environmensmock.NewIService(t)
+	taskSvc := tasksmock.NewIService(t)
+	artifactStore := newFakeArtifactStore()
+	svc := newTestServiceWithArtifactStore(
+		t.TempDir(), repo, envSvc, taskSvc, t.TempDir(), "repository", artifactStore,
+	)
+
+	principal := makePrincipal("owner@example.com", provtypes.PermissionDestroyAll)
+	provID := uuid.MakeV4()
+	templateRef := "gs://test-bucket/" + provID.String() + "/template.tar.gz"
+	planRef := "gs://test-bucket/" + provID.String() + "/plan.json"
+	artifactStore.objects[templateRef] = []byte("template")
+	artifactStore.objects[planRef] = []byte(`{"changes":true}`)
+
+	repo.On("GetProvisioning", ctx, mock.Anything, provID).Return(provmodels.Provisioning{
+		ID:                  provID,
+		Owner:               "owner@example.com",
+		State:               provmodels.ProvisioningStateDestroyed,
+		TemplateSnapshotRef: templateRef,
+		PlanOutputRef:       planRef,
+	}, nil).Once()
+	repo.On("DeleteProvisioning", ctx, mock.Anything, provID).Return(nil).Once()
+
+	err := svc.DeleteProvisioning(ctx, l, principal, provID)
+	require.NoError(t, err)
+	require.NotContains(t, artifactStore.objects, templateRef)
+	require.NotContains(t, artifactStore.objects, planRef)
+	require.ElementsMatch(t, []string{templateRef, planRef}, artifactStore.deletes)
 }
 
 // --- Step 1 tests: Default lifetime ---
@@ -603,19 +765,17 @@ func TestExtendLifetime_ExtendsExpiration(t *testing.T) {
 	provID := uuid.MakeV4()
 	originalExpiry := time.Now().UTC().Add(2 * time.Hour)
 	prov := provmodels.Provisioning{
-		ID:         provID,
-		Owner:      "owner@example.com",
-		State:      provmodels.ProvisioningStateProvisioned,
-		ExpiresAt:  &originalExpiry,
-		PlanOutput: json.RawMessage(`{"format_version":"1.0"}`),
-		Outputs:    map[string]interface{}{"k": "v"},
+		ID:        provID,
+		Owner:     "owner@example.com",
+		State:     provmodels.ProvisioningStateProvisioned,
+		ExpiresAt: &originalExpiry,
+		Outputs:   map[string]interface{}{"k": "v"},
 	}
 
-	repo.On("GetProvisioning", ctx, mock.Anything, provID).Return(prov, nil).Once()
-	repo.On("UpdateProvisioning", ctx, mock.Anything, mock.MatchedBy(func(p provmodels.Provisioning) bool {
-		return p.ID == provID &&
-			p.ExpiresAt != nil &&
-			p.ExpiresAt.After(originalExpiry.Add(11*time.Hour)) // at least 11h extension
+	repo.On("GetProvisioningSummary", ctx, mock.Anything, provID).Return(prov, nil).Once()
+	repo.On("UpdateProvisioningExpiration", ctx, mock.Anything, provID, mock.MatchedBy(func(expiresAt *time.Time) bool {
+		return expiresAt != nil &&
+			expiresAt.After(originalExpiry.Add(11*time.Hour)) // at least 11h extension
 	})).Return(nil).Once()
 
 	got, err := svc.ExtendLifetime(ctx, l, principal, provID)
@@ -641,12 +801,12 @@ func TestExtendLifetime_DestroyedReturnsError(t *testing.T) {
 		State: provmodels.ProvisioningStateDestroyed,
 	}
 
-	repo.On("GetProvisioning", ctx, mock.Anything, provID).Return(prov, nil).Once()
+	repo.On("GetProvisioningSummary", ctx, mock.Anything, provID).Return(prov, nil).Once()
 
 	_, err := svc.ExtendLifetime(ctx, l, principal, provID)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, provtypes.ErrInvalidState)
-	repo.AssertNotCalled(t, "UpdateProvisioning", mock.Anything, mock.Anything, mock.Anything)
+	repo.AssertNotCalled(t, "UpdateProvisioningExpiration", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestExtendLifetime_UpdateOwnCannotExtendOthers(t *testing.T) {
@@ -665,7 +825,7 @@ func TestExtendLifetime_UpdateOwnCannotExtendOthers(t *testing.T) {
 		State: provmodels.ProvisioningStateProvisioned,
 	}
 
-	repo.On("GetProvisioning", ctx, mock.Anything, provID).Return(prov, nil).Once()
+	repo.On("GetProvisioningSummary", ctx, mock.Anything, provID).Return(prov, nil).Once()
 
 	_, err := svc.ExtendLifetime(ctx, l, principal, provID)
 	require.Error(t, err)
@@ -690,8 +850,8 @@ func TestExtendLifetime_UpdateAllCanExtendOthers(t *testing.T) {
 		ExpiresAt: &expiry,
 	}
 
-	repo.On("GetProvisioning", ctx, mock.Anything, provID).Return(prov, nil).Once()
-	repo.On("UpdateProvisioning", ctx, mock.Anything, mock.Anything).Return(nil).Once()
+	repo.On("GetProvisioningSummary", ctx, mock.Anything, provID).Return(prov, nil).Once()
+	repo.On("UpdateProvisioningExpiration", ctx, mock.Anything, provID, mock.Anything).Return(nil).Once()
 
 	got, err := svc.ExtendLifetime(ctx, l, principal, provID)
 	require.NoError(t, err)
@@ -714,9 +874,9 @@ func TestExtendLifetime_NilExpiresAt(t *testing.T) {
 		State: provmodels.ProvisioningStateProvisioned,
 	}
 
-	repo.On("GetProvisioning", ctx, mock.Anything, provID).Return(prov, nil).Once()
-	repo.On("UpdateProvisioning", ctx, mock.Anything, mock.MatchedBy(func(p provmodels.Provisioning) bool {
-		return p.ExpiresAt != nil
+	repo.On("GetProvisioningSummary", ctx, mock.Anything, provID).Return(prov, nil).Once()
+	repo.On("UpdateProvisioningExpiration", ctx, mock.Anything, provID, mock.MatchedBy(func(expiresAt *time.Time) bool {
+		return expiresAt != nil
 	})).Return(nil).Once()
 
 	got, err := svc.ExtendLifetime(ctx, l, principal, provID)
@@ -740,7 +900,7 @@ func TestHandleGC_NewStateMarksDestroyed(t *testing.T) {
 		State: provmodels.ProvisioningStateNew,
 	}}, nil).Once()
 
-	repo.On("UpdateProvisioning", ctx, mock.Anything, mock.MatchedBy(func(p provmodels.Provisioning) bool {
+	repo.On("UpdateProvisioningProgress", ctx, mock.Anything, mock.MatchedBy(func(p provmodels.Provisioning) bool {
 		return p.ID == provID && p.State == provmodels.ProvisioningStateDestroyed
 	})).Return(nil).Once()
 
@@ -767,7 +927,7 @@ func TestHandleGC_ProvisionedSchedulesDestroy(t *testing.T) {
 	taskSvc.On("GetTasks", ctx, mock.Anything, (*auth.Principal)(nil), mock.Anything).
 		Return([]taskmodels.ITask{}, 0, nil).Once()
 
-	repo.On("UpdateProvisioning", ctx, mock.Anything, mock.MatchedBy(func(p provmodels.Provisioning) bool {
+	repo.On("UpdateProvisioningProgress", ctx, mock.Anything, mock.MatchedBy(func(p provmodels.Provisioning) bool {
 		return p.ID == provID && p.State == provmodels.ProvisioningStateDestroying
 	})).Return(nil).Once()
 
@@ -777,7 +937,7 @@ func TestHandleGC_ProvisionedSchedulesDestroy(t *testing.T) {
 
 	err := svc.HandleGC(ctx, l)
 	require.NoError(t, err)
-	repo.AssertCalled(t, "UpdateProvisioning", ctx, mock.Anything, mock.Anything)
+	repo.AssertCalled(t, "UpdateProvisioningProgress", ctx, mock.Anything, mock.Anything)
 	taskSvc.AssertCalled(t, "CreateTask", ctx, mock.Anything, mock.Anything)
 }
 
@@ -803,7 +963,7 @@ func TestHandleGC_InFlightWithActiveTaskSkips(t *testing.T) {
 
 	err := svc.HandleGC(ctx, l)
 	require.NoError(t, err)
-	repo.AssertNotCalled(t, "UpdateProvisioning", mock.Anything, mock.Anything, mock.Anything)
+	repo.AssertNotCalled(t, "UpdateProvisioningProgress", mock.Anything, mock.Anything, mock.Anything)
 	taskSvc.AssertNotCalled(t, "CreateTask", mock.Anything, mock.Anything, mock.Anything)
 }
 
@@ -824,7 +984,7 @@ func TestHandleGC_InFlightStaleSchedulesDestroy(t *testing.T) {
 	taskSvc.On("GetTasks", ctx, mock.Anything, (*auth.Principal)(nil), mock.Anything).
 		Return([]taskmodels.ITask{}, 0, nil).Once()
 
-	repo.On("UpdateProvisioning", ctx, mock.Anything, mock.MatchedBy(func(p provmodels.Provisioning) bool {
+	repo.On("UpdateProvisioningProgress", ctx, mock.Anything, mock.MatchedBy(func(p provmodels.Provisioning) bool {
 		return p.ID == provID && p.State == provmodels.ProvisioningStateDestroying
 	})).Return(nil).Once()
 
@@ -857,7 +1017,7 @@ func TestGCScheduleDestroy_DuplicatePrevention(t *testing.T) {
 		}, 1, nil).Once()
 
 	svc.gcScheduleDestroy(ctx, l, &prov)
-	repo.AssertNotCalled(t, "UpdateProvisioning", mock.Anything, mock.Anything, mock.Anything)
+	repo.AssertNotCalled(t, "UpdateProvisioningProgress", mock.Anything, mock.Anything, mock.Anything)
 	taskSvc.AssertNotCalled(t, "CreateTask", mock.Anything, mock.Anything, mock.Anything)
 }
 

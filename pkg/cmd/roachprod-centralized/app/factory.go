@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -50,6 +51,7 @@ import (
 	sprovhooks "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/hooks"
 	sprovssh "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/ssh"
 	sprovtemplates "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/templates"
+	sprovartifacts "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/tf-artifacts"
 	sprovtypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/provisionings/types"
 	spublicdns "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns"
 	spublicdnstypes "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns/types"
@@ -81,6 +83,7 @@ func NewServicesFromConfig(
 	cfg *configtypes.Config, l *logger.Logger, mode health.Mode,
 ) (*Services, error) {
 	appCtx := context.Background()
+	storageClientFactory := makeStorageClientFactory(appCtx)
 
 	// Generate instance ID to be used by both task and health services
 	instanceID := shealth.GenerateInstanceID()
@@ -227,7 +230,7 @@ func NewServicesFromConfig(
 	}
 
 	// Create the task log store based on configuration.
-	taskLogStore, err := newLogStore(appCtx, l, cfg)
+	taskLogStore, err := newLogStore(appCtx, l, cfg, storageClientFactory)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating task log store")
 	}
@@ -348,6 +351,15 @@ func NewServicesFromConfig(
 		if err != nil {
 			return nil, errors.Wrapf(err, "parse provisionings GC watcher interval %q", cfg.Provisionings.GCWatcherInterval)
 		}
+		artifactBackend := strings.ToLower(cfg.Provisionings.Artifacts.Backend)
+		if artifactBackend == "" {
+			artifactBackend = "repository"
+		}
+		switch artifactBackend {
+		case "repository", "gcs":
+		default:
+			return nil, fmt.Errorf("unsupported provisionings artifact backend: %s (must be 'repository' or 'gcs')", artifactBackend)
+		}
 
 		// Create the backend for terraform state storage.
 		var provBackend sprovtemplates.Backend
@@ -357,7 +369,7 @@ func NewServicesFromConfig(
 					"provisionings.gcs_state_sa_key_path is required when gcs_state_bucket is set",
 				)
 			}
-			gcsClient, err := storage.NewClient(appCtx)
+			gcsClient, err := storageClientFactory()
 			if err != nil {
 				return nil, errors.Wrap(err, "create GCS client for provisioning state backend")
 			}
@@ -369,6 +381,29 @@ func NewServicesFromConfig(
 		} else {
 			provBackend = sprovtemplates.NewLocalBackend()
 		}
+
+		var artifactStore sprovartifacts.Store
+		if cfg.Provisionings.Artifacts.GCSBucket != "" {
+			gcsClient, err := storageClientFactory()
+			if err != nil {
+				return nil, errors.Wrap(err, "create GCS client for provisioning artifacts")
+			}
+			artifactStore = sprovartifacts.NewGCSStore(
+				gcsClient,
+				cfg.Provisionings.Artifacts.GCSBucket,
+				cfg.Provisionings.Artifacts.GCSPrefix,
+			)
+		}
+		if artifactBackend == "gcs" && artifactStore == nil {
+			return nil, errors.New(
+				"provisionings.artifacts.gcs_bucket is required when artifacts.backend is set to gcs",
+			)
+		}
+		l.Info("using provisioning artifact backend",
+			slog.String("backend", artifactBackend),
+			slog.String("bucket", cfg.Provisionings.Artifacts.GCSBucket),
+			slog.String("prefix", cfg.Provisionings.Artifacts.GCSPrefix),
+		)
 
 		// Create hook infrastructure for post-provisioning actions.
 		hookRegistry := sprovhooks.NewRegistry()
@@ -411,12 +446,14 @@ func NewServicesFromConfig(
 				TemplatesDir:      cfg.Provisionings.TemplatesDir,
 				WorkingDirBase:    cfg.Provisionings.WorkingDirBase,
 				TofuBinary:        cfg.Provisionings.TofuBinary,
+				ArtifactBackend:   artifactBackend,
 				WorkersEnabled:    cfg.Tasks.Workers > 0,
 				DefaultLifetime:   defaultLifetime,
 				LifetimeExtension: lifetimeExtension,
 				GCWatcherInterval: gcWatcherInterval,
 			},
 			provBackend,
+			artifactStore,
 			hookOrchestrator,
 		)
 	}
@@ -515,7 +552,10 @@ func NewAuthenticatorFromConfig(
 
 // newLogStore creates a log store based on the task log configuration.
 func newLogStore(
-	ctx context.Context, l *logger.Logger, cfg *configtypes.Config,
+	ctx context.Context,
+	l *logger.Logger,
+	cfg *configtypes.Config,
+	storageClientFactory func() (*storage.Client, error),
 ) (logstore.ILogStore, error) {
 	backend := strings.ToLower(cfg.Tasks.Logs.Backend)
 	switch backend {
@@ -527,7 +567,7 @@ func newLogStore(
 		if cfg.Tasks.Logs.GCSBucket == "" {
 			return nil, fmt.Errorf("tasks.logs.gcs_bucket is required when backend=gcs")
 		}
-		client, err := storage.NewClient(ctx)
+		client, err := storageClientFactory()
 		if err != nil {
 			return nil, errors.Wrap(err, "create GCS client for task logs")
 		}
@@ -547,5 +587,19 @@ func newLogStore(
 
 	default:
 		return nil, fmt.Errorf("unsupported task log backend: %s (must be 'memory', 'gcs', or 'noop')", backend)
+	}
+}
+
+func makeStorageClientFactory(ctx context.Context) func() (*storage.Client, error) {
+	var (
+		once   sync.Once
+		client *storage.Client
+		err    error
+	)
+	return func() (*storage.Client, error) {
+		once.Do(func() {
+			client, err = storage.NewClient(ctx)
+		})
+		return client, err
 	}
 }
