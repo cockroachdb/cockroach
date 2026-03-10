@@ -44,6 +44,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -1987,6 +1989,11 @@ func (ief *InternalDB) txn(
 		if len(modifiedDescriptors) == 0 && deletedDescs.Len() == 0 {
 			return nil
 		}
+		ctx, span := tracing.ChildSpan(ctx, "wait-for-descriptors")
+		defer span.Finish()
+		start := timeutil.Now()
+		log.Dev.Infof(ctx, "waiting for %d modified and %d deleted descriptors",
+			len(modifiedDescriptors), deletedDescs.Len())
 		retryOpts := retry.Options{
 			InitialBackoff: time.Millisecond,
 			Multiplier:     1.5,
@@ -2015,6 +2022,7 @@ func (ief *InternalDB) txn(
 				return err
 			}
 		}
+		log.Dev.Infof(ctx, "waiting for descriptors done, took %v", timeutil.Since(start))
 		return nil
 	}
 

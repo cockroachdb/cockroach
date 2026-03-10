@@ -151,6 +151,8 @@ func (m *Manager) WaitForNoVersion(
 	regions regionliveness.CachedDatabaseRegions,
 	retryOpts retry.Options,
 ) error {
+	ctx, span := tracing.ChildSpan(ctx, "wait-for-no-version")
+	defer span.Finish()
 	versions := []IDVersion{
 		{
 			Name:    fmt.Sprintf("[%d]", id),
@@ -566,6 +568,8 @@ func (m *Manager) WaitForOneVersion(
 	regions regionliveness.CachedDatabaseRegions,
 	retryOpts retry.Options,
 ) (catalog.Descriptor, error) {
+	ctx, span := tracing.ChildSpan(ctx, "wait-for-one-version")
+	defer span.Finish()
 	// Increment the long wait gauge for wait for one version, if this function
 	// takes longer than the lease duration.
 	decAfterWait := m.IncGaugeAfterLeaseDuration(GaugeWaitForOneVersion)
@@ -613,6 +617,8 @@ func (m *Manager) WaitForNewVersion(
 	regions regionliveness.CachedDatabaseRegions,
 	retryOpts retry.Options,
 ) (catalog.Descriptor, error) {
+	ctx, span := tracing.ChildSpan(ctx, "wait-for-new-version")
+	defer span.Finish()
 	if retryOpts.MaxRetries != 0 {
 		return nil, errors.New("The MaxRetries option shouldn't be set in WaitForNewVersion")
 	}
