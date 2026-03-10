@@ -198,3 +198,73 @@ export function generatePlanDistributionTimeseries(
 
   return { alignedData, planGists };
 }
+
+// generateCanaryVsStablePlanDistributionTimeseries builds a grouped bar
+// chart with two bars per timestamp: canary (left) and stable (right).
+// Each bar is stacked by plan gist, showing execution counts.
+//
+// Returns data as [timestamps, gist1_canary, gist2_canary, ..., gist1_stable, gist2_stable, ...]
+// along with the plan gist list and the number of gists (groupSize).
+export function generateCanaryVsStablePlanDistributionTimeseries(
+  stats: StatementStatisticsPerAggregatedTsAndPlanHash[],
+): { alignedData: AlignedData; planGists: string[]; groupSize: number } {
+  // Two maps: one for canary counts, one for stable counts.
+  const canaryMap = new Map<number, Map<string, number>>();
+  const stableMap = new Map<number, Map<string, number>>();
+  const planGistSet = new Set<string>();
+  let hasCanary = false;
+
+  stats.forEach(stat => {
+    const ts = TimestampToNumber(stat.aggregated_ts) * 1e3;
+    const planGist = stat.plan_gist || "unknown";
+    planGistSet.add(planGist);
+
+    const canaryCount = Number(stat.canary_execution_count || 0);
+    // Use the explicitly tracked stable count rather than deriving it
+    // from (total - canary), since executions where the canary experiment
+    // is off should not be counted as stable.
+    const stableCount = Number(stat.stable_execution_count || 0);
+
+    if (canaryCount > 0 || stableCount > 0) {
+      hasCanary = true;
+    }
+
+    if (!canaryMap.has(ts)) {
+      canaryMap.set(ts, new Map());
+      stableMap.set(ts, new Map());
+    }
+
+    const existingCanary = canaryMap.get(ts).get(planGist) || 0;
+    canaryMap.get(ts).set(planGist, existingCanary + canaryCount);
+
+    const existingStable = stableMap.get(ts).get(planGist) || 0;
+    stableMap.get(ts).set(planGist, existingStable + stableCount);
+  });
+
+  if (!hasCanary) {
+    return { alignedData: [[]], planGists: [], groupSize: 0 };
+  }
+
+  const timestamps = Array.from(canaryMap.keys()).sort((a, b) => a - b);
+  const planGists = Array.from(planGistSet).sort();
+  const groupSize = planGists.length;
+
+  // Data layout: [timestamps, ...canary_gists, ...stable_gists]
+  const alignedData: AlignedData = [timestamps];
+
+  // Canary series (one per plan gist)
+  planGists.forEach(planGist => {
+    alignedData.push(
+      timestamps.map(ts => canaryMap.get(ts)?.get(planGist) || 0),
+    );
+  });
+
+  // Stable series (one per plan gist)
+  planGists.forEach(planGist => {
+    alignedData.push(
+      timestamps.map(ts => stableMap.get(ts)?.get(planGist) || 0),
+    );
+  });
+
+  return { alignedData, planGists, groupSize };
+}
