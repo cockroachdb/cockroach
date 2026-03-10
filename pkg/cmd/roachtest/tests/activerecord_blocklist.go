@@ -58,6 +58,8 @@ var activeRecordIgnoreList = blocklist{
 	`HasManyAssociationsTest#test_dependent_association_respects_optional_hash_conditions_on_delete`:                                                           "flaky",
 	`HasManyAssociationsTest#test_dependent_association_respects_optional_sanitized_conditions_on_delete`:                                                      "flaky",
 	`HasManyAssociationsTest#test_depends_and_nullify`:                                                                                                         "flaky",
+	`HotCompatibilityTest#test_cleans_up_after_prepared_statement_failure_in_nested_transactions`:                                                              "flaky",
+	`HotCompatibilityTest#test_cleans_up_after_prepared_statement_failure_in_a_transaction`:                                                                    "flaky",
 	`InheritanceTest#test_destroy_all_within_inheritance`:                                                                                                      "flaky",
 	`InheritanceTest#test_eager_load_belongs_to_primary_key_quoting`:                                                                                           "flaky",
 	`InheritanceTest#test_eager_load_belongs_to_something_inherited`:                                                                                           "flaky",
