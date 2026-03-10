@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -339,6 +340,9 @@ type Batch[B storage.WriteBatch] struct {
 	// logEngine is a reference to the LogEngine, used for lazy raft batch
 	// creation. Only set when engines are separated.
 	logEngine storage.Engine
+	// w is the WAG writer for staging lifecycle events. Initialized eagerly
+	// when engines are separated; zero-value (no-op) otherwise.
+	w wag.Writer
 }
 
 // separated returns true if the log and state machine engines are separated.
@@ -361,14 +365,30 @@ func (b *Batch[B]) Raft() RaftWO {
 	return b.raft
 }
 
+// WagWriter returns a pointer to the batch's WAG writer. When engines are
+// not separated, the writer is a zero-value no-op.
+func (b *Batch[B]) WagWriter() *wag.Writer {
+	return &b.w
+}
+
 // Commit commits the batch to storage.
 //
 // The sync flag is one-way. If true, the sync is guaranteed. If false, syncing
 // might still happen, specifically when engines are separated and this is a
 // cross-engine write.
+//
+// When engines are separated, any staged WAG events are flushed to the raft
+// batch before committing.
 func (b *Batch[B]) Commit(sync bool) error {
 	if !b.separated() {
 		return b.state.Commit(sync)
+	}
+	// Avoid eagerly creating a raft batch and computing Repr() when no WAG
+	// events were staged.
+	if !b.w.Empty() {
+		if err := b.w.Flush(b.Raft(), b.state.Repr()); err != nil {
+			return err
+		}
 	}
 	if b.raft != nil {
 		if err := b.raft.Commit(true /* sync */); err != nil {

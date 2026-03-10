@@ -19,6 +19,7 @@ go_library(
         "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverpb",
+        "//pkg/kv/kvserver/kvstorage/wag",
         "//pkg/kv/kvserver/logstore",
         "//pkg/kv/kvserver/rditer",
         "//pkg/kv/kvserver/spanset",
