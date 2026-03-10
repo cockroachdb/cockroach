@@ -24,6 +24,7 @@ go_library(
         "stats.go",
         "table.go",
         "trigger.go",
+        "type.go",
         "zone_config.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec",

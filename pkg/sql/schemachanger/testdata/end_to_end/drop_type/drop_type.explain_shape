@@ -1,9 +1,8 @@
 /* setup */
-CREATE DATABASE db;
-CREATE TYPE db.blue_fish AS ENUM('salmon');
+CREATE TYPE blue_fish AS ENUM('salmon');
 
 /* test */
-EXPLAIN (DDL, SHAPE) DROP TYPE db.blue_fish;
+EXPLAIN (DDL, SHAPE) DROP TYPE blue_fish;
 ----
-Schema change plan for DROP TYPE ‹db›.‹public›.‹blue_fish›;
+Schema change plan for DROP TYPE ‹defaultdb›.‹public›.‹blue_fish›;
  └── execute 2 system table mutations transactions

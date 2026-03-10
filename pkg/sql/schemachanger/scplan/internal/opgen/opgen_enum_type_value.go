@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2026 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -14,17 +14,44 @@ func init() {
 	opRegistry.register((*scpb.EnumTypeValue)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
+			to(scpb.Status_WRITE_ONLY,
+				emit(func(this *scpb.EnumTypeValue) *scop.AddEnumTypeValue {
+					return &scop.AddEnumTypeValue{
+						TypeID:                 this.TypeID,
+						PhysicalRepresentation: this.PhysicalRepresentation,
+						LogicalRepresentation:  this.LogicalRepresentation,
+					}
+				}),
+			),
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.EnumTypeValue) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.EnumTypeValue) *scop.PromoteEnumTypeValue {
+					return &scop.PromoteEnumTypeValue{
+						TypeID:                 this.TypeID,
+						PhysicalRepresentation: this.PhysicalRepresentation,
+						LogicalRepresentation:  this.LogicalRepresentation,
+					}
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
+			to(scpb.Status_WRITE_ONLY,
+				emit(func(this *scpb.EnumTypeValue) *scop.DemoteEnumTypeValue {
+					return &scop.DemoteEnumTypeValue{
+						TypeID:                 this.TypeID,
+						PhysicalRepresentation: this.PhysicalRepresentation,
+						LogicalRepresentation:  this.LogicalRepresentation,
+					}
+				}),
+			),
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.EnumTypeValue) *scop.NotImplementedForPublicObjects {
-					return notImplementedForPublicObjects(this)
+				revertible(false),
+				emit(func(this *scpb.EnumTypeValue) *scop.RemoveEnumTypeValue {
+					return &scop.RemoveEnumTypeValue{
+						TypeID:                 this.TypeID,
+						PhysicalRepresentation: this.PhysicalRepresentation,
+						LogicalRepresentation:  this.LogicalRepresentation,
+					}
 				}),
 			),
 		),
