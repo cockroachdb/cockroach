@@ -277,10 +277,10 @@ func (e *Engines) Sync() error {
 	return storage.WriteSyncNoop(e.LogEngine())
 }
 
-// NewWriteBatch creates a new write batch to storage. When engines are
+// newWriteBatch creates a new write batch to storage. When engines are
 // separated, the raft engine batch is lazily initialized on first access via
-// Raft().
-func (e *Engines) NewWriteBatch() Batch[storage.WriteBatch] {
+// Raft(). Callers outside this package should use BatchFactory.
+func (e *Engines) newWriteBatch() Batch[storage.WriteBatch] {
 	if e.Separated() {
 		return Batch[storage.WriteBatch]{
 			state:     e.StateEngine().NewWriteBatch(),
@@ -301,9 +301,10 @@ func (e *Engines) NewWriteBatch() Batch[storage.WriteBatch] {
 	}
 }
 
-// NewBatch is like NewWriteBatch, but the StateEngine batch is a read-write
-// storage.Batch rather than a write-only storage.WriteBatch.
-func (e *Engines) NewBatch() Batch[storage.Batch] {
+// newBatch is like newWriteBatch, but the StateEngine batch is a read-write
+// storage.Batch rather than a write-only storage.WriteBatch. Callers outside
+// this package should use BatchFactory.
+func (e *Engines) newBatch() Batch[storage.Batch] {
 	if e.Separated() {
 		return Batch[storage.Batch]{
 			state:     e.StateEngine().NewBatch(),
@@ -322,6 +323,36 @@ func (e *Engines) NewBatch() Batch[storage.Batch] {
 		state: e.StateEngine().(batchWrapper).WrapBatch(b),
 		raft:  e.LogEngine().(batchWrapper).WrapWriteBatch(b),
 	}
+}
+
+// BatchFactory is used to create engine separation aware and WAG aware batches.
+type BatchFactory struct {
+	eng *Engines
+	seq *wag.Seq
+}
+
+// MakeBatchFactory creates a BatchFactory for the given engines and WAG
+// sequencer.
+func MakeBatchFactory(eng *Engines, seq *wag.Seq) BatchFactory {
+	return BatchFactory{eng: eng, seq: seq}
+}
+
+// NewWriteBatch creates a new write-only batch with WAG writing enabled.
+func (f *BatchFactory) NewWriteBatch() Batch[storage.WriteBatch] {
+	b := f.eng.newWriteBatch()
+	if b.separated() {
+		b.w = wag.MakeWriter(f.seq)
+	}
+	return b
+}
+
+// NewBatch creates a new read-write batch with WAG writing enabled.
+func (f *BatchFactory) NewBatch() Batch[storage.Batch] {
+	b := f.eng.newBatch()
+	if b.separated() {
+		b.w = wag.MakeWriter(f.seq)
+	}
+	return b
 }
 
 // Batch is a write batch to storage which is aware whether the log and state
