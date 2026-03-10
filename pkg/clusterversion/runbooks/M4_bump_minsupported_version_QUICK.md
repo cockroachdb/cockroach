@@ -24,12 +24,12 @@ Two PRs to bump MinSupported (e.g., from V25_2 → V25_3 → V25_4), each follow
 
 ### Critical Files (⚠️ BUILD BREAKS IF MISSED)
 
-| File | Action | Line |
-|------|--------|------|
-| `pkg/clusterversion/cockroach_versions.go` | `const MinSupported Key = V25_3` | ~362 |
-| `pkg/storage/pebble.go` | Update `MinimumSupportedFormatVersion` | ~2518 |
+| File | Action |
+|------|--------|
+| `pkg/clusterversion/cockroach_versions.go` | `const MinSupported Key = V25_3` |
+| `pkg/storage/pebble.go` | Update `MinimumSupportedFormatVersion` |
 
-**For pebble.go:** Check `pebbleFormatVersionMap` at line ~2510, use the pebble format for new MinSupported version.
+**For pebble.go:** Check `pebbleFormatVersionMap`, use the pebble format for the new MinSupported version.
 
 ### Find Files to Update
 
@@ -86,7 +86,7 @@ rm -rf pkg/sql/schemachanger/scplan/internal/rules/release_25_2/
 
 Edit `pkg/sql/schemachanger/scplan/plan.go`:
 - Remove import for `release_25_2`
-- Remove from `rulesForReleases` array (line ~158)
+- Remove from `rulesForReleases` array
 
 Edit `pkg/sql/schemachanger/scplan/BUILD.bazel`:
 - Remove dependency
@@ -119,8 +119,8 @@ rm pkg/sql/catalog/bootstrap/data/25_2_tenant.sha256
 ```
 
 Edit `pkg/sql/catalog/bootstrap/initial_values.go`:
-- Remove V25_2 entry from `initialValuesFactoryByKey` map (line ~66)
-- Remove `go:embed` variables (lines ~147-157)
+- Remove V25_2 entry from `initialValuesFactoryByKey` map
+- Remove `go:embed` variables for the removed version
 
 Edit `pkg/sql/catalog/bootstrap/BUILD.bazel`:
 - Remove embedsrcs entries
@@ -202,7 +202,7 @@ Release note: None"
 
 ### Step 1: Update logictestbase.go
 
-Remove config definition (lines ~501-515):
+Remove config definition:
 ```go
 // REMOVE:
 {
@@ -216,7 +216,7 @@ Remove config definition (lines ~501-515):
 },
 ```
 
-Remove from sets (lines ~660, ~684):
+Remove from sets:
 ```go
 "default-configs": makeConfigSet(
     "local-mixed-25.2",  // REMOVE THIS LINE
@@ -229,7 +229,7 @@ Remove from sets (lines ~660, ~684):
 
 ### Step 2: Update Nightly Build Script (⚠️ CRITICAL)
 
-Edit `build/teamcity/cockroach/nightlies/sqllogic_corpus_nightly_impl.sh` (line ~84):
+Edit `build/teamcity/cockroach/nightlies/sqllogic_corpus_nightly_impl.sh`:
 
 ```diff
 -for config in local-mixed-25.2 local-mixed-25.3; do
@@ -308,17 +308,17 @@ Release note: None"
 
 ## Validation
 
-### Run Tests
-
+Before creating or re-pushing the PR, run the pre-push validation script:
 ```bash
-./dev test pkg/clusterversion pkg/storage
+./pkg/clusterversion/runbooks/scripts/validate-m4.sh
 ```
+This runs the unit tests most likely to fail after an M.4 change and rewrites test data where appropriate.
 
-### Build
-
+Also compare changed files against the most recent reference PR to catch unexpected scope:
 ```bash
-./dev build short
+./pkg/clusterversion/runbooks/scripts/compare-with-reference-pr.sh 158225
 ```
+Justify any differences — version-specific file names are expected to differ.
 
 ### Check Commits
 
@@ -332,25 +332,6 @@ Expected:
 3. Remove 25.2 bootstrap data
 4. Update mixed_version tests to use 25.3 testserver
 5. Remove local-mixed-25.2 test configuration
-
-### Compare with Reference PR
-
-```bash
-# Get files from reference PR
-gh pr view 157767 --json files --jq '.files[].path' | sort > /tmp/ref_files.txt
-
-# Get your files
-git diff --name-only master | sort > /tmp/current_files.txt
-
-# Compare
-echo "=== Only in current ==="
-comm -13 /tmp/ref_files.txt /tmp/current_files.txt
-
-echo "=== Only in reference ==="
-comm -23 /tmp/ref_files.txt /tmp/current_files.txt
-```
-
-Justify differences (version-specific files are expected to differ).
 
 ---
 
@@ -371,60 +352,7 @@ Before creating PR, verify these files were updated:
 
 ---
 
-## Quick Troubleshooting
+## Troubleshooting
 
-| Error | Quick Fix |
-|-------|-----------|
-| `TestMinimumSupportedFormatVersion` fails | Check `pkg/storage/pebble.go` MinimumSupportedFormatVersion matches pebbleFormatVersionMap |
-| Nightly build fails "nonexistent local-mixed" | Update `sqllogic_corpus_nightly_impl.sh` |
-| `panic: unknown config name` | Logic test files still reference old config - run sed commands again |
-| `empty LogicTest directive` | Remove with `sed -i '' '/^# LogicTest:$/d' <file>` |
-| Duplicate statement errors | Manually review files with `onlyif` - see full runbook |
+See [failures/m4_failures.md](failures/m4_failures.md).
 
-**Full troubleshooting:** See main runbook section "Common Errors and Solutions"
-
----
-
-## Third PR: Prefix Old Version Gates with TODO_Delete_
-
-After both MinSupported bump PRs are merged, create a third PR to mark obsolete version gates.
-
-### What to Do
-
-Prefix all non-permanent version keys below MinSupported with `TODO_Delete_`:
-
-**Example:**
-```go
-// Before:
-V25_2_Start
-V25_3_AddEventLogColumnAndIndex
-
-// After:
-TODO_Delete_V25_2_Start
-TODO_Delete_V25_3_AddEventLogColumnAndIndex
-```
-
-**Rules:**
-- Prefix if: `Internal != 0` AND version value `< MinSupported`
-- Do NOT prefix: Final release keys (e.g., `V25_2`, `V25_3`)
-- Do NOT prefix: Bootstrap keys (`Major: 0, Minor: 0`)
-
-### Files to Update
-
-1. `pkg/clusterversion/cockroach_versions.go` - Add prefix to key names and versionTable
-2. Update all references: `git grep V25_2_Start` and replace with `TODO_Delete_V25_2_Start`
-3. Update test files that use these keys
-
-**Example PR:** #160852
-
-### After Merging: Create Cleanup Issues
-
-Create GitHub issues for teams to remove the TODO_Delete_ gates:
-
-1. Find original PRs: `git log -S "V25_3_GateName"`
-2. Determine team ownership from PR approvals (use GraphQL API)
-3. Create one issue per team with their gates listed
-
-**Example issues:** #160856, #160857, #160858, #160859, #160860, #160861
-
-**Full details:** See main runbook "Post-Commit: Create Cleanup Issues for Teams"

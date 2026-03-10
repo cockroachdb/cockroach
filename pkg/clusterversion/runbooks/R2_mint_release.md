@@ -78,11 +78,16 @@ var SystemDatabaseSchemaBootstrapVersion = clusterversion.V25_4.Version()
 
    Note: The `internal` field should be removed when minting the final version.
 
-8. **Verify all tests pass:**
+8. **Verify all tests pass** by running the pre-push validation script:
    ```bash
-   ./dev test pkg/sql/catalog/bootstrap -f TestInitialValuesToString
-   ./dev test pkg/sql/catalog/systemschema_test
-   ./dev test pkg/sql/logictest -f crdb_internal_catalog
+   ./pkg/clusterversion/runbooks/scripts/validate-r2.sh
+   ```
+   This regenerates docs, rewrites systemschema test data, and verifies the
+   bootstrap hash and logic tests pass. Run before creating or re-pushing the PR.
+
+   Also compare changed files against the reference PR:
+   ```bash
+   ./pkg/clusterversion/runbooks/scripts/compare-with-reference-pr.sh 150211
    ```
 
 ### Common Errors and Solutions
