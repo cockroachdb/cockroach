@@ -106,7 +106,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	// a synchronous batch first and then delete the data alternatively, but
 	// then need to handle the case in which there is both the tombstone and
 	// leftover replica data.
-	if err := batch.CommitAndSync(); err != nil {
+	if err := batch.Commit(true /* sync */); err != nil {
 		return err
 	}
 	commitTime := timeutil.Now()

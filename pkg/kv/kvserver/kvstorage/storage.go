@@ -361,12 +361,14 @@ func (b *Batch[B]) Raft() RaftWO {
 	return b.raft
 }
 
-// CommitAndSync commits and syncs the batch to storage. When engines are
-// separated, only the LogEngine batch is synced, and the StateEngine part is
-// expected to be replayable from the LogEngine batch.
-func (b *Batch[B]) CommitAndSync() error {
+// Commit commits the batch to storage.
+//
+// The sync flag is one-way. If true, the sync is guaranteed. If false, syncing
+// might still happen, specifically when engines are separated and this is a
+// cross-engine write.
+func (b *Batch[B]) Commit(sync bool) error {
 	if !b.separated() {
-		return b.state.Commit(true /* sync */)
+		return b.state.Commit(sync)
 	}
 	if b.raft != nil {
 		if err := b.raft.Commit(true /* sync */); err != nil {
