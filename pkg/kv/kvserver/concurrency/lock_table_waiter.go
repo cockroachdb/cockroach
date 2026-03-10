@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -113,6 +114,20 @@ type IntentResolver interface {
 func (w *lockTableWaiterImpl) WaitOn(
 	ctx context.Context, req Request, guard lockTableGuard,
 ) *Error {
+	tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+	var info ash.WorkloadInfo
+	if req.Batch != nil {
+		info = ash.WorkloadInfo{
+			WorkloadID:    req.Batch.WorkloadID,
+			AppNameID:     req.Batch.AppNameID,
+			GatewayNodeID: req.Batch.GatewayNodeID,
+		}
+	}
+	cleanup := ash.SetWorkState(
+		tenantID, info,
+		ash.WorkLock, "LockWait")
+	defer cleanup()
+
 	newStateC := guard.NewStateChan()
 	ctxDoneC := ctx.Done()
 	shouldQuiesceC := w.stopper.ShouldQuiesce()

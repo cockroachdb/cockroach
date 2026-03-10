@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -454,7 +455,18 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 		// If necessary, wait in the txnWaitQueue for the pushee transaction to
 		// expire or to move to a finalized state.
 		t := req.Requests[0].GetPushTxn()
+		tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+		var info ash.WorkloadInfo
+		if req.Batch != nil {
+			info = ash.WorkloadInfo{
+				WorkloadID:    req.Batch.WorkloadID,
+				AppNameID:     req.Batch.AppNameID,
+				GatewayNodeID: req.Batch.GatewayNodeID,
+			}
+		}
+		cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "TxnPushWait")
 		resp, err := m.twq.MaybeWaitForPush(ctx, t, req.WaitPolicy)
+		cleanup()
 		if err != nil {
 			return nil, err
 		} else if resp != nil {
@@ -464,7 +476,19 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 		// If necessary, wait in the txnWaitQueue for a transaction state update
 		// or for a dependent transaction to change.
 		t := req.Requests[0].GetQueryTxn()
-		return nil, m.twq.MaybeWaitForQuery(ctx, t)
+		tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+		var info ash.WorkloadInfo
+		if req.Batch != nil {
+			info = ash.WorkloadInfo{
+				WorkloadID:    req.Batch.WorkloadID,
+				AppNameID:     req.Batch.AppNameID,
+				GatewayNodeID: req.Batch.GatewayNodeID,
+			}
+		}
+		cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "TxnQueryWait")
+		pErr := m.twq.MaybeWaitForQuery(ctx, t)
+		cleanup()
+		return nil, pErr
 	default:
 		// TODO(nvanbenschoten): in the future, use this hook to update the lock
 		// table to allow contending transactions to proceed.

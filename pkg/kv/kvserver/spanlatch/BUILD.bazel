@@ -17,6 +17,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/concurrency/poison",
         "//pkg/kv/kvserver/spanset",
+        "//pkg/obs/ash",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
