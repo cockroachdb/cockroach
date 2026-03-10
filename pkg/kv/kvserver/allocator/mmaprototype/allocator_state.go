@@ -502,6 +502,9 @@ func (i ignoreLevel) String() string {
 // ignoreHigherThanLoadThreshold, to maximize the probability of finding a
 // candidate.
 
+// formatCandidatesLog builds a redactable log string summarizing the given
+// candidates. Returns "" when verbose logging at level 2 is not enabled,
+// allowing callers to skip the log call entirely.
 func formatCandidatesLog(
 	ctx context.Context, candidates []candidateInfo, overloadedDim LoadDimension,
 ) redact.RedactableString {
