@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1278,7 +1279,12 @@ func (r *Replica) leaseGoodToGo(
 func (r *Replica) redirectOnOrAcquireLease(
 	ctx context.Context,
 ) (kvserverpb.LeaseStatus, *kvpb.Error) {
-	return r.redirectOnOrAcquireLeaseForRequest(ctx, hlc.Timestamp{}, r.breaker.Signal())
+	// TODO(alyshan): Create hardcoded WorkloadInfo constants for system-level
+	// tasks like lease acquisition so that these internal operations are visible
+	// in ASH samples.
+	return r.redirectOnOrAcquireLeaseForRequest(
+		ctx, hlc.Timestamp{}, r.breaker.Signal(), roachpb.TenantID{}, ash.WorkloadInfo{},
+	)
 }
 
 // TestingAcquireLease is redirectOnOrAcquireLease exposed for tests.
@@ -1299,9 +1305,21 @@ func (s *Store) rangeLeaseAcquireTimeout() time.Duration {
 // redirectOnOrAcquireLeaseForRequest is like redirectOnOrAcquireLease,
 // but it accepts a specific request timestamp instead of assuming that
 // the request is operating at the current time.
+//
+// tenantID and info are used for ASH instrumentation. When called from
+// a request path, these should be populated from the batch request.
+// When called without request context (e.g. from redirectOnOrAcquireLease),
+// zero values may be passed.
 func (r *Replica) redirectOnOrAcquireLeaseForRequest(
-	ctx context.Context, reqTS hlc.Timestamp, brSig signaller,
+	ctx context.Context,
+	reqTS hlc.Timestamp,
+	brSig signaller,
+	tenantID roachpb.TenantID,
+	info ash.WorkloadInfo,
 ) (status kvserverpb.LeaseStatus, pErr *kvpb.Error) {
+	cleanup := ash.SetWorkState(tenantID, info, ash.WorkOther, "LeaseAcquisition")
+	defer cleanup()
+
 	// Does not use RunWithTimeout(), because we do not want to mask the
 	// NotLeaseHolderError on context cancellation.
 	ctx, cancel := context.WithTimeout(ctx, r.store.rangeLeaseAcquireTimeout()) // nolint:context
