@@ -1451,6 +1451,11 @@ func (ot *optTable) IsMaterializedView() bool {
 	return ot.desc.MaterializedView()
 }
 
+// IsReadOnly implements the cat.Table interface.
+func (ot *optTable) IsReadOnly() bool {
+	return ot.desc.IsReadOnly()
+}
+
 // ColumnCount is part of the cat.Table interface.
 func (ot *optTable) ColumnCount() int {
 	return len(ot.columns)
@@ -2635,6 +2640,11 @@ func (ot *optVirtualTable) IsSystemTable() bool {
 
 // IsMaterializedView implements the cat.Table interface.
 func (ot *optVirtualTable) IsMaterializedView() bool {
+	return false
+}
+
+// IsReadOnly implements the cat.Table interface.
+func (ot *optVirtualTable) IsReadOnly() bool {
 	return false
 }
 

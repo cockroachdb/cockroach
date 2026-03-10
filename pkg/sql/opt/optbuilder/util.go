@@ -616,9 +616,15 @@ func (b *Builder) resolveTableForMutation(
 		alias = *outerAlias
 	}
 
-	// We can't mutate materialized views.
-	if tab.IsMaterializedView() {
-		panic(pgerror.Newf(pgcode.WrongObjectType, "cannot mutate materialized view %q", tab.Name()))
+	// We can't mutate read-only tables (materialized views, tables with
+	// external row data on a PCR reader catalog, etc.).
+	if tab.IsReadOnly() {
+		if tab.IsMaterializedView() {
+			panic(pgerror.Newf(pgcode.WrongObjectType,
+				"cannot mutate materialized view %q", tab.Name()))
+		}
+		panic(pgerror.Newf(pgcode.ReadOnlySQLTransaction,
+			"cannot mutate read-only table %q", tab.Name()))
 	}
 
 	return tab, depName, alias, columns

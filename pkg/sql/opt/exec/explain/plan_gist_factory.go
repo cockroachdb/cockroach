@@ -519,6 +519,10 @@ func (u *unknownTable) IsMaterializedView() bool {
 	return false
 }
 
+func (u *unknownTable) IsReadOnly() bool {
+	return false
+}
+
 func (u *unknownTable) LookupColumnOrdinal(descpb.ColumnID) (int, error) {
 	panic(errors.AssertionFailedf("not implemented"))
 }

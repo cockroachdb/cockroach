@@ -309,6 +309,12 @@ INSERT INTO t3(n) VALUES (3);
 	r.destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER SEQUENCE sq1 RENAME TO sq4")
 	r.destRunner.ExpectErr(t, "schema changes are not allowed on a reader catalog", "ALTER TYPE status ADD VALUE 'newval' ")
 
+	// Validate that DML mutations are blocked on external row data tables, even
+	// when the bypass_pcr_reader_catalog_aost session variable is set.
+	r.destRunner.Exec(t, "SET bypass_pcr_reader_catalog_aost = true")
+	r.destRunner.ExpectErr(t, "cannot mutate read-only table", "INSERT INTO t1(val) VALUES('open')")
+	r.destRunner.Exec(t, "SET bypass_pcr_reader_catalog_aost = false")
+
 	// As a final test intentionally drop dependencies between descriptors. If we
 	// don't batch descriptor updates this will cause a validation error, since
 	// the sequence and table depend on each other.

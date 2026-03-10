@@ -988,6 +988,11 @@ func (tt *Table) IsMaterializedView() bool {
 	return false
 }
 
+// IsReadOnly is part of the cat.Table interface.
+func (tt *Table) IsReadOnly() bool {
+	return false
+}
+
 // ColumnCount is part of the cat.Table interface.
 func (tt *Table) ColumnCount() int {
 	return len(tt.Columns)

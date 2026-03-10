@@ -46,6 +46,11 @@ type Table interface {
 	// that they cannot be mutated.
 	IsMaterializedView() bool
 
+	// IsReadOnly returns true if this table cannot be mutated. This is the
+	// case for materialized views and tables with external row data (e.g.,
+	// tables on a PCR reader catalog).
+	IsReadOnly() bool
+
 	// LookupColumnOrdinal returns the ordinal of the column with the given ID.
 	LookupColumnOrdinal(colID descpb.ColumnID) (int, error)
 
