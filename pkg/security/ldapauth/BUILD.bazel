@@ -88,7 +88,6 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/lexbase",
-        "//pkg/sql/pgwire",
         "//pkg/sql/pgwire/hba",
         "//pkg/sql/pgwire/identmap",
         "//pkg/util/log",
@@ -104,6 +103,7 @@ go_test(
     name = "ldapauth_test",
     srcs = [
         "authentication_ldap_test.go",
+        "authorization_ldap_external_test.go",
         "authorization_ldap_test.go",
         "main_test.go",
         "settings_test.go",

@@ -23,7 +23,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/logical"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/physical"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/producer"
-	_ "github.com/cockroachdb/cockroach/pkg/security/ldapauth"
 	_ "github.com/cockroachdb/cockroach/pkg/security/oidcauth"
 )
 

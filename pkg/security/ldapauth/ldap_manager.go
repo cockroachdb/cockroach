@@ -11,15 +11,18 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
+	"github.com/go-ldap/ldap/v3"
 )
 
 const (
@@ -40,6 +43,39 @@ var (
 	// multiple search entries like "(key1=value1)(key2=value2)".
 	ldapSearchRe = regexp.MustCompile(`\(\s*\S+\s*=\s*\S+.*\)`)
 )
+
+// LDAPManager is an interface for LDAP login (authN) and groups sync (authZ)
+// support.
+type LDAPManager interface {
+	// FetchLDAPUserDN extracts the user distinguished name for the sql session
+	// user performing a lookup for the user on ldap server using options provided
+	// in the hba conf and supplied sql username in db connection string.
+	FetchLDAPUserDN(_ context.Context, _ *cluster.Settings,
+		_ username.SQLUsername,
+		_ *hba.Entry,
+		_ *identmap.Conf,
+	) (userDN *ldap.DN, detailedErrorMsg redact.RedactableString, authError error)
+	// ValidateLDAPLogin validates whether the password supplied could be used to
+	// bind to ldap server with the ldap user DN(provided as systemIdentityDN
+	// being the "externally-defined" system identity).
+	ValidateLDAPLogin(_ context.Context, _ *cluster.Settings,
+		_ *ldap.DN,
+		_ username.SQLUsername,
+		_ string,
+		_ *hba.Entry,
+		_ *identmap.Conf,
+	) (detailedErrorMsg redact.RedactableString, authError error)
+	// FetchLDAPGroups retrieves ldap groups for the supplied ldap user
+	// DN(provided as systemIdentityDN being the "externally-defined" system
+	// identity) performing a group search with the options provided in the hba
+	// conf and filtering for the groups which have the user DN as its member.
+	FetchLDAPGroups(_ context.Context, _ *cluster.Settings,
+		_ *ldap.DN,
+		_ username.SQLUsername,
+		_ *hba.Entry,
+		_ *identmap.Conf,
+	) (ldapGroups []*ldap.DN, detailedErrorMsg redact.RedactableString, authError error)
+}
 
 // ldapAuthManager is an object that is used for both:
 // 1. enabling ldap connection validation that are used as part of the CRDB
@@ -145,9 +181,9 @@ func (authManager *ldapAuthManager) setLDAPConfigOptions(entry *hba.Entry) error
 	return nil
 }
 
-// checkHBAEntryLDAP validates that the HBA entry for ldap has all the options
+// CheckHBAEntryLDAP validates that the HBA entry for ldap has all the options
 // set to acceptable values and mandatory options are all set.
-func checkHBAEntryLDAP(_ *settings.Values, entry hba.Entry) error {
+func CheckHBAEntryLDAP(_ *settings.Values, entry hba.Entry) error {
 	var parseErr error
 	entryOptions := map[string]bool{}
 	for _, opt := range entry.Options {
@@ -191,14 +227,15 @@ func checkHBAEntryLDAP(_ *settings.Values, entry hba.Entry) error {
 	return nil
 }
 
-// ConfigureLDAPAuth initializes and returns a ldapAuthManager. It also sets up listeners so
-// that the ldapAuthManager's config is updated when the cluster settings values change.
-var ConfigureLDAPAuth = func(
+// ConfigureLDAPAuth initializes and returns a ldapAuthManager. It also sets up
+// listeners so that the ldapAuthManager's config is updated when the cluster
+// settings values change.
+func ConfigureLDAPAuth(
 	serverCtx context.Context,
 	ambientCtx log.AmbientContext,
 	st *cluster.Settings,
 	clusterUUID uuid.UUID,
-) pgwire.LDAPManager {
+) LDAPManager {
 	authManager := ldapAuthManager{}
 	authManager.clusterUUID = clusterUUID
 	authManager.reloadConfig(serverCtx, st)
@@ -212,9 +249,4 @@ var ConfigureLDAPAuth = func(
 		authManager.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
 	})
 	return &authManager
-}
-
-func init() {
-	pgwire.ConfigureLDAPAuth = ConfigureLDAPAuth
-	pgwire.RegisterAuthMethod("ldap", pgwire.AuthLDAP, hba.ConnAny, checkHBAEntryLDAP)
 }
