@@ -226,7 +226,7 @@ type storeForTruncator interface {
 	// releaseReplicaForTruncator releases the replica.
 	releaseReplicaForTruncator(r replicaForTruncator)
 	// Engine accessor.
-	getEngine() storage.Engine
+	getEngines() kvstorage.Engines
 }
 
 // replicaForTruncator abstracts the interface of Replica needed by the
@@ -441,7 +441,8 @@ func (t *raftLogTruncator) durabilityAdvanced(ctx context.Context) {
 	// Sort it for deterministic testing output.
 	sort.Sort(rangesByRangeID(ranges))
 	// Create an engine Reader to provide a safe lower bound on what is durable.
-	reader := t.store.getEngine().NewReader(storage.GuaranteedDurability)
+	eng := t.store.getEngines()
+	reader := eng.StateEngine().NewReader(storage.GuaranteedDurability)
 	defer reader.Close()
 	shouldQuiesce := t.stopper.ShouldQuiesce()
 	quiesced := false
@@ -545,7 +546,8 @@ func (t *raftLogTruncator) tryEnactTruncations(
 	}
 	// Do the truncation of persistent raft entries, specified by enactIndex
 	// (this subsumes all the preceding queued truncations).
-	batch := t.store.getEngine().NewWriteBatch()
+	eng := t.store.getEngines()
+	batch := eng.LogEngine().NewWriteBatch()
 	defer batch.Close()
 	if err := handleTruncatedStateBelowRaftPreApply(ctx, truncState,
 		pendingTruncs.mu.truncs[enactIndex].RaftTruncatedState,

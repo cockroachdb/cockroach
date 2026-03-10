@@ -4265,10 +4265,8 @@ func (s *storeForTruncatorImpl) releaseReplicaForTruncator(r replicaForTruncator
 	replica.raftMu.Unlock()
 }
 
-func (s *storeForTruncatorImpl) getEngine() storage.Engine {
-	// TODO(sep-raft-log): we'll need the log engine here but need
-	// to read code to see if more needs to be done.
-	return (*Store)(s).TODOEngine()
+func (s *storeForTruncatorImpl) getEngines() kvstorage.Engines {
+	return (*Store)(s).internalEngines
 }
 
 func init() {
