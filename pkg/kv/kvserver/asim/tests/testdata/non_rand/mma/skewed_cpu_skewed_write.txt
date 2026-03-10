@@ -85,17 +85,17 @@ write_bytes_per_second#1: thrash_pct: [s1=0%, s2=0%, s3=13%, s4=95%, s5=94%, s6=
 hash: b675d1f910d5192
 ==========================
 mma-only:
-cpu_util#1: last:  [s1=0.17, s2=0.17, s3=0.17, s4=0.17, s5=0.17, s6=0.17] (stddev=0.00, mean=0.17, sum=1)
-cpu_util#1: thrash_pct: [s1=7%, s2=36%, s3=58%, s4=14%, s5=14%, s6=13%]  (sum=142%)
+cpu_util#1: last:  [s1=0.17, s2=0.17, s3=0.16, s4=0.17, s5=0.17, s6=0.17] (stddev=0.00, mean=0.17, sum=1)
+cpu_util#1: thrash_pct: [s1=7%, s2=28%, s3=51%, s4=14%, s5=14%, s6=13%]  (sum=128%)
 leases#1: first: [s1=136, s2=0, s3=0, s4=136, s5=0, s6=0] (stddev=64.11, mean=45.33, sum=272)
-leases#1: last:  [s1=106, s2=15, s3=13, s4=125, s5=7, s6=6] (stddev=50.02, mean=45.33, sum=272)
-leases#1: thrash_pct: [s1=0%, s2=5%, s3=10%, s4=10%, s5=0%, s6=0%]  (sum=25%)
+leases#1: last:  [s1=106, s2=15, s3=14, s4=125, s5=6, s6=6] (stddev=50.04, mean=45.33, sum=272)
+leases#1: thrash_pct: [s1=0%, s2=4%, s3=8%, s4=10%, s5=0%, s6=0%]  (sum=22%)
 replicas#1: first: [s1=136, s2=136, s3=136, s4=136, s5=136, s6=136] (stddev=0.00, mean=136.00, sum=816)
-replicas#1: last:  [s1=142, s2=152, s3=148, s4=125, s5=125, s6=124] (stddev=11.70, mean=136.00, sum=816)
-replicas#1: thrash_pct: [s1=53%, s2=20%, s3=37%, s4=37%, s5=43%, s6=37%]  (sum=228%)
-write_bytes_per_second#1: last:  [s1=8365970, s2=10579513, s3=10027499, s4=10523766, s5=10522676, s6=9966826] (stddev=769765.72, mean=9997708.33, sum=59986250)
-write_bytes_per_second#1: thrash_pct: [s1=1%, s2=13%, s3=5%, s4=2%, s5=109%, s6=109%]  (sum=240%)
-hash: 777f2410cca7e6a9
+replicas#1: last:  [s1=138, s2=154, s3=150, s4=125, s5=124, s6=125] (stddev=12.32, mean=136.00, sum=816)
+replicas#1: thrash_pct: [s1=64%, s2=7%, s3=30%, s4=35%, s5=52%, s6=35%]  (sum=224%)
+write_bytes_per_second#1: last:  [s1=7813759, s2=10580659, s3=10580605, s4=10522780, s5=9969244, s6=10520968] (stddev=999962.11, mean=9998002.50, sum=59988015)
+write_bytes_per_second#1: thrash_pct: [s1=1%, s2=6%, s3=13%, s4=2%, s5=120%, s6=109%]  (sum=251%)
+hash: 2503a0eb7d9b7bdb
 ==========================
 mma-count:
 cpu_util#1: last:  [s1=0.17, s2=0.17, s3=0.17, s4=0.17, s5=0.17, s6=0.17] (stddev=0.00, mean=0.17, sum=1)

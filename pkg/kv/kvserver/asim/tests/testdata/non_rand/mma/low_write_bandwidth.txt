@@ -1,35 +1,33 @@
-# This test exercises MMA behavior at low write bandwidth. With 500 ranges
-# spread across 6 nodes under a write-only workload, each store converges to
-# ~917 KB/s of write bandwidth. Per-range WB contributions are ~3.7 KB/s, so
-# individual replica moves cause only small relative changes in store load.
+# This test exercises MMA behavior at low write bandwidth with the
+# significance floor. With 500 ranges across 6 nodes under a write-only
+# workload, mean WB per store is ~2.5 MB/s, below the 5 MiB/s significance
+# floor. The skewed initial placement creates large enough imbalances that
+# the most loaded stores exceed the 10% overloadSlow threshold (relative to
+# the 5 MiB floor), triggering WB-based rebalancing.
 #
-# Despite the low absolute throughput, MMA correctly identifies small WB
-# imbalances using fractionAbove on raw bytes/s values. Stores slightly above
-# the mean are classified as overloadSlow and shed replicas, while stores below
-# the mean absorb them. Because per-range WB is small relative to the mean,
-# moves produce modest improvements per transfer.
-#
-# In mma-only mode, WB thrashing is moderate (~103%) as MMA makes small
-# adjustments that don't fully resolve imbalances in a single move. In
-# mma-count mode, replica count balancing adds additional churn as it shuffles
-# ranges to equalize counts, amplifying WB thrashing (~250%).
+# MMA sheds replicas from overloaded stores until fractionAbove drops below
+# the threshold. Because the floor is larger than the mean, the residual
+# imbalance at convergence is wider than it would be without the floor:
+# stores settle within ~524 KB/s of the mean (10% of 5 MiB) rather than
+# within 10% of the mean itself. This is the intended tradeoff -- the floor
+# prevents churn from tiny absolute differences at the cost of looser
+# balancing at low throughput.
 #
 # See: https://github.com/cockroachdb/cockroach/issues/164539
 #
 # Setup:
 #   - 6 nodes, 500 ranges with skewed initial placement
-#   - Write-only uniform workload, so after convergence all stores cluster near
-#     the balanced WB ≈ 917 KB/s
-#   - Per-range WB ≈ 3.7 KB/s
+#   - Write-only uniform workload, mean WB ≈ 2.5 MB/s per store
+#   - Per-range WB ≈ 10 KB/s
 gen_cluster nodes=6 node_cpu_cores=8
 ----
 
 gen_ranges ranges=500 placement_type=skewed
 ----
 
-gen_load rate=1835 rw_ratio=0 min_block=1000 max_block=1000 raft_cpu_per_write=1
+gen_load rate=5000 rw_ratio=0 min_block=1000 max_block=1000 raft_cpu_per_write=1
 ----
-0.00 raft-vcpus, 1.7 MiB/s goodput
+0.00 raft-vcpus, 4.8 MiB/s goodput
 
 setting split_queue_enabled=false
 ----
@@ -37,22 +35,22 @@ setting split_queue_enabled=false
 eval duration=25m cfgs=(mma-only,mma-count) metrics=(write_bytes_per_second,replicas,cpu)
 ----
 mma-only:
-cpu#1: last:  [s1=973, s2=998, s3=935, s4=898, s5=862, s6=829] (stddev=59.36, mean=915.83, sum=5495)
-cpu#1: thrash_pct: [s1=18%, s2=16%, s3=26%, s4=16%, s5=15%, s6=15%]  (sum=108%)
+cpu#1: last:  [s1=3006, s2=2926, s3=2818, s4=2639, s5=2012, s6=1588] (stddev=520.87, mean=2498.17, sum=14989)
+cpu#1: thrash_pct: [s1=8%, s2=8%, s3=17%, s4=9%, s5=11%, s6=11%]  (sum=65%)
 replicas#1: first: [s1=500, s2=433, s3=243, s4=148, s5=100, s6=76] (stddev=162.90, mean=250.00, sum=1500)
-replicas#1: last:  [s1=266, s2=273, s3=255, s4=245, s5=235, s6=226] (stddev=16.51, mean=250.00, sum=1500)
+replicas#1: last:  [s1=301, s2=293, s3=282, s4=264, s5=201, s6=159] (stddev=52.20, mean=250.00, sum=1500)
 replicas#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%]  (sum=0%)
-write_bytes_per_second#1: last:  [s1=973211, s2=998143, s3=935506, s4=898278, s5=862148, s6=829092] (stddev=59397.16, mean=916063.00, sum=5496378)
-write_bytes_per_second#1: thrash_pct: [s1=12%, s2=16%, s3=25%, s4=18%, s5=15%, s6=15%]  (sum=102%)
-hash: e615c98de3bd44e0
+write_bytes_per_second#1: last:  [s1=3006427, s2=2926206, s3=2818300, s4=2639529, s5=2012206, s6=1588983] (stddev=520702.48, mean=2498608.50, sum=14991651)
+write_bytes_per_second#1: thrash_pct: [s1=7%, s2=7%, s3=17%, s4=9%, s5=11%, s6=11%]  (sum=62%)
+hash: 93291ac58e6a83ab
 ==========================
 mma-count:
-cpu#1: last:  [s1=952, s2=952, s3=950, s4=880, s5=880, s6=884] (stddev=35.03, mean=916.33, sum=5498)
-cpu#1: thrash_pct: [s1=58%, s2=59%, s3=43%, s4=35%, s5=31%, s6=32%]  (sum=257%)
+cpu#1: last:  [s1=2608, s2=2600, s3=2599, s4=2389, s5=2410, s6=2388] (stddev=103.62, mean=2499.00, sum=14994)
+cpu#1: thrash_pct: [s1=50%, s2=51%, s3=40%, s4=35%, s5=31%, s6=26%]  (sum=233%)
 replicas#1: first: [s1=500, s2=433, s3=243, s4=148, s5=100, s6=76] (stddev=162.90, mean=250.00, sum=1500)
-replicas#1: last:  [s1=260, s2=260, s3=259, s4=240, s5=240, s6=241] (stddev=9.68, mean=250.00, sum=1500)
-replicas#1: thrash_pct: [s1=0%, s2=0%, s3=3%, s4=0%, s5=0%, s6=0%]  (sum=3%)
-write_bytes_per_second#1: last:  [s1=952291, s2=952565, s3=950390, s4=880087, s5=880400, s6=884094] (stddev=35141.06, mean=916637.83, sum=5499827)
-write_bytes_per_second#1: thrash_pct: [s1=56%, s2=59%, s3=42%, s4=35%, s5=33%, s6=28%]  (sum=253%)
-hash: 18c684e515fd035f
+replicas#1: last:  [s1=261, s2=260, s3=260, s4=239, s5=241, s6=239] (stddev=10.36, mean=250.00, sum=1500)
+replicas#1: thrash_pct: [s1=0%, s2=0%, s3=18%, s4=0%, s5=0%, s6=0%]  (sum=18%)
+write_bytes_per_second#1: last:  [s1=2608155, s2=2600325, s3=2599295, s4=2389538, s5=2410949, s6=2388808] (stddev=103373.33, mean=2499511.67, sum=14997070)
+write_bytes_per_second#1: thrash_pct: [s1=51%, s2=51%, s3=40%, s4=34%, s5=31%, s6=27%]  (sum=234%)
+hash: 92af9bb72856a4fc
 ==========================
