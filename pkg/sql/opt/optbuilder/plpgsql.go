@@ -1524,8 +1524,10 @@ func (b *plpgsqlBuilder) buildCursorNameGen(nameCon *continuation, nameVar ast.V
 			Overload:   &overloads[0],
 		},
 	)
+	_, ord := b.resolveVariableForAssign(nameVar)
 	nameScope := nameCon.s.push()
-	b.ob.synthesizeColumn(nameScope, scopeColName(nameVar), types.RefCursor, nil /* expr */, nameCall)
+	col := b.ob.synthesizeColumn(nameScope, scopeColName(nameVar), types.RefCursor, nil /* expr */, nameCall)
+	col.setParamOrd(ord)
 	b.ob.constructProjectForScope(nameCon.s, nameScope)
 	return nameScope
 }
@@ -2370,7 +2372,20 @@ func (b *plpgsqlBuilder) makeContinuationArgs(con *continuation, s *scope) memo.
 			if err != nil {
 				panic(err)
 			}
-			args = append(args, b.ob.factory.ConstructVariable(source.(*scopeColumn).id))
+			col := source.(*scopeColumn)
+			if col.paramOrd == 0 {
+				// The name-based lookup resolved to a column without a param ordinal,
+				// which means it's a SQL statement output column rather than a PL/pgSQL
+				// variable. Fall back to ordinal-based lookup to find the correct
+				// PL/pgSQL variable column. This can happen when a SQL statement (e.g.
+				// SELECT INTO) has an output column with the same name as a PL/pgSQL
+				// variable.
+				col = s.findFuncArgCol(len(args))
+				if col == nil {
+					panic(errors.AssertionFailedf("variable %s not found", name))
+				}
+			}
+			args = append(args, b.ob.factory.ConstructVariable(col.id))
 		}
 		for _, name := range block.hiddenVars {
 			col := s.findFuncArgCol(len(args))
