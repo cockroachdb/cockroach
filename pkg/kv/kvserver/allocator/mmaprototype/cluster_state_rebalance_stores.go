@@ -762,7 +762,9 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		// NB: intentionally log before re-adding the current leaseholder so
 		// we don't list it as a candidate.
 		// TODO(tbg): allocates 207x/op (logging and candidate building).
-		log.KvDistribution.VEventf(ctx, 3, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
+		if log.ExpensiveLogEnabled(ctx, 3) {
+			log.KvDistribution.VEventf(ctx, 3, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
+		}
 		// Now candsPL is ready for computing the means.
 		candsPL.insert(store.StoreID)
 
