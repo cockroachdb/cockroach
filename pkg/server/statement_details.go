@@ -665,13 +665,15 @@ LIMIT $%d`, rb.mergeAggStmtMetadataColExpr, rb.whereClause, len(args)), args...)
 func (rb *statementDetailsRespBuilder) getStatementDetailsPerAggregatedTsAndPlanHash(
 	ctx context.Context,
 ) ([]serverpb.StatementDetailsResponse_StatementPlanDistribution, error) {
-	const expectedNumDatums = 4
+	const expectedNumDatums = 6
 	const queryFormat = `
 SELECT
     COALESCE(sum((statistics -> 'statistics' ->> 'cnt')::INT8), 0)::INT8 AS execution_count,
     aggregated_ts,
     plan_hash,
-    (statistics -> 'statistics' -> 'planGists' ->> 0) AS plan_gist
+    (statistics -> 'statistics' -> 'planGists' ->> 0) AS plan_gist,
+    COALESCE(sum((statistics -> 'statistics' -> 'canaryStats' ->> 'count')::INT8), 0)::INT8 AS canary_execution_count,
+    COALESCE(sum((statistics -> 'statistics' -> 'stableStats' ->> 'count')::INT8), 0)::INT8 AS stable_execution_count
 FROM %s %s
 GROUP BY
     aggregated_ts,
@@ -752,11 +754,16 @@ LIMIT $%d`
 			planGist = string(tree.MustBeDString(row[3]))
 		}
 
+		canaryExecutionCount := int64(tree.MustBeDInt(row[4]))
+		stableExecutionCount := int64(tree.MustBeDInt(row[5]))
+
 		stmt := serverpb.StatementDetailsResponse_StatementPlanDistribution{
-			ExecutionCount: executionCount,
-			AggregatedTs:   aggregatedTs,
-			PlanHash:       planHash,
-			PlanGist:       planGist,
+			ExecutionCount:       executionCount,
+			AggregatedTs:         aggregatedTs,
+			PlanHash:             planHash,
+			PlanGist:             planGist,
+			CanaryExecutionCount: canaryExecutionCount,
+			StableExecutionCount: stableExecutionCount,
 		}
 
 		statements = append(statements, stmt)
