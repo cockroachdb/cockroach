@@ -205,8 +205,35 @@ func distImport(
 
 	var manifestBuf *backfill.SSTManifestBuffer
 
+	// progressMu serializes calls to updateJobProgress from the ticker
+	// goroutine and the metaFn callback, preventing concurrent transactions
+	// from overwriting each other's manifest data.
+	var progressMu syncutil.Mutex
+
 	updateJobProgress := func() error {
-		return job.DebugNameNoTxn(importProgressDebugName).Update(ctx, func(
+		progressMu.Lock()
+		defer progressMu.Unlock()
+
+		// Snapshot manifest data outside the retriable transaction callback.
+		// This ensures the same data is written on every retry attempt, and
+		// we only mark the buffer clean after the transaction commits.
+		var manifestData []byte
+		var manifestLen int
+		if useDistributedMerge && manifestBuf != nil && manifestBuf.Dirty() {
+			manifests := manifestBuf.Snapshot()
+			if len(manifests) > 0 {
+				var err error
+				manifestData, err = protoutil.Marshal(
+					&jobspb.BulkSSTManifests{Manifests: manifests},
+				)
+				if err != nil {
+					return errors.Wrap(err, "marshaling SST manifests")
+				}
+				manifestLen = len(manifests)
+			}
+		}
+
+		err := job.DebugNameNoTxn(importProgressDebugName).Update(ctx, func(
 			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
 			if err := md.CheckRunningOrReverting(); err != nil {
@@ -229,16 +256,9 @@ func distImport(
 			prog.Summary = accumulatedBulkSummary.BulkOpSummary.DeepCopy()
 			accumulatedBulkSummary.Unlock()
 
-			// Persist SST manifests to job info keys for distributed merge.
-			// Only write when the buffer has new data to avoid unnecessary I/O.
-			if useDistributedMerge && manifestBuf != nil && manifestBuf.Dirty() {
-				manifests := manifestBuf.SnapshotAndMarkClean()
-				data, err := protoutil.Marshal(&jobspb.BulkSSTManifests{Manifests: manifests})
-				if err != nil {
-					return errors.Wrap(err, "marshaling SST manifests")
-				}
+			if len(manifestData) > 0 {
 				if err := jobs.WriteChunkedFileToJobInfo(
-					ctx, importSSTManifestsInfoKey, data, txn, job.ID(),
+					ctx, importSSTManifestsInfoKey, manifestData, txn, job.ID(),
 				); err != nil {
 					return errors.Wrap(err, "writing SST manifests to job info")
 				}
@@ -257,6 +277,14 @@ func distImport(
 			ju.UpdateProgress(md.Progress)
 			return nil
 		})
+
+		// Mark the buffer clean only after the transaction commits. If new
+		// manifests were appended during the transaction, the size won't match
+		// and the buffer stays dirty for the next checkpoint.
+		if err == nil && manifestLen > 0 {
+			manifestBuf.MarkCleanIfSize(manifestLen)
+		}
+		return err
 	}
 
 	var res kvpb.BulkOpSummary

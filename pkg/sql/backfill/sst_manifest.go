@@ -80,6 +80,21 @@ func (b *SSTManifestBuffer) SnapshotAndMarkClean() []jobspb.BulkSSTManifest {
 	return b.snapshotLocked()
 }
 
+// MarkCleanIfSize clears the dirty flag only if the buffer still contains
+// exactly expectedLen manifests. This is used to safely mark the buffer clean
+// after a transaction commits: if new manifests were appended between the
+// snapshot and the commit, the lengths won't match and the buffer stays dirty.
+func (b *SSTManifestBuffer) MarkCleanIfSize(expectedLen int) {
+	if b == nil {
+		return
+	}
+	b.Lock()
+	defer b.Unlock()
+	if len(b.manifests) == expectedLen {
+		b.dirty = false
+	}
+}
+
 // StripTenantPrefixFromSSTManifests normalizes SST manifest metadata by
 // removing tenant prefixes before persisting it in job state. This matches the
 // CompletedSpans handling and keeps job progress tenant-agnostic.
