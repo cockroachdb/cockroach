@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -208,6 +209,16 @@ func evaluateBatch(
 	evalPath batchEvalPath,
 	omitInRangefeeds bool, // only relevant for transactional writes
 ) (_ *kvpb.BatchResponse, _ result.Result, retErr *kvpb.Error) {
+	tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+	cleanup := ash.SetWorkState(
+		tenantID, ash.WorkloadInfo{
+			WorkloadID:    ba.WorkloadID,
+			AppNameID:     ba.AppNameID,
+			GatewayNodeID: ba.GatewayNodeID,
+		},
+		ash.WorkIO, "StorageEval")
+	defer cleanup()
+
 	// NB: Don't mutate BatchRequest directly.
 	baReqs := ba.Requests
 

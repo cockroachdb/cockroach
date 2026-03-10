@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -192,6 +193,15 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 	if !canBackpressureBatch(ba) {
 		return nil
 	}
+	tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+	cleanup := ash.SetWorkState(
+		tenantID, ash.WorkloadInfo{
+			WorkloadID:    ba.WorkloadID,
+			AppNameID:     ba.AppNameID,
+			GatewayNodeID: ba.GatewayNodeID,
+		},
+		ash.WorkOther, "Backpressure")
+	defer cleanup()
 
 	// If we need to apply backpressure, wait for an ongoing split to finish
 	// if one exists. This does not place a hard upper bound on the size of
