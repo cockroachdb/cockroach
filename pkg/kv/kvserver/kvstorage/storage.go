@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -339,7 +340,10 @@ type Batch[B storage.WriteBatch] struct {
 	// logEngine is a reference to the LogEngine, used for lazy raft batch
 	// creation. Only set when engines are separated.
 	logEngine storage.Engine
-	closed    bool
+	// w is the WAG writer for staging lifecycle events. Initialized eagerly
+	// when engines are separated; zero-value (no-op) otherwise.
+	w      wag.Writer
+	closed bool
 }
 
 // separated returns true if the log and state machine engines are separated.
@@ -355,11 +359,22 @@ func (b *Batch[B]) State() B {
 // Raft returns the LogEngine writer. When engines are separated, the raft
 // batch is lazily created on first access.
 func (b *Batch[B]) Raft() RaftWO {
+	b.maybeInitRaft()
+	return b.raft
+}
+
+// WagWriter returns a pointer to the batch's WAG writer. When engines are
+// not separated, the writer is a zero-value no-op.
+func (b *Batch[B]) WagWriter() *wag.Writer {
+	return &b.w
+}
+
+// maybeInitRaft lazily initializes the raft batch when engines are separated.
+func (b *Batch[B]) maybeInitRaft() {
 	if b.raft == nil {
 		assertTrue(b.separated(), "raft batch unexpectedly nil with non-separated engines")
 		b.raft = b.logEngine.NewWriteBatch()
 	}
-	return b.raft
 }
 
 // Commit commits the batch to storage.
@@ -367,9 +382,19 @@ func (b *Batch[B]) Raft() RaftWO {
 // The sync flag is one-way. If true, the sync is guaranteed. If false, syncing
 // might still happen, specifically when engines are separated and this is a
 // cross-engine write.
+//
+// When engines are separated, any staged WAG events are flushed to the raft
+// batch before committing.
 func (b *Batch[B]) Commit(sync bool) error {
 	if !b.separated() {
 		return b.state.Commit(sync)
+	}
+	// Avoid eagerly creating a raft batch and computing Repr() when no WAG
+	// events were staged.
+	if !b.w.Empty() {
+		if err := b.w.Flush(b.Raft(), b.state.Repr()); err != nil {
+			return err
+		}
 	}
 	if b.raft != nil {
 		if err := b.raft.Commit(true /* sync */); err != nil {
