@@ -1315,6 +1315,14 @@ func (s *state) ComputeSplitKey(
 	panic("not implemented")
 }
 
+// ForEachOverlappingSpanConfig is part of the spanconfig.StoreReader interface.
+func (s *state) ForEachOverlappingSpanConfig(
+	context.Context, roachpb.Span, func(roachpb.Span, roachpb.SpanConfig) error,
+) error {
+	// We don't need to implement this method for conformance reports.
+	panic("not implemented")
+}
+
 // GetSpanConfigForKey is added for the spanconfig.StoreReader interface, required for
 // SpanConfigConformanceReport.
 func (s *state) GetSpanConfigForKey(

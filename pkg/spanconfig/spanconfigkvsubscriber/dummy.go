@@ -56,6 +56,14 @@ func (n *noopKVSubscriber) GetSpanConfigForKey(
 	return roachpb.SpanConfig{}, roachpb.Span{}, nil
 }
 
+// ForEachOverlappingSpanConfig is part of the spanconfig.KVSubscriber
+// interface.
+func (n *noopKVSubscriber) ForEachOverlappingSpanConfig(
+	context.Context, roachpb.Span, func(roachpb.Span, roachpb.SpanConfig) error,
+) error {
+	return nil
+}
+
 // GetProtectionTimestamps is part of the spanconfig.KVSubscriber interface.
 func (n *noopKVSubscriber) GetProtectionTimestamps(
 	context.Context, roachpb.Span,
