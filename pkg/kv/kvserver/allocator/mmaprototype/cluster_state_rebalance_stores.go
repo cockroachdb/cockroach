@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/rand"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -30,6 +31,27 @@ var rangeSkippedDueToFailedConstraintsLogEvery = log.Every(time.Minute)
 // always returns true; in production, it rate-limits to once per minute.
 func rangeSkippedDueToFailedConstraintsShouldLog() bool {
 	return buildutil.CrdbTestBuild || rangeSkippedDueToFailedConstraintsLogEvery.ShouldLog()
+}
+
+var storeAndLeasePreferenceSlicePool = sync.Pool{
+	New: func() interface{} {
+		s := make([]storeAndLeasePreference, 0, 8)
+		return &s
+	},
+}
+
+var storeIDSlicePool = sync.Pool{
+	New: func() interface{} {
+		s := make([]roachpb.StoreID, 0, 10)
+		return &s
+	},
+}
+
+var candidateInfoSlicePool = sync.Pool{
+	New: func() interface{} {
+		s := make([]candidateInfo, 0, 8)
+		return &s
+	},
 }
 
 // rebalanceEnv tracks the state and outcomes of a rebalanceStores invocation.
@@ -661,6 +683,14 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 	topKRanges := ss.adjusted.topKRanges[localStoreID]
 	var leaseTransferCount int
 	n := topKRanges.len()
+	pLeasePrefs := storeAndLeasePreferenceSlicePool.Get().(*[]storeAndLeasePreference)
+	pCandsPL := storeIDSlicePool.Get().(*[]roachpb.StoreID)
+	pCandInfos := candidateInfoSlicePool.Get().(*[]candidateInfo)
+	defer func() {
+		storeAndLeasePreferenceSlicePool.Put(pLeasePrefs)
+		storeIDSlicePool.Put(pCandsPL)
+		candidateInfoSlicePool.Put(pCandInfos)
+	}()
 	for i := 0; i < n; i++ {
 		if leaseTransferCount >= re.maxLeaseTransferCount {
 			log.KvDistribution.VEventf(ctx, 2, "reached max lease transfer count %d, returning", re.maxLeaseTransferCount)
@@ -741,11 +771,12 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		//
 		// In effect, we interpret each replica whose store is worse than the current
 		// leaseholder as ill-disposed for the lease and (pre-means) filter then out.
-		cands, _ := rstate.constraints.candidatesToMoveLease()
+		cands, _ := rstate.constraints.candidatesToMoveLease(*pLeasePrefs)
+		*pLeasePrefs = cands
 		// candsPL is the set of stores to consider the mean. This should
 		// include the current leaseholder, so we add it in, but only in a
 		// little while.
-		var candsPL storeSet // TODO(tbg): avoid allocation
+		candsPL := storeSet((*pCandsPL)[:0])
 		for _, cand := range cands {
 			candsPL.insert(cand.storeID)
 		}
@@ -769,6 +800,8 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		// leaseholder is always going to include itself in the mean, even if it
 		// is ill-disposed towards leases.
 		candsPL = retainReadyLeaseTargetStoresOnly(ctx, candsPL, re.stores, rangeID, store.StoreID)
+		// Save back to pool slice so capacity is preserved across iterations.
+		*pCandsPL = []roachpb.StoreID(candsPL)
 
 		// INVARIANT: candsPL - {store.StoreID} \subset cands
 		if len(candsPL) == 0 || (len(candsPL) == 1 && candsPL[0] == store.StoreID) {
@@ -793,7 +826,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			re.passObs.leaseShed(notOverloaded)
 			continue
 		}
-		var candsSet candidateSet
+		candsSet := candidateSet{candidates: (*pCandInfos)[:0]}
 		for _, cand := range cands {
 			if cand.storeID == store.StoreID {
 				panic(errors.AssertionFailedf("current leaseholder can't be a candidate: %v", cand))
@@ -804,7 +837,6 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 				continue
 			}
 			candSls := re.computeLoadSummary(ctx, cand.storeID, &means.storeLoad, &means.nodeLoad)
-			// TODO(tbg): allocates 87x/op (candidateInfo slice growth).
 			candsSet.candidates = append(candsSet.candidates, candidateInfo{
 				StoreID:              cand.storeID,
 				storeLoadSummary:     candSls,
@@ -812,6 +844,8 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 				leasePreferenceIndex: cand.leasePreferenceIndex,
 			})
 		}
+		// Save back to pool slice so capacity is preserved across iterations.
+		*pCandInfos = candsSet.candidates
 		// Have candidates. We set ignoreLevel to
 		// ignoreHigherThanLoadThreshold since this is the only allocator that
 		// can shed leases for this store, and lease shedding is cheap, and it

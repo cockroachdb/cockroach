@@ -122,7 +122,8 @@ func (s *storeSet) insert(storeID roachpb.StoreID) bool {
 		if m < minLength {
 			m = minLength
 		}
-		// TODO(tbg): allocates 109x/op.
+		// NB: this allocates when the slice outgrows its pooled capacity,
+		// but that is rare enough to not matter in practice.
 		b = make([]roachpb.StoreID, n+1, m)
 		// Insert at pos, so pos-1 is the last element before the insertion.
 		if pos > 0 {
