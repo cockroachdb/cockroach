@@ -54,6 +54,7 @@ go_library(
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/txnwait",
         "//pkg/multitenant",
+        "//pkg/obs/ash",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
