@@ -118,6 +118,48 @@ export function generateCPUTimeseries(
   return [ts, count];
 }
 
+// generateCanaryVsStableTimeseries builds a time series with four data
+// series for a grouped+stacked bar chart. For each aggregated timestamp,
+// two side-by-side bars are shown: one for canary and one for stable.
+// Each bar is split into execution (bottom) and planning (top) portions,
+// matching the color order of the "Statement Times" chart (execution =
+// blue at index 0, planning = green at index 1).
+//
+// Returns [timestamps, canaryRun, canaryPlan, stableRun, stablePlan].
+// Both canary and stable latencies are tracked explicitly in the backend
+// rather than deriving stable from (total - canary), because executions
+// where the canary experiment is off should not be counted as stable.
+export function generateCanaryVsStableTimeseries(
+  stats: StatementStatisticsPerAggregatedTs[],
+): AlignedData {
+  const ts: Array<number> = [];
+  const canaryRun: Array<number> = [];
+  const canaryPlan: Array<number> = [];
+  const stableRun: Array<number> = [];
+  const stablePlan: Array<number> = [];
+
+  stats.forEach(function (stat: StatementStatisticsPerAggregatedTs) {
+    const canaryStats = stat.stats?.canary_stats;
+    const stableStats = stat.stats?.stable_stats;
+    const canaryCount = longToInt(canaryStats?.count) || 0;
+    const stableCount = longToInt(stableStats?.count) || 0;
+
+    // Skip timestamps where the canary experiment was not active.
+    if (canaryCount === 0 && stableCount === 0) {
+      return;
+    }
+
+    ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
+
+    canaryRun.push((canaryStats?.run_lat?.mean || 0) * 1e9);
+    canaryPlan.push((canaryStats?.plan_lat?.mean || 0) * 1e9);
+    stableRun.push((stableStats?.run_lat?.mean || 0) * 1e9);
+    stablePlan.push((stableStats?.plan_lat?.mean || 0) * 1e9);
+  });
+
+  return [ts, canaryRun, canaryPlan, stableRun, stablePlan];
+}
+
 type StatementStatisticsPerAggregatedTsAndPlanHash =
   cockroach.server.serverpb.StatementDetailsResponse.IStatementPlanDistribution;
 export function generatePlanDistributionTimeseries(
