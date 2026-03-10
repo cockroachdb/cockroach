@@ -665,7 +665,7 @@ func (mvb *mixedVersionBackup) CommonTestUtils(
 	mvb.utilsOnce.Do(func() {
 		connectFunc := func(node int) (*gosql.DB, error) { return h.Connect(node), nil }
 		mvb.commonTestUtils, err = newCommonTestUtils(
-			ctx, mvb.t, mvb.cluster, connectFunc, mvb.roachNodes,
+			ctx, mvb.t, mvb.cluster, connectFunc, mvb.roachNodes, mvb.roachNodes,
 		)
 	})
 	return mvb.commonTestUtils, err

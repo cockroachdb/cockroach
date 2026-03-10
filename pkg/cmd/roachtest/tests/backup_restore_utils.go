@@ -30,12 +30,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -80,6 +82,22 @@ var (
 		return names
 	}()
 
+	// retry options while waiting for a backup to complete
+	backupCompletionRetryOptions = retry.Options{
+		InitialBackoff: 10 * time.Second,
+		MaxBackoff:     1 * time.Minute,
+		Multiplier:     1.5,
+		MaxRetries:     80,
+	}
+
+	// retry options while waiting for a job to pass a certain progress threshold
+	jobProgRetryOptions = retry.Options{
+		InitialBackoff: 1 * time.Second,
+		MaxBackoff:     5 * time.Second,
+		Multiplier:     1.5,
+		MaxDuration:    60 * time.Minute,
+	}
+
 	fewBankRows      = 100
 	bankPossibleRows = []int{
 		fewBankRows, // creates keys with long revision history (not valid with largeBankPayload)
@@ -100,16 +118,23 @@ var (
 )
 
 type CommonTestUtils struct {
-	t                 test.Test
-	cluster           cluster.Cluster
-	roachNodes        option.NodeListOption
+	t          test.Test
+	cluster    cluster.Cluster
+	roachNodes option.NodeListOption
+	// The set of nodes that can be connected to and used for running queries. If
+	// the test is running failure injections, this should generally exclude the
+	// nodes subject to failure.
+	// TODO (kev-cao): Not a fan of having to separately track roachNodes and
+	// queryNodes. Ideally there's some way to filter out nodes in the cluster
+	// that have had failures injected. Will need to look into this further.
+	queryNodes        option.NodeListOption
 	mock              bool
 	onlineRestore     bool
 	compactionEnabled bool
 
 	connCache struct {
 		mu    syncutil.Mutex
-		cache []*gosql.DB
+		cache map[int]*gosql.DB
 	}
 }
 
@@ -139,16 +164,17 @@ func newCommonTestUtils(
 	t test.Test,
 	c cluster.Cluster,
 	connectFunc func(int) (*gosql.DB, error),
-	nodes option.NodeListOption,
+	roachNodes option.NodeListOption,
+	queryNodes option.NodeListOption,
 	opts ...commonTestOption,
 ) (*CommonTestUtils, error) {
-	cc := make([]*gosql.DB, len(nodes))
-	for _, node := range nodes {
+	cc := make(map[int]*gosql.DB)
+	for _, node := range queryNodes {
 		conn, err := connectFunc(node)
 		if err != nil {
 			return nil, err
 		}
-		cc[node-1] = conn
+		cc[node] = conn
 	}
 
 	if len(cc) == 0 {
@@ -158,7 +184,8 @@ func newCommonTestUtils(
 	u := &CommonTestUtils{
 		t:          t,
 		cluster:    c,
-		roachNodes: nodes,
+		roachNodes: roachNodes,
+		queryNodes: queryNodes,
 	}
 	u.connCache.cache = cc
 
@@ -220,7 +247,7 @@ func (u *CommonTestUtils) systemTableWriter(
 	// statement, creating a named external connection to a nodelocal
 	// location.
 	addExternalConnection := func() error {
-		node := u.RandomNode(rng, u.roachNodes)
+		node := u.RandomNode(rng, u.queryNodes)
 		l.Printf("adding external connection to node %d", node)
 		nodeLocal := fmt.Sprintf("nodelocal://%d/%s", node, randString(rng, 16))
 		name := randString(rng, 8)
@@ -302,7 +329,7 @@ func (u *CommonTestUtils) loadTablesForDBs(
 	eg := u.t.NewErrorGroup(task.WithContext(ctx), task.Logger(l))
 	for j, dbName := range dbs {
 		eg.Go(func(ctx context.Context, l *logger.Logger) error {
-			node, db := u.RandomDB(rng, u.roachNodes)
+			node, db := u.RandomDB(rng, u.queryNodes)
 			l.Printf("loading table information for DB %q via node %d", dbName, node)
 			query := fmt.Sprintf("SELECT table_name FROM [SHOW TABLES FROM %s]", dbName)
 			rows, err := db.QueryContext(ctx, query)
@@ -380,7 +407,7 @@ func (u *CommonTestUtils) setMaxRangeSizeAndDependentSettings(
 		}
 	}
 	// Ensure ranges have been properly replicated.
-	_, dbConn := u.RandomDB(rng, u.roachNodes)
+	_, dbConn := u.RandomDB(rng, u.queryNodes)
 	return roachtestutil.WaitFor3XReplication(ctx, t.L(), dbConn)
 }
 
@@ -409,7 +436,7 @@ func (u *CommonTestUtils) setClusterSettings(
 	}
 	defer systemDB.Close()
 
-	appDB := u.Connect(1) // no need to Close() this as it's a cached connection
+	appDB := u.Connect(u.RandomNode(rng, u.queryNodes)) // no need to Close() this as it's a cached connection
 
 	for j := 0; j < numCustomSettings; j++ {
 		settingName := clusterSettingNames[rng.Intn(len(clusterSettingNames))]
@@ -441,7 +468,7 @@ func (u *CommonTestUtils) waitForJobSuccess(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, jobID int, internalSystemJobs bool,
 ) (resErr error) {
 	var lastErr error
-	node := u.RandomNode(rng, u.roachNodes)
+	node := u.RandomNode(rng, u.queryNodes)
 	l.Printf("querying job status through node %d", node)
 
 	db, err := u.cluster.ConnE(ctx, l, node, option.DBName("system"))
@@ -500,6 +527,64 @@ func (u *CommonTestUtils) waitForJobSuccess(
 	return fmt.Errorf("error waiting for job to finish: %w", lastErr)
 }
 
+// waitForJobProgressPercentage waits for the given job to reach at the least
+// the provided progress percentage.
+func (u *CommonTestUtils) waitForJobProgressPercentage(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, jobID int, percentage float64,
+) (resErr error) {
+	node := u.RandomNode(rng, u.queryNodes)
+	l.Printf("querying job progress through node %d", node)
+
+	db, err := u.cluster.ConnE(ctx, l, node, option.DBName("system"))
+	if err != nil {
+		l.Printf("error connecting to node %d: %v", node, err)
+		return err
+	}
+	defer func() {
+		err := db.Close()
+		resErr = errors.CombineErrors(resErr, err)
+	}()
+
+	logThrottler := util.EveryMono(30 * time.Second)
+	const progQuery = `SELECT coordinator_id, fraction_completed FROM crdb_internal.jobs WHERE job_id = $1`
+	var claimInstanceID gosql.NullInt64
+	var fractionCompleted gosql.NullFloat64
+	for r := retry.StartWithCtx(ctx, jobProgRetryOptions); r.Next(); {
+		unclaimed := !claimInstanceID.Valid
+		err := db.QueryRowContext(ctx, progQuery, jobID).Scan(&claimInstanceID, &fractionCompleted)
+		if err != nil {
+			resErr = fmt.Errorf("error querying progress for job %d: %w", jobID, err)
+			l.Printf("%v", resErr)
+			continue
+		}
+		if unclaimed && claimInstanceID.Valid {
+			l.Printf("job %d claimed by instance %d", jobID, claimInstanceID.Int64)
+		}
+
+		if fractionCompleted.Valid {
+			if fractionCompleted.Float64 >= percentage {
+				l.Printf(
+					"job %d passed %.2f%% progress (current progress: %.2f%%)",
+					jobID, percentage*100, fractionCompleted.Float64*100,
+				)
+				return nil
+			}
+			if logThrottler.ShouldProcess(crtime.NowMono()) {
+				l.Printf(
+					"waiting for job %d to pass %.2f%% (current progress: %.2f%%)",
+					jobID, percentage*100, fractionCompleted.Float64*100,
+				)
+			}
+		}
+	}
+
+	return errors.Wrapf(
+		resErr,
+		"error waiting for job %d to pass %.2f%% progress",
+		jobID, percentage*100,
+	)
+}
+
 // runJobOnOneOf disables job adoption on cockroach nodes that are not
 // in the `nodes` list. The function passed is then executed and job
 // adoption is re-enabled at the end of the function. The function
@@ -509,7 +594,7 @@ func (u *CommonTestUtils) runJobOnOneOf(
 ) error {
 	sort.Ints(nodes)
 	var disabledNodes option.NodeListOption
-	for _, node := range u.roachNodes {
+	for _, node := range u.queryNodes {
 		idx := sort.SearchInts(nodes, node)
 		if idx == len(nodes) || nodes[idx] != node {
 			disabledNodes = append(disabledNodes, node)
@@ -547,6 +632,8 @@ func (u *CommonTestUtils) disableJobAdoption(
 ) error {
 	l.Printf("disabling job adoption on nodes %v", nodes)
 	eg := u.t.NewErrorGroup(task.WithContext(ctx), task.Logger(l))
+	queryNode := u.queryNodes[0]
+	db := u.Connect(queryNode)
 	for _, node := range nodes {
 		eg.Go(func(ctx context.Context, l *logger.Logger) error {
 			l.Printf("node %d: disabling job adoption", node)
@@ -562,7 +649,6 @@ func (u *CommonTestUtils) disableJobAdoption(
 			// adoption on.
 			l.Printf("node %d: waiting for all running jobs to terminate", node)
 			if err := retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
-				db := u.Connect(node)
 				var count int
 				err := db.QueryRow(fmt.Sprintf(
 					`SELECT count(*) FROM [SHOW JOBS] WHERE status = 'running' AND coordinator_id = %d`,
@@ -665,6 +751,16 @@ func (u *CommonTestUtils) collectFailureArtifacts(
 	return fmt.Errorf("%w (artifacts collected in %s)", restoreErr, dirName), nil
 }
 
+// takeDebugZip fetches a debug.zip from the cluster and saves it with the
+// current timestamp in the test artifacts.
+func (u *CommonTestUtils) takeDebugZip(ctx context.Context, l *logger.Logger) {
+	zipPath := fmt.Sprintf("debug-%d.zip", timeutil.Now().Unix())
+	err := u.cluster.FetchDebugZip(ctx, l, zipPath)
+	if err != nil {
+		l.Printf("failed to fetch debug zip: %v", err)
+	}
+}
+
 // resetCluster wipes the entire cluster and starts it again with the
 // specified version binary. This is done before we attempt restoring a
 // full cluster backup.
@@ -676,7 +772,11 @@ func (u *CommonTestUtils) resetCluster(
 	settings []install.ClusterSettingOption,
 ) error {
 	l.Printf("resetting cluster using version %q", version.String())
-	expectDeathsFn(len(u.roachNodes))
+	// TODO (kev-cao): Once we've migrated off of the deprecated cluster Monitor,
+	// we can remove expectDeathsFn entirely.
+	if expectDeathsFn != nil {
+		expectDeathsFn(len(u.roachNodes))
+	}
 	if err := u.cluster.WipeE(ctx, l, u.roachNodes); err != nil {
 		return fmt.Errorf("failed to wipe cluster: %w", err)
 	}
@@ -732,6 +832,10 @@ func hasInternalSystemJobs(
 
 func randIntBetween(rng *rand.Rand, min, max int) int {
 	return rng.Intn(max-min) + min
+}
+
+func randFloatBetween(rng *rand.Rand, min, max float64) float64 {
+	return rng.Float64()*(max-min) + min
 }
 
 func randString(rng *rand.Rand, strLen int) string {

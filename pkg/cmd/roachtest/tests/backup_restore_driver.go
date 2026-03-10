@@ -41,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/version"
@@ -97,14 +96,6 @@ var (
 		"zones":        "SHOW ZONE CONFIGURATIONS",
 	}
 
-	// retry options while waiting for a backup to complete
-	backupCompletionRetryOptions = retry.Options{
-		InitialBackoff: 10 * time.Second,
-		MaxBackoff:     1 * time.Minute,
-		Multiplier:     1.5,
-		MaxRetries:     80,
-	}
-
 	possibleNumIncrementalBackups = []int{
 		2,
 		3,
@@ -118,6 +109,9 @@ type BackupRestoreTestDriver struct {
 	t       test.Test
 	cluster cluster.Cluster
 
+	// roachNodes is the set of nodes that the cluster will run queries through to
+	// validate backups and restores. If running failure injections, this should
+	// exclude any nodes subject to failure.
 	roachNodes option.NodeListOption
 
 	// databases where user data is being inserted
@@ -242,7 +236,7 @@ func (d *BackupRestoreTestDriver) verifyBackupCollection(
 			return fmt.Errorf("backup %s: %w", bc.name, err)
 		}
 	}
-	_, db := d.testUtils.RandomDB(rng, d.testUtils.roachNodes)
+	_, db := d.testUtils.RandomDB(rng, d.testUtils.queryNodes)
 	if err := roachtestutil.CheckInvalidDescriptors(ctx, l, db); err != nil {
 		return fmt.Errorf("failed descriptor check: %w", err)
 	}

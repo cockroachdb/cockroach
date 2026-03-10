@@ -864,7 +864,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 
 	m.Go(func(ctx context.Context) error {
 		testUtils, err := setupBackupRestoreTestUtils(
-			ctx, t, c, testRNG,
+			ctx, t, c, c.CRDBNodes(), c.CRDBNodes(), testRNG,
 			withOnlineRestore(true), withCompaction(true),
 		)
 		if err != nil {
@@ -874,7 +874,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 
 		dbs := []string{"bank", "tpcc", schemaChangeDB}
 		d, runBackgroundWorkload, _, err := createDriversForBackupRestore(
-			ctx, t, c, testRNG, workloadSeed, testUtils, dbs,
+			ctx, t, c, c.CRDBNodes(), testRNG, workloadSeed, testUtils, dbs,
 		)
 		if err != nil {
 			return err
