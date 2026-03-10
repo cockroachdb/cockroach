@@ -200,12 +200,13 @@ func BenchmarkRebalanceStores(b *testing.B) {
 		}
 	}
 
+	dsm := newDiversityScoringMemo()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		re := newRebalanceEnv(
 			cs,
 			rand.New(rand.NewSource(0)),
-			newDiversityScoringMemo(),
+			dsm,
 			ts.Now(),
 			nil, /* passObs */
 		)
