@@ -699,7 +699,8 @@ func (oc *optCatalog) dataSourceForTable(
 		var statsCanaryWindow time.Duration
 		var statsAsOf hlc.Timestamp
 		if desc.TableDesc() != nil && oc.planner != nil && oc.planner.EvalContext() != nil {
-			stable = desc.TableDesc().StatsCanaryWindow > 0 && !oc.planner.EvalContext().UseCanaryStats
+			stable = desc.TableDesc().StatsCanaryWindow > 0 &&
+				oc.planner.EvalContext().StatsRollout == eval.StatsRolloutStable
 			statsCanaryWindow = desc.TableDesc().StatsCanaryWindow
 			statsAsOf = oc.planner.EvalContext().SessionData().StatsAsOf
 		}

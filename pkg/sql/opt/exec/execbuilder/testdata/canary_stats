@@ -315,6 +315,10 @@ subtest end
 
 subtest simple_auto_stats_collection
 
+# Set sql.stats.canary_fraction to be non-zero so that we're in "experiment on" mode.
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction='0.1';
+
 statement ok
 SET optimizer_use_forecasts = off
 

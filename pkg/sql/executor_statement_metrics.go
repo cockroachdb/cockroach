@@ -233,6 +233,10 @@ func (ex *connExecutor) recordStatementSummary(
 			b.AppliedStatementHints()
 		}
 
+		if flags.IsSet(planFlagCanaryAndStableStatsDiffer) {
+			b.CanaryStatsRollout(planner.EvalContext().StatsRollout)
+		}
+
 		ex.statsCollector.RecordStatement(ctx, b.Build())
 	}
 
