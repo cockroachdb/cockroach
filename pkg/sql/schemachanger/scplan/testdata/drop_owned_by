@@ -17,7 +17,7 @@ CREATE VIEW s.v2 AS (SELECT 'a'::s.typ::string AS k, name FROM s.v1);
 ops
 DROP OWNED BY r
 ----
-StatementPhase stage 1 of 1 with 202 MutationType ops
+StatementPhase stage 1 of 1 with 203 MutationType ops
   transitions:
     [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: s, ReferencedDescID: 100, IntValue: 0}, ABSENT], PUBLIC] -> ABSENT
@@ -414,9 +414,11 @@ StatementPhase stage 1 of 1 with 202 MutationType ops
       TableID: 110
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
-    *scop.NotImplementedForPublicObjects
-      DescID: 111
-      ElementType: scpb.EnumTypeValue
+    *scop.DemoteEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 111
     *scop.RemoveObjectParent
       ObjectID: 111
       ParentSchemaID: 105
@@ -649,6 +651,11 @@ StatementPhase stage 1 of 1 with 202 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 111
       User: root
+    *scop.RemoveEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 111
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -1026,7 +1033,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 214 MutationType ops
+PreCommitPhase stage 2 of 2 with 215 MutationType ops
   transitions:
     [[UserPrivileges:{DescID: 100, Name: r}, ABSENT], PUBLIC] -> ABSENT
     [[Namespace:{DescID: 105, Name: s, ReferencedDescID: 100, IntValue: 0}, ABSENT], PUBLIC] -> ABSENT
@@ -1423,9 +1430,11 @@ PreCommitPhase stage 2 of 2 with 214 MutationType ops
       TableID: 110
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
-    *scop.NotImplementedForPublicObjects
-      DescID: 111
-      ElementType: scpb.EnumTypeValue
+    *scop.DemoteEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 111
     *scop.RemoveObjectParent
       ObjectID: 111
       ParentSchemaID: 105
@@ -1658,6 +1667,11 @@ PreCommitPhase stage 2 of 2 with 214 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 111
       User: root
+    *scop.RemoveEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 111
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100

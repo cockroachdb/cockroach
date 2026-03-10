@@ -1444,10 +1444,6 @@ DROP SCHEMA defaultdb.SC1 CASCADE
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
 - from: [EnumType:{DescID: 111}, DROPPED]
-  to:   [EnumTypeValue:{DescID: 111, Name: a}, ABSENT]
-  kind: Precedence
-  rule: descriptor dropped before dependent element removal
-- from: [EnumType:{DescID: 111}, DROPPED]
   to:   [Namespace:{DescID: 111, Name: typ, ReferencedDescID: 100, IntValue: 104}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
@@ -2587,7 +2583,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 ops
 DROP SCHEMA defaultdb.SC1 CASCADE
 ----
-StatementPhase stage 1 of 1 with 255 MutationType ops
+StatementPhase stage 1 of 1 with 256 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: sc1, ReferencedDescID: 100, IntValue: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -3130,9 +3126,11 @@ StatementPhase stage 1 of 1 with 255 MutationType ops
       TableID: 110
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
-    *scop.NotImplementedForPublicObjects
-      DescID: 111
-      ElementType: scpb.EnumTypeValue
+    *scop.DemoteEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 111
     *scop.RemoveObjectParent
       ObjectID: 111
       ParentSchemaID: 104
@@ -3422,6 +3420,11 @@ StatementPhase stage 1 of 1 with 255 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 111
       User: root
+    *scop.RemoveEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 111
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -3847,7 +3850,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 267 MutationType ops
+PreCommitPhase stage 2 of 2 with 268 MutationType ops
   transitions:
     [[Namespace:{DescID: 104, Name: sc1, ReferencedDescID: 100, IntValue: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
@@ -4390,9 +4393,11 @@ PreCommitPhase stage 2 of 2 with 267 MutationType ops
       TableID: 110
     *scop.MarkDescriptorAsDropped
       DescriptorID: 111
-    *scop.NotImplementedForPublicObjects
-      DescID: 111
-      ElementType: scpb.EnumTypeValue
+    *scop.DemoteEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 111
     *scop.RemoveObjectParent
       ObjectID: 111
       ParentSchemaID: 104
@@ -4682,6 +4687,11 @@ PreCommitPhase stage 2 of 2 with 267 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 111
       User: root
+    *scop.RemoveEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 111
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
