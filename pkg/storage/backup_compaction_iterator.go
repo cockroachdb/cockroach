@@ -80,6 +80,10 @@ func (f *BackupCompactionIterator) advance() {
 		if ok := f.updateValid(); !ok {
 			return
 		}
+		if _, hasRange := f.iter.HasPointAndRange(); hasRange {
+			f.iter.Next()
+			continue
+		}
 		if key := f.iter.UnsafeKey(); f.asOf.Less(key.Timestamp) {
 			f.iter.Next()
 			continue
@@ -114,11 +118,7 @@ func (f *BackupCompactionIterator) ValueLen() int {
 }
 
 func (f *BackupCompactionIterator) HasPointAndRange() (bool, bool) {
-	hasPoint, hasRange := f.iter.HasPointAndRange()
-	if hasRange {
-		panic(errors.AssertionFailedf("unexpected range tombstone"))
-	}
-	return hasPoint, hasRange
+	return true, false
 }
 
 func (f *BackupCompactionIterator) RangeBounds() roachpb.Span {

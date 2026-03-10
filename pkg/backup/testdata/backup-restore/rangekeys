@@ -114,10 +114,5 @@ compact start=start end=end tag=comp_job
 SELECT crdb_internal.backup_compaction(0, 'BACKUP INTO LATEST IN ''nodelocal://1/test-root/''', '$backup_path', start, end);
 ----
 
-job tag=comp_job wait-for-state=failed
+job tag=comp_job wait-for-state=succeeded
 ----
-
-query-sql regex=(compactions does not support range keys)
-SELECT error FROM [SHOW JOBS] WHERE job_type = 'BACKUP' AND status = 'failed' ORDER BY created DESC LIMIT 1;
-----
-true

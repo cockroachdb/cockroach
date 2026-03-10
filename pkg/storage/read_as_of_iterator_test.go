@@ -187,20 +187,38 @@ func TestReadAsOfIteratorSeek(t *testing.T) {
 }
 
 // populateBatch populates a pebble batch with a series of MVCC key values.
-// input is a string containing key, timestamp, value tuples: first a single
-// character key, then a single character timestamp walltime. If the
-// character after the timestamp is an M, this entry is a "metadata" key
-// (timestamp=0, sorts before any non-0 timestamp, and no value). If the
-// character after the timestamp is an X, this entry is a deletion
-// tombstone. Otherwise the value is the same as the timestamp.
+// The input string is a sequence of the following:
+//
+// - a1   : a key with timestamp 1 and value "1"
+// - a2X  : a point tombstone at timestamp 2 (no value)
+// - aM   : an MVCC metadata key (timestamp 0, no value)
+// - a-c1 : a range tombstone from key a to c at timestamp 1 (no value)
 func populateBatch(t *testing.T, batch Batch, input string) {
 	for i := 0; ; {
 		if i == len(input) {
 			break
 		}
+		require.True(t, i+1 < len(input), "invalid input string: %v", input)
 		k := []byte{input[i]}
-		ts := hlc.Timestamp{WallTime: int64(input[i+1])}
 		var v MVCCValue
+
+		if input[i+1] == '-' {
+			require.True(t, i+3 < len(input), "invalid range key in input string: %v", input)
+			ts := hlc.Timestamp{WallTime: int64(input[i+3])}
+			endKey := []byte{input[i+2]}
+			require.NoError(t, batch.PutMVCCRangeKey(
+				MVCCRangeKey{
+					StartKey:  k,
+					EndKey:    endKey,
+					Timestamp: ts,
+				},
+				v,
+			))
+			i += 4
+			continue
+		}
+
+		ts := hlc.Timestamp{WallTime: int64(input[i+1])}
 		if i+1 < len(input) && input[i+1] == 'M' {
 			ts = hlc.Timestamp{}
 		} else if i+2 < len(input) && input[i+2] == 'X' {
