@@ -36,6 +36,9 @@ export type TableIndex = {
   tableName: string;
   escSchemaQualifiedTableName: string;
   indexType: string;
+  createStatement: string;
+  tableID: string;
+  indexID: string;
   lastRead: moment.Moment | null;
   totalReads: number;
   totalRowsRead: number;
@@ -82,6 +85,9 @@ export const useTableIndexStats = ({
         ]).sqlString(),
         tableName: tableName,
         indexType: stat.index_type?.toLowerCase() ?? "",
+        createStatement: stat.create_statement ?? "",
+        tableID: stat.statistics?.key?.table_id?.toString() ?? "",
+        indexID: stat.statistics?.key?.index_id?.toString() ?? "",
         lastRead: lastRead.unix() <= 0 ? null : lastRead,
         totalReads: stat.statistics?.stats?.total_read_count?.toNumber() ?? 0,
         totalRowsRead:
@@ -104,6 +110,7 @@ export const useTableIndexStats = ({
     indexStats: {
       tableIndexes,
       lastReset: lastReset.unix() <= 0 ? null : lastReset,
+      databaseID: data?.database_id,
     },
     isLoading,
     error,
