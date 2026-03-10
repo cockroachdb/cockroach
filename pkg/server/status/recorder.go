@@ -124,6 +124,40 @@ var ChildMetricsStorageEnabled = settings.RegisterBoolSetting(
 	false,
 	settings.WithVisibility(settings.Reserved))
 
+// ScrapeMetrics holds meta-metrics that describe the volume of a Prometheus
+// scrape. They are updated at the end of each /_status/vars scrape cycle and
+// therefore report values from the most recent (or, on first scrape, zero)
+// scrape. Because the metrics themselves live in the node registry, they are
+// self-referentially included in the output.
+type ScrapeMetrics struct {
+	NameCount  *metric.Gauge
+	LineCount  *metric.Gauge
+	ChildCount *metric.GaugeVec
+}
+
+func newScrapeMetrics() *ScrapeMetrics {
+	return &ScrapeMetrics{
+		NameCount: metric.NewGauge(metric.Metadata{
+			Name:        "obs.metric_export.name.count",
+			Help:        "Number of metric families (unique metric names) in the most recent Prometheus scrape",
+			Measurement: "Metric Names",
+			Unit:        metric.Unit_COUNT,
+		}),
+		LineCount: metric.NewGauge(metric.Metadata{
+			Name:        "obs.metric_export.line.count",
+			Help:        "Total individual time series (all label combinations) in the most recent Prometheus scrape",
+			Measurement: "Time Series",
+			Unit:        metric.Unit_COUNT,
+		}),
+		ChildCount: metric.NewExportedGaugeVec(metric.Metadata{
+			Name:        "obs.metric_export.child.count",
+			Help:        "Number of child metric instances per parent metric that implements PrometheusIterable",
+			Measurement: "Child Instances",
+			Unit:        metric.Unit_COUNT,
+		}, []string{"metric_name"}),
+	}
+}
+
 // MetricsRecorder is used to periodically record the information in a number of
 // metric registries.
 //
@@ -155,6 +189,10 @@ type MetricsRecorder struct {
 	// prometheus text format. It has a ScrapeAndPrintAsText method for thread safe
 	// scrape and print so there is no need to have additional lock here.
 	prometheusExporter metric.PrometheusExporter
+
+	// scrapeMetrics holds meta-metrics that describe the volume of the most
+	// recent /_status/vars Prometheus scrape.
+	scrapeMetrics *ScrapeMetrics
 
 	// mu synchronizes the reading of node/store registries against the adding of
 	// nodes/stores. Consequently, almost all uses of it only need to take an
@@ -228,6 +266,7 @@ func NewMetricsRecorder(
 		tenantID:            tenantID,
 		tenantNameContainer: tenantNameContainer,
 		prometheusExporter:  metric.MakePrometheusExporter(),
+		scrapeMetrics:       newScrapeMetrics(),
 	}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)
@@ -340,6 +379,7 @@ func (mr *MetricsRecorder) AddNode(
 	nodeIDGauge := metric.NewGauge(metadata)
 	nodeIDGauge.Update(int64(desc.NodeID))
 	nodeReg.AddMetric(nodeIDGauge)
+	nodeReg.AddMetricStruct(mr.scrapeMetrics)
 
 	if !disableNodeAndTenantLabels {
 		nodeIDInt := int(desc.NodeID)
@@ -462,11 +502,44 @@ func (mr *MetricsRecorder) PrintAsText(
 	w io.Writer, contentType expfmt.Format, useStaticLabels bool,
 ) error {
 	var buf bytes.Buffer
-	if err := mr.prometheusExporter.ScrapeAndPrintAsText(&buf, contentType, mr.ScrapeIntoPrometheusWithStaticLabels(useStaticLabels)); err != nil {
+	scrapeFunc := mr.ScrapeIntoPrometheusWithStaticLabels(useStaticLabels)
+	// For /_status/vars (useStaticLabels=false), update scrape meta-metrics
+	// after scraping. Values appear in the next scrape (first reports zeros).
+	if !useStaticLabels {
+		inner := scrapeFunc
+		scrapeFunc = func(pm *metric.PrometheusExporter) {
+			inner(pm)
+			mr.updateScrapeMetrics(pm)
+		}
+	}
+	if err := mr.prometheusExporter.ScrapeAndPrintAsText(
+		&buf, contentType, scrapeFunc,
+	); err != nil {
 		return err
 	}
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+// updateScrapeMetrics counts families and time series from the current
+// exporter state and updates the scrape meta-metrics gauges. Called inside
+// ScrapeAndPrintAsText's lock, after all registries have been scraped.
+func (mr *MetricsRecorder) updateScrapeMetrics(pm *metric.PrometheusExporter) {
+	families, _ := pm.Gather()
+	var nameCount, lineCount int64
+	for _, f := range families {
+		nameCount++
+		lineCount += int64(len(f.Metric))
+	}
+	mr.scrapeMetrics.NameCount.Update(nameCount)
+	mr.scrapeMetrics.LineCount.Update(lineCount)
+
+	mr.scrapeMetrics.ChildCount.Clear()
+	for metricName, count := range pm.ChildCounts() {
+		mr.scrapeMetrics.ChildCount.Update(
+			map[string]string{"metric_name": metricName}, count,
+		)
+	}
 }
 
 // ExportToGraphite sends the current metric values to a Graphite server.

@@ -38,18 +38,30 @@ type PrometheusExporter struct {
 	muScrapeAndPrint syncutil.Mutex
 	families         map[string]*prometheusgo.MetricFamily
 	selection        map[string]struct{}
+
+	// childCounts tracks the number of child instances produced by each
+	// PrometheusIterable parent metric during the current scrape cycle.
+	// Accumulated across ScrapeRegistry calls and cleared in clearMetrics.
+	childCounts map[string]int64
 }
 
 // MakePrometheusExporter returns an initialized prometheus exporter.
 func MakePrometheusExporter() PrometheusExporter {
-	return PrometheusExporter{families: map[string]*prometheusgo.MetricFamily{}}
+	return PrometheusExporter{
+		families:    map[string]*prometheusgo.MetricFamily{},
+		childCounts: map[string]int64{},
+	}
 }
 
 // MakePrometheusExporterForSelectedMetrics returns an initialized prometheus
 // exporter. It would only consider selected metrics when scraping. The caller
 // should not modify the map after the call.
 func MakePrometheusExporterForSelectedMetrics(selection map[string]struct{}) PrometheusExporter {
-	return PrometheusExporter{families: map[string]*prometheusgo.MetricFamily{}, selection: selection}
+	return PrometheusExporter{
+		families:    map[string]*prometheusgo.MetricFamily{},
+		selection:   selection,
+		childCounts: map[string]int64{},
+	}
 }
 
 // find the family for the passed-in metric, or create and return it if not found.
@@ -166,6 +178,11 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry RegistryReader, options ..
 					})
 				}
 
+				if numChildren > 0 {
+					metricName := prom.GetName(o.useStaticLabels)
+					pm.childCounts[metricName] += int64(numChildren)
+				}
+
 				// PrometheusReinitialisable metrics (like SQLMetric) dynamically
 				// add child metrics. If no child metrics are present we want to ensure
 				// we report the aggregate regardless of the respective cluster setting.
@@ -187,9 +204,15 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry RegistryReader, options ..
 				if o.includeAggregateMetrics {
 					family.Metric = append(family.Metric, m)
 				}
+				numChildren := 0
 				promIter.Each(m.Label, func(metric *prometheusgo.Metric) {
 					family.Metric = append(family.Metric, metric)
+					numChildren++
 				})
+				if numChildren > 0 {
+					metricName := prom.GetName(o.useStaticLabels)
+					pm.childCounts[metricName] += int64(numChildren)
+				}
 				return
 			}
 
@@ -207,6 +230,12 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry RegistryReader, options ..
 	} else {
 		registry.Select(pm.selection, f)
 	}
+}
+
+// ChildCounts returns the per-metric child instance counts accumulated
+// during the current scrape cycle. The caller must not modify the map.
+func (pm *PrometheusExporter) ChildCounts() map[string]int64 {
+	return pm.childCounts
 }
 
 // printAsText writes all metrics in the families map to the io.Writer in
@@ -262,5 +291,8 @@ func (pm *PrometheusExporter) clearMetrics() {
 	for _, family := range pm.families {
 		// Set to nil to avoid allocation if the family never gets any metrics.
 		family.Metric = nil
+	}
+	for k := range pm.childCounts {
+		delete(pm.childCounts, k)
 	}
 }
