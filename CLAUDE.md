@@ -33,7 +33,7 @@ Note that when filtering tests via `-f` to include the `-v` flag which
 will warn you in the output if your filter didn't match anything. Look
 for `testing: warning: no tests to run` in the output.
 
-See `./dev test --help` for all options`.
+See `./dev test --help` for all options.
 
 #### Building
 
