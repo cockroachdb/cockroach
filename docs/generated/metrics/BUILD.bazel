@@ -1,6 +1,13 @@
+exports_files(
+    ["metrics.yaml"],
+    visibility = [
+        "//pkg/testutils/metrictestutils:__pkg__",
+    ],
+)
+
 genrule(
     name = "metrics",
-    outs = ["metrics.yaml"],
+    outs = ["metrics-generated.yaml"],
     cmd = "$(location //pkg/cmd/cockroach-short) gen metric-list --logtostderr=NONE > $@",
     tools = ["//pkg/cmd/cockroach-short"],
     visibility = [

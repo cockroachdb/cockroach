@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "metrictestutils",
@@ -9,5 +9,22 @@ go_library(
     deps = [
         "//pkg/util/metric",
         "@com_github_prometheus_common//expfmt",
+    ],
+)
+
+go_test(
+    name = "metrictestutils_test",
+    srcs = ["metrics_budget_test.go"],
+    data = [
+        "//docs/generated/metrics:metrics.yaml",
+    ],
+    deps = [
+        "//pkg/build/bazel",
+        "//pkg/internal/reporoot",
+        "//pkg/testutils/skip",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )

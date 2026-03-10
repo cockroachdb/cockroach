@@ -20,11 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
+	"github.com/cockroachdb/cockroach/pkg/internal/reporoot"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/test/obs/metricscan"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/catalog"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgrades"
@@ -48,6 +51,7 @@ type MetricInfo struct {
 	Derivative   string `yaml:"derivative"`
 	HowToUse     string `yaml:"how_to_use,omitempty"`
 	Visibility   string `yaml:"visibility,omitempty"`
+	Owner        string `yaml:"owner,omitempty"`
 }
 
 type Category struct {
@@ -387,6 +391,26 @@ func init() {
 }
 
 func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*Layer, error) {
+	// Run AST scan + CODEOWNERS resolution to determine the
+	// owning team for each metric. This needs access to Go source
+	// files and .github/CODEOWNERS, so it only works when run
+	// from the repo root (not inside a Bazel sandbox).
+	var scanResult *metricscan.Result
+	var owners *codeowners.CodeOwners
+	if repoRoot := reporoot.Get(); repoRoot != "" {
+		var scanErr error
+		scanResult, scanErr = metricscan.Scan(repoRoot)
+		if scanErr != nil {
+			fmt.Fprintf(os.Stderr, "metric source scan failed (owner will be omitted): %v\n", scanErr)
+			scanResult = nil
+		}
+		var ownersErr error
+		owners, ownersErr = codeowners.DefaultLoadCodeOwners()
+		if ownersErr != nil {
+			fmt.Fprintf(os.Stderr, "CODEOWNERS load failed (owner will be omitted): %v\n", ownersErr)
+		}
+	}
+
 	sArgs := base.TestServerArgs{
 		Insecure:          true,
 		DefaultTestTenant: base.ExternalTestTenantAlwaysEnabled,
@@ -499,6 +523,17 @@ func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*La
 			if visibility == "INTERNAL" {
 				visibility = ""
 			}
+			// Resolve the owning team for this metric via AST
+			// scan (to find the source file) + CODEOWNERS.
+			var owner string
+			if scanResult != nil && owners != nil {
+				exportedName := chart.Metrics[0].ExportedName
+				if src, ok := scanResult.Resolve(exportedName); ok {
+					if teams := owners.Match(src.File); len(teams) > 0 {
+						owner = string(teams[0].Name())
+					}
+				}
+			}
 			metric := MetricInfo{
 				Name:         chart.Metrics[0].Name,
 				ExportedName: chart.Metrics[0].ExportedName,
@@ -511,6 +546,7 @@ func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*La
 				Derivative:   chart.Derivative.String(),
 				HowToUse:     strings.TrimSpace(chart.Metrics[0].HowToUse),
 				Visibility:   visibility,
+				Owner:        owner,
 			}
 			category.Metrics = append(category.Metrics, metric)
 		}
