@@ -342,6 +342,7 @@ type Batch[B storage.WriteBatch] struct {
 	// creation. Only set when engines are separated.
 	logEngine storage.Engine
 	separated bool
+	closed    bool
 }
 
 // State returns the StateEngine batch.
@@ -375,8 +376,12 @@ func (b *Batch[B]) Commit(syncStateEngine bool) error {
 	return b.state.Commit(syncStateEngine)
 }
 
-// Close closes the batch.
+// Close closes the batch. It is idempotent.
 func (b *Batch[B]) Close() {
+	if b.closed {
+		return
+	}
+	b.closed = true
 	b.state.Close()
 	if b.separated && b.raft != nil {
 		b.raft.Close()
