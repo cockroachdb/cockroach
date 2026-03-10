@@ -81,10 +81,6 @@ type restoreDataProcessor struct {
 	// qp is a MemoryBackedQuotaPool that restricts the amount of memory that
 	// can be used by this processor to open iterators on SSTs.
 	qp *backuputils.MemoryBackedQuotaPool
-
-	// progressMade is true if the processor has successfully processed a
-	// restore span entry.
-	progressMade bool
 }
 
 var (
@@ -687,7 +683,6 @@ func (rd *restoreDataProcessor) linkFiles(
 		}
 	}
 
-	rd.progressMade = true
 	return summary, nil
 }
 
@@ -908,7 +903,6 @@ func (rd *restoreDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Produce
 			return nil, rd.DrainHelper()
 		}
 		prog.ProgressDetails = *details
-		rd.progressMade = true
 		return nil, &execinfrapb.ProducerMetadata{BulkProcessorProgress: &prog}
 	case <-rd.aggTimer.C:
 		rd.aggTimer.Reset(15 * time.Second)
