@@ -503,8 +503,11 @@ func (i ignoreLevel) String() string {
 // candidate.
 
 func formatCandidatesLog(
-	candidates []candidateInfo, overloadedDim LoadDimension,
+	ctx context.Context, candidates []candidateInfo, overloadedDim LoadDimension,
 ) redact.RedactableString {
+	if !log.ExpensiveLogEnabled(ctx, 2) {
+		return ""
+	}
 	var buf redact.StringBuilder
 	for _, c := range candidates {
 		if overloadedDim != NumLoadDimensions {
@@ -571,10 +574,8 @@ func sortTargetCandidateSetAndPick(
 	for i, cand := range cands.candidates {
 		if !diversityScoresAlmostEqual(bestDiversity, cand.diversityScore) {
 			// Have a set of candidates with the best diversity.
-			if log.ExpensiveLogEnabled(ctx, 2) {
-				if s := formatCandidatesLog(cands.candidates[i:], overloadedDim); s != "" {
-					log.KvDistribution.VEventf(ctx, 2, "discarding candidates due to lower diversity score: %s", s)
-				}
+			if s := formatCandidatesLog(ctx, cands.candidates[i:], overloadedDim); s != "" {
+				log.KvDistribution.VEventf(ctx, 2, "discarding candidates due to lower diversity score: %s", s)
 			}
 			break
 		}
@@ -605,11 +606,9 @@ func sortTargetCandidateSetAndPick(
 				// Never go to the next set if we have discarded candidates that have
 				// pending changes. We will wait for those to have no pending changes
 				// before we consider later sets.
-				if log.ExpensiveLogEnabled(ctx, 2) {
-					if s := formatCandidatesLog(cands.candidates[i:], overloadedDim); s != "" {
-						log.KvDistribution.VEventf(ctx, 2,
-							"candidate with pending changes was discarded, discarding remaining candidates with higher load: %s", s)
-					}
+				if s := formatCandidatesLog(ctx, cands.candidates[i:], overloadedDim); s != "" {
+					log.KvDistribution.VEventf(ctx, 2,
+						"candidate with pending changes was discarded, discarding remaining candidates with higher load: %s", s)
 				}
 				break
 			}
@@ -621,11 +620,9 @@ func sortTargetCandidateSetAndPick(
 				lowestLoadSet = cand.sls
 			} else if ignoreLevel < ignoreHigherThanLoadThreshold || overloadedDim == NumLoadDimensions {
 				// Past the lowestLoad set. We don't care about these.
-				if log.ExpensiveLogEnabled(ctx, 2) {
-					if s := formatCandidatesLog(cands.candidates[i:], overloadedDim); s != "" {
-						log.KvDistribution.VEventf(ctx, 2,
-							"discarding candidates with higher load than lowestLoadSet(%v): %s", lowestLoadSet, s)
-					}
+				if s := formatCandidatesLog(ctx, cands.candidates[i:], overloadedDim); s != "" {
+					log.KvDistribution.VEventf(ctx, 2,
+						"discarding candidates with higher load than lowestLoadSet(%v): %s", lowestLoadSet, s)
 				}
 				break
 			}
@@ -634,11 +631,9 @@ func sortTargetCandidateSetAndPick(
 			// cand.sls <= loadThreshold.
 		}
 		if cand.sls > loadThreshold {
-			if log.ExpensiveLogEnabled(ctx, 2) {
-				if s := formatCandidatesLog(cands.candidates[i:], overloadedDim); s != "" {
-					log.KvDistribution.VEventf(ctx, 2,
-						"discarding candidates with higher load than loadThreshold(%v): %s", loadThreshold, s)
-				}
+			if s := formatCandidatesLog(ctx, cands.candidates[i:], overloadedDim); s != "" {
+				log.KvDistribution.VEventf(ctx, 2,
+					"discarding candidates with higher load than loadThreshold(%v): %s", loadThreshold, s)
 			}
 			break
 		}
@@ -787,16 +782,13 @@ func sortTargetCandidateSetAndPick(
 			}
 			j++
 		}
-		if log.ExpensiveLogEnabled(ctx, 2) {
-			if s := formatCandidatesLog(cands.candidates[j:], overloadedDim); s != "" {
-				log.KvDistribution.VEventf(ctx, 2, "discarding candidates due to overloadedDim: %s", s)
-			}
+		if s := formatCandidatesLog(ctx, cands.candidates[j:], overloadedDim); s != "" {
+			log.KvDistribution.VEventf(ctx, 2, "discarding candidates due to overloadedDim: %s", s)
 		}
 		cands.candidates = cands.candidates[:j]
 	}
 	j = rng.Intn(j)
-	if log.ExpensiveLogEnabled(ctx, 2) {
-		s := formatCandidatesLog(cands.candidates, overloadedDim)
+	if s := formatCandidatesLog(ctx, cands.candidates, overloadedDim); s != "" {
 		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: candidates:%s, picked s%v", s, cands.candidates[j].StoreID)
 	}
 	if ignoreLevel == ignoreLoadNoChangeAndHigher && cands.candidates[j].sls >= loadNoChange ||
