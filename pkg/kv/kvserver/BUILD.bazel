@@ -284,6 +284,7 @@ go_test(
     srcs = [
         "addressing_test.go",
         "allocator_impl_test.go",
+        "ash_test.go",
         "batch_spanset_test.go",
         "below_raft_protos_test.go",
         "client_atomic_membership_change_test.go",
@@ -491,6 +492,7 @@ go_test(
         "//pkg/kv/kvtestutils",
         "//pkg/multitenant",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
+        "//pkg/obs/ash",
         "//pkg/raft",
         "//pkg/raft/confchange",
         "//pkg/raft/quorum",
