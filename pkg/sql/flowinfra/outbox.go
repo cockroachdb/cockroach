@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -172,7 +174,16 @@ func (m *Outbox) flush(ctx context.Context) error {
 	msg := m.encoder.FormMessage(ctx)
 
 	log.VEvent(ctx, 2, "Outbox flushing")
+	sendCleanup := ash.SetWorkState(
+		m.flowCtx.Codec().TenantID,
+		ash.WorkloadInfo{
+			WorkloadID:    m.flowCtx.EvalCtx.WorkloadID,
+			AppNameID:     m.flowCtx.EvalCtx.AppNameID,
+			GatewayNodeID: roachpb.NodeID(m.flowCtx.NodeID.SQLInstanceID()),
+		},
+		ash.WorkNetwork, "OutboxSend")
 	sendErr := m.stream.Send(msg)
+	sendCleanup()
 	if m.statsCollectionEnabled {
 		m.streamStats.NetTx.BytesSent.Add(int64(msg.Size()))
 		m.streamStats.NetTx.MessagesSent.Add(1)
