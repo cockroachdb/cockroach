@@ -9,7 +9,6 @@ import { all, fork } from "redux-saga/effects";
 import { clusterLocksSaga } from "./clusterLocks/clusterLocks.saga";
 import { clusterSettingsSaga } from "./clusterSettings/clusterSettings.saga";
 import { databasesListSaga } from "./databasesList";
-import { indexStatsSaga } from "./indexStats";
 import { transactionInsightDetailsSaga } from "./insightDetails/transactionInsightDetails";
 import { statementFingerprintInsightsSaga } from "./insights/statementFingerprintInsights";
 import { statementInsightsSaga } from "./insights/statementInsights";
@@ -45,7 +44,6 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(notifificationsSaga),
     fork(sqlStatsSaga),
     fork(sqlDetailsStatsSaga),
-    fork(indexStatsSaga),
     fork(clusterLocksSaga),
     fork(uiConfigSaga, cacheInvalidationPeriod),
     fork(statementFingerprintInsightsSaga),

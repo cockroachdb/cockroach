@@ -8,8 +8,8 @@ import { Heading, Icon } from "@cockroachlabs/ui-components";
 import { Col, Row, Tooltip } from "antd";
 import classNames from "classnames/bind";
 import flatMap from "lodash/flatMap";
-import moment, { Moment } from "moment-timezone";
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import { Moment } from "moment-timezone";
+import React, { useState, useCallback, useContext, useMemo } from "react";
 
 import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
@@ -25,11 +25,19 @@ import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
 
 import { Anchor } from "../anchor";
 import {
+  resetIndexStatsApi,
+  useTableIndexStats,
+  IndexRecommendation,
+  IndexRecTypeEnum,
+} from "../api/databases/tableIndexesApi";
+import {
   getStatementsUsingIndex,
   StatementsListRequestFromDetails,
-  StatementsUsingIndexRequest,
 } from "../api/indexDetailsApi";
+import { useNodes } from "../api/nodesApi";
+import { useUserSQLRoles } from "../api/userApi";
 import { commonStyles } from "../common";
+import { ClusterDetailsContext } from "../contexts";
 import { Pagination } from "../pagination";
 import {
   calculateActiveFilters,
@@ -49,13 +57,13 @@ import {
   makeStatementsColumns,
   populateRegionNodeForStatements,
 } from "../statementsTable";
-import { UIConfigState } from "../store";
 import { SummaryCard } from "../summaryCard";
 import { TableStatistics } from "../tableStatistics";
 import {
   TimeScale,
   timeScale1hMinOptions,
   TimeScaleDropdown,
+  toRoundedDateRange,
 } from "../timeScaleDropdown";
 import {
   calculateTotalWorkload,
@@ -65,6 +73,7 @@ import {
   performanceTuningRecipes,
   unique,
   unset,
+  useSwrWithClusterId,
 } from "../util";
 import {
   databaseDetailsPagePath,
@@ -77,92 +86,73 @@ import styles from "./indexDetailsPage.module.scss";
 const cx = classNames.bind(styles);
 const stmtCx = classNames.bind(statementsStyles);
 
-// We break out separate interfaces for some of the nested objects in our data
-// so that we can make (typed) test assertions on narrower slices of the data.
-//
-// The loading and loaded flags help us know when to dispatch the appropriate
-// refresh actions.
-//
-// The overall structure is:
-//
-//   interface IndexDetailsPageData {
-//     databaseName: string;
-//     tableName: string;
-//     indexName: string;
-//     details: { // IndexDetails;
-//       loading: boolean;
-//       loaded: boolean;
-//       tableID: string;
-//       indexID: string;
-//       createStatement: string;
-//       totalReads: number;
-//       lastRead: Moment;
-//       lastReset: Moment;
-//     }
-//   }
+// Parses a SQL-quoted schema-qualified table name into its parts.
+// e.g. '"public"."mytable"' -> { schema: "public", table: "mytable" }
+export function parseSchemaQualifiedTableName(qualifiedName: string): {
+  schema: string;
+  table: string;
+} {
+  const splitIdx = qualifiedName.indexOf('"."');
+  if (splitIdx >= 0) {
+    return {
+      schema: qualifiedName.substring(1, splitIdx),
+      table: qualifiedName.substring(splitIdx + 3, qualifiedName.length - 1),
+    };
+  }
+  const dotIdx = qualifiedName.indexOf(".");
+  if (dotIdx >= 0) {
+    return {
+      schema: qualifiedName.substring(0, dotIdx),
+      table: qualifiedName.substring(dotIdx + 1),
+    };
+  }
+  return { schema: "public", table: qualifiedName };
+}
 
-export interface IndexDetailsPageData {
+export interface IndexDetailsPageProps {
   databaseName: string;
   tableName: string;
   indexName: string;
-  details: IndexDetails;
-  isTenant: UIConfigState["isTenant"];
-  hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
-  hasAdminRole?: UIConfigState["hasAdminRole"];
-  nodeRegions: { [nodeId: string]: string };
   timeScale: TimeScale;
-}
-
-interface IndexDetails {
-  loading: boolean;
-  loaded: boolean;
-  tableID: string;
-  indexID: string;
-  createStatement: string;
-  totalReads: number;
-  lastRead: Moment;
-  lastReset: Moment;
-  indexRecommendations: IndexRecommendation[];
-  databaseID: number;
-}
-
-export type RecommendationType = "DROP_UNUSED" | "Unknown";
-
-interface IndexRecommendation {
-  type: RecommendationType;
-  reason: string;
-}
-
-export interface IndexDetailPageActions {
-  refreshIndexStats?: (database: string, table: string) => void;
-  resetIndexUsageStats?: (database: string, table: string) => void;
-  refreshNodes?: () => void;
-  refreshUserSQLRoles: () => void;
   onTimeScaleChange: (ts: TimeScale) => void;
 }
-
-export type IndexDetailsPageProps = IndexDetailsPageData &
-  IndexDetailPageActions;
 
 export function IndexDetailsPage(
   props: IndexDetailsPageProps,
 ): React.ReactElement {
-  const {
-    databaseName,
-    tableName,
-    indexName,
-    details,
-    isTenant,
-    hasViewActivityRedactedRole,
-    hasAdminRole,
-    nodeRegions,
-    timeScale,
-    refreshIndexStats,
-    resetIndexUsageStats,
-    refreshNodes,
-    refreshUserSQLRoles,
-    onTimeScaleChange,
-  } = props;
+  const { databaseName, tableName, indexName, timeScale, onTimeScaleChange } =
+    props;
+
+  const { isTenant } = useContext(ClusterDetailsContext);
+
+  // Parse the schema-qualified table name for the index stats hook.
+  const { schema: schemaName, table: unqualifiedTableName } = useMemo(
+    () => parseSchemaQualifiedTableName(tableName),
+    [tableName],
+  );
+
+  // Fetch index stats for the table.
+  const { indexStats, refreshIndexStats } = useTableIndexStats({
+    dbName: databaseName,
+    schemaName,
+    tableName: unqualifiedTableName,
+  });
+
+  // Find the specific index by name.
+  const indexDetail = useMemo(
+    () => indexStats.tableIndexes.find(idx => idx.indexName === indexName),
+    [indexStats.tableIndexes, indexName],
+  );
+
+  // Fetch node statuses for region info.
+  const { nodeRegionsByID: nodeRegions } = useNodes();
+
+  // Fetch user SQL roles.
+  const { data: userSQLRolesResp } = useUserSQLRoles();
+  const hasAdminRole = userSQLRolesResp?.roles?.includes("ADMIN");
+  const hasViewActivityRedactedRole = userSQLRolesResp?.roles?.includes(
+    "VIEWACTIVITYREDACTED",
+  );
 
   const [stmtSortSetting, setStmtSortSetting] = useState<SortSetting>({
     ascending: true,
@@ -172,93 +162,57 @@ export function IndexDetailsPage(
     pageSize: 10,
     current: 1,
   });
-  const [statements, setStatements] = useState<AggregateStatistics[]>([]);
-  const [lastStatementsUpdated, setLastStatementsUpdated] =
-    useState<moment.Moment | null>(null);
-  const [lastStatementsError, setLastStatementsError] = useState<Error | null>(
-    null,
-  );
   const [search, setSearch] = useState<string>(null);
   const [activeFilters, setActiveFilters] = useState<number>(0);
   const [filters, setFilters] = useState<Filters>(defaultFilters);
 
-  const refreshDataIntervalRef = useRef<NodeJS.Timeout>(null);
-
-  const refresh = useCallback(() => {
-    refreshUserSQLRoles();
-    if (refreshNodes != null && !isTenant) {
-      refreshNodes();
-    }
-    if (!details.loaded && !details.loading) {
-      refreshIndexStats?.(databaseName, tableName);
-    }
-  }, [
-    refreshUserSQLRoles,
-    refreshNodes,
-    isTenant,
-    details.loaded,
-    details.loading,
-    refreshIndexStats,
-    databaseName,
-    tableName,
-  ]);
-
-  const refreshStatementsList = useCallback(() => {
-    const noData = lastStatementsUpdated == null;
-    const movingTimeScaleWithPeriodPassed =
-      timeScale.key !== "Custom" &&
-      moment().diff(lastStatementsUpdated, "minutes") >= 5;
-    if ((noData || movingTimeScaleWithPeriodPassed) && details.loaded) {
-      const req: StatementsUsingIndexRequest = StatementsListRequestFromDetails(
-        details.tableID,
-        details.indexID,
-        databaseName,
-        timeScale,
-      );
-      getStatementsUsingIndex(req)
-        .then(res => {
-          populateRegionNodeForStatements(res.results, nodeRegions);
-          setStatements(res.results);
-          setLastStatementsUpdated(moment());
-          setLastStatementsError(null);
-        })
-        .catch(error => {
-          setLastStatementsUpdated(moment());
-          setLastStatementsError(error);
-        });
-    }
-  }, [
-    lastStatementsUpdated,
-    timeScale,
-    details.loaded,
-    details.tableID,
-    details.indexID,
-    databaseName,
-    nodeRegions,
-  ]);
-
-  // Initial refresh on mount.
-  useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  // Keep a ref to the latest refreshStatementsList so the interval
-  // doesn't need to be torn down and recreated on every state change.
-  const refreshStatementsListRef = useRef(refreshStatementsList);
-  refreshStatementsListRef.current = refreshStatementsList;
-
-  // Set up interval for refreshing statements list.
-  useEffect(() => {
-    refreshDataIntervalRef.current = setInterval(() => {
-      refreshStatementsListRef.current();
-    }, 100);
-
-    return () => {
-      if (refreshDataIntervalRef.current) {
-        clearInterval(refreshDataIntervalRef.current);
-      }
+  // Build the SWR key for statements using this index.
+  // Include timeScale range so key changes when the window changes,
+  // triggering a refetch. Pass null when index details aren't loaded
+  // yet to disable fetching.
+  const statementsSwrKey = useMemo(() => {
+    if (!indexDetail) return null;
+    const dateRange: [Moment | null, Moment | null] = timeScale
+      ? toRoundedDateRange(timeScale)
+      : [null, null];
+    return {
+      name: "statementsUsingIndex",
+      tableID: indexDetail.tableID,
+      indexID: indexDetail.indexID,
+      databaseName,
+      start: dateRange[0]?.toISOString(),
+      end: dateRange[1]?.toISOString(),
     };
-  }, [refreshStatementsListRef]);
+  }, [indexDetail, databaseName, timeScale]);
+
+  const { data: statementsData, error: lastStatementsError } =
+    useSwrWithClusterId(
+      statementsSwrKey,
+      statementsSwrKey
+        ? () =>
+            getStatementsUsingIndex(
+              StatementsListRequestFromDetails(
+                indexDetail.tableID,
+                indexDetail.indexID,
+                databaseName,
+                timeScale,
+              ),
+            )
+        : null,
+      {
+        refreshInterval: 5 * 60 * 1000, // 5 minutes
+        dedupingInterval: 5 * 60 * 1000,
+        revalidateOnFocus: false,
+      },
+    );
+
+  // Post-process statement results with node region info.
+  const statements = useMemo(() => {
+    if (!statementsData?.results) return [];
+    const results = [...statementsData.results];
+    populateRegionNodeForStatements(results, nodeRegions);
+    return results;
+  }, [statementsData, nodeRegions]);
 
   const onChangeSortSetting = (ss: SortSetting): void => {
     setStmtSortSetting(ss);
@@ -299,24 +253,21 @@ export function IndexDetailsPage(
     resetPagination();
   }, [resetPagination]);
 
-  const changeTimeScale = useCallback(
-    (ts: TimeScale): void => {
-      if (onTimeScaleChange) {
-        onTimeScaleChange(ts);
-      }
-      setLastStatementsUpdated(null);
-      refresh();
-    },
-    [onTimeScaleChange, refresh],
-  );
-
-  const getTimestamp = (timestamp: Moment) => {
-    const minDate = moment.utc("0001-01-01"); // minimum value as per UTC
-    if (timestamp.isSame(minDate)) {
-      return <>Never</>;
-    } else {
-      return <Timestamp time={timestamp} format={DATE_FORMAT_24_TZ} />;
+  const handleResetIndexStats = useCallback(async () => {
+    try {
+      await resetIndexStatsApi();
+      refreshIndexStats();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to reset index stats:", e);
     }
+  }, [refreshIndexStats]);
+
+  const getTimestampOrNull = (timestamp: Moment | null) => {
+    if (timestamp == null) {
+      return <>Never</>;
+    }
+    return <Timestamp time={timestamp} format={DATE_FORMAT_24_TZ} />;
   };
 
   const getApps = (): string[] => {
@@ -351,8 +302,11 @@ export function IndexDetailsPage(
     return indexRecommendations.map((recommendation, key) => {
       let recommendationType: string;
       switch (recommendation.type) {
-        case "DROP_UNUSED":
+        case IndexRecTypeEnum.DROP_UNUSED:
           recommendationType = "Drop unused index";
+          break;
+        default:
+          recommendationType = "Unknown";
       }
       return (
         <tr key={key} className={cx("index-recommendations-rows")}>
@@ -383,17 +337,19 @@ export function IndexDetailsPage(
   };
 
   const renderBreadcrumbs = () => {
+    const databaseID = indexStats.databaseID;
+    const tableID = indexDetail?.tableID;
     return (
       <Breadcrumbs
         items={[
           { link: DB_PAGE_PATH, name: "Databases" },
           {
-            link: databaseDetailsPagePath(details.databaseID),
+            link: databaseDetailsPagePath(databaseID),
             name: databaseName,
           },
           {
-            link: tableDetailsPagePath(parseInt(details.tableID, 10)),
-            name: `Table: ${tableName}`,
+            link: tableDetailsPagePath(tableID ? parseInt(tableID, 10) : 0),
+            name: `Table: ${unqualifiedTableName}`,
           },
           {
             link: EncodeDatabaseTableIndexUri(
@@ -446,6 +402,12 @@ export function IndexDetailsPage(
 
   const filteredStmts = filteredStatements();
 
+  const totalReads = indexDetail?.totalReads ?? 0;
+  const lastRead = indexDetail?.lastRead;
+  const lastReset = indexStats.lastReset;
+  const createStatement = indexDetail?.createStatement ?? "";
+  const indexRecommendations = indexDetail?.indexRecs ?? [];
+
   return (
     <div className={cx("page-container")}>
       <div className="root table-area">
@@ -467,7 +429,7 @@ export function IndexDetailsPage(
               title="Index stats accumulate from the time the index was created or had its stats reset.. Clicking 'Reset all index stats' will reset index stats for the entire cluster. Last reset is the timestamp at which the last reset started."
             >
               <div className={cx("last-reset", "underline")}>
-                Last reset: {getTimestamp(details.lastReset)}
+                Last reset: {getTimestampOrNull(lastReset)}
               </div>
             </Tooltip>
             {hasAdminRole && (
@@ -478,7 +440,7 @@ export function IndexDetailsPage(
                     "separator",
                     "index-stats__reset-btn",
                   )}
-                  onClick={() => resetIndexUsageStats(databaseName, tableName)}
+                  onClick={handleResetIndexStats}
                 >
                   Reset all index stats
                 </a>
@@ -489,10 +451,7 @@ export function IndexDetailsPage(
         <section className={baseHeadingClasses.wrapper}>
           <Row gutter={18}>
             <Col className="gutter-row" span={18}>
-              <SqlBox
-                value={details.createStatement}
-                size={SqlBoxSize.CUSTOM}
-              />
+              <SqlBox value={createStatement} size={SqlBoxSize.CUSTOM} />
             </Col>
           </Row>
           <Row gutter={18}>
@@ -513,7 +472,7 @@ export function IndexDetailsPage(
                       </td>
                       <td className="table__cell">
                         <p className={cx("summary-card--value")}>
-                          {Count(details.totalReads)}
+                          {Count(totalReads)}
                         </p>
                       </td>
                     </tr>
@@ -528,7 +487,7 @@ export function IndexDetailsPage(
                       </td>
                       <td className="table__cell">
                         <p className={cx("summary-card--value")}>
-                          {getTimestamp(details.lastRead)}
+                          {getTimestampOrNull(lastRead)}
                         </p>
                       </td>
                     </tr>
@@ -543,7 +502,7 @@ export function IndexDetailsPage(
                 <Heading type="h5">Index Recommendations</Heading>
                 <table>
                   <tbody>
-                    {renderIndexRecommendations(details.indexRecommendations)}
+                    {renderIndexRecommendations(indexRecommendations)}
                   </tbody>
                 </table>
               </SummaryCard>
@@ -581,12 +540,12 @@ export function IndexDetailsPage(
                     <TimeScaleDropdown
                       options={timeScale1hMinOptions}
                       currentScale={timeScale}
-                      setTimeScale={changeTimeScale}
+                      setTimeScale={onTimeScaleChange}
                     />
                   </PageConfigItem>
                 </PageConfig>
                 <Loading
-                  loading={statements == null}
+                  loading={!statementsData && !lastStatementsError}
                   page="index details"
                   error={lastStatementsError}
                   renderError={() =>
