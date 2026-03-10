@@ -701,7 +701,9 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		storeAndLeasePreferenceSlicePool.Put(pLeasePrefs)
 		storeIDSlicePool.Put(pCandsPL)
 		candidateInfoSlicePool.Put(pCandInfos)
+		clear(scratchNodes)
 		nodeLoadMapPool.Put(scratchNodes)
+		clear(scratchStores)
 		storeIDStructMapPool.Put(scratchStores)
 	}()
 	for i := 0; i < n; i++ {
@@ -827,7 +829,6 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		// INVARIANT: candsPL has at least one candidate other than store.StoreID,
 		// which is also in cands.
 
-		clear(scratchNodes)
 		// NB: candsPL is not empty - it includes at least the current leaseholder
 		// and one additional candidate.
 		means := computeMeansForStoreSet(re, candsPL, scratchNodes, scratchStores)
