@@ -10011,6 +10011,7 @@ WHERE object_id = table_descriptor_id
 			DistsqlBlocklist: true,
 		},
 		sessionVariableHintOverload,
+		sessionVariableHintWithDatabaseOverload,
 	),
 	"crdb_internal.clear_statement_hints_cache": makeBuiltin(
 		tree.FunctionProperties{
@@ -13331,6 +13332,85 @@ var rewriteInlineHintsWithDatabaseOverload = tree.Overload{
 	Volatility: volatility.Volatile,
 }
 
+// sessionVariableHintImpl is the shared implementation for the 3-arg and 4-arg
+// overloads of information_schema.crdb_set_session_variable_hint.
+func sessionVariableHintImpl(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	statementFingerprintArg, varName, varValue, optDatabase string,
+) (tree.Datum, error) {
+	// Session variable hints require the hint_type column to exist.
+	if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V26_2_StatementHintsTypeColumnBackfilled) {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported,
+			"session variable hints cannot be used until the cluster version is upgraded to %s",
+			clusterversion.V26_2_StatementHintsTypeColumnBackfilled.Version(),
+		)
+	}
+
+	// The user must have REPAIRCLUSTER to use this builtin.
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+	); err != nil {
+		return nil, err
+	}
+
+	// Parse and normalize the statement fingerprint.
+	fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
+		&evalCtx.Settings.SV,
+	))
+	fingerprint, err := parserutils.FingerprintStatement(
+		parserutils.FingerprintTagStatementFingerprint, statementFingerprintArg, fingerprintFlags,
+	)
+	if err != nil {
+		return nil, err
+	}
+	stmt, err := parserutils.ParseOne(fingerprint)
+	if err != nil {
+		return nil, err
+	}
+	if isTransactionControlStatement(stmt.AST) {
+		return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+			"transaction control statements cannot be used as hint targets")
+	}
+	if fingerprint != statementFingerprintArg {
+		evalCtx.ClientNoticeSender.BufferClientNotice(
+			ctx, pgnotice.Newf("statement fingerprint changed to: %s", fingerprint),
+		)
+	}
+
+	// Validate that the variable exists, is writable, is safe to hint,
+	// and that the value is valid.
+	if err := evalCtx.Planner.ValidateSessionVariableHint(
+		ctx, varName, varValue, evalCtx.SessionData().SafeUpdates,
+	); err != nil {
+		return nil, err
+	}
+
+	// Create the session variable hint and insert into system.statement_hints.
+	var hint hintpb.StatementHintUnion
+	hint.SetValue(&hintpb.SessionVariableHint{
+		VariableName:  varName,
+		VariableValue: varValue,
+	})
+	hintID, err := evalCtx.Planner.InsertStatementHint(ctx, fingerprint, hint, optDatabase)
+	if err != nil {
+		return nil, err
+	}
+
+	// Log the session variable hint event.
+	if err := evalCtx.Planner.LogEvent(ctx, &eventpb.SetSessionVariableHint{
+		StatementFingerprint: fingerprint,
+		VariableName:         varName,
+		VariableValue:        varValue,
+		HintID:               hintID,
+		Database:             optDatabase,
+	}); err != nil {
+		return nil, err
+	}
+
+	return tree.NewDInt(tree.DInt(hintID)), nil
+}
+
 var sessionVariableHintOverload = tree.Overload{
 	Types: tree.ParamTypes{
 		{Name: "statement_fingerprint", Typ: types.String},
@@ -13339,84 +13419,39 @@ var sessionVariableHintOverload = tree.Overload{
 	},
 	ReturnType: tree.FixedReturnType(types.Int),
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-		// Session variable hints require the hint_type column to exist.
-		if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V26_2_StatementHintsTypeColumnBackfilled) {
-			return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-				"session variable hints cannot be used until the cluster version is upgraded to %s",
-				clusterversion.V26_2_StatementHintsTypeColumnBackfilled.Version(),
-			)
-		}
-
-		// The user must have REPAIRCLUSTER to use this builtin.
-		if err := evalCtx.SessionAccessor.CheckPrivilege(
-			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
-		); err != nil {
-			return nil, err
-		}
-
 		statementFingerprintArg := string(tree.MustBeDString(args[0]))
 		varName := string(tree.MustBeDString(args[1]))
 		varValue := string(tree.MustBeDString(args[2]))
-
-		// Parse and normalize the statement fingerprint.
-		fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
-			&evalCtx.Settings.SV,
-		))
-		fingerprint, err := parserutils.FingerprintStatement(
-			parserutils.FingerprintTagStatementFingerprint, statementFingerprintArg, fingerprintFlags,
-		)
-		if err != nil {
-			return nil, err
-		}
-		stmt, err := parserutils.ParseOne(fingerprint)
-		if err != nil {
-			return nil, err
-		}
-		if isTransactionControlStatement(stmt.AST) {
-			return nil, pgerror.Newf(pgcode.InvalidParameterValue,
-				"transaction control statements cannot be used as hint targets")
-		}
-		if fingerprint != statementFingerprintArg {
-			evalCtx.ClientNoticeSender.BufferClientNotice(
-				ctx, pgnotice.Newf("statement fingerprint changed to: %s", fingerprint),
-			)
-		}
-
-		// Validate that the variable exists, is writable, is safe to hint,
-		// and that the value is valid.
-		if err := evalCtx.Planner.ValidateSessionVariableHint(
-			ctx, varName, varValue, evalCtx.SessionData().SafeUpdates,
-		); err != nil {
-			return nil, err
-		}
-
-		// Create the session variable hint and insert into system.statement_hints.
-		var hint hintpb.StatementHintUnion
-		hint.SetValue(&hintpb.SessionVariableHint{
-			VariableName:  varName,
-			VariableValue: varValue,
-		})
-		hintID, err := evalCtx.Planner.InsertStatementHint(ctx, fingerprint, hint, "" /* optDatabase */)
-		if err != nil {
-			return nil, err
-		}
-
-		// Log the session variable hint event.
-		if err := evalCtx.Planner.LogEvent(ctx, &eventpb.SetSessionVariableHint{
-			StatementFingerprint: fingerprint,
-			VariableName:         varName,
-			VariableValue:        varValue,
-			HintID:               hintID,
-		}); err != nil {
-			return nil, err
-		}
-
-		return tree.NewDInt(tree.DInt(hintID)), nil
+		return sessionVariableHintImpl(ctx, evalCtx, statementFingerprintArg, varName, varValue, "" /* optDatabase */)
 	},
 	Info: `This function adds a session variable override hint for a statement fingerprint. It ` +
 		`returns the hint ID of the newly created hint. The hint only applies to matching ` +
 		`statement fingerprints and temporarily overrides the specified session variable ` +
 		`for that statement only. Safe variables can be hinted without restrictions. ` +
 		`Unsafe variables cannot be hinted when sql_safe_updates is enabled.`,
+	Volatility: volatility.Volatile,
+}
+
+var sessionVariableHintWithDatabaseOverload = tree.Overload{
+	Types: tree.ParamTypes{
+		{Name: "statement_fingerprint", Typ: types.String},
+		{Name: "variable_name", Typ: types.String},
+		{Name: "variable_value", Typ: types.String},
+		{Name: "database", Typ: types.String},
+	},
+	ReturnType: tree.FixedReturnType(types.Int),
+	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+		statementFingerprintArg := string(tree.MustBeDString(args[0]))
+		varName := string(tree.MustBeDString(args[1]))
+		varValue := string(tree.MustBeDString(args[2]))
+		database := string(tree.MustBeDString(args[3]))
+		return sessionVariableHintImpl(ctx, evalCtx, statementFingerprintArg, varName, varValue, database)
+	},
+	Info: `This function adds a session variable override hint for a statement fingerprint, scoped ` +
+		`to the given database. It returns the hint ID of the newly created hint. The hint only ` +
+		`applies to matching statement fingerprints when the current database matches the ` +
+		`specified database, and temporarily overrides the specified session variable for that ` +
+		`statement only. Safe variables can be hinted without restrictions. Unsafe variables ` +
+		`cannot be hinted when sql_safe_updates is enabled.`,
 	Volatility: volatility.Volatile,
 }
