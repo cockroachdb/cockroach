@@ -21,8 +21,6 @@ import {
   staggeredVersionDismissedSetting,
   newVersionNotificationSelector,
   newVersionDismissedLocalSetting,
-  disconnectedAlertSelector,
-  disconnectedDismissedLocalSetting,
   emailSubscriptionAlertLocalSetting,
   emailSubscriptionAlertSelector,
   clusterPreserveDowngradeOptionDismissedSetting,
@@ -33,7 +31,6 @@ import {
   versionReducerObj,
   nodesReducerObj,
   clusterReducerObj,
-  healthReducerObj,
   settingsReducerObj,
 } from "./apiReducers";
 import { loginSuccess } from "./login";
@@ -400,55 +397,6 @@ describe("alerts", function () {
       });
     });
 
-    describe("disconnected alert", function () {
-      it("requires health to be available before displaying", function () {
-        const alert = disconnectedAlertSelector(state());
-        expect(alert).toBeUndefined();
-      });
-
-      it("does not display when cluster is healthy", function () {
-        dispatch(
-          healthReducerObj.receiveData(
-            new protos.cockroach.server.serverpb.ClusterResponse({}),
-          ),
-        );
-        const alert = disconnectedAlertSelector(state());
-        expect(alert).toBeUndefined();
-      });
-
-      it("displays when cluster health endpoint returns an error", function () {
-        dispatch(healthReducerObj.errorData(new Error("error")));
-        const alert = disconnectedAlertSelector(state());
-        expect(typeof alert).toBe("object");
-        expect(alert.level).toEqual(AlertLevel.CRITICAL);
-        expect(alert.title).toEqual(
-          "We're currently having some trouble fetching updated data. If this persists, it might be a good idea to check your network connection to the CockroachDB cluster.",
-        );
-      });
-
-      it("does not display if dismissed locally", function () {
-        dispatch(healthReducerObj.errorData(new Error("error")));
-        dispatch(disconnectedDismissedLocalSetting.set(moment()));
-        const alert = disconnectedAlertSelector(state());
-        expect(alert).toBeUndefined();
-      });
-
-      it("dismisses by setting local dismissal", function (done) {
-        dispatch(healthReducerObj.errorData(new Error("error")));
-        const alert = disconnectedAlertSelector(state());
-        const beforeDismiss = moment();
-
-        alert.dismiss(dispatch, state).then(() => {
-          expect(
-            disconnectedDismissedLocalSetting
-              .selector(state())
-              .isSameOrAfter(beforeDismiss),
-          ).toBe(true);
-          done();
-        });
-      });
-    });
-
     describe("email signup for release notes alert", () => {
       it("initialized with default 'false' (hidden) state", () => {
         const settingState =
@@ -543,7 +491,6 @@ describe("alerts", function () {
       expect(state().cachedData.cluster.inFlight).toBe(true);
       expect(state().cachedData.nodes.inFlight).toBe(true);
       expect(state().cachedData.version.inFlight).toBe(false);
-      expect(state().cachedData.health.inFlight).toBe(true);
     });
 
     it("dispatches request for version data when cluster ID and nodes are available", function () {
@@ -595,17 +542,6 @@ describe("alerts", function () {
       expect(state().cachedData.version.inFlight).toBe(false);
     });
 
-    it("refreshes health function whenever the last health response is no longer valid.", function () {
-      dispatch(
-        healthReducerObj.receiveData(
-          new protos.cockroach.server.serverpb.ClusterResponse({}),
-        ),
-      );
-      dispatch(healthReducerObj.invalidateData());
-      sync();
-      expect(state().cachedData.health.inFlight).toBe(true);
-    });
-
     it("does not do anything when all data is available.", function () {
       dispatch(
         nodesReducerObj.receiveData([
@@ -629,11 +565,6 @@ describe("alerts", function () {
         versionReducerObj.receiveData({
           details: [],
         }),
-      );
-      dispatch(
-        healthReducerObj.receiveData(
-          new protos.cockroach.server.serverpb.ClusterResponse({}),
-        ),
       );
       dispatch(
         settingsReducerObj.receiveData(

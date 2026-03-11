@@ -32,7 +32,6 @@ import {
   refreshCluster,
   refreshNodes,
   refreshVersion,
-  refreshHealth,
   refreshSettings,
 } from "./apiReducers";
 import {
@@ -265,41 +264,6 @@ export const newVersionNotificationSelector = createSelector(
             value: dismissedAt.valueOf(),
           }),
         );
-      },
-    };
-  },
-);
-
-export const disconnectedDismissedLocalSetting = new LocalSetting(
-  "disconnected_dismissed",
-  localSettingsSelector,
-  moment(0),
-);
-
-/**
- * Notification when the Admin UI is disconnected from the cluster.
- */
-export const disconnectedAlertSelector = createSelector(
-  (state: AdminUIState) => state.cachedData.health,
-  disconnectedDismissedLocalSetting.selector,
-  (health, disconnectedDismissed): Alert => {
-    if (!health || !health.lastError) {
-      return undefined;
-    }
-
-    // Allow local dismissal for one minute.
-    const dismissedMaxTime = moment().subtract(1, "m");
-    if (disconnectedDismissed.isAfter(dismissedMaxTime)) {
-      return undefined;
-    }
-
-    return {
-      level: AlertLevel.CRITICAL,
-      title:
-        "We're currently having some trouble fetching updated data. If this persists, it might be a good idea to check your network connection to the CockroachDB cluster.",
-      dismiss: (dispatch: Dispatch<Action>) => {
-        dispatch(disconnectedDismissedLocalSetting.set(moment()));
-        return Promise.resolve();
       },
     };
   },
@@ -736,7 +700,6 @@ export const isManagedClusterSelector = createSelector(
  * all critical-level alerts.
  */
 export const bannerAlertsSelector = createSelector(
-  disconnectedAlertSelector,
   emailSubscriptionAlertSelector,
   createStatementDiagnosticsAlertSelector,
   cancelStatementDiagnosticsAlertSelector,
@@ -763,9 +726,6 @@ export function alertDataSync(store: Store<AdminUIState>) {
 
   return () => {
     const state: AdminUIState = store.getState();
-
-    // Always refresh health.
-    dispatch(refreshHealth());
 
     const { Insecure } = getDataFromServer();
     // We should not send out requests to the endpoints below if
