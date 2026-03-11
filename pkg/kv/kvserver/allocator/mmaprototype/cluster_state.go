@@ -1348,7 +1348,7 @@ type clusterState struct {
 	*localityTierInterner
 	meansMemo *meansMemo
 
-	mmaid int // a counter for rebalanceStores calls, for logging
+	mmaid int // a counter for repair/rebalanceStores calls, for logging
 
 	// Disk utilization thresholds from cluster settings. These are set via
 	// SetDiskUtilThresholds.

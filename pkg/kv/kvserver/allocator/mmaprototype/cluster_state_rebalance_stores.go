@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -147,10 +146,6 @@ type sheddingStore struct {
 func (re *rebalanceEnv) rebalanceStores(
 	ctx context.Context, localStoreID roachpb.StoreID,
 ) []ExternalRangeChange {
-	re.mmaid++
-	id := re.mmaid
-	ctx = logtags.AddTag(ctx, "mmaid", id)
-
 	log.KvDistribution.VEventf(ctx, 2, "rebalanceStores begins")
 	// To select which stores are overloaded, we use a notion of overload that
 	// is based on cluster means (and of course individual store/node

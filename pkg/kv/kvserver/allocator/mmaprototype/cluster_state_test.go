@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
@@ -421,6 +422,13 @@ func TestClusterState(t *testing.T) {
 			tr.SetRedactable(true)
 			defer tr.Close()
 
+			// The test DSL maintains its own mmaid counter to tag contexts
+			// for repair and rebalance-stores directives. In production,
+			// ComputeChanges increments mmaid once and shares it across
+			// both phases, but tests call repair() and rebalanceStores()
+			// directly.
+			testMmaid := 0
+
 			printNodeListMeta := func(t *testing.T) string {
 				nodeList := []int{}
 				for nodeID := range cs.nodes {
@@ -711,6 +719,9 @@ func TestClusterState(t *testing.T) {
 					dsm := newDiversityScoringMemo()
 					passObs := makeRebalancingPassMetricsAndLogger(storeID)
 					re := newRebalanceEnv(cs, rng, dsm, cs.ts.Now(), passObs)
+					testMmaid++
+					re.mmaid = testMmaid
+					ctx = logtags.AddTag(ctx, "mmaid", re.mmaid)
 
 					if n, ok := dd.ScanArgOpt[int](t, d, "max-lease-transfer-count"); ok {
 						re.maxLeaseTransferCount = n
@@ -762,6 +773,9 @@ func TestClusterState(t *testing.T) {
 					dsm := newDiversityScoringMemo()
 					passObs := makeRebalancingPassMetricsAndLogger(storeID)
 					re := newRebalanceEnv(cs, rng, dsm, cs.ts.Now(), passObs)
+					testMmaid++
+					re.mmaid = testMmaid
+					ctx = logtags.AddTag(ctx, "mmaid", re.mmaid)
 					re.repair(ctx, storeID)
 					rec := finishAndGet()
 					var sb redact.StringBuilder
@@ -784,25 +798,6 @@ func TestClusterState(t *testing.T) {
 						slices.Sort(ids)
 						fmt.Fprintf(&sb, "%s:", action)
 						for i, rid := range ids {
-							if i > 0 {
-								fmt.Fprintf(&sb, ",")
-							}
-							fmt.Fprintf(&sb, " r%d", rid)
-						}
-						fmt.Fprintln(&sb)
-					}
-					// RepairPending ranges are not in repairRanges, so
-					// scan for them separately.
-					var pendingIDs []roachpb.RangeID
-					for rid, rs := range cs.ranges {
-						if rs.repairAction == RepairPending {
-							pendingIDs = append(pendingIDs, rid)
-						}
-					}
-					if len(pendingIDs) > 0 {
-						slices.Sort(pendingIDs)
-						fmt.Fprintf(&sb, "RepairPending:")
-						for i, rid := range pendingIDs {
 							if i > 0 {
 								fmt.Fprintf(&sb, ",")
 							}
