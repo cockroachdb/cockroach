@@ -78,6 +78,7 @@ func EvalLinkExternalSSTable(
 				Span:                    roachpb.Span{Key: start.Key, EndKey: end.Key},
 				RemoteRewriteTimestamp:  rewriteTimestamp,
 				RemoteSyntheticPrefix:   args.ExternalFile.SyntheticPrefix,
+				RemoteEncryptionKey:     args.ExternalFile.EncryptionKey,
 			},
 			MVCCHistoryMutation: mvccHistoryMutation,
 		},

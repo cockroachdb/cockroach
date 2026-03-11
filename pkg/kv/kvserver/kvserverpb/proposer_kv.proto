@@ -277,6 +277,7 @@ message ReplicatedEvalResult {
     uint64 approximate_physical_size = 5;
     util.hlc.Timestamp remote_rewrite_timestamp = 6 [(gogoproto.nullable) = false];
     bytes remote_synthetic_prefix = 7;
+    bytes remote_encryption_key = 8;
   }
 
   LinkExternalSSTable link_external_sstable = 27 [(gogoproto.customname) = "LinkExternalSSTable"];

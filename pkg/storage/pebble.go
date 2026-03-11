@@ -1033,8 +1033,19 @@ type remoteStorageAdaptor struct {
 }
 
 func (r remoteStorageAdaptor) CreateStorage(locator remote.Locator) (remote.Storage, error) {
-	es, err := r.factory.OpenURL(r.ctx, string(locator))
-	return &externalStorageWrapper{p: r.p, ctx: r.ctx, es: es}, err
+	loc, key, err := decodeLocator(string(locator))
+	if err != nil {
+		return nil, errors.Wrap(err, "parsing encryption key from locator")
+	}
+	es, err := r.factory.OpenURL(r.ctx, loc)
+	if err != nil {
+		return nil, err
+	}
+	s := &externalStorageWrapper{p: r.p, ctx: r.ctx, es: es}
+	if key != nil {
+		return &decryptingReadOnlyStorage{inner: s, key: key}, nil
+	}
+	return s, nil
 }
 
 // newPebble creates a new Pebble instance, at the specified path.

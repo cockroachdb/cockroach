@@ -637,6 +637,11 @@ func (rd *restoreDataProcessor) linkFiles(
 			batchTimestamp = kvDB.Clock().Now()
 		}
 
+		var encryptionKey []byte
+		if rd.spec.Encryption != nil {
+			encryptionKey = rd.spec.Encryption.Key
+		}
+
 		loc := kvpb.LinkExternalSSTableRequest_ExternalFile{
 			Locator:                 file.Dir.URI,
 			Path:                    file.Path,
@@ -645,6 +650,7 @@ func (rd *restoreDataProcessor) linkFiles(
 			SyntheticPrefix:         syntheticPrefix,
 			UseSyntheticSuffix:      batchTimestamp.IsSet(),
 			MVCCStats:               fileStats,
+			EncryptionKey:           encryptionKey,
 		}
 
 		if err := kvDB.LinkExternalSSTable(ctx, restoringSubspan, loc, batchTimestamp); err != nil {

@@ -2199,11 +2199,15 @@ message LinkExternalSSTableRequest {
     uint64 approximate_physical_size = 4;
     bytes synthetic_prefix = 5;
     bool use_synthetic_suffix = 6;
+    // EncryptionKey is the base64url-encoded AES encryption key for
+    // decrypting this SST file. When set, the storage layer transparently
+    // decrypts reads by embedding the key in the locator URL.
+    bytes encryption_key = 7;
 
     // MVCCStats are estimated MVCCStats for the contents of this Extrenal SSTable
     // and is used as-is during evaluation of the command to update the range
     // MVCCStats, instead of computing the stats for the SSTable by iterating it.
-    storage.enginepb.MVCCStats mvcc_stats = 7 [(gogoproto.customname) = "MVCCStats"];
+    storage.enginepb.MVCCStats mvcc_stats = 8 [(gogoproto.customname) = "MVCCStats"];
   }
   ExternalFile external_file = 4 [(gogoproto.nullable) = false];
 }

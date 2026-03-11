@@ -238,7 +238,7 @@ func sendAddRemoteSSTs(
 	}
 
 	approxRows, approxDataSize, err = linkExternalFiles(
-		ctx, execCtx, genSpan, *kr, fromSystemTenant, requestFinishedCh,
+		ctx, execCtx, genSpan, *kr, fromSystemTenant, encryption, requestFinishedCh,
 	)
 	return approxRows, approxDataSize, errors.Wrap(err, "failed to ingest into remote files")
 }
@@ -278,6 +278,7 @@ func linkExternalFiles(
 	genSpans func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
 	kr KeyRewriter,
 	fromSystemTenant bool,
+	encryption *jobspb.BackupEncryptionOptions,
 	requestFinishedCh chan<- struct{},
 ) (approxRows int64, approxDataSize int64, err error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backup.linkExternalFiles")
@@ -296,7 +297,7 @@ func linkExternalFiles(
 	grp.GoCtx(func(ctx context.Context) error { return genSpans(ctx, ch) })
 	for i := 0; i < workers; i++ {
 		grp.GoCtx(sendAddRemoteSSTWorker(
-			execCtx, ch, requestFinishedCh, kr, fromSystemTenant, &approxRows, &approxDataSize,
+			execCtx, ch, requestFinishedCh, kr, fromSystemTenant, encryption, &approxRows, &approxDataSize,
 		))
 	}
 	if err := grp.Wait(); err != nil {
@@ -311,6 +312,7 @@ func sendAddRemoteSSTWorker(
 	requestFinishedCh chan<- struct{},
 	kr KeyRewriter,
 	fromSystemTenant bool,
+	encryption *jobspb.BackupEncryptionOptions,
 	approxRows *int64,
 	approxDataSize *int64,
 ) func(context.Context) error {
@@ -355,7 +357,7 @@ func sendAddRemoteSSTWorker(
 				log.Dev.VInfof(ctx, 1, "restoring span %s of file %s (file span: %s)", restoringSubspan, file.Path, file.BackupFileEntrySpan)
 				file.BackupFileEntrySpan = restoringSubspan
 
-				if err := sendRemoteAddSSTable(ctx, execCtx, file, entry.ElidedPrefix, fromSystemTenant); err != nil {
+				if err := sendRemoteAddSSTable(ctx, execCtx, file, entry.ElidedPrefix, fromSystemTenant, encryption); err != nil {
 					return err
 				}
 
@@ -428,6 +430,7 @@ func sendRemoteAddSSTable(
 	file execinfrapb.RestoreFileSpec,
 	elidedPrefixType execinfrapb.ElidePrefix,
 	fromSystemTenant bool,
+	encryption *jobspb.BackupEncryptionOptions,
 ) error {
 	ctx, sp := tracing.ChildSpan(ctx, "backup.sendRemoteAddSSTable")
 	defer sp.Finish()
@@ -469,6 +472,11 @@ func sendRemoteAddSSTable(
 		batchTimestamp = execCtx.ExecCfg().DB.Clock().Now()
 	}
 
+	var encryptionKey []byte
+	if encryption != nil {
+		encryptionKey = encryption.Key
+	}
+
 	loc := kvpb.LinkExternalSSTableRequest_ExternalFile{
 		Locator:                 file.Dir.URI,
 		Path:                    file.Path,
@@ -477,6 +485,7 @@ func sendRemoteAddSSTable(
 		SyntheticPrefix:         syntheticPrefix,
 		UseSyntheticSuffix:      batchTimestamp.IsSet(),
 		MVCCStats:               fileStats,
+		EncryptionKey:           encryptionKey,
 	}
 
 	return execCtx.ExecCfg().DB.LinkExternalSSTable(

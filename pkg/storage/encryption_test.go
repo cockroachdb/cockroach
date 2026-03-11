@@ -66,7 +66,7 @@ func TestEncryptDecrypt(t *testing.T) {
 		ciphertext, err := EncryptFile(plaintext, key)
 		require.NoError(t, err)
 
-		r, err := decryptingReader(bytes.NewReader(ciphertext), key)
+		r, err := newDecryptingReadableFile(context.Background(), bytes.NewReader(ciphertext), int64(len(ciphertext)), key)
 		require.NoError(t, err)
 
 		t.Run("start", func(t *testing.T) {
@@ -182,7 +182,7 @@ func TestEncryptDecrypt(t *testing.T) {
 					plainReader := bytes.NewReader(plaintext)
 					ciphertext, err := EncryptFile(plaintext, key)
 					require.NoError(t, err)
-					r, err := decryptingReader(bytes.NewReader(ciphertext), key)
+					r, err := newDecryptingReadableFile(context.Background(), bytes.NewReader(ciphertext), int64(len(ciphertext)), key)
 					require.NoError(t, err)
 					for k := 0; k < reads; k++ {
 						start := rng.Int63n(int64(float64(len(plaintext)+1) * 1.1))
@@ -264,7 +264,7 @@ func BenchmarkEncryption(b *testing.B) {
 						ciphertext := bytes.NewReader(ciphertextOriginal[chunkSizeNum])
 						for i := 0; i < b.N; i++ {
 							ciphertext.Reset(ciphertextOriginal[chunkSizeNum])
-							r, err := decryptingReader(ciphertext, key)
+							r, err := newDecryptingReadableFile(context.Background(), ciphertext, int64(ciphertext.Len()), key)
 							if err != nil {
 								b.Fatal(err)
 							}

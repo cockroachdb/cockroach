@@ -12,14 +12,17 @@ import (
 	"crypto/cipher"
 	crypto_rand "crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"io"
-	"os"
+	"net/url"
 
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/objstorage"
+	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/vfs"
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -38,6 +41,7 @@ import (
 var encryptionPreamble = []byte("encrypt")
 
 const encryptionSaltSize = 16
+const encryptionKeySize = 32
 
 // v2 is an IV followed by 1 or more sealed GCM messages representing chunks of
 // the original input. The last chunk is always less than full size (and may be
@@ -53,6 +57,54 @@ var encryptionChunkSizeV2 = 64 << 10 // 64kb
 const nonceSize = 12                 // GCM standard nonce
 const headerSize = 7 + 1 + nonceSize // preamble + version + iv
 const encryptionTagSize = 16         // GCM standard tag
+
+// EncryptionKeyQueryParam is the URL query parameter used to embed an
+// encryption key in a remote storage locator URI. Used by online restore
+// to pass encryption keys through to the storage layer for transparent
+// decryption of encrypted backup SSTs.
+const EncryptionKeyQueryParam = "COCKROACH_INTERNAL_BACKUP_ENCRYPTION_KEY"
+
+func EncodeDecryptingLocator(uri string, key []byte) (string, error) {
+	url, err := url.Parse(uri)
+	if err != nil {
+		return uri, err
+	}
+
+	if len(key) != encryptionKeySize {
+		return "", errors.AssertionFailedf("encryption key must be %d bytes", encryptionKeySize)
+	}
+	encodedKey := base64.URLEncoding.EncodeToString(key)
+	vals := url.Query()
+	vals.Set(EncryptionKeyQueryParam, encodedKey)
+	url.RawQuery = vals.Encode()
+
+	return url.String(), nil
+}
+
+// decodeLocator parses a locator URL and extracts the encryption key
+// query parameter if present. Returns the cleaned URL (without the param)
+// and the decoded key bytes, or the original locator and nil if no key.
+func decodeLocator(locator string) (string, []byte, error) {
+	uri, err := url.Parse(locator)
+	if err != nil {
+		return "", nil, errors.Wrap(err, "parsing locator URI")
+	}
+
+	keyStr := uri.Query().Get(EncryptionKeyQueryParam)
+	if keyStr == "" {
+		return locator, nil, nil
+	}
+
+	key, err := base64.URLEncoding.DecodeString(keyStr)
+	if err != nil {
+		return "", nil, errors.Wrap(err, "decoding encryption key")
+	}
+
+	vals := uri.Query()
+	vals.Del(EncryptionKeyQueryParam)
+	uri.RawQuery = vals.Encode()
+	return uri.String(), key, nil
+}
 
 // GenerateSalt generates a 16 byte random salt.
 func GenerateSalt() ([]byte, error) {
@@ -201,47 +253,53 @@ func (e *encWriter) flush() error {
 func DecryptFile(
 	ctx context.Context, ciphertext, key []byte, mm *mon.BoundAccount,
 ) ([]byte, error) {
-	r, err := decryptingReader(bytes.NewReader(ciphertext), key)
+	r, err := newDecryptingReadableFile(ctx, bytes.NewReader(ciphertext), int64(len(ciphertext)), key)
 	if err != nil {
 		return nil, err
 	}
-	return mon.ReadAll(ctx, ioctx.ReaderAdapter(r.(io.Reader)), mm)
+	return mon.ReadAll(ctx, ioctx.ReaderAdapter(r.(*decryptingReadableFile)), mm)
 }
 
-type decryptReader struct {
-	ciphertext io.ReaderAt
-	g          cipher.AEAD
-	fileIV     []byte
+// decryptingReader holds the core decryption logic for chunk-based AES-GCM
+// encrypted data. It does not implement any public interface directly;
+// instead, decryptReadableFile and decryptObjectReader wrap it to provide
+// objstorage.ReadableFile and remote.ObjectReader respectively.
+//
+// readAt is the core entry point. Callers must hold mu.
+type decryptingReader struct {
+	ciphertext     remote.ObjectReader
+	ciphertextSize int64
+	g              cipher.AEAD
+	fileIV         []byte
 
+	mu        syncutil.Mutex
 	ivScratch []byte
 	buf       []byte
-	pos       int64 // pos is used to transform Read() to ReadAt(pos).
 	chunk     int64
 }
 
-type readerAndReaderAt interface {
-	io.Reader
-	io.ReaderAt
-}
-
-func decryptingReader(ciphertext readerAndReaderAt, key []byte) (objstorage.ReadableFile, error) {
+// newDecryptingReader creates a decryptingReader that decrypts chunk-based AES-GCM
+// encrypted data from the given ciphertext ObjectReader. ciphertextSize is the
+// total size of the encrypted object.
+func newDecryptingReader(
+	ctx context.Context, ciphertext remote.ObjectReader, ciphertextSize int64, key []byte,
+) (*decryptingReader, error) {
 	gcm, err := aesgcm(key)
 	if err != nil {
 		return nil, err
 	}
 
+	// Read and validate the encryption header.
 	header := make([]byte, headerSize)
-	_, readHeaderErr := io.ReadFull(ciphertext, header)
-
-	// Verify that the read data does indeed look like an encrypted file and has
-	// a encoding version we can decode.
+	if err := ciphertext.ReadAt(ctx, header, 0); err != nil {
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			return nil, errors.New("file does not appear to be encrypted")
+		}
+		return nil, errors.Wrap(err, "reading encryption header")
+	}
 	if !AppearsEncrypted(header) {
 		return nil, errors.New("file does not appear to be encrypted")
 	}
-	if readHeaderErr != nil {
-		return nil, errors.Wrap(readHeaderErr, "invalid encryption header")
-	}
-
 	version := header[len(encryptionPreamble)]
 	if version != encryptionVersion {
 		return nil, errors.Errorf("unexpected encryption scheme/config version %d", version)
@@ -251,24 +309,38 @@ func decryptingReader(ciphertext readerAndReaderAt, key []byte) (objstorage.Read
 	buf := make([]byte, nonceSize, encryptionChunkSizeV2+encryptionTagSize+nonceSize)
 	ivScratch := buf[:nonceSize]
 	buf = buf[nonceSize:]
-	r := &decryptReader{g: gcm, fileIV: iv, ivScratch: ivScratch, ciphertext: ciphertext, buf: buf, chunk: -1}
-	return r, err
+	return &decryptingReader{
+		g: gcm, fileIV: iv, ivScratch: ivScratch,
+		ciphertext: ciphertext, ciphertextSize: ciphertextSize,
+		buf: buf, chunk: -1,
+	}, nil
 }
 
-// fill loads the requested chunk into the buffer.
-func (r *decryptReader) fill(chunk int64) error {
+// fill loads the requested chunk into the buffer. Caller must hold r.mu.
+func (r *decryptingReader) fill(ctx context.Context, chunk int64) error {
 	if chunk == r.chunk {
 		return nil // this chunk is already loaded in buf.
 	}
 
 	r.chunk = -1 // invalidate the current buffered chunk while we fill it.
 	ciphertextChunkSize := int64(encryptionChunkSizeV2) + encryptionTagSize
+	offset := int64(headerSize) + chunk*ciphertextChunkSize
+
+	// Compute exact read size, clamping to the ciphertext boundary.
+	readSize := ciphertextChunkSize
+	if offset+readSize > r.ciphertextSize {
+		readSize = r.ciphertextSize - offset
+	}
+	if readSize <= 0 {
+		r.buf = r.buf[:0]
+		return nil
+	}
+
 	// Load the region of ciphertext that corresponds to chunk.
-	n, err := r.ciphertext.ReadAt(r.buf[:cap(r.buf)], headerSize+chunk*ciphertextChunkSize)
-	if err != nil && err != io.EOF {
+	r.buf = r.buf[:readSize]
+	if err := r.ciphertext.ReadAt(ctx, r.buf, offset); err != nil {
 		return err
 	}
-	r.buf = r.buf[:n]
 
 	// Decrypt the ciphertext chunk into buf.
 	buf, err := r.g.Open(r.buf[:0], r.chunkIV(chunk), r.buf, nil)
@@ -277,16 +349,17 @@ func (r *decryptReader) fill(chunk int64) error {
 	}
 	r.buf = buf
 	r.chunk = chunk
-	return err
+	return nil
 }
 
-func (r *decryptReader) chunkIV(num int64) []byte {
+func (r *decryptingReader) chunkIV(num int64) []byte {
 	r.ivScratch = append(r.ivScratch[:0], r.fileIV...)
 	binary.BigEndian.PutUint64(r.ivScratch[4:], binary.BigEndian.Uint64(r.ivScratch[4:])+uint64(num))
 	return r.ivScratch
 }
 
-func (r *decryptReader) ReadAt(p []byte, offset int64) (int, error) {
+// readAt is the core read logic. Caller must hold r.mu.
+func (r *decryptingReader) readAt(ctx context.Context, p []byte, offset int64) (int, error) {
 	if offset < 0 {
 		return 0, errors.New("bad offset")
 	}
@@ -296,7 +369,7 @@ func (r *decryptReader) ReadAt(p []byte, offset int64) (int, error) {
 		chunk := offset / int64(encryptionChunkSizeV2)
 		offsetInChunk := offset % int64(encryptionChunkSizeV2)
 
-		if err := r.fill(chunk); err != nil {
+		if err := r.fill(ctx, chunk); err != nil {
 			return read, err
 		}
 
@@ -324,46 +397,105 @@ func (r *decryptReader) ReadAt(p []byte, offset int64) (int, error) {
 	}
 }
 
-func (r *decryptReader) Read(p []byte) (int, error) {
-	n, err := r.ReadAt(p, r.pos)
-	r.pos += int64(n)
+func (r *decryptingReader) close() error {
+	return r.ciphertext.Close()
+}
+
+// decryptingReadableFile wraps a *decryptingReader as an objstorage.ReadableFile
+// (io.ReaderAt + io.Closer + Stat). Used by ExternalSSTReader and DecryptFile.
+type decryptingReadableFile struct {
+	dr  *decryptingReader
+	pos int64 // sequential read position for Read()
+}
+
+var _ objstorage.ReadableFile = (*decryptingReadableFile)(nil)
+
+func (f *decryptingReadableFile) ReadAt(p []byte, offset int64) (int, error) {
+	f.dr.mu.Lock()
+	defer f.dr.mu.Unlock()
+	return f.dr.readAt(context.Background(), p, offset)
+}
+
+func (f *decryptingReadableFile) Read(p []byte) (int, error) {
+	f.dr.mu.Lock()
+	defer f.dr.mu.Unlock()
+	n, err := f.dr.readAt(context.Background(), p, f.pos)
+	f.pos += int64(n)
 	return n, err
 }
 
-func (r *decryptReader) Close() error {
-	if closer, ok := r.ciphertext.(io.Closer); ok {
+func (f *decryptingReadableFile) Close() error {
+	return f.dr.close()
+}
+
+func (f *decryptingReadableFile) Stat() (vfs.FileInfo, error) {
+	return sizeStat(plaintextSize(f.dr.ciphertextSize)), nil
+}
+
+// decryptingObjectReader wraps a *decryptingReader as a remote.ObjectReader.
+// Used by newDecryptingObjectReader for online restore.
+type decryptingObjectReader struct {
+	dr *decryptingReader
+}
+
+var _ remote.ObjectReader = (*decryptingObjectReader)(nil)
+
+func (d *decryptingObjectReader) ReadAt(ctx context.Context, p []byte, offset int64) error {
+	d.dr.mu.Lock()
+	defer d.dr.mu.Unlock()
+	n, err := d.dr.readAt(ctx, p, offset)
+	if n == len(p) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return io.ErrUnexpectedEOF
+}
+
+func (d *decryptingObjectReader) Close() error {
+	return d.dr.close()
+}
+
+// readerAtObjectReader wraps an io.ReaderAt and a known size as a
+// remote.ObjectReader. It translates io.ReaderAt's (n, err) return to
+// remote.ObjectReader's fill-or-error contract.
+type readerAtObjectReader struct {
+	r    io.ReaderAt
+	size int64
+}
+
+func (a *readerAtObjectReader) ReadAt(_ context.Context, p []byte, offset int64) error {
+	if offset >= a.size {
+		return io.EOF
+	}
+	readSize := int64(len(p))
+	if offset+readSize > a.size {
+		return io.ErrUnexpectedEOF
+	}
+	_, err := a.r.ReadAt(p, offset)
+	return err
+}
+
+func (a *readerAtObjectReader) Close() error {
+	if closer, ok := a.r.(io.Closer); ok {
 		return closer.Close()
 	}
 	return nil
 }
 
-// Size returns the size of the file.
-func (r *decryptReader) Stat() (vfs.FileInfo, error) {
-	var size int64
-	// The vfs interface uses its own vfs.FileInfo interface. Check for either
-	// the vfs Stat() or the os Stat().
-	// TODO(jackson): Do we ever actually use a native os.File here? We might be
-	// able to remove the support for os.FileInfo (and change r.ciphertext to a
-	// vfs.File).
-	if stater, ok := r.ciphertext.(interface{ Stat() (os.FileInfo, error) }); ok {
-		stat, err := stater.Stat()
-		if err != nil {
-			return nil, err
-		}
-		size = stat.Size()
-	} else if stater, ok := r.ciphertext.(interface{ Stat() (vfs.FileInfo, error) }); ok {
-		stat, err := stater.Stat()
-		if err != nil {
-			return nil, err
-		}
-		size = stat.Size()
-	} else {
-		return nil, errors.Newf("%T does not support stat", r.ciphertext)
+// newDecryptingReadableFile creates an objstorage.ReadableFile that decrypts
+// ciphertext provided via an io.ReaderAt. Used by ExternalSSTReader and
+// DecryptFile.
+func newDecryptingReadableFile(
+	ctx context.Context, ciphertext io.ReaderAt, ciphertextSize int64, key []byte,
+) (objstorage.ReadableFile, error) {
+	or := &readerAtObjectReader{r: ciphertext, size: ciphertextSize}
+	dr, err := newDecryptingReader(ctx, or, ciphertextSize, key)
+	if err != nil {
+		return nil, err
 	}
-
-	size -= headerSize
-	size -= encryptionTagSize * ((size / (int64(encryptionChunkSizeV2) + encryptionTagSize)) + 1)
-	return sizeStat(size), nil
+	return &decryptingReadableFile{dr: dr}, nil
 }
 
 func aesgcm(key []byte) (cipher.AEAD, error) {
@@ -372,4 +504,78 @@ func aesgcm(key []byte) (cipher.AEAD, error) {
 		return nil, err
 	}
 	return cipher.NewGCM(block)
+}
+
+// newDecryptingObjectReader creates a remote.ObjectReader that decrypts
+// ciphertext provided via a remote.ObjectReader. Used by online restore.
+func newDecryptingObjectReader(
+	ctx context.Context, ciphertext remote.ObjectReader, ciphertextSize int64, key []byte,
+) (remote.ObjectReader, error) {
+	dr, err := newDecryptingReader(ctx, ciphertext, ciphertextSize, key)
+	if err != nil {
+		return nil, err
+	}
+	return &decryptingObjectReader{dr: dr}, nil
+}
+
+// plaintextSize computes the decrypted plaintext size from the total
+// ciphertext size of an encrypted file.
+func plaintextSize(ciphertextSize int64) int64 {
+	size := ciphertextSize - int64(headerSize)
+	size -= encryptionTagSize * ((size / (int64(encryptionChunkSizeV2) + encryptionTagSize)) + 1)
+	return size
+}
+
+// decryptingReadOnlyStorage wraps a remote.Storage and transparently
+// decrypts reads using the provided encryption key. Write operations
+// return errors — this wrapper is read-only, intended for online restore
+// of encrypted backups.
+type decryptingReadOnlyStorage struct {
+	inner remote.Storage
+	key   []byte
+}
+
+var _ remote.Storage = (*decryptingReadOnlyStorage)(nil)
+
+func (d *decryptingReadOnlyStorage) ReadObject(
+	ctx context.Context, objName string,
+) (_ remote.ObjectReader, objSize int64, _ error) {
+	ciphertextReader, ciphertextSize, err := d.inner.ReadObject(ctx, objName)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	dr, err := newDecryptingObjectReader(
+		ctx, ciphertextReader, ciphertextSize, d.key,
+	)
+	if err != nil {
+		_ = ciphertextReader.Close()
+		return nil, 0, err
+	}
+
+	return dr, plaintextSize(ciphertextSize), nil
+}
+
+func (d *decryptingReadOnlyStorage) Close() error {
+	return d.inner.Close()
+}
+
+func (d *decryptingReadOnlyStorage) Size(objName string) (int64, error) {
+	return d.inner.Size(objName)
+}
+
+func (d *decryptingReadOnlyStorage) IsNotExistError(err error) bool {
+	return d.inner.IsNotExistError(err)
+}
+
+func (d *decryptingReadOnlyStorage) CreateObject(objName string) (io.WriteCloser, error) {
+	return nil, errors.New("decryptingReadOnlyStorage: read-only")
+}
+
+func (d *decryptingReadOnlyStorage) List(prefix, delimiter string) ([]string, error) {
+	return nil, errors.New("decryptingReadOnlyStorage: read-only")
+}
+
+func (d *decryptingReadOnlyStorage) Delete(objName string) error {
+	return errors.New("decryptingReadOnlyStorage: read-only")
 }

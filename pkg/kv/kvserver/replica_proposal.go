@@ -785,8 +785,20 @@ func linkExternalSStablePreApply(
 		syntheticPrefix = sst.RemoteSyntheticPrefix
 	}
 
+	locator := sst.RemoteFileLoc
+	if sst.RemoteEncryptionKey != nil {
+		var err error
+		locator, err = storage.EncodeDecryptingLocator(locator, sst.RemoteEncryptionKey)
+		if err != nil {
+			log.KvExec.Fatalf(ctx,
+				"encoding decrypting locator (uri: %s, key: %s): %v",
+				locator, sst.RemoteEncryptionKey, err,
+			)
+		}
+	}
+
 	externalFile := pebble.ExternalFile{
-		Locator:           remote.Locator(sst.RemoteFileLoc),
+		Locator:           remote.Locator(locator),
 		ObjName:           sst.RemoteFilePath,
 		Size:              sst.ApproximatePhysicalSize,
 		StartKey:          start.Encode(),
