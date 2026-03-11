@@ -39,7 +39,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed/schematestutils"
@@ -2983,6 +2982,8 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 		context.Background(), &s.ClusterSettings().SV, 100<<20 /* 100 MiB */)
 	changefeedbase.SpanCheckpointLagThreshold.Override(
 		context.Background(), &s.ClusterSettings().SV, 10*time.Millisecond)
+	changefeedbase.FrontierPersistenceInterval.Override(
+		context.Background(), &s.ClusterSettings().SV, 100*time.Millisecond)
 
 	// We'll start the changefeed with the cursor set to the current time (not insert time).
 	// NB: The changefeed created in this test doesn't actually send any message events.
@@ -3035,11 +3036,15 @@ WITH resolved='50ms', min_checkpoint_frequency='50ms', no_initial_scan, cursor=$
 	}
 
 	// We should eventually checkpoint some spans that are ahead of the highwater.
-	// We'll wait until we have two unique timestamps.
+	// We'll wait until we have two unique timestamps above the minimum.
+	idb := s.InternalDB().(isql.DB)
 	testutils.SucceedsSoon(t, func() error {
-		progress := loadProgress()
-		cp := maps.Collect(loadCheckpoint(t, progress).All())
-		if len(cp) >= 2 {
+		checkpointSpans := loadCheckpointSpans(t, jobID, idb)
+		tsSet := make(map[hlc.Timestamp]struct{})
+		for _, rs := range checkpointSpans {
+			tsSet[rs.Timestamp] = struct{}{}
+		}
+		if len(tsSet) >= 2 {
 			return nil
 		}
 		return errors.New("waiting for checkpoint with two different timestamps")
@@ -3054,15 +3059,28 @@ WITH resolved='50ms', min_checkpoint_frequency='50ms', no_initial_scan, cursor=$
 	progress := loadProgress()
 	require.True(t, progress.GetHighWater().IsEmpty() || progress.GetHighWater().Equal(cursor),
 		"expected empty highwater or %s, found %s", cursor, progress.GetHighWater())
-	spanLevelCheckpoint := loadCheckpoint(t, progress)
-	require.NotNil(t, spanLevelCheckpoint)
-	require.True(t, cursor.LessEq(spanLevelCheckpoint.MinTimestamp()))
+	checkpointSpans := loadCheckpointSpans(t, jobID, idb)
+	require.NotEmpty(t, checkpointSpans)
+	// Verify all checkpoint timestamps are at least at the cursor.
+	for _, rs := range checkpointSpans {
+		require.True(t, cursor.LessEq(rs.Timestamp),
+			"expected checkpoint timestamp >= %s, found %s", cursor, rs.Timestamp)
+	}
 
-	// Construct a reverse index from spans to timestamps.
+	// Construct a reverse index from spans to timestamps for all checkpointed
+	// spans. Any spans not in this map are expected to resume at the cursor.
 	spanTimestamps := make(map[string]hlc.Timestamp)
-	for ts, spans := range spanLevelCheckpoint.All() {
-		for _, s := range spans {
-			spanTimestamps[s.String()] = ts
+	for _, rs := range checkpointSpans {
+		spanTimestamps[rs.Span.String()] = rs.Timestamp
+	}
+	// TODO(#164598): Delete this code.
+	if cfProgress := progress.GetChangefeed(); cfProgress != nil {
+		for ts, spans := range cfProgress.SpanLevelCheckpoint.All() {
+			for _, sp := range spans {
+				if existing, ok := spanTimestamps[sp.String()]; !ok || existing.Less(ts) {
+					spanTimestamps[sp.String()] = ts
+				}
+			}
 		}
 	}
 
@@ -3211,6 +3229,8 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns', no_initial_scan`)
 			context.Background(), &s.Server.ClusterSettings().SV, 1)
 		changefeedbase.SpanCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
+		changefeedbase.FrontierPersistenceInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 100*time.Millisecond)
 
 		var tableSpan roachpb.Span
 		refreshTableSpan := func() {
@@ -3222,6 +3242,7 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns', no_initial_scan`)
 		// FilterSpanWithMutation should ensure that once the backfill begins, the following resolved events
 		// that are for that backfill (are of the timestamp right after the backfill timestamp) resolve some
 		// but not all of the time, which results in a checkpoint eventually being created
+		idb := s.Server.InternalDB().(isql.DB)
 		numGaps := 0
 		var backfillTimestamp hlc.Timestamp
 		var initialCheckpoint roachpb.SpanGroup
@@ -3246,16 +3267,19 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns', no_initial_scan`)
 				return false, nil
 			}
 
-			// Check if we've set a checkpoint yet
-			progress := loadProgress()
-			if spanLevelCheckpoint := loadCheckpoint(t, progress); spanLevelCheckpoint != nil {
-				minCheckpointTS := spanLevelCheckpoint.MinTimestamp()
-				// Checkpoint timestamp should be the timestamp of the spans from the backfill
-				if !minCheckpointTS.Equal(backfillTimestamp.Next()) {
-					return false, changefeedbase.WithTerminalError(
-						errors.AssertionFailedf("expected checkpoint timestamp %s, found %s", backfillTimestamp, minCheckpointTS))
+			// Check if we've set a checkpoint yet (spans above the frontier minimum).
+			checkpointSpans := loadCheckpointSpans(t, jobFeed.JobID(), idb)
+			if len(checkpointSpans) > 0 {
+				// All checkpoint spans should be at the backfill timestamp
+				// (the filter below prevents any span from advancing beyond it).
+				for _, rs := range checkpointSpans {
+					if !rs.Timestamp.Equal(backfillTimestamp.Next()) {
+						return false, changefeedbase.WithTerminalError(
+							errors.AssertionFailedf("expected checkpoint timestamp %s, found %s",
+								backfillTimestamp.Next(), rs.Timestamp))
+					}
 				}
-				initialCheckpoint = makeSpanGroupFromCheckpoint(t, spanLevelCheckpoint)
+				initialCheckpoint = makeSpanGroupFromFrontierSpans(t, checkpointSpans)
 				atomic.StoreInt32(&foundCheckpoint, 1)
 			}
 
@@ -3314,9 +3338,9 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns', no_initial_scan`)
 			}
 
 			// Once we've set a checkpoint that covers new spans, record it
-			progress := loadProgress()
-			if spanLevelCheckpoint := loadCheckpoint(t, progress); spanLevelCheckpoint != nil {
-				currentCheckpoint := makeSpanGroupFromCheckpoint(t, spanLevelCheckpoint)
+			checkpointSpans := loadCheckpointSpans(t, jobFeed.JobID(), idb)
+			if len(checkpointSpans) > 0 {
+				currentCheckpoint := makeSpanGroupFromFrontierSpans(t, checkpointSpans)
 				// Ensure that the second checkpoint both contains all spans in the first checkpoint as well as new spans
 				if currentCheckpoint.Encloses(initialCheckpoint.Slice()...) && !initialCheckpoint.Encloses(currentCheckpoint.Slice()...) {
 					secondCheckpoint = currentCheckpoint
@@ -3370,13 +3394,13 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns', no_initial_scan`)
 		// Resume job.
 		require.NoError(t, jobFeed.Resume())
 
-		// checkpoint should eventually be gone once backfill completes.
+		// Wait for highwater to advance past the backfill, indicating backfill completion.
 		testutils.SucceedsSoon(t, func() error {
 			progress := loadProgress()
-			if loadCheckpoint(t, progress) != nil {
-				return errors.New("checkpoint still non-empty")
+			if hw := progress.GetHighWater(); hw != nil && backfillTimestamp.Less(*hw) {
+				return nil
 			}
-			return nil
+			return errors.New("waiting for highwater to advance past backfill")
 		})
 
 		// Pause job to avoid race on the resolved array
@@ -9290,6 +9314,8 @@ func TestChangefeedBackfillCheckpoint(t *testing.T) {
 			context.Background(), &s.Server.ClusterSettings().SV, 1)
 		changefeedbase.SpanCheckpointMaxBytes.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, maxCheckpointSize)
+		changefeedbase.FrontierPersistenceInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 100*time.Millisecond)
 
 		registry := s.Server.JobRegistry().(*jobs.Registry)
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo
@@ -9321,6 +9347,7 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns'`)
 		}()
 
 		jobFeed := foo.(cdctest.EnterpriseTestFeed)
+		idb := s.Server.InternalDB().(isql.DB)
 		loadProgress := func() jobspb.Progress {
 			jobID := jobFeed.JobID()
 			job, err := registry.LoadJob(context.Background(), jobID)
@@ -9330,8 +9357,8 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns'`)
 
 		// Wait for non-nil checkpoint.
 		testutils.SucceedsSoon(t, func() error {
-			progress := loadProgress()
-			if loadCheckpoint(t, progress) != nil {
+			checkpointSpans := loadCheckpointSpans(t, jobFeed.JobID(), idb)
+			if len(checkpointSpans) > 0 {
 				return nil
 			}
 			return errors.New("waiting for checkpoint")
@@ -9345,9 +9372,9 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns'`)
 		noHighWater := h == nil || h.IsEmpty()
 		require.True(t, noHighWater)
 
-		spanLevelCheckpoint := loadCheckpoint(t, progress)
-		require.NotNil(t, spanLevelCheckpoint)
-		checkpointSpanGroup := makeSpanGroupFromCheckpoint(t, spanLevelCheckpoint)
+		checkpointSpans := loadCheckpointSpans(t, jobFeed.JobID(), idb)
+		require.NotEmpty(t, checkpointSpans)
+		checkpointSpanGroup := makeSpanGroupFromFrontierSpans(t, checkpointSpans)
 
 		// Collect spans we attempt to resolve after when we resume.
 		var resolved []roachpb.Span
@@ -9358,17 +9385,8 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns'`)
 			return false, nil
 		}
 
-		var actualFrontierStr atomic.Value
-		knobs.AfterCoordinatorFrontierRestore = func(frontier *resolvedspan.CoordinatorFrontier) {
-			require.NotNil(t, frontier)
-			actualFrontierStr.Store(frontier.String())
-		}
-
-		// Resume job.
-		require.NoError(t, jobFeed.Resume())
-
-		// Verify that the resumed job has restored the progress from the checkpoint
-		// to the change frontier.
+		// Build the expected frontier from saved changefeed progress.
+		allFrontierSpans := loadFrontierSpans(t, jobFeed.JobID(), idb)
 		expectedFrontier, err := resolvedspan.NewCoordinatorFrontier(
 			hlc.Timestamp{},
 			hlc.Timestamp{},
@@ -9379,8 +9397,29 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns'`)
 		if err != nil {
 			t.Fatal(err)
 		}
-		assert.NoError(t, checkpoint.Restore(expectedFrontier, spanLevelCheckpoint))
+		for _, rs := range allFrontierSpans {
+			_, err := expectedFrontier.Forward(rs.Span, rs.Timestamp)
+			require.NoError(t, err)
+		}
+		// TODO(#164598): Delete this code.
+		if cfProgress := progress.GetChangefeed(); cfProgress != nil {
+			for ts, spans := range cfProgress.SpanLevelCheckpoint.All() {
+				for _, sp := range spans {
+					_, err := expectedFrontier.Forward(sp, ts)
+					require.NoError(t, err)
+				}
+			}
+		}
 		expectedFrontierStr := expectedFrontier.String()
+
+		var actualFrontierStr atomic.Value
+		knobs.AfterCoordinatorFrontierRestore = func(frontier *resolvedspan.CoordinatorFrontier) {
+			require.NotNil(t, frontier)
+			actualFrontierStr.Store(frontier.String())
+		}
+
+		// Resume job.
+		require.NoError(t, jobFeed.Resume())
 		testutils.SucceedsSoon(t, func() error {
 			if s := actualFrontierStr.Load(); s != nil {
 				require.Equal(t, expectedFrontierStr, s)
@@ -9391,17 +9430,12 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns'`)
 
 		// Wait for the high water mark to be non-zero.
 		testutils.SucceedsSoon(t, func() error {
-			prog := loadProgress()
-			if p := prog.GetHighWater(); p != nil && !p.IsEmpty() {
+			progress = loadProgress()
+			if p := progress.GetHighWater(); p != nil && !p.IsEmpty() {
 				return nil
 			}
 			return errors.New("waiting for highwater")
 		})
-
-		// At this point, highwater mark should be set, and previous checkpoint should be gone.
-		progress = loadProgress()
-		require.NotNil(t, progress.GetChangefeed())
-		require.Nil(t, loadCheckpoint(t, progress))
 
 		// Verify that none of the resolved spans after resume were checkpointed.
 		for _, sp := range resolved {
