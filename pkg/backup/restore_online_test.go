@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -41,13 +40,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var orParams = base.TestClusterArgs{
-	// Online restore is not supported in a secondary tenant yet.
-	ServerArgs: base.TestServerArgs{
-		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-	},
-}
-
 var latestDownloadJobIDQuery = `SELECT id FROM system.jobs WHERE description LIKE '%Background Data Download%' ORDER BY created DESC LIMIT 1`
 
 func onlineImpl(rng *rand.Rand) string {
@@ -62,16 +54,16 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	ctx := context.Background()
 
 	const numAccounts = 1000
 
-	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, orParams)
+	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFnRestored()
 
 	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB, rSQLDB)
@@ -119,13 +111,11 @@ func TestOnlineRestoreRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tmpDir := t.TempDir()
-
-	defer nodelocal.ReplaceNodeLocalForTesting(tmpDir)()
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	const numAccounts = 1000
 
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	_, sqlDB, tmpDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
 	trueExternalStorage := "nodelocal://1/backup"
@@ -216,13 +206,11 @@ func TestFullClusterOnlineRestoreRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tmpDir := t.TempDir()
-
-	defer nodelocal.ReplaceNodeLocalForTesting(tmpDir)()
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	const numAccounts = 1000
 
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	_, sqlDB, tmpDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
 	trueExternalStorage := "nodelocal://1/backup"
@@ -285,14 +273,10 @@ func corruptBackup(t *testing.T, sqlDB *sqlutils.SQLRunner, ioDir string, uri st
 func TestOnlineRestorePartitioned(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
-	srv, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, 3, 100,
-		InitManualReplication,
-		base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant},
-		},
-	)
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	srv, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, 3, 100, InitManualReplication)
 	defer cleanupFn()
 
 	a := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/a", "conn-a", sqlDB) + "?COCKROACH_LOCALITY=default"
@@ -315,18 +299,13 @@ func TestOnlineRestorePartitioned(t *testing.T) {
 func TestOnlineRestoreLinkCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	rng, _ := randutil.NewTestRand()
 
 	const numAccounts = 10
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
-		t,
-		singleNode,
-		numAccounts,
-		InitManualReplication,
-		orParams,
-	)
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
 	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
@@ -348,20 +327,11 @@ func TestOnlineRestoreLinkCheckpoint(t *testing.T) {
 func TestOnlineRestoreStatementResult(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	const numAccounts = 2
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
-		t,
-		singleNode,
-		numAccounts,
-		InitManualReplication,
-		base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-			},
-		},
-	)
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
 	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
@@ -421,15 +391,11 @@ func TestOnlineRestoreStatementResult(t *testing.T) {
 func TestOnlineRestoreWaitForDownload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	const numAccounts = 1000
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
-		// Online restore is not supported in a secondary tenant yet.
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-		},
-	})
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
 
@@ -455,7 +421,7 @@ func TestOnlineRestoreTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -556,17 +522,11 @@ func TestOnlineRestoreErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 2, InitManualReplication)
 	defer cleanupFn()
-	params := base.TestClusterArgs{
-		// Online restore is not supported in a secondary tenant yet.
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-		},
-	}
-	_, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
+	_, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFnRestored()
 	rSQLDB.Exec(t, "CREATE DATABASE data")
 	var (
@@ -614,7 +574,7 @@ func TestOnlineRestoreRetryingDownloadRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	rng, seed := randutil.NewPseudoRand()
 	t.Logf("random seed: %d", seed)
@@ -626,7 +586,6 @@ func TestOnlineRestoreRetryingDownloadRequests(t *testing.T) {
 
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			Knobs: base.TestingKnobs{
 				BackupRestore: &sql.BackupRestoreTestingKnobs{
 					RunBeforeSendingDownloadSpan: func() error {
@@ -673,12 +632,11 @@ func TestOnlineRestoreDownloadRetryReset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	var attemptCount int
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			Knobs: base.TestingKnobs{
 				BackupRestore: &sql.BackupRestoreTestingKnobs{
 					// We want the retry loop to fail until its final attempt, and then
@@ -728,7 +686,8 @@ func TestOnlineRestoreDownloadRetryReset(t *testing.T) {
 func TestOnlineRestoreFailScatterNonEmptyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	// This test first runs online restore and waits for an external SST to be
 	// added to ensure at least one range has ingested an external SST. It then
@@ -748,8 +707,7 @@ func TestOnlineRestoreFailScatterNonEmptyRanges(t *testing.T) {
 	var postPauseScatterRequests atomic.Int32
 	var postPauseSuccessfulScatters atomic.Int32
 
-	params := orParams
-	params.ServerArgs.Knobs = base.TestingKnobs{
+	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{
 		BackupRestore: &sql.BackupRestoreTestingKnobs{
 			AfterAddRemoteSST: func() error {
 				if resumed.Load() {
@@ -786,7 +744,7 @@ func TestOnlineRestoreFailScatterNonEmptyRanges(t *testing.T) {
 				return nil
 			},
 		},
-	}
+	}}}
 
 	const numAccounts = 100
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
@@ -893,17 +851,17 @@ func TestOnlineRestoreRevisionHistoryLayers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	ctx := context.Background()
 
 	// Use enough accounts to create multiple ranges.
 	const numAccounts = 500
 
-	srcTC, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	srcTC, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	dstTC, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, orParams)
+	dstTC, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFnRestored()
 
 	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup-rev-history", "backup-rev-history", sqlDB, rSQLDB)
@@ -1223,12 +1181,11 @@ func TestOnlineRestoreLinkingNonexistentFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tmpDir := t.TempDir()
-	defer nodelocal.ReplaceNodeLocalForTesting(tmpDir)()
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	const numAccounts = 1000
 
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
 	// Force each backup layer into a single wide SST by setting a large file
@@ -1264,7 +1221,7 @@ func TestOnlineRestoreLinkingNonexistentFiles(t *testing.T) {
 	// (filelist.sst, descriptorslist.sst) are preserved so restore can read
 	// the manifest. When Pebble's overlap checker tries to open a previously-
 	// linked backing file during the link phase, the I/O will fail.
-	backupDir := filepath.Join(tmpDir, "backup")
+	backupDir := filepath.Join(dir, "backup")
 	var deleted int
 	require.NoError(t, filepath.WalkDir(backupDir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -1294,16 +1251,16 @@ func TestOnlineRestoreWithDistFlow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	ctx := context.Background()
 
 	const numAccounts = 100
 
-	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, orParams)
+	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFnRestored()
 
 	testutils.RunTrueAndFalse(t, "incremental", func(t *testing.T, incremental bool) {
