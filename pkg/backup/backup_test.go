@@ -1229,7 +1229,8 @@ func TestEncryptedBackupRestoreSystemJobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(at): enable once OR supports encrypted backups.
+	// Disable OR metamorphic: this test validates exact job description
+	// strings, which change when ExperimentalCopy is injected.
 	backuptestutils.DisableFastRestoreForTest(t)
 
 	regionEnvVariable := "AWS_KMS_REGION_A"
@@ -4281,9 +4282,6 @@ func TestEncryptedBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(at): enable once OR supports encrypted backups.
-	backuptestutils.DisableFastRestoreForTest(t)
-
 	regionEnvVariable := "AWS_KMS_REGION_A"
 	keyIDEnvVariable := "AWS_KMS_KEY_ARN_A"
 
@@ -4397,9 +4395,6 @@ func concatMultiRegionKMSURIs(uris []string) string {
 func TestRegionalKMSEncryptedBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// TODO(at): enable once OR supports encrypted backups.
-	backuptestutils.DisableFastRestoreForTest(t)
 
 	regionEnvVariables := []string{"AWS_KMS_REGION_A", "AWS_KMS_REGION_B"}
 	keyIDEnvVariables := []string{"AWS_KMS_KEY_ARN_A", "AWS_KMS_KEY_ARN_B"}
@@ -4538,9 +4533,6 @@ func TestValidateKMSURIsAgainstFullBackup(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(at): enable once OR supports encrypted backups.
-	backuptestutils.DisableFastRestoreForTest(t)
-
 	for _, tc := range []struct {
 		name                  string
 		fullBackupURIs        []string
@@ -4615,9 +4607,6 @@ func TestValidateKMSURIsAgainstFullBackup(t *testing.T) {
 func TestGetEncryptedDataKeyByKMSMasterKeyID(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-
-	// TODO(at): enable once OR supports encrypted backups.
-	backuptestutils.DisableFastRestoreForTest(t)
 
 	ctx := context.Background()
 	plaintextDataKey := []byte("supersecret")
