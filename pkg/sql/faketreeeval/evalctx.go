@@ -625,6 +625,13 @@ func (ep *DummyEvalPlanner) DeleteStatementHint(
 	return nil, nil, nil, nil
 }
 
+// ValidateSessionVariableHint is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) ValidateSessionVariableHint(
+	ctx context.Context, varName, varValue string, safeUpdates bool,
+) error {
+	return nil
+}
+
 // UsingHintInjection is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) UsingHintInjection() bool {
 	return false

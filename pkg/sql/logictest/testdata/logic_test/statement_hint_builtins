@@ -311,6 +311,26 @@ SELECT information_schema.crdb_rewrite_inline_hints(
   'SELECT b FROM ab WHERE a = _'
 )
 
+# Transaction control statements cannot be used as hint targets.
+
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_rewrite_inline_hints('BEGIN', 'BEGIN')
+
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_rewrite_inline_hints('COMMIT', 'COMMIT')
+
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_rewrite_inline_hints('ROLLBACK', 'ROLLBACK')
+
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_rewrite_inline_hints('SAVEPOINT s', 'SAVEPOINT s')
+
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_rewrite_inline_hints('RELEASE SAVEPOINT s', 'RELEASE SAVEPOINT s')
+
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_rewrite_inline_hints('ROLLBACK TO SAVEPOINT s', 'ROLLBACK TO SAVEPOINT s')
+
 subtest delete_hints
 
 query TTT
@@ -527,3 +547,109 @@ SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
 SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
 
 subtest end
+
+# ---- Session setting hints ----
+
+subtest session_setting_hints
+
+# Basic creation of a session setting hint.
+skipif config local-mixed-25.4 local-mixed-26.1
+let $sh1
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE x = 1',
+  'reorder_joins_limit',
+  '4'
+);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query T
+SELECT fingerprint FROM system.statement_hints WHERE row_id = $sh1;
+----
+SELECT * FROM xy WHERE x = _
+
+# Verify hint_type is set correctly.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TB
+SELECT hint_type, enabled FROM system.statement_hints WHERE row_id = $sh1;
+----
+SET VARIABLE  true
+
+# Multiple session setting hints for the same fingerprint.
+skipif config local-mixed-25.4 local-mixed-26.1
+let $sh2
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE x = 1',
+  'distsql',
+  'off'
+);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT count(*) FROM system.statement_hints
+WHERE fingerprint = 'SELECT * FROM xy WHERE x = _';
+----
+2
+
+# Unknown variable should fail.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error unrecognized session variable: "nonexistent_var"
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE x = 1',
+  'nonexistent_var',
+  'value'
+);
+
+# Invalid value should be rejected at creation time.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error invalid value for session variable "reorder_joins_limit"
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE x = 1',
+  'reorder_joins_limit',
+  'not_a_number'
+);
+
+# Read-only variable should be rejected.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error session variable "crdb_version" is read-only and cannot be set in a statement hint
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE x = 1',
+  'crdb_version',
+  'v99.0'
+);
+
+# Transaction control statements cannot be used as hint targets.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_set_session_variable_hint('BEGIN', 'distsql', 'off')
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_set_session_variable_hint('COMMIT', 'distsql', 'off')
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_set_session_variable_hint('ROLLBACK', 'distsql', 'off')
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_set_session_variable_hint('SAVEPOINT s', 'distsql', 'off')
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_set_session_variable_hint('RELEASE SAVEPOINT s', 'distsql', 'off')
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_set_session_variable_hint('ROLLBACK TO SAVEPOINT s', 'distsql', 'off')
+
+skipif config local-mixed-25.4 local-mixed-26.1
+subtest end
+
+# Clean up all hints (rewrite inline + session setting) for other tests.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement count 5
+DELETE FROM system.statement_hints WHERE true
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()

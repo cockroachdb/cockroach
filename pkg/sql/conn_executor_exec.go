@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -49,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
@@ -948,6 +950,12 @@ func (ex *connExecutor) execStmtInOpenState(
 		ev, payload := ex.execShowCommitTimestampInOpenState(ctx, s, res, canAutoCommit)
 		return ev, payload, nil
 	}
+
+	// Apply session variable hints after the transaction control switch. This
+	// ensures hints don't interact with BEGIN/COMMIT/SAVEPOINT stack operations.
+	// The cleanup function pops the pushed hint session data frame on return.
+	hintCleanup := ex.applySessionVariableHints(ctx, p, &stmt)
+	defer hintCleanup()
 
 	if s, ok := ast.(*tree.Prepare); ok {
 		// This is handling the SQL statement "PREPARE". See execPrepare for
@@ -1953,6 +1961,13 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		ev, payload := ex.execShowCommitTimestampInOpenState(ctx, s, res, canAutoCommit)
 		return ev, payload, nil
 	}
+
+	// Apply session variable hints after the transaction control switch.
+	// Use a regular defer (not processCleanupFunc) because the pushed session
+	// data must be popped on every execution return, not deferred until portal
+	// close. Each invocation pushes/pops its own frame.
+	hintCleanup := ex.applySessionVariableHints(ctx, p, &vars.stmt)
+	defer hintCleanup()
 
 	if s, ok := vars.ast.(*tree.Prepare); ok {
 		// This is handling the SQL statement "PREPARE". See execPrepare for
@@ -4731,4 +4746,78 @@ func isSQLOkayToThrottle(ast tree.Statement) bool {
 	default:
 		return true
 	}
+}
+
+// applySessionVariableHints pushes statement-level session data and applies all
+// enabled session variable hints. Returns a cleanup function that pops the
+// statement-level overlay. If no hints need applying, returns a no-op cleanup
+// function.
+//
+// The cache should have already resolved any duplicate hints. If applying a
+// hint fails, the error is logged and the hint is skipped, but the other hints
+// are still applied and statement execution continues.
+func (ex *connExecutor) applySessionVariableHints(
+	ctx context.Context, p *planner, stmt *Statement,
+) func() {
+	var pushedSessionData bool
+	for i := range stmt.Hints {
+		hint := &stmt.Hints[i]
+		if !hint.Enabled || hint.Err != nil || hint.SessionVariable == nil {
+			continue
+		}
+		varHint := hint.SessionVariable
+		if !pushedSessionData {
+			ex.sessionDataStack.PushStmtLevel()
+			pushedSessionData = true
+		}
+		if err := ex.applySessionVariableHint(ctx, p, varHint); err != nil {
+			log.Eventf(ctx, "skipping session variable hint for %s: %v",
+				redact.Safe(varHint.VariableName), err)
+		} else {
+			log.Eventf(ctx, "applied session variable hint: %s = %s",
+				redact.Safe(varHint.VariableName), varHint.VariableValue)
+		}
+	}
+	if !pushedSessionData {
+		return func() {}
+	}
+	return func() {
+		ex.sessionDataStack.PopStmtLevel()
+	}
+}
+
+// applySessionVariableHint applies a single session variable change from a
+// statement hint.
+func (ex *connExecutor) applySessionVariableHint(
+	ctx context.Context, p *planner, hint *hintpb.SessionVariableHint,
+) error {
+	varName := hint.VariableName
+	varValue := hint.VariableValue
+
+	v, ok := varGen[varName]
+	if !ok {
+		return errors.New("unknown session variable")
+	}
+
+	// Normalize the value via GetStringVal if available (e.g. for booleans,
+	// this canonicalizes "TRUE"/"1" to "on").
+	if v.GetStringVal != nil {
+		values := []tree.TypedExpr{tree.NewDString(varValue)}
+		normalized, err := v.GetStringVal(ctx, &p.extendedEvalCtx, values, p.Txn())
+		if err != nil {
+			return err
+		}
+		varValue = normalized
+	}
+
+	if v.Set != nil {
+		return ex.dataMutatorIterator.ApplyOnStmtScopedMutator(
+			func(m sessionmutator.SessionDataMutator) error {
+				return v.Set(ctx, m, varValue)
+			},
+		)
+	} else if v.SetWithPlanner != nil {
+		return v.SetWithPlanner(ctx, p, setScopeStmt, varValue)
+	}
+	return errors.New("cannot set session variable")
 }

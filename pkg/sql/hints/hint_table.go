@@ -93,12 +93,17 @@ func GetStatementHintsFromDB(
 		retErr = errors.CombineErrors(retErr, it.Close())
 	}()
 
-	// To make hint injection more comprehensible, we only consider applying the
-	// newest hint-injection hint we find, which should be first, and ignore older
-	// hint-injection hints. This is true even if we are unable to decode or apply
-	// the newest hint-injection hint for some reason. seenHintInjection tracks
-	// whether we've seen a hint injection for a given fingerprint.
-	seenHintInjection := make(map[string]struct{})
+	// To make hint injection more comprehensible, we de-duplicate hint injections
+	// and session variable hints for the same variable. When resolving
+	// duplicates, we apply the newer of the two hints, which should be the first
+	// of the two we encounter. This is true even if we are unable to decode or
+	// apply the newer hint for some reason.
+	//
+	// seenInjections tracks which fingerprints already have a hint injection.
+	// seenVarHints tracks which (fingerprint, variable name) pairs already have
+	// a session variable hint.
+	seenInjections := make(map[string]struct{})
+	seenVarHints := make(map[[2]string]struct{})
 
 	for {
 		ok, queryErr := it.Next(ctx)
@@ -114,17 +119,26 @@ func GetStatementHintsFromDB(
 				ctx, "could not decode hint ID %v for statement hash %v fingerprint %v: %v",
 				hintID, statementHash, fingerprint, hint.Err,
 			)
-			// Do not return the error. Instead we'll simply execute the query without
+			// Do not return the error. Instead, we'll simply execute the query without
 			// this hint (which should already be disabled).
 			hint.Enabled = false
 		}
 
-		// Ignore hint injections that are not the newest hint injection.
-		if hint.InjectHints != nil {
-			if _, ok := seenHintInjection[fingerprint]; ok {
+		// Resolve duplicate hints by picking the newer one (which will be ordered
+		// first by the query).
+		switch t := hint.GetValue().(type) {
+		case *hintpb.InjectHints:
+			if _, ok := seenInjections[fingerprint]; ok {
 				hint.Enabled = false
 			} else {
-				seenHintInjection[fingerprint] = struct{}{}
+				seenInjections[fingerprint] = struct{}{}
+			}
+		case *hintpb.SessionVariableHint:
+			key := [2]string{fingerprint, t.VariableName}
+			if _, ok := seenVarHints[key]; ok {
+				hint.Enabled = false
+			} else {
+				seenVarHints[key] = struct{}{}
 			}
 		}
 

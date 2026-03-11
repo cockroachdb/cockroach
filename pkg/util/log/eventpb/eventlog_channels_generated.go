@@ -86,10 +86,16 @@ func (m *StatusChange) LoggingChannel() logpb.Channel { return logpb.Channel_OPS
 func (m *DeleteRewriteInlineHints) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *DeleteSessionVariableHint) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *RewriteInlineHints) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *SetClusterSetting) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
+
+// LoggingChannel implements the EventPayload interface.
+func (m *SetSessionVariableHint) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
 
 // LoggingChannel implements the EventPayload interface.
 func (m *SetTenantClusterSetting) LoggingChannel() logpb.Channel { return logpb.Channel_OPS }
