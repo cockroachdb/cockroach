@@ -51,6 +51,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/metamorphic",
         "//pkg/util/metric",
+        "//pkg/util/metric/aggmetric",
         "//pkg/util/queue",
         "//pkg/util/schedulerlatency",
         "//pkg/util/syncutil",
