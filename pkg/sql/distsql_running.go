@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
@@ -42,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -1168,9 +1170,13 @@ type DistSQLReceiver struct {
 	stats topLevelQueryStats
 
 	// scanStageEstimateMap maps stage IDs for logical scans to their
-	// corresponding scanStageEstimate.
+	// corresponding scanStageEstimate. For a given stage ID the value might be
+	// missing either because it doesn't correspond to the TableReader or it
+	// corresponds to the TableReader on a table that we exempt from
+	// "misestimate handling".
 	scanStageEstimateMap map[int32]scanStageEstimate
 	logMisestimates      bool
+	fixMisestimates      bool
 
 	// isTenantExplainAnalyze is used to indicate that network egress should be
 	// collected in order to estimate RU consumption for a tenant that is running
@@ -1412,7 +1418,12 @@ type scanStageEstimate struct {
 	estimatedRowCount uint64
 	statsCreatedAt    time.Time
 	tableDesc         catalog.TableDescriptor
+	indexID           descpb.IndexID
 	indexName         string
+	// spans will only be populated if we're fixing misestimates with auto
+	// partial stats collection. It's a copy of the TableReader's spans for the
+	// stage.
+	spans []roachpb.Span
 
 	rowsRead uint64
 }
@@ -1947,6 +1958,15 @@ var logScanRowCountMisestimate = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
+var fixScanRowCountMisestimate = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.stats.automatic_partial_collection.fix_scan_row_count_misestimate.enabled",
+	"when set to true, trigger automatic partial stats refresh when a scan's "+
+		"actual row count differs significantly from the optimizer's estimate. Full index scans aren't eligible.",
+	false,
+	settings.WithPublic,
+)
+
 func (r *DistSQLReceiver) makeScanEstimates(
 	ctx context.Context, planner *planner, physPlan *PhysicalPlan, st *cluster.Settings,
 ) {
@@ -1956,7 +1976,8 @@ func (r *DistSQLReceiver) makeScanEstimates(
 		return
 	}
 	r.logMisestimates = logScanRowCountMisestimate.Get(&st.SV)
-	if !r.logMisestimates {
+	r.fixMisestimates = fixScanRowCountMisestimate.Get(&st.SV)
+	if !r.logMisestimates && !r.fixMisestimates {
 		return
 	}
 
@@ -1966,10 +1987,12 @@ func (r *DistSQLReceiver) makeScanEstimates(
 			continue
 		}
 		stageID := p.Spec.StageID
+		// TODO(yuzefovich): we might have multiple TableReaders for the same
+		// stage in which we case we actually need to merge all spans together.
 		if _, exists := r.scanStageEstimateMap[stageID]; exists {
 			continue
 		}
-		tableID := core.FetchSpec.TableID
+		tableID, indexID := core.FetchSpec.TableID, core.FetchSpec.IndexID
 		tableDesc, err := planner.LookupTableByID(ctx, tableID)
 		if err != nil {
 			continue
@@ -1982,11 +2005,56 @@ func (r *DistSQLReceiver) makeScanEstimates(
 		if catalog.IsSystemDescriptor(tableDesc) || tableDesc.IsVirtualTable() || tableDesc.IsView() {
 			continue
 		}
+		// spans will only be populated if we're fixing misestimates with
+		// auto partial stats collection.
+		var spans roachpb.Spans
+		if r.fixMisestimates {
+			spans = func() roachpb.Spans {
+				// We can only collect partial stats on the forward indexes.
+				idx := catalog.FindIndexByID(tableDesc, indexID)
+				if idx == nil {
+					return nil
+				}
+				if idx.GetType() != idxtype.FORWARD {
+					return nil
+				}
+				if idx.ExplicitColumnStartIdx() != 0 {
+					// Ignore RBR tables as well as hash-sharded indexes since
+					// we can only constrain a single column which would be
+					// the implicit one.
+					return nil
+				}
+
+				// Don't try to fix-up estimates for full table/index scans.
+				if len(core.Spans) == 1 {
+					indexPrefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(planner.ExecCfg().Codec, tableID, indexID))
+					indexSpan := roachpb.Span{Key: indexPrefix, EndKey: indexPrefix.PrefixEnd()}
+					fullScan := core.Spans[0].EqualValue(indexSpan)
+					if fullScan {
+						return nil
+					}
+				}
+
+				// Given that the TableReader implementations take over the
+				// spans slice and can modify it during the execution, we need
+				// to make a copy. Note that the implementations already make a
+				// copy for distributed plans (for purposes of reporting
+				// misplanned ranges info), but we choose to not overoptimize
+				// for that case and make a copy unconditionally.
+				// TODO(yuzefovich): perhaps avoid the copy for distributed
+				// plans.
+				res := make([]roachpb.Span, len(core.Spans))
+				copy(res, core.Spans)
+				return res
+			}()
+		}
 		r.scanStageEstimateMap[stageID] = scanStageEstimate{
 			estimatedRowCount: p.Spec.EstimatedRowCount,
 			statsCreatedAt:    p.Spec.StatsCreatedAt,
 			tableDesc:         tableDesc,
+			indexID:           indexID,
 			indexName:         core.FetchSpec.IndexName,
+			spans:             spans,
 		}
 	}
 }
@@ -1994,7 +2062,7 @@ func (r *DistSQLReceiver) makeScanEstimates(
 // TODO(yuzefovich): consider whether we want to handle misestimates for
 // postqueries too.
 func (r *DistSQLReceiver) handleMisestimates(ctx context.Context, planner *planner) {
-	if !r.logMisestimates {
+	if !r.logMisestimates && !r.fixMisestimates {
 		return
 	}
 	checkedLimiter := false
@@ -2014,15 +2082,17 @@ func (r *DistSQLReceiver) handleMisestimates(ctx context.Context, planner *plann
 			continue
 		}
 
+		if r.logMisestimates && !checkedLimiter {
+			// Log all or none of the misestimated scans in the query.
+			r.logMisestimates = misestimateLogLimiter.ShouldLog()
+			checkedLimiter = true
+		}
 		if r.logMisestimates {
-			if !checkedLimiter {
-				// Log all or none of the misestimated scans in the query.
-				if !misestimateLogLimiter.ShouldLog() {
-					return
-				}
-				checkedLimiter = true
-			}
 			s.logMisestimate(ctx, planner)
+		}
+
+		if r.fixMisestimates && len(s.spans) > 0 {
+			planner.execCfg.StatsRefresher.FixMisestimate(ctx, s.tableDesc, s.indexID, s.spans)
 		}
 	}
 }
