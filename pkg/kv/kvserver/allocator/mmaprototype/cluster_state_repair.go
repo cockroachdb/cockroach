@@ -8,10 +8,14 @@ package mmaprototype
 import (
 	"context"
 	"fmt"
+	"slices"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -83,6 +87,11 @@ const (
 
 	// NoRepairNeeded indicates the range is healthy and conformant.
 	NoRepairNeeded
+
+	// numRepairActions is the total number of RepairAction values (including
+	// NoRepairNeeded). It must remain the last entry in the iota sequence so
+	// that iteration over [1, numRepairActions) covers all valid actions.
+	numRepairActions
 )
 
 // SafeFormat implements redact.SafeFormatter.
@@ -241,8 +250,9 @@ func (cs *clusterState) updateRepairAction(
 	if oldAction == newAction {
 		return
 	}
-	// Remove from old bucket.
-	if oldAction != NoRepairNeeded && oldAction != RepairPending && oldAction != 0 {
+	// Remove from old bucket. All states except NoRepairNeeded (and the zero
+	// value, which indicates an uninitialized field) are tracked in the index.
+	if oldAction != NoRepairNeeded && oldAction != 0 {
 		if m, ok := cs.repairRanges[oldAction]; ok {
 			delete(m, rangeID)
 			if len(m) == 0 {
@@ -254,7 +264,7 @@ func (cs *clusterState) updateRepairAction(
 		}
 	}
 	// Add to new bucket.
-	if newAction != NoRepairNeeded && newAction != RepairPending {
+	if newAction != NoRepairNeeded {
 		m, ok := cs.repairRanges[newAction]
 		if !ok {
 			m = map[roachpb.RangeID]struct{}{}
@@ -268,7 +278,7 @@ func (cs *clusterState) updateRepairAction(
 // removeFromRepairRanges removes a range from the repairRanges index. This
 // should be called before deleting a range from cs.ranges.
 func (cs *clusterState) removeFromRepairRanges(rangeID roachpb.RangeID, rs *rangeState) {
-	if rs.repairAction != NoRepairNeeded && rs.repairAction != RepairPending && rs.repairAction != 0 {
+	if rs.repairAction != NoRepairNeeded && rs.repairAction != 0 {
 		if m, ok := cs.repairRanges[rs.repairAction]; ok {
 			delete(m, rangeID)
 			if len(m) == 0 {
@@ -276,6 +286,82 @@ func (cs *clusterState) removeFromRepairRanges(rangeID roachpb.RangeID, rs *rang
 			}
 		}
 	}
+}
+
+// isLeaseholderOnStore returns true if the given store holds the lease for the
+// range.
+func isLeaseholderOnStore(rs *rangeState, storeID roachpb.StoreID) bool {
+	for _, repl := range rs.replicas {
+		if repl.StoreID == storeID && repl.IsLeaseholder {
+			return true
+		}
+	}
+	return false
+}
+
+// repair examines the ranges on the local store and proposes changes to bring
+// them into compliance with their span configs. For example, it adds replicas
+// when under-replicated, removes replicas when over-replicated, replaces dead
+// or decommissioning replicas, and finalizes atomic replication changes.
+//
+// Only ranges where localStoreID is the leaseholder are considered for repair,
+// matching how the replicate queue works: only the leaseholder proposes changes.
+func (re *rebalanceEnv) repair(
+	ctx context.Context, localStoreID roachpb.StoreID,
+) []ExternalRangeChange {
+	re.mmaid++
+	ctx = logtags.AddTag(ctx, "mmaid", re.mmaid)
+
+	// Iterate repair actions in priority order (lower enum = higher priority).
+	// Start at 1: RepairAction(0) is intentionally invalid (see enum definition).
+	idsPtr := rangeIDSlicePool.Get().(*[]roachpb.RangeID)
+	ids := (*idsPtr)[:0]
+	defer func() {
+		// Preserve any grown capacity for reuse.
+		ids = ids[:0]
+		*idsPtr = ids
+		rangeIDSlicePool.Put(idsPtr)
+	}()
+	for action := RepairAction(1); action < numRepairActions; action++ {
+		ranges := re.repairRanges[action]
+		// RepairSkipped and RepairPending are tracked in the index for metrics
+		// visibility but are not actionable.
+		if len(ranges) == 0 || action == RepairSkipped || action == RepairPending {
+			continue
+		}
+		// Collect and sort range IDs, then shuffle deterministically so that
+		// iteration is not systematically biased toward any range.
+		ids = ids[:0]
+		for rid := range ranges {
+			ids = append(ids, rid)
+		}
+		slices.Sort(ids)
+		re.rng.Shuffle(len(ids), func(i, j int) {
+			ids[i], ids[j] = ids[j], ids[i]
+		})
+
+		for _, rangeID := range ids {
+			rs := re.ranges[rangeID]
+			// Only repair ranges where localStoreID is the leaseholder.
+			if !isLeaseholderOnStore(rs, localStoreID) {
+				continue
+			}
+
+			switch action {
+			default:
+				log.KvDistribution.VEventf(ctx, 2,
+					"repair action %s for r%d not yet implemented", action, rangeID)
+			}
+		}
+	}
+	return re.changes
+}
+
+var rangeIDSlicePool = sync.Pool{
+	New: func() interface{} {
+		s := make([]roachpb.RangeID, 0, 16)
+		return &s
+	},
 }
 
 // Verify interface compliance.

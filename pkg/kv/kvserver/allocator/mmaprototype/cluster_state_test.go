@@ -395,6 +395,18 @@ func safeTrace(t *testing.T, sb *redact.StringBuilder) string {
 	return stripped
 }
 
+func TestNumRepairActions(t *testing.T) {
+	// Verify that numRepairActions immediately follows NoRepairNeeded, ensuring
+	// the sentinel stays correct as new actions are added.
+	require.Equal(t, NoRepairNeeded+1, numRepairActions)
+	// All actions in [1, numRepairActions) must have known String() values
+	// (i.e. not the fallback "RepairAction(N)" format).
+	for a := RepairAction(1); a < numRepairActions; a++ {
+		require.NotContains(t, a.String(), "RepairAction(",
+			"action %d has no stringer entry; regenerate with go generate", a)
+	}
+}
+
 func TestClusterState(t *testing.T) {
 	tdPath := datapathutils.TestDataPath(t, "cluster_state")
 	datadriven.Walk(t,
@@ -744,10 +756,22 @@ func TestClusterState(t *testing.T) {
 					rec.SafeFormatMinimal(&sb)
 					return fmt.Sprintf("%s%v\n", safeTrace(t, &sb), out)
 
+				case "repair":
+					storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
+					rng := rand.New(rand.NewSource(0))
+					dsm := newDiversityScoringMemo()
+					passObs := makeRebalancingPassMetricsAndLogger(storeID)
+					re := newRebalanceEnv(cs, rng, dsm, cs.ts.Now(), passObs)
+					re.repair(ctx, storeID)
+					rec := finishAndGet()
+					var sb redact.StringBuilder
+					rec.SafeFormatMinimal(&sb)
+					return safeTrace(t, &sb) + printPendingChangesTest(testingGetPendingChanges(t, cs))
+
 				case "repair-needed":
 					var sb strings.Builder
 					// Iterate actions in priority order.
-					for action := FinalizeAtomicReplicationChange; action < NoRepairNeeded; action++ {
+					for action := RepairAction(1); action < numRepairActions; action++ {
 						ranges, ok := cs.repairRanges[action]
 						if !ok || len(ranges) == 0 {
 							continue
