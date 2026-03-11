@@ -1,0 +1,44 @@
+================================================================
+MMA Backport Candidates: master -> release-26.2
+================================================================
+
+Total MMA-related PRs on master since branch split: 16
+Already backported: 8
+Ignored (skipped):  0
+NOT YET backported: 8
+
+----------------------------------------------------------------
+PRs NOT YET backported (in cherry-pick order, oldest first)
+----------------------------------------------------------------
+
+  Legend: [P]=path-based  [T]=title-based  [A]=author-based  [B]=both(P+T)
+
+   1. [A] #165450  4c123b411ff  kvnemesis: add MVCC GC operation to KVNemesis
+            https://github.com/cockroachdb/cockroach/pull/165450
+   2. [A] #166328  9fc2f395971  replicastats: removed an unnecessary indirection in `replicaStatsRecord`
+            https://github.com/cockroachdb/cockroach/pull/166328
+   3. [A] #166419  7b2d2cff0dc  roachtest: enable Go execution traces in kv/restart/nodes=12
+            https://github.com/cockroachdb/cockroach/pull/166419
+   4. [B] #166148  d8f2867dd26  allocator/mmaprototype: add test for non-voter WB rebalancing
+            https://github.com/cockroachdb/cockroach/pull/166148
+   5. [A] #166421  630fc2d636f  roachtest: enable Go execution traces in kv/splits
+            https://github.com/cockroachdb/cockroach/pull/166421
+   6. [A] #166532  0e4c792e661  investigate: analyze heap profiles on OOM failures
+            https://github.com/cockroachdb/cockroach/pull/166532
+   7. [A] #166423  7fdcb3c57fa  roachtest: add Datadog Logs link to GitHub issues
+            https://github.com/cockroachdb/cockroach/pull/166423
+   8. [A] #166560  3b786c5c307  tsdump2duck: add CLI tool to convert tsdump.gob to DuckDB SQL
+            https://github.com/cockroachdb/cockroach/pull/166560
+
+----------------------------------------------------------------
+PRs already backported (for reference)
+----------------------------------------------------------------
+  #166076  d71ec96bd45  storeliveness: fix flaky TestTransportClusterSettingToggle
+  #166422  3fecb16a94a  roachtest: bump user_login.timeout in follower-reads insufficient-quorum
+  #162182  7ae2fd949c0  mmaprototype: balance CPU on utilization
+  #166306  4324c93284f  server: add cluster setting to disable GC assist
+  #166418  a9516dda64e  roachtest: fix acceptance/cli/node-status quorum loss
+  #166531  9e4eb90c76d  sql: fix TestReadCommittedReadTimestampNotSteppedOnCommit for write buffering
+  #166669  3aa8ac691bc  singleflight,stop: fix trace.StartRegion crash with oversized strings
+  #166658  70c832b9804  perturbation: rate-limit backfill pre-fill to avoid OOM on target node
+
