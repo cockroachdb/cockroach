@@ -1,0 +1,50 @@
+# Promote non-voter to voter: r1 has 2 voters and 1 non-voter, but config says
+# 3 voters. MMA should promote the non-voter to voter instead of adding a new
+# replica on a fresh store.
+
+set-store quiet=true
+  store-id=1 node-id=1 locality-tiers=zone=a
+  store-id=2 node-id=2 locality-tiers=zone=b
+  store-id=3 node-id=3 locality-tiers=zone=c
+  store-id=4 node-id=4 locality-tiers=zone=d
+----
+
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    store-id=3 type=NON_VOTER
+    config=num_replicas=3
+----
+
+# Under-replicated: has 2 voters but needs 3.
+repair-needed
+----
+AddVoter: r1
+
+# Repair promotes s3 (the non-voter) to voter.
+repair store-id=1
+----
+[mmaid=1] applying replica change r1 type: ChangeReplica target store n3,s3 (replica-id=3 type=NON_VOTER)->(replica-id=unknown type=VOTER_FULL) to range 1 on store 3
+[mmaid=1] addPendingRangeChange: change_id=1, range_id=1, change=r1 type: ChangeReplica target store n3,s3 (replica-id=3 type=NON_VOTER)->(replica-id=unknown type=VOTER_FULL)
+[mmaid=1] result(success): AddVoter repair for r1, promoting non-voter on s3 to voter
+pending(1)
+change-id=1 store-id=3 node-id=3 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s
+  prev=(replica-id=3 type=NON_VOTER)
+  next=(replica-id=unknown type=VOTER_FULL)
+
+# Confirm the promotion: leaseholder reports 3 voters.
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    store-id=3 type=VOTER_FULL
+    config=num_replicas=3
+----
+
+# After promotion enacted, range is healthy.
+repair-needed
+----
+no ranges need repair
