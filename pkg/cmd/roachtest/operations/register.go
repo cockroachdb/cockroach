@@ -33,6 +33,7 @@ func RegisterOperations(r registry.Registry) {
 	registerLicenseThrottle(r)
 	registerSessionVariables(r)
 	registerDebugZip(r)
+	registerDiskFill(r)
 	changefeeds.RegisterChangefeeds(r)
 	registerInspect(r)
 }
