@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -92,6 +93,7 @@ func (ls *storageImpl) Update(
 ) (Record, error) {
 	var v *roachpb.Value
 	if err := ls.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		txn.SetWorkloadInfo(uint64(workloadid.WORKLOAD_ID_NODE_LIVENESS), 0 /* appNameID */, workloadid.WorkloadTypeSystem)
 		// NB: we have to allocate a new Value every time because once we've
 		// update a value into the KV API we have to assume something hangs on
 		// to it still.
@@ -155,6 +157,7 @@ func (ls *storageImpl) Create(ctx context.Context, nodeID roachpb.NodeID) error 
 
 		v := new(roachpb.Value)
 		err := ls.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			txn.SetWorkloadInfo(uint64(workloadid.WORKLOAD_ID_NODE_LIVENESS), 0 /* appNameID */, workloadid.WorkloadTypeSystem)
 			b := txn.NewBatch()
 			key := keys.NodeLivenessKey(nodeID)
 			if err := v.SetProto(&liveness); err != nil {

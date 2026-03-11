@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -131,6 +132,14 @@ type Config struct {
 	// when throughput is low. If MaxWait is <= 0 then no wait timeout is
 	// enforced. It is inadvisable to disable both MaxIdle and MaxWait.
 	MaxIdle time.Duration
+
+	// WorkloadID, if non-zero, is set as the WorkloadID on every
+	// BatchRequest constructed by this batcher. This allows internal
+	// subsystems (e.g. intent resolution, GC) to attribute their KV
+	// traffic in ASH samples. The WorkloadType is automatically set to
+	// WorkloadTypeSystem since the batcher is only used for internal
+	// system operations.
+	WorkloadID uint64
 
 	// MaxTimeout limits the amount of time that a BatchRequest can run for
 	// before timing out. When the work for a batch is paginated into multiple
@@ -680,6 +689,10 @@ func (b *batch) batchRequest(cfg *Config) *kvpb.BatchRequest {
 		req.TargetBytes = cfg.TargetBytesPerBatchReq
 	}
 	req.AdmissionHeader = b.admissionHeader()
+	if cfg.WorkloadID != 0 {
+		req.Header.WorkloadID = cfg.WorkloadID
+		req.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
+	}
 	return req
 }
 

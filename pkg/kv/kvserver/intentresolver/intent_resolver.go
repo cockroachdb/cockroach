@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -271,6 +272,7 @@ func New(c Config) *IntentResolver {
 		MaxWait:         c.MaxGCBatchWait,
 		MaxIdle:         c.MaxGCBatchIdle,
 		MaxTimeout:      intentResolutionSendBatchTimeout,
+		WorkloadID:      uint64(workloadid.WORKLOAD_ID_GC),
 		// NB: async GC work is not limited by ir.sem, so we do need an in-flight
 		// backpressure limit.
 		InFlightBackpressureLimit: func() int { return inFlightGCBackpressureLimit },
@@ -295,6 +297,7 @@ func New(c Config) *IntentResolver {
 		MaxWait:                   c.MaxIntentResolutionBatchWait,
 		MaxIdle:                   c.MaxIntentResolutionBatchIdle,
 		MaxTimeout:                intentResolutionSendBatchTimeout,
+		WorkloadID:                uint64(workloadid.WORKLOAD_ID_INTENT_RESOLUTION),
 		InFlightBackpressureLimit: inFlightLimit.limit,
 		Stopper:                   c.Stopper,
 		Sender:                    c.DB.NonTransactionalSender(),
@@ -308,6 +311,7 @@ func New(c Config) *IntentResolver {
 		MaxWait:                   c.MaxIntentResolutionBatchWait,
 		MaxIdle:                   c.MaxIntentResolutionBatchIdle,
 		MaxTimeout:                intentResolutionSendBatchTimeout,
+		WorkloadID:                uint64(workloadid.WORKLOAD_ID_INTENT_RESOLUTION),
 		InFlightBackpressureLimit: inFlightLimit.limit,
 		Stopper:                   c.Stopper,
 		Sender:                    c.DB.NonTransactionalSender(),
@@ -459,6 +463,8 @@ func (ir *IntentResolver) MaybePushTransactions(
 	b.Header.Timestamp = ir.clock.Now()
 	b.Header.Timestamp.Forward(pushTo)
 	b.Header.WaitPolicy = h.WaitPolicy
+	b.Header.WorkloadID = uint64(workloadid.WORKLOAD_ID_INTENT_RESOLUTION)
+	b.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
 	for _, pushTxn := range pushTxns {
 		b.AddRawRequest(&kvpb.PushTxnRequest{
 			RequestHeader: kvpb.RequestHeader{
@@ -758,6 +764,8 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 			}
 			b := &kv.Batch{}
 			b.Header.Timestamp = now
+			b.Header.WorkloadID = uint64(workloadid.WORKLOAD_ID_INTENT_RESOLUTION)
+			b.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
 			b.AddRawRequest(&kvpb.PushTxnRequest{
 				RequestHeader: kvpb.RequestHeader{Key: txn.Key},
 				PusherTxn: roachpb.Transaction{
