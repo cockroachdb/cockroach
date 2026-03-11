@@ -186,6 +186,9 @@ func (t *descriptorState) upsertLeaseLocked(
 	session sqlliveness.Session,
 	regionEnumPrefix []byte,
 ) error {
+	if fn := t.m.testingKnobs.TestingLeaseUpsertEventForID; fn != nil {
+		fn(desc.GetID(), desc.GetVersion(), "attempting")
+	}
 	if t.mu.maxVersionSeen < desc.GetVersion() {
 		t.mu.maxVersionSeen = desc.GetVersion()
 	}
@@ -199,16 +202,25 @@ func (t *descriptorState) upsertLeaseLocked(
 			// If we don't have sufficient memory, then release the lease so
 			// that the system.lease table doesn't have a reference.
 			t.m.storage.release(ctx, t.m.stopper, descState.mu.lease)
+			if fn := t.m.testingKnobs.TestingLeaseUpsertEventForID; fn != nil {
+				fn(desc.GetID(), desc.GetVersion(), "memory budget exceeded, releasing lease")
+			}
 			return wrapMemoryError(err)
 		}
 		t.mu.active.insert(descState)
 		t.m.names.insert(ctx, descState)
+		if fn := t.m.testingKnobs.TestingLeaseUpsertEventForID; fn != nil {
+			fn(desc.GetID(), desc.GetVersion(), "inserted new version into active set")
+		}
 		return nil
 	}
 	// If the version already exists and the session ID matches, nothing
 	// needs to be done. If an expiration is set up then this is a historical
 	// version being revived.
 	if s.getSessionID() == session.ID() && s.expiration.Load() == nil {
+		if fn := t.m.testingKnobs.TestingLeaseUpsertEventForID; fn != nil {
+			fn(desc.GetID(), desc.GetVersion(), "already exists with same session, skipping")
+		}
 		return nil
 	}
 
@@ -240,7 +252,14 @@ func (t *descriptorState) upsertLeaseLocked(
 	}()
 	// Delete the existing lease on behalf of the caller.
 	if cleanupOldLease {
+		if fn := t.m.testingKnobs.TestingLeaseUpsertEventForID; fn != nil {
+			fn(desc.GetID(), desc.GetVersion(), "updated session, releasing old lease")
+		}
 		t.m.storage.release(ctx, t.m.stopper, &existingLease)
+	} else {
+		if fn := t.m.testingKnobs.TestingLeaseUpsertEventForID; fn != nil {
+			fn(desc.GetID(), desc.GetVersion(), "revived historical descriptor as live lease")
+		}
 	}
 	return nil
 }
