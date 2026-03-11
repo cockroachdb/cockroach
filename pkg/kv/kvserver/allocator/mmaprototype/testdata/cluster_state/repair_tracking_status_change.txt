@@ -1,0 +1,42 @@
+# Repair tracking across store health transitions: a healthy range transitions
+# to needing repair when a store dies, and back to healthy when the store
+# recovers.
+
+set-store quiet=true
+  store-id=1 node-id=1 locality-tiers=zone=a
+  store-id=2 node-id=2 locality-tiers=zone=b
+  store-id=3 node-id=3 locality-tiers=zone=c
+  store-id=4 node-id=4 locality-tiers=zone=d
+----
+
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    store-id=3 type=VOTER_FULL
+    config=num_replicas=3
+----
+
+# Initially healthy: no repair needed.
+repair-needed
+----
+no ranges need repair
+
+# Mark s3 dead: should need ReplaceDeadVoter.
+update-store-status store-id=3 health=dead leases=shedding replicas=shedding
+----
+dead shedding=leases,replicas
+
+repair-needed
+----
+ReplaceDeadVoter: r1
+
+# s3 comes back healthy: no repair needed.
+update-store-status store-id=3 health=ok leases=ok replicas=ok
+----
+ok accepting all
+
+repair-needed
+----
+no ranges need repair

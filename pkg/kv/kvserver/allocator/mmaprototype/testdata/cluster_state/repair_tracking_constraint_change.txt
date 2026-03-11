@@ -1,0 +1,40 @@
+# Constraint satisfaction changes: a voter constraint violation is resolved
+# when replicas are moved to satisfy it.
+
+set-store quiet=true
+  store-id=1 node-id=1 locality-tiers=zone=a
+  store-id=2 node-id=2 locality-tiers=zone=a
+  store-id=3 node-id=3 locality-tiers=zone=b
+  store-id=4 node-id=4 locality-tiers=zone=b
+----
+
+# 3 voters: s1(zone=a), s2(zone=a), s3(zone=b).
+# voter_constraint requires 2 in zone=b, only 1 satisfies it.
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    store-id=3 type=VOTER_FULL
+    config=num_replicas=3 voter_constraints={'+zone=b':2}
+----
+
+repair-needed
+----
+SwapVoterForConstraints: r1
+
+# Move s2 from zone=a to s4 in zone=b (simulated by a new leaseholder msg
+# with updated replicas).
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=3 type=VOTER_FULL
+    store-id=4 type=VOTER_FULL
+    config=num_replicas=3 voter_constraints={'+zone=b':2}
+----
+
+# Constraint now satisfied.
+repair-needed
+----
+no ranges need repair

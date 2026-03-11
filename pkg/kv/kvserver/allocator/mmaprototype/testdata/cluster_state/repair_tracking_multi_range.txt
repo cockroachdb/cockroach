@@ -1,0 +1,48 @@
+# Repair tracking with multiple ranges having different actions.
+
+set-store quiet=true
+  store-id=1 node-id=1 locality-tiers=zone=a
+  store-id=2 node-id=2 locality-tiers=zone=b
+  store-id=3 node-id=3 locality-tiers=zone=c
+  store-id=4 node-id=4 locality-tiers=zone=d
+----
+
+# r1: 2 voters, config says 3 → AddVoter.
+# r2: 3 voters, s3 dead → ReplaceDeadVoter.
+# r3: healthy 3 voters → no repair.
+store-leaseholder-msg
+store-id=1
+  range-id=1
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    config=num_replicas=3
+  range-id=2
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    store-id=3 type=VOTER_FULL
+    config=num_replicas=3
+  range-id=3
+    store-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 type=VOTER_FULL
+    store-id=3 type=VOTER_FULL
+    config=num_replicas=3
+----
+
+# Mark s3 dead for r2.
+update-store-status store-id=3 health=dead leases=shedding replicas=shedding
+----
+dead shedding=leases,replicas
+
+repair-needed
+----
+AddVoter: r1
+ReplaceDeadVoter: r2, r3
+
+# s3 comes back: r2 and r3 no longer need repair, r1 still does.
+update-store-status store-id=3 health=ok leases=ok replicas=ok
+----
+ok accepting all
+
+repair-needed
+----
+AddVoter: r1
