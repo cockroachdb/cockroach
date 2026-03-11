@@ -107,6 +107,67 @@ func TestOnlineRestoreBasic(t *testing.T) {
 
 }
 
+func TestOnlineRestoreEncrypted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	ctx := context.Background()
+
+	const numAccounts = 1000
+	const passphrase = "encryption_passphrase = 'super-secret-password'"
+
+	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetup(
+		t, singleNode, numAccounts, InitManualReplication,
+	)
+	defer cleanupFn()
+
+	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(
+		t, 1, dir, InitManualReplication, base.TestClusterArgs{},
+	)
+	defer cleanupFnRestored()
+
+	externalStorage := backuptestutils.GetExternalStorageURI(
+		t, "nodelocal://1/encrypted-backup", "encrypted-backup", sqlDB, rSQLDB,
+	)
+
+	sqlDB.Exec(t, fmt.Sprintf(
+		"BACKUP DATABASE data INTO '%s' WITH %s", externalStorage, passphrase,
+	))
+
+	testutils.RunTrueAndFalse(t, "blocking download",
+		func(t *testing.T, blockingDownload bool) {
+			restoreOpt := "EXPERIMENTAL DEFERRED COPY"
+			if blockingDownload {
+				restoreOpt = "EXPERIMENTAL COPY"
+			}
+			rSQLDB.Exec(t, fmt.Sprintf(
+				"RESTORE DATABASE data FROM LATEST IN '%s' WITH %s, %s",
+				externalStorage, passphrase, restoreOpt,
+			))
+
+			if !blockingDownload {
+				// Wait for the download job to complete. This is when Pebble
+				// actually downloads and decrypts the SSTs.
+				waitForLatestDownloadJobToSucceed(t, rSQLDB)
+			}
+
+			// Verify the restored data matches the source after decryption.
+			fpSrc, err := fingerprintutils.FingerprintDatabase(
+				ctx, tc.Conns[0], "data", fingerprintutils.Stripped(),
+			)
+			require.NoError(t, err)
+			fpDst, err := fingerprintutils.FingerprintDatabase(
+				ctx, rtc.Conns[0], "data", fingerprintutils.Stripped(),
+			)
+			require.NoError(t, err)
+			require.NoError(t, fingerprintutils.CompareDatabaseFingerprints(fpSrc, fpDst))
+
+			rSQLDB.Exec(t, "DROP DATABASE data CASCADE")
+		})
+}
+
 func TestOnlineRestoreRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

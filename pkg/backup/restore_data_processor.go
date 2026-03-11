@@ -645,8 +645,19 @@ func (rd *restoreDataProcessor) linkFiles(
 			batchTimestamp = kvDB.Clock().Now()
 		}
 
+		locator := file.Dir.URI
+		if rd.spec.Encryption != nil {
+			locator, err = enginepb.InjectRemoteDecodingInfo(
+				enginepb.RemoteDecodingInfo{EncryptionKey: rd.spec.Encryption.Key},
+				locator,
+			)
+			if err != nil {
+				return summary, errors.Wrap(err, "injecting decoding info")
+			}
+		}
+
 		loc := kvpb.LinkExternalSSTableRequest_ExternalFile{
-			Locator:                 string(cloud.MakeRedactableURI(file.Dir.URI)),
+			Locator:                 string(cloud.MakeRedactableURI(locator)),
 			Path:                    file.Path,
 			ApproximatePhysicalSize: fileSize,
 			BackingFileSize:         file.BackingFileSize,
