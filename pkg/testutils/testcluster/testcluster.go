@@ -560,17 +560,25 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 	testutils.SucceedsSoon(t, func() error {
 		var err error
 		for _, ssrv := range tc.Servers {
+			rpcCtx := ssrv.SystemLayer().RPCContext()
 			for _, dsrv := range tc.Servers {
 				stl := dsrv.StorageLayer()
+				addr := dsrv.SystemLayer().AdvRPCAddr()
+				nodeID := stl.NodeID()
+
 				// Note: we avoid using .RPCClientConn() here to avoid accumulating
 				// stopper closures in RAM during the SucceedsSoon iterations.
-				_, e := ssrv.SystemLayer().RPCContext().GRPCDialNode(
-					dsrv.SystemLayer().AdvRPCAddr(),
-					stl.NodeID(),
-					roachpb.Locality{},
-					rpcbase.DefaultClass,
-				).Connect(context.TODO())
-				err = errors.CombineErrors(err, e)
+				if !rpcCtx.UseDRPC {
+					_, e := rpcCtx.GRPCDialNode(
+						addr, nodeID, roachpb.Locality{}, rpcbase.DefaultClass,
+					).Connect(context.TODO())
+					err = errors.CombineErrors(err, e)
+				} else {
+					_, e := rpcCtx.DRPCDialNode(
+						addr, nodeID, roachpb.Locality{}, rpcbase.DefaultClass,
+					).Connect(context.TODO())
+					err = errors.CombineErrors(err, e)
+				}
 			}
 		}
 		return err
@@ -1794,16 +1802,37 @@ func (tc *TestCluster) WaitForNodeStatuses(t serverutils.TestFataler) {
 		// Note: we avoid using .RPCClientConn() here to avoid accumulating
 		// stopper closures in RAM during the SucceedsSoon iterations.
 		srv := tc.Server(0).SystemLayer()
-		conn, err := srv.RPCContext().GRPCDialNode(
-			srv.AdvRPCAddr(),
-			tc.Server(0).StorageLayer().NodeID(),
-			roachpb.Locality{},
-			rpcbase.DefaultClass,
-		).Connect(context.TODO())
+		rpcCtx := srv.RPCContext()
+
+		client, err := func() (serverpb.RPCStatusClient, error) {
+			if !rpcCtx.UseDRPC {
+				cc, err := rpcCtx.GRPCDialNode(
+					srv.AdvRPCAddr(),
+					tc.Server(0).StorageLayer().NodeID(),
+					roachpb.Locality{},
+					rpcbase.DefaultClass,
+				).Connect(context.TODO())
+				if err != nil {
+					return nil, err
+				}
+				return serverpb.NewGRPCStatusClientAdapter(cc), nil
+			}
+
+			dc, err := rpcCtx.DRPCDialNode(
+				srv.AdvRPCAddr(),
+				tc.Server(0).StorageLayer().NodeID(),
+				roachpb.Locality{},
+				rpcbase.DefaultClass,
+			).Connect(context.TODO())
+			if err != nil {
+				return nil, err
+			}
+			return serverpb.NewDRPCStatusClientAdapter(dc), nil
+		}()
 		if err != nil {
 			return err
 		}
-		client := serverpb.NewGRPCStatusClientAdapter(conn)
+
 		response, err := client.Nodes(context.Background(), &serverpb.NodesRequest{})
 		if err != nil {
 			return err
