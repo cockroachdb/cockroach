@@ -115,10 +115,18 @@ the `slices`, `maps`, and `cmp` packages) where appropriate.
 
 ### When generating PRs and commit records
 
-Use the `commit-helper` skill (invoked via `/commit-helper`) when creating commits and PRs.
+Use the `/commit-helper` skill when creating commits and PRs.
 
 - For multi-commit PRs, summarize each commit in the PR record.
 - Do not include a test plan unless explicitly asked by the user.
+
+### Skills
+
+The following repo-specific skills are available:
+
+- `/commit-helper` — Create commits and PRs with properly formatted messages and release notes.
+- `/file-crdb-issue` — File GitHub issues using CockroachDB templates and labeling conventions.
+- `/review-crdb` — Review code changes or PRs for correctness and reviewability.
 
 # Interaction Style
 
