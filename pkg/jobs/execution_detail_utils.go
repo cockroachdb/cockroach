@@ -115,6 +115,24 @@ func ReadExecutionDetailFile(
 		return stringifyProtobinFile(trimmedFilename, fileBytes)
 	}
 
+	// If the file requested ends in `.url.html`, strip the `.html` suffix to
+	// find the underlying `.url` file and wrap its contents in an HTML redirect.
+	if strings.HasSuffix(filename, ".url.html") {
+		urlFilename := strings.TrimSuffix(filename, ".html")
+		urlBytes, err := ReadChunkedFileToJobInfo(
+			ctx,
+			profilerconstants.MakeProfilerExecutionDetailsChunkKeyPrefix(urlFilename),
+			txn,
+			jobID,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return []byte(fmt.Sprintf(
+			`<meta http-equiv="Refresh" content="0; url=%s">`, string(urlBytes),
+		)), nil
+	}
+
 	return ReadChunkedFileToJobInfo(
 		ctx,
 		profilerconstants.MakeProfilerExecutionDetailsChunkKeyPrefix(filename),
@@ -144,6 +162,11 @@ func ListExecutionDetailFiles(
 					// the file available for consumption.
 					if strings.HasSuffix(filename, ".binpb") {
 						files = append(files, filename+".txt")
+					}
+					// If we see a `.url` file, also list a `.url.html`
+					// virtual entry that serves the URL wrapped in HTML.
+					if strings.HasSuffix(filename, ".url") {
+						files = append(files, filename+".html")
 					}
 					files = append(files, filename)
 				}

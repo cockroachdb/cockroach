@@ -195,7 +195,7 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
 		distSQLDiagram, err := checkExecutionDetails(t, s, jobspb.JobID(importJobID), "distsql")
 		require.NoError(t, err)
-		require.Regexp(t, "<meta http-equiv=\"Refresh\" content=\"0\\; url=https://cockroachdb\\.github\\.io/distsqlplan/decode.html.*>", string(distSQLDiagram))
+		require.Regexp(t, "https://cockroachdb\\.github\\.io/distsqlplan/decode.html.*", string(distSQLDiagram))
 		close(continueRunning)
 		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
 	})
@@ -378,7 +378,8 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 		files := listExecutionDetails(t, s, jobspb.JobID(importJobID))
 
 		patterns := []string{
-			".*/distsql-plan.html",
+			".*/distsql-plan.url",
+			".*/distsql-plan.url.html",
 		}
 		if !s.DeploymentMode().IsExternal() {
 			patterns = append(patterns, ".*/job-goroutines.txt")
@@ -395,7 +396,7 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 
 		testutils.SucceedsSoon(t, func() error {
 			files = listExecutionDetails(t, s, jobspb.JobID(importJobID))
-			expectedCount := 5
+			expectedCount := 6
 			if s.DeploymentMode().IsExternal() {
 				expectedCount--
 			}
@@ -416,9 +417,9 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
 		testutils.SucceedsSoon(t, func() error {
 			files = listExecutionDetails(t, s, jobspb.JobID(importJobID))
-			expectedCount := 10
+			expectedCount := 12
 			if s.DeploymentMode().IsExternal() {
-				expectedCount = 8
+				expectedCount = 10
 			}
 			if len(files) != expectedCount {
 				return errors.Newf("expected %d files, got %d: %v", expectedCount, len(files), files)
@@ -426,8 +427,10 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 			return nil
 		})
 		patterns = []string{
-			".*/distsql-plan.html",
-			".*/distsql-plan.html",
+			".*/distsql-plan.url",
+			".*/distsql-plan.url",
+			".*/distsql-plan.url.html",
+			".*/distsql-plan.url.html",
 		}
 		if !s.DeploymentMode().IsExternal() {
 			patterns = append(patterns, ".*/job-goroutines.txt", ".*/job-goroutines.txt")
