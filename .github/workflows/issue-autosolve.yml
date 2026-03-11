@@ -157,11 +157,6 @@ jobs:
             echo "assessment=SKIP" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Install Claude CLI
-        if: steps.assess_result.outputs.assessment == 'PROCEED'
-        run: |
-          npm install -g @anthropic-ai/claude-code
-
       - name: Stage 2 - Implement Fix (with retries)
         id: implement
         if: steps.assess_result.outputs.assessment == 'PROCEED'
