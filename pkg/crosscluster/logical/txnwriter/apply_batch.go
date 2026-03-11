@@ -95,7 +95,7 @@ func (tw *transactionWriter) tryApplyTransaction(
 		tableWriter := tw.tableWriters[row.TableID]
 		switch {
 		case row.IsDeleteRow():
-			err := tableWriter.DeleteRow(ctx, transaction.Timestamp, row.PrevRow)
+			err := tableWriter.DeleteRow(ctx, transaction.TxnID.Timestamp, row.PrevRow)
 			if err != nil {
 				return ApplyResult{}, err
 			}
@@ -103,7 +103,7 @@ func (tw *transactionWriter) tryApplyTransaction(
 			// TODO(jeffswenson): handle the tombstone update case. For ordered mode,
 			// this case is only needed for racing updates.
 		case row.IsInsertRow():
-			err := tableWriter.InsertRow(ctx, transaction.Timestamp, row.Row)
+			err := tableWriter.InsertRow(ctx, transaction.TxnID.Timestamp, row.Row)
 			if sqlwriter.IsLwwLoser(err) {
 				lwwLosers++
 				continue
@@ -114,7 +114,7 @@ func (tw *transactionWriter) tryApplyTransaction(
 		case row.IsUpdateRow():
 			err := tableWriter.UpdateRow(
 				ctx,
-				transaction.Timestamp,
+				transaction.TxnID.Timestamp,
 				row.PrevRow,
 				row.Row,
 			)
