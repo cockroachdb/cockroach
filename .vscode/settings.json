@@ -44,7 +44,7 @@
     },
     "filewatcher.commands": [
         {
-            "match": "\\.go*",
+            "match": ".*\\.go$",
             "isAsync": true,
             "cmd": "${workspaceRoot}/bin/crlfmt -w -tab=2 ${file}",
             "event": "onFileChange"
