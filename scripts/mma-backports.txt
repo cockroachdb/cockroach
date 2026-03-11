@@ -1,0 +1,72 @@
+================================================================
+MMA Backport Candidates: master -> release-26.2
+================================================================
+
+Total MMA-related PRs on master since branch split: 29
+Already backported: 10
+Ignored (skipped):  15
+NOT YET backported: 4
+
+----------------------------------------------------------------
+PRs NOT YET backported (in cherry-pick order, oldest first)
+----------------------------------------------------------------
+
+  Legend: [P]=path-based  [T]=title-based  [A]=author-based  [B]=both(P+T)
+
+   1. [A] #166745  57c21590cc0  admission: plumb SQL CPU time token admission through SQLCPUProvider
+            https://github.com/cockroachdb/cockroach/pull/166745
+   2. [B] #167051  3122e1b1742  asim: add sma-count and mma-only configs to skewed disk balance test
+            https://github.com/cockroachdb/cockroach/pull/167051
+   3. [A] #166792  5f484ad0d8d  admission: integrate SQL CPU admission with CTT WorkQueue
+            https://github.com/cockroachdb/cockroach/pull/166792
+   4. [B] #167110  72f5c45a5db  asim: document thrashing sources in skewed disk balance test
+            https://github.com/cockroachdb/cockroach/pull/167110
+
+----------------------------------------------------------------
+PRs ignored (add/remove in IGNORED_PRS dict)
+----------------------------------------------------------------
+  #165450  4c123b411ff  kvnemesis: add MVCC GC operation to KVNemesis
+       reason: author-based: kvnemesis: add MVCC GC operation to KVNemesis
+  #166328  9fc2f395971  replicastats: removed an unnecessary indirection in `replicaStatsRecord`
+       reason: author-based: replicastats: removed an unnecessary indirection in `replicaStatsRecord`
+  #166419  7b2d2cff0dc  roachtest: enable Go execution traces in kv/restart/nodes=12
+       reason: author-based: roachtest: enable Go execution traces in kv/restart/nodes=12
+  #166421  630fc2d636f  roachtest: enable Go execution traces in kv/splits
+       reason: author-based: roachtest: enable Go execution traces in kv/splits
+  #166532  0e4c792e661  investigate: analyze heap profiles on OOM failures
+       reason: author-based: investigate: analyze heap profiles on OOM failures
+  #166423  7fdcb3c57fa  roachtest: add Datadog Logs link to GitHub issues
+       reason: author-based: roachtest: add Datadog Logs link to GitHub issues
+  #166560  3b786c5c307  tsdump2duck: add CLI tool to convert tsdump.gob to DuckDB SQL
+       reason: author-based: tsdump2duck: add CLI tool to convert tsdump.gob to DuckDB SQL
+  #167100  cc104061783  engflow-artifacts: rewrite protobuf parsing with proper schema
+       reason: author-based: engflow-artifacts: rewrite protobuf parsing with proper schema
+  #167211  043bbc66afc  CLAUDE.md: improve PR description guidance
+       reason: author-based: CLAUDE.md: improve PR description guidance
+  #166156  1d52a673164  intentresolver: chunk intent resolution to limit in-flight requests
+       reason: author-based: intentresolver: chunk intent resolution to limit in-flight requests
+  #166698  c2e82219150  kvserver: introduce stageDestroyReplica and pendingReplicaDestruction
+       reason: author-based: kvserver: introduce stageDestroyReplica and pendingReplicaDestruction
+  #166924  0c0f9c2bd16  server: use liveness cache for high-frequency scan callers
+       reason: author-based: server: use liveness cache for high-frequency scan callers
+  #167297  6394b41096b  intentresolver: expose intent budget constants as env vars
+       reason: author-based: intentresolver: expose intent budget constants as env vars
+  #166760  c279baa28e2  kvcoord: fix a potential persistent failure loop in `DistSender`
+       reason: author-based: kvcoord: fix a potential persistent failure loop in `DistSender`
+  #167289  461753032b1  kvserver: stop treating split/merge trigger errors as replica corruption
+       reason: author-based: kvserver: stop treating split/merge trigger errors as replica corruption
+
+----------------------------------------------------------------
+PRs already backported (for reference)
+----------------------------------------------------------------
+  #166076  d71ec96bd45  storeliveness: fix flaky TestTransportClusterSettingToggle
+  #166148  d8f2867dd26  allocator/mmaprototype: add test for non-voter WB rebalancing
+  #166422  3fecb16a94a  roachtest: bump user_login.timeout in follower-reads insufficient-quorum
+  #162182  7ae2fd949c0  mmaprototype: balance CPU on utilization
+  #166306  4324c93284f  server: add cluster setting to disable GC assist
+  #166418  a9516dda64e  roachtest: fix acceptance/cli/node-status quorum loss
+  #166531  9e4eb90c76d  sql: fix TestReadCommittedReadTimestampNotSteppedOnCommit for write buffering
+  #166669  3aa8ac691bc  singleflight,stop: fix trace.StartRegion crash with oversized strings
+  #166658  70c832b9804  perturbation: rate-limit backfill pre-fill to avoid OOM on target node
+  #167307  bcc11cc1ac4  kvserver: fix TestReplicaRemovalDuringCPut hang on failure
+
