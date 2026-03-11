@@ -20,7 +20,7 @@ scale, and manage modern, data-intensive applications.
 - [See Also](#see-also)
 
 ## What is CockroachDB?
-
+sdfsdfds
 CockroachDB is a distributed SQL database built on a transactional and
 strongly-consistent key-value store. It **scales** horizontally;
 **survives** disk, machine, rack, and even datacenter failures with
