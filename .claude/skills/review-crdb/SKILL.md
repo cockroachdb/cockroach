@@ -81,16 +81,27 @@ This is faster and gives comprehensive results. Use this unless the user
 requests sequential review.
 
 **Correctness agent**: run in the **foreground** (not background). It reads
-more surrounding context and anecdotally takes longer than the other agents.
-Running it synchronously avoids `TaskOutput` polling timeouts. Launch all
-other agents in the background first, then block on the correctness agent.
+more surrounding context and takes longer than the other agents.
+Launch all other agents in the background first, then run the correctness
+agent in the foreground.
 
-**Timeouts**: when polling background agents with `TaskOutput`, always use the
-maximum allowed timeout to avoid premature timeouts on larger diffs.
+**Do NOT poll with `TaskOutput`**. Background agents frequently take 1–3
+minutes, which exceeds `TaskOutput` timeout limits and causes unreliable
+results. Instead, rely on the automatic task notification system:
+
+1. Launch background agents with `run_in_background: true`.
+2. Run foreground agents (correctness, and any others if few agents apply).
+3. When a background agent completes, you receive a `<task-notification>`
+   automatically — no polling needed.
+4. After all foreground work is done, if background notifications haven't
+   arrived yet, continue waiting. Do not attempt to read output files or
+   poll manually.
+5. Once all notifications arrive, aggregate the results into the summary.
 
 ### Handling agent failures
 
-If an agent fails (API error, timeout, or returns empty output):
+If an agent fails (API error, empty result in the task notification, or other
+error):
 
 1. **Retry once**. Transient API errors are common — a single retry usually
    succeeds.
