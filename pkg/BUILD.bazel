@@ -1210,6 +1210,8 @@ GO_TARGETS = [
     "//pkg/cmd/fuzz:fuzz_lib",
     "//pkg/cmd/generate-acceptance-tests:generate-acceptance-tests",
     "//pkg/cmd/generate-acceptance-tests:generate-acceptance-tests_lib",
+    "//pkg/cmd/generate-ash-inventory:generate-ash-inventory",
+    "//pkg/cmd/generate-ash-inventory:generate-ash-inventory_lib",
     "//pkg/cmd/generate-bazel-extra:generate-bazel-extra",
     "//pkg/cmd/generate-bazel-extra:generate-bazel-extra_lib",
     "//pkg/cmd/generate-binary:generate-binary",
