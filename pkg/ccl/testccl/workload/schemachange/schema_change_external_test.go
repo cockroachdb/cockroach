@@ -34,8 +34,26 @@ import (
 func TestWorkload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer ccl.TestingEnableEnterprise()()
+	defer schemachange.DisableMultiRegionOps()()
 	skip.UnderDeadlock(t, "test connections can be too slow under expensive configs")
 	skip.UnderRace(t, "test connections can be too slow under expensive configs")
+
+	runSchemaChangeWorkload(t, "CREATE DATABASE schemachange")
+}
+
+func TestWorkloadMultiRegion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer ccl.TestingEnableEnterprise()()
+	skip.UnderDeadlock(t, "test connections can be too slow under expensive configs")
+	skip.UnderRace(t, "test connections can be too slow under expensive configs")
+
+	runSchemaChangeWorkload(
+		t,
+		`CREATE DATABASE schemachange PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3"`,
+	)
+}
+
+func runSchemaChangeWorkload(t *testing.T, createDBStmt string) {
 
 	rng, _ := randutil.NewTestRand()
 	scope := log.Scope(t)
@@ -62,7 +80,7 @@ func TestWorkload(t *testing.T) {
 	tdb := sqlutils.MakeSQLRunner(db)
 	reg := histogram.NewRegistry(20*time.Second, m.Name)
 	tdb.Exec(t, "CREATE USER testuser")
-	tdb.Exec(t, "CREATE DATABASE schemachange")
+	tdb.Exec(t, createDBStmt)
 	tdb.Exec(t, "GRANT admin TO testuser")
 	tdb.Exec(t, "SET CLUSTER SETTING sql.log.all_statements.enabled = true")
 
