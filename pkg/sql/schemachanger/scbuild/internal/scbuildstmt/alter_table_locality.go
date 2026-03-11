@@ -47,7 +47,7 @@ func AlterTableLocality(b BuildCtx, t *tree.AlterTableLocality) {
 	tableID := tbl.TableID
 	tableName := t.Name.Object()
 
-	if elts.Filter(notFilter(publicTargetFilter)) != nil {
+	if elts.Filter(notFilter(publicTargetFilter)).FilterTable() != nil {
 		panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
 			"table %q is being dropped, try again later", tbl))
 	}
