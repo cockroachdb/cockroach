@@ -1,0 +1,14 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "generate-ash-inventory_lib",
+    srcs = ["main.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/generate-ash-inventory",
+    visibility = ["//visibility:private"],
+)
+
+go_binary(
+    name = "generate-ash-inventory",
+    embed = [":generate-ash-inventory_lib"],
+    visibility = ["//visibility:public"],
+)

@@ -45,6 +45,7 @@ func makeGenerateCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.
         dev generate testlogic     # logictest generated code (includes 'dev generate schemachanger')
         dev generate ui            # Create UI assets to be consumed by 'go build'
         dev generate http-schema   # Generate OpenAPI schema and TypeScript types from Go API annotations
+        dev generate ash-inventory # Generate ASH integration points inventory
 `,
 		Args: cobra.MinimumNArgs(0),
 		// TODO(irfansharif): Errors but default just eaten up. Let's wrap these
@@ -66,6 +67,7 @@ type configuration struct {
 func (d *dev) generate(cmd *cobra.Command, targets []string) error {
 	var generatorTargetMapping = map[string]func(cmd *cobra.Command) error{
 		"acceptance":    d.generateAcceptanceTests,
+		"ash-inventory": d.generateAshInventory,
 		"bazel":         d.generateBazel,
 		"bnf":           d.generateBNF,
 		"cgo":           d.generateCgo,
@@ -238,6 +240,18 @@ func (d *dev) generateAcceptanceTests(cmd *cobra.Command) error {
 	}
 	return d.exec.CommandContextInheritingStdStreams(
 		ctx, "bazel", "run", "pkg/cmd/generate-acceptance-tests", "--", fmt.Sprintf("-out-dir=%s", workspace),
+	)
+}
+
+func (d *dev) generateAshInventory(cmd *cobra.Command) error {
+	ctx := cmd.Context()
+	workspace, err := d.getWorkspace(ctx)
+	if err != nil {
+		return err
+	}
+	return d.exec.CommandContextInheritingStdStreams(
+		ctx, "bazel", "run", "pkg/cmd/generate-ash-inventory",
+		"--", fmt.Sprintf("-out-dir=%s", workspace),
 	)
 }
 
