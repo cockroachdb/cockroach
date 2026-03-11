@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -2406,6 +2407,11 @@ func TestVirtualIntentResolutionReentryAfterEvaluationLiveLock(t *testing.T) {
 	concurrency.VirtualIntentResolution.Override(ctx, &st.SV, true)
 	concurrency.DefaultLockTableSize.Override(ctx, &st.SV, 4)
 	storage.MaxConflictsPerLockConflictError.Override(ctx, &st.SV, 3)
+	rng, _ := randutil.NewTestRand()
+	if rng.Float32() > 0.5 {
+		t.Logf("setting DiscoveredLocksThresholdToConsultTxnStatusCache = 1")
+		concurrency.DiscoveredLocksThresholdToConsultTxnStatusCache.Override(ctx, &st.SV, 1)
+	}
 
 	store, err := tc.Server(0).GetStores().(*Stores).GetStore(tc.Server(0).GetFirstStoreID())
 	require.NoError(t, err)

@@ -592,12 +592,6 @@ func (m *managerImpl) HandleLockConflictError(
 	//
 	// Either way, there is no possibility of the request entering an infinite
 	// loop without making progress.
-
-	// Condense point resolve entries into range entries before they are cleared
-	// by the next ScanAndEnqueue. This prevents livelock when the lock table
-	// evicts entries under memory pressure.
-	g.PrepareForLockConflictRetry(ctx)
-
 	consultTxnStatusCache :=
 		int64(len(t.Locks)) > DiscoveredLocksThresholdToConsultTxnStatusCache.Get(&m.st.SV)
 	var numAdded int
@@ -617,6 +611,11 @@ func (m *managerImpl) HandleLockConflictError(
 	if numAdded > 0 {
 		log.VEventf(ctx, 2, "added %d discovered lock(s) to lock table: %v", numAdded, t)
 	}
+
+	// Condense point resolve entries into range entries before they are cleared
+	// by the next ScanAndEnqueue. This prevents livelock when the lock table
+	// evicts entries under memory pressure.
+	g.PrepareForLockConflictRetry(ctx)
 
 	// Release the Guard's latches but continue to remain in lock wait-queues by
 	// not releasing lockWaitQueueGuards. We expect the caller of this method to
