@@ -36,12 +36,9 @@
 /build/                      @cockroachdb/dev-inf
 
 /docs/RFCS/                  @cockroachdb/rfc-prs
-/docs/generated/redact_safe.md @cockroachdb/security-engineering
 
 /LICENSE                     @cockroachdb/release-eng-prs
 /licenses                    @cockroachdb/release-eng-prs
-
-/Makefile                    @cockroachdb/dev-inf
 
 #!/pkg                         @cockroachdb/unowned
 #!/pkg/sql/                    @cockroachdb/sql-queries-noreview
@@ -170,7 +167,6 @@
 /pkg/cli/doctor*.go          @cockroachdb/sql-foundations     @cockroachdb/cli-prs
 /pkg/cli/flags*.go           @cockroachdb/cli-prs
 /pkg/cli/import*.go          @cockroachdb/sql-foundations   @cockroachdb/cli-prs
-/pkg/cli/inflight_trace_dump/ @cockroachdb/obs-prs @cockroachdb/cli-prs @cockroachdb/obs-india-prs
 /pkg/cli/init.go             @cockroachdb/kv-prs         @cockroachdb/cli-prs
 /pkg/cli/log*.go             @cockroachdb/obs-prs    @cockroachdb/cli-prs @cockroachdb/obs-india-prs
 /pkg/cli/mt_cert*            @cockroachdb/security-engineering
@@ -214,7 +210,6 @@
 /pkg/server/fanout*.go                   @cockroachdb/obs-prs
 /pkg/server/diagnostics/                 @cockroachdb/obs-prs
 /pkg/server/goroutinedumper/             @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/heapprofiler/                @cockroachdb/obs-prs @cockroachdb/server-prs
 /pkg/server/import_ts*.go                @cockroachdb/obs-prs @cockroachdb/kv-prs
 /pkg/server/index_usage*.go              @cockroachdb/obs-prs
 /pkg/server/init*.go                     @cockroachdb/kv-prs      @cockroachdb/server-prs
@@ -265,8 +260,6 @@
 /pkg/server/user*.go                     @cockroachdb/obs-prs @cockroachdb/security-engineering
 /pkg/server/version_cluster*.go          @cockroachdb/dev-inf
 
-
-/pkg/ccl/jobsccl/            @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 /pkg/ccl/changefeedccl/      @cockroachdb/cdc-prs
 /pkg/sql/export/             @cockroachdb/cdc-prs
 
@@ -361,7 +354,6 @@
 /pkg/kv/kvserver/spanlatch/             @cockroachdb/kv-prs
 /pkg/kv/kvserver/spanset/               @cockroachdb/kv-prs
 /pkg/kv/kvserver/split/                 @cockroachdb/kv-prs
-/pkg/kv/kvserver/stateloader/           @cockroachdb/kv-prs
 /pkg/kv/kvserver/storeliveness/         @cockroachdb/kv-prs
 /pkg/kv/kvserver/tenantrate/            @cockroachdb/kv-prs
 #!/pkg/kv/kvserver/testdata/            @cockroachdb/kv-prs-noreview
@@ -402,26 +394,11 @@
 /pkg/bench/rttanalysis       @cockroachdb/sql-foundations
 /pkg/blobs/                  @cockroachdb/disaster-recovery
 /pkg/build/                  @cockroachdb/dev-inf
-#!/pkg/ccl/baseccl/          @cockroachdb/unowned
-/pkg/ccl/baseccl/encryption* @cockroachdb/storage
-/pkg/ccl/buildccl/           @cockroachdb/dev-inf
-#!/pkg/ccl/cliccl/           @cockroachdb/unowned
-/pkg/ccl/cmdccl/stub-schema-registry/ @cockroachdb/cdc-prs
-/pkg/ccl/cmdccl/clusterrepl/ @cockroachdb/disaster-recovery
-/pkg/ccl/gqpccl/             @cockroachdb/sql-queries-prs
 /pkg/ccl/gssapiccl/          @cockroachdb/product-security
-#!/pkg/ccl/kvccl/              @cockroachdb/kv-noreview
-/pkg/ccl/kvccl/kvtenantccl/  @cockroachdb/server-prs
-#!/pkg/ccl/upgradeccl/       @cockroachdb/release-eng-prs @cockroachdb/upgrade-prs
 #!/pkg/ccl/logictestccl/       @cockroachdb/sql-queries-noreview
 #!/pkg/ccl/sqlitelogictestccl/ @cockroachdb/sql-queries-noreview
 /pkg/ccl/multiregionccl/     @cockroachdb/sql-foundations
 /pkg/ccl/multitenantccl/     @cockroachdb/server-prs
-/pkg/ccl/multitenant/tenantcostclient/ @cockroachdb/sql-queries-prs
-/pkg/ccl/multitenant/tenantcostserver/ @cockroachdb/sql-queries-prs
-/pkg/ccl/pgcryptoccl/        @cockroachdb/sql-foundations
-/pkg/ccl/plpgsqlccl/         @cockroachdb/sql-queries-prs
-/pkg/ccl/securityccl/        @cockroachdb/security-engineering @cockroachdb/product-security
 #!/pkg/ccl/serverccl/        @cockroachdb/unowned
 /pkg/ccl/serverccl/diagnosticsccl/ @cockroachdb/obs-prs
 /pkg/ccl/serverccl/server_sql* @cockroachdb/server-prs
@@ -439,13 +416,11 @@
 /pkg/ccl/testccl/workload/schemachange/ @cockroachdb/sql-foundations
 #!/pkg/ccl/testutilsccl/     @cockroachdb/test-eng-noreview
 /pkg/ccl/testutilsccl/alter_* @cockroachdb/sql-foundations
-#!/pkg/ccl/utilccl/          @cockroachdb/unowned
 /pkg/ccl/workloadccl/        @cockroachdb/test-eng
 #!/pkg/clusterversion/       @cockroachdb/kv-prs-noreview @cockroachdb/dev-inf-noreview @cockroachdb/test-eng-noreview
 /pkg/clusterversion/cockroach_versions.go @cockroachdb/release-eng-prs @cockroachdb/upgrade-prs
 /pkg/cmd/allocsim/           @cockroachdb/kv-prs
 /pkg/cmd/bazci/              @cockroachdb/dev-inf
-/pkg/cmd/cloudupload/        @cockroachdb/dev-inf
 /pkg/cmd/cmdutil/            @cockroachdb/dev-inf
 /pkg/cmd/cmp-protocol/       @cockroachdb/sql-foundations
 /pkg/cmd/cmp-sql/            @cockroachdb/sql-foundations
@@ -453,7 +428,6 @@
 /pkg/cmd/cockroach/          @cockroachdb/dev-inf @cockroachdb/cli-prs
 /pkg/cmd/cockroach-short/    @cockroachdb/dev-inf @cockroachdb/cli-prs
 /pkg/cmd/cockroach-sql/      @cockroachdb/sql-foundations @cockroachdb/cli-prs
-/pkg/cmd/compile-build/      @cockroachdb/dev-inf
 /pkg/cmd/cr2pg/              @cockroachdb/sql-foundations
 /pkg/cmd/dev/                @cockroachdb/dev-inf
 #!/pkg/cmd/docgen/             @cockroachdb/docs-infra-prs
@@ -474,13 +448,10 @@
 /pkg/cmd/github-post/        @cockroachdb/test-eng
 /pkg/cmd/github-pull-request-make/ @cockroachdb/dev-inf
 /pkg/cmd/gossipsim/          @cockroachdb/kv-prs
-/pkg/cmd/import-tools/       @cockroachdb/dev-inf
-/pkg/cmd/internal/issues/    @cockroachdb/test-eng
 /pkg/cmd/mirror/             @cockroachdb/dev-inf
 /pkg/cmd/prereqs/            @cockroachdb/dev-inf
 /pkg/cmd/protoc-gen-gogoroach/ @cockroachdb/dev-inf
 /pkg/cmd/publish-artifacts/  @cockroachdb/dev-inf
-/pkg/cmd/publish-provisional-artifacts/ @cockroachdb/dev-inf
 /pkg/cmd/reduce/             @cockroachdb/sql-queries-prs
 /pkg/cmd/release/            @cockroachdb/dev-inf
 /pkg/cmd/returncheck/        @cockroachdb/dev-inf
@@ -525,7 +496,6 @@
 /pkg/cmd/roachtest/tests/ruby_pg.go	      @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
 /pkg/cmd/roachtest/tests/sequelize.go	    @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
 /pkg/cmd/roachtest/tests/typeorm.go	      @cockroachdb/sql-foundations @cockroachdb/docs-infra-prs
-/pkg/cmd/label-merged-pr/    @cockroachdb/dev-inf
 /pkg/cmd/roachvet/           @cockroachdb/dev-inf
 /pkg/cmd/skip-test/          @cockroachdb/test-eng
 /pkg/cmd/skiperrs/           @cockroachdb/sql-foundations
@@ -533,7 +503,6 @@
 /pkg/cmd/smith/              @cockroachdb/sql-queries-prs
 /pkg/cmd/smithcmp/           @cockroachdb/sql-queries-prs
 /pkg/cmd/smithtest/          @cockroachdb/sql-queries-prs
-/pkg/cmd/teamcity-trigger/   @cockroachdb/dev-inf
 /pkg/cmd/testfilter/         @cockroachdb/test-eng
 /pkg/cmd/uptodate/           @cockroachdb/dev-inf
 #!/pkg/cmd/urlcheck/           @cockroachdb/docs-infra-prs
@@ -623,13 +592,11 @@
 /pkg/spanconfig/spanconfigtestutils/     @cockroachdb/kv-prs @cockroachdb/sql-foundations @cockroachdb/kv-distribution
 /pkg/repstream/              @cockroachdb/disaster-recovery
 #!/pkg/testutils/              @cockroachdb/test-eng-noreview
-/pkg/testutils/reduce/       @cockroachdb/sql-queries-prs
 /pkg/testutils/sqlutils/     @cockroachdb/sql-queries-prs
 /pkg/testutils/jobutils/     @cockroachdb/jobs-prs @cockroachdb/disaster-recovery
 /pkg/ts/                     @cockroachdb/kv-prs
 /pkg/ts/catalog/             @cockroachdb/obs-prs
 #!/pkg/util/                 @cockroachdb/unowned
-/pkg/util/addr/              @cockroachdb/obs-prs
 /pkg/util/admission/         @cockroachdb/admission-control
 /pkg/util/cancelchecker/     @cockroachdb/sql-queries-prs
 /pkg/util/encoding/          @cockroachdb/sql-queries-prs
