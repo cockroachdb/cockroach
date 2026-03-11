@@ -33,6 +33,10 @@ func TestMetadataReadWrite(t *testing.T) {
 				"3": "2",
 				"4": "2",
 			},
+			NodeToRegionMap: map[string]string{
+				"1": "region-1",
+				"2": "region-2",
+			},
 			CreatedAt: timeutil.Unix(1609459200, 0), // 2021-01-01 00:00:00 UTC
 		}
 
@@ -49,6 +53,11 @@ func TestMetadataReadWrite(t *testing.T) {
 				"2": "2",
 				"3": "3",
 			},
+			NodeToRegionMap: map[string]string{
+				"1": "region-1",
+				"2": "region-1",
+				"3": "region-2",
+			},
 			CreatedAt: timeutil.Unix(1640995200, 0), // 2022-01-01 00:00:00 UTC
 		}
 
@@ -63,6 +72,7 @@ func TestMetadataReadWrite(t *testing.T) {
 
 		require.Equal(t, originalMetadata.Version, readMetadata.Version)
 		require.Equal(t, originalMetadata.StoreToNodeMap, readMetadata.StoreToNodeMap)
+		require.Equal(t, originalMetadata.NodeToRegionMap, readMetadata.NodeToRegionMap)
 		require.Equal(t, originalMetadata.CreatedAt.Unix(), readMetadata.CreatedAt.Unix())
 	})
 

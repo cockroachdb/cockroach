@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -295,11 +296,20 @@ will then convert it to the --format requested in the current invocation.
 					return err
 				}
 
+				// Get node-to-region mapping for metadata. Failure is non-fatal
+				// so tsdump still works if gossip_nodes is inaccessible.
+				nodeToRegionMap, err := getNodeToRegionMapping(ctx)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to get node-to-region mapping: %v\n", err)
+					nodeToRegionMap = make(map[string]string)
+				}
+
 				// Create metadata header
 				metadata := tsdumpmeta.Metadata{
-					Version:        build.BinaryVersion(),
-					StoreToNodeMap: storeToNodeMap,
-					CreatedAt:      timeutil.Now(),
+					Version:         build.BinaryVersion(),
+					StoreToNodeMap:  storeToNodeMap,
+					NodeToRegionMap: nodeToRegionMap,
+					CreatedAt:       timeutil.Now(),
 				}
 
 				stream, err := tsClient.DumpRaw(context.Background(), req)
@@ -360,6 +370,9 @@ will then convert it to the --format requested in the current invocation.
 				dec = gob.NewDecoder(f) // Reset decoder to read from beginning
 			} else {
 				fmt.Printf("Found embedded store-to-node mapping with %d entries\n", len(embeddedMetadata.StoreToNodeMap))
+				if len(embeddedMetadata.NodeToRegionMap) > 0 {
+					fmt.Printf("Found embedded node-to-region mapping with %d entries\n", len(embeddedMetadata.NodeToRegionMap))
+				}
 			}
 
 			decodeOne := func() (*tspb.TimeSeriesData, error) {
@@ -648,6 +661,92 @@ func getStoreToNodeMapping(ctx context.Context) (map[string]string, error) {
 		}
 	}
 	return mapping, nil
+}
+
+// getNodeToRegionMapping retrieves the node-to-region mapping from the database
+// by querying gossip_nodes for each node's locality, then anonymizes region
+// names (e.g. "region-1", "region-2") to avoid leaking sensitive locality info.
+func getNodeToRegionMapping(ctx context.Context) (map[string]string, error) {
+	sqlConn, err := makeSQLClient(ctx, tsDumpAppName, useSystemDb)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if closeErr := sqlConn.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close SQL connection: %v\n", closeErr)
+		}
+	}()
+
+	_, rows, err := sqlExecCtx.RunQuery(
+		ctx,
+		sqlConn,
+		clisqlclient.MakeQuery(`SELECT node_id, locality FROM crdb_internal.gossip_nodes`), false)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return anonymizeNodeRegions(rows), nil
+}
+
+// anonymizeNodeRegions takes rows of [node_id, locality] and produces a mapping
+// from node ID to an anonymized region label. Unique region names are sorted
+// alphabetically and assigned labels "region-1", "region-2", etc. Nodes without
+// a region tier in their locality are omitted from the mapping.
+func anonymizeNodeRegions(rows [][]string) map[string]string {
+	// First pass: collect unique regions.
+	regionSet := make(map[string]struct{})
+	type nodeRegion struct {
+		nodeID string
+		region string
+	}
+	var nodeRegions []nodeRegion
+	for _, row := range rows {
+		if len(row) < 2 {
+			continue
+		}
+		nodeID := strings.TrimSpace(row[0])
+		locality := strings.TrimSpace(row[1])
+		region := extractRegionFromLocality(locality)
+		if region == "" {
+			continue
+		}
+		regionSet[region] = struct{}{}
+		nodeRegions = append(nodeRegions, nodeRegion{nodeID: nodeID, region: region})
+	}
+
+	// Sort unique regions alphabetically for deterministic assignment.
+	uniqueRegions := make([]string, 0, len(regionSet))
+	for r := range regionSet {
+		uniqueRegions = append(uniqueRegions, r)
+	}
+	sort.Strings(uniqueRegions)
+
+	// Build region-name to anonymized-label mapping.
+	regionToAnon := make(map[string]string, len(uniqueRegions))
+	for i, r := range uniqueRegions {
+		regionToAnon[r] = fmt.Sprintf("region-%d", i+1)
+	}
+
+	// Second pass: build node-to-anonymized-region mapping.
+	result := make(map[string]string, len(nodeRegions))
+	for _, nr := range nodeRegions {
+		result[nr.nodeID] = regionToAnon[nr.region]
+	}
+	return result
+}
+
+// extractRegionFromLocality parses a locality string like
+// "region=us-west-1,zone=us-west-1a" and returns the value of the "region"
+// tier, or "" if no region tier is found.
+func extractRegionFromLocality(locality string) string {
+	for _, tier := range strings.Split(locality, ",") {
+		parts := strings.SplitN(strings.TrimSpace(tier), "=", 2)
+		if len(parts) == 2 && parts[0] == "region" {
+			return parts[1]
+		}
+	}
+	return ""
 }
 
 func makeOpenMetricsWriter(out io.Writer) *openMetricsWriter {

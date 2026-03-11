@@ -44,6 +44,7 @@ const (
 	UploadStatusPartialSuccess = "Partial Success"
 	UploadStatusFailure        = "Failed"
 	nodeKey                    = "node_id"
+	regionKey                  = "region"
 )
 
 var (
@@ -212,6 +213,7 @@ type datadogWriter struct {
 	threshold         int
 	uploadTime        time.Time
 	storeToNodeMap    map[string]string
+	nodeToRegionMap   map[string]string
 	metricTypeMap     map[string]string
 	noOfUploadWorkers int
 	// isPartialUploadOfFailedRequests indicates whether are we retrying failed requests
@@ -305,6 +307,7 @@ func makeDatadogWriter(
 		threshold:                       threshold,
 		uploadTime:                      currentTime,
 		storeToNodeMap:                  make(map[string]string),
+		nodeToRegionMap:                 make(map[string]string),
 		metricTypeMap:                   metricTypeMap,
 		noOfUploadWorkers:               noOfUploadWorkers,
 		isPartialUploadOfFailedRequests: isPartialUploadOfFailedRequests,
@@ -452,6 +455,10 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 			if shouldAddTag(nodeKey) {
 				appendTag(series, nodeKey, source)
 			}
+			// Add region tag from node-to-region mapping if available.
+			if region, ok := d.nodeToRegionMap[source]; ok && shouldAddTag(regionKey) {
+				appendTag(series, regionKey, region)
+			}
 		case "store":
 			if shouldAddTag(key) {
 				appendTag(series, key, source)
@@ -459,6 +466,12 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 			// Add node_id from store-to-node mapping if available
 			if nodeID, ok := d.storeToNodeMap[source]; ok && shouldAddTag(nodeKey) {
 				appendTag(series, nodeKey, nodeID)
+			}
+			// Add region tag by chaining store→node→region.
+			if nodeID, ok := d.storeToNodeMap[source]; ok {
+				if region, ok := d.nodeToRegionMap[nodeID]; ok && shouldAddTag(regionKey) {
+					appendTag(series, regionKey, region)
+				}
 			}
 		default:
 			if shouldAddTag(key) {
@@ -859,6 +872,10 @@ func (d *datadogWriter) upload(fileName string) error {
 	if metadataErr == nil && embeddedMetadata != nil {
 		d.storeToNodeMap = embeddedMetadata.StoreToNodeMap
 		fmt.Printf("Using embedded store-to-node mapping with %d entries\n", len(d.storeToNodeMap))
+		if len(embeddedMetadata.NodeToRegionMap) > 0 {
+			d.nodeToRegionMap = embeddedMetadata.NodeToRegionMap
+			fmt.Printf("Using embedded node-to-region mapping with %d entries\n", len(d.nodeToRegionMap))
+		}
 	} else {
 		// Reset the reader since we tried to read metadata. Close the file and
 		// reopen a fresh reader.
