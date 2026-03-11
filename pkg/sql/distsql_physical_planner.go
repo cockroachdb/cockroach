@@ -838,7 +838,8 @@ func (r SpanPartitionReason) String() string {
 // those spans.
 type SpanPartition struct {
 	SQLInstanceID base.SQLInstanceID
-	Spans         roachpb.Spans
+	// Spans must be ordered.
+	Spans roachpb.Spans
 
 	haveRangeInfo bool
 	numRanges     int
@@ -2023,6 +2024,9 @@ func (dsp *DistSQLPlanner) planTableReaders(
 		p.TotalEstimatedScannedRows += info.estimatedRowCount
 
 		corePlacement[i].SQLInstanceID = sp.SQLInstanceID
+		// TODO(yuzefovich): if we have multiple TableReaders for this stage,
+		// then each processors gets EstimatedRowCount equal to the optimizer's
+		// estimate for the whole stage, resulting in an overestimate.
 		corePlacement[i].EstimatedRowCount = info.estimatedRowCount
 		corePlacement[i].StatsCreatedAt = info.statsCreatedAt
 		corePlacement[i].Core.TableReader = tr

@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -991,6 +992,20 @@ func (r *Refresher) EstimateStaleness(
 	staleFraction := float64(statsAge) / float64(avgRefreshTime) * staleTargetFraction
 
 	return staleFraction, nil
+}
+
+// FixMisestimate is called by the execution engine after having executed a SQL
+// statement where we had an inaccurate estimated row count for the rows scanned
+// by the TableReader. It is an ask to collect partial stats on the given spans
+// on the table on which the partial fixup stats are enabled.
+//
+// Spans must be ordered and non-overlapping.
+func (r *Refresher) FixMisestimate(
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	indexID descpb.IndexID,
+	spans []roachpb.Span,
+) {
 }
 
 func (r *Refresher) mustDoFullRefresh(
