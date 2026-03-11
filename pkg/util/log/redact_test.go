@@ -351,6 +351,43 @@ func parseLogEntry(t *testing.T, line string) logpb.Entry {
 	return entry
 }
 
+// TestHashRedaction verifies that hash-based redaction works through the
+// redact pipeline: HashString values produce a deterministic hash when
+// hashing is enabled, regular unsafe values still produce ×, and
+// disabling hashing reverts to full redaction.
+func TestHashRedaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	redact.DisableHashing()
+	t.Cleanup(redact.DisableHashing)
+
+	hashAlice := func() string {
+		return string(redact.Sprintf("user=%s", redact.HashString("alice")).Redact())
+	}
+
+	t.Run("hash-string produces expected hash when enabled", func(t *testing.T) {
+		redact.EnableHashing(nil)
+		defer redact.DisableHashing()
+
+		require.Equal(t, "user=‹2bd806c9›", hashAlice())
+	})
+
+	t.Run("regular unsafe still fully redacted", func(t *testing.T) {
+		redact.EnableHashing(nil)
+		defer redact.DisableHashing()
+
+		got := string(redact.Sprintf("val=%s", "secret").Redact())
+		require.Equal(t, "val=‹×›", got)
+	})
+
+	t.Run("disabling hashing reverts to full redaction", func(t *testing.T) {
+		redact.EnableHashing(nil)
+		redact.DisableHashing()
+
+		require.Equal(t, "user=‹×›", hashAlice())
+	})
+}
+
 func BenchmarkDefaultSafeRedaction(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer ScopeWithoutShowLogs(b).Close(b)

@@ -146,10 +146,28 @@ type Config struct {
 	// Sinks represents the sink configurations.
 	Sinks SinkConfig `yaml:",omitempty"`
 
+	// Redaction configures process-global redaction behavior.
+	Redaction RedactionConfig `yaml:"redaction,omitempty"`
+
 	// CaptureFd2 represents the configuration for the redirection of
 	// internal writes to file descriptor 2 (incl that done internally
 	// by the go runtime).
 	CaptureFd2 CaptureFd2Config `yaml:"capture-stray-errors,omitempty"`
+}
+
+// RedactionConfig represents process-global redaction behavior.
+type RedactionConfig struct {
+	// Hashing configures hash-based redaction behavior.
+	Hashing HashingConfig `yaml:"hashing,omitempty"`
+}
+
+// HashingConfig represents hash-based redaction behavior.
+type HashingConfig struct {
+	// Enabled determines whether hash-based redaction is enabled.
+	Enabled bool `yaml:"enabled,omitempty"`
+
+	// Salt is an optional inline salt used for hash-based redaction.
+	Salt string `yaml:"salt,omitempty"`
 }
 
 // CaptureFd2Config represents the configuration for the fd2 capture sink.
