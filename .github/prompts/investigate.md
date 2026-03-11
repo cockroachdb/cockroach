@@ -313,6 +313,10 @@ valuable during this investigation but were not available. Examples:
 a specific command that was blocked, a log or artifact source that
 was inaccessible, an API you couldn't query, etc. This helps
 improve future investigation runs.
+
+---
+
+Was this investigation helpful? Leave a 👍 or 👎 on this comment.
 ```
 
 Important:
@@ -325,4 +329,5 @@ Important:
 - If you cannot determine the failure SHA, investigate using the
   default branch and note this limitation.
 - End the findings with a link to the workflow run (from the
-  WORKFLOW RUN variable passed in the prompt).
+  WORKFLOW RUN variable passed in the prompt), followed by the
+  feedback footer (the `---` / reaction prompt from the template).
