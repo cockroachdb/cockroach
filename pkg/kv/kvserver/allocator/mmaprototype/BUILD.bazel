@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//build:STRINGER.bzl", "stringer")
 
 go_library(
     name = "mmaprototype",
@@ -7,6 +8,7 @@ go_library(
         "allocator_state.go",
         "cluster_state.go",
         "cluster_state_rebalance_stores.go",
+        "cluster_state_repair.go",
         "constraint.go",
         "constraint_matcher.go",
         "doc.go",
@@ -20,6 +22,7 @@ go_library(
         "store_set.go",
         "store_status.go",
         "top_k_replicas.go",
+        ":gen-repairaction-stringer",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype",
     visibility = ["//visibility:public"],
@@ -71,4 +74,10 @@ go_test(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
     ],
+)
+
+stringer(
+    name = "gen-repairaction-stringer",
+    src = "cluster_state_repair.go",
+    typ = "RepairAction",
 )
