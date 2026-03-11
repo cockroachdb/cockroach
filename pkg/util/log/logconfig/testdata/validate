@@ -13,6 +13,59 @@ capture-stray-errors:
   dir: /default-dir
   max-group-size: 100MiB
 
+# Check that hashing can be enabled without salt.
+yaml
+redaction:
+  hashing:
+    enabled: true
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  stderr:
+    filter: NONE
+redaction:
+  hashing:
+    enabled: true
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that hashing can be enabled with salt.
+yaml
+redaction:
+  hashing:
+    enabled: true
+    salt: inline-salt
+----
+sinks:
+  file-groups:
+    default:
+      channels: {INFO: all}
+      filter: INFO
+  stderr:
+    filter: NONE
+redaction:
+  hashing:
+    enabled: true
+    salt: inline-salt
+capture-stray-errors:
+  enable: true
+  dir: /default-dir
+  max-group-size: 100MiB
+
+# Check that salt is rejected when hashing is disabled.
+yaml
+redaction:
+  hashing:
+    enabled: false
+    salt: inline-salt
+----
+ERROR: redaction.hashing.salt requires redaction.hashing.enabled to be true
+
 # Check that defaults propagate to file groups.
 yaml
 sinks:

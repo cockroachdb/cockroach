@@ -34,6 +34,11 @@
 //
 //	   ... repeat ...
 //
+//	redaction: #optional
+//	  hashing: #optional
+//	    enabled: <bool> # enable hash-based redaction for sensitive values
+//	    salt: <string>  # optional inline salt (valid only when enabled=true)
+//
 //	capture-stray-errors: #optional
 //	  enable: <bool>       # whether to enable internal fd2 capture
 //	  dir: <optional>      # output directory, defaults to file-defaults.dir

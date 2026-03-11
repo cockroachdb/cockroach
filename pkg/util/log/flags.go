@@ -67,6 +67,20 @@ const testLogConfigEnvVar = "COCKROACH_TEST_LOG_CONFIG"
 
 var envTestLogConfig = envutil.EnvOrDefaultString(testLogConfigEnvVar, "")
 
+func applyRedactionHashingConfig(cfg logconfig.HashingConfig) {
+	if cfg.Enabled {
+		if cfg.Salt == "" {
+			fmt.Printf("# WARNING: hash-based redaction enabled without a salt; " +
+				"hashes are more susceptible to brute-force reversal\n")
+			redact.EnableHashing(nil)
+		} else {
+			redact.EnableHashing([]byte(cfg.Salt))
+		}
+	} else {
+		redact.DisableHashing()
+	}
+}
+
 func init() {
 	logflags.InitFlags(
 		&logging.showLogs,
@@ -196,6 +210,8 @@ func applyConfigInternal(
 		for _, l := range sinkInfos {
 			logging.allSinkInfos.del(l)
 		}
+
+		redact.DisableHashing() // Reset hash redaction state.
 	}
 
 	// Call the final value of logShutdownFn immediately if returning with error.
@@ -447,6 +463,7 @@ func applyConfigInternal(
 		l.sinkInfos = append([]*sinkInfo{interceptorSinkInfo}, l.sinkInfos...)
 	}
 
+	applyRedactionHashingConfig(config.Redaction.Hashing)
 	logging.setChannelLoggers(chans, &stderrSinkInfo)
 	setActive()
 
