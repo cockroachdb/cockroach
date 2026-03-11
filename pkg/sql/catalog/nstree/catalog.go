@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -179,6 +180,25 @@ func (c Catalog) LookupNamespaceEntry(key descpb.NameInfo) NamespaceEntry {
 		return nil
 	}
 	return e.(NamespaceEntry)
+}
+
+// LookupNamespaceEntryByID does a linear scan of cached namespace entries
+// to find one with the given ID. This is used as a fallback for resolving
+// temporary schemas from other sessions, which have namespace entries but
+// no descriptors.
+func (c Catalog) LookupNamespaceEntryByID(id descpb.ID) NamespaceEntry {
+	if !c.IsInitialized() {
+		return nil
+	}
+	var found NamespaceEntry
+	_ = c.byName.ascend(func(entry catalog.NameEntry) error {
+		if entry.GetID() == id {
+			found = entry.(NamespaceEntry)
+			return iterutil.StopIteration()
+		}
+		return nil
+	})
+	return found
 }
 
 // OrderedDescriptors returns the descriptors in an ordered fashion.
