@@ -18,8 +18,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/objstorage"
+	"github.com/cockroachdb/pebble/objstorage/remote"
 	"github.com/cockroachdb/pebble/vfs"
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -372,4 +374,137 @@ func aesgcm(key []byte) (cipher.AEAD, error) {
 		return nil, err
 	}
 	return cipher.NewGCM(block)
+}
+
+type objectReaderAdapter struct {
+	r    remote.ObjectReader
+	ctx  context.Context
+	size int64
+	pos  int64
+}
+
+func (a *objectReaderAdapter) ReadAt(p []byte, off int64) (int, error) {
+	if off >= a.size {
+		return 0, io.EOF
+	}
+	if off+int64(len(p)) > a.size {
+		// Partial read at end of object: clamp and return io.EOF.
+		p = p[:a.size-off]
+		if err := a.r.ReadAt(a.ctx, p, off); err != nil {
+			return 0, err
+		}
+		return len(p), io.EOF
+	}
+	if err := a.r.ReadAt(a.ctx, p, off); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+func (a *objectReaderAdapter) Read(p []byte) (int, error) {
+	n, err := a.ReadAt(p, a.pos)
+	a.pos += int64(n)
+	return n, err
+}
+
+func (a *objectReaderAdapter) Close() error {
+	return a.r.Close()
+}
+
+// decryptingObjectReader wraps a decryptReader to implement remote.ObjectReader.
+type decryptingObjectReader struct {
+	mu      syncutil.Mutex
+	adapter *objectReaderAdapter
+	dr      *decryptReader
+}
+
+var _ remote.ObjectReader = (*decryptingObjectReader)(nil)
+
+func (d *decryptingObjectReader) ReadAt(ctx context.Context, p []byte, offset int64) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.adapter.ctx = ctx
+	n, err := d.dr.ReadAt(p, offset)
+	if n == len(p) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return io.ErrUnexpectedEOF
+}
+
+func (d *decryptingObjectReader) Close() error {
+	return d.dr.Close()
+}
+
+func newDecryptingObjectReader(
+	ctx context.Context, ciphertext remote.ObjectReader, ciphertextSize int64, key []byte,
+) (remote.ObjectReader, error) {
+	adapter := &objectReaderAdapter{r: ciphertext, size: ciphertextSize, ctx: ctx}
+	dr, err := decryptingReader(adapter, key)
+	if err != nil {
+		return nil, err
+	}
+	return &decryptingObjectReader{
+		adapter: adapter,
+		dr:      dr.(*decryptReader),
+	}, nil
+}
+
+func plaintextSize(ciphertextSize int64) int64 {
+	size := ciphertextSize - int64(headerSize)
+	size -= encryptionTagSize *
+		((size / (int64(encryptionChunkSizeV2) + encryptionTagSize)) + 1)
+	return size
+}
+
+type decryptingReadOnlyStorage struct {
+	inner remote.Storage
+	key   []byte
+}
+
+var _ remote.Storage = (*decryptingReadOnlyStorage)(nil)
+
+func (d *decryptingReadOnlyStorage) ReadObject(
+	ctx context.Context, objName string,
+) (_ remote.ObjectReader, objSize int64, _ error) {
+	reader, ciphertextSize, err := d.inner.ReadObject(ctx, objName)
+	if err != nil {
+		return nil, 0, err
+	}
+	dr, err := newDecryptingObjectReader(ctx, reader, ciphertextSize, d.key)
+	if err != nil {
+		_ = reader.Close()
+		return nil, 0, err
+	}
+	return dr, plaintextSize(ciphertextSize), nil
+}
+
+func (d *decryptingReadOnlyStorage) Close() error {
+	return d.inner.Close()
+}
+
+func (d *decryptingReadOnlyStorage) Size(objName string) (int64, error) {
+	ciphertextSize, err := d.inner.Size(objName)
+	if err != nil {
+		return 0, err
+	}
+	return plaintextSize(ciphertextSize), nil
+}
+
+func (d *decryptingReadOnlyStorage) IsNotExistError(err error) bool {
+	return d.inner.IsNotExistError(err)
+}
+
+func (d *decryptingReadOnlyStorage) CreateObject(objName string) (io.WriteCloser, error) {
+	return nil, errors.New("decryptingReadOnlyStorage: read-only")
+}
+
+func (d *decryptingReadOnlyStorage) List(prefix, delimiter string) ([]string, error) {
+	return nil, errors.New("decryptingReadOnlyStorage: read-only")
+}
+
+func (d *decryptingReadOnlyStorage) Delete(objName string) error {
+	return errors.New("decryptingReadOnlyStorage: read-only")
 }
