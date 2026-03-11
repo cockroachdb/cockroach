@@ -73,6 +73,12 @@ type ManagerTestingKnobs struct {
 	TestingOnUpdateReadTimestamp func(timestamp hlc.Timestamp)
 
 	LeaseStoreTestingKnobs StorageTestingKnobs
+	// TestingLeaseUpsertEventForID, if set, is called on every lease upsert
+	// attempt for the specified descriptor. The msg argument describes what
+	// happened (e.g. "attempting", "skipping", "already leased"). This knob
+	// was added for debugging #162173, and it can be removed when it's no
+	// longer needed.
+	TestingLeaseUpsertEventForID func(id descpb.ID, version descpb.DescriptorVersion, msg string)
 }
 
 var _ base.ModuleTestingKnobs = &ManagerTestingKnobs{}

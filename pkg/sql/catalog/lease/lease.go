@@ -1130,6 +1130,9 @@ func (m *Manager) acquireNodeLease(
 					return false, err
 				}
 				if desc == nil {
+					if fn := m.testingKnobs.TestingLeaseUpsertEventForID; fn != nil {
+						fn(id, currentVersion, "system table acquisition returned nil, already leased")
+					}
 					return true, nil
 				}
 			} else {
@@ -1140,6 +1143,9 @@ func (m *Manager) acquireNodeLease(
 				// If a nil descriptor is returned, then the latest version has already
 				// been leased. So, nothing needs to be done here.
 				if desc == nil {
+					if fn := m.testingKnobs.TestingLeaseUpsertEventForID; fn != nil {
+						fn(id, currentVersion, "acquisition returned nil, already leased")
+					}
 					return true, nil
 				}
 				err = doUpsertion(desc)
