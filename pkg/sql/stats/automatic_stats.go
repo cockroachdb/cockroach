@@ -200,6 +200,8 @@ var bufferedChanFullLogLimiter = log.Every(time.Second)
 
 var fixMisestimatesChanFullLogLimiter = log.Every(10 * time.Second)
 
+var fixMisestimatesErrLogLimiter = log.Every(time.Second)
+
 // Constants for automatic statistics collection.
 // TODO(rytaft): Should these constants be configurable?
 const (
@@ -299,6 +301,7 @@ const (
 type Refresher struct {
 	log.AmbientContext
 	st             *cluster.Settings
+	codec          keys.SQLCodec
 	internalDB     descs.DB
 	cache          *TableStatisticsCache
 	knobs          *TableStatsTestingKnobs
@@ -402,6 +405,9 @@ type TableStatsTestingKnobs struct {
 	// tableID on which the refresh is rescheduled due to
 	// ConcurrentCreateStatsError.
 	RescheduleAttempt chan descpb.ID
+	// DisablePartialUsingExtremes, if set, indicates that the Refresher should
+	// not perform partial USING EXTREMES statistics refreshes.
+	DisablePartialUsingExtremes bool
 }
 
 var _ base.ModuleTestingKnobs = &TableStatsTestingKnobs{}
@@ -412,6 +418,7 @@ func (k *TableStatsTestingKnobs) ModuleTestingKnobs() {}
 func MakeRefresher(
 	ambientCtx log.AmbientContext,
 	st *cluster.Settings,
+	codec keys.SQLCodec,
 	internalDB descs.DB,
 	cache *TableStatisticsCache,
 	asOfTime time.Duration,
@@ -421,6 +428,7 @@ func MakeRefresher(
 	return &Refresher{
 		AmbientContext:   ambientCtx,
 		st:               st,
+		codec:            codec,
 		internalDB:       internalDB,
 		cache:            cache,
 		knobs:            knobs,
@@ -715,6 +723,8 @@ func (r *Refresher) Start(
 									explicitSettings = &settings
 								}
 							}
+							// TODO(#165271): consider introducing concurrency
+							// between the tables.
 							r.maybeRefreshStats(
 								ctx,
 								tableID,
@@ -788,7 +798,51 @@ func (r *Refresher) Start(
 			select {
 			case <-timer.C:
 				misestimateSpans := r.misestimateSpans
-				_ = misestimateSpans
+				r.startedTasksWG.Add(1)
+				if err := stopper.RunAsyncTask(
+					ctx, "stats.MisestimatesRefresher: fixMisestimates", func(ctx context.Context) {
+						defer r.startedTasksWG.Done()
+
+						// Wait so that the latest changes will be reflected
+						// according to the AS OF time.
+						timerAsOf := time.NewTimer(r.asOfTime)
+						defer timerAsOf.Stop()
+						select {
+						case <-timerAsOf.C:
+							break
+						case <-r.drainAutoStats:
+							return
+						case <-ctx.Done():
+							return
+						}
+
+						for target, spans := range misestimateSpans {
+							// TODO(#165271): consider introducing
+							// concurrency between the tables.
+							// TODO(yuzefovich): similar to the 'refresher'
+							// thread, consider re-checking whether we can
+							// collect auto partial fixup stats on the given
+							// table in case the cluster or table-level settings
+							// have changed since the execution engine called
+							// FixMisestimate.
+							err := r.refreshAutoPartialWhere(ctx, target, spans)
+							if err != nil && fixMisestimatesErrLogLimiter.ShouldLog() {
+								log.Dev.Warningf(ctx, "failed to 'fix misestimates' stats on %q on %d: %v", target.keyColumnName, target.tableID, err)
+							}
+
+							select {
+							case <-ctx.Done():
+								return
+							case <-r.drainAutoStats:
+								return
+							default:
+							}
+						}
+						timer.Reset(refreshInterval)
+					}); err != nil {
+					r.startedTasksWG.Done()
+					log.Dev.Errorf(ctx, "failed to start async stats task: %v", err)
+				}
 				r.misestimateSpans = make(map[indexInfo]roachpb.Spans, len(r.misestimateSpans))
 
 			case mis := <-r.misestimates:
@@ -1084,6 +1138,10 @@ func (r *Refresher) EstimateStaleness(
 	return staleFraction, nil
 }
 
+// TODO(#165272): we need to do something about the "infinite loop" of
+// triggering the "fix misestimates" auto stats jobs which don't actually fix
+// the misestimates.
+
 // FixMisestimate is called by the execution engine after having executed a SQL
 // statement where we had an inaccurate estimated row count for the rows scanned
 // by the TableReader. It is an ask to collect partial stats on the given spans
@@ -1223,7 +1281,8 @@ func (r *Refresher) maybeRefreshStats(
 	if !doFullRefresh {
 		// No full statistics refresh is happening this time. Let's try a partial
 		// stats refresh.
-		if !partialStatsEnabled {
+		doPartialRefresh := partialStatsEnabled && (r.knobs == nil || !r.knobs.DisablePartialUsingExtremes)
+		if !doPartialRefresh {
 			// No refresh is happening this time, full or partial.
 			return
 		}
@@ -1284,6 +1343,56 @@ func (r *Refresher) refreshStats(
 		stmt,
 	)
 	return err
+}
+
+func (r *Refresher) refreshAutoPartialWhere(
+	ctx context.Context, target indexInfo, spans roachpb.Spans,
+) error {
+	var da tree.DatumAlloc
+	var lastFilter string
+	for _, span := range spans {
+		filter, err := spanToBounds(r.codec, span, target, &da)
+		if err != nil {
+			return err
+		}
+		if filter == "false" {
+			// Simply skip the contradiction.
+			continue
+		}
+		// Given that we truncate the span bounds to just the first key column,
+		// it seems possible that filters for consecutive spans are the same
+		// even though the spans themselves are different. In such a scenario
+		// simply skip the span given we've just handled the same filter.
+		if lastFilter == filter {
+			continue
+		}
+		lastFilter = filter
+		stmt := fmt.Sprintf(
+			// TODO(yuzefovich): consider extending the CREATE STATISTICS stmt
+			// to allow forcing a particular index.
+			"CREATE STATISTICS %s ON %s FROM [%d] WITH OPTIONS THROTTLING %g AS OF SYSTEM TIME '-%s' WHERE %s",
+			jobspb.AutoPartialStatsName,
+			target.keyColumnName,
+			target.tableID,
+			AutomaticStatisticsMaxIdleTime.Get(&r.st.SV),
+			r.asOfTime.String(),
+			filter,
+		)
+
+		if log.ExpensiveLogEnabled(ctx, 1) {
+			log.Dev.Infof(ctx, "automatically executing %q", stmt)
+		}
+		_ /* rows */, err = r.internalDB.Executor().Exec(
+			ctx,
+			"create-stats-where",
+			nil, /* txn */
+			stmt,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // addMisestimate includes the given misestimate into the "queue" of

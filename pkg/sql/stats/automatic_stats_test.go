@@ -80,7 +80,7 @@ func TestMaybeRefreshStats(t *testing.T) {
 		s.AppStopper(),
 	)
 	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
-	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
+	refresher := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 	// There should not be any stats yet.
 	if err := checkStatsCount(ctx, cache, descA, 0 /* expectedFull */, 0 /* expectedPartial */); err != nil {
@@ -242,7 +242,7 @@ func TestEnsureAllTablesQueries(t *testing.T) {
 		s.AppStopper(),
 	)
 	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
-	r := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
+	r := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 	// Exclude the 5 system tables which don't use autostats.
 	systemTablesWithStats := bootstrap.NumSystemTablesForSystemTenant - 5
@@ -344,7 +344,7 @@ func BenchmarkEnsureAllTables(b *testing.B) {
 				s.AppStopper(),
 			)
 			require.NoError(b, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
-			r := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
+			r := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
@@ -418,7 +418,7 @@ func TestAverageRefreshTime(t *testing.T) {
 		s.AppStopper(),
 	)
 	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
-	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
+	refresher := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 	// curTime is used as the current time throughout the test to ensure that the
 	// calculated average refresh time is consistent even if there are delays due
@@ -668,7 +668,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 		s.AppStopper(),
 	)
 	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
-	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
+	refresher := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 	AutomaticStatisticsClusterMode.Override(ctx, &st.SV, true)
 
@@ -724,7 +724,7 @@ func TestAutoStatsOnStartupClusterSettingOff(t *testing.T) {
 		s.AppStopper(),
 	)
 	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
-	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
+	refresher := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 	// Refresher start should trigger stats collection on t.a.
 	if err := refresher.Start(
@@ -772,7 +772,7 @@ func TestNoRetryOnFailure(t *testing.T) {
 		s.AppStopper(),
 	)
 	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
-	r := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
+	r := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache, time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
 
 	// Try to refresh stats on a table that doesn't exist.
 	r.maybeRefreshStats(
@@ -1011,9 +1011,9 @@ func TestAutoStatsDisabledReadOnlyTenant(t *testing.T) {
 		s.AppStopper(),
 	)
 	require.NoError(t, cache.Start(ctx, codec, s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
-	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache,
+	refresher := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache,
 		time.Microsecond /* asOfTime */, nil /* knobs */, false /* readOnlyTenant */)
-	readOnlyRefresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache,
+	readOnlyRefresher := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache,
 		time.Microsecond /* asOfTime */, nil /* knobs */, true /* readOnlyTenant */)
 
 	// Test normal table descriptor with normal tenant (should have auto stats enabled).
@@ -1044,7 +1044,7 @@ func TestRefresherReadOnlyShutdown(t *testing.T) {
 	internalDB := s.InternalDB().(descs.DB)
 
 	// Create a read-only refresher.
-	readOnlyRefresher := MakeRefresher(s.AmbientCtx(), s.ClusterSettings(), internalDB, nil, /* cache */
+	readOnlyRefresher := MakeRefresher(s.AmbientCtx(), s.ClusterSettings(), s.Codec(), internalDB, nil, /* cache */
 		time.Microsecond /* asOfTime */, nil /* knobs */, true /* readOnlyTenant */)
 
 	// Start the refresher.
@@ -1095,7 +1095,7 @@ func TestEstimateStaleness(t *testing.T) {
 	knobs := &TableStatsTestingKnobs{
 		StubTimeNow: func() time.Time { return curTime },
 	}
-	refresher := MakeRefresher(s.AmbientCtx(), st, internalDB, cache, time.Microsecond /* asOfTime */, knobs, false /* readOnlyTenant */)
+	refresher := MakeRefresher(s.AmbientCtx(), st, codec, internalDB, cache, time.Microsecond /* asOfTime */, knobs, false /* readOnlyTenant */)
 
 	checkEstimatedStaleness := func(expected float64) error {
 		return testutils.SucceedsSoonError(func() error {
@@ -1720,4 +1720,101 @@ func TestSpanToBounds(t *testing.T) {
 			require.Equal(t, tc.expected, result)
 		})
 	}
+}
+
+// TestFixMisestimatesAutoStats verifies that "fix misestimates" stats are
+// collected automatically in response to scans with significantly incorrect
+// estimated row count.
+func TestFixMisestimatesAutoStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Speed up the test.
+	defer func(oldRefreshInterval, oldAsOf time.Duration) {
+		DefaultRefreshInterval = oldRefreshInterval
+		DefaultAsOfTime = oldAsOf
+	}(DefaultRefreshInterval, DefaultAsOfTime)
+	DefaultRefreshInterval = time.Second
+	DefaultAsOfTime = 100 * time.Millisecond
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			TableStatsKnobs: &TableStatsTestingKnobs{
+				// Disable USING EXTREMES auto partial stats collection so that
+				// it doesn't interfere with "fix misestimates" auto partial
+				// stats.
+				DisablePartialUsingExtremes: true,
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	// Disable auto full table stats collection to have more control.
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_full_collection.enabled = false;`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_partial_collection.fix_scan_row_count_misestimate.enabled = true;`)
+
+	// Set up the state where the only present table stats are quite stale.
+	sqlDB.Exec(t, `
+	CREATE TABLE t (k INT PRIMARY KEY) WITH (sql_stats_automatic_partial_collection_fix_scan_row_count_enabled = true);
+	INSERT INTO t SELECT generate_series(1, 1000);
+	ANALYZE t;
+	INSERT INTO t SELECT generate_series(1001, 5000);
+`)
+
+	// Use a query that gets a bad estimate due to stale stats.
+	const query = `SELECT count(*) FROM t WHERE k > 900;`
+
+	// Sanity check that the estimate is, indeed, bad.
+	sqlDB.Exec(t, `SELECT crdb_internal.clear_table_stats_cache();`)
+	output := sqlDB.QueryStr(t, `EXPLAIN `+query)
+	var foundBadEstimate bool
+	for _, line := range output {
+		if strings.Contains(line[0], `estimated row count: 100`) {
+			foundBadEstimate = true
+			break
+		}
+	}
+	require.True(t, foundBadEstimate)
+
+	// Run the query via EXPLAIN ANALYZE to sanity check that the warning is
+	// printed.
+	output = sqlDB.QueryStr(t, `EXPLAIN ANALYZE `+query)
+	const expected = `WARNING: the row count estimate is inaccurate`
+	var foundWarning bool
+	for _, line := range output {
+		if strings.Contains(line[0], expected) {
+			foundWarning = true
+			break
+		}
+	}
+	require.True(t, foundWarning)
+
+	// Now, meat of the test - the query should have asked for "fix
+	// misestimates" stats to be collected, so we check that those are collected
+	// reasonably quickly.
+	testutils.SucceedsSoon(t, func() error {
+		const partialPredicate = `k >= 901`
+		row := sqlDB.QueryRow(t, `SELECT count(*) FROM [SHOW STATISTICS FOR TABLE t] WHERE partial_predicate = $1`, partialPredicate)
+		var partialStatsCount int
+		row.Scan(&partialStatsCount)
+		if partialStatsCount != 1 {
+			return fmt.Errorf("not yet collected")
+		}
+		return nil
+	})
+
+	// Sanity check that "fix misestimates" stats are now used for a better
+	// estimate.
+	sqlDB.Exec(t, `SELECT crdb_internal.clear_table_stats_cache();`)
+	output = sqlDB.QueryStr(t, `EXPLAIN SELECT count(*) FROM t WHERE k > 900;`)
+	var foundGoodEstimate bool
+	for _, line := range output {
+		if strings.Contains(line[0], `estimated row count: 4,102`) {
+			foundGoodEstimate = true
+			break
+		}
+	}
+	require.True(t, foundGoodEstimate)
 }
