@@ -41,10 +41,11 @@ import (
 type sampleAggregator struct {
 	execinfra.ProcessorBase
 
-	spec    *execinfrapb.SampleAggregatorSpec
-	input   execinfra.RowSource
-	inTypes []*types.T
-	sr      stats.SampleReservoir
+	spec         *execinfrapb.SampleAggregatorSpec
+	input        execinfra.RowSource
+	inTypes      []*types.T
+	sr           stats.SampleReservoir
+	collationEnv tree.CollationEnvironment
 
 	// memAcc accounts for memory accumulated throughout the life of the
 	// sampleAggregator.
@@ -428,7 +429,7 @@ func (s *sampleAggregator) sampleRow(
 	ctx context.Context, sr *stats.SampleReservoir, sampleRow rowenc.EncDatumRow, rank uint64,
 ) error {
 	prevCapacity := sr.Cap()
-	if err := sr.SampleRow(ctx, s.FlowCtx.EvalCtx, sampleRow, rank); err != nil {
+	if err := sr.SampleRow(ctx, &s.collationEnv, sampleRow, rank); err != nil {
 		if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
 			return err
 		}
