@@ -73,6 +73,8 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
+	"storj.io/drpc/drpcclient"
 )
 
 // mustGetInt decodes an int64 value from the bytes field of the receiver
@@ -4993,6 +4995,38 @@ func (cs *disablingClientStream) SendMsg(m interface{}) error {
 	return cs.ClientStream.SendMsg(m)
 }
 
+// disablingDRPCClientStream is the DRPC equivalent of disablingClientStream.
+// It wraps a drpc.Stream and delays MsgSend calls when the disabled function
+// returns true, buffering messages and flushing them when re-enabled.
+type disablingDRPCClientStream struct {
+	drpc.Stream
+	wasDisabled bool
+	buffer      []struct {
+		msg drpc.Message
+		enc drpc.Encoding
+	}
+	disabled func() bool
+}
+
+func (cs *disablingDRPCClientStream) MsgSend(msg drpc.Message, enc drpc.Encoding) error {
+	if cs.disabled() {
+		cs.buffer = append(cs.buffer, struct {
+			msg drpc.Message
+			enc drpc.Encoding
+		}{msg, enc})
+		cs.wasDisabled = true
+		return nil
+	}
+	if cs.wasDisabled {
+		for _, buf := range cs.buffer {
+			_ = cs.Stream.MsgSend(buf.msg, buf.enc)
+		}
+		cs.buffer = nil
+		cs.wasDisabled = false
+	}
+	return cs.Stream.MsgSend(msg, enc)
+}
+
 // TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic tests that
 // disconnection on connections of the rpc.DefaultClass do not interfere with
 // traffic on the SystemClass connection.
@@ -5034,6 +5068,27 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 				}, nil
 			}
 		},
+		StreamClientInterceptorDRPC: func(target string, class rpcbase.ConnectionClass) drpcclient.StreamClientInterceptor {
+			disabledFunc := func() bool {
+				if class == rpcbase.SystemClass {
+					return disabledSystem.Load().(bool)
+				}
+				return disabled.Load().(bool)
+			}
+			return func(
+				ctx context.Context, rpc string, enc drpc.Encoding, cc *drpcclient.ClientConn,
+				streamer drpcclient.Streamer,
+			) (drpc.Stream, error) {
+				s, err := streamer(ctx, rpc, enc, cc)
+				if err != nil {
+					return nil, err
+				}
+				return &disablingDRPCClientStream{
+					disabled: disabledFunc,
+					Stream:   s,
+				}, nil
+			}
+		},
 	}
 
 	// This test relies on epoch leases being invalidated when a node restart,
@@ -5066,10 +5121,7 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 		base.TestClusterArgs{
 			ReplicationMode:     base.ReplicationManual,
 			ReusableListenerReg: lisReg,
-			ServerArgs: base.TestServerArgs{
-				DefaultDRPCOption: base.TestDRPCDisabled,
-			},
-			ServerArgsPerNode: stickyServerArgs,
+			ServerArgsPerNode:   stickyServerArgs,
 		})
 	defer tc.Stopper().Stop(ctx)
 	// Make a key that's in the user data space.
