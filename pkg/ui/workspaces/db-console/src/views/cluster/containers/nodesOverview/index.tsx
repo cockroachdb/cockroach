@@ -653,8 +653,7 @@ function NodesMain(): React.ReactElement {
   const { nodeStatuses, livenessStatusByNodeID, livenessByNodeID } =
     useNodesSummary({ refreshInterval: 10000 });
 
-  // Partition nodes into live vs decommissioned, mirroring the logic
-  // previously in the partitionedStatuses Redux selector.
+  // Partition nodes into live vs decommissioned.
   const liveStatuses = useMemo(() => {
     return (nodeStatuses || []).filter(ns => {
       const status = livenessStatusByNodeID[ns.desc.node_id];

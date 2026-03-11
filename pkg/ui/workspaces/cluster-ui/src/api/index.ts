@@ -11,6 +11,7 @@ export * from "./basePath";
 export * from "./nodesApi";
 export * from "./livenessApi";
 export * from "./nodesSummaryApi";
+export * from "./clusterApi";
 export * from "./clusterLocksApi";
 export * from "./stmtInsightsApi";
 export * from "./txnInsightsApi";

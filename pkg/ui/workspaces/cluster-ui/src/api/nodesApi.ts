@@ -58,8 +58,7 @@ export const useNodes = (opts?: UseNodesOptions) => {
   );
 
   // Roll up store-level metrics (replicas, capacity, etc.) into each
-  // node's top-level metrics map, matching the behavior of the Redux
-  // CachedDataReducer path in db-console.
+  // node's top-level metrics map so consumers see aggregated values.
   const nodeStatuses: INodeStatus[] = useMemo(
     () => accumulateMetrics(data?.nodes ?? []),
     [data],
