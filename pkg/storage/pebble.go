@@ -1033,8 +1033,19 @@ type remoteStorageAdaptor struct {
 }
 
 func (r remoteStorageAdaptor) CreateStorage(locator remote.Locator) (remote.Storage, error) {
-	es, err := r.factory.OpenURL(r.ctx, locator.RawRedactableString.StripMarkers())
-	return &externalStorageWrapper{p: r.p, ctx: r.ctx, es: es}, err
+	loc, info, err := enginepb.ExtractRemoteDecodingInfo(locator.RawRedactableString.StripMarkers())
+	if err != nil {
+		return nil, errors.Wrap(err, "extracting remote decoding info")
+	}
+	es, err := r.factory.OpenURL(r.ctx, loc)
+	if err != nil {
+		return nil, err
+	}
+	s := &externalStorageWrapper{p: r.p, ctx: r.ctx, es: es}
+	if info.EncryptionKey != nil {
+		return &decryptingReadOnlyStorage{inner: s, key: info.EncryptionKey}, nil
+	}
+	return s, nil
 }
 
 // newPebble creates a new Pebble instance, at the specified path.
@@ -3382,4 +3393,8 @@ func (dut *diskUnhealthyTracker) getUnhealthyDuration() time.Duration {
 	dut.mu.Lock()
 	defer dut.mu.Unlock()
 	return dut.mu.cumulativeUnhealthyDuration
+}
+
+func init() {
+	cloud.RegisterRedactedParams(cloud.RedactedParams(enginepb.RemoteDecodingInfoQueryParam))
 }

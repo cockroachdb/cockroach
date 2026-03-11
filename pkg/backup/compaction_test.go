@@ -251,9 +251,6 @@ func TestBackupCompaction(t *testing.T) {
 	})
 
 	t.Run("encrypted backups", func(t *testing.T) {
-		// TODO(at): enable once OR supports encrypted backups.
-		backuptestutils.DisableFastRestoreForTest(t)
-
 		bucketNum++
 		collectionURI := []string{fmt.Sprintf("nodelocal://1/backup/%d", bucketNum)}
 		encryptOpts := "WITH encryption_passphrase = 'correct-horse-battery-staple'"
