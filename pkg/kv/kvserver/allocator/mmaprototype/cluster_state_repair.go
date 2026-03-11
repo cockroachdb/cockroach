@@ -10,6 +10,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -225,6 +227,55 @@ func (cs *clusterState) computeRepairAction(ctx context.Context, rs *rangeState)
 
 	// Step 9: Everything is fine.
 	return NoRepairNeeded
+}
+
+// updateRepairAction recomputes the repair action for a range and updates the
+// repairRanges index. This should be called at every trigger point where the
+// range's repair status may have changed: after processRangeMsg, store status
+// changes, pending change add/undo/enact, and range GC.
+func (cs *clusterState) updateRepairAction(
+	ctx context.Context, rangeID roachpb.RangeID, rs *rangeState,
+) {
+	oldAction := rs.repairAction
+	newAction := cs.computeRepairAction(ctx, rs)
+	if oldAction == newAction {
+		return
+	}
+	// Remove from old bucket.
+	if oldAction != NoRepairNeeded && oldAction != RepairPending && oldAction != 0 {
+		if m, ok := cs.repairRanges[oldAction]; ok {
+			delete(m, rangeID)
+			if len(m) == 0 {
+				delete(cs.repairRanges, oldAction)
+			}
+		} else if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf(
+				"repairRanges missing bucket for action %s on r%d", oldAction, rangeID))
+		}
+	}
+	// Add to new bucket.
+	if newAction != NoRepairNeeded && newAction != RepairPending {
+		m, ok := cs.repairRanges[newAction]
+		if !ok {
+			m = map[roachpb.RangeID]struct{}{}
+			cs.repairRanges[newAction] = m
+		}
+		m[rangeID] = struct{}{}
+	}
+	rs.repairAction = newAction
+}
+
+// removeFromRepairRanges removes a range from the repairRanges index. This
+// should be called before deleting a range from cs.ranges.
+func (cs *clusterState) removeFromRepairRanges(rangeID roachpb.RangeID, rs *rangeState) {
+	if rs.repairAction != NoRepairNeeded && rs.repairAction != RepairPending && rs.repairAction != 0 {
+		if m, ok := cs.repairRanges[rs.repairAction]; ok {
+			delete(m, rangeID)
+			if len(m) == 0 {
+				delete(cs.repairRanges, rs.repairAction)
+			}
+		}
+	}
 }
 
 // Verify interface compliance.
