@@ -19,10 +19,6 @@ import {
   reducer as databasesList,
 } from "./databasesList/databasesList.reducers";
 import {
-  IndexStatsReducerState,
-  reducer as indexStats,
-} from "./indexStats/indexStats.reducer";
-import {
   reducer as txnInsightDetails,
   TxnInsightDetailsCachedState,
 } from "./insightDetails/transactionInsightDetails";
@@ -76,7 +72,6 @@ export type AdminUiState = {
   statements: SQLStatsState;
   transactions: TxnStatsState;
   sqlDetailsStats: SQLDetailsStatsReducerState;
-  indexStats: IndexStatsReducerState;
   jobs: JobsState;
   job: JobDetailsReducerState;
   executionDetailFiles: JobProfilerExecutionDetailFilesState;
@@ -107,7 +102,6 @@ export const reducers = combineReducers<AdminUiState>({
   statements: sqlStats,
   transactions: txnStats,
   sqlDetailsStats,
-  indexStats,
   jobs,
   job,
   executionDetailFiles,
