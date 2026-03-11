@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -525,7 +526,7 @@ func (r *testingRCRange) startWaitForEval(name string, pri admissionpb.WorkPrior
 	}
 
 	go func() {
-		waited, err := r.rc.WaitForEval(ctx, pri)
+		waited, err := r.rc.WaitForEval(ctx, pri, roachpb.TenantID{}, ash.WorkloadInfo{})
 
 		r.mu.Lock()
 		defer r.mu.Unlock()

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -325,7 +326,12 @@ func (n *controllerImpl) AdmitKVWork(
 			}
 			var err error
 			admitted, err = kvflowHandle.Admit(
-				ctx, admissionInfo.Priority, timeutil.FromUnixNanos(admissionInfo.CreateTime))
+				ctx, admissionInfo.Priority, timeutil.FromUnixNanos(admissionInfo.CreateTime),
+				admissionInfo.TenantID, ash.WorkloadInfo{
+					WorkloadID:    admissionInfo.WorkloadID,
+					AppNameID:     admissionInfo.AppNameID,
+					GatewayNodeID: admissionInfo.GatewayNodeID,
+				})
 			if err != nil {
 				return Handle{}, err
 			} else if admitted {

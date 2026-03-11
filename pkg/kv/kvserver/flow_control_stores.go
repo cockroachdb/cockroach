@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -208,7 +209,11 @@ type admissionHandle struct {
 
 // Admit implements kvflowcontrol.ReplicationAdmissionHandle.
 func (h admissionHandle) Admit(
-	ctx context.Context, pri admissionpb.WorkPriority, ct time.Time,
+	ctx context.Context,
+	pri admissionpb.WorkPriority,
+	ct time.Time,
+	tenantID roachpb.TenantID,
+	info ash.WorkloadInfo,
 ) (admitted bool, err error) {
-	return h.r.flowControlV2.AdmitForEval(ctx, pri, ct)
+	return h.r.flowControlV2.AdmitForEval(ctx, pri, ct, tenantID, info)
 }

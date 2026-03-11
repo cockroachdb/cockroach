@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -165,7 +166,13 @@ type ReplicationAdmissionHandle interface {
 	// - Configuration specifies the given WorkPriority is not subject to
 	//   replication AC.
 	// - The callee doesn't think it is the leader or has been closed/destroyed.
-	Admit(context.Context, admissionpb.WorkPriority, time.Time) (admitted bool, _ error)
+	Admit(
+		ctx context.Context,
+		pri admissionpb.WorkPriority,
+		ct time.Time,
+		tenantID roachpb.TenantID,
+		info ash.WorkloadInfo,
+	) (admitted bool, _ error)
 }
 
 // ReplicationAdmissionHandles is used to look up a
