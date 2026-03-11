@@ -1061,6 +1061,129 @@ func TestOIDCExchangeVerifyFailure(t *testing.T) {
 	require.Contains(t, string(body), genericCallbackHTTPError)
 }
 
+// TestOIDCEstimatedLastLoginTime verifies that the estimated_last_login_time
+// column in system.users is populated for OIDC-authenticated DB Console logins
+// when provisioning is enabled, and left NULL when provisioning is disabled.
+func TestOIDCEstimatedLastLoginTime(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	ts := s.ApplicationLayer()
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	usernameUnderTest := "oidclastloginuser"
+	basePath := "/base/path"
+
+	// Mock the OIDC manager.
+	defer testutils.TestingHook(
+		&NewOIDCManager,
+		func(ctx context.Context, conf oidcAuthenticationConf, redirectURL string, scopes []string) (IOIDCManager, error) {
+			c := &oauth2.Config{
+				ClientID:     conf.clientID,
+				ClientSecret: conf.clientSecret,
+				RedirectURL:  redirectURL,
+				Endpoint: oauth2.Endpoint{
+					AuthURL: "https://provider.example.com/endpoint",
+				},
+				Scopes: scopes,
+			}
+			return &mockOidcManager{oauth2Config: c, claimEmail: fmt.Sprintf("%s@example.com", usernameUnderTest)}, nil
+		})()
+
+	// Configure OIDC cluster settings.
+	OIDCProviderURL.Override(ctx, &ts.ClusterSettings().SV, "https://provider.example.com")
+	OIDCClientID.Override(ctx, &ts.ClusterSettings().SV, "fake_client_id")
+	OIDCClientSecret.Override(ctx, &ts.ClusterSettings().SV, "fake_client_secret")
+	OIDCRedirectURL.Override(ctx, &ts.ClusterSettings().SV, "https://cockroachlabs.com/oidc/v1/callback")
+	OIDCClaimJSONKey.Override(ctx, &ts.ClusterSettings().SV, "email")
+	OIDCPrincipalRegex.Override(ctx, &ts.ClusterSettings().SV, "^([^@]+)@[^@]+$")
+	authserver.ServerHTTPBasePath.Override(ctx, &ts.ClusterSettings().SV, basePath)
+	OIDCEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
+
+	// Setup HTTP client.
+	testCertsContext := ts.NewClientRPCContext(ctx, username.TestUserName())
+	client, err := testCertsContext.GetHTTPClient()
+	require.NoError(t, err)
+	client.Timeout = 30 * time.Second
+
+	// Helper to perform the full OIDC login flow (login + callback).
+	doOIDCLogin := func(t *testing.T) {
+		t.Helper()
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+		resp, err := client.Get(ts.AdminURL().WithPath("/oidc/v1/login").String())
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusFound, resp.StatusCode)
+
+		cookie := resp.Cookies()[0]
+		authURL, err := url.Parse(resp.Header.Get("Location"))
+		require.NoError(t, err)
+		stateParam := authURL.Query().Get("state")
+
+		client.CheckRedirect = nil
+		req, err := http.NewRequest("GET", ts.AdminURL().WithPath("/oidc/v1/callback").String(), nil)
+		require.NoError(t, err)
+		req.AddCookie(cookie)
+		q := req.URL.Query()
+		q.Add("state", stateParam)
+		q.Add("code", "some-auth-code")
+		req.URL.RawQuery = q.Encode()
+
+		resp, err = client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+	}
+
+	t.Run("provisioning enabled, estimated_last_login_time is populated", func(t *testing.T) {
+		sqlDB.Exec(t, fmt.Sprintf("DROP USER IF EXISTS %s", usernameUnderTest))
+
+		provisioning.OIDCProvisioningEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
+		defer provisioning.OIDCProvisioningEnabled.Override(ctx, &ts.ClusterSettings().SV, false)
+
+		doOIDCLogin(t)
+
+		// Verify estimated_last_login_time is properly populated.
+		testutils.SucceedsSoon(t, func() error {
+			var count int
+			sqlDB.QueryRow(t,
+				"SELECT count(*) FROM system.users WHERE username = $1 AND estimated_last_login_time IS NOT NULL",
+				usernameUnderTest,
+			).Scan(&count)
+			if count != 1 {
+				return fmt.Errorf("expected estimated_last_login_time to be set for %s", usernameUnderTest)
+			}
+			return nil
+		})
+	})
+
+	t.Run("provisioning disabled, estimated_last_login_time is not populated", func(t *testing.T) {
+		// The user persists from the previous sub-test with estimated_last_login_time
+		// set. Reset it to NULL to verify that a login with provisioning disabled does
+		// not update it.
+		sqlDB.Exec(t, "UPDATE system.users SET estimated_last_login_time = NULL WHERE username = $1",
+			usernameUnderTest)
+		defer sqlDB.Exec(t, fmt.Sprintf("DROP USER IF EXISTS %s", usernameUnderTest))
+
+		provisioning.OIDCProvisioningEnabled.Override(ctx, &ts.ClusterSettings().SV, false)
+
+		doOIDCLogin(t)
+
+		// Verify estimated_last_login_time is NOT populated.
+		var count int
+		sqlDB.QueryRow(t,
+			"SELECT count(*) FROM system.users WHERE username = $1 AND estimated_last_login_time IS NULL",
+			usernameUnderTest,
+		).Scan(&count)
+		require.Equal(t, 1, count, "expected estimated_last_login_time to remain NULL for %s", usernameUnderTest)
+	})
+}
+
 func TestOIDCIssuerValidation(t *testing.T) {
 	// Sub-test 1:  This test ensures that an ID token with an untrusted,
 	// malicious, or misconfigured issuer (`iss` claim) is rejected.
