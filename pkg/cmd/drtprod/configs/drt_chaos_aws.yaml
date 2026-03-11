@@ -65,6 +65,10 @@ targets:
           - $CLUSTER
           - "--binary"
           - "./cockroach"
+          - "--env"
+          - "COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT=40s"
+          - "--env"
+          - "COCKROACH_LOG_MAX_SYNC_DURATION=40s"
         flags:
           enable-fluent-sink: true
           store-count: 4
