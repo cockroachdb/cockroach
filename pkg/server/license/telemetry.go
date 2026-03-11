@@ -8,8 +8,13 @@ package license
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -116,7 +121,48 @@ func (e *Enforcer) persistTelemetryToSystemTable(
 	if e.db == nil {
 		return
 	}
-	// TODO(vishal): Implement persistence to system.license_telemetry table
-	// once the system table migration is in place. For now, the event is
-	// emitted to the TELEMETRY log channel only.
+
+	payloadBytes, err := json.Marshal(event)
+	if err != nil {
+		log.Dev.Warningf(ctx, "failed to marshal license telemetry event: %v", err)
+		return
+	}
+
+	addOnsArray := tree.NewDArray(types.String)
+	for _, ao := range event.AddOns {
+		if err := addOnsArray.Append(tree.NewDString(ao)); err != nil {
+			log.Dev.Warningf(ctx, "failed to build add_ons array: %v", err)
+			return
+		}
+	}
+
+	var expiresAt tree.Datum = tree.DNull
+	if event.ExpiresAt != 0 {
+		expiresAt = tree.MustMakeDTimestampTZ(
+			timeutil.Unix(event.ExpiresAt, 0), time.Microsecond,
+		)
+	}
+
+	if err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, err := txn.ExecEx(ctx, "license-telemetry-insert", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			`INSERT INTO system.license_telemetry (
+				node_id, license_type, edition, add_ons,
+				organization_id, license_id, vcpu_entitled, vcpu_actual,
+				environment, expires_at, is_expired, is_throttled,
+				emission_reason, event_payload
+			) VALUES (
+				$1, $2, $3, $4, $5, $6, $7, $8,
+				$9, $10, $11, $12, $13, $14::JSONB
+			)`,
+			event.NodeID, event.LicenseType, event.Edition, addOnsArray,
+			event.OrganizationID, event.LicenseID, event.VCPUEntitled,
+			event.VCPUActual, event.Environment, expiresAt,
+			event.IsExpired, event.IsThrottled,
+			event.EmissionReason, string(payloadBytes),
+		)
+		return err
+	}); err != nil {
+		log.Dev.Warningf(ctx, "failed to persist license telemetry: %v", err)
+	}
 }
