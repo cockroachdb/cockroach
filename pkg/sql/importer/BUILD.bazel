@@ -13,6 +13,7 @@ go_library(
         "import_planning.go",
         "import_processor.go",
         "import_processor_planning.go",
+        "import_progress_tracker.go",
         "import_table_creation.go",
         "read_import_avro.go",
         "read_import_base.go",

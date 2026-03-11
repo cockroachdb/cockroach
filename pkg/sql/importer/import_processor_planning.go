@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -188,108 +187,9 @@ func distImport(
 		}
 	}
 
-	// progressState holds all in-memory import progress that is periodically
-	// checkpointed to the job record. All fields are protected by mu so that
-	// metaFn (which updates progress) and the checkpoint ticker (which reads
-	// and persists it) see a consistent view. In particular, SST manifests
-	// and resumePos must always be consistent: if resumePos reflects rows up
-	// to N, the manifest buffer must contain the SST metadata for those rows.
-	// Without the mutex, a checkpoint could read an advanced resumePos but
-	// miss the corresponding manifests, causing data loss on resume.
-	var progressState struct {
-		syncutil.Mutex
-		rowProgress      []int64
-		fractionProgress []float32
-		bulkSummary      kvpb.BulkOpSummary
-		manifestBuf      *backfill.SSTManifestBuffer
-	}
-	progressState.rowProgress = make([]int64, len(from))
-	progressState.fractionProgress = make([]float32, len(from))
-	progressState.bulkSummary = getLastImportSummary(job)
-
-	// updateJobProgress persists the current import progress to the job
-	// record in a single transaction. When the manifest buffer has dirty
-	// data, the serialized SST manifests are written to a job info key
-	// within the same transaction and the dirty flag is cleared only after
-	// the transaction commits. This atomicity is critical: resumePos and
-	// manifests must advance together so that on resume, every row covered
-	// by resumePos has a corresponding SST manifest.
-	updateJobProgress := func() error {
-		progressState.Lock()
-		// Snapshot all progress state under the mutex so the checkpoint
-		// transaction sees a consistent view even if metaFn updates
-		// progress concurrently.
-		rowSnapshot := append([]int64(nil), progressState.rowProgress...)
-		fracSnapshot := append([]float32(nil), progressState.fractionProgress...)
-		summarySnapshot := progressState.bulkSummary.DeepCopy()
-
-		var manifestData []byte
-		hasDirtyManifests := progressState.manifestBuf != nil &&
-			progressState.manifestBuf.Dirty()
-		if hasDirtyManifests {
-			manifests := progressState.manifestBuf.SnapshotAndMarkClean()
-			var err error
-			manifestData, err = protoutil.Marshal(
-				&jobspb.BulkSSTManifests{Manifests: manifests},
-			)
-			if err != nil {
-				progressState.manifestBuf.MarkDirty()
-				progressState.Unlock()
-				return errors.Wrap(err, "marshaling SST manifests")
-			}
-		}
-		progressState.Unlock()
-
-		err := job.DebugNameNoTxn(importProgressDebugName).Update(ctx, func(
-			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
-		) error {
-			if err := md.CheckRunningOrReverting(); err != nil {
-				return err
-			}
-
-			prog := md.Progress.GetImport()
-
-			var overall float32
-			for i := range rowSnapshot {
-				prog.ResumePos[i] = rowSnapshot[i]
-			}
-			for i := range fracSnapshot {
-				prog.ReadProgress[i] = fracSnapshot[i]
-				overall += fracSnapshot[i]
-			}
-			prog.Summary = summarySnapshot
-
-			if len(manifestData) > 0 {
-				if err := jobs.WriteChunkedFileToJobInfo(
-					ctx, importSSTManifestsInfoKey, manifestData, txn, job.ID(),
-				); err != nil {
-					return errors.Wrap(err, "writing SST manifests to job info")
-				}
-			}
-
-			fractionCompleted := overall / float32(len(from))
-			// Clamp to [0.0, 1.0].
-			if fractionCompleted > 1.0 {
-				fractionCompleted = 1.0
-			} else if fractionCompleted < 0.0 {
-				fractionCompleted = 0
-			}
-			md.Progress.Progress = &jobspb.Progress_FractionCompleted{
-				FractionCompleted: fractionCompleted,
-			}
-			ju.UpdateProgress(md.Progress)
-			return nil
-		})
-
-		// If the transaction failed and we had dirty manifests, re-mark
-		// the buffer dirty so the next checkpoint retries.
-		if err != nil && hasDirtyManifests {
-			progressState.Lock()
-			progressState.manifestBuf.MarkDirty()
-			progressState.Unlock()
-		}
-		return err
-	}
+	checkpoint := newImportCheckpointTracker(
+		len(from), getLastImportSummary(job), nil, /* manifestBuf */
+	)
 
 	var res kvpb.BulkOpSummary
 
@@ -322,41 +222,31 @@ func distImport(
 		}); err != nil {
 			return kvpb.BulkOpSummary{}, err
 		}
-		progressState.manifestBuf = backfill.NewSSTManifestBuffer(resumeManifests)
+		checkpoint.manifestBuf = backfill.NewSSTManifestBuffer(resumeManifests)
 	}
 
 	metaFn := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
 		if meta.BulkProcessorProgress != nil {
 			// Decode map progress outside the lock since it doesn't touch
 			// shared state.
+			var manifests []jobspb.BulkSSTManifest
 			var mapProgress execinfrapb.BulkMapProgress
-			var hasMapProgress bool
 			if gogotypes.Is(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress) {
 				if err := gogotypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress); err != nil {
 					return err
 				}
-				hasMapProgress = true
+				manifests = mapProgress.SSTManifests
 			}
 
-			// Update all progress state under the mutex so that the
-			// checkpoint ticker always sees a consistent snapshot.
-			progressState.Lock()
-			if hasMapProgress && len(mapProgress.SSTManifests) > 0 {
-				if progressState.manifestBuf != nil {
-					progressState.manifestBuf.Append(mapProgress.SSTManifests)
-				}
-				processorOutput = append(processorOutput, bulksst.ManifestsToSSTFiles(mapProgress.SSTManifests))
-			}
-			for i, v := range meta.BulkProcessorProgress.ResumePos {
-				progressState.rowProgress[i] = v
-			}
-			for i, v := range meta.BulkProcessorProgress.CompletedFraction {
-				progressState.fractionProgress[i] = v
-			}
-			progressState.bulkSummary.Add(meta.BulkProcessorProgress.BulkSummary)
-			progressState.Unlock()
+			checkpoint.RecordProcessorUpdate(meta.BulkProcessorProgress, manifests)
 
-			// For distributed merge, record storage prefix for nodes that report progress
+			// Accumulate SST file info for the merge phase outside the
+			// tracker since it's only used after the flow completes.
+			if len(manifests) > 0 {
+				processorOutput = append(processorOutput, bulksst.ManifestsToSSTFiles(manifests))
+			}
+
+			// For distributed merge, record storage prefix for nodes that report progress.
 			if useDistributedMerge && meta.BulkProcessorProgress.NodeID != 0 {
 				prefix := fmt.Sprintf("nodelocal://%d/", meta.BulkProcessorProgress.NodeID)
 				if err := addStoragePrefix(ctx, prefix); err != nil {
@@ -365,7 +255,7 @@ func distImport(
 			}
 
 			if testingKnobs.alwaysFlushJobProgress {
-				return updateJobProgress()
+				return checkpoint.Persist(ctx, job)
 			}
 		}
 		return nil
@@ -416,7 +306,7 @@ func distImport(
 			case <-done:
 				return ctx.Err()
 			case <-tick.C:
-				if err := updateJobProgress(); err != nil {
+				if err := checkpoint.Persist(ctx, job); err != nil {
 					return err
 				}
 
