@@ -25,9 +25,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/ldapccl"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
+	"github.com/cockroachdb/cockroach/pkg/security/jwtauth"
+	"github.com/cockroachdb/cockroach/pkg/security/ldapauth"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -184,9 +184,9 @@ func authCCLRunTest(t *testing.T, insecure bool) {
 		defer cleanup()
 
 		// Intercept the call to NewLDAPUtil and return the mocked NewLDAPUtil function
-		mockLDAP, newMockLDAPUtil := ldapccl.LDAPMocks()
+		mockLDAP, newMockLDAPUtil := ldapauth.LDAPMocks()
 		if strings.Contains(path, "ldap") {
-			defer testutils.TestingHook(&ldapccl.NewLDAPUtil, newMockLDAPUtil)()
+			defer testutils.TestingHook(&ldapauth.NewLDAPUtil, newMockLDAPUtil)()
 		}
 
 		srv := serverutils.StartServerOnly(t,
@@ -237,27 +237,27 @@ func authCCLRunTest(t *testing.T, insecure bool) {
 							if err != nil {
 								t.Fatalf("unknown value for jwt_cluster_setting enabled: %s", a.Vals[0])
 							}
-							jwtauthccl.JWTAuthEnabled.Override(ctx, sv, v)
+							jwtauth.JWTAuthEnabled.Override(ctx, sv, v)
 						case "audience":
 							if len(a.Vals) != 1 {
 								t.Fatalf("wrong number of argumenets to jwt_cluster_setting audience: %d", len(a.Vals))
 							}
-							jwtauthccl.JWTAuthAudience.Override(ctx, sv, a.Vals[0])
+							jwtauth.JWTAuthAudience.Override(ctx, sv, a.Vals[0])
 						case "issuers":
 							if len(a.Vals) != 1 {
 								t.Fatalf("wrong number of argumenets to jwt_cluster_setting issuers: %d", len(a.Vals))
 							}
-							jwtauthccl.JWTAuthIssuersConfig.Override(ctx, sv, a.Vals[0])
+							jwtauth.JWTAuthIssuersConfig.Override(ctx, sv, a.Vals[0])
 						case "jwks":
 							if len(a.Vals) != 1 {
 								t.Fatalf("wrong number of argumenets to jwt_cluster_setting jwks: %d", len(a.Vals))
 							}
-							jwtauthccl.JWTAuthJWKS.Override(ctx, sv, a.Vals[0])
+							jwtauth.JWTAuthJWKS.Override(ctx, sv, a.Vals[0])
 						case "claim":
 							if len(a.Vals) != 1 {
 								t.Fatalf("wrong number of argumenets to jwt_cluster_setting claim: %d", len(a.Vals))
 							}
-							jwtauthccl.JWTAuthClaim.Override(ctx, sv, a.Vals[0])
+							jwtauth.JWTAuthClaim.Override(ctx, sv, a.Vals[0])
 						case "ident_map":
 							if len(a.Vals) != 1 {
 								t.Fatalf("wrong number of argumenets to jwt_cluster_setting ident_map: %d", len(a.Vals))
@@ -275,7 +275,7 @@ func authCCLRunTest(t *testing.T, insecure bool) {
 							if err != nil {
 								t.Fatalf("unknown value for jwt_cluster_setting jwks_auto_fetch.enabled: %s", a.Vals[0])
 							}
-							jwtauthccl.JWKSAutoFetchEnabled.Override(ctx, sv, v)
+							jwtauth.JWKSAutoFetchEnabled.Override(ctx, sv, v)
 						case "authorization.enabled":
 							if len(a.Vals) != 1 {
 								t.Fatalf("wrong number of arguments to jwt_cluster_setting authorization.enabled")
@@ -284,17 +284,17 @@ func authCCLRunTest(t *testing.T, insecure bool) {
 							if err != nil {
 								t.Fatalf("unknown value for jwt_cluster_setting authorization.enabled: %s", a.Vals[0])
 							}
-							jwtauthccl.JWTAuthZEnabled.Override(ctx, sv, v)
+							jwtauth.JWTAuthZEnabled.Override(ctx, sv, v)
 						case "group_claim":
 							if len(a.Vals) != 1 {
 								t.Fatalf("wrong number of arguments to jwt_cluster_setting group_claim")
 							}
-							jwtauthccl.JWTAuthGroupClaim.Override(ctx, sv, a.Vals[0])
+							jwtauth.JWTAuthGroupClaim.Override(ctx, sv, a.Vals[0])
 						case "userinfo_group_key":
 							if len(a.Vals) != 1 {
 								t.Fatalf("wrong number of arguments to jwt_cluster_setting userinfo_group_key")
 							}
-							jwtauthccl.JWTAuthUserinfoGroupKey.Override(ctx, sv, a.Vals[0])
+							jwtauth.JWTAuthUserinfoGroupKey.Override(ctx, sv, a.Vals[0])
 						default:
 							t.Fatalf("unknown jwt_cluster_setting: %s", a.Key)
 						}

@@ -20,8 +20,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/jwtauth"
+	"github.com/cockroachdb/cockroach/pkg/security/ldapauth"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	secuser "github.com/cockroachdb/cockroach/pkg/security/username"
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/settings/rulebasedscanner"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
@@ -37,11 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -79,36 +77,16 @@ const (
 	UsernameHeader = "X-Cockroach-User"
 )
 
-type noOIDCConfigured struct{}
-
-var _ ui.OIDCUI = &noOIDCConfigured{}
-
-func (c *noOIDCConfigured) GetOIDCConf() ui.OIDCUIConf {
-	return ui.OIDCUIConf{
-		Enabled: false,
-	}
-}
-
-// OIDC is an interface that an OIDC-based authentication module should implement to integrate with
-// the rest of the node's functionality
-type OIDC interface {
-	ui.OIDCUI
-}
-
-// ConfigureOIDC is a hook for the `oidcccl` library to add OIDC login support. It's called during
-// server startup to initialize a client for OIDC support.
-var ConfigureOIDC = func(
-	ctx context.Context,
-	st *cluster.Settings,
-	locality roachpb.Locality,
-	handleHTTP func(pattern string, handler http.Handler),
-	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
-	ambientCtx log.AmbientContext,
-	cluster uuid.UUID,
-	execCfg *sql.ExecutorConfig,
-) (OIDC, error) {
-	return &noOIDCConfigured{}, nil
-}
+// ServerHTTPBasePath is a cluster setting that contains the path to
+// route the user to after successful login. It is intended to be
+// overridden in cases where DB Console is being proxied.
+var ServerHTTPBasePath = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	"server.http.base_path",
+	"path to redirect the user to upon succcessful login",
+	"/",
+	settings.WithPublic,
+)
 
 // WebSessionTimeout is the cluster setting for web session TTL.
 var WebSessionTimeout = settings.RegisterDurationSetting(
@@ -119,13 +97,11 @@ var WebSessionTimeout = settings.RegisterDurationSetting(
 	settings.WithName("server.web_session.timeout"),
 	settings.WithPublic)
 
-// jwtVerifier is a duplicate of the singleton global pgwire object which gets
-// initialized from VerifyJWT method whenever a JWT auth attempt for accessing
-// DB console APIs happens. It depends on jwtauthccl module to be imported
-// properly to override its default ConfigureJWTAuth constructor.
+// jwtVerifier is a singleton initialized from VerifyJWT on the first JWT auth
+// attempt for DB console API access.
 var jwtVerifier = struct {
 	sync.Once
-	j pgwire.JWTVerifier
+	j jwtauth.JWTVerifier
 }{}
 
 type authenticationServer struct {
@@ -150,13 +126,11 @@ func (s *authenticationServer) RegisterGateway(
 	return serverpb.RegisterLogOutHandler(ctx, mux, conn)
 }
 
-// ldapManager is a duplicate of singleton global pgwire object which gets
-// initialized from UserLogin method whenever an LDAP auth attempt happens. It
-// depends on ldapccl module to be imported properly to override its default
-// ConfigureLDAPAuth constructor.
+// ldapManager is a singleton global object which gets initialized from
+// UserLogin method whenever an LDAP auth attempt happens.
 var ldapManager = struct {
 	sync.Once
-	m pgwire.LDAPManager
+	m ldapauth.LDAPManager
 }{}
 
 // UserLogin is part of the Server interface.
@@ -214,7 +188,7 @@ func (s *authenticationServer) userLogin(
 		execCfg := s.sqlServer.ExecutorConfig()
 		ldapManager.Do(func() {
 			if ldapManager.m == nil {
-				ldapManager.m = pgwire.ConfigureLDAPAuth(ctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
+				ldapManager.m = ldapauth.ConfigureLDAPAuth(ctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
 			}
 		})
 		var detailedErrors redact.RedactableString
@@ -690,7 +664,7 @@ func (s *authenticationServer) VerifyJWT(
 	execCfg := s.sqlServer.ExecutorConfig()
 	jwtVerifier.Do(func() {
 		if jwtVerifier.j == nil {
-			jwtVerifier.j = pgwire.ConfigureJWTAuth(
+			jwtVerifier.j = jwtauth.ConfigureJWTAuth(
 				ctx,
 				execCfg.AmbientCtx,
 				execCfg.Settings,

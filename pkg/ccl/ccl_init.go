@@ -12,11 +12,8 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/backup"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/ldapccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multitenantccl"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/oidcccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/cliccl" // registers fixtures command
 	// TODO(ssd): Many test packages require this implicitly but have failed to

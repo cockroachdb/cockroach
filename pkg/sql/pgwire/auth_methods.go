@@ -15,13 +15,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
+	"github.com/cockroachdb/cockroach/pkg/security/jwtauth"
+	"github.com/cockroachdb/cockroach/pkg/security/ldapauth"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/sessionrevival"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
@@ -33,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/go-ldap/ldap/v3"
@@ -85,6 +85,9 @@ func loadDefaultMethods() {
 	// The "trust" method accepts any connection attempt that matches
 	// the current rule.
 	RegisterAuthMethod("trust", authTrust, hba.ConnAny, NoOptionsAllowed)
+
+	// The "ldap" method uses LDAP for authentication.
+	RegisterAuthMethod("ldap", AuthLDAP, hba.ConnAny, ldapauth.CheckHBAEntryLDAP)
 }
 
 // AuthMethod is a top-level factory for composing the various
@@ -727,84 +730,7 @@ func authSessionRevivalToken(token []byte) AuthMethod {
 	}
 }
 
-// JWTVerifier is an interface for the `jwtauthccl` library to add JWT login support.
-// This interface has a method that validates whether a given JWT token is a proper
-// credential for a given user to login.
-type JWTVerifier interface {
-	ValidateJWTLogin(_ context.Context, _ *cluster.Settings,
-		_ username.SQLUsername,
-		_ []byte,
-		_ *identmap.Conf,
-	) (detailedErrorMsg redact.RedactableString, authError error)
-
-	// RetrieveIdentity retrieves the user identity from the JWT.
-	//
-	// If a user identity is provided as input, it matches it against the token
-	// principals. In case of a match, it returns the matched user and no
-	// error. Otherwise, it returns the input user along with the error.
-	//
-	// If a user identity is not provided as input, and there is a single token
-	// principal to match against, it returns this user identity and no error.
-	// If there are multiple matches, then it returns an error.
-	RetrieveIdentity(
-		_ context.Context, st *cluster.Settings, _ username.SQLUsername, _ []byte, _ *identmap.Conf,
-	) (retrievedUser username.SQLUsername, authError error)
-
-	ExtractGroups(ctx context.Context, st *cluster.Settings, token []byte) ([]string, error)
-
-	// Combined minimal check used by the provisioner:
-	//   - verifies signature with the configured key set
-	//   - confirms the `iss` claim is configured
-	//   - returns the verified issuer string
-	//
-	//   issuer       – verified `iss` string (empty on failure)
-	//   detailedErr  – redactable diagnostics for LogAuthFailed
-	//   authErr      – high-level error shown to the client
-	VerifyAndExtractIssuer(
-		_ context.Context,
-		_ *cluster.Settings,
-		_ []byte,
-	) (issuer string, detailedErr redact.RedactableString, authErr error)
-}
-
-var jwtVerifier JWTVerifier
-
-type noJWTConfigured struct{}
-
-func (c *noJWTConfigured) ValidateJWTLogin(
-	_ context.Context, _ *cluster.Settings, _ username.SQLUsername, _ []byte, _ *identmap.Conf,
-) (detailedErrorMsg redact.RedactableString, authError error) {
-	return "", errors.New("JWT token authentication requires CCL features")
-}
-
-func (c *noJWTConfigured) RetrieveIdentity(
-	_ context.Context, _ *cluster.Settings, u username.SQLUsername, _ []byte, _ *identmap.Conf,
-) (retrievedUser username.SQLUsername, authError error) {
-	return u, errors.New("JWT token authentication requires CCL features")
-}
-
-func (c *noJWTConfigured) ExtractGroups(
-	ctx context.Context, _ *cluster.Settings, _ []byte,
-) ([]string, error) {
-	return nil, errors.New("JWT authorization requires CCL features")
-}
-
-func (c *noJWTConfigured) VerifyAndExtractIssuer(
-	_ context.Context, _ *cluster.Settings, _ []byte,
-) (issuer string, detailedErr redact.RedactableString, authErr error) {
-	return "", "", errors.New("JWT token authentication has not been configured")
-}
-
-// ConfigureJWTAuth is a hook for the `jwtauthccl` library to add JWT login support. It's called to
-// setup the JWTVerifier just as it is needed.
-var ConfigureJWTAuth = func(
-	serverCtx context.Context,
-	ambientCtx log.AmbientContext,
-	st *cluster.Settings,
-	clusterUUID uuid.UUID,
-) JWTVerifier {
-	return &noJWTConfigured{}
-}
+var jwtVerifier jwtauth.JWTVerifier
 
 // authJwtToken is the AuthMethod constructor for the CRDB-specific
 // jwt auth token.
@@ -825,7 +751,7 @@ func authJwtToken(
 ) (*AuthBehaviors, error) {
 	// Initialize the jwt verifier if it hasn't been already.
 	if jwtVerifier == nil {
-		jwtVerifier = ConfigureJWTAuth(sctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
+		jwtVerifier = jwtauth.ConfigureJWTAuth(sctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
 	}
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
@@ -945,7 +871,7 @@ func authJwtToken(
 	b.SetAuthorizer(func(ctx context.Context, systemIdentity string, clientConnection bool) error {
 		c.LogAuthInfof(ctx, "JWT authentication succeeded; attempting authorization")
 
-		// Ask the CCL verifier for groups (nil slice means feature disabled).
+		// Ask the verifier for groups (nil slice means feature disabled).
 		groups, err := jwtVerifier.ExtractGroups(ctx, execCfg.Settings, []byte(token))
 		if err != nil {
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_AUTHORIZATION_ERROR, err)
@@ -992,89 +918,12 @@ func authJwtToken(
 	return b, nil
 }
 
-// LDAPManager is an interface for `ldapauthccl` pkg to add ldap login(authN)
-// and groups sync(authZ) support.
-type LDAPManager interface {
-	// FetchLDAPUserDN extracts the user distinguished name for the sql session
-	// user performing a lookup for the user on ldap server using options provided
-	// in the hba conf and supplied sql username in db connection string.
-	FetchLDAPUserDN(_ context.Context, _ *cluster.Settings,
-		_ username.SQLUsername,
-		_ *hba.Entry,
-		_ *identmap.Conf,
-	) (userDN *ldap.DN, detailedErrorMsg redact.RedactableString, authError error)
-	// ValidateLDAPLogin validates whether the password supplied could be used to
-	// bind to ldap server with the ldap user DN(provided as systemIdentityDN
-	// being the "externally-defined" system identity).
-	ValidateLDAPLogin(_ context.Context, _ *cluster.Settings,
-		_ *ldap.DN,
-		_ username.SQLUsername,
-		_ string,
-		_ *hba.Entry,
-		_ *identmap.Conf,
-	) (detailedErrorMsg redact.RedactableString, authError error)
-	// FetchLDAPGroups retrieves ldap groups for the supplied ldap user
-	// DN(provided as systemIdentityDN being the "externally-defined" system
-	// identity) performing a group search with the options provided in the hba
-	// conf and filtering for the groups which have the user DN as its member.
-	FetchLDAPGroups(_ context.Context, _ *cluster.Settings,
-		_ *ldap.DN,
-		_ username.SQLUsername,
-		_ *hba.Entry,
-		_ *identmap.Conf,
-	) (ldapGroups []*ldap.DN, detailedErrorMsg redact.RedactableString, authError error)
-}
-
 // ldapManager is a singleton global pgwire object which gets initialized from
-// authLDAP method whenever an LDAP auth attempt happens. It depends on ldapccl
-// module to be imported properly to override its default ConfigureLDAPAuth
-// constructor.
+// AuthLDAP method whenever an LDAP auth attempt happens.
 var ldapManager = struct {
 	sync.Once
-	m LDAPManager
+	m ldapauth.LDAPManager
 }{}
-
-type noLDAPConfigured struct{}
-
-func (c *noLDAPConfigured) FetchLDAPUserDN(
-	_ context.Context, _ *cluster.Settings, _ username.SQLUsername, _ *hba.Entry, _ *identmap.Conf,
-) (retrievedUserDN *ldap.DN, detailedErrorMsg redact.RedactableString, authError error) {
-	return nil, "", errors.New("LDAP based authentication requires CCL features")
-}
-
-func (c *noLDAPConfigured) ValidateLDAPLogin(
-	_ context.Context,
-	_ *cluster.Settings,
-	_ *ldap.DN,
-	_ username.SQLUsername,
-	_ string,
-	_ *hba.Entry,
-	_ *identmap.Conf,
-) (detailedErrorMsg redact.RedactableString, authError error) {
-	return "", errors.New("LDAP based authentication requires CCL features")
-}
-
-func (c *noLDAPConfigured) FetchLDAPGroups(
-	_ context.Context,
-	_ *cluster.Settings,
-	_ *ldap.DN,
-	_ username.SQLUsername,
-	_ *hba.Entry,
-	_ *identmap.Conf,
-) (ldapGroups []*ldap.DN, detailedErrorMsg redact.RedactableString, authError error) {
-	return nil, "", errors.New("LDAP based authorization requires CCL features")
-}
-
-// ConfigureLDAPAuth is a hook for the `ldapauthccl` library to add LDAP login
-// support. It's called to setup the LDAPManager just as it is needed.
-var ConfigureLDAPAuth = func(
-	serverCtx context.Context,
-	ambientCtx log.AmbientContext,
-	st *cluster.Settings,
-	clusterUUID uuid.UUID,
-) LDAPManager {
-	return &noLDAPConfigured{}
-}
 
 // AuthLDAP is the AuthMethod constructor for the CRDB-specific ldap auth
 // mechanism. The "LDAP" method requires a clear text password which will be
@@ -1094,7 +943,7 @@ func AuthLDAP(
 ) (*AuthBehaviors, error) {
 	ldapManager.Do(func() {
 		if ldapManager.m == nil {
-			ldapManager.m = ConfigureLDAPAuth(sCtx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
+			ldapManager.m = ldapauth.ConfigureLDAPAuth(sCtx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
 		}
 	})
 	b := &AuthBehaviors{}
@@ -1225,7 +1074,7 @@ func AuthLDAP(
 func AuthorizeLDAPHelper(
 	ctx context.Context,
 	b *AuthBehaviors,
-	ldapManager LDAPManager,
+	ldapManager ldapauth.LDAPManager,
 	execCfg *sql.ExecutorConfig,
 	ldapUserDN *ldap.DN,
 	user username.SQLUsername,

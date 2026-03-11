@@ -410,10 +410,8 @@
 /pkg/ccl/cmdccl/clusterrepl/ @cockroachdb/disaster-recovery
 /pkg/ccl/gqpccl/             @cockroachdb/sql-queries-prs
 /pkg/ccl/gssapiccl/          @cockroachdb/product-security
-/pkg/ccl/jwtauthccl/         @cockroachdb/cloud-identity @cockroachdb/product-security
 #!/pkg/ccl/kvccl/              @cockroachdb/kv-noreview
 /pkg/ccl/kvccl/kvtenantccl/  @cockroachdb/server-prs
-/pkg/ccl/ldapccl/            @cockroachdb/security-engineering @cockroachdb/product-security
 #!/pkg/ccl/upgradeccl/       @cockroachdb/release-eng-prs @cockroachdb/upgrade-prs
 #!/pkg/ccl/logictestccl/       @cockroachdb/sql-queries-noreview
 #!/pkg/ccl/sqlitelogictestccl/ @cockroachdb/sql-queries-noreview
@@ -421,7 +419,6 @@
 /pkg/ccl/multitenantccl/     @cockroachdb/server-prs
 /pkg/ccl/multitenant/tenantcostclient/ @cockroachdb/sql-queries-prs
 /pkg/ccl/multitenant/tenantcostserver/ @cockroachdb/sql-queries-prs
-/pkg/ccl/oidcccl/            @cockroachdb/product-security
 /pkg/ccl/pgcryptoccl/        @cockroachdb/sql-foundations
 /pkg/ccl/plpgsqlccl/         @cockroachdb/sql-queries-prs
 /pkg/ccl/securityccl/        @cockroachdb/security-engineering @cockroachdb/product-security
@@ -600,7 +597,10 @@
 /pkg/security/x509.go        @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/clientsecopts/ @cockroachdb/sql-foundations @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/distinguishedname/ @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/jwtauth/       @cockroachdb/cloud-identity @cockroachdb/product-security
 /pkg/security/jwthelper/     @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/ldapauth/      @cockroachdb/security-engineering @cockroachdb/product-security
+/pkg/security/oidcauth/      @cockroachdb/product-security
 /pkg/security/password/      @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/provisioning/  @cockroachdb/security-engineering @cockroachdb/product-security
 /pkg/security/username/      @cockroachdb/security-engineering @cockroachdb/product-security
