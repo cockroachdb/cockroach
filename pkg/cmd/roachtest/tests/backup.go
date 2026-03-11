@@ -15,7 +15,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -308,62 +307,6 @@ func initBulkJobPerfArtifacts(testName string, timeout time.Duration) (func(), *
 }
 
 func registerBackup(r registry.Registry) {
-	backup2TBSpec := r.MakeClusterSpec(10)
-	r.Add(registry.TestSpec{
-		Name:      fmt.Sprintf("backup/2TB/%s", backup2TBSpec),
-		Owner:     registry.OwnerDisasterRecovery,
-		Benchmark: true,
-		Cluster:   backup2TBSpec,
-		// The default storage on Azure Standard_D4ds_v5 is only 150 GiB compared
-		// to 400 on GCE, which is not enough for this test. We could request a
-		// larger volume size and set spec.LocalSSDDisable if we wanted to run
-		// this on Azure.
-		CompatibleClouds:          registry.OnlyGCE,
-		Suites:                    registry.Suites(registry.Nightly),
-		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
-		EncryptionSupport:         registry.EncryptionAlwaysDisabled,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			rows := rows2TiB
-			if c.IsLocal() {
-				rows = 100
-			}
-			dest := importBankData(ctx, rows, t, c)
-			tick, perfBuf := initBulkJobPerfArtifacts("backup/2TB", 2*time.Hour)
-
-			m := c.NewMonitor(ctx)
-			m.Go(func(ctx context.Context) error {
-				t.Status(`running backup`)
-				// Tick once before starting the backup, and once after to capture the
-				// total elapsed time. This is used by roachperf to compute and display
-				// the average MB/sec per node.
-				tick()
-				conn := c.Conn(ctx, t.L(), 1)
-				defer conn.Close()
-				var jobID jobspb.JobID
-				uri := `gs://` + backupTestingBucket + `/` + dest + `?AUTH=implicit`
-				if err := conn.QueryRowContext(ctx, fmt.Sprintf("BACKUP bank.bank INTO '%s' WITH detached", uri)).Scan(&jobID); err != nil {
-					return err
-				}
-				if err := AssertReasonableFractionCompleted(ctx, t.L(), c, jobID, 2); err != nil {
-					return err
-				}
-				tick()
-
-				// Upload the perf artifacts to any one of the nodes so that the test
-				// runner copies it into an appropriate directory path.
-				dest := filepath.Join(t.PerfArtifactsDir(), "stats.json")
-				if err := c.RunE(ctx, option.WithNodes(c.Node(1)), "mkdir -p "+filepath.Dir(dest)); err != nil {
-					t.L().ErrorfCtx(ctx, "failed to create perf dir: %+v", err)
-				}
-				if err := c.PutString(ctx, perfBuf.String(), dest, 0755, c.Node(1)); err != nil {
-					t.L().ErrorfCtx(ctx, "failed to upload perf artifacts to node: %s", err.Error())
-				}
-				return nil
-			})
-			m.Wait()
-		},
-	})
-
 	// Skip running on aws because the roachtest env does not have the proper
 	// credentials. See 127062
 	for _, cloudProvider := range []spec.Cloud{spec.GCE} {
