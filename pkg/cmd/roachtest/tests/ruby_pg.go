@@ -266,11 +266,14 @@ func registerRubyPG(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:             "ruby-pg",
-		Timeout:          1 * time.Hour,
-		Owner:            registry.OwnerSQLFoundations,
-		Cluster:          r.MakeClusterSpec(1),
-		Leases:           registry.MetamorphicLeases,
+		Name:    "ruby-pg",
+		Timeout: 1 * time.Hour,
+		Owner:   registry.OwnerSQLFoundations,
+		Cluster: r.MakeClusterSpec(1),
+		Leases:  registry.MetamorphicLeases,
+		// Never run with runtime assertions as the overhead can delay
+		// sqlliveness heartbeats enough to cause session expiration errors.
+		CockroachBinary:  registry.StandardCockroach,
 		NativeLibs:       registry.LibGEOS,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly, registry.Driver),
