@@ -6,11 +6,11 @@ import { ArrowLeft } from "@cockroachlabs/icons";
 import { Col, Row } from "antd";
 import classNames from "classnames/bind";
 import Long from "long";
-import React, { useEffect } from "react";
+import React from "react";
 import Helmet from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 
-import { Schedule } from "src/api/schedulesApi";
+import { getSchedule } from "src/api/schedulesApi";
 import { Button } from "src/button";
 import { commonStyles } from "src/common";
 import { Loading } from "src/loading";
@@ -18,38 +18,34 @@ import scheduleStyles from "src/schedules/schedules.module.scss";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
-import { DATE_FORMAT_24_TZ, idAttr, getMatchParamByName } from "src/util";
+import {
+  DATE_FORMAT_24_TZ,
+  idAttr,
+  getMatchParamByName,
+  useSwrWithClusterId,
+} from "src/util";
 
 import { Timestamp } from "../../timestamp";
 
 const cardCx = classNames.bind(summaryCardStyles);
 const scheduleCx = classNames.bind(scheduleStyles);
 
-export interface ScheduleDetailsStateProps {
-  schedule: Schedule;
-  scheduleError: Error | null;
-  scheduleLoading: boolean;
-}
-
-export interface ScheduleDetailsDispatchProps {
-  refreshSchedule: (id: Long) => void;
-}
-
-export type ScheduleDetailsProps = ScheduleDetailsStateProps &
-  ScheduleDetailsDispatchProps &
-  RouteComponentProps;
+export type ScheduleDetailsProps = RouteComponentProps;
 
 export const ScheduleDetails: React.FC<ScheduleDetailsProps> = props => {
   const idStr = getMatchParamByName(props.match, idAttr);
-  const { refreshSchedule } = props;
-  useEffect(() => {
-    refreshSchedule(Long.fromString(idStr));
-  }, [idStr, refreshSchedule]);
+
+  const {
+    data: schedule,
+    error,
+    isLoading,
+  } = useSwrWithClusterId({ name: "schedule", id: idStr }, () =>
+    getSchedule(Long.fromString(idStr)),
+  );
 
   const prevPage = (): void => props.history.goBack();
 
   const renderContent = (): React.ReactElement => {
-    const schedule = props.schedule;
     return (
       <>
         <Row gutter={24}>
@@ -126,9 +122,9 @@ export const ScheduleDetails: React.FC<ScheduleDetailsProps> = props => {
       </div>
       <section className={scheduleCx("section section--container")}>
         <Loading
-          loading={!props.schedule || props.scheduleLoading}
+          loading={!schedule || isLoading}
           page={"schedule details"}
-          error={props.scheduleError}
+          error={error}
           render={renderContent}
         />
       </section>
