@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -154,7 +155,7 @@ type testRangeController struct {
 }
 
 func (c *testRangeController) WaitForEval(
-	ctx context.Context, pri admissionpb.WorkPriority,
+	ctx context.Context, pri admissionpb.WorkPriority, _ ash.WorkloadInfo,
 ) (bool, error) {
 	errStr := "<nil>"
 	if c.waitForEvalErr != nil {
@@ -467,8 +468,9 @@ func TestProcessorBasic(t *testing.T) {
 
 			case "admit-for-eval":
 				pri := parseAdmissionPriority(t, d)
-				// The callee ignores the create time.
-				admitted, err := p.AdmitForEval(ctx, pri, time.Time{})
+				// The callee ignores the create time and workload identity.
+				admitted, err := p.AdmitForEval(
+					ctx, pri, time.Time{}, ash.WorkloadInfo{})
 				fmt.Fprintf(&b, "admitted: %t err: ", admitted)
 				if err == nil {
 					fmt.Fprintf(&b, "<nil>\n")
