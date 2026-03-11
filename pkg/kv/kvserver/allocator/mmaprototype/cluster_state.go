@@ -1218,6 +1218,17 @@ func (rs *rangeState) removeReplica(storeID roachpb.StoreID) error {
 	return errors.Errorf("store %v has no replica", storeID)
 }
 
+// replicaStateForStore returns the ReplicaState of the replica on the given
+// store, and whether it was found.
+func (rs *rangeState) replicaStateForStore(storeID roachpb.StoreID) (ReplicaState, bool) {
+	for _, repl := range rs.replicas {
+		if repl.StoreID == storeID {
+			return repl.ReplicaState, true
+		}
+	}
+	return ReplicaState{}, false
+}
+
 func replicaSetIsValid(replicas []StoreIDAndReplicaState) error {
 	hasSeenLeaseholder := false
 	for _, repl := range replicas {

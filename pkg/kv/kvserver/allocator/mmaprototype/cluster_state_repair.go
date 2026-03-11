@@ -8,6 +8,7 @@ package mmaprototype
 import (
 	"context"
 	"fmt"
+	"math"
 	"slices"
 	"sync"
 
@@ -299,6 +300,244 @@ func isLeaseholderOnStore(rs *rangeState, storeID roachpb.StoreID) bool {
 	return false
 }
 
+// enactRepair records a repair change as pending and appends it to the changes
+// list for external delivery. The caller is responsible for logging the success
+// message.
+func (re *rebalanceEnv) enactRepair(
+	ctx context.Context, localStoreID roachpb.StoreID, rangeChange PendingRangeChange,
+) {
+	re.addPendingRangeChange(ctx, rangeChange)
+	re.changes = append(re.changes,
+		MakeExternalRangeChange(originMMARepair, localStoreID, rangeChange))
+}
+
+// filterAddCandidates filters candidateStores down to stores that are ready
+// (not dead/draining/IO-overloaded) and not already hosting a replica for the
+// range at the node level. excludeStoreID, if non-zero, is excluded from the
+// existing-replica set (used when a replica on that store is being
+// concurrently removed as part of the same change, such as during non-voter
+// promotions).
+//
+// The returned storeSet reuses the backing memory of candidateStores (filtered
+// in place). Callers using pooled memory must account for this.
+func (re *rebalanceEnv) filterAddCandidates(
+	ctx context.Context, rs *rangeState, candidateStores storeSet, excludeStoreID roachpb.StoreID,
+) storeSet {
+	var existingReplicas storeSet
+	existingNodes := make(map[roachpb.NodeID]struct{})
+	for _, repl := range rs.replicas {
+		if repl.StoreID == excludeStoreID {
+			continue
+		}
+		existingReplicas.insert(repl.StoreID)
+		ss := re.stores[repl.StoreID]
+		if ss != nil {
+			existingNodes[ss.NodeID] = struct{}{}
+		}
+	}
+	candidateStores = retainReadyReplicaTargetStoresOnly(
+		ctx, candidateStores, re.stores, existingReplicas)
+	// Filter in place, reusing candidateStores' backing array.
+	valid := candidateStores[:0]
+	for _, storeID := range candidateStores {
+		if existingReplicas.contains(storeID) {
+			continue
+		}
+		ss := re.stores[storeID]
+		if ss == nil {
+			continue
+		}
+		if _, ok := existingNodes[ss.NodeID]; ok {
+			continue
+		}
+		valid = append(valid, storeID)
+	}
+	return valid
+}
+
+// diversityScorer computes a diversity score for a candidate store's locality
+// relative to existing replica localities. Both getScoreChangeForNewReplica
+// (for additions) and getScoreChangeForReplicaRemoval (for removals) have this
+// signature. In both cases, higher scores are better: for additions, a high
+// score means the candidate is diverse; for removals, a high (least negative)
+// score means the candidate is the most redundant.
+type diversityScorer func(erl *existingReplicaLocalities, lt localityTiers) float64
+
+// pickStoreByDiversity selects the store from candidates that maximizes the
+// given diversity scorer. When multiple candidates are tied for the best score,
+// one is chosen uniformly at random via reservoir sampling to avoid
+// systematically favoring any particular store. Returns 0 if no valid candidate
+// is found (e.g. all candidates have nil storeState).
+//
+// The localityTiers parameter determines which replicas' localities are used
+// for diversity scoring: voterLocalityTiers for voter operations,
+// replicaLocalityTiers for non-voter operations.
+func (re *rebalanceEnv) pickStoreByDiversity(
+	candidates []roachpb.StoreID, localityTiers replicasLocalityTiers, scorer diversityScorer,
+) roachpb.StoreID {
+	localities := re.dsm.getExistingReplicaLocalities(localityTiers)
+	bestStoreID := roachpb.StoreID(0)
+	bestScore := math.Inf(-1)
+	tieCount := 0
+	for _, storeID := range candidates {
+		ss := re.stores[storeID]
+		if ss == nil {
+			continue
+		}
+		score := scorer(localities, ss.localityTiers)
+		if score > bestScore && !diversityScoresAlmostEqual(score, bestScore) {
+			// Strictly better — reset.
+			bestScore = score
+			bestStoreID = storeID
+			tieCount = 1
+		} else if diversityScoresAlmostEqual(score, bestScore) {
+			// Tied — reservoir sampling: replace with probability 1/n.
+			tieCount++
+			if re.rng.Intn(tieCount) == 0 {
+				bestStoreID = storeID
+			}
+		}
+	}
+	return bestStoreID
+}
+
+// repairAddVoter attempts to add a voter to an under-replicated range.
+// First it tries to promote an existing non-voter to voter (avoiding
+// unnecessary data movement), then falls back to adding a voter on a new store.
+func (re *rebalanceEnv) repairAddVoter(
+	ctx context.Context, localStoreID roachpb.StoreID, rangeID roachpb.RangeID, rs *rangeState,
+) {
+	re.ensureAnalyzedConstraints(ctx, rs)
+	if rs.constraints == nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping AddVoter repair for r%d: constraint analysis failed", rangeID)
+		return
+	}
+
+	// Step 1: Try to promote a non-voter to voter.
+	promoteCands, err := rs.constraints.candidatesToConvertFromNonVoterToVoter()
+	if err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping AddVoter repair for r%d: %v", rangeID, err)
+		return
+	}
+	if len(promoteCands) > 0 {
+		re.promoteNonVoterToVoter(ctx, localStoreID, rangeID, rs, promoteCands)
+		return
+	}
+
+	// Step 2: Find a new store to add a voter.
+	constrDisj, err := rs.constraints.constraintsForAddingVoter()
+	if err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping AddVoter repair for r%d: %v", rangeID, err)
+		return
+	}
+
+	// Get candidate stores satisfying constraints. For nil constraints (no
+	// constraints configured), constrainStoresForExpr returns all stores.
+	var candidateStores storeSet
+	re.constraintMatcher.constrainStoresForExpr(constrDisj, &candidateStores)
+
+	const noExcludedStore = roachpb.StoreID(0)
+	validCandidates := re.filterAddCandidates(ctx, rs, candidateStores, noExcludedStore)
+	if len(validCandidates) == 0 {
+		log.KvDistribution.VEventf(ctx, 1,
+			"skipping AddVoter repair for r%d: no valid target stores", rangeID)
+		return
+	}
+
+	// Pick the target with the best voter diversity score.
+	bestStoreID := re.pickStoreByDiversity(
+		validCandidates, rs.constraints.voterLocalityTiers,
+		(*existingReplicaLocalities).getScoreChangeForNewReplica)
+	if bestStoreID == 0 {
+		log.KvDistribution.VEventf(ctx, 1,
+			"skipping AddVoter repair for r%d: no valid target after diversity scoring", rangeID)
+		return
+	}
+
+	// Create the pending change.
+	targetSS := re.stores[bestStoreID]
+	addTarget := roachpb.ReplicationTarget{
+		NodeID:  targetSS.NodeID,
+		StoreID: bestStoreID,
+	}
+	addIDAndType := ReplicaIDAndType{
+		ReplicaType: ReplicaType{ReplicaType: roachpb.VOTER_FULL},
+	}
+	addChange := MakeAddReplicaChange(rangeID, rs.load, addIDAndType, addTarget)
+	rangeChange := MakePendingRangeChange(rangeID, []ReplicaChange{addChange})
+	if err := re.preCheckOnApplyReplicaChanges(rangeChange); err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping AddVoter repair for r%d: pre-check failed: %v", rangeID, err)
+		return
+	}
+	re.enactRepair(ctx, localStoreID, rangeChange)
+	log.KvDistribution.VEventf(ctx, 1,
+		"result(success): AddVoter repair for r%d, adding voter on s%d",
+		rangeID, bestStoreID)
+}
+
+// promoteNonVoterToVoter promotes the best non-voter candidate to voter,
+// choosing by voter diversity score (higher is better), with ties broken
+// uniformly at random via reservoir sampling.
+func (re *rebalanceEnv) promoteNonVoterToVoter(
+	ctx context.Context,
+	localStoreID roachpb.StoreID,
+	rangeID roachpb.RangeID,
+	rs *rangeState,
+	promoteCands []roachpb.StoreID,
+) {
+	// Pick the best candidate by voter diversity score.
+	bestStoreID := re.pickStoreByDiversity(
+		promoteCands, rs.constraints.voterLocalityTiers,
+		(*existingReplicaLocalities).getScoreChangeForNewReplica)
+	if bestStoreID == 0 {
+		log.KvDistribution.VEventf(ctx, 1,
+			"skipping AddVoter repair for r%d: no valid promotion candidates", rangeID)
+		return
+	}
+
+	// Find the existing replica state for the non-voter being promoted.
+	// This should always succeed: bestStoreID was just returned by
+	// candidatesToConvertFromNonVoterToVoter() from the same rs.replicas data
+	// within this single-threaded repair() call.
+	prevState, found := rs.replicaStateForStore(bestStoreID)
+	if !found {
+		err := errors.AssertionFailedf(
+			"non-voter on s%d not found in replicas for r%d", bestStoreID, rangeID)
+		if buildutil.CrdbTestBuild {
+			panic(err)
+		}
+		log.KvDistribution.Warningf(ctx,
+			"skipping AddVoter repair for r%d: %v", rangeID, err)
+		return
+	}
+
+	// Create the type change from NON_VOTER to VOTER_FULL.
+	targetSS := re.stores[bestStoreID]
+	promoteTarget := roachpb.ReplicationTarget{
+		NodeID:  targetSS.NodeID,
+		StoreID: bestStoreID,
+	}
+	nextIDAndType := ReplicaIDAndType{
+		ReplicaType: ReplicaType{ReplicaType: roachpb.VOTER_FULL},
+	}
+	typeChange := MakeReplicaTypeChange(
+		rangeID, rs.load, prevState, nextIDAndType, promoteTarget)
+	rangeChange := MakePendingRangeChange(rangeID, []ReplicaChange{typeChange})
+	if err := re.preCheckOnApplyReplicaChanges(rangeChange); err != nil {
+		log.KvDistribution.Warningf(ctx,
+			"skipping AddVoter repair for r%d: pre-check failed: %v", rangeID, err)
+		return
+	}
+	re.enactRepair(ctx, localStoreID, rangeChange)
+	log.KvDistribution.VEventf(ctx, 1,
+		"result(success): AddVoter repair for r%d, promoting non-voter on s%d to voter",
+		rangeID, bestStoreID)
+}
+
 // repair examines the ranges on the local store and proposes changes to bring
 // them into compliance with their span configs. For example, it adds replicas
 // when under-replicated, removes replicas when over-replicated, replaces dead
@@ -348,6 +587,8 @@ func (re *rebalanceEnv) repair(
 			}
 
 			switch action {
+			case AddVoter:
+				re.repairAddVoter(ctx, localStoreID, rangeID, rs)
 			default:
 				log.KvDistribution.VEventf(ctx, 2,
 					"repair action %s for r%d not yet implemented", action, rangeID)
