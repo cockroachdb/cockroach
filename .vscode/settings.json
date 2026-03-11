@@ -1,0 +1,53 @@
+{
+    "[go]": {
+        "editor.rulers": [
+            80,
+            100,
+        ],
+    },
+    "[git-commit]": {
+        "editor.rulers": [
+            72,
+            100,
+        ],
+        "editor.wordWrap": "off",
+    },
+    "go.lintTool": "golangci-lint",
+    "go.lintFlags": [
+        "--fast"
+    ],
+    "files.exclude": {
+        "**/_bazel": true,
+        "**/bin/": true,
+        "**/c-deps/": true,
+        "**/pkg/ui/": true
+    },
+    "search.exclude": {
+        "**/_bazel": true,
+        "**/bin/": true,
+        "**/c-deps/": true,
+        "**/pkg/ui/": true
+    },
+    "files.watcherExclude": {
+        "**/_bazel": true,
+        "**/bin/": true,
+        "**/c-deps/": true,
+        "**/pkg/ui/": true
+    },
+    "gopls": {
+        "directoryFilters": [
+            "-_bazel",
+            "-bin",
+            "-c-deps",
+            "-pkg/ui"
+        ]
+    },
+    "filewatcher.commands": [
+        {
+            "match": "\\.go*",
+            "isAsync": true,
+            "cmd": "${workspaceRoot}/bin/crlfmt -w -tab=2 ${file}",
+            "event": "onFileChange"
+        }
+    ],
+}
