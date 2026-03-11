@@ -46,11 +46,13 @@ func main() {
 
 	// Try reading embedded metadata.
 	var storeToNode map[string]string
+	var nodeToRegion map[string]string
 	md, mdErr := tsdumpmeta.Read(dec)
 	if mdErr == nil {
 		storeToNode = md.StoreToNodeMap
-		fmt.Fprintf(os.Stderr, "read embedded metadata: version=%s, %d store-to-node entries\n",
-			md.Version, len(storeToNode))
+		nodeToRegion = md.NodeToRegionMap
+		fmt.Fprintf(os.Stderr, "read embedded metadata: version=%s, %d store-to-node entries, %d node-to-region entries\n",
+			md.Version, len(storeToNode), len(nodeToRegion))
 	} else {
 		// No embedded metadata; restart from beginning.
 		if _, err := f.Seek(0, io.SeekStart); err != nil {
@@ -89,6 +91,11 @@ func main() {
 	fmt.Fprintln(out, `CREATE TABLE store_node_map (
     store_id VARCHAR NOT NULL,
     node_id  VARCHAR NOT NULL
+);`)
+
+	fmt.Fprintln(out, `CREATE TABLE node_region_map (
+    node_id VARCHAR NOT NULL,
+    region  VARCHAR NOT NULL
 );`)
 
 	// Decode and emit timeseries data.
@@ -143,6 +150,16 @@ func main() {
 		var rows []string
 		for storeID, nodeID := range storeToNode {
 			rows = append(rows, fmt.Sprintf("  ('%s', '%s')", escapeSQLString(storeID), escapeSQLString(nodeID)))
+		}
+		fmt.Fprintln(out, strings.Join(rows, ",\n")+";")
+	}
+
+	// Emit node-to-region mapping.
+	if len(nodeToRegion) > 0 {
+		fmt.Fprintln(out, "INSERT INTO node_region_map VALUES")
+		var rows []string
+		for nodeID, region := range nodeToRegion {
+			rows = append(rows, fmt.Sprintf("  ('%s', '%s')", escapeSQLString(nodeID), escapeSQLString(region)))
 		}
 		fmt.Fprintln(out, strings.Join(rows, ",\n")+";")
 	}

@@ -314,6 +314,25 @@ func TestTSDumpUploadWithEmbeddedMetadataDataDriven(t *testing.T) {
 			dumpFilePath = generateMockTSDumpFromCSV(t, d.Input)
 			// No extraFlag needed - this tests normal upload without any mapping
 
+		case "upload-datadog-with-regions":
+			// Both store-to-node and node-to-region mappings present.
+			regionMap := map[string]string{"1": "region-1", "2": "region-2"}
+			dumpFilePath = generateMockTSDumpFromCSV(t, d.Input,
+				withEmbeddedMetadata(), withNodeToRegionMap(regionMap))
+
+		case "upload-datadog-regions-no-store-map":
+			// Node-to-region mapping only, no store-to-node mapping.
+			// Store metrics cannot resolve a node ID so they get no region tag.
+			regionMap := map[string]string{"1": "region-1", "2": "region-2"}
+			dumpFilePath = generateMockTSDumpFromCSV(t, d.Input,
+				withNodeToRegionMap(regionMap))
+
+		case "upload-datadog-partial-region-coverage":
+			// Only some nodes have a region entry; others should be omitted.
+			partialRegionMap := map[string]string{"1": "region-1"}
+			dumpFilePath = generateMockTSDumpFromCSV(t, d.Input,
+				withEmbeddedMetadata(), withNodeToRegionMap(partialRegionMap))
+
 		default:
 			t.Fatalf("unknown command: %s", d.Cmd)
 			return ""
@@ -361,6 +380,20 @@ func withEmbeddedMetadata() mockTSDumpOption {
 			},
 			CreatedAt: timeutil.Unix(1609459200, 0),
 		}
+	}
+}
+
+// withNodeToRegionMap adds a node-to-region mapping to the embedded metadata.
+// Must be used after withEmbeddedMetadata so the metadata struct is initialized.
+func withNodeToRegionMap(m map[string]string) mockTSDumpOption {
+	return func(c *mockTSDumpConfig) {
+		if c.metadata == nil {
+			c.metadata = &tsdumpmeta.Metadata{
+				Version:   "v23.1.0",
+				CreatedAt: timeutil.Unix(1609459200, 0),
+			}
+		}
+		c.metadata.NodeToRegionMap = m
 	}
 }
 

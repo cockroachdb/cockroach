@@ -14,9 +14,10 @@ import (
 // Metadata contains metadata that can be embedded at the start of a raw tsdump
 // GOB stream. It includes a store-to-node mapping and auxiliary information.
 type Metadata struct {
-	Version        string            `json:"version"`
-	StoreToNodeMap map[string]string `json:"storeToNodeMap"`
-	CreatedAt      time.Time         `json:"createdAt"`
+	Version         string            `json:"version"`
+	StoreToNodeMap  map[string]string `json:"storeToNodeMap"`
+	NodeToRegionMap map[string]string `json:"nodeToRegionMap"`
+	CreatedAt       time.Time         `json:"createdAt"`
 }
 
 // Write encodes the provided metadata and writes it to w using gob.

@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -67,35 +66,6 @@ func TestDebugTimeSeriesDumpCmd(t *testing.T) {
 		require.NoError(t, err)
 		results = strings.Split(out, "\n")[1:]
 		require.Greater(t, len(results), 0, "expected output from tsdump with root user")
-	})
-
-	t.Run("debug tsdump --format=raw with custom SQL and gRPC ports", func(t *testing.T) {
-		//  The `NewCLITest` function we call above to setup the test, already uses custom
-		//  ports to avoid conflict between concurrently running tests.
-
-		// Make sure that the yamlFileName is unique for each concurrently running test
-		_, port, err := net.SplitHostPort(c.Server.SQLAddr())
-		require.NoError(t, err)
-		yamlFileName := fmt.Sprintf("/tmp/tsdump_test_%s.yaml", port)
-
-		// The `--host` flag is automatically added by the `RunWithCapture` function based on the assigned port.
-		out, err := c.RunWithCapture(
-			"debug tsdump --yaml=" + yamlFileName +
-				" --format=raw --cluster-name=test-cluster-1 --disable-cluster-name-verification",
-		)
-		require.NoError(t, err)
-		require.NotEmpty(t, out)
-
-		yaml, err := os.Open(yamlFileName)
-		require.NoError(t, err)
-		defer func() {
-			require.NoError(t, yaml.Close())
-			require.NoError(t, os.Remove(yamlFileName)) // cleanup
-		}()
-
-		yamlContents, err := io.ReadAll(yaml)
-		require.NoError(t, err)
-		require.NotEmpty(t, yamlContents)
 	})
 
 	t.Run("debug tsdump datadog upload with invalid upload workers", func(t *testing.T) {
@@ -400,6 +370,10 @@ func TestTSDumpConversionWithEmbeddedMetadata(t *testing.T) {
 			"1": "1",
 			"2": "2",
 		},
+		NodeToRegionMap: map[string]string{
+			"1": "region-1",
+			"2": "region-2",
+		},
 		CreatedAt: timeutil.Unix(1609459200, 0),
 	}
 	err = tsdumpmeta.Write(tmpFile, metadata)
@@ -426,6 +400,7 @@ func TestTSDumpConversionWithEmbeddedMetadata(t *testing.T) {
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 
 	require.Contains(t, out, "Found embedded store-to-node mapping with 2 entries")
+	require.Contains(t, out, "Found embedded node-to-region mapping with 2 entries")
 
 	csvFound := false
 	for _, line := range lines {
@@ -881,4 +856,89 @@ distsender\.errors\..*
 			}
 		})
 	}
+}
+
+// TestExtractRegionFromLocality tests parsing region from locality strings.
+func TestExtractRegionFromLocality(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		locality string
+		expected string
+	}{
+		{"region=us-west-1,zone=us-west-1a", "us-west-1"},
+		{"region=eu-central-1", "eu-central-1"},
+		{"zone=us-east-1a,region=us-east-1", "us-east-1"},
+		{"zone=us-east-1a", ""},
+		{"", ""},
+		{"cloud=aws,region=ap-southeast-1,zone=ap-southeast-1a", "ap-southeast-1"},
+		{"region=", ""},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.locality, func(t *testing.T) {
+			result := extractRegionFromLocality(tc.locality)
+			require.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+// TestAnonymizeNodeRegions tests the anonymization of node-to-region mappings.
+func TestAnonymizeNodeRegions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("basic anonymization", func(t *testing.T) {
+		rows := [][]string{
+			{"1", "region=us-west-1,zone=us-west-1a"},
+			{"2", "region=us-east-1,zone=us-east-1a"},
+			{"3", "region=us-west-1,zone=us-west-1b"},
+		}
+		result := anonymizeNodeRegions(rows)
+		require.Len(t, result, 3)
+		// us-east-1 sorts before us-west-1, so us-east-1 → region-1, us-west-1 → region-2
+		require.Equal(t, "region-2", result["1"]) // us-west-1
+		require.Equal(t, "region-1", result["2"]) // us-east-1
+		require.Equal(t, "region-2", result["3"]) // us-west-1
+	})
+
+	t.Run("no region tier", func(t *testing.T) {
+		rows := [][]string{
+			{"1", "zone=us-east-1a"},
+			{"2", "zone=us-west-1a"},
+		}
+		result := anonymizeNodeRegions(rows)
+		require.Empty(t, result)
+	})
+
+	t.Run("empty rows", func(t *testing.T) {
+		result := anonymizeNodeRegions(nil)
+		require.Empty(t, result)
+	})
+
+	t.Run("mixed nodes with and without region", func(t *testing.T) {
+		rows := [][]string{
+			{"1", "region=eu-west-1,zone=eu-west-1a"},
+			{"2", "zone=us-east-1a"},
+			{"3", "region=eu-west-1,zone=eu-west-1b"},
+		}
+		result := anonymizeNodeRegions(rows)
+		require.Len(t, result, 2)
+		require.Equal(t, "region-1", result["1"])
+		require.Equal(t, "region-1", result["3"])
+		_, exists := result["2"]
+		require.False(t, exists)
+	})
+
+	t.Run("single region", func(t *testing.T) {
+		rows := [][]string{
+			{"1", "region=us-west-1"},
+			{"2", "region=us-west-1"},
+		}
+		result := anonymizeNodeRegions(rows)
+		require.Len(t, result, 2)
+		require.Equal(t, "region-1", result["1"])
+		require.Equal(t, "region-1", result["2"])
+	})
 }

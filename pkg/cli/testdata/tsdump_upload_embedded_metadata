@@ -51,3 +51,44 @@ cr.node.sql.query.count,2021-01-01T00:00:20Z,1,100.5
 [{"ddsource":"tsdump_upload","ddtags":"cluster_type:SELF_HOSTED,cluster_label:\"test-cluster\",cluster_id:test-cluster-id,zendesk_ticket:zd-test,org_name:test-org,user_name:test-user,upload_id:\"test-cluster\"-20241114000000,upload_timestamp:2024-11-14 00:00:00,upload_year:2024,upload_month:11,upload_day:14,series_uploaded:2","dry_run":"false","duration":"0","estimated_cost":"0.00012465753424657533","hostname":"hostname","message":"tsdump upload completed: uploaded 2 series overall","series_uploaded":"2","service":"tsdump_upload","success":"true"}]
 ----
 ----
+
+# Test case 5: both store-to-node and node-to-region mappings
+# Store metrics get node_id and region tags; node metrics get region tags.
+upload-datadog-with-regions
+cr.store.rocksdb.block.cache.usage,2021-01-01T00:00:00Z,1,75.2
+cr.node.sql.query.count,2021-01-01T00:00:20Z,2,100.5
+----
+----
+{"series":[{"interval":10,"metric":"cockroachdb.rocksdb.block.cache.usage","points":[{"timestamp":1609459200,"value":75.2}],"tags":["node_id:1","region:region-1","store:1","cluster_type:SELF_HOSTED","cluster_label:\"test-cluster\"","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:\"test-cluster\"-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"],"type":3},{"interval":10,"metric":"cockroachdb.sql.query.count","points":[{"timestamp":1604275220,"value":100.5}],"tags":["node_id:2","region:region-2","cluster_type:SELF_HOSTED","cluster_label:\"test-cluster\"","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:\"test-cluster\"-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"],"type":1}]}
+
+[{"ddsource":"tsdump_upload","ddtags":"cluster_type:SELF_HOSTED,cluster_label:\"test-cluster\",cluster_id:test-cluster-id,zendesk_ticket:zd-test,org_name:test-org,user_name:test-user,upload_id:\"test-cluster\"-20241114000000,upload_timestamp:2024-11-14 00:00:00,upload_year:2024,upload_month:11,upload_day:14,series_uploaded:2","dry_run":"false","duration":"0","estimated_cost":"0.00012465753424657533","hostname":"hostname","message":"tsdump upload completed: uploaded 2 series overall","series_uploaded":"2","service":"tsdump_upload","success":"true"}]
+----
+----
+
+# Test case 6: node-to-region mapping without store-to-node mapping
+# Node metrics still get region tags; store metrics cannot resolve node_id
+# so they get neither node_id nor region tags.
+upload-datadog-regions-no-store-map
+cr.store.rocksdb.block.cache.usage,2021-01-01T00:00:00Z,1,75.2
+cr.node.sql.query.count,2021-01-01T00:00:20Z,1,100.5
+----
+----
+{"series":[{"interval":10,"metric":"cockroachdb.rocksdb.block.cache.usage","points":[{"timestamp":1609459200,"value":75.2}],"tags":["store:1","cluster_type:SELF_HOSTED","cluster_label:\"test-cluster\"","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:\"test-cluster\"-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"],"type":3},{"interval":10,"metric":"cockroachdb.sql.query.count","points":[{"timestamp":1604275220,"value":100.5}],"tags":["node_id:1","region:region-1","cluster_type:SELF_HOSTED","cluster_label:\"test-cluster\"","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:\"test-cluster\"-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"],"type":1}]}
+
+[{"ddsource":"tsdump_upload","ddtags":"cluster_type:SELF_HOSTED,cluster_label:\"test-cluster\",cluster_id:test-cluster-id,zendesk_ticket:zd-test,org_name:test-org,user_name:test-user,upload_id:\"test-cluster\"-20241114000000,upload_timestamp:2024-11-14 00:00:00,upload_year:2024,upload_month:11,upload_day:14,series_uploaded:2","dry_run":"false","duration":"0","estimated_cost":"0.00012465753424657533","hostname":"hostname","message":"tsdump upload completed: uploaded 2 series overall","series_uploaded":"2","service":"tsdump_upload","success":"true"}]
+----
+----
+
+# Test case 7: partial region coverage
+# Node 1 has a region; node 2 does not. Only node 1 metrics get region tag.
+upload-datadog-partial-region-coverage
+cr.node.sql.query.count,2021-01-01T00:00:00Z,1,100.5
+cr.node.sql.query.count,2021-01-01T00:00:10Z,2,200.5
+cr.store.rocksdb.block.cache.usage,2021-01-01T00:00:20Z,3,42.0
+----
+----
+{"series":[{"interval":10,"metric":"cockroachdb.sql.query.count","points":[{"timestamp":1604275200,"value":100.5}],"tags":["node_id:1","region:region-1","cluster_type:SELF_HOSTED","cluster_label:\"test-cluster\"","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:\"test-cluster\"-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"],"type":1},{"interval":10,"metric":"cockroachdb.sql.query.count","points":[{"timestamp":1604275210,"value":200.5}],"tags":["node_id:2","cluster_type:SELF_HOSTED","cluster_label:\"test-cluster\"","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:\"test-cluster\"-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"],"type":1},{"interval":10,"metric":"cockroachdb.rocksdb.block.cache.usage","points":[{"timestamp":1609459220,"value":42}],"tags":["node_id:2","store:3","cluster_type:SELF_HOSTED","cluster_label:\"test-cluster\"","cluster_id:test-cluster-id","zendesk_ticket:zd-test","org_name:test-org","user_name:test-user","upload_id:\"test-cluster\"-20241114000000","upload_timestamp:2024-11-14 00:00:00","upload_year:2024","upload_month:11","upload_day:14"],"type":3}]}
+
+[{"ddsource":"tsdump_upload","ddtags":"cluster_type:SELF_HOSTED,cluster_label:\"test-cluster\",cluster_id:test-cluster-id,zendesk_ticket:zd-test,org_name:test-org,user_name:test-user,upload_id:\"test-cluster\"-20241114000000,upload_timestamp:2024-11-14 00:00:00,upload_year:2024,upload_month:11,upload_day:14,series_uploaded:3","dry_run":"false","duration":"0","estimated_cost":"0.000186986301369863","hostname":"hostname","message":"tsdump upload completed: uploaded 3 series overall","series_uploaded":"3","service":"tsdump_upload","success":"true"}]
+----
+----
