@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/pprof/profile"
@@ -323,21 +324,11 @@ func getProfileWithTimeout(
 	logger.Printf("getting profile using URL: %s", url)
 
 	// Set up a timer to limit the time spent trying to get the profile.
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-
+	r := retry.StartWithCtx(ctx, retry.Options{
+		MaxDuration: timeout,
+	})
 	var latestError error
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, errors.Wrapf(errors.CombineErrors(latestError, ctx.Err()),
-				"failed to get profile from %s after %s", url, timeout)
-		case <-timer.C:
-			return nil, errors.Wrapf(errors.CombineErrors(latestError, errors.New("timed out")),
-				"failed to get profile from %s after %s", url, timeout)
-		default:
-		}
-
+	for r.Next() {
 		// Request the profile.
 		resp, err := client.Get(ctx, url)
 		if err != nil {
@@ -380,6 +371,8 @@ func getProfileWithTimeout(
 
 		return prof, nil
 	}
+	return nil, errors.Wrapf(errors.CombineErrors(latestError, errors.New("timed out")),
+		"failed to get profile from %s after %s", url, timeout)
 }
 
 // getProfileSingleNode returns the specified profile for a single node. The
