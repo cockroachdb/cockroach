@@ -161,7 +161,7 @@ change-id=2 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-80ns/s, write-bandw
 
 # Store load msg from s2, showing its new load.
 store-load-msg
-  store-id=2 node-id=1 load=[80,80,80] capacity=[100,100,100] secondary-load=1 load-time=15s
+  store-id=2 node-id=1 load=[80,80,80] capacity=[100,100,100] secondary-load=1 load-time=15s node-cpu-load=160 node-cpu-capacity=200
 ----
 
 # The adjusted load on s2 reflects both the reported load and the addition of
@@ -176,7 +176,7 @@ store-id=2 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwid
 # Store load msg from s2 at time 16s, which is 11s after the enactment of
 # change 1. So the change is no longer needed for load adjustment.
 store-load-msg
-  store-id=2 node-id=1 load=[80,80,80] capacity=[100,100,100] secondary-load=1 load-time=16s
+  store-id=2 node-id=1 load=[80,80,80] capacity=[100,100,100] secondary-load=1 load-time=16s node-cpu-load=160 node-cpu-capacity=200
 ----
 
 # We are no longer tracking change 1 for the sake of load.
@@ -239,7 +239,7 @@ store-id=2 node-id=1 status=ok accepting all reported=[cpu:80ns/s, write-bandwid
 
 # Store load msg from s2, showing its new load.
 store-load-msg
-  store-id=2 node-id=1 load=[85,85,85] capacity=[100,100,100] secondary-load=1 load-time=20s
+  store-id=2 node-id=1 load=[85,85,85] capacity=[100,100,100] secondary-load=1 load-time=20s node-cpu-load=165 node-cpu-capacity=200
 ----
 
 get-load-info
@@ -256,7 +256,7 @@ t=40s
 # longer needed for load adjustment since load-time is 20s after the enactment
 # time (and lagForChangeReflectedInLoad is 10s).
 store-load-msg
-  store-id=1 node-id=1 load=[5,5,5] capacity=[100,100,100] secondary-load=1 load-time=40s
+  store-id=1 node-id=1 load=[5,5,5] capacity=[100,100,100] secondary-load=1 load-time=40s node-cpu-load=90 node-cpu-capacity=200
 ----
 
 # No longer tracking change 2 for the sake of load.

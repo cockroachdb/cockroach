@@ -230,6 +230,7 @@ type BasicCluster struct {
 	Region              []string
 	NodesPerRegion      []int
 	NodeCPURateCapacity state.NodeCPURateCapacities
+	NodePhysical        state.NodePhysicalCharacteristics
 }
 
 func (bc BasicCluster) String() string {
@@ -252,6 +253,7 @@ func (bc BasicCluster) Generate(seed int64, settings *config.SimulationSettings)
 	info := bc.info()
 	info.StoreDiskCapacityBytes = bc.StoreByteCapacity
 	info.NodeCPURateCapacityNanos = bc.NodeCPURateCapacity
+	info.NodePhysical = bc.NodePhysical
 	return state.LoadClusterInfo(info, settings)
 }
 

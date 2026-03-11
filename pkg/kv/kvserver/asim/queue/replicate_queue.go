@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -158,9 +159,10 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 			continue
 		}
 
+		amp := computeAmpVector(s, rq.storeID)
 		rq.next, rq.lastSyncChangeID = pushReplicateChange(
 			ctx, roachpb.StoreID(rq.storeID), change, repl, tick, rq.settings.ReplicaChangeDelayFn(),
-			rq.baseQueue.stateChanger, rq.as, "replicate queue")
+			rq.baseQueue.stateChanger, rq.as, amp, "replicate queue")
 	}
 
 	rq.lastTick = tick
@@ -175,6 +177,7 @@ func pushReplicateChange(
 	delayFn func(int64, bool) time.Duration,
 	stateChanger state.Changer,
 	as *mmaintegration.AllocatorSync,
+	amp mmaprototype.AmpVector,
 	queueName string,
 ) (time.Time, mmaintegration.SyncChangeID) {
 	var stateChange state.Change
@@ -188,12 +191,12 @@ func pushReplicateChange(
 		panic("unimplemented finalize atomic replication op")
 	case plan.AllocationTransferLeaseOp:
 		if as != nil {
-			// as may be nil in some tests.
 			changeID = as.NonMMAPreTransferLease(
 				ctx,
 				localStoreID,
 				repl.Desc(),
 				repl.RangeUsageInfo(),
+				amp,
 				op.Source,
 				op.Target,
 			)
@@ -206,12 +209,12 @@ func pushReplicateChange(
 		}
 	case plan.AllocationChangeReplicasOp:
 		if as != nil {
-			// as may be nil in some tests.
 			changeID = as.NonMMAPreChangeReplicas(
 				ctx,
 				localStoreID,
 				repl.Desc(),
 				repl.RangeUsageInfo(),
+				amp,
 				op.Chgs,
 				repl.StoreID(), /* leaseholder */
 			)
@@ -236,4 +239,13 @@ func pushReplicateChange(
 		changeID = mmaintegration.InvalidSyncChangeID
 	}
 	return next, changeID
+}
+
+// computeAmpVector computes amplification factors for a store from its
+// descriptor, matching the real kvserver's amplificationFactors() method.
+func computeAmpVector(s state.State, storeID state.StoreID) mmaprototype.AmpVector {
+	if descs := s.StoreDescriptors(true /* cached */, storeID); len(descs) > 0 {
+		return mmaintegration.ComputeAmplificationFactors(descs[0])
+	}
+	return mmaprototype.IdentityAmpVector()
 }

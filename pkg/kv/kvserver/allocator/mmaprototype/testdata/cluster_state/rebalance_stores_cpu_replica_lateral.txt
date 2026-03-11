@@ -27,8 +27,8 @@ node-id=3 locality-tiers=node=3
 store-load-msg
   store-id=1 node-id=1 load=[100,20000000,0] capacity=[1000,100000000,1000] secondary-load=0 load-time=0s
   store-id=2 node-id=2 load=[100,20000000,0] capacity=[1000,100000000,1000] secondary-load=0 load-time=0s
-  store-id=3 node-id=3 load=[50,80000000,0] capacity=[1000,100000000,1000] secondary-load=0 load-time=0s
-  store-id=4 node-id=3 load=[50,10000000,0] capacity=[1000,100000000,1000] secondary-load=0 load-time=0s
+  store-id=3 node-id=3 load=[50,80000000,0] capacity=[1000,100000000,1000] secondary-load=0 load-time=0s node-cpu-load=100 node-cpu-capacity=2000
+  store-id=4 node-id=3 load=[50,10000000,0] capacity=[1000,100000000,1000] secondary-load=0 load-time=0s node-cpu-load=100 node-cpu-capacity=2000
 ----
 
 store-leaseholder-msg
@@ -128,8 +128,8 @@ rebalance-stores store-id=1
 [mmaid=1] cannot add load from n3s3 to n3s4 for r1 due to target_summary(overloadSlow)>=loadNoChange,target-node(overloadSlow)>target-store(loadNormal): delta([cpu:10ns/s, write-bandwidth:10 MB/s, byte-size:0 B]) targetSLS[(store=loadNormal worst=ByteSize cpu=loadLow writes=loadLow bytes=loadNormal node=overloadSlow frac_pending=0.00,0.00(true))] srcSLS[(store=overloadSlow worst=WriteBandwidth cpu=loadLow writes=overloadSlow bytes=loadNormal node=loadNormal frac_pending=0.00,0.00(true))]
 [mmaid=1] rebalancing pass summary [local=s1]:
 	overloaded:
-		lease-grace: [s2]
-		short: [s1, s3]
+		lease-grace: [s1, s2]
+		short: [s3]
 	failure: [{s1, total: 2, no-cand:1, no-cand-load:1}, {s3, total: 1, no-cand-to-accept-load:1}]
 	no-ranges-evaluated: [s2]
 pending(0)

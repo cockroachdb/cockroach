@@ -283,6 +283,9 @@ type ClusterInfo struct {
 	Regions                  []Region
 	StoreDiskCapacityBytes   int64
 	NodeCPURateCapacityNanos NodeCPURateCapacities
+	// NodePhysical overrides the default NodePhysicalCharacteristics for all
+	// nodes. Zero-valued fields use DefaultNodePhysicalCharacteristics().
+	NodePhysical NodePhysicalCharacteristics
 }
 
 func (c ClusterInfo) String() (s string) {
@@ -361,6 +364,16 @@ func LoadClusterInfo(c ClusterInfo, settings *config.SimulationSettings) State {
 	s := newState(settings)
 	// A new state has a single range - add the replica load for that range.
 	s.clusterinfo = c
+	physical := DefaultNodePhysicalCharacteristics()
+	if c.NodePhysical.CPUOverheadMultiplier > 0 {
+		physical.CPUOverheadMultiplier = c.NodePhysical.CPUOverheadMultiplier
+	}
+	if c.NodePhysical.SpaceAmplification > 0 {
+		physical.SpaceAmplification = c.NodePhysical.SpaceAmplification
+	}
+	if c.NodePhysical.ReservedDiskBytes > 0 {
+		physical.ReservedDiskBytes = c.NodePhysical.ReservedDiskBytes
+	}
 	var nodeIdx int
 	for _, r := range c.Regions {
 		regionTier := roachpb.Tier{
@@ -387,6 +400,7 @@ func LoadClusterInfo(c ClusterInfo, settings *config.SimulationSettings) State {
 				}
 				nodeIdx += 1
 				node := s.AddNode(int64(cpuCap), locality)
+				s.SetNodePhysicalCharacteristics(node.NodeID(), physical)
 				storesRequired := z.StoresPerNode
 				if storesRequired < 1 {
 					panic(fmt.Sprintf("storesPerNode cannot be less than one but found %v", storesRequired))

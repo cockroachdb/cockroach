@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	kvmmaintegration "github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -23,6 +24,13 @@ import (
 func MakeStoreLeaseholderMsgFromState(
 	s state.State, storeID state.StoreID,
 ) mmaprototype.StoreLeaseholderMsg {
+	// Compute amplification factors once for all ranges on this store, matching
+	// the real kvserver which derives these from the store descriptor.
+	amp := mmaprototype.IdentityAmpVector()
+	if descs := s.StoreDescriptors(true /* cached */, storeID); len(descs) > 0 {
+		amp = kvmmaintegration.ComputeAmplificationFactors(descs[0])
+	}
+
 	var rangeMessages []mmaprototype.RangeMsg
 	for _, replica := range s.Replicas(storeID) {
 		if !replica.HoldsLease() {
@@ -74,12 +82,14 @@ func MakeStoreLeaseholderMsgFromState(
 				"msg for s%d: did not find itself in the set of replicas", replica.Range(), storeID))
 		}
 
-		var rl mmaprototype.RangeLoad
 		load := s.RangeUsageInfo(rng.RangeID(), replica.StoreID())
-		rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(load.WriteBytesPerSecond)
-		rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(load.LogicalBytes)
-		rl.Load[mmaprototype.CPURate] = mmaprototype.LoadValue(load.RaftCPUNanosPerSecond + load.RequestCPUNanosPerSecond)
-		rl.RaftCPU = mmaprototype.LoadValue(load.RaftCPUNanosPerSecond)
+		rl := kvmmaintegration.MakePhysicalRangeLoad(
+			load.RequestCPUNanosPerSecond,
+			load.RaftCPUNanosPerSecond,
+			load.WriteBytesPerSecond,
+			load.LogicalBytes,
+			amp,
+		)
 
 		rangeMsg := mmaprototype.RangeMsg{
 			RangeID:                  roachpb.RangeID(replica.Range()),

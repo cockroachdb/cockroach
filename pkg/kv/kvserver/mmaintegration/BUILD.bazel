@@ -5,8 +5,8 @@ go_library(
     srcs = [
         "allocator_op.go",
         "allocator_sync.go",
-        "capacity_model.go",
         "mma_conversion.go",
+        "physical_model.go",
         "store_load_msg.go",
         "store_status.go",
         "testing_knobs.go",
@@ -32,9 +32,11 @@ go_library(
 go_test(
     name = "mmaintegration_test",
     srcs = [
-        "capacity_model_test.go",
+        "deprecated_logical_model_test.go",
         "legacy_model_test.go",
         "mma_conversion_test.go",
+        "physical_model_test.go",
+        "store_load_msg_test.go",
         "store_status_test.go",
     ],
     data = glob(["testdata/**"]),
@@ -50,6 +52,7 @@ go_test(
         "//pkg/util/humanizeutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",

@@ -903,7 +903,20 @@ func newStoreState() *storeState {
 type nodeState struct {
 	stores []roachpb.StoreID
 	NodeLoad
-	// NB: adjustedCPU can be negative.
+	// adjustedCPU starts at NodeCPULoad (physical node CPU) and is
+	// adjusted by pending change deltas, mirroring how storeState.adjusted.load
+	// tracks pending changes on top of reportedLoad. The deltas are in
+	// store-level modeled CPU units while NodeCPULoad is physical — a known
+	// imprecision accepted because the delta is small and transient.
+	// TODO(wenyihu6): fix this by introducing physical load modeling.
+	//
+	// Only CPU is tracked at the node level because CPU is a shared physical
+	// resource across all stores on a node: if any store saturates the CPU,
+	// the whole node is affected. Other dimensions (WriteBandwidth, ByteSize)
+	// are per-store (each store has its own disk) and only need store-level
+	// overload detection.
+	//
+	// NB: can be negative.
 	adjustedCPU LoadValue
 }
 
@@ -1368,11 +1381,21 @@ func (cs *clusterState) processStoreLoadMsg(
 	if ss == nil {
 		panic(fmt.Sprintf("store %d not found", storeMsg.StoreID))
 	}
-	ns.ReportedCPU += storeMsg.Load[CPURate] - ss.reportedLoad[CPURate]
-	ns.CapacityCPU += storeMsg.Capacity[CPURate] - ss.capacity[CPURate]
-	// Undo the adjustment for the store. We will apply the adjustment again
-	// below.
-	ns.adjustedCPU += storeMsg.Load[CPURate] - ss.adjusted.load[CPURate]
+	// Update adjustedCPU (= NodeCPULoad + sum of pending deltas across all
+	// stores on this node). NodeCPULoad is a node-level physical value carried
+	// in every store's message; each store generates its descriptor
+	// independently, so the values may differ slightly across stores on the
+	// same node. For simplicity, we overwrite with the latest one received.
+	//
+	// For a single-store node we could simply set adjustedCPU =
+	// storeMsg.NodeCPULoad and let the loop below re-apply pending deltas.
+	// With multiple stores we must preserve other stores' pending deltas,
+	// so we incrementally adjust for the baseline shift and strip only this
+	// store's pending delta.
+	storePendingDelta := ss.adjusted.load[CPURate] - ss.reportedLoad[CPURate]
+	ns.adjustedCPU += (storeMsg.NodeCPULoad - ns.NodeCPULoad) - storePendingDelta
+	ns.NodeCPULoad = storeMsg.NodeCPULoad
+	ns.NodeCPUCapacity = storeMsg.NodeCPUCapacity
 
 	// The store's load sequence number is incremented on each load change. The
 	// store's load is updated below.
@@ -2400,11 +2423,6 @@ func (cs *clusterState) canShedAndAddLoad(
 	// Add the delta.
 	deltaToAdd := loadVectorToAdd(delta)
 	targetSS.adjusted.load.add(deltaToAdd)
-	// TODO(tbg): why does NodeLoad have an adjustedCPU field but not fields for
-	// the other load dimensions? We just added deltaToAdd to targetSS.adjusted,
-	// shouldn't this be wholly reflected in targetNS as well, not just for CPU?
-	// Or maybe CPU is the only dimension that matters at the node level. It feels
-	// sloppy/confusing though.
 	targetNS.adjustedCPU += deltaToAdd[CPURate]
 	targetSLS := computeLoadSummary(ctx, targetSS, targetNS, &means.storeLoad, &means.nodeLoad)
 	postTransferHighDiskSpaceUtil := highDiskSpaceUtilization(targetSS.adjusted.load[ByteSize],
@@ -2621,7 +2639,13 @@ func (cs *clusterState) loadSummaryForAllStores(ctx context.Context) string {
 		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity)
 	buf.Printf("(nodes-cpu-load %v) (nodes-cpu-capacity %v)\n",
 		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU)
-	for storeID, ss := range cs.stores {
+	storeIDs := make([]roachpb.StoreID, 0, len(cs.stores))
+	for storeID := range cs.stores {
+		storeIDs = append(storeIDs, storeID)
+	}
+	slices.Sort(storeIDs)
+	for _, storeID := range storeIDs {
+		ss := cs.stores[storeID]
 		sls := cs.meansMemo.getStoreLoadSummary(ctx, clusterMeans, storeID, ss.loadSeqNum)
 		buf.Printf("evaluating store s%v for shedding: load summary %v", storeID, sls)
 	}
@@ -2643,7 +2667,15 @@ func computeLoadSummary(
 		}
 		dimSummary[i] = ls
 	}
-	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, CPURate, ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
+	// Use adjustedCPU for node-level overload detection. It starts at
+	// NodeCPULoad (physical) and is adjusted by pending change deltas (in
+	// store-level modeled CPU units — a known imprecision accepted because the
+	// delta is small and transient).
+	//
+	// TODO(wenyihu6): the unit mismatch between physical NodeCPULoad and
+	// store-level pending deltas will be resolved with the introduction of
+	// physical load modeling.
+	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, CPURate, ns.adjustedCPU, ns.NodeCPUCapacity, mnl.loadCPU, mnl.utilCPU)
 	return storeLoadSummary{
 		worstDim:                   worstDim,
 		sls:                        sls,
