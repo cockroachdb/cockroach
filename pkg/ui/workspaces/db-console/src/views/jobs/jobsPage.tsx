@@ -4,21 +4,15 @@
 // included in the /LICENSE file.
 import {
   JobsPage,
-  JobsPageStateProps,
   SortSetting,
   defaultLocalOptions,
 } from "@cockroachlabs/cluster-ui";
-import { connect } from "react-redux";
+import React from "react";
+import { useSelector, useDispatch } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
-import {
-  createSelectorForKeyedCachedDataField,
-  jobsKey,
-  refreshJobs,
-} from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
-import { JobsResponseMessage } from "src/util/api";
 
 export const statusSetting = new LocalSetting<AdminUIState, string>(
   "jobs/status_setting",
@@ -50,47 +44,41 @@ export const columnsLocalSetting = new LocalSetting<AdminUIState, string[]>(
   null,
 );
 
-const selectJobsState =
-  createSelectorForKeyedCachedDataField<JobsResponseMessage>(
-    "jobs",
-    (state: AdminUIState, _props) => {
-      const type = typeSetting.selector(state);
-      const status = statusSetting.selector(state);
-      const show = showSetting.selector(state);
-      const showAsNum = parseInt(show, 10);
-      return jobsKey(status, type, isNaN(showAsNum) ? 0 : showAsNum);
-    },
+const JobsPageWrapper: React.FC<RouteComponentProps> = props => {
+  const dispatch = useDispatch();
+  const sort = useSelector((state: AdminUIState) =>
+    sortSetting.selector(state),
+  );
+  const status = useSelector((state: AdminUIState) =>
+    statusSetting.selector(state),
+  );
+  const show = useSelector((state: AdminUIState) =>
+    showSetting.selector(state),
+  );
+  const type = useSelector((state: AdminUIState) =>
+    typeSetting.selector(state),
+  );
+  const columns = useSelector((state: AdminUIState) =>
+    columnsLocalSetting.selectorToArray(state),
   );
 
-const mapStateToProps = (
-  state: AdminUIState,
-  props: RouteComponentProps,
-): JobsPageStateProps => {
-  const sort = sortSetting.selector(state);
-  const status = statusSetting.selector(state);
-  const show = showSetting.selector(state);
-  const type = typeSetting.selector(state);
-  const columns = columnsLocalSetting.selectorToArray(state);
-  const jobsResponse = selectJobsState(state, props);
-  return {
-    sort,
-    status,
-    show,
-    type,
-    columns,
-    jobsResponse,
-  };
+  return (
+    <JobsPage
+      {...props}
+      sort={sort}
+      status={status}
+      show={show}
+      type={type}
+      columns={columns}
+      setSort={(ss: SortSetting) => dispatch(sortSetting.set(ss))}
+      setStatus={(s: string) => dispatch(statusSetting.set(s))}
+      setShow={(s: string) => dispatch(showSetting.set(s))}
+      setType={(t: number) => dispatch(typeSetting.set(t))}
+      onColumnsChange={(cols: string[]) =>
+        dispatch(columnsLocalSetting.set(cols))
+      }
+    />
+  );
 };
 
-const mapDispatchToProps = {
-  setSort: sortSetting.set,
-  setStatus: statusSetting.set,
-  setShow: showSetting.set,
-  setType: typeSetting.set,
-  onColumnsChange: columnsLocalSetting.set,
-  refreshJobs,
-};
-
-export default withRouter(
-  connect(mapStateToProps, mapDispatchToProps)(JobsPage),
-);
+export default withRouter(JobsPageWrapper);

@@ -9,15 +9,29 @@ import * as H from "history";
 import moment from "moment-timezone";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
+import { SWRConfig } from "swr";
 
+import * as jobsApi from "src/api/jobsApi";
+
+import { ClusterDetailsContext } from "../../contexts";
 import { formatDuration } from "../util/duration";
 
 import { JobsPage, JobsPageProps } from "./jobsPage";
 import { allJobsFixture, earliestRetainedTime } from "./jobsPage.fixture";
 
-import Job = cockroach.server.serverpb.IJobResponse;
+import JobsResponse = cockroach.server.serverpb.JobsResponse;
 
-const getMockJobsPageProps = (jobs: Array<Job>): JobsPageProps => {
+jest.mock("src/api/jobsApi", () => {
+  const actual = jest.requireActual("src/api/jobsApi");
+  return {
+    ...actual,
+    useJobs: jest.fn(),
+  };
+});
+
+const mockUseJobs = jobsApi.useJobs as jest.Mock;
+
+const getMockJobsPageProps = (): JobsPageProps => {
   const history = H.createHashHistory();
   return {
     sort: { columnTitle: null, ascending: true },
@@ -30,17 +44,6 @@ const getMockJobsPageProps = (jobs: Array<Job>): JobsPageProps => {
     setShow: () => {},
     setType: () => {},
     onColumnsChange: () => {},
-    jobsResponse: {
-      data: {
-        jobs,
-        earliest_retained_time: earliestRetainedTime,
-      },
-      valid: true,
-      lastUpdated: moment(),
-      error: null,
-      inFlight: false,
-    },
-    refreshJobs: () => {},
     location: history.location,
     history,
     match: {
@@ -52,7 +55,35 @@ const getMockJobsPageProps = (jobs: Array<Job>): JobsPageProps => {
   };
 };
 
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(
+    <SWRConfig value={{ provider: () => new Map() }}>
+      <ClusterDetailsContext.Provider
+        value={{ clusterId: "test", isTenant: false }}
+      >
+        <MemoryRouter>{ui}</MemoryRouter>
+      </ClusterDetailsContext.Provider>
+    </SWRConfig>,
+  );
+};
+
 describe("Jobs", () => {
+  beforeEach(() => {
+    mockUseJobs.mockReturnValue({
+      data: new JobsResponse({
+        jobs: allJobsFixture,
+        earliest_retained_time: earliestRetainedTime,
+      }),
+      error: null,
+      isLoading: false,
+      mutate: jest.fn(),
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it("format duration", () => {
     expect(formatDuration(moment.duration(0))).toEqual("00:00:00");
     expect(formatDuration(moment.duration(5, "minutes"))).toEqual("00:05:00");
@@ -64,10 +95,8 @@ describe("Jobs", () => {
   });
 
   it("renders expected jobs table columns", () => {
-    const { getAllByText } = render(
-      <MemoryRouter>
-        <JobsPage {...getMockJobsPageProps(allJobsFixture)} />
-      </MemoryRouter>,
+    const { getAllByText } = renderWithProviders(
+      <JobsPage {...getMockJobsPageProps()} />,
     );
     const expectedColumnTitles = [
       "Description",
@@ -84,10 +113,15 @@ describe("Jobs", () => {
   });
 
   it("renders a message when the table is empty", () => {
-    const { getByText } = render(
-      <MemoryRouter>
-        <JobsPage {...getMockJobsPageProps([])} />
-      </MemoryRouter>,
+    mockUseJobs.mockReturnValue({
+      data: new JobsResponse({ jobs: [] }),
+      error: null,
+      isLoading: false,
+      mutate: jest.fn(),
+    });
+
+    const { getByText } = renderWithProviders(
+      <JobsPage {...getMockJobsPageProps()} />,
     );
     const expectedText = [
       "No jobs found.",
