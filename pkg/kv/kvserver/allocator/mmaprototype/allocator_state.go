@@ -300,7 +300,7 @@ func (a *allocatorState) AdjustPendingChangeDisposition(
 	}
 	for _, c := range changes {
 		if success {
-			a.cs.pendingChangeEnacted(c.changeID, a.cs.ts.Now())
+			a.cs.pendingChangeEnacted(ctx, c.changeID, a.cs.ts.Now())
 		} else {
 			a.cs.undoPendingChange(ctx, c.changeID)
 		}

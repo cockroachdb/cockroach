@@ -1121,6 +1121,12 @@ type rangeState struct {
 	// be identical to clusterState.pendingChanges.
 	pendingChanges []*pendingReplicaChange
 
+	// repairAction is the eagerly-computed repair action for this range. It is
+	// recomputed when replicas, config, pending changes, or store statuses
+	// change. Ranges with a repairAction other than NoRepairNeeded or
+	// RepairPending are indexed in clusterState.repairRanges.
+	repairAction RepairAction
+
 	// Nil if conf is nil (since conf is required input), or if constraint
 	// analysis fails (e.g., no leaseholder found). When nil, the range is
 	// excluded from rebalancing. When non-nil, it is up-to-date and cached to
@@ -1172,6 +1178,7 @@ func newRangeState(localRangeOwner roachpb.StoreID) *rangeState {
 		replicas:        []StoreIDAndReplicaState{},
 		pendingChanges:  []*pendingReplicaChange{},
 		localRangeOwner: localRangeOwner,
+		repairAction:    NoRepairNeeded,
 	}
 }
 
@@ -1303,6 +1310,11 @@ type clusterState struct {
 	pendingChanges map[changeID]*pendingReplicaChange
 	changeSeqGen   changeID
 
+	// repairRanges indexes ranges by their RepairAction. Ranges with
+	// NoRepairNeeded or RepairPending are NOT stored. This allows repair()
+	// to iterate ranges needing repair without scanning all ranges.
+	repairRanges map[RepairAction]map[roachpb.RangeID]struct{}
+
 	*constraintMatcher
 	*localityTierInterner
 	meansMemo *meansMemo
@@ -1340,6 +1352,7 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 		ranges:               map[roachpb.RangeID]*rangeState{},
 		scratchRangeMap:      map[roachpb.RangeID]struct{}{},
 		pendingChanges:       map[changeID]*pendingReplicaChange{},
+		repairRanges:         map[RepairAction]map[roachpb.RangeID]struct{}{},
 		constraintMatcher:    newConstraintMatcher(interner),
 		localityTierInterner: newLocalityTierInterner(interner),
 		// Disk utilization thresholds default to 0. We don't plumb cluster
@@ -1566,7 +1579,7 @@ func (cs *clusterState) processRangeMsg(
 		// example_skewed_cpu_even_ranges_mma_and_queues. I suspect the latter
 		// is because MMA is acting faster to undo the effects of the changes
 		// made by the replicate and lease queues.
-		cs.pendingChangeEnacted(change.changeID, now)
+		cs.pendingChangeEnacted(ctx, change.changeID, now)
 	}
 	// INVARIANT: remainingChanges and rs.pendingChanges contain the same set
 	// of changes, though possibly in different order.
@@ -1640,6 +1653,7 @@ func (cs *clusterState) processRangeMsg(
 	// since in this slow path the span config or the replicas may have
 	// changed.
 	rs.clearAnalyzedConstraints()
+	cs.updateRepairAction(ctx, rangeMsg.RangeID, rs)
 	return
 }
 
@@ -1697,7 +1711,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			changeIDs[i] = change.changeID
 		}
 		for _, changeID := range changeIDs {
-			cs.pendingChangeEnacted(changeID, now)
+			cs.pendingChangeEnacted(ctx, changeID, now)
 		}
 		// Remove from the storeStates.
 		for _, replica := range rs.replicas {
@@ -1708,6 +1722,7 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			delete(cs.stores[replica.StoreID].adjusted.replicas, r)
 		}
 		rs.clearAnalyzedConstraints()
+		cs.removeFromRepairRanges(r, rs)
 		delete(cs.ranges, r)
 	}
 	localss := cs.stores[msg.StoreID]
@@ -1932,7 +1947,9 @@ func (cs *clusterState) gcPendingChanges(ctx context.Context, now time.Time) {
 	}
 }
 
-func (cs *clusterState) pendingChangeEnacted(cid changeID, enactedAt time.Time) {
+func (cs *clusterState) pendingChangeEnacted(
+	ctx context.Context, cid changeID, enactedAt time.Time,
+) {
 	change, ok := cs.pendingChanges[cid]
 	if !ok {
 		panic(fmt.Sprintf("change %v not found %v", cid, printMapPendingChanges(cs.pendingChanges)))
@@ -1945,6 +1962,11 @@ func (cs *clusterState) pendingChangeEnacted(cid changeID, enactedAt time.Time) 
 
 	rs.removePendingChangeTracking(change.changeID)
 	delete(cs.pendingChanges, change.changeID)
+	// Recompute repair action if all pending changes for this range have
+	// been enacted.
+	if len(rs.pendingChanges) == 0 {
+		cs.updateRepairAction(ctx, change.rangeID, rs)
+	}
 }
 
 // undoPendingChange reverses the change with ID cid.
@@ -1966,6 +1988,8 @@ func (cs *clusterState) undoPendingChange(ctx context.Context, cid changeID) {
 	rs.removePendingChangeTracking(cid)
 	delete(cs.stores[change.target.StoreID].adjusted.loadPendingChanges, change.changeID)
 	delete(cs.pendingChanges, change.changeID)
+	// Recompute repair action now that the pending change was removed.
+	cs.updateRepairAction(ctx, change.rangeID, rs)
 }
 
 func printMapPendingChanges(changes map[changeID]*pendingReplicaChange) string {
@@ -2033,6 +2057,8 @@ func (cs *clusterState) addPendingRangeChange(ctx context.Context, change Pendin
 			"addPendingRangeChange: change_id=%v, range_id=%v, change=%v",
 			cid, rangeID, pendingChange.ReplicaChange)
 	}
+	// Pending changes are now present, so this will set RepairPending.
+	cs.updateRepairAction(ctx, rangeID, cs.ranges[rangeID])
 }
 
 // preCheckOnApplyReplicaChanges does some validation of the changes being
@@ -2311,7 +2337,18 @@ func (cs *clusterState) updateStoreStatuses(
 			log.KvDistribution.VEventf(ctx, 2, "store %d: upgrading replica disposition to Refusing due to high disk utilization (>= %.1f%%)",
 				storeID, cs.diskUtilRefuseThreshold*100)
 		}
+		oldStatus := cs.stores[storeID].status
 		cs.stores[storeID].status = storeStatus
+		// If the store's status changed, recompute repair actions for all
+		// ranges on this store. The cached rs.constraints is still valid here
+		// (store status doesn't affect constraint satisfaction).
+		if oldStatus != storeStatus {
+			for rangeID := range ss.adjusted.replicas {
+				if rs, ok := cs.ranges[rangeID]; ok {
+					cs.updateRepairAction(ctx, rangeID, rs)
+				}
+			}
+		}
 	}
 }
 

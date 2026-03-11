@@ -158,6 +158,8 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 	require.True(t, strings.HasPrefix(lines[0], "store-id="))
 	msg.StoreID = roachpb.StoreID(parseInt(t, strings.TrimPrefix(lines[0], "store-id=")))
 
+	// nextReplicaID auto-assigns replica IDs when not explicitly specified.
+	nextReplicaID := roachpb.ReplicaID(1)
 	var rMsg RangeMsg
 	var notPopulatedOverride bool
 	tryAppendRangeMsg := func() {
@@ -169,6 +171,7 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 			rMsg = RangeMsg{RangeID: 0}
 		}
 		notPopulatedOverride = false
+		nextReplicaID = 1
 	}
 	for _, line := range lines[1:] {
 		line = strings.TrimSpace(line)
@@ -198,7 +201,7 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 		} else {
 			var repl StoreIDAndReplicaState
 			fields := strings.Fields(line)
-			require.Greater(t, len(fields), 2)
+			require.Greater(t, len(fields), 1)
 			for _, field := range fields {
 				parts := strings.Split(field, "=")
 				require.GreaterOrEqual(t, len(parts), 2)
@@ -228,6 +231,13 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 				default:
 					t.Fatalf("unknown argument: %s", parts[0])
 				}
+			}
+			// Auto-assign replica ID if not explicitly set.
+			if repl.ReplicaID == 0 {
+				repl.ReplicaID = nextReplicaID
+				nextReplicaID++
+			} else if repl.ReplicaID >= nextReplicaID {
+				nextReplicaID = repl.ReplicaID + 1
 			}
 			rMsg.Replicas = append(rMsg.Replicas, repl)
 			rMsg.MaybeSpanConfIsPopulated = true
@@ -523,6 +533,9 @@ func TestClusterState(t *testing.T) {
 						// healthy.
 						cs.stores[sal.StoreID].status = Status{Health: HealthOK}
 					}
+					if quiet, ok := dd.ScanArgOpt[bool](t, d, "quiet"); ok && quiet {
+						return ""
+					}
 					return printNodeListMeta(t)
 
 				case "update-store-status":
@@ -540,7 +553,17 @@ func TestClusterState(t *testing.T) {
 						if !ok {
 							t.Fatalf("store %d not found", storeID)
 						}
+						oldStatus := ss.status
 						parseStatusFromArgs(t, d, &ss.status)
+						// Recompute repair actions for ranges on this store
+						// if the status changed.
+						if oldStatus != ss.status {
+							for rangeID := range ss.adjusted.replicas {
+								if rs, ok := cs.ranges[rangeID]; ok {
+									cs.updateRepairAction(ctx, rangeID, rs)
+								}
+							}
+						}
 						return ss.status.String()
 					}
 
@@ -704,6 +727,58 @@ func TestClusterState(t *testing.T) {
 					var sb redact.StringBuilder
 					rec.SafeFormatMinimal(&sb)
 					return fmt.Sprintf("%s%v\n", safeTrace(t, &sb), out)
+
+				case "repair":
+					// Stub: outputs pending changes only; actual repair
+					// execution comes in a later PR.
+					return printPendingChangesTest(testingGetPendingChanges(t, cs))
+
+				case "repair-needed":
+					var sb strings.Builder
+					// Iterate actions in priority order.
+					for action := FinalizeAtomicReplicationChange; action < NoRepairNeeded; action++ {
+						ranges, ok := cs.repairRanges[action]
+						if !ok || len(ranges) == 0 {
+							continue
+						}
+						// Sort range IDs for deterministic output.
+						ids := make([]roachpb.RangeID, 0, len(ranges))
+						for rid := range ranges {
+							ids = append(ids, rid)
+						}
+						slices.Sort(ids)
+						fmt.Fprintf(&sb, "%s:", action)
+						for i, rid := range ids {
+							if i > 0 {
+								fmt.Fprintf(&sb, ",")
+							}
+							fmt.Fprintf(&sb, " r%d", rid)
+						}
+						fmt.Fprintln(&sb)
+					}
+					// RepairPending ranges are not in repairRanges, so
+					// scan for them separately.
+					var pendingIDs []roachpb.RangeID
+					for rid, rs := range cs.ranges {
+						if rs.repairAction == RepairPending {
+							pendingIDs = append(pendingIDs, rid)
+						}
+					}
+					if len(pendingIDs) > 0 {
+						slices.Sort(pendingIDs)
+						fmt.Fprintf(&sb, "RepairPending:")
+						for i, rid := range pendingIDs {
+							if i > 0 {
+								fmt.Fprintf(&sb, ",")
+							}
+							fmt.Fprintf(&sb, " r%d", rid)
+						}
+						fmt.Fprintln(&sb)
+					}
+					if sb.Len() == 0 {
+						return "no ranges need repair"
+					}
+					return sb.String()
 
 				default:
 					panic(fmt.Sprintf("unknown command: %v", d.Cmd))
