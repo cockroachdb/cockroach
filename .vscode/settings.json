@@ -2,13 +2,13 @@
     "[go]": {
         "editor.rulers": [
             80,
-            100,
-        ],
+            100
+        ]
     },
     "[git-commit]": {
         "editor.rulers": [
             72,
-            100,
+            100
         ],
         "editor.wordWrap": "off",
     },
@@ -49,5 +49,5 @@
             "cmd": "${workspaceRoot}/bin/crlfmt -w -tab=2 ${file}",
             "event": "onFileChange"
         }
-    ],
+    ]
 }
