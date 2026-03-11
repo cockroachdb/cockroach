@@ -539,8 +539,6 @@ statement ok
 ALTER DATABASE db DROP SECONDARY REGION
 
 # Verify super region interactions
-statement ok
-SET enable_super_regions = 'on'
 
 # Primary in super region
 statement ok
@@ -749,9 +747,6 @@ subtest alter_primary_region_super_region_secondary
 statement ok
 CREATE DATABASE pr_sr_test PRIMARY REGION "us-east-1"
     REGIONS "us-west-1", "us-central-1", "ca-central-1", "ap-southeast-2"
-
-statement ok
-SET enable_super_regions = 'on'
 
 statement ok
 ALTER DATABASE pr_sr_test ADD SUPER REGION "usa"

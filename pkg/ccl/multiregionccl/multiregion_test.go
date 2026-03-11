@@ -318,7 +318,6 @@ func TestSuperRegionConstraintConformance(t *testing.T) {
 	// Setup MR database with all 5 regions.
 	tdb.Exec(t, `CREATE DATABASE testdb PRIMARY REGION "ap-southeast-1"
 		REGIONS "us-east-1", "us-central-1", "us-west-1", "eu-west-1"`)
-	tdb.Exec(t, `SET enable_super_regions = 'on'`)
 	tdb.Exec(t, `ALTER DATABASE testdb ADD SUPER REGION "americas"
 		VALUES "us-east-1", "us-central-1", "us-west-1"`)
 	tdb.Exec(t, `ALTER DATABASE testdb SET SECONDARY REGION "eu-west-1"`) // Set a secondary outside the super region.

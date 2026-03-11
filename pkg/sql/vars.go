@@ -2790,23 +2790,7 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`enable_super_regions`: {
-		GetStringVal: makePostgresBoolGetStringValFn(`enable_super_regions`),
-		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar("enable_super_regions", s)
-			if err != nil {
-				return err
-			}
-			m.SetEnableSuperRegions(b)
-			return nil
-		},
-		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableSuperRegions), nil
-		},
-		GlobalDefault: func(sv *settings.Values) string {
-			return formatBoolAsPostgresSetting(enableSuperRegions.Get(sv))
-		},
-	},
+	`enable_super_regions`: makeBackwardsCompatBoolVar("enable_super_regions", true),
 
 	// CockroachDB extension.
 	`alter_primary_region_super_region_override`: {

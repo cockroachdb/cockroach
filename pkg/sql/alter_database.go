@@ -1598,10 +1598,6 @@ type alterDatabaseAddSuperRegion struct {
 func (p *planner) AlterDatabaseAddSuperRegion(
 	ctx context.Context, n *tree.AlterDatabaseAddSuperRegion,
 ) (planNode, error) {
-	if err := p.isSuperRegionEnabled(); err != nil {
-		return nil, err
-	}
-
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),
@@ -1703,10 +1699,6 @@ type alterDatabaseDropSuperRegion struct {
 func (p *planner) AlterDatabaseDropSuperRegion(
 	ctx context.Context, n *tree.AlterDatabaseDropSuperRegion,
 ) (planNode, error) {
-	if err := p.isSuperRegionEnabled(); err != nil {
-		return nil, err
-	}
-
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),
@@ -1788,20 +1780,6 @@ func (n *alterDatabaseDropSuperRegion) Next(runParams) (bool, error) { return fa
 func (n *alterDatabaseDropSuperRegion) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterDatabaseDropSuperRegion) Close(context.Context)        {}
 
-func (p *planner) isSuperRegionEnabled() error {
-	if !p.SessionData().EnableSuperRegions {
-		return errors.WithTelemetry(
-			pgerror.WithCandidateCode(
-				errors.WithHint(errors.New("super regions are only supported experimentally"),
-					"You can enable super regions by running `SET enable_super_regions = 'on'`."),
-				pgcode.ExperimentalFeature),
-			"sql.schema.super_regions_disabled",
-		)
-	}
-
-	return nil
-}
-
 func (p *planner) getSuperRegionsForDatabase(
 	ctx context.Context, desc catalog.DatabaseDescriptor,
 ) ([]descpb.SuperRegion, error) {
@@ -1830,10 +1808,6 @@ func (n *alterDatabaseAlterSuperRegion) Close(context.Context)        {}
 func (p *planner) AlterDatabaseAlterSuperRegion(
 	ctx context.Context, n *tree.AlterDatabaseAlterSuperRegion,
 ) (planNode, error) {
-	if err := p.isSuperRegionEnabled(); err != nil {
-		return nil, err
-	}
-
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),

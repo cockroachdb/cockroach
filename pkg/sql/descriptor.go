@@ -163,10 +163,6 @@ func (p *planner) createDatabase(
 	}
 
 	if database.SuperRegion.Name != "" {
-		if err := p.isSuperRegionEnabled(); err != nil {
-			return nil, false, err
-		}
-
 		typeID, err := db.MultiRegionEnumID()
 		if err != nil {
 			return nil, false, err

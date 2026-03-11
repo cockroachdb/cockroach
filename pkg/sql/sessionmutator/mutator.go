@@ -580,10 +580,6 @@ func (m *SessionDataMutator) SetAllowViewWithSecurityInvokerClause(val bool) {
 	m.Data.AllowViewWithSecurityInvokerClause = val
 }
 
-func (m *SessionDataMutator) SetEnableSuperRegions(val bool) {
-	m.Data.EnableSuperRegions = val
-}
-
 func (m *SessionDataMutator) SetEnableOverrideAlterPrimaryRegionInSuperRegion(val bool) {
 	m.Data.OverrideAlterPrimaryRegionInSuperRegion = val
 }
