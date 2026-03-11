@@ -8,10 +8,13 @@ package mmaprototype
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -276,6 +279,60 @@ func (cs *clusterState) removeFromRepairRanges(rangeID roachpb.RangeID, rs *rang
 			}
 		}
 	}
+}
+
+// isLeaseholderOnStore returns true if the given store holds the lease for the
+// range.
+func isLeaseholderOnStore(rs *rangeState, storeID roachpb.StoreID) bool {
+	for _, repl := range rs.replicas {
+		if repl.StoreID == storeID && repl.IsLeaseholder {
+			return true
+		}
+	}
+	return false
+}
+
+// repair examines the ranges on the local store and proposes changes to bring
+// them into compliance with their span configs. For example, it adds replicas
+// when under-replicated, removes replicas when over-replicated, replaces dead
+// or decommissioning replicas, and finalizes atomic replication changes.
+//
+// Only ranges where localStoreID is the leaseholder are considered for repair,
+// matching how the replicate queue works: only the leaseholder proposes changes.
+func (re *rebalanceEnv) repair(
+	ctx context.Context, localStoreID roachpb.StoreID,
+) []ExternalRangeChange {
+	re.mmaid++
+	ctx = logtags.AddTag(ctx, "mmaid", re.mmaid)
+
+	// Iterate repair actions in priority order (lower enum = higher priority).
+	for action := FinalizeAtomicReplicationChange; action < NoRepairNeeded; action++ {
+		ranges := re.repairRanges[action]
+		if len(ranges) == 0 {
+			continue
+		}
+		// Sort range IDs for deterministic iteration order.
+		ids := make([]roachpb.RangeID, 0, len(ranges))
+		for rid := range ranges {
+			ids = append(ids, rid)
+		}
+		slices.Sort(ids)
+
+		for _, rangeID := range ids {
+			rs := re.ranges[rangeID]
+			// Only repair ranges where localStoreID is the leaseholder.
+			if !isLeaseholderOnStore(rs, localStoreID) {
+				continue
+			}
+
+			switch action {
+			default:
+				log.KvDistribution.Infof(ctx,
+					"repair action %s for r%d not yet implemented", action, rangeID)
+			}
+		}
+	}
+	return re.changes
 }
 
 // Verify interface compliance.
