@@ -150,25 +150,31 @@ func TestCPUTimeTokenGranter(t *testing.T) {
 			return flushAndReset(false /* init */)
 
 		case "refill":
-			// The delta & the bucket capacity are hard-coded. It is unwiedly
-			// to make them data-driven arguments, and the payoff would be
-			// low anyway.
+			// The delta, bucket capacity, & bucket minimums are hard-coded.
+			// It is unwieldy to make them data-driven arguments, and the
+			// payoff would be low anyway.
 			var delta [numResourceTiers][numBurstQualifications]int64
 			delta[testTier0][canBurst] = 5
 			delta[testTier0][noBurst] = 4
 			delta[testTier1][canBurst] = 3
 			delta[testTier1][noBurst] = 1
 			var bucketCapacity [numResourceTiers][numBurstQualifications]int64
-			bucketCapacity[testTier0][canBurst] = 4
-			bucketCapacity[testTier0][noBurst] = 3
-			bucketCapacity[testTier1][canBurst] = 10
-			bucketCapacity[testTier1][noBurst] = 1
-			granter.refill(delta, bucketCapacity)
+			bucketCapacity[testTier0][canBurst] = 20
+			bucketCapacity[testTier0][noBurst] = 16
+			bucketCapacity[testTier1][canBurst] = 12
+			bucketCapacity[testTier1][noBurst] = 8
+			var bucketMins [numResourceTiers][numBurstQualifications]int64
+			bucketMins[testTier0][canBurst] = 0
+			bucketMins[testTier0][noBurst] = -4
+			bucketMins[testTier1][canBurst] = -8
+			bucketMins[testTier1][noBurst] = -12
+			granter.refill(delta, bucketCapacity, bucketMins)
 			fmt.Fprint(&buf, "refill(\n")
-			for tier := int(numResourceTiers - 1); tier >= 0; tier-- {
-				for qual := int(numBurstQualifications - 1); qual >= 0; qual-- {
-					fmt.Fprintf(&buf, "\ttier%d %s -> delta: %v, cap: %v\n",
-						tier, burstQualification(qual).String(), delta[tier][qual], bucketCapacity[tier][qual])
+			for tier := 0; tier < int(numResourceTiers); tier++ {
+				for qual := 0; qual < int(numBurstQualifications); qual++ {
+					fmt.Fprintf(&buf, "\ttier%d %s -> delta: %v, cap: %v, min: %v\n",
+						tier, burstQualification(qual).String(), delta[tier][qual],
+						bucketCapacity[tier][qual], bucketMins[tier][qual])
 				}
 			}
 			fmt.Fprint(&buf, ")\n")

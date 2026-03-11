@@ -24,8 +24,8 @@ burstM
 tier0  1000
 tier1  500
 
-# clear simulates tokens being taken due to admitted work.
-clear
+# set-tokens v=0 simulates tokens being taken due to admitted work.
+set-tokens v=0
 ----
 cpuTTG canBurst noBurst
 tier0  0        0
@@ -128,7 +128,7 @@ burstM
 tier0  1000
 tier1  500
 
-clear
+set-tokens v=0
 ----
 cpuTTG canBurst noBurst
 tier0  0        0
@@ -180,7 +180,7 @@ burstM
 tier0  800
 tier1  400
 
-clear
+set-tokens v=0
 ----
 cpuTTG canBurst noBurst
 tier0  0        0
@@ -216,7 +216,7 @@ burstM
 tier0  1000
 tier1  500
 
-clear
+set-tokens v=0
 ----
 cpuTTG canBurst noBurst
 tier0  0        0
@@ -266,7 +266,7 @@ burstM
 tier0  1000
 tier1  500
 
-clear
+set-tokens v=0
 ----
 cpuTTG canBurst noBurst
 tier0  0        0
@@ -304,7 +304,7 @@ burstM
 tier0  999
 tier1  499
 
-clear
+set-tokens v=0
 ----
 cpuTTG canBurst noBurst
 tier0  0        0
@@ -324,7 +324,7 @@ burstM
 tier0  999
 tier1  499
 
-clear
+set-tokens v=0
 ----
 cpuTTG canBurst noBurst
 tier0  0        0
@@ -364,3 +364,62 @@ tier1  0        0
 burstM
 tier0  0
 tier1  0
+
+# Test that both allocateTokens and resetInterval clamp bucket token counts to
+# their per-bucket minimums. The granter minimums are computed from the current
+# refill rates {4999, 3999, 2999, 1999}:
+#   tier0 canBurst: 0              (top priority, floor is 0)
+#   tier0 noBurst:  3999 - 4999 = -1000
+#   tier1 canBurst: 2999 - 4999 = -2000
+#   tier1 noBurst:  1999 - 4999 = -3000
+#
+# The burst buckets also have minimums. The burst bucket capacity for each tier
+# is noBurstRate/4 (tier0: 3999/4 = 999, tier1: 1999/4 = 499), and the burst
+# bucket minimum is -capacity/4 (tier0: -999/4 = -249, tier1: -499/4 = -124).
+
+# Test allocateTokens path. Drive buckets deeply negative, then allocate. The
+# added tokens (the full refill rates) are far too small to overcome the deficit,
+# so each bucket clamps to its minimum.
+set-tokens v=-10000000
+----
+cpuTTG canBurst   noBurst
+tier0  -10000000 -10000000
+tier1  -10000000 -10000000
+burstM
+tier0  -10000000
+tier1  -10000000
+
+allocate remaining=1
+----
+cpuTTG canBurst noBurst
+tier0  0        -1000
+tier1  -2000    -3000
+burstM
+tier0  -249
+tier1  -124
+
+# Test resetInterval path. Drive buckets deeply negative again. resetInterval
+# has delta=0 (rates unchanged), but the floor still clamps.
+set-tokens v=-10000000
+----
+cpuTTG canBurst   noBurst
+tier0  -10000000 -10000000
+tier1  -10000000 -10000000
+burstM
+tier0  -10000000
+tier1  -10000000
+
+resetInterval
+----
+fit(
+	tier1 noBurst -> 50%
+	tier1 canBurst -> 60%
+	tier0 noBurst -> 75%
+	tier0 canBurst -> 85%
+)
+cpuTTG canBurst noBurst
+tier0  0        -1000
+tier1  -2000    -3000
+burstM
+tier0  -249
+tier1  -124

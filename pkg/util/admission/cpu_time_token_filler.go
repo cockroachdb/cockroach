@@ -231,6 +231,10 @@ type rates [numResourceTiers][numBurstQualifications]int64
 // buckets, one per bucket in cpuTimeTokenGranter.
 type capacities [numResourceTiers][numBurstQualifications]int64
 
+// minimums stores the minimum number of tokens that can be in the
+// buckets, one per bucket in cpuTimeTokenGranter.
+type minimums [numResourceTiers][numBurstQualifications]int64
+
 // tokenCounts stores unit-less token counts, one per bucket in
 // cpuTimeTokenGranter.
 type tokenCounts [numResourceTiers][numBurstQualifications]int64
@@ -239,6 +243,44 @@ type tokenCounts [numResourceTiers][numBurstQualifications]int64
 // 0.8 for 80% CPU utilization), one per bucket in CPUTimeTokenGranter. This
 // is aggregate CPU usage, so 0.8 means 80% of CPU time across all cores.
 type targetUtilizations [numResourceTiers][numBurstQualifications]float64
+
+// computeMinimums computes per-bucket minimums from refill rates. These
+// minimums prevent higher priority work from putting lower priority buckets
+// into unbounded token debt.
+//
+// The top priority bucket (tier0/canBurst) has a floor of 0. Each subsequent
+// bucket's floor is its rate minus the top priority rate, which is always
+// negative. For example, with refill rates of 100, 95, 80, 75, the minimums
+// are 0, -5, -20, -25.
+//
+// Any choice of minimums must respect the invariants in cpuTimeTokenGranter
+// that higher priority buckets always have more tokens than lower priority
+// ones (see Invariant #1 and #2 on cpuTimeTokenGranter.mu.buckets). The
+// approach here satisfies these invariants because the minimums are derived
+// from the refill rates, which are themselves ordered by priority.
+//
+// An alternative would be to set all minimums to 0. We go with the
+// rate-derived minimums instead because they preserve the same delta
+// in token counts between buckets that cpuTimeTokenLinearModel
+// establishes during normal operation. That is, the spacing between
+// bucket token counts is consistent regardless of whether buckets are
+// full, partially drained, or at their minimum. One concrete benefit:
+// during overload, when all buckets are at their minimums, the higher
+// priority buckets recover to positive first, which means burstable
+// work is naturally prioritized over non-burstable work (and, less
+// importantly, system tenant work over app tenant work). With all-zero
+// minimums, all buckets would recover roughly simultaneously, losing
+// this prioritization at an important moment.
+func computeMinimums(r rates) minimums {
+	var m minimums
+	topRate := r[0][0]
+	for tier := range r {
+		for qual := range r[tier] {
+			m[tier][qual] = r[tier][qual] - topRate
+		}
+	}
+	return m
+}
 
 // allocateTokens allocates tokens to a cpuTimeTokenGranter. allocateTokens
 // adds the desired number of tokens every interval, while respecting the bucket
@@ -278,7 +320,11 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	// one second worth of tokens at the current refill rate. This is a fairly
 	// arbitrary decision.
 	bucketCapacities := capacities(a.refillRates)
-	a.granter.refill(allocations, bucketCapacities)
+	// Each bucket has a minimum allowed token count. This prevents
+	// higher priority work from putting lower priority buckets into
+	// unbounded token debt.
+	bucketMinimums := computeMinimums(a.refillRates)
+	a.granter.refill(allocations, bucketCapacities, bucketMinimums)
 
 	// Refill per-tenant burst buckets in the WorkQueues. The burst bucket
 	// refill rate and capacity should be 1/4th of the noBurst refill rate
@@ -335,9 +381,10 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 		}
 	}
 	// See comment above the call to refill in allocateTokens for a discussion of
-	// bucketCapacities.
+	// bucketCapacities and bucketMinimums.
 	bucketCapacities := capacities(newRefillRates)
-	a.granter.refill(deltaRefillRates, bucketCapacities)
+	bucketMinimums := computeMinimums(newRefillRates)
+	a.granter.refill(deltaRefillRates, bucketCapacities, bucketMinimums)
 	a.refillRates = newRefillRates
 
 	// Apply the delta to the per-tenant burst buckets also.

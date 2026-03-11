@@ -275,24 +275,25 @@ tier1requester: waitingRequests: true, returnValueFromHasWaitingRequests: noBurs
 
 # The arguments to refill are hard-coded in the test code, but they are also
 # shown in the below output. The corresponding entry in delta is added to every
-# bucket, subject to a max capacity of the corresponding entry in cap. Note as
-# per the call init above, there is one tier1 non-burstable request waiting for
-# admission. Due to the call to refill, it is granted admission, as can be seen
-# in the output below. So one token is deducted from all buckets, post the deltas
-# being added to the buckets. For example, tier0 canBurst was 0, then 3 is added
-# to it subject to a cap of 10 (so cap is applied), then 1 token is deducted, so
-# the final state of the bucket is 3-1 = 2.
+# bucket, subject to a max capacity of the corresponding entry in cap and a min
+# floor of the corresponding entry in min. Note as per the call init above,
+# there is one tier1 non-burstable request waiting for admission. Due to the
+# call to refill, it is granted admission, as can be seen in the output below.
+# So one token is deducted from all buckets, post the deltas being added to the
+# buckets. For example, tier0 canBurst was 0, then 5 is added to it (cap of 20
+# is not applied), then 1 token is deducted, so the final state of the bucket is
+# 5-1 = 4.
 refill
 ----
 kvtier1: granted in chain 0, and returning 1
 refill(
-	tier1 noBurst -> delta: 1, cap: 1
-	tier1 canBurst -> delta: 3, cap: 10
-	tier0 noBurst -> delta: 4, cap: 3
-	tier0 canBurst -> delta: 5, cap: 4
+	tier0 canBurst -> delta: 5, cap: 20, min: 0
+	tier0 noBurst -> delta: 4, cap: 16, min: -4
+	tier1 canBurst -> delta: 3, cap: 12, min: -8
+	tier1 noBurst -> delta: 1, cap: 8, min: -12
 )
 cpuTTG canBurst noBurst
-tier0  3        2
+tier0  4        3
 tier1  2        0
 
 # Refilling the buckets does not count as token usage. The only usage that happens
@@ -301,3 +302,27 @@ tier1  2        0
 reset-tokens-used
 ----
 reset-tokens-used-in-interval() returned 1
+
+# Test that refill enforces both ceiling and floor. tier0 canBurst starts at 16,
+# so 16 + delta(5) = 21 > cap(20), demonstrating the ceiling. The other three
+# buckets start deeply negative, so they are clamped to their respective floors:
+# tier0 noBurst to -4, tier1 canBurst to -8, tier1 noBurst to -12.
+init tier0=-100 tier0burst=16 tier1=-100 tier1burst=-100
+----
+cpuTTG canBurst noBurst
+tier0  16       -100
+tier1  -100     -100
+tier0requester: waitingRequests: false, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 0
+tier1requester: waitingRequests: false, returnValueFromHasWaitingRequests: noBurst, returnValueFromGranted: 0
+
+refill
+----
+refill(
+	tier0 canBurst -> delta: 5, cap: 20, min: 0
+	tier0 noBurst -> delta: 4, cap: 16, min: -4
+	tier1 canBurst -> delta: 3, cap: 12, min: -8
+	tier1 noBurst -> delta: 1, cap: 8, min: -12
+)
+cpuTTG canBurst noBurst
+tier0  20       -4
+tier1  -8       -12
