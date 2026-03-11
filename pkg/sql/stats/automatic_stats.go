@@ -16,12 +16,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -190,6 +195,8 @@ var DefaultAsOfTime = 30 * time.Second
 // "buffered channel is full" errors.
 var bufferedChanFullLogLimiter = log.Every(time.Second)
 
+var fixMisestimatesChanFullLogLimiter = log.Every(10 * time.Second)
+
 // Constants for automatic statistics collection.
 // TODO(rytaft): Should these constants be configurable?
 const (
@@ -204,6 +211,26 @@ const (
 	// existing mutations in the buffer and makes space for new ones. SQL
 	// mutations will never block waiting on the refresher.
 	mutationsChanBufferLen = 1 << 15
+
+	// misestimatesChanBufferLen is the same as mutationsChanBufferLen but for
+	// the stats misestimates buffered channel.
+	// TODO(#168078): maybe we should increase this value, perhaps after
+	// adding the memory accounting for the spans buffered in the channel.
+	// TODO(yuzefovich): consider introducing metrics counters to track how
+	// frequently the buffered channel fills up.
+	misestimatesChanBufferLen = 1 << 10
+
+	// maxMisestimateSpanCountPerTable is a loose upper-bound on the number of
+	// misestimate spans that we keep for a single table.
+	// TODO(#168078): consider making this configurable by a cluster setting,
+	// probably after adding the memory accounting.
+	maxMisestimateSpanCountPerTable = 256
+
+	// maxTablesForMisestimates controls the maximum number of tables for which
+	// we track the misestimates.
+	// TODO(#168078): consider making this configurable by a cluster setting,
+	// probably after adding the memory accounting.
+	maxTablesForMisestimates = 250
 
 	// settingsChanBufferLen is the same as mutationsChanBufferLen but for the
 	// settings' overrides buffered channel.
@@ -287,6 +314,11 @@ type Refresher struct {
 	// metadata about SQL mutations to the background Refresher thread.
 	mutations chan mutation
 
+	// misestimates is the buffered channel used to pass messages from the
+	// execution engine after it encountered a "stats misestimate" to the
+	// background MisestimatesRefresher thread.
+	misestimates chan misestimate
+
 	// settings is the buffered channel used to pass messages containing
 	// autostats setting override information to the background Refresher thread.
 	settings chan settingOverride
@@ -304,6 +336,12 @@ type Refresher struct {
 	// mutationCounts contains aggregated mutation counts for each table that
 	// have yet to be processed by the refresher.
 	mutationCounts map[descpb.ID]int64
+
+	// misesimateSpans contains all the stats misestimates accumulated so far
+	// that have yet to be processed by the refresher.
+	// TODO(#168078): we should add memory accounting for spans stored in
+	// this map.
+	misestimateSpans map[indexInfo]roachpb.Spans
 
 	// settingOverrides holds any autostats cluster setting overrides for each
 	// table.
@@ -331,6 +369,19 @@ type mutation struct {
 	// cluster setting overrides for the table with the above tableID.
 	// The default value of false is a no-Op.
 	removeSettingOverrides bool
+}
+
+type indexInfo struct {
+	tableID       descpb.ID
+	indexID       descpb.IndexID
+	keyColumnName string
+	keyColumnDir  catenumpb.IndexColumn_Direction
+	keyColumnType *types.T
+}
+
+type misestimate struct {
+	indexInfo
+	roachpb.Spans
 }
 
 // settingOverride specifies the autostats setting override values to use in
@@ -377,10 +428,12 @@ func MakeRefresher(
 		readOnlyTenant:   readOnlyTenant,
 		rng:              rand.New(rand.NewSource(rand.Int63())),
 		mutations:        make(chan mutation, mutationsChanBufferLen),
+		misestimates:     make(chan misestimate, misestimatesChanBufferLen),
 		settings:         make(chan settingOverride, settingsChanBufferLen),
 		asOfTime:         asOfTime,
 		extraTime:        time.Duration(rand.Int63n(int64(time.Hour))),
 		mutationCounts:   make(map[descpb.ID]int64, 16),
+		misestimateSpans: make(map[indexInfo]roachpb.Spans, 16),
 		settingOverrides: make(map[descpb.ID]catpb.AutoStatsSettings),
 		drainAutoStats:   make(chan struct{}),
 	}
@@ -536,7 +589,8 @@ func (r *Refresher) SetDraining() {
 
 // Start starts the stats refresher thread, which polls for messages about
 // new SQL mutations and refreshes the table statistics with probability
-// proportional to the percentage of rows affected.
+// proportional to the percentage of rows affected. It also starts the
+// "misestimates refresher" as well as the stats garbage collector threads.
 func (r *Refresher) Start(
 	ctx context.Context, stopper *stop.Stopper, refreshInterval time.Duration,
 ) error {
@@ -717,8 +771,47 @@ func (r *Refresher) Start(
 		r.startedTasksWG.Done()
 		log.Dev.Warningf(ctx, "refresher task failed to start: %v", err)
 	}
-	// Start another task that will periodically run an internal query to delete
-	// stats for dropped tables.
+
+	// Start another task to process "stats misestimates".
+	//
+	// The main reason for separating it out from the 'refresher' thread is that
+	// on each 'misestimate' object from r.misestimates we might need to do
+	// non-trivial amount of work, so we could delay consuming mutations from
+	// r.mutations.
+	r.startedTasksWG.Add(1)
+	if err := stopper.RunAsyncTask(bgCtx, "misestimates refresher", func(ctx context.Context) {
+		defer r.startedTasksWG.Done()
+
+		timer := time.NewTimer(refreshInterval)
+		defer timer.Stop()
+
+		for {
+			select {
+			case <-timer.C:
+				misestimateSpans := r.misestimateSpans
+				_ = misestimateSpans
+				r.misestimateSpans = make(map[indexInfo]roachpb.Spans, len(r.misestimateSpans))
+				timer.Reset(refreshInterval)
+
+			case mis := <-r.misestimates:
+				r.addMisestimate(mis)
+
+			case <-r.drainAutoStats:
+				log.Dev.Infof(ctx, "draining auto stats misestimates refresher")
+				return
+
+			case <-ctx.Done():
+				log.Dev.Infof(ctx, "quiescing auto stats misestimates refresher")
+				return
+			}
+		}
+	}); err != nil {
+		r.startedTasksWG.Done()
+		log.Dev.Warningf(ctx, "misestimates refresher task failed to start: %v", err)
+	}
+
+	// Start yet another task that will periodically run an internal query to
+	// delete stats for dropped tables.
 	r.startedTasksWG.Add(1)
 	if err := stopper.RunAsyncTask(bgCtx, "stats-garbage-collector", func(ctx context.Context) {
 		defer r.startedTasksWG.Done()
@@ -993,6 +1086,61 @@ func (r *Refresher) EstimateStaleness(
 	return staleFraction, nil
 }
 
+// FixMisestimate is called by the execution engine after having executed a SQL
+// statement where we had an inaccurate estimated row count for the rows scanned
+// by the TableReader. It is an ask to collect partial stats on the given spans
+// on the table on which the partial fixup stats are enabled.
+//
+// Spans must be ordered and non-overlapping.
+func (r *Refresher) FixMisestimate(
+	ctx context.Context,
+	tableDesc catalog.TableDescriptor,
+	indexID descpb.IndexID,
+	spans []roachpb.Span,
+) {
+	if !r.autoStatsEnabled(tableDesc) {
+		// Collecting stats in general is disabled on this table, so we cannot
+		// start the "fix misestimates" stats job. (Partial fixup stats are
+		// enabled though.)
+		return
+	}
+	if !r.cache.autostatsCollectionAllowed(tableDesc) {
+		// Unexpected - we shouldn't have tracked the estimate for this table in
+		// the first place.
+		if buildutil.CrdbTestBuild {
+			panic(errors.AssertionFailedf("table ID %d should've been exempted from fixing misestimates", tableDesc.GetID()))
+		}
+		return
+	}
+	idx, err := catalog.MustFindIndexByID(tableDesc, indexID)
+	if err != nil {
+		return
+	}
+	col, err := catalog.MustFindColumnByID(tableDesc, idx.GetKeyColumnID(0 /* columnOrdinal */))
+	if err != nil {
+		return
+	}
+	select {
+	case r.misestimates <- misestimate{
+		indexInfo: indexInfo{
+			tableID:       tableDesc.GetID(),
+			indexID:       indexID,
+			keyColumnName: tree.NameString(col.GetName()),
+			keyColumnDir:  idx.GetKeyColumnDirection(0 /* columnOrdinal */),
+			keyColumnType: col.GetType(),
+		},
+		// TODO(#168078): we could consider stripping TableID/IndexID prefix
+		// given that we track that separately.
+		Spans: spans,
+	}:
+	default:
+		// Don't block if there is no room in the buffered channel.
+		if fixMisestimatesChanFullLogLimiter.ShouldLog() {
+			log.Dev.Warningf(ctx, "buffered channel is full. Unable to fix misestimates for table ID %d", tableDesc.GetID())
+		}
+	}
+}
+
 func (r *Refresher) mustDoFullRefresh(
 	ctx context.Context, tableID descpb.ID,
 ) (mustRefresh bool, rowCount float64, _ error) {
@@ -1138,6 +1286,103 @@ func (r *Refresher) refreshStats(
 		stmt,
 	)
 	return err
+}
+
+// addMisestimate includes the given misestimate into the "queue" of
+// misestimates. It de-duplicates and merges spans.
+func (r *Refresher) addMisestimate(mis misestimate) {
+	id := mis.indexInfo
+	oldSpans := r.misestimateSpans[id]
+	if len(oldSpans) == 0 {
+		if len(r.misestimateSpans) >= maxTablesForMisestimates {
+			return
+		}
+		r.misestimateSpans[id] = mis.Spans
+		return
+	}
+	if len(oldSpans) >= maxMisestimateSpanCountPerTable {
+		return
+	}
+
+	// Quick check whether all new spans are fully contained within old ones.
+	allDups := true
+	var oldIdx, newIdx int
+	for oldIdx < len(oldSpans) && newIdx < len(mis.Spans) {
+		if oldSpans[oldIdx].Contains(mis.Spans[newIdx]) {
+			// Fully contained. Only advance newIdx in case the current old span
+			// contains more than one new.
+			newIdx++
+			continue
+		}
+		if oldSpans[oldIdx].EndKey.Compare(mis.Spans[newIdx].Key) < 0 {
+			// The old span ends before the new span starts.
+			oldIdx++
+			continue
+		}
+		// Either the old span starts after the new span ends (in which case the
+		// new span doesn't overlap with any old ones), or there is a partial
+		// overlap with the old one. In both cases we'll need to update the
+		// "queue".
+		allDups = false
+		break
+	}
+	allDups = allDups && newIdx == len(mis.Spans)
+	if allDups {
+		return
+	}
+
+	// Merge two ordered non-overlapping lists of spans. We also de-duplicate
+	// them and merge adjacent spans together.
+	updatedSpans := make(roachpb.Spans, 0, len(oldSpans)+len(mis.Spans))
+	// addSpan is a helper that includes the given span into the updated result.
+	// It additionally checks whether the span can be merged into the "previous"
+	// span.
+	addSpan := func(span roachpb.Span) {
+		if len(updatedSpans) > 0 {
+			prevSpan := updatedSpans[len(updatedSpans)-1]
+			if prevSpan.Contains(span) {
+				// Already fully contained - nothing to do.
+				return
+			}
+			if prevSpan.EndKey.Compare(span.Key) >= 0 {
+				// The "previous" span can be extended to include the span.
+				updatedSpans[len(updatedSpans)-1].EndKey = span.EndKey
+				return
+			}
+		}
+		updatedSpans = append(updatedSpans, span)
+	}
+	oldIdx, newIdx = 0, 0
+	for oldIdx < len(oldSpans) && newIdx < len(mis.Spans) {
+		// Decide which span must be included into the result next (whichever
+		// starts earlier).
+		var span roachpb.Span
+		if cmp := oldSpans[oldIdx].Key.Compare(mis.Spans[newIdx].Key); cmp == 0 {
+			// Both share the start key - pick the larger of the two.
+			span = oldSpans[oldIdx]
+			if oldSpans[oldIdx].EndKey.Compare(mis.Spans[newIdx].EndKey) < 0 {
+				span = mis.Spans[newIdx]
+			}
+			oldIdx++
+			newIdx++
+		} else if cmp < 0 {
+			span = oldSpans[oldIdx]
+			oldIdx++
+		} else {
+			span = mis.Spans[newIdx]
+			newIdx++
+		}
+		addSpan(span)
+	}
+	for oldIdx < len(oldSpans) {
+		addSpan(oldSpans[oldIdx])
+		oldIdx++
+	}
+	for newIdx < len(mis.Spans) {
+		addSpan(mis.Spans[newIdx])
+		newIdx++
+	}
+	r.misestimateSpans[id] = updatedSpans
 }
 
 // mostRecentAutomaticFullStat finds the most recent automatic statistic
