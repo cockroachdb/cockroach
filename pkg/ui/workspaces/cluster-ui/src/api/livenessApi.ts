@@ -23,7 +23,12 @@ export const getLiveness =
     return fetchData(cockroach.server.serverpb.LivenessResponse, LIVENESS_PATH);
   };
 
-export const useLiveness = () => {
+interface UseLivenessOptions {
+  // Polling interval in milliseconds. Defaults to no polling (undefined).
+  refreshInterval?: number;
+}
+
+export const useLiveness = (opts?: UseLivenessOptions) => {
   const { isTenant } = useContext(ClusterDetailsContext);
   const { data, isLoading, error } = useSwrWithClusterId(
     LIVENESS_SWR_KEY,
@@ -31,6 +36,7 @@ export const useLiveness = () => {
     {
       revalidateOnFocus: false,
       dedupingInterval: 10000, // 10 seconds.
+      refreshInterval: opts?.refreshInterval,
     },
   );
 

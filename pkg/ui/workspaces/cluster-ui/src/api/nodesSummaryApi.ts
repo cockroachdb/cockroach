@@ -26,19 +26,24 @@ export type NodesSummary = {
   storeIDsByNodeID: Record<string, string[]>;
 };
 
-export const useNodesSummary = () => {
+interface UseNodesSummaryOptions {
+  // Polling interval in milliseconds. Defaults to no polling (undefined).
+  refreshInterval?: number;
+}
+
+export const useNodesSummary = (opts?: UseNodesSummaryOptions) => {
   const {
     nodeStatuses,
     isLoading: nodesLoading,
     error: nodesError,
-  } = useNodes();
+  } = useNodes({ refreshInterval: opts?.refreshInterval });
 
   const {
     livenesses,
     statuses: livenessStatusByNodeID,
     isLoading: livenessLoading,
     error: livenessError,
-  } = useLiveness();
+  } = useLiveness({ refreshInterval: opts?.refreshInterval });
 
   const isLoading = nodesLoading || livenessLoading;
 

@@ -651,7 +651,7 @@ export function decommissionedNodesTableData(
  */
 function NodesMain(): React.ReactElement {
   const { nodeStatuses, livenessStatusByNodeID, livenessByNodeID } =
-    useNodesSummary();
+    useNodesSummary({ refreshInterval: 10000 });
 
   // Partition nodes into live vs decommissioned, mirroring the logic
   // previously in the partitionedStatuses Redux selector.
