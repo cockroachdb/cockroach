@@ -1593,3 +1593,32 @@ func BenchmarkFuncExprTypeCheck(b *testing.B) {
 		})
 	}
 }
+
+// BenchmarkShowIndexes measures SHOW INDEXES performance as the number of
+// tables in the database increases. Before the fix for #164443, pg_class had
+// an incomplete virtual index that caused each index OID lookup to fall back
+// to a full table scan, making SHOW INDEXES scale quadratically with the
+// number of objects.
+func BenchmarkShowIndexes(b *testing.B) {
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+	benchmarkCockroach(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		numCreated := 0
+		for _, numTables := range []int{10, 50, 100} {
+			b.Run(fmt.Sprintf("tables=%d", numTables), func(b *testing.B) {
+				for i := numCreated; i < numTables; i++ {
+					db.Exec(b, fmt.Sprintf(
+						"CREATE TABLE t%d (a INT PRIMARY KEY, b INT, INDEX idx_%d(b))", i, i,
+					))
+				}
+				numCreated = numTables
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					rows := db.Query(b, "SHOW INDEXES FROM t0")
+					rows.Close()
+				}
+				b.StopTimer()
+			})
+		}
+	})
+}
