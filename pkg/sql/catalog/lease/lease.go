@@ -1496,6 +1496,10 @@ func (m *Manager) acquireNodeLease(
 			}()
 			if waitedForBulkAcquire || err != nil {
 				// We didn't do any acquiring and just waited for a bulk operation.
+				// Debug log for #162173, will be removed when the issue is resolved.
+				if buildutil.CrdbTestBuild {
+					log.Dev.Infof(ctx, "upsert lease: descriptor %d waited for bulk acquire (err: %v), skipping individual acquisition", id, err)
+				}
 				return false, err
 			}
 			newest, offline := m.findNewest(id)
@@ -1550,6 +1554,11 @@ func (m *Manager) acquireNodeLease(
 					return false, err
 				}
 				if desc == nil {
+					// Debug log for #162173, will be removed when the issue is resolved.
+					if buildutil.CrdbTestBuild {
+						log.Dev.Infof(ctx, "upsert lease: descriptor %d (system table fast-path) acquisition returned nil, already leased at version %d session %s",
+							id, currentVersion, currentSessionID)
+					}
 					return true, nil
 				}
 			} else {
@@ -1560,6 +1569,11 @@ func (m *Manager) acquireNodeLease(
 				// If a nil descriptor is returned, then the latest version has already
 				// been leased. So, nothing needs to be done here.
 				if desc == nil {
+					// Debug log for #162173, will be removed when the issue is resolved.
+					if buildutil.CrdbTestBuild {
+						log.Dev.Infof(ctx, "upsert lease: descriptor %d acquisition returned nil, already leased at version %d session %s",
+							id, currentVersion, currentSessionID)
+					}
 					return true, nil
 				}
 				if err := m.upsertDescriptorIntoState(ctx, id, session, desc); err != nil {
