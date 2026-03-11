@@ -1056,6 +1056,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		QueryCache: querycache.New(cfg.QueryCacheSize),
 		StatementHintsCache: hints.NewStatementHintsCache(
 			cfg.clock, cfg.rangeFeedFactory, cfg.stopper, codec, cfg.internalDB, cfg.Settings,
+			serverCacheMemoryMonitor.MakeBoundAccount(),
 		),
 		VecIndexManager:            vecIndexManager,
 		RowMetrics:                 &rowMetrics,
