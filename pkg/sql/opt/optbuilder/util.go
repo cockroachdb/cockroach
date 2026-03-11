@@ -6,6 +6,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -710,7 +711,7 @@ func (b *Builder) resolveDataSourceRef(
 	return ds, depName
 }
 
-// checkPrivilege ensures that the current user has at least one of the given
+// checkPrivilege ensures that the checkPrivilegeUser has at least one of the given
 // privileges on the given object in the catalog. If not, then checkPrivilege
 // raises an error. It also adds the object and its original unresolved name as
 // a dependency to the metadata, so that the privileges can be re-checked on
@@ -723,19 +724,19 @@ func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, privs ..
 	priv := privs[0]
 	if priv == privilege.SELECT && b.skipSelectPrivilegeChecks {
 		// The check is skipped, so don't recheck when dependencies are checked.
-		b.factory.Metadata().AddDependency(name, ds, 0)
+		b.factory.Metadata().AddDependency(name, ds, 0, b.privilegeDependencyUser())
 		return
 	}
 
 	if len(privs) == 1 {
-		if err := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser, priv); err != nil {
+		if err := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser(), priv); err != nil {
 			panic(err)
 		}
 	} else {
 		// Try each privilege in order. Use the first one the user holds.
 		var firstErr error
 		for _, p := range privs {
-			if err := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser, p); err != nil {
+			if err := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser(), p); err != nil {
 				if firstErr == nil {
 					firstErr = err
 				}
@@ -752,14 +753,27 @@ func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, privs ..
 
 	// Add dependency on this object to the metadata, so that the metadata can be
 	// cached and later checked for freshness.
-	b.factory.Metadata().AddDependency(name, ds, priv)
+	depUser := b.privilegeDependencyUser()
+	b.factory.Metadata().AddDependency(name, ds, priv, depUser)
 
 	// If we're building within a builtin context (unsafe checks disabled),
 	// mark this dependency as coming from a builtin so it can bypass unsafe
 	// checks during memo staleness checking.
 	if b.skipUnsafeInternalsCheck {
-		b.factory.Metadata().AddDependency(name, ds, privilege.BUILTIN_UNSAFE_ALLOWED)
+		b.factory.Metadata().AddDependency(name, ds, privilege.BUILTIN_UNSAFE_ALLOWED, depUser)
 	}
+}
+
+// privilegeDependencyUser returns the user to store in privilege dependency
+// keys. When in a definer context (SECURITY DEFINER view or routine), it
+// returns the definer's username so re-validation checks the definer. Otherwise
+// it returns an empty username, signaling that re-validation should use the
+// current session user. This avoids memo invalidation on SET ROLE.
+func (b *Builder) privilegeDependencyUser() username.SQLUsername {
+	if b.dataSourcePrivilegeUserOverride.Undefined() {
+		return username.SQLUsername{}
+	}
+	return b.dataSourcePrivilegeUserOverride
 }
 
 // resolveNumericColumnRefs converts a list of tree.ColumnIDs from a

@@ -8,6 +8,7 @@ package cat
 import (
 	"bytes"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -39,6 +40,10 @@ type View interface {
 
 	// Trigger returns the ith trigger, where i < TriggerCount.
 	Trigger(i int) Trigger
+
+	// Owner returns the username of the view owner.
+	// Used to check view select privileges.
+	Owner() username.SQLUsername
 }
 
 // FormatView nicely formats a catalog view using a treeprinter for debugging
