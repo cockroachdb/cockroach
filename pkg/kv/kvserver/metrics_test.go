@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/stretchr/testify/require"
 )
 
@@ -156,5 +157,54 @@ func TestWALSecondaryFileOpLatencyMetric(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestUpdateDiskCounter(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		name     string
+		initial  int64
+		newVal   int64
+		expected int64
+	}{{
+		name:     "fresh counter, first update",
+		initial:  0,
+		newVal:   100,
+		expected: 100,
+	}, {
+		name:     "normal increasing update",
+		initial:  100,
+		newVal:   200,
+		expected: 200,
+	}, {
+		name:     "same value (no change)",
+		initial:  100,
+		newVal:   100,
+		expected: 100,
+	}, {
+		name:     "counter wrap: new value lower than current",
+		initial:  4294720145000000,
+		newVal:   136286000000,
+		expected: 136286000000,
+	}, {
+		name:     "counter wrap to zero",
+		initial:  100,
+		newVal:   0,
+		expected: 0,
+	}}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			counter := metric.NewCounter(metric.Metadata{Name: "test"})
+			if tt.initial > 0 {
+				counter.Update(tt.initial)
+			}
+			updateDiskCounter(ctx, counter, tt.newVal)
+			require.Equal(t, tt.expected, counter.Count())
+		})
 	}
 }
