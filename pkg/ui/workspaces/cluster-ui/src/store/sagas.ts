@@ -14,8 +14,6 @@ import { transactionInsightDetailsSaga } from "./insightDetails/transactionInsig
 import { statementFingerprintInsightsSaga } from "./insights/statementFingerprintInsights";
 import { statementInsightsSaga } from "./insights/statementInsights";
 import { transactionInsightsSaga } from "./insights/transactionInsights/transactionInsights.sagas";
-import { jobSaga } from "./jobDetails";
-import { jobsSaga } from "./jobs";
 import { livenessSaga } from "./liveness";
 import { localStorageSaga } from "./localStorage";
 import { nodesSaga } from "./nodes";
@@ -37,8 +35,6 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(transactionInsightsSaga),
     fork(transactionInsightDetailsSaga),
     fork(statementInsightsSaga),
-    fork(jobsSaga),
-    fork(jobSaga),
     fork(databasesListSaga),
     fork(sessionsSaga),
     fork(terminateSaga),

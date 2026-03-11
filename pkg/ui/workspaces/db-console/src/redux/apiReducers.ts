@@ -167,52 +167,6 @@ export const livenessReducerObj = new CachedDataReducer(
 );
 export const refreshLiveness = livenessReducerObj.refresh;
 
-export const jobsKey = (
-  status: string,
-  type: protos.cockroach.sql.jobs.jobspb.Type,
-  limit: number,
-) =>
-  `${encodeURIComponent(status)}/${encodeURIComponent(
-    type.toString(),
-  )}/${encodeURIComponent(limit.toString())}`;
-
-const jobsRequestKey = (req: api.JobsRequestMessage): string =>
-  jobsKey(req.status, req.type, req.limit);
-
-const jobsReducerObj = new KeyedCachedDataReducer(
-  api.getJobs,
-  "jobs",
-  jobsRequestKey,
-  null,
-  moment.duration(10, "m"),
-);
-export const refreshJobs = jobsReducerObj.refresh;
-
-export const jobRequestKey = (req: api.JobRequestMessage): string =>
-  `${req.job_id}`;
-
-const jobReducerObj = new KeyedCachedDataReducer(
-  api.getJob,
-  "job",
-  jobRequestKey,
-  null,
-  moment.duration(10, "m"),
-);
-export const refreshJob = jobReducerObj.refresh;
-
-export const jobProfilerRequestKey = (
-  req: api.ListJobProfilerExecutionDetailsRequestMessage,
-): string => `${req.job_id}`;
-
-const jobProfilerReducerObj = new KeyedCachedDataReducer(
-  api.listExecutionDetailFiles,
-  "jobProfiler",
-  jobProfilerRequestKey,
-  null,
-  moment.duration(10, "m"),
-);
-export const refreshListExecutionDetailFiles = jobProfilerReducerObj.refresh;
-
 export const queryToID = (req: api.QueryPlanRequestMessage): string =>
   req.query;
 
@@ -532,9 +486,6 @@ export interface APIReducersState {
   nonTableStats: CachedDataReducerState<api.NonTableStatsResponseMessage>;
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
   liveness: CachedDataReducerState<api.LivenessResponseMessage>;
-  jobProfiler: KeyedCachedDataReducerState<api.ListJobProfilerExecutionDetailsResponseMessage>;
-  jobs: KeyedCachedDataReducerState<api.JobsResponseMessage>;
-  job: KeyedCachedDataReducerState<api.JobResponseMessage>;
   queryPlan: CachedDataReducerState<api.QueryPlanResponseMessage>;
   problemRanges: KeyedCachedDataReducerState<api.ProblemRangesResponseMessage>;
   certificates: KeyedCachedDataReducerState<api.CertificatesResponseMessage>;
@@ -590,9 +541,6 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [nonTableStatsReducerObj.actionNamespace]: nonTableStatsReducerObj.reducer,
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
   [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,
-  [jobProfilerReducerObj.actionNamespace]: jobProfilerReducerObj.reducer,
-  [jobsReducerObj.actionNamespace]: jobsReducerObj.reducer,
-  [jobReducerObj.actionNamespace]: jobReducerObj.reducer,
   [queryPlanReducerObj.actionNamespace]: queryPlanReducerObj.reducer,
   [problemRangesReducerObj.actionNamespace]: problemRangesReducerObj.reducer,
   [certificatesReducerObj.actionNamespace]: certificatesReducerObj.reducer,

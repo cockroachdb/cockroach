@@ -38,12 +38,6 @@ import {
   reducer as txnInsights,
   TxnInsightsState,
 } from "./insights/transactionInsights";
-import { JobDetailsReducerState, reducer as job } from "./jobDetails";
-import { JobsState, reducer as jobs } from "./jobs";
-import {
-  JobProfilerExecutionDetailFilesState,
-  reducer as executionDetailFiles,
-} from "./jobs/jobProfiler.reducer";
 import { LivenessState, reducer as liveness } from "./liveness";
 import { LocalStorageState, reducer as localStorage } from "./localStorage";
 import { NodesState, reducer as nodes } from "./nodes";
@@ -77,9 +71,6 @@ export type AdminUiState = {
   transactions: TxnStatsState;
   sqlDetailsStats: SQLDetailsStatsReducerState;
   indexStats: IndexStatsReducerState;
-  jobs: JobsState;
-  job: JobDetailsReducerState;
-  executionDetailFiles: JobProfilerExecutionDetailFilesState;
   clusterLocks: ClusterLocksReqState;
   databasesList: DatabasesListState;
   stmtInsights: StmtInsightsState;
@@ -108,9 +99,6 @@ export const reducers = combineReducers<AdminUiState>({
   transactions: txnStats,
   sqlDetailsStats,
   indexStats,
-  jobs,
-  job,
-  executionDetailFiles,
   clusterLocks,
   databasesList,
   statementFingerprintInsights,
