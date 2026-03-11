@@ -24,8 +24,7 @@ export function getUserSQLRoles(): Promise<UserSQLRolesResponseMessage> {
 
 export function useUserSQLRoles() {
   return useSwrWithClusterId("userSQLRoles", () => getUserSQLRoles(), {
-    // Only call every 5 minutes
-    dedupingInterval: 4_999,
-    refreshInterval: 5_000,
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
   });
 }
