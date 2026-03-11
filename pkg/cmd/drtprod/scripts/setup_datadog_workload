@@ -111,6 +111,7 @@ service:
       - memory_limiter/datadog
       - filter/workload
       - batch/datadog
+      - attributes/datadog
       exporters:
       - datadog
 EOF"

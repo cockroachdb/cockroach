@@ -86,5 +86,5 @@ fi
   --datadog-app-key "unused" \
   --datadog-tags "env:development,cluster:${CLUSTER},workload:${WORKLOAD_CLUSTER},team:drt,service:drt-cockroachdb" \
   --certs-dir ./certs --prom-port 2115 \
-  --cloud "${CLOUD}" --workload-cluster "${WORKLOAD_CLUSTER}" --run-forever | tee -a roachtest_ops.log
+  --cloud "${CLOUD}" --workload-cluster "${WORKLOAD_CLUSTER}" --run-forever 2>&1 | tee -a roachtest_ops.log
 
