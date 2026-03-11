@@ -4,7 +4,6 @@
 // included in the /LICENSE file.
 
 import { Button, Icon, InlineAlert } from "@cockroachlabs/ui-components";
-import classnames from "classnames/bind";
 import classNames from "classnames/bind";
 import moment from "moment-timezone";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
@@ -65,7 +64,7 @@ export type DiagnosticsViewProps = DiagnosticsViewOwnProps &
   DiagnosticsViewStateProps &
   DiagnosticsViewDispatchProps;
 
-const cx = classnames.bind(styles);
+const cx = classNames.bind(styles);
 
 const NavButton: React.FC = props => (
   <Button {...props} as="a" intent="tertiary">
