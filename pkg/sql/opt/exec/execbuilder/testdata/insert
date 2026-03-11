@@ -732,3 +732,47 @@ CPut /Table/117/4/4/0 -> /BYTES/0x89
 
 statement ok
 RESET use_cputs_on_non_unique_indexes;
+
+# Regression test for incorrectly reusing existing column that has a different
+# type (#163911).
+statement ok
+CREATE TABLE t163911 (a INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE t163911 ADD COLUMN new1 STRING DEFAULT (true);
+
+statement ok
+ALTER TABLE t163911 ADD COLUMN new2 STRING CHECK (true);
+
+query T
+EXPLAIN (OPT, TYPES) INSERT INTO t163911 VALUES (1);
+----
+insert t163911
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => a:1
+ │    ├── new1_cast:11 => new1:2
+ │    └── new2_default:10 => new2:3
+ ├── check columns: check1:12(bool)
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ ├── stats: [rows=0]
+ ├── cost: 0.03
+ ├── distribution: test
+ └── values
+      ├── columns: column1:8(int!null) new2_default:10(string) new1_cast:11(string!null) check1:12(bool!null)
+      ├── cardinality: [1 - 1]
+      ├── stats: [rows=1]
+      ├── cost: 0.02
+      ├── key: ()
+      ├── fd: ()-->(8,10-12)
+      ├── distribution: test
+      └── tuple [type=tuple{int, string, string, bool}]
+           ├── const: 1 [type=int]
+           ├── null [type=string]
+           ├── const: 'true' [type=string]
+           └── true [type=bool]
+
+# Also run the statement to ensure it doesn't hit an internal error.
+statement ok
+INSERT INTO t163911 VALUES (1);
