@@ -26,6 +26,16 @@ import (
 // planFileName is the file name used to save the tofu plan output.
 const planFileName = "plan.tfplan"
 
+// noLockFlag disables OpenTofu's built-in state locking. We rely on the task
+// system's concurrency keys (enforced by a unique index on running tasks) to
+// guarantee at-most-one execution per provisioning, making the backend lock
+// redundant. Disabling it avoids orphaned locks when Cloud Run kills a worker
+// mid-apply (SIGKILL after 10 s), which would otherwise block all subsequent
+// runs until a manual force-unlock.
+//
+// Only init, plan, apply, and destroy support -lock; output and show do not.
+const noLockFlag = "-lock=false"
+
 // IExecutor defines the interface for executing OpenTofu commands.
 // Each method operates on a working directory that must contain the template
 // HCL files and a backend.tf configuration.
@@ -95,7 +105,7 @@ func NewExecutor(binaryPath string) *Executor {
 func (e *Executor) Init(
 	ctx context.Context, l *logger.Logger, workingDir string, envVars map[string]string,
 ) error {
-	args := []string{"init", "-no-color"}
+	args := []string{"init", "-no-color", noLockFlag}
 	_, stderr, _, err := e.run(ctx, l, workingDir, args, envVars, true)
 	if err != nil {
 		return errors.Wrapf(err, "tofu init: %s", strings.TrimSpace(stderr))
@@ -122,7 +132,7 @@ func (e *Executor) Plan(
 	envVars map[string]string,
 ) (bool, error) {
 	// Step 1: Run tofu plan to detect changes and save the plan file.
-	args := []string{"plan", "-out=" + planFileName, "-no-color", "-detailed-exitcode"}
+	args := []string{"plan", "-out=" + planFileName, "-no-color", "-detailed-exitcode", noLockFlag}
 	args = appendVarArgs(args, vars)
 
 	_, stderr, exitCode, err := e.run(ctx, l, workingDir, args, envVars, true)
@@ -190,10 +200,10 @@ func (e *Executor) Apply(
 	if _, statErr := os.Stat(planPath); statErr == nil {
 		// Saved plan exists — apply it directly. No -auto-approve needed
 		// because applying a saved plan is non-interactive.
-		args = []string{"apply", "-no-color", planFileName}
+		args = []string{"apply", "-no-color", noLockFlag, planFileName}
 	} else {
 		// No saved plan — apply with vars directly.
-		args = []string{"apply", "-no-color", "-auto-approve"}
+		args = []string{"apply", "-no-color", "-auto-approve", noLockFlag}
 		args = appendVarArgs(args, vars)
 	}
 
@@ -214,7 +224,7 @@ func (e *Executor) Destroy(
 	vars map[string]string,
 	envVars map[string]string,
 ) error {
-	args := []string{"destroy", "-no-color", "-auto-approve"}
+	args := []string{"destroy", "-no-color", "-auto-approve", noLockFlag}
 	args = appendVarArgs(args, vars)
 
 	_, stderr, _, err := e.run(ctx, l, workingDir, args, envVars, true)
