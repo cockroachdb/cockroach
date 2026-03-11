@@ -2,46 +2,30 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Col, Row, Tabs } from "antd";
 import classNames from "classnames/bind";
 import long from "long";
-import moment from "moment-timezone";
 import React, {
   useCallback,
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import Helmet from "react-helmet";
-import { Selector, useSelector } from "react-redux";
 import { RouteComponentProps } from "react-router-dom";
 
-import { JobRequest, JobResponse, useJobDetails } from "src/api/jobsApi";
+import { useJobDetails } from "src/api/jobsApi";
+import { useUserSQLRoles } from "src/api/userApi";
 import { Button } from "src/button";
 import { commonStyles } from "src/common";
 import { CockroachCloudContext } from "src/contexts";
-import { EmptyTable } from "src/empty";
 import jobStyles from "src/jobs/jobs.module.scss";
-import { HighwaterTimestamp } from "src/jobs/util/highwaterTimestamp";
-import { JobStatusCell } from "src/jobs/util/jobStatusCell";
 import { Loading } from "src/loading";
-import { SortedTable } from "src/sortedtable";
 import { SqlBox, SqlBoxSize } from "src/sql";
-import { UIConfigState } from "src/store";
-import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
-import { Text, TextTypes } from "src/text";
-import {
-  DATE_WITH_SECONDS_FORMAT_24_TZ,
-  DATE_WITH_SECONDS_FORMAT,
-  TimestampToMoment,
-  getMatchParamByName,
-  idAttr,
-} from "src/util";
+import { getMatchParamByName, idAttr } from "src/util";
 
 import {
   CollectExecutionDetailsRequest,
@@ -50,17 +34,11 @@ import {
   GetJobProfilerExecutionDetailResponse,
   ListJobProfilerExecutionDetailsRequest,
   ListJobProfilerExecutionDetailsResponse,
-  RequestState,
 } from "../../api";
-import { Timestamp } from "../../timestamp";
 import { isTerminalState } from "../util";
 
 import { JobProfilerView } from "./jobProfilerView";
 import OverviewTabContent from "./overviewTab";
-
-type JobMessage = JobResponse["messages"][number];
-
-const { TabPane } = Tabs;
 
 const cardCx = classNames.bind(summaryCardStyles);
 const jobCx = classNames.bind(jobStyles);
@@ -70,9 +48,7 @@ enum TabKeysEnum {
   PROFILER = "Advanced Debugging",
 }
 
-export interface JobDetailsPropsV2<AppState = unknown>
-  extends RouteComponentProps {
-  refreshUserSQLRoles: () => void;
+export interface JobDetailsPropsV2 extends RouteComponentProps {
   onFetchExecutionDetailFiles: (
     req: ListJobProfilerExecutionDetailsRequest,
   ) => Promise<ListJobProfilerExecutionDetailsResponse>;
@@ -82,20 +58,18 @@ export interface JobDetailsPropsV2<AppState = unknown>
   onDownloadExecutionFile: (
     req: GetJobProfilerExecutionDetailRequest,
   ) => Promise<GetJobProfilerExecutionDetailResponse>;
-  adminRoleSelector: Selector<AppState, UIConfigState["hasAdminRole"]>;
 }
 
-export function JobDetailsV2<AppState = unknown>({
+export function JobDetailsV2({
   history,
   match,
-  refreshUserSQLRoles,
   onFetchExecutionDetailFiles,
   onCollectExecutionDetails,
   onDownloadExecutionFile,
-  adminRoleSelector,
-}: JobDetailsPropsV2<AppState>): React.ReactElement {
+}: JobDetailsPropsV2): React.ReactElement {
   const ccContext = useContext(CockroachCloudContext);
-  const hasAdminRole = useSelector(adminRoleSelector);
+  const { data: userRoles } = useUserSQLRoles();
+  const hasAdminRole = userRoles?.roles?.includes("ADMIN") ?? false;
   const jobId = useMemo(
     () => long.fromString(getMatchParamByName(match, idAttr)),
     [match],
@@ -127,9 +101,6 @@ export function JobDetailsV2<AppState = unknown>({
     },
     [history, searchParams],
   );
-  useEffect(() => {
-    refreshUserSQLRoles();
-  }, [refreshUserSQLRoles]);
   useEffect(() => {
     if (job) {
       setJobTerminal(isTerminalState(job.status));
@@ -198,285 +169,6 @@ export function JobDetailsV2<AppState = unknown>({
                     },
                 ]}
               />
-            </>
-          )}
-        />
-      </section>
-    </div>
-  );
-}
-
-// DEPRECATED: Remove once ported over to Cockroach Cloud.
-
-export interface JobDetailsStateProps {
-  jobRequest: RequestState<JobResponse>;
-  jobProfilerExecutionDetailFilesResponse: RequestState<ListJobProfilerExecutionDetailsResponse>;
-  jobProfilerLastUpdated: moment.Moment;
-  jobProfilerDataIsValid: boolean;
-  onDownloadExecutionFileClicked: (
-    req: GetJobProfilerExecutionDetailRequest,
-  ) => Promise<GetJobProfilerExecutionDetailResponse>;
-  hasAdminRole?: UIConfigState["hasAdminRole"];
-}
-
-export interface JobDetailsDispatchProps {
-  refreshJob: (req: JobRequest) => void;
-  refreshExecutionDetailFiles: (
-    req: ListJobProfilerExecutionDetailsRequest,
-  ) => void;
-  onRequestExecutionDetails: (jobID: long) => void;
-  refreshUserSQLRoles: () => void;
-}
-
-export type JobDetailsProps = JobDetailsStateProps &
-  JobDetailsDispatchProps &
-  RouteComponentProps;
-
-export function JobDetails(props: JobDetailsProps): React.ReactElement {
-  const { jobRequest, refreshJob, refreshUserSQLRoles, history, match } = props;
-
-  const searchParams = useMemo(
-    () => new URLSearchParams(history.location.search),
-    [history.location.search],
-  );
-  const [currentTab, setCurrentTab] = useState<string>(
-    searchParams.get("tab") || "overview",
-  );
-
-  const refreshDataIntervalRef = useRef<NodeJS.Timeout>(null);
-
-  const refresh = useCallback(() => {
-    if (isTerminalState(jobRequest.data?.status)) {
-      clearInterval(refreshDataIntervalRef.current);
-      return;
-    }
-
-    refreshJob(
-      new cockroach.server.serverpb.JobRequest({
-        job_id: long.fromString(getMatchParamByName(match, idAttr)),
-      }),
-    );
-  }, [jobRequest.data?.status, refreshJob, match]);
-
-  useEffect(() => {
-    refreshUserSQLRoles();
-  }, [refreshUserSQLRoles]);
-
-  // Keep a ref to the latest refresh so the interval doesn't need
-  // to be torn down and recreated on every poll result.
-  const refreshRef = useRef(refresh);
-  refreshRef.current = refresh;
-
-  // Initial fetch if no data is available yet.
-  useEffect(() => {
-    if (!jobRequest.data) {
-      refreshRef.current();
-    }
-  }, [jobRequest.data, refreshRef]);
-
-  // Stable 10s polling interval.
-  useEffect(() => {
-    refreshDataIntervalRef.current = setInterval(
-      () => refreshRef.current(),
-      10 * 1000,
-    );
-
-    return () => {
-      if (refreshDataIntervalRef.current) {
-        clearInterval(refreshDataIntervalRef.current);
-      }
-    };
-  }, [refreshRef]);
-
-  const prevPage = (): void => {
-    history.goBack();
-  };
-
-  const onTabChange = useCallback(
-    (tabId: string): void => {
-      const params = new URLSearchParams(history.location.search);
-      params.set("tab", tabId);
-      history.replace({
-        ...history.location,
-        search: params.toString(),
-      });
-      setCurrentTab(tabId);
-    },
-    [history],
-  );
-
-  const renderOverviewTabContent = (job: JobResponse): React.ReactElement => {
-    if (!job) {
-      return null;
-    }
-
-    const messageColumns = [
-      {
-        name: "timestamp",
-        title: "When",
-        hideTitleUnderline: true,
-        cell: (x: JobMessage) => (
-          <Timestamp
-            time={TimestampToMoment(x.timestamp, null)}
-            format={DATE_WITH_SECONDS_FORMAT}
-          />
-        ),
-      },
-      {
-        name: "kind",
-        title: "Kind",
-        hideTitleUnderline: true,
-        cell: (x: JobMessage) => x.kind,
-      },
-      {
-        name: "message",
-        title: "Message",
-        hideTitleUnderline: true,
-        cell: (x: JobMessage) => (
-          <p className={jobCx("message")}>{x.message}</p>
-        ),
-      },
-    ];
-
-    return (
-      <Row gutter={24}>
-        <Col className="gutter-row" span={8}>
-          <Text
-            textType={TextTypes.Heading5}
-            className={jobCx("details-header")}
-          >
-            Details
-          </Text>
-          <SummaryCard className={cardCx("summary-card")}>
-            <SummaryCardItem
-              label="Status"
-              value={
-                <JobStatusCell job={job} lineWidth={1.5} hideDuration={true} />
-              }
-            />
-            <SummaryCardItem
-              label="Creation Time"
-              value={
-                <Timestamp
-                  time={TimestampToMoment(job.created, null)}
-                  format={DATE_WITH_SECONDS_FORMAT_24_TZ}
-                />
-              }
-            />
-            {job.modified && (
-              <SummaryCardItem
-                label="Last Modified Time"
-                value={
-                  <Timestamp
-                    time={TimestampToMoment(job.modified, null)}
-                    format={DATE_WITH_SECONDS_FORMAT_24_TZ}
-                  />
-                }
-              />
-            )}
-            {job.finished && (
-              <SummaryCardItem
-                label="Completed Time"
-                value={
-                  <Timestamp
-                    time={TimestampToMoment(job.finished, null)}
-                    format={DATE_WITH_SECONDS_FORMAT_24_TZ}
-                  />
-                }
-              />
-            )}
-            <SummaryCardItem label="User Name" value={job.username} />
-            {job.highwater_timestamp && (
-              <SummaryCardItem
-                label="High-water Timestamp"
-                value={
-                  <HighwaterTimestamp
-                    timestamp={job.highwater_timestamp}
-                    decimalString={job.highwater_decimal}
-                  />
-                }
-              />
-            )}
-            <SummaryCardItem
-              label="Coordinator Node"
-              value={
-                job.coordinator_id.isZero()
-                  ? "-"
-                  : job.coordinator_id.toString()
-              }
-            />
-          </SummaryCard>
-        </Col>
-        <Col className="gutter-row" span={16}>
-          <Text
-            textType={TextTypes.Heading5}
-            className={jobCx("details-header")}
-          >
-            Events
-          </Text>
-          <SummaryCard className={jobCx("messages-card")}>
-            <SortedTable
-              data={job.messages}
-              columns={messageColumns}
-              tableWrapperClassName={jobCx("job-messages", "sorted-table")}
-              renderNoResult={<EmptyTable title="No messages recorded." />}
-            />
-          </SummaryCard>
-        </Col>
-      </Row>
-    );
-  };
-
-  const isLoading = jobRequest.inFlight && !jobRequest.data;
-  const error = jobRequest.error;
-  const job = jobRequest.data;
-
-  return (
-    <div className={jobCx("job-details")}>
-      <Helmet title={"Details | Job"} />
-      <div className={jobCx("section page--header")}>
-        <Button
-          onClick={prevPage}
-          type="unstyled-link"
-          size="small"
-          icon={<ArrowLeft fontSize={"10px"} />}
-          iconPosition="left"
-          className={commonStyles("small-margin")}
-        >
-          Jobs
-        </Button>
-        <h3 className={jobCx("page--header__title")}>{`Job ID: ${String(
-          getMatchParamByName(match, idAttr),
-        )}`}</h3>
-      </div>
-      <section className={jobCx("section section--container")}>
-        <Loading
-          loading={isLoading}
-          page={"job details"}
-          error={error}
-          render={() => (
-            <>
-              <section className={cardCx("summary-card")}>
-                <Row gutter={24}>
-                  <Col className="gutter-row" span={24}>
-                    <SqlBox
-                      value={job?.description ?? "Job not found."}
-                      size={SqlBoxSize.CUSTOM}
-                      format={true}
-                    />
-                  </Col>
-                </Row>
-              </section>
-              <Tabs
-                className={commonStyles("cockroach--tabs")}
-                defaultActiveKey={TabKeysEnum.OVERVIEW}
-                onChange={onTabChange}
-                activeKey={currentTab}
-              >
-                <TabPane tab={TabKeysEnum.OVERVIEW} key="overview">
-                  {renderOverviewTabContent(job)}
-                </TabPane>
-              </Tabs>
             </>
           )}
         />
