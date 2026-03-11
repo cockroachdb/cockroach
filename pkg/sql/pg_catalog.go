@@ -5750,26 +5750,9 @@ func populateVirtualIndexForTable(
 	}
 	h := makeOidHasher()
 	scResolver := oneAtATimeSchemaResolver{p: p, ctx: ctx}
-	var sc catalog.SchemaDescriptor
-	if tableDesc.IsTemporary() {
-		// Temp tables from other sessions should still be visible here.
-		// Ideally, the catalog API would be able to return the temporary
-		// schemas from other sessions, but it cannot right now. See
-		// https://github.com/cockroachdb/cockroach/issues/97822.
-		if err := forEachSchema(ctx, p, dbContext, false /* requiresPrivileges */, false /* includeMetadata */, func(ctx context.Context, schema catalog.SchemaDescriptor) error {
-			if schema.GetID() == tableDesc.GetParentSchemaID() {
-				sc = schema
-			}
-			return nil
-		}); err != nil {
-			return false, err
-		}
-	}
-	if sc == nil {
-		sc, err = descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.txn, p.EvalContext().Settings).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
-		if err != nil {
-			return false, err
-		}
+	sc, err := descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.txn, p.EvalContext().Settings).WithoutNonPublic().Get().Schema(ctx, tableDesc.GetParentSchemaID())
+	if err != nil {
+		return false, err
 	}
 	db := dbContext
 	if db == nil {
