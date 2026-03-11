@@ -87,7 +87,8 @@ func (tds *txnDiagnosticsCollector) ShouldCollect(executionDuration time.Duratio
 		return false
 	}
 
-	return executionDuration >= tds.request.MinExecutionLatency()
+	return executionDuration >= tds.request.MinExecutionLatency() &&
+		(tds.request.MaxExecutionLatency() == 0 || executionDuration <= tds.request.MaxExecutionLatency())
 }
 
 // AddStatementBundle adds a statement diagnostic bundle to the transaction

@@ -35,6 +35,7 @@ type TxnRequest struct {
 	username            string
 	expiresAt           time.Time
 	minExecutionLatency time.Duration
+	maxExecutionLatency time.Duration
 	samplingProbability float64
 }
 
@@ -45,6 +46,7 @@ func NewTxnRequest(
 	username string,
 	expiresAt time.Time,
 	minExecutionLatency time.Duration,
+	maxExecutionLatency time.Duration,
 	samplingProbability float64,
 ) TxnRequest {
 	return TxnRequest{
@@ -54,6 +56,7 @@ func NewTxnRequest(
 		username:            username,
 		expiresAt:           expiresAt,
 		minExecutionLatency: minExecutionLatency,
+		maxExecutionLatency: maxExecutionLatency,
 		samplingProbability: samplingProbability,
 	}
 }
@@ -79,11 +82,15 @@ func (t *TxnRequest) isExpired(now time.Time) bool {
 }
 
 func (t *TxnRequest) IsConditional() bool {
-	return t.minExecutionLatency != 0
+	return t.minExecutionLatency != 0 || t.maxExecutionLatency != 0
 }
 
 func (t *TxnRequest) MinExecutionLatency() time.Duration {
 	return t.minExecutionLatency
+}
+
+func (t *TxnRequest) MaxExecutionLatency() time.Duration {
+	return t.maxExecutionLatency
 }
 
 // TxnDiagnostic is a container for all the diagnostic data that has been
@@ -138,6 +145,7 @@ func (r *TxnRegistry) InsertRequest(
 	stmtFingerprintIDs []appstatspb.StmtFingerprintID,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
+	maxExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 	redacted bool,
 	username string,
@@ -146,7 +154,7 @@ func (r *TxnRegistry) InsertRequest(
 	for i, sf := range stmtFingerprintIDs {
 		stmtFingerprintUintIDs[i] = uint64(sf)
 	}
-	id, err := r.insertTxnRequestInternal(ctx, uint64(txnFingerprintID), stmtFingerprintUintIDs, username, samplingProbability, minExecutionLatency, expiresAfter, redacted)
+	id, err := r.insertTxnRequestInternal(ctx, uint64(txnFingerprintID), stmtFingerprintUintIDs, username, samplingProbability, minExecutionLatency, maxExecutionLatency, expiresAfter, redacted)
 	return int64(id), err
 }
 
@@ -242,11 +250,14 @@ func (r *TxnRegistry) InsertTxnRequest(
 	username string,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
+	maxExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 	redacted bool,
 ) (int, error) {
 	reqId, err := r.insertTxnRequestInternal(
-		ctx, txnFingerprintId, stmtFingerprintIds, username, samplingProbability, minExecutionLatency, expiresAfter, redacted)
+		ctx, txnFingerprintId, stmtFingerprintIds, username, samplingProbability,
+		minExecutionLatency, maxExecutionLatency, expiresAfter, redacted,
+	)
 	return int(reqId), err
 }
 
@@ -257,6 +268,7 @@ func (r *TxnRegistry) insertTxnRequestInternal(
 	username string,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
+	maxExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 	redacted bool,
 ) (reqID RequestID, er error) {
@@ -270,6 +282,21 @@ func (r *TxnRegistry) insertTxnRequestInternal(
 			return reqID, errors.Newf(
 				"got non-zero sampling probability %f and empty min exec latency",
 				samplingProbability)
+		}
+	}
+	if maxExecutionLatency != 0 {
+		if !r.st.Version.IsActive(ctx, clusterversion.V26_2_AddMaxExecutionLatencyToStmtDiag) {
+			return reqID, errors.New(
+				"max_execution_latency is not available until the cluster upgrade to v26.2 is finalized")
+		}
+		if minExecutionLatency == 0 {
+			return reqID, errors.New(
+				"max_execution_latency requires min_execution_latency to be set")
+		}
+		if maxExecutionLatency <= minExecutionLatency {
+			return reqID, errors.Newf(
+				"max_execution_latency (%s) must be greater than min_execution_latency (%s)",
+				maxExecutionLatency, minExecutionLatency)
 		}
 	}
 
@@ -304,6 +331,10 @@ func (r *TxnRegistry) insertTxnRequestInternal(
 		if minExecutionLatency != 0 {
 			insertColumns += ", min_execution_latency"
 			qargs = append(qargs, minExecutionLatency)
+		}
+		if maxExecutionLatency != 0 {
+			insertColumns += ", max_execution_latency"
+			qargs = append(qargs, maxExecutionLatency)
 		}
 		if !expiresAt.IsZero() {
 			insertColumns += ", expires_at"
@@ -354,7 +385,7 @@ func (r *TxnRegistry) insertTxnRequestInternal(
 		r.mu.epoch++
 		r.addTxnRequestInternalLocked(
 			ctx, reqID, txnFingerprintId, stmtFingerprintIds, samplingProbability,
-			minExecutionLatency, expiresAt, redacted, username,
+			minExecutionLatency, maxExecutionLatency, expiresAt, redacted, username,
 		)
 	}()
 
@@ -505,6 +536,7 @@ func (r *TxnRegistry) addTxnRequestInternalLocked(
 	stmtFingerprintsId []uint64,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
+	maxExecutionLatency time.Duration,
 	expiresAt time.Time,
 	redacted bool,
 	username string,
@@ -522,6 +554,7 @@ func (r *TxnRegistry) addTxnRequestInternalLocked(
 		username:            username,
 		expiresAt:           expiresAt,
 		minExecutionLatency: minExecutionLatency,
+		maxExecutionLatency: maxExecutionLatency,
 		samplingProbability: samplingProbability,
 	}
 	r.mu.requests[id] = request
@@ -546,6 +579,14 @@ func (r *TxnRegistry) pollTxnRequests(ctx context.Context) error {
 		return nil
 	}
 
+	hasMaxExecLatency := r.st.Version.IsActive(ctx, clusterversion.V26_2_AddMaxExecutionLatencyToStmtDiag)
+
+	selectColumns := `id, transaction_fingerprint_id, statement_fingerprint_ids,
+		min_execution_latency, expires_at, sampling_probability, redacted, username`
+	if hasMaxExecLatency {
+		selectColumns += `, max_execution_latency`
+	}
+
 	var rows []tree.Datums
 
 	// Loop until we run the query without straddling an epoch increment.
@@ -556,9 +597,10 @@ func (r *TxnRegistry) pollTxnRequests(ctx context.Context) error {
 
 		it, err := r.db.Executor().QueryIteratorEx(ctx, "txn-diag-poll", nil, /* txn */
 			sessiondata.NodeUserSessionDataOverride,
-			`SELECT id, transaction_fingerprint_id, statement_fingerprint_ids, min_execution_latency, expires_at, sampling_probability, redacted, username
+			fmt.Sprintf(`SELECT %s
 				FROM system.transaction_diagnostics_requests
 				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`,
+				selectColumns),
 		)
 		if err != nil {
 			return err
@@ -603,7 +645,7 @@ func (r *TxnRegistry) pollTxnRequests(ctx context.Context) error {
 			stmtFingerprintIds = append(stmtFingerprintIds, stmtFpId)
 		}
 
-		var minExecutionLatency time.Duration
+		var minExecutionLatency, maxExecutionLatency time.Duration
 		var expiresAt time.Time
 		var samplingProbability float64
 		var redacted bool
@@ -621,13 +663,17 @@ func (r *TxnRegistry) pollTxnRequests(ctx context.Context) error {
 		if b, ok := row[6].(*tree.DBool); ok {
 			redacted = bool(*b)
 		}
-
 		if u, ok := row[7].(*tree.DString); ok {
 			username = string(*u)
 		}
+		if hasMaxExecLatency {
+			if maxExecLatency, ok := row[8].(*tree.DInterval); ok {
+				maxExecutionLatency = time.Duration(maxExecLatency.Nanos())
+			}
+		}
 
 		ids.Add(int(id))
-		r.addTxnRequestInternalLocked(ctx, id, txnFingerprintId, stmtFingerprintIds, samplingProbability, minExecutionLatency, expiresAt, redacted, username)
+		r.addTxnRequestInternalLocked(ctx, id, txnFingerprintId, stmtFingerprintIds, samplingProbability, minExecutionLatency, maxExecutionLatency, expiresAt, redacted, username)
 	}
 
 	// Remove all other requests.

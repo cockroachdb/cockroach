@@ -8733,12 +8733,20 @@ specified store on the node it's run from. One of 'mvccGC', 'merge', 'split',
 			Category:         builtinconstants.CategorySystemInfo,
 			DistsqlBlocklist: true, // applicable only on the gateway
 		},
-		makeRequestStatementBundleBuiltinOverload(false /* withPlanGist */, false /* withAntiPlanGist */, false /* redacted */),
-		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, false /* withAntiPlanGist */, false /* redacted */),
-		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, true /* withAntiPlanGist */, false /* redacted */),
-		makeRequestStatementBundleBuiltinOverload(false /* withPlanGist */, false /* withAntiPlanGist */, true /* redacted */),
-		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, false /* withAntiPlanGist */, true /* redacted */),
-		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, true /* withAntiPlanGist */, true /* redacted */),
+		// Original overloads without maxExecutionLatency (backward compatible).
+		makeRequestStatementBundleBuiltinOverload(false /* withPlanGist */, false /* withAntiPlanGist */, false /* withMaxExecutionLatency */, false /* withRedacted */),
+		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, false /* withAntiPlanGist */, false /* withMaxExecutionLatency */, false /* withRedacted */),
+		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, true /* withAntiPlanGist */, false /* withMaxExecutionLatency */, false /* withRedacted */),
+		makeRequestStatementBundleBuiltinOverload(false /* withPlanGist */, false /* withAntiPlanGist */, false /* withMaxExecutionLatency */, true /* withRedacted */),
+		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, false /* withAntiPlanGist */, false /* withMaxExecutionLatency */, true /* withRedacted */),
+		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, true /* withAntiPlanGist */, false /* withMaxExecutionLatency */, true /* withRedacted */),
+		// New overloads with maxExecutionLatency.
+		makeRequestStatementBundleBuiltinOverload(false /* withPlanGist */, false /* withAntiPlanGist */, true /* withMaxExecutionLatency */, false /* withRedacted */),
+		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, false /* withAntiPlanGist */, true /* withMaxExecutionLatency */, false /* withRedacted */),
+		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, true /* withAntiPlanGist */, true /* withMaxExecutionLatency */, false /* withRedacted */),
+		makeRequestStatementBundleBuiltinOverload(false /* withPlanGist */, false /* withAntiPlanGist */, true /* withMaxExecutionLatency */, true /* withRedacted */),
+		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, false /* withAntiPlanGist */, true /* withMaxExecutionLatency */, true /* withRedacted */),
+		makeRequestStatementBundleBuiltinOverload(true /* withPlanGist */, true /* withAntiPlanGist */, true /* withMaxExecutionLatency */, true /* withRedacted */),
 	),
 
 	"crdb_internal.set_compaction_concurrency": makeBuiltin(
@@ -12831,7 +12839,7 @@ func spanToDatum(span roachpb.Span) (tree.Datum, error) {
 }
 
 func makeRequestStatementBundleBuiltinOverload(
-	withPlanGist bool, withAntiPlanGist bool, withRedacted bool,
+	withPlanGist bool, withAntiPlanGist bool, withMaxExecutionLatency bool, withRedacted bool,
 ) tree.Overload {
 	typs := tree.ParamTypes{{Name: "stmtFingerprint", Typ: types.String}}
 	info := `Used to request statement bundle for a given statement fingerprint
@@ -12852,8 +12860,14 @@ true, then any plan other then the specified gist will be used`
 	typs = append(typs, tree.ParamTypes{
 		{Name: "samplingProbability", Typ: types.Float},
 		{Name: "minExecutionLatency", Typ: types.Interval},
-		{Name: "expiresAfter", Typ: types.Interval},
 	}...)
+	if withMaxExecutionLatency {
+		typs = append(typs, tree.ParamType{Name: "maxExecutionLatency", Typ: types.Interval})
+		info += `. If 'maxExecutionLatency' is set,
+only executions with latency between minExecutionLatency and
+maxExecutionLatency will be collected`
+	}
+	typs = append(typs, tree.ParamType{Name: "expiresAfter", Typ: types.Interval})
 	if withRedacted {
 		typs = append(typs, tree.ParamType{Name: "redacted", Typ: types.Bool})
 		info += `. If 'redacted'
@@ -12870,34 +12884,42 @@ argument is true, then the bundle will be redacted`
 			stmtFingerprint := string(tree.MustBeDString(args[0]))
 			var planGist string
 			var antiPlanGist bool
-			spIdx, melIdx, eaIdx := 1, 2, 3
+			idx := 1
 			if withPlanGist {
-				if args[1] != tree.DNull {
-					planGist = string(tree.MustBeDString(args[1]))
+				if args[idx] != tree.DNull {
+					planGist = string(tree.MustBeDString(args[idx]))
 				}
-				spIdx, melIdx, eaIdx = 2, 3, 4
+				idx++
 				if withAntiPlanGist {
-					if args[2] != tree.DNull {
-						antiPlanGist = bool(tree.MustBeDBool(args[2]))
+					if args[idx] != tree.DNull {
+						antiPlanGist = bool(tree.MustBeDBool(args[idx]))
 					}
-					spIdx, melIdx, eaIdx = 3, 4, 5
+					idx++
 				}
 			}
 			var samplingProbability float64
-			if args[spIdx] != tree.DNull {
-				samplingProbability = float64(tree.MustBeDFloat(args[spIdx]))
+			if args[idx] != tree.DNull {
+				samplingProbability = float64(tree.MustBeDFloat(args[idx]))
 			}
-			var minExecutionLatency, expiresAfter time.Duration
-			if args[melIdx] != tree.DNull {
-				minExecutionLatency = time.Duration(tree.MustBeDInterval(args[melIdx]).Nanos())
+			idx++
+			var minExecutionLatency, maxExecutionLatency, expiresAfter time.Duration
+			if args[idx] != tree.DNull {
+				minExecutionLatency = time.Duration(tree.MustBeDInterval(args[idx]).Nanos())
 			}
-			if args[eaIdx] != tree.DNull {
-				expiresAfter = time.Duration(tree.MustBeDInterval(args[eaIdx]).Nanos())
+			idx++
+			if withMaxExecutionLatency {
+				if args[idx] != tree.DNull {
+					maxExecutionLatency = time.Duration(tree.MustBeDInterval(args[idx]).Nanos())
+				}
+				idx++
+			}
+			if args[idx] != tree.DNull {
+				expiresAfter = time.Duration(tree.MustBeDInterval(args[idx]).Nanos())
 			}
 			var redacted bool
 			if withRedacted {
-				if args[eaIdx+1] != tree.DNull {
-					redacted = bool(tree.MustBeDBool(args[eaIdx+1]))
+				if args[idx+1] != tree.DNull {
+					redacted = bool(tree.MustBeDBool(args[idx+1]))
 				}
 			}
 			var username string
@@ -12930,6 +12952,7 @@ argument is true, then the bundle will be redacted`
 				antiPlanGist,
 				samplingProbability,
 				minExecutionLatency,
+				maxExecutionLatency,
 				expiresAfter,
 				redacted,
 				username,

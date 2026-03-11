@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -107,6 +108,7 @@ type Request struct {
 	antiPlanGist        bool
 	samplingProbability float64
 	minExecutionLatency time.Duration
+	maxExecutionLatency time.Duration
 	expiresAt           time.Time
 	redacted            bool
 	username            string
@@ -128,7 +130,7 @@ func (r *Request) isExpired(now time.Time) bool {
 }
 
 func (r *Request) isConditional() bool {
-	return r.minExecutionLatency != 0
+	return r.minExecutionLatency != 0 || r.maxExecutionLatency != 0
 }
 
 // continueCollecting returns true if we want to continue collecting bundles for
@@ -195,6 +197,7 @@ func (r *Registry) addRequestInternalLocked(
 	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
+	maxExecutionLatency time.Duration,
 	expiresAt time.Time,
 	redacted bool,
 	username string,
@@ -212,6 +215,7 @@ func (r *Registry) addRequestInternalLocked(
 		antiPlanGist:        antiPlanGist,
 		samplingProbability: samplingProbability,
 		minExecutionLatency: minExecutionLatency,
+		maxExecutionLatency: maxExecutionLatency,
 		expiresAt:           expiresAt,
 		redacted:            redacted,
 		username:            username,
@@ -251,13 +255,14 @@ func (r *Registry) InsertRequest(
 	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
+	maxExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 	redacted bool,
 	username string,
 ) error {
 	_, err := r.insertRequestInternal(
 		ctx, stmtFingerprint, planGist, antiPlanGist, samplingProbability,
-		minExecutionLatency, expiresAfter, redacted, username,
+		minExecutionLatency, maxExecutionLatency, expiresAfter, redacted, username,
 	)
 	return err
 }
@@ -269,6 +274,7 @@ func (r *Registry) insertRequestInternal(
 	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
+	maxExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 	redacted bool,
 	username string,
@@ -283,6 +289,21 @@ func (r *Registry) insertRequestInternal(
 			return 0, errors.Newf(
 				"got non-zero sampling probability %f and empty min exec latency",
 				samplingProbability)
+		}
+	}
+	if maxExecutionLatency != 0 {
+		if !r.st.Version.IsActive(ctx, clusterversion.V26_2_AddMaxExecutionLatencyToStmtDiag) {
+			return 0, errors.New(
+				"max_execution_latency is not available until the cluster upgrade to v26.2 is finalized")
+		}
+		if minExecutionLatency == 0 {
+			return 0, errors.New(
+				"max_execution_latency requires min_execution_latency to be set")
+		}
+		if maxExecutionLatency <= minExecutionLatency {
+			return 0, errors.Newf(
+				"max_execution_latency (%s) must be greater than min_execution_latency (%s)",
+				maxExecutionLatency, minExecutionLatency)
 		}
 	}
 
@@ -315,7 +336,7 @@ func (r *Registry) insertRequestInternal(
 
 		now := timeutil.Now()
 		insertColumns := "statement_fingerprint, requested_at"
-		qargs := make([]interface{}, 2, 9)
+		qargs := make([]interface{}, 2, 10)
 		qargs[0] = stmtFingerprint // statement_fingerprint
 		qargs[1] = now             // requested_at
 		if planGist != "" {
@@ -330,6 +351,10 @@ func (r *Registry) insertRequestInternal(
 		if minExecutionLatency != 0 {
 			insertColumns += ", min_execution_latency"
 			qargs = append(qargs, minExecutionLatency) // min_execution_latency
+		}
+		if maxExecutionLatency != 0 {
+			insertColumns += ", max_execution_latency"
+			qargs = append(qargs, maxExecutionLatency) // max_execution_latency
 		}
 		if expiresAfter != 0 {
 			insertColumns += ", expires_at"
@@ -377,7 +402,7 @@ func (r *Registry) insertRequestInternal(
 		r.mu.epoch++
 		r.addRequestInternalLocked(
 			ctx, reqID, stmtFingerprint, planGist, antiPlanGist, samplingProbability,
-			minExecutionLatency, expiresAt, redacted, username,
+			minExecutionLatency, maxExecutionLatency, expiresAt, redacted, username,
 		)
 	}()
 
@@ -413,9 +438,12 @@ func (r *Registry) CancelRequest(ctx context.Context, requestID int64) error {
 }
 
 // IsConditionSatisfied returns whether the completed request satisfies its
-// condition.
+// condition. The condition is satisfied when:
+//   - execLatency >= minExecutionLatency, AND
+//   - maxExecutionLatency is zero (no upper bound) OR execLatency <= maxExecutionLatency.
 func (r *Registry) IsConditionSatisfied(req Request, execLatency time.Duration) bool {
-	return req.minExecutionLatency <= execLatency
+	return req.minExecutionLatency <= execLatency &&
+		(req.maxExecutionLatency == 0 || execLatency <= req.maxExecutionLatency)
 }
 
 // MaybeRemoveRequest checks whether the request needs to be removed from the
@@ -677,6 +705,14 @@ func (r *Registry) innerInsertStatementDiagnostics(
 func (r *Registry) pollStmtRequests(ctx context.Context) error {
 	var rows []tree.Datums
 
+	hasMaxExecLatency := r.st.Version.IsActive(ctx, clusterversion.V26_2_AddMaxExecutionLatencyToStmtDiag)
+
+	selectColumns := `id, statement_fingerprint, min_execution_latency, expires_at,
+		sampling_probability, plan_gist, anti_plan_gist, redacted, username`
+	if hasMaxExecLatency {
+		selectColumns += `, max_execution_latency`
+	}
+
 	// Loop until we run the query without straddling an epoch increment.
 	for {
 		r.mu.Lock()
@@ -685,9 +721,10 @@ func (r *Registry) pollStmtRequests(ctx context.Context) error {
 
 		it, err := r.db.Executor().QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
 			sessiondata.NodeUserSessionDataOverride,
-			`SELECT id, statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username
+			fmt.Sprintf(`SELECT %s
 				FROM system.statement_diagnostics_requests
 				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`,
+				selectColumns),
 		)
 		if err != nil {
 			return err
@@ -718,7 +755,7 @@ func (r *Registry) pollStmtRequests(ctx context.Context) error {
 	for _, row := range rows {
 		id := RequestID(*row[0].(*tree.DInt))
 		stmtFingerprint := string(*row[1].(*tree.DString))
-		var minExecutionLatency time.Duration
+		var minExecutionLatency, maxExecutionLatency time.Duration
 		var expiresAt time.Time
 		var samplingProbability float64
 		var planGist, username string
@@ -750,8 +787,13 @@ func (r *Registry) pollStmtRequests(ctx context.Context) error {
 		if u, ok := row[8].(*tree.DString); ok {
 			username = string(*u)
 		}
+		if hasMaxExecLatency {
+			if maxExecLatency, ok := row[9].(*tree.DInterval); ok {
+				maxExecutionLatency = time.Duration(maxExecLatency.Nanos())
+			}
+		}
 		ids.Add(int(id))
-		r.addRequestInternalLocked(ctx, id, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, expiresAt, redacted, username)
+		r.addRequestInternalLocked(ctx, id, stmtFingerprint, planGist, antiPlanGist, samplingProbability, minExecutionLatency, maxExecutionLatency, expiresAt, redacted, username)
 	}
 
 	// Remove all other requests.
