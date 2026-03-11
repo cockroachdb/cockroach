@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/indexrec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -477,6 +478,23 @@ func (oc *optCatalog) CheckExecutionPrivilege(
 		return errors.WithAssertionFailure(err)
 	}
 	return oc.planner.CheckPrivilegeForUser(ctx, desc, privilege.EXECUTE, user)
+}
+
+// TryRewriteWithStmtHints is part of the cat.Catalog interface.
+func (oc *optCatalog) TryRewriteWithStmtHints(
+	ctx context.Context, fingerprint string, ast tree.Statement, fmtFlags tree.FmtFlags,
+) tree.Statement {
+	hintCache := oc.planner.execCfg.StatementHintsCache
+	if hintCache == nil {
+		return ast
+	}
+	stmtHints, hintIDs := hintCache.MaybeGetStatementHints(ctx, fingerprint, fmtFlags)
+	if injected := hints.TryInjectHints(
+		ctx, stmtHints, hintIDs, ast, nil /* wrapperAST */, fmtFlags,
+	); injected != nil {
+		return injected
+	}
+	return ast
 }
 
 // HasAdminRole is part of the cat.Catalog interface.
