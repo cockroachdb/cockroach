@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -345,7 +346,11 @@ func (a *allocatorState) ComputeChanges(
 		passObs = a.preparePassMetricsAndLoggerLocked(ctx, opts.LocalStoreID)
 	}
 	re := newRebalanceEnv(a.cs, a.rand, a.diversityScoringMemo, a.cs.ts.Now(), passObs)
+	re.mmaid++
+	ctx = logtags.AddTag(ctx, "mmaid", re.mmaid)
 	if opts.IncludeRepair {
+		// The return value is intentionally discarded: repair() appends to
+		// re.changes, and rebalanceStores() returns the same accumulated slice.
 		re.repair(ctx, opts.LocalStoreID)
 	}
 	return re.rebalanceStores(ctx, opts.LocalStoreID)

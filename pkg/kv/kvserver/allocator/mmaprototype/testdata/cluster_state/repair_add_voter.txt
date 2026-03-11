@@ -22,9 +22,9 @@ AddVoter: r1
 # s2 (zone=b) and s3 (zone=c) are equally diverse; one is chosen at random.
 repair store-id=1
 ----
-[mmaid=1] applying replica change r1 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL) to range 1 on store 3
-[mmaid=1] addPendingRangeChange: change_id=1, range_id=1, change=r1 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL)
-[mmaid=1] result(success): AddVoter repair for r1, adding voter on s3
+applying replica change r1 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL) to range 1 on store 3
+addPendingRangeChange: change_id=1, range_id=1, change=r1 type: AddReplica target store n3,s3 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL)
+result(success): AddVoter repair for r1, adding voter on s3
 pending(1)
 change-id=1 store-id=3 node-id=3 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s
   prev=(replica-id=none type=VOTER_FULL)
@@ -53,9 +53,9 @@ AddVoter: r1
 # s2 (zone=b) is the only remaining candidate.
 repair store-id=1
 ----
-[mmaid=2] applying replica change r1 type: AddReplica target store n2,s2 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL) to range 1 on store 2
-[mmaid=2] addPendingRangeChange: change_id=2, range_id=1, change=r1 type: AddReplica target store n2,s2 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL)
-[mmaid=2] result(success): AddVoter repair for r1, adding voter on s2
+applying replica change r1 type: AddReplica target store n2,s2 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL) to range 1 on store 2
+addPendingRangeChange: change_id=2, range_id=1, change=r1 type: AddReplica target store n2,s2 (replica-id=none type=VOTER_FULL)->(replica-id=unknown type=VOTER_FULL)
+result(success): AddVoter repair for r1, adding voter on s2
 pending(2)
 change-id=1 store-id=3 node-id=3 range-id=1 load-delta=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s enacted=0s
   prev=(replica-id=none type=VOTER_FULL)

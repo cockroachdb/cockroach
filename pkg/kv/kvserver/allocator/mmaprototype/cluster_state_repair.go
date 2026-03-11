@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 )
 
@@ -547,9 +546,6 @@ func (re *rebalanceEnv) promoteNonVoterToVoter(
 func (re *rebalanceEnv) repair(
 	ctx context.Context, localStoreID roachpb.StoreID,
 ) []ExternalRangeChange {
-	re.mmaid++
-	ctx = logtags.AddTag(ctx, "mmaid", re.mmaid)
-
 	// Iterate repair actions in priority order (lower enum = higher priority).
 	// Start at 1: RepairAction(0) is intentionally invalid (see enum definition).
 	for action := RepairAction(1); action < numRepairActions; action++ {
