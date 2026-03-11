@@ -1226,6 +1226,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	statsRefresher := stats.MakeRefresher(
 		cfg.AmbientCtx,
 		cfg.Settings,
+		codec,
 		internalDB,
 		execCfg.TableStatsCache,
 		stats.DefaultAsOfTime,
