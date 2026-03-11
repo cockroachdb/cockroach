@@ -58,6 +58,32 @@ func TestBackupSucceededUpdatesMetrics(t *testing.T) {
 		verifyRPOTenantMetricLabels(t, executor.metrics.RpoTenantMetric, expectedTenantIDs)
 		verifyRPOTenantMetricGaugeValue(t, executor.metrics.RpoTenantMetric, details.EndTime)
 	})
+
+	t.Run("tenant backup does not update RPO metric", func(t *testing.T) {
+		// Use a fresh executor to ensure RpoMetric starts at zero.
+		freshExecutor := &scheduledBackupExecutor{
+			metrics: backupMetrics{
+				RpoMetric:       metric.NewGauge(metric.Metadata{}),
+				RpoTenantMetric: metric.NewExportedGaugeVec(metric.Metadata{}, []string{"tenant_id"}),
+			},
+		}
+		schedule := createSchedule(t, true)
+		tenantIDs := mustMakeTenantIDs(t, 2)
+		endTime := hlc.Timestamp{WallTime: hlc.UnixNano()}
+		details := jobspb.BackupDetails{
+			EndTime:           endTime,
+			SpecificTenantIds: tenantIDs,
+		}
+
+		err := freshExecutor.backupSucceeded(ctx, nil, schedule, details, nil)
+		require.NoError(t, err)
+
+		// RpoMetric should NOT be updated for tenant-specific backups.
+		require.Equal(t, int64(0), freshExecutor.metrics.RpoMetric.Value())
+		// But RpoTenantMetric should be updated.
+		verifyRPOTenantMetricLabels(t, freshExecutor.metrics.RpoTenantMetric, []string{"2"})
+		verifyRPOTenantMetricGaugeValue(t, freshExecutor.metrics.RpoTenantMetric, details.EndTime)
+	})
 }
 
 func TestBackupFailedUpdatesMetrics(t *testing.T) {
