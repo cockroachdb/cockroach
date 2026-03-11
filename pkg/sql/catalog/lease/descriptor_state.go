@@ -133,6 +133,9 @@ func (t *descriptorState) upsertLeaseLocked(
 	session sqlliveness.Session,
 	regionEnumPrefix []byte,
 ) (createdDescriptorVersionState *descriptorVersionState, toRelease *storedLease, _ error) {
+	if fn := t.m.testingKnobs.TestingLeaseUpsertEventForID; fn != nil {
+		fn(desc.GetID(), desc.GetVersion(), "attempting")
+	}
 	if t.mu.maxVersionSeen < desc.GetVersion() {
 		t.mu.maxVersionSeen = desc.GetVersion()
 	}
