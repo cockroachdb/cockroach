@@ -674,6 +674,6 @@ load("//build:pgo.bzl", "pgo_profile")
 
 pgo_profile(
     name = "pgo_profile",
-    sha256 = "5a23c5b33325d5fc3dfa4e67d872aa8371756f8e4f8f159509e8cc522c298cb2",
-    url = "https://storage.googleapis.com/cockroach-profiles/20251204202750-818ff5108cdb1f16f69b3d915acdb4f669b848eb.pb.gz",
+    sha256 = "1b202e1c594966bf1aa679b50fe467634ad7fdf0d719966873214a1eb7d8d8d8",
+    url = "https://storage.googleapis.com/cockroach-profiles/20260311044914-327bfa5a9d46937117f45aa48762f9fb2b364598.pb.gz",
 )
