@@ -120,6 +120,8 @@ type cdcTester struct {
 	// sinkType -> sinkURI
 	sinkCache map[sinkType]string
 
+	kafkaManager *kafkaManager
+
 	workloadWg *sync.WaitGroup
 	doneCh     chan struct{}
 }
@@ -282,10 +284,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		kafka, _ := setupKafka(ct.ctx, ct.t, ct.cluster, ct.sinkNodes)
 		kafka.mon = ct.mon
 		kafka.validateOrder = args.kafkaArgs.validateOrder
-
-		if err := kafka.startTopicConsumers(ct.ctx, args.targets, ct.doneCh); err != nil {
-			ct.t.Fatal(err)
-		}
+		ct.kafkaManager = &kafka
 
 		if args.kafkaArgs.kafkaChaos {
 			ct.mon.Go(func(ctx context.Context) error {
@@ -631,6 +630,14 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 	}
 
 	ct.t.Status(fmt.Sprintf("created changefeed %s with jobID %d", cj.Label(), jobID))
+
+	// Start topic consumers after the changefeed has been created so that the
+	// Kafka topics exist.
+	if ct.kafkaManager != nil {
+		if err := ct.kafkaManager.startTopicConsumers(ct.ctx, args.targets, ct.doneCh); err != nil {
+			ct.t.Fatal(err)
+		}
+	}
 
 	return cj
 }
