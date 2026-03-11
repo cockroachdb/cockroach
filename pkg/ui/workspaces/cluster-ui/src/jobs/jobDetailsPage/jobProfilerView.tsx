@@ -161,22 +161,32 @@ function makeJobProfilerViewColumns(
               size="small"
               intent="tertiary"
               className={cx("view-execution-detail-button")}
-              onClick={() => {
-                const req =
-                  new cockroach.server.serverpb.GetJobProfilerExecutionDetailRequest(
-                    {
-                      job_id: jobID,
-                      filename: executionDetailFile,
-                    },
-                  );
-                onDownloadExecutionFileClicked(req).then(resp => {
+              onClick={async () => {
+                // Open the window synchronously to avoid popup blockers.
+                // Async calls to window.open() are blocked by most browsers.
+                const newWindow = window.open("", "_blank");
+                try {
+                  const req =
+                    new cockroach.server.serverpb.GetJobProfilerExecutionDetailRequest(
+                      {
+                        job_id: jobID,
+                        filename: executionDetailFile,
+                      },
+                    );
+                  const resp = await onDownloadExecutionFileClicked(req);
                   const type = getContentTypeForFile(executionDetailFile);
-                  const executionFileBytes = new Blob([resp?.data], {
+                  const blob = new Blob([resp?.data], {
                     type: type,
                   });
-                  const url = URL.createObjectURL(executionFileBytes);
-                  window.open(url, "_blank");
-                });
+                  const url = URL.createObjectURL(blob);
+                  if (newWindow) {
+                    newWindow.location.href = url;
+                  }
+                } catch {
+                  if (newWindow) {
+                    newWindow.close();
+                  }
+                }
               }}
             >
               <Icon iconName="Open" />
