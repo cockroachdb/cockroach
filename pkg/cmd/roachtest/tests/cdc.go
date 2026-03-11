@@ -254,6 +254,18 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		kafka.mon = ct.mon
 		kafka.validateOrder = args.kafkaArgs.validateOrder
 
+		// Manually create Kafka topics so that topic consumers can start
+		// without racing on auto-creation by the changefeed.
+		for _, target := range args.targets {
+			topic := target
+			if i := strings.LastIndex(topic, "."); i != -1 {
+				topic = topic[i+1:]
+			}
+			if err := kafka.createTopic(ct.ctx, topic); err != nil {
+				ct.t.Fatal(err)
+			}
+		}
+
 		if err := kafka.startTopicConsumers(ct.ctx, args.targets, ct.doneCh); err != nil {
 			ct.t.Fatal(err)
 		}
@@ -2835,10 +2847,10 @@ CONFIGURE ZONE USING
 			// topics that changefeeds need but not for all topics on the kafka
 			// cluster. The test verifies the work by 1. creating lots of random kafka
 			// topics on the kafka cluster 2. running some tpcc workload with a
-			// changefeed configured to watch all tpcc tables (note that cdc creates
-			// kafka topics for every target tables internally) 3. assert that
-			// changefeed only fetches metadata for tpcc tables but not for other
-			// random topics created in 1.
+			// changefeed configured to watch all tpcc tables (note that even though
+			// cdc creates kafka topics for every target table internally, we create
+			// them ourselves to avoid a race) 3. assert that changefeed only fetches
+			// metadata for tpcc tables but not for other random topics created in 1.
 
 			// Run minimal level of tpcc workload and changefeed.
 			ct.runTPCCWorkload(tpccArgs{warehouses: 1, duration: "30s"})
