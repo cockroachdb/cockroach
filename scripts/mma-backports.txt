@@ -1,0 +1,298 @@
+================================================================
+MMA Backport Candidates: master -> release-26.1
+================================================================
+
+Total MMA-related PRs on master since branch split: 184
+Already backported: 94
+Ignored (skipped):  78
+NOT YET backported: 12
+
+----------------------------------------------------------------
+PRs NOT YET backported (in cherry-pick order, oldest first)
+----------------------------------------------------------------
+
+  Legend: [P]=path-based  [T]=title-based  [A]=author-based  [B]=both(P+T)
+
+   1. [B] #165284  559db16d29c  kvserver/mmaprototype: add BenchmarkRebalanceStores
+            https://github.com/cockroachdb/cockroach/pull/165284
+   2. [B] #165809  c6808c599b0  kvserver: add timeout to mma change application
+            https://github.com/cockroachdb/cockroach/pull/165809
+   3. [A] #165450  4c123b411ff  kvnemesis: add MVCC GC operation to KVNemesis
+            https://github.com/cockroachdb/cockroach/pull/165450
+   4. [A] #166328  9fc2f395971  replicastats: removed an unnecessary indirection in `replicaStatsRecord`
+            https://github.com/cockroachdb/cockroach/pull/166328
+   5. [A] #166419  7b2d2cff0dc  roachtest: enable Go execution traces in kv/restart/nodes=12
+            https://github.com/cockroachdb/cockroach/pull/166419
+   6. [B] #166148  d8f2867dd26  allocator/mmaprototype: add test for non-voter WB rebalancing
+            https://github.com/cockroachdb/cockroach/pull/166148
+   7. [B] #162182  7ae2fd949c0  mmaprototype: balance CPU on utilization
+            https://github.com/cockroachdb/cockroach/pull/162182
+   8. [A] #166421  630fc2d636f  roachtest: enable Go execution traces in kv/splits
+            https://github.com/cockroachdb/cockroach/pull/166421
+   9. [A] #166306  4324c93284f  server: add cluster setting to disable GC assist
+            https://github.com/cockroachdb/cockroach/pull/166306
+  10. [A] #166532  0e4c792e661  investigate: analyze heap profiles on OOM failures
+            https://github.com/cockroachdb/cockroach/pull/166532
+  11. [A] #166423  7fdcb3c57fa  roachtest: add Datadog Logs link to GitHub issues
+            https://github.com/cockroachdb/cockroach/pull/166423
+  12. [A] #166560  3b786c5c307  tsdump2duck: add CLI tool to convert tsdump.gob to DuckDB SQL
+            https://github.com/cockroachdb/cockroach/pull/166560
+
+----------------------------------------------------------------
+PRs ignored (add/remove in IGNORED_PRS dict)
+----------------------------------------------------------------
+  #159047  a747b7593c9  roachprod: allow multi-store local cluster
+       reason: author-based: roachprod multi-store local cluster
+  #159005  74642a6fd66  kvserver: lower slow latch request threshold to 2s for nodeliveness rng
+       reason: author-based: kvserver slow latch threshold tweak
+  #159063  da00462b261  gen-cockroach-metrics: tweak a regexp
+       reason: author-based: gen-cockroach-metrics regexp tweak
+  #159376  3c4d785cc6a  admission: improve the help string of the exhausted_duration metrics
+       reason: author-based: admission exhausted_duration help string
+  #159406  41b785ea1e3  admission: small cleanup to SnapshotQueue
+       reason: author-based: admission SnapshotQueue cleanup
+  #159440  717b1214610  admission: use counter type for admission.elastic_cpu.nanos_exhausted…
+       reason: author-based: admission elastic_cpu counter type fix
+  #159518  53e36dbe073  roachtest: wait for rapid-restart termination
+       reason: author-based: roachtest rapid-restart termination wait
+  #158629  19cdd02126e  storeliveness: introduce and implement the SupportStatus interface
+       reason: storeliveness infrastructure, not MMA-specific
+  #159819  f50ee9dc7b9  cmd: add ghsearchdump and ghweeklysummary
+       reason: author-based: cmd ghsearchdump and ghweeklysummary
+  #160541  1f4923679b0  kvserver: simplify split/replicate trace tests
+       reason: author-based: kvserver split/replicate trace test simplification
+  #160617  878e4b94b04  ghweeklysummary: fix PR fetch limit logic
+       reason: author-based: ghweeklysummary PR fetch limit fix
+  #159917  f3f12a67849  admission: move yielding into ElasticCPUWorkHandle
+       reason: author-based: admission ElasticCPUWorkHandle yielding
+  #159436  c49126f29dd  admission,kvserver: allow specification of a min-rate for snapshot disk writes
+       reason: author-based: admission/kvserver snapshot disk write min-rate
+  #160654  2b9d89f2054  roachtest/kv_rangefeed: increase node cpu from 8 to 16
+       reason: author-based: roachtest kv_rangefeed node cpu increase
+  #160702  4dcc5e8e80e  rangefeed: fix BenchmarkEventQueueMPSC allocation profile
+       reason: author-based: rangefeed benchmark allocation fix
+  #160681  fb55c17cba9  roachprod-microbench: use markdown checklist for regression issues
+       reason: author-based: roachprod-microbench markdown checklist
+  #159925  10f40a3afb9  kvserver: permit yielding for read requests evaluating without latches
+       reason: author-based: kvserver read request yielding without latches
+  #158639  33c53dd564a  storepool: consider StoreLiveness status when determining suspect stores
+       reason: storepool StoreLiveness suspect-store detection, shared SMA/MMA infra
+  #160655  09a7a7b43cd  cmd/ghsearchdump: update search query to include date range and update prompt
+       reason: author-based: cmd/ghsearchdump search query update
+  #160923  de16d1648f2  cmd/ghsearchdump: update format to include inline links
+       reason: author-based: cmd/ghsearchdump format update
+  #160947  6fb3814bbb5  kvcoord: fix nil pointer panic in BenchmarkTxnWriteBuffer
+       reason: author-based: kvcoord BenchmarkTxnWriteBuffer nil panic fix
+  #161013  0c3c32da394  kvcoord: skip TestDistSenderCircuitBreakerModes UnderDuress
+       reason: author-based: kvcoord skip test UnderDuress
+  #161007  01b407c9956  admission: improve commentary and naming for disk bandwidth limiter
+       reason: author-based: admission disk bandwidth limiter naming
+  #161111  c0d6be3b5b9  workload: allow rows=0 for workload
+       reason: author-based: workload allow rows=0
+  #161091  213837425b4  admission: fix typo in metric help text
+       reason: author-based: admission metric help text typo
+  #161030  10703dd9b32  admission: add disk bandwidth exhausted metric
+       reason: author-based: admission disk bandwidth exhausted metric
+  #161082  6c12e07fd3d  admission: incorporate bandwidth overload to tick faster
+       reason: author-based: admission bandwidth overload tick faster
+  #159352  e6145612f7b  server: allow on-demand goroutine dumps
+       reason: author-based: server on-demand goroutine dumps
+  #161195  fd8129a1c15  kvserver: do not use StoreLiveness as a signal to mark stores as dead
+       reason: storepool deadness signal change, shared SMA/MMA infra
+  #161229  6bf0f9778f3  sql,roachtest: unskip locality-related tests
+       reason: false positive: sql/roachtest locality tests, not MMA-related
+  #161132  2f44cee2121  admission: refactor error accounting logic and prepare for logic change
+       reason: author-based: admission error accounting refactor
+  #161217  97e48cc1bc4  admission: smooth out disk bandwidth error accounting
+       reason: author-based: admission disk bandwidth error smoothing
+  #161173  8a4f4cd6100  kvserver,storage: fix incoming handling of snapshots with shared/external ssts
+       reason: author-based: kvserver/storage snapshot shared/external sst fix
+  #161266  b622cdd9e8f  kvflowcontrol: increase log verbosity from level 1 to level 2
+       reason: author-based: kvflowcontrol log verbosity increase
+  #161081  c150609232a  storeliveness: use StateUnknown for stale SupportState after restart
+       reason: storeliveness SupportState fix, not MMA-specific
+  #161427  c150609232a  admission: wrap context errors
+       reason: author-based: admission wrap context errors
+  #161511  a21482d70b2  roachtest: Fixed some formatting nits
+       reason: author-based: roachtest formatting nits
+  #161652  bd57614e1f0  scripts: Change scripts/gceworker.sh to trim username lengths to 32
+       reason: author-based: scripts gceworker.sh username length trim
+  #161517  17c82d0e79c  cmd/kv: add datadoggen
+       reason: author-based: cmd/kv datadoggen
+  #161684  62b42d562de  sniffarg: fix parsing for - string flags
+       reason: author-based: sniffarg flag parsing fix
+  #161457  a47c92a7669  execinfra: fix inconsistent spelling in same sentence
+       reason: author-based: execinfra spelling fix
+  #161778  01a893ef768  .cursor: remove main.mdc
+       reason: author-based: .cursor remove main.mdc
+  #161782  7a86f736b64  CLAUDE.md: update
+       reason: author-based: CLAUDE.md update
+  #161285  9eef0da004a  roachtest: test secondary stores get bootstrapped with correct metrics
+       reason: author-based: roachtest secondary store metrics bootstrap
+  #161899  9dabc0410fe  schedulerlatency: fix runtimeHistogram to use cumulative counts
+       reason: author-based: schedulerlatency runtimeHistogram fix
+  #161956  41b39530fa4  schedulerlatency: rename runtimeHistogram.counts to .windowedCounts
+       reason: author-based: schedulerlatency rename windowedCounts
+  #161957  eaf9449eb14  CLAUDE.md: improve principles around comments
+       reason: author-based: CLAUDE.md improve comment principles
+  #162285  e4700ffda49  kvserver: remove kv.Sender implementation from Store, Stores, Replica
+       reason: author-based: kvserver remove kv.Sender from Store/Stores/Replica
+  #162136  8f2f323e1f6  kvadmission: plumb RaftAdmissionMeta via explicit parameter instead o…
+       reason: author-based: kvadmission RaftAdmissionMeta plumbing
+  #161656  9ec84f6a9e8  tests: add a single node index backfill, disk bandwidth limiting test
+       reason: author-based: tests index backfill disk bandwidth limiting
+  #162599  2e3c134ac5f  server: add store ID tag to MMA ProcessStoreLoadMsg context
+       reason: reverted by #163138, net zero
+  #163138  a8ae47a1815  Revert "server: add store ID tag to MMA ProcessStoreLoadMsg context"
+       reason: revert of #162599, net zero
+  #157015  0d72a2c2f2d  kvserver: improve obs in load based splits
+       reason: author-based: kvserver load-based splits observability
+  #162076  9c3ec933aa9  microbench-ci: tweak repro instructions
+       reason: author-based: microbench-ci repro instructions
+  #162086  a00c371b255  roachprod: extend gce machine type for heterogeneous clusters
+       reason: author-based: extend gce machine type for heterogeneous clusters
+  #163493  a3a5ac4391f  kvserver: fix stuck merge-pending replicas in GC queue
+       reason: author-based: fix stuck merge-pending replicas in GC queue
+  #161952  60e70b591e9  sql,admission: support cpu reporting and admission
+       reason: SQL CPU: sql,admission: support cpu reporting and admission
+  #163272  7979ee6ac1e  kvserver: add diagnostic logging for stuck leadership transfers
+       reason: author-based: add diagnostic logging for stuck leadership transfers
+  #163834  67739f567c6  status: add major and minor version labels to build.timestamp metric
+       reason: author-based: add major and minor version labels to build.timestamp metric
+  #163592  aacaa3890d5  load: extract cumulativeDelta helper from recordCPUUsage
+       reason: SQL CPU: load: extract cumulativeDelta helper from recordCPUUsage
+  #164300  75195d25a58  kvserver: split TestReplicateQueueSeesLearnerOrJointConfig into two
+       reason: author-based: split TestReplicateQueueSeesLearnerOrJointConfig into two
+  #164428  9c937767859  disk: add collectInstantaneous to defaultCollector
+       reason: author-based: add collectInstantaneous to defaultCollector
+  #164303  0569a6211f4  closedts: increase timing threshold in TestPaceUpdateSignalling
+       reason: author-based: increase timing threshold in TestPaceUpdateSignalling
+  #164145  453127a3488  kvserver: reject lease transfers to replicas with send queues
+       reason: author-based: reject lease transfers to replicas with send queues
+  #164508  c034c95bc9c  kvserver: skip TestLeaseTransferReplicatesLocks under duress
+       reason: author-based: skip TestLeaseTransferReplicatesLocks under duress
+  #164510  e2e6f16e3ba  roachtest: bump backup perturbation threshold from 5x to 15x
+       reason: author-based: bump backup perturbation threshold from 5x to 15x
+  #164312  93672d80257  kvserver: deflake TestLeaseTransferReplicatesLocks
+       reason: author-based: deflake TestLeaseTransferReplicatesLocks
+  #164549  7fcda789109  mmaprototype: add MMA investigator Claude Code skill
+       reason: adds a claude skill, doesn't need to be backported
+  #164753  607a7a56cb2  *: delete accidentally committed executable
+       reason: author-based: delete accidentally committed executable
+  #164730  5a632aefcd2  claude: rewrite redactability rule for better triggering
+       reason: author-based: rewrite redactability rule for better triggering
+  #164813  4c3d2638a6e  claude: add review-crdb skill
+       reason: author-based: add review-crdb skill
+  #165003  eb4a2e5038f  mmaintegration: add SQL-aware decomposition to physical CPU model
+       reason: SQL CPU: mmaintegration: add SQL-aware decomposition to physical CPU model
+  #164827  629c4cb74fa  admission: promote key admission control metrics to Essential
+       reason: author-based: promote key admission control metrics to Essential
+  #164970  466cc69f76f  spanconfig: cleanup unused spans introduced in e5a3e0029cf
+       reason: removes unused spans, unrelated to MMA
+  #165333  c70a1b9f9cd  allocatorimpl: fix domain store list in bestStoreToMinimizeLoadDelta
+       reason: fix for a long standing issue in SMA that needs to bake more
+  #165415  18ee8efc390  ci: add feedback footer to /investigate findings
+       reason: author-based: ci: add feedback footer to /investigate findings
+  #165531  e016c6967f8  go: bump go fork to pick up gcnoassist toggle
+       reason: author-based: go: bump go fork to pick up gcnoassist toggle
+  #165703  74562f93f27  kvserverbase: always sync in WriteFileSyncing
+       reason: author-based: kvserverbase: always sync in WriteFileSyncing
+
+----------------------------------------------------------------
+PRs already backported (for reference)
+----------------------------------------------------------------
+  #159165  16ee348819f  Revert "decommission: retry on errors for AllocatorCheckRange"
+  #159099  433195fd486  mma: plumbing changes for existing MMA metrics
+  #159123  85270c90c7f  mma: cleanup and populate counter metrics
+  #159046  ea92c6b974d  status: add node_id label to stores initialized after AddNode
+  #159279  d7ad21d19c8  allstacks: improve buffer alloc sizing and adopt more widely
+  #159403  6a25c602c97  admission: fix deadlock possibility in SnapshotQueue
+  #159499  44c2c1d46f8  kvserver: default kv.range_split.load_sample_reset_duration to 30m
+  #159215  9492da31dde  mma: framework and integration for guage metrics and logging
+  #159210  e9bd8502192  mmaprototype: dedup constraint conj
+  #159228  1db94b418b1  mmaprototype: fix isConstraintSatisfied
+  #159573  7eb4054a41a  mmaprototype: fix lease transfer candidates filtering
+  #159556  a54f93c147b  mma: move metrics initialization to Store.Start
+  #159704  6db6e621a89  logictest: use unique TestClusterName
+  #159653  52f1d1ec67d  mmaprototype: improve error handling for constraint normalization
+  #159807  1795f5444ab  mmaprototype: skip metrics unregistered warning in tests
+  #159823  3fe4a23ea97  kvserver: remove TestPriorityInversionRequeue
+  #159852  c1a671fcdaf  storeliveness: record latency metric for disk access
+  #158473  43add13db86  mmaprototype: align replica transfer filtering with documented strategy
+  #159877  5b180f5c475  kvserver: deflake TestReadLoadMetricAccounting
+  #159696  5981a5e2a71  server: make TestNodeStatusWritten robust against background activity
+  #159905  26f520bfdda  kvserver: delete flaky TestLeaseTransferAfterStoreLivenessSupportWithdrawn
+  #159872  eced8c4c751  mmaprototype: track span config normalization errors
+  #159667  d13028bb693  asim: only populate spanconfig in store leaseholder msg when needed
+  #159881  52c5e27d04a  kvserverbase: allow MMA cluster setting in production builds
+  #160015  c61d71a3bfd  mmaprototype: improve comments on gaps in health status
+  #159885  30d938efc50  kvserver: ignore SysBytes in assertRecomputedStats
+  #160555  bbd4f5447e4  storepool: export GetStoreStatuses for mma health signal plumbing
+  #159888  e130a5f1dd4  kvserver: fix flaky TestReplicaCircuitBreaker_ResolveIntent_QuorumLoss
+  #160615  288bc25f83f  mmaprototype: fix panic when sls <= loadNoChange but nls > loadNoChange
+  #160626  878e4b94b04  mma: populate failure reason string only when needed
+  #159882  7b9a1c73633  kvserver: remove TestProcessSplitAfterRightHandSideHasBeenRemoved
+  #160623  3668254abf8  mmaintegration: add StoreStatus to mma status translation plumbing
+  #160607  03e29d7c793  status: expose Go heap object count metrics
+  #160742  5c0ad35e82e  mma: small logging fixes
+  #160608  2d60081f3a3  server: implement delta profiling for allocs/heap/block/mutex profiles
+  #160698  73453cccdff  mmaintegration: update Unknown and Decommissioning translation
+  #160943  d81a9893823  asim: updated CPU loads in test one_voter_skewed_cpu_skewed_write
+  #160798  f51a5140106  goroutinedumper: adopt debug=3 instead of debug=2
+  #160914  b76755253fd  mmaprototype: remove highDiskSpaceUtilization from storeLoadSummary
+  #160956  1d229745b13  admission: report admission control metrics in nanosecond durations
+  #161187  47f7858c357  cli: update expected goroutine_dump file suffix
+  #161247  0f11651be8f  kvserverbase: implement String() on LBRebalancingMode
+  #161078  dbe1028a1bb  roachtest: added MMA+count rebalance tests
+  #160458  1b48fd81c79  asim: improve and CI-enable skewed_cpu_skewed_write
+  #160703  68dd3e53011  mmaprototype: add comment abt thrashing for pre-mean
+  #162017  3fc8163287d  kv/kvserver/asim: add multi-region MMA scenarios
+  #161883  860d5734bc7  asim: add test comparing sma/mma rebalancing rate
+  #161904  2581666dd3f  asim: Add more asim tests to check constraint satisfaction
+  #162375  9e7035679ea  asim: fix formatting-related merge skew
+  #163227  6d27588833a  server: *correctly* add store ID tag to ProcessStoreLoadMsg
+  #163292  56845dac59a  mmaprototype: fix disk utilization modeling
+  #163204  261c732ac9e  roachtest: restrict kv-rangefeed to GCE only
+  #162592  da3078a1894  asim: add gateway-overload test for #162590
+  #163270  b27b969aac2  roachprod: don't propagate errors from prometheus target updates
+  #162274  33c126b91fe  asim: experimenting with MMA and disk usage based balancing
+  #162562  ff713391ac6  mmaprototype: add more MMA related metrics
+  #163420  60539ccec9a  kvserver: deflake TestStoreRangeMergeRaftSnapshot
+  #163441  5864fba2613  mmaprototype: consolidate canShedAndAddLoad failure log into one message
+  #162584  655e1514873  kvserver: log skipped candidates and load in lease transfer decisions
+  #163421  44b3ed167cf  concurrency: disable slow latch request logging in TestConcurrencyManagerBasic
+  #163413  f589971b7e5  allocatorimpl: improve diagnostic context in lease preference check
+  #163341  1827fd207cd  mmaintegration: add capped multiplier CPU capacity model
+  #163837  2f44653a358  kvserver: deflake TestLargeUnsplittableRangeReplicate
+  #163805  cc916ed86cf  server: remove one of the two redundant liveness scans
+  #164141  92c72ef9f12  asim: add issue= tracking for expected assertion failures
+  #163243  67f99f20467  mmaprototype: log all the reasons and counts for shedding failure
+  #163870  9cb62cbeaa6  mmaprototype: fix some logical accounting errors in rebalancing pass
+  #164065  f65639305a2  mmaprototype: enforce redaction safety in allocator logging
+  #164342  58f881487f3  mmaprototype: consolidate candidate logging into single multi-line entry
+  #164454  80e3e81d5ad  kvserver: pin RHS lease after transfer in TestClosedTimestampFrozenAf…
+  #163583  c8f6b6fbe02  mmaintegration: add per-store CPU capacity floor
+  #164700  ce737bca704  asim: add physical modeling to simulator
+  #164793  7cbefca668c  asim: fix TestDataDriven
+  #164760  06a46246d0a  mmaprototype: plumb node CPU in MakeStoreLoadMsg
+  #164882  ad3451ab6f9  mmaintegration: add TestMakeStoreLoadMsg
+  #164900  d85d4e62270  mmaintegration: introduce physical capacity model
+  #164841  1a1279de553  kvserver: use span config reader in entireSpanExcludedFromBackup
+  #163305  91b130cf335  mmaprototype: improve metrics description
+  #165006  186557a4b1b  mmaintegration: move deprecated logical model definitions to test scope
+  #164931  b9b1542c945  asim: add low write bandwidth quantization thrashing test
+  #165122  543d86d57d0  asim: use real amplification factors for per-range MMA loads
+  #165086  327bfa5a9d4  mmaprototype: populate lease_grace overloaded store metrics
+  #165336  c0d20117c9a  mmaprototype: remove WriteBandwidth quantization in loadSummaryForDimension
+  #165537  5866027b639  asim: regenerate low_write_bandwidth
+  #165701  b24dc7b21a3  asim: fix TestDataDriven
+  #165720  63f9ce410c0  mmaprototype: emit shedding stores via Infof
+  #165383  b214651ebcc  mmaprototype: clamp fractionAbove denominator to significance floor
+  #166041  5af86175471  kvcoord: re-log "slow range RPC" warning every 10 minutes
+  #166076  d71ec96bd45  storeliveness: fix flaky TestTransportClusterSettingToggle
+  #166422  3fecb16a94a  roachtest: bump user_login.timeout in follower-reads insufficient-quorum
+  #166418  a9516dda64e  roachtest: fix acceptance/cli/node-status quorum loss
+  #166531  9e4eb90c76d  sql: fix TestReadCommittedReadTimestampNotSteppedOnCommit for write buffering
+  #166669  3aa8ac691bc  singleflight,stop: fix trace.StartRegion crash with oversized strings
+  #166658  70c832b9804  perturbation: rate-limit backfill pre-fill to avoid OOM on target node
+
