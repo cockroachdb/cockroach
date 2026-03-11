@@ -186,6 +186,11 @@ func (t *descriptorState) upsertLeaseLocked(
 	session sqlliveness.Session,
 	regionEnumPrefix []byte,
 ) error {
+	// Debug log for #162173, will be removed when the issue is resolved.
+	if buildutil.CrdbTestBuild && desc.GetID() == 105 {
+		log.Dev.Infof(ctx, "upsert lease: attempting for descriptor %d version %d session %s",
+			desc.GetID(), desc.GetVersion(), session.ID())
+	}
 	if t.mu.maxVersionSeen < desc.GetVersion() {
 		t.mu.maxVersionSeen = desc.GetVersion()
 	}
@@ -209,6 +214,11 @@ func (t *descriptorState) upsertLeaseLocked(
 	// needs to be done. If an expiration is set up then this is a historical
 	// version being revived.
 	if s.getSessionID() == session.ID() && s.expiration.Load() == nil {
+		// Debug log for #162173, will be removed when the issue is resolved.
+		if buildutil.CrdbTestBuild && desc.GetID() == 105 {
+			log.Dev.Infof(ctx, "upsert lease: descriptor %d version %d already exists with same session %s, skipping",
+				desc.GetID(), desc.GetVersion(), session.ID())
+		}
 		return nil
 	}
 
