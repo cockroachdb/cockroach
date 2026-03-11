@@ -10,13 +10,14 @@ EXPLAIN (DDL) DROP INDEX idx CASCADE;
 Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 37 elements transitioning toward ABSENT
+ │         ├── 38 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │         │    ├── PUBLIC → ABSENT    Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb), IntValue: 101}
  │         │    ├── PUBLIC → ABSENT    Owner:{DescID: 106 (v3-)}
  │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "root"}
  │         │    ├── PUBLIC → DROPPED   View:{DescID: 106 (v3-)}
+ │         │    ├── PUBLIC → ABSENT    ViewQuery:{DescID: 106 (v3-)}
  │         │    ├── PUBLIC → ABSENT    SchemaChild:{DescID: 106 (v3-), ReferencedDescID: 101 (public)}
  │         │    ├── PUBLIC → ABSENT    ColumnFamily:{DescID: 106 (v3-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 1 (j-)}
@@ -48,8 +49,9 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 106 (v3-), ColumnID: 1 (j-), IndexID: 1 (v3_pkey-)}
  │         │    ├── PUBLIC → ABSENT    PrimaryIndex:{DescID: 106 (v3-), IndexID: 1 (v3_pkey-), ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT    IndexName:{DescID: 106 (v3-), Name: "v3_pkey", IndexID: 1 (v3_pkey-)}
- │         └── 47 Mutation operations
+ │         └── 48 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
+ │              ├── RemoveBackReferencesInRelations {"BackReferencedID":106}
  │              ├── RemoveBackReferencesInRelations {"BackReferencedID":106}
  │              ├── RemoveObjectParent {"ObjectID":106,"ParentSchemaID":101}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":106}
@@ -98,13 +100,14 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 37 elements transitioning toward ABSENT
+ │    │    ├── 38 elements transitioning toward ABSENT
  │    │    │    ├── VALIDATED → PUBLIC SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │    │    │    ├── ABSENT    → PUBLIC Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb), IntValue: 101}
  │    │    │    ├── ABSENT    → PUBLIC Owner:{DescID: 106 (v3-)}
  │    │    │    ├── ABSENT    → PUBLIC UserPrivileges:{DescID: 106 (v3-), Name: "admin"}
  │    │    │    ├── ABSENT    → PUBLIC UserPrivileges:{DescID: 106 (v3-), Name: "root"}
  │    │    │    ├── DROPPED   → PUBLIC View:{DescID: 106 (v3-)}
+ │    │    │    ├── ABSENT    → PUBLIC ViewQuery:{DescID: 106 (v3-)}
  │    │    │    ├── ABSENT    → PUBLIC SchemaChild:{DescID: 106 (v3-), ReferencedDescID: 101 (public)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnFamily:{DescID: 106 (v3-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 106 (v3-), ColumnID: 1 (j-)}
@@ -139,13 +142,14 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 37 elements transitioning toward ABSENT
+ │         ├── 38 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │         │    ├── PUBLIC → ABSENT    Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb), IntValue: 101}
  │         │    ├── PUBLIC → ABSENT    Owner:{DescID: 106 (v3-)}
  │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "root"}
  │         │    ├── PUBLIC → DROPPED   View:{DescID: 106 (v3-)}
+ │         │    ├── PUBLIC → ABSENT    ViewQuery:{DescID: 106 (v3-)}
  │         │    ├── PUBLIC → ABSENT    SchemaChild:{DescID: 106 (v3-), ReferencedDescID: 101 (public)}
  │         │    ├── PUBLIC → ABSENT    ColumnFamily:{DescID: 106 (v3-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 1 (j-)}
@@ -177,8 +181,9 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 106 (v3-), ColumnID: 1 (j-), IndexID: 1 (v3_pkey-)}
  │         │    ├── PUBLIC → ABSENT    PrimaryIndex:{DescID: 106 (v3-), IndexID: 1 (v3_pkey-), ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT    IndexName:{DescID: 106 (v3-), Name: "v3_pkey", IndexID: 1 (v3_pkey-)}
- │         └── 50 Mutation operations
+ │         └── 51 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
+ │              ├── RemoveBackReferencesInRelations {"BackReferencedID":106}
  │              ├── RemoveBackReferencesInRelations {"BackReferencedID":106}
  │              ├── RemoveObjectParent {"ObjectID":106,"ParentSchemaID":101}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":1,"TableID":106}

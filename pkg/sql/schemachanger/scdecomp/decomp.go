@@ -337,6 +337,46 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 				return result
 			}(tbl),
 		})
+		// Emit ViewQuery element for views with a query string.
+		if tbl.GetViewQuery() != "" {
+			vq := &scpb.ViewQuery{
+				ViewID: tbl.GetID(),
+				Query:  tbl.GetViewQuery(),
+			}
+			// Populate forward references from DependsOn back-references.
+			for _, toID := range tbl.GetDependsOn() {
+				to := w.lookupFn(toID)
+				toTbl, err := catalog.AsTableDescriptor(to)
+				if err != nil {
+					panic(err)
+				}
+				if toTbl.IsSequence() {
+					vq.UsesSequenceIDs = append(vq.UsesSequenceIDs, toID)
+					continue
+				}
+				_ = toTbl.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+					if dep.ID != tbl.GetID() {
+						return nil
+					}
+					if toTbl.IsView() {
+						vq.UsesViews = append(vq.UsesViews, scpb.FunctionBody_ViewReference{
+							ViewID:    toID,
+							ColumnIDs: dep.ColumnIDs,
+						})
+					} else {
+						vq.UsesTables = append(vq.UsesTables, scpb.FunctionBody_TableReference{
+							TableID:   toID,
+							ColumnIDs: dep.ColumnIDs,
+							IndexID:   dep.IndexID,
+						})
+					}
+					return nil
+				})
+			}
+			vq.UsesTypeIDs = catalog.MakeDescriptorIDSet(tbl.GetDependsOnTypes()...).Ordered()
+			vq.UsesFunctionIDs = catalog.MakeDescriptorIDSet(tbl.GetDependsOnFunctions()...).Ordered()
+			w.ev(descriptorStatus(tbl), vq)
+		}
 	default:
 		w.ev(descriptorStatus(tbl), &scpb.Table{
 			TableID:     tbl.GetID(),

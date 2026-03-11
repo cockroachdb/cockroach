@@ -39,6 +39,7 @@ go_library(
         "create_schema.go",
         "create_sequence.go",
         "create_trigger.go",
+        "create_view.go",
         "database_zone_config.go",
         "dependencies.go",
         "drop_database.go",

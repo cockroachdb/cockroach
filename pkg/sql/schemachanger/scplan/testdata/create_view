@@ -1,0 +1,279 @@
+setup
+CREATE TABLE t (id INT PRIMARY KEY, name TEXT);
+----
+
+ops
+CREATE VIEW v AS SELECT name FROM t
+----
+StatementPhase stage 1 of 1 with 15 MutationType ops
+  transitions:
+    [[View:{DescID: 105}, PUBLIC], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 105, Name: v, ReferencedDescID: 100, IntValue: 101}, PUBLIC], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
+    [[Column:{DescID: 105, ColumnID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1, TypeName: STRING}, PUBLIC], ABSENT] -> PUBLIC
+    [[ViewQuery:{DescID: 105}, PUBLIC], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 105}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 105, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 105, Name: root}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.CreateViewDescriptor
+      ViewID: 105
+    *scop.SetNameInDescriptor
+      DescriptorID: 105
+      Name: v
+    *scop.AddDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 105
+        Name: v
+        SchemaID: 101
+    *scop.SetObjectParentID
+      ObjParent:
+        ChildObjectID: 105
+        SchemaID: 101
+    *scop.MakeAbsentColumnDeleteOnly
+      Column:
+        ColumnID: 1
+        TableID: 105
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: name
+      TableID: 105
+    *scop.UpsertColumnType
+      ColumnType:
+        ColumnID: 1
+        ElementCreationMetadata:
+          in261OrLater: true
+        TableID: 105
+        TypeT:
+          Type:
+            family: StringFamily
+            oid: 25
+          TypeName: STRING
+    *scop.SetViewQuery
+      Query: SELECT name FROM defaultdb.public.t;
+      ViewID: 105
+    *scop.UpdateViewBackReferencesInRelations
+      TableReferences:
+      - tableid: 104
+        columnids:
+        - 2
+        indexid: 0
+      ViewID: 105
+    *scop.UpdateOwner
+      Owner:
+        DescriptorID: 105
+        Owner: root
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 105
+        Privileges: 2
+        UserName: admin
+        WithGrantOption: 2
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 105
+        Privileges: 2
+        UserName: root
+        WithGrantOption: 2
+    *scop.MakeDeleteOnlyColumnWriteOnly
+      ColumnID: 1
+      TableID: 105
+    *scop.MakeWriteOnlyColumnPublic
+      ColumnID: 1
+      TableID: 105
+    *scop.MarkDescriptorAsPublic
+      DescriptorID: 105
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[View:{DescID: 105}, PUBLIC], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 105, Name: v, ReferencedDescID: 100, IntValue: 101}, PUBLIC], PUBLIC] -> ABSENT
+    [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, PUBLIC], PUBLIC] -> ABSENT
+    [[Column:{DescID: 105, ColumnID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1, TypeName: STRING}, PUBLIC], PUBLIC] -> ABSENT
+    [[ViewQuery:{DescID: 105}, PUBLIC], PUBLIC] -> ABSENT
+    [[Owner:{DescID: 105}, PUBLIC], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 105, Name: admin}, PUBLIC], PUBLIC] -> ABSENT
+    [[UserPrivileges:{DescID: 105, Name: root}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 16 MutationType ops
+  transitions:
+    [[View:{DescID: 105}, PUBLIC], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 105, Name: v, ReferencedDescID: 100, IntValue: 101}, PUBLIC], ABSENT] -> PUBLIC
+    [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, PUBLIC], ABSENT] -> PUBLIC
+    [[Column:{DescID: 105, ColumnID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1, TypeName: STRING}, PUBLIC], ABSENT] -> PUBLIC
+    [[ViewQuery:{DescID: 105}, PUBLIC], ABSENT] -> PUBLIC
+    [[Owner:{DescID: 105}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 105, Name: admin}, PUBLIC], ABSENT] -> PUBLIC
+    [[UserPrivileges:{DescID: 105, Name: root}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.CreateViewDescriptor
+      ViewID: 105
+    *scop.SetNameInDescriptor
+      DescriptorID: 105
+      Name: v
+    *scop.AddDescriptorName
+      Namespace:
+        DatabaseID: 100
+        DescriptorID: 105
+        Name: v
+        SchemaID: 101
+    *scop.UpdateTTLScheduleMetadata
+      NewName: v
+      TableID: 105
+    *scop.SetObjectParentID
+      ObjParent:
+        ChildObjectID: 105
+        SchemaID: 101
+    *scop.MakeAbsentColumnDeleteOnly
+      Column:
+        ColumnID: 1
+        TableID: 105
+    *scop.SetColumnName
+      ColumnID: 1
+      Name: name
+      TableID: 105
+    *scop.UpsertColumnType
+      ColumnType:
+        ColumnID: 1
+        ElementCreationMetadata:
+          in261OrLater: true
+        TableID: 105
+        TypeT:
+          Type:
+            family: StringFamily
+            oid: 25
+          TypeName: STRING
+    *scop.SetViewQuery
+      Query: SELECT name FROM defaultdb.public.t;
+      ViewID: 105
+    *scop.UpdateViewBackReferencesInRelations
+      TableReferences:
+      - tableid: 104
+        columnids:
+        - 2
+        indexid: 0
+      ViewID: 105
+    *scop.UpdateOwner
+      Owner:
+        DescriptorID: 105
+        Owner: root
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 105
+        Privileges: 2
+        UserName: admin
+        WithGrantOption: 2
+    *scop.UpdateUserPrivileges
+      Privileges:
+        DescriptorID: 105
+        Privileges: 2
+        UserName: root
+        WithGrantOption: 2
+    *scop.MakeDeleteOnlyColumnWriteOnly
+      ColumnID: 1
+      TableID: 105
+    *scop.MakeWriteOnlyColumnPublic
+      ColumnID: 1
+      TableID: 105
+    *scop.MarkDescriptorAsPublic
+      DescriptorID: 105
+
+deps
+CREATE VIEW v AS SELECT name FROM t
+----
+- from: [Column:{DescID: 106, ColumnID: 1}, DELETE_ONLY]
+  to:   [ColumnName:{DescID: 106, Name: name, ColumnID: 1}, PUBLIC]
+  kind: SameStagePrecedence
+  rules: [column existence precedes column dependents; column name set right after column existence, except for alter column type]
+- from: [Column:{DescID: 106, ColumnID: 1}, DELETE_ONLY]
+  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1, TypeName: STRING}, PUBLIC]
+  kind: SameStagePrecedence
+  rules: [column existence precedes column dependents; column type set right after column existence]
+- from: [Column:{DescID: 106, ColumnID: 1}, PUBLIC]
+  to:   [View:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [ColumnName:{DescID: 106, Name: name, ColumnID: 1}, PUBLIC]
+  to:   [Column:{DescID: 106, ColumnID: 1}, PUBLIC]
+  kind: Precedence
+  rule: column dependents exist before column becomes public
+- from: [ColumnName:{DescID: 106, Name: name, ColumnID: 1}, PUBLIC]
+  to:   [View:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1, TypeName: STRING}, PUBLIC]
+  to:   [Column:{DescID: 106, ColumnID: 1}, PUBLIC]
+  kind: Precedence
+  rule: column dependents exist before column becomes public
+- from: [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1, TypeName: STRING}, PUBLIC]
+  to:   [View:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [Namespace:{DescID: 106, Name: v, ReferencedDescID: 100, IntValue: 101}, PUBLIC]
+  to:   [View:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [Owner:{DescID: 106}, PUBLIC]
+  to:   [View:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [SchemaChild:{DescID: 106, ReferencedDescID: 101}, PUBLIC]
+  to:   [View:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [UserPrivileges:{DescID: 106, Name: admin}, PUBLIC]
+  to:   [View:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [UserPrivileges:{DescID: 106, Name: root}, PUBLIC]
+  to:   [View:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public
+- from: [View:{DescID: 106}, DESCRIPTOR_ADDED]
+  to:   [Column:{DescID: 106, ColumnID: 1}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [View:{DescID: 106}, DESCRIPTOR_ADDED]
+  to:   [ColumnName:{DescID: 106, Name: name, ColumnID: 1}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [View:{DescID: 106}, DESCRIPTOR_ADDED]
+  to:   [ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1, TypeName: STRING}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [View:{DescID: 106}, DESCRIPTOR_ADDED]
+  to:   [Namespace:{DescID: 106, Name: v, ReferencedDescID: 100, IntValue: 101}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [View:{DescID: 106}, DESCRIPTOR_ADDED]
+  to:   [Owner:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [View:{DescID: 106}, DESCRIPTOR_ADDED]
+  to:   [SchemaChild:{DescID: 106, ReferencedDescID: 101}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [View:{DescID: 106}, DESCRIPTOR_ADDED]
+  to:   [UserPrivileges:{DescID: 106, Name: admin}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [View:{DescID: 106}, DESCRIPTOR_ADDED]
+  to:   [UserPrivileges:{DescID: 106, Name: root}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [View:{DescID: 106}, DESCRIPTOR_ADDED]
+  to:   [ViewQuery:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: descriptor existence precedes dependents
+- from: [ViewQuery:{DescID: 106}, PUBLIC]
+  to:   [View:{DescID: 106}, PUBLIC]
+  kind: Precedence
+  rule: dependents exist before descriptor becomes public

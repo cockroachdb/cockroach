@@ -359,6 +359,7 @@ type FunctionHelpers interface {
 	BuildReferenceProvider(stmt tree.Statement) ReferenceProvider
 	WrapFunctionBody(fnID descpb.ID, bodyStr string, lang catpb.Function_Language,
 		returnType tree.ResolvableTypeReference, provider ReferenceProvider) *scpb.FunctionBody
+	WrapViewQuery(viewID descpb.ID, queryStr string, refProvider ReferenceProvider) *scpb.ViewQuery
 	ReplaceSeqTypeNamesInStatements(queryStr string, lang catpb.Function_Language) string
 }
 
@@ -498,6 +499,12 @@ type ReferenceProvider interface {
 	ReferencedRelationIDs() catalog.DescriptorIDSet
 	// ReferencedRoutines returns all referenced routine IDs.
 	ReferencedRoutines() catalog.DescriptorIDSet
+	// ViewQuery returns the fully-qualified view query string. Only populated
+	// for CREATE VIEW statements.
+	ViewQuery() string
+	// ViewColumns returns the result columns of the view query. Only populated
+	// for CREATE VIEW statements.
+	ViewColumns() colinfo.ResultColumns
 }
 
 // TemporarySchemaProvider provides functions needed to help support

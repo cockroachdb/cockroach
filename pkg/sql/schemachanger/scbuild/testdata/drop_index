@@ -115,6 +115,8 @@ DROP INDEX idx3 CASCADE
   {descriptorId: 105, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 105}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [2], toId: 104}, {columnIds: [2], indexId: 6, toId: 104}], usesRelationIds: [104], viewId: 105}
+- [[ViewQuery:{DescID: 105}, ABSENT], PUBLIC]
+  {query: SELECT count(j) FROM defaultdb.public.t1@idx3, usesTables: [{columnIds: [2], tableId: 104}, {columnIds: [2], indexId: 6, tableId: 104}], viewId: 105}
 - [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 105, schemaId: 101}
 - [[Column:{DescID: 105, ColumnID: 1}, ABSENT], PUBLIC]
@@ -183,6 +185,8 @@ DROP INDEX v2@idx CASCADE
   {descriptorId: 107, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 107}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [2], indexId: 2, toId: 106}], isMaterialized: true, usesRelationIds: [106], viewId: 107}
+- [[ViewQuery:{DescID: 107}, ABSENT], PUBLIC]
+  {query: SELECT j FROM defaultdb.public.v2@idx, usesViews: [{columnIds: [2], viewId: 106}], viewId: 107}
 - [[SchemaChild:{DescID: 107, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 107, schemaId: 101}
 - [[ColumnFamily:{DescID: 107, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC]

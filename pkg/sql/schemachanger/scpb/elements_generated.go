@@ -3486,6 +3486,43 @@ func (c *ElementCollection[E]) FilterView() *ElementCollection[*View] {
 		return ok
 	})
 	return (*ElementCollection[*View])(ret)
+}
+
+func (e ViewQuery) element() {}
+
+// Element implements ElementGetter.
+func (e * ElementProto_ViewQuery) Element() Element {
+	return e.ViewQuery
+}
+
+// ForEachViewQuery iterates over elements of type ViewQuery.
+// Deprecated
+func ForEachViewQuery(
+	c *ElementCollection[Element], fn func(current Status, target TargetStatus, e *ViewQuery),
+) {
+  c.FilterViewQuery().ForEach(fn)
+}
+
+// FindViewQuery finds the first element of type ViewQuery.
+// Deprecated
+func FindViewQuery(
+	c *ElementCollection[Element],
+) (current Status, target TargetStatus, element *ViewQuery) {
+	if tc := c.FilterViewQuery(); !tc.IsEmpty() {
+		var e Element
+		current, target, e = tc.Get(0)
+		element = e.(*ViewQuery)
+	}
+	return current, target, element
+}
+
+// ViewQueryElements filters elements of type ViewQuery.
+func (c *ElementCollection[E]) FilterViewQuery() *ElementCollection[*ViewQuery] {
+	ret := c.genericFilter(func(_ Status, _ TargetStatus, e Element) bool {
+		_, ok := e.(*ViewQuery)
+		return ok
+	})
+	return (*ElementCollection[*ViewQuery])(ret)
 }//
 // SetElements sets the element inside the protobuf.
 func (e* ElementProto) SetElement(element Element) {
@@ -3680,7 +3717,9 @@ func (e* ElementProto) SetElement(element Element) {
 		case *UserPrivileges:
 			e.ElementOneOf = &ElementProto_UserPrivileges{ UserPrivileges: t}
 		case *View:
-			e.ElementOneOf = &ElementProto_View{ View: t}}
+			e.ElementOneOf = &ElementProto_View{ View: t}
+		case *ViewQuery:
+			e.ElementOneOf = &ElementProto_ViewQuery{ ViewQuery: t}}
 }
 //
 // GetElementOneOfProtos returns all one of protos.
@@ -3780,7 +3819,8 @@ func GetElementOneOfProtos() []interface{} {
 	((*ElementProto_UniqueWithoutIndexConstraint)(nil)),
 	((*ElementProto_UniqueWithoutIndexConstraintUnvalidated)(nil)),
 	((*ElementProto_UserPrivileges)(nil)),
-	((*ElementProto_View)(nil)),}
+	((*ElementProto_View)(nil)),
+	((*ElementProto_ViewQuery)(nil)),}
 }
 //
 // GetElementTypes returns all element types. 
@@ -3881,7 +3921,8 @@ func GetElementTypes() []interface{} {
 	((*UniqueWithoutIndexConstraint)(nil)),
 	((*UniqueWithoutIndexConstraintUnvalidated)(nil)),
 	((*UserPrivileges)(nil)),
-	((*View)(nil)),}
+	((*View)(nil)),
+	((*ViewQuery)(nil)),}
 }
 //
 // ForEachElementType loops over each element type

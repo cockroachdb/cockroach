@@ -240,6 +240,8 @@ DROP OWNED BY r
   {descriptorId: 110, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 110}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [2], toId: 108}], usesRelationIds: [108], viewId: 110}
+- [[ViewQuery:{DescID: 110}, ABSENT], PUBLIC]
+  {query: (SELECT name FROM defaultdb.s.t), usesTables: [{columnIds: [2], tableId: 108}], viewId: 110}
 - [[SchemaChild:{DescID: 110, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {childObjectId: 110, schemaId: 105}
 - [[Column:{DescID: 110, ColumnID: 1}, ABSENT], PUBLIC]
@@ -320,6 +322,8 @@ DROP OWNED BY r
   {descriptorId: 113, privileges: "2", userName: root, withGrantOption: "2"}
 - [[View:{DescID: 113}, ABSENT], PUBLIC]
   {forwardReferences: [{columnIds: [1], toId: 110}], usesRelationIds: [110], usesTypeIds: [111, 112], viewId: 113}
+- [[ViewQuery:{DescID: 113}, ABSENT], PUBLIC]
+  {query: '(SELECT b''\x80'':::@100111::STRING AS k, name FROM defaultdb.s.v1)', usesTypeIds: [111, 112], usesViews: [{columnIds: [1], viewId: 110}], viewId: 113}
 - [[SchemaChild:{DescID: 113, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {childObjectId: 113, schemaId: 105}
 - [[Column:{DescID: 113, ColumnID: 1}, ABSENT], PUBLIC]

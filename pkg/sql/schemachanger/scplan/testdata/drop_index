@@ -705,7 +705,7 @@ DROP INDEX idx3 CASCADE
 ops
 DROP INDEX idx4 CASCADE
 ----
-StatementPhase stage 1 of 1 with 32 MutationType ops
+StatementPhase stage 1 of 1 with 33 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 105, IndexID: 8, ConstraintID: 4, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Namespace:{DescID: 106, Name: v, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
@@ -713,6 +713,7 @@ StatementPhase stage 1 of 1 with 32 MutationType ops
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 106}, ABSENT], PUBLIC] -> DROPPED
+    [[ViewQuery:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 106, Name: count, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -739,6 +740,11 @@ StatementPhase stage 1 of 1 with 32 MutationType ops
     *scop.RemoveBackReferencesInRelations
       BackReferencedID: 106
       RelationIDs:
+      - 105
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 106
+      RelationIDs:
+      - 105
       - 105
     *scop.RemoveObjectParent
       ObjectID: 106
@@ -846,6 +852,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[View:{DescID: 106}, ABSENT], DROPPED] -> PUBLIC
+    [[ViewQuery:{DescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Column:{DescID: 106, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 106, Name: count, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
@@ -869,7 +876,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 35 MutationType ops
+PreCommitPhase stage 2 of 2 with 36 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 105, IndexID: 8, ConstraintID: 4, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Namespace:{DescID: 106, Name: v, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
@@ -877,6 +884,7 @@ PreCommitPhase stage 2 of 2 with 35 MutationType ops
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 106}, ABSENT], PUBLIC] -> DROPPED
+    [[ViewQuery:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 106, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 106, Name: count, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -903,6 +911,11 @@ PreCommitPhase stage 2 of 2 with 35 MutationType ops
     *scop.RemoveBackReferencesInRelations
       BackReferencedID: 106
       RelationIDs:
+      - 105
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 106
+      RelationIDs:
+      - 105
       - 105
     *scop.RemoveObjectParent
       ObjectID: 106
@@ -1444,11 +1457,19 @@ DROP INDEX idx4 CASCADE
   to:   [View:{DescID: 106}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
+- from: [View:{DescID: 106}, DROPPED]
+  to:   [ViewQuery:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [ViewQuery:{DescID: 106}, ABSENT]
+  to:   [View:{DescID: 106}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 
 ops
 DROP INDEX v2@idx CASCADE;
 ----
-StatementPhase stage 1 of 1 with 47 MutationType ops
+StatementPhase stage 1 of 1 with 48 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Namespace:{DescID: 108, Name: v3, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
@@ -1456,6 +1477,7 @@ StatementPhase stage 1 of 1 with 47 MutationType ops
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 108}, ABSENT], PUBLIC] -> DROPPED
+    [[ViewQuery:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 108, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1490,6 +1512,10 @@ StatementPhase stage 1 of 1 with 47 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 108
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 108
+      RelationIDs:
+      - 107
     *scop.RemoveBackReferencesInRelations
       BackReferencedID: 108
       RelationIDs:
@@ -1649,6 +1675,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[View:{DescID: 108}, ABSENT], DROPPED] -> PUBLIC
+    [[ViewQuery:{DescID: 108}, ABSENT], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 108, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}, ABSENT], ABSENT] -> PUBLIC
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
@@ -1683,7 +1710,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 50 MutationType ops
+PreCommitPhase stage 2 of 2 with 51 MutationType ops
   transitions:
     [[SecondaryIndex:{DescID: 107, IndexID: 2, ConstraintID: 0, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}, ABSENT], PUBLIC] -> VALIDATED
     [[Namespace:{DescID: 108, Name: v3, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
@@ -1691,6 +1718,7 @@ PreCommitPhase stage 2 of 2 with 50 MutationType ops
     [[UserPrivileges:{DescID: 108, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 108, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 108}, ABSENT], PUBLIC] -> DROPPED
+    [[ViewQuery:{DescID: 108}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 108, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnFamily:{DescID: 108, Name: primary, ColumnFamilyID: 0}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 108, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -1725,6 +1753,10 @@ PreCommitPhase stage 2 of 2 with 50 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 108
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 108
+      RelationIDs:
+      - 107
     *scop.RemoveBackReferencesInRelations
       BackReferencedID: 108
       RelationIDs:

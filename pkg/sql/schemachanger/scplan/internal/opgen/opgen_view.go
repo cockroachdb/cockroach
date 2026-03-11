@@ -14,9 +14,13 @@ func init() {
 	opRegistry.register((*scpb.View)(nil),
 		toPublic(
 			scpb.Status_ABSENT,
-			to(scpb.Status_DROPPED,
-				emit(func(this *scpb.View) *scop.NotImplemented {
-					return notImplemented(this)
+			equiv(scpb.Status_DROPPED),
+			to(scpb.Status_DESCRIPTOR_ADDED,
+				emit(func(this *scpb.View) *scop.CreateViewDescriptor {
+					return &scop.CreateViewDescriptor{
+						ViewID:    this.ViewID,
+						Temporary: this.IsTemporary,
+					}
 				}),
 			),
 			to(scpb.Status_PUBLIC,
@@ -29,6 +33,7 @@ func init() {
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
+			equiv(scpb.Status_DESCRIPTOR_ADDED),
 			to(scpb.Status_DROPPED,
 				revertible(false),
 				emit(func(this *scpb.View) *scop.MarkDescriptorAsDropped {

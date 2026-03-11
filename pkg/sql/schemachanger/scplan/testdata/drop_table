@@ -42,7 +42,7 @@ CREATE TRIGGER foo BEFORE INSERT OR UPDATE ON shipments FOR EACH ROW EXECUTE FUN
 ops
 DROP TABLE defaultdb.shipments CASCADE;
 ----
-StatementPhase stage 1 of 1 with 150 MutationType ops
+StatementPhase stage 1 of 1 with 151 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -133,6 +133,7 @@ StatementPhase stage 1 of 1 with 150 MutationType ops
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 111}, ABSENT], PUBLIC] -> DROPPED
+    [[ViewQuery:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 111, Name: customer_id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -195,6 +196,11 @@ StatementPhase stage 1 of 1 with 150 MutationType ops
     *scop.RemoveBackReferencesInRelations
       BackReferencedID: 111
       RelationIDs:
+      - 109
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 111
+      RelationIDs:
+      - 109
       - 109
     *scop.RemoveObjectParent
       ObjectID: 111
@@ -771,6 +777,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], ABSENT] -> PUBLIC
     [[View:{DescID: 111}, ABSENT], DROPPED] -> PUBLIC
+    [[ViewQuery:{DescID: 111}, ABSENT], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Column:{DescID: 111, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
     [[ColumnName:{DescID: 111, Name: customer_id, ColumnID: 1}, ABSENT], ABSENT] -> PUBLIC
@@ -797,7 +804,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 161 MutationType ops
+PreCommitPhase stage 2 of 2 with 162 MutationType ops
   transitions:
     [[Namespace:{DescID: 109, Name: shipments, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
@@ -888,6 +895,7 @@ PreCommitPhase stage 2 of 2 with 161 MutationType ops
     [[UserPrivileges:{DescID: 111, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 111, Name: root}, ABSENT], PUBLIC] -> ABSENT
     [[View:{DescID: 111}, ABSENT], PUBLIC] -> DROPPED
+    [[ViewQuery:{DescID: 111}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 111, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Column:{DescID: 111, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnName:{DescID: 111, Name: customer_id, ColumnID: 1}, ABSENT], PUBLIC] -> ABSENT
@@ -950,6 +958,11 @@ PreCommitPhase stage 2 of 2 with 161 MutationType ops
     *scop.RemoveBackReferencesInRelations
       BackReferencedID: 111
       RelationIDs:
+      - 109
+    *scop.RemoveBackReferencesInRelations
+      BackReferencedID: 111
+      RelationIDs:
+      - 109
       - 109
     *scop.RemoveObjectParent
       ObjectID: 111
@@ -3119,6 +3132,14 @@ DROP TABLE defaultdb.shipments CASCADE;
   to:   [View:{DescID: 111}, ABSENT]
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
+- from: [View:{DescID: 111}, DROPPED]
+  to:   [ViewQuery:{DescID: 111}, ABSENT]
+  kind: Precedence
+  rule: descriptor dropped before dependent element removal
+- from: [ViewQuery:{DescID: 111}, ABSENT]
+  to:   [View:{DescID: 111}, ABSENT]
+  kind: Precedence
+  rule: non-data dependents removed before descriptor
 
 ops
 DROP TABLE defaultdb.customers CASCADE;
