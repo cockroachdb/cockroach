@@ -5,7 +5,10 @@
 
 package license
 
-import "github.com/cockroachdb/cockroach/pkg/sql/isql"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
+)
 
 type options struct {
 	db                      isql.DB
@@ -13,6 +16,7 @@ type options struct {
 	testingKnobs            *TestingKnobs
 	telemetryStatusReporter TelemetryStatusReporter
 	metadataAccessor        MetadataAccessor
+	stopper                 *stop.Stopper
 }
 
 type Option interface {
@@ -54,5 +58,11 @@ func WithTelemetryStatusReporter(r TelemetryStatusReporter) Option {
 func WithMetadataAccessor(m MetadataAccessor) Option {
 	return optionFunc(func(o *options) {
 		o.metadataAccessor = m
+	})
+}
+
+func WithStopper(s *stop.Stopper) Option {
+	return optionFunc(func(o *options) {
+		o.stopper = s
 	})
 }

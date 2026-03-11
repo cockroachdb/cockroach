@@ -1366,6 +1366,33 @@ CREATE TABLE system.table_statistics_locks (
     CONSTRAINT "primary" PRIMARY KEY (table_id ASC, kind ASC),
     FAMILY "primary" (table_id, kind, job_ids)
 );`
+
+	// LicenseTelemetryTableSchema defines the schema for the
+	// system.license_telemetry table, which stores license validation telemetry
+	// events for air-gapped compliance auditing. Rows expire after 90 days.
+	LicenseTelemetryTableSchema = `
+CREATE TABLE system.license_telemetry (
+    id               UUID NOT NULL DEFAULT gen_random_uuid(),
+    event_timestamp  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    node_id          INT8 NOT NULL,
+    license_type     STRING NOT NULL,
+    edition          STRING NULL,
+    add_ons          STRING[] NULL,
+    organization_id  STRING NULL,
+    license_id       STRING NULL,
+    vcpu_entitled    INT4 NULL,
+    vcpu_actual      FLOAT4 NULL,
+    environment      STRING NULL,
+    expires_at       TIMESTAMPTZ NULL,
+    is_expired       BOOL NOT NULL DEFAULT false,
+    is_throttled     BOOL NOT NULL DEFAULT false,
+    emission_reason  STRING NOT NULL,
+    event_payload    JSONB NOT NULL,
+    crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '90 days':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '90 days':::INTERVAL,
+    CONSTRAINT "primary" PRIMARY KEY (id ASC),
+    INDEX ts_idx (event_timestamp DESC),
+    FAMILY "primary" (id, event_timestamp, node_id, license_type, edition, add_ons, organization_id, license_id, vcpu_entitled, vcpu_actual, environment, expires_at, is_expired, is_throttled, emission_reason, event_payload, crdb_internal_expiration)
+) WITH (ttl_expire_after = '90 days');`
 )
 
 func pk(name string) descpb.IndexDescriptor {
@@ -1612,6 +1639,7 @@ func MakeSystemTables() []SystemTable {
 		StatementHintsTable,
 		ClusterMetricsTable,
 		TableStatisticsLocksTable,
+		LicenseTelemetryTable,
 	}
 }
 
@@ -5420,6 +5448,66 @@ var (
 				KeyColumnIDs:        []descpb.ColumnID{1, 2},
 			},
 		),
+	)
+
+	licenseTelemetryExpirationString = "current_timestamp():::TIMESTAMPTZ + '90 days':::INTERVAL"
+
+	LicenseTelemetryTable = makeSystemTable(
+		LicenseTelemetryTableSchema,
+		systemTable(
+			catconstants.LicenseTelemetryTableName,
+			descpb.InvalidID, // dynamically assigned
+			[]descpb.ColumnDescriptor{
+				{Name: "id", ID: 1, Type: types.Uuid, DefaultExpr: &genRandomUUIDString},
+				{Name: "event_timestamp", ID: 2, Type: types.TimestampTZ, DefaultExpr: &nowTZString},
+				{Name: "node_id", ID: 3, Type: types.Int},
+				{Name: "license_type", ID: 4, Type: types.String},
+				{Name: "edition", ID: 5, Type: types.String, Nullable: true},
+				{Name: "add_ons", ID: 6, Type: types.StringArray, Nullable: true},
+				{Name: "organization_id", ID: 7, Type: types.String, Nullable: true},
+				{Name: "license_id", ID: 8, Type: types.String, Nullable: true},
+				{Name: "vcpu_entitled", ID: 9, Type: types.Int4, Nullable: true},
+				{Name: "vcpu_actual", ID: 10, Type: types.Float4, Nullable: true},
+				{Name: "environment", ID: 11, Type: types.String, Nullable: true},
+				{Name: "expires_at", ID: 12, Type: types.TimestampTZ, Nullable: true},
+				{Name: "is_expired", ID: 13, Type: types.Bool, DefaultExpr: &falseBoolString},
+				{Name: "is_throttled", ID: 14, Type: types.Bool, DefaultExpr: &falseBoolString},
+				{Name: "emission_reason", ID: 15, Type: types.String},
+				{Name: "event_payload", ID: 16, Type: types.Jsonb},
+				{Name: "crdb_internal_expiration", ID: 17, Type: types.TimestampTZ, DefaultExpr: &licenseTelemetryExpirationString, OnUpdateExpr: &licenseTelemetryExpirationString, Hidden: true},
+			},
+			[]descpb.ColumnFamilyDescriptor{
+				{
+					Name:        "primary",
+					ID:          0,
+					ColumnNames: []string{"id", "event_timestamp", "node_id", "license_type", "edition", "add_ons", "organization_id", "license_id", "vcpu_entitled", "vcpu_actual", "environment", "expires_at", "is_expired", "is_throttled", "emission_reason", "event_payload", "crdb_internal_expiration"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17},
+				},
+			},
+			descpb.IndexDescriptor{
+				Name:                "primary",
+				ID:                  1,
+				Unique:              true,
+				KeyColumnNames:      []string{"id"},
+				KeyColumnDirections: singleASC,
+				KeyColumnIDs:        singleID1,
+			},
+			descpb.IndexDescriptor{
+				Name:                "ts_idx",
+				ID:                  2,
+				Unique:              false,
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeyColumnNames:      []string{"event_timestamp"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_DESC},
+				KeyColumnIDs:        []descpb.ColumnID{2},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+			},
+		),
+		func(tbl *descpb.TableDescriptor) {
+			tbl.RowLevelTTL = &catpb.RowLevelTTL{
+				DurationExpr: catpb.Expression("'90 days':::INTERVAL"),
+			}
+		},
 	)
 )
 

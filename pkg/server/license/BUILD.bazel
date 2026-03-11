@@ -8,7 +8,10 @@ go_library(
         "enforcer.go",
         "license.go",
         "opts.go",
-        ":gen-lictype-stringer",  # keep
+        "telemetry.go",
+        ":gen-lictype-stringer",   # keep
+        ":gen-edition-stringer",   # keep
+        ":gen-addon-stringer",     # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/license",
     visibility = ["//visibility:public"],
@@ -22,9 +25,13 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",
         "//pkg/sql/sem/tree",
+        "//pkg/util/cgroups",
         "//pkg/util/envutil",
         "//pkg/util/log",
+        "//pkg/util/log/eventpb",
+        "//pkg/util/log/severity",
         "//pkg/util/metric",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
@@ -72,4 +79,18 @@ stringer(
     src = "cclbridge.go",
     additional_args = ["-linecomment"],
     typ = "LicType",
+)
+
+stringer(
+    name = "gen-edition-stringer",
+    src = "cclbridge.go",
+    additional_args = ["-linecomment"],
+    typ = "Edition",
+)
+
+stringer(
+    name = "gen-addon-stringer",
+    src = "cclbridge.go",
+    additional_args = ["-linecomment"],
+    typ = "AddOn",
 )

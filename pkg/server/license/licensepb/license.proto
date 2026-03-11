@@ -43,4 +43,30 @@ message License {
     // dependencies, as the generated code is also used in other repositories.
     bytes license_id = 6;
     bytes organization_id = 7;
+
+    // Edition defines the capability tier of the license. Orthogonal to Type,
+    // which represents the commercial relationship (Enterprise, Trial, etc.).
+    enum Edition {
+      option (gogoproto.goproto_enum_stringer) = false;
+
+      EDITION_UNSPECIFIED = 0;
+      STANDARD = 1;
+      ENTERPRISE_EDITION = 2;
+      MISSION_CRITICAL = 3;
+    }
+
+    // AddOn defines optional feature bundles purchasable on top of an edition.
+    enum AddOn {
+      option (gogoproto.goproto_enum_stringer) = false;
+
+      ADD_ON_UNSPECIFIED = 0;
+      DATA_REPLICATION = 1;
+      ADVANCED_WORKLOAD_MGMT = 2;
+      DATA_SYNCHRONIZATION = 3;
+      ADVANCED_COMPLIANCE = 4;
+    }
+
+    Edition edition = 8;
+    repeated AddOn add_ons = 9;
+    int32 vcpu_entitled = 10;
 }

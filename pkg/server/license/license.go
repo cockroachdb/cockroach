@@ -8,7 +8,6 @@ package license
 import (
 	"context"
 	"sync/atomic"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/license/licensepb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -175,27 +174,27 @@ func registerCallbackOnLicenseChange(
 				"unable to refresh license enforcer for license change: %v", err)
 			return
 		}
-		var licenseType LicType
-		var licenseExpiry time.Time
-		if lic == nil {
-			licenseType = LicTypeNone
-		} else {
-			licenseExpiry = timeutil.Unix(lic.ValidUntilUnixSec, 0)
+		info := LicenseInfo{Type: LicTypeNone}
+		if lic != nil {
+			info.Expiry = timeutil.Unix(lic.ValidUntilUnixSec, 0)
+			info.Edition = mapEdition(lic.Edition)
+			info.AddOns = mapAddOns(lic.AddOns)
+			info.VCPUEntitled = lic.VcpuEntitled
 			switch lic.Type {
 			case licensepb.License_Free:
-				licenseType = LicTypeFree
+				info.Type = LicTypeFree
 			case licensepb.License_Trial:
-				licenseType = LicTypeTrial
+				info.Type = LicTypeTrial
 			case licensepb.License_Evaluation:
-				licenseType = LicTypeEvaluation
+				info.Type = LicTypeEvaluation
 			default:
-				licenseType = LicTypeEnterprise
+				info.Type = LicTypeEnterprise
 			}
 		}
-		licenseEnforcer.RefreshForLicenseChange(ctx, licenseType, licenseExpiry)
+		licenseEnforcer.RefreshForLicenseChange(ctx, info)
 
 		err = licenseEnforcer.UpdateTrialLicenseExpiry(
-			ctx, licenseType, isChange, licenseExpiry.Unix())
+			ctx, info.Type, isChange, info.Expiry.Unix())
 		if err != nil {
 			log.Dev.Errorf(ctx,
 				"unable to update trial license expiry: %v", err)
@@ -208,4 +207,39 @@ func registerCallbackOnLicenseChange(
 		func(ctx context.Context) { refreshFunc(ctx, true /* isChange */) })
 	// Call the refresh function for the current license.
 	refreshFunc(ctx, false /* isChange */)
+}
+
+// mapEdition converts a proto License_Edition to the Go Edition type.
+func mapEdition(e licensepb.License_Edition) Edition {
+	switch e {
+	case licensepb.License_STANDARD:
+		return EditionStandard
+	case licensepb.License_ENTERPRISE_EDITION:
+		return EditionEnterprise
+	case licensepb.License_MISSION_CRITICAL:
+		return EditionMissionCritical
+	default:
+		return EditionUnspecified
+	}
+}
+
+// mapAddOns converts proto License_AddOn values to the Go AddOn type.
+func mapAddOns(protos []licensepb.License_AddOn) []AddOn {
+	if len(protos) == 0 {
+		return nil
+	}
+	addOns := make([]AddOn, 0, len(protos))
+	for _, p := range protos {
+		switch p {
+		case licensepb.License_DATA_REPLICATION:
+			addOns = append(addOns, AddOnDataReplication)
+		case licensepb.License_ADVANCED_WORKLOAD_MGMT:
+			addOns = append(addOns, AddOnAdvancedWorkload)
+		case licensepb.License_DATA_SYNCHRONIZATION:
+			addOns = append(addOns, AddOnDataSync)
+		case licensepb.License_ADVANCED_COMPLIANCE:
+			addOns = append(addOns, AddOnAdvancedCompliance)
+		}
+	}
+	return addOns
 }

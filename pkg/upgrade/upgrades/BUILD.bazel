@@ -23,6 +23,7 @@ go_library(
         "v26_2_add_table_statistics_delay_delete_column.go",
         "v26_2_descriptor_txn_key.go",
         "v26_2_system_cluster_metrics.go",
+        "v26_2_system_license_telemetry.go",
         "v26_2_trigger_backref_repair.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/upgrade/upgrades",

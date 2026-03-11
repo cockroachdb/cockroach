@@ -237,6 +237,10 @@ const (
 	// and a covering index to the system.transaction_statistics table to support
 	// efficient aggregation queries.
 	V26_2_AddTransactionStatisticsComputedColumns
+
+	// V26_2_AddSystemLicenseTelemetryTable adds the system.license_telemetry
+	// table for air-gapped license compliance auditing with a 90-day TTL.
+	V26_2_AddSystemLicenseTelemetryTable
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -300,6 +304,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_2_AddStatementStatisticsComputedColumns: {Major: 26, Minor: 1, Internal: 18},
 
 	V26_2_AddTransactionStatisticsComputedColumns: {Major: 26, Minor: 1, Internal: 20},
+
+	V26_2_AddSystemLicenseTelemetryTable: {Major: 26, Minor: 1, Internal: 22},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.

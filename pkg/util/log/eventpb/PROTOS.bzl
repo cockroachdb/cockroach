@@ -19,6 +19,7 @@ EVENTPB_PROTOS = [
     "health_events.proto",
     "storage_events.proto",
     "telemetry.proto",
+    "license_events.proto",
     "changefeed_events.proto",
     "contention_events.proto",
     "bulk_ingest_perf.proto",

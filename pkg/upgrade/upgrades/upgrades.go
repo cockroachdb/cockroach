@@ -134,6 +134,14 @@ var upgrades = []upgradebase.Upgrade{
 		transactionStatisticsComputedColumnsMigration,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore computed columns"),
 	),
+
+	upgrade.NewTenantUpgrade(
+		"create license_telemetry table",
+		clusterversion.V26_2_AddSystemLicenseTelemetryTable.Version(),
+		upgrade.NoPrecondition,
+		createLicenseTelemetryTable,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
+	),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
