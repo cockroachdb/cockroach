@@ -303,7 +303,7 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	bucketCapacities := capacities(a.refillRates)
 	// Metrics don't need higher fidelity than one update per second. For example,
 	// in CC, we scrape metrics once every 10s.
-	a.granter.refill(allocations, bucketCapacities, false /* updateMetrics */)
+	a.refill(allocations, bucketCapacities, false /* updateMetrics */)
 
 	// Refill per-tenant burst buckets in the WorkQueues. The burst bucket
 	// refill rate and capacity should be 1/4th of the noBurst refill rate
@@ -364,7 +364,7 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 	bucketCapacities := capacities(newRefillRates)
 	// Metrics don't need higher fidelity than one update per second. For example,
 	// in CC, we scrape metrics once every 10s.
-	a.granter.refill(deltaRefillRates, bucketCapacities, true /* updateMetrics */)
+	a.refill(deltaRefillRates, bucketCapacities, true /* updateMetrics */)
 	a.refillRates = newRefillRates
 
 	// Apply the delta to the per-tenant burst buckets also.
@@ -380,13 +380,26 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 			a.allocated[wc][kind] = 0
 		}
 	}
+}
 
-	for tier := range newRefillRates {
-		for qual := range newRefillRates[tier] {
-			a.metrics.RefillRate.Update(
-				a.metrics.labelMaps[tier][qual], newRefillRates[tier][qual])
+// refill increments per-bucket refill metrics, then delegates to
+// granter.refill. Positive toAdd values are tracked as tokens added;
+// negative values (which occur when refill rates decrease between
+// intervals) are tracked as tokens removed.
+func (a *cpuTimeTokenAllocator) refill(
+	toAdd tokenCounts, bucketCapacities capacities, updateMetrics bool,
+) {
+	for tier := range toAdd {
+		for qual := range toAdd[tier] {
+			idx := perBucketIdx(resourceTier(tier), burstQualification(qual))
+			if v := toAdd[tier][qual]; v > 0 {
+				a.metrics.RefillAdded[idx].Inc(v)
+			} else if v < 0 {
+				a.metrics.RefillRemoved[idx].Inc(-v)
+			}
 		}
 	}
+	a.granter.refill(toAdd, bucketCapacities, updateMetrics)
 }
 
 // workQueueIForAllocator abstracts the burst bucket refill method in WorkQueue,
@@ -476,6 +489,8 @@ type cpuTimeTokenLinearModel struct {
 	totalCPUTime time.Duration
 	// The linear correction term, see the docs above cpuTimeTokenLinearModel.
 	tokenToCPUTimeMultiplier float64
+
+	logger fitLogger
 }
 
 // tokenUsageTracker is implemented by cpuTimeTokenGranter. It provides
@@ -669,15 +684,16 @@ func (m *cpuTimeTokenLinearModel) fit(ctx context.Context, targets targetUtiliza
 	}
 
 	refillRates := m.computeRefillRates(targets, m.tokenToCPUTimeMultiplier, cpuCapacity)
+
 	m.metrics.Multiplier.Update(m.tokenToCPUTimeMultiplier)
-	log.Dev.Infof(ctx,
-		"fit: elapsed=%s cpuCapacity=%.2f intCPU=%s tokensUsed=%s isLowCPU=%t "+
-			"multiplier=%.4f refillRates=%s",
-		elapsedSinceLastFit, cpuCapacity,
-		intCPUTime, time.Duration(tokensUsed),
-		isLowCPUUtil, m.tokenToCPUTimeMultiplier,
-		refillRates,
-	)
+	if msg, shouldLog := m.logger.accumulate(
+		m.tokenToCPUTimeMultiplier, isLowCPUUtil,
+		intCPUTime, tokensUsed,
+		elapsedSinceLastFit,
+	); shouldLog {
+		log.Dev.Infof(ctx, "%s", msg)
+	}
+
 	return refillRates
 }
 
@@ -694,4 +710,68 @@ func (*cpuTimeTokenLinearModel) computeRefillRates(
 		}
 	}
 	return refillRates
+}
+
+// fitLogger accumulates state across fit() intervals so that a
+// single log line can summarize multiple intervals. A log line is emitted
+// every fitLogInterval calls or when isLowCPU flips, whichever comes
+// first.
+type fitLogger struct {
+	// Number of fit() calls accumulated since the last log line.
+	intervals int
+	// Wall-clock time accumulated across the window.
+	elapsed time.Duration
+	// Cumulative CPU time consumed across the window.
+	intCPU time.Duration
+	// Cumulative tokens used across the window.
+	tokensUsed int64
+	// Multiplier range observed across the window.
+	multiplierLo, multiplierHi float64
+	// Previous isLowCPU value, used to detect transitions.
+	prevIsLowCPU bool
+}
+
+// fitLogInterval is the number of fit() calls between log lines. Since fit()
+// is called once per second, this means one log line every 10s (modulo
+// isLowCPU transitions, which trigger an immediate log line).
+const fitLogInterval = 10
+
+// accumulate records one fit() interval's data. If it's time to emit a
+// log line (every fitLogInterval intervals or on an isLowCPU transition),
+// accumulate returns (msg, true) and resets the accumulator. Otherwise
+// it returns ("", false).
+func (a *fitLogger) accumulate(
+	multiplier float64, isLowCPU bool, intCPU time.Duration, tokensUsed int64, elapsed time.Duration,
+) (string, bool) {
+	a.intervals++
+	a.elapsed += elapsed
+	a.intCPU += intCPU
+	a.tokensUsed += tokensUsed
+	if a.intervals == 1 {
+		a.multiplierLo = multiplier
+		a.multiplierHi = multiplier
+	} else {
+		a.multiplierLo = min(a.multiplierLo, multiplier)
+		a.multiplierHi = max(a.multiplierHi, multiplier)
+	}
+
+	isLowCPUFlip := isLowCPU != a.prevIsLowCPU
+	if a.intervals < fitLogInterval && !isLowCPUFlip {
+		a.prevIsLowCPU = isLowCPU
+		return "", false
+	}
+
+	elapsedSec := a.elapsed.Seconds()
+	if elapsedSec == 0 {
+		elapsedSec = 1
+	}
+	msg := fmt.Sprintf(
+		"fit: multiplier=[%.4f,%.4f] isLowCPU=%t "+
+			"cpuUsagePerSecond=%.2fvCPU tokenUsagePerSecond=%.2fvCPU",
+		a.multiplierLo, a.multiplierHi, isLowCPU,
+		float64(a.intCPU)/float64(time.Second)/elapsedSec,
+		float64(a.tokensUsed)/float64(time.Second)/elapsedSec,
+	)
+	*a = fitLogger{prevIsLowCPU: isLowCPU}
+	return msg, true
 }

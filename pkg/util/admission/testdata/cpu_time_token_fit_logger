@@ -1,0 +1,6 @@
+echo
+----
+fit: multiplier=[1.0000,1.0000] isLowCPU=false cpuUsagePerSecond=8.00vCPU tokenUsagePerSecond=8.00vCPU
+fit: multiplier=[1.1000,2.0000] isLowCPU=false cpuUsagePerSecond=8.00vCPU tokenUsagePerSecond=5.35vCPU
+fit: multiplier=[2.0000,2.0000] isLowCPU=true cpuUsagePerSecond=5.67vCPU tokenUsagePerSecond=2.83vCPU
+fit: multiplier=[2.0000,2.0000] isLowCPU=true cpuUsagePerSecond=1.00vCPU tokenUsagePerSecond=0.50vCPU

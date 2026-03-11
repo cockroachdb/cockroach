@@ -11313,49 +11313,33 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: admission.cpu_time_tokens.bucket_tokens
-      exported_name: admission_cpu_time_tokens_bucket_tokens
-      description: The current number of tokens in each CPU time token bucket, broken down by resource tier and burst qualification
-      y_axis_label: Tokens
-      type: GAUGE
-      unit: COUNT
-      aggregation: AVG
-      derivative: NONE
-    - name: admission.cpu_time_tokens.consumed
-      exported_name: admission_cpu_time_tokens_consumed
-      description: Cumulative number of CPU time tokens consumed (deducted from buckets) by admitted work
-      y_axis_label: Tokens
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: admission.cpu_time_tokens.exhausted_duration_nanos.app_tenant.canBurst
-      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_app_tenant_canBurst
-      description: Cumulative nanoseconds the app_tenant/canBurst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
+    - name: admission.cpu_time_tokens.exhausted_duration_nanos.app_tenant.can_burst
+      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_app_tenant_can_burst
+      description: Cumulative nanoseconds the app_tenant/can_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
       y_axis_label: Nanoseconds
       type: COUNTER
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: admission.cpu_time_tokens.exhausted_duration_nanos.app_tenant.noBurst
-      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_app_tenant_noBurst
-      description: Cumulative nanoseconds the app_tenant/noBurst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
+    - name: admission.cpu_time_tokens.exhausted_duration_nanos.app_tenant.no_burst
+      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_app_tenant_no_burst
+      description: Cumulative nanoseconds the app_tenant/no_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
       y_axis_label: Nanoseconds
       type: COUNTER
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: admission.cpu_time_tokens.exhausted_duration_nanos.system_tenant.canBurst
-      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_system_tenant_canBurst
-      description: Cumulative nanoseconds the system_tenant/canBurst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
+    - name: admission.cpu_time_tokens.exhausted_duration_nanos.system_tenant.can_burst
+      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_system_tenant_can_burst
+      description: Cumulative nanoseconds the system_tenant/can_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
       y_axis_label: Nanoseconds
       type: COUNTER
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: admission.cpu_time_tokens.exhausted_duration_nanos.system_tenant.noBurst
-      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_system_tenant_noBurst
-      description: Cumulative nanoseconds the system_tenant/noBurst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
+    - name: admission.cpu_time_tokens.exhausted_duration_nanos.system_tenant.no_burst
+      exported_name: admission_cpu_time_tokens_exhausted_duration_nanos_system_tenant_no_burst
+      description: Cumulative nanoseconds the system_tenant/no_burst CPU time token bucket has spent exhausted (tokens <= 0); rate() gives the fraction of wall-clock time the bucket was exhausted
       y_axis_label: Nanoseconds
       type: COUNTER
       unit: NANOSECONDS
@@ -11369,16 +11353,80 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
-    - name: admission.cpu_time_tokens.refill_rate
-      exported_name: admission_cpu_time_tokens_refill_rate
-      description: The rate at which CPU time tokens are added per second, broken down by resource tier and burst qualification; note that the refill rate of a bucket is also the capacity of the bucket
+    - name: admission.cpu_time_tokens.refill.added.app_tenant.can_burst
+      exported_name: admission_cpu_time_tokens_refill_added_app_tenant_can_burst
+      description: Cumulative tokens added to the app_tenant/can_burst CPU time token bucket via the refill process; rate() gives the effective refill rate
       y_axis_label: Tokens
-      type: GAUGE
+      type: COUNTER
       unit: COUNT
       aggregation: AVG
-      derivative: NONE
-    - name: admission.cpu_time_tokens.returned
-      exported_name: admission_cpu_time_tokens_returned
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.cpu_time_tokens.refill.added.app_tenant.no_burst
+      exported_name: admission_cpu_time_tokens_refill_added_app_tenant_no_burst
+      description: Cumulative tokens added to the app_tenant/no_burst CPU time token bucket via the refill process; rate() gives the effective refill rate
+      y_axis_label: Tokens
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.cpu_time_tokens.refill.added.system_tenant.can_burst
+      exported_name: admission_cpu_time_tokens_refill_added_system_tenant_can_burst
+      description: Cumulative tokens added to the system_tenant/can_burst CPU time token bucket via the refill process; rate() gives the effective refill rate
+      y_axis_label: Tokens
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.cpu_time_tokens.refill.added.system_tenant.no_burst
+      exported_name: admission_cpu_time_tokens_refill_added_system_tenant_no_burst
+      description: Cumulative tokens added to the system_tenant/no_burst CPU time token bucket via the refill process; rate() gives the effective refill rate
+      y_axis_label: Tokens
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.cpu_time_tokens.refill.removed.app_tenant.can_burst
+      exported_name: admission_cpu_time_tokens_refill_removed_app_tenant_can_burst
+      description: Cumulative tokens removed from the app_tenant/can_burst CPU time token bucket when refill rates decrease between intervals
+      y_axis_label: Tokens
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.cpu_time_tokens.refill.removed.app_tenant.no_burst
+      exported_name: admission_cpu_time_tokens_refill_removed_app_tenant_no_burst
+      description: Cumulative tokens removed from the app_tenant/no_burst CPU time token bucket when refill rates decrease between intervals
+      y_axis_label: Tokens
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.cpu_time_tokens.refill.removed.system_tenant.can_burst
+      exported_name: admission_cpu_time_tokens_refill_removed_system_tenant_can_burst
+      description: Cumulative tokens removed from the system_tenant/can_burst CPU time token bucket when refill rates decrease between intervals
+      y_axis_label: Tokens
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.cpu_time_tokens.refill.removed.system_tenant.no_burst
+      exported_name: admission_cpu_time_tokens_refill_removed_system_tenant_no_burst
+      description: Cumulative tokens removed from the system_tenant/no_burst CPU time token bucket when refill rates decrease between intervals
+      y_axis_label: Tokens
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.cpu_time_tokens.usage.consumed
+      exported_name: admission_cpu_time_tokens_usage_consumed
+      description: Cumulative number of CPU time tokens consumed (deducted from buckets) by admitted work
+      y_axis_label: Tokens
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: admission.cpu_time_tokens.usage.returned
+      exported_name: admission_cpu_time_tokens_usage_returned
       description: Cumulative number of CPU time tokens returned (credited back to buckets), for example when actual CPU usage was lower than the initial estimate
       y_axis_label: Tokens
       type: COUNTER

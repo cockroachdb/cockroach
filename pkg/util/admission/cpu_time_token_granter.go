@@ -171,7 +171,7 @@ func newCPUTimeTokenGranter(
 		for qual := burstQualification(0); qual < numBurstQualifications; qual++ {
 			g.mu.buckets[tier][qual].exhaustedStart = now
 			g.mu.buckets[tier][qual].exhaustedDuration =
-				metrics.ExhaustedDurationNanos[exhaustedDurationIdx(tier, qual)]
+				metrics.ExhaustedDurationNanos[perBucketIdx(tier, qual)]
 		}
 	}
 	return g
@@ -376,17 +376,6 @@ func (stg *cpuTimeTokenGranter) refill(
 	var shouldGrant bool
 	for tier := range stg.mu.buckets {
 		for qual := range stg.mu.buckets[tier] {
-			// refill updates these metrics before tokens are added / grants happen. This
-			// way, if a bucket is consistently empty, we will see it an empty in the
-			// graphs. If refill updated metrics after adding tokens / doing grants, it
-			// always will show positive tokens.
-			//
-			// Note that this metric only provides a coarse view into bucket state. For
-			// a fine-grained view, see the exhausted-duration counters.
-			if updateMetrics {
-				stg.metrics.BucketTokens.Update(
-					stg.metrics.labelMaps[tier][qual], stg.mu.buckets[tier][qual].tokens)
-			}
 			if toAdd[tier][qual] > 0 {
 				shouldGrant = true
 			}

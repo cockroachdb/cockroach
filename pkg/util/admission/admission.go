@@ -155,9 +155,9 @@ func (bq burstQualification) String() string {
 func (bq burstQualification) SafeFormat(s redact.SafePrinter, _ rune) {
 	switch bq {
 	case canBurst:
-		s.SafeString("canBurst")
+		s.SafeString("can_burst")
 	case noBurst:
-		s.SafeString("noBurst")
+		s.SafeString("no_burst")
 	default:
 		s.Printf("burstQualification(%d)", bq)
 	}

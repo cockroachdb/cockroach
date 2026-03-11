@@ -23,27 +23,8 @@ var (
 		Unit:        metric.Unit_COUNT,
 	}
 
-	cpuTimeTokenRefillRateMeta = metric.Metadata{
-		Name: "admission.cpu_time_tokens.refill_rate",
-		Help: crstrings.UnwrapText(`
-			The rate at which CPU time tokens are added per second,
-			broken down by resource tier and burst qualification; note that
-			the refill rate of a bucket is also the capacity of the bucket`),
-		Measurement: "Tokens",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	cpuTimeTokenBucketTokensMeta = metric.Metadata{
-		Name: "admission.cpu_time_tokens.bucket_tokens",
-		Help: crstrings.UnwrapText(`
-			The current number of tokens in each CPU time token bucket,
-			broken down by resource tier and burst qualification`),
-		Measurement: "Tokens",
-		Unit:        metric.Unit_COUNT,
-	}
-
 	cpuTimeTokensConsumedMeta = metric.Metadata{
-		Name: "admission.cpu_time_tokens.consumed",
+		Name: "admission.cpu_time_tokens.usage.consumed",
 		Help: crstrings.UnwrapText(`
 			Cumulative number of CPU time tokens consumed (deducted from
 			buckets) by admitted work`),
@@ -52,7 +33,7 @@ var (
 	}
 
 	cpuTimeTokensReturnedMeta = metric.Metadata{
-		Name: "admission.cpu_time_tokens.returned",
+		Name: "admission.cpu_time_tokens.usage.returned",
 		Help: crstrings.UnwrapText(`
 			Cumulative number of CPU time tokens returned (credited back to
 			buckets), for example when actual CPU usage was lower than the
@@ -62,23 +43,11 @@ var (
 	}
 )
 
-const (
-	tierLabel      = "tier"
-	burstQualLabel = "burst_qual"
-)
-
 // cpuTimeTokenMetrics tracks metrics for the CPU time token admission
 // control. Fields are exported because metric.Registry.AddMetricStruct
 // uses reflection to discover metrics.
-//
-// RefillRate and BucketTokens use GaugeVec rather than AggGauge because
-// aggregating across tier/burst-qualification labels is not meaningful.
-// GaugeVec exports per-label values to Prometheus/Datadog without writing
-// to the internal time-series database or computing an aggregate.
 type cpuTimeTokenMetrics struct {
 	Multiplier     *metric.GaugeFloat64
-	RefillRate     *metric.GaugeVec
-	BucketTokens   *metric.GaugeVec
 	TokensConsumed *metric.Counter
 	TokensReturned *metric.Counter
 
@@ -93,26 +62,31 @@ type cpuTimeTokenMetrics struct {
 	// wall-clock time the bucket was exhausted, queryable over any window
 	// (1m, 5m, 30m, etc.).
 	//
-	// This is a flat array indexed by exhaustedDurationIdx(tier, qual)
-	// rather than a nested [tier][qual] array, because AddMetricStruct
-	// cannot register metrics inside nested arrays.
-	ExhaustedDurationNanos [int(numResourceTiers) * int(numBurstQualifications)]*metric.Counter
+	// Per (tier, qual) counters use flat arrays indexed by
+	// perBucketIdx(tier, qual) rather than nested [tier][qual] arrays,
+	// because AddMetricStruct cannot register metrics inside nested arrays.
+	ExhaustedDurationNanos [numPerBucketCounters]*metric.Counter
 
-	// labelMaps avoids allocations when updating GaugeVec metrics.
-	labelMaps [numResourceTiers][numBurstQualifications]map[string]string
+	// RefillAdded tracks cumulative tokens added to each bucket via
+	// the refill process. rate(refill.added) gives the effective refill
+	// rate per bucket.
+	RefillAdded [numPerBucketCounters]*metric.Counter
+
+	// RefillRemoved tracks cumulative tokens removed from each bucket
+	// when refill rates decrease between intervals (negative delta).
+	RefillRemoved [numPerBucketCounters]*metric.Counter
 }
 
 func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 	m := &cpuTimeTokenMetrics{
 		Multiplier:     metric.NewGaugeFloat64(cpuTimeTokenMultiplierMeta),
-		RefillRate:     metric.NewExportedGaugeVec(cpuTimeTokenRefillRateMeta, []string{tierLabel, burstQualLabel}),
-		BucketTokens:   metric.NewExportedGaugeVec(cpuTimeTokenBucketTokensMeta, []string{tierLabel, burstQualLabel}),
 		TokensConsumed: metric.NewCounter(cpuTimeTokensConsumedMeta),
 		TokensReturned: metric.NewCounter(cpuTimeTokensReturnedMeta),
 	}
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
 		for qual := burstQualification(0); qual < numBurstQualifications; qual++ {
-			m.ExhaustedDurationNanos[exhaustedDurationIdx(tier, qual)] = metric.NewCounter(metric.Metadata{
+			idx := perBucketIdx(tier, qual)
+			m.ExhaustedDurationNanos[idx] = metric.NewCounter(metric.Metadata{
 				Name: fmt.Sprintf(
 					"admission.cpu_time_tokens.exhausted_duration_nanos.%s.%s",
 					tier, qual),
@@ -124,14 +98,28 @@ func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 				Measurement: "Nanoseconds",
 				Unit:        metric.Unit_NANOSECONDS,
 			})
-		}
-	}
-	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
-		for qual := burstQualification(0); qual < numBurstQualifications; qual++ {
-			m.labelMaps[tier][qual] = map[string]string{
-				tierLabel:      tier.String(),
-				burstQualLabel: qual.String(),
-			}
+			m.RefillAdded[idx] = metric.NewCounter(metric.Metadata{
+				Name: fmt.Sprintf(
+					"admission.cpu_time_tokens.refill.added.%s.%s",
+					tier, qual),
+				Help: fmt.Sprintf(
+					"Cumulative tokens added to the %s/%s CPU time token bucket "+
+						"via the refill process; rate() gives the effective refill rate",
+					tier, qual),
+				Measurement: "Tokens",
+				Unit:        metric.Unit_COUNT,
+			})
+			m.RefillRemoved[idx] = metric.NewCounter(metric.Metadata{
+				Name: fmt.Sprintf(
+					"admission.cpu_time_tokens.refill.removed.%s.%s",
+					tier, qual),
+				Help: fmt.Sprintf(
+					"Cumulative tokens removed from the %s/%s CPU time token bucket "+
+						"when refill rates decrease between intervals",
+					tier, qual),
+				Measurement: "Tokens",
+				Unit:        metric.Unit_COUNT,
+			})
 		}
 	}
 	return m
@@ -140,8 +128,10 @@ func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 // MetricStruct implements the metric.Struct interface.
 func (cpuTimeTokenMetrics) MetricStruct() {}
 
-// exhaustedDurationIdx returns the flat index into
-// ExhaustedDurationNanos for the given (tier, qual) pair.
-func exhaustedDurationIdx(tier resourceTier, qual burstQualification) int {
+const numPerBucketCounters = int(numResourceTiers) * int(numBurstQualifications)
+
+// perBucketIdx returns the flat index into per-(tier, qual) counter
+// arrays for the given (tier, qual) pair.
+func perBucketIdx(tier resourceTier, qual burstQualification) int {
 	return int(tier)*int(numBurstQualifications) + int(qual)
 }
