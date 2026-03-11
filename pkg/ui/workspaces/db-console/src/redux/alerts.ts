@@ -32,7 +32,6 @@ import {
   refreshCluster,
   refreshNodes,
   refreshVersion,
-  refreshHealth,
   refreshSettings,
 } from "./apiReducers";
 import {
@@ -280,7 +279,7 @@ export const disconnectedDismissedLocalSetting = new LocalSetting(
  * Notification when the Admin UI is disconnected from the cluster.
  */
 export const disconnectedAlertSelector = createSelector(
-  (state: AdminUIState) => state.cachedData.health,
+  (state: AdminUIState) => state.health,
   disconnectedDismissedLocalSetting.selector,
   (health, disconnectedDismissed): Alert => {
     if (!health || !health.lastError) {
@@ -763,9 +762,6 @@ export function alertDataSync(store: Store<AdminUIState>) {
 
   return () => {
     const state: AdminUIState = store.getState();
-
-    // Always refresh health.
-    dispatch(refreshHealth());
 
     const { Insecure } = getDataFromServer();
     // We should not send out requests to the endpoints below if

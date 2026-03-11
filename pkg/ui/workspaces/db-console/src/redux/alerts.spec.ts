@@ -33,9 +33,9 @@ import {
   versionReducerObj,
   nodesReducerObj,
   clusterReducerObj,
-  healthReducerObj,
   settingsReducerObj,
 } from "./apiReducers";
+import { setHealthError } from "./health";
 import { loginSuccess } from "./login";
 import { AdminUIState, AppDispatch, createAdminUIStore } from "./state";
 import {
@@ -401,23 +401,20 @@ describe("alerts", function () {
     });
 
     describe("disconnected alert", function () {
-      it("requires health to be available before displaying", function () {
+      it("does not display when no health error is set", function () {
         const alert = disconnectedAlertSelector(state());
         expect(alert).toBeUndefined();
       });
 
-      it("does not display when cluster is healthy", function () {
-        dispatch(
-          healthReducerObj.receiveData(
-            new protos.cockroach.server.serverpb.ClusterResponse({}),
-          ),
-        );
+      it("does not display when health error is cleared", function () {
+        dispatch(setHealthError(new Error("error")));
+        dispatch(setHealthError(null));
         const alert = disconnectedAlertSelector(state());
         expect(alert).toBeUndefined();
       });
 
-      it("displays when cluster health endpoint returns an error", function () {
-        dispatch(healthReducerObj.errorData(new Error("error")));
+      it("displays when health error is set", function () {
+        dispatch(setHealthError(new Error("error")));
         const alert = disconnectedAlertSelector(state());
         expect(typeof alert).toBe("object");
         expect(alert.level).toEqual(AlertLevel.CRITICAL);
@@ -427,14 +424,14 @@ describe("alerts", function () {
       });
 
       it("does not display if dismissed locally", function () {
-        dispatch(healthReducerObj.errorData(new Error("error")));
+        dispatch(setHealthError(new Error("error")));
         dispatch(disconnectedDismissedLocalSetting.set(moment()));
         const alert = disconnectedAlertSelector(state());
         expect(alert).toBeUndefined();
       });
 
       it("dismisses by setting local dismissal", function (done) {
-        dispatch(healthReducerObj.errorData(new Error("error")));
+        dispatch(setHealthError(new Error("error")));
         const alert = disconnectedAlertSelector(state());
         const beforeDismiss = moment();
 
@@ -543,7 +540,6 @@ describe("alerts", function () {
       expect(state().cachedData.cluster.inFlight).toBe(true);
       expect(state().cachedData.nodes.inFlight).toBe(true);
       expect(state().cachedData.version.inFlight).toBe(false);
-      expect(state().cachedData.health.inFlight).toBe(true);
     });
 
     it("dispatches request for version data when cluster ID and nodes are available", function () {
@@ -595,17 +591,6 @@ describe("alerts", function () {
       expect(state().cachedData.version.inFlight).toBe(false);
     });
 
-    it("refreshes health function whenever the last health response is no longer valid.", function () {
-      dispatch(
-        healthReducerObj.receiveData(
-          new protos.cockroach.server.serverpb.ClusterResponse({}),
-        ),
-      );
-      dispatch(healthReducerObj.invalidateData());
-      sync();
-      expect(state().cachedData.health.inFlight).toBe(true);
-    });
-
     it("does not do anything when all data is available.", function () {
       dispatch(
         nodesReducerObj.receiveData([
@@ -629,11 +614,6 @@ describe("alerts", function () {
         versionReducerObj.receiveData({
           details: [],
         }),
-      );
-      dispatch(
-        healthReducerObj.receiveData(
-          new protos.cockroach.server.serverpb.ClusterResponse({}),
-        ),
       );
       dispatch(
         settingsReducerObj.receiveData(

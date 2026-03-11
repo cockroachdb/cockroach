@@ -29,6 +29,7 @@ import ErrorBoundary from "src/views/app/components/errorMessage/errorBoundary";
 import NavigationBar from "src/views/app/components/layoutSidebar";
 import LoginIndicator from "src/views/app/components/loginIndicator";
 import AlertBanner from "src/views/app/containers/alertBanner";
+import { HealthMonitor } from "src/views/app/containers/healthMonitor";
 import TimeWindowManager from "src/views/app/containers/metricsTimeManager";
 import RequireLogin from "src/views/login/requireLogin";
 import { ThrottleNotificationBar } from "src/views/shared/components/alertBar/alertBar";
@@ -82,6 +83,7 @@ function Layout({ children }: LayoutProps): React.ReactElement {
         defaultTitle="Cockroach Console"
       />
       <TimeWindowManager />
+      <HealthMonitor />
       <AlertBanner />
       <div className="layout-panel">
         <div className="layout-panel__header">

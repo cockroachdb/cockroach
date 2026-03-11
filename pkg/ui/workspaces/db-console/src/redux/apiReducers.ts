@@ -59,14 +59,6 @@ const eventsReducerObj = new CachedDataReducer(
 );
 export const refreshEvents = eventsReducerObj.refresh;
 
-export type HealthState = CachedDataReducerState<api.HealthResponseMessage>;
-export const healthReducerObj = new CachedDataReducer(
-  api.getHealth,
-  "health",
-  moment.duration(2, "s"),
-);
-export const refreshHealth = healthReducerObj.refresh;
-
 function rollupStoreMetrics(
   res: api.NodesResponseExternalMessage,
 ): INodeStatus[] {
@@ -513,7 +505,6 @@ export interface APIReducersState {
   events: CachedDataReducerState<
     clusterUiApi.SqlApiResponse<clusterUiApi.EventsResponse>
   >;
-  health: HealthState;
   nodes: CachedDataReducerState<INodeStatus[]>;
   raft: CachedDataReducerState<api.RaftDebugResponseMessage>;
   version: CachedDataReducerState<VersionList>;
@@ -570,7 +561,6 @@ export interface APIReducersState {
 export const apiReducersReducer = combineReducers<APIReducersState>({
   [clusterReducerObj.actionNamespace]: clusterReducerObj.reducer,
   [eventsReducerObj.actionNamespace]: eventsReducerObj.reducer,
-  [healthReducerObj.actionNamespace]: healthReducerObj.reducer,
   [nodesReducerObj.actionNamespace]: nodesReducerObj.reducer,
   [raftReducerObj.actionNamespace]: raftReducerObj.reducer,
   [versionReducerObj.actionNamespace]: versionReducerObj.reducer,

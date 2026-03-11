@@ -10,6 +10,7 @@ import React from "react";
 import { Provider } from "react-redux";
 
 import { apiReducersReducer } from "src/redux/apiReducers";
+import { healthReducer } from "src/redux/health";
 import { hoverReducer } from "src/redux/hover";
 import { localSettingsReducer } from "src/redux/localsettings";
 import { loginReducer } from "src/redux/login";
@@ -31,6 +32,7 @@ export function renderWithProviders(
   const store = configureStore<AdminUIState>({
     reducer: {
       cachedData: apiReducersReducer,
+      health: healthReducer,
       hover: hoverReducer,
       localSettings: localSettingsReducer,
       // TODO (koorosh): cannot properly cast Query Manager Action types to AnyAction.
