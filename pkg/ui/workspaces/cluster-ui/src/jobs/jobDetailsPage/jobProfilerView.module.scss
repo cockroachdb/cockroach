@@ -6,34 +6,96 @@
 @import "src/core/index.module";
 
 .crl-job-profiler-view {
-    &__actions-column {
-        display: flex;
-        flex-direction: row;
-        flex-wrap: nowrap;
-        justify-content: flex-end;
-    }
+  &__actions-column {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    justify-content: flex-end;
+  }
 }
 
 .column-size-medium {
-    width: 230px;
+  width: 230px;
 }
 
 .view-execution-detail-button {
-    white-space: nowrap;
+  white-space: nowrap;
 
-    >svg {
-        margin-right: $spacing-x-small;
-    }
+  > svg {
+    margin-right: $spacing-x-small;
+  }
 }
 
 .download-execution-detail-button {
-    white-space: nowrap;
+  white-space: nowrap;
 
-    >svg {
-        margin-right: $spacing-x-small;
-    }
+  > svg {
+    margin-right: $spacing-x-small;
+  }
 }
 
 .full-width {
   width: 100%;
+}
+
+// Execution detail viewer overlay and panel.
+.viewer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.viewer-panel {
+  background-color: white;
+  border: 0.5px solid $colors--neutral-2;
+  border-radius: 8px;
+  box-shadow: 0 0 4px rgba(154, 161, 171, 0.33);
+  width: 98vw;
+  height: 98vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 0.5px solid $colors--neutral-2;
+}
+
+.viewer-filename {
+  font-family: $font-family--base;
+  font-weight: $font-weight--bold;
+  font-size: $font-size--small;
+  line-height: $line-height--small;
+  letter-spacing: 0.3px;
+  color: $colors--neutral-7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.viewer-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: 16px;
+}
+
+.viewer-iframe {
+  width: 100%;
+  border: none;
+  display: block;
+  flex: 1;
+  min-height: 0;
 }

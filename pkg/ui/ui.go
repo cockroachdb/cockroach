@@ -36,6 +36,7 @@ const (
 	cspHeader = "default-src 'self'; " +
 		"style-src 'self' 'unsafe-inline'; " +
 		"font-src 'self' data:; " +
+		"frame-src 'self' blob: https://cockroachdb.github.io; " +
 		"img-src 'self' data:; " +
 		"connect-src 'self' https://register.cockroachdb.com;"
 )
