@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -87,6 +88,11 @@ const (
 
 	// NoRepairNeeded indicates the range is healthy and conformant.
 	NoRepairNeeded
+
+	// numRepairActions is the total number of RepairAction values (including
+	// NoRepairNeeded). It must remain the last entry in the iota sequence so
+	// that iteration over [1, numRepairActions) covers all valid actions.
+	numRepairActions
 )
 
 // SafeFormat implements redact.SafeFormatter.
@@ -258,7 +264,7 @@ func (cs *clusterState) updateRepairAction(
 		}
 	}
 	// Add to new bucket.
-	if newAction != NoRepairNeeded && newAction != RepairPending {
+	if newAction != NoRepairNeeded && newAction != RepairPending && newAction != RepairSkipped {
 		m, ok := cs.repairRanges[newAction]
 		if !ok {
 			m = map[roachpb.RangeID]struct{}{}
@@ -272,7 +278,7 @@ func (cs *clusterState) updateRepairAction(
 // removeFromRepairRanges removes a range from the repairRanges index. This
 // should be called before deleting a range from cs.ranges.
 func (cs *clusterState) removeFromRepairRanges(rangeID roachpb.RangeID, rs *rangeState) {
-	if rs.repairAction != NoRepairNeeded && rs.repairAction != RepairPending && rs.repairAction != 0 {
+	if rs.repairAction != NoRepairNeeded && rs.repairAction != RepairPending && rs.repairAction != RepairSkipped && rs.repairAction != 0 {
 		if m, ok := cs.repairRanges[rs.repairAction]; ok {
 			delete(m, rangeID)
 			if len(m) == 0 {
@@ -538,17 +544,23 @@ func (re *rebalanceEnv) repair(
 	ctx = logtags.AddTag(ctx, "mmaid", re.mmaid)
 
 	// Iterate repair actions in priority order (lower enum = higher priority).
-	for action := FinalizeAtomicReplicationChange; action < NoRepairNeeded; action++ {
+	// Start at 1: RepairAction(0) is intentionally invalid (see enum definition).
+	for action := RepairAction(1); action < numRepairActions; action++ {
 		ranges := re.repairRanges[action]
 		if len(ranges) == 0 {
 			continue
 		}
-		// Sort range IDs for deterministic iteration order.
-		ids := make([]roachpb.RangeID, 0, len(ranges))
+		// Collect and sort range IDs, then shuffle deterministically so that
+		// iteration is not systematically biased toward any range.
+		idsPtr := rangeIDSlicePool.Get().(*[]roachpb.RangeID)
+		ids := (*idsPtr)[:0]
 		for rid := range ranges {
 			ids = append(ids, rid)
 		}
 		slices.Sort(ids)
+		re.rng.Shuffle(len(ids), func(i, j int) {
+			ids[i], ids[j] = ids[j], ids[i]
+		})
 
 		for _, rangeID := range ids {
 			rs := re.ranges[rangeID]
@@ -561,12 +573,21 @@ func (re *rebalanceEnv) repair(
 			case AddVoter:
 				re.repairAddVoter(ctx, localStoreID, rangeID, rs)
 			default:
-				log.KvDistribution.Infof(ctx,
+				log.KvDistribution.VEventf(ctx, 2,
 					"repair action %s for r%d not yet implemented", action, rangeID)
 			}
 		}
+		*idsPtr = ids
+		rangeIDSlicePool.Put(idsPtr)
 	}
 	return re.changes
+}
+
+var rangeIDSlicePool = sync.Pool{
+	New: func() interface{} {
+		s := make([]roachpb.RangeID, 0, 16)
+		return &s
+	},
 }
 
 // Verify interface compliance.

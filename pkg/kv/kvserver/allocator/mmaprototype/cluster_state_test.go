@@ -395,6 +395,18 @@ func safeTrace(t *testing.T, sb *redact.StringBuilder) string {
 	return stripped
 }
 
+func TestNumRepairActions(t *testing.T) {
+	// Verify that numRepairActions immediately follows NoRepairNeeded, ensuring
+	// the sentinel stays correct as new actions are added.
+	require.Equal(t, NoRepairNeeded+1, numRepairActions)
+	// All actions in [1, numRepairActions) must have known String() values
+	// (i.e. not the fallback "RepairAction(N)" format).
+	for a := RepairAction(1); a < numRepairActions; a++ {
+		require.NotContains(t, a.String(), "RepairAction(",
+			"action %d has no stringer entry; regenerate with go generate", a)
+	}
+}
+
 func TestClusterState(t *testing.T) {
 	tdPath := datapathutils.TestDataPath(t, "cluster_state")
 	datadriven.Walk(t,
@@ -759,7 +771,7 @@ func TestClusterState(t *testing.T) {
 				case "repair-needed":
 					var sb strings.Builder
 					// Iterate actions in priority order.
-					for action := FinalizeAtomicReplicationChange; action < NoRepairNeeded; action++ {
+					for action := RepairAction(1); action < numRepairActions; action++ {
 						ranges, ok := cs.repairRanges[action]
 						if !ok || len(ranges) == 0 {
 							continue
