@@ -25,6 +25,10 @@ type ChangeOptions struct {
 	// (due to pending changes from a load perspective), and so choose not to
 	// update gauges and logs in those subsequent calls.
 	PeriodicCall bool
+	// IncludeRepair tells ComputeChanges to run repair() before
+	// rebalanceStores(). Repair is higher priority; its pending changes
+	// prevent the rebalancer from touching the same ranges.
+	IncludeRepair bool
 }
 
 // Allocator is the interface for a distributed allocator. We expect that the

@@ -744,6 +744,18 @@ func TestClusterState(t *testing.T) {
 					rec.SafeFormatMinimal(&sb)
 					return fmt.Sprintf("%s%v\n", safeTrace(t, &sb), out)
 
+				case "repair":
+					storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
+					rng := rand.New(rand.NewSource(0))
+					dsm := newDiversityScoringMemo()
+					passObs := makeRebalancingPassMetricsAndLogger(storeID)
+					re := newRebalanceEnv(cs, rng, dsm, cs.ts.Now(), passObs)
+					re.repair(ctx, storeID)
+					rec := finishAndGet()
+					var sb redact.StringBuilder
+					rec.SafeFormatMinimal(&sb)
+					return safeTrace(t, &sb) + printPendingChangesTest(testingGetPendingChanges(t, cs))
+
 				case "repair-needed":
 					var sb strings.Builder
 					// Iterate actions in priority order.
