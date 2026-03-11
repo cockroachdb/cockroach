@@ -4,31 +4,23 @@
 // included in the /LICENSE file.
 
 import { render } from "@testing-library/react";
-import * as H from "history";
 import React from "react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route } from "react-router-dom";
 
 import * as utils from "src/util/hooks";
 
 import { activeScheduleFixture } from "../schedulesPage/schedulesPage.fixture";
 
-import { ScheduleDetails, ScheduleDetailsProps } from "./scheduleDetails";
+import { ScheduleDetails } from "./scheduleDetails";
 
-const getMockScheduleDetailsProps = (
-  scheduleID = "123",
-): ScheduleDetailsProps => {
-  const history = H.createHashHistory();
-  return {
-    location: history.location,
-    history,
-    match: {
-      url: "",
-      path: history.location.pathname,
-      isExact: false,
-      params: { id: scheduleID },
-    },
-  };
-};
+const renderWithRoute = (scheduleID = "123") =>
+  render(
+    <MemoryRouter initialEntries={[`/schedules/${scheduleID}`]}>
+      <Route path="/schedules/:id">
+        <ScheduleDetails />
+      </Route>
+    </MemoryRouter>,
+  );
 
 describe("ScheduleDetails", () => {
   let spy: jest.MockInstance<any, any>;
@@ -44,11 +36,7 @@ describe("ScheduleDetails", () => {
       mutate: null,
       isValidating: false,
     });
-    const { getByText } = render(
-      <MemoryRouter>
-        <ScheduleDetails {...getMockScheduleDetailsProps()} />
-      </MemoryRouter>,
-    );
+    const { getByText } = renderWithRoute();
     getByText("Label");
     getByText("Status");
     getByText("State");
@@ -68,11 +56,7 @@ describe("ScheduleDetails", () => {
       isValidating: false,
     });
 
-    const { getByText } = render(
-      <MemoryRouter>
-        <ScheduleDetails {...getMockScheduleDetailsProps()} />
-      </MemoryRouter>,
-    );
+    const { getByText } = renderWithRoute();
     getByText("Error retrieving data");
   });
 
@@ -85,11 +69,7 @@ describe("ScheduleDetails", () => {
       isValidating: false,
     });
 
-    const { getByTestId } = render(
-      <MemoryRouter>
-        <ScheduleDetails {...getMockScheduleDetailsProps()} />
-      </MemoryRouter>,
-    );
+    const { getByTestId } = renderWithRoute();
     getByTestId("loading-spinner");
   });
 
@@ -102,11 +82,7 @@ describe("ScheduleDetails", () => {
       isValidating: false,
     });
 
-    const { getByText } = render(
-      <MemoryRouter>
-        <ScheduleDetails {...getMockScheduleDetailsProps("456")} />
-      </MemoryRouter>,
-    );
+    const { getByText } = renderWithRoute("456");
     getByText("Schedule ID: 456");
   });
 });

@@ -13,6 +13,7 @@ stubComponentInModule(
   "@cockroachlabs/cluster-ui",
   "DatabasesPageV2",
   "DatabaseDetailsPageV2",
+  "ScheduleDetails",
 );
 stubComponentInModule("src/views/cluster/containers/nodeGraphs", "default");
 stubComponentInModule("src/views/cluster/containers/events", "EventPage");
@@ -43,7 +44,6 @@ stubComponentInModule(
 );
 stubComponentInModule("src/views/insights/schemaInsightsPage", "default");
 stubComponentInModule("src/views/schedules/schedulesPage", "default");
-stubComponentInModule("src/views/schedules/scheduleDetails", "default");
 stubComponentInModule("src/views/tracez_v2/snapshotPage", "default");
 stubComponentInModule(
   "src/views/app/components/tenantDropdown/tenantDropdown",
@@ -264,7 +264,7 @@ describe("Routing to", () => {
   describe("'/schedules/:id' path", () => {
     test("routes to <ScheduleDetails> component", () => {
       navigateToPath("/schedules/12345");
-      screen.getByTestId("scheduleDetails");
+      screen.getByTestId("ScheduleDetails");
     });
   });
 

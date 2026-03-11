@@ -10,6 +10,7 @@ import {
   DatabasesPageV2,
   DatabaseDetailsPageV2,
   TableDetailsPageV2,
+  ScheduleDetails,
 } from "@cockroachlabs/cluster-ui";
 import { ConfigProvider } from "antd";
 import { ConnectedRouter } from "connected-react-router";
@@ -77,7 +78,6 @@ import Range from "src/views/reports/containers/range";
 import ReduxDebug from "src/views/reports/containers/redux";
 import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
-import ScheduleDetails from "src/views/schedules/scheduleDetails";
 import SchedulesPage from "src/views/schedules/schedulesPage";
 import SessionDetails from "src/views/sessions/sessionDetails";
 import SQLActivityPage from "src/views/sqlActivity/sqlActivityPage";

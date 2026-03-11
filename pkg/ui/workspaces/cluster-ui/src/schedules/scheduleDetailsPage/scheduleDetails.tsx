@@ -8,7 +8,7 @@ import classNames from "classnames/bind";
 import Long from "long";
 import React from "react";
 import Helmet from "react-helmet";
-import { RouteComponentProps } from "react-router-dom";
+import { useHistory, useParams } from "react-router-dom";
 
 import { getSchedule } from "src/api/schedulesApi";
 import { Button } from "src/button";
@@ -18,22 +18,16 @@ import scheduleStyles from "src/schedules/schedules.module.scss";
 import { SqlBox, SqlBoxSize } from "src/sql";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
-import {
-  DATE_FORMAT_24_TZ,
-  idAttr,
-  getMatchParamByName,
-  useSwrWithClusterId,
-} from "src/util";
+import { DATE_FORMAT_24_TZ, useSwrWithClusterId } from "src/util";
 
 import { Timestamp } from "../../timestamp";
 
 const cardCx = classNames.bind(summaryCardStyles);
 const scheduleCx = classNames.bind(scheduleStyles);
 
-export type ScheduleDetailsProps = RouteComponentProps;
-
-export const ScheduleDetails: React.FC<ScheduleDetailsProps> = props => {
-  const idStr = getMatchParamByName(props.match, idAttr);
+export const ScheduleDetails: React.FC = () => {
+  const { id: idStr } = useParams<{ id: string }>();
+  const history = useHistory();
 
   const {
     data: schedule,
@@ -43,7 +37,7 @@ export const ScheduleDetails: React.FC<ScheduleDetailsProps> = props => {
     getSchedule(Long.fromString(idStr)),
   );
 
-  const prevPage = (): void => props.history.goBack();
+  const prevPage = (): void => history.goBack();
 
   const renderContent = (): React.ReactElement => {
     return (
