@@ -622,7 +622,7 @@ func findExistingColInList(
 		if expr == col {
 			return col
 		}
-		if exprStr == col.getExprStr() {
+		if col.typ.Equivalent(expr.ResolvedType()) && exprStr == col.getExprStr() {
 			if allowSideEffects || col.scalar == nil {
 				return col
 			}
@@ -638,7 +638,9 @@ func findExistingColInList(
 
 // findExistingCol finds the given expression among the bound variables in this
 // scope. Returns nil if the expression is not found (or an expression is found
-// but it has side-effects and allowSideEffects is false).
+// but it has side-effects and allowSideEffects is false). The types of the
+// given expression and the bound variable need to be equivalent.
+//
 // If a column is found and we are tracking view dependencies, we add the column
 // to the view dependencies since it means this column is being referenced.
 func (s *scope) findExistingCol(expr tree.TypedExpr, allowSideEffects bool) *scopeColumn {
