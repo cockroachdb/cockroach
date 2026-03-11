@@ -150,7 +150,7 @@ func (c *uniquenessCheck) Start(
 WITH all_regions AS (
   %s
 )
-SELECT %s, array_agg(remote_region) as remote_regions
+SELECT %s, array_agg(remote_region ORDER BY remote_region) as remote_regions
 FROM all_regions
 GROUP BY %s
 `,
