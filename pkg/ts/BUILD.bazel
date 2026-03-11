@@ -25,6 +25,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/liveness",
+        "//pkg/obs/workloadid",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",

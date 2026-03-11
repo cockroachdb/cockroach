@@ -18,6 +18,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvstorage",
         "//pkg/kv/kvserver/liveness/livenesspb",
+        "//pkg/obs/workloadid",
         "//pkg/roachpb",
         "//pkg/rpc/nodedialer",
         "//pkg/server/telemetry",

@@ -17,6 +17,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/multitenant",
+        "//pkg/obs/workloadid",
         "//pkg/roachpb",
         "//pkg/server/settingswatcher",
         "//pkg/settings",
