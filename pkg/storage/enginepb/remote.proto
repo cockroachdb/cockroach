@@ -1,0 +1,17 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.storage.enginepb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/storage/enginepb";
+
+// RemoteDecodingInfo carries metadata needed to read data from remote storage.
+// It is injected into remote storage locator URIs so that the storage layer can apply 
+// transformations when reading from external storage on behalf of higher-level subsystems.
+message RemoteDecodingInfo {
+  // EncryptionKey is the encryption key used to decrypt data read from the remote
+  // storage. If empty, no decryption is applied.
+  bytes encryption_key = 1;
+}

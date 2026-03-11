@@ -155,7 +155,7 @@ func ExternalSSTReader(
 		var reader objstorage.ReadableFile
 
 		if encryption != nil {
-			r, err := decryptingReader(raw, encryption.Key)
+			r, err := newDecryptingReadableFile(raw, encryption.Key)
 			if err != nil {
 				f.Close(ctx)
 				return nil, err
