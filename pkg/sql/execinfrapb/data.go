@@ -177,8 +177,6 @@ type ProducerMetadata struct {
 	BulkProcessorProgress *RemoteProducerMetadata_BulkProcessorProgress
 	// Metrics contains information about goodput of the node.
 	Metrics *RemoteProducerMetadata_Metrics
-	// Changefeed contains information about changefeed.
-	Changefeed *ChangefeedMeta
 	// AggregatorEvents contains information from a tracing aggregator.
 	AggregatorEvents *TracingAggregatorEvents
 }
@@ -249,8 +247,6 @@ func RemoteProducerMetaToLocalMeta(
 		meta.Err = v.Error.ErrorDetail(ctx)
 	case *RemoteProducerMetadata_Metrics_:
 		meta.Metrics = v.Metrics
-	case *RemoteProducerMetadata_Changefeed:
-		meta.Changefeed = v.Changefeed
 	case *RemoteProducerMetadata_TracingAggregatorEvents:
 		meta.AggregatorEvents = v.TracingAggregatorEvents
 	default:
@@ -300,10 +296,6 @@ func LocalMetaToRemoteProducerMeta(
 	} else if meta.Err != nil {
 		rpm.Value = &RemoteProducerMetadata_Error{
 			Error: NewError(ctx, meta.Err),
-		}
-	} else if meta.Changefeed != nil {
-		rpm.Value = &RemoteProducerMetadata_Changefeed{
-			Changefeed: meta.Changefeed,
 		}
 	} else if meta.AggregatorEvents != nil {
 		rpm.Value = &RemoteProducerMetadata_TracingAggregatorEvents{

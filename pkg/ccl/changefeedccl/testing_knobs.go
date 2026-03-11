@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -71,13 +70,6 @@ type TestingKnobs struct {
 	// starts executing.
 	OverrideCursor func(currentTime *hlc.Timestamp) string
 
-	// FilterDrainingNodes is a callback that's invoked by changefeed dist planner
-	// in order to filter draining nodes from the list of eligible nodes.
-	// Normally, we rely on dist sql planner to do that for us.
-	FilterDrainingNodes func(
-		partitions []sql.SpanPartition, draining []roachpb.NodeID,
-	) ([]sql.SpanPartition, error)
-
 	// ShouldFlushFrontier returns true if the change aggregator should flush
 	// its frontier after processing a resolved span.
 	ShouldFlushFrontier func(rs jobspb.ResolvedSpan) bool
@@ -85,9 +77,6 @@ type TestingKnobs struct {
 	// ShouldCheckpointToJobRecord returns true if change frontier should checkpoint itself
 	// to the job record.
 	ShouldCheckpointToJobRecord func(hw hlc.Timestamp) bool
-
-	// OnDrain returns the channel to select on to detect node drain
-	OnDrain func() <-chan struct{}
 
 	// SpanPartitionsCallback is called with the span partition
 	// when the changefeed is planned.

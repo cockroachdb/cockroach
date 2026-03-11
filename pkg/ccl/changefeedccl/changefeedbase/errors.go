@@ -142,6 +142,3 @@ func AsTerminalError(ctx context.Context, dh drainHelper, cause error) (termErr 
 	// All other errors retry.
 	return nil
 }
-
-// ErrNodeDraining indicates that this node is being drained.
-var ErrNodeDraining = errors.New("node draining")
