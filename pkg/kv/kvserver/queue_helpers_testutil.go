@@ -8,6 +8,7 @@ package kvserver
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -55,8 +56,15 @@ func mustForceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) {
 }
 
 // ForceReplicationScanAndProcess iterates over all ranges and
-// enqueues any that need to be replicated.
+// enqueues any that need to be replicated. When MMA repair-and-rebalance
+// mode is active, it delegates to the MMA rebalancer instead of the
+// replicate queue (whose shouldQueue/process are no-ops in that mode).
 func (s *Store) ForceReplicationScanAndProcess() error {
+	if kvserverbase.LoadBasedRebalancingModeIsMMARepairAndRebalance(
+		&s.cfg.Settings.SV) {
+		s.mmaStoreRebalancer.rebalanceUntilStable(context.TODO())
+		return nil
+	}
 	return forceScanAndProcess(context.TODO(), s, s.replicateQueue.baseQueue)
 }
 
