@@ -1,0 +1,3 @@
+setup
+CREATE TYPE defaultdb.climes AS ENUM ('tropical', 'arctic', 'mediterranean');
+----

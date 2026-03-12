@@ -44,6 +44,7 @@ var supportedStatements = map[reflect.Type]supportedStatement{
 	// supportedAlterTableStatements list, so we will consider it fully supported
 	// here.
 	reflect.TypeOf((*tree.AlterTable)(nil)):          {fn: AlterTable, statementTags: []string{tree.AlterTableTag}, on: true, checks: alterTableChecks},
+	reflect.TypeOf((*tree.AlterType)(nil)):           {fn: AlterType, statementTags: []string{tree.AlterTypeTag}, on: false, checks: alterTypeChecks},
 	reflect.TypeOf((*tree.AlterTableLocality)(nil)):  {fn: AlterTableLocality, statementTags: []string{tree.AlterTableTag}, on: true, checks: isV262Active},
 	reflect.TypeOf((*tree.AlterTableSetSchema)(nil)): {fn: AlterTableSetSchema, statementTags: []string{tree.AlterTableTag}, on: true, checks: isV261Active},
 	reflect.TypeOf((*tree.AlterPolicy)(nil)):         {fn: AlterPolicy, statementTags: []string{tree.AlterPolicyTag}, on: true, checks: nil},
