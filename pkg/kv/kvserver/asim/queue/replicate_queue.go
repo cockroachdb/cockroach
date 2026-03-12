@@ -112,6 +112,9 @@ func (rq *replicateQueue) MaybeAdd(ctx context.Context, replica state.Replica, s
 // priority, then in FIFO order on ties. The Tick function currently only
 // supports processing ConsiderRebalance actions on replicas.
 func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
+	if !rq.settings.ReplicateQueueEnabled {
+		return
+	}
 	rq.AddLogTag("tick", tick)
 	ctx = rq.AnnotateCtx(ctx)
 	// TODO(wenyihu6): it is unclear why next tick is forwarded to last tick
