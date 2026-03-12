@@ -41,7 +41,7 @@ sleep 3m
 add-apt-repository ppa:git-core/ppa
 apt-get update
 
-python_packages="python3"
+python_packages="python3 python3-pip python3-venv"
 if [[ $(lsb_release -cs) = "focal" ]]; then
     python_packages="$python_packages python2"
 fi
