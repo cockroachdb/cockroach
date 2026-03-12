@@ -178,13 +178,14 @@ func (sfr *SimpleFlightRecorder) Start(ctx context.Context, stopper *stop.Stoppe
 					continue
 				}
 				_, err = sfr.fr.WriteTo(destFile)
-				if err != nil {
+				if err = errors.CombineErrors(err, destFile.Close()); err != nil {
 					log.Dev.Warningf(ctx, "error while writing flight record to %s, will try again: %v", filename, err)
+					_ = os.Remove(filename)
 					t.Reset(max(interval-timeutil.Since(startTime), 0))
 					continue
 				}
 
-				// Can run GC since we successfully wrote a new file.
+				// Can run GC since we successfully wrote and closed a new file.
 				sfr.dumpStore.GC(ctx, timeutil.Now(), sfr)
 				t.Reset(max(interval-timeutil.Since(startTime), 0))
 			case <-stopper.ShouldQuiesce():
