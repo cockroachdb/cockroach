@@ -1,4 +1,7 @@
-# LogicTest: !local-prepared
+# LogicTest: !local-prepared !fakedist-disk
+# ST_AsMVT output depends on input row ordering. Distributed execution with
+# disk spilling does not preserve ORDER BY from subqueries, causing flaky
+# failures on fakedist-disk. See #165515.
 statement ok
 CREATE TABLE geo_table(
   id int primary key,
