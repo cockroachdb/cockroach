@@ -66,14 +66,16 @@ func TestClusterTimestampConversion(t *testing.T) {
 		)
 
 		ctx := eval.Context{
-			Txn: kv.NewTxnFromProto(
-				context.Background(),
-				db,
-				1, /* gatewayNodeID */
-				ts,
-				kv.RootTxn,
-				&txnProto,
-			),
+			GlobalState: &eval.GlobalState{
+				Txn: kv.NewTxnFromProto(
+					context.Background(),
+					db,
+					1, /* gatewayNodeID */
+					ts,
+					kv.RootTxn,
+					&txnProto,
+				),
+			},
 		}
 
 		dec, err := ctx.GetClusterTimestamp()

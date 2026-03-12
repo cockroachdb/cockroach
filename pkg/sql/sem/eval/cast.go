@@ -530,7 +530,7 @@ func performCastWithoutPrecisionTruncation(
 			return tree.NewDString(s), nil
 		case types.CollatedStringFamily:
 			if t.Oid() == oidext.T_citext {
-				return tree.NewDCIText(s, &evalCtx.CollationEnv)
+				return tree.NewDCIText(s, evalCtx.GetCollationEnv())
 			}
 
 			// bpchar types truncate trailing whitespace.
@@ -541,7 +541,7 @@ func performCastWithoutPrecisionTruncation(
 			if truncateWidth && t.Width() > 0 {
 				s = util.TruncateString(s, int(t.Width()))
 			}
-			return tree.NewDCollatedString(s, t.Locale(), &evalCtx.CollationEnv)
+			return tree.NewDCollatedString(s, t.Locale(), evalCtx.GetCollationEnv())
 		}
 
 	case types.BytesFamily:

@@ -127,11 +127,16 @@ func TestEvalContextCopy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// Note: the test relies on "parent" EvalContext having non-nil and non-empty
-	// iVarContainerStack.
-	ctx := Context{iVarContainerStack: make([]tree.IndexedVarContainer, 1)}
+	// iVarContainerStack in Local.
+	ctx := Context{
+		GlobalState: &GlobalState{},
+		Local: LocalState{
+			iVarContainerStack: make([]tree.IndexedVarContainer, 1),
+		},
+	}
 
 	cpy := ctx.Copy()
-	if &ctx.iVarContainerStack[0] == &cpy.iVarContainerStack[0] {
+	if &ctx.Local.iVarContainerStack[0] == &cpy.Local.iVarContainerStack[0] {
 		t.Fatal("iVarContainerStacks are the same")
 	}
 }

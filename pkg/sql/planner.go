@@ -149,6 +149,11 @@ func (evalCtx *extendedEvalContext) copyFromExecCfg(execCfg *ExecutorConfig) {
 	evalCtx.InspectzServer = execCfg.InspectzServer
 }
 
+// Note: copyFromExecCfg assigns directly to GlobalState fields
+// (Settings, Codec, Tracer, etc.) via embedding. This is safe because
+// copyFromExecCfg is called during initialization, before any concurrent
+// access.
+
 // copy returns a deep copy of ctx.
 func (evalCtx *extendedEvalContext) copy() *extendedEvalContext {
 	cpy := *evalCtx
@@ -575,21 +580,23 @@ func internalExtendedEvalCtx(
 	}
 	ret := extendedEvalContext{
 		Context: eval.Context{
-			Txn:                            txn,
-			SessionDataStack:               sds,
-			TxnReadOnly:                    false,
-			TxnImplicit:                    true,
-			TxnIsSingleStmt:                true,
-			TestingKnobs:                   evalContextTestingKnobs,
-			StmtTimestamp:                  stmtTimestamp,
-			TxnTimestamp:                   txnTimestamp,
-			SQLStatsController:             sqlStatsProvider,
-			SchemaTelemetryController:      schemaTelemetryController,
-			IndexUsageStatsController:      indexUsageStatsController,
-			ConsistencyChecker:             execCfg.ConsistencyChecker,
-			StmtDiagnosticsRequestInserter: execCfg.StmtDiagnosticsRecorder.InsertRequest,
-			TxnDiagnosticsRequestInserter:  execCfg.TxnDiagnosticsRecorder.InsertTxnRequest,
-			RangeStatsFetcher:              execCfg.RangeStatsFetcher,
+			GlobalState: &eval.GlobalState{
+				Txn:                            txn,
+				SessionDataStack:               sds,
+				TxnReadOnly:                    false,
+				TxnImplicit:                    true,
+				TxnIsSingleStmt:                true,
+				TestingKnobs:                   evalContextTestingKnobs,
+				StmtTimestamp:                  stmtTimestamp,
+				TxnTimestamp:                   txnTimestamp,
+				SQLStatsController:             sqlStatsProvider,
+				SchemaTelemetryController:      schemaTelemetryController,
+				IndexUsageStatsController:      indexUsageStatsController,
+				ConsistencyChecker:             execCfg.ConsistencyChecker,
+				StmtDiagnosticsRequestInserter: execCfg.StmtDiagnosticsRecorder.InsertRequest,
+				TxnDiagnosticsRequestInserter:  execCfg.TxnDiagnosticsRecorder.InsertTxnRequest,
+				RangeStatsFetcher:              execCfg.RangeStatsFetcher,
+			},
 		},
 		Tracing:           &SessionTracing{},
 		Descs:             tables,

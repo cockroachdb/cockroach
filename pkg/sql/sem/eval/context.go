@@ -60,29 +60,43 @@ var ErrNilTxnInClusterContext = errors.New("nil txn in cluster context")
 // through that proto too.
 // TODO(andrei): remove or limit the duplication.
 //
-// NOTE(andrei): Context is dusty; it started as a collection of fields
-// needed by expression evaluation, but it has grown quite large; some of the
-// things in it don't seem to belong in this low-level package (e.g. Planner).
-// In the sql package it is embedded by extendedEvalContext, which adds some
-// more fields from the sql package. Through that extendedEvalContext, this
-// struct now generally used by planNodes.
+// Context is organized into three tiers:
+//
+//   - GlobalState (embedded pointer): immutable + thread-safe fields shared
+//     across all processors by pointer. Never copied.
+//   - SharedState (Shared field): shallow-copied per processor. Contains
+//     not-thread-safe planner-backed interfaces and per-processor state.
+//   - LocalState (Local field): deep-copied per processor via LocalState.copy().
+//     Contains fields with internal mutable state (maps, slices) that would
+//     alias after shallow copy.
+//
+// In the sql package Context is embedded by extendedEvalContext, which adds
+// some more fields from the sql package.
 type Context struct {
-	// SessionDataStack stores the session variables accessible by the correct
-	// context. Each element on the stack represents the beginning of a new
-	// transaction or nested transaction (savepoints).
-	SessionDataStack *sessiondata.Stack
-	// TxnState is a string representation of the current transactional state.
-	TxnState string
-	// TxnReadOnly specifies if the current transaction is read-only.
-	TxnReadOnly bool
-	// TxnImplicit specifies if the current transaction is implicit.
-	TxnImplicit bool
-	// TxnIsSingleStmt specifies the current implicit transaction consists of only
-	// a single statement.
-	TxnIsSingleStmt bool
-	// TxnIsoLevel is the isolation level of the current transaction.
-	TxnIsoLevel isolation.Level
-	Settings    *cluster.Settings
+	// GlobalState is shared by pointer across all processors. It contains
+	// only fields that are immutable during statement execution and/or
+	// thread-safe. Never copied.
+	*GlobalState
+
+	// Shared holds per-processor fields that are shallow-copied. Each
+	// processor gets its own copy of these values.
+	Shared SharedState
+
+	// Local holds fields with internal mutable state that would alias
+	// after shallow copy. Deep-copied per processor.
+	Local LocalState
+}
+
+// GlobalState holds fields shared by pointer across all processors via Copy().
+// Fields here are not copied — all processors see the same GlobalState.
+// Callers must be aware that some fields (especially planner-backed interfaces)
+// are NOT thread-safe and should only be used from the main goroutine on the
+// gateway. On remote DistSQL nodes, planner-backed interfaces are set to dummy
+// implementations from faketreeeval.
+type GlobalState struct {
+	// --- Server/cluster config ---
+
+	Settings *cluster.Settings
 	// ClusterID is the logical cluster ID for this tenant.
 	ClusterID uuid.UUID
 	// ClusterName is the security string used to secure the RPC layer.
@@ -101,8 +115,117 @@ type Context struct {
 	// The region entry in this variable is the gateway region.
 	Locality roachpb.Locality
 
-	Tracer *tracing.Tracer
+	Tracer       *tracing.Tracer
+	TestingKnobs TestingKnobs
 
+	// TestingMon is a memory monitor that should be only used in tests. In
+	// production code consider using either the monitor of the planner or of
+	// the flow.
+	// TODO(yuzefovich): remove this.
+	TestingMon *mon.BytesMonitor
+
+	// --- Thread-safe caches ---
+
+	ReCache           *tree.RegexpCache
+	ToCharFormatCache *tochar.FormatCache
+	// CidrLookup is used to look up the tag name for a given IP address.
+	CidrLookup *cidr.Lookup
+
+	// --- Thread-safe server services ---
+
+	SQLLivenessReader sqlliveness.Reader
+	// BlockingSQLLivenessReader is a sqlliveness.Reader that synchronously
+	// blocks to determine the status of a session which it does not know about or
+	// thinks might be expired.
+	BlockingSQLLivenessReader sqlliveness.Reader
+	SQLStatsController        SQLStatsController
+	SchemaTelemetryController SchemaTelemetryController
+	IndexUsageStatsController IndexUsageStatsController
+	// CompactEngineSpan is used to force compaction of a span in a store.
+	CompactEngineSpan CompactEngineSpanFunc
+	// GetTableMetrics is used in crdb_internal.sstable_metrics.
+	GetTableMetrics GetTableMetricsFunc
+	// ScanStorageInternalKeys is used in crdb_internal.scan_storage_internal_keys.
+	ScanStorageInternalKeys ScanStorageInternalKeysFunc
+	// SetCompactionConcurrency is used to change the compaction concurrency of
+	// a store.
+	SetCompactionConcurrency SetCompactionConcurrencyFunc
+	// KVStoresIterator is used by various crdb_internal builtins to directly
+	// access stores on this node.
+	KVStoresIterator kvserverbase.StoresIterator
+	// InspectzServer is used to power various crdb_internal vtables, exposing
+	// the equivalent of /inspectz but through SQL.
+	InspectzServer inspectzpb.InspectzServer
+	// ConsistencyChecker is to generate the results in calls to
+	// crdb_internal.check_consistency.
+	ConsistencyChecker ConsistencyCheckRunner
+	// RangeProber is used in calls to crdb_internal.probe_ranges.
+	RangeProber RangeProber
+	// StmtDiagnosticsRequestInserter is used by the
+	// crdb_internal.request_statement_bundle builtin to insert a statement
+	// bundle request.
+	StmtDiagnosticsRequestInserter StmtDiagnosticsRequestInsertFunc
+	// TxnDiagnosticsRequestInsertFunc is used by the
+	// crdb_internal.request_transaction_bundle builtin to insert a transaction
+	// bundle request.
+	TxnDiagnosticsRequestInserter TxnDiagnosticsRequestInsertFunc
+	// RangeStatsFetcher is used to fetch RangeStats.
+	RangeStatsFetcher RangeStatsFetcher
+
+	// --- Metrics (pointers to thread-safe counters) ---
+
+	// StartedRoutineStatementCounters contains metrics for statements initiated by
+	// users when calling a UDF/SP. These metrics count user-initiated
+	// operations, regardless of success
+	StartedRoutineStatementCounters RoutineStatementCounters
+	// ExecutedStatementCounters contains metrics for successfully executed
+	// statements defined within the body of a UDF/SP.
+	ExecutedRoutineStatementCounters RoutineStatementCounters
+
+	// --- Planner-backed interfaces ---
+	// These are backed by the planner, which is explicitly documented as
+	// not safe for concurrent use. On remote DistSQL nodes, these are
+	// set to dummy implementations from faketreeeval. Callers must ensure
+	// they only use these from the appropriate goroutine.
+
+	Planner              Planner
+	StreamManagerFactory StreamManagerFactory
+	// Not using sql.JobExecContext type to avoid cycle dependency with sql package
+	JobExecContext     interface{}
+	PrivilegedAccessor PrivilegedAccessor
+	SessionAccessor    SessionAccessor
+	ClientNoticeSender ClientNoticeSender
+	Sequence           SequenceOperators
+	Tenant             TenantOperator
+	// Regions stores information about regions.
+	Regions                RegionOperator
+	Gossip                 GossipOperator
+	PreparedStatementState PreparedStatementState
+	// JobsProfiler is the interface for builtins to extract job specific
+	// execution details that may have been aggregated during a job's lifetime.
+	JobsProfiler JobsProfiler
+	// CatalogBuiltins is used by various builtins which depend on looking up
+	// catalog information. Unlike the Planner, it is available in DistSQL.
+	CatalogBuiltins CatalogBuiltins
+	DescIDGenerator DescIDGenerator
+
+	// --- Per-statement config (immutable during execution) ---
+
+	// SessionDataStack stores the session variables accessible by the correct
+	// context. Each element on the stack represents the beginning of a new
+	// transaction or nested transaction (savepoints).
+	SessionDataStack *sessiondata.Stack
+	// TxnState is a string representation of the current transactional state.
+	TxnState string
+	// TxnReadOnly specifies if the current transaction is read-only.
+	TxnReadOnly bool
+	// TxnImplicit specifies if the current transaction is implicit.
+	TxnImplicit bool
+	// TxnIsSingleStmt specifies the current implicit transaction consists of only
+	// a single statement.
+	TxnIsSingleStmt bool
+	// TxnIsoLevel is the isolation level of the current transaction.
+	TxnIsoLevel isolation.Level
 	// The statement timestamp. May be different for every statement.
 	// Used for statement_timestamp().
 	StmtTimestamp time.Time
@@ -110,7 +233,6 @@ type Context struct {
 	// of a transaction. Used for now(), current_timestamp(),
 	// transaction_timestamp() and the like.
 	TxnTimestamp time.Time
-
 	// AsOfSystemTime denotes either the explicit (i.e. in the query text) or
 	// implicit (via the txn mode) AS OF SYSTEM TIME timestamp for the query, if
 	// any. If the query is not an AS OF SYSTEM TIME query, AsOfSystemTime is
@@ -120,212 +242,25 @@ type Context struct {
 	// timestamp. In that case, the timestamp would not be set
 	// globally for the entire txn and this field would not be needed.
 	AsOfSystemTime *AsOfSystemTime
-
 	// Placeholders relates placeholder names to their type and, later, value.
 	// This pointer should always be set to the location of the PlaceholderInfo
 	// in the corresponding SemaContext during normal execution. Placeholders are
 	// available during Eval to permit lookup of a particular placeholder's
 	// underlying datum, if available.
 	Placeholders *tree.PlaceholderInfo
-
 	// Annotations augments the AST with extra information. This pointer should
 	// always be set to the location of the Annotations in the corresponding
 	// SemaContext.
 	Annotations *tree.Annotations
-
-	// IVarContainer is used to evaluate IndexedVars. Note that the underlying
-	// implementation must support the eval.IndexedVarContainer interface.
-	IVarContainer tree.IndexedVarContainer
-	// iVarContainerStack is used when we swap out IVarContainers in order to
-	// evaluate an intermediate expression. This keeps track of those which we
-	// need to restore once we finish evaluating it.
-	iVarContainerStack []tree.IndexedVarContainer
-
-	Planner Planner
-
-	StreamManagerFactory StreamManagerFactory
-
-	// Not using sql.JobExecContext type to avoid cycle dependency with sql package
-	JobExecContext interface{}
-
-	PrivilegedAccessor PrivilegedAccessor
-
-	SessionAccessor SessionAccessor
-
-	ClientNoticeSender ClientNoticeSender
-
-	Sequence SequenceOperators
-
-	Tenant TenantOperator
-
-	// Regions stores information about regions.
-	Regions RegionOperator
-
-	Gossip GossipOperator
-
-	PreparedStatementState PreparedStatementState
-
 	// The transaction in which the statement is executing.
 	Txn *kv.Txn
-
-	ReCache           *tree.RegexpCache
-	ToCharFormatCache *tochar.FormatCache
-
 	// TODO(mjibson): remove prepareOnly in favor of a 2-step prepare-exec solution
 	// that is also able to save the plan to skip work during the exec step.
 	PrepareOnly bool
-
 	// SkipNormalize indicates whether expressions should be normalized
 	// (false) or not (true).  It is set to true conditionally by
 	// EXPLAIN(TYPES[, NORMALIZE]).
 	SkipNormalize bool
-
-	CollationEnv tree.CollationEnvironment
-
-	TestingKnobs TestingKnobs
-
-	// TestingMon is a memory monitor that should be only used in tests. In
-	// production code consider using either the monitor of the planner or of
-	// the flow.
-	// TODO(yuzefovich): remove this.
-	TestingMon *mon.BytesMonitor
-
-	// SingleDatumAggMemAccount is a memory account that all aggregate builtins
-	// that store a single datum will share to account for the memory needed to
-	// perform the aggregation (i.e. memory not reported by AggregateFunc.Size
-	// method). This memory account exists so that such aggregate functions
-	// could "batch" their reservations - otherwise, we end up a situation
-	// where each aggregate function struct grows its own memory account by
-	// tiny amount, yet the account reserves a lot more resulting in
-	// significantly overestimating the memory usage.
-	//
-	// Additionally, this memory account is touched by some aggregate builtins
-	// that store multiple datums in order to access the memory monitor this
-	// account is bound to.
-	//
-	// It **must** be bound to an unlimited memory monitor.
-	SingleDatumAggMemAccount *mon.BoundAccount
-
-	SQLLivenessReader sqlliveness.Reader
-
-	// BlockingSQLLivenessReader is a sqlliveness.Reader that synchronously
-	// blocks to determine the status of a session which it does not know about or
-	// thinks might be expired.
-	BlockingSQLLivenessReader sqlliveness.Reader
-
-	SQLStatsController SQLStatsController
-
-	SchemaTelemetryController SchemaTelemetryController
-
-	IndexUsageStatsController IndexUsageStatsController
-
-	// CompactEngineSpan is used to force compaction of a span in a store.
-	CompactEngineSpan CompactEngineSpanFunc
-
-	// GetTableMetrics is used in crdb_internal.sstable_metrics.
-	GetTableMetrics GetTableMetricsFunc
-
-	// ScanStorageInternalKeys is used in crdb_internal.scan_storage_internal_keys.
-	ScanStorageInternalKeys ScanStorageInternalKeysFunc
-
-	// SetCompactionConcurrency is used to change the compaction concurrency of
-	// a store.
-	SetCompactionConcurrency SetCompactionConcurrencyFunc
-
-	// KVStoresIterator is used by various crdb_internal builtins to directly
-	// access stores on this node.
-	KVStoresIterator kvserverbase.StoresIterator
-
-	// InspectzServer is used to power various crdb_internal vtables, exposing
-	// the equivalent of /inspectz but through SQL.
-	InspectzServer inspectzpb.InspectzServer
-
-	// ConsistencyChecker is to generate the results in calls to
-	// crdb_internal.check_consistency.
-	ConsistencyChecker ConsistencyCheckRunner
-
-	// RangeProber is used in calls to crdb_internal.probe_ranges.
-	RangeProber RangeProber
-
-	// StmtDiagnosticsRequestInserter is used by the
-	// crdb_internal.request_statement_bundle builtin to insert a statement
-	// bundle request.
-	StmtDiagnosticsRequestInserter StmtDiagnosticsRequestInsertFunc
-
-	// TxnDiagnosticsRequestInsertFunc is used by the
-	// crdb_internal.request_transaction_bundle builtin to insert a transaction
-	// bundle request.
-	TxnDiagnosticsRequestInserter TxnDiagnosticsRequestInsertFunc
-
-	// CatalogBuiltins is used by various builtins which depend on looking up
-	// catalog information. Unlike the Planner, it is available in DistSQL.
-	CatalogBuiltins CatalogBuiltins
-
-	// QueryCancelKey is the key used by the pgwire protocol to cancel the
-	// query currently running in this session.
-	QueryCancelKey pgwirecancel.BackendKeyData
-
-	DescIDGenerator DescIDGenerator
-
-	// RangeStatsFetcher is used to fetch RangeStats.
-	RangeStatsFetcher RangeStatsFetcher
-
-	// CoreChangefeedState stores the in-memory progress of core changefeeds.
-	CoreChangefeedState CoreChangefeedState
-
-	// ParseHelper makes date parsing more efficient.
-	ParseHelper pgdate.ParseHelper
-
-	// RemoteRegions contains the slice of remote regions in a multiregion
-	// database which owns a table accessed by the current SQL request.
-	// This slice is only populated during the optbuild stage.
-	RemoteRegions catpb.RegionNames
-
-	// JobsProfiler is the interface for builtins to extract job specific
-	// execution details that may have been aggregated during a job's lifetime.
-	JobsProfiler JobsProfiler
-
-	// RoutineSender allows nested routines in tail-call position to defer their
-	// execution until control returns to the parent routine. It is only valid
-	// during local execution. It may be unset.
-	RoutineSender DeferredRoutineSender
-
-	// RNGFactory, if set, provides the random number generator for the "random"
-	// built-in function.
-	//
-	// NB: do not access this field directly - use GetRNG() instead. This field
-	// is exported only for the connExecutor to pass its "external" RNGFactory.
-	RNGFactory *RNGFactory
-
-	// internalRNGFactory provides the random number generator for the "random"
-	// built-in function if RNGFactory is not set. This field exists to allow
-	// not setting RNGFactory on the code paths that don't need to preserve
-	// usage of the same RNG within a session.
-	internalRNGFactory RNGFactory
-
-	// ULIDEntropyFactory, if set, is the entropy source for ULID generation.
-	//
-	// NB: do not access this field directly - use GetULIDEntropy() instead.
-	// This field is exported only for the connExecutor to pass its "external"
-	// ULIDEntropyFactory.
-	ULIDEntropyFactory *ULIDEntropyFactory
-
-	// internalULIDEntropyFactory is the entropy source for ULID generation if
-	// ULIDEntropyFactory is not set. This field exists to allow not setting
-	// ULIDEntropyFactory on the code paths that don't need to preserve usage of
-	// the same RNG within a session.
-	internalULIDEntropyFactory ULIDEntropyFactory
-
-	// CidrLookup is used to look up the tag name for a given IP address.
-	CidrLookup *cidr.Lookup
-
-	// StartedRoutineStatementCounters contains metrics for statements initiated by
-	// users when calling a UDF/SP. These metrics count user-initiated
-	// operations, regardless of success
-	StartedRoutineStatementCounters RoutineStatementCounters
-	// ExecutedStatementCounters contains metrics for successfully executed
-	// statements defined within the body of a UDF/SP.
-	ExecutedRoutineStatementCounters RoutineStatementCounters
 	// UseCanaryStats indicates whether this query participates in the canary
 	// statistics rollout feature. When set to true, the optimizer attempts to use
 	// "canary statistics" for all tables referenced by the query.
@@ -360,16 +295,101 @@ type Context struct {
 	// thumb is: the cached memo, either in query cache or prepared stmt,
 	// are always for stable stats.
 	UseCanaryStats bool
-
 	// WorkloadID for ASH sampling.
 	WorkloadID uint64
-
 	// AppNameID is the hash of the application name, for ASH
 	// sampling. Set alongside WorkloadID in the connExecutor.
 	// Note(alyshan): This will eventually be replaced by a general
 	// enrichment_id field which will enable the ASH sampler to
 	// enrich samples with more workload context.
 	AppNameID uint64
+	// QueryCancelKey is the key used by the pgwire protocol to cancel the
+	// query currently running in this session.
+	QueryCancelKey pgwirecancel.BackendKeyData
+	// RemoteRegions contains the slice of remote regions in a multiregion
+	// database which owns a table accessed by the current SQL request.
+	// This slice is only populated during the optbuild stage.
+	RemoteRegions catpb.RegionNames
+	// RNGFactory, if set, provides the random number generator for the "random"
+	// built-in function.
+	//
+	// NB: do not access this field directly - use GetRNG() instead. This field
+	// is exported only for the connExecutor to pass its "external" RNGFactory.
+	RNGFactory *RNGFactory
+	// ULIDEntropyFactory, if set, is the entropy source for ULID generation.
+	//
+	// NB: do not access this field directly - use GetULIDEntropy() instead.
+	// This field is exported only for the connExecutor to pass its "external"
+	// ULIDEntropyFactory.
+	ULIDEntropyFactory *ULIDEntropyFactory
+}
+
+// SharedState holds per-processor fields that are shallow-copied. Each
+// processor gets its own copy of these values.
+type SharedState struct {
+	// CoreChangefeedState stores the in-memory progress of core changefeeds.
+	CoreChangefeedState CoreChangefeedState
+	// RoutineSender allows nested routines in tail-call position to defer their
+	// execution until control returns to the parent routine. It is only valid
+	// during local execution. It may be unset.
+	RoutineSender DeferredRoutineSender
+	// SingleDatumAggMemAccount is a memory account that all aggregate builtins
+	// that store a single datum will share to account for the memory needed to
+	// perform the aggregation (i.e. memory not reported by AggregateFunc.Size
+	// method). This memory account exists so that such aggregate functions
+	// could "batch" their reservations - otherwise, we end up a situation
+	// where each aggregate function struct grows its own memory account by
+	// tiny amount, yet the account reserves a lot more resulting in
+	// significantly overestimating the memory usage.
+	//
+	// Additionally, this memory account is touched by some aggregate builtins
+	// that store multiple datums in order to access the memory monitor this
+	// account is bound to.
+	//
+	// It **must** be bound to an unlimited memory monitor.
+	SingleDatumAggMemAccount *mon.BoundAccount
+}
+
+// LocalState holds fields with internal mutable state that would alias
+// after shallow copy. Deep-copied or reset per processor.
+//
+// When adding a field, update copy(). The compile-time check in
+// context_test.go will remind you.
+type LocalState struct {
+	CollationEnv tree.CollationEnvironment
+	// ParseHelper makes date parsing more efficient.
+	ParseHelper pgdate.ParseHelper
+	// IVarContainer is used to evaluate IndexedVars. Note that the underlying
+	// implementation must support the eval.IndexedVarContainer interface.
+	IVarContainer tree.IndexedVarContainer
+	// iVarContainerStack is used when we swap out IVarContainers in order to
+	// evaluate an intermediate expression. This keeps track of those which we
+	// need to restore once we finish evaluating it.
+	iVarContainerStack []tree.IndexedVarContainer
+	// internalRNGFactory provides the random number generator for the "random"
+	// built-in function if RNGFactory is not set. This field exists to allow
+	// not setting RNGFactory on the code paths that don't need to preserve
+	// usage of the same RNG within a session.
+	internalRNGFactory RNGFactory
+	// internalULIDEntropyFactory is the entropy source for ULID generation if
+	// ULIDEntropyFactory is not set. This field exists to allow not setting
+	// ULIDEntropyFactory on the code paths that don't need to preserve usage of
+	// the same RNG within a session.
+	internalULIDEntropyFactory ULIDEntropyFactory
+}
+
+func (l *LocalState) copy() LocalState {
+	cpy := *l
+	cpy.CollationEnv = tree.CollationEnvironment{} // not thread-safe, reset
+	// ParseHelper: fixed-size arrays, shallow copy is fine.
+	cpy.iVarContainerStack = make(
+		[]tree.IndexedVarContainer,
+		len(l.iVarContainerStack), cap(l.iVarContainerStack),
+	)
+	copy(cpy.iVarContainerStack, l.iVarContainerStack)
+	cpy.internalRNGFactory = RNGFactory{}
+	cpy.internalULIDEntropyFactory = ULIDEntropyFactory{}
+	return cpy
 }
 
 // RoutineStatementCounters encapsulates metrics for tracking the execution
@@ -398,7 +418,7 @@ func (ec *Context) GetRNG() *rand.Rand {
 	if ec.RNGFactory != nil {
 		return ec.RNGFactory.getOrCreate()
 	}
-	return ec.internalRNGFactory.getOrCreate()
+	return ec.Local.internalRNGFactory.getOrCreate()
 }
 
 func (r *RNGFactory) getOrCreate() *rand.Rand {
@@ -420,7 +440,7 @@ func (ec *Context) GetULIDEntropy() ulid.MonotonicReader {
 	if ec.ULIDEntropyFactory != nil {
 		return ec.ULIDEntropyFactory.getOrCreate(ec.GetRNG())
 	}
-	return ec.internalULIDEntropyFactory.getOrCreate(ec.GetRNG())
+	return ec.Local.internalULIDEntropyFactory.getOrCreate(ec.GetRNG())
 }
 
 func (f *ULIDEntropyFactory) getOrCreate(rng *rand.Rand) ulid.MonotonicReader {
@@ -531,17 +551,19 @@ func MakeTestingEvalContextWithMon(
 	// Set defaults that match what the session variables system expects.
 	// allow_unsafe_internals defaults to true.
 	sessionData.AllowUnsafeInternals = true
-	ctx := Context{
-		Codec:            codec,
-		Txn:              &kv.Txn{},
-		SessionDataStack: sessiondata.NewStack(sessionData),
-		Settings:         st,
-		NodeID:           base.TestingIDContainer,
-	}
 	monitor.Start(context.Background(), nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))
-	ctx.TestingMon = monitor
-	ctx.Planner = &fakePlannerWithMonitor{monitor: monitor}
-	ctx.StreamManagerFactory = &fakeStreamManagerFactory{}
+	ctx := Context{
+		GlobalState: &GlobalState{
+			Codec:                codec,
+			Txn:                  &kv.Txn{},
+			SessionDataStack:     sessiondata.NewStack(sessionData),
+			Settings:             st,
+			NodeID:               base.TestingIDContainer,
+			TestingMon:           monitor,
+			Planner:              &fakePlannerWithMonitor{monitor: monitor},
+			StreamManagerFactory: &fakeStreamManagerFactory{},
+		},
+	}
 	now := timeutil.Now()
 	ctx.SetTxnTimestamp(now)
 	ctx.SetStmtTimestamp(now)
@@ -616,27 +638,29 @@ func (ec *Context) SessionData() *sessiondata.SessionData {
 	return ec.SessionDataStack.Top()
 }
 
-// Copy returns a deep copy of ctx.
+// Copy returns a deep copy of ctx. GlobalState is shared by pointer (never
+// copied). SharedState is shallow-copied. LocalState is deep-copied.
 func (ec *Context) Copy() *Context {
-	ctxCopy := *ec
-	ctxCopy.iVarContainerStack = make([]tree.IndexedVarContainer, len(ec.iVarContainerStack), cap(ec.iVarContainerStack))
-	copy(ctxCopy.iVarContainerStack, ec.iVarContainerStack)
-	return &ctxCopy
+	return &Context{
+		GlobalState: ec.GlobalState,
+		Shared:      ec.Shared,
+		Local:       ec.Local.copy(),
+	}
 }
 
 // PushIVarContainer replaces the current IVarContainer with a different one -
 // pushing the current one onto a stack to be replaced later once
 // PopIVarContainer is called.
 func (ec *Context) PushIVarContainer(c tree.IndexedVarContainer) {
-	ec.iVarContainerStack = append(ec.iVarContainerStack, ec.IVarContainer)
-	ec.IVarContainer = c
+	ec.Local.iVarContainerStack = append(ec.Local.iVarContainerStack, ec.Local.IVarContainer)
+	ec.Local.IVarContainer = c
 }
 
 // PopIVarContainer discards the current IVarContainer on the EvalContext,
 // replacing it with an older one.
 func (ec *Context) PopIVarContainer() {
-	ec.IVarContainer = ec.iVarContainerStack[len(ec.iVarContainerStack)-1]
-	ec.iVarContainerStack = ec.iVarContainerStack[:len(ec.iVarContainerStack)-1]
+	ec.Local.IVarContainer = ec.Local.iVarContainerStack[len(ec.Local.iVarContainerStack)-1]
+	ec.Local.iVarContainerStack = ec.Local.iVarContainerStack[:len(ec.Local.iVarContainerStack)-1]
 }
 
 // QualityOfService returns the current value of session setting
@@ -832,7 +856,7 @@ func (ec *Context) GetRelativeParseTime() time.Time {
 
 // GetDateHelper implements ParseTimeContext.
 func (ec *Context) GetDateHelper() *pgdate.ParseHelper {
-	return &ec.ParseHelper
+	return &ec.Local.ParseHelper
 }
 
 // GetTxnTimestamp retrieves the current transaction timestamp as per
@@ -910,7 +934,7 @@ func (ec *Context) GetIntervalStyle() duration.IntervalStyle {
 
 // GetCollationEnv returns the collation env.
 func (ec *Context) GetCollationEnv() *tree.CollationEnvironment {
-	return &ec.CollationEnv
+	return &ec.Local.CollationEnv
 }
 
 // GetDateStyle returns the session date style.

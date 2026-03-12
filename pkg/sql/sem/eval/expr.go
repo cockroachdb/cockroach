@@ -217,9 +217,9 @@ func (e *evaluator) EvalCollateExpr(
 		}
 		switch d := datum.(type) {
 		case *tree.DString:
-			return tree.NewDCollatedString(string(*d), expr.Locale, &e.CollationEnv)
+			return tree.NewDCollatedString(string(*d), expr.Locale, e.ctx().GetCollationEnv())
 		case *tree.DCollatedString:
-			return tree.NewDCollatedString(d.Contents, expr.Locale, &e.CollationEnv)
+			return tree.NewDCollatedString(d.Contents, expr.Locale, e.ctx().GetCollationEnv())
 		case *tree.DArray:
 			a := tree.NewDArray(types.MakeCollatedType(d.ParamTyp, expr.Locale))
 			a.Array = make(tree.Datums, 0, len(d.Array))
@@ -289,14 +289,14 @@ func (e *evaluator) EvalComparisonExpr(
 }
 
 func (e *evaluator) EvalIndexedVar(ctx context.Context, iv *tree.IndexedVar) (tree.Datum, error) {
-	if e.IVarContainer == nil {
+	if e.Local.IVarContainer == nil {
 		return nil, errors.AssertionFailedf(
 			"indexed var must be bound to a container before evaluation")
 	}
-	eivc, ok := e.IVarContainer.(IndexedVarContainer)
+	eivc, ok := e.Local.IVarContainer.(IndexedVarContainer)
 	if !ok {
 		return nil, errors.AssertionFailedf(
-			"indexed var container of type %T may not be evaluated", e.IVarContainer)
+			"indexed var container of type %T may not be evaluated", e.Local.IVarContainer)
 	}
 	return eivc.IndexedVarEval(iv.Idx)
 }

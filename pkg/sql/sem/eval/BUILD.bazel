@@ -119,6 +119,7 @@ go_test(
         "cast_rand_test.go",
         "cast_test.go",
         "compare_test.go",
+        "context_test.go",
         "eval_internal_test.go",
         "eval_test.go",
         "like_test.go",
