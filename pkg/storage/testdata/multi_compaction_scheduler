@@ -1,0 +1,452 @@
+# Basic: both engines register, TrySchedule respects limits.
+
+init max-concurrency=3 deprioritization=0.5 log-allowed=2 state-allowed=2
+----
+
+set-waiting engine=log score=1.0
+----
+
+set-waiting engine=state score=1.0
+----
+
+try-schedule engine=log
+----
+granted
+
+try-schedule engine=state
+----
+granted
+
+print-state
+----
+totalRunning: 2
+log: running=1 waiting=false registered=true
+state: running=1 waiting=false registered=true
+
+# Third compaction succeeds (under global max=3).
+
+try-schedule engine=log
+----
+granted
+
+print-state
+----
+totalRunning: 3
+log: running=2 waiting=false registered=true
+state: running=1 waiting=false registered=true
+
+# Global max enforcement: fourth compaction is denied.
+
+try-schedule engine=state
+----
+not granted
+
+print-state
+----
+totalRunning: 3
+log: running=2 waiting=false registered=true
+state: running=1 waiting=true registered=true
+
+# Clear mock waiting on state so Done doesn't re-grant via tryGrant.
+
+clear-waiting engine=state
+----
+
+compaction-done engine=state idx=0
+----
+state: GetWaitingCompaction
+
+compaction-done engine=log idx=0
+----
+
+compaction-done engine=log idx=1
+----
+
+print-state
+----
+totalRunning: 0
+log: running=0 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+close
+----
+
+# Per-engine limit: log at allowed=2, even though global has room.
+
+init max-concurrency=3 deprioritization=0.5 log-allowed=2 state-allowed=2
+----
+
+try-schedule engine=log
+----
+granted
+
+try-schedule engine=log
+----
+granted
+
+try-schedule engine=log
+----
+not granted
+
+print-state
+----
+totalRunning: 2
+log: running=2 waiting=true registered=true
+state: running=0 waiting=false registered=true
+
+clear-waiting engine=log
+----
+
+compaction-done engine=log idx=0
+----
+log: GetWaitingCompaction
+
+compaction-done engine=log idx=1
+----
+
+print-state
+----
+totalRunning: 0
+log: running=0 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+close
+----
+
+# Log deprioritization: state engine wins when scores are close.
+# Fill to max (3) with 1 log + 2 state so both engines stay under their
+# per-engine limit (allowed=2) after freeing one state compaction.
+
+init max-concurrency=3 deprioritization=0.5 log-allowed=2 state-allowed=2
+----
+
+set-waiting engine=log priority=80 score=2.0
+----
+
+set-waiting engine=state priority=80 score=1.5
+----
+
+try-schedule engine=log
+----
+granted
+
+try-schedule engine=state
+----
+granted
+
+try-schedule engine=state
+----
+granted
+
+# At max concurrency (3). Both engines have waiting work.
+
+try-schedule engine=log
+----
+not granted
+
+try-schedule engine=state
+----
+not granted
+
+# Free one state slot. Now log.running=1, state.running=1, both under
+# allowed=2. Both are candidates. State should win because log's
+# deprioritized score 2.0*0.5=1.0 < state's 1.5.
+
+compaction-done engine=state idx=0
+----
+log: GetWaitingCompaction
+state: GetWaitingCompaction
+state: Schedule => accepted
+
+# Clean up.
+
+clear-waiting engine=state
+----
+
+clear-waiting engine=log
+----
+
+compaction-done engine=state idx=1
+----
+log: GetWaitingCompaction
+state: GetWaitingCompaction
+
+compaction-done engine=log idx=0
+----
+
+compaction-done engine=state idx=2
+----
+
+print-state
+----
+totalRunning: 0
+log: running=0 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+close
+----
+
+# Tick triggers grants.
+
+init max-concurrency=3 deprioritization=0.5 log-allowed=2 state-allowed=2
+----
+
+set-allowed engine=state allowed=0
+----
+
+set-waiting engine=state priority=80 score=1.5
+----
+
+try-schedule engine=state
+----
+not granted
+
+set-allowed engine=state allowed=2
+----
+
+tick
+----
+state: GetWaitingCompaction
+state: Schedule => accepted
+state: GetWaitingCompaction
+
+compaction-done engine=state idx=0
+----
+
+print-state
+----
+totalRunning: 0
+log: running=0 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+close
+----
+
+# Schedule rejection: if Schedule returns false, try next candidate.
+
+init max-concurrency=3 deprioritization=0.5 log-allowed=2 state-allowed=2
+----
+
+set-allowed engine=log allowed=0
+----
+
+set-allowed engine=state allowed=0
+----
+
+set-waiting engine=log priority=80 score=2.0
+----
+
+set-waiting engine=state priority=80 score=1.0
+----
+
+try-schedule engine=log
+----
+not granted
+
+try-schedule engine=state
+----
+not granted
+
+set-allowed engine=log allowed=2
+----
+
+set-allowed engine=state allowed=2
+----
+
+set-reject-next engine=state
+----
+
+tick
+----
+log: GetWaitingCompaction
+log: Schedule => accepted
+log: GetWaitingCompaction
+state: GetWaitingCompaction
+state: GetWaitingCompaction
+state: Schedule => rejected
+
+compaction-done engine=log idx=0
+----
+
+print-state
+----
+totalRunning: 0
+log: running=0 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+close
+----
+
+# UpdateGetAllowedWithoutPermission poke path.
+
+init max-concurrency=3 deprioritization=0.5 log-allowed=2 state-allowed=2
+----
+
+set-allowed engine=state allowed=0
+----
+
+set-waiting engine=state score=1.0
+----
+
+try-schedule engine=state
+----
+not granted
+
+set-allowed engine=state allowed=3 inform
+----
+state: GetWaitingCompaction
+state: Schedule => accepted
+state: GetWaitingCompaction
+
+compaction-done engine=state idx=0
+----
+
+print-state
+----
+totalRunning: 0
+log: running=0 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+close
+----
+
+# Repeated grants hitting per-engine limit.
+# State has allowed=2 and accept-count=5 (waiting persists across
+# multiple Schedule calls). tryGrant should grant twice (running
+# reaches allowed=2) then stop despite waiting remaining.
+
+init max-concurrency=3 deprioritization=0.5 log-allowed=2 state-allowed=2
+----
+
+set-allowed engine=state allowed=0
+----
+
+set-allowed engine=log allowed=0
+----
+
+set-waiting engine=state score=1.0 accept-count=5
+----
+
+try-schedule engine=state
+----
+not granted
+
+set-allowed engine=state allowed=2
+----
+
+tick
+----
+state: GetWaitingCompaction
+state: Schedule => accepted
+state: GetWaitingCompaction
+state: Schedule => accepted
+
+print-state
+----
+totalRunning: 2
+log: running=0 waiting=false registered=true
+state: running=2 waiting=true registered=true
+
+# Clean up.
+
+clear-waiting engine=state
+----
+
+compaction-done engine=state idx=0
+----
+state: GetWaitingCompaction
+
+compaction-done engine=state idx=1
+----
+
+set-allowed engine=log allowed=2
+----
+
+print-state
+----
+totalRunning: 0
+log: running=0 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+close
+----
+
+# Repeated grants hitting global limit.
+# Both engines have allowed=3, accept-count=5. max-concurrency=3.
+# tryGrant should grant 3 total. All go to state because log's
+# deprioritized score (0.5) < state's score (1.0).
+
+init max-concurrency=3 deprioritization=0.5 log-allowed=3 state-allowed=3
+----
+
+set-allowed engine=log allowed=0
+----
+
+set-allowed engine=state allowed=0
+----
+
+set-waiting engine=log score=1.0 accept-count=5
+----
+
+set-waiting engine=state score=1.0 accept-count=5
+----
+
+try-schedule engine=log
+----
+not granted
+
+try-schedule engine=state
+----
+not granted
+
+set-allowed engine=log allowed=3
+----
+
+set-allowed engine=state allowed=3
+----
+
+tick
+----
+log: GetWaitingCompaction
+log: GetWaitingCompaction
+log: GetWaitingCompaction
+state: GetWaitingCompaction
+state: Schedule => accepted
+state: GetWaitingCompaction
+state: Schedule => accepted
+state: GetWaitingCompaction
+state: Schedule => accepted
+
+print-state
+----
+totalRunning: 3
+log: running=0 waiting=true registered=true
+state: running=3 waiting=true registered=true
+
+# Clean up.
+
+clear-waiting engine=log
+----
+
+clear-waiting engine=state
+----
+
+compaction-done engine=state idx=0
+----
+log: GetWaitingCompaction
+state: GetWaitingCompaction
+
+compaction-done engine=state idx=1
+----
+
+compaction-done engine=state idx=2
+----
+
+print-state
+----
+totalRunning: 0
+log: running=0 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+close
+----
