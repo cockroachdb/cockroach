@@ -10,10 +10,12 @@ go_library(
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/util/log",
+        "//pkg/util/retry",
         "//pkg/util/stop",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@org_golang_x_exp//trace",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -27,6 +29,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/stop",
+        "@com_github_cockroachdb_errors//oserror",
         "@com_github_stretchr_testify//require",
     ],
 )

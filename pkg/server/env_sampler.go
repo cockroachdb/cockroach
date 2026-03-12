@@ -41,16 +41,15 @@ var jemallocPurgePeriod = settings.RegisterDurationSettingWithExplicitUnit(
 )
 
 type sampleEnvironmentCfg struct {
-	st                    *cluster.Settings
-	stopper               *stop.Stopper
-	minSampleInterval     time.Duration
-	heapProfileDirName    string
-	cpuProfileDirName     string
-	executionTraceDirName string
-	runtime               *status.RuntimeStatSampler
-	sessionRegistry       *sql.SessionRegistry
-	rootMemMonitor        *mon.BytesMonitor
-	cgoMemTarget          uint64
+	st                 *cluster.Settings
+	stopper            *stop.Stopper
+	minSampleInterval  time.Duration
+	heapProfileDirName string
+	cpuProfileDirName  string
+	runtime            *status.RuntimeStatSampler
+	sessionRegistry    *sql.SessionRegistry
+	rootMemMonitor     *mon.BytesMonitor
+	cgoMemTarget       uint64
 }
 
 // startSampleEnvironment starts a periodic loop that samples the environment and,
@@ -64,6 +63,7 @@ func startSampleEnvironment(
 	stopper *stop.Stopper,
 	runtimeSampler *status.RuntimeStatSampler,
 	goroutineDumper *goroutinedumper.GoroutineDumper,
+	flightRecorder *goexectrace.SimpleFlightRecorder,
 	sessionRegistry *sql.SessionRegistry,
 	rootMemMonitor *mon.BytesMonitor,
 ) error {
@@ -72,16 +72,15 @@ func startSampleEnvironment(
 		metricsSampleInterval = p.EnvironmentSampleInterval
 	}
 	cfg := sampleEnvironmentCfg{
-		st:                    srvCfg.Settings,
-		stopper:               stopper,
-		minSampleInterval:     metricsSampleInterval,
-		heapProfileDirName:    srvCfg.HeapProfileDirName,
-		cpuProfileDirName:     srvCfg.CPUProfileDirName,
-		executionTraceDirName: srvCfg.ExecutionTraceDirName,
-		runtime:               runtimeSampler,
-		sessionRegistry:       sessionRegistry,
-		rootMemMonitor:        rootMemMonitor,
-		cgoMemTarget:          max(uint64(pebbleCacheSize), 128*1024*1024),
+		st:                 srvCfg.Settings,
+		stopper:            stopper,
+		minSampleInterval:  metricsSampleInterval,
+		heapProfileDirName: srvCfg.HeapProfileDirName,
+		cpuProfileDirName:  srvCfg.CPUProfileDirName,
+		runtime:            runtimeSampler,
+		sessionRegistry:    sessionRegistry,
+		rootMemMonitor:     rootMemMonitor,
+		cgoMemTarget:       max(uint64(pebbleCacheSize), 128*1024*1024),
 	}
 	// Initialize a heap profiler if we have an output directory
 	// specified.
@@ -132,12 +131,8 @@ func startSampleEnvironment(
 		}
 	}
 
-	simpleFlightRecorder, err := goexectrace.NewFlightRecorder(cfg.st, 10*time.Second, cfg.executionTraceDirName)
-	if err != nil {
-		log.Dev.Warningf(ctx, "failed to initialize flight recorder: %v", err)
-	} else {
-		err = simpleFlightRecorder.Start(ctx, cfg.stopper)
-		if err != nil {
+	if flightRecorder != nil {
+		if err := flightRecorder.Start(ctx, cfg.stopper); err != nil {
 			log.Dev.Warningf(ctx, "failed to start flight recorder: %v", err)
 		}
 	}

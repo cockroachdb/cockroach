@@ -30,10 +30,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/goexectrace"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	pebbletool "github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/redact"
 	"github.com/felixge/fgprof"
 	metrics "github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
@@ -63,9 +65,16 @@ type Server struct {
 	st         *cluster.Settings
 	mux        *http.ServeMux
 	spy        logSpy
+
+	// flightRecorder, if set, is used to serve /debug/pprof/trace from the
+	// flight recorder buffer instead of running a synchronous trace via
+	// pprof.Trace. This avoids the Go runtime's single-trace-consumer
+	// constraint.
+	flightRecorder *goexectrace.SimpleFlightRecorder
 }
 
 func setupProcessWideRoutes(
+	ds *Server,
 	mux *http.ServeMux,
 	st *cluster.Settings,
 	tenantID roachpb.TenantID,
@@ -97,7 +106,49 @@ func setupProcessWideRoutes(
 		CPUProfileHandler(st, w, r)
 	}))
 	mux.HandleFunc("/debug/pprof/symbol", authzFunc(pprof.Symbol))
-	mux.HandleFunc("/debug/pprof/trace", authzFunc(pprof.Trace))
+	mux.HandleFunc("/debug/pprof/trace", authzFunc(func(w http.ResponseWriter, r *http.Request) {
+		// When the flight recorder is active, the Go runtime only allows one
+		// trace consumer. Stream the flight recorder buffer instead of calling
+		// pprof.Trace, which would fail.
+		if etw := ds.flightRecorder; etw != nil && etw.Enabled() {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Header().Set("Content-Disposition", `attachment; filename="trace"`)
+			if _, err := etw.WriteTraceTo(r.Context(), w); err != nil {
+				// Response headers are already sent; logging is the only
+				// option since http.Error would corrupt the partial response.
+				log.Ops.Warningf(r.Context(), "goexectrace: error writing trace to HTTP response: %v", err)
+			}
+			return
+		}
+		pprof.Trace(w, r)
+	}))
+
+	// On-demand execution trace dump endpoint. Triggers DumpNow on the flight
+	// recorder, saving a trace file to disk and returning the filename.
+	mux.HandleFunc("/debug/execution-trace/dump", authzFunc(func(w http.ResponseWriter, r *http.Request) {
+		etw := ds.flightRecorder
+		if etw == nil || !etw.Enabled() {
+			http.Error(w, "flight recorder is not enabled; "+
+				"set obs.execution_tracer.duration to a positive value", http.StatusServiceUnavailable)
+			return
+		}
+		reason := r.URL.Query().Get("reason")
+		if reason == "" {
+			reason = "HTTP debug endpoint"
+		}
+		tag := r.URL.Query().Get("tag")
+		filename, err := etw.DumpNow(r.Context(), redact.Sprintf("%s", reason), tag)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if filename == "" {
+			http.Error(w, "dump rate limited; try again later", http.StatusTooManyRequests)
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprintln(w, filename)
+	}))
 
 	// Cribbed straight from trace's `init()` method. See:
 	// https://github.com/golang/net/blob/master/trace/trace.go
@@ -158,19 +209,10 @@ func NewServer(
 	// Install a redirect to the UI's collection of debug tools.
 	mux.HandleFunc(Endpoint, handleLanding)
 
-	// Debug routes that retrieve process-wide state.
-	vsrv := &vmoduleServer{}
-	setupProcessWideRoutes(mux, st, tenantID, authorizer, vsrv, profiler)
-
-	if hbaConfDebugFn != nil {
-		// Expose the processed HBA configuration through the debug
-		// interface for inspection during troubleshooting.
-		mux.HandleFunc("/debug/hba_conf", hbaConfDebugFn)
-	}
-
 	// Set up the log spy, a tool that allows inspecting filtered logs at high
 	// verbosity. We require the tenant ID from the ambientCtx to set the logSpy
 	// tenant filter.
+	vsrv := &vmoduleServer{}
 	spy := logSpy{
 		vsrv:         vsrv,
 		setIntercept: log.InterceptWith,
@@ -185,14 +227,30 @@ func NewServer(
 	}
 	spy.tenantID = roachpb.MustMakeTenantID(parsed)
 
-	mux.HandleFunc("/debug/logspy", spy.handleDebugLogSpy)
-
-	return &Server{
+	ds := &Server{
 		ambientCtx: ambientContext,
 		st:         st,
 		mux:        mux,
 		spy:        spy,
 	}
+
+	// Debug routes that retrieve process-wide state.
+	setupProcessWideRoutes(ds, mux, st, tenantID, authorizer, vsrv, profiler)
+
+	if hbaConfDebugFn != nil {
+		mux.HandleFunc("/debug/hba_conf", hbaConfDebugFn)
+	}
+
+	mux.HandleFunc("/debug/logspy", spy.handleDebugLogSpy)
+
+	return ds
+}
+
+// RegisterFlightRecorder sets the execution trace flight recorder for the
+// debug server, enabling the /debug/pprof/trace and
+// /debug/execution-trace/dump endpoints.
+func (ds *Server) RegisterFlightRecorder(fr *goexectrace.SimpleFlightRecorder) {
+	ds.flightRecorder = fr
 }
 
 func analyzeLSM(dir string, writer io.Writer) error {

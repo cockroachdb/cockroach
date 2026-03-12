@@ -78,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/goexectrace"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -125,7 +126,8 @@ type SQLServerWrapper struct {
 	authentication  authserver.Server
 	stopper         *stop.Stopper
 
-	debug *debug.Server
+	debug          *debug.Server
+	flightRecorder *goexectrace.SimpleFlightRecorder
 
 	// pgL is the SQL listener.
 	pgL net.Listener
@@ -523,6 +525,24 @@ func newTenantServer(
 		processCapAuthz,
 	)
 
+	// Determine the flight recorder for this tenant. Shared-process tenants
+	// reuse the node's flight recorder; separate-process tenants create their
+	// own.
+	var flightRecorder *goexectrace.SimpleFlightRecorder
+	if sqlCfg.NodeFlightRecorder != nil {
+		flightRecorder = sqlCfg.NodeFlightRecorder
+	} else if baseCfg.ExecutionTraceDirName != "" {
+		var err error
+		flightRecorder, err = goexectrace.NewFlightRecorder(
+			args.Settings, 10*time.Second, baseCfg.ExecutionTraceDirName)
+		if err != nil {
+			log.Dev.Warningf(ctx, "failed to initialize flight recorder: %v", err)
+		}
+	}
+	if flightRecorder != nil {
+		debugServer.RegisterFlightRecorder(flightRecorder)
+	}
+
 	return &SQLServerWrapper{
 		cfg: args.BaseConfig,
 
@@ -547,7 +567,8 @@ func newTenantServer(
 		authentication:  sAuth,
 		stopper:         args.stopper,
 
-		debug: debugServer,
+		debug:          debugServer,
+		flightRecorder: flightRecorder,
 
 		pgPreServer: pgPreServer,
 
@@ -801,6 +822,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			s.stopper,
 			s.runtime,
 			goroutineDumper,
+			s.flightRecorder,
 			s.tenantStatus.sessionRegistry,
 			s.sqlServer.execCfg.RootMemoryMonitor,
 		); err != nil {

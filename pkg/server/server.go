@@ -136,6 +136,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/ptp"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/goexectrace"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -185,6 +186,7 @@ type topLevelServer struct {
 	policyRefresher      *policyrefresher.PolicyRefresher
 	nodeCapacityProvider *load.NodeCapacityProvider
 	goroutineDumper      *goroutinedumper.GoroutineDumper
+	flightRecorder       *goexectrace.SimpleFlightRecorder
 
 	http            *httpServer
 	adminAuthzCheck privchecker.CheckerForRPCHandlers
@@ -950,6 +952,15 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		return nil, errors.Wrap(err, "starting goroutine dumper worker")
 	}
 
+	var flightRecorder *goexectrace.SimpleFlightRecorder
+	if cfg.BaseConfig.ExecutionTraceDirName != "" {
+		flightRecorder, err = goexectrace.NewFlightRecorder(st, 10*time.Second, cfg.BaseConfig.ExecutionTraceDirName)
+		if err != nil {
+			log.Dev.Warningf(ctx, "failed to initialize flight recorder: %v", err)
+		}
+	}
+	cfg.SQLConfig.NodeFlightRecorder = flightRecorder
+
 	storeCfg := kvserver.StoreConfig{
 		DefaultSpanConfig:            cfg.DefaultZoneConfig.AsSpanConfig(),
 		Settings:                     st,
@@ -998,6 +1009,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	}
 	if goroutineDumper != nil {
 		storeCfg.GoroutineDumpNow = goroutineDumper.DumpNow
+	}
+	if flightRecorder != nil {
+		storeCfg.ExecutionTraceDumpNow = flightRecorder.DumpNow
 	}
 	if storeTestingKnobs := cfg.TestingKnobs.Store; storeTestingKnobs != nil {
 		storeCfg.TestingKnobs = *storeTestingKnobs.(*kvserver.StoreTestingKnobs)
@@ -1377,6 +1391,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		authorizer,
 	)
 
+	if flightRecorder != nil {
+		debugServer.RegisterFlightRecorder(flightRecorder)
+	}
+
 	recoveryServer := loqrecovery.NewServer(
 		nodeIDContainer,
 		st,
@@ -1421,6 +1439,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		nodeCapacityProvider:      nodeCapacityProvider,
 		runtime:                   runtimeSampler,
 		goroutineDumper:           goroutineDumper,
+		flightRecorder:            flightRecorder,
 		http:                      sHTTP,
 		adminAuthzCheck:           adminAuthzCheck,
 		admin:                     sAdmin,
@@ -2057,6 +2076,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.stopper,
 		s.runtime,
 		s.goroutineDumper,
+		s.flightRecorder,
 		s.status.sessionRegistry,
 		s.sqlServer.execCfg.RootMemoryMonitor,
 	); err != nil {

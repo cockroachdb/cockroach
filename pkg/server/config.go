@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/goexectrace"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -548,6 +549,11 @@ type SQLConfig struct {
 	// NodeMetricsRecorder is the node's MetricRecorder; the tenant's metrics will
 	// be recorded with it. Nil if this is not a shared-process tenant.
 	NodeMetricsRecorder *status.MetricsRecorder
+
+	// NodeFlightRecorder is the node's execution trace flight recorder. When
+	// set (shared-process tenants), the tenant reuses this recorder instead of
+	// creating its own. Nil for separate-process tenants.
+	NodeFlightRecorder *goexectrace.SimpleFlightRecorder
 
 	// LicenseEnforcer is used to enforce license policies.
 	LicenseEnforcer *license.Enforcer
