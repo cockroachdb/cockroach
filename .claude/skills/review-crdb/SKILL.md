@@ -55,6 +55,7 @@ the rest.
 | Test coverage | `crdb-test-reviewer` | Test files changed, or new behavior without tests |
 | Commit structure & PR description | `crdb-commit-reviewer` | Reviewing a branch/PR with commits |
 | Type design | `crdb-type-reviewer` | New structs/interfaces added or significantly modified |
+| Metric hygiene | `crdb-metric-reviewer` | Diff adds or modifies `metric.Metadata` definitions or introduces new metrics |
 | Simplification | `crdb-simplifier` | After other aspects pass — polish step |
 
 ### Selecting aspects
@@ -66,7 +67,7 @@ The user can request specific aspects:
 - `/review-crdb simplify` — run only the simplifier
 
 Valid aspect names: `correctness`, `errors`, `conventions`, `tests`, `commits`,
-`types`, `simplify`, `all`.
+`types`, `metrics`, `simplify`, `all`.
 
 ## Dispatching agents
 
