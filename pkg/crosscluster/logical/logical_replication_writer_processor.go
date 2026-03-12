@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -853,6 +854,22 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		w := worker
 		lrw.bhStats[w] = flushStats{}
 		g.GoCtx(func(ctx context.Context) error {
+			// The LDR processor is running inside of a distsql flow and this
+			// goroutine will be executing SQL inside that flow. By default, the flow
+			// has a CPU handle that has `AtGateway: false`. This is an issue because
+			// the multi metric allocator assumes non-gateway sql cpu usage will
+			// follow the leaseholder when the leaseholder moves. LDR work is
+			// not collocated with leaseholders in the destination cluster.
+			handle := lrw.FlowCtx.Cfg.SQLCPUProvider.GetHandle(admission.SQLWorkInfo{
+				AtGateway:  false,
+				TenantID:   lrw.FlowCtx.Codec().TenantID,
+				Priority:   admissionpb.LowPri,
+				CreateTime: timeutil.Now().UnixNano(),
+			})
+			defer handle.Close()
+			ctx = admission.ContextWithSQLCPUHandle(ctx, handle)
+			defer handle.RegisterGoroutine().Close(ctx)
+
 			for chunk := range chunks {
 				s, err := lrw.flushChunk(ctx, lrw.bh[w], chunk, canRetry)
 				if err != nil {

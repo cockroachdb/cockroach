@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -1959,6 +1960,67 @@ func TestFlushErrorHandling(t *testing.T) {
 	require.NoError(t, lrw.handleStreamBuffer(ctx, []streampb.StreamEvent_KV{skv("d")}))
 	require.Equal(t, 1, int(dlq))
 	require.Equal(t, int64(3), lrw.metrics.RetryQueueEvents.Value())
+}
+
+// cpuHandleAssertingSession wraps an isql.Session and asserts that the context
+// carries a SQL CPU handle with AtGateway=false and that the calling goroutine
+// has its handle registered before any SQL execution begins.
+type cpuHandleAssertingSession struct {
+	isql.Session
+	t *testing.T
+}
+
+func (s *cpuHandleAssertingSession) assertHandle(ctx context.Context) {
+	h := admission.SQLCPUHandleFromContext(ctx)
+	if h != nil {
+		require.False(s.t, h.WorkInfo().AtGateway,
+			"LDR CPU handle should have AtGateway=false")
+		require.True(s.t, h.IsGoroutineRegistered(),
+			"goroutine handle should be registered before internal SQL execution")
+	}
+}
+
+func (s *cpuHandleAssertingSession) Txn(ctx context.Context, do func(context.Context) error) error {
+	s.assertHandle(ctx)
+	return s.Session.Txn(ctx, do)
+}
+
+func TestLDRCPUHandle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(134857),
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				SQLExecutor: &sql.ExecutorTestingKnobs{
+					SessionWrapper: func(session isql.Session) isql.Session {
+						return &cpuHandleAssertingSession{
+							Session: session,
+							t:       t,
+						}
+					},
+				},
+			},
+		},
+	}
+
+	server, s, dbA, dbB := setupLogicalTestServer(t, ctx, clusterArgs, 1)
+	defer server.Stopper().Stop(ctx)
+
+	dbB.Exec(t, "INSERT INTO tab VALUES (1, 'hello')")
+
+	dbBURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("b"))
+	var jobAID jobspb.JobID
+	dbA.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON $1 INTO TABLE tab",
+		dbBURL.String()).Scan(&jobAID)
+
+	now := s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbA, jobAID)
 }
 
 func TestLogicalStreamIngestionJobWithFallbackUDF(t *testing.T) {

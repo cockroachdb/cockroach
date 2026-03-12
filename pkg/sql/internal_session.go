@@ -150,5 +150,12 @@ func (s *Server) NewInternalSession(
 	csm.config.sd = sd
 	csm.config.appStats = s.localSqlStats.GetApplicationStats(sessionName)
 
-	return ISessionFactoryHook(ctx, csm)
+	session, err := ISessionFactoryHook(ctx, csm)
+	if err != nil {
+		return nil, err
+	}
+	if w := s.cfg.TestingKnobs.SessionWrapper; w != nil {
+		session = w(session)
+	}
+	return session, nil
 }
