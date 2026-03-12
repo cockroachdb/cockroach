@@ -2903,6 +2903,8 @@ storage_value_separation_value_retrieval_count: storage.value_separation.value_r
 storage_wal_bytes_in: storage.wal.bytes_in
 storage_wal_bytes_written: storage.wal.bytes_written
 storage_wal_failover_primary_duration: storage.wal.failover.primary.duration
+storage_wal_failover_secondary_disk_available: storage.wal.failover.secondary.disk.available
+storage_wal_failover_secondary_disk_capacity: storage.wal.failover.secondary.disk.capacity
 storage_wal_failover_secondary_duration: storage.wal.failover.secondary.duration
 storage_wal_failover_switch_count: storage.wal.failover.switch.count
 storage_wal_failover_write_and_sync_latency: storage.wal.failover.write_and_sync.latency

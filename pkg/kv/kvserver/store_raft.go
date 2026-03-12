@@ -1183,5 +1183,10 @@ func (s *Store) updateCapacityGauges(ctx context.Context) error {
 	s.metrics.Available.Update(desc.Capacity.Available)
 	s.metrics.Used.Update(desc.Capacity.Used)
 
+	if du, err := s.TODOBothEngines().WALFailoverDiskUsage(); err == nil {
+		s.metrics.WALFailoverSecondaryDiskCapacity.Update(int64(du.TotalBytes))
+		s.metrics.WALFailoverSecondaryDiskAvailable.Update(int64(du.AvailBytes))
+	}
+
 	return nil
 }

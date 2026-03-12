@@ -3205,6 +3205,24 @@ var (
 			relevant metric is storage.wal.fsync.latency.
 		`),
 	}
+	metaStorageWALFailoverSecondaryDiskCapacity = metric.Metadata{
+		Name:        "storage.wal.failover.secondary.disk.capacity",
+		Help:        "Total disk capacity of the secondary WAL failover volume.",
+		Measurement: "Storage",
+		Unit:        metric.Unit_BYTES,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_STORAGE,
+		HowToUse:    "Only populated when WAL failover is configured.",
+	}
+	metaStorageWALFailoverSecondaryDiskAvailable = metric.Metadata{
+		Name:        "storage.wal.failover.secondary.disk.available",
+		Help:        "Available disk space on the secondary WAL failover volume.",
+		Measurement: "Storage",
+		Unit:        metric.Unit_BYTES,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_STORAGE,
+		HowToUse:    "Only populated when WAL failover is configured.",
+	}
 	metaReplicaReadBatchDroppedLatchesBeforeEval = metric.Metadata{
 		Name:        "kv.replica_read_batch_evaluate.dropped_latches_before_eval",
 		Help:        `Number of times read-only batches dropped latches before evaluation.`,
@@ -3526,6 +3544,8 @@ type StoreMetrics struct {
 	WALFailoverPrimaryDuration         *metric.Counter
 	WALFailoverSecondaryDuration       *metric.Counter
 	WALFailoverWriteAndSyncLatency     *metric.ManualWindowHistogram
+	WALFailoverSecondaryDiskCapacity   *metric.Gauge
+	WALFailoverSecondaryDiskAvailable  *metric.Gauge
 
 	RdbCheckpoints *metric.Gauge
 
@@ -4309,6 +4329,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			pebble.FsyncLatencyBuckets,
 			false, /* withRotate */
 		),
+		WALFailoverSecondaryDiskCapacity:  metric.NewGauge(metaStorageWALFailoverSecondaryDiskCapacity),
+		WALFailoverSecondaryDiskAvailable: metric.NewGauge(metaStorageWALFailoverSecondaryDiskAvailable),
 
 		// Ingestion metrics
 		IngestCount: metric.NewGauge(metaIngestCount),

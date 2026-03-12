@@ -923,6 +923,9 @@ type Engine interface {
 	Attrs() roachpb.Attributes
 	// Capacity returns capacity details for the engine's available storage.
 	Capacity() (roachpb.StoreCapacity, error)
+	// WALFailoverDiskUsage returns disk usage for the WAL failover secondary
+	// volume. Returns vfs.ErrUnsupported if WAL failover is not configured.
+	WALFailoverDiskUsage() (vfs.DiskUsage, error)
 	// Properties returns the low-level properties for the engine's underlying storage.
 	Properties() roachpb.StoreProperties
 	// ProfileSeparatedValueRetrievals collects a profile of the engine's
