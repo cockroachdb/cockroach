@@ -45,9 +45,8 @@ func registerIndexBackfill(r registry.Registry) {
 		Owner:            registry.OwnerAdmissionControl,
 		Benchmark:        true,
 		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.ManualOnly,
+		Suites:           registry.Suites(registry.Nightly),
 		// TODO(aaditya): Revisit this as part of #111614.
-		//Suites:           registry.Suites(registry.Weekly),
 		//Tags:             registry.Tags(`weekly`),
 		Cluster:        clusterSpec,
 		SnapshotPrefix: "index-backfill-tpce-100k",
@@ -120,12 +119,7 @@ func registerIndexBackfill(r registry.Registry) {
 					len(snapshots), t.SnapshotPrefix())
 
 				if !t.SkipInit() {
-					// Creating and attaching volumes takes some time. This test
-					// is written to be re-entrant. Assume the user passing in
-					// --skip-init knows this particular test behavior.
-					if err := c.ApplySnapshots(ctx, snapshots); err != nil {
-						t.Fatal(err)
-					}
+					roachtestutil.CopySnapshotDataToNodes(ctx, t, c, snapshots)
 				}
 			}
 
