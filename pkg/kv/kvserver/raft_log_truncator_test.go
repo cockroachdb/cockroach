@@ -305,7 +305,7 @@ func TestRaftLogTruncator(t *testing.T) {
 
 			case "print-engine-state":
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "id")
-				store.replicas[rangeID].printEngine(t, eng.TODOEngine())
+				store.replicas[rangeID].printEngine(t, eng.TODOBothEngines())
 				return flushAndReset()
 
 			case "add-pending-truncation":
