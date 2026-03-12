@@ -340,6 +340,15 @@ type settingOverride struct {
 	settings catpb.AutoStatsSettings
 }
 
+// refreshWorkItem contains the parameters needed to execute a stats refresh
+// on a specific table. It is sent from the maybeRefreshStats goroutine to
+// worker goroutines via the refreshWork channel.
+type refreshWorkItem struct {
+	tableID   descpb.ID
+	asOf      time.Duration
+	isPartial bool
+}
+
 // TableStatsTestingKnobs contains testing knobs for table statistics.
 type TableStatsTestingKnobs struct {
 	// DisableInitialTableCollection, if set, indicates that the "initial table
@@ -622,6 +631,50 @@ func (r *Refresher) Start(
 							return
 						}
 
+						// Create an unbuffered channel for this batch of
+						// refresh work. Sending to this channel will block
+						// until a worker is available.
+						refreshWork := make(chan refreshWorkItem)
+						// Use a separate wait group to block until all workers
+						// exit.
+						var workersWG sync.WaitGroup
+						defer func() {
+							close(refreshWork)
+							workersWG.Wait()
+							timer.Reset(refreshInterval)
+						}()
+
+						// TODO(yuzefovich): consider starting more workers in
+						// the future, configurable based on a cluster setting.
+						numWorkers := 2
+						if len(mutationCounts) <= 1 {
+							numWorkers = 1
+						}
+						// Assuming every worker on each node tries to run an
+						// auto full job, we'll have 2 * N concurrent attempts
+						// (where N is the number of nodes in the cluster). Yet
+						// the cluster-wide concurrency limit is determined by
+						// the cluster setting which is P / 2 (where P is the
+						// number of vCPUs on the machine), so we are very
+						// likely to hit the limit on medium to large clusters.
+						//
+						// To partially alleviate this, we will short-circuit
+						// all but first workers whenever
+						// ConcurrentCreateStatsLimitError is encountered.
+						for i := 0; i < numWorkers; i++ {
+							exitOnLimitError := i > 0
+							workersWG.Add(1)
+							if err := stopper.RunAsyncTask(
+								ctx, "stats-refresh-worker", func(ctx context.Context) {
+									defer workersWG.Done()
+									r.refreshWorker(ctx, refreshWork, exitOnLimitError)
+								}); err != nil {
+								workersWG.Done()
+								log.Dev.Errorf(ctx, "failed to start stats refresh worker: %v", err)
+								return
+							}
+						}
+
 						for tableID, rowsAffected := range mutationCounts {
 							var desc catalog.TableDescriptor
 							now := timeutil.Now()
@@ -664,6 +717,7 @@ func (r *Refresher) Start(
 							}
 							r.maybeRefreshStats(
 								ctx,
+								refreshWork,
 								tableID,
 								explicitSettings,
 								rowsAffected,
@@ -673,14 +727,13 @@ func (r *Refresher) Start(
 							)
 
 							select {
-							case <-ctx.Done():
-								return
 							case <-r.drainAutoStats:
+								return
+							case <-ctx.Done():
 								return
 							default:
 							}
 						}
-						timer.Reset(refreshInterval)
 					}); err != nil {
 					r.startedTasksWG.Done()
 					log.Dev.Errorf(ctx, "failed to start async stats task: %v", err)
@@ -1042,6 +1095,7 @@ func (r *Refresher) mustDoFullRefresh(
 // for this table.
 func (r *Refresher) maybeRefreshStats(
 	ctx context.Context,
+	refreshWork chan<- refreshWorkItem,
 	tableID descpb.ID,
 	explicitSettings *catpb.AutoStatsSettings,
 	rowsAffected int64,
@@ -1098,14 +1152,48 @@ func (r *Refresher) maybeRefreshStats(
 		isPartial = true
 	}
 
-	if err := r.refreshStats(ctx, tableID, asOf, isPartial); err != nil {
-		// ConcurrentCreateStatsError is expected, so simply ignore it (it's
-		// handled by RescheduleRefresh called by the stats job). Log all
-		// others.
-		if IsConcurrentCreateStatsError(err) {
+	// Send work to one of the worker goroutines. This will block until a worker
+	// is available to process the request.
+	select {
+	case refreshWork <- refreshWorkItem{
+		tableID:   tableID,
+		asOf:      asOf,
+		isPartial: isPartial,
+	}:
+	case <-r.drainAutoStats:
+	case <-ctx.Done():
+	}
+}
+
+// refreshWorker is the body of the worker goroutine that actually collects auto
+// table stats. It exits whenever the refreshWork channel is closed. If
+// exitOnLimitError is true, then it'll also exit if
+// ConcurrentCreateStatsLimitError is observed.
+func (r *Refresher) refreshWorker(
+	ctx context.Context, refreshWork <-chan refreshWorkItem, exitOnLimitError bool,
+) {
+	for {
+		select {
+		case work, ok := <-refreshWork:
+			if !ok {
+				return
+			}
+			if err := r.refreshStats(ctx, work.tableID, work.asOf, work.isPartial); err != nil {
+				// ConcurrentCreateStatsError is expected, so simply ignore it
+				// (it's handled by RescheduleRefresh called by the stats job).
+				// Log all others.
+				if !IsConcurrentCreateStatsError(err) {
+					log.Dev.Warningf(ctx, "failed to create statistics on table %d: %v", work.tableID, err)
+				}
+				if exitOnLimitError && errors.Is(err, ConcurrentCreateStatsLimitError) {
+					return
+				}
+			}
+		case <-r.drainAutoStats:
+			return
+		case <-ctx.Done():
 			return
 		}
-		log.Dev.Warningf(ctx, "failed to create statistics on table %d: %v", tableID, err)
 	}
 }
 
