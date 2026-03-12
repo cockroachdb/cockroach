@@ -1,0 +1,72 @@
+# Log deprioritization: state engine wins when scores are close.
+# Fill to max (3) with 1 log + 2 state so both engines stay under their
+# per-engine limit (allowed=2) after freeing one state compaction.
+
+init max-concurrency=3 deprioritization=0.5 log-allowed=2 state-allowed=2
+----
+
+try-schedule engine=log
+----
+granted: compaction index 0
+
+try-schedule engine=state
+----
+granted: compaction index 0
+
+try-schedule engine=state
+----
+granted: compaction index 1
+
+# At max concurrency (3). Both engines have waiting work.
+
+try-schedule engine=log
+----
+not granted
+
+try-schedule engine=state
+----
+not granted
+
+set-waiting engine=log priority=80 score=2.0
+----
+
+set-waiting engine=state priority=80 score=1.5
+----
+
+# Free one state slot. Now log.running=1, state.running=1, both under
+# allowed=2. Both are candidates. State should win because log's
+# deprioritized score 2.0*0.5=1.0 < state's 1.5.
+
+compaction-done engine=state idx=0
+----
+log: GetWaitingCompaction
+state: GetWaitingCompaction
+state: Schedule => accepted: compaction index 2
+
+# Clean up.
+
+clear-waiting engine=state
+----
+
+clear-waiting engine=log
+----
+
+compaction-done engine=state idx=1
+----
+log: GetWaitingCompaction
+state: GetWaitingCompaction
+
+compaction-done engine=log idx=0
+----
+
+compaction-done engine=state idx=2
+----
+
+print-state
+----
+totalRunning: 0
+log: running=0 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+close
+----
