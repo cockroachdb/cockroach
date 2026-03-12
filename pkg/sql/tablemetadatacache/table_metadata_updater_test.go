@@ -119,7 +119,7 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 				// Flush store so that bytes return non-zero from span stats.
 				s := s.StorageLayer()
 				err := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-					return store.TODOEngine().Flush()
+					return store.StateEngine().Flush()
 				})
 				if err != nil {
 					return err.Error()
