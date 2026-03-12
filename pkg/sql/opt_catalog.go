@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -2522,7 +2523,8 @@ func newOptVirtualTable(
 		name: *name,
 	}
 
-	ot.columns = make([]cat.Column, len(desc.PublicColumns())+1)
+	// Allocate space for public columns + 1 dummy PK + tableoid system column.
+	ot.columns = make([]cat.Column, len(desc.PublicColumns())+1+1)
 	// Init dummy PK column.
 	ot.columns[0].Init(
 		0,
@@ -2556,6 +2558,25 @@ func newOptVirtualTable(
 		)
 	}
 
+	// Add the tableoid system column. Other system columns
+	// (crdb_internal_mvcc_timestamp, etc.) are not meaningful for virtual
+	// tables since they don't have MVCC data.
+	tableoidOrd := len(desc.PublicColumns()) + 1
+	ot.columns[tableoidOrd].Init(
+		tableoidOrd,
+		cat.StableID(colinfo.TableOIDColumnID),
+		colinfo.TableOIDColumnName,
+		cat.System,
+		types.Oid,
+		true,       /* nullable */
+		cat.Hidden, /* hidden */
+		nil,        /* defaultExpr */
+		nil,        /* computedExpr */
+		nil,        /* onUpdateExpr */
+		cat.NotGeneratedAsIdentity,
+		nil, /* generatedAsIdentitySequenceOption */
+	)
+
 	// Create the table's column mapping from descpb.ColumnID to column ordinal.
 	for i := range ot.columns {
 		ot.colMap.Set(descpb.ColumnID(ot.columns[i].ColID()), i)
@@ -2568,8 +2589,11 @@ func newOptVirtualTable(
 
 	// Build the indexes (add 1 to account for lack of primary index in
 	// indexes slice).
+	numNonSystemCols := len(desc.PublicColumns()) + 1 // +1 for dummy PK
 	ot.indexes = make([]optVirtualIndex, len(ot.desc.ActiveIndexes()))
-	// Set up the primary index.
+	// Set up the primary index. Include the tableoid system column so the
+	// optimizer considers the primary index as covering for tableoid queries,
+	// avoiding unnecessary index joins.
 	ot.indexes[0] = optVirtualIndex{
 		tab:          ot,
 		indexOrdinal: 0,
@@ -2582,12 +2606,15 @@ func newOptVirtualTable(
 		}
 
 		// Add 1, since the 0th index will the primary that we added above.
+		// Secondary indexes do not include the tableoid system column in
+		// numCols because the Column() method for secondary indexes uses a
+		// different offset scheme and would panic on out-of-bounds access.
 		ot.indexes[idx.Ordinal()] = optVirtualIndex{
 			tab:          ot,
 			idx:          idx,
 			indexOrdinal: idx.Ordinal(),
 			// The virtual indexes don't return the bogus PK key?
-			numCols: ot.ColumnCount(),
+			numCols: numNonSystemCols,
 		}
 	}
 
