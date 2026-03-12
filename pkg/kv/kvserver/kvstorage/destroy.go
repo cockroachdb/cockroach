@@ -73,7 +73,9 @@ type DestroyReplicaInfo struct {
 	// FullReplicaID identifies the replica on its store.
 	roachpb.FullReplicaID
 	// Keys is the user key span of this replica, taken from its RangeDescriptor.
-	// Non-empty iff the replica is initialized.
+	// Non-empty iff the replica is initialized and its user keys should be
+	// removed as part of the replica destruction (i.e. the replica is not being
+	// subsumed, since subsumption transfers user keys to the subsuming range).
 	Keys roachpb.RSpan
 }
 
