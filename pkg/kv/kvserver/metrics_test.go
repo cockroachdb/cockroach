@@ -160,6 +160,50 @@ func TestWALSecondaryFileOpLatencyMetric(t *testing.T) {
 	}
 }
 
+// TestWALFailoverSecondaryDiskMetrics verifies that the secondary WAL failover
+// disk capacity metrics are properly registered and accessible.
+func TestWALFailoverSecondaryDiskMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tmpDir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		StoreSpecs: []base.StoreSpec{
+			{Size: storageconfig.BytesSize(storageconfig.MinimumStoreSize), Path: tmpDir},
+		},
+	})
+	defer ts.Stopper().Stop(ctx)
+
+	if err := ts.GetStores().(*Stores).VisitStores(func(s *Store) error {
+		if ok := s.Registry().Contains("storage.wal.failover.secondary.disk.capacity"); !ok {
+			return fmt.Errorf("missing WAL failover secondary disk capacity metric")
+		}
+		if ok := s.Registry().Contains("storage.wal.failover.secondary.disk.available"); !ok {
+			return fmt.Errorf("missing WAL failover secondary disk available metric")
+		}
+		if s.metrics.WALFailoverSecondaryDiskCapacity == nil {
+			return fmt.Errorf("WALFailoverSecondaryDiskCapacity metric is nil")
+		}
+		if s.metrics.WALFailoverSecondaryDiskAvailable == nil {
+			return fmt.Errorf("WALFailoverSecondaryDiskAvailable metric is nil")
+		}
+		// Without WAL failover configured, these metrics should be zero.
+		if v := s.metrics.WALFailoverSecondaryDiskCapacity.Value(); v != 0 {
+			return fmt.Errorf("expected WALFailoverSecondaryDiskCapacity to be 0, got %d", v)
+		}
+		if v := s.metrics.WALFailoverSecondaryDiskAvailable.Value(); v != 0 {
+			return fmt.Errorf("expected WALFailoverSecondaryDiskAvailable to be 0, got %d", v)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestUpdateDiskCounter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

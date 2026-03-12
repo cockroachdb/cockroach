@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/metrics"
+	"github.com/cockroachdb/pebble/vfs"
 )
 
 // EnableAssertions is a convenient entry point to enable/disable spanset
@@ -174,6 +175,11 @@ func (s *spanSetEngine) Attrs() roachpb.Attributes {
 // Capacity implements the storage.EngineWithoutRW interface.
 func (s *spanSetEngine) Capacity() (roachpb.StoreCapacity, error) {
 	return s.e.Capacity()
+}
+
+// WALFailoverDiskUsage implements the storage.Engine interface.
+func (s *spanSetEngine) WALFailoverDiskUsage() (vfs.DiskUsage, error) {
+	return s.e.WALFailoverDiskUsage()
 }
 
 // Properties implements the storage.EngineWithoutRW interface.
