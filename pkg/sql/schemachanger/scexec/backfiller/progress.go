@@ -8,14 +8,26 @@
 package backfiller
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/errors"
 )
+
+// backfillSSTManifestsInfoKeyPrefix is the prefix for all backfill SST manifest
+// info keys. Used for range-based cleanup.
+const backfillSSTManifestsInfoKeyPrefix = "~backfill/sst-manifests/"
+
+// BackfillSSTManifestsInfoKey returns the job info key used to store SST
+// manifests for a declarative schema changer backfill identified by the given
+// table ID and source index ID.
+func BackfillSSTManifestsInfoKey(tableID descpb.ID, sourceIndexID descpb.IndexID) string {
+	return fmt.Sprintf("%s%d-%d.binpb", backfillSSTManifestsInfoKeyPrefix, tableID, sourceIndexID)
+}
 
 func convertToJobBackfillProgress(
 	codec keys.SQLCodec, progresses []scexec.BackfillProgress,
@@ -26,17 +38,14 @@ func convertToJobBackfillProgress(
 		if err != nil {
 			return nil, err
 		}
-		manifests, err := backfill.StripTenantPrefixFromSSTManifests(codec, bp.SSTManifests)
-		if err != nil {
-			return nil, err
-		}
+		// Note: SSTManifests are stored separately in job info keys, not in the
+		// proto payload.
 		ret = append(ret, jobspb.BackfillProgress{
 			TableID:                      bp.TableID,
 			SourceIndexID:                bp.SourceIndexID,
 			DestIndexIDs:                 bp.DestIndexIDs,
 			WriteTimestamp:               bp.MinimumWriteTimestamp,
 			CompletedSpans:               strippedSpans,
-			SSTManifests:                 manifests,
 			SSTStoragePrefixes:           bp.SSTStoragePrefixes,
 			DistributedMergePhase:        bp.DistributedMergePhase,
 			MergeIterationTasksTotal:     bp.MergeIterationTasksTotal,
@@ -51,6 +60,8 @@ func convertFromJobBackfillProgress(
 ) []scexec.BackfillProgress {
 	ret := make([]scexec.BackfillProgress, 0, len(progresses))
 	for _, bp := range progresses {
+		// Note: SSTManifests are read separately from job info keys by the
+		// caller and populated on the returned progress entries.
 		ret = append(ret, scexec.BackfillProgress{
 			Backfill: scexec.Backfill{
 				TableID:       bp.TableID,
@@ -59,7 +70,6 @@ func convertFromJobBackfillProgress(
 			},
 			MinimumWriteTimestamp:        bp.WriteTimestamp,
 			CompletedSpans:               addTenantPrefixToSpans(codec, bp.CompletedSpans),
-			SSTManifests:                 backfill.AddTenantPrefixToSSTManifests(codec, bp.SSTManifests),
 			SSTStoragePrefixes:           bp.SSTStoragePrefixes,
 			DistributedMergePhase:        bp.DistributedMergePhase,
 			MergeIterationTasksTotal:     bp.MergeIterationTasksTotal,

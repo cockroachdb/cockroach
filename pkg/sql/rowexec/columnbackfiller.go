@@ -260,11 +260,9 @@ func GetResumeSpansAndSSTManifests(
 			return nil, nil, nil, 0, err
 		}
 	}
-	manifests := backfill.AddTenantPrefixToSSTManifests(
-		codec, details.ResumeSpanList[mutationIdx].SSTManifests,
-	)
-	// Return the resume spans and manifests from the job using the mutation idx.
-	return spanList, manifests, job, mutationIdx, nil
+
+	// Return the resume spans from the job using the mutation idx.
+	return spanList, nil, job, mutationIdx, nil
 }
 
 // GetResumeSpans returns the resume spans for the specified mutation and job.
@@ -285,8 +283,8 @@ func GetResumeSpans(
 	return spans, job, mutationIdx, err
 }
 
-// SetResumeSpansAndSSTManifestsInJob persists resume spans and optional SST
-// manifest metadata into the schema change job details.
+// SetResumeSpansAndSSTManifestsInJob persists resume spans into the schema
+// change job details.
 func SetResumeSpansAndSSTManifestsInJob(
 	ctx context.Context,
 	codec *keys.SQLCodec,
@@ -301,18 +299,6 @@ func SetResumeSpansAndSSTManifestsInJob(
 		return errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Details())
 	}
 	details.ResumeSpanList[mutationIdx].ResumeSpans = spans
-	if len(manifests) == 0 {
-		details.ResumeSpanList[mutationIdx].SSTManifests = nil
-	} else {
-		if codec == nil {
-			return errors.AssertionFailedf("codec required when persisting SST manifests")
-		}
-		normalized, err := backfill.StripTenantPrefixFromSSTManifests(*codec, manifests)
-		if err != nil {
-			return err
-		}
-		details.ResumeSpanList[mutationIdx].SSTManifests = normalized
-	}
 	return job.WithTxn(txn).SetDetails(ctx, details)
 }
 

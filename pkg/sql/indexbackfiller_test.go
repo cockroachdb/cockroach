@@ -1583,15 +1583,19 @@ func waitForCheckpointPersisted(
 		}
 
 		// Otherwise, verify SST manifests are checkpointed (iteration pause case).
+		// Manifests are now stored in job info keys, not in the proto payload.
 		bp := schemaChangeDetails.BackfillProgress[0]
-		if len(bp.SSTManifests) == 0 {
-			return errors.Errorf("no SST manifests checkpointed yet")
+		manifestKey := fmt.Sprintf("~backfill/sst-manifests/%d-%d.binpb", bp.TableID, bp.SourceIndexID)
+		var manifestData []byte
+		manifestQuery := `SELECT value FROM system.job_info WHERE job_id = $1 AND info_key LIKE $2 ORDER BY info_key LIMIT 1`
+		if err := db.QueryRowContext(ctx, manifestQuery, jobID, manifestKey+"%").Scan(&manifestData); err != nil {
+			return errors.Wrap(err, "no SST manifests checkpointed yet")
 		}
 		if expectedPhase > 0 && bp.DistributedMergePhase != expectedPhase {
 			return errors.Errorf("waiting for phase %d, current: %d",
 				expectedPhase, bp.DistributedMergePhase)
 		}
-		t.Logf("checkpoint contains %d SST manifests, phase=%d", len(bp.SSTManifests), bp.DistributedMergePhase)
+		t.Logf("checkpoint contains SST manifests (key=%s), phase=%d", manifestKey, bp.DistributedMergePhase)
 		return nil
 	}, 5*time.Second)
 }

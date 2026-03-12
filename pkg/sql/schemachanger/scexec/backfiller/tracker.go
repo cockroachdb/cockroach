@@ -13,12 +13,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -57,11 +59,21 @@ type Tracker struct {
 
 var _ scexec.BackfillerTracker = (*Tracker)(nil)
 
+// BackfillManifestKey uniquely identifies a backfill for manifest lookup.
+type BackfillManifestKey struct {
+	TableID       descpb.ID
+	SourceIndexID descpb.IndexID
+}
+
 // NewTracker constructs a new Tracker.
 //
 // If cleaner is non-nil, the tracker will perform SST cleanup when phase
 // transitions are detected. The caller is responsible for closing the cleaner.
 // If nil, cleanup is disabled.
+//
+// backfillManifests maps each backfill to its SST manifests, which are read
+// from job info keys by the caller. These manifests should already have tenant
+// prefixes applied. If nil, no manifests are populated.
 func NewTracker(
 	codec keys.SQLCodec,
 	counter RangeCounter,
@@ -70,11 +82,23 @@ func NewTracker(
 	jobBackfillProgress []jobspb.BackfillProgress,
 	jobMergeProgress []jobspb.MergeProgress,
 	cleaner *bulkutil.BulkJobCleaner,
+	backfillManifests map[BackfillManifestKey][]jobspb.BulkSSTManifest,
 ) *Tracker {
+	bps := convertFromJobBackfillProgress(codec, jobBackfillProgress)
+	// Populate SST manifests from the map provided by the caller.
+	for i := range bps {
+		key := BackfillManifestKey{
+			TableID:       bps[i].TableID,
+			SourceIndexID: bps[i].SourceIndexID,
+		}
+		if manifests, ok := backfillManifests[key]; ok {
+			bps[i].SSTManifests = manifests
+		}
+	}
 	tr := newTracker(
 		codec,
 		newTrackerConfig(codec, counter, job, db),
-		convertFromJobBackfillProgress(codec, jobBackfillProgress),
+		bps,
 		convertFromJobMergeProgress(codec, jobMergeProgress),
 	)
 
@@ -141,6 +165,37 @@ func newTrackerConfig(
 				sc.BackfillProgress = backfillJobProgress
 				sc.MergeProgress = mergeJobProgress
 				ju.UpdatePayload(pl)
+
+				// Write SST manifests to job info keys, keeping them out of
+				// the (potentially large) job payload. When manifests are
+				// empty (e.g. after merge completes), delete any stale info
+				// key to prevent reading outdated manifests on job restart.
+				for _, bp := range bps {
+					infoKey := BackfillSSTManifestsInfoKey(bp.TableID, bp.SourceIndexID)
+					if len(bp.SSTManifests) == 0 {
+						// Clean up stale manifest data from previous phases.
+						jobInfo := jobs.InfoStorageForJob(txn, job.ID())
+						if err := jobInfo.DeleteRange(
+							ctx, infoKey, infoKey+"~", 0,
+						); err != nil {
+							return err
+						}
+						continue
+					}
+					stripped, err := backfill.StripTenantPrefixFromSSTManifests(codec, bp.SSTManifests)
+					if err != nil {
+						return err
+					}
+					data, err := protoutil.Marshal(&jobspb.BulkSSTManifests{Manifests: stripped})
+					if err != nil {
+						return err
+					}
+					if err := jobs.WriteChunkedFileToJobInfo(
+						ctx, infoKey, data, txn, job.ID(),
+					); err != nil {
+						return err
+					}
+				}
 				return nil
 			})
 		},
