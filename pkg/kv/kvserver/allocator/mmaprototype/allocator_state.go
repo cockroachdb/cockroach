@@ -252,8 +252,7 @@ func (a *allocatorState) AdjustPendingChangeDisposition(
 				metrics.ExternalReplicaChangeFailure.Inc(1)
 			}
 		}
-	case originMMARebalance, originMMARepair:
-		// TODO(mma): add dedicated repair metrics in a follow-up PR.
+	case originMMARebalance:
 		if isLeaseTransfer {
 			if success {
 				metrics.RebalanceLeaseChangeSuccess.Inc(1)
@@ -265,6 +264,20 @@ func (a *allocatorState) AdjustPendingChangeDisposition(
 				metrics.RebalanceReplicaChangeSuccess.Inc(1)
 			} else {
 				metrics.RebalanceReplicaChangeFailure.Inc(1)
+			}
+		}
+	case originMMARepair:
+		if isLeaseTransfer {
+			if success {
+				metrics.RepairLeaseChangeSuccess.Inc(1)
+			} else {
+				metrics.RepairLeaseChangeFailure.Inc(1)
+			}
+		} else {
+			if success {
+				metrics.RepairReplicaChangeSuccess.Inc(1)
+			} else {
+				metrics.RepairReplicaChangeFailure.Inc(1)
 			}
 		}
 	}
