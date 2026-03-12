@@ -116,11 +116,6 @@ type Engines struct {
 	// stateEngine is the state machine engine, in which the committed raft state
 	// materializes after being "applied".
 	stateEngine storage.Engine
-	// todoEngine is a placeholder used in cases where:
-	// - the code does not yet cleanly separate between state and log engine
-	// - it is still unclear which of the two engines is the better choice for a
-	//   particular write, or there is a candidate, but it needs to be verified.
-	todoEngine storage.Engine
 	// logEngine is the engine holding mainly the raft state, such as HardState
 	// and logs, and the Store-local keys. This engine provides timely
 	// durability, by frequent and on-demand syncing.
@@ -139,12 +134,10 @@ func MakeEngines(eng storage.Engine) Engines {
 		return Engines{
 			stateEngine: spanset.NewEngine(eng, validateIsStateEngineSpan),
 			logEngine:   spanset.NewEngine(eng, validateIsRaftEngineSpan),
-			todoEngine:  eng,
 		}
 	}
 	return Engines{
 		stateEngine: eng,
-		todoEngine:  eng,
 		logEngine:   eng,
 	}
 }
@@ -161,28 +154,24 @@ func MakeSeparatedEnginesForTesting(state, log storage.Engine) Engines {
 		// accesses.
 		return Engines{
 			stateEngine: spanset.NewEngine(state, validateIsStateEngineSpan),
-			todoEngine:  nil,
 			logEngine:   spanset.NewEngine(log, validateIsRaftEngineSpan),
 			separated:   true,
 		}
 	}
 	return Engines{
 		stateEngine: state,
-		todoEngine:  nil,
 		logEngine:   log,
 		separated:   true,
 	}
 }
 
 // Engine returns the single engine. Used when the caller implements backwards
-// compatible code and neither StateEngine nor LogEngine can be used. This is
-// different from TODOEngine in that the caller explicitly acknowledges the fact
-// that they are using a combined engine.
+// compatible code and neither StateEngine nor LogEngine can be used.
 func (e *Engines) Engine() storage.Engine {
 	if buildutil.CrdbTestBuild && e.separated {
 		panic("engines are separated")
 	}
-	return e.todoEngine
+	return disableAccessAssertions(e.stateEngine)
 }
 
 // StateEngine returns the state machine engine.
@@ -193,13 +182,6 @@ func (e *Engines) StateEngine() storage.Engine {
 // LogEngine returns the raft/log engine.
 func (e *Engines) LogEngine() storage.Engine {
 	return e.logEngine
-}
-
-// TODOEngine returns the combined engine, used in the code which currently does
-// not support separated engines. The caller must eventually "resolve" this call
-// to one of StateEngine, LogEngine, or Engine.
-func (e *Engines) TODOEngine() storage.Engine {
-	return e.todoEngine
 }
 
 // TODOBothEngines returns the StateEngine, and indicates that the caller must
