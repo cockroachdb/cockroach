@@ -1923,9 +1923,19 @@ func newRegisteredServer(
 	opts.RPCHeartbeatTimeout = 1000 * time.Millisecond
 
 	rpcCtx := NewContext(context.Background(), opts)
-	// This is normally set up inside the server, we want to hold onto all PingRequests that come through.
+
+	verifyDialbackFn := func() func(context.Context, *PingRequest, *PingResponse) error {
+		if !rpcCtx.UseDRPC {
+			return func(ctx context.Context, req *PingRequest, resp *PingResponse) error {
+				return VerifyDialback(ctx, NewGRPCDialbackAdapter(rpcCtx), req, resp, roachpb.Locality{}, &rpcCtx.Settings.SV)
+			}
+		}
+		return func(ctx context.Context, req *PingRequest, resp *PingResponse) error {
+			return VerifyDialback(ctx, NewDRPCDialbackAdapter(rpcCtx), req, resp, roachpb.Locality{}, &rpcCtx.Settings.SV)
+		}
+	}()
 	rpcCtx.OnIncomingPing = func(ctx context.Context, req *PingRequest, resp *PingResponse) error {
-		err := VerifyDialback(ctx, rpcCtx, req, resp, roachpb.Locality{}, &rpcCtx.Settings.SV)
+		err := verifyDialbackFn(ctx, req, resp)
 		if err != nil {
 			t.Logf("dialback error n%d->n%d @ %s: %s", nodeID, req.OriginNodeID, req.OriginAddr, err)
 			return err
@@ -2045,12 +2055,16 @@ func TestHeartbeatDialback(t *testing.T) {
 func TestVerifyDialback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	run := func(t *testing.T, name string, f func(t *testing.T, mockRPCCtx *MockDialbacker, sv *settings.Values)) {
+	run := func(
+		t *testing.T,
+		name string,
+		f func(t *testing.T, mockRPCCtx *MockDialbacker[*grpc.ClientConn], sv *settings.Values),
+	) {
 		t.Helper()
 		t.Run(name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
-			f(t, NewMockDialbacker(ctrl), &cluster.MakeTestingClusterSettings().SV)
+			f(t, NewMockDialbacker[*grpc.ClientConn](ctrl), &cluster.MakeTestingClusterSettings().SV)
 		})
 	}
 
@@ -2072,7 +2086,7 @@ func TestVerifyDialback(t *testing.T) {
 		}
 	}
 
-	run(t, "no-ops", func(t *testing.T, mockRPCCtx *MockDialbacker, sv *settings.Values) {
+	run(t, "no-ops", func(t *testing.T, mockRPCCtx *MockDialbacker[*grpc.ClientConn], sv *settings.Values) {
 		// NONE always no-ops, the other modes do if setting is disabled.
 		require.NoError(t, VerifyDialback(context.Background(), mockRPCCtx, ping(PingRequest_NONE),
 			&PingResponse{}, roachpb.Locality{}, sv))
@@ -2087,9 +2101,8 @@ func TestVerifyDialback(t *testing.T) {
 	// hits the fast-path, returning success.
 	for _, typ := range []PingRequest_DialbackType{PingRequest_BLOCKING, PingRequest_NON_BLOCKING} {
 		run(t, fmt.Sprintf("fast-path/healthy/%s", typ),
-			func(t *testing.T, mockRPCCtx *MockDialbacker, sv *settings.Values) {
-
-				mockRPCCtx.EXPECT().GRPCDialNode("1.1.1.1", roachpb.NodeID(2), roachpb.Locality{}, rpcbase.SystemClass).
+			func(t *testing.T, mockRPCCtx *MockDialbacker[*grpc.ClientConn], sv *settings.Values) {
+				mockRPCCtx.EXPECT().DialNode("1.1.1.1", roachpb.NodeID(2), roachpb.Locality{}, rpcbase.SystemClass).
 					DoAndReturn(func(string, roachpb.NodeID, roachpb.Locality, rpcbase.ConnectionClass) *GRPCConnection {
 						healthyConn := mkConn()
 						close(healthyConn.connFuture.ready)
@@ -2105,79 +2118,86 @@ func TestVerifyDialback(t *testing.T) {
 			})
 	}
 
-	run(t, "fast-path/pending/NON_BLOCKING", func(t *testing.T, mockRPCCtx *MockDialbacker, sv *settings.Values) {
-		// If reverse system class connection is not healthy, non-blocking dial attempt
-		// interprets this as success.
-		mockRPCCtx.EXPECT().GRPCDialNode("1.1.1.1", roachpb.NodeID(2), roachpb.Locality{}, rpcbase.SystemClass).
-			DoAndReturn(func(string, roachpb.NodeID, roachpb.Locality, rpcbase.ConnectionClass) *GRPCConnection {
-				tmpConn := mkConn()
-				assert.Equal(t, ErrNotHeartbeated, tmpConn.Health())
-				return tmpConn
-			})
-		require.NoError(t, VerifyDialback(context.Background(), mockRPCCtx, &PingRequest{
-			OriginAddr:    "1.1.1.1",
-			TargetNodeID:  1,
-			OriginNodeID:  2,
-			NeedsDialback: PingRequest_NON_BLOCKING,
-		}, &PingResponse{}, roachpb.Locality{}, sv))
-	})
-
-	for _, dialbackOK := range []bool{true, false} {
-		run(t, fmt.Sprintf("fast-path/pending/BLOCKING/success=%t", dialbackOK), func(t *testing.T, mockRPCCtx *MockDialbacker, sv *settings.Values) {
-			// If reverse system class connection is not healthy, blocking dial attempt
-			// will do a one-off dialback.
-			mockRPCCtx.EXPECT().GRPCDialNode("1.1.1.1", roachpb.NodeID(2), roachpb.Locality{}, rpcbase.SystemClass).
+	run(t, "fast-path/pending/NON_BLOCKING",
+		func(t *testing.T, mockRPCCtx *MockDialbacker[*grpc.ClientConn], sv *settings.Values) {
+			// If reverse system class connection is not healthy, non-blocking dial attempt
+			// interprets this as success.
+			mockRPCCtx.EXPECT().DialNode("1.1.1.1", roachpb.NodeID(2), roachpb.Locality{}, rpcbase.SystemClass).
 				DoAndReturn(func(string, roachpb.NodeID, roachpb.Locality, rpcbase.ConnectionClass) *GRPCConnection {
 					tmpConn := mkConn()
 					assert.Equal(t, ErrNotHeartbeated, tmpConn.Health())
 					return tmpConn
 				})
-			mockRPCCtx.EXPECT().wrapCtx(gomock.Any(), "1.1.1.1", roachpb.NodeID(2), rpcbase.SystemClass).DoAndReturn(func(
-				ctx context.Context, _ string, _ roachpb.NodeID, _ rpcbase.ConnectionClass) context.Context {
-				return ctx
-			})
-			mockRPCCtx.EXPECT().grpcDialRaw(gomock.Any() /* ctx */, "1.1.1.1", rpcbase.SystemClass, gomock.Any() /* onDialFunc */, gomock.Any()).
-				DoAndReturn(func(context.Context, string, rpcbase.ConnectionClass, onDialFunc, ...grpc.DialOption) (*grpc.ClientConn, error) {
-					if dialbackOK {
-						return nil, nil
-					}
-					return nil, errors.New("boom")
-				})
-			err := VerifyDialback(context.Background(), mockRPCCtx, &PingRequest{
+			require.NoError(t, VerifyDialback(context.Background(), mockRPCCtx, &PingRequest{
 				OriginAddr:    "1.1.1.1",
 				TargetNodeID:  1,
 				OriginNodeID:  2,
-				NeedsDialback: PingRequest_BLOCKING,
-			}, &PingResponse{}, roachpb.Locality{}, sv)
-			if dialbackOK {
-				require.NoError(t, err)
-			} else {
-				require.Error(t, err)
-			}
+				NeedsDialback: PingRequest_NON_BLOCKING,
+			}, &PingResponse{}, roachpb.Locality{}, sv))
 		})
+
+	for _, dialbackOK := range []bool{true, false} {
+		run(t, fmt.Sprintf("fast-path/pending/BLOCKING/success=%t", dialbackOK),
+			func(t *testing.T, mockRPCCtx *MockDialbacker[*grpc.ClientConn], sv *settings.Values) {
+				// If reverse system class connection is not healthy, blocking dial attempt
+				// will do a one-off dialback.
+				mockRPCCtx.EXPECT().DialNode("1.1.1.1", roachpb.NodeID(2), roachpb.Locality{}, rpcbase.SystemClass).
+					DoAndReturn(func(string, roachpb.NodeID, roachpb.Locality, rpcbase.ConnectionClass) *GRPCConnection {
+						tmpConn := mkConn()
+						assert.Equal(t, ErrNotHeartbeated, tmpConn.Health())
+						return tmpConn
+					})
+				mockRPCCtx.EXPECT().WrapCtx(gomock.Any(), "1.1.1.1", roachpb.NodeID(2), rpcbase.SystemClass).
+					DoAndReturn(func(
+						ctx context.Context, _ string, _ roachpb.NodeID, _ rpcbase.ConnectionClass,
+					) context.Context {
+						return ctx
+					})
+				mockRPCCtx.EXPECT().DialRaw(gomock.Any(), "1.1.1.1", rpcbase.SystemClass).
+					DoAndReturn(func(context.Context, string, rpcbase.ConnectionClass) error {
+						if dialbackOK {
+							return nil
+						}
+						return errors.New("boom")
+					})
+				err := VerifyDialback(context.Background(), mockRPCCtx, &PingRequest{
+					OriginAddr:    "1.1.1.1",
+					TargetNodeID:  1,
+					OriginNodeID:  2,
+					NeedsDialback: PingRequest_BLOCKING,
+				}, &PingResponse{}, roachpb.Locality{}, sv)
+				if dialbackOK {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+				}
+			})
 	}
 
-	run(t, "without-nodeid", func(t *testing.T, mockRPCCtx *MockDialbacker, sv *settings.Values) {
-		// If PingRequest has no OriginNodeID, we'll check the system-level connection using GRPCUnvalidatedDial
-		// and still do the one-off dialback (in BLOCKING mode)
-		req := ping(PingRequest_BLOCKING)
-		req.OriginNodeID = 0
-		mockRPCCtx.EXPECT().GRPCUnvalidatedDial("1.1.1.1", roachpb.Locality{}).
-			DoAndReturn(func(string, roachpb.Locality) *GRPCConnection {
-				tmpConn := mkConn()
-				assert.Equal(t, ErrNotHeartbeated, tmpConn.Health())
-				return tmpConn
-			})
-		mockRPCCtx.EXPECT().wrapCtx(gomock.Any(), "1.1.1.1", roachpb.NodeID(0), rpcbase.SystemClass).DoAndReturn(func(
-			ctx context.Context, _ string, _ roachpb.NodeID, _ rpcbase.ConnectionClass) context.Context {
-			return ctx
+	run(t, "without-nodeid",
+		func(t *testing.T, mockRPCCtx *MockDialbacker[*grpc.ClientConn], sv *settings.Values) {
+			// If PingRequest has no OriginNodeID, we'll check the system-level connection
+			// using UnvalidatedDial and still do the one-off dialback (in BLOCKING mode).
+			req := ping(PingRequest_BLOCKING)
+			req.OriginNodeID = 0
+			mockRPCCtx.EXPECT().UnvalidatedDial("1.1.1.1", roachpb.Locality{}).
+				DoAndReturn(func(string, roachpb.Locality) *GRPCConnection {
+					tmpConn := mkConn()
+					assert.Equal(t, ErrNotHeartbeated, tmpConn.Health())
+					return tmpConn
+				})
+			mockRPCCtx.EXPECT().WrapCtx(gomock.Any(), "1.1.1.1", roachpb.NodeID(0), rpcbase.SystemClass).
+				DoAndReturn(func(
+					ctx context.Context, _ string, _ roachpb.NodeID, _ rpcbase.ConnectionClass,
+				) context.Context {
+					return ctx
+				})
+			mockRPCCtx.EXPECT().DialRaw(gomock.Any(), "1.1.1.1", rpcbase.SystemClass).
+				DoAndReturn(func(context.Context, string, rpcbase.ConnectionClass) error {
+					return nil
+				})
+			require.NoError(t, VerifyDialback(context.Background(), mockRPCCtx, req, &PingResponse{}, roachpb.Locality{}, sv))
 		})
-		mockRPCCtx.EXPECT().grpcDialRaw(gomock.Any() /* ctx */, "1.1.1.1", rpcbase.SystemClass, gomock.Any() /* onDialFunc */, gomock.Any()).
-			DoAndReturn(func(context.Context, string, rpcbase.ConnectionClass, onDialFunc, ...grpc.DialOption) (*grpc.ClientConn, error) {
-				return nil, nil
-			})
-		require.NoError(t, VerifyDialback(context.Background(), mockRPCCtx, req, &PingResponse{}, roachpb.Locality{}, sv))
-	})
 }
 
 // TODO(baptist): Add a test using TestCluster to verify this works in a full

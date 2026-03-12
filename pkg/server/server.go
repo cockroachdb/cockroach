@@ -369,6 +369,16 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	}
 	rpcContext := rpc.NewContext(ctx, rpcCtxOpts)
 
+	verifyDialbackFn := func() func(context.Context, *rpc.PingRequest, *rpc.PingResponse) error {
+		if !rpcContext.UseDRPC {
+			return func(ctx context.Context, req *rpc.PingRequest, resp *rpc.PingResponse) error {
+				return rpc.VerifyDialback(ctx, rpc.NewGRPCDialbackAdapter(rpcContext), req, resp, roachpb.Locality{}, &rpcContext.Settings.SV)
+			}
+		}
+		return func(ctx context.Context, req *rpc.PingRequest, resp *rpc.PingResponse) error {
+			return rpc.VerifyDialback(ctx, rpc.NewDRPCDialbackAdapter(rpcContext), req, resp, roachpb.Locality{}, &rpcContext.Settings.SV)
+		}
+	}()
 	rpcContext.OnIncomingPing = func(ctx context.Context, req *rpc.PingRequest, resp *rpc.PingResponse) error {
 		// Decommission state is only tracked for the system tenant.
 		if tenantID, isTenant := roachpb.ClientTenantFromContext(ctx); !isTenant ||
@@ -380,9 +390,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 				return err
 			}
 		}
-		// VerifyDialback verifies if a reverse connection to the sending node can
-		// be established.
-		return rpc.VerifyDialback(ctx, rpcContext, req, resp, cfg.Locality, &rpcContext.Settings.SV)
+		return verifyDialbackFn(ctx, req, resp)
 	}
 
 	appRegistry.AddMetricStruct(rpcContext.Metrics())

@@ -53,6 +53,46 @@ func (g *grpcCloseNotifier) CloseNotify(ctx context.Context) <-chan struct{} {
 
 type GRPCConnection = Connection[*grpc.ClientConn]
 
+// GRPCDialbackAdapter implements Dialbacker[*grpc.ClientConn] by
+// delegating to the corresponding methods on *Context.
+type GRPCDialbackAdapter struct {
+	rpcCtx *Context
+}
+
+// NewGRPCDialbackAdapter creates a new GRPCDialbackAdapter.
+func NewGRPCDialbackAdapter(rpcCtx *Context) *GRPCDialbackAdapter {
+	return &GRPCDialbackAdapter{rpcCtx: rpcCtx}
+}
+
+func (a *GRPCDialbackAdapter) UnvalidatedDial(
+	target string, locality roachpb.Locality,
+) *GRPCConnection {
+	return a.rpcCtx.GRPCUnvalidatedDial(target, locality)
+}
+
+func (a *GRPCDialbackAdapter) DialNode(
+	target string, nodeID roachpb.NodeID, locality roachpb.Locality, class rpcbase.ConnectionClass,
+) *GRPCConnection {
+	return a.rpcCtx.GRPCDialNode(target, nodeID, locality, class)
+}
+
+func (a *GRPCDialbackAdapter) DialRaw(
+	ctx context.Context, target string, class rpcbase.ConnectionClass,
+) error {
+	onNetworkDial := func(conn net.Conn) {}
+	conn, err := a.rpcCtx.grpcDialRaw(ctx, target, class, onNetworkDial, grpc.WithBlock())
+	if conn != nil {
+		_ = conn.Close() // nolint:grpcconnclose
+	}
+	return err
+}
+
+func (a *GRPCDialbackAdapter) WrapCtx(
+	ctx context.Context, target string, remoteNodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+) context.Context {
+	return a.rpcCtx.wrapCtx(ctx, target, remoteNodeID, class)
+}
+
 // newGRPCPeerOptions creates peerOptions for gRPC peers.
 func newGRPCPeerOptions(
 	rpcCtx *Context, k peerKey, locality roachpb.Locality,

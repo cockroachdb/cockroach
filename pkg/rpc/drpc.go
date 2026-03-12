@@ -218,6 +218,45 @@ func (c *closeEntirePoolConn) Close() (err error) {
 
 type DRPCConnection = Connection[drpc.Conn]
 
+// DRPCDialbackAdapter implements Dialbacker[drpc.Conn] by delegating
+// to the corresponding methods on *Context.
+type DRPCDialbackAdapter struct {
+	rpcCtx *Context
+}
+
+// NewDRPCDialbackAdapter creates a new DRPCDialbackAdapter.
+func NewDRPCDialbackAdapter(rpcCtx *Context) *DRPCDialbackAdapter {
+	return &DRPCDialbackAdapter{rpcCtx: rpcCtx}
+}
+
+func (a *DRPCDialbackAdapter) UnvalidatedDial(
+	target string, locality roachpb.Locality,
+) *DRPCConnection {
+	return a.rpcCtx.DRPCUnvalidatedDial(target, locality)
+}
+
+func (a *DRPCDialbackAdapter) DialNode(
+	target string, nodeID roachpb.NodeID, locality roachpb.Locality, class rpcbase.ConnectionClass,
+) *DRPCConnection {
+	return a.rpcCtx.DRPCDialNode(target, nodeID, locality, class)
+}
+
+func (a *DRPCDialbackAdapter) DialRaw(
+	ctx context.Context, target string, class rpcbase.ConnectionClass,
+) error {
+	conn, err := a.rpcCtx.drpcDialRaw(ctx, target, class)
+	if conn != nil {
+		_ = conn.Close()
+	}
+	return err
+}
+
+func (a *DRPCDialbackAdapter) WrapCtx(
+	ctx context.Context, target string, remoteNodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+) context.Context {
+	return a.rpcCtx.wrapCtx(ctx, target, remoteNodeID, class)
+}
+
 // ErrDRPCDisabled is returned from hosts that in principle could but do not
 // have the DRPC server enabled.
 var ErrDRPCDisabled = errors.New("DRPC is not enabled")
