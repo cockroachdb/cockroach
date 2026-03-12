@@ -189,6 +189,10 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 				execinfrapb.MergeAggregatedStmtMetadata:
 				// We skip merge statistics functions because they
 				// require custom JSON objects.
+			case execinfrapb.StAsMVT:
+				// We skip ST_AsMVT because it requires a tuple as
+				// its first argument and specific types for its
+				// optional arguments.
 			default:
 				found = true
 			}
