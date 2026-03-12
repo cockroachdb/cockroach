@@ -7,7 +7,9 @@ package license
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/license/licensepb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -15,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -170,4 +173,51 @@ func setLicense(ctx context.Context, updater settings.Updater, val string) error
 		Value: val,
 		Type:  "s",
 	})
+}
+
+func TestGenManualTestLicenses(t *testing.T) {
+	licID := uuid.MakeV4()
+	orgID := uuid.MakeV4()
+	exp := time.Now().Add(365 * 24 * time.Hour).Unix()
+
+	lic1, err := (&licensepb.License{
+		Type:              licensepb.License_Enterprise,
+		ValidUntilUnixSec: exp,
+		OrganizationName:  "Manual Test Org",
+		Environment:       licensepb.Production,
+		Edition:           licensepb.License_ENTERPRISE_EDITION,
+		AddOns: []licensepb.License_AddOn{
+			licensepb.License_DATA_REPLICATION,
+			licensepb.License_ADVANCED_COMPLIANCE,
+		},
+		VcpuEntitled:   16,
+		LicenseId:      licID.GetBytes(),
+		OrganizationId: orgID.GetBytes(),
+	}).Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lic2, err := (&licensepb.License{
+		Type:              licensepb.License_Evaluation,
+		ValidUntilUnixSec: exp,
+		OrganizationName:  "Manual Test Org",
+		Environment:       licensepb.PreProduction,
+		Edition:           licensepb.License_STANDARD,
+		AddOns: []licensepb.License_AddOn{
+			licensepb.License_DATA_REPLICATION,
+		},
+		VcpuEntitled:   8,
+		LicenseId:      uuid.MakeV4().GetBytes(),
+		OrganizationId: orgID.GetBytes(),
+	}).Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Printf("LICENSE_ID=%s\n", licID.String())
+	fmt.Printf("ORG_ID=%s\n", orgID.String())
+	fmt.Printf("EXPIRY=%d\n", exp)
+	fmt.Printf("ENTERPRISE_LIC=%s\n", lic1)
+	fmt.Printf("EVAL_LIC=%s\n", lic2)
 }
