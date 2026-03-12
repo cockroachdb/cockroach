@@ -111,7 +111,10 @@ func makeCPUTimeTokenGrantCoordinator(
 	registry *metric.Registry,
 	knobs *TestingKnobs,
 ) *cpuTimeTokenGrantCoordinator {
-	granter := &cpuTimeTokenGranter{}
+	metrics := makeCPUTimeTokenMetrics()
+	registry.AddMetricStruct(metrics)
+	timeSource := timeutil.DefaultTimeSource{}
+	granter := newCPUTimeTokenGranter(metrics, timeSource)
 	var childGranters [numResourceTiers]cpuTimeTokenChildGranter
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
 		childGranters[tier] = cpuTimeTokenChildGranter{
@@ -119,7 +122,6 @@ func makeCPUTimeTokenGrantCoordinator(
 			parent: granter,
 		}
 	}
-	timeSource := timeutil.DefaultTimeSource{}
 	filler := &cpuTimeTokenFiller{
 		timeSource: timeSource,
 		closeCh:    make(chan struct{}),
@@ -127,11 +129,13 @@ func makeCPUTimeTokenGrantCoordinator(
 	allocator := &cpuTimeTokenAllocator{
 		granter:  granter,
 		settings: settings,
+		metrics:  metrics,
 	}
 	model := &cpuTimeTokenLinearModel{
 		granter:            granter,
 		cpuMetricsProvider: opts.CPUMetricsProvider,
 		timeSource:         timeSource,
+		metrics:            metrics,
 	}
 	allocator.model = model
 	filler.allocator = allocator
@@ -141,6 +145,8 @@ func makeCPUTimeTokenGrantCoordinator(
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
 		opts := makeWorkQueueOptions(KVWork)
 		opts.mode = usesCPUTimeTokens
+		opts.admittedCountPerTenant = metrics.AdmittedCountPerTenant
+		opts.waitTimeNanosPerTenant = metrics.WaitTimeNanosPerTenant
 		requesters[tier] = makeWorkQueue(
 			ambientCtx, KVWork, &childGranters[tier], settings, wqMetrics, opts)
 		granter.requester[tier] = requesters[tier]

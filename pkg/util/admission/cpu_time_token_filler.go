@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // Below two are the non-burstable utilization goals. See resetInterval for
@@ -212,6 +213,7 @@ type cpuTimeTokenAllocator struct {
 	queues   [numResourceTiers]workQueueIForAllocator
 	settings *cluster.Settings
 	model    cpuTimeModel
+	metrics  *cpuTimeTokenMetrics
 
 	// refillRates stores the number of CPU time tokens to add to each bucket
 	// per interval (1s).
@@ -226,6 +228,27 @@ type cpuTimeTokenAllocator struct {
 // rates at which we add tokens per second, one per bucket in
 // cpuTimeTokenGranter.
 type rates [numResourceTiers][numBurstQualifications]int64
+
+func (r rates) String() string {
+	return redact.StringWithoutMarkers(r)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (r rates) SafeFormat(s redact.SafePrinter, _ rune) {
+	s.SafeRune('[')
+	first := true
+	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
+		for qual := burstQualification(0); qual < numBurstQualifications; qual++ {
+			if !first {
+				s.SafeRune(' ')
+			}
+			first = false
+			s.Printf("%s-%s=%s",
+				tier, qual, redact.Safe(time.Duration(r[tier][qual])))
+		}
+	}
+	s.SafeRune(']')
+}
 
 // capacities stores the maximum number of tokens that can be in the
 // buckets, one per bucket in cpuTimeTokenGranter.
@@ -324,7 +347,9 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	// higher priority work from putting lower priority buckets into
 	// unbounded token debt.
 	bucketMinimums := computeMinimums(a.refillRates)
-	a.granter.refill(allocations, bucketCapacities, bucketMinimums)
+	// Metrics don't need higher fidelity than one update per second. For example,
+	// in CC, we scrape metrics once every 10s.
+	a.refill(allocations, bucketCapacities, bucketMinimums, false /* updateMetrics */)
 
 	// Refill per-tenant burst buckets in the WorkQueues. The burst bucket
 	// refill rate and capacity should be 1/4th of the noBurst refill rate
@@ -384,7 +409,9 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 	// bucketCapacities and bucketMinimums.
 	bucketCapacities := capacities(newRefillRates)
 	bucketMinimums := computeMinimums(newRefillRates)
-	a.granter.refill(deltaRefillRates, bucketCapacities, bucketMinimums)
+	// Metrics don't need higher fidelity than one update per second. For example,
+	// in CC, we scrape metrics once every 10s.
+	a.refill(deltaRefillRates, bucketCapacities, bucketMinimums, true /* updateMetrics */)
 	a.refillRates = newRefillRates
 
 	// Apply the delta to the per-tenant burst buckets also.
@@ -400,6 +427,26 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 			a.allocated[wc][kind] = 0
 		}
 	}
+}
+
+// refill increments per-bucket refill metrics, then delegates to
+// granter.refill. Positive toAdd values are tracked as tokens added;
+// negative values (which occur when refill rates decrease between
+// intervals) are tracked as tokens removed.
+func (a *cpuTimeTokenAllocator) refill(
+	toAdd tokenCounts, bucketCapacities capacities, bucketMinimums minimums, updateMetrics bool,
+) {
+	for tier := range toAdd {
+		for qual := range toAdd[tier] {
+			idx := perBucketIdx(resourceTier(tier), burstQualification(qual))
+			if v := toAdd[tier][qual]; v > 0 {
+				a.metrics.RefillAdded[idx].Inc(v)
+			} else if v < 0 {
+				a.metrics.RefillRemoved[idx].Inc(-v)
+			}
+		}
+	}
+	a.granter.refill(toAdd, bucketCapacities, bucketMinimums, updateMetrics)
 }
 
 // workQueueIForAllocator abstracts the burst bucket refill method in WorkQueue,
@@ -479,6 +526,7 @@ type cpuTimeTokenLinearModel struct {
 	granter            tokenUsageTracker
 	cpuMetricsProvider CPUMetricsProvider
 	timeSource         timeutil.TimeSource
+	metrics            *cpuTimeTokenMetrics
 
 	// True after first call to fit.
 	init bool
@@ -488,6 +536,8 @@ type cpuTimeTokenLinearModel struct {
 	totalCPUTime time.Duration
 	// The linear correction term, see the docs above cpuTimeTokenLinearModel.
 	tokenToCPUTimeMultiplier float64
+
+	logger fitLogger
 }
 
 // tokenUsageTracker is implemented by cpuTimeTokenGranter. It provides
@@ -680,7 +730,18 @@ func (m *cpuTimeTokenLinearModel) fit(ctx context.Context, targets targetUtiliza
 			alpha*tokenToCPUTimeMultiplier + (1-alpha)*m.tokenToCPUTimeMultiplier
 	}
 
-	return m.computeRefillRates(targets, m.tokenToCPUTimeMultiplier, cpuCapacity)
+	refillRates := m.computeRefillRates(targets, m.tokenToCPUTimeMultiplier, cpuCapacity)
+
+	m.metrics.Multiplier.Update(m.tokenToCPUTimeMultiplier)
+	if msg, shouldLog := m.logger.accumulate(
+		m.tokenToCPUTimeMultiplier, isLowCPUUtil,
+		intCPUTime, tokensUsed,
+		elapsedSinceLastFit, cpuCapacity,
+	); shouldLog {
+		log.Dev.Infof(ctx, "%s", msg)
+	}
+
+	return refillRates
 }
 
 // computeRefillRates is a pure helper function that computes refill rates.

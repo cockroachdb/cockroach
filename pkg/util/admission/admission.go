@@ -121,13 +121,13 @@
 package admission
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/redact"
 )
 
 // burstQualification is an optional behavior of certain WorkQueues (which
@@ -148,13 +148,18 @@ const (
 )
 
 func (bq burstQualification) String() string {
+	return redact.StringWithoutMarkers(bq)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (bq burstQualification) SafeFormat(s redact.SafePrinter, _ rune) {
 	switch bq {
 	case canBurst:
-		return "canBurst"
+		s.SafeString("can_burst")
 	case noBurst:
-		return "noBurst"
+		s.SafeString("no_burst")
 	default:
-		return fmt.Sprintf("burstQualification(%d)", bq)
+		s.Printf("burstQualification(%d)", bq)
 	}
 }
 
