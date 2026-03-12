@@ -340,6 +340,15 @@ type settingOverride struct {
 	settings catpb.AutoStatsSettings
 }
 
+// refreshWorkItem contains the parameters needed to execute a stats refresh
+// on a specific table. It is sent from the maybeRefreshStats goroutine to
+// worker goroutines via the refreshWork channel.
+type refreshWorkItem struct {
+	tableID   descpb.ID
+	asOf      time.Duration
+	isPartial bool
+}
+
 // TableStatsTestingKnobs contains testing knobs for table statistics.
 type TableStatsTestingKnobs struct {
 	// DisableInitialTableCollection, if set, indicates that the "initial table
@@ -591,6 +600,10 @@ func (r *Refresher) Start(
 
 			case <-timer.C:
 				mutationCounts := r.mutationCounts
+				if len(mutationCounts) == 0 {
+					timer.Reset(refreshInterval)
+					continue
+				}
 				refreshingAllTables := ensuringAllTables
 				ensuringAllTables = false
 
@@ -628,6 +641,31 @@ func (r *Refresher) Start(
 							return
 						case <-ctx.Done():
 							return
+						}
+
+						// Create an unbuffered channel for this batch of
+						// refresh work. Sending to this channel will block
+						// until a worker is available.
+						refreshWork := make(chan refreshWorkItem)
+						defer close(refreshWork)
+
+						// TODO(yuzefovich): consider starting more workers in
+						// the future, configurable based on a cluster setting.
+						numWorkers := 2
+						if len(mutationCounts) == 1 {
+							numWorkers = 1
+						}
+						for i := 0; i < numWorkers; i++ {
+							r.startedTasksWG.Add(1)
+							if err := stopper.RunAsyncTask(
+								ctx, "stats-refresh-worker", func(ctx context.Context) {
+									defer r.startedTasksWG.Done()
+									r.refreshWorker(ctx, refreshWork)
+								}); err != nil {
+								r.startedTasksWG.Done()
+								log.Dev.Errorf(ctx, "failed to start stats refresh worker: %v", err)
+								return
+							}
 						}
 
 						for tableID, rowsAffected := range mutationCounts {
@@ -672,6 +710,7 @@ func (r *Refresher) Start(
 							}
 							r.maybeRefreshStats(
 								ctx,
+								refreshWork,
 								tableID,
 								explicitSettings,
 								rowsAffected,
@@ -681,9 +720,9 @@ func (r *Refresher) Start(
 							)
 
 							select {
-							case <-ctx.Done():
-								return
 							case <-r.drainAutoStats:
+								return
+							case <-ctx.Done():
 								return
 							default:
 							}
@@ -1050,6 +1089,7 @@ func (r *Refresher) mustDoFullRefresh(
 // for this table.
 func (r *Refresher) maybeRefreshStats(
 	ctx context.Context,
+	refreshWork chan<- refreshWorkItem,
 	tableID descpb.ID,
 	explicitSettings *catpb.AutoStatsSettings,
 	rowsAffected int64,
@@ -1106,14 +1146,41 @@ func (r *Refresher) maybeRefreshStats(
 		isPartial = true
 	}
 
-	if err := r.refreshStats(ctx, tableID, asOf, isPartial); err != nil {
-		// ConcurrentCreateStatsError is expected, so simply ignore it (it's
-		// handled by RescheduleRefresh called by the stats job). Log all
-		// others.
-		if errors.Is(err, ConcurrentCreateStatsError) {
+	// Send work to one of the worker goroutines. This will block until a worker
+	// is available to process the request.
+	select {
+	case refreshWork <- refreshWorkItem{
+		tableID:   tableID,
+		asOf:      asOf,
+		isPartial: isPartial,
+	}:
+	case <-r.drainAutoStats:
+	case <-ctx.Done():
+	}
+}
+
+// refreshWorker is the body of the worker goroutine that actually collects auto
+// table stats. It exits whenever the refreshWork channel is closed.
+func (r *Refresher) refreshWorker(ctx context.Context, refreshWork <-chan refreshWorkItem) {
+	for {
+		select {
+		case work, ok := <-refreshWork:
+			if !ok {
+				return
+			}
+			if err := r.refreshStats(ctx, work.tableID, work.asOf, work.isPartial); err != nil {
+				// ConcurrentCreateStatsError is expected, so simply ignore it
+				// (it's handled by RescheduleRefresh called by the stats job).
+				// Log all others.
+				if !errors.Is(err, ConcurrentCreateStatsError) {
+					log.Dev.Warningf(ctx, "failed to create statistics on table %d: %v", work.tableID, err)
+				}
+			}
+		case <-r.drainAutoStats:
+			return
+		case <-ctx.Done():
 			return
 		}
-		log.Dev.Warningf(ctx, "failed to create statistics on table %d: %v", tableID, err)
 	}
 }
 
