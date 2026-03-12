@@ -3087,12 +3087,6 @@ func (s *Store) StateEngine() storage.Engine {
 	return s.internalEngines.StateEngine()
 }
 
-// TODOEngine is a placeholder for cases in which the caller needs to be updated
-// in order to use only one engine, or a closer check is still pending.
-func (s *Store) TODOEngine() storage.Engine {
-	return s.internalEngines.TODOEngine()
-}
-
 // TODOBothEngines is a placeholder for cases in which the caller needs to be
 // updated because it likely needs to handle both engines.
 func (s *Store) TODOBothEngines() storage.Engine {
