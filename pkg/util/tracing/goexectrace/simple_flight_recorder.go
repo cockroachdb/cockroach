@@ -64,6 +64,12 @@ type SimpleFlightRecorder struct {
 	// checks to see if the feature has been enabled if it's disabled.
 	enabledCheckInterval time.Duration
 	enabled              atomic.Bool
+
+	// logMetadata, if set, is called just before each WriteTo to embed
+	// metadata (e.g. wallclock, node ID, version) into the execution trace
+	// via runtime/trace.Log. This ensures the metadata event is in the
+	// flight recorder's ring buffer at snapshot time.
+	logMetadata func(ctx context.Context, source string)
 }
 
 // A `Dumper` implementation is needed to run `DumpStore.GC` periodically. This
@@ -72,7 +78,10 @@ type SimpleFlightRecorder struct {
 var _ dumpstore.Dumper = &SimpleFlightRecorder{}
 
 func NewFlightRecorder(
-	st *cluster.Settings, enabledCheckInterval time.Duration, directory string,
+	st *cluster.Settings,
+	enabledCheckInterval time.Duration,
+	directory string,
+	logMetadata func(ctx context.Context, source string),
 ) (*SimpleFlightRecorder, error) {
 	fr := trace.NewFlightRecorder()
 	if directory == "" {
@@ -90,6 +99,7 @@ func NewFlightRecorder(
 		sv:                   &st.SV,
 		directory:            directory,
 		enabledCheckInterval: enabledCheckInterval,
+		logMetadata:          logMetadata,
 	}, nil
 }
 
@@ -176,6 +186,9 @@ func (sfr *SimpleFlightRecorder) Start(ctx context.Context, stopper *stop.Stoppe
 					log.Dev.Warningf(ctx, "unable to open file %s to dump flight record, will try again: %v", filename, err)
 					t.Reset(max(interval-timeutil.Since(startTime), 0))
 					continue
+				}
+				if sfr.logMetadata != nil {
+					sfr.logMetadata(ctx, "flight_recorder")
 				}
 				_, err = sfr.fr.WriteTo(destFile)
 				if err = errors.CombineErrors(err, destFile.Close()); err != nil {
