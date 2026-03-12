@@ -201,13 +201,19 @@ type ClusterSpec struct {
 	WorkloadNodeCPUs     int
 	WorkloadRequiresDisk bool
 	// CPUs is the number of CPUs per node.
-	CPUs                 int
-	Mem                  MemPerCPU
-	DiskCount            int
-	RAID0                bool
-	VolumeSize           int
-	VolumeType           string
-	LocalSSD             LocalSSDSetting
+	CPUs       int
+	Mem        MemPerCPU
+	DiskCount  int
+	RAID0      bool
+	VolumeSize int
+	VolumeType string
+	LocalSSD   LocalSSDSetting
+	// UseExt4IOBarrier, if set, ensures that the local SSD is mounted with
+	// ext4 IO barriers enabled (i.e. without the "nobarrier" mount option).
+	// Only relevant when the filesystem is ext4. This is important for tests
+	// that SIGKILL nodes, as disabling barriers can lead to lost writes that
+	// surface as storage-level corruption on restart.
+	UseExt4IOBarrier     bool
 	Geo                  bool
 	Lifetime             time.Duration
 	ReusePolicy          clusterReusePolicy
@@ -530,7 +536,7 @@ type RoachprodClusterConfig struct {
 func (s *ClusterSpec) RoachprodOpts(
 	params RoachprodClusterConfig,
 ) (vm.CreateOpts, vm.ProviderOpts, vm.ProviderOpts, vm.CPUArch, error) {
-	useIOBarrier := params.UseIOBarrierOnLocalSSD
+	useIOBarrier := params.UseIOBarrierOnLocalSSD || s.UseExt4IOBarrier
 	requestedArch := params.PreferredArch
 
 	createVMOpts := vm.DefaultCreateOpts()
@@ -723,8 +729,8 @@ func (s *ClusterSpec) RoachprodOpts(
 			// This is because local SSDs have very low latency and ext4 barriers
 			// can significantly degrade performance.
 			// This setting is only relevant if the selected filesystem is ext4.
-			if !useIOBarrier && createVMOpts.SSDOpts.FileSystem == vm.Ext4 {
-				createVMOpts.SSDOpts.NoExt4Barrier = true
+			if createVMOpts.SSDOpts.FileSystem == vm.Ext4 {
+				createVMOpts.SSDOpts.NoExt4Barrier = !useIOBarrier
 			}
 		}
 	} else {

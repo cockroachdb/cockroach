@@ -2052,6 +2052,9 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 	}
 
 	opts := []spec.Option{spec.CPU(b.CPUs)}
+	if b.Chaos {
+		opts = append(opts, spec.UseExt4IOBarrier())
+	}
 	if b.HighMem {
 		opts = append(opts, spec.Mem(spec.High))
 	}

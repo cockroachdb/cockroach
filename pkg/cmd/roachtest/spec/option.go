@@ -204,6 +204,15 @@ func DisableLocalSSD() Option {
 	}
 }
 
+// UseExt4IOBarrier ensures the local SSD is mounted with ext4 IO barriers
+// enabled. Use this for tests that SIGKILL nodes to prevent lost writes
+// from surfacing as storage-level corruption on restart.
+func UseExt4IOBarrier() Option {
+	return func(spec *ClusterSpec) {
+		spec.UseExt4IOBarrier = true
+	}
+}
+
 // RandomizeVolumeType is an Option which randomly picks the volume type
 // to be used. Unless SSD is forced, the volume type is picked randomly
 // between the available types for a provider:
