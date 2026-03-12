@@ -8,9 +8,7 @@ package importer
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
-	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -35,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -167,16 +164,6 @@ func distImport(
 		return kvpb.BulkOpSummary{}, err
 	}
 
-	// accumulatedBulkSummary accumulates the BulkOpSummary returned from each
-	// processor in their progress updates. It is used to update the job progress.
-	accumulatedBulkSummary := struct {
-		syncutil.Mutex
-		kvpb.BulkOpSummary
-	}{}
-	accumulatedBulkSummary.Lock()
-	accumulatedBulkSummary.BulkOpSummary = getLastImportSummary(job)
-	accumulatedBulkSummary.Unlock()
-
 	importDetails := job.Progress().Details.(*jobspb.Progress_Import).Import
 	if importDetails.ReadProgress == nil {
 		// Initialize the progress metrics on the first attempt.
@@ -200,64 +187,9 @@ func distImport(
 		}
 	}
 
-	rowProgress := make([]int64, len(from))
-	fractionProgress := make([]uint32, len(from))
-
-	var manifestBuf *backfill.SSTManifestBuffer
-
-	updateJobProgress := func() error {
-		return job.DebugNameNoTxn(importProgressDebugName).Update(ctx, func(
-			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
-		) error {
-			if err := md.CheckRunningOrReverting(); err != nil {
-				return err
-			}
-
-			prog := md.Progress.GetImport()
-
-			var overall float32
-			for i := range rowProgress {
-				prog.ResumePos[i] = atomic.LoadInt64(&rowProgress[i])
-			}
-			for i := range fractionProgress {
-				fileProgress := math.Float32frombits(atomic.LoadUint32(&fractionProgress[i]))
-				prog.ReadProgress[i] = fileProgress
-				overall += fileProgress
-			}
-
-			accumulatedBulkSummary.Lock()
-			prog.Summary = accumulatedBulkSummary.BulkOpSummary.DeepCopy()
-			accumulatedBulkSummary.Unlock()
-
-			// Persist SST manifests to job info keys for distributed merge.
-			// Only write when the buffer has new data to avoid unnecessary I/O.
-			if useDistributedMerge && manifestBuf != nil && manifestBuf.Dirty() {
-				manifests := manifestBuf.SnapshotAndMarkClean()
-				data, err := protoutil.Marshal(&jobspb.BulkSSTManifests{Manifests: manifests})
-				if err != nil {
-					return errors.Wrap(err, "marshaling SST manifests")
-				}
-				if err := jobs.WriteChunkedFileToJobInfo(
-					ctx, importSSTManifestsInfoKey, data, txn, job.ID(),
-				); err != nil {
-					return errors.Wrap(err, "writing SST manifests to job info")
-				}
-			}
-
-			fractionCompleted := overall / float32(len(from))
-			// Clamp to [0.0, 1.0].
-			if fractionCompleted > 1.0 {
-				fractionCompleted = 1.0
-			} else if fractionCompleted < 0.0 {
-				fractionCompleted = 0
-			}
-			md.Progress.Progress = &jobspb.Progress_FractionCompleted{
-				FractionCompleted: fractionCompleted,
-			}
-			ju.UpdateProgress(md.Progress)
-			return nil
-		})
-	}
+	checkpoint := newImportCheckpointTracker(
+		len(from), getLastImportSummary(job), nil, /* manifestBuf */
+	)
 
 	var res kvpb.BulkOpSummary
 
@@ -290,38 +222,31 @@ func distImport(
 		}); err != nil {
 			return kvpb.BulkOpSummary{}, err
 		}
-		manifestBuf = backfill.NewSSTManifestBuffer(resumeManifests)
+		checkpoint.manifestBuf = backfill.NewSSTManifestBuffer(resumeManifests)
 	}
 
 	metaFn := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
 		if meta.BulkProcessorProgress != nil {
-			for i, v := range meta.BulkProcessorProgress.ResumePos {
-				atomic.StoreInt64(&rowProgress[i], v)
-			}
-			for i, v := range meta.BulkProcessorProgress.CompletedFraction {
-				atomic.StoreUint32(&fractionProgress[i], math.Float32bits(v))
-			}
-
-			accumulatedBulkSummary.Lock()
-			accumulatedBulkSummary.Add(meta.BulkProcessorProgress.BulkSummary)
-			accumulatedBulkSummary.Unlock()
-
-			// Accumulate SST metadata emitted by processors during distributed merge,
-			// following the index backfiller pattern.
+			// Decode map progress outside the lock since it doesn't touch
+			// shared state.
+			var manifests []jobspb.BulkSSTManifest
 			var mapProgress execinfrapb.BulkMapProgress
 			if gogotypes.Is(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress) {
 				if err := gogotypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress); err != nil {
 					return err
 				}
-				if len(mapProgress.SSTManifests) > 0 {
-					if manifestBuf != nil {
-						manifestBuf.Append(mapProgress.SSTManifests)
-					}
-					processorOutput = append(processorOutput, bulksst.ManifestsToSSTFiles(mapProgress.SSTManifests))
-				}
+				manifests = mapProgress.SSTManifests
 			}
 
-			// For distributed merge, record storage prefix for nodes that report progress
+			checkpoint.RecordProcessorUpdate(meta.BulkProcessorProgress, manifests)
+
+			// Accumulate SST file info for the merge phase outside the
+			// tracker since it's only used after the flow completes.
+			if len(manifests) > 0 {
+				processorOutput = append(processorOutput, bulksst.ManifestsToSSTFiles(manifests))
+			}
+
+			// For distributed merge, record storage prefix for nodes that report progress.
 			if useDistributedMerge && meta.BulkProcessorProgress.NodeID != 0 {
 				prefix := fmt.Sprintf("nodelocal://%d/", meta.BulkProcessorProgress.NodeID)
 				if err := addStoragePrefix(ctx, prefix); err != nil {
@@ -330,7 +255,7 @@ func distImport(
 			}
 
 			if testingKnobs.alwaysFlushJobProgress {
-				return updateJobProgress()
+				return checkpoint.Persist(ctx, job)
 			}
 		}
 		return nil
@@ -381,7 +306,7 @@ func distImport(
 			case <-done:
 				return ctx.Err()
 			case <-tick.C:
-				if err := updateJobProgress(); err != nil {
+				if err := checkpoint.Persist(ctx, job); err != nil {
 					return err
 				}
 
