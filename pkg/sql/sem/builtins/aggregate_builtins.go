@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/geo/mvt"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -588,6 +589,7 @@ var aggregates = map[string]builtinDefinition{
 	"st_memunion":   makeSTUnionBuiltin(),
 	"st_collect":    makeSTCollectBuiltin(),
 	"st_memcollect": makeSTCollectBuiltin(),
+	"st_asmvt":      makeSTAsMVTBuiltin(),
 
 	AnyNotNull: makePrivate(makeBuiltin(tree.FunctionProperties{},
 		makeImmutableAggOverloadWithReturnType(
@@ -5352,4 +5354,242 @@ func (a *jsonObjectAggregate) Close(ctx context.Context) {
 // Size is part of the eval.AggregateFunc interface.
 func (a *jsonObjectAggregate) Size() int64 {
 	return sizeOfJSONObjectAggregate
+}
+
+func makeSTAsMVTBuiltin() builtinDefinition {
+	const defaultLayerName = "default"
+	const defaultExtent = 4096
+	const defaultGeomColumn = ""
+	const defaultFeatureIDColumn = ""
+
+	// parseSTAsMVTArgs extracts the constant arguments from the arguments slice.
+	parseSTAsMVTArgs := func(arguments tree.Datums) (string, uint32, string, string) {
+		layerName := defaultLayerName
+		extent := uint32(defaultExtent)
+		geomColumn := defaultGeomColumn
+		featureIDColumn := defaultFeatureIDColumn
+		if len(arguments) >= 1 && arguments[0] != tree.DNull {
+			layerName = string(tree.MustBeDString(arguments[0]))
+		}
+		if len(arguments) >= 2 && arguments[1] != tree.DNull {
+			extent = uint32(tree.MustBeDInt(arguments[1]))
+		}
+		if len(arguments) >= 3 && arguments[2] != tree.DNull {
+			geomColumn = string(tree.MustBeDString(arguments[2]))
+		}
+		if len(arguments) >= 4 && arguments[3] != tree.DNull {
+			featureIDColumn = string(tree.MustBeDString(arguments[3]))
+		}
+		return layerName, extent, geomColumn, featureIDColumn
+	}
+
+	makeOverload := func(argTypes []*types.T, info string) tree.Overload {
+		return makeAggOverload(
+			argTypes,
+			types.Bytes,
+			func(params []*types.T, evalCtx *eval.Context, arguments tree.Datums) eval.AggregateFunc {
+				layerName, extent, geomColumn, featureIDColumn := parseSTAsMVTArgs(arguments)
+				return newSTAsMVTAggregate(evalCtx, layerName, extent, geomColumn, featureIDColumn)
+			},
+			info,
+			volatility.Immutable,
+			true, /* calledOnNullInput */
+		)
+	}
+
+	return makeBuiltin(
+		tree.FunctionProperties{
+			AvailableOnPublicSchema: true,
+		},
+		makeOverload(
+			[]*types.T{types.AnyTuple},
+			"Generates a Mapbox Vector Tile (MVT) representation of a set of rows. "+
+				"Uses default layer name 'default' and extent 4096. "+
+				"Expects a geometry column named 'geom' in the input rows.",
+		),
+		makeOverload(
+			[]*types.T{types.AnyTuple, types.String},
+			"Generates a Mapbox Vector Tile (MVT) representation of a set of rows with the specified layer name. "+
+				"Uses extent 4096 and expects a geometry column named 'geom' in the input rows.",
+		),
+		makeOverload(
+			[]*types.T{types.AnyTuple, types.String, types.Int},
+			"Generates a Mapbox Vector Tile (MVT) representation of a set of rows with the specified layer name and extent. "+
+				"Expects a geometry column named 'geom' in the input rows.",
+		),
+		makeOverload(
+			[]*types.T{types.AnyTuple, types.String, types.Int, types.String},
+			"Generates a Mapbox Vector Tile (MVT) representation of a set of rows with the specified layer name, extent, and geometry column name.",
+		),
+		makeOverload(
+			[]*types.T{types.AnyTuple, types.String, types.Int, types.String, types.String},
+			"Generates a Mapbox Vector Tile (MVT) representation of a set of rows with the specified layer name, extent, geometry column name, and feature ID column name.",
+		),
+	)
+}
+
+// stAsMVTAggregate implements the ST_AsMVT aggregate function.
+type stAsMVTAggregate struct {
+	mvtBuilder      *mvt.MVTBuilder
+	layerName       string
+	extent          uint32
+	geomColumn      string
+	featureIDColumn string
+	acc             mon.BoundAccount
+}
+
+const sizeOfSTAsMVTAggregate = int64(unsafe.Sizeof(stAsMVTAggregate{}))
+
+func newSTAsMVTAggregate(
+	evalCtx *eval.Context, layerName string, extent uint32, geomColumn string, featureIDColumn string,
+) eval.AggregateFunc {
+	return &stAsMVTAggregate{
+		mvtBuilder:      mvt.NewMVTBuilder(),
+		layerName:       layerName,
+		extent:          extent,
+		geomColumn:      geomColumn,
+		featureIDColumn: featureIDColumn,
+		acc:             evalCtx.Planner.ExecMon().MakeBoundAccount(),
+	}
+}
+
+// Add implements the AggregateFunc interface.
+func (agg *stAsMVTAggregate) Add(
+	ctx context.Context, firstArg tree.Datum, otherArgs ...tree.Datum,
+) error {
+	if firstArg == tree.DNull {
+		return nil
+	}
+
+	// Handle optional parameters from otherArgs in order: layer_name, extent,
+	// geom_column, feature_id_column. These are constant per aggregate and
+	// are also parsed in the constructor, but in some execution paths, the
+	// constant args are rendered as columns and passed via otherArgs.
+	if len(otherArgs) >= 1 && otherArgs[0] != tree.DNull {
+		agg.layerName = string(tree.MustBeDString(otherArgs[0]))
+	}
+	if len(otherArgs) >= 2 && otherArgs[1] != tree.DNull {
+		agg.extent = uint32(tree.MustBeDInt(otherArgs[1]))
+	}
+	if len(otherArgs) >= 3 && otherArgs[2] != tree.DNull {
+		agg.geomColumn = string(tree.MustBeDString(otherArgs[2]))
+	}
+	if len(otherArgs) >= 4 && otherArgs[3] != tree.DNull {
+		agg.featureIDColumn = string(tree.MustBeDString(otherArgs[3]))
+	}
+
+	// Expect the first argument to be a tuple (representing a row).
+	tuple, ok := firstArg.(*tree.DTuple)
+	if !ok {
+		return errors.Newf("ST_AsMVT expects tuple input, got %T", firstArg)
+	}
+
+	// Parse the tuple to extract geometry and properties.
+	geometry, id, properties, err := agg.parseTupleRow(tuple)
+	if err != nil {
+		return err
+	}
+
+	if geometry == nil {
+		return nil // Skip rows without geometry.
+	}
+
+	// Add the feature to the MVT builder
+	return agg.mvtBuilder.AddFeature(*geometry, id, properties)
+}
+
+// parseTupleRow extracts geometry, ID, and properties from a tuple row.
+func (agg *stAsMVTAggregate) parseTupleRow(
+	tuple *tree.DTuple,
+) (*geo.Geometry, *uint64, []mvt.Property, error) {
+	var geometry *geo.Geometry
+	var id *uint64
+	var properties []mvt.Property
+
+	// Get tuple type information to access column labels
+	tupleType := tuple.ResolvedType()
+	labels := tupleType.TupleLabels()
+
+	// Find geometry column and extract it. If geomColumn is not specified, then
+	// the first geometry column in the tuple will be used.
+	geomColumnIndex := -1
+	for i, datum := range tuple.D {
+		if geomDatum, ok := datum.(*tree.DGeometry); ok &&
+			(agg.geomColumn == "" || (labels != nil && i < len(labels) && labels[i] == agg.geomColumn)) {
+			geom := geomDatum.Geometry
+			geometry = &geom
+			geomColumnIndex = i
+			break
+		}
+	}
+
+	// Extract feature ID only if specified. PostGIS only considers columns with
+	// integer types (INT2/INT4/INT8) as feature ID candidates. For duplicate
+	// column names, only the first column matching both name and integer type is
+	// used as the feature ID column; subsequent matches become regular properties.
+	featureIDColumnIndex := -1
+	if agg.featureIDColumn != "" {
+		found := false
+		tupleContents := tupleType.TupleContents()
+		for i, label := range labels {
+			if label == agg.featureIDColumn {
+				// Only consider columns with integer types as feature ID candidates,
+				// matching PostGIS behavior.
+				if i < len(tupleContents) && tupleContents[i].Family() == types.IntFamily {
+					found = true
+					if featureIDColumnIndex < 0 {
+						featureIDColumnIndex = i
+						if intDatum, ok := tuple.D[i].(*tree.DInt); ok && *intDatum >= 0 {
+							idVal := uint64(*intDatum)
+							id = &idVal
+						}
+					}
+				}
+			}
+		}
+		if !found {
+			return nil, nil, nil, pgerror.Newf(pgcode.InvalidParameterValue, "could not find column '%s' of integer type", agg.featureIDColumn)
+		}
+	}
+
+	// Add all non-geometry, non-ID columns as properties using column labels.
+	for i, datum := range tuple.D {
+		if i != geomColumnIndex && i != featureIDColumnIndex {
+			// Use column label if available, otherwise fall back to generic name.
+			var key string
+			if labels != nil && i < len(labels) && labels[i] != "" {
+				key = labels[i]
+			} else {
+				key = fmt.Sprintf("attr_%d", i)
+			}
+			properties = append(properties, mvt.Property{Key: key, Value: datum})
+		}
+	}
+
+	return geometry, id, properties, nil
+}
+
+// Result returns the MVT binary data.
+func (agg *stAsMVTAggregate) Result() (tree.Datum, error) {
+	data, err := agg.mvtBuilder.Build(agg.layerName, agg.extent)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDBytes(tree.DBytes(data)), nil
+}
+
+// Reset implements eval.AggregateFunc interface.
+func (agg *stAsMVTAggregate) Reset(ctx context.Context) {
+	agg.mvtBuilder = mvt.NewMVTBuilder()
+	agg.acc.Clear(ctx)
+}
+
+// Close allows the aggregate to release the memory it requested during operation.
+func (agg *stAsMVTAggregate) Close(ctx context.Context) {
+	agg.acc.Close(ctx)
+}
+
+// Size is part of the eval.AggregateFunc interface.
+func (agg *stAsMVTAggregate) Size() int64 {
+	return sizeOfSTAsMVTAggregate
 }
