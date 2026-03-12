@@ -16,6 +16,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -576,7 +577,15 @@ func (c *stmtEnvCollector) getStmtHintRecreateStmts(
 		return nil, err
 	}
 
-	query := `SELECT hint FROM system.statement_hints WHERE fingerprint = $1 ORDER BY created_at`
+	versionHasDBCol := c.p.execCfg.Settings.Version.IsActive(
+		ctx, clusterversion.V26_2_StatementHintsTypeNameEnabledColumnsAdded,
+	)
+	var query string
+	if versionHasDBCol {
+		query = `SELECT hint, database FROM system.statement_hints WHERE fingerprint = $1 ORDER BY created_at`
+	} else {
+		query = `SELECT hint, NULL::STRING AS database FROM system.statement_hints WHERE fingerprint = $1 ORDER BY created_at`
+	}
 	rows, err := c.ie.QueryBufferedEx(
 		ctx,
 		"stmtEnvCollector",
@@ -591,8 +600,8 @@ func (c *stmtEnvCollector) getStmtHintRecreateStmts(
 
 	recreateStmts = make([]string, 0, len(rows))
 	for _, row := range rows {
-		if len(row) == 0 {
-			return nil, errors.AssertionFailedf("expect not nil row")
+		if len(row) != 2 {
+			return nil, errors.AssertionFailedf("expected 2 columns in row, got %d", len(row))
 		}
 		if row[0] == tree.DNull {
 			continue
@@ -602,7 +611,7 @@ func (c *stmtEnvCollector) getStmtHintRecreateStmts(
 		if err != nil {
 			return nil, errors.Wrap(err, "deserializing statement hint")
 		}
-		recreateSQL, ok := hint.RecreateStmt(stmt)
+		recreateSQL, ok := hint.RecreateStmt(stmt, row[1])
 		if !ok {
 			continue
 		}

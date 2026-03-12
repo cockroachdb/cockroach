@@ -8,6 +8,7 @@ package hintpb
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,6 +33,7 @@ func TestRecreateStmt(t *testing.T) {
 		name     string
 		hint     StatementHintUnion
 		stmt     string
+		database tree.Datum
 		expected string
 		ok       bool
 	}{
@@ -43,7 +45,20 @@ func TestRecreateStmt(t *testing.T) {
 				return h
 			}(),
 			stmt:     "SELECT * FROM t",
+			database: tree.DNull,
 			expected: "SELECT information_schema.crdb_rewrite_inline_hints('SELECT * FROM t', 'SELECT * FROM t@idx');",
+			ok:       true,
+		},
+		{
+			name: "inject hints with database",
+			hint: func() StatementHintUnion {
+				var h StatementHintUnion
+				h.SetValue(&InjectHints{DonorSQL: "SELECT * FROM t@idx"})
+				return h
+			}(),
+			stmt:     "SELECT * FROM t",
+			database: tree.NewDString("mydb"),
+			expected: "SELECT information_schema.crdb_rewrite_inline_hints('SELECT * FROM t', 'SELECT * FROM t@idx', 'mydb');",
 			ok:       true,
 		},
 		{
@@ -54,7 +69,20 @@ func TestRecreateStmt(t *testing.T) {
 				return h
 			}(),
 			stmt:     "SELECT * FROM t",
+			database: tree.DNull,
 			expected: "SELECT information_schema.crdb_set_session_variable_hint('SELECT * FROM t', 'distsql', 'on');",
+			ok:       true,
+		},
+		{
+			name: "session variable with database",
+			hint: func() StatementHintUnion {
+				var h StatementHintUnion
+				h.SetValue(&SessionVariableHint{VariableName: "distsql", VariableValue: "on"})
+				return h
+			}(),
+			stmt:     "SELECT * FROM t",
+			database: tree.NewDString("testdb"),
+			expected: "SELECT information_schema.crdb_set_session_variable_hint('SELECT * FROM t', 'distsql', 'on', 'testdb');",
 			ok:       true,
 		},
 		{
@@ -65,6 +93,7 @@ func TestRecreateStmt(t *testing.T) {
 				return h
 			}(),
 			stmt:     "SELECT * FROM t WHERE x = 'hello'",
+			database: tree.DNull,
 			expected: `SELECT information_schema.crdb_set_session_variable_hint(e'SELECT * FROM t WHERE x = \'hello\'', 'var', e'it\'s');`,
 			ok:       true,
 		},
@@ -76,19 +105,21 @@ func TestRecreateStmt(t *testing.T) {
 				return h
 			}(),
 			stmt:     "SELECT 1",
+			database: tree.DNull,
 			expected: `SELECT information_schema.crdb_set_session_variable_hint('SELECT 1', 'var', e'a\\b');`,
 			ok:       true,
 		},
 		{
-			name: "empty hint",
-			hint: StatementHintUnion{},
-			stmt: "SELECT 1",
-			ok:   false,
+			name:     "empty hint",
+			hint:     StatementHintUnion{},
+			stmt:     "SELECT 1",
+			database: tree.DNull,
+			ok:       false,
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result, ok := tc.hint.RecreateStmt(tc.stmt)
+			result, ok := tc.hint.RecreateStmt(tc.stmt, tc.database)
 			require.Equal(t, tc.ok, ok)
 			if ok {
 				require.Equal(t, tc.expected, result)
