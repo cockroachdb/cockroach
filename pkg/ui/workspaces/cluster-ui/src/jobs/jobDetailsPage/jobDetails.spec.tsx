@@ -4,16 +4,15 @@
 // included in the /LICENSE file.
 
 import "@testing-library/jest-dom";
-import { configureStore } from "@reduxjs/toolkit";
 import { render, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import * as H from "history";
 import Long from "long";
 import React from "react";
-import { Provider } from "react-redux";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, Route } from "react-router";
+import { SWRConfig } from "swr";
 
 import * as jobApi from "src/api/jobsApi";
+import * as userApi from "src/api/userApi";
 import { CockroachCloudContext } from "src/contexts";
 
 import { JOB_STATUS_RUNNING, JOB_STATUS_SUCCEEDED } from "../util";
@@ -52,44 +51,40 @@ const mockCollectExecutionDetails = jest.fn().mockImplementation(() => {
 });
 
 const createJobDetailsPageProps = (): JobDetailsPropsV2 => {
-  const history = H.createHashHistory();
   return {
-    adminRoleSelector: jest.fn().mockReturnValue(true),
-    refreshUserSQLRoles: jest.fn(),
     onFetchExecutionDetailFiles: mockFetchExecutionDetailFiles,
     onCollectExecutionDetails: mockCollectExecutionDetails,
     onDownloadExecutionFile: jest.fn(),
-    history: history,
-    location: history.location,
-    match: {
-      url: "",
-      path: history.location.pathname,
-      isExact: false,
-      params: { id: "1" },
-    },
   };
 };
 
 describe("JobDetailsV2", () => {
+  beforeEach(() => {
+    jest.spyOn(userApi, "useUserSQLRoles").mockReturnValue({
+      data: { roles: ["ADMIN"] },
+      isLoading: false,
+      error: null,
+      mutate: jest.fn(),
+      isValidating: false,
+    } as any);
+  });
+
   afterEach(() => {
     jest.clearAllMocks();
     jest.useRealTimers();
   });
 
   const renderPage = () => {
-    const store = configureStore({
-      reducer: {
-        noop: (state = {}) => state,
-      },
-    });
     return render(
-      <Provider store={store}>
+      <SWRConfig value={{ provider: () => new Map() }}>
         <CockroachCloudContext.Provider value={false}>
-          <MemoryRouter>
-            <JobDetailsV2 {...createJobDetailsPageProps()} />
+          <MemoryRouter initialEntries={["/job/1"]}>
+            <Route path="/job/:id">
+              <JobDetailsV2 {...createJobDetailsPageProps()} />
+            </Route>
           </MemoryRouter>
         </CockroachCloudContext.Provider>
-      </Provider>,
+      </SWRConfig>,
     );
   };
 
