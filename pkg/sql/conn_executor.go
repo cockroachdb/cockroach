@@ -4027,6 +4027,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.SchemaChangerState = ex.extraTxnState.schemaChangerState
 	evalCtx.DescIDGenerator = ex.getDescIDGenerator()
 	evalCtx.UseCanaryStats = false
+	evalCtx.CanaryAndStableStatsDiffer = false
 
 	// See resetPlanner for more context on setting the maximum timestamp for
 	// AOST read retries.

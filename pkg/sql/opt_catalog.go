@@ -701,7 +701,17 @@ func (oc *optCatalog) dataSourceForTable(
 			statsCanaryWindow = desc.TableDesc().StatsCanaryWindow
 			statsAsOf = oc.planner.EvalContext().SessionData().StatsAsOf
 		}
-		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStatsMaybeStable(ctx, desc, typeResolver, stable, statsCanaryWindow, statsAsOf)
+		var statsDiffer bool
+		tableStats, statsDiffer, err = oc.planner.execCfg.TableStatsCache.GetTableStatsMaybeStable(ctx, desc, typeResolver, stable, statsCanaryWindow, statsAsOf)
+		// "OR" the per-table divergence flag into the query-wide flag. This
+		// is called once per table during optbuilder.Build(), which walks
+		// the AST sequentially on a single goroutine (the planner is not
+		// safe for concurrent use — see planner.go). The flag is
+		// write-only here and read-only later in metric recording, so no
+		// synchronization is needed.
+		if statsDiffer {
+			oc.planner.EvalContext().CanaryAndStableStatsDiffer = true
+		}
 		if err != nil {
 			// Ignore any error. We still want to be able to run queries even if we lose
 			// access to the statistics table.

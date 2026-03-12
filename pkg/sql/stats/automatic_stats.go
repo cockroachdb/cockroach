@@ -910,7 +910,7 @@ func (r *Refresher) EstimateStaleness(
 	// NB: we pass nil boolean as 'forecast' argument in order to not invalidate
 	// the stats cache entry since we don't care whether there is a forecast or
 	// not in the stats.
-	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableDesc.GetID(), forecast, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+	tableStats, _, err := r.cache.getTableStatsFromCache(ctx, tableDesc.GetID(), forecast, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	if err != nil {
 		return 0, err
 	}
@@ -964,7 +964,7 @@ func (r *Refresher) maybeRefreshStats(
 	// the stats cache entry since we don't care whether there is a forecast or
 	// not in the stats.
 	var forecast *bool
-	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID, forecast, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+	tableStats, _, err := r.cache.getTableStatsFromCache(ctx, tableID, forecast, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	if err != nil {
 		log.Dev.Errorf(ctx, "failed to get table statistics: %v", err)
 		return
