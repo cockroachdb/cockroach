@@ -236,14 +236,14 @@ func (r *replicaTruncatorTest) printReplicaState() {
 }
 
 type storeTruncatorTest struct {
-	eng      storage.Engine
+	eng      kvstorage.Engines
 	buf      *strings.Builder
 	replicas map[roachpb.RangeID]*replicaTruncatorTest
 }
 
 var _ storeForTruncator = &storeTruncatorTest{}
 
-func makeStoreTT(eng storage.Engine, buf *strings.Builder) *storeTruncatorTest {
+func makeStoreTT(eng kvstorage.Engines, buf *strings.Builder) *storeTruncatorTest {
 	return &storeTruncatorTest{
 		eng:      eng,
 		buf:      buf,
@@ -251,7 +251,7 @@ func makeStoreTT(eng storage.Engine, buf *strings.Builder) *storeTruncatorTest {
 	}
 }
 
-func (s *storeTruncatorTest) getEngine() storage.Engine {
+func (s *storeTruncatorTest) getEngines() kvstorage.Engines {
 	return s.eng
 }
 
@@ -281,7 +281,7 @@ func TestRaftLogTruncator(t *testing.T) {
 		buf.Reset()
 		return str
 	}
-	eng := storage.NewDefaultInMemForTesting()
+	eng := kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
 	defer eng.Close()
 	store := makeStoreTT(eng, &buf)
 	stopper := stop.NewStopper()
@@ -299,13 +299,13 @@ func TestRaftLogTruncator(t *testing.T) {
 
 				r := makeReplicaTT(rangeID, &buf)
 				r.truncState.Index = truncIndex
-				r.writeRaftStateToEngine(t, eng, truncIndex, lastLogEntry)
+				r.writeRaftStateToEngine(t, eng.LogEngine(), truncIndex, lastLogEntry)
 				store.replicas[rangeID] = r
 				return flushAndReset()
 
 			case "print-engine-state":
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "id")
-				store.replicas[rangeID].printEngine(t, eng)
+				store.replicas[rangeID].printEngine(t, eng.TODOEngine())
 				return flushAndReset()
 
 			case "add-pending-truncation":
@@ -342,7 +342,8 @@ func TestRaftLogTruncator(t *testing.T) {
 				// encounter an unexpected flush.
 				noFlush := dd.ScanArgOr(t, d, "no-flush", false)
 
-				store.replicas[rangeID].writeRaftAppliedIndex(t, eng, raftAppliedIndex, !noFlush)
+				store.replicas[rangeID].writeRaftAppliedIndex(
+					t, eng.StateEngine(), raftAppliedIndex, !noFlush)
 				return flushAndReset()
 
 			case "add-replica-to-truncator":
