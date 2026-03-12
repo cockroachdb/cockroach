@@ -1,0 +1,38 @@
+# Per-engine limit: log at allowed=2, even though global has room.
+
+init max-concurrency=3 deprioritization=0.5 log-allowed=2 state-allowed=2
+----
+
+try-schedule engine=log
+----
+granted: compaction index 0
+
+try-schedule engine=log
+----
+granted: compaction index 1
+
+try-schedule engine=log
+----
+not granted
+
+print-state
+----
+totalRunning: 2
+log: running=2 waiting=true registered=true
+state: running=0 waiting=false registered=true
+
+compaction-done engine=log idx=0
+----
+log: GetWaitingCompaction
+
+compaction-done engine=log idx=1
+----
+
+print-state
+----
+totalRunning: 0
+log: running=0 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+close
+----
