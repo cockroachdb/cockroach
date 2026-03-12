@@ -156,6 +156,12 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	}
 }
 
+func getEnginesKeySet(t *testing.T, e kvstorage.Engines) map[string]struct{} {
+	t.Helper()
+	require.False(t, e.Separated(), "not supported in this test")
+	return getEngineKeySet(t, e.Engine())
+}
+
 func getEngineKeySet(t *testing.T, e storage.Engine) map[string]struct{} {
 	t.Helper()
 	// Have to scan local and global keys separately as mentioned in the comment
@@ -183,10 +189,9 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-		})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
 	defer tc.Stopper().Stop(context.Background())
 	tc.ScratchRange(t)
 	store := tc.GetFirstStoreFromServer(t, 0)
@@ -194,36 +199,30 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	content := scratchKey("testing!")
 
 	// Write some values left of the proposed split key.
-	pArgs := putArgs(scratchKey("aaa"), content)
-	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), pArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(),
+		putArgs(scratchKey("aaa"), content))
+	require.NoError(t, pErr.GoError())
 
 	// Collect all the keys.
-	preKeys := getEngineKeySet(t, store.TODOEngine())
+	preKeys := getEnginesKeySet(t, store.Engines())
 
 	// Split the range.
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, scratchKey(""), store)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Write some values right of the split key.
-	pArgs = putArgs(scratchKey("ccc"), content)
-	if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{
+	_, pErr = kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{
 		RangeID: rhsDesc.RangeID,
-	}, pArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
+	}, putArgs(scratchKey("ccc"), content))
+	require.NoError(t, pErr.GoError())
 
 	// Merge the b range back into the a range.
-	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
-		t.Fatal(pErr)
-	}
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(),
+		adminMergeArgs(lhsDesc.StartKey.AsRawKey()))
+	require.NoError(t, pErr.GoError())
 
 	// Collect all the keys again.
-	postKeys := getEngineKeySet(t, store.TODOEngine())
+	postKeys := getEnginesKeySet(t, store.Engines())
 
 	// Compute the new keys.
 	for k := range preKeys {
@@ -4251,8 +4250,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			}
 
 			// Verify that the sets of keys in store1 and store3 are identical.
-			storeKeys1 := getKeySet(store1.TODOEngine())
-			storeKeys3 := getKeySet(store3.TODOEngine())
+			storeKeys1 := getKeySet(store1.StateEngine())
+			storeKeys3 := getKeySet(store3.StateEngine())
 			for k := range storeKeys1 {
 				if _, ok := storeKeys3[k]; !ok {
 					return fmt.Errorf("store3 missing key %s", roachpb.Key(k))

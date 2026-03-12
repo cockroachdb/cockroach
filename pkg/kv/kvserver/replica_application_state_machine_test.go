@@ -446,7 +446,7 @@ func TestReplicaStateMachineEphemeralAppBatchRejection(t *testing.T) {
 	r.mu.RUnlock()
 
 	descWriteRepr := func(v string) (kvpb.Request, []byte) {
-		b := tc.store.TODOEngine().NewBatch()
+		b := tc.store.StateEngine().NewBatch()
 		defer b.Close()
 		key := keys.LocalMax
 		val := roachpb.MakeValueFromString("hello")

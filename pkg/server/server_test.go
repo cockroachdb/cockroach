@@ -1203,7 +1203,7 @@ func TestStorageBlockLoadConcurrencyLimit(t *testing.T) {
 
 			check := func(expected int64) error {
 				return s.GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
-					metrics := s.TODOEngine().GetMetrics()
+					metrics := s.TODOBothEngines().GetMetrics()
 					if metrics.BlockLoadConcurrencyLimit != expected {
 						return fmt.Errorf("expected %d, got %d", expected, metrics.BlockLoadConcurrencyLimit)
 					}

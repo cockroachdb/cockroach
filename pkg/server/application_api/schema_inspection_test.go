@@ -436,11 +436,12 @@ func TestAdminAPIDatabaseDetails(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// Flush all stores here so that we can read the ApproximateDiskBytes field without waiting for a flush.
+	// Flush all stores here so that we can read the ApproximateDiskBytes field
+	// without waiting for a flush.
 	for i := 0; i < numServers; i++ {
 		s := tc.Server(i).StorageLayer()
 		err = s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-			return store.TODOEngine().Flush()
+			return store.StateEngine().Flush()
 		})
 		require.NoError(t, err)
 	}

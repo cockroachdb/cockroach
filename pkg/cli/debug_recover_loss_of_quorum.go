@@ -823,7 +823,7 @@ func applyRecoveryToLocalStore(
 		store := kvstorage.MakeEngines(eng)
 		stores[i] = store
 
-		batch := store.TODOEngine().NewBatch()
+		batch := store.TODOBothEngines().NewBatch()
 		defer store.Close() //nolint:deferloop
 		defer batch.Close() //nolint:deferloop
 

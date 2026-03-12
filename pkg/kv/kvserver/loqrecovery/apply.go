@@ -386,7 +386,7 @@ func MaybeApplyPendingRecoveryPlan(
 			if err != nil {
 				return errors.Wrap(err, "failed to read store ident when trying to apply loss of quorum recovery plan")
 			}
-			b := e.TODOEngine().NewBatch()
+			b := e.TODOBothEngines().NewBatch()
 			defer b.Close() //nolint:deferloop
 			batches[ident.StoreID] = b
 		}

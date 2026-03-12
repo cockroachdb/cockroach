@@ -325,7 +325,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	onDiskCheckpointPaths := func(nodeIdx int) []string {
 		fs := stickyVFSRegistry.Get(vfsIDs[nodeIdx])
 		store := tc.GetFirstStoreFromServer(t, nodeIdx)
-		checkpointPath := filepath.Join(store.TODOEngine().GetAuxiliaryDir(), "checkpoints")
+		checkpointPath := filepath.Join(store.TODOBothEngines().GetAuxiliaryDir(), "checkpoints")
 		checkpoints, _ := fs.List(checkpointPath)
 		var checkpointPaths []string
 		for _, cpDirName := range checkpoints {
@@ -354,7 +354,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 	// Write some arbitrary data only to store on n2. Inconsistent key "e"!
 	s2 := tc.GetFirstStoreFromServer(t, 1)
-	s2AuxDir := s2.TODOEngine().GetAuxiliaryDir()
+	s2AuxDir := s2.TODOBothEngines().GetAuxiliaryDir()
 	var val roachpb.Value
 	val.SetInt(42)
 	// Put an inconsistent key "e" to s2, and have s1 and s3 still agree.
