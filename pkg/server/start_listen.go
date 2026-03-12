@@ -201,7 +201,7 @@ func startListenRPCAndSQL(
 		_ = stopper.RunAsyncTask(workersCtx, "serve-loopback-grpc", func(context.Context) {
 			netutil.FatalIfUnexpected(grpc.Serve(grpcLoopbackL))
 		})
-		_ = stopper.RunAsyncTask(workersCtx, "serve-loopback-drpc", func(ctx context.Context) {
+		_ = stopper.RunAsyncTask(drpcCtx, "serve-loopback-drpc", func(ctx context.Context) {
 			netutil.FatalIfUnexpected(drpc.Serve(ctx, drpcLoopbackL))
 		})
 
