@@ -626,14 +626,36 @@ func (b *Builder) buildScan(
 	}
 	if tab.IsVirtualTable() {
 		if indexFlags != nil {
-			panic(pgerror.Newf(pgcode.Syntax,
-				"index flags not allowed with virtual tables"))
+			// Only the primary index hint is allowed for virtual tables. It forces
+			// a full scan instead of a virtual table lookup join, which is important
+			// for tables like pg_class and pg_attribute whose virtual indexes are
+			// incomplete.
+			if !indexFlags.IndexOnlyHint() {
+				panic(pgerror.Newf(pgcode.Syntax,
+					"%q hint not allowed with virtual tables, only hinting primary index is allowed",
+					tree.ErrString(indexFlags),
+				))
+			}
+			primaryIdxName := tab.Index(cat.PrimaryIndex).Name()
+			isPrimary := indexFlags.Index == tabledesc.LegacyPrimaryKeyIndexName ||
+				tree.Name(indexFlags.Index) == primaryIdxName
+			if !isPrimary {
+				panic(pgerror.Newf(pgcode.Syntax,
+					"%q hint not allowed with virtual tables, only hinting primary index is allowed",
+					tree.ErrString(indexFlags),
+				))
+			}
 		}
 		if locking.isSet() {
 			panic(pgerror.Newf(pgcode.Syntax,
 				"%s not allowed with virtual tables", locking.get().Strength))
 		}
 		private := memo.ScanPrivate{Table: tabID, Cols: scanColIDs}
+		if indexFlags != nil {
+			// Force primary index to prevent virtual index lookup joins.
+			private.Flags.ForceIndex = true
+			private.Flags.Index = cat.PrimaryIndex
+		}
 		outScope.expr = b.factory.ConstructScan(&private)
 
 		// Add the partial indexes after constructing the scan so we can use the

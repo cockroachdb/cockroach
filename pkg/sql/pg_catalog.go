@@ -398,6 +398,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-attrdef.html`,
 	},
 	nil)
 
+// pg_attribute has an incomplete virtual index on attrelid. Lookups using table
+// descriptor OIDs resolve directly, but hashed index OIDs (e.g.  from
+// pg_index.indexrelid) miss the index and fall back to a full table scan.
+// Queries joining pg_attribute on a potentially hashed OID should use
+// pg_attribute@primary to force a hash join rather than an expensive lookup
+// join that silently degrades to a full scan.
 var pgCatalogAttributeTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	`table columns (incomplete - see also information_schema.columns)
 https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
@@ -785,6 +791,12 @@ var (
 	relPersistenceTemporary = tree.NewDString("t")
 )
 
+// pg_class has an incomplete virtual index on oid. Lookups using table
+// descriptor OIDs resolve directly, but hashed index OIDs (e.g. from
+// pg_index.indexrelid) miss the index and fall back to a full table scan.
+// Queries joining pg_class on a potentially hashed OID should use
+// pg_class@primary to force a hash join rather than an expensive lookup join
+// that silently degrades to a full scan.
 var pgCatalogClassTable = makeAllRelationsVirtualTableWithDescriptorIDIndex(
 	`tables and relation-like objects (incomplete - see also information_schema.tables/sequences/views)
 https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,

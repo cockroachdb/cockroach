@@ -744,7 +744,7 @@ List of relations:
           END as "Type",
           pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
           c2.relname AS "Table"
-     FROM pg_catalog.pg_class c
+     FROM pg_catalog.pg_class@primary c
 LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
 LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
 LEFT JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
@@ -790,7 +790,7 @@ List of relations:
           WHEN 'u' THEN 'unlogged' END AS "Persistence",
           am.amname AS "Access Method",
           COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
-     FROM pg_catalog.pg_class c
+     FROM pg_catalog.pg_class@primary c
 LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
 LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
 LEFT JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
@@ -830,7 +830,7 @@ List of relations:
           END as "Type",
           pg_catalog.pg_get_userbyid(c.relowner) as "Owner",
           c2.relname AS "Table"
-     FROM pg_catalog.pg_class c
+     FROM pg_catalog.pg_class@primary c
 LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
 LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
 LEFT JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
@@ -868,7 +868,7 @@ List of relations:
           WHEN 'u' THEN 'unlogged' END AS "Persistence",
           am.amname AS "Access Method",
           COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"
-     FROM pg_catalog.pg_class c
+     FROM pg_catalog.pg_class@primary c
 LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace
 LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam
 LEFT JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid

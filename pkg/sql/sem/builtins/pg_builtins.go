@@ -899,7 +899,9 @@ FROM defaults_parsed
 						ELSE a.attname
 					END as pg_get_indexdef
 					FROM pg_catalog.pg_index i
-					LEFT JOIN pg_catalog.pg_attribute a ON (a.attrelid = i.indexrelid AND a.attnum = $2)
+					-- Use an index hint to avoid an incomplete virtual index lookup join
+					-- that degrades to a full scan.
+					LEFT JOIN pg_catalog.pg_attribute@primary AS a ON (a.attrelid = i.indexrelid AND a.attnum = $2)
 					LEFT JOIN pg_catalog.pg_indexes defs ON ($2 = 0 AND defs.crdb_oid = i.indexrelid)
 					WHERE i.indexrelid = $1`,
 			Info:       "Gets the CREATE INDEX command for index, or definition of just one index column when given a non-zero column number",
