@@ -1,0 +1,35 @@
+# Tick triggers grants.
+
+init max-concurrency=3 deprioritization=0.5 log-allowed=2 state-allowed=2
+----
+
+set-allowed engine=state allowed=0
+----
+
+set-waiting engine=state priority=80 score=1.5
+----
+
+try-schedule engine=state
+----
+not granted
+
+set-allowed engine=state allowed=2
+----
+
+tick
+----
+state: GetWaitingCompaction
+state: Schedule => accepted: handle=0
+state: GetWaitingCompaction
+
+compaction-done engine=state handle=0
+----
+
+print-state
+----
+totalRunning: 0
+log: running=0 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+close
+----
