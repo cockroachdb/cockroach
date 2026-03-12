@@ -373,6 +373,16 @@ var MaxRetryBackoff = settings.RegisterDurationSettingWithExplicitUnit(
 	settings.DurationInRange(1*time.Second, 1*time.Hour),
 )
 
+// ResetBackoffOnHighwaterAdvance controls whether the changefeed retry
+// backoff resets when the highwater mark advances between retries.
+var ResetBackoffOnHighwaterAdvance = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.reset_backoff_on_highwater_advance.enabled",
+	"if true, the changefeed retry backoff resets when the resolved "+
+		"timestamp advances between retries",
+	true,
+)
+
 // RetryBackoffReset is the time between changefeed retries before the
 // backoff timer resets.
 var RetryBackoffReset = settings.RegisterDurationSettingWithExplicitUnit(
