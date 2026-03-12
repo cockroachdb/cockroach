@@ -75,10 +75,15 @@ func (f *BackupCompactionIterator) updateValid() bool {
 }
 
 // advance moves past keys with timestamps later than f.asOf.
+// If a range key is encountered, the entire span of the range key is skipped.
 func (f *BackupCompactionIterator) advance() {
 	for {
 		if ok := f.updateValid(); !ok {
 			return
+		}
+		if _, hasRange := f.iter.HasPointAndRange(); hasRange {
+			f.iter.Next()
+			continue
 		}
 		if key := f.iter.UnsafeKey(); f.asOf.Less(key.Timestamp) {
 			f.iter.Next()
@@ -114,11 +119,7 @@ func (f *BackupCompactionIterator) ValueLen() int {
 }
 
 func (f *BackupCompactionIterator) HasPointAndRange() (bool, bool) {
-	hasPoint, hasRange := f.iter.HasPointAndRange()
-	if hasRange {
-		panic(errors.AssertionFailedf("unexpected range tombstone"))
-	}
-	return hasPoint, hasRange
+	return true, false
 }
 
 func (f *BackupCompactionIterator) RangeBounds() roachpb.Span {
@@ -151,6 +152,9 @@ func (f *BackupCompactionIterator) assertInvariants() error {
 	}
 	if f.asOf.Less(key.Timestamp) {
 		return errors.AssertionFailedf("emitted key %s above asOf timestamp %s", key, f.asOf)
+	}
+	if _, hasRange := f.iter.HasPointAndRange(); hasRange {
+		return errors.AssertionFailedf("emitted key is within the bounds of a range key")
 	}
 
 	return nil

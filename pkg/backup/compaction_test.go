@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -1435,6 +1436,104 @@ func TestToggleCompactionForRestore(t *testing.T) {
 
 	require.Equal(t, 2, getNumBackupsInRestore(t, db, compRestoreID))
 	require.Equal(t, 3, getNumBackupsInRestore(t, db, classicRestoreID))
+}
+
+// TestCompactionWithRangeKeys creates a table with the following key span over
+// time with revision history backups taken at each timestamp.
+//
+//	                   range tombstone
+//	                          ᵛ
+//	t@3 |             |-------x-------|
+//	    | xxxxxxxxxxxx|xxxxxxxxxxxxxxx|xxxxxxxxxxxxx
+//	t@2 | xxxxxxxxxxxx|xxxxxxxxxxxxxxx|xxxxxxxxxxxxx
+//	t@1 | xxxxxxxxxxxx|xxxxxxxxxxxxxxx|xxxxxxxxxxxxx
+//	    --------------|---------------|-------------
+//	     primary idx  |     idx y     |    idx z
+//
+// This allows us to test a backup compaction that has keys both before and
+// after a range tombstone.
+func TestCompactionWithRangeKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tempDir, tempDirCleanup := testutils.TempDir(t)
+	defer tempDirCleanup()
+	st := cluster.MakeTestingClusterSettings()
+	_, db, cleanup := backupRestoreTestSetupEmpty(
+		t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+				Settings:          st,
+				Knobs: base.TestingKnobs{
+					Store: &kvserver.StoreTestingKnobs{
+						DisableGCQueue: true,
+					},
+					GCJob: &sql.GCJobTestingKnobs{
+						SkipWaitingForMVCCGC: true,
+					},
+					JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+				},
+			},
+		},
+	)
+	defer cleanup()
+
+	// Create two indexes so that we have keys before and after a range tombstone
+	// when we drop the first index.
+	db.Exec(
+		t,
+		`CREATE TABLE foo (
+			x INT PRIMARY KEY, y INT, z INT,
+			INDEX idx_y (y),
+			INDEX idx_z (z)
+		)`,
+	)
+
+	const numRows = 100
+	for i := range numRows {
+		db.Exec(t, "INSERT INTO foo VALUES ($1, $1, $1)", i)
+	}
+
+	collectionURI := []string{"nodelocal://1/backup"}
+	const revHistOpt = "WITH revision_history"
+	fullEnd := getTime()
+	backupStmt := fullBackupQuery(fullCluster, collectionURI, fullEnd, revHistOpt)
+	db.Exec(t, backupStmt)
+
+	db.Exec(t, "UPDATE foo SET y = y + 1, z = z + 1 WHERE 1=1")
+	db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, revHistOpt))
+
+	db.Exec(t, "UPDATE foo SET y = y + 1, z = z + 1 WHERE 1=1")
+	db.Exec(t, "DROP INDEX foo@idx_y")
+	// Wait for GC to lay the range tombstone so that the next incremental can
+	// capture it and surface it for compaction.
+	var gcJobID jobspb.JobID
+	db.QueryRow(t, "SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'").Scan(&gcJobID)
+	jobutils.WaitForJobToSucceed(t, db, gcJobID)
+
+	chainEnd := getTime()
+	db.Exec(t, incBackupQuery(fullCluster, collectionURI, chainEnd, revHistOpt))
+
+	var backupPath string
+	db.QueryRow(
+		t,
+		fmt.Sprintf("SHOW BACKUPS IN (%s)", stringifyCollectionURI(collectionURI)),
+	).Scan(&backupPath)
+
+	compJob := triggerCompaction(t, db, backupStmt, backupPath, fullEnd, chainEnd)
+	jobutils.WaitForJobToSucceed(t, db, compJob)
+
+	fingerprint := func() [][]string {
+		rows := db.QueryStr(t, "SHOW FINGERPRINTS FROM TABLE foo")
+		return rows
+	}
+
+	fingerprintsBefore := fingerprint()
+	db.Exec(t, "DROP TABLE foo")
+	db.Exec(t, restoreQuery(t, "TABLE foo", collectionURI, noAOST, noOpts))
+	fingerprintsAfter := fingerprint()
+
+	require.Equal(t, fingerprintsBefore, fingerprintsAfter)
 }
 
 func TestCheckCompactionManifestFields(t *testing.T) {

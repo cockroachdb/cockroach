@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -206,6 +207,87 @@ func TestBackupCompactionIteratorSeek(t *testing.T) {
 				output.WriteRune('X')
 			}
 			require.Equal(t, test.expected, output.String())
+		})
+	}
+}
+
+func TestBackupCompactionIteratorRangeKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	pebble, err := Open(context.Background(), InMemory(),
+		cluster.MakeTestingClusterSettings(), CacheSize(1<<20 /* 1 MiB */))
+	require.NoError(t, err)
+	defer pebble.Close()
+
+	tests := []struct {
+		input  string
+		asOf   string
+		output string
+	}{
+		// Simple batch with a range key
+		{"a-c2", "", ""},
+		// Range key with a point key before it.
+		{"a1b-c1", "", "a1"},
+		// Range key with a point key below it.
+		{"a1b1b-d2e2", "", "a1e2"},
+
+		// The backup compaction iterator does not respect MVCC rules for range keys
+		// and simply ignores all keys within the span of the range key. Within the
+		// context of backup compaction, this is fine, but the following tests are
+		// left here to explicitly acknowledge this behavior in the event we decide
+		// to change it in the future.
+		// Range key with a point key above it.
+		{"a1b3b-d2e2", "", "a1e2"},
+		// Range key with point keys below it and an AOST read below it.
+		{"a2b1c2b-d3e1", "2", "a2e1"},
+	}
+
+	for i, test := range tests {
+		name := fmt.Sprintf("Test %d: %s, AOST %s", i, test.input, test.asOf)
+		t.Run(name, func(t *testing.T) {
+			batch := pebble.NewBatch()
+			defer batch.Close()
+			populateBatch(t, batch, test.input)
+
+			iter, err := batch.NewMVCCIterator(
+				context.Background(),
+				MVCCKeyAndIntentsIterKind,
+				IterOptions{
+					KeyTypes:   IterKeyTypePointsAndRanges,
+					UpperBound: roachpb.KeyMax,
+				},
+			)
+			require.NoError(t, err)
+			defer iter.Close()
+
+			asOf := hlc.MaxTimestamp
+			if test.asOf != "" {
+				asOf.WallTime = int64(test.asOf[0])
+			}
+
+			it, err := NewBackupCompactionIterator(iter, asOf)
+			require.NoError(t, err)
+			it.SeekGE(MVCCKey{Key: keys.LocalMax})
+
+			var output bytes.Buffer
+			for {
+				ok, err := it.Valid()
+				require.NoError(t, err)
+				if !ok {
+					break
+				}
+				output.Write(it.UnsafeKey().Key)
+				output.WriteByte(byte(it.UnsafeKey().Timestamp.WallTime))
+				v, err := DecodeMVCCValueAndErr(it.UnsafeValue())
+				require.NoError(t, err)
+				if v.IsTombstone() {
+					output.WriteRune('X')
+				}
+				it.Next()
+			}
+
+			require.Equal(t, test.output, output.String())
 		})
 	}
 }
