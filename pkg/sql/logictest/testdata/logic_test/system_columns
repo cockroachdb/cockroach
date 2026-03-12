@@ -199,6 +199,87 @@ SELECT tableoid, x FROM tab3@i WHERE x = 1
 statement error pq: relation "bad" \([0-9]+\): column name "tableoid" conflicts with a system column name
 CREATE TABLE bad (tableoid int)
 
+subtest tableoid_virtual_tables
+
+# Verify that tableoid works on virtual tables (pg_catalog, information_schema, etc.).
+
+# The tableoid should be the descriptor ID of the virtual table. Each virtual
+# table has a stable descriptor ID, so we can verify the value is consistent
+# across rows and matches the table's OID.
+
+# pg_catalog tables.
+let $pg_class_oid
+SELECT oid FROM pg_class WHERE relname = 'pg_class' AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'pg_catalog')
+
+query B
+SELECT bool_and(tableoid = $pg_class_oid) FROM pg_class
+----
+true
+
+let $pg_namespace_oid
+SELECT oid FROM pg_class WHERE relname = 'pg_namespace' AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'pg_catalog')
+
+query B
+SELECT bool_and(tableoid = $pg_namespace_oid) FROM pg_namespace
+----
+true
+
+# Verify tableoid is different for different virtual tables.
+query B
+SELECT (SELECT tableoid FROM pg_class LIMIT 1) != (SELECT tableoid FROM pg_namespace LIMIT 1)
+----
+true
+
+# information_schema tables.
+let $is_tables_oid
+SELECT oid FROM pg_class WHERE relname = 'tables' AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'information_schema')
+
+query B
+SELECT bool_and(tableoid = $is_tables_oid) FROM information_schema.tables
+----
+true
+
+# Test the pg_dump pattern that motivated this change:
+# SELECT x.tableoid, ... FROM pg_extension x
+query OT
+SELECT x.tableoid, x.extname FROM pg_extension x
+----
+
+# Verify tableoid is preserved correctly in joins between virtual tables.
+# The tableoid for pg_class rows should differ from the tableoid for
+# pg_namespace rows, even when the tables are joined.
+query B
+SELECT bool_and(c.tableoid != n.tableoid) FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid
+----
+true
+
+# Verify that tableoid works with column aliases.
+query OT colnames
+SELECT t.tableoid, t.nspname FROM pg_namespace t WHERE t.nspname = 'pg_catalog'
+----
+tableoid    nspname
+4294967048  pg_catalog
+
+# Verify tableoid works with WHERE clause filtering.
+query B
+SELECT tableoid IS NOT NULL FROM pg_namespace WHERE nspname = 'pg_catalog'
+----
+true
+
+# Verify tableoid works with LIMIT.
+query B
+SELECT tableoid IS NOT NULL FROM pg_class LIMIT 1
+----
+true
+
+# Verify tableoid works when a secondary index is used on a virtual table.
+# pg_class has a secondary index on oid. Querying tableoid with a filter on oid
+# should not cause an index join (which would panic for virtual tables).
+query BT
+SELECT tableoid = $pg_class_oid, relname FROM pg_class WHERE oid = 'pg_class'::regclass
+----
+true  pg_class
+
 subtest origin_id
 
 statement ok
