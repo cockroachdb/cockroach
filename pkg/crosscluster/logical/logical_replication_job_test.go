@@ -36,12 +36,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
@@ -1905,12 +1907,26 @@ func (m *mockDLQ) Log(
 func TestFlushErrorHandling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	serverCfg := s.DistSQLServer().(*distsql.ServerImpl).ServerConfig
+
 	dlq := mockDLQ(0)
 	lrw := &logicalReplicationWriterProcessor{
 		metrics:   MakeMetrics(0).(*Metrics),
 		dlqClient: &dlq,
+	}
+	writerWorkers.Override(ctx, &serverCfg.Settings.SV, 1)
+	lrw.FlowCtx = &execinfra.FlowCtx{
+		Cfg: &serverCfg,
+		EvalCtx: &eval.Context{
+			Codec: s.Codec(),
+		},
 	}
 	lrw.purgatory.flush = lrw.flushBuffer
 	lrw.purgatory.bytesGauge = lrw.metrics.RetryQueueBytes
