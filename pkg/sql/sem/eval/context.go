@@ -361,6 +361,21 @@ type Context struct {
 	// are always for stable stats.
 	UseCanaryStats bool
 
+	// CanaryAndStableStatsDiffer is set to true during planning if at least
+	// one table referenced by the query has genuinely different canary
+	// (newest) vs. stable (second-newest) statistics within its canary
+	// window.
+	//
+	// This flag gates experiment metric recording only. When false, the
+	// execution is not recorded in canary/stable experiment buckets even if
+	// UseCanaryStats is set, because both paths used the same statistics
+	// and recording would only add noise.
+	//
+	// This flag is independent of UseCanaryStats: UseCanaryStats is decided
+	// by the dice roll (canaryRollDice) before planning; this flag is
+	// determined during planning by inspecting each table's cache entry.
+	CanaryAndStableStatsDiffer bool
+
 	// WorkloadID for ASH sampling.
 	WorkloadID uint64
 
