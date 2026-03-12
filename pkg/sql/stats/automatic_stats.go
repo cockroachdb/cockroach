@@ -1046,8 +1046,14 @@ func (r *Refresher) maybeRefreshStats(
 
 	if err := r.refreshStats(ctx, tableID, asOf, isPartial); err != nil {
 		if errors.Is(err, ConcurrentCreateStatsError) {
-			// Another stats job was already running. Attempt to reschedule this
-			// refresh.
+			if isPartial {
+				// Simply ignore this error since it's most likely due to an
+				// auto stats collection job (either full or partial) on the
+				// same table started by another node.
+				return
+			}
+			// Another full stats job was already running. Attempt to reschedule
+			// this refresh.
 			var newEvent mutation
 			if mustRefresh {
 				// For the cases where mustRefresh=true (stats don't yet exist or it
