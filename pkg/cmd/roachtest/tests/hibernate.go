@@ -152,6 +152,28 @@ func registerHibernate(r registry.Registry, opt hibernateOptions) {
 			t.Fatal(err)
 		}
 
+		// Apply upstream fix for statement_timeout not resetting properly on
+		// CockroachDB. Session-level SET is not reverted on transaction rollback
+		// in CockroachDB (unlike PostgreSQL), so a leaked 1s timeout from
+		// withJdbcTimeout can cause subsequent tests to fail with
+		// "query execution canceled due to statement timeout".
+		// See: https://github.com/hibernate/hibernate-orm/commit/456194394d
+		// See: https://github.com/cockroachdb/cockroach/issues/165002
+		// TODO(spilchen): Remove this patch once we upgrade to Hibernate v8.0.0+,
+		// which will include the fix.
+		if err := repeatRunE(
+			ctx,
+			t,
+			c,
+			node,
+			"apply statement_timeout fix",
+			`cd /mnt/data1/hibernate && `+
+				`curl -sL https://github.com/hibernate/hibernate-orm/commit/456194394d7af925b145855d9e4abffc2d71fcd6.patch | `+
+				`git apply`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
 		t.Status("building hibernate (without tests)")
 		// Build hibernate and run a single test, this step involves some
 		// downloading, so it needs a retry loop as well. Just building was not
