@@ -694,6 +694,14 @@ const (
 
 	// planFlagUsesRLS is set if the plan applies row-level security policies.
 	planFlagUsesRLS
+
+	// planFlagCanaryAndStableStatsDiffer is set if at least one table
+	// referenced by the query has genuinely different canary (newest) vs.
+	// stable (second-newest) statistics within its canary window. This
+	// gates experiment metric recording: when false, the execution is not
+	// recorded in canary/stable experiment buckets even if StatsRollout is
+	// Canary or Stable.
+	planFlagCanaryAndStableStatsDiffer
 )
 
 // IsSet returns true if the receiver has all of the given flags set.
