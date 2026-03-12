@@ -485,13 +485,21 @@ func withTimeout(
 	if jobFeed, ok := f.(cdctest.EnterpriseTestFeed); ok {
 		jobID = jobFeed.JobID()
 	}
-	return timeutil.RunWithTimeout(context.Background(),
+	err := timeutil.RunWithTimeout(context.Background(),
 		redact.Sprintf("withTimeout-%d", jobID), timeout,
 		func(ctx context.Context) error {
 			defer stopFeedWhenDone(ctx, f)()
 			return fn(ctx)
 		},
 	)
+	if err != nil {
+		var timeoutErr *timeutil.TimeoutError
+		if errors.As(err, &timeoutErr) {
+			dumpFile := testutils.WriteGoroutineDump()
+			return errors.WithDetail(err, fmt.Sprintf("goroutine dump: %s", dumpFile))
+		}
+	}
+	return err
 }
 
 func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {

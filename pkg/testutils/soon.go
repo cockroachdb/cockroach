@@ -7,13 +7,9 @@ package testutils
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -64,25 +60,10 @@ func SucceedsWithin(t TestFataler, fn func() error, duration time.Duration) {
 		if f, l, _, ok := errors.GetOneLineSource(err); ok {
 			err = errors.Wrapf(err, "from %s:%d", f, l)
 		}
-		dumpFile := writeGoroutineDump()
+		dumpFile := WriteGoroutineDump()
 		t.Fatalf("condition failed to evaluate within %s: %s\n\ngoroutine dump: %s",
 			duration, err, dumpFile)
 	}
-}
-
-// writeGoroutineDump writes a goroutine stack dump to a file in the test
-// output directory and returns the file path. If the file cannot be created
-// or written, it returns a description of the error.
-func writeGoroutineDump() string {
-	f, err := os.CreateTemp(datapathutils.DebuggableTempDir(), "goroutine_dump_*.txt")
-	if err != nil {
-		return fmt.Sprintf("<failed to create dump file: %v>", err)
-	}
-	defer f.Close()
-	if _, err := f.Write(allstacks.Get()); err != nil {
-		return fmt.Sprintf("<failed to write dump to %s: %v>", f.Name(), err)
-	}
-	return f.Name()
 }
 
 // SucceedsWithinError returns an error unless the supplied function
