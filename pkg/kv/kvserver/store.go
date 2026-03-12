@@ -2301,10 +2301,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 	// concurrently. Note that while we can perform this initialization
 	// concurrently, all initialization must be performed before we start
 	// listening for Raft messages and starting the process Raft loop.
-	//
-	// TODO(sep-raft-log): this will need to learn to stitch and reconcile data from
-	// both engines.
-	repls, err := kvstorage.LoadAndReconcileReplicas(ctx, s.TODOEngine())
+	repls, err := kvstorage.LoadAndReconcileReplicas(ctx, s.internalEngines)
 	if err != nil {
 		return err
 	}
@@ -2321,7 +2318,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			continue
 		}
 		// TODO(pavelkalinnikov): integrate into kvstorage.LoadAndReconcileReplicas.
-		state, err := repl.Load(ctx, s.TODOEngine(), s.StoreID())
+		state, err := repl.Load(ctx, s.StateEngine(), s.LogEngine(), s.StoreID())
 		if err != nil {
 			return err
 		}

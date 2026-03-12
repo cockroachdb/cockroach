@@ -51,23 +51,15 @@ func InitEngine(ctx context.Context, eng Engines, ident roachpb.StoreIdent) erro
 		return err
 	}
 
-	if err := checkCanInitializeEngine(ctx, eng.TODOEngine()); err != nil {
+	if err := checkCanInitializeEngine(ctx, eng); err != nil {
 		return errors.Wrap(err, "while trying to initialize engine")
 	}
 
 	batch := eng.LogEngine().NewBatch()
-	if err := storage.MVCCPutProto(
-		ctx,
-		batch,
-		keys.StoreIdentKey(),
-		hlc.Timestamp{},
-		&ident,
-		storage.MVCCWriteOptions{},
-	); err != nil {
-		batch.Close()
-		return err
-	}
-	if err := batch.Commit(true /* sync */); err != nil {
+	defer batch.Close()
+	if err := WriteStoreIdent(ctx, batch, ident); err != nil {
+		return errors.Wrap(err, "writing StoreIdent")
+	} else if err := batch.Commit(true /* sync */); err != nil {
 		return errors.Wrap(err, "persisting engine initialization data")
 	}
 	// We will set the store ID during start, but we want to set it as quickly as
@@ -81,9 +73,9 @@ func InitEngine(ctx context.Context, eng Engines, ident roachpb.StoreIdent) erro
 
 // checkCanInitializeEngine ensures that the engine is empty except possibly for
 // cluster version or cached cluster settings.
-func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
+func checkCanInitializeEngine(ctx context.Context, eng Engines) error {
 	// See if this is an already-bootstrapped store.
-	ident, err := ReadStoreIdent(ctx, eng)
+	ident, err := ReadStoreIdent(ctx, eng.LogEngine())
 	if err == nil {
 		return errors.Errorf("engine already initialized as %s", ident.String())
 	} else if !errors.HasType(err, (*NotBootstrappedError)(nil)) {
@@ -93,6 +85,30 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 	// settings, but nothing else. Use EngineIterator to ensure that there are no
 	// keys that cannot be parsed as MVCCKeys (e.g. lock table keys) in the
 	// engine.
+	// TODO(pav-kv): verify this is actually true, attempt removing this quirk.
+	check := func(k storage.MVCCKey) error {
+		if _, err := keys.DecodeStoreCachedSettingsKey(k.Key); err != nil {
+			return errors.Errorf("engine cannot be bootstrapped, contains key:\n%s", k.String())
+		}
+		return nil
+	}
+	if eng.Separated() {
+		return CheckEngineKeys(ctx, eng.StateEngine(), check)
+	}
+	return CheckEngineKeys(ctx, eng.LogEngine(), check)
+}
+
+// CheckEngineKeys iterates the Engine that is expected to be mostly empty. Some
+// callers allow certain keys to be present in partially initialized engines, so
+// this information is given to the caller via a callback for validation.
+func CheckEngineKeys(
+	ctx context.Context, eng storage.Engine, allowed func(key storage.MVCCKey) error,
+) error {
+	// Disable engine access assertions since we are iterating the entirety of the
+	// engine without trying to target specific key subsets. The caller knows what
+	// they are doing.
+	eng = disableAccessAssertions(eng)
+
 	iter, err := eng.NewEngineIterator(ctx, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		UpperBound: roachpb.KeyMax,
@@ -106,6 +122,7 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 		return err
 	}
 
+	// NB: only MVCC point keys are possibly allowed in an empty engine.
 	getMVCCKey := func() (storage.MVCCKey, error) {
 		if _, hasRange := iter.HasPointAndRange(); hasRange {
 			bounds, err := iter.EngineRangeBounds()
@@ -114,27 +131,21 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 			}
 			return storage.MVCCKey{}, errors.Errorf("found mvcc range key: %s", bounds)
 		}
-		var k storage.EngineKey
-		k, err = iter.EngineKey()
+		k, err := iter.EngineKey()
 		if err != nil {
 			return storage.MVCCKey{}, err
-		}
-		if !k.IsMVCCKey() {
+		} else if !k.IsMVCCKey() {
 			return storage.MVCCKey{}, errors.Errorf("found non-mvcc key: %s", k)
 		}
 		return k.ToMVCCKey()
 	}
 
-	for valid {
-		var k storage.MVCCKey
-		if k, err = getMVCCKey(); err != nil {
+	for ; valid; valid, err = iter.NextEngineKey() {
+		if k, err := getMVCCKey(); err != nil {
+			return err
+		} else if err := allowed(k); err != nil {
 			return err
 		}
-		// Only allowed to find cached cluster settings on an uninitialized engine.
-		if _, err := keys.DecodeStoreCachedSettingsKey(k.Key); err != nil {
-			return errors.Errorf("engine cannot be bootstrapped, contains key:\n%s", k.String())
-		}
-		valid, err = iter.NextEngineKey()
 	}
 	return err
 }
@@ -227,19 +238,26 @@ func iterateRangeIDKeys(
 	return iterErr
 }
 
-// ReadStoreIdent reads the StoreIdent from the store.
-// It returns *NotBootstrappedError if the ident is missing (meaning that the
-// store needs to be bootstrapped).
-func ReadStoreIdent(ctx context.Context, eng storage.Engine) (roachpb.StoreIdent, error) {
+// ReadStoreIdent reads the StoreIdent. Returns *NotBootstrappedError if the
+// ident is missing, meaning that the store still needs to be bootstrapped.
+func ReadStoreIdent(ctx context.Context, r storage.Reader) (roachpb.StoreIdent, error) {
 	var ident roachpb.StoreIdent
 	ok, err := storage.MVCCGetProto(
-		ctx, eng, keys.StoreIdentKey(), hlc.Timestamp{}, &ident, storage.MVCCGetOptions{})
+		ctx, r, keys.StoreIdentKey(), hlc.Timestamp{}, &ident, storage.MVCCGetOptions{})
 	if err != nil {
 		return roachpb.StoreIdent{}, err
 	} else if !ok {
 		return roachpb.StoreIdent{}, &NotBootstrappedError{}
 	}
 	return ident, err
+}
+
+// WriteStoreIdent writes the StoreIdent to storage.
+func WriteStoreIdent(ctx context.Context, rw storage.ReadWriter, ident roachpb.StoreIdent) error {
+	return storage.MVCCPutProto(
+		ctx, rw, keys.StoreIdentKey(),
+		hlc.Timestamp{}, &ident, storage.MVCCWriteOptions{},
+	)
 }
 
 // IterateRangeDescriptorsFromDisk discovers the initialized replicas and calls
@@ -425,7 +443,7 @@ func (r Replica) ID() roachpb.FullReplicaID {
 
 // Load loads the state necessary to instantiate a replica in memory.
 func (r Replica) Load(
-	ctx context.Context, eng storage.Reader, storeID roachpb.StoreID,
+	ctx context.Context, stateRO StateRO, raftRO RaftRO, storeID roachpb.StoreID,
 ) (LoadedReplicaState, error) {
 	ls := LoadedReplicaState{
 		ReplicaID: r.ReplicaID,
@@ -433,13 +451,13 @@ func (r Replica) Load(
 	}
 	sl := MakeStateLoader(r.Desc.RangeID)
 	var err error
-	if ls.TruncState, err = sl.LoadRaftTruncatedState(ctx, eng); err != nil {
+	if ls.TruncState, err = sl.LoadRaftTruncatedState(ctx, raftRO); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.LastEntryID, err = sl.LoadLastEntryID(ctx, eng, ls.TruncState); err != nil {
+	if ls.LastEntryID, err = sl.LoadLastEntryID(ctx, raftRO, ls.TruncState); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.ReplState, err = sl.Load(ctx, eng, r.Desc); err != nil {
+	if ls.ReplState, err = sl.Load(ctx, stateRO, r.Desc); err != nil {
 		return LoadedReplicaState{}, err
 	}
 
@@ -483,7 +501,7 @@ func (m replicaMap) setDesc(rangeID roachpb.RangeID, desc roachpb.RangeDescripto
 	return nil
 }
 
-func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
+func loadReplicas(ctx context.Context, eng Engines) ([]Replica, error) {
 	s := replicaMap{}
 
 	// INVARIANT: the latest visible committed version of the RangeDescriptor
@@ -494,7 +512,7 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	{
 		var lastDesc roachpb.RangeDescriptor
 		if err := IterateRangeDescriptorsFromDisk(
-			ctx, eng, func(desc roachpb.RangeDescriptor) error {
+			ctx, eng.StateEngine(), func(desc roachpb.RangeDescriptor) error {
 				if lastDesc.RangeID != 0 && desc.StartKey.Less(lastDesc.EndKey) {
 					return errors.AssertionFailedf("overlapping descriptors %s and %s", lastDesc, desc)
 				}
@@ -522,7 +540,34 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	// entire raft state (i.e. HardState, TruncatedState, Log).
 	logEvery := log.Every(10 * time.Second)
 	var i int
-	if err := iterateRangeIDKeys(ctx, eng, func(id roachpb.RangeID, get readKeyFn) error {
+
+	// If engines are separated, scan the LogEngine to learn the HardState of each
+	// replica. Otherwise, it will be loaded as part of the other loop below.
+	if eng.Separated() {
+		logEng := disableAccessAssertions(eng.LogEngine())
+		if err := iterateRangeIDKeys(ctx, logEng, func(id roachpb.RangeID, get readKeyFn) error {
+			if logEvery.ShouldLog() && i > 0 { // only log if slow
+				log.KvExec.Infof(ctx, "loaded raft state for %d/%d replicas", i, len(s))
+			}
+			i++
+			var hs raftpb.HardState
+			if ok, err := get(keys.RaftHardStateKey(id), &hs); err != nil {
+				return err
+			} else if ok {
+				s.setHardState(id, hs)
+			}
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+		log.KvExec.Infof(ctx, "loaded raft state for %d/%d replicas", len(s), len(s))
+		i = 0 // reset counter for the second scan
+	}
+
+	// Scan the StateEngine to learn RangeTombstone and RaftReplicaID keys. If
+	// engines are not separated, also read the HardState keys.
+	stateEng := disableAccessAssertions(eng.StateEngine())
+	if err := iterateRangeIDKeys(ctx, stateEng, func(id roachpb.RangeID, get readKeyFn) error {
 		if logEvery.ShouldLog() && i > 0 { // only log if slow
 			log.KvExec.Infof(ctx, "loaded state for %d/%d replicas", i, len(s))
 		}
@@ -536,11 +581,13 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 			ts = kvserverpb.RangeTombstone{} // just in case it was mutated
 		}
 		// NB: the keys must be requested in sorted order here.
-		var hs raftpb.HardState
-		if ok, err := get(buf.RaftHardStateKey(), &hs); err != nil {
-			return err
-		} else if ok {
-			s.setHardState(id, hs)
+		if !eng.Separated() {
+			var hs raftpb.HardState
+			if ok, err := get(buf.RaftHardStateKey(), &hs); err != nil {
+				return err
+			} else if ok {
+				s.setHardState(id, hs)
+			}
 		}
 		// NB: the keys must be requested in sorted order here.
 		var rID kvserverpb.RaftReplicaID
@@ -563,13 +610,14 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	return sl, nil
 }
 
-// LoadAndReconcileReplicas loads the Replicas present on this
-// store. It reconciles inconsistent state and runs validation checks.
-// The returned slice is sorted by ReplicaID.
+// LoadAndReconcileReplicas loads the Replicas present on this store from the
+// engine(s). It reconciles inconsistent state and runs validation checks. The
+// returned slice is sorted by ReplicaID.
 //
 // TODO(sep-raft-log): consider a callback-visitor pattern here.
-func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
-	ident, err := ReadStoreIdent(ctx, eng)
+// TODO(sep-raft-log): implement WAG replay.
+func LoadAndReconcileReplicas(ctx context.Context, eng Engines) ([]Replica, error) {
+	ident, err := ReadStoreIdent(ctx, eng.LogEngine())
 	if err != nil {
 		return nil, err
 	}
