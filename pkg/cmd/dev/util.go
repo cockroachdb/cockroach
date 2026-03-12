@@ -211,6 +211,16 @@ func logCommand(cmd string, args ...string) {
 	log.Printf("$ %s", shellescape.QuoteCommand(fullArgs))
 }
 
+// normalizePackage strips Bazel-style prefixes ("//", "./") and trailing
+// slashes from a package path, returning a clean relative path like
+// "pkg/sql/parser".
+func normalizePackage(pkg string) string {
+	pkg = strings.TrimPrefix(pkg, "//")
+	pkg = strings.TrimPrefix(pkg, "./")
+	pkg = strings.TrimRight(pkg, "/")
+	return pkg
+}
+
 func sendBepDataToBeaverHubIfNeeded(bepFilepath string) error {
 	// Check if a BEP file exists.
 	if _, err := os.Stat(bepFilepath); err != nil {

@@ -12,8 +12,6 @@ import (
 	"go/token"
 	"strings"
 	"time"
-
-	"github.com/cockroachdb/errors"
 )
 
 type (
@@ -179,7 +177,7 @@ func analyzeBenchmarkArgs(fn *ast.FuncDecl) (RunArgs, CompareArgs, error) {
 			kv := strings.SplitN(part, "=", 2)
 			if len(kv) != 2 {
 				return RunArgs{}, CompareArgs{},
-					errors.Newf("malformed key-value pair in %s: %q", fn.Name.Name, part)
+					fmt.Errorf("malformed key-value pair in %s: %q", fn.Name.Name, part)
 			}
 			key := strings.TrimSpace(kv[0])
 			val := strings.TrimSpace(kv[1])
@@ -188,7 +186,7 @@ func analyzeBenchmarkArgs(fn *ast.FuncDecl) (RunArgs, CompareArgs, error) {
 				var count int
 				if n, err := fmt.Sscanf(val, "%d", &count); err != nil || n != 1 {
 					return RunArgs{}, CompareArgs{},
-						errors.Newf("invalid count value in %s: %q", fn.Name.Name, val)
+						fmt.Errorf("invalid count value in %s: %q", fn.Name.Name, val)
 				}
 				runArgs.Count = count
 			case "benchtime":
@@ -197,7 +195,7 @@ func analyzeBenchmarkArgs(fn *ast.FuncDecl) (RunArgs, CompareArgs, error) {
 				d, err := time.ParseDuration(val)
 				if err != nil {
 					return RunArgs{}, CompareArgs{},
-						errors.Wrapf(err, "invalid timeout value in %s", fn.Name.Name)
+						fmt.Errorf("invalid timeout value in %s: %w", fn.Name.Name, err)
 				}
 				runArgs.Timeout = d
 			case "suite":
@@ -208,7 +206,7 @@ func analyzeBenchmarkArgs(fn *ast.FuncDecl) (RunArgs, CompareArgs, error) {
 					runArgs.Suite = SuiteManual
 				default:
 					return RunArgs{}, CompareArgs{},
-						errors.Newf("invalid suite value in %s: %q", fn.Name.Name, val)
+						fmt.Errorf("invalid suite value in %s: %q", fn.Name.Name, val)
 				}
 			case "post":
 				switch val {
@@ -220,22 +218,22 @@ func analyzeBenchmarkArgs(fn *ast.FuncDecl) (RunArgs, CompareArgs, error) {
 					compareArgs.PostIssue = PostIssueBlocker
 				default:
 					return RunArgs{}, CompareArgs{},
-						errors.Newf("invalid post issue value in %s: %q", fn.Name.Name, val)
+						fmt.Errorf("invalid post issue value in %s: %q", fn.Name.Name, val)
 				}
 			case "threshold":
 				var threshold float64
 				if n, err := fmt.Sscanf(val, "%f", &threshold); err != nil || n != 1 {
 					return RunArgs{}, CompareArgs{},
-						errors.Newf("invalid threshold value in %s: %q", fn.Name.Name, val)
+						fmt.Errorf("invalid threshold value in %s: %q", fn.Name.Name, val)
 				}
 				if threshold < 0 || threshold > 1.0 {
 					return RunArgs{}, CompareArgs{},
-						errors.Newf("threshold must be in range [0.0, 1.0] in %s: %f", fn.Name.Name, threshold)
+						fmt.Errorf("threshold must be in range [0.0, 1.0] in %s: %f", fn.Name.Name, threshold)
 				}
 				compareArgs.Threshold = threshold
 			default:
 				return RunArgs{}, CompareArgs{},
-					errors.Newf("unknown benchmark config key in %s: %q", fn.Name.Name, key)
+					fmt.Errorf("unknown benchmark config key in %s: %q", fn.Name.Name, key)
 			}
 		}
 	}
