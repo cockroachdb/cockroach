@@ -10,6 +10,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -72,6 +73,10 @@ const DestroyReplicaTODO = 0
 type DestroyReplicaInfo struct {
 	// FullReplicaID identifies the replica on its store.
 	roachpb.FullReplicaID
+	// RaftAppliedIndex is the replica's last applied raft log index before
+	// destruction. Used for constructing WAG dependency nodes. Zero for
+	// uninitialized replicas that never applied any log entries.
+	RaftAppliedIndex kvpb.RaftIndex
 	// Keys is the user key span of this replica, taken from its RangeDescriptor.
 	// Non-empty iff the replica is initialized.
 	Keys roachpb.RSpan
