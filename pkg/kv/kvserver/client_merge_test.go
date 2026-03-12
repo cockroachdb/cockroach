@@ -4250,8 +4250,8 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			}
 
 			// Verify that the sets of keys in store1 and store3 are identical.
-			storeKeys1 := getKeySet(store1.TODOEngine())
-			storeKeys3 := getKeySet(store3.TODOEngine())
+			storeKeys1 := getKeySet(store1.StateEngine())
+			storeKeys3 := getKeySet(store3.StateEngine())
 			for k := range storeKeys1 {
 				if _, ok := storeKeys3[k]; !ok {
 					return fmt.Errorf("store3 missing key %s", roachpb.Key(k))

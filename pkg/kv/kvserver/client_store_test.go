@@ -93,7 +93,7 @@ func TestStoreRaftReplicaID(t *testing.T) {
 	require.NoError(t, err)
 	repl, err := store.GetReplica(desc.RangeID)
 	require.NoError(t, err)
-	replicaID, err := kvstorage.MakeStateLoader(desc.RangeID).LoadRaftReplicaID(ctx, store.TODOEngine())
+	replicaID, err := kvstorage.MakeStateLoader(desc.RangeID).LoadRaftReplicaID(ctx, store.StateEngine())
 	require.NoError(t, err)
 	require.Equal(t, repl.ReplicaID(), replicaID.ReplicaID)
 
