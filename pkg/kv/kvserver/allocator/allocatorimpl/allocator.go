@@ -2831,11 +2831,14 @@ func (t TransferLeaseDecision) String() string {
 }
 
 // CountBasedRebalancingDisabled returns true if count-based rebalancing should
-// be disabled. Count-based rebalancing is disabled only when
-// LBRebalancingMultiMetricOnly mode is active. To enable both multi-metric and
-// count-based rebalancing, use LBRebalancingMultiMetricAndCount mode instead.
+// be disabled. Count-based rebalancing is disabled when
+// LBRebalancingMultiMetricOnly or LBRebalancingMultiMetricRepairAndRebalance
+// mode is active. To enable both multi-metric and count-based rebalancing, use
+// LBRebalancingMultiMetricAndCount mode instead.
 func (a *Allocator) CountBasedRebalancingDisabled() bool {
-	return kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV) == kvserverbase.LBRebalancingMultiMetricOnly
+	mode := kvserverbase.LoadBasedRebalancingMode.Get(&a.st.SV)
+	return mode == kvserverbase.LBRebalancingMultiMetricOnly ||
+		mode == kvserverbase.LBRebalancingMultiMetricRepairAndRebalance
 }
 
 // ShouldTransferLease returns true if the specified store is overfull in terms

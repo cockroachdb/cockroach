@@ -104,6 +104,10 @@ func newLeaseQueue(store *Store, allocator allocatorimpl.Allocator) *leaseQueue 
 func (lq *leaseQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
 ) (shouldQueue bool, priority float64) {
+	if kvserverbase.LoadBasedRebalancingModeIsMMARepairAndRebalance(
+		&lq.store.cfg.Settings.SV) {
+		return false, 0
+	}
 	conf, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
 	if err != nil {
 		return false, 0
@@ -126,6 +130,10 @@ func (lq *leaseQueue) shouldQueue(
 func (lq *leaseQueue) process(
 	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
+	if kvserverbase.LoadBasedRebalancingModeIsMMARepairAndRebalance(
+		&lq.store.cfg.Settings.SV) {
+		return false, nil
+	}
 	if tokenErr := repl.allocatorToken.TryAcquire(ctx, lq.name); tokenErr != nil {
 		return false, tokenErr
 	}

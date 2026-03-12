@@ -685,6 +685,10 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 func (rq *replicateQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
 ) (shouldQueue bool, priority float64) {
+	if kvserverbase.LoadBasedRebalancingModeIsMMARepairAndRebalance(
+		&rq.store.cfg.Settings.SV) {
+		return false, 0
+	}
 	// TODO(baptist): Change to Replica.SpanConfig() once the refactor is done to
 	// have that use the confReader.
 	conf, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
@@ -705,6 +709,10 @@ func (rq *replicateQueue) shouldQueue(
 func (rq *replicateQueue) process(
 	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader, priorityAtEnqueue float64,
 ) (processed bool, err error) {
+	if kvserverbase.LoadBasedRebalancingModeIsMMARepairAndRebalance(
+		&rq.store.cfg.Settings.SV) {
+		return false, nil
+	}
 	if tokenErr := repl.allocatorToken.TryAcquire(ctx, rq.name); tokenErr != nil {
 		log.KvDistribution.VEventf(ctx,
 			1, "unable to acquire allocator token to process range: %v", tokenErr)
