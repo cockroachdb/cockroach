@@ -55,6 +55,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 		joinAddr          string
 		sqlPoolMemorySize int64
 		cacheSize         int64
+		useDRPC           bool
 
 		expected base.TestServerArgs
 	}{
@@ -114,6 +115,36 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				ExternalIODir: "nodelocal/n3",
 			},
 		},
+		{
+			serverIdx:         0,
+			joinAddr:          "127.0.0.1",
+			sqlPoolMemorySize: 2 << 10,
+			cacheSize:         1 << 10,
+			useDRPC:           true,
+			expected: base.TestServerArgs{
+				DefaultTenantName:             "demoapp",
+				DefaultTestTenant:             base.TestControlsTenantsExplicitly,
+				PartOfCluster:                 true,
+				JoinAddr:                      "127.0.0.1",
+				DisableTLSForHTTP:             true,
+				Addr:                          "127.0.0.1:1334",
+				SQLAddr:                       "127.0.0.1:1234",
+				HTTPAddr:                      "127.0.0.1:4567",
+				ApplicationInternalRPCPortMin: 1332,
+				ApplicationInternalRPCPortMax: 2356,
+				SQLMemoryPoolSize:             2 << 10,
+				CacheSize:                     1 << 10,
+				NoAutoInitializeCluster:       true,
+				EnableDemoLoginEndpoint:       true,
+				UseDRPC:                       true,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						StickyVFSRegistry: stickyVFSRegistry,
+					},
+				},
+				ExternalIODir: "nodelocal/n1",
+			},
+		},
 	}
 
 	for i, tc := range testCases {
@@ -123,6 +154,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			demoCtx.CacheSize = tc.cacheSize
 			demoCtx.SQLPort = 1234
 			demoCtx.HTTPPort = 4567
+			demoCtx.UseDRPC = tc.useDRPC
 			actual := demoCtx.testServerArgsForTransientCluster(unixSocketDetails{}, tc.serverIdx, tc.joinAddr, "", stickyVFSRegistry)
 			stopper := actual.Stopper
 			defer stopper.Stop(context.Background())

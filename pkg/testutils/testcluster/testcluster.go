@@ -83,7 +83,7 @@ type TestCluster struct {
 	clusterArgs base.TestClusterArgs
 
 	defaultTestTenantOptions base.DefaultTestTenantOptions
-	defaultDRPCOption        base.DefaultTestDRPCOption
+	drpcEnabled              bool
 
 	t serverutils.TestFataler
 }
@@ -133,7 +133,7 @@ func (tc *TestCluster) StartedDefaultTestTenant() bool {
 // IsDRPCEnabled returns whether DRPC is enabled for inter-node communication
 // in this cluster.
 func (tc *TestCluster) IsDRPCEnabled() bool {
-	return tc.defaultDRPCOption == base.TestDRPCEnabled
+	return tc.drpcEnabled
 }
 
 // ApplicationLayer calls .ApplicationLayer() on the ith server in
@@ -387,7 +387,7 @@ func NewTestCluster(
 	// by the top-level ServerArgs.
 	defaultDRPCOption := tc.clusterArgs.ServerArgs.DefaultDRPCOption
 	tc.validateDefaultDRPCOption(t, nodes, defaultDRPCOption)
-	tc.defaultDRPCOption = serverutils.ShouldEnableDRPC(context.Background(), t, defaultDRPCOption)
+	tc.drpcEnabled = serverutils.ShouldEnableDRPC(context.Background(), t, defaultDRPCOption)
 
 	var firstListener net.Listener
 	for i := 0; i < nodes; i++ {
@@ -720,7 +720,7 @@ func (tc *TestCluster) AddServer(
 	// Inject the decisions that were made about test configuration
 	// into this new server's configuration.
 	serverArgs.DefaultTestTenant = tc.defaultTestTenantOptions
-	serverArgs.DefaultDRPCOption = tc.defaultDRPCOption
+	serverArgs.UseDRPC = tc.drpcEnabled
 
 	s, err := serverutils.NewServer(serverArgs)
 	if err != nil {
