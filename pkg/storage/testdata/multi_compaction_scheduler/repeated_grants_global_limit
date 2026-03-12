@@ -1,0 +1,79 @@
+# Repeated grants hitting global limit.
+# Both engines have allowed=3, accept-count=5. max-concurrency=3.
+# tryGrant should grant 3 total. All go to state because log's
+# deprioritized score (0.5) < state's score (1.0).
+
+init max-concurrency=3 deprioritization=0.5 log-allowed=3 state-allowed=3
+----
+
+set-allowed engine=log allowed=0
+----
+
+set-allowed engine=state allowed=0
+----
+
+set-waiting engine=log score=1.0 accept-count=5
+----
+
+set-waiting engine=state score=1.0 accept-count=5
+----
+
+try-schedule engine=log
+----
+not granted
+
+try-schedule engine=state
+----
+not granted
+
+set-allowed engine=log allowed=3
+----
+
+set-allowed engine=state allowed=3
+----
+
+tick
+----
+log: GetWaitingCompaction
+state: GetWaitingCompaction
+state: Schedule => accepted: compaction index 0
+log: GetWaitingCompaction
+state: GetWaitingCompaction
+state: Schedule => accepted: compaction index 1
+log: GetWaitingCompaction
+state: GetWaitingCompaction
+state: Schedule => accepted: compaction index 2
+
+print-state
+----
+totalRunning: 3
+log: running=0 waiting=true registered=true
+state: running=3 waiting=true registered=true
+
+# Clean up.
+
+clear-waiting engine=log
+----
+
+clear-waiting engine=state
+----
+
+compaction-done engine=state idx=0
+----
+log: GetWaitingCompaction
+state: GetWaitingCompaction
+
+compaction-done engine=state idx=1
+----
+
+compaction-done engine=state idx=2
+----
+
+print-state
+----
+totalRunning: 0
+log: running=0 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+close
+----
