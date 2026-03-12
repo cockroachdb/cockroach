@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -510,7 +511,13 @@ func TestMuxRangeFeedMetricsManagement(t *testing.T) {
 		return skipSet.stuck.Contains(k)
 	}
 
-	frontierAdvanced := make(chan struct{}, 1)
+	var closeOnce sync.Once
+	frontierAdvanced := make(chan struct{})
+	frontierHasAdvanced := func() {
+		closeOnce.Do(func() {
+			close(frontierAdvanced)
+		})
+	}
 	ignoreValues := func(event kvcoord.RangeFeedMessage) {}
 	errCh, closeFeed := rangeFeed(ts.DistSenderI(), fooSpan, startTime, ignoreValues,
 		kvcoord.TestingWithRangeFeedMetrics(&metrics),
@@ -549,10 +556,7 @@ func TestMuxRangeFeedMetricsManagement(t *testing.T) {
 							return false, err
 						}
 						if advanced {
-							select {
-							case frontierAdvanced <- struct{}{}:
-							default:
-							}
+							defer frontierHasAdvanced()
 						}
 
 						if numCatchupBlocked.Add(1) <= numCatchupToBlock {
@@ -571,8 +575,9 @@ func TestMuxRangeFeedMetricsManagement(t *testing.T) {
 			}))
 	defer closeFeed()
 
-	// Wait for the test frontier to advance.  Once it advances,
-	// we know the rangefeed is started, all ranges are running (even if some of them are blocked).
+	// Wait for the test frontier to advance. Once it advances, we know the
+	// rangefeed is started, all ranges are running (even if some of them are
+	// blocked).
 	channelWaitWithTimeout(t, frontierAdvanced, errCh)
 
 	// At this point, we know the rangefeed for all ranges are running.
@@ -581,8 +586,24 @@ func TestMuxRangeFeedMetricsManagement(t *testing.T) {
 	// All ranges expected to be local.
 	require.EqualValues(t, numRanges, metrics.RangefeedLocalRanges.Value(), frontier.String())
 
-	// We also know that we have blocked numCatchupToBlock ranges in their catchup scan.
-	require.EqualValues(t, numCatchupToBlock, metrics.RangefeedCatchupRanges.Value())
+	// We also know that we have blocked numCatchupToBlock ranges from emitting
+	// the checkpoint that would allow them to mark their catch-up scan as done.
+	//
+	// We use succeed soon here because we could observe extra ranges in catch-up
+	// scan if our testing hook _just_ observed the checkpoint such that we were
+	// unblocked from channelWaitWithTimeout above but the metric hasn't been
+	// decremented yet.
+	//
+	// We should never observed fewer ranges in catchup, so test for that case
+	// without waiting.
+	require.GreaterOrEqual(t, metrics.RangefeedCatchupRanges.Value(), numCatchupToBlock)
+	testutils.SucceedsSoon(t, func() error {
+		if count := metrics.RangefeedCatchupRanges.Value(); count != numCatchupToBlock {
+			return errors.Errorf("expected %d catchup ranges, got %d",
+				numCatchupToBlock, count)
+		}
+		return nil
+	})
 }
 
 // TestMuxRangefeedRangeObserver ensures the kvcoord.WithRangeObserver option
