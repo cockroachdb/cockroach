@@ -13,59 +13,59 @@ prototyping artifacts and will NOT be checked in.
 
 ---
 
-## PR 1: Foundation
+## PR 1: Foundation — [#165413](https://github.com/cockroachdb/cockroach/pull/165413) ✅
 
-**Content:**
-- `RepairAction` enum (all 14 values + `RepairPending`, `RepairSkipped`,
-  `NoRepairNeeded`) with priority ordering.
-- `computeRepairAction()` skeleton — the decision tree that maps range state to
-  a repair action. Returns stubs / `NoRepairNeeded` for all actions initially.
-- `repairRanges` index on `clusterState` + `updateRepairAction()` maintenance
-  (called from `processRangeMsg`, `pendingChangeEnacted`, `undoPendingChange`,
-  `addPendingRangeChange`, `updateStoreStatuses`, range removal).
-- DSL commands (`repair-needed`, `repair`) as stubs in `cluster_state_test.go`.
-- Constraint methods moved from test file to production code (`constraint.go`):
-  these are a prerequisite for multiple repair actions later.
-- Non-voter constraint helpers moved to production code.
+**Commits:**
+1. `allocator/mmaprototype: move constraint helpers to production code` —
+   moved `voterConstraintCount`, `constraintCount`, `constraintsForAddingVoter`,
+   `candidatesToConvertFromNonVoterToVoter`, and related methods from
+   `constraint_unused_test.go` to `constraint.go`.
+2. `allocator/mmaprototype: add RepairAction enum and decision tree` —
+   `RepairAction` enum (14 action values + `RepairSkipped`, `RepairPending`,
+   `NoRepairNeeded`, `numRepairActions`), `computeRepairAction()` decision tree,
+   `go:generate stringer`, `SafeFormat`.
+3. `allocator/mmaprototype: wire repair index into cluster state` —
+   `repairRanges` index on `clusterState`, `updateRepairAction()` called from
+   `processRangeMsg`, `pendingChangeEnacted`, `undoPendingChange`,
+   `addPendingRangeChange`, `updateStoreStatuses`, range removal. DSL commands
+   `repair-needed` and `repair` (stub). Six testdata files covering tracking
+   scenarios.
 
 **Files touched:**
-`cluster_state.go`, `cluster_state_repair.go` (enum + skeleton only),
-`cluster_state_test.go`, `constraint.go`, `constraint_unused_test.go`.
-
-**Review focus:** Does this action space make sense? Is the priority ordering
-right? Is the indexing/maintenance approach correct? Are the constraint method
-signatures production-ready?
-
-**~LOC:** 300–400
+`cluster_state.go`, `cluster_state_repair.go`, `cluster_state_test.go`,
+`constraint.go`, `constraint_unused_test.go`, `allocator_state.go`,
+`repairaction_string.go`, `BUILD.bazel`, `stringer.bzl`, testdata files.
 
 ---
 
-## PR 2: AddVoter + repair orchestration
+## PR 2: AddVoter + repair orchestration — [#165423](https://github.com/cockroachdb/cockroach/pull/165423) ✅
 
-**Content:**
-- `repair()` method on `rebalanceEnv` — iterates `repairRanges` by priority,
-  calls per-action repair functions, emits pending changes.
-- `IncludeRepair` in `ChangeOptions`; `ComputeChanges` calls `repair()` before
-  `rebalanceStores()` when set.
-- Full `repairAddVoter()` implementation, including non-voter-to-voter
-  promotion path.
-- `pickStoreByDiversity` generalized to accept a `diversityScorer` function
-  parameter (needed by AddVoter and reused later by removal/swap).
-- Random tiebreaking in diversity picker.
-- `RepairPending` state and pending-change suppression logic.
-- DSL tests for `repair_add_voter`, `repair_promote_nonvoter`.
-- One simple ASIM upreplication test to prove the wiring works end-to-end.
+**Commits:**
+1. `allocator/mmaprototype: add repair orchestration loop` —
+   `repair()` method on `rebalanceEnv` iterating `repairRanges` by priority,
+   filtering to leaseholder ranges, dispatching to per-action functions (all
+   actions except `AddVoter` hit default "not yet implemented" log).
+   `IncludeRepair` on `ChangeOptions`; `ComputeChanges` calls `repair()` before
+   `rebalanceStores()` when set. `originMMARepair` `ChangeOrigin` enum value.
+   `AdjustPendingChangeDisposition` updated to handle `originMMARepair`
+   (temporarily uses rebalance counters). DSL `repair` command wired up.
+2. `allocator/mmaprototype: implement repairAddVoter with non-voter promotion` —
+   full `repairAddVoter()` with two code paths: (a) promote existing non-voter
+   to voter via `promoteNonVoterToVoter()` using `MakeReplicaTypeChange`, (b)
+   add new voter on constraint-satisfying, diversity-maximizing store. Helpers:
+   `enactRepair`, `filterAddCandidates`, `pickStoreByDiversity` (with reservoir
+   sampling for tie-breaking), `replicaStateForStore`, `diversityScorer` type,
+   `isLeaseholderOnStore`. Two testdata files: `repair_add_voter`,
+   `repair_promote_nonvoter`.
+3. `allocator/mmaprototype: lift mmaid tagging to ComputeChanges` —
+   `mmaid` increment and logtag moved from `rebalanceStores()`/`repair()` into
+   `ComputeChanges` so both phases share the same mmaid context.
 
 **Files touched:**
 `cluster_state_repair.go`, `allocator.go`, `allocator_state.go`,
-`cluster_state_test.go`, testdata files, ASIM test files.
-
-**Review focus:** Is the orchestration right? Currently greedy on highest
-priority — is that correct, or should it be weighted/round-robin? How does
-pending-change suppression work (any pending change on a range → skip repair)?
-Is AddVoter correct? Is the diversity picker generalization clean?
-
-**~LOC:** 400–500
+`cluster_state.go`, `cluster_state_rebalance_stores.go`,
+`cluster_state_test.go`, `mma_metrics.go`, `repairaction_string.go`,
+testdata files.
 
 ---
 
@@ -73,34 +73,44 @@ Is AddVoter correct? Is the diversity picker generalization clean?
 
 **Content:**
 - `LBRebalancingMultiMetricRepairAndRebalance` mode added to
-  `LoadBasedRebalancingMode` cluster setting.
-- Setting validation guarded by `buildutil.IsCrdbTest` so this mode cannot be
-  enabled outside of tests.
+  `LoadBasedRebalancingMode` cluster setting in `kvserverbase/base.go`.
+  `LoadBasedRebalancingModeIsMMA` updated to include the new mode. New helper
+  `LoadBasedRebalancingModeIsMMARepairAndRebalance`.
 - Replicate queue `shouldQueue`/`process` return immediately when mode active.
 - Lease queue `shouldQueue`/`process` return immediately when mode active.
-- `rebalanceUntilStable()` extracted from `mmaStoreRebalancer.run()`.
+- `CountBasedRebalancingDisabled()` returns `true` for new mode.
+- `rebalanceUntilStable()` extracted from `mmaStoreRebalancer.run()` — loops
+  calling `rebalance()` until no changes are computed.
 - `ForceReplicationScanAndProcess` delegates to
-  `mmaStoreRebalancer.rebalanceUntilStable()` when mode active
-  (fixes `WaitForFullReplication` in tests).
+  `mmaStoreRebalancer.rebalanceUntilStable()` when mode active (fixes
+  `WaitForFullReplication` in tests).
 - `IsLeaveJoint()` on `ExternalRangeChange`; leave-joint changes routed through
   `maybeLeaveAtomicChangeReplicas` instead of `changeReplicasImpl`.
-- Repair metrics (`mma_metrics.go`): success/failure counters for repair lease
-  and replica changes.
-- `originMMARepair` tracking in `AdjustPendingChangeDisposition`.
-- `TestMMAUpreplication` integration test: end-to-end upreplication from 1→3
-  voters under MMA.
+- Repair metrics in `mma_metrics.go`: `RepairReplicaChange{Success,Failure}`,
+  `RepairLeaseChange{Success,Failure}` counters. Replaces the temporary
+  rebalance-counter routing from PR 2.
+- `originMMARepair` case in `AdjustPendingChangeDisposition` routes to
+  dedicated repair metrics.
+- `TestMMAUpreplication` integration test: 3-node cluster, scratch range goes
+  from 1→3 voters entirely through MMA repair.
+- ASIM wiring: `IncludeRepair` set in ASIM's `mmaStoreRebalancer` based on
+  mode check, queue `Tick()` methods check enabled flags, "mma-repair" config
+  added to datadriven simulation tests.
 
 **Files touched:**
 `kvserverbase/base.go`, `replicate_queue.go`, `lease_queue.go`,
-`mma_store_rebalancer.go`, `queue_helpers_testutil.go`, `client_mma_test.go`,
-`mma_metrics.go`, `allocator_state.go`, `range_change.go`.
+`allocator/allocatorimpl/allocator.go`, `mma_store_rebalancer.go`,
+`queue_helpers_testutil.go`, `client_mma_test.go`, `mma_metrics.go`,
+`allocator_state.go`, `range_change.go`,
+`asim/queue/replicate_queue.go`, `asim/queue/lease_queue.go`,
+`asim/state/impl.go`, `asim/mmaintegration/mma_store_rebalancer.go`,
+`asim/tests/datadriven_simulation_test.go`.
 
 **Review focus:** Is this production integration safe? Are queue disabling
-semantics correct? Is the `buildutil.IsCrdbTest` guard sufficient? Is the
-`IsLeaveJoint` routing correct? Does `ForceReplicationScanAndProcess` delegation
-break any existing tests?
+semantics correct? Is the `IsLeaveJoint` routing correct? Does
+`ForceReplicationScanAndProcess` delegation break any existing tests?
 
-**~LOC:** 300–400
+**~LOC:** 400–500
 
 ---
 
@@ -113,9 +123,8 @@ break any existing tests?
 - `repairRemoveNonVoter()` — removes over-replicated non-voters.
 - `repairRemoveLearner()` — cleans up orphaned learners.
 - `repairFinalizeAtomicReplicationChange()` — emits leave-joint change.
-- Helper extractions that emerge from the patterns: `enactRepair`,
-  `filterAddCandidates`, `pickBestRemovalCandidate`, `excludeLeaseholder`,
-  `replicaStateForStore`.
+- Helper extractions that emerge from the patterns: `pickBestRemovalCandidate`,
+  `excludeLeaseholder`.
 - DSL tests for each action.
 - ASIM tests for each action.
 
@@ -139,9 +148,8 @@ the over-replication detection right? Are the helper extractions clean?
 - `repairReplaceDeadNonVoter()` — same for non-voters.
 - `repairReplaceDecommissioningVoter()` — replaces decommissioning voter.
 - `repairReplaceDecommissioningNonVoter()` — same for non-voters.
-- `repairReplace()` unified helper that merges the four Replace functions
+- `repairReplaceReplica()` unified helper that merges the four Replace functions
   (remove dead/decom replica + add replacement in one operation).
-- Quorum-loss detection: if `aliveVoters < quorum`, return `RepairSkipped`.
 - DSL tests for all four actions.
 - ASIM tests for all four actions + `repair_range_unavailable` scenario.
 
@@ -150,7 +158,7 @@ the over-replication detection right? Are the helper extractions clean?
 
 **Review focus:** Is quorum-loss detection correct (off-by-one risk)? Is the
 replacement store selection right (diversity + constraint satisfaction)? Does the
-unified `repairReplace` helper correctly handle all four cases? Is the
+unified `repairReplaceReplica` helper correctly handle all four cases? Is the
 unavailable-range skipping logic sound?
 
 **~LOC:** 300–400
