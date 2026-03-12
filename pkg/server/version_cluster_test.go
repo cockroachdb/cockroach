@@ -294,21 +294,14 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	}
 
 	// Set CLUSTER SETTING cluster.preserve_downgrade_option to oldVersion to prevent upgrade.
-	if err := tc.setDowngrade(0, oldVersion.String()); err != nil {
-		t.Fatalf("error setting CLUSTER SETTING cluster.preserve_downgrade_option: %s", err)
-	}
+	require.NoError(t, tc.setDowngrade(0, oldVersion.String()))
 	close(disableUpgradeCh)
 
 	// Check the cluster version is still oldVersion.
-	curVersion := tc.getVersionFromSelect(0)
-	if curVersion != oldVersion.String() {
-		t.Fatalf("cluster version should still be %s, but got %s", oldVersion, curVersion)
-	}
+	require.Equal(t, oldVersion.String(), tc.getVersionFromSelect(0))
 
 	// Reset cluster.preserve_downgrade_option to enable auto upgrade.
-	if err := tc.resetDowngrade(0); err != nil {
-		t.Fatalf("error resetting CLUSTER SETTING cluster.preserve_downgrade_option: %s", err)
-	}
+	require.NoError(t, tc.resetDowngrade(0))
 
 	// Check the cluster version is bumped to newVersion.
 	testutils.SucceedsWithin(t, func() error {
@@ -317,7 +310,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 		}
 		return nil
 	}, 3*time.Minute)
-	curVersion = tc.getVersionFromSelect(0)
+	curVersion := tc.getVersionFromSelect(0)
 	isNoopUpdate := curVersion == newVersion.String()
 
 	testutils.SucceedsWithin(t, func() error {
@@ -328,7 +321,6 @@ func TestClusterVersionUpgrade(t *testing.T) {
 			if isActive := v.IsActiveVersion(newVersion); isActive != wantActive {
 				return errors.Errorf("%d: v%s active=%t (wanted %t)", i, newVersion, isActive, wantActive)
 			}
-
 			if tableV, curV := tc.getVersionFromSelect(i), v.String(); tableV != curV {
 				return errors.Errorf("%d: read v%s from table, v%s from setting", i, tableV, curV)
 			}
@@ -374,15 +366,11 @@ func TestClusterVersionUpgrade(t *testing.T) {
 
 	// Since the wrapped version setting exposes the new versions, it must
 	// definitely be present on all stores on the first try.
-	if err := tc.Servers[1].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+	require.NoError(t, tc.Servers[1].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 		cv := s.TODOEngine().MinVersion()
-		if act := cv.String(); act != exp {
-			t.Fatalf("%s: %s persisted, but should be %s", s, act, exp)
-		}
+		require.Equal(t, exp, cv.String())
 		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
+	}))
 }
 
 // Test that, after cluster bootstrap, the different ways of getting the cluster
