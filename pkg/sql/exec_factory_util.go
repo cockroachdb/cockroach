@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 func constructPlan(
@@ -293,13 +294,46 @@ func constructVirtualScan(
 		// We shouldn't have allowed SELECT FOR UPDATE for a virtual table.
 		return nil, errors.AssertionFailedf("locking cannot be used with virtual table")
 	}
-	if needed := params.NeededCols; needed.Len() != len(columns) {
+
+	// Check if the tableoid system column is needed. The tableoid ordinal is
+	// after all public columns + the dummy PK column. Since the virtual table
+	// generator doesn't produce system columns, we handle tableoid separately
+	// by rendering it as a constant after the scan.
+	tableoidOrd := len(columns) + 1 // +1 for dummy PK
+	needTableoid := params.NeededCols.Contains(tableoidOrd)
+	needed := params.NeededCols.Copy()
+	needed.Remove(tableoidOrd)
+
+	if needed.Len() != len(columns) {
 		// We are selecting a subset of columns; we need a projection.
 		cols := make([]exec.NodeColumnOrdinal, 0, needed.Len())
 		for ord, ok := needed.Next(0); ok; ord, ok = needed.Next(ord + 1) {
 			cols = append(cols, exec.NodeColumnOrdinal(ord-1))
 		}
 		n, err = ef.ConstructSimpleProject(n, cols, nil /* reqOrdering */)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if needTableoid {
+		// Add the tableoid system column as a constant render. The tableoid
+		// has the highest ordinal, so it always appears last in the output.
+		inputCols := planColumns(n.(planNode))
+		renderCols := make(colinfo.ResultColumns, len(inputCols)+1)
+		copy(renderCols, inputCols)
+		renderCols[len(inputCols)] = colinfo.ResultColumn{
+			Name:    colinfo.TableOIDColumnName,
+			Typ:     types.Oid,
+			Hidden:  true,
+			TableID: table.(*optVirtualTable).desc.GetID(),
+		}
+		exprs := make(tree.TypedExprs, len(inputCols)+1)
+		for i := range inputCols {
+			exprs[i] = tree.NewTypedOrdinalReference(i, inputCols[i].Typ)
+		}
+		tableID := table.(*optVirtualTable).desc.GetID()
+		exprs[len(inputCols)] = tree.NewDOid(oid.Oid(tableID))
+		n, err = ef.ConstructRender(n, renderCols, exprs, nil /* reqOrdering */)
 		if err != nil {
 			return nil, err
 		}
