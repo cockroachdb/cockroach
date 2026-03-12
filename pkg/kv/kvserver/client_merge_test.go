@@ -156,6 +156,12 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	}
 }
 
+func getEnginesKeySet(t *testing.T, e kvstorage.Engines) map[string]struct{} {
+	t.Helper()
+	require.False(t, e.Separated(), "not supported in this test")
+	return getEngineKeySet(t, e.Engine())
+}
+
 func getEngineKeySet(t *testing.T, e storage.Engine) map[string]struct{} {
 	t.Helper()
 	// Have to scan local and global keys separately as mentioned in the comment
@@ -198,7 +204,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	require.NoError(t, pErr.GoError())
 
 	// Collect all the keys.
-	preKeys := getEngineKeySet(t, store.TODOEngine())
+	preKeys := getEnginesKeySet(t, store.Engines())
 
 	// Split the range.
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, scratchKey(""), store)
@@ -216,7 +222,7 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	require.NoError(t, pErr.GoError())
 
 	// Collect all the keys again.
-	postKeys := getEngineKeySet(t, store.TODOEngine())
+	postKeys := getEnginesKeySet(t, store.Engines())
 
 	// Compute the new keys.
 	for k := range preKeys {
