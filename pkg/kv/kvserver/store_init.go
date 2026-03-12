@@ -156,8 +156,13 @@ func WriteInitialClusterData(
 		// TODO(#97616): the ranges are written one by one, so it is possible to end
 		// up with a partially initialized store if there is a crash in the middle.
 		// Write through a single batch, or find another way to make this atomic.
+
+		// TODO(sep-raft-log): this code path initializes replicas when bootstrapping
+		// the cluster and will need to write through WAG.
+		factory := kvstorage.MakeBatchFactory(&eng, nil /* seq */)
+
 		err := func() error {
-			batch := eng.NewBatch()
+			batch := factory.NewBatch()
 			defer batch.Close()
 
 			now := hlc.Timestamp{
@@ -267,7 +272,7 @@ func WriteInitialClusterData(
 				return err
 			}
 
-			return batch.CommitAndSync()
+			return batch.Commit(true /* sync */)
 		}()
 		if err != nil {
 			return err

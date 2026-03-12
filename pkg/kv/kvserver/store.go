@@ -881,6 +881,7 @@ type Store struct {
 	cfg                  StoreConfig
 	internalEngines      kvstorage.Engines
 	wagSeq               wag.Seq
+	batchFactory         kvstorage.BatchFactory
 	db                   *kv.DB
 	tsCache              tscache.Cache           // Most recent timestamps for keys / key ranges
 	allocator            allocatorimpl.Allocator // Makes allocation decisions
@@ -1497,6 +1498,7 @@ func NewStore(
 		ioThresholds:                      &iot,
 		rangeFeedSlowClosedTimestampNudge: singleflight.NewGroup("rangfeed-ct-nudge", "range"),
 	}
+	s.batchFactory = kvstorage.MakeBatchFactory(&s.internalEngines, &s.wagSeq)
 	s.ioThreshold.t = &admissionpb.IOThreshold{}
 	// Track the maxScore over the last 5 minutes, in one minute windows.
 	now := cfg.Clock.Now().GoTime()
