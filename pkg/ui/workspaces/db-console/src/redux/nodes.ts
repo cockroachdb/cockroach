@@ -7,19 +7,13 @@ import { util } from "@cockroachlabs/cluster-ui";
 import countBy from "lodash/countBy";
 import each from "lodash/each";
 import filter from "lodash/filter";
-import first from "lodash/first";
-import flow from "lodash/flow";
 import groupBy from "lodash/groupBy";
-import head from "lodash/head";
 import isArray from "lodash/isArray";
 import isEmpty from "lodash/isEmpty";
 import isNil from "lodash/isNil";
-import isUndefined from "lodash/isUndefined";
 import keyBy from "lodash/keyBy";
 import map from "lodash/map";
-import sortBy from "lodash/sortBy";
 import uniq from "lodash/uniq";
-import uniqBy from "lodash/uniqBy";
 import { createSelector } from "reselect";
 
 import * as protos from "src/js/protos";
@@ -491,38 +485,6 @@ export function selectNodesSummaryValid(state: AdminUIState) {
   return state.cachedData.nodes.valid && state.cachedData.liveness.valid;
 }
 
-/*
- * clusterNameSelector returns the name of cluster which has to be the same for every node in the cluster.
- * - That is why it is safe to get first non empty cluster name.
- * - Empty cluster name is possible in case `DisableClusterNameVerification` flag is used (see pkg/base/config.go:176).
- */
-export const clusterNameSelector = createSelector(
-  nodeStatusesSelector,
-  livenessStatusByNodeIDSelector,
-  (nodeStatuses, livenessStatusByNodeID): string => {
-    if (isUndefined(nodeStatuses) || isEmpty(livenessStatusByNodeID)) {
-      return undefined;
-    }
-    const liveNodesOnCluster = nodeStatuses.filter(
-      nodeStatus =>
-        livenessStatusByNodeID[nodeStatus.desc.node_id] ===
-        LivenessStatus.NODE_STATUS_LIVE,
-    );
-
-    const nodesWithUniqClusterNames = flow(
-      (statuses: INodeStatus[]) =>
-        filter(statuses, s => !isEmpty(s.desc.cluster_name)),
-      statuses => uniqBy(statuses, s => s.desc.cluster_name),
-    )(liveNodesOnCluster);
-
-    if (isEmpty(nodesWithUniqClusterNames)) {
-      return undefined;
-    } else {
-      return head(nodesWithUniqClusterNames).desc.cluster_name;
-    }
-  },
-);
-
 export const validateNodesSelector = createSelector(
   nodeStatusesSelector,
   livenessByNodeIDSelector,
@@ -592,22 +554,6 @@ export const singleVersionSelector = createSelector(
   builds => {
     if (!builds || builds.length !== 1) {
       return undefined;
-    }
-    return builds[0];
-  },
-);
-
-// clusterVersionSelector returns build version of the cluster, or returns the lowest version
-// if cluster's version is staggered.
-export const clusterVersionLabelSelector = createSelector(
-  versionsSelector,
-  builds => {
-    if (!builds) {
-      return undefined;
-    }
-    if (builds.length > 1) {
-      const lowestVersion = first(sortBy(builds, b => b));
-      return `${lowestVersion} - Mixed Versions`;
     }
     return builds[0];
   },
