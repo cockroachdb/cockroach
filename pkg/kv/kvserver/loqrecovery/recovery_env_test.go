@@ -676,7 +676,7 @@ func (e *quorumRecoveryEnv) groupStoresByNodeStore(
 				nodeStores = make(map[roachpb.StoreID]storage.Batch)
 				nodes[nodeID] = nodeStores
 			}
-			nodeStores[storeID] = store.TODOEngine().NewBatch()
+			nodeStores[storeID] = store.TODOBothEngines().NewBatch()
 		})
 	return nodes
 }

@@ -136,10 +136,9 @@ func (s Server) ServeLocalReplicas(
 		g.Go(func() error {
 			// TODO(sep-raft-log): when raft and state machine engines are separate,
 			// we need two snapshots here. This path is online, so we should make sure
-			// these snapshots are consistent (in particular, the LogID must match
-			// across the two), or make sure that LogID mismatch is handled in
-			// visitStoreReplicas.
-			reader := s.TODOEngine().NewSnapshot()
+			// these snapshots are consistent, or visitStoreReplicas handles the
+			// asynchronous snapshots well.
+			reader := s.TODOBothEngines().NewSnapshot()
 			defer reader.Close()
 			return visitStoreReplicas(ctx, reader, reader, s.StoreID(), s.NodeID(),
 				func(info loqrecoverypb.ReplicaInfo) error {
