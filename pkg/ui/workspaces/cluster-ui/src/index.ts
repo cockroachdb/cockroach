@@ -44,6 +44,7 @@ export * from "./tracez";
 export { util, api };
 export { useNodes } from "./api/nodesApi";
 export { useNodesSummary } from "./api/nodesSummaryApi";
+export { useHealth } from "./api/healthApi";
 export type { NodesSummary } from "./api/nodesSummaryApi";
 export { useConnectivity } from "./api/connectivityApi";
 export * from "./sessions";
