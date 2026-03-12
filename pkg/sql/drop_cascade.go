@@ -294,6 +294,8 @@ func (d *dropCascadeState) canDropType(
 		}
 		// Also skip types being dropped (e.g., a domain type that added a
 		// back-reference to its companion array type during creation).
+		// Note: toDeleteByID only contains tables/views/sequences, not types,
+		// so we must check typesToDelete separately here.
 		droppingType := false
 		for _, t := range d.typesToDelete {
 			if t.ID == id {

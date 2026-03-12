@@ -575,8 +575,6 @@ func (p *planner) createDomainWithID(
 		[]descpb.TypeDescriptor_Domain_CheckConstraint, len(n.DomainConstraints),
 	)
 	for i, c := range n.DomainConstraints {
-		// Validate the CHECK expression by substituting VALUE with a typed
-		// null of the base type and type-checking as boolean.
 		validationExpr, err := tree.SimpleVisit(c.Expr, func(e tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 			if n, ok := e.(*tree.UnresolvedName); ok {
 				if n.NumParts == 1 && strings.EqualFold(n.Parts[0], "value") {
