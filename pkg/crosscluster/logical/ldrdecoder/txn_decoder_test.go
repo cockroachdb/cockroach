@@ -58,7 +58,7 @@ func TestTxnDecoder(t *testing.T) {
 
 	txn, err := decoder.DecodeTxn(ctx, events)
 	require.NoError(t, err)
-	require.Equal(t, txnTime, txn.Timestamp)
+	require.Equal(t, txnTime, txn.TxnID.Timestamp)
 	require.Len(t, txn.WriteSet, 4)
 
 	writeSetChecks := []struct {

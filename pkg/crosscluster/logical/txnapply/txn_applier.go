@@ -31,7 +31,7 @@ type appliedTransaction struct {
 
 type ScheduledTransaction struct {
 	ldrdecoder.Transaction
-	Dependencies []hlc.Timestamp
+	Dependencies []ldrdecoder.TxnID
 	EventHorizon hlc.Timestamp
 }
 
@@ -49,23 +49,23 @@ type Applier struct {
 		syncutil.Mutex
 		replicatedTime hlc.Timestamp
 
-		// transactions maps a txn's origin timestamp to its state.
-		transactions map[hlc.Timestamp]transactionState
+		// transactions maps a txn's TxnID to its state.
+		transactions map[ldrdecoder.TxnID]transactionState
 
 		// waiting maps a pending transaction to its dependents. I.e. if t5 depends
 		// on t2, then waiting[t2] will contain t5.
-		waiting map[hlc.Timestamp][]hlc.Timestamp
+		waiting map[ldrdecoder.TxnID][]ldrdecoder.TxnID
 
-		// timestamps buffers timestamps of transactions in the order they were
+		// txnIDs buffers TxnIDs of transactions in the order they were
 		// received, to help with replicatedTime tracking.
-		timestamps ring.Buffer[hlc.Timestamp]
+		txnIDs ring.Buffer[ldrdecoder.TxnID]
 
 		// horizonWaiting tracks transactions that have no remaining
 		// dependencies but cannot be applied yet because the applier's
 		// replicatedTime has not advanced past their EventHorizon.
 		//
 		// TODO(msbutler): consider making this a heap.
-		horizonWaiting []hlc.Timestamp
+		horizonWaiting []ldrdecoder.TxnID
 	}
 	txnWriters []txnwriter.TransactionWriter
 
@@ -77,8 +77,8 @@ func NewApplier(writers []txnwriter.TransactionWriter) *Applier {
 		txnWriters: writers,
 		frontier:   MakeLatest[hlc.Timestamp](),
 	}
-	a.mu.transactions = make(map[hlc.Timestamp]transactionState)
-	a.mu.waiting = make(map[hlc.Timestamp][]hlc.Timestamp)
+	a.mu.transactions = make(map[ldrdecoder.TxnID]transactionState)
+	a.mu.waiting = make(map[ldrdecoder.TxnID][]ldrdecoder.TxnID)
 	return a
 }
 
@@ -147,13 +147,13 @@ func (a *Applier) recordTransaction(transaction ScheduledTransaction) (bool, err
 	var err error
 	// Clone the slice to avoid mutating the caller's slice.
 	transaction.Dependencies = slices.Clone(transaction.Dependencies)
-	transaction.Dependencies = slices.DeleteFunc(transaction.Dependencies, func(txn hlc.Timestamp) bool {
-		if txn.LessEq(a.mu.replicatedTime) {
+	transaction.Dependencies = slices.DeleteFunc(transaction.Dependencies, func(txnID ldrdecoder.TxnID) bool {
+		if txnID.Timestamp.LessEq(a.mu.replicatedTime) {
 			return true
 		}
-		dependency, ok := a.mu.transactions[txn]
+		dependency, ok := a.mu.transactions[txnID]
 		if !ok {
-			err = errors.AssertionFailedf("missing dependency %+v", txn)
+			err = errors.AssertionFailedf("missing dependency %+v", txnID)
 		}
 		return dependency.applied
 	})
@@ -161,24 +161,24 @@ func (a *Applier) recordTransaction(transaction ScheduledTransaction) (bool, err
 		return false, err
 	}
 
-	a.mu.transactions[transaction.Timestamp] = transactionState{
+	a.mu.transactions[transaction.TxnID] = transactionState{
 		ScheduledTransaction: transaction,
 		applied:              false,
 	}
-	if a.mu.timestamps.Len() != 0 && transaction.Timestamp.LessEq(a.mu.timestamps.GetLast()) {
-		return false, errors.AssertionFailedf("transactions must be sent in increasing timestamp order: got %s, last was %s", transaction.Timestamp, a.mu.timestamps.GetLast())
+	if a.mu.txnIDs.Len() != 0 && transaction.TxnID.LessEq(a.mu.txnIDs.GetLast()) {
+		return false, errors.AssertionFailedf("transactions must be sent in increasing timestamp order: got %s, last was %s", transaction.TxnID.Timestamp, a.mu.txnIDs.GetLast().Timestamp)
 	}
-	a.mu.timestamps.AddLast(transaction.Timestamp)
+	a.mu.txnIDs.AddLast(transaction.TxnID)
 
 	for _, dependency := range transaction.Dependencies {
-		a.mu.waiting[dependency] = append(a.mu.waiting[dependency], transaction.Transaction.Timestamp)
+		a.mu.waiting[dependency] = append(a.mu.waiting[dependency], transaction.TxnID)
 	}
 
 	if len(transaction.Dependencies) == 0 {
 		if transaction.EventHorizon.LessEq(a.mu.replicatedTime) {
 			return true, nil
 		}
-		a.mu.horizonWaiting = append(a.mu.horizonWaiting, transaction.Timestamp)
+		a.mu.horizonWaiting = append(a.mu.horizonWaiting, transaction.TxnID)
 	}
 	return false, nil
 }
@@ -206,7 +206,7 @@ func (a *Applier) writer(
 			}
 			if txn.applyResult.DlqReason != nil {
 				// TODO(msbutler): actually write to the DLQ.
-				log.Dev.Errorf(ctx, "transaction %s should be sent to DLQ with reason: %v", transaction.Timestamp, txn.applyResult.DlqReason)
+				log.Dev.Errorf(ctx, "transaction %s should be sent to DLQ with reason: %v", transaction.TxnID.Timestamp, txn.applyResult.DlqReason)
 			}
 			select {
 			case <-ctx.Done():
@@ -259,48 +259,49 @@ func (a *Applier) recordCompletion(
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	for _, waitingTs := range a.mu.waiting[completedTxn.Timestamp] {
-		waitingTxn, ok := a.mu.transactions[waitingTs]
+	completedID := completedTxn.TxnID
+	for _, waitingID := range a.mu.waiting[completedID] {
+		waitingTxn, ok := a.mu.transactions[waitingID]
 		if !ok {
-			return errors.AssertionFailedf("missing transaction %+v", waitingTs)
+			return errors.AssertionFailedf("missing transaction %+v", waitingID)
 		}
 
-		waitingTxn.Dependencies = slices.DeleteFunc(waitingTxn.Dependencies, func(ts hlc.Timestamp) bool {
-			return ts == completedTxn.Timestamp
+		waitingTxn.Dependencies = slices.DeleteFunc(waitingTxn.Dependencies, func(id ldrdecoder.TxnID) bool {
+			return id == completedID
 		})
-		a.mu.transactions[waitingTs] = waitingTxn
+		a.mu.transactions[waitingID] = waitingTxn
 
 		if len(waitingTxn.Dependencies) == 0 {
 			if waitingTxn.EventHorizon.LessEq(a.mu.replicatedTime) {
 				readyBuffer.AddLast(waitingTxn.Transaction)
 			} else {
-				a.mu.horizonWaiting = append(a.mu.horizonWaiting, waitingTs)
+				a.mu.horizonWaiting = append(a.mu.horizonWaiting, waitingID)
 			}
 		}
 	}
 
-	delete(a.mu.waiting, completedTxn.Timestamp)
-	txnState := a.mu.transactions[completedTxn.Timestamp]
+	delete(a.mu.waiting, completedID)
+	txnState := a.mu.transactions[completedID]
 	txnState.applied = true
-	a.mu.transactions[completedTxn.Timestamp] = txnState
+	a.mu.transactions[completedID] = txnState
 
 	var newReplicatedTime hlc.Timestamp
-	for a.mu.timestamps.Len() != 0 {
-		txn := a.mu.timestamps.GetFirst()
-		if !a.mu.transactions[txn].applied {
+	for a.mu.txnIDs.Len() != 0 {
+		id := a.mu.txnIDs.GetFirst()
+		if !a.mu.transactions[id].applied {
 			break
 		}
-		newReplicatedTime = txn
-		delete(a.mu.transactions, txn)
-		a.mu.timestamps.RemoveFirst()
+		newReplicatedTime = id.Timestamp
+		delete(a.mu.transactions, id)
+		a.mu.txnIDs.RemoveFirst()
 	}
 	if newReplicatedTime.IsSet() {
 		a.mu.replicatedTime = newReplicatedTime
 		a.frontier.Set(newReplicatedTime)
 
 		// Drain transactions whose EventHorizon is now satisfied.
-		a.mu.horizonWaiting = slices.DeleteFunc(a.mu.horizonWaiting, func(ts hlc.Timestamp) bool {
-			txn := a.mu.transactions[ts]
+		a.mu.horizonWaiting = slices.DeleteFunc(a.mu.horizonWaiting, func(id ldrdecoder.TxnID) bool {
+			txn := a.mu.transactions[id]
 			if txn.EventHorizon.LessEq(newReplicatedTime) {
 				readyBuffer.AddLast(txn.Transaction)
 				return true

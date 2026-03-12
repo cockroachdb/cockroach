@@ -96,7 +96,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		setup: func(t *testing.T, baseID int) {},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: s.Clock().Now(),
+				TxnID: ldrdecoder.TxnID{Timestamp: s.Clock().Now()},
 				WriteSet: []ldrdecoder.DecodedRow{{
 					Row:     parentRow(baseID+1, "inserted"),
 					PrevRow: nil,
@@ -119,7 +119,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: s.Clock().Now(),
+				TxnID: ldrdecoder.TxnID{Timestamp: s.Clock().Now()},
 				WriteSet: []ldrdecoder.DecodedRow{{
 					Row:     parentRow(baseID+1, "after"),
 					PrevRow: parentRow(baseID+1, "before"),
@@ -142,7 +142,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: s.Clock().Now(),
+				TxnID: ldrdecoder.TxnID{Timestamp: s.Clock().Now()},
 				WriteSet: []ldrdecoder.DecodedRow{{
 					Row:      tree.Datums{tree.NewDInt(tree.DInt(baseID + 1)), tree.DNull},
 					PrevRow:  parentRow(baseID+1, "doomed"),
@@ -167,7 +167,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: s.Clock().Now(),
+				TxnID: ldrdecoder.TxnID{Timestamp: s.Clock().Now()},
 				WriteSet: []ldrdecoder.DecodedRow{
 					{
 						Row:     parentRow(baseID+1, "updated"),
@@ -209,7 +209,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		},
 		buildTxn: func(t *testing.T, baseID int, preSetupTS hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: preSetupTS,
+				TxnID: ldrdecoder.TxnID{Timestamp: preSetupTS},
 				WriteSet: []ldrdecoder.DecodedRow{
 					{
 						Row:     parentRow(baseID+1, "stale-insert"),
@@ -245,7 +245,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		},
 		buildTxn: func(t *testing.T, baseID int, preSetupTS hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: preSetupTS,
+				TxnID: ldrdecoder.TxnID{Timestamp: preSetupTS},
 				WriteSet: []ldrdecoder.DecodedRow{
 					{
 						Row:     parentRow(baseID+1, "loser"),
@@ -281,7 +281,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		},
 		buildTxn: func(t *testing.T, baseID int, preSetupTS hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: preSetupTS,
+				TxnID: ldrdecoder.TxnID{Timestamp: preSetupTS},
 				WriteSet: []ldrdecoder.DecodedRow{
 					{
 						Row:      tree.Datums{tree.NewDInt(tree.DInt(baseID + 1)), tree.DNull},
@@ -320,7 +320,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: s.Clock().Now(),
+				TxnID: ldrdecoder.TxnID{Timestamp: s.Clock().Now()},
 				WriteSet: []ldrdecoder.DecodedRow{{
 					Row:     parentRow(baseID+1, "winner"),
 					PrevRow: parentRow(baseID+1, "stale"),
@@ -343,7 +343,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: s.Clock().Now(),
+				TxnID: ldrdecoder.TxnID{Timestamp: s.Clock().Now()},
 				WriteSet: []ldrdecoder.DecodedRow{{
 					Row:      tree.Datums{tree.NewDInt(tree.DInt(baseID + 1)), tree.DNull},
 					PrevRow:  parentRow(baseID+1, "stale"),
@@ -365,7 +365,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: s.Clock().Now(),
+				TxnID: ldrdecoder.TxnID{Timestamp: s.Clock().Now()},
 				WriteSet: []ldrdecoder.DecodedRow{{
 					Row:     parentRow(baseID+1, "recovered"),
 					PrevRow: parentRow(baseID+1, "phantom"),
@@ -386,7 +386,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: s.Clock().Now(),
+				TxnID: ldrdecoder.TxnID{Timestamp: s.Clock().Now()},
 				WriteSet: []ldrdecoder.DecodedRow{{
 					Row:      tree.Datums{tree.NewDInt(tree.DInt(baseID + 1)), tree.DNull},
 					PrevRow:  parentRow(baseID+1, "phantom"),
@@ -413,7 +413,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: s.Clock().Now(),
+				TxnID: ldrdecoder.TxnID{Timestamp: s.Clock().Now()},
 				WriteSet: []ldrdecoder.DecodedRow{{
 					Row:     parentRow(baseID+1, "parent-row"),
 					TableID: parentID,
@@ -437,7 +437,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		setup: func(t *testing.T, baseID int) {},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: s.Clock().Now(),
+				TxnID: ldrdecoder.TxnID{Timestamp: s.Clock().Now()},
 				WriteSet: []ldrdecoder.DecodedRow{{
 					Row:     childRow(baseID+1, baseID+99, "orphan"), // non-existent parent
 					PrevRow: nil,
@@ -459,7 +459,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: s.Clock().Now(),
+				TxnID: ldrdecoder.TxnID{Timestamp: s.Clock().Now()},
 				WriteSet: []ldrdecoder.DecodedRow{{
 					Row:     childRow(baseID+1, baseID+99, "child"), // non-existent parent
 					PrevRow: childRow(baseID+1, baseID+1, "child"),
@@ -481,7 +481,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: s.Clock().Now(),
+				TxnID: ldrdecoder.TxnID{Timestamp: s.Clock().Now()},
 				WriteSet: []ldrdecoder.DecodedRow{{
 					Row:      tree.Datums{tree.NewDInt(tree.DInt(baseID + 1)), tree.DNull},
 					PrevRow:  parentRow(baseID+1, "p"),
@@ -508,7 +508,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: s.Clock().Now(),
+				TxnID: ldrdecoder.TxnID{Timestamp: s.Clock().Now()},
 				WriteSet: []ldrdecoder.DecodedRow{
 					// Delete must precede insert so the unique constraint is freed.
 					{
@@ -554,7 +554,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: s.Clock().Now(),
+				TxnID: ldrdecoder.TxnID{Timestamp: s.Clock().Now()},
 				WriteSet: []ldrdecoder.DecodedRow{{
 					Row:     childRowWithUnique(baseID+2, baseID+2, baseID+1, "duplicate"), // duplicate unique_val
 					PrevRow: nil,
@@ -578,7 +578,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
-				Timestamp: s.Clock().Now(),
+				TxnID: ldrdecoder.TxnID{Timestamp: s.Clock().Now()},
 				WriteSet: []ldrdecoder.DecodedRow{{
 					Row:     childRowWithUnique(baseID+2, baseID+2, baseID+1, "child2"), // duplicate unique_val
 					PrevRow: childRow(baseID+2, baseID+2, "child2"),

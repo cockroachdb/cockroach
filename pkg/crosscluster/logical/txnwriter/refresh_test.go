@@ -67,7 +67,7 @@ func TestTransactionWriter_Refresh(t *testing.T) {
 		insertRows: []string{"1, 'existing'"},
 		buildBatch: func(descID descpb.ID, tsStart, _ hlc.Timestamp) []ldrdecoder.Transaction {
 			return []ldrdecoder.Transaction{{
-				Timestamp: tsStart,
+				TxnID: ldrdecoder.TxnID{Timestamp: tsStart},
 				WriteSet: []ldrdecoder.DecodedRow{
 					{
 						Row:     tree.Datums{tree.NewDInt(1), tree.NewDString("stale")},
@@ -92,7 +92,7 @@ func TestTransactionWriter_Refresh(t *testing.T) {
 		insertRows: []string{"1, 'row1'", "2, 'row2'"},
 		buildBatch: func(descID descpb.ID, tsStart, _ hlc.Timestamp) []ldrdecoder.Transaction {
 			return []ldrdecoder.Transaction{{
-				Timestamp: tsStart,
+				TxnID: ldrdecoder.TxnID{Timestamp: tsStart},
 				WriteSet: []ldrdecoder.DecodedRow{
 					{
 						Row:     tree.Datums{tree.NewDInt(1), tree.NewDString("stale1")},
@@ -117,7 +117,7 @@ func TestTransactionWriter_Refresh(t *testing.T) {
 		insertRows: []string{"1, 'local_val'"},
 		buildBatch: func(descID descpb.ID, _, tsEnd hlc.Timestamp) []ldrdecoder.Transaction {
 			return []ldrdecoder.Transaction{{
-				Timestamp: tsEnd,
+				TxnID: ldrdecoder.TxnID{Timestamp: tsEnd},
 				WriteSet: []ldrdecoder.DecodedRow{
 					{
 						Row:     tree.Datums{tree.NewDInt(1), tree.NewDString("updated")},

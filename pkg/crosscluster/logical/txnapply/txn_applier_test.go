@@ -48,8 +48,8 @@ func (w *testWriter) ApplyBatch(
 
 	results := make([]txnwriter.ApplyResult, len(txns))
 	for i, txn := range txns {
-		w.t.Logf("applied txn at %s", txn.Timestamp)
-		w.mu.log = append(w.mu.log, txn.Timestamp)
+		w.t.Logf("applied txn at %s", txn.TxnID.Timestamp)
+		w.mu.log = append(w.mu.log, txn.TxnID.Timestamp)
 		results[i] = txnwriter.ApplyResult{AppliedRows: len(txn.WriteSet)}
 	}
 	return results, nil
@@ -60,8 +60,8 @@ func (w *testWriter) Close(ctx context.Context) {}
 // txnNode represents a transaction with its dependencies and an optional
 // EventHorizon that must be met before the transaction can be applied.
 type txnNode struct {
-	ts           hlc.Timestamp
-	deps         []hlc.Timestamp
+	id           ldrdecoder.TxnID
+	deps         []ldrdecoder.TxnID
 	eventHorizon hlc.Timestamp
 }
 
@@ -72,7 +72,10 @@ type depsOpt []int64
 
 func (d depsOpt) add(n *txnNode) {
 	for _, w := range d {
-		n.deps = append(n.deps, hlc.Timestamp{WallTime: w})
+		n.deps = append(n.deps, ldrdecoder.TxnID{
+			Timestamp: hlc.Timestamp{WallTime: w},
+			ApplierID: 1,
+		})
 	}
 }
 
@@ -87,7 +90,10 @@ func (h horizonOpt) add(n *txnNode) {
 func horizon(wallTime int64) horizonOpt { return horizonOpt(wallTime) }
 
 func txn(wallTime int64, opts ...txnOpt) txnNode {
-	n := txnNode{ts: hlc.Timestamp{WallTime: wallTime}}
+	n := txnNode{id: ldrdecoder.TxnID{
+		Timestamp: hlc.Timestamp{WallTime: wallTime},
+		ApplierID: 1,
+	}}
 	for _, o := range opts {
 		o.add(&n)
 	}
@@ -106,7 +112,10 @@ func generateRandomDAG(rng *rand.Rand, numTxns int, maxDeps int) []txnNode {
 	nodes := make([]txnNode, numTxns)
 	var maxHorizonWallTime int64
 	for i := range nodes {
-		nodes[i].ts = hlc.Timestamp{WallTime: int64(i + 1)}
+		nodes[i].id = ldrdecoder.TxnID{
+			Timestamp: hlc.Timestamp{WallTime: int64(i + 1)},
+			ApplierID: 1,
+		}
 
 		horizonRange := int64(i) - maxHorizonWallTime + 1
 		horizonWallTime := maxHorizonWallTime + int64(rng.Intn(int(horizonRange)))
@@ -121,7 +130,7 @@ func generateRandomDAG(rng *rand.Rand, numTxns int, maxDeps int) []txnNode {
 			numDeps := min(rng.Intn(maxDeps+1), availableCount)
 			perm := rng.Perm(availableCount)[:numDeps]
 			for _, p := range perm {
-				nodes[i].deps = append(nodes[i].deps, nodes[availableStart+p].ts)
+				nodes[i].deps = append(nodes[i].deps, nodes[availableStart+p].id)
 			}
 		}
 	}
@@ -132,9 +141,9 @@ func logDAG(t *testing.T, dag []txnNode) {
 	t.Log("transaction dependency graph:")
 	for _, node := range dag {
 		if node.eventHorizon.IsSet() {
-			t.Logf("  %s depends on %v horizon=%s", node.ts, node.deps, node.eventHorizon)
+			t.Logf("  %s depends on %v horizon=%s", node.id.Timestamp, node.deps, node.eventHorizon)
 		} else {
-			t.Logf("  %s depends on %v", node.ts, node.deps)
+			t.Logf("  %s depends on %v", node.id.Timestamp, node.deps)
 		}
 	}
 }
@@ -154,7 +163,7 @@ func runApplier(t *testing.T, dag []txnNode, numWriters int, rngSeed int64) []hl
 	input := make(chan ScheduledTransaction, len(dag))
 	for _, node := range dag {
 		input <- ScheduledTransaction{
-			Transaction:  ldrdecoder.Transaction{Timestamp: node.ts},
+			Transaction:  ldrdecoder.Transaction{TxnID: node.id},
 			Dependencies: node.deps,
 			EventHorizon: node.eventHorizon,
 		}
@@ -171,7 +180,7 @@ func runApplier(t *testing.T, dag []txnNode, numWriters int, rngSeed int64) []hl
 		return applier.Run(ctx, input)
 	})
 
-	lastTs := dag[len(dag)-1].ts
+	lastTs := dag[len(dag)-1].id.Timestamp
 	group.GoCtx(func(ctx context.Context) error {
 		var prev hlc.Timestamp
 		for ts := range applier.Frontier() {
@@ -209,7 +218,7 @@ func checkApplierDrained(t *testing.T, applier *Applier) {
 	defer applier.mu.Unlock()
 	require.Empty(t, applier.mu.transactions, "transactions map should be empty")
 	require.Empty(t, applier.mu.waiting, "waiting map should be empty")
-	require.Equal(t, 0, applier.mu.timestamps.Len(), "timestamps buffer should be empty")
+	require.Equal(t, 0, applier.mu.txnIDs.Len(), "txnIDs buffer should be empty")
 	require.Empty(t, applier.mu.horizonWaiting, "horizonWaiting should be empty")
 }
 
@@ -221,20 +230,20 @@ func checkApplyOrder(t *testing.T, dag []txnNode, applied []hlc.Timestamp) {
 		appliedAt[ts] = i
 	}
 
-	deps := make(map[hlc.Timestamp][]hlc.Timestamp)
+	deps := make(map[hlc.Timestamp][]ldrdecoder.TxnID)
 	horizons := make(map[hlc.Timestamp]hlc.Timestamp)
 	for _, node := range dag {
-		deps[node.ts] = node.deps
-		horizons[node.ts] = node.eventHorizon
+		deps[node.id.Timestamp] = node.deps
+		horizons[node.id.Timestamp] = node.eventHorizon
 	}
 
 	for ts, order := range appliedAt {
 		for _, dep := range deps[ts] {
-			depOrder, ok := appliedAt[dep]
-			require.True(t, ok, "dependency %s of %s was never applied", dep, ts)
+			depOrder, ok := appliedAt[dep.Timestamp]
+			require.True(t, ok, "dependency %s of %s was never applied", dep.Timestamp, ts)
 			require.Less(t, depOrder, order,
 				"dependency %s (position %d) applied after %s (position %d)",
-				dep, depOrder, ts, order)
+				dep.Timestamp, depOrder, ts, order)
 		}
 
 		// Verify that the transaction was not applied before its EventHorizon

@@ -74,7 +74,7 @@ func (tw *transactionWriter) refresh(
 			idx := rowIndex{txn: txnIdx, row: rowIdx}
 			pr, rowExists := priorRows[idx]
 
-			if rowExists && !pr.LogicalTimestamp.Less(transaction.Timestamp) {
+			if rowExists && !pr.LogicalTimestamp.Less(transaction.TxnID.Timestamp) {
 				results[txnIdx].LwwLoserRows++
 				continue
 			}
@@ -88,8 +88,8 @@ func (tw *transactionWriter) refresh(
 			writeSet = append(writeSet, refreshedRow)
 		}
 		refreshed[txnIdx] = ldrdecoder.Transaction{
-			Timestamp: transaction.Timestamp,
-			WriteSet:  writeSet,
+			TxnID:    transaction.TxnID,
+			WriteSet: writeSet,
 		}
 	}
 
