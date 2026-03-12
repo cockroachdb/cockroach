@@ -121,7 +121,7 @@ const (
 	defaultConcurrencyVCPURequirement = 2
 	// We don't recommend running on fewer than 4 vCPUs, but we do have clusters
 	// with 2 vCPUs.
-	minViableProcs = 2
+	minViableProcs = 4
 )
 
 var automaticFullStatsConcurrencyLimit = settings.RegisterIntSetting(
