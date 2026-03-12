@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -88,6 +89,16 @@ type replicaAppBatch struct {
 
 	// Reused by addAppliedStateToBatch to avoid heap allocations.
 	asAlloc kvserverpb.RangeAppliedState
+
+	// rangefeedLogicalOps accumulates logical ops from all commands in the
+	// batch for deferred processing by the rangefeed. The ops are populated
+	// with values read from the fully-staged batch right before it commits,
+	// instead of being populated incrementally per-command.
+	rangefeedLogicalOps []enginepb.MVCCLogicalOp
+	// rangefeedOpsMissing is set to true if any command with a non-nil
+	// WriteBatch had a nil LogicalOpLog. This indicates that the rangefeed
+	// should be disconnected.
+	rangefeedOpsMissing bool
 }
 
 // Stage implements the apply.Batch interface. The method handles the first
@@ -221,15 +232,19 @@ func changeRemovesStore(
 func (b *replicaAppBatch) runPreAddTriggersReplicaOnly(
 	ctx context.Context, cmd *replicatedCmd,
 ) error {
-	if ops := cmd.Cmd.LogicalOpLog; ops != nil {
-		// We only need the logical op log for rangefeeds, and in standalone
-		// application there are no listening rangefeeds. So we do this only
-		// in Replica application.
-		if p, filter := b.r.getRangefeedProcessorAndFilter(); p != nil {
-			if err := populatePrevValsInLogicalOpLog(ctx, filter, ops, b.batch); err != nil {
-				b.r.disconnectRangefeedWithErr(p, kvpb.NewError(err))
-			}
+	// Accumulate logical ops for deferred rangefeed processing. The actual value
+	// population (both prev and new values) happens in bulk in
+	// populateAndHandleLogicalOps, right before the batch commits.
+	if cmd.Cmd.WriteBatch != nil {
+		if ops := cmd.Cmd.LogicalOpLog; ops != nil {
+			b.rangefeedLogicalOps = append(b.rangefeedLogicalOps, ops.Ops...)
+		} else {
+			// A command with a WriteBatch must have a LogicalOpLog when rangefeeds
+			// are active. Mark that ops are missing so we can disconnect later.
+			b.rangefeedOpsMissing = true
 		}
+	} else if cmd.Cmd.LogicalOpLog != nil {
+		log.KvExec.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.Cmd)
 	}
 	return nil
 }
@@ -487,19 +502,6 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		}
 	}
 
-	// Provide the command's corresponding logical operations to the Replica's
-	// rangefeed. Only do so if the WriteBatch is non-nil, in which case the
-	// rangefeed requires there to be a corresponding logical operation log or
-	// it will shut down with an error. If the WriteBatch is nil then we expect
-	// the logical operation log to also be nil. We don't want to trigger a
-	// shutdown of the rangefeed in that situation, so we don't pass anything to
-	// the rangefeed. If no rangefeed is running at all, this call will be a noop.
-	if ops := cmd.Cmd.LogicalOpLog; cmd.Cmd.WriteBatch != nil {
-		b.r.handleLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
-	} else if ops != nil {
-		log.KvExec.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.Cmd)
-	}
-
 	return nil
 }
 
@@ -652,6 +654,14 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 		b.raftBatch.Close()
 		b.raftBatch = nil
 	}
+
+	// Populate logical ops with values from the fully-staged batch and pass them
+	// to the rangefeed processor. This is done once per batch (rather than per
+	// command) because all WriteBatches have been staged at this point, and MVCC
+	// reads by key+timestamp will find the correct values regardless of staging
+	// order. Previous values are read using ts.Prev() to exclude each op's own
+	// write.
+	b.r.populateAndHandleLogicalOps(ctx, b.rangefeedLogicalOps, b.rangefeedOpsMissing, b.batch)
 
 	// Apply the write batch to Pebble. Entry application is done without syncing
 	// to disk. The atomicity guarantees of the batch, and the fact that the

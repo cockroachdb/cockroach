@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -613,116 +612,53 @@ func (r *Replica) numRangefeedRegistrations() int {
 	return p.Len()
 }
 
-// populatePrevValsInLogicalOpLog updates the provided logical op
-// log with previous values read from the reader, which is expected to reflect
-// the state of the Replica before the operations in the logical op log are
-// applied. No-op if a rangefeed is not active. Requires raftMu to be locked.
-func populatePrevValsInLogicalOpLog(
-	ctx context.Context,
-	filter *rangefeed.Filter,
-	ops *kvserverpb.LogicalOpLog,
-	prevReader storage.Reader,
-) error {
-	// Read from the Reader to populate the PrevValue fields.
-	for _, op := range ops.Ops {
-		var key []byte
-		var ts hlc.Timestamp
-		var prevValPtr *[]byte
-		switch t := op.GetValue().(type) {
-		case *enginepb.MVCCWriteValueOp:
-			key, ts, prevValPtr = t.Key, t.Timestamp, &t.PrevValue
-		case *enginepb.MVCCCommitIntentOp:
-			key, ts, prevValPtr = t.Key, t.Timestamp, &t.PrevValue
-		case *enginepb.MVCCWriteIntentOp,
-			*enginepb.MVCCUpdateIntentOp,
-			*enginepb.MVCCAbortIntentOp,
-			*enginepb.MVCCAbortTxnOp,
-			*enginepb.MVCCDeleteRangeOp:
-			// Nothing to do.
-			continue
-		default:
-			panic(errors.AssertionFailedf("unknown logical op %T", t))
-		}
-
-		// Don't read previous values from the reader for operations that are
-		// not needed by any rangefeed registration.
-		if !filter.NeedPrevVal(roachpb.Span{Key: key}) {
-			continue
-		}
-
-		// Read the previous value from the prev Reader. Unlike the new value
-		// (see handleLogicalOpLogRaftMuLocked), this one may be missing.
-		prevValRes, err := storage.MVCCGet(
-			ctx, prevReader, key, ts, storage.MVCCGetOptions{
-				Tombstones: true, Inconsistent: true, ReadCategory: fs.RangefeedReadCategory},
-		)
-		if err != nil {
-			return errors.Wrapf(err, "consuming %T for key %v @ ts %v", op, key, ts)
-		}
-		if prevValRes.Value.Exists() {
-			*prevValPtr = prevValRes.Value.Value.RawBytes
-		} else {
-			*prevValPtr = nil
-		}
-	}
-	return nil
-}
-
-// handleLogicalOpLogRaftMuLocked passes the logical op log to the active
-// rangefeed, if one is running. The method accepts a batch, which is used to
-// look up the values associated with key-value writes in the log before handing
-// them to the rangefeed processor. No-op if a rangefeed is not active. Requires
-// raftMu to be locked.
+// populateAndHandleLogicalOps populates the accumulated logical ops from the
+// batch with both previous and new values, then passes them to the rangefeed
+// processor. This is called once per application batch (rather than per
+// command), after all commands' WriteBatches have been staged in the indexed
+// batch.
 //
-// REQUIRES: batch is an indexed batch.
-func (r *Replica) handleLogicalOpLogRaftMuLocked(
-	ctx context.Context, ops *kvserverpb.LogicalOpLog, batch storage.Batch,
+// Previous values are read at ts.Prev() to exclude each op's own write, which
+// is correct because MVCC guarantees no two values exist at the same
+// key+timestamp. New values are read at the op's exact timestamp.
+//
+// No-op if a rangefeed is not active. Requires raftMu to be locked.
+//
+// REQUIRES: batch is an indexed batch with all commands' WriteBatches staged.
+func (r *Replica) populateAndHandleLogicalOps(
+	ctx context.Context, ops []enginepb.MVCCLogicalOp, opsMissing bool, batch storage.Batch,
 ) {
 	p, filter := r.getRangefeedProcessorAndFilter()
 	if p == nil {
 		return
 	}
-	if ops == nil {
-		// Rangefeeds can't be turned on unless RangefeedEnabled is set to true,
-		// after which point new Raft proposals will include logical op logs.
-		// However, there's a race present where old Raft commands without a
-		// logical op log might be passed to a rangefeed. Since the effect of
-		// these commands was not included in the catch-up scan of current
-		// registrations, we're forced to throw an error. The rangefeed clients
-		// can reconnect at a later time, at which point all new Raft commands
-		// should have logical op logs.
+	if opsMissing {
+		// At least one command had a WriteBatch but no LogicalOpLog. This can
+		// happen during a race with rangefeed enablement. Since these commands'
+		// effects were not included in catch-up scans, we must disconnect.
 		r.disconnectRangefeedWithReason(kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING)
 		return
 	}
-	if len(ops.Ops) == 0 {
+	if len(ops) == 0 {
 		return
 	}
 
-	// The RangefeedValueHeaderFilter function is supposed to be applied for all
-	// emitted events to enable kvnemesis to match rangefeed events to kvnemesis
-	// operations. Applying the function here could mean we apply it to a
-	// rangefeed event that is later filtered out and not actually emitted; one
-	// way for such filtering to happen is if the filtering happens in the
-	// registry's PublishToOverlapping if the event has OmitInRangefeeds = true
-	// and the registration has WithFiltering = true.
-	//
-	// The above is not an issue because (a) for all emitted events, the
-	// RangefeedValueHeaderFilter will be called, and (b) the kvnemesis rangefeed
-	// is an internal rangefeed and should always have WithFiltering = false.
 	vhf := r.store.TestingKnobs().RangefeedValueHeaderFilter
 
-	// When reading straight from the Raft log, some logical ops will not be
-	// fully populated. Read from the batch to populate all fields.
-	for _, op := range ops.Ops {
+	for i := range ops {
+		op := &ops[i]
 		var key []byte
 		var ts hlc.Timestamp
 		var valPtr *[]byte
+		var prevValPtr *[]byte
 		var omitInRangefeedsPtr *bool
 		var originIDPtr *uint32
 		valueInBatch := false
 		switch t := op.GetValue().(type) {
 		case *enginepb.MVCCWriteValueOp:
-			key, ts, valPtr, omitInRangefeedsPtr, originIDPtr = t.Key, t.Timestamp, &t.Value, &t.OmitInRangefeeds, &t.OriginID
+			key, ts = t.Key, t.Timestamp
+			valPtr, prevValPtr = &t.Value, &t.PrevValue
+			omitInRangefeedsPtr, originIDPtr = &t.OmitInRangefeeds, &t.OriginID
 			if !ts.IsEmpty() {
 				// 1PC transaction commit, and no intent was written, so the value
 				// must be in the batch.
@@ -734,14 +670,16 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 			// involve merging with state in the engine. So, valueInBatch remains
 			// false.
 		case *enginepb.MVCCCommitIntentOp:
-			key, ts, valPtr, omitInRangefeedsPtr, originIDPtr = t.Key, t.Timestamp, &t.Value, &t.OmitInRangefeeds, &t.OriginID
+			key, ts = t.Key, t.Timestamp
+			valPtr, prevValPtr = &t.Value, &t.PrevValue
+			omitInRangefeedsPtr, originIDPtr = &t.OmitInRangefeeds, &t.OriginID
 			// Intent was committed. The now committed provisional value may be in
 			// the engine, so valueInBatch remains false.
 		case *enginepb.MVCCWriteIntentOp,
 			*enginepb.MVCCUpdateIntentOp,
 			*enginepb.MVCCAbortIntentOp,
 			*enginepb.MVCCAbortTxnOp:
-			// Nothing to do.
+			// Nothing to do for intent lifecycle ops (no values to populate).
 			continue
 		case *enginepb.MVCCDeleteRangeOp:
 			if vhf == nil {
@@ -752,7 +690,6 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 			if err != nil {
 				panic(err)
 			}
-
 			v, err := storage.DecodeMVCCValue(valBytes)
 			if err != nil {
 				panic(err)
@@ -763,25 +700,46 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 			panic(errors.AssertionFailedf("unknown logical op %T", t))
 		}
 
-		// Don't read values from the batch for operations that are not needed
+		// Populate the previous value if any rangefeed registration needs it.
+		// Read at ts.Prev() to exclude the op's own write. This is safe because
+		// MVCC does not allow two values at the same key+timestamp.
+		if filter.NeedPrevVal(roachpb.Span{Key: key}) && !ts.IsEmpty() {
+			prevValRes, err := storage.MVCCGet(
+				ctx, batch, key, ts.Prev(), storage.MVCCGetOptions{
+					Tombstones: true, Inconsistent: true,
+					ReadCategory: fs.RangefeedReadCategory,
+				},
+			)
+			if err != nil {
+				r.disconnectRangefeedWithErr(p, kvpb.NewErrorf(
+					"error reading prev value for %T, key %s @ ts %v: %v",
+					op.GetValue(), roachpb.Key(key), ts, err,
+				))
+				return
+			}
+			if prevValRes.Value.Exists() {
+				*prevValPtr = prevValRes.Value.Value.RawBytes
+			} else {
+				*prevValPtr = nil
+			}
+		}
+
+		// Don't read new values from the batch for operations that are not needed
 		// by any rangefeed registration. We still need to inform the rangefeed
 		// processor of the changes to intents so that it can track unresolved
 		// intents, but we don't need to provide values.
-		//
-		// We could filter out MVCCWriteValueOp operations entirely at this
-		// point if they are not needed by any registration, but as long as we
-		// avoid the value lookup here, doing any more doesn't seem worth it.
 		if !filter.NeedVal(roachpb.Span{Key: key}) {
 			continue
 		}
 
-		// Read the value directly from the batch. This is performed in the
-		// same raftMu critical section that the logical op's corresponding
-		// WriteBatch is applied, so the value should exist.
-		val, vh, err := storage.MVCCGetForKnownTimestampWithNoIntent(ctx, batch, key, ts, valueInBatch)
+		// Read the new value directly from the batch.
+		val, vh, err := storage.MVCCGetForKnownTimestampWithNoIntent(
+			ctx, batch, key, ts, valueInBatch,
+		)
 		if err != nil {
 			r.disconnectRangefeedWithErr(p, kvpb.NewErrorf(
-				"error consuming %T for key %s @ ts %v: %v", op.GetValue(), roachpb.Key(key), ts, err,
+				"error consuming %T for key %s @ ts %v: %v",
+				op.GetValue(), roachpb.Key(key), ts, err,
 			))
 			return
 		}
@@ -795,7 +753,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 	}
 
 	// Pass the ops to the rangefeed processor.
-	if !p.ConsumeLogicalOps(ctx, ops.Ops...) {
+	if !p.ConsumeLogicalOps(ctx, ops...) {
 		// Consumption failed and the rangefeed was stopped.
 		r.unsetRangefeedProcessor(p)
 	}
