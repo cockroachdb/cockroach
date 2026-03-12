@@ -1346,7 +1346,7 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 
 	cf.highWaterAtStart = cf.spec.Feed.StatementTime
 	if cf.spec.JobID == 0 {
-		cf.coreChangefeedState = cf.evalCtx.CoreChangefeedState
+		cf.coreChangefeedState = cf.evalCtx.Shared.CoreChangefeedState
 		if cf.coreChangefeedState == nil {
 			cf.MoveToDraining(errors.AssertionFailedf(
 				"expected initialized CoreChangefeedState"))

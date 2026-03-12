@@ -269,7 +269,7 @@ func startDistChangefeed(
 	// set it on the eval context so the changeFrontier processor can access it.
 	if jobID == 0 {
 		result.coreProgress = &coreProgress{progress: progress}
-		execCtx.ExtendedEvalContext().CoreChangefeedState = result.coreProgress
+		execCtx.ExtendedEvalContext().Shared.CoreChangefeedState = result.coreProgress
 	}
 
 	execPlan := func(ctx context.Context) error {

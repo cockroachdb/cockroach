@@ -129,7 +129,7 @@ func newWindower(
 	// we need to update the eval context before constructing the window
 	// builtins.
 	w.aggFuncsAcc = w.unlimitedMemMonitor.MakeBoundAccount()
-	w.evalCtx.SingleDatumAggMemAccount = &w.aggFuncsAcc
+	w.evalCtx.Shared.SingleDatumAggMemAccount = &w.aggFuncsAcc
 
 	w.partitionBy = spec.PartitionBy
 	windowFns := spec.WindowFns

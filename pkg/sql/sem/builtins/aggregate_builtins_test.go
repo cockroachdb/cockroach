@@ -37,7 +37,7 @@ func testAggregateResultDeepCopy(
 	defer evalCtx.Stop(context.Background())
 	acc := evalCtx.TestingMon.MakeBoundAccount()
 	defer acc.Close(context.Background())
-	evalCtx.SingleDatumAggMemAccount = &acc
+	evalCtx.Shared.SingleDatumAggMemAccount = &acc
 	argTypes := []*types.T{firstArgs[0].ResolvedType()}
 	otherArgs = flattenArgs(otherArgs...)
 	if len(otherArgs) == 0 {
@@ -575,7 +575,7 @@ func runBenchmarkAggregate(
 	defer evalCtx.Stop(context.Background())
 	acc := evalCtx.TestingMon.MakeBoundAccount()
 	defer acc.Close(context.Background())
-	evalCtx.SingleDatumAggMemAccount = &acc
+	evalCtx.Shared.SingleDatumAggMemAccount = &acc
 	argTypes := []*types.T{firstArgs[0].ResolvedType()}
 	otherArgs = flattenArgs(otherArgs...)
 	if len(otherArgs) == 0 {

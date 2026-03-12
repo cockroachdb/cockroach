@@ -1098,7 +1098,7 @@ func NewColOperator(
 					newAggArgs.Allocator = colmem.NewAllocator(
 						ctx, hashAggregatorUnlimitedMemAccount, factory,
 					)
-					evalCtx.SingleDatumAggMemAccount = hashAggregatorUnlimitedMemAccount
+					evalCtx.Shared.SingleDatumAggMemAccount = hashAggregatorUnlimitedMemAccount
 					newHashAggArgs := &colexecagg.NewHashAggregatorArgs{
 						NewAggregatorArgs:        newAggArgs,
 						HashTableAllocator:       colmem.NewAllocator(ctx, accounts[1], factory),
@@ -1130,7 +1130,7 @@ func NewColOperator(
 					// spilling to disk occurs (if we don't replace it in such
 					// case, the wrapped aggregate functions might hit a memory
 					// error even when used by the external hash aggregator).
-					evalCtx.SingleDatumAggMemAccount = ehaMemAccount
+					evalCtx.Shared.SingleDatumAggMemAccount = ehaMemAccount
 					diskSpiller := colexecdisk.NewOneInputDiskSpiller(
 						inputs[0].Root, inMemoryHashAggregator.(colexecop.BufferingInMemoryOperator),
 						hashAggregatorMemMonitorName,
@@ -1172,7 +1172,7 @@ func NewColOperator(
 				accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
 					ctx, flowCtx, "ordered-aggregator" /* opName */, spec.ProcessorID, 2, /* numAccounts */
 				)
-				evalCtx.SingleDatumAggMemAccount = accounts[0]
+				evalCtx.Shared.SingleDatumAggMemAccount = accounts[0]
 				newAggArgs.Allocator = colmem.NewAllocator(ctx, accounts[1], factory)
 				result.Root = colexec.NewOrderedAggregator(ctx, newAggArgs)
 				args.CloserRegistry.AddCloser(result.Root.(colexecop.Closer))
@@ -1463,7 +1463,7 @@ func NewColOperator(
 			// (if we don't replace it in such case, the wrapped aggregate
 			// functions might hit a memory error even when used by the external
 			// hash aggregator).
-			evalCtx.SingleDatumAggMemAccount = ehaMemAccount
+			evalCtx.Shared.SingleDatumAggMemAccount = ehaMemAccount
 			diskSpiller := colexecdisk.NewTwoInputDiskSpiller(
 				inputs[0].Root, inputs[1].Root, hgj,
 				[2]mon.Name{hashJoinerMemMonitorName, hashAggregatorMemMonitorName},

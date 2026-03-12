@@ -130,13 +130,13 @@ func (p *planner) EvalRoutineExpr(
 
 	if tailCallOptimizationEnabled && expr.TailCall && !expr.Generator {
 		// This is a nested routine in tail-call position.
-		sender := p.EvalContext().RoutineSender
+		sender := p.EvalContext().Shared.RoutineSender
 		if sender != nil && sender.CanOptimizeTailCall(expr) {
 			// Tail-call optimizations are enabled. Send the information needed to
 			// evaluate this routine to the parent routine, then return. It is safe to
 			// return NULL here because the parent is guaranteed not to perform any
 			// processing on the result of the child.
-			p.EvalContext().RoutineSender.SendDeferredRoutine(expr, args)
+			p.EvalContext().Shared.RoutineSender.SendDeferredRoutine(expr, args)
 			return tree.DNull, nil
 		}
 	}

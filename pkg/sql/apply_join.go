@@ -308,7 +308,7 @@ func runPlanInsidePlan(
 	// use it as the golden version going forward.
 	plannerCopy.extendedEvalCtx.Planner = &plannerCopy
 	plannerCopy.extendedEvalCtx.StreamManagerFactory = &plannerCopy
-	plannerCopy.extendedEvalCtx.RoutineSender = deferredRoutineSender
+	plannerCopy.extendedEvalCtx.Shared.RoutineSender = deferredRoutineSender
 	evalCtxFactory := plannerCopy.ExtendedEvalContextCopy
 
 	if len(plan.subqueryPlans) != 0 {

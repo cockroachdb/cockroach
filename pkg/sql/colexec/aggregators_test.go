@@ -1027,7 +1027,7 @@ func benchmarkAggregateFunction(
 	defer evalCtx.Stop(ctx)
 	aggMemAcc := evalCtx.TestingMon.MakeBoundAccount()
 	defer aggMemAcc.Close(ctx)
-	evalCtx.SingleDatumAggMemAccount = &aggMemAcc
+	evalCtx.Shared.SingleDatumAggMemAccount = &aggMemAcc
 	const bytesFixedLength = 8
 	typs := []*types.T{types.Int}
 	groupCols := []uint32{0}

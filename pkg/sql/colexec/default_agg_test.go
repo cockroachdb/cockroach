@@ -130,7 +130,7 @@ func TestDefaultAggregateFunc(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 	aggMemAcc := evalCtx.TestingMon.MakeBoundAccount()
 	defer aggMemAcc.Close(context.Background())
-	evalCtx.SingleDatumAggMemAccount = &aggMemAcc
+	evalCtx.Shared.SingleDatumAggMemAccount = &aggMemAcc
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
 	for _, agg := range aggTypes {
 		for _, tc := range testCases {

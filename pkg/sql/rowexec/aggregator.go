@@ -111,7 +111,7 @@ func (ag *aggregatorBase) init(
 	ag.arena = stringarena.Make(&ag.bucketsAcc)
 	ag.aggFuncsAcc = memMonitor.MakeBoundAccount()
 	ag.evalCtx = flowCtx.NewEvalCtx()
-	ag.evalCtx.SingleDatumAggMemAccount = &ag.aggFuncsAcc
+	ag.evalCtx.Shared.SingleDatumAggMemAccount = &ag.aggFuncsAcc
 
 	// Loop over the select expressions and extract any aggregate functions --
 	// non-aggregation functions are replaced with parser.NewIdentAggregate,
