@@ -136,6 +136,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/ptp"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/goexectrace"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -1367,6 +1368,10 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 	drain.serverCtl = sc
 
+	// Create the callback for embedding metadata in Go execution traces,
+	// used by the debug server's trace endpoint.
+	logMetadata := goexectrace.NewLogMetadataFn(cfg.BaseConfig.IDContainer)
+
 	// Create the debug API server.
 	debugServer := debug.NewServer(
 		cfg.BaseConfig.AmbientCtx,
@@ -1375,6 +1380,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		sqlServer.execCfg.SQLStatusServer,
 		roachpb.SystemTenantID,
 		authorizer,
+		logMetadata,
 	)
 
 	recoveryServer := loqrecovery.NewServer(
@@ -2059,6 +2065,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.goroutineDumper,
 		s.status.sessionRegistry,
 		s.sqlServer.execCfg.RootMemoryMonitor,
+		goexectrace.NewLogMetadataFn(s.cfg.BaseConfig.IDContainer),
 	); err != nil {
 		return err
 	}
