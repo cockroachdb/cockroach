@@ -114,7 +114,7 @@ func checkStatsForTable(
 
 	// Perform the lookup and refresh, and confirm the
 	// returned stats match the expected values.
-	statsList, err := sc.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+	statsList, _, err := sc.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	if err != nil {
 		t.Fatalf("error retrieving stats: %s", err)
 	}
@@ -412,7 +412,7 @@ func TestCacheWait(t *testing.T) {
 		for n := 0; n < 10; n++ {
 			wg.Add(1)
 			go func() {
-				stats, err := sc.getTableStatsFromCache(ctx, id, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+				stats, _, err := sc.getTableStatsFromCache(ctx, id, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 				if err != nil {
 					t.Error(err)
 				} else if !checkStats(stats, expectedStats[id]) {
@@ -840,6 +840,110 @@ func TestDecodeHistogramBucketsEnum(t *testing.T) {
 	}
 }
 
+// TestCanaryAndStableStatsDiffer exercises the cacheEntry.canaryAndStableStatsDiffer
+// method with a table-driven test covering all edge cases.
+func TestCanaryAndStableStatsDiffer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	now := hlc.Timestamp{WallTime: 1000 * time.Second.Nanoseconds()}
+	latestTS := hlc.Timestamp{WallTime: 999 * time.Second.Nanoseconds()}
+	stableTS := hlc.Timestamp{WallTime: 990 * time.Second.Nanoseconds()}
+	window := 10 * time.Second
+
+	tests := []struct {
+		name                           string
+		canaryWindowSize               time.Duration
+		asOf                           hlc.Timestamp
+		latestFullStatsTimestamp       hlc.Timestamp
+		latestStableFullStatsTimestamp hlc.Timestamp
+		expected                       bool
+	}{
+		{
+			name:             "no canary window",
+			canaryWindowSize: 0,
+			asOf:             now,
+			expected:         false,
+		},
+		{
+			name:                           "within window, two distinct generations",
+			canaryWindowSize:               window,
+			asOf:                           now,
+			latestFullStatsTimestamp:       latestTS,
+			latestStableFullStatsTimestamp: stableTS,
+			expected:                       true,
+		},
+		{
+			name:                           "past canary window",
+			canaryWindowSize:               window,
+			asOf:                           hlc.Timestamp{WallTime: 1100 * time.Second.Nanoseconds()},
+			latestFullStatsTimestamp:       latestTS,
+			latestStableFullStatsTimestamp: stableTS,
+			expected:                       false,
+		},
+		{
+<<<<<<< HEAD
+			name:                     "within window, only one generation (stable timestamp empty)",
+			canaryWindowSize:         window,
+			asOf:                     now,
+			latestFullStatsTimestamp: latestTS,
+			expected:                 false,
+=======
+			name:                     "within window, only one generation (stable is empty set)",
+			canaryWindowSize:         window,
+			asOf:                     now,
+			latestFullStatsTimestamp: latestTS,
+			expected:                 true,
+>>>>>>> 5831870e2c7 (sql/stats: only record canary/stable "canary vs stable" metrics when stats actually differ)
+		},
+		{
+			name:                           "within window, same timestamp for both generations",
+			canaryWindowSize:               window,
+			asOf:                           now,
+			latestFullStatsTimestamp:       latestTS,
+			latestStableFullStatsTimestamp: latestTS,
+<<<<<<< HEAD
+			expected:                       false,
+=======
+			expected:                       true,
+>>>>>>> 5831870e2c7 (sql/stats: only record canary/stable "canary vs stable" metrics when stats actually differ)
+		},
+		{
+			name:             "empty latestFullStatsTimestamp",
+			canaryWindowSize: window,
+			asOf:             now,
+			expected:         false,
+		},
+		{
+			name:                           "exactly at window boundary (window just expired)",
+			canaryWindowSize:               window,
+			asOf:                           hlc.Timestamp{WallTime: (999*time.Second + window).Nanoseconds()},
+			latestFullStatsTimestamp:       latestTS,
+			latestStableFullStatsTimestamp: stableTS,
+			expected:                       false,
+		},
+		{
+			name:                           "one nanosecond before window expires",
+			canaryWindowSize:               window,
+			asOf:                           hlc.Timestamp{WallTime: (999*time.Second + window).Nanoseconds() - 1},
+			latestFullStatsTimestamp:       latestTS,
+			latestStableFullStatsTimestamp: stableTS,
+			expected:                       true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			e := &cacheEntry{
+				latestFullStatsTimestamp:       tc.latestFullStatsTimestamp,
+				latestStableFullStatsTimestamp: tc.latestStableFullStatsTimestamp,
+			}
+			got := e.canaryAndStableStatsDiffer(tc.canaryWindowSize, tc.asOf)
+			require.Equal(t, tc.expected, got)
+		})
+	}
+}
+
 // TestCanaryDualCache tests the dual cache mechanism that maintains
 // separate fresh and stable statistics caches. The stable cache
 // preserves older stats during canary windows to ensure query plan
@@ -893,6 +997,35 @@ func TestCanaryDualCache(t *testing.T) {
 			formatStats("fresh", stats)
 			formatStats("stable", stableStats)
 			return result.String()
+
+		case "stats-differ":
+			tableName := "test"
+			if d.HasArg("table") {
+				d.ScanArgs(t, "table", &tableName)
+			}
+			var canaryWindow time.Duration
+			if d.HasArg("canary-window") {
+				var windowStr string
+				d.ScanArgs(t, "canary-window", &windowStr)
+				var err error
+				canaryWindow, err = time.ParseDuration(windowStr)
+				if err != nil {
+					return fmt.Sprintf("error parsing canary-window: %v", err)
+				}
+			}
+
+			tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
+			if !d.HasArg("no-invalidate") {
+				sc.InvalidateTableStats(ctx, tbl.GetID())
+			}
+			_, statsDiffer, err := sc.GetTableStatsMaybeStable(
+				ctx, tbl, nil /* typeResolver */, false /* stable */, canaryWindow, hlc.Timestamp{}, /* statsAsOf */
+			)
+			if err != nil {
+				return fmt.Sprintf("error: %v", err)
+			}
+			return fmt.Sprintf("stats_differ: %t\n", statsDiffer)
+
 		default:
 			return fmt.Sprintf("unknown command: %s", d.Cmd)
 		}

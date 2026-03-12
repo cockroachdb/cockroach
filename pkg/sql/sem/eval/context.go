@@ -361,6 +361,7 @@ type Context struct {
 	// are always for stable stats.
 	UseCanaryStats bool
 
+<<<<<<< Updated upstream
 	// WorkloadID for ASH sampling.
 	WorkloadID uint64
 

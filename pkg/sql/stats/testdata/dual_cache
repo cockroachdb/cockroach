@@ -614,3 +614,83 @@ created_at=2023-02-01 00:30:00, name="__auto__", row_count=6, distinct_count=3, 
 created_at=2023-02-01 00:00:00, name="__auto__", row_count=3, distinct_count=3, null_count=0, delayed_delete=false
 
 subtest end
+
+subtest stats_differ
+
+# Create a new table with canary window for stats-differ testing.
+exec
+CREATE TABLE differ_test (id INT PRIMARY KEY) WITH (sql_stats_canary_window = '1h')
+----
+
+# No stats yet — stats should not differ.
+stats-differ table=differ_test canary-window=1h
+----
+stats_differ: false
+
+# Inject a single generation of stats.
+exec
+ALTER TABLE differ_test INJECT STATISTICS '[
+  {
+    "columns": ["id"],
+    "created_at": "2025-01-01 10:00:00.000000",
+    "row_count": 100,
+    "distinct_count": 100,
+    "null_count": 0,
+    "avg_size": 8,
+    "name": "__auto__"
+  }
+]'
+----
+
+# Only one generation — no divergence.
+stats-differ table=differ_test canary-window=1h
+----
+stats_differ: false
+
+# Inject two generations of stats. Use a far-future timestamp for the freshest
+# generation so the canary window never expires regardless of when the test runs.
+exec
+ALTER TABLE differ_test INJECT STATISTICS '[
+  {
+    "columns": ["id"],
+    "created_at": "2025-01-01 10:00:00.000000",
+    "row_count": 100,
+    "distinct_count": 100,
+    "null_count": 0,
+    "avg_size": 8,
+    "name": "__auto__"
+  },
+  {
+    "columns": ["id"],
+    "created_at": "2099-01-01 10:00:00.000000",
+    "row_count": 200,
+    "distinct_count": 200,
+    "null_count": 0,
+    "avg_size": 8,
+    "name": "__auto__"
+  }
+]'
+----
+
+# Two distinct generations within the canary window — stats differ.
+stats-differ table=differ_test canary-window=1h
+----
+stats_differ: true
+
+# No canary window — stats should not differ even with two generations.
+stats-differ table=differ_test canary-window=0s
+----
+stats_differ: false
+
+# Test warm-cache path: call stats-differ without invalidating the cache
+# first (no-invalidate). The cache-hit branch in getTableStatsFromCache
+# should return the same statsDiffer value.
+stats-differ table=differ_test canary-window=1h no-invalidate
+----
+stats_differ: true
+
+stats-differ table=differ_test canary-window=0s no-invalidate
+----
+stats_differ: false
+
+subtest end

@@ -1080,6 +1080,13 @@ func (opc *optPlanningCtx) runExecBuilder(
 
 	planTop.planComponents = *result
 	planTop.stmt = stmt
+<<<<<<< HEAD
+	if opc.catalog.canaryAndStableStatsDiffer {
+=======
+	if oc, ok := opc.catalog.(*optCatalog); ok && oc.canaryAndStableStatsDiffer {
+>>>>>>> 5831870e2c7 (sql/stats: only record canary/stable "canary vs stable" metrics when stats actually differ)
+		opc.flags.Set(planFlagCanaryAndStableStatsDiffer)
+	}
 	planTop.flags |= opc.flags
 	if planTop.flags.IsSet(planFlagIsDDL) {
 		// The declarative schema changer mode would have already been set here,
