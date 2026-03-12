@@ -635,11 +635,6 @@ export const partitionedStatuses = createSelector(
   },
 );
 
-export const isSingleNodeCluster = createSelector(
-  nodeStatusesSelector,
-  nodeStatuses => nodeStatuses && nodeStatuses.length === 1,
-);
-
 export const nodeOptionsSelector = createSelector(
   nodesSummarySelector,
   (summary: NodesSummary): DropdownOption[] => {
