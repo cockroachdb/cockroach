@@ -367,8 +367,8 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	// Since the wrapped version setting exposes the new versions, it must
 	// definitely be present on all stores on the first try.
 	require.NoError(t, tc.Servers[1].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
-		cv := s.TODOEngine().MinVersion()
-		require.Equal(t, exp, cv.String())
+		require.Equal(t, exp, s.StateEngine().MinVersion().String())
+		require.Equal(t, exp, s.LogEngine().MinVersion().String())
 		return nil
 	}))
 }
