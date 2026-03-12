@@ -126,6 +126,32 @@ func (rc *ExternalRangeChange) IsChangeReplicas() bool {
 	return true
 }
 
+// IsLeaveJoint returns true if this change exclusively finalizes a joint
+// configuration — every change transitions a replica from a joint-config type
+// (VOTER_INCOMING, VOTER_DEMOTING_LEARNER, VOTER_DEMOTING_NON_VOTER) to its
+// finalized form.
+//
+// These changes cannot be expressed as kvpb.ReplicationChanges because the
+// production code uses a fundamentally different mechanism to leave joint
+// configs (execChangeReplicasTxn with nil internal changes, triggered via
+// maybeLeaveAtomicChangeReplicas). Callers must detect this case and route
+// through the leave-joint path directly.
+func (rc *ExternalRangeChange) IsLeaveJoint() bool {
+	if len(rc.Changes) == 0 {
+		return false
+	}
+	for _, c := range rc.Changes {
+		switch c.Prev.ReplicaType.ReplicaType {
+		case roachpb.VOTER_INCOMING, roachpb.VOTER_DEMOTING_LEARNER,
+			roachpb.VOTER_DEMOTING_NON_VOTER:
+			// Joint-config type being finalized.
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // IsPureTransferLease returns true if the range change is purely a transfer
 // lease operation (i.e., it is not a combined replication change and lease
 // transfer).

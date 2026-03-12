@@ -35,6 +35,9 @@ type replicaToApplyChanges interface {
 		details string,
 		chgs kvpb.ReplicationChanges,
 	) (updatedDesc *roachpb.RangeDescriptor, _ error)
+	maybeLeaveAtomicChangeReplicas(
+		ctx context.Context, desc *roachpb.RangeDescriptor,
+	) (*roachpb.RangeDescriptor, error)
 	Desc() *roachpb.RangeDescriptor
 }
 
@@ -145,8 +148,9 @@ func (m *mmaStoreRebalancer) rebalance(ctx context.Context, periodicCall bool) b
 	}
 
 	changes := m.mma.ComputeChanges(ctx, &storeLeaseholderMsg, mmaprototype.ChangeOptions{
-		LocalStoreID: m.store.StoreID(),
-		PeriodicCall: periodicCall,
+		LocalStoreID:  m.store.StoreID(),
+		PeriodicCall:  periodicCall,
+		IncludeRepair: kvserverbase.LoadBasedRebalancingModeIsMMARepairAndRebalance(&m.st.SV),
 	})
 
 	// TODO(wenyihu6): add allocator sync and post apply here
@@ -174,6 +178,10 @@ func (m *mmaStoreRebalancer) applyChange(
 	switch {
 	case change.IsPureTransferLease():
 		err = m.applyLeaseTransfer(ctx, repl, change)
+	case change.IsLeaveJoint():
+		// Leave-joint changes finalize joint configs and must bypass
+		// ReplicationChanges() / changeReplicasImpl (see IsLeaveJoint doc).
+		_, err = repl.maybeLeaveAtomicChangeReplicas(ctx, repl.Desc())
 	case change.IsChangeReplicas():
 		err = m.applyReplicaChanges(ctx, repl, change)
 	default:
