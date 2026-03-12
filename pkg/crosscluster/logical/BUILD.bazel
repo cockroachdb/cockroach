@@ -170,6 +170,7 @@ go_test(
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/resolver",
+        "//pkg/sql/distsql",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
