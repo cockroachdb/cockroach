@@ -159,7 +159,7 @@ func (ps *projectSetProcessor) nextInputRow() (
 	// Set expression helper row so that we can use it as an
 	// IndexedVarContainer.
 	ps.eh.SetRow(row)
-	ps.evalCtx.IVarContainer = ps.eh.IVarContainer()
+	ps.evalCtx.Local.IVarContainer = ps.eh.IVarContainer()
 
 	// Initialize a round of SRF generators or scalar values.
 	for i, n := 0, ps.eh.ExprCount(); i < n; i++ {

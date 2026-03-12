@@ -316,7 +316,7 @@ func truncateDatum(evalCtx *eval.Context, d tree.Datum, maxBytes int) tree.Datum
 
 		// Note: this will end up being larger than maxBytes due to the key and
 		// locale, so this is just a best-effort attempt to limit the size.
-		res, err := tree.NewDCollatedString(contents, t.Locale, &evalCtx.CollationEnv)
+		res, err := tree.NewDCollatedString(contents, t.Locale, evalCtx.GetCollationEnv())
 		if err != nil {
 			return d
 		}

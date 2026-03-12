@@ -272,7 +272,7 @@ func (c *CustomFuncs) CastToCollatedString(str opt.ScalarExpr, locale string) op
 		default:
 			panic(errors.AssertionFailedf("unexpected type for COLLATE: %T", t))
 		}
-		d, err := tree.NewDCollatedString(value, locale, &c.f.evalCtx.CollationEnv)
+		d, err := tree.NewDCollatedString(value, locale, c.f.evalCtx.GetCollationEnv())
 		if err != nil {
 			panic(err)
 		}

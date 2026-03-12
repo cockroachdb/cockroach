@@ -164,7 +164,7 @@ func (c *CustomFuncs) CollapseRepeatedLikePatternWildcards(
 		orig := t.Contents
 		collapsed := eval.CollapseLikeWildcards(orig)
 		if orig != collapsed {
-			d, err := tree.NewDCollatedString(collapsed, t.Locale, &c.f.evalCtx.CollationEnv)
+			d, err := tree.NewDCollatedString(collapsed, t.Locale, c.f.evalCtx.GetCollationEnv())
 			if err != nil {
 				panic(err)
 			}

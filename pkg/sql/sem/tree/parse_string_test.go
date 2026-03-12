@@ -72,7 +72,7 @@ func TestParseStringTypeGamut(t *testing.T) {
 		}
 		d, _, err1 := tree.ParseAndRequireString(typ, s, evalCtx)
 		vecHandlers[i] = coldataext.MakeVecHandler(b.ColVec(i))
-		err2 := tree.ParseAndRequireStringHandler(typ, s, evalCtx, vecHandlers[i], &evalCtx.ParseHelper)
+		err2 := tree.ParseAndRequireStringHandler(typ, s, evalCtx, vecHandlers[i], evalCtx.GetDateHelper())
 		require.Equal(t, err1, err2)
 		if err1 == nil {
 			if d.ResolvedType().Family() == types.FloatFamily {
@@ -126,7 +126,7 @@ func TestParseStringHandlerErrors(t *testing.T) {
 		_, _, err1 := tree.ParseAndRequireString(tc.t, tc.val, evalCtx)
 		require.Errorf(t, err1, "parsing `%s` as `%v` didn't error as expected", tc.val, tc.t)
 		vh := &anyHandler{}
-		err2 := tree.ParseAndRequireStringHandler(tc.t, tc.val, evalCtx, vh, &evalCtx.ParseHelper)
+		err2 := tree.ParseAndRequireStringHandler(tc.t, tc.val, evalCtx, vh, evalCtx.GetDateHelper())
 		require.Equal(t, err1.Error(), err2.Error())
 	}
 }
@@ -198,7 +198,7 @@ func BenchmarkParseString(b *testing.B) {
 			b.ResetTimer()
 			rowCount := 0
 			for i := 0; i < b.N; i++ {
-				err := tree.ParseAndRequireStringHandler(tc.typ, tc.str, evalCtx, vhs[col], &evalCtx.ParseHelper)
+				err := tree.ParseAndRequireStringHandler(tc.typ, tc.str, evalCtx, vhs[col], evalCtx.GetDateHelper())
 				require.NoError(b, err)
 				rowCount++
 				if rowCount == numRows {

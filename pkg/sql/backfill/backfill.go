@@ -367,7 +367,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	}
 	iv.Cols = append(iv.Cols, tableDesc.PublicColumns()...)
 	iv.Cols = append(iv.Cols, cb.added...)
-	cb.evalCtx.IVarContainer = iv
+	cb.evalCtx.Local.IVarContainer = iv
 
 	fetchedValues := make(tree.Datums, cb.colIdxMap.Len())
 	iv.CurSourceRow = make(tree.Datums, len(iv.Cols))
@@ -1446,7 +1446,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		Cols:    ib.cols,
 		Mapping: ib.colIdxMap,
 	}
-	ib.evalCtx.IVarContainer = iv
+	ib.evalCtx.Local.IVarContainer = iv
 
 	indexEntriesPerRowInitialBufferSize := int64(len(ib.added)) * sizeOfIndexEntry
 	if err := ib.GrowBoundAccount(ctx, indexEntriesPerRowInitialBufferSize); err != nil {

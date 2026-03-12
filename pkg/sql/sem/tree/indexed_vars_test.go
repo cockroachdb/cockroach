@@ -76,7 +76,7 @@ func TestIndexedVars(t *testing.T) {
 	// Verify the expression evaluates correctly.
 	evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
-	evalCtx.IVarContainer = c
+	evalCtx.Local.IVarContainer = c
 	d, err := eval.Expr(ctx, evalCtx, typedExpr)
 	if err != nil {
 		t.Fatal(err)
