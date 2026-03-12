@@ -125,7 +125,7 @@ func (b *AuthBehaviors) EnhancedMapRole(
 	if found := b.enhancedRoleMapper; found != nil {
 		return found(ctx, systemIdentities)
 	}
-	return nil, errors.New("no SAN RoleMapper provided to AuthBehaviors.")
+	return nil, errors.New("no SAN RoleMapper provided to AuthBehaviors")
 }
 
 // SetRoleMapper updates the RoleMapper to be used.
@@ -135,13 +135,13 @@ func (b *AuthBehaviors) SetRoleMapper(m RoleMapper) {
 
 // SetEnhancedRoleMapper sets the enhanced mapper that returns identity associations.
 // This is used when multiple system identities exist (e.g., certificate SANs).
-func (a *AuthBehaviors) SetEnhancedRoleMapper(fn EnhancedRoleMapper) {
-	a.enhancedRoleMapper = fn
-	a.enhancedRoleMapperSet = true
+func (b *AuthBehaviors) SetEnhancedRoleMapper(fn EnhancedRoleMapper) {
+	b.enhancedRoleMapper = fn
+	b.enhancedRoleMapperSet = true
 }
 
-func (a *AuthBehaviors) IsEnhancedRoleMapperSet() bool {
-	return a.enhancedRoleMapperSet
+func (b *AuthBehaviors) IsEnhancedRoleMapperSet() bool {
+	return b.enhancedRoleMapperSet
 }
 
 // SetAuthorizer updates the SetAuthorizer to be used.
