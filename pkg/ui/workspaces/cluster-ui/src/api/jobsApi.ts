@@ -11,6 +11,8 @@ import { propsToQueryString, useSwrWithClusterId } from "../util";
 
 import { fetchData } from "./fetchData";
 
+type JobType = cockroach.sql.jobs.jobspb.Type;
+
 const JOBS_PATH = "_admin/v1/jobs";
 
 export type JobsRequest = cockroach.server.serverpb.JobsRequest;
@@ -53,6 +55,26 @@ export function useJobDetails(jobId: long, opts: SWRConfiguration = {}) {
   return useSwrWithClusterId<JobResponse>(
     { name: "jobDetailsById", jobId },
     () => getJob({ job_id: jobId }),
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      ...opts,
+    },
+  );
+}
+
+export function useJobs(
+  status: string,
+  type: JobType,
+  limit: number,
+  opts: SWRConfiguration = {},
+) {
+  return useSwrWithClusterId<JobsResponse>(
+    { name: "jobs", status, type: String(type), limit: String(limit) },
+    () =>
+      getJobs(
+        new cockroach.server.serverpb.JobsRequest({ status, type, limit }),
+      ),
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
