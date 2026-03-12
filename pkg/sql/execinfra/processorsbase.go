@@ -809,7 +809,7 @@ func (pb *ProcessorBase) Init(
 	opts ProcStateOpts,
 ) error {
 	return pb.InitWithEvalCtx(
-		ctx, self, post, coreOutputTypes, flowCtx, flowCtx.EvalCtx, processorID, memMonitor, opts,
+		ctx, self, post, coreOutputTypes, flowCtx, flowCtx.NewEvalCtx(), processorID, memMonitor, opts,
 	)
 }
 
