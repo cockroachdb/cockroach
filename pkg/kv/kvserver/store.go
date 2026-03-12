@@ -3613,7 +3613,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 }
 
 func (s *Store) checkpointsDir() string {
-	return filepath.Join(s.TODOEngine().GetAuxiliaryDir(), "checkpoints")
+	return filepath.Join(s.TODOBothEngines().GetAuxiliaryDir(), "checkpoints")
 }
 
 // checkpointSpans returns key spans containing the given range. The spans may
@@ -3622,7 +3622,7 @@ func (s *Store) checkpointsDir() string {
 // storage issues, e.g. in situations when a recent reconfiguration like split
 // or merge occurred.
 func (s *Store) checkpointSpans(desc *roachpb.RangeDescriptor) []roachpb.Span {
-	_ = s.TODOEngine() // this method needs to return two sets of spans, one for each engine
+	_ = s.TODOBothEngines() // need to return two sets of spans, one for each engine
 	// Find immediate left and right neighbours by range ID.
 	var prevID, nextID roachpb.RangeID
 	s.mu.replicasByRangeID.Range(func(rangeID roachpb.RangeID, _ *Replica) bool {
@@ -3691,16 +3691,17 @@ func (s *Store) checkpointSpans(desc *roachpb.RangeDescriptor) []roachpb.Span {
 // the provided key spans. If spans is empty, it includes the entire store.
 func (s *Store) checkpoint(tag string, spans []roachpb.Span) (string, error) {
 	checkpointBase := s.checkpointsDir()
-	_ = s.TODOEngine().Env().MkdirAll(checkpointBase, os.ModePerm)
+	eng := s.TODOBothEngines()
+	_ = eng.Env().MkdirAll(checkpointBase, os.ModePerm)
 	// Create the checkpoint in a "pending" directory first. If we fail midway, it
 	// should be clear that the directory contains an incomplete checkpoint.
 	pendingDir := filepath.Join(checkpointBase, tag+"_pending")
-	if err := s.TODOEngine().CreateCheckpoint(pendingDir, spans); err != nil {
+	if err := eng.CreateCheckpoint(pendingDir, spans); err != nil {
 		return "", err
 	}
 	// Atomically rename the directory when it represents a complete checkpoint.
 	checkpointDir := filepath.Join(checkpointBase, tag)
-	if err := s.TODOEngine().Env().Rename(pendingDir, checkpointDir); err != nil {
+	if err := eng.Env().Rename(pendingDir, checkpointDir); err != nil {
 		return "", err
 	}
 	return checkpointDir, nil
