@@ -8,6 +8,7 @@ package stats_test
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -19,11 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -841,6 +845,113 @@ func TestCreateStatsAsOfTime(t *testing.T) {
 		[][]string{
 			{"s", "{x}", "1"},
 		})
+}
+
+// TestReschedulingOnConcurrentCreateStatsError verifies that if a full table
+// stats refresh encounters ConcurrentCreateStatsError, it is rescheduled for
+// the next refresh cycle.
+func TestReschedulingOnConcurrentCreateStatsError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "the test is too sensitive to overload")
+
+	defer func(oldRefreshInterval, oldAsOf time.Duration) {
+		stats.DefaultRefreshInterval = oldRefreshInterval
+		stats.DefaultAsOfTime = oldAsOf
+	}(stats.DefaultRefreshInterval, stats.DefaultAsOfTime)
+	stats.DefaultRefreshInterval = time.Second
+	stats.DefaultAsOfTime = 100 * time.Millisecond
+
+	ctx := context.Background()
+	var allowRequest chan struct{}
+	var allowRequestOpen bool
+
+	filter, setTableID := createStatsRequestFilter(&allowRequest)
+	var params base.TestClusterArgs
+	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+	params.ServerArgs.Knobs.Store = &kvserver.StoreTestingKnobs{
+		TestingRequestFilter: filter,
+	}
+	rescheduleAttempt := make(chan descpb.ID, 1)
+	params.ServerArgs.Knobs.TableStatsKnobs = &stats.TableStatsTestingKnobs{
+		DisableInitialTableCollection: true,
+		RescheduleAttempt:             rescheduleAttempt,
+	}
+	params.ServerArgs.Settings = cluster.MakeTestingClusterSettings()
+	// Disable auto stats on all tables so that they don't interfere with the
+	// test.
+	stats.AutomaticStatisticsClusterMode.Override(ctx, &params.ServerArgs.Settings.SV, false)
+
+	const nodes = 1
+	tc := testcluster.StartTestCluster(t, nodes, params)
+	defer tc.Stopper().Stop(ctx)
+	s := tc.ApplicationLayer(0)
+	refresher := s.ExecutorConfig().(sql.ExecutorConfig).StatsRefresher
+
+	defer func() {
+		if allowRequestOpen {
+			close(allowRequest)
+		}
+	}()
+
+	conn := s.SQLConn(t)
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	// Lower the concurrency limit to allow at most one auto full stats job.
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_full_concurrency_limit = 1`)
+
+	// Create two tables. Notably auto stats are enabled on 't2'.
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE TABLE d.t2 (x INT PRIMARY KEY) WITH (sql_stats_automatic_collection_enabled = true)`)
+	sqlDB.Exec(t, `INSERT INTO d.t SELECT generate_series(1,1000)`)
+
+	descT2 := desctestutils.TestingGetTableDescriptor(s.DB(), s.Codec(), "d", "public", "t2")
+
+	// Block the next stats collection on the table 't'.
+	var tID, t2ID descpb.ID
+	sqlDB.QueryRow(t, `SELECT 'd.t'::regclass::int, 'd.t2'::regclass::int`).Scan(&tID, &t2ID)
+	setTableID(tID)
+
+	// Start an auto full stat job and wait until it's done one scan. This will
+	// be the stat job that runs in the background.
+	allowRequest = make(chan struct{})
+	allowRequestOpen = true
+	backgroundAutoFullStatErrCh := make(chan error)
+	go func() {
+		_, err := conn.Exec(`CREATE STATISTICS __auto__ FROM d.t`)
+		backgroundAutoFullStatErrCh <- err
+	}()
+	select {
+	case allowRequest <- struct{}{}:
+	case err := <-backgroundAutoFullStatErrCh:
+		t.Fatal(err)
+	}
+
+	// Don't block the other stats jobs.
+	setTableID(descpb.InvalidID)
+
+	// This should trigger a refresh on 't2' which should hit the
+	// ConcurrentCreateStatsError (due to global concurrency limit being
+	// reached).
+	refresher.NotifyMutation(ctx, descT2, math.MaxInt32)
+	// We expect that the failed refresh is rescheduled.
+	select {
+	case tableID := <-rescheduleAttempt:
+		if tableID != t2ID {
+			t.Fatalf("expected the rescheduled refresh on %d, but got %d", t2ID, tableID)
+		}
+	case <-time.After(testutils.SucceedsSoonDuration()):
+		t.Fatal("timed out waiting for a refresh to be rescheduled")
+	}
+
+	// Unblock the background stats job.
+	close(allowRequest)
+	allowRequestOpen = false
+	if err := <-backgroundAutoFullStatErrCh; err != nil {
+		t.Fatalf("expected no error, found %v", err)
+	}
 }
 
 // Create a blocking request filter for the actions related to CREATE

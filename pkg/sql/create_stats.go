@@ -186,6 +186,22 @@ func (n *createStatsNode) isAuto() bool {
 	return n.Name == jobspb.AutoStatsName || n.Name == jobspb.AutoPartialStatsName
 }
 
+func (n *createStatsNode) handleConcurrentStatsErr(ctx context.Context, tableID descpb.ID) {
+	if !n.isAuto() {
+		// Only auto full stats jobs might need to be rescheduled.
+		return
+	}
+	if n.Name == jobspb.AutoPartialStatsName {
+		// Simply ignore this error since it's most likely due to an auto stats
+		// collection job (either full or partial) on the same table started by
+		// another node.
+		return
+	}
+	// Another full stats job was already running. Attempt to reschedule
+	// this refresh.
+	n.p.ExecCfg().StatsRefresher.RescheduleRefresh(ctx, tableID)
+}
+
 // runJob starts a CreateStats job synchronously to plan and execute
 // statistics creation and then waits for the job to complete.
 func (n *createStatsNode) runJob(ctx context.Context) error {
@@ -206,9 +222,12 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 				ctx, nil /* job */, n.p, n.Name == jobspb.AutoPartialStatsName, n.p.ExecCfg().JobRegistry,
 				details.Table.ID,
 			); err != nil {
-				if !errorOnConcurrentCreateStats.Get(n.p.ExecCfg().SV()) && errors.Is(err, stats.ConcurrentCreateStatsError) {
-					log.Dev.Infof(ctx, "concurrent create stats job found, skipping")
-					return nil
+				if errors.Is(err, stats.ConcurrentCreateStatsError) {
+					n.handleConcurrentStatsErr(ctx, details.Table.ID)
+					if !errorOnConcurrentCreateStats.Get(n.p.ExecCfg().SV()) {
+						log.Dev.Infof(ctx, "concurrent create stats job found, skipping")
+						return nil
+					}
 				}
 				return err
 			}
@@ -242,9 +261,12 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 				log.Dev.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
 			}
 		}
-		if !errorOnConcurrentCreateStats.Get(n.p.ExecCfg().SV()) && errors.Is(err, stats.ConcurrentCreateStatsError) {
-			log.Dev.Infof(ctx, "concurrent create stats job found, skipping")
-			return nil
+		if errors.Is(err, stats.ConcurrentCreateStatsError) {
+			n.handleConcurrentStatsErr(ctx, details.Table.ID)
+			if !errorOnConcurrentCreateStats.Get(n.p.ExecCfg().SV()) {
+				log.Dev.Infof(ctx, "concurrent create stats job found, skipping")
+				return nil
+			}
 		}
 		return err
 	}
@@ -257,6 +279,7 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 			if delErr := n.p.ExecCfg().JobRegistry.DeleteTerminalJobByID(ctx, job.ID()); delErr != nil {
 				log.Dev.Warningf(ctx, "failed to delete job: %v", delErr)
 			}
+			n.handleConcurrentStatsErr(ctx, details.Table.ID)
 			if !errorOnConcurrentCreateStats.Get(n.p.ExecCfg().SV()) {
 				return nil
 			}

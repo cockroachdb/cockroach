@@ -348,6 +348,10 @@ type TableStatsTestingKnobs struct {
 	// StubTimeNow allows tests to override the current time, used by
 	// EstimateStaleness to get the latest stats' age.
 	StubTimeNow func() time.Time
+	// RescheduleAttempt, if non-nil, will be used to non-blockingly send the
+	// tableID on which the refresh is rescheduled due to
+	// ConcurrentCreateStatsError.
+	RescheduleAttempt chan descpb.ID
 }
 
 var _ base.ModuleTestingKnobs = &TableStatsTestingKnobs{}
@@ -668,7 +672,6 @@ func (r *Refresher) Start(
 							}
 							r.maybeRefreshStats(
 								ctx,
-								stopper,
 								tableID,
 								explicitSettings,
 								rowsAffected,
@@ -896,6 +899,58 @@ func (r *Refresher) NotifyMutation(
 	}
 }
 
+// RescheduleRefresh should be called by an auto full stats job whenever it hits
+// ConcurrentCreateStatsError to attempt to reschedule the stats refresh. Note
+// that it might block (for at most DefaultRefreshInterval) but will
+// short-circuit on the node shutdown.
+func (r *Refresher) RescheduleRefresh(ctx context.Context, tableID descpb.ID) {
+	mustRefresh, _, err := r.mustDoFullRefresh(ctx, tableID)
+	if err != nil {
+		mustRefresh = true
+		log.Dev.Warningf(ctx, "failed to get table statistics for rescheduling the refresh: %v", err)
+	}
+	var newEvent mutation
+	if mustRefresh {
+		// For the cases where mustRefresh=true (stats don't yet exist or it
+		// has been 2x the average time since a refresh), we want to make sure
+		// that maybeRefreshStats is called on this table during the next
+		// cycle so that we have another chance to trigger a refresh. We pass
+		// rowsAffected=0 so that we don't force a refresh if another node has
+		// already done it.
+		newEvent = mutation{tableID: tableID, rowsAffected: 0}
+	} else {
+		// If this refresh was caused by a "dice roll", we want to make sure
+		// that the refresh is rescheduled so that we adhere to the
+		// AutomaticStatisticsFractionStaleRows statistical ideal. We
+		// ensure that the refresh is triggered during the next cycle by
+		// passing a very large number for rowsAffected.
+		newEvent = mutation{tableID: tableID, rowsAffected: math.MaxInt32}
+	}
+	if r.knobs != nil && r.knobs.RescheduleAttempt != nil {
+		select {
+		case r.knobs.RescheduleAttempt <- tableID:
+		default:
+		}
+	}
+	select {
+	case r.mutations <- newEvent:
+		return
+	case <-r.drainAutoStats:
+		// Shutting down due to a graceful drain.
+		// We don't want to force a write to the mutations here
+		// otherwise we could block the graceful shutdown.
+		err = errors.New("server is shutting down")
+	case <-r.cache.stopper.ShouldQuiesce():
+		// Shutting down due to direct stopper Stop call.
+		// This is not strictly required for correctness but
+		// helps avoiding log spam.
+		err = errors.New("server is shutting down")
+	case <-ctx.Done():
+		err = ctx.Err()
+	}
+	log.Dev.Warningf(ctx, "failed to create statistics on table %d: %v", tableID, err)
+}
+
 // EstimateStaleness returns an estimate fraction of stale rows in the given
 // table based on how long it has been since the last full statistics refresh,
 // and the average time between refreshes.
@@ -946,33 +1001,18 @@ func (r *Refresher) EstimateStaleness(
 	return staleFraction, nil
 }
 
-// maybeRefreshStats implements the core logic described in the comment for
-// Refresher. It is called by the background Refresher thread.
-// explicitSettings, if non-nil, holds any autostats cluster setting overrides
-// for this table.
-func (r *Refresher) maybeRefreshStats(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	tableID descpb.ID,
-	explicitSettings *catpb.AutoStatsSettings,
-	rowsAffected int64,
-	asOf time.Duration,
-	partialStatsEnabled bool,
-	fullStatsEnabled bool,
-) {
+func (r *Refresher) mustDoFullRefresh(
+	ctx context.Context, tableID descpb.ID,
+) (mustRefresh bool, rowCount float64, _ error) {
 	// NB: we pass nil boolean as 'forecast' argument in order to not invalidate
 	// the stats cache entry since we don't care whether there is a forecast or
 	// not in the stats.
 	var forecast *bool
 	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID, forecast, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	if err != nil {
-		log.Dev.Errorf(ctx, "failed to get table statistics: %v", err)
-		return
+		return false, 0, err
 	}
 
-	var rowCount float64
-	mustRefresh := false
-	isPartial := false
 	stat := mostRecentAutomaticFullStat(tableStats)
 	if stat != nil {
 		// Check if too much time has passed since the last refresh.
@@ -1001,7 +1041,29 @@ func (r *Refresher) maybeRefreshStats(
 		// a refresh.
 		mustRefresh = true
 	}
+	return mustRefresh, rowCount, nil
+}
 
+// maybeRefreshStats implements the core logic described in the comment for
+// Refresher. It is called by the background Refresher thread.
+// explicitSettings, if non-nil, holds any autostats cluster setting overrides
+// for this table.
+func (r *Refresher) maybeRefreshStats(
+	ctx context.Context,
+	tableID descpb.ID,
+	explicitSettings *catpb.AutoStatsSettings,
+	rowsAffected int64,
+	asOf time.Duration,
+	partialStatsEnabled bool,
+	fullStatsEnabled bool,
+) {
+	mustRefresh, rowCount, err := r.mustDoFullRefresh(ctx, tableID)
+	if err != nil {
+		log.Dev.Errorf(ctx, "failed to get table statistics: %v", err)
+		return
+	}
+
+	isPartial := false
 	var doFullRefresh bool
 	if fullStatsEnabled {
 		// We will always do a full stats refresh if we must or if the maximum
@@ -1045,52 +1107,13 @@ func (r *Refresher) maybeRefreshStats(
 	}
 
 	if err := r.refreshStats(ctx, tableID, asOf, isPartial); err != nil {
+		// ConcurrentCreateStatsError is expected, so simply ignore it (it's
+		// handled by RescheduleRefresh called by the stats job). Log all
+		// others.
 		if errors.Is(err, ConcurrentCreateStatsError) {
-			if isPartial {
-				// Simply ignore this error since it's most likely due to an
-				// auto stats collection job (either full or partial) on the
-				// same table started by another node.
-				return
-			}
-			// Another full stats job was already running. Attempt to reschedule
-			// this refresh.
-			var newEvent mutation
-			if mustRefresh {
-				// For the cases where mustRefresh=true (stats don't yet exist or it
-				// has been 2x the average time since a refresh), we want to make sure
-				// that maybeRefreshStats is called on this table during the next
-				// cycle so that we have another chance to trigger a refresh. We pass
-				// rowsAffected=0 so that we don't force a refresh if another node has
-				// already done it.
-				newEvent = mutation{tableID: tableID, rowsAffected: 0}
-			} else {
-				// If this refresh was caused by a "dice roll", we want to make sure
-				// that the refresh is rescheduled so that we adhere to the
-				// AutomaticStatisticsFractionStaleRows statistical ideal. We
-				// ensure that the refresh is triggered during the next cycle by
-				// passing a very large number for rowsAffected.
-				newEvent = mutation{tableID: tableID, rowsAffected: math.MaxInt32}
-			}
-			select {
-			case r.mutations <- newEvent:
-				return
-			case <-r.drainAutoStats:
-				// Shutting down due to a graceful drain.
-				// We don't want to force a write to the mutations here
-				// otherwise we could block the graceful shutdown.
-				err = errors.New("server is shutting down")
-			case <-stopper.ShouldQuiesce():
-				// Shutting down due to direct stopper Stop call.
-				// This is not strictly required for correctness but
-				// helps avoiding log spam.
-				err = errors.New("server is shutting down")
-			}
+			return
 		}
-
-		// Log other errors but don't automatically reschedule the refresh, since
-		// that could lead to endless retries.
 		log.Dev.Warningf(ctx, "failed to create statistics on table %d: %v", tableID, err)
-		return
 	}
 }
 
