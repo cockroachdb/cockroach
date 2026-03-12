@@ -1320,6 +1320,17 @@ func runCDCRollingRestart(
 	racks.Env = append(racks.Env, `COCKROACH_CHANGEFEED_TESTING_INITIAL_RETRY_BACKOFF=32s`)
 	c.Start(ctx, t.L(), startOpts, racks)
 
+	// Set up prometheus on the workload node for roachperf export. The
+	// workload node is never restarted, so prometheus scraping is stable.
+	workloadNode := c.Spec().NodeCount
+	promCfg := (&prometheus.Config{}).
+		WithPrometheusNode(c.Node(workloadNode).InstallNodes()[0]).
+		WithCluster(c.All().InstallNodes()).
+		WithNodeExporter(c.All().InstallNodes())
+	if err := c.StartGrafana(ctx, t.L(), promCfg); err != nil {
+		t.Fatal(err)
+	}
+
 	restart := func(n int) error {
 		t.L().Printf("draining and restarting node %d", n)
 		cmd := fmt.Sprintf("./cockroach node drain --certs-dir=%s --port={pgport:%d} --self", install.CockroachNodeCertsDir, n)
@@ -1338,7 +1349,6 @@ func runCDCRollingRestart(
 
 	// Connect to the workload node for queries since we'll be restarting the
 	// other nodes during the test.
-	workloadNode := c.Spec().NodeCount
 	db := c.Conn(ctx, t.L(), workloadNode)
 	defer db.Close()
 	t.L().Printf("setting up test with maxBackoff=%s, doRestarts=%t",
@@ -1396,6 +1406,7 @@ func runCDCRollingRestart(
 			l.Printf("starting rolling drain+restarts of nodes %v at %s interval for %s...", restartNodes, restartInterval, params.restartDuration)
 
 			timer := time.NewTimer(0)
+			defer timer.Stop()
 			restartDeadline := beginTime.Add(params.restartDuration)
 			for {
 				for _, n := range restartNodes {
@@ -1421,8 +1432,6 @@ func runCDCRollingRestart(
 		})
 	}
 
-	// TODO(#164040): Instead of polling the highwater via SHOW CHANGEFEED JOB,
-	// measure the lag using metrics (max_behind_nanos).
 	getCurrentJobInfo := func() (time.Duration, string, string, error) {
 		var status string
 		var hwNanos gosql.NullFloat64
@@ -1448,6 +1457,7 @@ func runCDCRollingRestart(
 	testDeadline := beginTime.Add(params.testDuration)
 	const maxAllowedLag = 5 * time.Minute
 
+	var maxHighwaterLag time.Duration
 	ticker := time.NewTicker(lagPollInterval)
 	defer ticker.Stop()
 	for range ticker.C {
@@ -1462,6 +1472,9 @@ func runCDCRollingRestart(
 		}
 		t.L().Printf("[%s] changefeed lag: %s, status: %s, running_status: %s",
 			timeutil.Since(beginTime), currentLag, status, runningStatus)
+		if currentLag > maxHighwaterLag {
+			maxHighwaterLag = currentLag
+		}
 		if status == "failed" {
 			t.Fatalf("changefeed entered failed status: %s", runningStatus)
 		}
@@ -1476,11 +1489,67 @@ func runCDCRollingRestart(
 	if err != nil {
 		t.Fatalf("error querying final changefeed status: %v", err)
 	}
-	t.L().Printf("[%s] changefeed %d completed %s test run, final lag=%s", timeutil.Since(beginTime), jobID, params.testDuration, finalLag)
+	t.L().Printf("[%s] changefeed %d completed %s test run, final_lag=%s max_lag=%s",
+		timeutil.Since(beginTime), jobID, params.testDuration,
+		finalLag, maxHighwaterLag)
 	const maxLagAfterRecovery = 2 * time.Minute
 	if finalLag > maxLagAfterRecovery {
 		t.Fatalf("changefeed lag %s exceeded maximum allowed (%s) after recovery period",
 			finalLag, maxLagAfterRecovery)
+	}
+
+	// Export metrics to roachperf.
+	promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	maxBehindNanos := clusterstats.ClusterStat{
+		LabelName: "node", Query: "changefeed_max_behind_nanos",
+	}
+	maxBehindSecondsAgg := clusterstats.AggQuery{
+		Stat:  maxBehindNanos,
+		Query: "max(changefeed_max_behind_nanos) / (1000*1000*1000)",
+		Tag:   "Max Behind (s)",
+	}
+	statsCollector := clusterstats.NewStatsCollector(ctx, promClient)
+	if _, err := statsCollector.Exporter().Export(ctx, c, t, false, /* dryRun */
+		beginTime,
+		timeutil.Now(),
+		[]clusterstats.AggQuery{maxBehindSecondsAgg},
+		func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+			return &roachtestutil.AggregatedMetric{
+				Name:           "Max highwater lag (s)",
+				Value:          roachtestutil.MetricPoint(maxHighwaterLag.Seconds()),
+				Unit:           "seconds",
+				IsHigherBetter: false,
+			}
+		},
+		func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+			var maxVal float64
+			if stat, ok := stats[maxBehindNanos.Query]; ok {
+				for _, v := range stat.Value {
+					if v > maxVal {
+						maxVal = v
+					}
+				}
+			}
+			return &roachtestutil.AggregatedMetric{
+				Name:           "Max behind lag (s)",
+				Value:          roachtestutil.MetricPoint(maxVal),
+				Unit:           "seconds",
+				IsHigherBetter: false,
+			}
+		},
+		func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+			return &roachtestutil.AggregatedMetric{
+				Name:           "Final highwater lag (s)",
+				Value:          roachtestutil.MetricPoint(finalLag.Seconds()),
+				Unit:           "seconds",
+				IsHigherBetter: false,
+			}
+		},
+	); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -2381,6 +2450,7 @@ CONFIGURE ZONE USING
 	r.Add(registry.TestSpec{
 		Name:             "cdc/rolling-restart",
 		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(4),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
@@ -2401,6 +2471,7 @@ CONFIGURE ZONE USING
 	r.Add(registry.TestSpec{
 		Name:             "cdc/no-rolling-restart",
 		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(4),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
