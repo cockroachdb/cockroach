@@ -1,0 +1,54 @@
+# Schedule rejection: if Schedule returns false, try next candidate.
+
+init max-concurrency=3 deprioritization=0.5 log-allowed=2 state-allowed=2
+----
+
+set-allowed engine=log allowed=0
+----
+
+set-allowed engine=state allowed=0
+----
+
+set-waiting engine=log priority=80 score=2.0
+----
+
+set-waiting engine=state priority=80 score=1.0
+----
+
+try-schedule engine=log
+----
+not granted
+
+try-schedule engine=state
+----
+not granted
+
+set-allowed engine=log allowed=2
+----
+
+set-allowed engine=state allowed=2
+----
+
+set-reject-next engine=state
+----
+
+tick
+----
+log: GetWaitingCompaction
+state: GetWaitingCompaction
+log: Schedule => accepted: compaction index 0
+log: GetWaitingCompaction
+state: GetWaitingCompaction
+state: Schedule => rejected
+
+compaction-done engine=log idx=0
+----
+
+print-state
+----
+totalRunning: 0
+log: running=0 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+close
+----
