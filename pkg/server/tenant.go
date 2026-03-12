@@ -78,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/goexectrace"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -513,6 +514,10 @@ func newTenantServer(
 		processCapAuthz = lsi.SameProcessCapabilityAuthorizer
 	}
 
+	// Create the callback for embedding metadata in Go execution traces,
+	// used by the debug server's trace endpoint.
+	logMetadata := goexectrace.NewLogMetadataFn(baseCfg.IDContainer)
+
 	// Create the debug API server.
 	debugServer := debug.NewServer(
 		baseCfg.AmbientCtx,
@@ -521,6 +526,7 @@ func newTenantServer(
 		sqlServer.execCfg.SQLStatusServer,
 		sqlCfg.TenantID,
 		processCapAuthz,
+		logMetadata,
 	)
 
 	return &SQLServerWrapper{
@@ -803,6 +809,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			goroutineDumper,
 			s.tenantStatus.sessionRegistry,
 			s.sqlServer.execCfg.RootMemoryMonitor,
+			goexectrace.NewLogMetadataFn(s.cfg.IDContainer),
 		); err != nil {
 			return err
 		}

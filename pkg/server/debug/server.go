@@ -72,6 +72,7 @@ func setupProcessWideRoutes(
 	authorizer tenantcapabilities.Authorizer,
 	vsrv *vmoduleServer,
 	profiler pprofui.Profiler,
+	logMetadata func(ctx context.Context, source string),
 ) {
 	authzCheck := func(w http.ResponseWriter, r *http.Request) bool {
 		if err := authorizer.HasProcessDebugCapability(r.Context(), tenantID); err != nil {
@@ -97,7 +98,9 @@ func setupProcessWideRoutes(
 		CPUProfileHandler(st, w, r)
 	}))
 	mux.HandleFunc("/debug/pprof/symbol", authzFunc(pprof.Symbol))
-	mux.HandleFunc("/debug/pprof/trace", authzFunc(pprof.Trace))
+	mux.HandleFunc("/debug/pprof/trace", authzFunc(func(w http.ResponseWriter, r *http.Request) {
+		ExecutionTraceHandler(logMetadata, w, r)
+	}))
 
 	// Cribbed straight from trace's `init()` method. See:
 	// https://github.com/golang/net/blob/master/trace/trace.go
@@ -144,7 +147,9 @@ func setupProcessWideRoutes(
 	mux.HandleFunc("/debug/pprof/fgprof", authzFunc(fgprof.Handler().ServeHTTP))
 }
 
-// NewServer sets up a debug server.
+// NewServer sets up a debug server. The logMetadata callback, if non-nil, is
+// called when serving /debug/pprof/trace to embed CRDB metadata (node ID,
+// version, wallclock) into Go execution traces.
 func NewServer(
 	ambientContext log.AmbientContext,
 	st *cluster.Settings,
@@ -152,6 +157,7 @@ func NewServer(
 	profiler pprofui.Profiler,
 	tenantID roachpb.TenantID,
 	authorizer tenantcapabilities.Authorizer,
+	logMetadata func(ctx context.Context, source string),
 ) *Server {
 	mux := http.NewServeMux()
 
@@ -160,7 +166,7 @@ func NewServer(
 
 	// Debug routes that retrieve process-wide state.
 	vsrv := &vmoduleServer{}
-	setupProcessWideRoutes(mux, st, tenantID, authorizer, vsrv, profiler)
+	setupProcessWideRoutes(mux, st, tenantID, authorizer, vsrv, profiler, logMetadata)
 
 	if hbaConfDebugFn != nil {
 		// Expose the processed HBA configuration through the debug
