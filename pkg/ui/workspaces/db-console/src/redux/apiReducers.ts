@@ -145,13 +145,6 @@ const nonTableStatsReducerObj = new CachedDataReducer(
 );
 export const refreshNonTableStats = nonTableStatsReducerObj.refresh;
 
-const logsReducerObj = new CachedDataReducer(
-  api.getLogs,
-  "logs",
-  moment.duration(10, "s"),
-);
-export const refreshLogs = logsReducerObj.refresh;
-
 export const livenessReducerObj = new CachedDataReducer(
   api.getLiveness,
   "liveness",
@@ -466,7 +459,6 @@ export interface APIReducersState {
   databases: CachedDataReducerState<clusterUiApi.DatabasesListResponse>;
   indexStats: KeyedCachedDataReducerState<api.IndexStatsResponseMessage>;
   nonTableStats: CachedDataReducerState<api.NonTableStatsResponseMessage>;
-  logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
   liveness: CachedDataReducerState<api.LivenessResponseMessage>;
   queryPlan: CachedDataReducerState<api.QueryPlanResponseMessage>;
   problemRanges: KeyedCachedDataReducerState<api.ProblemRangesResponseMessage>;
@@ -519,7 +511,6 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [databasesReducerObj.actionNamespace]: databasesReducerObj.reducer,
   [indexStatsReducerObj.actionNamespace]: indexStatsReducerObj.reducer,
   [nonTableStatsReducerObj.actionNamespace]: nonTableStatsReducerObj.reducer,
-  [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
   [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,
   [queryPlanReducerObj.actionNamespace]: queryPlanReducerObj.reducer,
   [problemRangesReducerObj.actionNamespace]: problemRangesReducerObj.reducer,
