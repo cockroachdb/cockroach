@@ -421,3 +421,318 @@ statement error pgcode 0A000 unimplemented: domain of domain is not yet supporte
 CREATE DOMAIN d_nested AS d_base_for_nested
 
 subtest end
+
+subtest domain_drop_syntax
+
+# Test DROP DOMAIN syntax variants.
+statement ok
+CREATE DOMAIN d_drop_test AS INT CHECK (VALUE > 0)
+
+statement ok
+DROP DOMAIN d_drop_test
+
+# DROP DOMAIN IF EXISTS on a nonexistent domain should not error.
+statement ok
+DROP DOMAIN IF EXISTS d_drop_test
+
+# DROP DOMAIN on a nonexistent domain should error.
+statement error pgcode 42704 type "d_drop_nonexistent" does not exist
+DROP DOMAIN d_drop_nonexistent
+
+# DROP DOMAIN when a table depends on it should fail without CASCADE.
+statement ok
+CREATE DOMAIN d_drop_dep AS INT CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_drop_dep (id INT PRIMARY KEY, val d_drop_dep)
+
+statement error pgcode 2BP01 cannot drop type "d_drop_dep" because other objects \(\[test.public.t_drop_dep\]\) still depend on it
+DROP DOMAIN d_drop_dep
+
+statement ok
+DROP TABLE t_drop_dep
+
+statement ok
+DROP DOMAIN d_drop_dep
+
+subtest end
+
+subtest domain_drop_database_cascade
+
+# Test DROP DATABASE CASCADE with domain types and tables using them.
+statement ok
+CREATE DATABASE d_drop_db_test
+
+statement ok
+USE d_drop_db_test
+
+statement ok
+CREATE DOMAIN d_in_db AS INT CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_in_db (id INT PRIMARY KEY, val d_in_db)
+
+statement ok
+USE test
+
+statement ok
+DROP DATABASE d_drop_db_test CASCADE
+
+subtest end
+
+subtest domain_show_create
+
+# Test crdb_internal.create_type_statements for domains.
+statement ok
+CREATE DOMAIN d_show AS INT DEFAULT 5 NOT NULL CHECK (VALUE > 0)
+
+query T
+SELECT create_statement FROM crdb_internal.create_type_statements WHERE descriptor_name = 'd_show'
+----
+CREATE DOMAIN public.d_show AS INT8 DEFAULT 5 NOT NULL CONSTRAINT d_show_check CHECK (value > 0)
+
+subtest end
+
+subtest domain_upsert
+
+# Test UPSERT and ON CONFLICT with domain columns.
+statement ok
+CREATE DOMAIN d_upsert AS INT CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_upsert (id INT PRIMARY KEY, val d_upsert)
+
+statement ok
+INSERT INTO t_upsert VALUES (1, 5)
+
+# UPSERT that violates the domain CHECK should fail.
+statement error pgcode 23514 value for domain d_upsert violates check constraint
+UPSERT INTO t_upsert VALUES (1, -1)
+
+# ON CONFLICT DO UPDATE that violates the domain CHECK should fail.
+statement error pgcode 23514 value for domain d_upsert violates check constraint
+INSERT INTO t_upsert VALUES (1, 10) ON CONFLICT (id) DO UPDATE SET val = -1
+
+# Valid UPSERT should succeed.
+statement ok
+UPSERT INTO t_upsert VALUES (1, 10)
+
+query IT
+SELECT * FROM t_upsert
+----
+1  10
+
+subtest end
+
+subtest domain_nonpublic_schema
+
+# Test domain in a non-public schema.
+statement ok
+CREATE SCHEMA myschema
+
+statement ok
+CREATE DOMAIN myschema.d_schema AS INT CHECK (VALUE > 0)
+
+query T
+SELECT 5::myschema.d_schema
+----
+5
+
+query error pgcode 23514 value for domain d_schema violates check constraint
+SELECT (-1)::myschema.d_schema
+
+subtest end
+
+subtest domain_duplicate_name
+
+# Test that creating a domain with a name that already exists errors.
+statement ok
+CREATE DOMAIN d_dup AS INT
+
+statement error pgcode 42710 type "test.public.d_dup" already exists
+CREATE DOMAIN d_dup AS TEXT
+
+subtest end
+
+subtest domain_drop_cascade
+
+# Test DROP DOMAIN with dependent table requires CASCADE.
+statement ok
+CREATE DOMAIN d_cascade AS INT CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_cascade (id INT PRIMARY KEY, val d_cascade)
+
+statement ok
+INSERT INTO t_cascade VALUES (1, 5)
+
+# DROP DOMAIN without CASCADE should fail when table depends on it.
+statement error pgcode 2BP01 cannot drop type "d_cascade" because other objects \(\[test.public.t_cascade\]\) still depend on it
+DROP DOMAIN d_cascade
+
+# Manually drop the dependent table first, then the domain.
+statement ok
+DROP TABLE t_cascade
+
+statement ok
+DROP DOMAIN d_cascade
+
+subtest end
+
+subtest domain_primary_key
+
+# Test domain type used as a primary key column.
+statement ok
+CREATE DOMAIN d_pk AS INT CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_pk (id d_pk PRIMARY KEY, name TEXT)
+
+statement ok
+INSERT INTO t_pk VALUES (1, 'alice')
+
+statement ok
+INSERT INTO t_pk VALUES (2, 'bob')
+
+# PK constraint violation.
+statement error duplicate key value violates unique constraint
+INSERT INTO t_pk VALUES (1, 'duplicate')
+
+# Domain CHECK constraint violation.
+statement error pgcode 23514 value for domain d_pk violates check constraint
+INSERT INTO t_pk VALUES (-1, 'negative')
+
+# Lookup by PK should work.
+query TT
+SELECT id, name FROM t_pk WHERE id = 1
+----
+1  alice
+
+query TT rowsort
+SELECT id, name FROM t_pk
+----
+1  alice
+2  bob
+
+statement ok
+DROP TABLE t_pk
+
+statement ok
+DROP DOMAIN d_pk
+
+subtest end
+
+subtest domain_width_precision
+
+# Test domain based on types with width/precision.
+statement ok
+CREATE DOMAIN d_vc5 AS VARCHAR(5)
+
+# Value within length should succeed.
+query T
+SELECT 'hi'::d_vc5
+----
+hi
+
+# Explicit cast truncates (matches PostgreSQL behavior for explicit casts).
+query T
+SELECT 'hello world'::d_vc5
+----
+hello
+
+# Test domain based on CHAR (blank-padded).
+statement ok
+CREATE DOMAIN d_char5 AS CHAR(5)
+
+query T
+SELECT 'hi'::d_char5
+----
+hi
+
+# Explicit cast to CHAR truncates.
+query T
+SELECT 'hello world'::d_char5
+----
+hello
+
+# Test domain based on DECIMAL with precision.
+statement ok
+CREATE DOMAIN d_dec AS DECIMAL(5, 2)
+
+query T
+SELECT 123.45::d_dec
+----
+123.45
+
+# Test domain with width used as table column (assignment cast errors on
+# overlength, unlike explicit cast which truncates).
+statement ok
+CREATE TABLE t_vc (val d_vc5)
+
+statement ok
+INSERT INTO t_vc VALUES ('hi')
+
+statement error pgcode 22001 value too long for type VARCHAR\(5\)
+INSERT INTO t_vc VALUES ('hello world')
+
+query T
+SELECT val FROM t_vc
+----
+hi
+
+statement ok
+DROP TABLE t_vc
+
+statement ok
+DROP DOMAIN d_vc5
+
+statement ok
+DROP DOMAIN d_char5
+
+statement ok
+DROP DOMAIN d_dec
+
+subtest end
+
+subtest domain_enum_base_type
+
+# Domain over enum type: creation succeeds but casting and back-references
+# don't fully work yet. The domain type inherits EnumFamily from the base
+# type but lacks the EnumData hydration metadata needed for string-to-enum
+# parsing. Back-references from the domain to the enum are also incomplete.
+# TODO(#27796): Fix domain-over-enum support (casting, back-references).
+
+subtest end
+
+subtest domain_update_atomicity
+
+# Test that UPDATE violating domain CHECK on some rows rejects the entire
+# statement atomically.
+statement ok
+CREATE DOMAIN d_atom AS INT CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_atom (id INT PRIMARY KEY, val d_atom)
+
+statement ok
+INSERT INTO t_atom VALUES (1, 100), (2, 5)
+
+# This UPDATE would make val=5 for id=1 (ok) but val=-95 for id=2 (violation).
+# The entire statement should be rejected.
+statement error pgcode 23514 value for domain d_atom violates check constraint
+UPDATE t_atom SET val = val - 100
+
+# Verify no rows were changed.
+query IT rowsort
+SELECT id, val FROM t_atom
+----
+1  100
+2  5
+
+statement ok
+DROP TABLE t_atom
+
+statement ok
+DROP DOMAIN d_atom
+
+subtest end
