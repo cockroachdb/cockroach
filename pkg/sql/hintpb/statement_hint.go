@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -73,21 +74,30 @@ func (hint *StatementHintUnion) HintType() string {
 }
 
 // RecreateStmt returns the SQL statement that can be used to recreate the hint.
-// Returns the empty string and false if the hint type is not supported.
-func (h StatementHintUnion) RecreateStmt(stmt string) (string, bool) {
+// Returns the empty string and false if the hint type is not supported. If
+// database is non-NULL, the recreated statement includes the database
+// argument to scope the hint to that database.
+func (h StatementHintUnion) RecreateStmt(stmt string, database tree.Datum) (string, bool) {
+	escapedStmt := lexbase.EscapeSQLString(stmt)
+	var dbArg string
+	if database != tree.DNull {
+		dbArg = ", " + lexbase.EscapeSQLString(string(tree.MustBeDString(database)))
+	}
 	switch t := h.GetValue().(type) {
 	case *InjectHints:
 		return fmt.Sprintf(
-			"SELECT information_schema.crdb_rewrite_inline_hints(%s, %s);",
-			lexbase.EscapeSQLString(stmt),
+			"SELECT information_schema.crdb_rewrite_inline_hints(%s, %s%s);",
+			escapedStmt,
 			lexbase.EscapeSQLString(t.DonorSQL),
+			dbArg,
 		), true
 	case *SessionVariableHint:
 		return fmt.Sprintf(
-			"SELECT information_schema.crdb_set_session_variable_hint(%s, %s, %s);",
-			lexbase.EscapeSQLString(stmt),
+			"SELECT information_schema.crdb_set_session_variable_hint(%s, %s, %s%s);",
+			escapedStmt,
 			lexbase.EscapeSQLString(t.VariableName),
 			lexbase.EscapeSQLString(t.VariableValue),
+			dbArg,
 		), true
 	default:
 		return "", false
