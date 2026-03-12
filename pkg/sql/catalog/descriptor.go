@@ -372,6 +372,9 @@ type TableDescriptor interface {
 	IsPhysicalTable() bool
 	// MaterializedView returns whether this TableDescriptor is a MaterializedView.
 	MaterializedView() bool
+	// IsSecurityInvoker returns true if security_invoker option is set to true.
+	// The function should only be called on a view descriptor.
+	IsSecurityInvoker() bool
 	// IsReadOnly returns if this table descriptor has external data, and cannot
 	// be written to.
 	IsReadOnly() bool
@@ -818,6 +821,8 @@ type TableDescriptor interface {
 	GetExcludeDataFromBackup() bool
 	// GetStorageParams returns a list of storage parameters for the table.
 	GetStorageParams(spaceBetweenEqual bool) ([]string, error)
+	// GetViewOptions returns a list of options for the view.
+	GetViewOptions(spaceBetweenEqual bool) ([]string, error)
 	// NoAutoStatsSettingsOverrides is true if no auto stats related settings are
 	// set at the table level for the given table.
 	NoAutoStatsSettingsOverrides() bool

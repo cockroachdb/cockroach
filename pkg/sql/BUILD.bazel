@@ -24,6 +24,7 @@ go_library(
         "alter_table_owner.go",
         "alter_table_set_schema.go",
         "alter_type.go",
+        "alter_view_set_options.go",
         "analyze_expr.go",
         "apply_join.go",
         "audit_logging.go",
