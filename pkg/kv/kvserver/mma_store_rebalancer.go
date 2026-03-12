@@ -86,16 +86,7 @@ func (m *mmaStoreRebalancer) run(ctx context.Context, stopper *stop.Stopper) {
 				continue
 			}
 
-			// Keeps rebalancing until no changes are computed. Then exit and await
-			// for the next interval.
-			periodicCall := true
-			for {
-				attemptedChanges := m.rebalance(ctx, periodicCall)
-				if !attemptedChanges {
-					break
-				}
-				periodicCall = false
-			}
+			m.rebalanceUntilStable(ctx)
 		}
 	}
 }
@@ -121,6 +112,20 @@ func (m *mmaStoreRebalancer) start(ctx context.Context, stopper *stop.Stopper) {
 	_ = stopper.RunAsyncTask(ctx, "mma-store-rebalancer", func(ctx context.Context) {
 		m.run(ctx, stopper)
 	})
+}
+
+// rebalanceUntilStable keeps rebalancing until no changes are computed.
+// This is used both by the periodic run loop and by
+// ForceReplicationScanAndProcess to drive MMA repair deterministically
+// in tests.
+func (m *mmaStoreRebalancer) rebalanceUntilStable(ctx context.Context) {
+	periodicCall := true
+	for {
+		if !m.rebalance(ctx, periodicCall) {
+			return
+		}
+		periodicCall = false
+	}
 }
 
 // rebalance computes the changes using the mma allocator and applies the
