@@ -129,6 +129,11 @@ __auto_partial__  {d}           100        1               0           (d IS NUL
 statement ok
 SET CLUSTER SETTING sql.internal_executor.session_overrides = 'EnableCreateStatsUsingExtremes=true';
 
+# Block to allow for stats.Refresher.mutations channel to be cleared from the
+# previous mutations.
+statement ok
+SELECT pg_sleep(3)
+
 # Insert enough data to guarantee a partial stats collection.
 statement ok
 INSERT INTO data SELECT a, b, c FROM
