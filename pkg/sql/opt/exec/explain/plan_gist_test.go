@@ -42,7 +42,7 @@ func explainGist(gist string, catalog cat.Catalog) string {
 	if err != nil {
 		panic(err)
 	}
-	err = explain.Emit(context.Background(), &eval.Context{}, explainPlan, ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" }, false /* createPostQueryPlanIfMissing */)
+	err = explain.Emit(context.Background(), &eval.Context{GlobalState: &eval.GlobalState{}}, explainPlan, ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" }, false /* createPostQueryPlanIfMissing */)
 	if err != nil {
 		panic(err)
 	}
@@ -50,7 +50,7 @@ func explainGist(gist string, catalog cat.Catalog) string {
 }
 
 func plan(ot *opttester.OptTester, t *testing.T) string {
-	f := explain.NewFactory(exec.StubFactory{}, &tree.SemaContext{}, &eval.Context{})
+	f := explain.NewFactory(exec.StubFactory{}, &tree.SemaContext{}, &eval.Context{GlobalState: &eval.GlobalState{}})
 	expr, err := ot.Optimize()
 	if err != nil {
 		t.Error(err)
@@ -67,7 +67,7 @@ func plan(ot *opttester.OptTester, t *testing.T) string {
 	}
 	flags := explain.Flags{HideValues: true, Deflake: explain.DeflakeAll, OnlyShape: true, ShowPolicyInfo: true}
 	ob := explain.NewOutputBuilder(flags)
-	err = explain.Emit(context.Background(), &eval.Context{}, explainPlan.(*explain.Plan), ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" }, false /* createPostQueryPlanIfMissing */)
+	err = explain.Emit(context.Background(), &eval.Context{GlobalState: &eval.GlobalState{}}, explainPlan.(*explain.Plan), ob, func(table cat.Table, index cat.Index, scanParams exec.ScanParams) string { return "" }, false /* createPostQueryPlanIfMissing */)
 	if err != nil {
 		t.Error(err)
 	}

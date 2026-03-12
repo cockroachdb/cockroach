@@ -127,7 +127,7 @@ func TestNewTableConstraints(t *testing.T) {
 				tc.tableName,
 			)
 
-			got, err := newTableConstraints(&eval.Context{}, tableDesc)
+			got, err := newTableConstraints(&eval.Context{GlobalState: &eval.GlobalState{}}, tableDesc)
 			require.NoError(t, err)
 
 			requireUnique := func(mixin uint64) {
@@ -168,7 +168,7 @@ func TestDependsOn(t *testing.T) {
 	tableDesc := desctestutils.TestingGetTableDescriptor(
 		kvDB, codec, "defaultdb", "public", "test_table",
 	)
-	constraints, err := newTableConstraints(&eval.Context{}, tableDesc)
+	constraints, err := newTableConstraints(&eval.Context{GlobalState: &eval.GlobalState{}}, tableDesc)
 	require.NoError(t, err)
 
 	desc := cdctest.GetHydratedTableDescriptor(

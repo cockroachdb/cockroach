@@ -419,7 +419,7 @@ func TestInitIndexesAllowList(t *testing.T) {
 		ib := &IndexBackfiller{}
 		err := ib.initIndexes(
 			context.Background(),
-			&eval.Context{Codec: keys.SystemSQLCodec},
+			&eval.Context{GlobalState: &eval.GlobalState{Codec: keys.SystemSQLCodec}},
 			desc,
 			nil, /* allowList */
 			0,   /* sourceIndexID */
@@ -435,7 +435,7 @@ func TestInitIndexesAllowList(t *testing.T) {
 		ib := &IndexBackfiller{}
 		err := ib.initIndexes(
 			context.Background(),
-			&eval.Context{Codec: keys.SystemSQLCodec},
+			&eval.Context{GlobalState: &eval.GlobalState{Codec: keys.SystemSQLCodec}},
 			desc,
 			[]catid.IndexID{3}, /* allowList */
 			0,                  /* sourceIndexID */

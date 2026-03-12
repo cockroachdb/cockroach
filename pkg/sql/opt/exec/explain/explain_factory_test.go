@@ -22,7 +22,7 @@ import (
 // TestFactory is a general API test for Factory. It is not intended as an
 // exhaustive test of all factory Construct methods.
 func TestFactory(t *testing.T) {
-	f := NewFactory(exec.StubFactory{}, &tree.SemaContext{}, &eval.Context{})
+	f := NewFactory(exec.StubFactory{}, &tree.SemaContext{}, &eval.Context{GlobalState: &eval.GlobalState{}})
 
 	n, err := f.ConstructValues(
 		[][]tree.TypedExpr{

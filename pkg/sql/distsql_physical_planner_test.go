@@ -1569,12 +1569,14 @@ func TestPartitionSpans(t *testing.T) {
 				locFilters = append(locFilters, locFilter)
 			}
 			evalCtx := &eval.Context{
-				Codec: s.Codec(),
-				SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
-					SessionData: sessiondatapb.SessionData{
-						DistsqlPlanGatewayBias: 2,
-					},
-				}),
+				GlobalState: &eval.GlobalState{
+					Codec: s.Codec(),
+					SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
+						SessionData: sessiondatapb.SessionData{
+							DistsqlPlanGatewayBias: 2,
+						},
+					}),
+				},
 			}
 			planCtx := dsp.NewPlanningCtxWithOracle(
 				ctx, &extendedEvalContext{Context: *evalCtx}, nil, /* planner */
@@ -1642,12 +1644,14 @@ func TestPartitionSpans(t *testing.T) {
 				// create new ctx and evalCtx to avoid spanUseAfterFinish panic.
 				ctxLoc := context.Background()
 				evalCtxLoc := &eval.Context{
-					Codec: s.Codec(),
-					SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
-						SessionData: sessiondatapb.SessionData{
-							DistsqlPlanGatewayBias: 2,
-						},
-					}),
+					GlobalState: &eval.GlobalState{
+						Codec: s.Codec(),
+						SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
+							SessionData: sessiondatapb.SessionData{
+								DistsqlPlanGatewayBias: 2,
+							},
+						}),
+					},
 				}
 				planCtxStrict := dsp.NewPlanningCtxWithOracle(
 					ctxLoc, &extendedEvalContext{Context: *evalCtxLoc}, nil, /* planner */
@@ -1843,11 +1847,13 @@ func TestShouldPickGatewayNode(t *testing.T) {
 			},
 		}
 		evalCtx := &eval.Context{
-			SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
-				SessionData: sessiondatapb.SessionData{
-					DistsqlPlanGatewayBias: 2,
-				},
-			}),
+			GlobalState: &eval.GlobalState{
+				SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
+					SessionData: sessiondatapb.SessionData{
+						DistsqlPlanGatewayBias: 2,
+					},
+				}),
+			},
 		}
 		mockPlanCtx := &PlanningCtx{
 			ExtendedEvalCtx: &extendedEvalContext{
@@ -1942,7 +1948,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 	// This test is specific to gossip-based planning.
 	useGossipPlanning.Override(ctx, &st.SV, true)
 	planCtx := dsp.NewPlanningCtx(
-		ctx, &extendedEvalContext{Context: eval.Context{Codec: codec, Settings: st}},
+		ctx, &extendedEvalContext{Context: eval.Context{GlobalState: &eval.GlobalState{Codec: codec, Settings: st}}},
 		nil /* planner */, nil /* txn */, FullDistribution,
 	)
 	partitions, err := dsp.PartitionSpans(ctx, planCtx, roachpb.Spans{span}, PartitionSpansBoundDefault)

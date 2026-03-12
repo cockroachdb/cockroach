@@ -894,9 +894,11 @@ func TestDTimeTZ(t *testing.T) {
 
 	ctx := context.Background()
 	evalCtx := &eval.Context{
-		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
-			Location: time.UTC,
-		}),
+		GlobalState: &eval.GlobalState{
+			SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
+				Location: time.UTC,
+			}),
+		},
 	}
 
 	maxTime, depOnCtx, err := tree.ParseDTimeTZ(evalCtx, "24:00:00-1559", time.Microsecond)
@@ -1037,9 +1039,11 @@ func TestDTimeTZPrev(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
 	evalCtx := &eval.Context{
-		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
-			Location: time.UTC,
-		}),
+		GlobalState: &eval.GlobalState{
+			SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
+				Location: time.UTC,
+			}),
+		},
 	}
 
 	// Check a few specific values.
@@ -1113,9 +1117,11 @@ func TestDTimeTZNext(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
 	evalCtx := &eval.Context{
-		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
-			Location: time.UTC,
-		}),
+		GlobalState: &eval.GlobalState{
+			SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
+				Location: time.UTC,
+			}),
+		},
 	}
 
 	// Check a few specific values.
@@ -1247,7 +1253,7 @@ func TestNewDefaultDatum(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("#%d %s", i, tc.t.SQLString()), func(t *testing.T) {
-			datum, err := tree.NewDefaultDatum(&evalCtx.CollationEnv, tc.t)
+			datum, err := tree.NewDefaultDatum(evalCtx.GetCollationEnv(), tc.t)
 			if err != nil {
 				t.Errorf("unexpected error: %s", err)
 			}

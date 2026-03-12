@@ -90,7 +90,7 @@ func parseTableDesc(createTableStmt string) (catalog.TableDescriptor, error) {
 func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.EncDatumRow, error) {
 	ctx := context.Background()
 	semaCtx := makeTestSemaCtx()
-	evalCtx := &eval.Context{}
+	evalCtx := &eval.Context{GlobalState: &eval.GlobalState{}}
 
 	valuesStmt, err := parser.ParseOne(values)
 	if err != nil {
@@ -417,7 +417,9 @@ func TestAvroSchema(t *testing.T) {
 			for _, encDatums := range rows {
 				row := cdcevent.TestingMakeEventRow(tableDesc, 0, encDatums, false)
 				evalCtx := &eval.Context{
-					SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
+					GlobalState: &eval.GlobalState{
+						SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
+					},
 				}
 				serialized, err := origSchema.textualFromRow(row)
 				require.NoError(t, err)

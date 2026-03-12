@@ -66,9 +66,11 @@ func TestKVWriterUpdateEncoding(t *testing.T) {
 				LeaseManager: s.LeaseManager(),
 				Settings:     s.ClusterSettings(),
 			}, &eval.Context{
-				Codec:            s.Codec(),
-				Settings:         s.ClusterSettings(),
-				SessionDataStack: sessiondata.NewStack(sd),
+				GlobalState: &eval.GlobalState{
+					Codec:            s.Codec(),
+					Settings:         s.ClusterSettings(),
+					SessionDataStack: sessiondata.NewStack(sd),
+				},
 			}, execinfrapb.LogicalReplicationWriterSpec{}, map[descpb.ID]sqlProcessorTableConfig{
 				desc.GetID(): {
 					srcDesc: desc,

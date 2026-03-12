@@ -29,7 +29,7 @@ func TestDatumPrevNext(t *testing.T) {
 
 	rng, _ := randutil.NewTestRand()
 	ctx := context.Background()
-	var evalCtx eval.Context
+	evalCtx := eval.Context{GlobalState: &eval.GlobalState{}}
 	const numRuns = 1000
 	for i := 0; i < numRuns; i++ {
 		typ := randgen.RandType(rng)
@@ -46,14 +46,14 @@ func TestDatumPrevNext(t *testing.T) {
 			}
 		}
 		if !d.IsMin(ctx, &evalCtx) {
-			if prev, ok := tree.DatumPrev(ctx, d, &evalCtx, &evalCtx.CollationEnv); ok {
+			if prev, ok := tree.DatumPrev(ctx, d, &evalCtx, evalCtx.GetCollationEnv()); ok {
 				cmp, err := d.Compare(ctx, &evalCtx, prev)
 				require.NoError(t, err)
 				require.True(t, cmp > 0, "d=%s, prev=%s, type=%s", d.String(), prev.String(), d.ResolvedType().SQLString())
 			}
 		}
 		if !d.IsMax(ctx, &evalCtx) {
-			if next, ok := tree.DatumNext(ctx, d, &evalCtx, &evalCtx.CollationEnv); ok {
+			if next, ok := tree.DatumNext(ctx, d, &evalCtx, evalCtx.GetCollationEnv()); ok {
 				cmp, err := d.Compare(ctx, &evalCtx, next)
 				require.NoError(t, err)
 				require.True(t, cmp < 0, "d=%s, next=%s, type=%s", d.String(), next.String(), d.ResolvedType().SQLString())

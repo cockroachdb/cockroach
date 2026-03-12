@@ -22,7 +22,7 @@ func TestDatumVec(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
-	evalCtx := &eval.Context{}
+	evalCtx := &eval.Context{GlobalState: &eval.GlobalState{}}
 
 	dv1 := newDatumVec(types.Jsonb, 0 /* n */, evalCtx)
 

@@ -58,7 +58,7 @@ func BenchmarkDeriveLocks(b *testing.B) {
 	ls := &LockSynthesizer{
 		tableConstraints: map[descpb.ID]*tableConstraints{
 			tableID: {
-				evalCtx: &eval.Context{},
+				evalCtx: &eval.Context{GlobalState: &eval.GlobalState{}},
 				PrimaryKeyConstraint: columnSet{
 					columns: []int32{0},
 					mixin:   pkMixin,

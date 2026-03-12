@@ -209,9 +209,11 @@ var defaultOptions = []Option{
 		state.semaCtx = &semaCtx
 
 		evalCtx := &eval.Context{
-			SessionDataStack:   sessiondata.NewStack(state.SessionData()),
-			Settings:           state.ClusterSettings(),
-			ClientNoticeSender: state.ClientNoticeSender(),
+			GlobalState: &eval.GlobalState{
+				SessionDataStack:   sessiondata.NewStack(state.SessionData()),
+				Settings:           state.ClusterSettings(),
+				ClientNoticeSender: state.ClientNoticeSender(),
+			},
 		}
 		state.evalCtx = evalCtx
 	}),

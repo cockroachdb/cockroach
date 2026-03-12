@@ -81,7 +81,9 @@ func TestJobBackedSeqChunkProvider(t *testing.T) {
 	s := srv.ApplicationLayer()
 
 	evalCtx := &eval.Context{
-		Codec: s.ExecutorConfig().(sql.ExecutorConfig).Codec,
+		GlobalState: &eval.GlobalState{
+			Codec: s.ExecutorConfig().(sql.ExecutorConfig).Codec,
+		},
 	}
 
 	registry := s.JobRegistry().(*jobs.Registry)

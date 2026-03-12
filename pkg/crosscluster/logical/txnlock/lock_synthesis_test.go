@@ -169,7 +169,7 @@ func TestDeriveLocks(t *testing.T) {
 
 	ls, err := NewLockSynthesizer(
 		ctx,
-		&eval.Context{},
+		&eval.Context{GlobalState: &eval.GlobalState{}},
 		s.LeaseManager().(*lease.Manager),
 		s.Clock(),
 		[]ldrdecoder.TableMapping{

@@ -36,7 +36,7 @@ type fakeExprContext struct{}
 var _ ExprContext = fakeExprContext{}
 
 func (fakeExprContext) EvalContext() *eval.Context {
-	return &eval.Context{}
+	return &eval.Context{GlobalState: &eval.GlobalState{}}
 }
 
 func (fakeExprContext) IsLocal() bool {

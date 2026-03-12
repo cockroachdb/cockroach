@@ -50,14 +50,16 @@ func descForTable(
 }
 
 var testEvalCtx = &eval.Context{
-	SessionDataStack: sessiondata.NewStack(
-		&sessiondata.SessionData{
-			Location: time.UTC,
-		},
-	),
-	StmtTimestamp: timeutil.Unix(100000000, 0),
-	Settings:      cluster.MakeTestingClusterSettings(),
-	Codec:         keys.SystemSQLCodec,
+	GlobalState: &eval.GlobalState{
+		SessionDataStack: sessiondata.NewStack(
+			&sessiondata.SessionData{
+				Location: time.UTC,
+			},
+		),
+		StmtTimestamp: timeutil.Unix(100000000, 0),
+		Settings:      cluster.MakeTestingClusterSettings(),
+		Codec:         keys.SystemSQLCodec,
+	},
 }
 
 // Value generator represents a value of some data at specified row/col.

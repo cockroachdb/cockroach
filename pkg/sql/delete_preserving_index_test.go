@@ -621,7 +621,7 @@ func TestMergeProcessor(t *testing.T) {
 		tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, codec, "d", "t")
 		settings := server.ClusterSettings()
 		execCfg := server.ExecutorConfig().(sql.ExecutorConfig)
-		evalCtx := eval.Context{Settings: settings, Codec: codec}
+		evalCtx := eval.Context{GlobalState: &eval.GlobalState{Settings: settings, Codec: codec}}
 		mm := mon.NewUnlimitedMonitor(ctx, mon.Options{
 			Name:     mon.MakeName("MemoryMonitor"),
 			Settings: settings,

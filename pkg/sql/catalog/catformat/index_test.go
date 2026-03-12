@@ -343,7 +343,7 @@ func TestIndexForDisplay(t *testing.T) {
 				false, /* isPrimary */
 				tc.partition,
 				tree.FmtSimple,
-				&eval.Context{},
+				&eval.Context{GlobalState: &eval.GlobalState{}},
 				&semaCtx,
 				sd,
 				tc.displayMode,
@@ -367,7 +367,7 @@ func TestIndexForDisplay(t *testing.T) {
 				false, /* isPrimary */
 				tc.partition,
 				tree.FmtPGCatalog,
-				&eval.Context{},
+				&eval.Context{GlobalState: &eval.GlobalState{}},
 				&semaCtx,
 				sd,
 				tc.displayMode,

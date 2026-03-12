@@ -107,8 +107,10 @@ func TestRetryDeleteBatch(t *testing.T) {
 			Codec:    s.Codec(),
 		},
 		EvalCtx: &eval.Context{
-			Codec:    s.Codec(),
-			Settings: s.ClusterSettings(),
+			GlobalState: &eval.GlobalState{
+				Codec:    s.Codec(),
+				Settings: s.ClusterSettings(),
+			},
 		},
 	}
 

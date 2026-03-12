@@ -1035,7 +1035,9 @@ func NewLimitedMonitorNoFlowCtx(
 	flowCtx := &FlowCtx{
 		Cfg: config,
 		EvalCtx: &eval.Context{
-			SessionDataStack: sessiondata.NewStack(sd),
+			GlobalState: &eval.GlobalState{
+				SessionDataStack: sessiondata.NewStack(sd),
+			},
 		},
 	}
 	return NewLimitedMonitor(ctx, parent, flowCtx, name)

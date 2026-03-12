@@ -301,7 +301,7 @@ FROM
 	}
 	defer rows.Close()
 
-	evalCtx := eval.Context{}
+	evalCtx := eval.Context{GlobalState: &eval.GlobalState{}}
 	var udts []*types.T
 	var udtNames []tree.TypeName
 

@@ -99,12 +99,14 @@ func MakeTestingSimpleTableDescriptor(
 	create.Defs = filteredDefs
 
 	evalCtx := eval.Context{
-		Sequence:           &importSequenceOperators{},
-		Regions:            makeImportRegionOperator(""),
-		SessionDataStack:   sessiondata.NewStack(&sessiondata.SessionData{}),
-		ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
-		TxnTimestamp:       timeutil.Unix(0, walltime),
-		Settings:           st,
+		GlobalState: &eval.GlobalState{
+			Sequence:           &importSequenceOperators{},
+			Regions:            makeImportRegionOperator(""),
+			SessionDataStack:   sessiondata.NewStack(&sessiondata.SessionData{}),
+			ClientNoticeSender: &faketreeeval.DummyClientNoticeSender{},
+			TxnTimestamp:       timeutil.Unix(0, walltime),
+			Settings:           st,
+		},
 	}
 	affected := make(map[descpb.ID]*tabledesc.Mutable)
 

@@ -216,8 +216,8 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		// evaluate any expressions to initialize virtual tables. We do need to
 		// pass in the cluster settings to make sure that functions can properly
 		// evaluate version gates, though.
-		&eval.Context{Settings: st}, /* evalCtx */
-		&sessiondata.SessionData{},  /* sessionData */
+		&eval.Context{GlobalState: &eval.GlobalState{Settings: st}}, /* evalCtx */
+		&sessiondata.SessionData{},                                  /* sessionData */
 		tree.PersistencePermanent,
 		nil, /* colToSequenceRefs */
 	)
@@ -400,7 +400,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		// evaluate any expressions to initialize virtual tables. We do need to
 		// pass in the cluster settings to make sure that functions can properly
 		// evaluate version gates, though.
-		&eval.Context{Settings: st}, /* evalCtx */
+		&eval.Context{GlobalState: &eval.GlobalState{Settings: st}}, /* evalCtx */
 		st,
 		tree.PersistencePermanent,
 		false, // isMultiRegion

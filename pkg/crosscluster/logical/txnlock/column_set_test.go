@@ -38,7 +38,7 @@ func TestColumnSet(t *testing.T) {
 
 	test := func(t *testing.T, types []*types.T) {
 		ctx := context.Background()
-		evalCtx := eval.Context{}
+		evalCtx := eval.Context{GlobalState: &eval.GlobalState{}}
 		colSet := columnSet{
 			columns: make([]int32, len(types)),
 		}

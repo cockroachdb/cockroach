@@ -184,7 +184,7 @@ func (s *Store) RunTransaction(ctx context.Context, fn func(txn cspann.Txn) erro
 		var fullVecFetchSpec vecstorepb.GetFullVectorsFetchSpec
 		if err := InitGetFullVectorsFetchSpec(
 			&fullVecFetchSpec,
-			&eval.Context{Codec: s.codec},
+			&eval.Context{GlobalState: &eval.GlobalState{Codec: s.codec}},
 			tableDesc,
 			indexDesc,
 			tableDesc.GetPrimaryIndex(),
@@ -193,7 +193,7 @@ func (s *Store) RunTransaction(ctx context.Context, fn func(txn cspann.Txn) erro
 		}
 
 		var tx Txn
-		tx.Init(&eval.Context{}, s, txn.KV(), &fullVecFetchSpec)
+		tx.Init(&eval.Context{GlobalState: &eval.GlobalState{}}, s, txn.KV(), &fullVecFetchSpec)
 
 		err = fn(&tx)
 		if err != nil {

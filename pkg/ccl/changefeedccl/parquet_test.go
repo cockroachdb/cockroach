@@ -248,7 +248,7 @@ func TestParquetRows(t *testing.T) {
 			// file may not match the order we insert them. To accommodate for
 			// this, sort the expected and actual datums by the primary key.
 			sortFn := func(a []tree.Datum, b []tree.Datum) int {
-				cmp, err := a[0].Compare(ctx, &eval.Context{}, b[0])
+				cmp, err := a[0].Compare(ctx, &eval.Context{GlobalState: &eval.GlobalState{}}, b[0])
 				require.NoError(t, err)
 				return cmp
 			}

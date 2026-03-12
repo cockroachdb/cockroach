@@ -1606,7 +1606,7 @@ func ValidateConstraint(
 		semaCtx := tree.MakeSemaContext(resolver)
 		semaCtx.FunctionResolver = descs.NewDistSQLFunctionResolver(txn.Descriptors(), txn.KV())
 		defer func() { txn.Descriptors().ReleaseAll(ctx) }()
-		evalCtx := &eval.Context{}
+		evalCtx := &eval.Context{GlobalState: &eval.GlobalState{}}
 
 		switch catalog.GetConstraintType(constraint) {
 		case catconstants.ConstraintTypeCheck:

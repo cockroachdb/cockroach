@@ -40,9 +40,11 @@ func newCrudBatchHandler(
 		ctx,
 		&executorConfig.DistSQLSrv.ServerConfig,
 		&eval.Context{
-			Codec:            s.Codec(),
-			Settings:         s.ClusterSettings(),
-			SessionDataStack: sessiondata.NewStack(sd),
+			GlobalState: &eval.GlobalState{
+				Codec:            s.Codec(),
+				Settings:         s.ClusterSettings(),
+				SessionDataStack: sessiondata.NewStack(sd),
+			},
 		},
 		sd,
 		jobspb.LogicalReplicationDetails_DiscardNothing,

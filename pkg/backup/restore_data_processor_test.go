@@ -275,8 +275,10 @@ func runTestIngest(t *testing.T, init func(*cluster.Settings)) {
 			BulkSenderLimiter: limit.MakeConcurrentRequestLimiter("test", math.MaxInt),
 		},
 		EvalCtx: &eval.Context{
-			Codec:    s.Codec(),
-			Settings: s.ClusterSettings(),
+			GlobalState: &eval.GlobalState{
+				Codec:    s.Codec(),
+				Settings: s.ClusterSettings(),
+			},
 		},
 	}
 

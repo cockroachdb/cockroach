@@ -210,7 +210,7 @@ const primary = descpb.FamilyID(0)
 func parseValues(tableDesc catalog.TableDescriptor, values string) ([]rowenc.EncDatumRow, error) {
 	ctx := context.Background()
 	semaCtx := makeTestSemaCtx()
-	evalCtx := &eval.Context{}
+	evalCtx := &eval.Context{GlobalState: &eval.GlobalState{}}
 
 	valuesStmt, err := parser.ParseOne(values)
 	if err != nil {
