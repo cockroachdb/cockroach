@@ -1,0 +1,131 @@
+# LogicTest: 5node
+
+subtest outbox_race
+
+# Regression test for #110322: data race in CollationEnvironment when multiple
+# outboxes share the same evalCtx on the gateway and evaluate COLLATE
+# expressions concurrently.
+
+statement ok
+CREATE TABLE t1 (c0 STRING PRIMARY KEY)
+
+statement ok
+INSERT INTO t1 VALUES ('a'), ('b'), ('c'), ('d'), ('e')
+
+statement ok
+ALTER TABLE t1 SPLIT AT VALUES ('b'), ('c'), ('d'), ('e')
+
+retry
+statement ok
+ALTER TABLE t1 EXPERIMENTAL_RELOCATE VALUES
+  (ARRAY[1], 'a'),
+  (ARRAY[2], 'b'),
+  (ARRAY[3], 'c'),
+  (ARRAY[4], 'd'),
+  (ARRAY[5], 'e')
+
+# Force DistSQL so the query creates multiple outboxes sharing the same
+# evalCtx on the gateway.
+statement ok
+SET distsql = on
+
+# This TLP-style UNION query creates three filter processors, each evaluating
+# a COLLATE expression. When distributed, the gateway runs multiple outbox
+# goroutines concurrently that all call NewDCollatedString through the shared
+# CollationEnvironment, triggering a data race.
+query T rowsort
+SELECT * FROM t1 WHERE (t1.c0 COLLATE en) > ('_' COLLATE en)
+UNION
+SELECT * FROM t1 WHERE NOT ((t1.c0 COLLATE en) > ('_' COLLATE en))
+UNION
+SELECT * FROM t1 WHERE ((t1.c0 COLLATE en) > ('_' COLLATE en)) IS NULL
+----
+a
+b
+c
+d
+e
+
+# Run the same query pattern several more times to increase the chance of
+# triggering the race under the race detector.
+query T rowsort
+SELECT * FROM t1 WHERE (t1.c0 COLLATE en) > ('b' COLLATE en)
+UNION
+SELECT * FROM t1 WHERE NOT ((t1.c0 COLLATE en) > ('b' COLLATE en))
+UNION
+SELECT * FROM t1 WHERE ((t1.c0 COLLATE en) > ('b' COLLATE en)) IS NULL
+----
+a
+b
+c
+d
+e
+
+query T rowsort
+SELECT * FROM t1 WHERE (t1.c0 COLLATE en) > ('c' COLLATE en)
+UNION
+SELECT * FROM t1 WHERE NOT ((t1.c0 COLLATE en) > ('c' COLLATE en))
+UNION
+SELECT * FROM t1 WHERE ((t1.c0 COLLATE en) > ('c' COLLATE en)) IS NULL
+----
+a
+b
+c
+d
+e
+
+subtest end
+
+subtest sampler_race
+
+# Regression test for data race in CollationEnvironment when the sampler and
+# sample aggregator processors share the same FlowCtx.EvalCtx on the gateway.
+# Both processors call SampleRow -> copyRow -> truncateDatum ->
+# NewDCollatedString concurrently for collated strings exceeding the 400-byte
+# sample size limit, racing on the shared CollationEnv.
+#
+# The race window: on the gateway, the local sampler processes rows (calling
+# truncateDatum) while the SampleAggregator concurrently processes sample rows
+# arriving from remote nodes' samplers (also calling truncateDatum). Both use
+# the shared FlowCtx.EvalCtx.CollationEnv.
+#
+# To maximize overlap, we put many rows on the gateway (so its sampler is slow)
+# and fewer rows on a remote node (so its sampler finishes first and sends
+# sample rows to the SampleAggregator while the gateway's sampler is still
+# running).
+
+statement ok
+CREATE TABLE t2 (c0 STRING COLLATE en PRIMARY KEY)
+
+# Insert long collated strings (> 400 bytes) to trigger the truncateDatum path,
+# which calls NewDCollatedString using the shared CollationEnv. We put many
+# rows on node 1 (gateway) and fewer on node 2.
+statement ok
+INSERT INTO t2
+  SELECT (chr(97 + (i % 26)) || repeat('x', 500) || i::STRING) COLLATE en
+  FROM generate_series(1, 100) AS g(i)
+
+# Split into two ranges: the first ~half on node 1 (gateway) and the rest on
+# node 2.
+statement ok
+ALTER TABLE t2 SPLIT AT VALUES ((chr(97 + 13) || repeat('x', 500) || '50') COLLATE en)
+
+retry
+statement ok
+ALTER TABLE t2 EXPERIMENTAL_RELOCATE VALUES
+  (ARRAY[1], (chr(97) || repeat('x', 500) || '1') COLLATE en),
+  (ARRAY[2], (chr(97 + 13) || repeat('x', 500) || '50') COLLATE en)
+
+# Run CREATE STATISTICS several times to increase the chance of triggering the
+# race between the sampler and sample aggregator on the gateway node. Both
+# processors run in separate goroutines sharing the same FlowCtx.EvalCtx.
+statement ok
+CREATE STATISTICS s1 ON c0 FROM t2
+
+statement ok
+CREATE STATISTICS s2 ON c0 FROM t2
+
+statement ok
+CREATE STATISTICS s3 ON c0 FROM t2
+
+subtest end
