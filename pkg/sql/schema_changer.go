@@ -1270,6 +1270,10 @@ func (sc *SchemaChanger) dropViewDeps(
 // corresponding OutboundFK from the origin table. Without this cleanup,
 // rolling back a CREATE TABLE with inline FOREIGN KEY constraints leaves
 // orphaned back-references on the referenced tables.
+//
+// Errors during cleanup are logged as warnings and skipped because this
+// function is only called during rollback, where the descriptor state may be
+// inconsistent or partially committed.
 func (sc *SchemaChanger) dropFKDeps(
 	ctx context.Context,
 	descsCol *descs.Collection,
