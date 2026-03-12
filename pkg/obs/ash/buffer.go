@@ -94,6 +94,31 @@ func (rb *RingBuffer) GetAll(result []ASHSample) []ASHSample {
 	return result
 }
 
+// RangeReverse iterates all samples in the buffer from newest to
+// oldest, calling fn for each sample. If fn returns false, iteration
+// stops early. The lock is held for the duration of the iteration
+// so fn must not call other RingBuffer methods.
+//
+// Newest-to-oldest order allows callers to stop early once they
+// reach samples older than a cutoff time, avoiding a full scan of
+// the buffer.
+func (rb *RingBuffer) RangeReverse(fn func(ASHSample) bool) {
+	rb.mu.Lock()
+	defer rb.mu.Unlock()
+
+	if rb.mu.count == 0 {
+		return
+	}
+
+	// The newest sample is at (head - 1). Walk backwards from there.
+	for i := range rb.mu.count {
+		idx := (rb.mu.head - 1 - i + rb.mu.capacity) % rb.mu.capacity
+		if !fn(rb.mu.samples[idx]) {
+			return
+		}
+	}
+}
+
 // Len returns the number of samples currently in the buffer.
 func (rb *RingBuffer) Len() int {
 	rb.mu.Lock()

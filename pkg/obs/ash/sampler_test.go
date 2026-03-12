@@ -15,7 +15,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -562,5 +566,128 @@ func TestSamplerAppName(t *testing.T) {
 		}
 		require.Contains(t, appNames, "app-a")
 		require.Contains(t, appNames, "app-b")
+	})
+}
+
+func TestSamplerLogSummary(t *testing.T) {
+	defer log.ScopeWithoutShowLogs(t).Close(t)
+
+	// newSummaryTestSampler returns a sampler with lastLogTime far
+	// enough in the past that the summary fires on the next call,
+	// and the log interval set short.
+	newSummaryTestSampler := func() (*Sampler, *stop.Stopper) {
+		s, stopper := newTestSampler()
+		LogInterval.Override(
+			context.Background(), &s.st.SV, time.Second,
+		)
+		s.lastLogTime = timeutil.Now().Add(-time.Hour)
+		return s, stopper
+	}
+
+	t.Run("emits summary for buffered samples", func(t *testing.T) {
+		s, stopper := newSummaryTestSampler()
+		defer stopper.Stop(context.Background())
+
+		enabled.Store(true)
+		defer enabled.Store(false)
+
+		ctx := context.Background()
+		spy := logtestutils.NewLogSpy(
+			t,
+			logtestutils.MatchesF("ash_workload_summary"),
+		)
+		defer log.InterceptWith(ctx, spy)()
+
+		// Register a work state and take several samples.
+		tenantID := roachpb.MustMakeTenantID(1)
+		cleanup := SetWorkState(tenantID, WorkloadInfo{WorkloadID: 42}, WorkCPU, "Optimize")
+		defer cleanup()
+
+		for range 5 {
+			s.takeSample(ctx)
+		}
+
+		// Push lastLogTime back so the next maybeLogSummary fires.
+		s.lastLogTime = timeutil.Now().Add(-time.Hour)
+		s.maybeLogSummary(ctx)
+
+		// Verify structured events were emitted.
+		entries := spy.ReadAll()
+		require.NotEmpty(t, entries,
+			"expected at least one ASHWorkloadSummary event")
+		lastMsg := entries[len(entries)-1].Message
+		require.Contains(t, lastMsg, "CPU")
+		require.Contains(t, lastMsg, "Optimize")
+	})
+
+	t.Run("top-N ordering", func(t *testing.T) {
+		s, stopper := newSummaryTestSampler()
+		defer stopper.Stop(context.Background())
+
+		ctx := context.Background()
+		spy := logtestutils.NewStructuredLogSpy(
+			t,
+			[]logpb.Channel{logpb.Channel_OPS},
+			[]string{"ash_workload_summary"},
+			logtestutils.AsLogEntry,
+		)
+		defer log.InterceptWith(ctx, spy)()
+
+		// Add samples directly to the buffer with different counts
+		// to test ordering. IO gets 200, CPU gets 100, LOCK gets 50.
+		now := timeutil.Now()
+		for range 200 {
+			s.buffer.Add(ASHSample{
+				SampleTime:    now,
+				WorkEventType: WorkIO,
+				WorkEvent:     "BatchEval",
+				WorkloadID:    "ccc",
+			})
+		}
+		for range 100 {
+			s.buffer.Add(ASHSample{
+				SampleTime:    now,
+				WorkEventType: WorkCPU,
+				WorkEvent:     "Optimize",
+				WorkloadID:    "aaa",
+			})
+		}
+		for range 50 {
+			s.buffer.Add(ASHSample{
+				SampleTime:    now,
+				WorkEventType: WorkLock,
+				WorkEvent:     "LockWait",
+				WorkloadID:    "bbb",
+			})
+		}
+
+		s.maybeLogSummary(ctx)
+
+		entries := spy.GetLogs(logpb.Channel_OPS)
+		require.Len(t, entries, 3)
+
+		// Events are emitted in descending order: IO, CPU, LOCK.
+		require.Contains(t, entries[0].Message, "IO")
+		require.Contains(t, entries[1].Message, "CPU")
+		require.Contains(t, entries[2].Message, "LOCK")
+	})
+
+	t.Run("skips empty window", func(t *testing.T) {
+		s, stopper := newSummaryTestSampler()
+		defer stopper.Stop(context.Background())
+
+		ctx := context.Background()
+		spy := logtestutils.NewLogSpy(
+			t,
+			logtestutils.MatchesF("ash_workload_summary"),
+		)
+		defer log.InterceptWith(ctx, spy)()
+
+		s.maybeLogSummary(ctx)
+
+		require.Empty(t, spy.ReadAll(),
+			"no summary should be logged when there are zero samples")
+		// lastLogTime should still be updated so we don't accumulate.
+		require.True(t, timeutil.Since(s.lastLogTime) < time.Second)
 	})
 }
