@@ -3073,16 +3073,6 @@ WITH resolved='50ms', min_checkpoint_frequency='50ms', no_initial_scan, cursor=$
 	for _, rs := range checkpointSpans {
 		spanTimestamps[rs.Span.String()] = rs.Timestamp
 	}
-	// TODO(#164598): Delete this code.
-	if cfProgress := progress.GetChangefeed(); cfProgress != nil {
-		for ts, spans := range cfProgress.SpanLevelCheckpoint.All() {
-			for _, sp := range spans {
-				if existing, ok := spanTimestamps[sp.String()]; !ok || existing.Less(ts) {
-					spanTimestamps[sp.String()] = ts
-				}
-			}
-		}
-	}
 
 	var rangefeedStartedOnce bool
 	var incorrectCheckpointErr error
@@ -9401,15 +9391,6 @@ WITH resolved='100ms', min_checkpoint_frequency='1ns'`)
 			_, err := expectedFrontier.Forward(rs.Span, rs.Timestamp)
 			require.NoError(t, err)
 		}
-		// TODO(#164598): Delete this code.
-		if cfProgress := progress.GetChangefeed(); cfProgress != nil {
-			for ts, spans := range cfProgress.SpanLevelCheckpoint.All() {
-				for _, sp := range spans {
-					_, err := expectedFrontier.Forward(sp, ts)
-					require.NoError(t, err)
-				}
-			}
-		}
 		expectedFrontierStr := expectedFrontier.String()
 
 		var actualFrontierStr atomic.Value
@@ -11599,10 +11580,10 @@ func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
 			}
 		}
 
-		loadJobErrCount := 2
-		knobs.LoadJobErr = func() error {
-			if loadJobErrCount > 0 {
-				loadJobErrCount -= 1
+		reloadErrorsRemaining := 2
+		knobs.AfterReloadJobProgressForRetry = func() error {
+			if reloadErrorsRemaining > 0 {
+				reloadErrorsRemaining -= 1
 				return errors.New("test error")
 			}
 			return nil
@@ -11630,7 +11611,7 @@ func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
 		//
 		// Step 2: Since `changefeedIsRetrying` is true, the changefeed will now attempt retries in
 		//         via `knobs.BeforeCheckpoint`.
-		// Step 3: `knobs.LoadJobErr` will result an in error when reading the job record a couple of times, causing
+		// Step 3: `knobs.AfterReloadJobProgressForRetry` will result an in error when reading the job record a couple of times, causing
 		//          more retries.
 		// Step 4: Eventually, a dist changefeed is started at a certain highwater timestamp.
 		//         `knobs.StartDistChangefeedInitialHighwater`. should see this stimetsamp and assert that it's the one

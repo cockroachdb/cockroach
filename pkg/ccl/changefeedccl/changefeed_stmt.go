@@ -20,9 +20,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/tableset"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -543,8 +545,12 @@ func coreChangefeed(
 		if knobs != nil && knobs.AfterComputeDistChangefeedTimestamps != nil {
 			knobs.AfterComputeDistChangefeedTimestamps(ctx)
 		}
+		var resolvedSpans []jobspb.ResolvedSpan
+		if prevResult.coreProgress != nil {
+			resolvedSpans = prevResult.coreProgress.frontierSpans
+		}
 		result, err := startDistChangefeed(ctx, p, 0 /* jobID */, schemaTS, details, description,
-			initialHighWater, progress, prevResult, resultsCh, nil, targets)
+			initialHighWater, progress, resolvedSpans, prevResult, resultsCh, nil, targets)
 		if err == nil {
 			log.Changefeed.Infof(ctx, "core changefeed completed with no error")
 			return nil
@@ -1612,14 +1618,13 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 	execCfg := jobExec.ExecCfg()
 	jobID := b.job.ID()
 	details := b.job.Details().(jobspb.ChangefeedDetails)
-	progress := b.job.Progress()
 	description := b.job.Payload().Description
 
 	if err := b.ensureClusterIDMatches(ctx, jobExec.ExtendedEvalContext().ClusterID); err != nil {
 		return err
 	}
 
-	err := b.resumeWithRetries(ctx, jobExec, jobID, details, description, progress, execCfg)
+	err := b.resumeWithRetries(ctx, jobExec, jobID, details, description, execCfg)
 	if err != nil {
 		return b.handleChangefeedError(ctx, err, details, jobExec)
 	}
@@ -1742,7 +1747,6 @@ func (b *changefeedResumer) resumeWithRetries(
 	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
 	description string,
-	initialProgress jobspb.Progress,
 	execCfg *sql.ExecutorConfig,
 ) error {
 	// If execution needs to be and is relocated, the resulting error should be
@@ -1758,7 +1762,10 @@ func (b *changefeedResumer) resumeWithRetries(
 		}
 	}
 
-	progress := initialProgress
+	progress, resolvedSpans, err := reloadJobProgress(ctx, jobID, execCfg)
+	if err != nil {
+		return err
+	}
 	var prevResult flowResult
 	knobs, _ := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
 
@@ -1897,7 +1904,7 @@ func (b *changefeedResumer) resumeWithRetries(
 				}
 				var err error
 				prevResult, err = startDistChangefeed(ctx, jobExec, jobID, schemaTS, details, description,
-					initialHighWater, progress, prevResult, startedCh, onTracingEvent, targets)
+					initialHighWater, progress, resolvedSpans, prevResult, startedCh, onTracingEvent, targets)
 				return err
 			})
 
@@ -1964,13 +1971,18 @@ func (b *changefeedResumer) resumeWithRetries(
 		}
 
 		var err error
-		progress, err = reloadJobProgress(ctx, jobID, execCfg)
+		progress, resolvedSpans, err = reloadJobProgress(ctx, jobID, execCfg)
 		if err != nil {
 			// Any errors during reconciliation are retry-able.
 			// When retry-able error propagates to jobs registry, it will clear out
 			// claim information, and will restart this job somewhere else (though,
 			// it's possible that the job gets restarted on this node).
 			return jobs.MarkAsRetryJobError(err)
+		}
+		if knobs != nil && knobs.AfterReloadJobProgressForRetry != nil {
+			if err := knobs.AfterReloadJobProgressForRetry(); err != nil {
+				return jobs.MarkAsRetryJobError(err)
+			}
 		}
 
 		// Reset retry backoff if the highwater advanced, indicating the
@@ -2018,27 +2030,59 @@ func reloadDest(ctx context.Context, id jobspb.JobID, execCfg *sql.ExecutorConfi
 	return resolveDest(ctx, execCfg, newDetails.SinkURI)
 }
 
-// reloadJobProgress reloads job progress from the job table.
-// The returned progress is used for the next retry iteration.
+// reloadJobProgress reloads the job progress and persisted frontier
+// from the database. All reads happen in a single transaction to
+// ensure consistency with the schema version gate checks.
+//
+// If the schema version indicates that span-level checkpoints are no
+// longer being read, the span-level checkpoint is cleared from the
+// returned progress so that downstream code does not use stale data.
 func reloadJobProgress(
 	ctx context.Context, jobID jobspb.JobID, execCfg *sql.ExecutorConfig,
-) (jobspb.Progress, error) {
-	// Re-load the job in order to get the latest progress, which may have
-	// been updated by the changeFrontier processor since the flow started.
-	reloadedJob, err := execCfg.JobRegistry.LoadClaimedJob(ctx, jobID)
-	if err != nil {
+) (jobspb.Progress, []jobspb.ResolvedSpan, error) {
+	var progress jobspb.Progress
+	var resolvedSpans []jobspb.ResolvedSpan
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		reloadedJob, err := execCfg.JobRegistry.LoadClaimedJobWithTxn(ctx, jobID, txn)
+		if err != nil {
+			return err
+		}
+		progress = reloadedJob.Progress()
+
+		v, err := txn.GetSystemSchemaVersion(ctx)
+		if err != nil {
+			return err
+		}
+
+		// Load the persisted frontier.
+		spans, ok, err := jobfrontier.GetAllResolvedSpans(ctx, txn, jobID)
+		if err != nil {
+			return err
+		}
+		if ok {
+			resolvedSpans = spans
+		}
+
+		// Check what to do with a non-nil span-level checkpoint.
+		if cfProgress := progress.GetChangefeed(); cfProgress != nil &&
+			cfProgress.SpanLevelCheckpoint != nil {
+			switch {
+			case v.AtLeast(clusterversion.V26_2_ChangefeedsNoLongerHaveSpanLevelCheckpoints.Version()):
+				return errors.AssertionFailedf("span-level checkpoint should have been purged")
+			case v.AtLeast(clusterversion.V26_2_ChangefeedsStopReadingSpanLevelCheckpoints.Version()):
+				cfProgress.SpanLevelCheckpoint = nil
+			default:
+			}
+		}
+
+		return nil
+	}); err != nil {
 		log.Changefeed.Warningf(ctx, `CHANGEFEED job %d could not reload job progress (%s); `+
 			`job should be retried later`, jobID, err)
-		return jobspb.Progress{}, err
-	}
-	knobs, _ := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
-	if knobs != nil && knobs.LoadJobErr != nil {
-		if err := knobs.LoadJobErr(); err != nil {
-			return jobspb.Progress{}, err
-		}
+		return jobspb.Progress{}, nil, err
 	}
 
-	return reloadedJob.Progress(), nil
+	return progress, resolvedSpans, nil
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.

@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
@@ -322,7 +323,7 @@ func alterTableChangefeed(
 
 	// Compute the new progress based on the table ops.
 	newProgress, newSpanFrontier, err := generateNewProgressForTableOps(
-		p, prevProgress, prevHighWater, prevResolvedSpans, resumeTS, primaryIndexIDs, tableOps,
+		ctx, p, prevProgress, prevHighWater, prevResolvedSpans, resumeTS, primaryIndexIDs, tableOps,
 	)
 	if err != nil {
 		return err
@@ -961,6 +962,7 @@ func validateNewTargetsAtResumeTime(
 // early return for empty tableOps. Currently we always rebuild
 // progress so that SLC data can be folded into the frontier.
 func generateNewProgressForTableOps(
+	ctx context.Context,
 	p sql.PlanHookState,
 	prevProgress jobspb.Progress,
 	prevHighWater hlc.Timestamp,
@@ -978,7 +980,7 @@ func generateNewProgressForTableOps(
 	}
 
 	// Build a combined checkpoint from both the persisted frontier
-	// and the span-level checkpoint.
+	// and the span-level checkpoint (if applicable).
 	checkpointBuilder, err := newCheckpointBuilder()
 	if err != nil {
 		return jobspb.Progress{}, nil, err
@@ -988,11 +990,23 @@ func generateNewProgressForTableOps(
 			return jobspb.Progress{}, nil, err
 		}
 	}
-	if changefeedProgress != nil {
-		for ts, spans := range changefeedProgress.SpanLevelCheckpoint.All() {
-			if err := checkpointBuilder.addSpans(spans, ts); err != nil {
-				return jobspb.Progress{}, nil, err
+	v, err := p.InternalSQLTxn().GetSystemSchemaVersion(ctx)
+	if err != nil {
+		return jobspb.Progress{}, nil, err
+	}
+	if changefeedProgress != nil && changefeedProgress.SpanLevelCheckpoint != nil {
+		switch {
+		case v.AtLeast(clusterversion.V26_2_ChangefeedsNoLongerHaveSpanLevelCheckpoints.Version()):
+			return jobspb.Progress{}, nil,
+				errors.AssertionFailedf("span-level checkpoint should have been purged")
+		case v.Less(clusterversion.V26_2_ChangefeedsStopReadingSpanLevelCheckpoints.Version()):
+			for ts, spans := range changefeedProgress.SpanLevelCheckpoint.All() {
+				if err := checkpointBuilder.addSpans(spans, ts); err != nil {
+					return jobspb.Progress{}, nil, err
+				}
 			}
+		default:
+			// Ignore stale data.
 		}
 	}
 
@@ -1030,7 +1044,7 @@ func generateNewProgressForTableOps(
 			Details: &jobspb.Progress_Changefeed{
 				Changefeed: &jobspb.ChangefeedProgress{
 					ProtectedTimestampRecord: ptsRecord,
-					SpanLevelCheckpoint:      checkpointBuilder.spanLevelCheckpoint(hlc.Timestamp{}),
+					SpanLevelCheckpoint:      checkpointBuilder.spanLevelCheckpoint(v, hlc.Timestamp{}),
 				},
 			},
 		}, checkpointBuilder.frontier(), nil
@@ -1046,7 +1060,7 @@ func generateNewProgressForTableOps(
 			Details: &jobspb.Progress_Changefeed{
 				Changefeed: &jobspb.ChangefeedProgress{
 					ProtectedTimestampRecord: ptsRecord,
-					SpanLevelCheckpoint:      checkpointBuilder.spanLevelCheckpoint(prevHighWater),
+					SpanLevelCheckpoint:      checkpointBuilder.spanLevelCheckpoint(v, prevHighWater),
 				},
 			},
 		}, checkpointBuilder.frontier(), nil
@@ -1077,7 +1091,7 @@ func generateNewProgressForTableOps(
 		Details: &jobspb.Progress_Changefeed{
 			Changefeed: &jobspb.ChangefeedProgress{
 				ProtectedTimestampRecord: ptsRecord,
-				SpanLevelCheckpoint:      checkpointBuilder.spanLevelCheckpoint(hlc.Timestamp{}),
+				SpanLevelCheckpoint:      checkpointBuilder.spanLevelCheckpoint(v, hlc.Timestamp{}),
 			},
 		},
 	}, checkpointBuilder.frontier(), nil
@@ -1206,9 +1220,15 @@ func (b *checkpointBuilder) removeSpans(spans []roachpb.Span) error {
 }
 
 // spanLevelCheckpoint builds a span-level checkpoint from the frontier
-// entries. Only entries strictly above highWater are included, since the SLC
-// only tracks spans ahead of the highwater mark.
-func (b *checkpointBuilder) spanLevelCheckpoint(highWater hlc.Timestamp) *jobspb.TimestampSpansMap {
+// entries. Only entries strictly above highWater are included, since the
+// span-level checkpoint only tracks spans ahead of the highwater.
+// Returns nil if span-level checkpoints are no longer being written.
+func (b *checkpointBuilder) spanLevelCheckpoint(
+	v roachpb.Version, highWater hlc.Timestamp,
+) *jobspb.TimestampSpansMap {
+	if v.AtLeast(clusterversion.V26_2_ChangefeedsStopWritingSpanLevelCheckpoints.Version()) {
+		return nil
+	}
 	result := make(map[hlc.Timestamp]roachpb.Spans)
 	for sp, ts := range b.f.Entries() {
 		if highWater.Less(ts) {

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/changefeed/changefeedpb"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -617,8 +618,12 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 		return nil, err
 	}
 
-	// Checkpointed spans are spans that were above the highwater mark, and we
-	// must preserve that information in the frontier for future checkpointing.
+	// NB: SpanLevelCheckpoint is always nil once
+	// V26_2_ChangefeedsStopReadingSpanLevelCheckpoints is active (the version
+	// gate is checked in reloadJobProgress which clears it from the progress
+	// before it reaches here).
+	//
+	// TODO(#163256): Delete this code once MinSupported = 26.2.
 	if err := checkpoint.Restore(ca.frontier, ca.spec.SpanLevelCheckpoint); err != nil {
 		return nil, errors.Wrapf(err, "failed to restore span-level checkpoint")
 	}
@@ -1416,6 +1421,12 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		return
 	}
 
+	// NB: SpanLevelCheckpoint is always nil once
+	// V26_2_ChangefeedsStopReadingSpanLevelCheckpoints is active (the version
+	// gate is checked in reloadJobProgress which clears it from the progress
+	// before it reaches here).
+	//
+	// TODO(#163256): Delete this code once MinSupported = 26.2.
 	if err := checkpoint.Restore(cf.frontier, cf.spec.SpanLevelCheckpoint); err != nil {
 		log.Changefeed.Warningf(cf.Ctx(),
 			"moving to draining due to error restoring span-level checkpoint: %v", err)
@@ -1708,15 +1719,8 @@ func (cf *changeFrontier) maybeCheckpoint(
 		return nil
 	}
 
-	// If the highwater has moved an empty checkpoint will be saved
-	var checkpoint *jobspb.TimestampSpansMap
-	if updateCheckpoint {
-		maxBytes := changefeedbase.SpanCheckpointMaxBytes.Get(&cf.FlowCtx.Cfg.Settings.SV)
-		checkpoint = cf.frontier.MakeCheckpoint(maxBytes, cf.sliMetrics.CheckpointMetrics)
-	}
-
 	checkpointStart := timeutil.Now()
-	if err := cf.checkpointJobProgress(ctx, cf.frontier.Frontier(), checkpoint); err != nil {
+	if err := cf.checkpointJobProgress(ctx, cf.frontier.Frontier(), updateCheckpoint); err != nil {
 		return err
 	}
 	cf.js.checkpointCompleted(ctx, timeutil.Since(checkpointStart))
@@ -1783,7 +1787,7 @@ func (cf *changeFrontier) shouldCheckpoint(
 const changefeedJobProgressTxnName = "changefeed job progress"
 
 func (cf *changeFrontier) checkpointJobProgress(
-	ctx context.Context, frontier hlc.Timestamp, spanLevelCheckpoint *jobspb.TimestampSpansMap,
+	ctx context.Context, frontier hlc.Timestamp, updateCheckpoint bool,
 ) error {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.checkpoint_job_progress")
 	defer sp.Finish()
@@ -1828,7 +1832,24 @@ func (cf *changeFrontier) checkpointJobProgress(
 			}
 
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
-			changefeedProgress.SpanLevelCheckpoint = spanLevelCheckpoint
+
+			// Populate the span-level checkpoint (if applicable).
+			v, err := txn.GetSystemSchemaVersion(ctx)
+			if err != nil {
+				return err
+			}
+			if !updateCheckpoint || v.AtLeast(
+				clusterversion.V26_2_ChangefeedsStopWritingSpanLevelCheckpoints.Version(),
+			) {
+				// NB: This preserves the (questionable) pre-migration behavior of
+				// always clearing the span-level checkpoint whenever we're updating
+				// the job progress and checkpoint doesn't need to be updated.
+				changefeedProgress.SpanLevelCheckpoint = nil
+			} else {
+				maxBytes := changefeedbase.SpanCheckpointMaxBytes.Get(&cf.FlowCtx.Cfg.Settings.SV)
+				changefeedProgress.SpanLevelCheckpoint =
+					cf.frontier.MakeCheckpoint(maxBytes, cf.sliMetrics.CheckpointMetrics)
+			}
 
 			// TODO(#153299): Make sure we only updated per-table PTS if we persisted
 			// the span frontier. We'll probably want to move this code out of
@@ -1854,8 +1875,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 			cf.lastProtectedTimestampUpdate = timeutil.Now()
 		}
 		if log.V(2) {
-			log.Changefeed.Infof(cf.Ctx(), "change frontier persisted highwater=%s and checkpoint=%s",
-				frontier, spanLevelCheckpoint)
+			log.Changefeed.Infof(cf.Ctx(), "change frontier persisted highwater=%s", frontier)
 		}
 	}
 
