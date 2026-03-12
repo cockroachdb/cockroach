@@ -934,9 +934,8 @@ func TestRelocateNonVoters(t *testing.T) {
 					require.NoErrorf(t, err, message)
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
+					testCluster.ToggleReplicateQueues(true)
 					testutils.SucceedsSoon(t, func() error {
-						// Check for learners before disabling the replicate queues to
-						// allow cleanup of learners
 						rows, err := db.QueryContext(ctx,
 							`SELECT learner_replicas FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS]`)
 						if err != nil {
