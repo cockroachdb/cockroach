@@ -210,7 +210,7 @@ func (e *Engines) TODOEngine() storage.Engine {
 // TODO(sep-raft-log): the callers must migrate off as part of separated engines
 // productionization.
 func (e *Engines) TODOBothEngines() storage.Engine {
-	return e.stateEngine
+	return disableAccessAssertions(e.stateEngine)
 }
 
 // Separated returns true iff the engines are logically or physically separated.

@@ -7049,7 +7049,7 @@ func TestReplicaDestroy(t *testing.T) {
 
 	// TODO(sep-raft-log): iterate the engines separately here. The state engine
 	// should have only the tombstone, and the log engine should have no keys.
-	engSnapshot := tc.repl.store.TODOEngine().NewSnapshot()
+	engSnapshot := tc.repl.store.TODOBothEngines().NewSnapshot()
 	defer engSnapshot.Close()
 
 	// If the range is destroyed, only a tombstone key should be there.
