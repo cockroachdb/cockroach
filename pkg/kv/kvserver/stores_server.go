@@ -175,7 +175,9 @@ func (is Server) CompactEngineSpan(
 	resp := &CompactEngineSpanResponse{}
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
 		func(ctx context.Context, s *Store) error {
-			return s.TODOEngine().CompactRange(ctx, req.Span.Key, req.Span.EndKey)
+			// TODO(sep-raft-log): this is likely only needed for StateEngine, but the
+			// API seems to be generic and may need to support both.
+			return s.TODOBothEngines().CompactRange(ctx, req.Span.Key, req.Span.EndKey)
 		})
 	return resp, err
 }
