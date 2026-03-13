@@ -148,6 +148,8 @@ func makeCPUTimeTokenGrantCoordinator(
 		opts.perTenantAggMetrics = &tenantAggMetrics{
 			admittedCount:  metrics.AdmittedCountPerTenant[tier],
 			waitTimeNanos:  metrics.WaitTimeNanosPerTenant[tier],
+			tokensUsed:     metrics.TokensUsedPerTenant[tier],
+			tokensReturned: metrics.TokensReturnedPerTenant[tier],
 		}
 		requesters[tier] = makeWorkQueue(
 			ambientCtx, KVWork, &childGranters[tier], settings, wqMetrics, opts)
