@@ -87,13 +87,25 @@ type rebalanceEnv struct {
 	// passObs is used to collect gauge metrics and logging for this rebalancing
 	// pass. Can be nil.
 	passObs *rebalancingPassMetricsAndLogger
+	// detailedLog, when true, causes re.logf to promote VEventf calls to Infof.
+	// This is set per-shedding-store when verbose logging at level 3 is enabled,
+	// or when the store has been persistently overloaded (>30min) and hasn't
+	// had detailed logs recently (>10min).
+	detailedLog bool
 }
 
-// logf logs at the given VEventf level.
+// logf logs at the given VEventf level. When re.detailedLog is true, the
+// message is emitted at Infof level instead so it appears in logs without
+// requiring elevated verbosity. Depth is used so the log entry is attributed
+// to logf's caller rather than to logf itself.
 func (re *rebalanceEnv) logf(
 	ctx context.Context, level log.Level, format string, args ...interface{},
 ) {
-	log.KvDistribution.VEventf(ctx, level, format, args...)
+	if re.detailedLog {
+		log.KvDistribution.InfofDepth(ctx, 1, format, args...)
+	} else {
+		log.KvDistribution.VEventfDepth(ctx, 1, level, format, args...)
+	}
 }
 
 // passObv can be nil.
@@ -209,6 +221,7 @@ func (re *rebalanceEnv) rebalanceStores(
 			if ss.overloadEndTime != (time.Time{}) {
 				if re.now.Sub(ss.overloadEndTime) > overloadGracePeriod {
 					ss.overloadStartTime = re.now
+					clear(ss.lastDetailedLogTimes)
 					re.logf(ctx, 2, "overload-start s%v (%v) - grace period expired", storeID, sls)
 				} else {
 					// Else, extend the previous overload interval.
@@ -267,6 +280,13 @@ func (re *rebalanceEnv) rebalanceStores(
 	n := len(sheddingStores)
 	for ; i < n; i++ {
 		store := sheddingStores[i]
+		ss := re.stores[store.StoreID]
+		// Set detailedLog for this shedding store: verbose logging at level 3,
+		// or persistently overloaded and not recently logged.
+		overloadDur := re.now.Sub(ss.overloadStartTime)
+		persistentOverload := overloadDur >= persistentOverloadThreshold &&
+			re.now.Sub(ss.lastDetailedLogTimes[localStoreID]) >= detailedLogInterval
+		re.detailedLog = persistentOverload || log.ExpensiveLogEnabled(ctx, 3)
 		// NB: we don't have to check the maxLeaseTransferCount here since only one
 		// store can transfer leases - the local store. So the limit is only checked
 		// inside of the corresponding rebalanceLeasesFromLocalStoreID call, but
@@ -277,7 +297,18 @@ func (re *rebalanceEnv) rebalanceStores(
 			break
 		}
 		re.rebalanceStore(ctx, store, localStoreID)
+		// Only update the timer for persistent overload, not when detailedLog
+		// was set via verbose logging. Otherwise, turning off verbose logging
+		// would suppress the next persistent-overload burst for
+		// detailedLogInterval.
+		if persistentOverload {
+			if ss.lastDetailedLogTimes == nil {
+				ss.lastDetailedLogTimes = make(map[roachpb.StoreID]time.Time)
+			}
+			ss.lastDetailedLogTimes[localStoreID] = re.now
+		}
 	}
+	re.detailedLog = false
 	for ; i < n; i++ {
 		re.passObs.skippedStore(sheddingStores[i].StoreID)
 	}
@@ -573,7 +604,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		// be included in the mean, but are never considered as candidates.
 		*pPostMeansExcl = []roachpb.StoreID(postMeansExclusions)
 		*pExistingReplicas = []roachpb.StoreID(existingReplicas)
-		cands, ssSLS := re.computeCandidatesForReplicaTransfer(ctx, conj, existingReplicas, postMeansExclusions, store.StoreID, re.passObs, re.logf, log.ExpensiveLogEnabled(ctx, 3) /* detailedLog */)
+		cands, ssSLS := re.computeCandidatesForReplicaTransfer(ctx, conj, existingReplicas, postMeansExclusions, store.StoreID, re.passObs, re.logf, re.detailedLog)
 		re.logf(ctx, 3, "considering replica-transfer r%v from s%v: store load %v",
 			rangeID, store.StoreID, ss.adjusted.load)
 		if log.ExpensiveLogEnabled(ctx, 3) {
@@ -627,7 +658,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		if !isLeaseholder {
 			addedLoad[CPURate] = rstate.load.RaftCPU
 		}
-		if !re.canShedAndAddLoad(ctx, ss, targetSS, rangeID, addedLoad, cands.means, false, loadDim, re.logf, log.ExpensiveLogEnabled(ctx, 3) /* detailedLog */) {
+		if !re.canShedAndAddLoad(ctx, ss, targetSS, rangeID, addedLoad, cands.means, false, loadDim, re.logf, re.detailedLog) {
 			re.passObs.replicaShed(noCandidateToAcceptLoad)
 			continue
 		}
@@ -818,7 +849,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		// NB: candsPL is not empty - it includes at least the current leaseholder
 		// and one additional candidate.
 		means := computeMeansForStoreSet(re, candsPL, scratchNodes, scratchStores)
-		sls := re.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad, log.ExpensiveLogEnabled(ctx, 3) /* detailedLog */)
+		sls := re.computeLoadSummary(ctx, store.StoreID, &means.storeLoad, &means.nodeLoad, re.detailedLog)
 		if sls.dimSummary[CPURate] < overloadSlow {
 			// This store is not cpu overloaded relative to these candidates for
 			// this range.
@@ -836,7 +867,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 				// retainReadyLeaseTargetStoresOnly.
 				continue
 			}
-			candSls := re.computeLoadSummary(ctx, cand.storeID, &means.storeLoad, &means.nodeLoad, log.ExpensiveLogEnabled(ctx, 3) /* detailedLog */)
+			candSls := re.computeLoadSummary(ctx, cand.storeID, &means.storeLoad, &means.nodeLoad, re.detailedLog)
 			candsSet.candidates = append(candsSet.candidates, candidateInfo{
 				StoreID:              cand.storeID,
 				storeLoadSummary:     candSls,
@@ -871,7 +902,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			addedLoad[CPURate] = 0
 			panic("raft cpu higher than total cpu")
 		}
-		if !re.canShedAndAddLoad(ctx, ss, targetSS, rangeID, addedLoad, &means, true, CPURate, re.logf, log.ExpensiveLogEnabled(ctx, 3) /* detailedLog */) {
+		if !re.canShedAndAddLoad(ctx, ss, targetSS, rangeID, addedLoad, &means, true, CPURate, re.logf, re.detailedLog) {
 			re.passObs.leaseShed(noCandidateToAcceptLoad)
 			continue
 		}

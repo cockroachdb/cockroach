@@ -418,6 +418,14 @@ const (
 const ignoreLoadThresholdAndHigherGraceDuration = 5 * time.Minute
 const ignoreHigherThanLoadThresholdGraceDuration = 8 * time.Minute
 
+// persistentOverloadThreshold is the minimum duration a store must be
+// continuously overloaded before detailed (Infof-level) logging is triggered.
+const persistentOverloadThreshold = 30 * time.Minute
+
+// detailedLogInterval is the minimum time between detailed log bursts for a
+// single persistently overloaded store.
+const detailedLogInterval = 10 * time.Minute
+
 // SafeFormat implements the redact.SafeFormatter interface.
 func (i ignoreLevel) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch i {
