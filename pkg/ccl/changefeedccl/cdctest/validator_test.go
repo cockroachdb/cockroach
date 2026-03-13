@@ -549,6 +549,119 @@ func TestFingerprintValidator(t *testing.T) {
 	})
 }
 
+func TestDuplicateCountingValidator(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const ignored = `ignored`
+
+	t.Run(`distinct keys`, func(t *testing.T) {
+		// Rows for distinct keys are not duplicates.
+		dupV := NewDuplicateCountingValidator(NoOpValidator)
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(1), `foo`)
+		noteRow(t, dupV, `p1`, `k2`, ignored, ts(1), `foo`)
+		noteRow(t, dupV, `p1`, `k3`, ignored, ts(1), `foo`)
+		require.Equal(t, int64(3), dupV.NumTotal.Load())
+		require.Equal(t, int64(0), dupV.NumDuplicates.Load())
+	})
+	t.Run(`distinct timestamps`, func(t *testing.T) {
+		// Rows for distinct timestamps are not duplicates.
+		dupV := NewDuplicateCountingValidator(NoOpValidator)
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(1), `foo`)
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(2), `foo`)
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(3), `foo`)
+		require.Equal(t, int64(3), dupV.NumTotal.Load())
+		require.Equal(t, int64(0), dupV.NumDuplicates.Load())
+	})
+	t.Run(`simple duplicate`, func(t *testing.T) {
+		dupV := NewDuplicateCountingValidator(NoOpValidator)
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(1), `foo`)
+		// We see a second message for the same key but at a later
+		// timestamp, which is NOT a duplicate.
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(2), `foo`)
+		// This message is exactly the same as the first and is a duplicate.
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(1), `foo`)
+		require.Equal(t, int64(3), dupV.NumTotal.Load())
+		require.Equal(t, int64(1), dupV.NumDuplicates.Load())
+	})
+	t.Run(`duplicate after resolved`, func(t *testing.T) {
+		// We consider all messages that come in after a resolved message
+		// to be duplicates. The resolved message means we must have seen
+		// this update before.
+		dupV := NewDuplicateCountingValidator(NoOpValidator)
+		noteResolved(t, dupV, `p1`, ts(5))
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(3), `foo`)
+		noteRow(t, dupV, `p1`, `k2`, ignored, ts(5), `foo`)
+		require.Equal(t, int64(2), dupV.NumTotal.Load())
+		require.Equal(t, int64(2), dupV.NumDuplicates.Load())
+	})
+	t.Run(`non-duplicate after resolved`, func(t *testing.T) {
+		// We may see (non-duplicate) messages on a key after a resolved
+		// message. This is expected.
+		inner := NewOrderValidator(`t1`)
+		dupV := NewDuplicateCountingValidator(inner)
+		noteResolved(t, dupV, `p1`, ts(5))
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(6), `foo`)
+		noteRow(t, dupV, `p1`, `k2`, ignored, ts(7), `foo`)
+		require.Equal(t, int64(2), dupV.NumTotal.Load())
+		require.Equal(t, int64(0), dupV.NumDuplicates.Load())
+	})
+	t.Run(`same key on different partition`, func(t *testing.T) {
+		// Duplicates are tracked independently per partition, even if
+		// they have the same key.
+		dupV := NewDuplicateCountingValidator(NoOpValidator)
+		noteResolved(t, dupV, `p1`, ts(10))
+		noteResolved(t, dupV, `p2`, ts(5))
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(8), `foo`)
+		noteRow(t, dupV, `p2`, `k1`, ignored, ts(8), `foo`)
+		require.Equal(t, int64(2), dupV.NumTotal.Load())
+		require.Equal(t, int64(1), dupV.NumDuplicates.Load())
+	})
+	t.Run(`resolved backwards ignored`, func(t *testing.T) {
+		// A resolved timestamp that goes backwards should not lower
+		// the stored value.
+		dupV := NewDuplicateCountingValidator(NoOpValidator)
+		noteResolved(t, dupV, `p1`, ts(10))
+		noteResolved(t, dupV, `p1`, ts(5))
+		// This update is still considered a duplicate, even though
+		// resolved regressed. The resolved timestamp of 10 means that
+		// we've seen this message before.
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(7), `foo`)
+		require.Equal(t, int64(1), dupV.NumTotal.Load())
+		require.Equal(t, int64(1), dupV.NumDuplicates.Load())
+	})
+	t.Run(`duplicate above resolved still caught`, func(t *testing.T) {
+		dupV := NewDuplicateCountingValidator(NoOpValidator)
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(12), `foo`)
+		noteResolved(t, dupV, `p1`, ts(10))
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(12), `foo`)
+		require.Equal(t, int64(2), dupV.NumTotal.Load())
+		require.Equal(t, int64(1), dupV.NumDuplicates.Load())
+	})
+	t.Run(`duplicate does not advance seen timestamp`, func(t *testing.T) {
+		// A duplicate at an older timestamp must not overwrite the seen
+		// entry, otherwise a later duplicate at an intermediate timestamp
+		// would be missed.
+		dupV := NewDuplicateCountingValidator(NoOpValidator)
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(5), `foo`)
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(3), `foo`) // duplicate
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(4), `foo`) // also duplicate
+		require.Equal(t, int64(3), dupV.NumTotal.Load())
+		require.Equal(t, int64(2), dupV.NumDuplicates.Load())
+	})
+	t.Run(`duplicates forwarded to inner validator`, func(t *testing.T) {
+		// Duplicates are counted but still forwarded to the inner
+		// validator. Wrapping a CountValidator lets us verify that
+		// all rows (including duplicates) reach the inner validator.
+		inner := NewCountValidator(NoOpValidator)
+		dupV := NewDuplicateCountingValidator(inner)
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(10), `foo`)
+		noteResolved(t, dupV, `p1`, ts(10))
+		noteRow(t, dupV, `p1`, `k1`, ignored, ts(10), `foo`)
+		require.Equal(t, int64(2), dupV.NumTotal.Load())
+		require.Equal(t, int64(1), dupV.NumDuplicates.Load())
+		require.Equal(t, 2, inner.NumRows)
+	})
+}
+
 func TestValidators(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	const ignored = `ignored`
