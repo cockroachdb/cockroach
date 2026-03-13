@@ -28,28 +28,28 @@ GRANT SYSTEM VIEWCLUSTERMETADATA TO testuser2
 # Now testuser2 can query statement hints.
 user testuser2
 
-query ITTT colnames
+query ITTTBT colnames
 SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10';
 ----
-row_id  fingerprint  hint_type  created_at
+row_id  fingerprint  hint_type  database  enabled  created_at
 
-query ITTTT colnames
+query ITTTBTT colnames
 SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10' WITH DETAILS;
 ----
-row_id  fingerprint  hint_type  created_at  details
+row_id  fingerprint  hint_type  database  enabled  created_at  details
 
 user root
 
 # Test with no hints.
-query ITTT colnames
+query ITTTBT colnames
 SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10';
 ----
-row_id  fingerprint  hint_type  created_at
+row_id  fingerprint  hint_type  database  enabled  created_at
 
-query ITTTT colnames
+query ITTTBTT colnames
 SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10' WITH DETAILS;
 ----
-row_id  fingerprint  hint_type  created_at  details
+row_id  fingerprint  hint_type  database  enabled  created_at  details
 
 statement ok
 SELECT crdb_internal.inject_hint(
@@ -59,20 +59,20 @@ SELECT crdb_internal.inject_hint(
 
 # Test SHOW STATEMENT HINTS without DETAILS. Note that hints are shown for the
 # fingerprint with constants removed.
-query TT colnames
-SELECT fingerprint, hint_type
+query TTBT colnames
+SELECT fingerprint, hint_type, enabled, database
 FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10'];
 ----
-fingerprint                   hint_type
-SELECT * FROM xy WHERE y = _  REWRITE INLINE HINTS
+fingerprint                   hint_type             enabled  database
+SELECT * FROM xy WHERE y = _  REWRITE INLINE HINTS  true     NULL
 
 # Test SHOW STATEMENT HINTS with DETAILS.
-query TTT colnames
-SELECT fingerprint, hint_type, details
+query TTTBT colnames
+SELECT fingerprint, hint_type, details, enabled, database
 FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10' WITH DETAILS];
 ----
-fingerprint                   hint_type             details
-SELECT * FROM xy WHERE y = _  REWRITE INLINE HINTS  {"donorSql": "SELECT * FROM xy@xy_y_idx WHERE y = _"}
+fingerprint                   hint_type             details                                                  enabled  database
+SELECT * FROM xy WHERE y = _  REWRITE INLINE HINTS  {"donorSql": "SELECT * FROM xy@xy_y_idx WHERE y = _"}  true     NULL
 
 # Case with a placeholder in the requested statement.
 query TTT
@@ -96,8 +96,24 @@ ORDER BY created_at DESC, row_id DESC;
 fingerprint                                                   hint_type             details
 WITH cte AS (SELECT * FROM xy WHERE y = _) SELECT * FROM cte  REWRITE INLINE HINTS  {"donorSql": "WITH cte AS (SELECT * FROM xy@xy_y_idx WHERE y = _) SELECT * FROM cte"}
 
+# Test with a hint scoped to a specific database using the 3-arg overload.
+statement ok
+SELECT crdb_internal.inject_hint(
+  'SELECT * FROM ab WHERE b = _',
+  'SELECT * FROM ab@ab_b_idx WHERE b = _',
+  'test'
+);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TTBT colnames
+SELECT fingerprint, hint_type, enabled, database
+FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM ab WHERE b = 10'];
+----
+fingerprint                   hint_type             enabled  database
+SELECT * FROM ab WHERE b = _  REWRITE INLINE HINTS  true     test
+
 # Test with non-existent fingerprint.
-query ITTT
+query ITTTBT
 SHOW STATEMENT HINTS FOR 'SELECT * FROM nonexistent WHERE x = 1';
 ----
 
