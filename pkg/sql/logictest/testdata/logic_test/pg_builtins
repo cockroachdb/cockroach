@@ -1,14 +1,304 @@
+subtest aclexplode
+
 query T
-SELECT aclexplode(NULL)
+SELECT aclexplode(NULL::text[])
 ----
 
 query T
 SELECT aclexplode(ARRAY[]::text[])
 ----
 
+# aclexplode with an invalid ACL string produces no rows (graceful skip).
 query T
-SELECT aclexplode(ARRAY['foo'])
+SELECT aclexplode(ARRAY['foo']::text[])
 ----
+
+# aclexplode with a valid ACL string using role names.
+# Use COALESCE with pg_roles to convert OIDs back to names for stable output.
+query TTTB colnames,rowsort
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  COALESCE(e.rolname, 'PUBLIC') AS grantee,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(ARRAY['root=r/admin']::text[]) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+LEFT JOIN pg_roles e ON e.oid = a.grantee
+----
+grantor  grantee  privilege_type  is_grantable
+admin    root     SELECT          false
+
+# aclexplode with grant option indicated by '*'.
+query TTB colnames,rowsort
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(ARRAY['root=r*/admin']::text[]) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+----
+grantor  privilege_type  is_grantable
+admin    SELECT          true
+
+# aclexplode with multiple privileges.
+query TTTB colnames,rowsort
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  COALESCE(e.rolname, 'PUBLIC') AS grantee,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(ARRAY['root=arw/admin']::text[]) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+LEFT JOIN pg_roles e ON e.oid = a.grantee
+----
+grantor  grantee  privilege_type  is_grantable
+admin    root     INSERT          false
+admin    root     SELECT          false
+admin    root     UPDATE          false
+
+# aclexplode with PUBLIC grantee (empty before '=').
+query TTTB colnames,rowsort
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  COALESCE(e.rolname, 'PUBLIC') AS grantee,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(ARRAY['=rw/root']::text[]) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+LEFT JOIN pg_roles e ON e.oid = a.grantee
+----
+grantor  grantee  privilege_type  is_grantable
+root     PUBLIC   SELECT          false
+root     PUBLIC   UPDATE          false
+
+# aclexplode with multiple ACL items.
+query TTTB colnames,rowsort
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  COALESCE(e.rolname, 'PUBLIC') AS grantee,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(ARRAY['root=r/admin', '=X/admin']::text[]) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+LEFT JOIN pg_roles e ON e.oid = a.grantee
+----
+grantor  grantee  privilege_type  is_grantable
+admin    PUBLIC   EXECUTE         false
+admin    root     SELECT          false
+
+# aclexplode also works with aclitem[] type via acldefault round-trip.
+query TTTB colnames,rowsort
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  COALESCE(e.rolname, 'PUBLIC') AS grantee,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(acldefault('r'::"char", 'root'::regrole)) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+LEFT JOIN pg_roles e ON e.oid = a.grantee
+----
+grantor  grantee  privilege_type  is_grantable
+root     root     DELETE          false
+root     root     INSERT          false
+root     root     MAINTAIN        false
+root     root     REFERENCES      false
+root     root     SELECT          false
+root     root     TRIGGER         false
+root     root     TRUNCATE        false
+root     root     UPDATE          false
+
+subtest end
+
+subtest makeaclitem
+
+# Single privilege.
+query T
+SELECT makeaclitem('root'::regrole, 'admin'::regrole, 'SELECT', false)
+----
+root=r/admin
+
+# Multiple privileges (comma-separated).
+query T
+SELECT makeaclitem('root'::regrole, 'admin'::regrole, 'SELECT,INSERT,UPDATE', false)
+----
+root=raw/admin
+
+# With grant option.
+query T
+SELECT makeaclitem('root'::regrole, 'admin'::regrole, 'SELECT,INSERT', true)
+----
+root=r*a*/admin
+
+# PUBLIC grantee (OID 0).
+query T
+SELECT makeaclitem(0::oid, 'root'::regrole, 'EXECUTE', false)
+----
+=X/root
+
+# Error on invalid privilege.
+statement error unrecognized privilege type: "BOGUS"
+SELECT makeaclitem('root'::regrole, 'admin'::regrole, 'BOGUS', false)
+
+subtest end
+
+subtest acldefault
+
+# Table defaults: owner gets arwdDxtm, PUBLIC gets nothing.
+query T
+SELECT acldefault('r'::"char", 'root'::regrole)
+----
+{root=arwdDxtm/root}
+
+# Database defaults: owner gets CTc, PUBLIC gets Tc.
+query T
+SELECT acldefault('d'::"char", 'root'::regrole)
+----
+{=Tc/root,root=CTc/root}
+
+# Function defaults: owner gets X, PUBLIC gets X.
+query T
+SELECT acldefault('f'::"char", 'root'::regrole)
+----
+{=X/root,root=X/root}
+
+# Type defaults: owner gets U, PUBLIC gets U.
+query T
+SELECT acldefault('T'::"char", 'root'::regrole)
+----
+{=U/root,root=U/root}
+
+# Schema defaults: owner gets UC, no PUBLIC.
+query T
+SELECT acldefault('n'::"char", 'root'::regrole)
+----
+{root=UC/root}
+
+# Language defaults: no owner, PUBLIC gets U.
+query T
+SELECT acldefault('l'::"char", 'root'::regrole)
+----
+{=U/root}
+
+# Column defaults: nobody gets anything.
+query T
+SELECT acldefault('c'::"char", 'root'::regrole)
+----
+{}
+
+# Error on invalid type char.
+statement error unrecognized object type abbreviation: "Z"
+SELECT acldefault('Z'::"char", 'root'::regrole)
+
+subtest end
+
+subtest aclitem_roundtrip
+
+# Round-trip: aclexplode(acldefault(...)) should produce correct rows.
+query TTTB colnames,rowsort
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  COALESCE(e.rolname, 'PUBLIC') AS grantee,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(acldefault('d'::"char", 'root'::regrole)) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+LEFT JOIN pg_roles e ON e.oid = a.grantee
+----
+grantor  grantee  privilege_type  is_grantable
+root     PUBLIC   CONNECT         false
+root     PUBLIC   TEMPORARY       false
+root     root     CONNECT         false
+root     root     CREATE          false
+root     root     TEMPORARY       false
+
+subtest end
+
+subtest aclitem_type
+
+# aclitem can be used as a column type.
+statement ok
+CREATE TABLE aclitem_test (a aclitem)
+
+statement ok
+INSERT INTO aclitem_test VALUES ('root=r/admin')
+
+query T
+SELECT * FROM aclitem_test
+----
+root=r/admin
+
+statement ok
+DROP TABLE aclitem_test
+
+# Cast string to aclitem.
+query T
+SELECT 'root=rw*/admin'::aclitem
+----
+root=rw*/admin
+
+subtest end
+
+subtest aclitem_validation
+
+# Valid: empty grantee (PUBLIC).
+query T
+SELECT '=r/'::aclitem
+----
+=r/
+
+# Valid: grant option markers.
+query T
+SELECT 'user1=r*w/'::aclitem
+----
+user1=r*w/
+
+# Valid: all privilege characters.
+query T
+SELECT 'user1=arwdDxtXUCTcsAm/'::aclitem
+----
+user1=arwdDxtXUCTcsAm/
+
+# Valid: empty privileges.
+query T
+SELECT 'user1=/'::aclitem
+----
+user1=/
+
+# Valid: missing slash (grantor defaults to empty).
+query T
+SELECT 'user1=r'::aclitem
+----
+user1=r
+
+# Valid: quoted identifiers.
+query T
+SELECT '"user with spaces"=r/'::aclitem
+----
+"user with spaces"=r/
+
+# Valid: grantor present.
+query T
+SELECT 'user1=r/grantor1'::aclitem
+----
+user1=r/grantor1
+
+# Invalid: bad privilege character.
+statement error pgcode 22P02 invalid mode character: "z"
+SELECT 'user1=z/'::aclitem
+
+# Invalid: missing equals sign.
+statement error pgcode 22P02 missing "=" sign
+SELECT 'user1rw/'::aclitem
+
+# Invalid: star without preceding privilege.
+statement error pgcode 22P02 "\*" must follow a privilege character
+SELECT 'user1=*r/'::aclitem
+
+# Invalid: extra characters after aclitem.
+statement error pgcode 22P02 extra characters after aclitem specification
+SELECT 'user1=r/grantor extra'::aclitem
+
+subtest end
 
 # Regression test for #43166.
 statement ok

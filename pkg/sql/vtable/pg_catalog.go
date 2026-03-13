@@ -291,7 +291,7 @@ CREATE TABLE pg_catalog.pg_default_acl (
 	defaclrole OID,
 	defaclnamespace OID,
 	defaclobjtype "char",
-	defaclacl STRING[]
+	defaclacl ACLITEM[]
 )`
 
 // PGCatalogDepend describes the schema of the pg_catalog.pg_depend table.
