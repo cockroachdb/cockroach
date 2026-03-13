@@ -239,8 +239,6 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 						statsRow.PartialPredicate = string(*r[partialPredicateIdx].(*tree.DString))
 						statsRow.FullStatisticID = (uint64)(*r[fullStatisticIDIdx].(*tree.DInt))
 					}
-					// TODO(janexing): add a mixed-version test that exercises the stats
-					// cache and show stats both before and after the migration (#161183).
 					statsRow.DelayDelete = (bool)(*r[delayDeleteIdx].(*tree.DBool))
 					if err := statsRow.DecodeAndSetHistogram(ctx, &p.semaCtx, r[histIdx]); err != nil {
 						v.Close(ctx)
