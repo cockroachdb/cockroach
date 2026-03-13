@@ -608,7 +608,7 @@ func (rl *resolvableLocks) condense() {
 // maybeCondense condenses point entries into range entries if toResolve has
 // grown beyond the configured threshold.
 func (rl *resolvableLocks) maybeCondense(threshold int) bool {
-	if rl.virEnabled && len(rl.toResolve) > threshold {
+	if rl.virEnabled && threshold > 0 && len(rl.toResolve) >= threshold {
 		rl.condense()
 		return true
 	}
@@ -4579,6 +4579,7 @@ func (t *lockTableImpl) ScanAndEnqueue(
 
 // defaultMaxToResolveRangeTxns is the default maximum number of distinct txns
 // tracked in toResolveRange.
+// TODO(mira): consider making this tunable or increasing it.
 const defaultMaxToResolveRangeTxns = 128
 
 func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
