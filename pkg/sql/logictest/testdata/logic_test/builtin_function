@@ -4250,7 +4250,7 @@ SELECT crdb_internal.redact('‹0›')
 query T
 SELECT crdb_internal.redact('‹‹0››')
 ----
-‹‹×››
+‹×››
 
 query T
 SELECT crdb_internal.redact('‹0› ‹0›')
@@ -4260,7 +4260,7 @@ SELECT crdb_internal.redact('‹0› ‹0›')
 query T
 SELECT crdb_internal.redact('‹‹0›')
 ----
-‹‹×›
+‹×›
 
 query T
 SELECT crdb_internal.redact(ARRAY[]::string[])
