@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -510,6 +512,107 @@ func TestImportIntoRowCountCheckAfterPause(t *testing.T) {
 				}
 				return nil
 			})
+
+			runner.CheckQueryResults(t,
+				fmt.Sprintf(`SELECT count(*) FROM %s`, tc.name),
+				[][]string{{fmt.Sprintf("%d", tc.totalRows)}})
+		})
+	}
+}
+
+// TestImportIntoRowCountCheckAfterIngestRetry verifies that the INSPECT row
+// count validation passes after ingestWithRetry retries a failed distImport.
+// When a transient error causes a retry, data from the first attempt persists
+// in KV but the distImport result only reflects the last attempt. The fix
+// reads the total imported row count from the job progress summary, which is
+// correctly maintained across all attempts.
+func TestImportIntoRowCountCheckAfterIngestRetry(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "uses short job adoption intervals that don't work well in slow test configurations")
+
+	ctx := context.Background()
+	dir, dirCleanupFn := testutils.TempDir(t)
+	defer dirCleanupFn()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		ExternalIODir: dir,
+		Knobs: base.TestingKnobs{
+			DistSQL: &execinfra.TestingKnobs{
+				BulkAdderFlushesEveryBatch: true,
+			},
+			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(db)
+
+	// Use sync mode so the import blocks until the inspect job completes. If
+	// the row count is wrong the import statement itself will fail.
+	runner.Exec(t, `SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'sync'`)
+
+	s := srv.ApplicationLayer()
+	registry := s.JobRegistry().(*jobs.Registry)
+
+	for _, tc := range []struct {
+		name      string
+		setupSQL  string
+		totalRows int
+	}{
+		{
+			name:      "retry_empty_table",
+			setupSQL:  "",
+			totalRows: 10,
+		},
+		{
+			name:      "retry_nonempty_table",
+			setupSQL:  `INSERT INTO retry_nonempty_table SELECT i, i*10 FROM generate_series(1, 5) AS g(i)`,
+			totalRows: 15,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Use sync.Once so the injected error fires only on the first
+			// successful distImport call inside ingestWithRetry.
+			var once sync.Once
+			registry.TestingWrapResumerConstructor(
+				jobspb.TypeImport,
+				func(resumer jobs.Resumer) jobs.Resumer {
+					r := resumer.(interface {
+						TestingSetAlwaysFlushJobProgress()
+						TestingSetAfterDistImportKnob(func() error)
+					})
+					r.TestingSetAlwaysFlushJobProgress()
+					r.TestingSetAfterDistImportKnob(func() error {
+						var err error
+						once.Do(func() {
+							// The "rpc error" substring makes this retryable
+							// per sqlerrors.IsDistSQLRetryableError.
+							err = errors.New("rpc error: injected test retry")
+						})
+						return err
+					})
+					return resumer
+				})
+
+			runner.Exec(t, fmt.Sprintf(`CREATE TABLE %s (k INT PRIMARY KEY, v INT)`, tc.name))
+
+			if tc.setupSQL != "" {
+				runner.Exec(t, tc.setupSQL)
+			}
+
+			runner.Exec(t, fmt.Sprintf(
+				`EXPORT INTO CSV 'nodelocal://1/export_%s/' FROM SELECT i, i*10 FROM generate_series(6, 15) AS g(i)`,
+				tc.name))
+
+			// Run import. The first distImport succeeds and ingests all rows,
+			// then the afterDistImport knob injects a retryable error. On
+			// retry, all files are at MaxInt64 resume pos so 0 new rows are
+			// ingested. The import should succeed with correct row count
+			// validation.
+			runner.Exec(t, fmt.Sprintf(
+				`IMPORT INTO %s (k, v) CSV DATA ('nodelocal://1/export_%s/export*-n*.0.csv')`,
+				tc.name, tc.name))
 
 			runner.CheckQueryResults(t,
 				fmt.Sprintf(`SELECT count(*) FROM %s`, tc.name),

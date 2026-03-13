@@ -64,6 +64,10 @@ type importTestingKnobs struct {
 	// expectedRowCountOffset is added to the expected row count passed to the
 	// inspect row count check.
 	expectedRowCountOffset int64
+	// afterDistImport, if set, is called after each successful distImport
+	// call inside ingestWithRetry. If it returns an error, that error
+	// replaces the nil err and triggers a retry.
+	afterDistImport func() error
 }
 
 type importResumer struct {
@@ -92,6 +96,10 @@ func (r *importResumer) TestingSetExpectedRowCountOffset(offset int64) {
 
 func (r *importResumer) TestingSetAlwaysFlushJobProgress() {
 	r.testingKnobs.alwaysFlushJobProgress = true
+}
+
+func (r *importResumer) TestingSetAfterDistImportKnob(fn func() error) {
+	r.testingKnobs.afterDistImport = fn
 }
 
 var _ jobs.TraceableJob = &importResumer{}
@@ -888,6 +896,9 @@ func ingestWithRetry(
 			if err == nil || !errors.Is(err, sql.ErrPlanChanged) {
 				break
 			}
+		}
+		if err == nil && testingKnobs.afterDistImport != nil {
+			err = testingKnobs.afterDistImport()
 		}
 		if err == nil {
 			break
