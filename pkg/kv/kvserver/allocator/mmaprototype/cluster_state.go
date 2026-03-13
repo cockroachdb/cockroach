@@ -808,6 +808,12 @@ type storeState struct {
 	overloadStartTime time.Time
 	// When overloaded this is equal to time.Time{}.
 	overloadEndTime time.Time
+	// lastDetailedLogTimes tracks the last time detailed (Infof-level) logging
+	// was emitted for this shedding store, keyed by the local store ID that
+	// triggered the log burst. Each local store may evaluate different lease
+	// transfer candidates for the same shedding store, so they get independent
+	// rate-limiting. Reset when the overload interval resets.
+	lastDetailedLogTimes map[roachpb.StoreID]time.Time
 }
 
 // The time duration between a change happening at a store, and when the
