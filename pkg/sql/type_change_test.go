@@ -517,7 +517,10 @@ func TestTypeChangeJobCancelSemantics(t *testing.T) {
 			defer s.Stopper().Stop(ctx)
 
 			// Setup.
+			// Force the legacy schema changer for this test, as it specifically
+			// tests the behavior of TYPEDESC SCHEMA CHANGE jobs.
 			_, err := sqlDB.Exec(`
+SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
 CREATE DATABASE db;
 CREATE TYPE db.greetings AS ENUM ('hi', 'yo');
 `)
