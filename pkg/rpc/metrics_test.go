@@ -303,8 +303,8 @@ func TestDRPCServerUnaryInterceptorAllMetrics(t *testing.T) {
 	require.Equal(t, int64(1), requestMetrics.RequestsTotal.Count(baseLabels))
 	// RequestsTotal with codeLabelsOK tracks completed requests.
 	require.Equal(t, int64(1), requestMetrics.RequestsTotal.Count(codeLabelsOK))
-	require.Equal(t, uint64(1), histogramSampleCount(requestMetrics.MsgRecvDuration, baseLabels))
-	require.Equal(t, uint64(1), histogramSampleCount(requestMetrics.MsgSendDuration, baseLabels))
+	// Unary interceptor does not record MsgRecvDuration/MsgSendDuration
+	// (those are only recorded by the streaming interceptor's monitored stream).
 
 	// Error call.
 	errHandler := func(ctx context.Context, req interface{}) (interface{}, error) {
@@ -324,10 +324,6 @@ func TestDRPCServerUnaryInterceptorAllMetrics(t *testing.T) {
 	// One completed with OK, one with Internal.
 	require.Equal(t, int64(1), requestMetrics.RequestsTotal.Count(codeLabelsOK))
 	require.Equal(t, int64(1), requestMetrics.RequestsTotal.Count(codeLabelsInternal))
-	// MsgRecvDuration increments unconditionally (before handler), but
-	// MsgSendDuration should not increment on error.
-	require.Equal(t, uint64(2), histogramSampleCount(requestMetrics.MsgRecvDuration, baseLabels))
-	require.Equal(t, uint64(1), histogramSampleCount(requestMetrics.MsgSendDuration, baseLabels))
 }
 
 // mockDRPCStream is a minimal drpc.Stream implementation for testing.
@@ -340,6 +336,7 @@ type mockDRPCStream struct {
 var _ drpc.Stream = (*mockDRPCStream)(nil)
 
 func (s *mockDRPCStream) Context() context.Context                  { return s.ctx }
+func (s *mockDRPCStream) Kind() drpc.StreamKind                     { return drpc.StreamKindUnknown }
 func (s *mockDRPCStream) MsgSend(drpc.Message, drpc.Encoding) error { return s.sendErr }
 func (s *mockDRPCStream) MsgRecv(drpc.Message, drpc.Encoding) error { return s.recvErr }
 func (s *mockDRPCStream) CloseSend() error                          { return nil }
