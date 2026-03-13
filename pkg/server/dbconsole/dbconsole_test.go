@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -162,6 +163,52 @@ func TestLivenessStatusToString(t *testing.T) {
 
 	for _, tt := range tests {
 		require.Equal(t, tt.want, livenessStatusToString(tt.status))
+	}
+}
+
+func TestFormatTimePtr(t *testing.T) {
+	tests := []struct {
+		name string
+		t    *time.Time
+		want string
+	}{
+		{"nil", nil, ""},
+		{"zero", func() *time.Time { t := time.Time{}; return &t }(), ""},
+		{
+			"valid",
+			func() *time.Time {
+				t := time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC)
+				return &t
+			}(),
+			"2024-01-15T10:30:00Z",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, formatTimePtr(tt.t))
+		})
+	}
+}
+
+func TestFormatTime(t *testing.T) {
+	tests := []struct {
+		name string
+		t    time.Time
+		want string
+	}{
+		{"zero", time.Time{}, ""},
+		{
+			"valid",
+			time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
+			"2024-01-15T10:30:00Z",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, formatTime(tt.t))
+		})
 	}
 }
 

@@ -20,6 +20,7 @@ package dbconsole
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
@@ -34,13 +35,9 @@ type StatusAPI interface {
 	NodesUI(ctx context.Context, req *serverpb.NodesRequest) (*serverpb.NodesResponseExternal, error)
 }
 
-// AdminAPI defines admin methods used by dbconsole
-type AdminAPI interface{}
-
 // ApiV2DBConsole implements the DB Console BFF API endpoints.
 type ApiV2DBConsole struct {
 	Status     StatusAPI
-	Admin      AdminAPI
 	InternalDB isql.DB
 }
 
@@ -131,6 +128,15 @@ func localityToMap(locality serverpb.Locality) map[string]string {
 		result[tier.Key] = tier.Value
 	}
 	return result
+}
+
+// formatTimePtr formats a *time.Time as an ISO 8601 string. Returns an empty
+// string for nil or zero values.
+func formatTimePtr(t *time.Time) string {
+	if t == nil || t.IsZero() {
+		return ""
+	}
+	return t.Format(time.RFC3339)
 }
 
 // livenessStatusToString converts a livenesspb.NodeLivenessStatus to its string

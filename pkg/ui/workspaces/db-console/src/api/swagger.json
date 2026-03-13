@@ -9,6 +9,103 @@
     "host": "localhost:8080",
     "basePath": "/api/v2/dbconsole",
     "paths": {
+        "/jobs": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns a list of jobs, optionally filtered by status, type, and limit.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Jobs"
+                ],
+                "summary": "List jobs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by job status",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Filter by job type (int32 enum value)",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of jobs to return",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Job list",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.JobsListResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/jobs/{job_id}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns a single job identified by its ID.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Jobs"
+                ],
+                "summary": "Get job",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Job ID",
+                        "name": "job_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Job details",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.JobInfo"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid job ID",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/nodes": {
             "get": {
                 "security": [
@@ -48,6 +145,156 @@
                 "error": {
                     "description": "Error is the error message.",
                     "type": "string"
+                }
+            }
+        },
+        "dbconsole.JobExecutionFailure": {
+            "type": "object",
+            "properties": {
+                "end": {
+                    "description": "End is the ISO 8601 timestamp when the error occurred.",
+                    "type": "string"
+                },
+                "error": {
+                    "description": "Error is the error message.",
+                    "type": "string"
+                },
+                "start": {
+                    "description": "Start is the ISO 8601 timestamp when the execution started.",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status is the status of the job during the failed execution.",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.JobInfo": {
+            "type": "object",
+            "properties": {
+                "coordinator_id": {
+                    "description": "CoordinatorID is the node ID coordinating the job.",
+                    "type": "integer"
+                },
+                "created": {
+                    "description": "Created is the ISO 8601 timestamp when the job was created.",
+                    "type": "string"
+                },
+                "description": {
+                    "description": "Description is a human-readable description of the job.",
+                    "type": "string"
+                },
+                "error": {
+                    "description": "Error is the error message if the job failed.",
+                    "type": "string"
+                },
+                "execution_failures": {
+                    "description": "ExecutionFailures is a log of execution failures.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dbconsole.JobExecutionFailure"
+                    }
+                },
+                "finished": {
+                    "description": "Finished is the ISO 8601 timestamp when the job finished.",
+                    "type": "string"
+                },
+                "fraction_completed": {
+                    "description": "FractionCompleted is the fraction of the job that has been completed.",
+                    "type": "number"
+                },
+                "highwater_decimal": {
+                    "description": "HighwaterDecimal is the highwater timestamp in decimal form for use\nwith AS OF SYSTEM TIME.",
+                    "type": "string"
+                },
+                "highwater_timestamp": {
+                    "description": "HighwaterTimestamp is the highwater timestamp as an ISO 8601 string.",
+                    "type": "string"
+                },
+                "id": {
+                    "description": "ID is the unique identifier for the job. Serialized as a string to avoid\nJavaScript integer precision loss for values exceeding 2^53.",
+                    "type": "string",
+                    "example": "0"
+                },
+                "last_run": {
+                    "description": "LastRun is the ISO 8601 timestamp of the last execution attempt.",
+                    "type": "string"
+                },
+                "messages": {
+                    "description": "Messages contains informational messages associated with the job.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dbconsole.JobMessageInfo"
+                    }
+                },
+                "modified": {
+                    "description": "Modified is the ISO 8601 timestamp when the job was last modified.",
+                    "type": "string"
+                },
+                "next_run": {
+                    "description": "NextRun is the ISO 8601 timestamp of the next scheduled execution.",
+                    "type": "string"
+                },
+                "num_runs": {
+                    "description": "NumRuns is the number of times the job has been executed.",
+                    "type": "integer"
+                },
+                "running_status": {
+                    "description": "RunningStatus provides additional detail on the job's running state.",
+                    "type": "string"
+                },
+                "started": {
+                    "description": "Started is the ISO 8601 timestamp when the job started executing.",
+                    "type": "string"
+                },
+                "statement": {
+                    "description": "Statement is the SQL statement that created the job.",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status is the current status of the job.",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "Type is the type of the job (e.g. \"BACKUP\", \"RESTORE\").",
+                    "type": "string"
+                },
+                "username": {
+                    "description": "Username is the user who created the job.",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.JobMessageInfo": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "description": "Kind is the kind of message.",
+                    "type": "string"
+                },
+                "message": {
+                    "description": "Message is the message text.",
+                    "type": "string"
+                },
+                "timestamp": {
+                    "description": "Timestamp is the ISO 8601 timestamp of the message.",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.JobsListResponse": {
+            "type": "object",
+            "properties": {
+                "earliest_retained_time": {
+                    "description": "EarliestRetainedTime is the earliest time for which job records are\nretained, as an ISO 8601 timestamp.",
+                    "type": "string"
+                },
+                "jobs": {
+                    "description": "Jobs contains the list of jobs.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dbconsole.JobInfo"
+                    }
                 }
             }
         },

@@ -4,6 +4,121 @@
  */
 
 export interface paths {
+    "/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List jobs
+         * @description Returns a list of jobs, optionally filtered by status, type, and limit.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Filter by job status */
+                    status?: string;
+                    /** @description Filter by job type (int32 enum value) */
+                    type?: number;
+                    /** @description Maximum number of jobs to return */
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Job list */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.JobsListResponse"];
+                    };
+                };
+                /** @description Internal error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get job
+         * @description Returns a single job identified by its ID.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Job ID */
+                    job_id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Job details */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.JobInfo"];
+                    };
+                };
+                /** @description Invalid job ID */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+                /** @description Internal error */
+                500: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["dbconsole.ErrorResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/nodes": {
         parameters: {
             query?: never;
@@ -59,6 +174,84 @@ export interface components {
         "dbconsole.ErrorResponse": {
             /** @description Error is the error message. */
             error?: string;
+        };
+        "dbconsole.JobExecutionFailure": {
+            /** @description End is the ISO 8601 timestamp when the error occurred. */
+            end?: string;
+            /** @description Error is the error message. */
+            error?: string;
+            /** @description Start is the ISO 8601 timestamp when the execution started. */
+            start?: string;
+            /** @description Status is the status of the job during the failed execution. */
+            status?: string;
+        };
+        "dbconsole.JobInfo": {
+            /** @description CoordinatorID is the node ID coordinating the job. */
+            coordinator_id?: number;
+            /** @description Created is the ISO 8601 timestamp when the job was created. */
+            created?: string;
+            /** @description Description is a human-readable description of the job. */
+            description?: string;
+            /** @description Error is the error message if the job failed. */
+            error?: string;
+            /** @description ExecutionFailures is a log of execution failures. */
+            execution_failures?: components["schemas"]["dbconsole.JobExecutionFailure"][];
+            /** @description Finished is the ISO 8601 timestamp when the job finished. */
+            finished?: string;
+            /** @description FractionCompleted is the fraction of the job that has been completed. */
+            fraction_completed?: number;
+            /**
+             * @description HighwaterDecimal is the highwater timestamp in decimal form for use
+             *     with AS OF SYSTEM TIME.
+             */
+            highwater_decimal?: string;
+            /** @description HighwaterTimestamp is the highwater timestamp as an ISO 8601 string. */
+            highwater_timestamp?: string;
+            /**
+             * @description ID is the unique identifier for the job. Serialized as a string to avoid
+             *     JavaScript integer precision loss for values exceeding 2^53.
+             * @example 0
+             */
+            id?: string;
+            /** @description LastRun is the ISO 8601 timestamp of the last execution attempt. */
+            last_run?: string;
+            /** @description Messages contains informational messages associated with the job. */
+            messages?: components["schemas"]["dbconsole.JobMessageInfo"][];
+            /** @description Modified is the ISO 8601 timestamp when the job was last modified. */
+            modified?: string;
+            /** @description NextRun is the ISO 8601 timestamp of the next scheduled execution. */
+            next_run?: string;
+            /** @description NumRuns is the number of times the job has been executed. */
+            num_runs?: number;
+            /** @description RunningStatus provides additional detail on the job's running state. */
+            running_status?: string;
+            /** @description Started is the ISO 8601 timestamp when the job started executing. */
+            started?: string;
+            /** @description Statement is the SQL statement that created the job. */
+            statement?: string;
+            /** @description Status is the current status of the job. */
+            status?: string;
+            /** @description Type is the type of the job (e.g. "BACKUP", "RESTORE"). */
+            type?: string;
+            /** @description Username is the user who created the job. */
+            username?: string;
+        };
+        "dbconsole.JobMessageInfo": {
+            /** @description Kind is the kind of message. */
+            kind?: string;
+            /** @description Message is the message text. */
+            message?: string;
+            /** @description Timestamp is the ISO 8601 timestamp of the message. */
+            timestamp?: string;
+        };
+        "dbconsole.JobsListResponse": {
+            /**
+             * @description EarliestRetainedTime is the earliest time for which job records are
+             *     retained, as an ISO 8601 timestamp.
+             */
+            earliest_retained_time?: string;
+            /** @description Jobs contains the list of jobs. */
+            jobs?: components["schemas"]["dbconsole.JobInfo"][];
         };
         "dbconsole.NodeInfo": {
             /**

@@ -2,30 +2,46 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "dbconsole",
-    srcs = ["dbconsole.go"],
+    srcs = [
+        "dbconsole.go",
+        "jobs.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/dbconsole",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/jobs/jobspb",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/server/apiutil",
         "//pkg/server/authserver",
         "//pkg/server/serverpb",
         "//pkg/server/srverrors",
         "//pkg/sql/isql",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/sessiondata",
+        "//pkg/util/hlc",
+        "//pkg/util/safesql",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gorilla_mux//:mux",
     ],
 )
 
 go_test(
     name = "dbconsole_test",
-    srcs = ["dbconsole_test.go"],
+    srcs = [
+        "dbconsole_test.go",
+        "jobs_test.go",
+    ],
     embed = [":dbconsole"],
     deps = [
         "//pkg/build",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/server/serverpb",
+        "//pkg/sql/sem/tree",
         "//pkg/util",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gorilla_mux//:mux",
         "@com_github_stretchr_testify//require",
     ],
 )
