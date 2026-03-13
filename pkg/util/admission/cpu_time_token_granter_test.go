@@ -20,108 +20,66 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const (
-	testTier0 resourceTier = iota
-	testTier1
-)
-
 func TestCPUTimeTokenGranter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var requesters [numResourceTiers]*testRequester
 	granter := newCPUTimeTokenGranter(makeCPUTimeTokenMetrics(), timeutil.DefaultTimeSource{})
-	tier0Granter := &cpuTimeTokenChildGranter{
-		tier:   testTier0,
-		parent: granter,
-	}
-	tier1Granter := &cpuTimeTokenChildGranter{
-		tier:   testTier1,
-		parent: granter,
-	}
 	var buf strings.Builder
 	var lastGranterStateStr string
+	requester := &testRequester{
+		additionalID: "",
+		granter:      granter,
+		buf:          &buf,
+	}
+	granter.requester = requester
+	requester.returnValueFromHasWaitingRequests = noBurst
+
 	flushAndReset := func(init bool) string {
-		granterStateStr := granter.String()
+		granterStateStr := granter.formatBuckets()
 		if granterStateStr != lastGranterStateStr {
 			fmt.Fprint(&buf, granterStateStr)
 		}
 		lastGranterStateStr = granterStateStr
 		if init {
-			fmt.Fprint(&buf, "tier0requester: "+requesters[0].String()+"\n")
-			fmt.Fprint(&buf, "tier1requester: "+requesters[1].String()+"\n")
+			fmt.Fprint(&buf, "requester: "+requester.String()+"\n")
 		}
 		str := buf.String()
 		buf.Reset()
 		return str
 	}
-	requesters[testTier0] = &testRequester{
-		additionalID: "tier0",
-		granter:      tier0Granter,
-		buf:          &buf,
-	}
-	requesters[testTier1] = &testRequester{
-		additionalID: "tier1",
-		granter:      tier1Granter,
-		buf:          &buf,
-	}
-	granter.requester[testTier0] = requesters[testTier0]
-	granter.requester[testTier1] = requesters[testTier1]
-
-	requesters[testTier0].returnValueFromHasWaitingRequests = noBurst
 
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "cpu_time_token_granter"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "init":
-			granter.mu.buckets[testTier0][canBurst].tokens = 0
-			granter.mu.buckets[testTier0][noBurst].tokens = 0
-			granter.mu.buckets[testTier1][canBurst].tokens = 0
-			granter.mu.buckets[testTier1][noBurst].tokens = 0
-			if d.HasArg("tier0burst") {
+			granter.mu.buckets[canBurst].tokens = 0
+			granter.mu.buckets[noBurst].tokens = 0
+			if d.HasArg("can_burst") {
 				var n int64
-				d.ScanArgs(t, "tier0burst", &n)
-				granter.mu.buckets[testTier0][canBurst].tokens = n
+				d.ScanArgs(t, "can_burst", &n)
+				granter.mu.buckets[canBurst].tokens = n
 			}
-			if d.HasArg("tier0") {
+			if d.HasArg("no_burst") {
 				var n int64
-				d.ScanArgs(t, "tier0", &n)
-				granter.mu.buckets[testTier0][noBurst].tokens = n
+				d.ScanArgs(t, "no_burst", &n)
+				granter.mu.buckets[noBurst].tokens = n
 			}
-			if d.HasArg("tier1burst") {
+			if d.HasArg("waiter") {
 				var n int64
-				d.ScanArgs(t, "tier1burst", &n)
-				granter.mu.buckets[testTier1][canBurst].tokens = n
-			}
-			if d.HasArg("tier1") {
-				var n int64
-				d.ScanArgs(t, "tier1", &n)
-				granter.mu.buckets[testTier1][noBurst].tokens = n
-			}
-			if d.HasArg("tier0waiter") {
-				var n int64
-				d.ScanArgs(t, "tier0waiter", &n)
-				requesters[testTier0].waitingRequests = true
-				requesters[testTier0].returnValueFromGranted = n
+				d.ScanArgs(t, "waiter", &n)
+				requester.waitingRequests = true
+				requester.returnValueFromGranted = n
 			} else {
-				requesters[testTier0].waitingRequests = false
-				requesters[testTier0].returnValueFromGranted = 0
+				requester.waitingRequests = false
+				requester.returnValueFromGranted = 0
 			}
-			if d.HasArg("tier1waiter") {
-				var n int64
-				d.ScanArgs(t, "tier1waiter", &n)
-				requesters[testTier1].waitingRequests = true
-				requesters[testTier1].returnValueFromGranted = n
-			} else {
-				requesters[testTier1].waitingRequests = false
-				requesters[testTier1].returnValueFromGranted = 0
-			}
-			if d.HasArg("tier1burstwaiter") {
-				if !d.HasArg("tier1waiter") {
-					panic("must set tier1waiter")
+			if d.HasArg("burst_waiter") {
+				if !d.HasArg("waiter") {
+					panic("must set waiter")
 				}
-				requesters[testTier1].returnValueFromHasWaitingRequests = canBurst
+				requester.returnValueFromHasWaitingRequests = canBurst
 			} else {
-				requesters[testTier1].returnValueFromHasWaitingRequests = noBurst
+				requester.returnValueFromHasWaitingRequests = noBurst
 			}
 			return flushAndReset(true /* init */)
 
@@ -134,7 +92,7 @@ func TestCPUTimeTokenGranter(t *testing.T) {
 			if d.HasArg("burst") {
 				qual = canBurst
 			}
-			requesters[scanResourceTier(t, d)].tryGet(qual, int64(v))
+			requester.tryGet(qual, int64(v))
 			return flushAndReset(false /* init */)
 
 		case "return-grant":
@@ -142,7 +100,7 @@ func TestCPUTimeTokenGranter(t *testing.T) {
 			if d.HasArg("v") {
 				d.ScanArgs(t, "v", &v)
 			}
-			requesters[scanResourceTier(t, d)].returnGrant(int64(v))
+			requester.returnGrant(int64(v))
 			return flushAndReset(false /* init */)
 
 		case "took-without-permission":
@@ -150,36 +108,26 @@ func TestCPUTimeTokenGranter(t *testing.T) {
 			if d.HasArg("v") {
 				d.ScanArgs(t, "v", &v)
 			}
-			requesters[scanResourceTier(t, d)].tookWithoutPermission(int64(v))
+			requester.tookWithoutPermission(int64(v))
 			return flushAndReset(false /* init */)
 
 		case "refill":
 			// The delta, bucket capacity, & bucket minimums are hard-coded.
-			// It is unwieldy to make them data-driven arguments, and the
-			// payoff would be low anyway.
-			var delta [numResourceTiers][numBurstQualifications]int64
-			delta[testTier0][canBurst] = 5
-			delta[testTier0][noBurst] = 4
-			delta[testTier1][canBurst] = 3
-			delta[testTier1][noBurst] = 1
-			var bucketCapacity [numResourceTiers][numBurstQualifications]int64
-			bucketCapacity[testTier0][canBurst] = 20
-			bucketCapacity[testTier0][noBurst] = 16
-			bucketCapacity[testTier1][canBurst] = 12
-			bucketCapacity[testTier1][noBurst] = 8
-			var bucketMins [numResourceTiers][numBurstQualifications]int64
-			bucketMins[testTier0][canBurst] = 0
-			bucketMins[testTier0][noBurst] = -4
-			bucketMins[testTier1][canBurst] = -8
-			bucketMins[testTier1][noBurst] = -12
+			var delta [numBurstQualifications]int64
+			delta[canBurst] = 5
+			delta[noBurst] = 4
+			var bucketCapacity [numBurstQualifications]int64
+			bucketCapacity[canBurst] = 20
+			bucketCapacity[noBurst] = 16
+			var bucketMins [numBurstQualifications]int64
+			bucketMins[canBurst] = 0
+			bucketMins[noBurst] = -4
 			granter.refill(delta, bucketCapacity, bucketMins, true /* updateMetrics */)
 			fmt.Fprint(&buf, "refill(\n")
-			for tier := 0; tier < int(numResourceTiers); tier++ {
-				for qual := 0; qual < int(numBurstQualifications); qual++ {
-					fmt.Fprintf(&buf, "\ttier%d %s -> delta: %v, cap: %v, min: %v\n",
-						tier, burstQualification(qual).String(), delta[tier][qual],
-						bucketCapacity[tier][qual], bucketMins[tier][qual])
-				}
+			for qual := 0; qual < int(numBurstQualifications); qual++ {
+				fmt.Fprintf(&buf, "\t%s -> delta: %v, cap: %v, min: %v\n",
+					burstQualification(qual).String(), delta[qual],
+					bucketCapacity[qual], bucketMins[qual])
 			}
 			fmt.Fprint(&buf, ")\n")
 			return flushAndReset(false /* init */)
@@ -189,28 +137,14 @@ func TestCPUTimeTokenGranter(t *testing.T) {
 			fmt.Fprintf(&buf, "reset-tokens-used-in-interval() returned %d\n", used)
 			return flushAndReset(false /* init */)
 
-		// For cpuTimeTokenChildGranter, this is a NOP. Still, it will be
-		// called in production. So best to test it doesn't panic, or similar.
 		case "continue-grant-chain":
-			requesters[scanResourceTier(t, d)].continueGrantChain()
+			requester.continueGrantChain()
 			return flushAndReset(false /* init */)
 
 		default:
 			return fmt.Sprintf("unknown command: %s", d.Cmd)
 		}
 	})
-}
-
-func scanResourceTier(t *testing.T, d *datadriven.TestData) resourceTier {
-	var kindStr string
-	d.ScanArgs(t, "tier", &kindStr)
-	switch kindStr {
-	case "tier0":
-		return testTier0
-	case "tier1":
-		return testTier1
-	}
-	panic("unknown resourceTier")
 }
 
 func TestExhaustedDuration(t *testing.T) {

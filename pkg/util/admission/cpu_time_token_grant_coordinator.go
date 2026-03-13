@@ -51,21 +51,16 @@ type CPUGrantCoordinators struct {
 }
 
 // GetKVWorkQueue returns a WorkQueue to use for KVWork. If
-// admission.cpu_time_tokens.enabled is true, it returns a WorkQueue that
-// implements CPU time token AC. Else it returns a WorkQueue that does
-// slots-based AC. If CPU time token AC, there is one WorkQueue for system
-// tenant work and another for app tenant work. The system tenant WorkQueue
-// is backed by a granter that allows greater resource usage than the app
-// tenant WorkQueue. This is a prioritization scheme. For details regarding
-// the granters, see cpu_time_token_granter.go.
+// admission.cpu_time_tokens.enabled is true, it returns the single WorkQueue
+// that implements CPU time token AC. Else it returns a WorkQueue that does
+// slots-based AC. The isSystemTenant parameter is kept for API compatibility
+// but is ignored when CPU time token AC is enabled — all work goes through
+// the same queue.
 func (coord *CPUGrantCoordinators) GetKVWorkQueue(isSystemTenant bool) *WorkQueue {
 	if !cpuTimeTokenACIsEnabled(&coord.st.SV) {
 		return coord.slotsCoord.GetWorkQueue(KVWork)
 	}
-	if isSystemTenant {
-		return coord.cpuTimeCoord.getWorkQueue(systemTenant)
-	}
-	return coord.cpuTimeCoord.getWorkQueue(appTenant)
+	return coord.cpuTimeCoord.getWorkQueue()
 }
 
 // GetSQLWorkQueue returns a WorkQueue for SQLKVResponseWork or
@@ -87,6 +82,30 @@ func (coord *CPUGrantCoordinators) SetTenantWeights(weights map[uint64]uint32) {
 	coord.cpuTimeCoord.setTenantWeights(weights)
 }
 
+// ResourceGroupConfig holds per-resource-group configuration.
+type ResourceGroupConfig struct {
+	Weight        uint32
+	BurstLimitFrac float64
+}
+
+// SetResourceGroupConfig sets per-resource-group weights and burst limits.
+// Each resource group appears as a tenant with weight = CPU_MIN. The
+// BurstLimitFrac controls burst qualification:
+//   - >= 1.0: FULLY_UTILIZE (always canBurst)
+//   - < 1.0: canBurst only while usage < burst limit fraction of CPU
+func (coord *CPUGrantCoordinators) SetResourceGroupConfig(
+	config map[uint64]ResourceGroupConfig,
+) {
+	weights := make(map[uint64]uint32, len(config))
+	burstLimits := make(map[uint64]float64, len(config))
+	for id, cfg := range config {
+		weights[id] = cfg.Weight
+		burstLimits[id] = cfg.BurstLimitFrac
+	}
+	coord.SetTenantWeights(weights)
+	coord.cpuTimeCoord.getWorkQueue().SetBurstLimits(burstLimits)
+}
+
 // GetRunnableCountCallback returns a callback of type
 // goschedstats.RunnableCountCallback.
 func (coord *CPUGrantCoordinators) GetRunnableCountCallback() goschedstats.RunnableCountCallback {
@@ -101,7 +120,7 @@ func (cg *CPUGrantCoordinators) Close() {
 
 type cpuTimeTokenGrantCoordinator struct {
 	filler *cpuTimeTokenFiller
-	queues [numResourceTiers]requesterClose
+	queue  requesterClose
 }
 
 func makeCPUTimeTokenGrantCoordinator(
@@ -115,13 +134,6 @@ func makeCPUTimeTokenGrantCoordinator(
 	registry.AddMetricStruct(metrics)
 	timeSource := timeutil.DefaultTimeSource{}
 	granter := newCPUTimeTokenGranter(metrics, timeSource)
-	var childGranters [numResourceTiers]cpuTimeTokenChildGranter
-	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
-		childGranters[tier] = cpuTimeTokenChildGranter{
-			tier:   tier,
-			parent: granter,
-		}
-	}
 	filler := &cpuTimeTokenFiller{
 		timeSource: timeSource,
 		closeCh:    make(chan struct{}),
@@ -140,26 +152,21 @@ func makeCPUTimeTokenGrantCoordinator(
 	allocator.model = model
 	filler.allocator = allocator
 
-	var requesters [numResourceTiers]requester
 	wqMetrics := makeWorkQueueMetrics("cpu", registry)
-	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
-		opts := makeWorkQueueOptions(KVWork)
-		opts.mode = usesCPUTimeTokens
-		opts.admittedCountPerTenant = metrics.AdmittedCountPerTenant
-		opts.waitTimeNanosPerTenant = metrics.WaitTimeNanosPerTenant
-		requesters[tier] = makeWorkQueue(
-			ambientCtx, KVWork, &childGranters[tier], settings, wqMetrics, opts)
-		granter.requester[tier] = requesters[tier]
-		// This type assertion is always valid, since makeWorkQueue always
-		// returns a *WorkQueue.
-		allocator.queues[tier] = requesters[tier].(*WorkQueue)
-	}
+	wqOpts := makeWorkQueueOptions(KVWork)
+	wqOpts.mode = usesCPUTimeTokens
+	wqOpts.admittedCountPerTenant = metrics.AdmittedCountPerTenant
+	wqOpts.waitTimeNanosPerTenant = metrics.WaitTimeNanosPerTenant
+	req := makeWorkQueue(
+		ambientCtx, KVWork, granter, settings, wqMetrics, wqOpts)
+	granter.requester = req
+	// This type assertion is always valid, since makeWorkQueue always
+	// returns a *WorkQueue.
+	allocator.queue = req.(*WorkQueue)
 
 	coordinator := &cpuTimeTokenGrantCoordinator{
 		filler: filler,
-	}
-	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
-		coordinator.queues[tier] = requesters[tier]
+		queue:  req,
 	}
 
 	// The filler ticking appears to have a slight negative impact on perf.
@@ -186,19 +193,15 @@ func makeCPUTimeTokenGrantCoordinator(
 	return coordinator
 }
 
-func (coord *cpuTimeTokenGrantCoordinator) getWorkQueue(tier resourceTier) *WorkQueue {
-	return coord.queues[tier].(*WorkQueue)
+func (coord *cpuTimeTokenGrantCoordinator) getWorkQueue() *WorkQueue {
+	return coord.queue.(*WorkQueue)
 }
 
 func (coord *cpuTimeTokenGrantCoordinator) setTenantWeights(weights map[uint64]uint32) {
-	for tier := range coord.queues {
-		coord.queues[tier].(*WorkQueue).SetTenantWeights(weights)
-	}
+	coord.queue.(*WorkQueue).SetTenantWeights(weights)
 }
 
 func (coord *cpuTimeTokenGrantCoordinator) close() {
-	for tier := range coord.queues {
-		coord.queues[tier].close()
-	}
+	coord.queue.close()
 	coord.filler.close()
 }

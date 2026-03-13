@@ -38,16 +38,16 @@ func TestCPUTimeTokenACEnableAndDisable(t *testing.T) {
 	cpuTimeTokenACEnabled.Override(context.Background(), &settings.SV, false)
 	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
 	require.Equal(t, usesSlots, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
-	// If CPU time token AC is disabled, we use one WorkQueue for both
-	// system & app tenant work.
+	// If CPU time token AC is disabled, we use the slots-based WorkQueue
+	// for both system & app tenant work.
 	require.Equal(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
 
 	cpuTimeTokenACEnabled.Override(context.Background(), &settings.SV, true)
 	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
 	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
-	// If CPU time token AC is enabled, we use one WorkQueue for system
-	// tenant work & a second WorkQueue for app tenant work.
-	require.NotEqual(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
+	// With 1-queue design, both system and app tenant work use the same
+	// WorkQueue.
+	require.Equal(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
 
 	// Test that the env var kill switch overrides the cluster setting.
 	// Even with the setting enabled, the kill switch forces slot-based AC.
@@ -64,5 +64,6 @@ func TestCPUTimeTokenACEnableAndDisable(t *testing.T) {
 	cpuTimeTokenACKillSwitch = false
 	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */).mode)
 	require.Equal(t, usesCPUTimeTokens, cpuCoords.GetKVWorkQueue(true /* isSystemTenant */).mode)
-	require.NotEqual(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
+	// Same single WorkQueue for both.
+	require.Equal(t, cpuCoords.GetKVWorkQueue(false /* isSystemTenant */), cpuCoords.GetKVWorkQueue(true /* isSystemTenant */))
 }
