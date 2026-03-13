@@ -10,24 +10,16 @@ import {
   util,
   api as clusterUiApi,
   TimezoneContext,
-  WithTimezone,
 } from "@cockroachlabs/cluster-ui";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import map from "lodash/map";
 import take from "lodash/take";
 import moment from "moment-timezone";
-import React, { useContext, useEffect } from "react";
+import React, { useContext } from "react";
 import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
-import { Link, RouteComponentProps, withRouter } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
+import { Link } from "react-router-dom";
 
-import { refreshEvents } from "src/redux/apiReducers";
-import {
-  eventsLastErrorSelector,
-  eventsSelector,
-  eventsValidSelector,
-  eventsMaxApiReached,
-} from "src/redux/events";
 import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
 import { getEventDescription } from "src/util/events";
@@ -89,22 +81,9 @@ export const EventRow = (props: EventRowProps) => {
   );
 };
 
-export interface EventBoxProps {
-  events: clusterUiApi.EventsResponse;
-  // eventsValid is needed so that this component will re-render when the events
-  // data becomes invalid, and thus trigger a refresh.
-  eventsValid: boolean;
-  refreshEvents: typeof refreshEvents;
-}
-
-export function EventBoxUnconnected({
-  events,
-  refreshEvents: refreshEventsAction,
-}: EventBoxProps): React.ReactElement {
-  useEffect(() => {
-    // Refresh events when mounting and when props change.
-    refreshEventsAction();
-  });
+export function EventBox(): React.ReactElement {
+  const { data } = clusterUiApi.useEvents();
+  const events = data?.results;
 
   return (
     <div className="events">
@@ -127,32 +106,13 @@ export function EventBoxUnconnected({
   );
 }
 
-export interface EventPageProps {
-  events: clusterUiApi.EventsResponse;
-  // eventsValid is needed so that this component will re-render when the events
-  // data becomes invalid, and thus trigger a refresh.
-  eventsValid: boolean;
-  refreshEvents: typeof refreshEvents;
-  sortSetting: SortSetting;
-  setSort: typeof eventsSortSetting.set;
-  lastError: Error;
-  maxSizeApiReached: boolean;
-  timezone: string;
-}
-
-export function EventPageUnconnected({
-  events,
-  refreshEvents: refreshEventsAction,
-  sortSetting,
-  setSort,
-  lastError,
-  maxSizeApiReached,
-  timezone,
-}: EventPageProps): React.ReactElement {
-  useEffect(() => {
-    // Refresh events when mounting and when props change.
-    refreshEventsAction();
-  });
+export function EventPage(): React.ReactElement {
+  const { data, error } = clusterUiApi.useEvents();
+  const events = data?.results;
+  const maxSizeApiReached = !!data?.maxSizeReached;
+  const timezone = useContext(TimezoneContext);
+  const sortSetting = useSelector(eventsSortSetting.selector);
+  const dispatch = useDispatch();
 
   const renderContent = () => {
     const simplifiedEvents = map(events, event => {
@@ -165,7 +125,9 @@ export function EventPageUnconnected({
           <EventSortedTable
             data={simplifiedEvents}
             sortSetting={sortSetting}
-            onChangeSortSetting={(setting: SortSetting) => setSort(setting)}
+            onChangeSortSetting={(setting: SortSetting) =>
+              dispatch(eventsSortSetting.set(setting))
+            }
             columns={[
               {
                 title: "Event",
@@ -206,47 +168,10 @@ export function EventPageUnconnected({
         <Loading
           loading={!events}
           page={"events"}
-          error={lastError}
+          error={error}
           render={renderContent}
         />
       </section>
     </div>
   );
 }
-
-// Connect the EventsList class with our redux store.
-const eventBoxConnected = withRouter(
-  connect(
-    (state: AdminUIState, _: RouteComponentProps) => {
-      return {
-        events: eventsSelector(state),
-        eventsValid: eventsValidSelector(state),
-      };
-    },
-    {
-      refreshEvents,
-    },
-  )(EventBoxUnconnected),
-);
-
-// Connect the EventsList class with our redux store.
-const eventPageConnected = withRouter(
-  connect(
-    (state: AdminUIState, _: RouteComponentProps) => {
-      return {
-        events: eventsSelector(state),
-        eventsValid: eventsValidSelector(state),
-        sortSetting: eventsSortSetting.selector(state),
-        lastError: eventsLastErrorSelector(state),
-        maxSizeApiReached: eventsMaxApiReached(state),
-      };
-    },
-    {
-      refreshEvents,
-      setSort: eventsSortSetting.set,
-    },
-  )(WithTimezone<EventPageProps>(EventPageUnconnected)),
-);
-
-export { eventBoxConnected as EventBox };
-export { eventPageConnected as EventPage };

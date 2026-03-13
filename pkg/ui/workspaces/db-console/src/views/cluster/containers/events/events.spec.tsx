@@ -8,13 +8,27 @@ import { render } from "@testing-library/react";
 import React from "react";
 import { MemoryRouter } from "react-router-dom";
 
-import { refreshEvents } from "src/redux/apiReducers";
 import { allEvents } from "src/util/eventTypes";
 import {
-  EventBoxUnconnected as EventBox,
+  EventBox,
   EventRow,
   getEventInfo,
 } from "src/views/cluster/containers/events";
+
+jest.mock("@cockroachlabs/cluster-ui", () => {
+  const actual = jest.requireActual("@cockroachlabs/cluster-ui");
+  return {
+    ...actual,
+    api: {
+      ...actual.api,
+      useEvents: jest.fn(),
+    },
+  };
+});
+
+const mockUseEvents = clusterUiApi.useEvents as jest.MockedFunction<
+  typeof clusterUiApi.useEvents
+>;
 
 const createEventWithEventType = (
   eventType: string,
@@ -28,17 +42,10 @@ const createEventWithEventType = (
   };
 };
 
-function makeEventBox(
-  events: clusterUiApi.EventsResponse,
-  refreshEventsFn: typeof refreshEvents,
-) {
+function makeEventBox() {
   return render(
     <MemoryRouter>
-      <EventBox
-        events={events}
-        refreshEvents={refreshEventsFn}
-        eventsValid={true}
-      />
+      <EventBox />
     </MemoryRouter>,
   );
 }
@@ -54,13 +61,35 @@ function makeEvent(event: clusterUiApi.EventColumns) {
 }
 
 describe("<EventBox>", function () {
-  const spy = jest.fn();
-
-  describe("refresh", function () {
-    it("refreshes events when mounted.", function () {
-      makeEventBox([], spy);
-      expect(spy).toHaveBeenCalled();
+  beforeEach(() => {
+    mockUseEvents.mockReturnValue({
+      data: { results: [], maxSizeReached: false },
+      error: undefined,
+      isLoading: false,
+      isValidating: false,
+      mutate: jest.fn(),
     });
+  });
+
+  it("renders without crashing when events are empty", function () {
+    makeEventBox();
+  });
+
+  it("renders events when data is available", function () {
+    mockUseEvents.mockReturnValue({
+      data: {
+        results: [createEventWithEventType("create_database")],
+        maxSizeReached: false,
+      },
+      error: undefined,
+      isLoading: false,
+      isValidating: false,
+      mutate: jest.fn(),
+    });
+    const { container } = makeEventBox();
+    expect(
+      container.querySelector("div.events__message span")?.textContent,
+    ).toContain("created database");
   });
 });
 

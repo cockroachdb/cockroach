@@ -52,13 +52,6 @@ export const clusterReducerObj = new CachedDataReducer(
 );
 export const refreshCluster = clusterReducerObj.refresh;
 
-const eventsReducerObj = new CachedDataReducer(
-  clusterUiApi.getNonRedactedEvents,
-  "events",
-  moment.duration(10, "s"),
-);
-export const refreshEvents = eventsReducerObj.refresh;
-
 function rollupStoreMetrics(
   res: api.NodesResponseExternalMessage,
 ): INodeStatus[] {
@@ -502,9 +495,6 @@ export const refreshTenantsList = tenantsListObj.refresh;
 
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
-  events: CachedDataReducerState<
-    clusterUiApi.SqlApiResponse<clusterUiApi.EventsResponse>
-  >;
   nodes: CachedDataReducerState<INodeStatus[]>;
   raft: CachedDataReducerState<api.RaftDebugResponseMessage>;
   version: CachedDataReducerState<VersionList>;
@@ -560,7 +550,6 @@ export interface APIReducersState {
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
   [clusterReducerObj.actionNamespace]: clusterReducerObj.reducer,
-  [eventsReducerObj.actionNamespace]: eventsReducerObj.reducer,
   [nodesReducerObj.actionNamespace]: nodesReducerObj.reducer,
   [raftReducerObj.actionNamespace]: raftReducerObj.reducer,
   [versionReducerObj.actionNamespace]: versionReducerObj.reducer,
