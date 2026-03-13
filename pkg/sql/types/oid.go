@@ -102,6 +102,7 @@ var OidToType = map[oid.Oid]*T{
 	oid.T_varchar:      VarChar,
 	oid.T_void:         Void,
 
+	oidext.T_aclitem:   AclItem,
 	oidext.T_geometry:  Geometry,
 	oidext.T_geography: Geography,
 	oidext.T_box2d:     Box2D,
@@ -153,6 +154,7 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 	oid.T_varbit:       oid.T__varbit,
 	oid.T_varchar:      oid.T__varchar,
 
+	oidext.T_aclitem:   oidext.T__aclitem,
 	oidext.T_geometry:  oidext.T__geometry,
 	oidext.T_geography: oidext.T__geography,
 	oidext.T_box2d:     oidext.T__box2d,

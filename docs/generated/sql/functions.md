@@ -1559,7 +1559,9 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
 <tbody>
-<tr><td><a name="aclexplode"></a><code>aclexplode(aclitems: <a href="string.html">string</a>[]) &rarr; tuple{oid AS grantor, oid AS grantee, string AS privilege_type, bool AS is_grantable}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing aclitem stuff (returns no rows as this feature is unsupported in CockroachDB)</p>
+<tr><td><a name="aclexplode"></a><code>aclexplode(aclitems: <a href="string.html">string</a>[]) &rarr; tuple{oid AS grantor, oid AS grantee, string AS privilege_type, bool AS is_grantable}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing aclitem privileges.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="aclexplode"></a><code>aclexplode(aclitems: aclitem[]) &rarr; tuple{oid AS grantor, oid AS grantee, string AS privilege_type, bool AS is_grantable}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing aclitem privileges.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="generate_series"></a><code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the integer values from <code>start</code> to <code>end</code>, inclusive.</p>
 </span></td><td>Immutable</td></tr>
@@ -3458,6 +3460,8 @@ may increase either contention or retry errors, or both.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
 <tbody>
+<tr><td><a name="acldefault"></a><code>acldefault(type: "char", ownerId: oid) &rarr; aclitem[]</code></td><td><span class="funcdesc"><p>Returns the default access privileges for an object of the given type belonging to the given owner.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="col_description"></a><code>col_description(table_oid: oid, column_number: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a table column, which is specified by the OID of its table and its column number. (obj_description cannot be used for table columns, since columns do not have OIDs of their own.)</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="current_setting"></a><code>current_setting(setting_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>System info</p>
@@ -3635,6 +3639,8 @@ may increase either contention or retry errors, or both.</p>
 <tr><td><a name="information_schema._pg_numeric_precision_radix"></a><code>information_schema._pg_numeric_precision_radix(typid: oid, typmod: int4) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the radix of the given type with type modifier</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="information_schema._pg_numeric_scale"></a><code>information_schema._pg_numeric_scale(typid: oid, typmod: int4) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the scale of the given type with type modifier</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="makeaclitem"></a><code>makeaclitem(grantee: oid, grantor: oid, privileges: <a href="string.html">string</a>, is_grantable: <a href="bool.html">bool</a>) &rarr; aclitem</code></td><td><span class="funcdesc"><p>Constructs an aclitem from the given grantee, grantor, privileges, and grant option.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="nameconcatoid"></a><code>nameconcatoid(name: <a href="string.html">string</a>, oid: oid) &rarr; name</code></td><td><span class="funcdesc"><p>Used in the information_schema to produce specific_name columns, which are supposed to be unique per schema. The result is the same as ($1::text || ‘_’ || $2::text)::name except that, if it would not fit in 63 characters, we make it do so by truncating the name input (not the oid).</p>
 </span></td><td>Immutable</td></tr>

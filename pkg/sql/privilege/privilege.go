@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
@@ -363,6 +364,204 @@ var privToACL = map[Kind]string{
 	EXECUTE:  "X",
 	MAINTAIN: "m",
 	TRIGGER:  "t",
+}
+
+// ACLCharToPrivName maps PostgreSQL ACL abbreviation characters to privilege
+// names as used in aclexplode output.
+var ACLCharToPrivName = map[byte]string{
+	'r': "SELECT",
+	'a': "INSERT",
+	'w': "UPDATE",
+	'd': "DELETE",
+	'D': "TRUNCATE",
+	'x': "REFERENCES",
+	't': "TRIGGER",
+	'X': "EXECUTE",
+	'U': "USAGE",
+	'C': "CREATE",
+	'T': "TEMPORARY",
+	'c': "CONNECT",
+	'm': "MAINTAIN",
+}
+
+// PrivNameToACLChar maps privilege names (uppercase) to PostgreSQL ACL
+// abbreviation characters, for use in makeaclitem.
+var PrivNameToACLChar = map[string]byte{
+	"SELECT":     'r',
+	"INSERT":     'a',
+	"UPDATE":     'w',
+	"DELETE":     'd',
+	"TRUNCATE":   'D',
+	"REFERENCES": 'x',
+	"TRIGGER":    't',
+	"EXECUTE":    'X',
+	"USAGE":      'U',
+	"CREATE":     'C',
+	"TEMPORARY":  'T',
+	"CONNECT":    'c',
+	"MAINTAIN":   'm',
+}
+
+// ValidACLChars is the set of valid privilege characters in an aclitem string,
+// matching PostgreSQL's ACL abbreviation characters. 'R' is accepted for
+// backward compatibility (old RULE privilege) but is otherwise ignored.
+const ValidACLChars = "arwdDxtXUCTcsAm"
+
+// ValidateACLItemString validates that s has the PostgreSQL aclitem format:
+//
+//	grantee=privchars/grantor
+//
+// where grantee and grantor are role names (possibly double-quoted, or empty),
+// and privchars is a sequence of privilege characters from ValidACLChars, each
+// optionally followed by '*' indicating grant option. An empty grantee means
+// PUBLIC. CockroachDB does not track grantors, so the grantor portion is
+// typically empty but still must be present after the '/'.
+func ValidateACLItemString(s string) error {
+	i := 0
+	// Parse grantee identifier (may be empty for PUBLIC).
+	i = skipACLIdentifier(s, i)
+	if i < 0 {
+		return pgerror.Newf(pgcode.InvalidTextRepresentation,
+			"unterminated quoted identifier: %q", s)
+	}
+	if i >= len(s) || s[i] != '=' {
+		return pgerror.Newf(pgcode.InvalidTextRepresentation,
+			"missing \"=\" sign: %q", s)
+	}
+	i++ // skip '='
+	// Parse privilege characters and grant option markers.
+	for i < len(s) && s[i] != '/' {
+		c := s[i]
+		if c == '*' {
+			return pgerror.Newf(pgcode.InvalidTextRepresentation,
+				"invalid mode character: \"*\" must follow a privilege character: %q", s)
+		}
+		if !isValidACLChar(c) {
+			return pgerror.Newf(pgcode.InvalidTextRepresentation,
+				"invalid mode character: %q", string(c))
+		}
+		i++
+		// Skip optional '*' grant option marker.
+		if i < len(s) && s[i] == '*' {
+			i++
+		}
+	}
+	if i < len(s) && s[i] == '/' {
+		i++ // skip '/'
+		// Parse grantor identifier (may be empty in CockroachDB).
+		i = skipACLIdentifier(s, i)
+		if i < 0 {
+			return pgerror.Newf(pgcode.InvalidTextRepresentation,
+				"unterminated quoted identifier: %q", s)
+		}
+	}
+	// If '/' is missing entirely, treat as empty grantor (PG issues a warning
+	// and defaults the grantor; CRDB doesn't track grantors so we just accept).
+	if i != len(s) {
+		return pgerror.Newf(pgcode.InvalidTextRepresentation,
+			"extra characters after aclitem specification: %q", s)
+	}
+	return nil
+}
+
+// skipACLIdentifier advances past an optionally double-quoted identifier
+// starting at position i in s. Returns the new position, or -1 if a
+// quoted identifier is missing its closing double quote.
+func skipACLIdentifier(s string, i int) int {
+	if i >= len(s) {
+		return i
+	}
+	if s[i] == '"' {
+		// Quoted identifier: consume until closing unescaped quote.
+		i++ // skip opening quote
+		for i < len(s) {
+			if s[i] == '"' {
+				i++
+				// Escaped double quote ("") continues the identifier.
+				if i < len(s) && s[i] == '"' {
+					i++
+					continue
+				}
+				return i
+			}
+			i++
+		}
+		// Unterminated quote.
+		return -1
+	}
+	// Unquoted identifier: alphanumeric, underscore, or high-bit chars.
+	for i < len(s) && isACLIdentChar(s[i]) {
+		i++
+	}
+	return i
+}
+
+// isACLIdentChar returns true for characters allowed in an unquoted ACL
+// identifier, matching PostgreSQL's is_safe_acl_char for getid context.
+func isACLIdentChar(c byte) bool {
+	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+		(c >= '0' && c <= '9') || c == '_' || c >= 128
+}
+
+// QuoteACLIdentifier quotes a role name for use in an aclitem string,
+// matching PostgreSQL's putid() behavior. The name is double-quoted if it
+// contains any character that is not alphanumeric, underscore, or a high-bit
+// byte. Internal double quotes are escaped by doubling them. An empty name
+// is returned as-is (it represents PUBLIC in aclitem format).
+func QuoteACLIdentifier(name string) string {
+	if len(name) == 0 {
+		return name
+	}
+	needsQuoting := false
+	for i := 0; i < len(name); i++ {
+		if !isACLIdentChar(name[i]) {
+			needsQuoting = true
+			break
+		}
+	}
+	if !needsQuoting {
+		return name
+	}
+	return lexbase.EscapeSQLIdent(name)
+}
+
+// ExtractACLIdentifier extracts and unquotes a (possibly double-quoted)
+// identifier from s starting at position i, matching PostgreSQL's getid()
+// behavior. Returns the unquoted name and the position after the identifier.
+// If a quoted identifier has no closing quote, returns ("", -1).
+func ExtractACLIdentifier(s string, i int) (string, int) {
+	if i >= len(s) {
+		return "", i
+	}
+	if s[i] == '"' {
+		i++ // skip opening quote
+		var buf strings.Builder
+		for i < len(s) {
+			if s[i] == '"' {
+				i++
+				// Doubled double quote is an escape; single one ends the identifier.
+				if i < len(s) && s[i] == '"' {
+					buf.WriteByte('"')
+					i++
+					continue
+				}
+				return buf.String(), i
+			}
+			buf.WriteByte(s[i])
+			i++
+		}
+		return "", -1
+	}
+	start := i
+	for i < len(s) && isACLIdentChar(s[i]) {
+		i++
+	}
+	return s[start:i], i
+}
+
+// isValidACLChar returns true if c is a recognized privilege character.
+func isValidACLChar(c byte) bool {
+	return strings.IndexByte(ValidACLChars, c) >= 0
 }
 
 // orderedPrivs is the list of privileges sorted in alphanumeric order based on the ACL character -> CUacdmrtwX

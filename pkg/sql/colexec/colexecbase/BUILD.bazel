@@ -40,6 +40,7 @@ go_library(
         "@com_github_cockroachdb_apd_v3//:apd",  # keep
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",  # keep
+        "//pkg/sql/oidext",  # keep
         "@com_github_lib_pq//oid",  # keep
     ],
 )

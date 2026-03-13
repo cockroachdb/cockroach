@@ -2887,6 +2887,15 @@ var builtinOidsArray = []string{
 	2932: `st_asmvt(arg1: tuple, arg2: string, arg3: int, arg4: string) -> bytes`,
 	2933: `st_asmvt(arg1: tuple, arg2: string, arg3: int, arg4: string, arg5: string) -> bytes`,
 	2934: `information_schema.crdb_set_session_variable_hint(statement_fingerprint: string, variable_name: string, variable_value: string, database: string) -> int`,
+	2935: `makeaclitem(grantee: oid, grantor: oid, privileges: string, is_grantable: bool) -> aclitem`,
+	2936: `acldefault(type: "char", ownerId: oid) -> aclitem[]`,
+	2937: `aclexplode(aclitems: aclitem[]) -> tuple{oid AS grantor, oid AS grantee, string AS privilege_type, bool AS is_grantable}`,
+	2938: `aclitemrecv(input: anyelement) -> aclitem`,
+	2939: `aclitemsend(aclitem: aclitem) -> bytes`,
+	2940: `aclitemin(input: anyelement) -> aclitem`,
+	2941: `aclitemout(aclitem: aclitem) -> bytes`,
+	2942: `aclitem(string: string) -> aclitem`,
+	2943: `aclitem(citext: citext) -> aclitem`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

@@ -187,6 +187,10 @@ func IsLegalColumnType(typ *types.T) bool {
 		// unlikely to use these types of columns, so disabling their generation
 		// is low risk.
 		return false
+	case oidext.T_aclitem, oidext.T__aclitem:
+		// aclitem has strict format requirements (grantee=privchars/grantor) that
+		// make random generation unreliable for workloads like schemachange.
+		return false
 	}
 	ctx := context.Background()
 	st := clustersettings.MakeTestingClusterSettings()
