@@ -109,4 +109,6 @@ message SetSessionVariableHint {
   string variable_value = 5 [(gogoproto.jsontag) = ",omitempty"];
   // The hint ID of the newly created statement hint.
   int64 hint_id = 6 [(gogoproto.customname) = "HintID", (gogoproto.jsontag) = ",omitempty"];
+  // The database to which the hint is scoped, if any.
+  string database = 7 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
