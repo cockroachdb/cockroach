@@ -2957,6 +2957,7 @@ GO_TARGETS = [
     "//pkg/util/log/logmetrics:logmetrics",
     "//pkg/util/log/logmetrics:logmetrics_test",
     "//pkg/util/log/logpb:logpb",
+    "//pkg/util/log/logtestutils/telemetrylogtestutils:telemetrylogtestutils",
     "//pkg/util/log/logtestutils:logtestutils",
     "//pkg/util/log/logutil:logutil",
     "//pkg/util/log/severity:severity",

@@ -980,6 +980,7 @@ go_test(
         "//pkg/util/log/logconfig",
         "//pkg/util/log/logpb",
         "//pkg/util/log/logtestutils",
+        "//pkg/util/log/logtestutils/telemetrylogtestutils",
         "//pkg/util/metamorphic",
         "//pkg/util/metric",
         "//pkg/util/mon",
