@@ -1,0 +1,326 @@
+# LogicTest: multiregion-9node-3region-3azs
+
+# Regression test: switching the primary region and survival goal should keep
+# zone configs consistent for all tables.
+
+statement ok
+CREATE DATABASE mr_test PRIMARY REGION "us-east-1" REGIONS "ca-central-1", "ap-southeast-2"
+
+statement ok
+USE mr_test
+
+statement ok
+CREATE TABLE t1 (k INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE t2 (k INT PRIMARY KEY);
+ALTER TABLE t2 CONFIGURE ZONE USING gc.ttlseconds=10;
+
+# Validate after initial setup.
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t1
+----
+DATABASE mr_test  ALTER DATABASE mr_test CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    num_replicas = 5,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=us-east-1]',
+                    lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t2
+----
+TABLE t2  ALTER TABLE t2 CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 10,
+                    num_replicas = 5,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=us-east-1]',
+                    lease_preferences = '[[+region=us-east-1]]'
+
+query B
+SELECT crdb_internal.validate_multi_region_zone_configs()
+----
+true
+
+# Switch primary region.
+statement ok
+ALTER DATABASE mr_test PRIMARY REGION "ca-central-1"
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t1
+----
+DATABASE mr_test  ALTER DATABASE mr_test CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    num_replicas = 5,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=ca-central-1]',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t2
+----
+TABLE t2  ALTER TABLE t2 CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 10,
+                    num_replicas = 5,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=ca-central-1]',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+query B
+SELECT crdb_internal.validate_multi_region_zone_configs()
+----
+true
+
+# Switch survival goal to region failure.
+statement ok
+ALTER DATABASE mr_test SURVIVE REGION FAILURE
+
+query TT
+SHOW ZONE CONFIGURATION FROM DATABASE mr_test
+----
+DATABASE mr_test  ALTER DATABASE mr_test CONFIGURE ZONE USING
+                range_min_bytes = 134217728,
+                range_max_bytes = 536870912,
+                gc.ttlseconds = 14400,
+                num_replicas = 5,
+                num_voters = 5,
+                constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                voter_constraints = '{+region=ca-central-1: 2}',
+                lease_preferences = '[[+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t1
+----
+TABLE t1  ALTER TABLE t1 CONFIGURE ZONE USING
+            range_min_bytes = 134217728,
+            range_max_bytes = 536870912,
+            gc.ttlseconds = 14400,
+            num_replicas = 5,
+            num_voters = 5,
+            constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+            voter_constraints = '{+region=ca-central-1: 2}',
+            lease_preferences = '[[+region=ca-central-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t2
+----
+TABLE t2  ALTER TABLE t2 CONFIGURE ZONE USING
+            range_min_bytes = 134217728,
+            range_max_bytes = 536870912,
+            gc.ttlseconds = 10,
+            num_replicas = 5,
+            num_voters = 5,
+            constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+            voter_constraints = '{+region=ca-central-1: 2}',
+            lease_preferences = '[[+region=ca-central-1]]'
+
+query B
+SELECT crdb_internal.validate_multi_region_zone_configs()
+----
+true
+
+# Switch primary region again while under region failure survival.
+statement ok
+ALTER DATABASE mr_test PRIMARY REGION "ap-southeast-2"
+
+query B
+SELECT crdb_internal.validate_multi_region_zone_configs()
+----
+true
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t1
+----
+TABLE t1  ALTER TABLE t1 CONFIGURE ZONE USING
+            range_min_bytes = 134217728,
+            range_max_bytes = 536870912,
+            gc.ttlseconds = 14400,
+            num_replicas = 5,
+            num_voters = 5,
+            constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+            voter_constraints = '{+region=ap-southeast-2: 2}',
+            lease_preferences = '[[+region=ap-southeast-2]]'
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t2
+----
+TABLE t2  ALTER TABLE t2 CONFIGURE ZONE USING
+            range_min_bytes = 134217728,
+            range_max_bytes = 536870912,
+            gc.ttlseconds = 10,
+            num_replicas = 5,
+            num_voters = 5,
+            constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+            voter_constraints = '{+region=ap-southeast-2: 2}',
+            lease_preferences = '[[+region=ap-southeast-2]]'
+
+# Switch back to zone failure survival.
+statement ok
+ALTER DATABASE mr_test SURVIVE ZONE FAILURE
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t1
+----
+DATABASE mr_test  ALTER DATABASE mr_test CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    num_replicas = 5,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=ap-southeast-2]',
+                    lease_preferences = '[[+region=ap-southeast-2]]'
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t2
+----
+TABLE t2  ALTER TABLE t2 CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 10,
+                    num_replicas = 5,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=ap-southeast-2]',
+                    lease_preferences = '[[+region=ap-southeast-2]]'
+
+query B
+SELECT crdb_internal.validate_multi_region_zone_configs()
+----
+true
+
+# Switch primary region once more under zone failure survival.
+statement ok
+ALTER DATABASE mr_test PRIMARY REGION "us-east-1"
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t1
+----
+DATABASE mr_test  ALTER DATABASE mr_test CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 14400,
+                    num_replicas = 5,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=us-east-1]',
+                    lease_preferences = '[[+region=us-east-1]]'
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t2
+----
+TABLE t2  ALTER TABLE t2 CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 10,
+                    num_replicas = 5,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=us-east-1]',
+                    lease_preferences = '[[+region=us-east-1]]'
+
+query B
+SELECT crdb_internal.validate_multi_region_zone_configs()
+----
+true
+
+# Switch primary region when overriding table zone config.
+# Note that crdb_internal.validate_multi_region_zone_configs() will always return true
+# when override_multi_region_zone_config = true.
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE t2 CONFIGURE ZONE USING num_replicas=10, num_voters = 1, voter_constraints = '[+region=us-east-1]';
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t2
+----
+TABLE t2  ALTER TABLE t2 CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 10,
+                    num_replicas = 10,
+                    num_voters = 1,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=us-east-1]',
+                    lease_preferences = '[[+region=us-east-1]]'
+
+statement ok
+ALTER DATABASE mr_test PRIMARY REGION "ca-central-1"
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t2
+----
+TABLE t2  ALTER TABLE t2 CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 10,
+                    num_replicas = 10,
+                    num_voters = 1,
+                    constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-east-1: 1}',
+                    voter_constraints = '[+region=us-east-1]',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+# Switch survival goal to region failure.
+statement ok
+ALTER DATABASE mr_test SURVIVE REGION FAILURE
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t2
+----
+TABLE t2  ALTER TABLE t2 CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 10,
+                    num_replicas = 5,
+                    num_voters = 5,
+                    constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+                    voter_constraints = '{+region=ca-central-1: 2}',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+SET override_multi_region_zone_config = true;
+ALTER TABLE t2 CONFIGURE ZONE USING num_replicas=10, num_voters = 3, voter_constraints = '{+region=ca-central-1: 2}';
+SET override_multi_region_zone_config = false
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t2
+----
+TABLE t2  ALTER TABLE t2 CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 10,
+                    num_replicas = 10,
+                    num_voters = 3,
+                    constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-east-1: 1}',
+                    voter_constraints = '{+region=ca-central-1: 2}',
+                    lease_preferences = '[[+region=ca-central-1]]'
+
+statement ok
+ALTER DATABASE mr_test PRIMARY REGION "us-east-1"
+
+query TT
+SHOW ZONE CONFIGURATION FROM TABLE t2
+----
+TABLE t2  ALTER TABLE t2 CONFIGURE ZONE USING
+                    range_min_bytes = 134217728,
+                    range_max_bytes = 536870912,
+                    gc.ttlseconds = 10,
+                    num_replicas = 5,
+                    num_voters = 5,
+                    constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-east-1: 2}',
+                    voter_constraints = '{+region=us-east-1: 2}',
+                    lease_preferences = '[[+region=us-east-1]]'
+
