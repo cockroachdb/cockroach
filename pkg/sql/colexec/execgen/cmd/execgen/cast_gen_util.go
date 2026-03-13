@@ -529,7 +529,7 @@ func toString(conv, to, toType string) string {
 	// tree.AdjustValueToType.
 	convStr := `
 		%[1]s
-		if %[3]s.Oid() != oid.T_name {
+		if %[3]s.Oid() != oid.T_name && %[3]s.Oid() != oidext.T_aclitem {
 			// bpchar types truncate trailing whitespace.
 			if %[3]s.Oid() == oid.T_bpchar {
 				%[2]s = bytes.TrimRight(%[2]s, " ")

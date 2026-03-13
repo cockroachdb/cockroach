@@ -2889,6 +2889,15 @@ var builtinOidsArray = []string{
 	2934: `information_schema.crdb_set_session_variable_hint(statement_fingerprint: string, variable_name: string, variable_value: string, database: string) -> int`,
 	2935: `pg_get_triggerdef(trigger_oid: oid) -> string`,
 	2936: `pg_get_triggerdef(trigger_oid: oid, pretty_bool: bool) -> string`,
+	2937: `makeaclitem(grantee: oid, grantor: oid, privileges: string, is_grantable: bool) -> aclitem`,
+	2938: `acldefault(type: "char", ownerId: oid) -> aclitem[]`,
+	2939: `aclexplode(aclitems: aclitem[]) -> tuple{oid AS grantor, oid AS grantee, string AS privilege_type, bool AS is_grantable}`,
+	2940: `aclitemrecv(input: anyelement) -> aclitem`,
+	2941: `aclitemsend(aclitem: aclitem) -> bytes`,
+	2942: `aclitemin(input: anyelement) -> aclitem`,
+	2943: `aclitemout(aclitem: aclitem) -> bytes`,
+	2944: `aclitem(string: string) -> aclitem`,
+	2945: `aclitem(citext: citext) -> aclitem`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

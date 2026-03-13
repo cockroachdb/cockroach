@@ -116,8 +116,11 @@ func Decode(
 		} else {
 			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
 		}
-		if valType.Oid() == oid.T_name {
+		switch valType.Oid() {
+		case oid.T_name:
 			return a.NewDName(tree.DString(r)), rkey, err
+		case oidext.T_aclitem:
+			return a.NewDACLItem(tree.DString(r)), rkey, err
 		}
 		return a.NewDString(tree.DString(r)), rkey, err
 	case types.CollatedStringFamily:

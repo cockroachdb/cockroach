@@ -274,6 +274,24 @@ func RandDatumWithNullChance(
 		if typ.Oid() == oid.T_bpchar {
 			return tree.NewDString(strings.TrimRight(string(p), " "))
 		}
+		if typ.Oid() == oidext.T_aclitem {
+			// Generate a valid aclitem string: grantee=privchars/grantor.
+			// Use only alphanumeric chars for the grantee to avoid special
+			// characters (=, /, ") that break the aclitem format.
+			const alphanums = "abcdefghijklmnopqrstuvwxyz0123456789"
+			granteeLen := 1 + rng.Intn(6)
+			grantee := make([]byte, granteeLen)
+			for i := range grantee {
+				grantee[i] = alphanums[rng.Intn(len(alphanums))]
+			}
+			const validPrivChars = "arwdDxtXUCTcsAm"
+			numPrivs := 1 + rng.Intn(4)
+			privs := make([]byte, numPrivs)
+			for i := range privs {
+				privs[i] = validPrivChars[rng.Intn(len(validPrivChars))]
+			}
+			return tree.NewDString(string(grantee) + "=" + string(privs) + "/")
+		}
 		return tree.NewDString(string(p))
 	case types.BytesFamily:
 		p := make([]byte, rng.Intn(10))
@@ -448,6 +466,11 @@ func adjustDatum(datum tree.Datum, typ *types.T) tree.Datum {
 	case types.StringFamily:
 		if typ.Oid() == oid.T_name {
 			datum = tree.NewDName(string(*datum.(*tree.DString)))
+		} else if typ.Oid() == oidext.T_aclitem {
+			// Return a fixed valid aclitem rather than trying to adapt
+			// the generic string datum, since special characters like
+			// quotes break the aclitem parser.
+			datum = tree.NewDString("=r/")
 		}
 		return datum
 

@@ -1155,8 +1155,8 @@
       ],
       "columns": {
         "defaclacl": {
-          "oid": 1009,
-          "dataType": "_TEXT"
+          "oid": 1034,
+          "dataType": "_aclitem"
         },
         "defaclnamespace": {
           "oid": 26,
