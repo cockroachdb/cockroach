@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -2153,6 +2154,14 @@ func TestStoreScanIntents(t *testing.T) {
 	defer stopper.Stop(ctx)
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
+	// Metamorphically lower the max conflicts per lock conflict error to exercise
+	// VIR intent condensing with fewer intents.
+	rng, _ := randutil.NewTestRand()
+	maxConflicts := []int64{1, 3, 5, 20, storage.MaxConflictsPerLockConflictErrorDefault}
+	storage.MaxConflictsPerLockConflictError.Override(
+		ctx, &store.cfg.Settings.SV, maxConflicts[rng.Intn(len(maxConflicts))],
+	)
+
 	testCases := []struct {
 		consistent bool
 		canPush    bool  // can the txn be pushed?
@@ -2402,10 +2411,16 @@ func TestVirtualIntentResolutionReentryAfterEvaluationLiveLock(t *testing.T) {
 
 	// Enable VIR, set low lock table size, and low max conflicts per error to
 	// force multi-round intent discovery with frequent lock table eviction.
+	// Setting DiscoveredLocksThresholdToConsultTxnStatusCache to 1 causes
+	// intents to bypass the lock table and go directly to toResolve when the
+	// txn is in the status cache. For VIR, this previously caused a livelock:
+	// toResolve was cleared on re-entry to ScanAndEnqueue, and without the
+	// lock in the lock table, the same intents were rediscovered every round.
 	st := tc.Server(0).ClusterSettings()
 	concurrency.VirtualIntentResolution.Override(ctx, &st.SV, true)
 	concurrency.DefaultLockTableSize.Override(ctx, &st.SV, 4)
 	storage.MaxConflictsPerLockConflictError.Override(ctx, &st.SV, 3)
+	concurrency.DiscoveredLocksThresholdToConsultTxnStatusCache.Override(ctx, &st.SV, 1)
 
 	store, err := tc.Server(0).GetStores().(*Stores).GetStore(tc.Server(0).GetFirstStoreID())
 	require.NoError(t, err)
@@ -2744,6 +2759,14 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+
+	// Metamorphically lower the max conflicts per lock conflict error to exercise
+	// VIR intent condensing with fewer intents.
+	rng, _ := randutil.NewTestRand()
+	maxConflicts := []int64{1, 3, 5, 20, storage.MaxConflictsPerLockConflictErrorDefault}
+	storage.MaxConflictsPerLockConflictError.Override(
+		ctx, &store.cfg.Settings.SV, maxConflicts[rng.Intn(len(maxConflicts))],
+	)
 
 	// Lay down ten intents from a single txn.
 	key1 := roachpb.Key("key00")

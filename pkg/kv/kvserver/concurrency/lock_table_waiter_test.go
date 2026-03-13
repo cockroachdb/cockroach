@@ -92,6 +92,7 @@ func (g *mockLockTableGuard) IntentsToResolveVirtually() []roachpb.LockUpdate {
 func (g *mockLockTableGuard) VirtuallyResolvesIntents() bool {
 	return g.virtuallyResolveIntents
 }
+func (g *mockLockTableGuard) HasCondensedIntents() bool { return false }
 func (g *mockLockTableGuard) AddReplicatedToResolveAndSignal(up roachpb.LockUpdate) {
 	g.toResolve = append(g.toResolve, up)
 	// Use non-blocking send, matching the real lockTableGuardImpl.notify().
@@ -103,7 +104,6 @@ func (g *mockLockTableGuard) AddReplicatedToResolveAndSignal(up roachpb.LockUpda
 func (g *mockLockTableGuard) CheckOptimisticNoConflicts(*lockspanset.LockSpanSet) (ok bool) {
 	return true
 }
-func (g *mockLockTableGuard) PrepareForLockConflictRetry(context.Context) {}
 func (g *mockLockTableGuard) IsKeyLockedByConflictingTxn(
 	context.Context, roachpb.Key, lock.Strength,
 ) (bool, *enginepb.TxnMeta, error) {
