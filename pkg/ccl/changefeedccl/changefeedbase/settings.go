@@ -350,6 +350,16 @@ var Quantize = settings.RegisterDurationSettingWithExplicitUnit(
 	settings.DurationWithMinimum(0),
 )
 
+// ResetBackoffOnHighwaterAdvance controls whether the changefeed retry
+// backoff resets when the highwater mark advances between retries.
+var ResetBackoffOnHighwaterAdvance = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.reset_backoff_on_highwater_advance.enabled",
+	"if true, the changefeed retry backoff resets when the resolved "+
+		"timestamp advances between retries",
+	false,
+)
+
 // KafkaV2IncludeErrorDetails enables detailed error messages for Kafka v2 sinks
 // when message_too_large errors occur. This includes the message key, size,
 // and MVCC timestamp in the error.
