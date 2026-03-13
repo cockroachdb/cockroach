@@ -120,6 +120,11 @@ type TestingKnobs struct {
 	// OverrideCursorAge is used to change how old a cursor is. Returns time in nanoseconds.
 	OverrideCursorAge func() int64
 
+	// EventConsumerError, if set, is called before creating the event consumer.
+	// If it returns a non-nil error, newEventConsumer returns that error.
+	// This is useful for testing error handling in changeAggregator.Start().
+	EventConsumerError func() error
+
 	// MakeKVFeedToAggregatorBufferKnobs is used to make a fresh set of testing knobs
 	// to pass to the constructor of the kv feed to change aggregator buffer.
 	MakeKVFeedToAggregatorBufferKnobs func() kvevent.BlockingBufferTestingKnobs

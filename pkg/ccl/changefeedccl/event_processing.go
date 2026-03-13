@@ -96,6 +96,11 @@ func newEventConsumer(
 	sliMetrics *sliMetrics,
 	knobs TestingKnobs,
 ) (eventConsumer, EventSink, error) {
+	if knobs.EventConsumerError != nil {
+		if err := knobs.EventConsumerError(); err != nil {
+			return nil, nil, err
+		}
+	}
 	encodingOpts, err := feed.Opts.GetEncodingOptions()
 	if err != nil {
 		return nil, nil, err
