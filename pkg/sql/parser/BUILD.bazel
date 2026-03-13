@@ -91,19 +91,11 @@ genrule(
     ],
     outs = ["sql.go"],
     cmd = """
-GO_REL_PATH=`dirname $(location @go_sdk//:bin/go)`
-GO_ABS_PATH=`cd $$GO_REL_PATH && pwd`
-export PATH=$$GO_ABS_PATH:$$PATH
-export HOME=$(GENDIR)
-export GOPATH=/nonexist-gopath
-export GOROOT=
 $(location :sql-gen) $(location sql.y) sql $(location replace_help_rules.awk) \
     $(location sql.go) $(location @org_golang_x_tools//cmd/goyacc)
 """,
-    tags = ["no-remote-exec"],  # keep
     tools = [
         ":sql-gen",
-        "@go_sdk//:bin/go",
         "@org_golang_x_tools//cmd/goyacc",
     ],
     visibility = ["//visibility:public"],
