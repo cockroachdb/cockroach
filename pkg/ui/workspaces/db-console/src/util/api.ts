@@ -155,9 +155,6 @@ export type StatementsResponseMessage =
 export type StatementDetailsResponseMessage =
   protos.cockroach.server.serverpb.StatementDetailsResponse;
 
-export type DataDistributionResponseMessage =
-  protos.cockroach.server.serverpb.DataDistributionResponse;
-
 export type EnqueueRangeRequestMessage =
   protos.cockroach.server.serverpb.EnqueueRangeRequest;
 export type EnqueueRangeResponseMessage =
@@ -733,18 +730,6 @@ export function getStatementDetails(
   return timeoutFetch(
     serverpb.StatementDetailsResponse,
     `${STATUS_PREFIX}/stmtdetails/${req.fingerprint_id}?${queryStr}`,
-    null,
-    timeout,
-  );
-}
-
-// getDataDistribution returns information about how replicas are distributed across nodes.
-export function getDataDistribution(
-  timeout?: moment.Duration,
-): Promise<DataDistributionResponseMessage> {
-  return timeoutFetch(
-    serverpb.DataDistributionResponse,
-    `${API_PREFIX}/data_distribution`,
     null,
     timeout,
   );
