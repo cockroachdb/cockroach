@@ -1063,19 +1063,28 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		params.p.BufferClientNotice(params.ctx, pgnotice.Newf("all REGIONAL BY TABLE tables without a region explicitly set are no longer part of the super region %s", superRegionOfOldPrimaryRegion))
 	}
 
-	// If the old or new primary region is a member of a super region, we also
-	// have to update regional tables that are part of the default region.
+	// With exactly 3 regions and SURVIVE REGION FAILURE, tables get explicit
+	// zone configs that must be updated when the primary region changes.
+	hasImplicitSuperRegion := updatedRegionConfig.HasImplicitSuperRegion()
+	if hasImplicitSuperRegion {
+		params.p.BufferClientNotice(params.ctx, pgnotice.Newf("all REGIONAL BY TABLE zone configurations in the old primary region have been updated to reflect the new primary region"))
+	}
+
+	// Refresh table zone configurations when any of the following hold:
+	// 1. PLACEMENT RESTRICTED: GLOBAL tables have explicit zone configs that
+	//    must be rebuilt to reflect the new primary region.
+	// 2. Super region membership change: regional tables in the primary region
+	//    need updated zone configs when the primary region moves into or out
+	//    of a super region.
+	// 3. SURVIVE REGION FAILURE with 3 regions: tables get explicit zone
+	//    configs with tighter replica constraints (2+2+1 vs 1+1+1) whose
+	//    voter_constraints and lease_preferences must track the primary region.
 	opts := WithOnlyGlobalTables
-	if isNewPrimaryRegionMemberOfASuperRegion || isOldPrimaryRegionMemberOfASuperRegion {
+	if isNewPrimaryRegionMemberOfASuperRegion || isOldPrimaryRegionMemberOfASuperRegion || hasImplicitSuperRegion {
 		opts = WithOnlyRegionalTablesAndGlobalTables
 	}
 
-	// Update all GLOBAL tables' zone configurations. This is required as if
-	// LOCALITY GLOBAL is used with PLACEMENT RESTRICTED, the global tables' zone
-	// configs must be explicitly rebuilt so as to move their primary region.
-	// If there are super regions defined on the database, we may have to update
-	// the zone config for regional tables.
-	if updatedRegionConfig.IsPlacementRestricted() || isNewPrimaryRegionMemberOfASuperRegion || isOldPrimaryRegionMemberOfASuperRegion {
+	if updatedRegionConfig.IsPlacementRestricted() || isNewPrimaryRegionMemberOfASuperRegion || isOldPrimaryRegionMemberOfASuperRegion || hasImplicitSuperRegion {
 		if err := params.p.refreshZoneConfigsForTables(
 			params.ctx,
 			n.desc,

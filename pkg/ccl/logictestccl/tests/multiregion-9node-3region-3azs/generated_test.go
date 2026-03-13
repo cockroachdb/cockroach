@@ -149,6 +149,13 @@ func TestCCLLogic_multi_region_locality_optimized_search_query_behavior(
 	runCCLLogicTest(t, "multi_region_locality_optimized_search_query_behavior")
 }
 
+func TestCCLLogic_multi_region_primary_region_switch_zone_configs(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "multi_region_primary_region_switch_zone_configs")
+}
+
 func TestCCLLogic_multi_region_privileges(
 	t *testing.T,
 ) {
