@@ -328,7 +328,7 @@ func runBackup(ctx context.Context, t test.Test, c cluster.Cluster, abandon bool
 	defer conn.Close()
 
 	const totalRowCount = 1000000
-	const perTransactionRowCount = 1000
+	const perTransactionRowCount = 10000
 	numTxns := totalRowCount / perTransactionRowCount
 
 	// Disable automatic stats collection to avoid additional contention.
@@ -415,13 +415,17 @@ func runBackup(ctx context.Context, t test.Test, c cluster.Cluster, abandon bool
 		t.Fatalf(err.Error())
 	}
 
+	// Enable virtual intent resolution so that the pre-evaluation lock-table
+	// scan discovers distinct conflicting transactions for ranged resolution.
+	_, err = conn.ExecContext(ctx, "SET CLUSTER SETTING kv.concurrency.virtual_intent_resolution.enabled = true")
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
 	// The backup runs with a timeout configured by bulkio.backup.read_timeout,
-	// which defaults to 5min. Currently, before the virtualized intent resolution
-	// work, this test takes ~2min for the pending case and ~3min for the
-	// abandoned case. The 5min timeout should be sufficient for this test, and
-	// if exceeded, will provide a signal that the intent resolution is taking
-	// longer than expected.
-	// TODO(mira): Adjust the timeout if the test flakes, and after the VIR work.
+	// which defaults to 5min. With VIR + preferDistinctTxns + ranged resolution,
+	// each ExportRequest should complete in seconds, but the timeout may need
+	// adjustment if the test flakes.
 	t.Status("running backup")
 	_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP TABLE foo INTO 'nodelocal://1/%s'", destinationName(c)))
 	if err != nil {
