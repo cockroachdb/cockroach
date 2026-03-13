@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/datadriven"
@@ -702,7 +703,7 @@ func TestClusterState(t *testing.T) {
 					in := dd.ScanArg[[]roachpb.StoreID](t, d, "in")
 					rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
 					lh, _ := dd.ScanArgOpt[roachpb.StoreID](t, d, "leaseholder")
-					out := retainReadyLeaseTargetStoresOnly(ctx, storeSet(in), cs.stores, rangeID, lh)
+					out := retainReadyLeaseTargetStoresOnly(ctx, storeSet(in), cs.stores, rangeID, lh, log.KvDistribution.VEventf)
 					rec := finishAndGet()
 					var sb redact.StringBuilder
 					rec.SafeFormatMinimal(&sb)
@@ -715,7 +716,7 @@ func TestClusterState(t *testing.T) {
 					for _, replica := range replicas {
 						replicasSet.insert(replica)
 					}
-					out := retainReadyReplicaTargetStoresOnly(ctx, storeSet(in), cs.stores, replicasSet)
+					out := retainReadyReplicaTargetStoresOnly(ctx, storeSet(in), cs.stores, replicasSet, log.KvDistribution.VEventf)
 					rec := finishAndGet()
 					var sb redact.StringBuilder
 					rec.SafeFormatMinimal(&sb)
