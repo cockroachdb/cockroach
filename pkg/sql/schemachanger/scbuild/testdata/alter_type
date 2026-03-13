@@ -1,3 +1,9 @@
 setup
 CREATE TYPE defaultdb.climes AS ENUM ('tropical', 'arctic', 'mediterranean');
 ----
+
+build
+ALTER TYPE defaultdb.climes ADD VALUE 'desert'
+----
+- [[EnumTypeValue:{DescID: 104, Name: desert}, PUBLIC], ABSENT]
+  {logicalRepresentation: desert, physicalRepresentation: 4A==, typeId: 104}

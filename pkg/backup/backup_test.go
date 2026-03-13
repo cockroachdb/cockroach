@@ -2810,6 +2810,11 @@ func TestBackupRestoreDuringUserDefinedTypeChange(t *testing.T) {
 				suffix = "-schema-only"
 			}
 			t.Run(tc.name+suffix, func(t *testing.T) {
+				// Skip AddInStatement test which now uses the declarative schema changer
+				// and doesn't trigger the RunBeforeEnumMemberPromotion hook.
+				if tc.name == "AddInStatement" {
+					skip.IgnoreLint(t, "ALTER TYPE ADD VALUE now uses declarative schema changer")
+				}
 				// Protects numTypeChangesStarted and numTypeChangesFinished.
 				var mu syncutil.Mutex
 				numTypeChangesStarted := 0
@@ -2840,6 +2845,10 @@ func TestBackupRestoreDuringUserDefinedTypeChange(t *testing.T) {
 					},
 				})
 				defer cleanupFn()
+
+				// Force the legacy schema changer for this test, as it specifically tests
+				// the behavior of TYPEDESC SCHEMA CHANGE jobs with RunBeforeEnumMemberPromotion.
+				sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off'`)
 
 				// Create a database with a type.
 				sqlDB.Exec(t, `

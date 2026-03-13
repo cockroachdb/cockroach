@@ -8,6 +8,7 @@ package scmutationexec
 import (
 	"bytes"
 	"context"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
@@ -20,13 +21,10 @@ func (i *immediateVisitor) AddEnumTypeValue(ctx context.Context, op scop.AddEnum
 		return err
 	}
 
-	insertIdx := len(typ.EnumMembers)
-	for j, member := range typ.EnumMembers {
-		if bytes.Compare(op.PhysicalRepresentation, member.PhysicalRepresentation) < 0 {
-			insertIdx = j
-			break
-		}
-	}
+	insertIdx, _ := slices.BinarySearchFunc(typ.EnumMembers, op.PhysicalRepresentation,
+		func(member descpb.TypeDescriptor_EnumMember, target []byte) int {
+			return bytes.Compare(member.PhysicalRepresentation, target)
+		})
 
 	newMember := descpb.TypeDescriptor_EnumMember{
 		PhysicalRepresentation: op.PhysicalRepresentation,
