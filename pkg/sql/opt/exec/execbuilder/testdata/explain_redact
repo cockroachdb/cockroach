@@ -911,7 +911,7 @@ EXPLAIN (OPT, REDACT) UPSERT INTO d VALUES (7.7)
 ----
 upsert d
  └── values
-      └── ‹(‹×›, ‹×›)›
+      └── (‹×›, ‹×›)
 
 query T
 EXPLAIN (OPT, VERBOSE, REDACT) UPSERT INTO d VALUES (7.7)
@@ -935,7 +935,7 @@ upsert d
       ├── fd: ()-->(6,7)
       ├── distribution: test
       ├── prune: (6,7)
-      └── ‹(‹×›, ‹×›)›
+      └── (‹×›, ‹×›)
 
 query T
 EXPLAIN (OPT, TYPES, REDACT) UPSERT INTO d VALUES (7.7)
@@ -994,7 +994,7 @@ memo (optimized, ~6KB, required=[presentation: info:8] [distribution: test])
  └── G10: (‹×›)
 upsert d
  └── values
-      └── ‹(‹×›, ‹×›)›
+      └── (‹×›, ‹×›)
 
 # Redaction of constants in updates.
 
@@ -3313,7 +3313,7 @@ EXPLAIN (REDACT) SELECT * FROM a WHERE a IN (2, 3, 4)
 distribution: local
 ·
 • filter
-│ filter: a IN ‹(‹×›, ‹×›, ‹×›)›
+│ filter: a IN (‹×›, ‹×›, ‹×›)
 │
 └── • scan
       missing stats
@@ -3329,7 +3329,7 @@ vectorized: true
 • filter
 │ columns: (a)
 │ estimated row count: 30 (missing stats)
-│ filter: a IN ‹(‹×›, ‹×›, ‹×›)›
+│ filter: a IN (‹×›, ‹×›, ‹×›)
 │
 └── • scan
       columns: (a)
@@ -3343,7 +3343,7 @@ EXPLAIN (OPT, REDACT) SELECT * FROM a WHERE a IN (2, 3, 4)
 select
  ├── scan a
  └── filters
-      └── a IN ‹(‹×›, ‹×›, ‹×›)›
+      └── a IN (‹×›, ‹×›, ‹×›)
 
 query T
 EXPLAIN (OPT, VERBOSE, REDACT) SELECT * FROM a WHERE a IN (2, 3, 4)
@@ -3362,7 +3362,7 @@ select
  │    ├── distribution: test
  │    └── prune: (1)
  └── filters
-      └── a:1 IN ‹(‹×›, ‹×›, ‹×›)› [outer=(1), constraints=(‹×›; tight)]
+      └── a:1 IN (‹×›, ‹×›, ‹×›) [outer=(1), constraints=(‹×›; tight)]
 
 query T
 EXPLAIN (OPT, TYPES, REDACT) SELECT * FROM a WHERE a IN (2, 3, 4)
@@ -3421,7 +3421,7 @@ memo (optimized, ~7KB, required=[presentation: info:7] [distribution: test])
 select
  ├── scan a
  └── filters
-      └── a IN ‹(‹×›, ‹×›, ‹×›)›
+      └── a IN (‹×›, ‹×›, ‹×›)
 
 # Redaction of constants in order by.
 
@@ -4102,3 +4102,25 @@ memo (optimized, ~4KB, required=[presentation: info:1] [distribution: test])
  └── G4: (scalar-list)
 create-table
  └── CREATE TABLE t (col STRING, CHECK (col != ‹×›))
+
+# Redaction of DOidWrapper datums (e.g. name-typed constants).
+# DOidWrapper wraps a child datum and delegates formatting via FormatNode,
+# which must not produce nested redaction markers.
+
+query T
+EXPLAIN (OPT, REDACT) SELECT 'foo'::name
+----
+values
+ └── (‹×›,)
+
+query T
+EXPLAIN (OPT, REDACT) SELECT 'foo'::name, 'bar'::name
+----
+values
+ └── (‹×›, ‹×›)
+
+query T
+EXPLAIN (OPT, REDACT) SELECT 'mycursor'::refcursor
+----
+values
+ └── (‹×›,)

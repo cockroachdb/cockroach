@@ -89,7 +89,7 @@ EXPLAIN (OPT, REDACT) INSERT INTO p VALUES (1, 1)
 ----
 insert p
  └── values
-      └── ‹(‹×›, ‹×›)›
+      └── (‹×›, ‹×›)
 
 query T
 EXPLAIN (OPT, VERBOSE, REDACT) INSERT INTO p VALUES (1, 1)
@@ -112,7 +112,7 @@ insert p
       ├── key: ()
       ├── fd: ()-->(7,8)
       ├── distribution: test
-      └── ‹(‹×›, ‹×›)›
+      └── (‹×›, ‹×›)
 
 query T
 EXPLAIN (OPT, TYPES, REDACT) INSERT INTO p VALUES (1, 1)
@@ -170,7 +170,7 @@ memo (optimized, ~5KB, required=[presentation: info:9] [distribution: test])
  └── G10: (const ‹×›)
 insert p
  └── values
-      └── ‹(‹×›, ‹×›)›
+      └── (‹×›, ‹×›)
 
 query T
 EXPLAIN (REDACT) SELECT * FROM p WHERE p = 11

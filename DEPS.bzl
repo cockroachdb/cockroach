@@ -1864,10 +1864,10 @@ def go_deps():
         name = "com_github_cockroachdb_redact",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/cockroachdb/redact",
-        sha256 = "9218f9c071e6d4dc07995aacf4227598f098f146f926745516c569e45808a98a",
-        strip_prefix = "github.com/cockroachdb/redact@v1.1.7",
+        sha256 = "833c2440ca5724533d053580c5fc818230106451edea959e5c334e7584b6d1a1",
+        strip_prefix = "github.com/cockroachdb/redact@v1.1.8",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/redact/com_github_cockroachdb_redact-v1.1.7.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/redact/com_github_cockroachdb_redact-v1.1.8.zip",
         ],
     )
     go_repository(

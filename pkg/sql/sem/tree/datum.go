@@ -5755,7 +5755,13 @@ func (d *DOidWrapper) AmbiguousFormat() bool {
 func (d *DOidWrapper) Format(ctx *FmtCtx) {
 	if d.Oid == oid.T_refcursor {
 		wrapped := MustBeDString(d.Wrapped)
+		if ctx.flags.HasFlags(FmtMarkRedactionNode) {
+			ctx.WriteString(string(redact.StartMarker()))
+		}
 		wrapped.Format(ctx)
+		if ctx.flags.HasFlags(FmtMarkRedactionNode) {
+			ctx.WriteString(string(redact.EndMarker()))
+		}
 		return
 	}
 	ctx.FormatNode(d.Wrapped)
