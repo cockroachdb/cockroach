@@ -12202,6 +12202,9 @@ func TestChangefeedRetryBackoffResetOnHighwaterAdvance(t *testing.T) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 
+		changefeedbase.ResetBackoffOnHighwaterAdvance.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, true)
+
 		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
 
 		// Let the first few checkpoints succeed so the highwater gets

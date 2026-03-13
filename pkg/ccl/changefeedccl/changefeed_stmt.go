@@ -1901,7 +1901,8 @@ func (b *changefeedResumer) resumeWithRetries(
 
 		// Reset retry backoff if the highwater advanced, indicating the
 		// changefeed made meaningful forward progress before the error.
-		if hw := localState.progress.GetHighWater(); hw != nil && preFlowHighWater.Less(*hw) {
+		resetOnProgress := changefeedbase.ResetBackoffOnHighwaterAdvance.Get(&execCfg.Settings.SV)
+		if hw := localState.progress.GetHighWater(); resetOnProgress && hw != nil && preFlowHighWater.Less(*hw) {
 			log.Changefeed.Infof(ctx,
 				"changefeed %d highwater advanced (%s -> %s); resetting retry backoff",
 				jobID, preFlowHighWater, *hw)
