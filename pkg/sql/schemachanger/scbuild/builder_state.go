@@ -1240,6 +1240,9 @@ func (b *builderState) ResolveUserDefinedTypeType(
 	default:
 		panic(errors.AssertionFailedf("unknown type kind %s", typ.GetKind()))
 	}
+	// Check schema USAGE privilege before ownership for consistency with the
+	// legacy schema changer.
+	b.requirePrivilege(typ.GetParentSchemaID(), privilege.USAGE)
 	b.mustOwn(typ.GetID())
 	return b.QueryByID(typ.GetID())
 }
