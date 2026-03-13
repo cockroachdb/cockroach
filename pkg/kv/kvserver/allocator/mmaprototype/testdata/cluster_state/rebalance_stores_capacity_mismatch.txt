@@ -178,6 +178,7 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 [mmaid=1] load summary for dim=ByteSize (s7): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 denom=25 fractionUsed=0.00% meanUtil=0.00% capacity=500]
 [mmaid=1] load summary for dim=CPURate (n7): loadLow, reason: load is >10% below mean [load=250 meanLoad=541 fractionUsed=50.00% meanUtil=75.80% capacity=500]
 [mmaid=1] evaluating s7: node load loadLow, store load loadNormal, worst dim WriteBandwidth
+[mmaid=1] sorted shedding stores: (s1: overloadSlow) (s2: overloadSlow) (s3: overloadSlow)
 [mmaid=1] start processing shedding store s1: cpu node load overloadSlow, store load overloadSlow, worst dim CPURate
 [mmaid=1] top-K[CPURate] ranges for s1 with lease on local s1: r3:[cpu:200ns/s, write-bandwidth:0 B/s, byte-size:0 B] r2:[cpu:200ns/s, write-bandwidth:0 B/s, byte-size:0 B] r1:[cpu:200ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=1] local store s1 is CPU overloaded (overloadSlow >= overloadSlow), attempting lease transfers first

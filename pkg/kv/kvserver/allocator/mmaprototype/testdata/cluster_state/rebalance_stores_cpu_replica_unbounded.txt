@@ -16,6 +16,7 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 [mmaid=2] evaluating s3: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=2] store s3 was added to shedding store list
 [mmaid=2] evaluating s4: node load loadLow, store load loadNormal, worst dim WriteBandwidth
+[mmaid=2] sorted shedding stores: (s3: overloadUrgent)
 [mmaid=2] start processing shedding store s3: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=2] top-K[CPURate] ranges for s3 with lease on local s1: r3:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] r2:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] r1:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=2] attempting to shed replicas next

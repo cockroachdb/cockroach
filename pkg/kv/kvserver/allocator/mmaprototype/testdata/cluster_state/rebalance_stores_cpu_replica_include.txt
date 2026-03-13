@@ -88,6 +88,7 @@ rebalance-stores store-id=1
 [mmaid=1] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 denom=50 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n4): loadLow, reason: load is >10% below mean [load=100 meanLoad=525 fractionUsed=10.00% meanUtil=52.50% capacity=1000]
 [mmaid=1] evaluating s4: node load loadLow, store load loadNormal, worst dim WriteBandwidth
+[mmaid=1] sorted shedding stores: (s3: overloadUrgent)
 [mmaid=1] start processing shedding store s3: cpu node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] top-K[CPURate] ranges for s3 with lease on local s1: r3:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] r2:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] r1:[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=1] skipping remote store s3: in lease shedding grace period
