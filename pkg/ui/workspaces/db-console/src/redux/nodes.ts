@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { util } from "@cockroachlabs/cluster-ui";
+import { util, sumNodeStats } from "@cockroachlabs/cluster-ui";
 import countBy from "lodash/countBy";
 import each from "lodash/each";
 import filter from "lodash/filter";
@@ -11,7 +11,6 @@ import first from "lodash/first";
 import flow from "lodash/flow";
 import groupBy from "lodash/groupBy";
 import head from "lodash/head";
-import isArray from "lodash/isArray";
 import isEmpty from "lodash/isEmpty";
 import isNil from "lodash/isNil";
 import isUndefined from "lodash/isUndefined";
@@ -32,6 +31,8 @@ import { DropdownOption } from "../views/shared/components/dropdown";
 
 import { AdminUIState } from "./state";
 
+import type { NodeSummaryStats } from "@cockroachlabs/cluster-ui";
+
 /**
  * LivenessStatus is a type alias for the fully-qualified NodeLivenessStatus
  * enumeration. As an enum, it needs to be imported rather than using the 'type'
@@ -43,7 +44,7 @@ import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipSt
 import INodeStatus = cockroach.server.status.statuspb.INodeStatus;
 import ILocality = cockroach.roachpb.ILocality;
 
-const { MetricConstants, BytesUsed } = util;
+const { MetricConstants } = util;
 
 /**
  * livenessNomenclature resolves a mismatch between the terms used for liveness
@@ -200,26 +201,8 @@ export const nodeStatusByIDSelector = createSelector(
   },
 );
 
-export type NodeSummaryStats = {
-  nodeCounts: {
-    total: number;
-    healthy: number;
-    suspect: number;
-    dead: number;
-    decommissioned: number;
-    draining: number;
-  };
-  capacityUsed: number;
-  capacityAvailable: number;
-  capacityTotal: number;
-  capacityUsable: number;
-  usedBytes: number;
-  usedMem: number;
-  totalRanges: number;
-  underReplicatedRanges: number;
-  unavailableRanges: number;
-  replicas: number;
-};
+export type { NodeSummaryStats };
+export { sumNodeStats };
 
 export type LivenessResponseStatuses = { [id: string]: LivenessStatus };
 
@@ -235,79 +218,6 @@ export const nodeSumsSelector = createSelector(
     state.cachedData.liveness.valid && state.cachedData.nodes.valid,
   sumNodeStats,
 );
-
-export function sumNodeStats(
-  nodeStatuses: INodeStatus[],
-  livenessStatusByNodeID: LivenessResponseStatuses,
-): NodeSummaryStats {
-  const result = {
-    nodeCounts: {
-      total: 0,
-      healthy: 0,
-      suspect: 0,
-      dead: 0,
-      decommissioned: 0,
-      draining: 0,
-    },
-    capacityUsed: 0,
-    capacityAvailable: 0,
-    capacityTotal: 0,
-    capacityUsable: 0,
-    usedBytes: 0,
-    usedMem: 0,
-    totalRanges: 0,
-    underReplicatedRanges: 0,
-    unavailableRanges: 0,
-    replicas: 0,
-  };
-  if (isArray(nodeStatuses) && !isEmpty(livenessStatusByNodeID)) {
-    nodeStatuses.forEach(n => {
-      const status = livenessStatusByNodeID[n.desc.node_id];
-      if (status !== LivenessStatus.NODE_STATUS_DECOMMISSIONED) {
-        result.nodeCounts.total += 1;
-      }
-      switch (status) {
-        case LivenessStatus.NODE_STATUS_LIVE:
-          result.nodeCounts.healthy++;
-          break;
-        case LivenessStatus.NODE_STATUS_UNAVAILABLE:
-        case LivenessStatus.NODE_STATUS_DECOMMISSIONING:
-          result.nodeCounts.suspect++;
-          break;
-        case LivenessStatus.NODE_STATUS_DECOMMISSIONED:
-          result.nodeCounts.decommissioned++;
-          break;
-        case LivenessStatus.NODE_STATUS_DRAINING:
-          result.nodeCounts.draining++;
-          break;
-        case LivenessStatus.NODE_STATUS_DEAD:
-        default:
-          result.nodeCounts.dead++;
-          break;
-      }
-      if (
-        status !== LivenessStatus.NODE_STATUS_DEAD &&
-        status !== LivenessStatus.NODE_STATUS_DECOMMISSIONED
-      ) {
-        const { available, used, usable } = nodeCapacityStats(n);
-
-        result.capacityUsed += used;
-        result.capacityAvailable += available;
-        result.capacityUsable += usable;
-        result.capacityTotal += n.metrics[MetricConstants.capacity];
-        result.usedBytes += BytesUsed(n);
-        result.usedMem += n.metrics[MetricConstants.rss];
-        result.totalRanges += n.metrics[MetricConstants.ranges];
-        result.underReplicatedRanges +=
-          n.metrics[MetricConstants.underReplicatedRanges];
-        result.unavailableRanges +=
-          n.metrics[MetricConstants.unavailableRanges];
-        result.replicas += n.metrics[MetricConstants.replicas];
-      }
-    });
-  }
-  return result;
-}
 
 export interface CapacityStats {
   used: number;

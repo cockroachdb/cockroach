@@ -9,6 +9,19 @@ import { match as Match } from "react-router-dom";
 import { parseLocalityRoute } from "src/util/localities";
 import { parseSplatParams } from "src/util/parseSplatParams";
 
+jest.mock("@cockroachlabs/cluster-ui", () => {
+  const actual = jest.requireActual("@cockroachlabs/cluster-ui");
+  return {
+    ...actual,
+    useCluster: jest.fn().mockReturnValue({
+      data: { enterprise_enabled: true },
+      isLoading: false,
+      error: null,
+      enterpriseEnabled: true,
+    }),
+  };
+});
+
 describe("ClusterVisualization", () => {
   describe("parse tiers params from URL path", () => {
     let history: History;

@@ -18,14 +18,21 @@ export function rollupStoreMetrics(ns: INodeStatus): StatusMetrics {
   if (!ns.store_statuses) {
     return ns.metrics || {};
   }
+  // Spread into a fresh object to avoid mutating ns.metrics. Multiple
+  // callers (e.g. two useNodes() hooks sharing the same SWR cache entry)
+  // would otherwise accumulate store metrics repeatedly into the same
+  // object, causing values to double on each call.
   return ns.store_statuses
     .map(ss => ss.metrics)
-    .reduce((acc, i) => {
-      for (const k in i) {
-        acc[k] = has(acc, k) ? acc[k] + i[k] : i[k];
-      }
-      return acc;
-    }, ns.metrics);
+    .reduce(
+      (acc, i) => {
+        for (const k in i) {
+          acc[k] = has(acc, k) ? acc[k] + i[k] : i[k];
+        }
+        return acc;
+      },
+      { ...ns.metrics },
+    );
 }
 
 export function accumulateMetrics(nodeStatuses: INodeStatus[]): INodeStatus[] {
