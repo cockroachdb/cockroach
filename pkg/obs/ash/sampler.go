@@ -9,10 +9,12 @@ import (
 	"context"
 	"encoding/hex"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -132,8 +134,8 @@ type Sampler struct {
 	// interval caches the sample interval so the timer loop can read it
 	// without locking, while the SetOnChange callback updates it.
 	interval atomic.Int64
-	// workloadIDCache caches the result of encodeStmtFingerprintIDToString
-	// to avoid repeated allocations for the same workload ID.
+	// workloadIDCache caches workload ID string encodings keyed by
+	// (id, type) to avoid repeated allocations for the same workload.
 	workloadIDCache *cache.UnorderedCache
 	// resolver, when set, fetches app name mappings from remote nodes
 	// for work states whose app name could not be resolved locally.
@@ -255,11 +257,18 @@ func (s *Sampler) takeSample(ctx context.Context) {
 		// Encode the workloadID to a string for the ASHSample.
 		// Note(alyshan): Consider encoding at read time.
 		if ps.state.WorkloadInfo.WorkloadID != 0 {
-			if cached, ok := s.workloadIDCache.Get(ps.state.WorkloadInfo.WorkloadID); ok {
+			cacheKey := workloadCacheKey{
+				id:  ps.state.WorkloadInfo.WorkloadID,
+				typ: ps.state.WorkloadInfo.WorkloadType,
+			}
+			if cached, ok := s.workloadIDCache.Get(cacheKey); ok {
 				ps.workloadIDStr = cached.(string)
 			} else {
-				ps.workloadIDStr = encodeStmtFingerprintIDToString(ps.state.WorkloadInfo.WorkloadID)
-				s.workloadIDCache.Add(ps.state.WorkloadInfo.WorkloadID, ps.workloadIDStr)
+				ps.workloadIDStr = encodeWorkloadID(
+					ps.state.WorkloadInfo.WorkloadID,
+					ps.state.WorkloadInfo.WorkloadType,
+				)
+				s.workloadIDCache.Add(cacheKey, ps.workloadIDStr)
 			}
 		}
 
@@ -490,6 +499,27 @@ func GlobalSamplerMetrics() *Metrics {
 		return &s.metrics
 	}
 	return nil
+}
+
+// workloadCacheKey is the composite key for the workload ID string
+// cache. Using both the numeric ID and the type prevents collisions
+// when the same numeric value appears across different workload types.
+type workloadCacheKey struct {
+	id  uint64
+	typ workloadid.WorkloadType
+}
+
+// encodeWorkloadID returns the string representation of a workload ID,
+// choosing the encoding based on workload type.
+func encodeWorkloadID(id uint64, typ workloadid.WorkloadType) string {
+	switch typ {
+	case workloadid.WorkloadTypeJob:
+		return strconv.FormatUint(id, 10)
+	case workloadid.WorkloadTypeSystem:
+		return workloadid.WorkloadID(id).Name()
+	default: // WorkloadTypeUnknown + WorkloadTypeStatement
+		return encodeStmtFingerprintIDToString(id)
+	}
 }
 
 // encodeUint64ToBytes returns the []byte representation of a uint64 value.

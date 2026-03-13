@@ -86,8 +86,8 @@ func TestSamplerWorkloadIDCache(t *testing.T) {
 	require.Equal(t, samples[0].WorkloadID, samples[1].WorkloadID)
 	require.Equal(t, encodeStmtFingerprintIDToString(99), samples[0].WorkloadID)
 
-	// Verify the cache contains the entry.
-	_, ok := s.workloadIDCache.Get(uint64(99))
+	// Verify the cache contains the entry (keyed by id + type).
+	_, ok := s.workloadIDCache.Get(workloadCacheKey{id: 99})
 	require.True(t, ok, "workload ID should be cached")
 }
 

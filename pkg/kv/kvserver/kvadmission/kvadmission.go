@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -331,6 +332,7 @@ func (n *controllerImpl) AdmitKVWork(
 					WorkloadID:    admissionInfo.WorkloadID,
 					AppNameID:     admissionInfo.AppNameID,
 					GatewayNodeID: admissionInfo.GatewayNodeID,
+					WorkloadType:  admissionInfo.WorkloadType,
 				})
 			if err != nil {
 				return Handle{}, err
@@ -735,6 +737,7 @@ func workInfoForBatch(
 		WorkloadID:      ba.Header.WorkloadID,
 		AppNameID:       ba.Header.AppNameID,
 		GatewayNodeID:   ba.Header.GatewayNodeID,
+		WorkloadType:    workloadid.WorkloadType(ba.Header.WorkloadType),
 	}
 	return admissionInfo
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -206,6 +207,7 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 					WorkloadID:    ba.WorkloadID,
 					AppNameID:     ba.AppNameID,
 					GatewayNodeID: ba.GatewayNodeID,
+					WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 				},
 				ash.WorkOther, "Backpressure")
 			defer cleanup() //nolint:deferloop

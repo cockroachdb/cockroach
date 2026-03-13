@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
@@ -33,6 +34,7 @@ func (r *Replica) maybeRateLimitBatch(
 			WorkloadID:    ba.WorkloadID,
 			AppNameID:     ba.AppNameID,
 			GatewayNodeID: ba.GatewayNodeID,
+			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 		},
 		ash.WorkOther, "TenantRateLimit")
 	defer cleanup()

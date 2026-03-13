@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -465,6 +466,7 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 				WorkloadID:    req.Batch.WorkloadID,
 				AppNameID:     req.Batch.AppNameID,
 				GatewayNodeID: req.Batch.GatewayNodeID,
+				WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
 			}
 		}
 		cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "TxnPushWait")
@@ -486,6 +488,7 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 				WorkloadID:    req.Batch.WorkloadID,
 				AppNameID:     req.Batch.AppNameID,
 				GatewayNodeID: req.Batch.GatewayNodeID,
+				WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
 			}
 		}
 		cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "TxnQueryWait")

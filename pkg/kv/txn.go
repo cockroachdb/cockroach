@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -98,7 +99,8 @@ type Txn struct {
 	// access of this field. This is when the connExecutor is serving a multi-statement
 	// transaction. In that case, statements are executed sequentially, and the
 	// workloadID is updated after each statement.
-	workloadID uint64
+	workloadID   uint64
+	workloadType workloadid.WorkloadType
 
 	// The following fields are not safe for concurrent modification.
 	// They should be set before operating on the transaction.
@@ -459,12 +461,15 @@ func (txn *Txn) debugNameLocked() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.debugName, txn.mu.ID)
 }
 
-// SetWorkloadInfo sets the workload ID and app name ID for ASH
-// sampling. Both are automatically propagated to all BatchRequests
-// sent through this transaction.
-func (txn *Txn) SetWorkloadInfo(workloadID, appNameID uint64) {
+// SetWorkloadInfo sets the workload ID, app name ID, and workload
+// type for ASH sampling. All three are automatically propagated to
+// all BatchRequests sent through this transaction.
+func (txn *Txn) SetWorkloadInfo(
+	workloadID, appNameID uint64, workloadType workloadid.WorkloadType,
+) {
 	txn.workloadID = workloadID
 	txn.appNameID = appNameID
+	txn.workloadType = workloadType
 }
 
 // SetBufferedWritesEnabled toggles whether the writes are buffered on the
@@ -1385,6 +1390,10 @@ func (txn *Txn) Send(
 
 	if txn.appNameID != 0 && ba.Header.AppNameID == 0 {
 		ba.Header.AppNameID = txn.appNameID
+	}
+
+	if txn.workloadType != 0 && ba.Header.WorkloadType == 0 {
+		ba.Header.WorkloadType = uint32(txn.workloadType)
 	}
 
 	// Requests with a bounded staleness header should use NegotiateAndSend.

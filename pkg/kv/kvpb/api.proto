@@ -3033,9 +3033,14 @@ message Header {
   // enrich samples with more workload context.
   uint64 app_name_id = 40 [(gogoproto.customname) = "AppNameID"];
 
+  // workload_type distinguishes the kind of workload that workload_id
+  // represents (statement fingerprint, job ID, system task, etc.).
+  // Used by the ASH sampler to choose the right encoding.
+  uint32 workload_type = 41 [(gogoproto.customname) = "WorkloadType"];
+
   reserved 7, 10, 12, 14, 20, 24;
 
-  // Next ID: 41
+  // Next ID: 42
 }
 
 message WriteOptions {

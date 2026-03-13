@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
@@ -166,6 +167,15 @@ func (o *Outbox) appNameID() uint64 {
 func (o *Outbox) gatewayNodeID() roachpb.NodeID {
 	if o.flowCtx != nil && o.flowCtx.NodeID != nil {
 		return roachpb.NodeID(o.flowCtx.NodeID.SQLInstanceID())
+	}
+	return 0
+}
+
+// workloadType returns the WorkloadType from the flow context's
+// EvalCtx, or 0 if EvalCtx is nil (which happens in tests).
+func (o *Outbox) workloadType() workloadid.WorkloadType {
+	if o.flowCtx != nil && o.flowCtx.EvalCtx != nil {
+		return o.flowCtx.EvalCtx.WorkloadType
 	}
 	return 0
 }
@@ -323,6 +333,7 @@ func (o *Outbox) sendBatches(
 						WorkloadID:    o.workloadID(),
 						AppNameID:     o.appNameID(),
 						GatewayNodeID: o.gatewayNodeID(),
+						WorkloadType:  o.workloadType(),
 					},
 					ash.WorkNetwork, "OutboxSend")
 				err := stream.Send(o.scratch.msg)
@@ -372,6 +383,7 @@ func (o *Outbox) sendBatches(
 					WorkloadID:    o.workloadID(),
 					AppNameID:     o.appNameID(),
 					GatewayNodeID: o.gatewayNodeID(),
+					WorkloadType:  o.workloadType(),
 				},
 				ash.WorkNetwork, "OutboxSend")
 			err = stream.Send(o.scratch.msg)
