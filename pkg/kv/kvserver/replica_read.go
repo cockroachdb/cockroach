@@ -107,6 +107,11 @@ func (r *Replica) executeReadOnlyBatch(
 		// directly on the storage batch before evaluating the read-only batch request
 		// below. Depending on the result of the intent resolution, the read-only
 		// batch request may not conflict with the intents anymore.
+		//
+		// Range resolves are widened to the full request span so that all of a
+		// txn's intents are resolved in one pass. The bounding span is computed
+		// lazily on first range resolve.
+		var reqSpan roachpb.Span
 		for _, intent := range intentsToResolveVirtually {
 			var (
 				// It's ok to pass an empty header since during intent resolution it's only
@@ -119,8 +124,19 @@ func (r *Replica) executeReadOnlyBatch(
 			)
 			if len(intent.EndKey) > 0 {
 				// Range LockUpdate: resolve all intents for this txn in the span.
+				if reqSpan.Key == nil {
+					reqSpan = ba.Requests[0].GetInner().Header().Span()
+					for _, ru := range ba.Requests[1:] {
+						reqSpan = reqSpan.Combine(ru.GetInner().Header().Span())
+					}
+					// Point requests (e.g. Get) have no EndKey. Ensure the span
+					// is a valid range for ResolveIntentRangeRequest.
+					if reqSpan.EndKey == nil {
+						reqSpan.EndKey = reqSpan.Key.Next()
+					}
+				}
 				req = &kvpb.ResolveIntentRangeRequest{
-					RequestHeader:     kvpb.RequestHeaderFromSpan(intent.Span),
+					RequestHeader:     kvpb.RequestHeaderFromSpan(reqSpan),
 					IntentTxn:         intent.Txn,
 					Status:            intent.Status,
 					IgnoredSeqNums:    intent.IgnoredSeqNums,
@@ -389,6 +405,11 @@ func (r *Replica) canDropLatchesBeforeEval(
 
 	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&r.store.cfg.Settings.SV)
 	targetLockConflictBytes := storage.TargetBytesPerLockConflictError.Get(&r.store.cfg.Settings.SV)
+	// After condensing, range resolves are widened to cover the full request
+	// span. In this regime, prefer discovering distinct conflicting transactions
+	// over accumulating many intents from the same transaction, since each
+	// distinct txn's range resolve will cover all its intents.
+	preferDistinctTxns := g.HasCondensedIntents()
 	var intents []roachpb.Intent
 	// Check if any of the requests within the batch need to resolve any intents
 	// or if any of them need to use an intent interleaving iterator.
@@ -401,6 +422,7 @@ func (r *Replica) canDropLatchesBeforeEval(
 		}
 		needsIntentInterleavingForThisRequest, err := storage.ScanConflictingIntentsForDroppingLatchesEarly(
 			ctx, rw, txnID, ba.Header.Timestamp, start, end, &intents, maxLockConflicts, targetLockConflictBytes,
+			preferDistinctTxns,
 		)
 		if err != nil {
 			return false /* ok */, true /* stillNeedsIntentInterleaving */, kvpb.NewError(
