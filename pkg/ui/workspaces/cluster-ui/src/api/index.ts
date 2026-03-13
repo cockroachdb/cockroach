@@ -26,3 +26,4 @@ export * from "./jobProfilerApi";
 export * from "./txnInsightDetailsApi";
 export * from "./healthApi";
 export * from "./connectivityApi";
+export * from "./locationsApi";
