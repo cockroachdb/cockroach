@@ -404,7 +404,13 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		return
 	}
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
-	ca.eventConsumer, ca.sink, err = newEventConsumer(
+
+	// Use local variables so that ca.sink is not overwritten with nil on error.
+	// newEventConsumer returns (nil, nil, err) on failure, and overwriting
+	// ca.sink would prevent close() from cleaning up the already-dialed sink.
+	var consumer eventConsumer
+	var s EventSink
+	consumer, s, err = newEventConsumer(
 		ctx, ca.FlowCtx.Cfg, ca.spec, feed, ca.frontier, kvFeedHighWater,
 		ca.sink, ca.metrics, ca.sliMetrics, ca.knobs)
 	if err != nil {
@@ -413,6 +419,9 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.cancel()
 		return
 	}
+	ca.eventConsumer = consumer
+	// Reassign sink, since s may be a wrapped version of the original sink.
+	ca.sink = s
 
 	// Init heartbeat timer.
 	ca.lastPush = timeutil.Now()
