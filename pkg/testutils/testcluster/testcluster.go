@@ -1712,6 +1712,7 @@ func (tc *TestCluster) WaitForFullReplication() error {
 	notReplicated := true
 	for r := retry.Start(opts); r.Next() && notReplicated; {
 		notReplicated = false
+		var totalRangeCount int64
 		for _, s := range tc.Servers {
 			err := s.StorageLayer().GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
 				if n := s.ClusterNodeCount(); n != len(tc.Servers) {
@@ -1733,6 +1734,7 @@ func (tc *TestCluster) WaitForFullReplication() error {
 					notReplicated = true
 					return nil
 				}
+				totalRangeCount += s.Metrics().RangeCount.Value()
 				if n := s.Metrics().UnderReplicatedRangeCount.Value(); n > 0 {
 					log.Dev.Infof(context.TODO(), "%s has %d underreplicated ranges", s, n)
 					notReplicated = true
@@ -1749,6 +1751,14 @@ func (tc *TestCluster) WaitForFullReplication() error {
 			if notReplicated {
 				break
 			}
+		}
+		// If no store is the "range counter" for any range, node liveness is
+		// degraded and the under/over-replicated metrics cannot be trusted.
+		// Retry until at least one store reports a non-zero range count.
+		if !notReplicated && totalRangeCount == 0 {
+			log.Dev.Infof(context.TODO(),
+				"no store is counting ranges; node liveness may be degraded, retrying")
+			notReplicated = true
 		}
 	}
 	return nil
