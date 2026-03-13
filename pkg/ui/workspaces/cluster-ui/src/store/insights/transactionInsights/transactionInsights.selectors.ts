@@ -20,7 +20,7 @@ export const selectTransactionInsightsError = (state: AppState): Error | null =>
 
 export const selectTransactionInsightsMaxApiReached = (
   state: AppState,
-): boolean => state.adminUI?.stmtInsights?.data?.maxSizeReached;
+): boolean => state.adminUI?.txnInsights?.data?.maxSizeReached;
 
 export const selectTxnInsightsByFingerprint = createSelector(
   selectTransactionInsights,
