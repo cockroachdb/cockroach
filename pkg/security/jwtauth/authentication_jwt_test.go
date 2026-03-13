@@ -1206,3 +1206,21 @@ func TestVerifyAndExtractIssuer(t *testing.T) {
 	require.ErrorContains(t, err, "JWT authentication: invalid token")
 	require.Empty(t, detail)
 }
+
+func TestGetHTTPResponseNon2xx(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "boom", http.StatusForbidden)
+	}))
+	defer ts.Close()
+
+	authenticator := &jwtAuthenticator{}
+	authenticator.mu.conf.httpClient = httputil.NewClientWithTimeout(httputil.StandardHTTPTimeout)
+
+	_, err := getHttpResponse(context.Background(), ts.URL, authenticator)
+	require.Error(t, err)
+	require.Equal(t, "JWT authentication: HTTP request failed", err.Error())
+	require.Contains(t, errors.FlattenDetails(err), "403 Forbidden")
+	require.Contains(t, errors.FlattenDetails(err), "boom")
+}
