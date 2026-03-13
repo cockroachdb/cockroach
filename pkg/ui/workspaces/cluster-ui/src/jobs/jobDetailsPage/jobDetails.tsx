@@ -27,14 +27,6 @@ import { SqlBox, SqlBoxSize } from "src/sql";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
 import { idAttr } from "src/util";
 
-import {
-  CollectExecutionDetailsRequest,
-  CollectExecutionDetailsResponse,
-  GetJobProfilerExecutionDetailRequest,
-  GetJobProfilerExecutionDetailResponse,
-  ListJobProfilerExecutionDetailsRequest,
-  ListJobProfilerExecutionDetailsResponse,
-} from "../../api";
 import { isTerminalState } from "../util";
 
 import { JobProfilerView } from "./jobProfilerView";
@@ -48,23 +40,7 @@ enum TabKeysEnum {
   PROFILER = "Advanced Debugging",
 }
 
-export interface JobDetailsPropsV2 {
-  onFetchExecutionDetailFiles: (
-    req: ListJobProfilerExecutionDetailsRequest,
-  ) => Promise<ListJobProfilerExecutionDetailsResponse>;
-  onCollectExecutionDetails: (
-    req: CollectExecutionDetailsRequest,
-  ) => Promise<CollectExecutionDetailsResponse>;
-  onDownloadExecutionFile: (
-    req: GetJobProfilerExecutionDetailRequest,
-  ) => Promise<GetJobProfilerExecutionDetailResponse>;
-}
-
-export function JobDetailsV2({
-  onFetchExecutionDetailFiles,
-  onCollectExecutionDetails,
-  onDownloadExecutionFile,
-}: JobDetailsPropsV2): React.ReactElement {
+export function JobDetailsV2(): React.ReactElement {
   const history = useHistory();
   const match = useRouteMatch();
   const ccContext = useContext(CockroachCloudContext);
@@ -156,16 +132,7 @@ export function JobDetailsV2({
                     hasAdminRole && {
                       key: "profiler",
                       label: TabKeysEnum.PROFILER,
-                      children: (
-                        <JobProfilerView
-                          jobID={jobId}
-                          onFetchExecutionDetailFiles={
-                            onFetchExecutionDetailFiles
-                          }
-                          onCollectExecutionDetails={onCollectExecutionDetails}
-                          onDownloadExecutionFile={onDownloadExecutionFile}
-                        />
-                      ),
+                      children: <JobProfilerView jobID={jobId} />,
                     },
                 ]}
               />
