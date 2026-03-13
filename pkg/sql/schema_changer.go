@@ -414,6 +414,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			&MemoryMetrics{},
 			sc.execCfg,
 			sd,
+			WithWorkloadInfo(kv.WorkloadInfoFromContext(ctx)),
 		)
 
 		defer cleanup()
