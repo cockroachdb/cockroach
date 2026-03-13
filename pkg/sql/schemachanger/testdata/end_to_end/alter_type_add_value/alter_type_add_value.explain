@@ -1,0 +1,34 @@
+/* setup */
+CREATE TYPE salmon AS ENUM ('sockeye', 'king');
+
+/* test */
+EXPLAIN (DDL) ALTER TYPE salmon ADD VALUE 'atlantic';
+----
+Schema change plan for ALTER TYPE ‹defaultdb›.‹public›.‹salmon› ADD VALUE ‹'atlantic'›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → WRITE_ONLY EnumTypeValue:{DescID: 104 (salmon), Name: "atlantic"}
+ │         └── 1 Mutation operation
+ │              └── AddEnumTypeValue {"LogicalRepresentation":"atlantic","PhysicalRepresentation":"wA==","TypeID":104}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward PUBLIC
+ │    │    │    └── WRITE_ONLY → ABSENT EnumTypeValue:{DescID: 104 (salmon), Name: "atlantic"}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → WRITE_ONLY EnumTypeValue:{DescID: 104 (salmon), Name: "atlantic"}
+ │         └── 3 Mutation operations
+ │              ├── AddEnumTypeValue {"LogicalRepresentation":"atlantic","PhysicalRepresentation":"wA==","TypeID":104}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
+ └── PostCommitPhase
+      └── Stage 1 of 1 in PostCommitPhase
+           ├── 1 element transitioning toward PUBLIC
+           │    └── WRITE_ONLY → PUBLIC EnumTypeValue:{DescID: 104 (salmon), Name: "atlantic"}
+           └── 3 Mutation operations
+                ├── PromoteEnumTypeValue {"LogicalRepresentation":"atlantic","PhysicalRepresentation":"wA==","TypeID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

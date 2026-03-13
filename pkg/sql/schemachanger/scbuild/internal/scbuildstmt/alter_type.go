@@ -6,11 +6,16 @@
 package scbuildstmt
 
 import (
+	"bytes"
 	"reflect"
+	"slices"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,7 +30,7 @@ type supportedAlterTypeCommand = supportedStatement
 // the declarative schema changer. Operations marked as non-fully supported can
 // only be used with the use_declarative_schema_changer session variable.
 var supportedAlterTypeStatements = map[reflect.Type]supportedAlterTypeCommand{
-	reflect.TypeOf((*tree.AlterTypeAddValue)(nil)):    {fn: alterTypeAddValue, on: false, checks: nil},
+	reflect.TypeOf((*tree.AlterTypeAddValue)(nil)):    {fn: alterTypeAddValue, on: true, checks: isV262Active},
 	reflect.TypeOf((*tree.AlterTypeRenameValue)(nil)): {fn: alterTypeRenameValue, on: false, checks: nil},
 	reflect.TypeOf((*tree.AlterTypeRename)(nil)):      {fn: alterTypeRename, on: false, checks: nil},
 	reflect.TypeOf((*tree.AlterTypeSetSchema)(nil)):   {fn: alterTypeSetSchema, on: false, checks: nil},
@@ -105,7 +110,85 @@ func AlterType(b BuildCtx, n *tree.AlterType) {
 func alterTypeAddValue(
 	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeAddValue,
 ) {
-	panic(scerrors.NotImplementedErrorf(t, "ALTER TYPE ADD VALUE is not supported"))
+	newVal := string(t.NewVal)
+
+	type valueInfo struct {
+		physicalRep []byte
+		logicalRep  string
+		target      scpb.TargetStatus
+	}
+	var existingValues []valueInfo
+	b.QueryByID(enumType.TypeID).FilterEnumTypeValue().ForEach(
+		func(_ scpb.Status, target scpb.TargetStatus, e *scpb.EnumTypeValue) {
+			existingValues = append(existingValues, valueInfo{
+				physicalRep: e.PhysicalRepresentation,
+				logicalRep:  e.LogicalRepresentation,
+				target:      target,
+			})
+		},
+	)
+
+	// Handle adding a duplicate.
+	for _, v := range existingValues {
+		if v.logicalRep != newVal {
+			continue
+		}
+		if v.target == scpb.ToAbsent {
+			panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				"enum value %q is being dropped, try again later", newVal))
+		}
+		if t.IfNotExists {
+			b.EvalCtx().ClientNoticeSender.BufferClientNotice(
+				b, pgnotice.Newf("enum value %q already exists, skipping", newVal),
+			)
+			return
+		}
+		panic(pgerror.Newf(pgcode.DuplicateObject, "enum value %q already exists", newVal))
+	}
+
+	var activeValues []valueInfo
+	for _, v := range existingValues {
+		if v.target != scpb.ToAbsent {
+			activeValues = append(activeValues, v)
+		}
+	}
+	sort.Slice(activeValues, func(i, j int) bool {
+		return bytes.Compare(activeValues[i].physicalRep, activeValues[j].physicalRep) < 0
+	})
+
+	// Determine insertion position. By default the new value is appended.
+	//
+	// pos is the index of the value after which the new value will be inserted.
+	pos := len(activeValues) - 1
+	if t.Placement != nil {
+		existing := string(t.Placement.ExistingVal)
+		pos = slices.IndexFunc(activeValues, func(v valueInfo) bool {
+			return v.logicalRep == existing
+		})
+		if pos == -1 {
+			panic(pgerror.Newf(pgcode.InvalidParameterValue,
+				"%q is not an existing enum value", existing))
+		}
+		if t.Placement.Before {
+			pos--
+		}
+	}
+
+	getPhysicalRep := func(idx int) []byte {
+		if idx < 0 || idx >= len(activeValues) {
+			return nil
+		}
+		return activeValues[idx].physicalRep
+	}
+	physicalRep := enum.GenByteStringBetween(
+		getPhysicalRep(pos), getPhysicalRep(pos+1), enum.SpreadSpacing,
+	)
+
+	b.Add(&scpb.EnumTypeValue{
+		TypeID:                 enumType.TypeID,
+		PhysicalRepresentation: physicalRep,
+		LogicalRepresentation:  newVal,
+	})
 }
 
 func alterTypeRenameValue(
