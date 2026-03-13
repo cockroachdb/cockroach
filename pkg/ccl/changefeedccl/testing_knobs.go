@@ -54,6 +54,9 @@ type TestingKnobs struct {
 	// checkpointJobProgress. Returning a non-nil error causes a retryable
 	// failure before the checkpoint is persisted.
 	BeforeCheckpoint func() error
+	// OnRetryBackoffReset, if set, is called when the changefeed retry loop
+	// resets its backoff due to changefeed progress.
+	OnRetryBackoffReset func()
 	// StartDistChangefeedInitialHighwater is called when starting the dist changefeed with the initial highwater
 	// of the changefeed. Note that this will be called when the changefeed starts and subsequently when the changefeed
 	// is retried.

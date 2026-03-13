@@ -68,3 +68,9 @@ func (r *Retry) Next() bool {
 	}
 	return r.Retry.Next()
 }
+
+// NextBackoff returns the next backoff duration, delegating to the
+// underlying retry.Retry.
+func (r *Retry) NextBackoff() time.Duration {
+	return r.Retry.NextBackoff()
+}

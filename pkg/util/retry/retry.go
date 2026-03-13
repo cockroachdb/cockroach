@@ -163,6 +163,12 @@ func (r *Retry) CurrentAttempt() int {
 	return r.currentAttempt
 }
 
+// NextBackoff returns what the next backoff duration would be based on the
+// current attempt, without actually waiting or advancing the attempt counter.
+func (r Retry) NextBackoff() time.Duration {
+	return r.retryIn()
+}
+
 // Do invokes the closure according to the retry options until it returns
 // success or no more retries are possible. Always returns an error unless the
 // return is prompted by a successful invocation of `fn`.
