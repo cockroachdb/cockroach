@@ -1209,7 +1209,7 @@ func (b *builderState) ResolveUserDefinedTypeType(
 	name *tree.UnresolvedObjectName, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
 	p.ResolveTypes = true
-	prefix, typ := b.cr.MayResolveType(b.ctx, *name)
+	_, typ := b.cr.MayResolveType(b.ctx, *name)
 	if typ == nil {
 		if p.IsExistenceOptional {
 			return nil
@@ -1222,11 +1222,7 @@ func (b *builderState) ResolveUserDefinedTypeType(
 		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
 			"%q is an implicit array type and cannot be modified", typ.GetName()))
 	case descpb.TypeDescriptor_MULTIREGION_ENUM:
-		typeName := tree.MakeTypeNameWithPrefix(prefix.NamePrefix(), typ.GetName())
-		// Multi-region enums are not directly modifiable.
-		panic(errors.WithHintf(pgerror.Newf(pgcode.DependentObjectsStillExist,
-			"%q is a multi-region enum and cannot be modified directly", typeName.FQString()),
-			"try ALTER DATABASE %s DROP REGION %s", prefix.Database.GetName(), typ.GetName()))
+		b.ensureDescriptor(typ.GetID())
 	case descpb.TypeDescriptor_ENUM:
 		b.ensureDescriptor(typ.GetID())
 	case descpb.TypeDescriptor_COMPOSITE:
@@ -1240,6 +1236,9 @@ func (b *builderState) ResolveUserDefinedTypeType(
 	default:
 		panic(errors.AssertionFailedf("unknown type kind %s", typ.GetKind()))
 	}
+	// Check schema USAGE privilege before ownership for consistency with the
+	// legacy schema changer.
+	b.requirePrivilege(typ.GetParentSchemaID(), privilege.USAGE)
 	b.mustOwn(typ.GetID())
 	return b.QueryByID(typ.GetID())
 }

@@ -2841,6 +2841,8 @@ func TestBackupRestoreDuringUserDefinedTypeChange(t *testing.T) {
 				})
 				defer cleanupFn()
 
+				sqlDB.Exec(t, `SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off'`)
+
 				// Create a database with a type.
 				sqlDB.Exec(t, `
 CREATE DATABASE d;

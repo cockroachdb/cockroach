@@ -453,7 +453,7 @@ COMMIT`)
 }
 
 // TestTypeChangeJobCancelSemantics ensures that type change jobs that involve
-// en enum member being dropped are cancelable and those that don't are not
+// an enum member being dropped are cancelable and those that don't are not
 // cancelable.
 func TestTypeChangeJobCancelSemantics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -517,7 +517,9 @@ func TestTypeChangeJobCancelSemantics(t *testing.T) {
 			defer s.Stopper().Stop(ctx)
 
 			// Setup.
-			_, err := sqlDB.Exec(`
+			_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off'`)
+			require.NoError(t, err)
+			_, err = sqlDB.Exec(`
 CREATE DATABASE db;
 CREATE TYPE db.greetings AS ENUM ('hi', 'yo');
 `)
