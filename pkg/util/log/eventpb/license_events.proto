@@ -1,0 +1,73 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.util.log.eventpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/util/log/eventpb";
+
+import "gogoproto/gogo.proto";
+import "util/log/logpb/event.proto";
+
+// Category: License telemetry events
+// Channel: TELEMETRY
+
+// Notes to CockroachDB maintainers: refer to doc.go at the package
+// level for more details. Beware that JSON compatibility rules apply
+// here, not protobuf.
+// *Really look at doc.go before modifying this file.*
+
+// LicenseValidationEvent is emitted periodically (hourly) and on every
+// license change to record the current license state for compliance
+// auditing. In air-gapped environments, these events are also persisted
+// to a system table for later export.
+message LicenseValidationEvent {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+
+  // LicenseType is the type of the installed license (e.g., "enterprise", "trial", "free").
+  string license_type = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // Edition is the edition tier of the license (e.g., "standard", "enterprise", "mission-critical").
+  string edition = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // AddOns is the list of enabled add-on feature bundles.
+  repeated string add_ons = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // OrganizationName is the organization from the license.
+  string organization_name = 5 [(gogoproto.jsontag) = ",omitempty"];
+
+  // LicenseID is the UUID of the license, hex-encoded.
+  string license_id = 6 [(gogoproto.customname) = "LicenseID", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // OrganizationID is the UUID of the organization, hex-encoded.
+  string organization_id = 7 [(gogoproto.customname) = "OrganizationID", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // VCPUEntitled is the number of vCPUs entitled by the license.
+  int32 vcpu_entitled = 8 [(gogoproto.customname) = "VCPUEntitled", (gogoproto.jsontag) = ",omitempty"];
+
+  // VCPUActual is the number of vCPUs available on this node,
+  // derived from cgroup limits or runtime.NumCPU().
+  float vcpu_actual = 9 [(gogoproto.customname) = "VCPUActual", (gogoproto.jsontag) = ",omitempty"];
+
+  // Environment is the license environment (production, pre-production, development).
+  string environment = 10 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+
+  // ExpiresAt is the license expiration timestamp. Expressed as seconds since the Unix epoch.
+  int64 expires_at = 11 [(gogoproto.jsontag) = ",omitempty"];
+
+  // IsExpired is true if the license has already expired at the time this event was emitted.
+  bool is_expired = 12 [(gogoproto.jsontag) = ",omitempty"];
+
+  // GracePeriodEndAt is when the enforcement grace period ends. Expressed as seconds since the Unix epoch.
+  int64 grace_period_end_at = 13 [(gogoproto.jsontag) = ",omitempty"];
+
+  // IsThrottled is true if the enforcer is currently throttling transactions.
+  bool is_throttled = 14 [(gogoproto.jsontag) = ",omitempty"];
+
+  // NodeID is the ID of the node emitting this event.
+  int32 node_id = 15 [(gogoproto.customname) = "NodeID", (gogoproto.jsontag) = ",omitempty"];
+
+  // EmissionReason explains why this event was emitted ("periodic" or "license-change").
+  string emission_reason = 16 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+}

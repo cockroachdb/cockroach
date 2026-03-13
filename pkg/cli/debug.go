@@ -1365,6 +1365,7 @@ var debugCmds = []*cobra.Command{
 	debugResetQuorumCmd,
 	debugSendKVBatchCmd,
 	debugRecoverCmd,
+	debugLicenseTelemetryCmd,
 }
 
 // DebugCmd is the root of all debug commands.
@@ -1463,6 +1464,11 @@ func init() {
 	doctorRecreateCmd.AddCommand(doctorRecreateClusterCmd, doctorRecreateZipDirCmd)
 	debugDoctorCmd.AddCommand(doctorExamineCmd, doctorRecreateCmd, doctorExamineFallbackClusterCmd, doctorExamineFallbackZipDirCmd)
 	DebugCmd.AddCommand(debugDoctorCmd)
+
+	debugLicenseTelemetryCmd.AddCommand(debugLicenseTelemetryExportCmd)
+	f = debugLicenseTelemetryExportCmd.Flags()
+	f.DurationVar(&licenseTelemetryExportOpts.Since, "since", 7*24*time.Hour,
+		"export records from this duration ago (e.g., 7d, 24h)")
 
 	DebugCmd.AddCommand(declarativeValidateCorpus)
 	DebugCmd.AddCommand(declarativePrintRules)

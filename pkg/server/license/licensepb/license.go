@@ -59,3 +59,35 @@ func (u License_Environment) String() string {
 		return "other"
 	}
 }
+
+func (e License_Edition) String() string {
+	switch e {
+	case License_EDITION_UNSPECIFIED:
+		return ""
+	case License_STANDARD:
+		return "standard"
+	case License_ENTERPRISE_EDITION:
+		return "enterprise"
+	case License_MISSION_CRITICAL:
+		return "mission-critical"
+	default:
+		return "unknown"
+	}
+}
+
+func (a License_AddOn) String() string {
+	switch a {
+	case License_ADD_ON_UNSPECIFIED:
+		return ""
+	case License_DATA_REPLICATION:
+		return "data-replication"
+	case License_ADVANCED_WORKLOAD_MGMT:
+		return "advanced-workload-mgmt"
+	case License_DATA_SYNCHRONIZATION:
+		return "data-synchronization"
+	case License_ADVANCED_COMPLIANCE:
+		return "advanced-compliance"
+	default:
+		return "unknown"
+	}
+}

@@ -1986,6 +1986,7 @@ func (s *SQLServer) startLicenseEnforcer(ctx context.Context, knobs base.Testing
 		license.WithDB(s.internalDB),
 		license.WithSystemTenant(s.execCfg.Codec.ForSystemTenant()),
 		license.WithTelemetryStatusReporter(s.diagnosticsReporter),
+		license.WithStopper(s.stopper),
 	}
 	if s.tenantConnect != nil {
 		opts = append(opts, license.WithMetadataAccessor(s.tenantConnect))

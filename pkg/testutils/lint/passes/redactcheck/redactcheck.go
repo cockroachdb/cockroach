@@ -183,6 +183,8 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					},
 					"github.com/cockroachdb/cockroach/pkg/server/license": {
 						"LicType": {},
+						"Edition": {},
+						"AddOn":   {},
 					},
 					"github.com/cockroachdb/cockroach/pkg/sql/catalog": {
 						"DescriptorType": {},

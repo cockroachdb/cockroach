@@ -73,6 +73,15 @@ type Enforcer struct {
 	// hasLicense is true if any license is installed.
 	hasLicense atomic.Bool
 
+	// licenseEdition caches the edition tier of the current license.
+	licenseEdition atomic.Int32
+
+	// licenseAddOns caches the add-ons as a bitmask for atomic access.
+	licenseAddOns atomic.Int64
+
+	// vcpuEntitled caches the vCPU entitlement from the license.
+	vcpuEntitled atomic.Int32
+
 	// throttleLogger is a logger for throttle-related messages. It is used to
 	// emit logs only every few minutes to avoid spamming the logs.
 	throttleLogger log.EveryN
@@ -81,6 +90,14 @@ type Enforcer struct {
 	// When enabled, all checks, including telemetry and expired license validation,
 	// are bypassed. This is typically used to disable enforcement for single-node deployments.
 	isDisabled atomic.Bool
+
+	// clusterSettings is a reference to the cluster settings, stored during
+	// Start() for use by the telemetry emitter.
+	clusterSettings *cluster.Settings
+
+	// telemetryTriggerCh is used to trigger immediate telemetry emission
+	// when a license change occurs. Buffered to size 1 so sends are non-blocking.
+	telemetryTriggerCh chan struct{}
 
 	// db is a pointer to the database for use for KV read/writes. This is only
 	// set for the system tenant.
@@ -124,6 +141,10 @@ type TestingKnobs struct {
 	// OverrideTelemetryStatusReporter, if set, will set the telemetry status
 	// reporter in Start().
 	OverrideTelemetryStatusReporter TelemetryStatusReporter
+
+	// OverrideTelemetryEmissionInterval, if set, overrides the interval
+	// between periodic license telemetry emissions.
+	OverrideTelemetryEmissionInterval *time.Duration
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
@@ -148,9 +169,10 @@ type MetadataAccessor interface {
 // NewEnforcer creates a new Enforcer object.
 func NewEnforcer(tk *TestingKnobs) *Enforcer {
 	e := &Enforcer{
-		startTime:      timeutil.Now(),
-		throttleLogger: log.Every(5 * time.Minute),
-		testingKnobs:   tk,
+		startTime:          timeutil.Now(),
+		throttleLogger:     log.Every(5 * time.Minute),
+		testingKnobs:       tk,
+		telemetryTriggerCh: make(chan struct{}, 1),
 	}
 	return e
 }
@@ -197,7 +219,7 @@ func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, opts ...Opti
 	// must be done after setting the cluster init grace period timestamp. And it
 	// is needed for testing that may be running this in isolation to the license
 	// ccl package.
-	e.RefreshForLicenseChange(ctx, LicTypeNone, time.Time{})
+	e.RefreshForLicenseChange(ctx, LicenseInfo{Type: LicTypeNone})
 
 	// Register a callback so that we refresh our state whenever the license
 	// changes. This will also update the state for the current license if not
@@ -207,6 +229,12 @@ func (e *Enforcer) Start(ctx context.Context, st *cluster.Settings, opts ...Opti
 	// This should be the final step after all error checks are completed.
 	e.isDisabled.Store(false)
 	e.mu.setupComplete = true
+
+	// Start the periodic telemetry emitter if a stopper is available.
+	e.clusterSettings = st
+	if options.stopper != nil {
+		e.startTelemetryEmitter(ctx, options.stopper)
+	}
 
 	return nil
 }
@@ -455,24 +483,25 @@ func (e *Enforcer) MaybeFailIfThrottled(
 // information to optimize enforcement. Instead of reading the license from the
 // settings, unmarshaling it, and checking its type and expiry each time,
 // caching the information improves efficiency since licenses change infrequently.
-func (e *Enforcer) RefreshForLicenseChange(
-	ctx context.Context, licType LicType, licenseExpiry time.Time,
-) {
-	e.hasLicense.Store(licType != LicTypeNone)
-	e.licenseExpiryTS.Store(licenseExpiry.Unix())
+func (e *Enforcer) RefreshForLicenseChange(ctx context.Context, info LicenseInfo) {
+	e.hasLicense.Store(info.Type != LicTypeNone)
+	e.licenseExpiryTS.Store(info.Expiry.Unix())
+	e.licenseEdition.Store(int32(info.Edition))
+	e.vcpuEntitled.Store(info.VCPUEntitled)
+	e.storeAddOns(info.AddOns)
 
-	switch licType {
+	switch info.Type {
 	case LicTypeNone:
 		e.storeNewGracePeriodEndDate(e.GetClusterInitGracePeriodEndTS(), 0)
 		e.licenseRequiresTelemetry.Store(false)
 	case LicTypeFree:
-		e.storeNewGracePeriodEndDate(licenseExpiry, e.getGracePeriodDuration(30*24*time.Hour))
+		e.storeNewGracePeriodEndDate(info.Expiry, e.getGracePeriodDuration(30*24*time.Hour))
 		e.licenseRequiresTelemetry.Store(true)
 	case LicTypeTrial:
-		e.storeNewGracePeriodEndDate(licenseExpiry, e.getGracePeriodDuration(7*24*time.Hour))
+		e.storeNewGracePeriodEndDate(info.Expiry, e.getGracePeriodDuration(7*24*time.Hour))
 		e.licenseRequiresTelemetry.Store(true)
 	case LicTypeEvaluation:
-		e.storeNewGracePeriodEndDate(licenseExpiry, e.getGracePeriodDuration(30*24*time.Hour))
+		e.storeNewGracePeriodEndDate(info.Expiry, e.getGracePeriodDuration(30*24*time.Hour))
 		e.licenseRequiresTelemetry.Store(false)
 	case LicTypeEnterprise:
 		e.storeNewGracePeriodEndDate(timeutil.UnixEpoch, 0)
@@ -480,7 +509,10 @@ func (e *Enforcer) RefreshForLicenseChange(
 	}
 
 	var sb redact.StringBuilder
-	sb.Printf("enforcer license updated: type is %s, ", licType)
+	sb.Printf("enforcer license updated: type is %s, ", info.Type)
+	if info.Edition != EditionUnspecified {
+		sb.Printf("edition is %s, ", info.Edition)
+	}
 	gpEnd, _ := e.GetGracePeriodEndTS()
 	if !gpEnd.IsZero() {
 		sb.Printf("grace period ends at %q, ", gpEnd)
@@ -491,6 +523,46 @@ func (e *Enforcer) RefreshForLicenseChange(
 	}
 	sb.Printf("telemetry required: %t", e.licenseRequiresTelemetry.Load())
 	log.Dev.Infof(ctx, "%s", sb.RedactableString())
+
+	// Trigger immediate telemetry emission on license change.
+	select {
+	case e.telemetryTriggerCh <- struct{}{}:
+	default: // non-blocking; skip if one is already pending
+	}
+}
+
+// GetEdition returns the cached edition of the current license.
+func (e *Enforcer) GetEdition() Edition {
+	return Edition(e.licenseEdition.Load())
+}
+
+// GetVCPUEntitled returns the cached vCPU entitlement from the license.
+func (e *Enforcer) GetVCPUEntitled() int32 {
+	return e.vcpuEntitled.Load()
+}
+
+// GetAddOns returns the cached add-ons from the license.
+func (e *Enforcer) GetAddOns() []AddOn {
+	mask := e.licenseAddOns.Load()
+	if mask == 0 {
+		return nil
+	}
+	var addOns []AddOn
+	for i := AddOn(1); i <= AddOnAdvancedCompliance; i++ {
+		if mask&(1<<i) != 0 {
+			addOns = append(addOns, i)
+		}
+	}
+	return addOns
+}
+
+// storeAddOns encodes the add-ons as a bitmask and stores them atomically.
+func (e *Enforcer) storeAddOns(addOns []AddOn) {
+	var mask int64
+	for _, a := range addOns {
+		mask |= 1 << int64(a)
+	}
+	e.licenseAddOns.Store(mask)
 }
 
 // UpdateTrialLicenseExpiry updates the expiration timestamp of trial license

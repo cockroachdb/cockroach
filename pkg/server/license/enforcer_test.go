@@ -288,7 +288,7 @@ func TestThrottle(t *testing.T) {
 				license.WithTelemetryStatusReporter(&mockTelemetryStatusReporter{lastPingTime: &tc.lastTelemetryPingTime}),
 			)
 			require.NoError(t, err)
-			e.RefreshForLicenseChange(ctx, tc.licType, tc.licExpiry)
+			e.RefreshForLicenseChange(ctx, license.LicenseInfo{Type: tc.licType, Expiry: tc.licExpiry})
 			notice, err := e.TestingMaybeFailIfThrottled(ctx, tc.openTxnsCount)
 			if tc.expectedErrRegex == "" {
 				require.NoError(t, err)
@@ -371,7 +371,7 @@ func TestThrottleErrorMsg(t *testing.T) {
 
 	// Set up a free license that will expire in 30 days
 	licenseEnforcer := srv.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).LicenseEnforcer
-	licenseEnforcer.RefreshForLicenseChange(ctx, license.LicTypeFree, t30d)
+	licenseEnforcer.RefreshForLicenseChange(ctx, license.LicenseInfo{Type: license.LicTypeFree, Expiry: t30d})
 
 	for _, tc := range []struct {
 		desc string
