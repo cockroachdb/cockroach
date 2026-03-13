@@ -134,6 +134,32 @@ var upgrades = []upgradebase.Upgrade{
 		transactionStatisticsComputedColumnsMigration,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore computed columns"),
 	),
+
+	upgrade.NewTenantUpgrade(
+		"backfill changefeed persisted frontiers from span-level checkpoints",
+		clusterversion.V26_2_ChangefeedsStopReadingSpanLevelCheckpoints.Version(),
+		upgrade.NoPrecondition,
+		backfillChangefeedPersistedFrontiers,
+		upgrade.RestoreActionNotRequired("changefeed jobs are not restored"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"stop writing changefeed span-level checkpoints",
+		clusterversion.V26_2_ChangefeedsStopWritingSpanLevelCheckpoints.Version(),
+		upgrade.NoPrecondition,
+		// NB: We need a migration to bump the system database schema version.
+		NoTenantUpgradeFunc,
+		upgrade.RestoreActionNotRequired("changefeed jobs are not restored"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"purge changefeed span-level checkpoints",
+		clusterversion.V26_2_ChangefeedsNoLongerHaveSpanLevelCheckpoints.Version(),
+		upgrade.NoPrecondition,
+		purgeChangefeedSpanLevelCheckpoints,
+		upgrade.RestoreActionNotRequired("changefeed jobs are not restored"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

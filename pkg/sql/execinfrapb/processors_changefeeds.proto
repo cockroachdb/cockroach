@@ -60,7 +60,9 @@ message ChangeAggregatorSpec {
   // SpanLevelCheckpoint is a map from timestamps to lists of spans. These spans
   // have been resolved to the given timestamp, so it is safe to forward these
   // spans to its corresponding timestamps upon resuming.
-  optional cockroach.sql.jobs.jobspb.TimestampSpansMap span_level_checkpoint = 9;
+  //
+  // TODO(#163256): Remove (and reserve) this field once MinSupported = 26.2.
+  optional cockroach.sql.jobs.jobspb.TimestampSpansMap span_level_checkpoint = 9 [deprecated = true];
 
   // ProgressConfig is the configuration for the changefeed's progress tracking.
   optional ChangefeedProgressConfig progress_config = 10;
@@ -106,7 +108,9 @@ message ChangeFrontierSpec {
 
   // SpanLevelCheckpoint is a map from timestamps to lists of spans that captures
   // the changefeed progress and is used to initialize the frontier on resume.
-  optional cockroach.sql.jobs.jobspb.TimestampSpansMap span_level_checkpoint = 6;
+  //
+  // TODO(#163256): Remove (and reserve) this field once MinSupported = 26.2.
+  optional cockroach.sql.jobs.jobspb.TimestampSpansMap span_level_checkpoint = 6 [deprecated = true];
 
   // ProgressConfig is the configuration for the changefeed's progress tracking.
   optional ChangefeedProgressConfig progress_config = 7;
