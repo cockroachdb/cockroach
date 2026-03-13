@@ -522,6 +522,11 @@ type Guard interface {
 	// IntentsToResolveVirtually delegates listing the locks to be resolved to the
 	// lock table guard.
 	IntentsToResolveVirtually() []roachpb.LockUpdate
+
+	// HasCondensedIntents returns true if point intents have been condensed
+	// into range entries, indicating that the pre-scan should prefer
+	// discovering distinct conflicting transactions.
+	HasCondensedIntents() bool
 }
 
 // guardImpl implements the Guard interface.

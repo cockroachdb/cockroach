@@ -997,6 +997,14 @@ func (g *guardImpl) IntentsToResolveVirtually() []roachpb.LockUpdate {
 	return nil
 }
 
+// HasCondensedIntents implements the Guard interface.
+func (g *guardImpl) HasCondensedIntents() bool {
+	if g.ltg != nil {
+		return g.ltg.HasCondensedIntents()
+	}
+	return false
+}
+
 func (g *guardImpl) moveLatchGuard() latchGuard {
 	lg := g.lg
 	g.lg = nil

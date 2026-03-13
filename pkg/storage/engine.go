@@ -1974,6 +1974,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 	intents *[]roachpb.Intent,
 	maxLockConflicts int64,
 	targetLockConflictBytes int64,
+	preferDistinctTxns bool,
 ) (needIntentHistory bool, err error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -2017,6 +2018,16 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 	var meta enginepb.MVCCMetadata
 	var ok bool
 	intentSize := int64(0)
+	// When preferDistinctTxns is set, we skip intents from transactions we've
+	// already collected, maximizing the number of distinct conflicting txns
+	// discovered within the maxLockConflicts budget.
+	// TODO(mira): consider collecting the first and last intent per transaction
+	// so that range resolve requests can be constructed more precisely, rather
+	// than widening to the full request span.
+	var seenTxns map[uuid.UUID]struct{}
+	if preferDistinctTxns {
+		seenTxns = make(map[uuid.UUID]struct{})
+	}
 	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ok; ok, err = iter.NextEngineKey() {
 		if maxLockConflicts != 0 && int64(len(*intents)) >= maxLockConflicts {
 			// Return early if we're done accumulating intents; make no claims about
@@ -2071,6 +2082,12 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		}
 		if intentConflicts := meta.Timestamp.ToTimestamp().LessEq(ts); !intentConflicts {
 			continue
+		}
+		if seenTxns != nil {
+			if _, seen := seenTxns[meta.Txn.ID]; seen {
+				continue
+			}
+			seenTxns[meta.Txn.ID] = struct{}{}
 		}
 		key, err := iter.EngineKey()
 		if err != nil {
