@@ -2251,6 +2251,23 @@ func TestResolvableLocks(t *testing.T) {
 	}
 	txn := makeTxnMeta("txn1")
 
+	t.Run("condense respects threshold", func(t *testing.T) {
+		rl := makeRL(true,
+			makeLockUpdate(txn, roachpb.Key("a")),
+			makeLockUpdate(txn, roachpb.Key("b")),
+			makeLockUpdate(txn, roachpb.Key("c")),
+		)
+		// Threshold of 3: 3 points is not > 3, so no condensing.
+		require.False(t, rl.maybeCondense(3))
+		require.Len(t, rl.toResolve, 3)
+		require.Nil(t, rl.toResolveRange)
+
+		// Threshold of 2: 3 points > 2, so condensing fires.
+		require.True(t, rl.maybeCondense(2))
+		require.Empty(t, rl.toResolve)
+		require.Len(t, rl.toResolveRange, 1)
+	})
+
 	t.Run("condense noop when VIR disabled", func(t *testing.T) {
 		rl := makeRL(false, makeLockUpdate(txn, roachpb.Key("a")))
 		require.False(t, rl.maybeCondense(0))
