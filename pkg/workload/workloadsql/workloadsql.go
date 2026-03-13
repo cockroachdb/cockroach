@@ -49,17 +49,22 @@ func Setup(
 		return 0, err
 	}
 
+	tables := gen.Tables()
+	log.Dev.Infof(ctx, "starting split operations for %d tables", len(tables))
 	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
-	for _, table := range gen.Tables() {
+	for _, table := range tables {
 		if err := Split(ctx, db, table, splitConcurrency); err != nil {
 			return 0, err
 		}
 	}
+	log.Dev.Infof(ctx, "finished split operations for %d tables", len(tables))
 
 	if hooks.PostLoad != nil {
+		log.Dev.Infof(ctx, "starting PostLoad hook")
 		if err := hooks.PostLoad(ctx, db); err != nil {
 			return 0, errors.Wrapf(err, "Could not postload")
 		}
+		log.Dev.Infof(ctx, "finished PostLoad hook")
 	}
 
 	return bytes, nil
