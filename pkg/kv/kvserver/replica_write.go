@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -211,6 +212,16 @@ func (r *Replica) executeWriteBatch(
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()
 	shouldQuiesce := r.store.stopper.ShouldQuiesce()
+
+	tenantIDOrZero, _ := roachpb.ClientTenantFromContext(ctx)
+	raftCleanup := ash.SetWorkState(
+		tenantIDOrZero, ash.WorkloadInfo{
+			WorkloadID:    ba.WorkloadID,
+			AppNameID:     ba.AppNameID,
+			GatewayNodeID: ba.GatewayNodeID,
+		},
+		ash.WorkOther, "RaftProposalWait")
+	defer raftCleanup()
 
 	for {
 		select {

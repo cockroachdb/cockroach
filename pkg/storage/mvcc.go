@@ -1266,6 +1266,9 @@ type MVCCGetOptions struct {
 	// roachpb.Value whose RawBytes may contain MVCCValueHeader
 	// data.
 	ReturnRawMVCCValues bool
+	// WorkloadID identifies the workload that triggered the get (e.g.
+	// statement fingerprint ID, job ID). Used for ASH sampling.
+	WorkloadID uint64
 }
 
 // MVCCGetResult bundles return values for the MVCCGet family of functions.

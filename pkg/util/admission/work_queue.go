@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -191,6 +192,11 @@ type WorkInfo struct {
 	ReplicatedWorkInfo ReplicatedWorkInfo
 	// WorkloadID is used for ASH sampling.
 	WorkloadID uint64
+	// AppNameID is the hash of the application name. Used for ASH sampling.
+	AppNameID uint64
+	// GatewayNodeID is the node that initiated the workload. Used for ASH
+	// sampling.
+	GatewayNodeID roachpb.NodeID
 }
 
 // ReplicatedWorkInfo groups everything needed to admit replicated writes, done
@@ -885,6 +891,14 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	ctx, span = tracing.ChildSpan(ctx, "admissionWorkQueueWait")
 	defer span.Finish()
 	defer releaseWaitingWork(work)
+	cleanup := ash.SetWorkState(
+		info.TenantID, ash.WorkloadInfo{
+			WorkloadID:    info.WorkloadID,
+			AppNameID:     info.AppNameID,
+			GatewayNodeID: info.GatewayNodeID,
+		},
+		ash.WorkAdmission, string(q.queueKind))
+	defer cleanup()
 	select {
 	case <-ctx.Done():
 		waitDur := q.timeNow().Sub(startTime)

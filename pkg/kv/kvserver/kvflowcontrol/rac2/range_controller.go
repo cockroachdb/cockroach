@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -66,7 +67,11 @@ type RangeController interface {
 	// waiting on the local store.
 	//
 	// No mutexes should be held.
-	WaitForEval(ctx context.Context, pri admissionpb.WorkPriority) (waited bool, err error)
+	WaitForEval(
+		ctx context.Context,
+		pri admissionpb.WorkPriority,
+		info ash.WorkloadInfo,
+	) (waited bool, err error)
 	// HandleRaftEventRaftMuLocked handles the provided raft event for the range.
 	//
 	// Requires replica.raftMu to be held.
@@ -736,7 +741,7 @@ func NewRangeController(
 
 // WaitForEval implements RangeController.WaitForEval.
 func (rc *rangeController) WaitForEval(
-	ctx context.Context, pri admissionpb.WorkPriority,
+	ctx context.Context, pri admissionpb.WorkPriority, info ash.WorkloadInfo,
 ) (waited bool, err error) {
 	expensiveLoggingEnabled := log.ExpensiveLogEnabled(ctx, 2)
 	wc := admissionpb.WorkClassFromPri(pri)
@@ -860,7 +865,7 @@ retry:
 			// is a superset of when tracing is enabled (and in a production setting
 			// is likely to be identical, so there isn't much waste).
 			state, selectCasesScratch = WaitForEval(ctx, waitCategoryChangeCh, refreshCh, handles,
-				remainingForQuorum, expensiveLoggingEnabled, selectCasesScratch)
+				remainingForQuorum, expensiveLoggingEnabled, selectCasesScratch, rc.opts.TenantID, info)
 			switch state {
 			case WaitSuccess:
 				continue
