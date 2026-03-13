@@ -12,11 +12,6 @@ dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 source "$dir/release/teamcity-support.sh"
 source "$dir/teamcity-bazel-support.sh"  # for run_bazel
 
-# TODO: remove this block after we upgrade to Ubuntu 22.04+
-# this is needed to support s390x builds on Ubuntu 20.04 hosts
-docker run --privileged --rm tonistiigi/binfmt@sha256:8f58e6214f4cc9dc83ce8f5acad1ece508eb6b20e696a8c1e9f274481982c541 --uninstall qemu-s390x
-docker run --privileged --rm tonistiigi/binfmt@sha256:8f58e6214f4cc9dc83ce8f5acad1ece508eb6b20e696a8c1e9f274481982c541 --install s390x
-# End of TODO
 #
 tc_start_block "Variable Setup"
 
@@ -38,25 +33,18 @@ if [[ -z "${DRY_RUN}" ]] ; then
   if [[ -z "${is_release_build}" ]] ; then
     # export the variable to avoid shell escaping
     export gcs_credentials="$GOOGLE_CREDENTIALS_CUSTOMIZED"
-    google_credentials=$GOOGLE_CREDENTIALS_CUSTOMIZED
     gcs_bucket="cockroach-customized-builds-artifacts-prod"
     gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb-customized/${cockroach_archive_prefix}-customized"
-    gcr_hostname="us-docker.pkg.dev"
   else
     gcs_bucket="cockroach-builds-artifacts-prod"
-    google_credentials=$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS
     gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/${cockroach_archive_prefix}"
-    # Used for docker login for gcloud
-    gcr_hostname="us-docker.pkg.dev"
     # export the variable to avoid shell escaping
     export gcs_credentials="$GCS_CREDENTIALS_PROD"
   fi
 else
   gcs_bucket="cockroach-builds-artifacts-dryrun"
-  google_credentials="$GOOGLE_COCKROACH_RELEASE_CREDENTIALS"
-  gcr_repository="us.gcr.io/cockroach-release/cockroach-test"
+  gcr_repository="us.gcr.io/cockroach-release/${cockroach_archive_prefix}-test"
   build_name="${build_name}.dryrun"
-  gcr_hostname="us.gcr.io"
   # export the variable to avoid shell escaping
   export gcs_credentials="$GCS_CREDENTIALS_DEV"
 fi
@@ -109,45 +97,11 @@ done
 
 tr -d '\r' < /tmp/THIRD-PARTY-NOTICES.txt.tmp > /tmp/THIRD-PARTY-NOTICES.txt
 
-$BAZEL_BIN/pkg/cmd/publish-artifacts/publish-artifacts_/publish-artifacts release --gcs-bucket="$gcs_bucket" --output-directory=artifacts --build-tag-override="$build_name" --platform $platform --third-party-notices-file=/tmp/THIRD-PARTY-NOTICES.txt --telemetry-disabled=$telemetry_disabled --cockroach-archive-prefix=$cockroach_archive_prefix
+$BAZEL_BIN/pkg/cmd/publish-artifacts/publish-artifacts_/publish-artifacts release --gcs-bucket="$gcs_bucket" --build-tag-override="$build_name" --platform $platform --third-party-notices-file=/tmp/THIRD-PARTY-NOTICES.txt --telemetry-disabled=$telemetry_disabled --cockroach-archive-prefix=$cockroach_archive_prefix
 
 EOF
 tc_end_block "Compile and publish artifacts"
 
-if [[ $platform == "linux-amd64" || $platform == "linux-arm64" || $platform == "linux-amd64-fips" || $platform == "linux-s390x" ]]; then
-  arch="amd64"
-  if [[ $platform == "linux-arm64" ]]; then
-    arch="arm64"
-  fi
-  if [[ $platform == "linux-s390x" ]]; then
-    arch="s390x"
-  fi
-
-  tc_start_block "Make and push docker image"
-  docker_login_with_google
-
-  cp --recursive "build/deploy" "build/deploy-${platform}"
-  tar \
-    --directory="build/deploy-${platform}" \
-    --extract \
-    --file="artifacts/${cockroach_archive_prefix}-${build_name}.${platform}.tgz" \
-    --ungzip \
-    --ignore-zeros \
-    --strip-components=1
-  cp LICENSE licenses/THIRD-PARTY-NOTICES.txt "build/deploy-${platform}"
-  # Move the libs where Dockerfile expects them to be
-  mv build/deploy-${platform}/lib/* build/deploy-${platform}/
-  rmdir build/deploy-${platform}/lib
-
-  build_docker_tag="${gcr_repository}:${arch}-${build_name}"
-  if [[ $platform == "linux-amd64-fips" ]]; then
-    build_docker_tag="${gcr_repository}:${build_name}-fips"
-  fi
-  docker build --no-cache --pull --platform "linux/${arch}" --tag="${build_docker_tag}" "build/deploy-${platform}"
-  docker push "$build_docker_tag"
-
-  tc_end_block "Make and push docker images"
-fi
 
 # Make finding the tag name easy.
 cat << EOF
