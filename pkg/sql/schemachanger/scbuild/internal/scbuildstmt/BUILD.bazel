@@ -97,6 +97,7 @@ go_library(
         "//pkg/sql/catalog/zone",
         "//pkg/sql/covering",
         "//pkg/sql/decodeusername",
+        "//pkg/sql/enum",
         "//pkg/sql/paramparse",
         "//pkg/sql/parser",
         "//pkg/sql/pgwire/pgcode",

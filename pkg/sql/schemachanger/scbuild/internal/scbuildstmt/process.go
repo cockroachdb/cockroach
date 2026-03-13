@@ -264,3 +264,7 @@ var isV261Active isVersionActiveFunc = func(_ tree.NodeFormatter, _ sessiondatap
 var isV262Active isVersionActiveFunc = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
 	return activeVersion.IsActive(clusterversion.V26_2)
 }
+
+var isV263Active isVersionActiveFunc = func(_ tree.NodeFormatter, _ sessiondatapb.NewSchemaChangerMode, activeVersion clusterversion.ClusterVersion) bool {
+	return activeVersion.IsActive(clusterversion.V26_3)
+}
