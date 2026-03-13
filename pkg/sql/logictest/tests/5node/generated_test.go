@@ -108,6 +108,13 @@ func TestLogic_distsql_builtin(
 	runLogicTest(t, "distsql_builtin")
 }
 
+func TestLogic_distsql_collated_string(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "distsql_collated_string")
+}
+
 func TestLogic_distsql_crdb_internal(
 	t *testing.T,
 ) {
