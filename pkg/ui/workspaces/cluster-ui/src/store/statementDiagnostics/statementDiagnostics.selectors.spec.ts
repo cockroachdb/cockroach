@@ -3,7 +3,6 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { assert } from "chai";
 import moment from "moment-timezone";
 
 import { StatementDiagnosticsReport } from "../../api";
@@ -39,7 +38,7 @@ describe("statementDiagnostics selectors", () => {
     it("returns diagnostics reports sorted in descending order", () => {
       const diagnosticsPerStatement =
         selectDiagnosticsReportsPerStatement.resultFunc(reports);
-      assert.deepEqual(diagnosticsPerStatement["SHOW database"][0].id, "3");
+      expect(diagnosticsPerStatement["SHOW database"][0].id).toBe("3");
     });
   });
 });

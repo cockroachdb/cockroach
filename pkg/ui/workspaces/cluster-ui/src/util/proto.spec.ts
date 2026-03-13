@@ -3,8 +3,6 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { assert } from "chai";
-
 import { INodeStatus, rollupStoreMetrics } from "./proto";
 
 describe("Proto utils", () => {
@@ -56,15 +54,14 @@ describe("Proto utils", () => {
     });
 
     it("sums up values for every metric", () => {
-      assert.deepEqual(
-        rollupStoreMetrics(nodeStatus),
+      expect(rollupStoreMetrics(nodeStatus)).toEqual(
         statusWithRolledMetrics.metrics,
       );
     });
 
     it("does not explode when node fields are missing", () => {
       const emptyNodeStatus: Partial<INodeStatus> = {};
-      assert.deepEqual(rollupStoreMetrics(emptyNodeStatus), {});
+      expect(rollupStoreMetrics(emptyNodeStatus)).toEqual({});
     });
   });
 });
