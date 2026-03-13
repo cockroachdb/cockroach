@@ -325,6 +325,8 @@ type WorkQueue struct {
 type tenantAggMetrics struct {
 	admittedCount  *aggmetric.AggCounter
 	waitTimeNanos  *aggmetric.AggCounter
+	tokensUsed     *aggmetric.AggCounter
+	tokensReturned *aggmetric.AggCounter
 }
 
 var _ requester = &WorkQueue{}
@@ -727,7 +729,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	}
 	if info.BypassAdmission {
 		q.adjustTenantUsedLocked(tenant, info.RequestedCount)
-		if tenant.perTenantMetrics != nil {
+		if tenant.perTenantMetrics.admittedCount != nil {
 			tenant.perTenantMetrics.admittedCount.Inc(1)
 		}
 		q.mu.Unlock()
@@ -755,18 +757,18 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// Fast-path. Try to grab token/slot.
 		// Optimistically update used to avoid locking again.
 		q.adjustTenantUsedLocked(tenant, info.RequestedCount)
-		// Save the per-tenant metrics before releasing the mutex, since
-		// tenant may be GC'd and its counters Unlink'd after unlock. Inc
-		// after Unlink is safe: the aggregate parent counter still gets
-		// the increment (see aggmetric.Counter.Unlink docs).
-		perTenantMetrics := tenant.perTenantMetrics
+		// Save the admittedCount counter before releasing the mutex,
+		// since tenant may be GC'd and its counters Unlink'd after
+		// unlock. Inc after Unlink is safe: the aggregate parent counter
+		// still gets the increment (see aggmetric.Counter.Unlink docs).
+		admittedCount := tenant.perTenantMetrics.admittedCount
 		q.mu.Unlock()
 		// We have unlocked q.mu, so another concurrent request can also do tryGet
 		// and get ahead of this request. We don't need to be fair for such
 		// concurrent requests.
 		if q.granter.tryGet(burstQual, info.RequestedCount) {
-			if perTenantMetrics != nil {
-				perTenantMetrics.admittedCount.Inc(1)
+			if admittedCount != nil {
+				admittedCount.Inc(1)
 			}
 			q.metrics.incAdmitted(info.Priority)
 			if info.ReplicatedWorkInfo.Enabled {
@@ -1098,7 +1100,7 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	waitDur := now.Sub(item.enqueueingTime)
 	tenant.priorityStates.updateDelayLocked(item.priority, waitDur, false /* canceled */)
 	q.adjustTenantUsedLocked(tenant, item.requestedCount)
-	if tenant.perTenantMetrics != nil {
+	if tenant.perTenantMetrics.admittedCount != nil {
 		tenant.perTenantMetrics.admittedCount.Inc(1)
 		tenant.perTenantMetrics.waitTimeNanos.Inc(waitDur.Nanoseconds())
 	}
@@ -1206,6 +1208,13 @@ func (q *WorkQueue) adjustTenantUsedLocked(tenant *tenantInfo, delta int64) {
 		}
 	} else {
 		tenant.used += uint64(delta)
+	}
+	if tenant.perTenantMetrics.tokensUsed != nil {
+		if delta > 0 {
+			tenant.perTenantMetrics.tokensUsed.Inc(delta)
+		} else if delta < 0 {
+			tenant.perTenantMetrics.tokensReturned.Inc(-delta)
+		}
 	}
 	if q.mode == usesCPUTimeTokens {
 		// Burst bucket tracks available budget, so we negate delta: consuming
@@ -1624,7 +1633,7 @@ type tenantInfo struct {
 	// perTenantMetrics holds per-tenant admission metric children. Only
 	// set when mode == usesCPUTimeTokens. See cpuTimeTokenMetrics for
 	// details.
-	perTenantMetrics *tenantMetrics
+	perTenantMetrics tenantMetrics
 }
 
 // tenantMetrics groups the per-tenant metric children that are created
@@ -1632,6 +1641,8 @@ type tenantInfo struct {
 type tenantMetrics struct {
 	admittedCount  *aggmetric.Counter
 	waitTimeNanos  *aggmetric.Counter
+	tokensUsed     *aggmetric.Counter
+	tokensReturned *aggmetric.Counter
 }
 
 // tenantHeap is a heap of tenants with waiting work, ordered in increasing
@@ -1674,10 +1685,10 @@ func newTenantInfo(
 		burstBucketCapacity, mode != usesCPUTimeTokens /* disable */)
 	if aggMetrics != nil {
 		tid := strconv.FormatUint(id, 10)
-		ti.perTenantMetrics = &tenantMetrics{
-			admittedCount:  aggMetrics.admittedCount.AddChild(tid),
-			waitTimeNanos:  aggMetrics.waitTimeNanos.AddChild(tid),
-		}
+		ti.perTenantMetrics.admittedCount = aggMetrics.admittedCount.AddChild(tid)
+		ti.perTenantMetrics.waitTimeNanos = aggMetrics.waitTimeNanos.AddChild(tid)
+		ti.perTenantMetrics.tokensUsed = aggMetrics.tokensUsed.AddChild(tid)
+		ti.perTenantMetrics.tokensReturned = aggMetrics.tokensReturned.AddChild(tid)
 	}
 	return ti
 }
@@ -1686,9 +1697,11 @@ func releaseTenantInfo(ti *tenantInfo) {
 	if isInTenantHeap(ti) {
 		panic("tenantInfo has non-empty heap")
 	}
-	if ti.perTenantMetrics != nil {
+	if ti.perTenantMetrics.admittedCount != nil {
 		ti.perTenantMetrics.admittedCount.Unlink()
 		ti.perTenantMetrics.waitTimeNanos.Unlink()
+		ti.perTenantMetrics.tokensUsed.Unlink()
+		ti.perTenantMetrics.tokensReturned.Unlink()
 	}
 	// NB: {waitingWorkHeap,openEpochsHeap}.Pop nil the slice elements when
 	// removing, so we are not inadvertently holding any references.
