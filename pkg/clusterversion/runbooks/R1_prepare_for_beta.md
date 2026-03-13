@@ -2,6 +2,23 @@
 
 When preparing for a beta release (e.g., 25.4 beta1), the following files must be updated:
 
+## When the Release Branch Hasn't Been Cut Yet
+
+R.1 changes must land **immediately** after the release branch is cut, so it's
+common to prepare the PR in advance. When `release-X.Y` doesn't exist yet:
+
+1. **Branch from master** with a name like `r1-prepare-beta-X.Y`.
+2. **Open a draft PR against `master`** — this makes the changes reviewable
+   before the branch exists.
+3. **Add the `do-not-merge` label** to the draft PR so it isn't accidentally
+   merged into master.
+4. **After `release-X.Y` is cut**, repoint the PR's base branch from `master`
+   to `release-X.Y` using the GitHub UI or:
+   ```bash
+   gh pr edit <PR_NUMBER> --base release-X.Y --repo cockroachdb/cockroach
+   ```
+5. Remove the `do-not-merge` label and mark the PR ready for review.
+
 ## 1. Core Version Changes
 
 **Set Development Branch Flag:**
