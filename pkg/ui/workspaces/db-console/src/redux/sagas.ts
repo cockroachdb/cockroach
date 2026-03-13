@@ -10,7 +10,6 @@ import { timeScaleSaga } from "src/redux/timeScale";
 import { analyticsSaga } from "./analyticsSagas";
 import { customAnalyticsSaga } from "./customAnalytics";
 import { indexUsageStatsSaga } from "./indexUsageStats";
-import { jobsSaga } from "./jobs/jobsSagas";
 import { localSettingsSaga } from "./localsettings";
 import { sessionsSaga } from "./sessions";
 import { sqlStatsSaga } from "./sqlStats";
@@ -21,7 +20,6 @@ export default function* rootSaga() {
     fork(localSettingsSaga),
     fork(customAnalyticsSaga),
     fork(statementsSaga),
-    fork(jobsSaga),
     fork(analyticsSaga),
     fork(sessionsSaga),
     fork(sqlStatsSaga),
