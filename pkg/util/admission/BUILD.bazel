@@ -37,6 +37,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/obs/ash",
+        "//pkg/obs/workloadid",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/settings",

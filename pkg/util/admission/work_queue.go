@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -197,6 +198,9 @@ type WorkInfo struct {
 	// GatewayNodeID is the node that initiated the workload. Used for ASH
 	// sampling.
 	GatewayNodeID roachpb.NodeID
+	// WorkloadType distinguishes the kind of workload that WorkloadID
+	// represents. Used for ASH sampling.
+	WorkloadType workloadid.WorkloadType
 }
 
 // ReplicatedWorkInfo groups everything needed to admit replicated writes, done
@@ -896,6 +900,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 			WorkloadID:    info.WorkloadID,
 			AppNameID:     info.AppNameID,
 			GatewayNodeID: info.GatewayNodeID,
+			WorkloadType:  info.WorkloadType,
 		},
 		ash.WorkAdmission, string(q.queueKind))
 	defer cleanup()

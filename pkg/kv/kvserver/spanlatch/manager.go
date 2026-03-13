@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -511,6 +512,7 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 			WorkloadID:    lg.ba.WorkloadID,
 			AppNameID:     lg.ba.AppNameID,
 			GatewayNodeID: lg.ba.GatewayNodeID,
+			WorkloadType:  workloadid.WorkloadType(lg.ba.WorkloadType),
 		}
 	}
 	cleanup := ash.SetWorkState(

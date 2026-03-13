@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -219,6 +220,7 @@ func (r *Replica) executeWriteBatch(
 			WorkloadID:    ba.WorkloadID,
 			AppNameID:     ba.AppNameID,
 			GatewayNodeID: ba.GatewayNodeID,
+			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 		},
 		ash.WorkOther, "RaftProposalWait")
 	defer raftCleanup()

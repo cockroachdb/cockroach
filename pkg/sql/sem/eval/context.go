@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -370,6 +371,10 @@ type Context struct {
 	// enrichment_id field which will enable the ASH sampler to
 	// enrich samples with more workload context.
 	AppNameID uint64
+
+	// WorkloadType distinguishes the kind of workload that WorkloadID
+	// represents (statement fingerprint, job ID, system task).
+	WorkloadType workloadid.WorkloadType
 }
 
 // RoutineStatementCounters encapsulates metrics for tracking the execution
