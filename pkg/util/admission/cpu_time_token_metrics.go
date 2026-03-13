@@ -64,6 +64,23 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+
+	cpuTimeTokensUsedPerTenantMetaBase = metric.Metadata{
+		Help: crstrings.UnwrapText(`
+			Cumulative CPU time tokens consumed per tenant by admitted
+			work; rate() gives the per-tenant token consumption rate`),
+		Measurement: "Tokens",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	cpuTimeTokensReturnedPerTenantMetaBase = metric.Metadata{
+		Help: crstrings.UnwrapText(`
+			Cumulative CPU time tokens returned per tenant, for example
+			when actual CPU usage was lower than the initial estimate;
+			rate() gives the per-tenant token return rate`),
+		Measurement: "Tokens",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // cpuTimeTokenMetrics tracks metrics for the CPU time token admission
@@ -113,6 +130,12 @@ type cpuTimeTokenMetrics struct {
 	// better not to rely on that routing invariant for panic safety.
 	AdmittedCountPerTenant [numResourceTiers]*aggmetric.AggCounter
 	WaitTimeNanosPerTenant [numResourceTiers]*aggmetric.AggCounter
+
+	// TokensUsedPerTenant and TokensReturnedPerTenant track per-tenant
+	// token consumption and returns via adjustTenantUsedLocked. Together
+	// they give per-tenant visibility into token flow.
+	TokensUsedPerTenant     [numResourceTiers]*aggmetric.AggCounter
+	TokensReturnedPerTenant [numResourceTiers]*aggmetric.AggCounter
 }
 
 func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
@@ -121,6 +144,8 @@ func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 	b := aggmetric.MakeBuilder("tenant_id")
 	m := &cpuTimeTokenMetrics{
 		Multiplier:     metric.NewGaugeFloat64(cpuTimeTokenMultiplierMeta),
+		TokensConsumed: metric.NewCounter(cpuTimeTokensConsumedMeta),
+		TokensReturned: metric.NewCounter(cpuTimeTokensReturnedMeta),
 	}
 	// Create one AggCounter per tier for each per-tenant metric.
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
@@ -134,6 +159,16 @@ func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 		waitMeta.Name = fmt.Sprintf(
 			"admission.cpu_time_tokens.per_tenant.wait_time_nanos.%s", tierStr)
 		m.WaitTimeNanosPerTenant[tier] = b.Counter(waitMeta)
+
+		usedMeta := cpuTimeTokensUsedPerTenantMetaBase
+		usedMeta.Name = fmt.Sprintf(
+			"admission.cpu_time_tokens.per_tenant.tokens_used.%s", tierStr)
+		m.TokensUsedPerTenant[tier] = b.Counter(usedMeta)
+
+		returnedMeta := cpuTimeTokensReturnedPerTenantMetaBase
+		returnedMeta.Name = fmt.Sprintf(
+			"admission.cpu_time_tokens.per_tenant.tokens_returned.%s", tierStr)
+		m.TokensReturnedPerTenant[tier] = b.Counter(returnedMeta)
 	}
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
 		for qual := burstQualification(0); qual < numBurstQualifications; qual++ {

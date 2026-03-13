@@ -325,6 +325,8 @@ type WorkQueue struct {
 type tenantAggMetrics struct {
 	admittedCount  *aggmetric.AggCounter
 	waitTimeNanos  *aggmetric.AggCounter
+	tokensUsed     *aggmetric.AggCounter
+	tokensReturned *aggmetric.AggCounter
 }
 
 var _ requester = &WorkQueue{}
@@ -1207,6 +1209,13 @@ func (q *WorkQueue) adjustTenantUsedLocked(tenant *tenantInfo, delta int64) {
 	} else {
 		tenant.used += uint64(delta)
 	}
+	if tenant.perTenantMetrics != nil {
+		if delta > 0 {
+			tenant.perTenantMetrics.tokensUsed.Inc(delta)
+		} else if delta < 0 {
+			tenant.perTenantMetrics.tokensReturned.Inc(-delta)
+		}
+	}
 	if q.mode == usesCPUTimeTokens {
 		// Burst bucket tracks available budget, so we negate delta: consuming
 		// resources (positive delta to used) depletes the burst bucket.
@@ -1632,6 +1641,8 @@ type tenantInfo struct {
 type tenantMetrics struct {
 	admittedCount  *aggmetric.Counter
 	waitTimeNanos  *aggmetric.Counter
+	tokensUsed     *aggmetric.Counter
+	tokensReturned *aggmetric.Counter
 }
 
 // tenantHeap is a heap of tenants with waiting work, ordered in increasing
@@ -1677,6 +1688,8 @@ func newTenantInfo(
 		ti.perTenantMetrics = &tenantMetrics{
 			admittedCount:  aggMetrics.admittedCount.AddChild(tid),
 			waitTimeNanos:  aggMetrics.waitTimeNanos.AddChild(tid),
+			tokensUsed:     aggMetrics.tokensUsed.AddChild(tid),
+			tokensReturned: aggMetrics.tokensReturned.AddChild(tid),
 		}
 	}
 	return ti
@@ -1689,6 +1702,8 @@ func releaseTenantInfo(ti *tenantInfo) {
 	if ti.perTenantMetrics != nil {
 		ti.perTenantMetrics.admittedCount.Unlink()
 		ti.perTenantMetrics.waitTimeNanos.Unlink()
+		ti.perTenantMetrics.tokensUsed.Unlink()
+		ti.perTenantMetrics.tokensReturned.Unlink()
 	}
 	// NB: {waitingWorkHeap,openEpochsHeap}.Pop nil the slice elements when
 	// removing, so we are not inadvertently holding any references.
