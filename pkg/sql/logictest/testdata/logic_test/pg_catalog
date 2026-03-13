@@ -1934,6 +1934,8 @@ oid     typname                typnamespace  typowner  typlen  typbyval  typtype
 1021    _float4                __OID__       NULL      -1      false     b
 1022    _float8                __OID__       NULL      -1      false     b
 1028    _oid                   __OID__       NULL      -1      false     b
+1033    aclitem                __OID__       NULL      -1      false     b
+1034    _aclitem               __OID__       NULL      -1      false     b
 1041    _inet                  __OID__       NULL      -1      false     b
 1042    bpchar                 __OID__       NULL      -1      false     b
 1043    varchar                __OID__       NULL      -1      false     b
@@ -2059,6 +2061,8 @@ oid     typname                typcategory  typispreferred  typisdefined  typdel
 1021    _float4                A            false           true          ,         0         700      0
 1022    _float8                A            false           true          ,         0         701      0
 1028    _oid                   A            false           true          ,         0         26       0
+1033    aclitem                S            false           true          ,         0         0        1034
+1034    _aclitem               A            false           true          ,         0         1033     0
 1041    _inet                  A            false           true          ,         0         869      0
 1042    bpchar                 S            false           true          ,         0         0        1014
 1043    varchar                S            false           true          ,         0         0        1015
@@ -2184,6 +2188,8 @@ oid     typname                typinput        typoutput        typreceive      
 1021    _float4                array_in        array_out        array_recv        array_send        0         0          0
 1022    _float8                array_in        array_out        array_recv        array_send        0         0          0
 1028    _oid                   array_in        array_out        array_recv        array_send        0         0          0
+1033    aclitem                aclitemin       aclitemout       aclitemrecv       aclitemsend       0         0          0
+1034    _aclitem               array_in        array_out        array_recv        array_send        0         0          0
 1041    _inet                  array_in        array_out        array_recv        array_send        0         0          0
 1042    bpchar                 bpcharin        bpcharout        bpcharrecv        bpcharsend        0         0          0
 1043    varchar                varcharin       varcharout       varcharrecv       varcharsend       0         0          0
@@ -2309,6 +2315,8 @@ oid     typname                typalign  typstorage  typnotnull  typbasetype  ty
 1021    _float4                NULL      NULL        false       0            -1
 1022    _float8                NULL      NULL        false       0            -1
 1028    _oid                   NULL      NULL        false       0            -1
+1033    aclitem                NULL      NULL        false       0            -1
+1034    _aclitem               NULL      NULL        false       0            -1
 1041    _inet                  NULL      NULL        false       0            -1
 1042    bpchar                 NULL      NULL        false       0            -1
 1043    varchar                NULL      NULL        false       0            -1
@@ -2434,6 +2442,8 @@ oid     typname                typndims  typcollation  typdefaultbin  typdefault
 1021    _float4                0         0             NULL           NULL        NULL
 1022    _float8                0         0             NULL           NULL        NULL
 1028    _oid                   0         0             NULL           NULL        NULL
+1033    aclitem                0         3403232968    NULL           NULL        NULL
+1034    _aclitem               0         3403232968    NULL           NULL        NULL
 1041    _inet                  0         0             NULL           NULL        NULL
 1042    bpchar                 0         3403232968    NULL           NULL        NULL
 1043    varchar                0         3403232968    NULL           NULL        NULL

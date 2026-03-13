@@ -5831,6 +5831,12 @@ func NewDName(d string) Datum {
 	return NewDNameFromDString(NewDString(d))
 }
 
+// NewDACLItem is a helper routine to create a *DOidWrapper with aclitem OID,
+// initialized from a string in the format "grantee=privchars/grantor".
+func NewDACLItem(d string) Datum {
+	return wrapWithOid(NewDString(d), oidext.T_aclitem)
+}
+
 // NewDCIText is a helper routine to create a *DCIText (implemented as a *DOidWrapper)
 // initialized from a string.
 func NewDCIText(contents string, env *CollationEnvironment) (Datum, error) {

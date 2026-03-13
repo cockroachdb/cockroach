@@ -125,6 +125,12 @@ test           pg_catalog          "char"                                 type  
 test           pg_catalog          "char"[]                               type         admin    ALL             false
 test           pg_catalog          "char"[]                               type         public   USAGE           false
 test           pg_catalog          "char"[]                               type         root     ALL             false
+test           pg_catalog          aclitem                                type         admin    ALL             false
+test           pg_catalog          aclitem                                type         public   USAGE           false
+test           pg_catalog          aclitem                                type         root     ALL             false
+test           pg_catalog          aclitem[]                              type         admin    ALL             false
+test           pg_catalog          aclitem[]                              type         public   USAGE           false
+test           pg_catalog          aclitem[]                              type         root     ALL             false
 test           pg_catalog          any                                    type         admin    ALL             false
 test           pg_catalog          any                                    type         public   USAGE           false
 test           pg_catalog          any                                    type         root     ALL             false
@@ -555,6 +561,10 @@ test           pg_catalog   "char"          type         admin    ALL           
 test           pg_catalog   "char"          type         root     ALL             false
 test           pg_catalog   "char"[]        type         admin    ALL             false
 test           pg_catalog   "char"[]        type         root     ALL             false
+test           pg_catalog   aclitem         type         admin    ALL             false
+test           pg_catalog   aclitem         type         root     ALL             false
+test           pg_catalog   aclitem[]       type         admin    ALL             false
+test           pg_catalog   aclitem[]       type         root     ALL             false
 test           pg_catalog   any             type         admin    ALL             false
 test           pg_catalog   any             type         root     ALL             false
 test           pg_catalog   anyarray        type         admin    ALL             false
@@ -815,6 +825,10 @@ a              pg_catalog   "char"          type         admin    ALL           
 a              pg_catalog   "char"          type         root     ALL             false
 a              pg_catalog   "char"[]        type         admin    ALL             false
 a              pg_catalog   "char"[]        type         root     ALL             false
+a              pg_catalog   aclitem         type         admin    ALL             false
+a              pg_catalog   aclitem         type         root     ALL             false
+a              pg_catalog   aclitem[]       type         admin    ALL             false
+a              pg_catalog   aclitem[]       type         root     ALL             false
 a              pg_catalog   any             type         admin    ALL             false
 a              pg_catalog   any             type         root     ALL             false
 a              pg_catalog   anyarray        type         admin    ALL             false
@@ -1013,6 +1027,10 @@ defaultdb      pg_catalog   "char"          type         admin    ALL           
 defaultdb      pg_catalog   "char"          type         root     ALL             false
 defaultdb      pg_catalog   "char"[]        type         admin    ALL             false
 defaultdb      pg_catalog   "char"[]        type         root     ALL             false
+defaultdb      pg_catalog   aclitem         type         admin    ALL             false
+defaultdb      pg_catalog   aclitem         type         root     ALL             false
+defaultdb      pg_catalog   aclitem[]       type         admin    ALL             false
+defaultdb      pg_catalog   aclitem[]       type         root     ALL             false
 defaultdb      pg_catalog   any             type         admin    ALL             false
 defaultdb      pg_catalog   any             type         root     ALL             false
 defaultdb      pg_catalog   anyarray        type         admin    ALL             false
@@ -1211,6 +1229,10 @@ postgres       pg_catalog   "char"          type         admin    ALL           
 postgres       pg_catalog   "char"          type         root     ALL             false
 postgres       pg_catalog   "char"[]        type         admin    ALL             false
 postgres       pg_catalog   "char"[]        type         root     ALL             false
+postgres       pg_catalog   aclitem         type         admin    ALL             false
+postgres       pg_catalog   aclitem         type         root     ALL             false
+postgres       pg_catalog   aclitem[]       type         admin    ALL             false
+postgres       pg_catalog   aclitem[]       type         root     ALL             false
 postgres       pg_catalog   any             type         admin    ALL             false
 postgres       pg_catalog   any             type         root     ALL             false
 postgres       pg_catalog   anyarray        type         admin    ALL             false
@@ -1417,6 +1439,10 @@ test           pg_catalog   "char"          type         admin    ALL           
 test           pg_catalog   "char"          type         root     ALL             false
 test           pg_catalog   "char"[]        type         admin    ALL             false
 test           pg_catalog   "char"[]        type         root     ALL             false
+test           pg_catalog   aclitem         type         admin    ALL             false
+test           pg_catalog   aclitem         type         root     ALL             false
+test           pg_catalog   aclitem[]       type         admin    ALL             false
+test           pg_catalog   aclitem[]       type         root     ALL             false
 test           pg_catalog   any             type         admin    ALL             false
 test           pg_catalog   any             type         root     ALL             false
 test           pg_catalog   anyarray        type         admin    ALL             false
