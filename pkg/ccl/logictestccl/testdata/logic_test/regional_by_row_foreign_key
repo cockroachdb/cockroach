@@ -208,7 +208,7 @@ statement error pgcode 42P16 pq: cannot drop constraint foo as it is used to det
 ALTER TABLE child DROP CONSTRAINT foo
 
 # Nonexistent constraint.
-statement error pgcode 42704 pq: constraint named "bar" does not exist
+statement error pgcode 42704 pq: constraint "bar" of relation "child" does not exist
 ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'bar')
 
 # Wrong type of constraint.

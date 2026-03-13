@@ -1,0 +1,19 @@
+/* setup */
+SET CLUSTER SETTING feature.infer_rbr_region_col_using_constraint.enabled = true;
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+USE multiregion_db;
+CREATE TABLE multiregion_db.public.parent (region multiregion_db.public.crdb_internal_region, k INT, PRIMARY KEY (region, k));
+CREATE TABLE multiregion_db.public.rbr (
+  pk INT PRIMARY KEY,
+  region multiregion_db.public.crdb_internal_region NOT NULL,
+  data INT,
+  CONSTRAINT fk_region FOREIGN KEY (region, pk) REFERENCES multiregion_db.public.parent (region, k) MATCH FULL,
+  CONSTRAINT fk_region2 FOREIGN KEY (region, data) REFERENCES multiregion_db.public.parent (region, k) MATCH FULL
+) LOCALITY REGIONAL BY ROW AS region;
+ALTER TABLE multiregion_db.public.rbr SET (infer_rbr_region_col_using_constraint = 'fk_region');
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE multiregion_db.public.rbr SET (infer_rbr_region_col_using_constraint = 'fk_region2');
+----
+Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹rbr› SET ('infer_rbr_region_col_using_constraint' = ‹'fk_region2'›);
+ └── execute 2 system table mutations transactions

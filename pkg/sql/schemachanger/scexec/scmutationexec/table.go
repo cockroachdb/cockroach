@@ -35,6 +35,17 @@ func (i *immediateVisitor) SetTableSchemaLocked(
 	return nil
 }
 
+func (i *immediateVisitor) SetTableRBRUsingConstraint(
+	ctx context.Context, op scop.SetTableRBRUsingConstraint,
+) error {
+	tbl, err := i.checkOutTable(ctx, op.TableID)
+	if err != nil {
+		return err
+	}
+	tbl.RBRUsingConstraint = op.ConstraintID
+	return nil
+}
+
 func (i *immediateVisitor) SetTableStorageParam(
 	ctx context.Context, op scop.SetTableStorageParam,
 ) error {

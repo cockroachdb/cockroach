@@ -4318,6 +4318,20 @@ deprules
     - $descriptor-Node[CurrentStatus] = ABSENT
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
     - joinTargetNode($descriptor, $descriptor-Target, $descriptor-Node)
+- name: old RBR using constraint param is dropped before the new one is added
+  from: old-rbr-using-constraint-Node
+  kind: SameStagePrecedence
+  to: new-rbr-using-constraint-Node
+  query:
+    - $old-rbr-using-constraint[Type] = '*scpb.TableLocalityRegionalByRowUsingConstraint'
+    - $new-rbr-using-constraint[Type] = '*scpb.TableLocalityRegionalByRowUsingConstraint'
+    - joinOnDescID($old-rbr-using-constraint, $new-rbr-using-constraint, $table-id)
+    - $old-rbr-using-constraint-Target[TargetStatus] = ABSENT
+    - $old-rbr-using-constraint-Node[CurrentStatus] = ABSENT
+    - $new-rbr-using-constraint-Target[TargetStatus] = PUBLIC
+    - $new-rbr-using-constraint-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-rbr-using-constraint, $old-rbr-using-constraint-Target, $old-rbr-using-constraint-Node)
+    - joinTargetNode($new-rbr-using-constraint, $new-rbr-using-constraint-Target, $new-rbr-using-constraint-Node)
 - name: old TTL params are dropped before the new one is added
   from: old-ttl-param-Node
   kind: SameStagePrecedence
@@ -9654,6 +9668,20 @@ deprules
     - $descriptor-Node[CurrentStatus] = ABSENT
     - joinTargetNode($dependent, $dependent-Target, $dependent-Node)
     - joinTargetNode($descriptor, $descriptor-Target, $descriptor-Node)
+- name: old RBR using constraint param is dropped before the new one is added
+  from: old-rbr-using-constraint-Node
+  kind: SameStagePrecedence
+  to: new-rbr-using-constraint-Node
+  query:
+    - $old-rbr-using-constraint[Type] = '*scpb.TableLocalityRegionalByRowUsingConstraint'
+    - $new-rbr-using-constraint[Type] = '*scpb.TableLocalityRegionalByRowUsingConstraint'
+    - joinOnDescID($old-rbr-using-constraint, $new-rbr-using-constraint, $table-id)
+    - $old-rbr-using-constraint-Target[TargetStatus] = ABSENT
+    - $old-rbr-using-constraint-Node[CurrentStatus] = ABSENT
+    - $new-rbr-using-constraint-Target[TargetStatus] = PUBLIC
+    - $new-rbr-using-constraint-Node[CurrentStatus] = PUBLIC
+    - joinTargetNode($old-rbr-using-constraint, $old-rbr-using-constraint-Target, $old-rbr-using-constraint-Node)
+    - joinTargetNode($new-rbr-using-constraint, $new-rbr-using-constraint-Target, $new-rbr-using-constraint-Node)
 - name: old TTL params are dropped before the new one is added
   from: old-ttl-param-Node
   kind: SameStagePrecedence
