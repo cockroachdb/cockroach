@@ -16,11 +16,6 @@ import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
 import { propsToQueryString } from "src/util/query";
 
-export type LocationsRequestMessage =
-  protos.cockroach.server.serverpb.LocationsRequest;
-export type LocationsResponseMessage =
-  protos.cockroach.server.serverpb.LocationsResponse;
-
 export type NodesRequestMessage = protos.cockroach.server.serverpb.NodesRequest;
 export type NodesResponseExternalMessage =
   protos.cockroach.server.serverpb.NodesResponseExternal;
@@ -367,18 +362,6 @@ export function setUIData(
     serverpb.SetUIDataResponse,
     `${API_PREFIX}/uidata`,
     req as any,
-    timeout,
-  );
-}
-
-export function getLocations(
-  _req: LocationsRequestMessage,
-  timeout?: moment.Duration,
-): Promise<LocationsResponseMessage> {
-  return timeoutFetch(
-    serverpb.LocationsResponse,
-    `${API_PREFIX}/locations`,
-    null,
     timeout,
   );
 }
