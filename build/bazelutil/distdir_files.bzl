@@ -1188,6 +1188,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_pkg-0.7.0.tar.gz": "8a298e832762eda1830597d64fe7db58178aa84cd5926d76d5b744d6558941c2",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_proto-6.0.2.tar.gz": "6fb6767d1bef535310547e03247f7518b03487740c11b6c6adb7952033fe1295",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_python-0.1.0.tar.gz": "b6d46438523a3ec0f3cead544190ee13223a52f6a6765a29eae7b7cc24cc83a0",
+    "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_shell-v0.3.0.tar.gz": "d8cd4a3a91fc1dc68d4c7d6b655f09def109f7186437e3f50a9b60ab436a0c53",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/sqllogictest-96138842571462ed9a697bff590828d8f6356a2f.tar.gz": "f7e0d659fbefb65f32d4c5d146cba4c73c43e0e96f9b217a756c82be17451f97",
     "https://storage.googleapis.com/public-bazel-artifacts/bazel/tools_telemetry-v0.2.8.tar.gz": "fea3bc2f9b7896ab222756c27147b1f1b8f489df8114e03d252ffff475f8bce6",
     "https://storage.googleapis.com/public-bazel-artifacts/c-deps/20250801-193032/libgeos_foreign.linux.20250801-193032.tar.gz": "1d5fa0bfebd7cb6a25b5e66fbdc4669f5bf3c9a30ac6b4696b58eba0af248929",

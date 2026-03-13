@@ -146,6 +146,22 @@ http_archive(
 # com_github_pmezard_go_difflib handled in DEPS.bzl.
 # org_golang_x_xerrors handled in DEPS.bzl.
 
+# rules_shell is a transitive dependency of rules_go, declared in
+# go/private/repositories.bzl via _maybe(). We pin it here so that
+# go_rules_dependencies() finds it already defined and skips its own
+# declaration, which points at GitHub rather than our GCS mirror.
+# When upgrading rules_go, check whether the version or sha256 of
+# rules_shell changed in go/private/repositories.bzl and update this
+# block (and the mirrored artifact) accordingly.
+http_archive(
+    name = "rules_shell",
+    sha256 = "d8cd4a3a91fc1dc68d4c7d6b655f09def109f7186437e3f50a9b60ab436a0c53",
+    strip_prefix = "rules_shell-0.3.0",
+    urls = [
+        "https://storage.googleapis.com/public-bazel-artifacts/bazel/rules_shell-v0.3.0.tar.gz",
+    ],
+)
+
 http_archive(
     name = "rules_cc",
     sha256 = "92a89a2bbe6c6db2a8b87da4ce723aff6253656e8417f37e50d362817c39b98b",
