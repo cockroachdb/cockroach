@@ -245,11 +245,13 @@ func (re *rebalanceEnv) rebalanceStores(
 			cmp.Compare(a.StoreID, b.StoreID))
 	})
 
-	if log.V(2) {
-		log.KvDistribution.VEventf(ctx, 2, "sorted shedding stores:")
+	if re.passObs != nil && len(sheddingStores) > 0 {
+		var buf redact.StringBuilder
+		buf.SafeString("sorted shedding stores:")
 		for _, store := range sheddingStores {
-			log.KvDistribution.VEventf(ctx, 2, "  (s%d: %s)", store.StoreID, store.sls)
+			buf.Printf(" (s%d: %s)", store.StoreID, store.sls)
 		}
+		log.KvDistribution.Infof(ctx, "%s", buf.RedactableString())
 	}
 
 	i := 0
