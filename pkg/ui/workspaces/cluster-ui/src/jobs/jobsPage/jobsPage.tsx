@@ -6,12 +6,11 @@ import { cockroach, google } from "@cockroachlabs/crdb-protobuf-client";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
 import moment from "moment-timezone";
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Helmet } from "react-helmet";
-import { RouteComponentProps } from "react-router-dom";
+import { useHistory } from "react-router-dom";
 
-import { JobsRequest, JobsResponse } from "src/api/jobsApi";
-import { RequestState } from "src/api/types";
+import { useJobs } from "src/api/jobsApi";
 import ColumnsSelector, {
   SelectOption,
 } from "src/columnsSelector/columnsSelector";
@@ -50,7 +49,6 @@ export interface JobsPageStateProps {
   status: string;
   show: string;
   type: number;
-  jobsResponse: RequestState<JobsResponse>;
   columns: string[];
 }
 
@@ -60,23 +58,9 @@ export interface JobsPageDispatchProps {
   setShow: (value: string) => void;
   setType: (value: JobType) => void;
   onColumnsChange: (selectedColumns: string[]) => void;
-  refreshJobs: (req: JobsRequest) => void;
 }
 
-export type JobsPageProps = JobsPageStateProps &
-  JobsPageDispatchProps &
-  RouteComponentProps;
-
-const reqFromProps = (
-  props: JobsPageStateProps,
-): cockroach.server.serverpb.JobsRequest => {
-  const showAsInt = parseInt(props.show, 10);
-  return new cockroach.server.serverpb.JobsRequest({
-    limit: isNaN(showAsInt) ? 0 : showAsInt,
-    status: props.status,
-    type: props.type,
-  });
-};
+export type JobsPageProps = JobsPageStateProps & JobsPageDispatchProps;
 
 export function JobsPage(props: JobsPageProps): React.ReactElement {
   const {
@@ -90,17 +74,25 @@ export function JobsPage(props: JobsPageProps): React.ReactElement {
     setStatus,
     setShow,
     setType,
-    jobsResponse,
-    refreshJobs,
-    history,
   } = props;
+  const history = useHistory();
 
   const [pagination, setPagination] = useState<ISortedTablePagination>({
     pageSize: 20,
     current: 1,
   });
 
-  const refreshDataIntervalRef = useRef<NodeJS.Timeout>(null);
+  const showAsInt = parseInt(show, 10);
+  const limit = isNaN(showAsInt) ? 0 : showAsInt;
+
+  const {
+    data: jobs,
+    error: jobsError,
+    isLoading,
+  } = useJobs(status, type as JobType, limit, {
+    refreshInterval: 10 * 1000,
+    keepPreviousData: true,
+  });
 
   // Sync URL params to state on mount.
   useEffect(() => {
@@ -136,32 +128,6 @@ export function JobsPage(props: JobsPageProps): React.ReactElement {
     }
     // Only run on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const scheduleFetch = useCallback(() => {
-    clearTimeout(refreshDataIntervalRef.current);
-    const now = moment.utc();
-    const nextRefresh =
-      !jobsResponse?.valid && !jobsResponse?.error
-        ? now
-        : jobsResponse.lastUpdated?.clone().add(10, "seconds") ?? now;
-    const msToNextRefresh = Math.max(0, nextRefresh.diff(now, "millisecond"));
-    refreshDataIntervalRef.current = setTimeout(() => {
-      const req = reqFromProps(props);
-      refreshJobs(req);
-    }, msToNextRefresh);
-  }, [jobsResponse, props, refreshJobs]);
-
-  // Schedule fetch on mount and when relevant props change.
-  useEffect(() => {
-    scheduleFetch();
-  }, [scheduleFetch, jobsResponse?.lastUpdated, show, status, type]);
-
-  // Cleanup on unmount.
-  useEffect(() => {
-    return () => {
-      clearTimeout(refreshDataIntervalRef.current);
-    };
   }, []);
 
   // Validate status and type on every render.
@@ -242,11 +208,6 @@ export function JobsPage(props: JobsPageProps): React.ReactElement {
       </>
     );
   };
-
-  const jobs = jobsResponse?.data;
-  const jobsError = jobsResponse?.error;
-
-  const isLoading = jobsResponse?.inFlight && (!jobsResponse?.valid || !jobs);
 
   const filteredJobs = jobs?.jobs ?? [];
   const columns = makeJobsColumns();
