@@ -138,13 +138,6 @@ export const invalidateIndexStats =
   indexStatsReducerObj.cachedDataReducer.invalidateData;
 export const refreshIndexStats = indexStatsReducerObj.refresh;
 
-const nonTableStatsReducerObj = new CachedDataReducer(
-  api.getNonTableStats,
-  "nonTableStats",
-  moment.duration(1, "m"),
-);
-export const refreshNonTableStats = nonTableStatsReducerObj.refresh;
-
 const logsReducerObj = new CachedDataReducer(
   api.getLogs,
   "logs",
@@ -204,15 +197,6 @@ const jobProfilerReducerObj = new KeyedCachedDataReducer(
   moment.duration(10, "m"),
 );
 export const refreshListExecutionDetailFiles = jobProfilerReducerObj.refresh;
-
-export const queryToID = (req: api.QueryPlanRequestMessage): string =>
-  req.query;
-
-const queryPlanReducerObj = new CachedDataReducer(
-  api.getQueryPlan,
-  "queryPlan",
-);
-export const refreshQueryPlan = queryPlanReducerObj.refresh;
 
 export const problemRangesRequestKey = (
   req: api.ProblemRangesRequestMessage,
@@ -452,14 +436,6 @@ const statementFingerprintInsightsReducerObj = new KeyedCachedDataReducer(
 export const refreshStatementFingerprintInsights =
   statementFingerprintInsightsReducerObj.refresh;
 
-const schemaInsightsReducerObj = new CachedDataReducer(
-  clusterUiApi.getSchemaInsights,
-  "schemaInsights",
-  null,
-  moment.duration(5, "m"),
-);
-export const refreshSchemaInsights = schemaInsightsReducerObj.refresh;
-
 const snapshotsReducerObj = new KeyedCachedDataReducer(
   clusterUiApi.listTracingSnapshots,
   "snapshots",
@@ -511,13 +487,11 @@ export interface APIReducersState {
   locations: CachedDataReducerState<api.LocationsResponseMessage>;
   databases: CachedDataReducerState<clusterUiApi.DatabasesListResponse>;
   indexStats: KeyedCachedDataReducerState<api.IndexStatsResponseMessage>;
-  nonTableStats: CachedDataReducerState<api.NonTableStatsResponseMessage>;
   logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
   liveness: CachedDataReducerState<api.LivenessResponseMessage>;
   jobProfiler: KeyedCachedDataReducerState<api.ListJobProfilerExecutionDetailsResponseMessage>;
   jobs: KeyedCachedDataReducerState<api.JobsResponseMessage>;
   job: KeyedCachedDataReducerState<api.JobResponseMessage>;
-  queryPlan: CachedDataReducerState<api.QueryPlanResponseMessage>;
   problemRanges: KeyedCachedDataReducerState<api.ProblemRangesResponseMessage>;
   certificates: KeyedCachedDataReducerState<api.CertificatesResponseMessage>;
   range: KeyedCachedDataReducerState<api.RangeResponseMessage>;
@@ -546,9 +520,6 @@ export interface APIReducersState {
   txnInsights: CachedDataReducerState<
     clusterUiApi.SqlApiResponse<TxnInsightEvent[]>
   >;
-  schemaInsights: CachedDataReducerState<
-    clusterUiApi.SqlApiResponse<clusterUiApi.InsightRecommendation[]>
-  >;
   statementFingerprintInsights: KeyedCachedDataReducerState<
     clusterUiApi.SqlApiResponse<StmtInsightEvent[]>
   >;
@@ -567,13 +538,11 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [locationsReducerObj.actionNamespace]: locationsReducerObj.reducer,
   [databasesReducerObj.actionNamespace]: databasesReducerObj.reducer,
   [indexStatsReducerObj.actionNamespace]: indexStatsReducerObj.reducer,
-  [nonTableStatsReducerObj.actionNamespace]: nonTableStatsReducerObj.reducer,
   [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
   [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,
   [jobProfilerReducerObj.actionNamespace]: jobProfilerReducerObj.reducer,
   [jobsReducerObj.actionNamespace]: jobsReducerObj.reducer,
   [jobReducerObj.actionNamespace]: jobReducerObj.reducer,
-  [queryPlanReducerObj.actionNamespace]: queryPlanReducerObj.reducer,
   [problemRangesReducerObj.actionNamespace]: problemRangesReducerObj.reducer,
   [certificatesReducerObj.actionNamespace]: certificatesReducerObj.reducer,
   [rangeReducerObj.actionNamespace]: rangeReducerObj.reducer,
@@ -599,7 +568,6 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [txnInsightDetailsReducerObj.actionNamespace]:
     txnInsightDetailsReducerObj.reducer,
   [stmtInsightsReducerObj.actionNamespace]: stmtInsightsReducerObj.reducer,
-  [schemaInsightsReducerObj.actionNamespace]: schemaInsightsReducerObj.reducer,
   [snapshotsReducerObj.actionNamespace]: snapshotsReducerObj.reducer,
   [snapshotReducerObj.actionNamespace]: snapshotReducerObj.reducer,
   [rawTraceReducerObj.actionNamespace]: rawTraceReducerObj.reducer,
