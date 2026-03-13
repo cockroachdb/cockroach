@@ -426,7 +426,9 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	}
 
 	ca.sink = &errorWrapperSink{wrapped: ca.sink}
-	ca.eventConsumer, ca.sink, err = newEventConsumer(
+	var consumer eventConsumer
+	var s EventSink
+	consumer, s, err = newEventConsumer(
 		ctx, ca.FlowCtx.Cfg, ca.spec, feed, ca.frontier, kvFeedHighWater,
 		ca.sink, ca.metrics, ca.sliMetrics, ca.knobs)
 	if err != nil {
@@ -435,6 +437,8 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 		ca.cancel()
 		return
 	}
+	ca.eventConsumer = consumer
+	ca.sink = s
 	// Generate expensive checkpoint only after we ran for a while.
 	ca.lastSpanFlush = timeutil.Now()
 }
