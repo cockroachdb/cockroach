@@ -15,6 +15,7 @@ This document provides an overview of the quarterly release preparation tasks wi
   - [M.3 Quick Reference](runbooks/M3_enable_upgrade_tests_QUICK.md) - Streamlined checklist version
 - [M.4: Bump MinSupported Version](runbooks/M4_bump_minsupported_version.md) - Remove support for oldest version
   - [M.4 Quick Reference](runbooks/M4_bump_minsupported_version_QUICK.md) - Streamlined checklist version
+- [M.5: Finalize Gates and Bootstrap Data](runbooks/M5_finalize_gates_and_bootstrap_data.md) - Refresh bootstrap data from final .0 release
 
 ## For Claude Code AI
 

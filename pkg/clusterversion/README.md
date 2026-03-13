@@ -349,6 +349,8 @@ release.
 
 **When**: When the final .0 release is out.
 
+**Claude Prompt**: "Please perform M.5 for 26.1 following the runbook in pkg/clusterversion/runbooks/M5_finalize_gates_and_bootstrap_data.md"
+
 **Checklist**:
 
 - [ ] Repeat the "create new SQL bootstrap data" step from
@@ -357,4 +359,4 @@ release.
 - [ ] Check that all gates for the previous release are identical on the
   `master` and release branch.
 
-**Example PR:** TODO
+**Example PR:** [#165680](https://github.com/cockroachdb/cockroach/pull/165680)
