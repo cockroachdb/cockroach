@@ -328,13 +328,6 @@ export const invalidateStatementDiagnosticsRequests =
 export const RECEIVE_STATEMENT_DIAGNOSTICS_REPORT =
   statementDiagnosticsReportsReducerObj.RECEIVE;
 
-const dataDistributionReducerObj = new CachedDataReducer(
-  api.getDataDistribution,
-  "dataDistribution",
-  moment.duration(1, "m"),
-);
-export const refreshDataDistribution = dataDistributionReducerObj.refresh;
-
 const metricMetadataReducerObj = new CachedDataReducer(
   api.getAllMetricMetadata,
   "metricMetadata",
@@ -480,7 +473,6 @@ export interface APIReducersState {
   statements: CachedDataReducerState<clusterUiApi.SqlStatsResponse>;
   transactions: CachedDataReducerState<clusterUiApi.SqlStatsResponse>;
   statementDetails: KeyedCachedDataReducerState<api.StatementDetailsResponseMessage>;
-  dataDistribution: CachedDataReducerState<api.DataDistributionResponseMessage>;
   metricMetadata: CachedDataReducerState<api.MetricMetadataResponseMessage>;
   statementDiagnosticsReports: CachedDataReducerState<clusterUiApi.StatementDiagnosticsResponse>;
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
@@ -535,8 +527,6 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
     txnFingerprintStatsReducerObj.reducer,
   [statementDetailsReducerObj.actionNamespace]:
     statementDetailsReducerObj.reducer,
-  [dataDistributionReducerObj.actionNamespace]:
-    dataDistributionReducerObj.reducer,
   [metricMetadataReducerObj.actionNamespace]: metricMetadataReducerObj.reducer,
   [statementDiagnosticsReportsReducerObj.actionNamespace]:
     statementDiagnosticsReportsReducerObj.reducer,
