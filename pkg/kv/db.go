@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -280,6 +281,38 @@ type DB struct {
 	AdmissionPacerFactory   admission.PacerFactory
 
 	SQLCPUProvider admission.SQLCPUProvider
+}
+
+// workloadInfoCtxKey is the context key for workload info propagation.
+type workloadInfoCtxKey struct{}
+
+// workloadInfo bundles the workload ID and type for context
+// propagation.
+type workloadInfo struct {
+	id           uint64
+	workloadType workloadid.WorkloadType
+}
+
+// ContextWithWorkloadInfo returns a new context that carries the given
+// workload ID and type. Transaction creation methods (NewTxn, Txn,
+// TxnWithAdmissionControl, TxnWithSteppingEnabled) automatically
+// extract these values and call SetWorkloadInfo on the new
+// transaction, enabling ASH workload attribution.
+func ContextWithWorkloadInfo(
+	ctx context.Context, id uint64, wType workloadid.WorkloadType,
+) context.Context {
+	return context.WithValue(ctx, workloadInfoCtxKey{}, workloadInfo{
+		id:           id,
+		workloadType: wType,
+	})
+}
+
+// WorkloadInfoFromContext extracts the workload ID and type
+// previously set by ContextWithWorkloadInfo. Returns (0, 0) if no
+// workload info is present.
+func WorkloadInfoFromContext(ctx context.Context) (uint64, workloadid.WorkloadType) {
+	v, _ := ctx.Value(workloadInfoCtxKey{}).(workloadInfo)
+	return v.id, v.workloadType
 }
 
 // NonTransactionalSender returns a Sender that can be used for sending
@@ -1019,6 +1052,9 @@ func (db *DB) NewTxn(ctx context.Context, debugName string) *Txn {
 	nodeID, _ := db.ctx.NodeID.OptionalNodeID() // zero if not available
 	txn := NewTxn(ctx, db, nodeID)
 	txn.SetDebugName(debugName)
+	if wid, wtype := WorkloadInfoFromContext(ctx); wid != 0 {
+		txn.SetWorkloadInfo(wid, 0 /* appNameID */, wtype)
+	}
 	return txn
 }
 
@@ -1076,6 +1112,9 @@ func (db *DB) TxnWithAdmissionControl(
 	txn := NewTxnWithAdmissionControl(ctx, db, nodeID, source, priority)
 	txn.SetDebugName("unnamed")
 	txn.ConfigureStepping(ctx, steppingMode)
+	if wid, wtype := WorkloadInfoFromContext(ctx); wid != 0 {
+		txn.SetWorkloadInfo(wid, 0 /* appNameID */, wtype)
+	}
 	return runTxn(ctx, txn, retryable)
 }
 
@@ -1095,6 +1134,9 @@ func (db *DB) TxnWithSteppingEnabled(
 	nodeID, _ := db.ctx.NodeID.OptionalNodeID() // zero if not available
 	txn := NewTxnWithSteppingEnabled(ctx, db, nodeID, qualityOfService)
 	txn.SetDebugName("unnamed")
+	if wid, wtype := WorkloadInfoFromContext(ctx); wid != 0 {
+		txn.SetWorkloadInfo(wid, 0 /* appNameID */, wtype)
+	}
 	return runTxn(ctx, txn, retryable)
 }
 
