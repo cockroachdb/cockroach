@@ -408,12 +408,12 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			if creationVersion := r.job.Payload().CreationClusterVersion; !details.Table.WasEmpty && creationVersion.Less(clusterversion.V26_2.Version()) {
 				log.Eventf(ctx, "skipping row count on table %q: the table was not empty and the job was started in an unsupported version", tableName)
 
-				checks, err = inspect.ChecksForTable(ctx, p.ExecCfg(), nil /* p */, tblDesc, nil /* expectedRowCount */)
+				checks, err = inspect.ChecksForTable(ctx, p.ExecCfg(), tblDesc, nil /* expectedRowCount */)
 				return err
 			}
 
 			expectedRowCount := uint64(r.res.Rows + previouslyImportedRows + int64(table.InitialRowCount) + r.testingKnobs.expectedRowCountOffset)
-			checks, err = inspect.ChecksForTable(ctx, p.ExecCfg(), nil /* p */, tblDesc, &expectedRowCount)
+			checks, err = inspect.ChecksForTable(ctx, p.ExecCfg(), tblDesc, &expectedRowCount)
 			return err
 		}); err != nil {
 			return err
