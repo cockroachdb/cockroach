@@ -175,7 +175,7 @@ func checkRestoreJobRunning(
 	defer conn.Close()
 
 	jobsCur, err := conn.QueryContext(ctx,
-		"WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'RESTORE' AND status = 'running' LIMIT 1)")
+		"(WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'RESTORE' AND status = 'running' LIMIT 1)")
 	if err != nil {
 		return false, err
 	}

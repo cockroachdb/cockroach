@@ -258,6 +258,57 @@ func (r *opsRunner) selectOperationToRun(
 	return &opSpec
 }
 
+// executeCleanup runs the cleanup phase with its own panic recovery so that
+// a panic during cleanup (e.g. from o.Fatal) does not crash the worker.
+func (r *opsRunner) executeCleanup(
+	op *operationImpl,
+	c *dynamicClusterImpl,
+	cleanup registry.OperationCleanup,
+	emitter *operationEventEmitter,
+	opSpec *registry.OperationSpec,
+) {
+	if cleanup == nil {
+		if !op.Failed() {
+			op.Status("operation ran successfully")
+			emitter.EmitCleanupCompleted(cleanupResultSkipped, nil)
+		}
+		return
+	}
+
+	op.Status("running cleanup")
+
+	// Clear run-phase failures so that op.Failed() after cleanup only
+	// reflects whether cleanup itself failed. The run-phase failure has
+	// already been logged and emitted.
+	func() {
+		op.mu.Lock()
+		defer op.mu.Unlock()
+		op.mu.failures = nil
+	}()
+
+	// Inner defer: guarantees EmitCleanupCompleted fires even if cleanup
+	// panics, and recovers the panic so the worker survives.
+	defer func() {
+		cleanupResult := cleanupResultSuccess
+		if rc := recover(); rc != nil {
+			cleanupResult = cleanupResultFailed
+			stack := debugutil.Stack()
+			r.logger.Printf("recovered from cleanup panic: %v\n%s", rc, stack)
+		}
+		var cleanupFailures []error
+		if op.Failed() {
+			cleanupResult = cleanupResultFailed
+			cleanupFailures = op.Failures()
+			op.Status("operation cleanup failed")
+		}
+		emitter.EmitCleanupCompleted(cleanupResult, cleanupFailures)
+	}()
+
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), opSpec.Timeout)
+	defer cancel()
+	cleanup.Cleanup(cleanupCtx, op, c)
+}
+
 // runOperation runs a single operation passed in as opSpec parameter within a single operation worker.
 func (r *opsRunner) runOperation(
 	ctx context.Context, opSpec *registry.OperationSpec, rng *rand.Rand, workerIdx int,
@@ -332,29 +383,8 @@ func (r *opsRunner) runOperation(
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-
 	op.mu.cancel = cancel
-	op.Status(fmt.Sprintf("checking if operation %s dependencies are met", opSpec.Name))
 
-	// Dependency check phase.
-	if roachtestflags.SkipDependencyCheck {
-		op.Status("skipping dependency check")
-	} else {
-		ok, err := operations.CheckDependencies(ctx, c, r.logger, opSpec)
-		if err != nil {
-			emitter.EmitDepCheckFailed(depCheckError, []error{err})
-			op.Fatalf("error checking dependencies: %s", err)
-		}
-		if !ok {
-			emitter.EmitDepCheckFailed(depCheckFailed, nil)
-			op.Status("operation dependencies not met. Use --skip-dependency-check to skip this check.")
-			return nil
-		}
-	}
-
-	// Run phase.
-	emitter.EmitStarted()
-	op.Status(fmt.Sprintf("running operation %s with run id %d", op.spec.Name, operationRunID))
 	var cleanup registry.OperationCleanup
 	var pendingCleanupIncremented bool
 
@@ -368,45 +398,34 @@ func (r *opsRunner) runOperation(
 			emitter.EmitCompleted(resultPanicked, failures)
 			r.logger.Printf("recovered from panic: %v\n%s", rc, stack)
 		}
-
-		// If no cleanup handler was returned, nothing to clean up.
-		if cleanup == nil {
-			if !op.Failed() {
-				op.Status("operation ran successfully")
-				emitter.EmitCleanupCompleted(cleanupResultSkipped, nil)
-			}
-			return
-		}
-
-		// Run cleanup with a fresh context (independent of operation context).
-		op.Status("running cleanup")
-
-		// Clear run-phase failures so that op.Failed() after cleanup only
-		// reflects whether cleanup itself failed. The run-phase failure has
-		// already been logged and emitted above.
-		func() {
-			op.mu.Lock()
-			defer op.mu.Unlock()
-			op.mu.failures = nil
-		}()
-
 		if pendingCleanupIncremented {
 			r.metrics.pendingCleanups.WithLabelValues(opName).Dec()
 		}
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), opSpec.Timeout)
-		defer cleanupCancel()
-		cleanup.Cleanup(cleanupCtx, op, c)
-
-		cleanupResult := cleanupResultSuccess
-		var cleanupFailures []error
-		if op.Failed() {
-			cleanupResult = cleanupResultFailed
-			cleanupFailures = op.Failures()
-			op.Status("operation cleanup failed")
-		}
-		emitter.EmitCleanupCompleted(cleanupResult, cleanupFailures)
+		r.executeCleanup(op, c, cleanup, emitter, opSpec)
 	}()
 
+	// Dependency check phase.
+	op.Status(fmt.Sprintf("checking if operation %s dependencies are met", opSpec.Name))
+	if !roachtestflags.SkipDependencyCheck {
+		ok, err := operations.CheckDependencies(ctx, c, r.logger, opSpec)
+		if err != nil {
+			emitter.EmitDepCheckFailed(depCheckError, []error{err})
+			op.Errorf("error checking dependencies: %s", err)
+			return errors.Wrap(err, "checking dependencies")
+		}
+		if !ok {
+			emitter.EmitDepCheckFailed(depCheckFailed, nil)
+			// Record a failure so the defer does not emit a spurious
+			// "ran successfully" / cleanupResultSkipped event.
+			op.Errorf("operation dependencies not met")
+			op.Status("operation dependencies not met. Use --skip-dependency-check to skip this check.")
+			return nil
+		}
+	}
+
+	// Run phase.
+	emitter.EmitStarted()
+	op.Status(fmt.Sprintf("running operation %s with run id %d", op.spec.Name, operationRunID))
 	func() {
 		ctx, cancel := context.WithTimeout(ctx, opSpec.Timeout)
 		defer cancel()
@@ -423,7 +442,6 @@ func (r *opsRunner) runOperation(
 		// was returned by the operation.
 		return failures[0]
 	}
-
 	emitter.EmitCompleted(resultSuccess, nil)
 
 	if cleanup == nil {
