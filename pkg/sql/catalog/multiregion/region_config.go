@@ -86,11 +86,17 @@ func (r *RegionConfig) IsMemberOfSuperRegion(region catpb.RegionName) bool {
 			}
 		}
 	}
+	return r.HasImplicitSuperRegion()
+}
 
+// HasImplicitSuperRegion returns true if the the survival goal i
+// SURVIVE_REGION_FAILURE and we have 3 regions configured.
+// In this case, tables get explicit zone configs with tighter replica constraints
+// (2+2+1 instead of 1+1+1) to prevent replica leak to other regions.
+func (r *RegionConfig) HasImplicitSuperRegion() bool {
 	if len(r.regions) == 3 && r.survivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
 		return true
 	}
-
 	return false
 }
 

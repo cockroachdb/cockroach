@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
@@ -206,8 +205,6 @@ func (r *databaseRegionChangeFinalizer) updateSystemTableRegionReferences(
 		return err
 	}
 
-	primaryRegion := regionConfig.PrimaryRegion()
-
 	// Collect tables that need to be updated.
 	var tablesToUpdate []*tabledesc.Mutable
 
@@ -227,21 +224,12 @@ func (r *databaseRegionChangeFinalizer) updateSystemTableRegionReferences(
 				return err
 			}
 
-			// If already set to primary (explicit or implicit), nothing to do.
-			if currentRegion == primaryRegion || currentRegion == catpb.RegionName(tree.PrimaryRegionNotSpecifiedName) {
-				return nil
-			}
-
-			// If the table's current region still exists in the database, leave
-			// it alone.
-			if regionConfig.IsValidRegionNameString(string(currentRegion)) {
-				return nil
-			}
-
 			// The table references a region that no longer exists. Reset it to
 			// implicitly follow the primary region.
-			tableDesc.SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
-			tablesToUpdate = append(tablesToUpdate, tableDesc)
+			if !regionConfig.IsValidRegionNameString(string(currentRegion)) {
+				tableDesc.SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
+				tablesToUpdate = append(tablesToUpdate, tableDesc)
+			}
 
 			// Also regenerate the zone config to match the new region.
 			return ApplyZoneConfigForMultiRegionTable(
