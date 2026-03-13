@@ -10,11 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -44,6 +46,7 @@ func TestHelperEveryNode(t *testing.T) {
 	ctx := context.Background()
 	var mu syncutil.Mutex
 	const numNodes = 3
+	useDRPC := serverutils.ShouldEnableDRPC(ctx, t, base.TestDRPCUnset) == base.TestDRPCEnabled
 
 	t.Run("with-node-addition", func(t *testing.T) {
 		// Add a node mid-way through execution. We expect EveryNode to start
@@ -52,7 +55,7 @@ func TestHelperEveryNode(t *testing.T) {
 		h := New(ClusterConfig{
 			NodeLiveness: tc,
 			Dialer:       NoopDialer{},
-			UseDRPC:      false, // TODO(server): enable DRPC
+			UseDRPC:      useDRPC,
 		})
 		opCount := 0
 		err := h.UntilClusterStable(ctx, retry.Options{
@@ -92,7 +95,7 @@ func TestHelperEveryNode(t *testing.T) {
 		h := New(ClusterConfig{
 			NodeLiveness: tc,
 			Dialer:       NoopDialer{},
-			UseDRPC:      false, // TODO(server): enable DRPC
+			UseDRPC:      useDRPC,
 		})
 		opCount := 0
 		err := h.UntilClusterStable(ctx, retry.Options{
@@ -133,7 +136,7 @@ func TestHelperEveryNode(t *testing.T) {
 		h := New(ClusterConfig{
 			NodeLiveness: tc,
 			Dialer:       NoopDialer{},
-			UseDRPC:      false, // TODO(server): enable DRPC
+			UseDRPC:      useDRPC,
 		})
 		expRe := "cluster not stable, nodes: n\\{1,2,3\\}, unavailable: n\\{2\\}"
 		opCount := 0
