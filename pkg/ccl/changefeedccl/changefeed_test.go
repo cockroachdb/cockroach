@@ -9380,7 +9380,7 @@ func TestCoreChangefeedBackfillScanCheckpoint(t *testing.T) {
 
 		emittedCount := 0
 		errorCount := 0
-		knobs.RaiseRetryableError = func() error {
+		knobs.BeforeCheckpoint = func() error {
 			emittedCount++
 			if emittedCount%200 == 0 {
 				errorCount++
@@ -11520,7 +11520,7 @@ func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
 
 		// A flag we toggle on to put the changefeed in a retrying state.
 		var changefeedIsRetrying atomic.Bool
-		knobs.RaiseRetryableError = func() error {
+		knobs.BeforeCheckpoint = func() error {
 			if changefeedIsRetrying.Load() {
 				return errors.New("test retryable error")
 			}
@@ -11603,7 +11603,7 @@ func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
 		// Check that the following happens soon.
 		//
 		// Step 2: Since `changefeedIsRetrying` is true, the changefeed will now attempt retries in
-		//         via `knobs.RaiseRetryableError`.
+		//         via `knobs.BeforeCheckpoint`.
 		// Step 3: `knobs.LoadJobErr` will result an in error when reading the job record a couple of times, causing
 		//          more retries.
 		// Step 4: Eventually, a dist changefeed is started at a certain highwater timestamp.
