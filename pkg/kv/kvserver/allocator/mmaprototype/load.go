@@ -433,7 +433,7 @@ func (mm *meansMemo) clear() {
 type loadInfoProvider interface {
 	getStoreReportedLoad(roachpb.StoreID) (roachpb.NodeID, *storeLoad)
 	getNodeReportedLoad(roachpb.NodeID) *NodeLoad
-	computeLoadSummary(context.Context, roachpb.StoreID, *meanStoreLoad, *meanNodeLoad) storeLoadSummary
+	computeLoadSummary(context.Context, roachpb.StoreID, *meanStoreLoad, *meanNodeLoad, bool) storeLoadSummary
 }
 
 // getMeans returns the means for an expression.
@@ -458,7 +458,7 @@ func (mm *meansMemo) getStoreLoadSummary(
 	if ok {
 		return summary
 	}
-	summary = mm.loadInfoProvider.computeLoadSummary(ctx, storeID, &means.storeLoad, &means.nodeLoad)
+	summary = mm.loadInfoProvider.computeLoadSummary(ctx, storeID, &means.storeLoad, &means.nodeLoad, log.ExpensiveLogEnabled(ctx, 3) /* detailedLog */)
 	means.putStoreLoadSummary(storeID, summary)
 	return summary
 }
@@ -602,6 +602,7 @@ func loadSummaryForDimension(
 	capacity LoadValue,
 	meanLoad LoadValue,
 	meanUtil float64,
+	detailedLog bool,
 ) (summary loadSummary) {
 	summ := loadLow
 	reason := ""
@@ -665,7 +666,7 @@ func loadSummaryForDimension(
 	}
 
 	defer func() {
-		if !log.ExpensiveLogEnabled(ctx, 3) {
+		if !detailedLog {
 			return
 		}
 
@@ -683,7 +684,7 @@ func loadSummaryForDimension(
 				redact.SafeFloat(fractionUsed*100), redact.SafeFloat(meanUtil*100), capacity)
 		}
 		buf.SafeRune(']')
-		log.KvDistribution.VEventf(ctx, 3, "%s", buf.RedactableString())
+		log.KvDistribution.Infof(ctx, "%s", buf.RedactableString())
 	}()
 
 	if capacity != UnknownCapacity && meanUtil*1.1 < fractionUsed {
