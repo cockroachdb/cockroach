@@ -1,0 +1,13 @@
+{
+    "permissions": {
+        "allow": [
+            "Bash(./dev build *)",
+            "Bash(./dev generate *)",
+            "Bash(./dev test *)",
+            "Bash(crlfmt *)",
+            "Bash(git diff *)",
+            "Bash(git log *)",
+            "Bash(git status)"
+        ]
+    }
+}
