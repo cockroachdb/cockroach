@@ -55,6 +55,7 @@ type samplerProcessor struct {
 	input           execinfra.RowSource
 	memAcc          mon.BoundAccount
 	sr              stats.SampleReservoir
+	collationEnv    tree.CollationEnvironment
 	sketches        []sketchInfo
 	outTypes        []*types.T
 	maxFractionIdle float64
@@ -471,7 +472,7 @@ func (s *samplerProcessor) sampleRow(
 	// Use Int63 so we don't have headaches converting to DInt.
 	rank := uint64(rng.Int63())
 	prevCapacity := sr.Cap()
-	if err := sr.SampleRow(ctx, s.FlowCtx.EvalCtx, row, rank); err != nil {
+	if err := sr.SampleRow(ctx, &s.collationEnv, row, rank); err != nil {
 		if !sqlerrors.IsOutOfMemoryError(err) {
 			return false, err
 		}
