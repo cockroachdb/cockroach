@@ -12,12 +12,6 @@ dir="$(dirname $(dirname $(dirname $(dirname $(dirname $(dirname "${0}"))))))"
 source "$dir/teamcity-support.sh"  # For log_into_gcloud
 source "$dir/release/teamcity-support.sh"
 
-# TODO: remove this block after we upgrade to Ubuntu 22.04+
-# this is needed to support s390x builds on Ubuntu 20.04 hosts
-docker run --privileged --rm tonistiigi/binfmt@sha256:8f58e6214f4cc9dc83ce8f5acad1ece508eb6b20e696a8c1e9f274481982c541 --uninstall qemu-s390x
-docker run --privileged --rm tonistiigi/binfmt@sha256:8f58e6214f4cc9dc83ce8f5acad1ece508eb6b20e696a8c1e9f274481982c541 --install s390x
-# End of TODO
-
 tc_start_block "Variable Setup"
 version=$(grep -v "^#" "$dir/../pkg/build/version.txt" | head -n1)
 prerelease=false
@@ -118,33 +112,35 @@ tc_end_block "Copy binaries"
 
 
 tc_start_block "Make and push multiarch docker images"
-declare -a gcr_arch_tags
-declare -a dockerhub_arch_tags
 dockerhub_tag="${dockerhub_repository}:${version}"
 gcr_tag="${gcr_repository}:${version}"
 
-for platform_name in amd64 arm64 s390x; do
-  dockerhub_arch_tag="${dockerhub_repository}:${platform_name}-${version}"
-  gcr_arch_tag="${gcr_repository}:${platform_name}-${version}"
-  gcr_staged_arch_tag="${gcr_staged_repository}:${platform_name}-${version}"
-  # Update the packages before pushing to the final destination.
-  tmpdir=$(mktemp -d)
-  echo "FROM $gcr_staged_arch_tag" > "$tmpdir/Dockerfile"
-  echo "RUN microdnf -y --best --refresh upgrade && microdnf clean all && rm -rf /var/cache/yum" >> "$tmpdir/Dockerfile"
-  docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
-  docker build --pull --no-cache --platform "linux/$platform_name" \
-    --tag "$dockerhub_arch_tag" --tag "$gcr_arch_tag" "$tmpdir"
-  docker_login_gcr "$gcr_repository" "$gcr_credentials"
-  docker push "$gcr_arch_tag"
-  docker push "$dockerhub_arch_tag"
-  gcr_arch_tags+=("$gcr_arch_tag")
-  dockerhub_arch_tags+=("$dockerhub_arch_tag")
-done
+# Create a buildx builder for multi-platform builds.
+docker buildx create --name "release-builder-$$" --use
+cleanup_buildx() { docker buildx rm "release-builder-$$" || true; }
+trap 'cleanup_buildx; remove_files_on_exit' EXIT
 
+# The staged image is already multi-arch; buildx pulls the right platform
+# automatically.
+tmpdir=$(mktemp -d)
+cat > "$tmpdir/Dockerfile" <<DOCKERFILE
+FROM ${gcr_staged_repository}:${version}
+RUN microdnf -y --best --refresh upgrade && microdnf clean all && rm -rf /var/cache/yum
+DOCKERFILE
+
+# Build and push the multi-arch image to DockerHub. The staged repo (source)
+# is on us-docker.pkg.dev and DockerHub (destination) is on docker.io, so both
+# logins can coexist.
+docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
+docker buildx build --pull --push --no-cache \
+  --platform linux/amd64,linux/arm64,linux/s390x \
+  --tag "$dockerhub_tag" "$tmpdir"
+
+# Copy the multi-arch manifest from DockerHub to GCR. These are on different
+# hostnames so both logins can coexist.
 docker_login_gcr "$gcr_repository" "$gcr_credentials"
+docker buildx imagetools create -t "$gcr_tag" "$dockerhub_tag"
 
-create_and_push_multi_arch_manifest "${gcr_tag}" "${gcr_arch_tags[@]}"
-create_and_push_multi_arch_manifest "${dockerhub_tag}" "${dockerhub_arch_tags[@]}"
 tc_end_block "Make and push multiarch docker images"
 
 
@@ -152,16 +148,20 @@ tc_start_block "Make and push FIPS docker image"
 gcr_staged_tag_fips="${gcr_staged_repository}:${version}-fips"
 gcr_tag_fips="${gcr_repository}:${version}-fips"
 dockerhub_tag_fips="${dockerhub_repository}:${version}-fips"
-# Update the packages before pushing to the final destination.
+
 tmpdir=$(mktemp -d)
-echo "FROM $gcr_staged_tag_fips" > "$tmpdir/Dockerfile"
-echo "RUN microdnf -y --best --refresh upgrade && microdnf clean all && rm -rf /var/cache/yum" >> "$tmpdir/Dockerfile"
+cat > "$tmpdir/Dockerfile" <<DOCKERFILE
+FROM $gcr_staged_tag_fips
+RUN microdnf -y --best --refresh upgrade && microdnf clean all && rm -rf /var/cache/yum
+DOCKERFILE
+
 docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
-docker build --pull --no-cache --platform "linux/amd64" \
-  --tag "$dockerhub_tag_fips" --tag "$gcr_tag_fips" "$tmpdir"
+docker buildx build --pull --push --no-cache \
+  --platform linux/amd64 \
+  --tag "$dockerhub_tag_fips" "$tmpdir"
+
 docker_login_gcr "$gcr_repository" "$gcr_credentials"
-docker push "$gcr_tag_fips"
-docker push "$dockerhub_tag_fips"
+docker buildx imagetools create -t "$gcr_tag_fips" "$dockerhub_tag_fips"
 tc_end_block "Make and push FIPS docker image"
 
 
@@ -199,7 +199,8 @@ tc_end_block "Publish binaries and archive as latest"
 
 tc_start_block "Tag docker image as latest-RELEASE_BRANCH"
 if [[ $prerelease == false ]]; then
-  create_and_push_multi_arch_manifest "${dockerhub_repository}:latest-${release_branch}" "${dockerhub_arch_tags[@]}"
+  docker buildx imagetools create \
+    -t "${dockerhub_repository}:latest-${release_branch}" "$dockerhub_tag"
 else
   echo "The ${dockerhub_repository}:latest-${release_branch} docker image tags were _not_ pushed."
 fi
@@ -212,7 +213,8 @@ tc_start_block "Tag docker images as latest"
 # https://github.com/cockroachdb/cockroach/issues/41067
 # https://github.com/cockroachdb/cockroach/issues/48309
 if [[ -n "${PUBLISH_LATEST}" || $prerelease == true ]]; then
-  create_and_push_multi_arch_manifest "${dockerhub_repository}:latest" "${dockerhub_arch_tags[@]}"
+  docker buildx imagetools create \
+    -t "${dockerhub_repository}:latest" "$dockerhub_tag"
 else
   echo "The ${dockerhub_repository}:latest docker image tags were _not_ pushed."
 fi
