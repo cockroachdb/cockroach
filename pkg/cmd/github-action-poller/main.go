@@ -27,9 +27,10 @@ import (
 )
 
 var (
-	owner, repo, sha string
-	timeout          time.Duration
-	sleepDuration    time.Duration
+	owner, repo, sha  string
+	timeout           time.Duration
+	sleepDuration     time.Duration
+	rerunWaitDuration time.Duration
 )
 
 var rootCmd = &cobra.Command{
@@ -38,23 +39,37 @@ var rootCmd = &cobra.Command{
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cmd.SilenceUsage = true
+		client := github.NewClient(nil)
 
-		deadline := timeutil.Now().Add(timeout)
+		const maxRetries = 3
 
-		for {
-			shouldRetry, err := run(cmd.Context(), owner, repo, sha, args)
-			if err == nil {
+		var lastErr error
+		for attempt := range maxRetries {
+			lastErr = pollChecks(cmd.Context(), client, owner, repo, sha, args)
+			if lastErr == nil {
 				return nil
 			}
-			if !shouldRetry {
-				return fmt.Errorf("failed: %w", err)
+			if attempt+1 >= maxRetries {
+				break
 			}
-			if timeutil.Now().After(deadline) {
-				return fmt.Errorf("timed out: %w", err)
+			// Wait for the rerun system to potentially re-run failed jobs.
+			log.Printf("attempt %d/%d failed, waiting %s for a potential rerun...",
+				attempt+1, maxRetries, rerunWaitDuration)
+			time.Sleep(rerunWaitDuration)
+
+			// Check if a new workflow run was started for the same ref.
+			hasNew, err := hasNewCheckRuns(cmd.Context(), client, owner, repo, sha, args)
+			if err != nil {
+				log.Printf("error checking for new runs: %v", err)
+				break
 			}
-			log.Printf("sleeping for %s, will stop in %s", sleepDuration, timeutil.Until(deadline))
-			time.Sleep(sleepDuration)
+			if !hasNew {
+				log.Printf("no new runs detected, giving up")
+				break
+			}
+			log.Printf("new run detected, restarting")
 		}
+		return lastErr
 	},
 }
 
@@ -65,6 +80,7 @@ func init() {
 	flags.StringVar(&sha, "sha", "", "SHA")
 	flags.DurationVar(&timeout, "timeout", 30*time.Minute, "overall program timeout")
 	flags.DurationVar(&sleepDuration, "sleep", 30*time.Second, "sleep between retries")
+	flags.DurationVar(&rerunWaitDuration, "rerun-wait", 3*time.Minute, "time to wait for a rerun after failure")
 
 	must := func(err error) {
 		if err != nil {
@@ -83,13 +99,32 @@ func main() {
 	}
 }
 
-func run(ctx context.Context, owner, repo, sha string, requiredChecks []string) (bool, error) {
-	statuses := make(map[string][]*github.CheckRun, len(requiredChecks))
-	for _, c := range requiredChecks {
-		statuses[c] = nil
+// pollChecks polls the required checks until they all complete or the timeout
+// is reached.
+func pollChecks(
+	ctx context.Context, client *github.Client, owner, repo, sha string, requiredChecks []string,
+) error {
+	deadline := timeutil.Now().Add(timeout)
+	for {
+		shouldRetry, err := checkStatus(ctx, client, owner, repo, sha, requiredChecks)
+		if err == nil {
+			return nil
+		}
+		if !shouldRetry {
+			return fmt.Errorf("failed: %w", err)
+		}
+		if timeutil.Now().After(deadline) {
+			return fmt.Errorf("timed out: %w", err)
+		}
+		log.Printf("sleeping for %s, will stop in %s", sleepDuration, timeutil.Until(deadline))
+		time.Sleep(sleepDuration)
 	}
+}
 
-	client := github.NewClient(nil)
+// fetchCheckRuns retrieves all check runs for a given ref from the GitHub API.
+func fetchCheckRuns(
+	ctx context.Context, client *github.Client, owner, repo, ref string,
+) ([]*github.CheckRun, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
@@ -100,21 +135,36 @@ func run(ctx context.Context, owner, repo, sha string, requiredChecks []string) 
 		},
 	}
 	for {
-		checks, resp, err := client.Checks.ListCheckRunsForRef(ctx, owner, repo, sha, opts)
+		checks, resp, err := client.Checks.ListCheckRunsForRef(ctx, owner, repo, ref, opts)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
-				return true, fmt.Errorf("API request timed out")
+				return nil, true, fmt.Errorf("API request timed out")
 			}
 			if resp != nil && resp.StatusCode >= 500 {
-				return true, fmt.Errorf("API server error: %w", err)
+				return nil, true, fmt.Errorf("API server error: %w", err)
 			}
-			return false, fmt.Errorf("API request error: %w", err)
+			return nil, false, fmt.Errorf("API request error: %w", err)
 		}
 		checkRuns = append(checkRuns, checks.CheckRuns...)
 		if resp.NextPage == 0 {
 			break
 		}
 		opts.Page = resp.NextPage
+	}
+	return checkRuns, false, nil
+}
+
+func checkStatus(
+	ctx context.Context, client *github.Client, owner, repo, sha string, requiredChecks []string,
+) (bool, error) {
+	statuses := make(map[string][]*github.CheckRun, len(requiredChecks))
+	for _, c := range requiredChecks {
+		statuses[c] = nil
+	}
+
+	checkRuns, shouldRetry, err := fetchCheckRuns(ctx, client, owner, repo, sha)
+	if err != nil {
+		return shouldRetry, err
 	}
 
 	for _, check := range checkRuns {
@@ -159,5 +209,32 @@ func run(ctx context.Context, owner, repo, sha string, requiredChecks []string) 
 	}
 	log.Println("Done.")
 	log.Println(strings.Join(completed, "\n"))
+	return false, nil
+}
+
+// hasNewCheckRuns checks whether any of the required checks have a run that
+// is not yet completed, indicating a rerun was triggered.
+func hasNewCheckRuns(
+	ctx context.Context, client *github.Client, owner, repo, sha string, requiredChecks []string,
+) (bool, error) {
+	checkRuns, _, err := fetchCheckRuns(ctx, client, owner, repo, sha)
+	if err != nil {
+		return false, err
+	}
+
+	required := make(map[string]struct{}, len(requiredChecks))
+	for _, c := range requiredChecks {
+		required[c] = struct{}{}
+	}
+
+	for _, check := range checkRuns {
+		if _, ok := required[check.GetName()]; !ok {
+			continue
+		}
+		if check.GetStatus() != "completed" {
+			log.Printf("new run detected for %q: %s", check.GetName(), check.GetHTMLURL())
+			return true, nil
+		}
+	}
 	return false, nil
 }
