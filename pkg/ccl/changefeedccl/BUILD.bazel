@@ -220,6 +220,7 @@ go_test(
         "nemeses_test.go",
         "parquet_test.go",
         "protected_timestamps_test.go",
+        "retry_test.go",
         "scheduled_changefeed_test.go",
         "schema_registry_test.go",
         "show_changefeed_jobs_test.go",

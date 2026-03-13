@@ -12032,6 +12032,58 @@ func TestChangefeedHeadersJSONVals(t *testing.T) {
 	}
 }
 
+// TestChangefeedRetryBackoffResetOnHighwaterAdvance verifies that the retry
+// backoff is reset when a changefeed advances its highwater mark before
+// encountering a retryable error. This ensures that transient errors after
+// meaningful forward progress don't leave the backoff unnecessarily elevated.
+func TestChangefeedRetryBackoffResetOnHighwaterAdvance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+
+		// Let the first few checkpoints succeed so the highwater gets
+		// persisted to the job record, then fire a retryable error. The
+		// retry loop should detect that the highwater advanced past its
+		// initial value and reset the backoff.
+		var checkpointCount atomic.Int32
+		knobs.BeforeCheckpoint = func() error {
+			if checkpointCount.Add(1) == 3 {
+				return errors.New("test transient error")
+			}
+			return nil
+		}
+
+		backoffResetCh := make(chan struct{}, 1)
+		knobs.OnRetryBackoffReset = func() {
+			select {
+			case backoffResetCh <- struct{}{}:
+			default:
+			}
+		}
+
+		feed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH initial_scan='no'`)
+		defer closeFeed(t, feed)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		assertPayloads(t, feed, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+		})
+
+		select {
+		case <-backoffResetCh:
+		case <-time.After(testutils.DefaultSucceedsSoonDuration):
+			t.Fatal("timed out waiting for retry backoff reset after highwater advance")
+		}
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
+}
+
 // TestPubsubAttributes tests that the "attributes" field in the
 // `pubsub_sink_config` behaves as expected.
 func TestPubsubAttributes(t *testing.T) {
