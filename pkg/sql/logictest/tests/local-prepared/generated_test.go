@@ -860,11 +860,25 @@ func TestLogic_jsonb_path_exists(
 	runLogicTest(t, "jsonb_path_exists")
 }
 
+func TestLogic_jsonb_path_exists_index_acceleration(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_exists_index_acceleration")
+}
+
 func TestLogic_jsonb_path_match(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "jsonb_path_match")
+}
+
+func TestLogic_jsonb_path_query(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonb_path_query")
 }
 
 func TestLogic_jsonb_path_query_array(
@@ -1469,6 +1483,13 @@ func TestLogic_show_inspect_errors(
 	runLogicTest(t, "show_inspect_errors")
 }
 
+func TestLogic_show_statement_hints(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_statement_hints")
+}
+
 func TestLogic_show_var(
 	t *testing.T,
 ) {
@@ -1873,6 +1894,13 @@ func TestLogic_vectorize_types(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "vectorize_types")
+}
+
+func TestLogic_vectorize_unsupported(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "vectorize_unsupported")
 }
 
 func TestLogic_views(
