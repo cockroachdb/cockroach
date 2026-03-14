@@ -3,10 +3,9 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Badge } from "@cockroachlabs/cluster-ui";
+import { Badge, useCluster, useClusterLabel } from "@cockroachlabs/cluster-ui";
 import React, { useEffect, useRef } from "react";
 import { Helmet } from "react-helmet";
-import { useSelector } from "react-redux";
 import { useLocation } from "react-router-dom";
 
 import {
@@ -18,12 +17,6 @@ import {
   Text,
   TextTypes,
 } from "src/components";
-import {
-  clusterIdSelector,
-  clusterNameSelector,
-  clusterVersionLabelSelector,
-} from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
 import { getDataFromServer } from "src/util/dataFromServer";
 import ErrorBoundary from "src/views/app/components/errorMessage/errorBoundary";
 import NavigationBar from "src/views/app/components/layoutSidebar";
@@ -51,15 +44,9 @@ interface LayoutProps {
  * Individual pages provide their content via react-router.
  */
 function Layout({ children }: LayoutProps): React.ReactElement {
-  const clusterName = useSelector((state: AdminUIState) =>
-    clusterNameSelector(state),
-  );
-  const clusterVersion = useSelector((state: AdminUIState) =>
-    clusterVersionLabelSelector(state),
-  );
-  const clusterId = useSelector((state: AdminUIState) =>
-    clusterIdSelector(state),
-  );
+  const { clusterName, clusterVersion } = useClusterLabel();
+  const { data } = useCluster();
+  const clusterId = data?.cluster_id;
   const location = useLocation();
   const contentRef = useRef<HTMLDivElement>(null);
 

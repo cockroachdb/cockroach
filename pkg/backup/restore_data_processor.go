@@ -541,6 +541,14 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 					}
 				}
 
+				if restoreKnobs, ok := rd.FlowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+					if restoreKnobs.RunAfterProcessingRestoreSpanEntry != nil {
+						if err := restoreKnobs.RunAfterProcessingRestoreSpanEntry(ctx, &entry); err != nil {
+							return done, err
+						}
+					}
+				}
+
 				select {
 				case rd.progCh <- makeProgressUpdate(summary, entry, rd.spec.PKIDs, rd.spec.RestoreTime):
 				case <-ctx.Done():
@@ -840,14 +848,6 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	// Flush out the last batch.
 	if err := batcher.Flush(ctx); err != nil {
 		return summary, err
-	}
-
-	if restoreKnobs, ok := rd.FlowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
-		if restoreKnobs.RunAfterProcessingRestoreSpanEntry != nil {
-			if err := restoreKnobs.RunAfterProcessingRestoreSpanEntry(ctx, &entry); err != nil {
-				return summary, err
-			}
-		}
 	}
 
 	return batcher.GetSummary(), nil

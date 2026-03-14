@@ -11,6 +11,7 @@ import { fetchData } from "src/api";
 import { ClusterDetailsContext } from "../contexts";
 import { NodeID, StoreID } from "../types/clusterTypes";
 import { useSwrWithClusterId } from "../util";
+import { accumulateMetrics } from "../util/proto";
 
 type INodeStatus = cockroach.server.status.statuspb.INodeStatus;
 type ILocality = cockroach.roachpb.ILocality;
@@ -39,7 +40,12 @@ export type NodeStatus = {
   stores: StoreID[];
 };
 
-export const useNodes = () => {
+interface UseNodesOptions {
+  // Polling interval in milliseconds. Defaults to no polling (undefined).
+  refreshInterval?: number;
+}
+
+export const useNodes = (opts?: UseNodesOptions) => {
   const { isTenant } = useContext(ClusterDetailsContext);
   const { data, isLoading, error } = useSwrWithClusterId(
     NODES_SWR_KEY,
@@ -47,10 +53,16 @@ export const useNodes = () => {
     {
       revalidateOnFocus: false,
       dedupingInterval: 10000, // 10 seconds.
+      refreshInterval: opts?.refreshInterval,
     },
   );
 
-  const nodeStatuses: INodeStatus[] = data?.nodes ?? [];
+  // Roll up store-level metrics (replicas, capacity, etc.) into each
+  // node's top-level metrics map so consumers see aggregated values.
+  const nodeStatuses: INodeStatus[] = useMemo(
+    () => accumulateMetrics(data?.nodes ?? []),
+    [data],
+  );
 
   const { storeIDToNodeID, nodeStatusByID, nodeRegionsByID } = useMemo(() => {
     const nodeStatusByID: Record<NodeID, NodeStatus> = {};
@@ -89,4 +101,4 @@ export const useNodes = () => {
 };
 
 /** @deprecated Use useNodes instead. */
-export const useNodeStatuses = useNodes;
+export const useNodeStatuses = (opts?: UseNodesOptions) => useNodes(opts);

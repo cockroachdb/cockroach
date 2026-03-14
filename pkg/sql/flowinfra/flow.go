@@ -333,6 +333,8 @@ func NewFlowBase(
 	// use SystemTenantID since it is already defined.
 	admissionInfo := admission.WorkInfo{TenantID: roachpb.SystemTenantID}
 	admissionInfo.WorkloadID = flowCtx.EvalCtx.WorkloadID
+	admissionInfo.AppNameID = flowCtx.EvalCtx.AppNameID
+	admissionInfo.GatewayNodeID = roachpb.NodeID(flowCtx.NodeID.SQLInstanceID())
 	if flowCtx.Txn == nil {
 		admissionInfo.Priority = admissionpb.NormalPri
 		admissionInfo.CreateTime = timeutil.Now().UnixNano()

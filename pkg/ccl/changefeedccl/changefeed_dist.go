@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -225,6 +224,7 @@ func startDistChangefeed(
 	description string,
 	initialHighWater hlc.Timestamp,
 	progress jobspb.Progress,
+	resolvedSpans []jobspb.ResolvedSpan,
 	prevResult flowResult,
 	resultsCh chan<- tree.Datums,
 	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
@@ -253,15 +253,14 @@ func startDistChangefeed(
 
 	dsp := execCtx.DistSQLPlanner()
 
+	// TODO(#163256): Delete this code once MinSupported = 26.2.
 	var spanLevelCheckpoint *jobspb.TimestampSpansMap
-	if cfProgress := progress.GetChangefeed(); cfProgress != nil && cfProgress.SpanLevelCheckpoint != nil {
+	if cfProgress := progress.GetChangefeed(); cfProgress != nil {
 		spanLevelCheckpoint = cfProgress.SpanLevelCheckpoint
-		if log.V(2) {
-			log.Changefeed.Infof(ctx, "span-level checkpoint: %s", spanLevelCheckpoint)
-		}
 	}
+
 	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
-		trackedSpans, spanLevelCheckpoint, prevResult, schemaTS)(ctx, dsp)
+		trackedSpans, spanLevelCheckpoint, resolvedSpans, schemaTS)(ctx, dsp)
 	if err != nil {
 		return flowResult{}, err
 	}
@@ -383,7 +382,7 @@ func makePlan(
 	initialHighWater hlc.Timestamp,
 	trackedSpans []roachpb.Span,
 	spanLevelCheckpoint *jobspb.TimestampSpansMap,
-	prevResult flowResult,
+	resolvedSpans []jobspb.ResolvedSpan,
 	schemaTS hlc.Timestamp,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
 	return func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
@@ -482,24 +481,6 @@ func makePlan(
 				// highwater mark is updated in manageProtectedTimestamps.
 				PerTableProtectedTimestamps: perTableTrackingEnabled && perTableProtectedTimestampsEnabled,
 			}
-		}
-
-		var resolvedSpans []jobspb.ResolvedSpan
-		if jobID != 0 {
-			if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-				spans, ok, err := jobfrontier.GetAllResolvedSpans(ctx, txn, jobID)
-				if err != nil {
-					return err
-				}
-				if ok {
-					resolvedSpans = spans
-				}
-				return nil
-			}); err != nil {
-				return nil, nil, err
-			}
-		} else if prevResult.coreProgress != nil {
-			resolvedSpans = prevResult.coreProgress.frontierSpans
 		}
 
 		aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))

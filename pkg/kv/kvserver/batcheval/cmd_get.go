@@ -70,6 +70,7 @@ func Get(
 		AllowEmpty:            cArgs.Header.AllowEmpty,
 		ReadCategory:          fs.BatchEvalReadCategory,
 		ReturnRawMVCCValues:   args.ReturnRawMVCCValues,
+		WorkloadID:            h.WorkloadID,
 	})
 	if err != nil {
 		// If the user has set ExpectExclusionSince, transform any WriteTooOld error

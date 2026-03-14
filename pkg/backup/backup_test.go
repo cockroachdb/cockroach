@@ -1314,9 +1314,6 @@ func TestRestoreCheckpointing(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	defer jobs.TestingSetProgressThresholds()()
 
-	// TODO(at): OR does not use RunAfterProcessingRestoreSpanEntry; adapt test for OR.
-	backuptestutils.DisableFastRestoreForTest(t)
-
 	// totalEntries represents the number of entries to appear in the persisted frontier.
 	const totalEntries = 7
 	const entriesBeforePause = 4
@@ -7529,11 +7526,6 @@ func TestClientDisconnect(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.jobType, func(t *testing.T) {
-			if testCase.jobType == "RESTORE" {
-				// TODO(at): OR does not use RunAfterProcessingRestoreSpanEntry; adapt test for OR.
-				backuptestutils.DisableFastRestoreForTest(t)
-			}
-
 			// When completing an export request, signal the a request has been sent and
 			// then wait to be signaled.
 			allowResponse := make(chan struct{})

@@ -37,6 +37,7 @@ go_library(
         "//pkg/kv/kvserver/protectedts",
         "//pkg/multitenant",
         "//pkg/multitenant/multitenantcpu",
+        "//pkg/obs/ash",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",

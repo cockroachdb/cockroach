@@ -57,6 +57,7 @@ go_test(
         "//pkg/server",
         "//pkg/sql",
         "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/lease",
         "//pkg/sql/parser",
         "//pkg/sql/schemachanger/scbuild",
         "//pkg/sql/schemachanger/scdeps/sctestutils",

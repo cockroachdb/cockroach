@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils/telemetrylogtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -218,9 +219,9 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 
 	ctx := context.Background()
 
-	st := logtestutils.StubTime{}
-	sqm := logtestutils.StubQueryStats{}
-	sts := logtestutils.StubTracingStatus{}
+	st := telemetrylogtestutils.StubTime{}
+	sqm := telemetrylogtestutils.StubQueryStats{}
+	sts := telemetrylogtestutils.StubTracingStatus{}
 
 	dir, dirCleanupFn := testutils.TempDir(t)
 

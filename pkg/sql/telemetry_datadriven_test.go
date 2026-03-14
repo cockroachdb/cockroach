@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils/telemetrylogtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
@@ -92,9 +93,9 @@ func TestTelemetryLoggingDataDriven(t *testing.T) {
 		stmtSpy.Reset()
 		txnsSpy.Reset()
 
-		st := logtestutils.StubTime{}
+		st := telemetrylogtestutils.StubTime{}
 		st.SetTime(timeutil.FromUnixMicros(0))
-		sts := logtestutils.StubTracingStatus{}
+		sts := telemetrylogtestutils.StubTracingStatus{}
 		stubTimeOnRestart := int64(0)
 		telemetryKnobs := &TelemetryLoggingTestingKnobs{
 			getTimeNow:       st.TimeNow,
@@ -282,7 +283,7 @@ func TestTelemetryLoggingDecision(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	cs := cluster.MakeTestingClusterSettings()
-	st := logtestutils.StubTime{}
+	st := telemetrylogtestutils.StubTime{}
 	testingKnobs := NewTelemetryLoggingTestingKnobs(st.TimeNow, nil, nil)
 	telemetryLogging := newTelemetryLoggingMetrics(testingKnobs, cs)
 	ctx := context.Background()

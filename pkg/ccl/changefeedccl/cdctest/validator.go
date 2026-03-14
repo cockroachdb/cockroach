@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -1007,6 +1008,95 @@ func (v *CountValidator) NoteResolved(partition string, resolved hlc.Timestamp) 
 
 // Failures implements the Validator interface.
 func (v *CountValidator) Failures() []string {
+	return v.v.Failures()
+}
+
+// DuplicateCountingValidator wraps a Validator and counts duplicate rows.
+// All rows (including duplicates) are forwarded to the wrapped validator;
+// this validator only observes and counts. The inner validator is responsible
+// for its own duplicate handling.
+//
+// NoteRow and NoteResolved must be called from a single goroutine (they
+// access unsynchronized map state). NumTotal and NumDuplicates are safe
+// to read from other goroutines concurrently.
+type DuplicateCountingValidator struct {
+	v Validator
+	// resolved tracks the highest resolved timestamp seen per partition.
+	resolved map[string]hlc.Timestamp
+	// seen tracks the latest timestamp observed for each key per partition,
+	// for detecting duplicates that arrive before or between resolved
+	// timestamps. Changefeed ordering guarantees that once a key has been
+	// emitted at timestamp T, no previously unseen version of that key
+	// will arrive at a timestamp <= T. This means we only need to store
+	// one timestamp per key: any row at or below that timestamp is a
+	// duplicate.
+	//
+	// On each resolved timestamp, entries whose timestamp is at or below
+	// the resolved are pruned (the resolved check in NoteRow handles
+	// those going forward). This keeps the map bounded by the number of
+	// keys updated since the last resolved timestamp rather than growing
+	// with every row over the life of the test.
+	seen map[string]map[string]hlc.Timestamp
+
+	// NumTotal and NumDuplicates use atomic operations so they can be read
+	// safely from a monitoring goroutine while a consumer goroutine calls
+	// NoteRow.
+
+	// NumTotal is the total number of rows seen (duplicates + unique).
+	NumTotal atomic.Int64
+	// NumDuplicates is the number of rows that were identified as duplicates.
+	NumDuplicates atomic.Int64
+}
+
+// NewDuplicateCountingValidator returns a DuplicateCountingValidator wrapping
+// the given Validator.
+func NewDuplicateCountingValidator(v Validator) *DuplicateCountingValidator {
+	return &DuplicateCountingValidator{
+		v:        v,
+		resolved: make(map[string]hlc.Timestamp),
+		seen:     make(map[string]map[string]hlc.Timestamp),
+	}
+}
+
+// NoteRow implements the Validator interface.
+func (v *DuplicateCountingValidator) NoteRow(
+	partition, key, value string, updated hlc.Timestamp, topic string,
+) error {
+	v.NumTotal.Add(1)
+	if r, ok := v.resolved[partition]; ok && updated.LessEq(r) {
+		// Changefeed guarantees mean we must have seen this update before.
+		v.NumDuplicates.Add(1)
+	} else if lastSeen, ok := v.seen[partition][key]; ok && updated.LessEq(lastSeen) {
+		// We've seen a more recent update of this key. Changefeed guarantees
+		// mean this must be a duplicate.
+		v.NumDuplicates.Add(1)
+	} else {
+		// This row is not a duplicate.
+		if v.seen[partition] == nil {
+			v.seen[partition] = make(map[string]hlc.Timestamp)
+		}
+		v.seen[partition][key] = updated
+	}
+	return v.v.NoteRow(partition, key, value, updated, topic)
+}
+
+// NoteResolved implements the Validator interface.
+func (v *DuplicateCountingValidator) NoteResolved(partition string, resolved hlc.Timestamp) error {
+	if cur, ok := v.resolved[partition]; !ok || cur.Less(resolved) {
+		v.resolved[partition] = resolved
+		// Prune seen keys before this timestamp. This keeps the memory usage
+		// of `seen` in check.
+		for key, ts := range v.seen[partition] {
+			if ts.LessEq(resolved) {
+				delete(v.seen[partition], key)
+			}
+		}
+	}
+	return v.v.NoteResolved(partition, resolved)
+}
+
+// Failures implements the Validator interface.
+func (v *DuplicateCountingValidator) Failures() []string {
 	return v.v.Failures()
 }
 

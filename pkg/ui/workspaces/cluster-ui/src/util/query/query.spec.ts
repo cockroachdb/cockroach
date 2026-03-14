@@ -3,7 +3,6 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { assert } from "chai";
 import { Location } from "history";
 
 import { propsToQueryString, queryByName } from "./query";
@@ -45,9 +44,9 @@ describe("Query utils", () => {
   });
   describe("queryByName", () => {
     it("get key from query", () => {
-      assert.equal(queryByName(location, "start"), "1581478532");
-      assert.equal(queryByName(location, "test"), null);
-      assert.equal(queryByName(location, undefined), null);
+      expect(queryByName(location, "start")).toBe("1581478532");
+      expect(queryByName(location, "test")).toBeNull();
+      expect(queryByName(location, undefined)).toBeNull();
     });
   });
 });

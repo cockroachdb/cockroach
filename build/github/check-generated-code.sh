@@ -65,6 +65,9 @@ check_workspace_clean "Run \`./dev generate bazel\` to fix this error."
 # generated documentation and checked-in go code are up to date.
 bazel run //pkg/gen $ENGFLOW_ARGS
 check_workspace_clean "Run \`./dev generate\` to fix this error."
+# Run ASH inventory generation and ensure nothing changes.
+bazel run //pkg/cmd/generate-ash-inventory $ENGFLOW_ARGS -- -out-dir="$(pwd)"
+check_workspace_clean "Run \`./dev generate ash-inventory\` to fix this error."
 # Run go mod tidy and ensure nothing changes.
 # NB: If files are missing from any packages then `go mod tidy` will
 # fail. So we need to make sure that `.pb.go` sources are populated.

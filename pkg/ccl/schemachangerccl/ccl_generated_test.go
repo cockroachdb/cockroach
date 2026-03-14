@@ -190,6 +190,13 @@ func TestEndToEndSideEffects_ccl_alter_table_locality_rbt_secondary_region_to_se
 	sctest.EndToEndSideEffects(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestEndToEndSideEffects_ccl_alter_table_set_infer_rbr_using_constraint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_set_infer_rbr_using_constraint"
+	sctest.EndToEndSideEffects(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestEndToEndSideEffects_ccl_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -425,6 +432,13 @@ func TestExecuteWithDMLInjection_ccl_alter_table_locality_rbt_secondary_region_t
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_secondary_region_to_secondary_region"
+	sctest.ExecuteWithDMLInjection(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestExecuteWithDMLInjection_ccl_alter_table_set_infer_rbr_using_constraint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_set_infer_rbr_using_constraint"
 	sctest.ExecuteWithDMLInjection(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -666,6 +680,13 @@ func TestGenerateSchemaChangeCorpus_ccl_alter_table_locality_rbt_secondary_regio
 	sctest.GenerateSchemaChangeCorpus(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestGenerateSchemaChangeCorpus_ccl_alter_table_set_infer_rbr_using_constraint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_set_infer_rbr_using_constraint"
+	sctest.GenerateSchemaChangeCorpus(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestGenerateSchemaChangeCorpus_ccl_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -901,6 +922,13 @@ func TestPause_ccl_alter_table_locality_rbt_secondary_region_to_secondary_region
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_secondary_region_to_secondary_region"
+	sctest.Pause(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestPause_ccl_alter_table_set_infer_rbr_using_constraint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_set_infer_rbr_using_constraint"
 	sctest.Pause(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -1142,6 +1170,13 @@ func TestPauseMixedVersion_ccl_alter_table_locality_rbt_secondary_region_to_seco
 	sctest.PauseMixedVersion(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestPauseMixedVersion_ccl_alter_table_set_infer_rbr_using_constraint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_set_infer_rbr_using_constraint"
+	sctest.PauseMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestPauseMixedVersion_ccl_create_index(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1377,6 +1412,13 @@ func TestRollback_ccl_alter_table_locality_rbt_secondary_region_to_secondary_reg
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_locality_rbt_secondary_region_to_secondary_region"
+	sctest.Rollback(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestRollback_ccl_alter_table_set_infer_rbr_using_constraint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/alter_table_set_infer_rbr_using_constraint"
 	sctest.Rollback(t, path, MultiRegionTestClusterFactory{})
 }
 

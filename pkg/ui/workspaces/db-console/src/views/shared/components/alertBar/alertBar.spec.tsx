@@ -3,17 +3,15 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { mount, ReactWrapper } from "enzyme";
+import { render } from "@testing-library/react";
 import moment from "moment";
 import React from "react";
 
 import { AlertBar } from "src/views/shared/components/alertBar/alertBar";
 
 describe("AlertBar", () => {
-  let wrapper: ReactWrapper;
-
   it("displays nothing if no grace period and no telemetry deadline and 3 nodes", () => {
-    wrapper = mount(
+    const { container } = render(
       <AlertBar
         hasGracePeriod={false}
         hasTelemetryDeadline={false}
@@ -23,11 +21,11 @@ describe("AlertBar", () => {
       />,
     );
 
-    expect(wrapper.isEmptyRender());
+    expect(container.innerHTML).toBe("");
   });
 
   it("displays nothing if 1 node even if grace period is present", () => {
-    wrapper = mount(
+    const { container } = render(
       <AlertBar
         hasGracePeriod={true}
         hasTelemetryDeadline={true}
@@ -37,11 +35,11 @@ describe("AlertBar", () => {
       />,
     );
 
-    expect(wrapper.isEmptyRender());
+    expect(container.innerHTML).toBe("");
   });
 
   it("displays throttle message: grace period = elapsed, license = expired, cluster = throttled", () => {
-    wrapper = mount(
+    const { container } = render(
       <AlertBar
         hasGracePeriod={true}
         hasTelemetryDeadline={true}
@@ -53,7 +51,7 @@ describe("AlertBar", () => {
       />,
     );
 
-    expect(wrapper.text()).toContain(
+    expect(container.textContent).toContain(
       "Your license key expired on September 15th, 2024 and the cluster was throttled. " +
         "Please add a license key to continue using this cluster. Learn more",
     );
@@ -61,7 +59,7 @@ describe("AlertBar", () => {
 
   it("displays warning message: grace period = active, license = expired, cluster = not throttled", () => {
     const gracePeriodEnd = moment().add(1, "days");
-    wrapper = mount(
+    const { container } = render(
       <AlertBar
         hasGracePeriod={true}
         hasTelemetryDeadline={true}
@@ -73,14 +71,14 @@ describe("AlertBar", () => {
       />,
     );
 
-    expect(wrapper.text()).toContain(
+    expect(container.textContent).toContain(
       "Your license key expired on September 15th, 2024. " +
         `The cluster will be throttled on ${gracePeriodEnd.format("MMMM Do, YYYY")} unless a new license key is added. Learn more`,
     );
   });
 
   it("displays throttle message: telemetry = missing, license = active, cluster = throttled", () => {
-    wrapper = mount(
+    const { container } = render(
       <AlertBar
         hasGracePeriod={false}
         hasTelemetryDeadline={true}
@@ -93,7 +91,7 @@ describe("AlertBar", () => {
       />,
     );
 
-    expect(wrapper.text()).toContain(
+    expect(container.textContent).toContain(
       "Telemetry has not been received from some nodes in this cluster since " +
         "September 1st, 2024. These nodes were throttled on September 15th, 2024. Learn more",
     );
@@ -101,7 +99,7 @@ describe("AlertBar", () => {
 
   it("displays warning message: telemetry = missing recently, license = active, cluster = not throttled", () => {
     const telemetryDeadline = moment().add(1, "days");
-    wrapper = mount(
+    const { container } = render(
       <AlertBar
         hasGracePeriod={false}
         hasTelemetryDeadline={true}
@@ -114,14 +112,14 @@ describe("AlertBar", () => {
       />,
     );
 
-    expect(wrapper.text()).toContain(
+    expect(container.textContent).toContain(
       "Telemetry has not been received from some nodes in this cluster since " +
         `September 1st, 2024. These nodes will be throttled on ${telemetryDeadline.format("MMMM Do, YYYY")} unless telemetry is received. Learn more`,
     );
   });
 
   it("displays throttle message: license = None, cluster = throttled", () => {
-    wrapper = mount(
+    const { container } = render(
       <AlertBar
         hasGracePeriod={true}
         hasTelemetryDeadline={false}
@@ -131,13 +129,14 @@ describe("AlertBar", () => {
       />,
     );
 
-    expect(wrapper.text()).toContain(
+    expect(container.textContent).toContain(
       "This cluster was throttled because it requires a license key. Please add a license key to continue using this cluster. Learn more",
     );
   });
+
   it("displays warning message: license = None, cluster = not throttled", () => {
     const gracePeriodEnd = moment().add(1, "days");
-    wrapper = mount(
+    const { container } = render(
       <AlertBar
         hasGracePeriod={true}
         hasTelemetryDeadline={false}
@@ -148,7 +147,7 @@ describe("AlertBar", () => {
       />,
     );
 
-    expect(wrapper.text()).toContain(
+    expect(container.textContent).toContain(
       `This cluster will require a license key by ${gracePeriodEnd.format("MMMM Do, YYYY")} or the cluster will be throttled. Learn more`,
     );
   });

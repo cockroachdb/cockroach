@@ -48,4 +48,21 @@ func init() {
 			}
 		},
 	)
+
+	registerDepRule(
+		"old RBR using constraint param is dropped before the new one is added",
+		scgraph.SameStagePrecedence,
+		"old-rbr-using-constraint", "new-rbr-using-constraint",
+		func(from, to NodeVars) rel.Clauses {
+			return rel.Clauses{
+				from.Type((*scpb.TableLocalityRegionalByRowUsingConstraint)(nil)),
+				to.Type((*scpb.TableLocalityRegionalByRowUsingConstraint)(nil)),
+				JoinOnDescID(from, to, "table-id"),
+				from.TargetStatus(scpb.ToAbsent),
+				from.CurrentStatus(scpb.Status_ABSENT),
+				to.TargetStatus(scpb.ToPublic),
+				to.CurrentStatus(scpb.Status_PUBLIC),
+			}
+		},
+	)
 }

@@ -3,7 +3,6 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { assert } from "chai";
 import { createStore } from "redux";
 
 import { rootReducer } from "./reducers";
@@ -20,9 +19,8 @@ describe("rootReducer", () => {
     store.dispatch(rootActions.resetState());
     const resetState = store.getState();
 
-    assert.deepEqual(initState, resetState);
-    assert.notDeepEqual(
-      resetState.statements.error,
+    expect(initState).toEqual(resetState);
+    expect(resetState.statements.error).not.toEqual(
       changedState.statements.error,
     );
   });

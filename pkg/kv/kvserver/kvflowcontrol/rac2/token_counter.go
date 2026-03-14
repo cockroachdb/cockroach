@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -499,6 +501,8 @@ func WaitForEval(
 	requiredQuorum int,
 	traceIndividualWaits bool,
 	scratch []reflect.SelectCase,
+	tenantID roachpb.TenantID,
+	info ash.WorkloadInfo,
 ) (state WaitEndState, scratch2 []reflect.SelectCase) {
 	scratch = scratch[:0]
 	if len(handles) < requiredQuorum {
@@ -538,6 +542,9 @@ func WaitForEval(
 	// Wait for (1) at least a quorumCount of partOfQuorum handles to be signaled
 	// and have available tokens; as well as (2) all of the required wait handles
 	// to be signaled and have tokens available.
+	cleanup := ash.SetWorkState(
+		tenantID, info, ash.WorkAdmission, "ReplicationFlowControl")
+	defer cleanup()
 	for signaledQuorumCount < requiredQuorum || requiredWaitCount > 0 {
 		chosen, _, _ := reflect.Select(scratch)
 		switch chosen {

@@ -37,6 +37,7 @@ go_test(
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
         "//pkg/util/log/logtestutils",
+        "//pkg/util/log/logtestutils/telemetrylogtestutils",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",

@@ -17,6 +17,7 @@ go_library(
         "//pkg/base",
         "//pkg/col/coldata",
         "//pkg/col/coldataext",
+        "//pkg/obs/ash",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/sql/catalog/descs",

@@ -3618,7 +3618,6 @@ func (s *Store) checkpointsDir() string {
 // storage issues, e.g. in situations when a recent reconfiguration like split
 // or merge occurred.
 func (s *Store) checkpointSpans(desc *roachpb.RangeDescriptor) []roachpb.Span {
-	_ = s.TODOBothEngines() // need to return two sets of spans, one for each engine
 	// Find immediate left and right neighbours by range ID.
 	var prevID, nextID roachpb.RangeID
 	s.mu.replicasByRangeID.Range(func(rangeID roachpb.RangeID, _ *Replica) bool {

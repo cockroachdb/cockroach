@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -115,6 +116,14 @@ func (r *Replica) SendWithWriteBytes(
 	ctx context.Context, ba *kvpb.BatchRequest, admissionInfo kvadmission.AdmissionInfo,
 ) (*kvpb.BatchResponse, *kvadmission.StoreWriteBytes, *kvpb.Error) {
 	tenantIDOrZero, _ := roachpb.ClientTenantFromContext(ctx)
+	cleanup := ash.SetWorkState(
+		tenantIDOrZero, ash.WorkloadInfo{
+			WorkloadID:    ba.WorkloadID,
+			AppNameID:     ba.AppNameID,
+			GatewayNodeID: ba.GatewayNodeID,
+		},
+		ash.WorkCPU, "ReplicaSend")
+	defer cleanup()
 
 	// Record the CPU time processing the request for this replica. This is
 	// recorded regardless of errors that are encountered.
@@ -305,6 +314,16 @@ func (r *Replica) maybeCommitWaitBeforeCommitTrigger(
 	before := r.Clock().PhysicalTime()
 	est := waitUntil.GoTime().Sub(before)
 	log.VEventf(ctx, 1, "performing server-side commit-wait sleep for ~%s", est)
+
+	tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+	cleanup := ash.SetWorkState(
+		tenantID, ash.WorkloadInfo{
+			WorkloadID:    ba.WorkloadID,
+			AppNameID:     ba.AppNameID,
+			GatewayNodeID: ba.GatewayNodeID,
+		},
+		ash.WorkOther, "CommitWaitSleep")
+	defer cleanup()
 
 	if err := r.Clock().SleepUntil(ctx, waitUntil); err != nil {
 		return err
@@ -857,7 +876,14 @@ func (r *Replica) handleInvalidLeaseError(ctx context.Context, ba *kvpb.BatchReq
 	// On an invalid lease error, attempt to acquire a new lease. If in the
 	// process of doing so, we determine that the lease now lives elsewhere,
 	// redirect.
-	_, pErr := r.redirectOnOrAcquireLeaseForRequest(ctx, ba.Timestamp, r.signallerForBatch(ba))
+	tenantIDOrZero, _ := roachpb.ClientTenantFromContext(ctx)
+	_, pErr := r.redirectOnOrAcquireLeaseForRequest(
+		ctx, ba.Timestamp, r.signallerForBatch(ba), tenantIDOrZero, ash.WorkloadInfo{
+			WorkloadID:    ba.WorkloadID,
+			AppNameID:     ba.AppNameID,
+			GatewayNodeID: ba.GatewayNodeID,
+		},
+	)
 	// If we managed to get a lease (i.e. pErr == nil), the request evaluation
 	// will be retried.
 	return pErr
@@ -944,7 +970,14 @@ func (r *Replica) executeAdminBatch(
 		case errors.HasType(err, (*kvpb.InvalidLeaseError)(nil)):
 			// If the replica does not have the lease, attempt to acquire it, or
 			// redirect to the current leaseholder by returning an error.
-			_, pErr := r.redirectOnOrAcquireLeaseForRequest(ctx, ba.Timestamp, r.signallerForBatch(ba))
+			tenantIDOrZero, _ := roachpb.ClientTenantFromContext(ctx)
+			_, pErr := r.redirectOnOrAcquireLeaseForRequest(
+				ctx, ba.Timestamp, r.signallerForBatch(ba), tenantIDOrZero, ash.WorkloadInfo{
+					WorkloadID:    ba.WorkloadID,
+					AppNameID:     ba.AppNameID,
+					GatewayNodeID: ba.GatewayNodeID,
+				},
+			)
 			if pErr != nil {
 				return nil, pErr
 			}

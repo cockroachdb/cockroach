@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils/telemetrylogtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -59,9 +60,9 @@ func TestTelemetryLogging(t *testing.T) {
 	txnCleanup := log.InterceptWith(ctx, txnSpy)
 	defer txnCleanup()
 
-	st := logtestutils.StubTime{}
-	sqm := logtestutils.StubQueryStats{}
-	sts := logtestutils.StubTracingStatus{}
+	st := telemetrylogtestutils.StubTime{}
+	sqm := telemetrylogtestutils.StubQueryStats{}
+	sts := telemetrylogtestutils.StubTracingStatus{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -714,8 +715,8 @@ func TestTelemetryLoggingInternalEnabled(t *testing.T) {
 	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
-	st := logtestutils.StubTime{}
-	sts := logtestutils.StubTracingStatus{}
+	st := telemetrylogtestutils.StubTime{}
+	sts := telemetrylogtestutils.StubTracingStatus{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -798,8 +799,8 @@ func TestTelemetryLoggingInternalConsoleEnabled(t *testing.T) {
 	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
-	st := logtestutils.StubTime{}
-	sts := logtestutils.StubTracingStatus{}
+	st := telemetrylogtestutils.StubTime{}
+	sts := telemetrylogtestutils.StubTracingStatus{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -894,7 +895,7 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
-	st := logtestutils.StubTime{}
+	st := telemetrylogtestutils.StubTime{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -1553,8 +1554,8 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
-	st := logtestutils.StubTime{}
-	sts := logtestutils.StubTracingStatus{}
+	st := telemetrylogtestutils.StubTime{}
+	sts := telemetrylogtestutils.StubTracingStatus{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{

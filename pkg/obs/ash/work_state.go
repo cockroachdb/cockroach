@@ -82,6 +82,9 @@ func SetWorkState(
 	if !enabled.Load() {
 		return noop
 	}
+	if !tenantID.IsSet() {
+		tenantID = roachpb.SystemTenantID
+	}
 	gid := goid.Get()
 	state := workStatePool.Get().(*WorkState)
 	state.TenantID = tenantID
@@ -136,7 +139,10 @@ func _clearWorkState(gid int64) {
 		return
 	}
 	prev := state.prev
-	state.prev = nil
+	// Nil-ing state.prev here would be good hygiene, but is not required:
+	// the sampler does not read prev from copied WorkStates, and reclaim
+	// zeroes the struct anyway. We skip it to avoid a race with the
+	// sampler's concurrent *value copy in rangeWorkStates.
 	if prev != nil {
 		activeWorkStates.Store(gid, prev)
 	} else {
