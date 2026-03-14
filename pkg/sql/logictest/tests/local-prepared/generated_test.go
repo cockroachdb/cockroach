@@ -713,6 +713,13 @@ func TestLogic_geospatial_regression(
 	runLogicTest(t, "geospatial_regression")
 }
 
+func TestLogic_geospatial_zm(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "geospatial_zm")
+}
+
 func TestLogic_grant_database(
 	t *testing.T,
 ) {
@@ -846,11 +853,53 @@ func TestLogic_inverted_filter_geospatial(
 	runLogicTest(t, "inverted_filter_geospatial")
 }
 
+func TestLogic_inverted_filter_json_array(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inverted_filter_json_array")
+}
+
+func TestLogic_inverted_join_geospatial(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inverted_join_geospatial")
+}
+
+func TestLogic_inverted_join_json_array(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inverted_join_json_array")
+}
+
+func TestLogic_inverted_join_multi_column(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inverted_join_multi_column")
+}
+
+func TestLogic_jobs(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jobs")
+}
+
 func TestLogic_join(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "join")
+}
+
+func TestLogic_json_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "json_index")
 }
 
 func TestLogic_jsonb_path_exists(
@@ -879,6 +928,13 @@ func TestLogic_jsonb_path_query_first(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "jsonb_path_query_first")
+}
+
+func TestLogic_jsonpath(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "jsonpath")
 }
 
 func TestLogic_kv_builtin_functions(
@@ -1756,6 +1812,13 @@ func TestLogic_udf_record(
 	runLogicTest(t, "udf_record")
 }
 
+func TestLogic_udf_regressions(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_regressions")
+}
+
 func TestLogic_udf_rewrite(
 	t *testing.T,
 ) {
@@ -1775,6 +1838,13 @@ func TestLogic_udf_setof(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_setof")
+}
+
+func TestLogic_udf_star(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_star")
 }
 
 func TestLogic_udf_subquery(
@@ -1854,6 +1924,13 @@ func TestLogic_values(
 	runLogicTest(t, "values")
 }
 
+func TestLogic_vector_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "vector_index")
+}
+
 func TestLogic_vectorize_agg(
 	t *testing.T,
 ) {
@@ -1922,4 +1999,11 @@ func TestLogic_zero(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "zero")
+}
+
+func TestLogic_zone_config_system_tenant(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "zone_config_system_tenant")
 }
