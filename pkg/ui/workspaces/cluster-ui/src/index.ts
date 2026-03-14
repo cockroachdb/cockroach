@@ -42,7 +42,7 @@ export * from "./transactionDetails";
 export * from "./text";
 export * from "./tracez";
 export { util, api };
-export { useCluster } from "./api/clusterApi";
+export { useCluster, useClusterLabel } from "./api/clusterApi";
 export { useNodes } from "./api/nodesApi";
 export { useNodesSummary } from "./api/nodesSummaryApi";
 export { useHealth } from "./api/healthApi";
