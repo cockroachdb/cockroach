@@ -691,9 +691,11 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// dedicated to that tenant yet. When we create the tenantInfo struct
 		// here, we also create the estimator. We init the estimator using a
 		// global estimator that sees workload across all tenants.
+		burstLimitFrac := q.getBurstLimitFracLocked(tenantID)
+		scaledCapacity := int64(float64(q.mu.burstBucketCapacity) * burstLimitFrac)
 		tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID),
-			q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), q.mu.burstBucketCapacity,
-			q.getBurstLimitFracLocked(tenantID),
+			q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), scaledCapacity,
+			burstLimitFrac,
 			q.admittedCountPerTenant, q.waitTimeNanosPerTenant)
 		q.mu.tenants[tenantID] = tenant
 	}
@@ -826,9 +828,11 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// tenantInfo struct is declared.
 		tenant, ok = q.mu.tenants[tenantID]
 		if !ok {
+			burstLimitFrac := q.getBurstLimitFracLocked(tenantID)
+			scaledCapacity := int64(float64(q.mu.burstBucketCapacity) * burstLimitFrac)
 			tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID),
-				q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), q.mu.burstBucketCapacity,
-				q.getBurstLimitFracLocked(tenantID),
+				q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), scaledCapacity,
+				burstLimitFrac,
 				q.admittedCountPerTenant, q.waitTimeNanosPerTenant)
 			q.mu.tenants[tenantID] = tenant
 		}
@@ -1232,17 +1236,29 @@ func (q *WorkQueue) adjustTenantUsedLocked(tenant *tenantInfo, delta int64) {
 }
 
 // refillBurstBuckets adds tokens to all tenant burst buckets and updates
-// their capacity. This is called by cpuTimeTokenAllocator periodically (every
-// 1ms). If a tenant's burst qualification changes as a result of the refill,
+// their capacity. This is called by cpuTimeTokenAllocator periodically
+// (every 1ms). noBurstToAdd and noBurstCapacity are the full noBurst
+// allocation and rate — these are scaled per-tenant by burstLimitFrac.
+//
+// The per-tenant scaling ensures that each tenant's burst bucket
+// break-even point (where refill = drain) corresponds to their CPU_MIN
+// fraction of node CPU. For example, a tenant with burstLimitFrac=0.1
+// (CPU_MIN=10%) gets 10% of the noBurst refill rate, so its burst bucket
+// drains when the tenant exceeds ~10% of node CPU.
+//
+// If a tenant's burst qualification changes as a result of the refill,
 // the tenant's position in the tenantHeap is updated to maintain correct
 // priority ordering.
-func (q *WorkQueue) refillBurstBuckets(toAdd int64, capacity int64) {
+func (q *WorkQueue) refillBurstBuckets(noBurstToAdd int64, noBurstCapacity int64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.mu.burstBucketCapacity = capacity
-	for _, tenant := range q.mu.tenants {
+	q.mu.burstBucketCapacity = noBurstCapacity
+	for id, tenant := range q.mu.tenants {
+		burstLimitFrac := q.getBurstLimitFracLocked(id)
+		scaledAdd := int64(float64(noBurstToAdd) * burstLimitFrac)
+		scaledCapacity := int64(float64(noBurstCapacity) * burstLimitFrac)
 		prevBurstQual := tenant.cpuTimeBurstBucket.burstQualification()
-		tenant.cpuTimeBurstBucket.refill(toAdd, capacity)
+		tenant.cpuTimeBurstBucket.refill(scaledAdd, scaledCapacity)
 		curBurstQual := tenant.cpuTimeBurstBucket.burstQualification()
 		if prevBurstQual != curBurstQual && isInTenantHeap(tenant) {
 			q.mu.tenantHeap.fix(tenant)
@@ -1451,8 +1467,15 @@ func (q *WorkQueue) SetBurstLimits(burstLimits map[uint64]float64) {
 	}
 }
 
+// defaultBurstLimitFrac is the burst limit fraction for tenants not
+// explicitly configured via SetBurstLimits. A value of 0.25 means
+// unconfigured tenants qualify for burst only when using < 25% of node
+// CPU — i.e., they are non-FULLY_UTILIZE by default. FULLY_UTILIZE
+// groups must be explicitly configured with burstLimitFrac=1.0.
+const defaultBurstLimitFrac = 0.25
+
 // getBurstLimitFracLocked returns the burst limit fraction for the given
-// tenant. If no override exists, returns 1.0 (always canBurst).
+// tenant. If no override exists, returns defaultBurstLimitFrac.
 //
 // REQUIRES: q.mu is held.
 func (q *WorkQueue) getBurstLimitFracLocked(tenantID uint64) float64 {
@@ -1461,7 +1484,7 @@ func (q *WorkQueue) getBurstLimitFracLocked(tenantID uint64) float64 {
 			return frac
 		}
 	}
-	return 1.0
+	return defaultBurstLimitFrac
 }
 
 // close tells the gc goroutine to stop.

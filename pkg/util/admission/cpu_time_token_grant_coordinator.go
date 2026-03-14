@@ -169,6 +169,25 @@ func makeCPUTimeTokenGrantCoordinator(
 		queue:  req,
 	}
 
+	// Hardcode 2 resource groups for the prototype:
+	//   - System tenant (ID=1): FULLY_UTILIZE, weight=9
+	//   - App tenants (default): non-FULLY_UTILIZE, weight=1
+	//
+	// System tenant gets burstLimitFrac=1.0 (always canBurst, access to
+	// 100% CPU bucket). App tenants default to burstLimitFrac=0.25 via
+	// getBurstLimitFracLocked, meaning they qualify for burst only when
+	// using < 25% of node CPU.
+	//
+	// In production, this will be driven by SQL DDL:
+	//   CREATE RESOURCE GROUP ... CPU_MIN=<pct> [FULLY_UTILIZE]
+	wq := req.(*WorkQueue)
+	wq.SetTenantWeights(map[uint64]uint32{
+		1: 9, // system tenant gets 9x weight
+	})
+	wq.SetBurstLimits(map[uint64]float64{
+		1: 1.0, // system tenant: FULLY_UTILIZE (always canBurst)
+	})
+
 	// The filler ticking appears to have a slight negative impact on perf.
 	// For now, we accept this, since CPU time token AC will be off by
 	// default, and only enabled in Serverless. To track fixing the perf

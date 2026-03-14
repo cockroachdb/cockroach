@@ -299,16 +299,12 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	// in CC, we scrape metrics once every 10s.
 	a.refill(allocations, bucketCapacities, bucketMinimums, false /* updateMetrics */)
 
-	// Refill per-tenant burst buckets in the WorkQueue. The burst bucket
-	// refill rate and capacity should be 1/4th of the noBurst refill rate
-	// and capacity. If a tenant's bucket is mostly full, we allow it to get
-	// priority in the queue (see cpu_time_token_burst.go for more). With
-	// cluster settings at their default values, this implies that a tenant
-	// can burst if they are using roughly less than ~19% of the CPU on a
-	// CRDB node (0.75 * 0.25 = 0.1875).
-	toAdd := allocations[noBurst] / 4
-	burstCapacity := a.refillRates[noBurst] / 4
-	a.queue.refillBurstBuckets(toAdd, burstCapacity)
+	// Refill per-tenant burst buckets in the WorkQueue. We pass the
+	// canBurst (= 100% CPU) allocation and rate as the base.
+	// refillBurstBuckets scales these per-tenant by burstLimitFrac
+	// (= CPU_MIN fraction), so a tenant with CPU_MIN=10% gets a refill
+	// rate of 10% of cpuCapacity, breaking even at exactly 10% CPU usage.
+	a.queue.refillBurstBuckets(allocations[canBurst], a.refillRates[canBurst])
 }
 
 // resetInterval is called to signal the beginning of a new interval.
@@ -345,9 +341,7 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 	a.refillRates = newRefillRates
 
 	// Apply the delta to the per-tenant burst buckets also.
-	toAdd := deltaRefillRates[noBurst] / 4
-	burstCapacity := bucketCapacities[noBurst] / 4
-	a.queue.refillBurstBuckets(toAdd, burstCapacity)
+	a.queue.refillBurstBuckets(deltaRefillRates[canBurst], bucketCapacities[canBurst])
 
 	// Reset allocated.
 	for qual := range a.allocated {
