@@ -123,6 +123,9 @@ func constructPlan(
 	if flags.IsSet(exec.PlanFlagUsesRLS) {
 		res.flags.Set(planFlagUsesRLS)
 	}
+	if flags.IsSet(exec.PlanFlagContainsUDF) {
+		res.flags.Set(planFlagContainsUDF)
+	}
 
 	return res, nil
 }

@@ -300,6 +300,16 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 		return nil, err
 	}
 
+	// Check if the query references any user-defined functions. We check
+	// the metadata rather than relying solely on buildUDF because the
+	// optimizer may inline UDFs, removing the UDFCallExpr before the
+	// execbuilder sees it.
+	b.mem.Metadata().ForEachUserDefinedRoutine(func(overload *tree.Overload) {
+		if overload.Type == tree.UDFRoutine {
+			b.flags.Set(exec.PlanFlagContainsUDF)
+		}
+	})
+
 	// Check if RLS policies were applied during query planning. This includes
 	// the case where no policies matched and all rows are filtered out.
 	rlsMeta := b.mem.Metadata().GetRLSMeta()

@@ -3103,6 +3103,12 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		return nil
 	}
 
+	// Now that the plan has been built successfully, increment the UDF
+	// started counter if the plan contains a UDF invocation.
+	if planner.curPlan.flags.IsSet(planFlagContainsUDF) {
+		ex.metrics.StartedStatementCounters.UDFCallCount.Inc()
+	}
+
 	var cols colinfo.ResultColumns
 	if stmt.AST.StatementReturnType() == tree.Rows {
 		cols = planner.curPlan.main.planColumns()
@@ -4419,6 +4425,9 @@ func (ex *connExecutor) incrementStartedStmtCounter(ast tree.Statement) {
 // statement counter for stmt's type.
 func (ex *connExecutor) incrementExecutedStmtCounter(ast tree.Statement) {
 	ex.metrics.ExecutedStatementCounters.incrementCount(ex, ast)
+	if ex.planner.curPlan.flags.IsSet(planFlagContainsUDF) {
+		ex.metrics.ExecutedStatementCounters.UDFCallCount.Inc()
+	}
 }
 
 // payloadHasError returns true if the passed payload implements

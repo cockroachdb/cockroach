@@ -4830,6 +4830,10 @@ type StatementCounters struct {
 	// stmt.
 	CallStoredProcCount telemetry.CounterWithMetric
 
+	// UDFCallCount counts statements whose plan invokes at least one
+	// user-defined function.
+	UDFCallCount telemetry.CounterWithMetric
+
 	// MiscCount counts all statements not covered by a more specific stat above.
 	MiscCount telemetry.CounterWithMetric
 }
@@ -4888,6 +4892,8 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaCopyNonAtomicStarted, internal)),
 		CallStoredProcCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaCallStoredProcStarted, internal)),
+		UDFCallCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaUDFCallStarted, internal)),
 		MiscCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaMiscStarted, internal)),
 		QueryCount: telemetry.NewCounterWithMetric(
@@ -4949,6 +4955,8 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaCopyNonAtomicExecuted, internal)),
 		CallStoredProcCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaCallStoredProcExecuted, internal)),
+		UDFCallCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaUDFCallExecuted, internal)),
 		MiscCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaMiscExecuted, internal)),
 		QueryCount: telemetry.NewCounterWithMetric(

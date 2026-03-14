@@ -1167,6 +1167,12 @@ var (
 		LabeledName:  "sql.started.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "call"),
 	}
+	MetaUDFCallStarted = metric.Metadata{
+		Name:        "sql.udf.started.count",
+		Help:        "Number of SQL statements that invoked user-defined functions",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
 	MetaMiscStarted = metric.Metadata{
 		Name:         "sql.misc.started.count",
 		Help:         "Number of other SQL statements started",
@@ -1411,6 +1417,12 @@ var (
 		Unit:         metric.Unit_COUNT,
 		LabeledName:  "sql.count",
 		StaticLabels: metric.MakeLabelPairs(metric.LabelQueryType, "call"),
+	}
+	MetaUDFCallExecuted = metric.Metadata{
+		Name:        "sql.udf.count",
+		Help:        "Number of successfully executed SQL statements that invoked user-defined functions",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
 	}
 	MetaMiscExecuted = metric.Metadata{
 		Name:         "sql.misc.count",
