@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 # Test cases for using invertedFilterer on an inverted json or array index.
 
 statement ok
