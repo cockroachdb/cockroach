@@ -56,7 +56,7 @@ func (m *cpuTimeBurstBucket) init(capacity int64, disabled bool, burstLimitFrac 
 		tokens:         capacity,
 		capacity:       capacity,
 		burstLimitFrac: burstLimitFrac,
-		disabled:        disabled,
+		disabled:       disabled,
 	}
 }
 
@@ -65,7 +65,16 @@ func (m *cpuTimeBurstBucket) init(capacity int64, disabled bool, burstLimitFrac 
 //
 // The qualification depends on burstLimitFrac:
 //   - burstLimitFrac >= 1.0: always canBurst (FULLY_UTILIZE groups)
-//   - burstLimitFrac < 1.0: canBurst only when tokens > burstLimitFrac × capacity
+//   - burstLimitFrac < 1.0: canBurst when tokens > 90% of capacity
+//
+// The per-tenant burst threshold is achieved via per-tenant scaling of
+// the refill rate and capacity in refillBurstBuckets, NOT via the
+// threshold check here. A tenant with burstLimitFrac=0.1 gets a
+// capacity and refill rate that are 10% of the base rate. This means
+// the bucket breaks even when the tenant uses ~10% of node CPU
+// (drain rate = scaled refill rate). The 90% fullness check here is
+// the same for all tenants — the per-tenant behavior comes from the
+// scaled capacity.
 func (m *cpuTimeBurstBucket) burstQualification() burstQualification {
 	if m.disabled {
 		return noBurst
@@ -74,20 +83,13 @@ func (m *cpuTimeBurstBucket) burstQualification() burstQualification {
 	if m.burstLimitFrac >= 1.0 {
 		return canBurst
 	}
-	// Non-FULLY_UTILIZE groups qualify for burst when their token balance
-	// exceeds burstLimitFrac of capacity. burstLimitFrac equals the group's
-	// CPU_MIN fraction (from the design doc). For example, a group with
-	// CPU_MIN=10% has burstLimitFrac=0.1, so it qualifies for burst when
-	// tokens > 10% of capacity — meaning it's using less than ~10% of
-	// node CPU.
-	//
 	// Note that at CRDB startup time, the capacity that is passed into
 	// cpuTimeBurstBucket.init will be zero, until 1ms passes, and the
 	// first call to refillBurstBuckets is made by cpuTimeTokenAllocator.
 	// So it is important that this code does not assume that m.capacity
 	// is non-zero. (There is a test for this case in
 	// TestCPUTimeTokenBurst.)
-	if m.capacity > 0 && m.tokens > int64(m.burstLimitFrac*float64(m.capacity)) {
+	if m.tokens > (m.capacity*9)/10 {
 		return canBurst
 	}
 	return noBurst

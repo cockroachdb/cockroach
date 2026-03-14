@@ -1735,8 +1735,9 @@ func newTenantInfo(
 	// If mode != usesCPUTimeTokens, cpuTimeBurstBucket.burstQualification
 	// always returns noBurst. This effectively disables the
 	// burstQualification functionality.
+	scaledCapacity := int64(float64(burstBucketCapacity) * burstLimitFrac)
 	ti.cpuTimeBurstBucket.init(
-		burstBucketCapacity, mode != usesCPUTimeTokens /* disable */, burstLimitFrac)
+		scaledCapacity, mode != usesCPUTimeTokens /* disable */, burstLimitFrac)
 	if admittedCountPerTenant != nil {
 		tid := strconv.FormatUint(id, 10)
 		ti.admittedCount = admittedCountPerTenant.AddChild(tid)

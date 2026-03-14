@@ -187,12 +187,19 @@ func (m *cpuTimeBurstBucket) burstQualification() burstQualification {
     if m.burstLimitFrac >= 1.0 {
         return canBurst  // FULLY_UTILIZE
     }
-    if m.capacity > 0 && m.tokens > int64(m.burstLimitFrac*float64(m.capacity)) {
-        return canBurst  // using less than CPU_MIN
+    if m.tokens > (m.capacity*9)/10 {
+        return canBurst  // bucket >90% full = using less than CPU_MIN
     }
-    return noBurst       // using more than CPU_MIN
+    return noBurst       // bucket depleted = using more than CPU_MIN
 }
 ```
+
+Note: the threshold is `>90% of capacity` (same as the original master
+code), NOT `>burstLimitFrac × capacity`. The per-tenant break-even point
+is controlled by the **scaled capacity and refill rate**, not by the
+threshold check. Using `burstLimitFrac × capacity` would double-apply
+the scaling (since capacity is already scaled by `burstLimitFrac` in
+`refillBurstBuckets`), making it too easy for small groups to qualify.
 
 ### Design Doc Scenarios
 
@@ -264,18 +271,32 @@ Every 1s:
 The linear model, token-to-CPU multiplier, asymmetric smoothing, and
 low-CPU recovery logic are all unchanged.
 
-### Known Limitations
+### Known Limitations / Open Design Questions
 
-**Deduct-all approximation**: When a FULLY_UTILIZE group consumes a
-large fraction of CPU (e.g., 65%), it drains the noBurst bucket,
-reducing the budget available to non-FULLY_UTILIZE groups. The design
-doc's scenarios describe the desired steady-state behavior, which is
-achieved through oscillation: non-FULLY_UTILIZE groups lose canBurst
-when above CPU_MIN, get throttled, drop below CPU_MIN, regain canBurst,
-and settle at their CPU_MIN. The approximation is acceptable because:
-1. The oscillation converges within a few cycles (< 1 second)
-2. The weights ensure proportional sharing within each bucket class
-3. The burst bucket's per-tenant refill rate is calibrated to CPU_MIN
+**Deduct-all + fast path fairness gap**: When a FULLY_UTILIZE group
+(always canBurst) uses the fast path, its admissions drain the noBurst
+bucket via deduct-all without any weight constraint. For example, if
+OPG uses 65% CPU via the fast path, it drains the noBurst bucket by
+65%, leaving only 10% (75% - 65%) for BPG + SCG combined — they each
+get ~5%, not their CPU_MIN of 10%. The design doc's example 2 expects
+BPG and SCG to each get 10%, but the deduct-all mechanism produces
+~5% each. The `tenantHeap` weight-based fair sharing only applies on
+the slow path (queued requests); the fast path bypasses it entirely.
+
+Potential fixes to discuss with Sumeer:
+1. Weight-constrain the fast path — don't let a tenant consume more
+   than its weight-proportional share of noBurst via fast path
+2. Don't deduct canBurst admissions from noBurst — but this breaks
+   the "buckets represent the same physical CPU" invariant
+3. Per-group admission budgets — fundamentally different mechanism
+
+**No scheduling latency feedback in CTT**: The pure token-based system
+has no direct signal for goroutine scheduling pressure. Slots had
+`isOverloaded` (usedSlots >= totalSlots), elastic CPU has
+`schedulerLatencyListener`. CTT relies on the utilization target being
+conservative (75%) and the multiplier indirectly catching increased
+runtime overhead. The design doc suggests using runnable goroutine
+count to throttle token distribution but this is not implemented.
 
 **Elastic work not integrated**: The design doc mentions elastic work
 sharing the same queue with 5% weight and 5% burst qualification limit.
@@ -293,8 +314,8 @@ translate SQL DDL into `SetResourceGroupConfig` calls.
 | `cpu_time_token_filler.go` | All type aliases collapsed to 1D; single queue; single utilization target; removed per-tier settings |
 | `cpu_time_token_grant_coordinator.go` | Single WorkQueue; removed childGranters; added `ResourceGroupConfig`, `SetResourceGroupConfig`; hardcoded 2 groups at init |
 | `cpu_time_token_metrics.go` | Collapsed from `numResourceTiers × numBurstQualifications` to `numBurstQualifications` counters |
-| `cpu_time_token_burst.go` | Added `burstLimitFrac`; `burstQualification()` uses it as threshold |
-| `work_queue.go` | Added `burstLimits` map, `SetBurstLimits`, `getBurstLimitFracLocked`, `defaultBurstLimitFrac`; per-tenant burst bucket refill scaling; scaled capacity at tenant creation |
+| `cpu_time_token_burst.go` | Added `burstLimitFrac`; `burstQualification()` uses `>= 1.0` for FULLY_UTILIZE, `>90% of capacity` for others; per-tenant break-even achieved via scaled capacity/refill, not threshold |
+| `work_queue.go` | Added `burstLimits` map, `SetBurstLimits`, `getBurstLimitFracLocked`; `refillBurstBuckets` scales toAdd and capacity per-tenant by `burstLimitFrac`; `newTenantInfo` scales initial burst bucket capacity |
 
 ## Future Work
 
