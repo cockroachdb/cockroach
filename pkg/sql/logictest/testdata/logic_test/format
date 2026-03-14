@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 # tests from https://github.com/postgres/postgres/blob/4ca9985957881c223b4802d309c0bbbcf8acd1c1/src/test/regress/sql/text.sql#L55
 
 query T
