@@ -443,6 +443,304 @@ func ComputeSSTStatsDiff(
 	return ms, nil
 }
 
+func makeAllowIdempotentAtOrAboveFn(
+	disallowShadowingBelow hlc.Timestamp,
+) func(hlc.Timestamp) bool {
+	if disallowShadowingBelow.IsEmpty() {
+		return func(_ hlc.Timestamp) bool { return false }
+	}
+	return func(extTimestamp hlc.Timestamp) bool {
+		return disallowShadowingBelow.LessEq(extTimestamp)
+	}
+}
+
+func readerHasAnyKeyInSpan(
+	ctx context.Context, reader Reader, start, end MVCCKey,
+) (bool, error) {
+	nonPrefixIter, err := reader.NewMVCCIterator(ctx, MVCCKeyAndIntentsIterKind, IterOptions{
+		KeyTypes:     IterKeyTypePointsAndRanges,
+		UpperBound:   end.Key,
+		ReadCategory: fs.BatchEvalReadCategory,
+	})
+	if err != nil {
+		return false, err
+	}
+	nonPrefixIter.SeekGE(start)
+	valid, err := nonPrefixIter.Valid()
+	nonPrefixIter.Close()
+	return valid, err
+}
+
+func scanSSTConflictingLocks(
+	ctx context.Context,
+	reader Reader,
+	startKey, endKey roachpb.Key,
+	maxLockConflicts, targetLockConflictBytes int64,
+) error {
+	locks, err := ScanLocks(
+		ctx, reader, startKey, endKey, maxLockConflicts, targetLockConflictBytes)
+	if err != nil {
+		return err
+	}
+	if len(locks) > 0 {
+		return &kvpb.LockConflictError{Locks: locks}
+	}
+	return nil
+}
+
+func sstContainsRangeKeys(sst []byte) (bool, error) {
+	rkIter, err := NewMemSSTIterator(sst, false /* verify */, IterOptions{
+		KeyTypes:   IterKeyTypeRangesOnly,
+		LowerBound: keys.MinKey,
+		UpperBound: keys.MaxKey,
+	})
+	if err != nil {
+		return false, err
+	}
+	rkIter.SeekGE(NilKey)
+
+	ok, err := rkIter.Valid()
+	rkIter.Close()
+	if err != nil {
+		return false, err
+	}
+	return ok, nil
+}
+
+func readerContainsRangeKeys(
+	ctx context.Context, reader Reader, start MVCCKey, upperBound roachpb.Key,
+) (bool, error) {
+	rkIter, err := reader.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
+		UpperBound:   upperBound,
+		KeyTypes:     IterKeyTypeRangesOnly,
+		ReadCategory: fs.BatchEvalReadCategory,
+	})
+	if err != nil {
+		return false, err
+	}
+	rkIter.SeekGE(start)
+
+	ok, err := rkIter.Valid()
+	rkIter.Close()
+	if err != nil {
+		return false, err
+	}
+	return ok, nil
+}
+
+type existingSSTCollisionEntry struct {
+	key      MVCCKey
+	valueRaw []byte
+	meta     enginepb.MVCCMetadata
+}
+
+func loadExistingSSTCollisionEntry(extIter MVCCIterator) (existingSSTCollisionEntry, error) {
+	entry := existingSSTCollisionEntry{key: extIter.UnsafeKey()}
+	var err error
+	if entry.key.IsValue() {
+		entry.valueRaw, err = extIter.UnsafeValue()
+	} else {
+		err = extIter.ValueProto(&entry.meta)
+	}
+	return entry, err
+}
+
+// compareForSSTCollision returns an error if the sstKey collides with extKey.
+// It also adjusts statsDiff to account for the conflict if there's no error.
+// If there's an sst range key that covers extKey, the first version of it
+// above extKey must be passed into sstRangeKeyVersion, so that the deletion
+// is recorded at the correct timestamp in stats (i.e. for GCBytesAge). A
+// zero value for sstRangeKeyVersion is acceptable.
+func compareForSSTCollision(
+	disallowShadowingBelow hlc.Timestamp,
+	statsDiff *enginepb.MVCCStats,
+	sstKey MVCCKey,
+	sstValueRaw []byte,
+	ext existingSSTCollisionEntry,
+	sstRangeKeyVersion MVCCRangeKeyVersion,
+) error {
+	// Make sure both keys are proper committed MVCC keys. Note that this is
+	// only checked when the key exists both in the SST and existing data, it is
+	// not an exhaustive check of the SST.
+	if !sstKey.IsValue() {
+		return errors.New("SST keys must have timestamps")
+	}
+	sstValueIsTombstone, err := EncodedMVCCValueIsTombstone(sstValueRaw)
+	if err != nil {
+		return err
+	}
+	if !ext.key.IsValue() {
+		if len(ext.meta.RawBytes) > 0 {
+			return errors.AssertionFailedf("inline values are unsupported")
+		} else if ext.meta.Txn == nil {
+			return errors.AssertionFailedf("found intent without transaction")
+		} else {
+			return errors.AssertionFailedf("found intent after ScanLocks call")
+		}
+	}
+	extValueIsTombstone, err := EncodedMVCCValueIsTombstone(ext.valueRaw)
+	if err != nil {
+		return err
+	}
+
+	// Allow certain idempotent writes where key/timestamp/value all match:
+	//
+	// * disallowShadowingBelow: any matching key at or above the given timestamp.
+	allowIdempotent := !disallowShadowingBelow.IsEmpty() &&
+		disallowShadowingBelow.LessEq(ext.key.Timestamp)
+	if allowIdempotent && sstKey.Timestamp.Equal(ext.key.Timestamp) &&
+		bytes.Equal(ext.valueRaw, sstValueRaw) {
+		// This SST entry will effectively be a noop, but its stats have already
+		// been accounted for resulting in double-counting. To address this we
+		// send back a stats diff for these existing KVs so that we can subtract
+		// them later. This enables us to construct accurate MVCCStats and
+		// prevents expensive recomputation in the future.
+		metaKeySize := int64(len(sstKey.Key) + 1)
+		metaValSize := int64(0)
+		totalBytes := metaKeySize + metaValSize
+
+		// Cancel the GCBytesAge contribution of the point tombstone (if any)
+		// that exists in the SST stats.
+		statsDiff.AgeTo(ext.key.Timestamp.WallTime)
+		// Update the skipped stats to account for the skipped meta key.
+		if !sstValueIsTombstone {
+			statsDiff.LiveBytes -= totalBytes
+			statsDiff.LiveCount--
+		}
+		statsDiff.KeyBytes -= metaKeySize
+		statsDiff.ValBytes -= metaValSize
+		statsDiff.KeyCount--
+
+		// Update the stats to account for the skipped versioned key/value.
+		totalBytes = int64(len(sstValueRaw)) + MVCCVersionTimestampSize
+		if !sstValueIsTombstone {
+			statsDiff.LiveBytes -= totalBytes
+		}
+		statsDiff.KeyBytes -= MVCCVersionTimestampSize
+		statsDiff.ValBytes -= int64(len(sstValueRaw))
+		statsDiff.ValCount--
+
+		return nil
+	}
+
+	// If requested, check that we're not shadowing a live key. Note that
+	// we check this before we check the timestamp, and avoid returning
+	// a WriteTooOldError -- that error implies that the client should
+	// retry at a higher timestamp, but we already know that such a retry
+	// would fail (because it will shadow an existing key).
+	if !extValueIsTombstone && !disallowShadowingBelow.IsEmpty() {
+		allowShadow := disallowShadowingBelow.LessEq(ext.key.Timestamp) &&
+			bytes.Equal(ext.valueRaw, sstValueRaw)
+		if !allowShadow {
+			return kvpb.NewKeyCollisionError(sstKey.Key, sstValueRaw)
+		}
+	}
+
+	// If the existing key has a timestamp at or above the SST key, return a
+	// WriteTooOldError. Normally this could cause a transactional request to be
+	// automatically retried after a read refresh, which we would only want to
+	// do if AddSSTable had SSTTimestampToRequestTimestamp set, but AddSSTable
+	// cannot be used in transactions so we don't need to check.
+	if sstKey.Timestamp.LessEq(ext.key.Timestamp) {
+		return kvpb.NewWriteTooOldError(
+			sstKey.Timestamp, ext.key.Timestamp.Next(), sstKey.Key)
+	}
+
+	// If we are shadowing an existing key, we must update the stats accordingly
+	// to take into account the existing KV pair. The key is considered deleted
+	// at the lowest timestamp where there was an mvcc point tombstone, or an
+	// overlapping range tombstone or new point key.
+	if extValueIsTombstone {
+		statsDiff.AgeTo(ext.key.Timestamp.WallTime)
+	} else if sstRangeKeyVersion.Timestamp.Compare(ext.key.Timestamp) >= 0 &&
+		sstRangeKeyVersion.Timestamp.Compare(sstKey.Timestamp) < 0 {
+		statsDiff.AgeTo(sstRangeKeyVersion.Timestamp.WallTime)
+	} else {
+		statsDiff.AgeTo(sstKey.Timestamp.WallTime)
+	}
+	statsDiff.KeyCount--
+	statsDiff.KeyBytes -= int64(len(ext.key.Key) + 1)
+	if !extValueIsTombstone {
+		statsDiff.LiveCount--
+		statsDiff.LiveBytes -= int64(len(ext.key.Key) + 1)
+		statsDiff.LiveBytes -= int64(len(ext.valueRaw)) + MVCCVersionTimestampSize
+	}
+	return nil
+}
+
+func runPrefixSSTConflictChecks(
+	ctx context.Context,
+	start MVCCKey,
+	disallowShadowingBelow hlc.Timestamp,
+	extIter, sstIter MVCCIterator,
+	statsDiff *enginepb.MVCCStats,
+) error {
+	// The caller guarantees that prefix iteration is only used when both the
+	// reader and SST are known to contain point keys only.
+	sstIter.SeekGE(start)
+	sstOK, sstErr := sstIter.Valid()
+	for sstErr == nil && sstOK {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		// extIter is a prefix iterator; it is expected to skip keys that belong
+		// to different prefixes. Only iterate along the sst iterator, and re-seek
+		// extIter each time.
+		sstKey := sstIter.UnsafeKey()
+		extIter.SeekGE(MVCCKey{Key: sstKey.Key})
+		extOK, extErr := extIter.Valid()
+		if extErr != nil {
+			return extErr
+		}
+		if !extOK {
+			// There is no key in extIter matching this prefix. Check the next key in
+			// sstIter. Note that we can't just use an exhausted extIter as a sign that
+			// we are done with the loop; extIter is a prefix iterator and could
+			// have keys after the current prefix that it will not return unless
+			// re-seeked.
+			sstIter.NextKey()
+			sstOK, sstErr = sstIter.Valid()
+			continue
+		}
+		sstValueRaw, err := sstIter.UnsafeValue()
+		if err != nil {
+			return err
+		}
+		ext, err := loadExistingSSTCollisionEntry(extIter)
+		if err != nil {
+			return err
+		}
+
+		// We just seeked the engine iter. If it has a mismatching prefix, the
+		// iterator is not obeying its contract.
+		if !bytes.Equal(ext.key.Key, sstKey.Key) {
+			return errors.Errorf(
+				"prefix iterator returned mismatching prefix: %s != %s",
+				ext.key.Key,
+				sstKey.Key,
+			)
+		}
+
+		if err := compareForSSTCollision(
+			disallowShadowingBelow,
+			statsDiff,
+			sstKey,
+			sstValueRaw,
+			ext,
+			MVCCRangeKeyVersion{},
+		); err != nil {
+			return err
+		}
+
+		sstIter.NextKey()
+		sstOK, sstErr = sstIter.Valid()
+	}
+	if sstErr != nil {
+		return sstErr
+	}
+	return nil
+}
+
 // CheckSSTConflicts iterates over an SST and a Reader in lockstep and errors
 // out if it finds any conflicts. This includes intents and existing keys with a
 // timestamp at or above the SST key timestamp.
@@ -477,12 +775,7 @@ func CheckSSTConflicts(
 	usePrefixSeek bool,
 ) (enginepb.MVCCStats, error) {
 
-	allowIdempotentHelper := func(_ hlc.Timestamp) bool { return false }
-	if !disallowShadowingBelow.IsEmpty() {
-		allowIdempotentHelper = func(extTimestamp hlc.Timestamp) bool {
-			return disallowShadowingBelow.LessEq(extTimestamp)
-		}
-	}
+	allowIdempotentHelper := makeAllowIdempotentAtOrAboveFn(disallowShadowingBelow)
 	if leftPeekBound == nil {
 		leftPeekBound = keys.MinKey
 	}
@@ -493,57 +786,29 @@ func CheckSSTConflicts(
 		sstTimestamp = hlc.Timestamp{}
 	}
 
-	// In some iterations below, we try to call Next() instead of SeekGE() for a
-	// few iterations, as nexts are more performant. If `numNextsBeforeSeek` nexts
-	// are not sufficient to land at or after a desired SeekGE key, we fall back to
-	// a seek.
-	const numNextsBeforeSeek = 5
 	var statsDiff enginepb.MVCCStats
 	if usePrefixSeek {
 		// If we're going to be using a prefix iterator, check for the fast path
 		// first, where there are no keys in the reader between the sstable's start
 		// and end keys. We use a non-prefix iterator for this search, and reopen a
 		// prefix one if there are engine keys in the span.
-		nonPrefixIter, err := reader.NewMVCCIterator(ctx, MVCCKeyAndIntentsIterKind, IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
-			UpperBound:   end.Key,
-			ReadCategory: fs.BatchEvalReadCategory,
-		})
-		if err != nil {
-			return statsDiff, err
-		}
-		nonPrefixIter.SeekGE(start)
-		valid, err := nonPrefixIter.Valid()
-		nonPrefixIter.Close()
-		if !valid {
+		hasAnyKey, err := readerHasAnyKeyInSpan(ctx, reader, start, end)
+		if !hasAnyKey {
 			return statsDiff, err
 		}
 	}
 
 	// Check for any overlapping locks, and return them to be resolved.
-	if locks, err := ScanLocks(
+	if err := scanSSTConflictingLocks(
 		ctx, reader, start.Key, end.Key, maxLockConflicts, targetLockConflictBytes); err != nil {
 		return enginepb.MVCCStats{}, err
-	} else if len(locks) > 0 {
-		return enginepb.MVCCStats{}, &kvpb.LockConflictError{Locks: locks}
 	}
 
 	// Check for any range keys.
 	//
 	// TODO(bilal): Expose reader.Properties.NumRangeKeys() here, so we don't
 	// need to read the SST to figure out if it has range keys.
-	rkIter, err := NewMemSSTIterator(sst, false /* verify */, IterOptions{
-		KeyTypes:   IterKeyTypeRangesOnly,
-		LowerBound: keys.MinKey,
-		UpperBound: keys.MaxKey,
-	})
-	if err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	rkIter.SeekGE(NilKey)
-
-	ok, err := rkIter.Valid()
-	rkIter.Close()
+	ok, err := sstContainsRangeKeys(sst)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
@@ -553,19 +818,8 @@ func CheckSSTConflicts(
 		usePrefixSeek = false
 	}
 
-	rkIter, err = reader.NewMVCCIterator(ctx, MVCCKeyIterKind, IterOptions{
-		UpperBound:   rightPeekBound,
-		KeyTypes:     IterKeyTypeRangesOnly,
-		ReadCategory: fs.BatchEvalReadCategory,
-	})
-	if err != nil {
-		return enginepb.MVCCStats{}, err
-	}
-	rkIter.SeekGE(start)
-
 	var engineHasRangeKeys bool
-	ok, err = rkIter.Valid()
-	rkIter.Close()
+	ok, err = readerContainsRangeKeys(ctx, reader, start, rightPeekBound)
 	if err != nil {
 		return enginepb.MVCCStats{}, err
 	}
@@ -618,122 +872,48 @@ func CheckSSTConflicts(
 	}
 	defer sstIter.Close()
 
-	// compareForCollision returns an error if the sstKey collides with extKey.
-	// It also adjusts statsDiff to account for the conflict if there's no error.
-	// If there's an sst range key that covers extKey, the first version of it
-	// above extKey must be passed into sstRangeKeyVersion, so that the deletion
-	// is recorded at the correct timestamp in stats (i.e. for GCBytesAge). A
-	// zero value for sstRangeKeyVersion is acceptable.
-	compareForCollision := func(sstKey, extKey MVCCKey, sstValueRaw, extValueRaw []byte, sstRangeKeyVersion MVCCRangeKeyVersion) error {
-		// Make sure both keys are proper committed MVCC keys. Note that this is
-		// only checked when the key exists both in the SST and existing data, it is
-		// not an exhaustive check of the SST.
-		if !sstKey.IsValue() {
-			return errors.New("SST keys must have timestamps")
+	if usePrefixSeek {
+		if err := runPrefixSSTConflictChecks(
+			ctx,
+			start,
+			disallowShadowingBelow,
+			extIter,
+			sstIter,
+			&statsDiff,
+		); err != nil {
+			return enginepb.MVCCStats{}, err
 		}
-		sstValueIsTombstone, err := EncodedMVCCValueIsTombstone(sstValueRaw)
-		if err != nil {
-			return err
-		}
-		if !extKey.IsValue() {
-			var mvccMeta enginepb.MVCCMetadata
-			if err = extIter.ValueProto(&mvccMeta); err != nil {
-				return err
-			}
-			if len(mvccMeta.RawBytes) > 0 {
-				return errors.AssertionFailedf("inline values are unsupported")
-			} else if mvccMeta.Txn == nil {
-				return errors.AssertionFailedf("found intent without transaction")
-			} else {
-				return errors.AssertionFailedf("found intent after ScanLocks call")
-			}
-		}
-		extValueIsTombstone, err := EncodedMVCCValueIsTombstone(extValueRaw)
-		if err != nil {
-			return err
-		}
-
-		// Allow certain idempotent writes where key/timestamp/value all match:
-		//
-		// * disallowShadowingBelow: any matching key at or above the given timestamp.
-		allowIdempotent := !disallowShadowingBelow.IsEmpty() && disallowShadowingBelow.LessEq(extKey.Timestamp)
-		if allowIdempotent && sstKey.Timestamp.Equal(extKey.Timestamp) &&
-			bytes.Equal(extValueRaw, sstValueRaw) {
-			// This SST entry will effectively be a noop, but its stats have already
-			// been accounted for resulting in double-counting. To address this we
-			// send back a stats diff for these existing KVs so that we can subtract
-			// them later. This enables us to construct accurate MVCCStats and
-			// prevents expensive recomputation in the future.
-			metaKeySize := int64(len(sstKey.Key) + 1)
-			metaValSize := int64(0)
-			totalBytes := metaKeySize + metaValSize
-
-			// Cancel the GCBytesAge contribution of the point tombstone (if any)
-			// that exists in the SST stats.
-			statsDiff.AgeTo(extKey.Timestamp.WallTime)
-			// Update the skipped stats to account for the skipped meta key.
-			if !sstValueIsTombstone {
-				statsDiff.LiveBytes -= totalBytes
-				statsDiff.LiveCount--
-			}
-			statsDiff.KeyBytes -= metaKeySize
-			statsDiff.ValBytes -= metaValSize
-			statsDiff.KeyCount--
-
-			// Update the stats to account for the skipped versioned key/value.
-			totalBytes = int64(len(sstValueRaw)) + MVCCVersionTimestampSize
-			if !sstValueIsTombstone {
-				statsDiff.LiveBytes -= totalBytes
-			}
-			statsDiff.KeyBytes -= MVCCVersionTimestampSize
-			statsDiff.ValBytes -= int64(len(sstValueRaw))
-			statsDiff.ValCount--
-
-			return nil
-		}
-
-		// If requested, check that we're not shadowing a live key. Note that
-		// we check this before we check the timestamp, and avoid returning
-		// a WriteTooOldError -- that error implies that the client should
-		// retry at a higher timestamp, but we already know that such a retry
-		// would fail (because it will shadow an existing key).
-		if !extValueIsTombstone && !disallowShadowingBelow.IsEmpty() {
-			allowShadow := disallowShadowingBelow.LessEq(extKey.Timestamp) && bytes.Equal(extValueRaw, sstValueRaw)
-			if !allowShadow {
-				return kvpb.NewKeyCollisionError(sstKey.Key, sstValueRaw)
-			}
-		}
-
-		// If the existing key has a timestamp at or above the SST key, return a
-		// WriteTooOldError. Normally this could cause a transactional request to be
-		// automatically retried after a read refresh, which we would only want to
-		// do if AddSSTable had SSTTimestampToRequestTimestamp set, but AddSSTable
-		// cannot be used in transactions so we don't need to check.
-		if sstKey.Timestamp.LessEq(extKey.Timestamp) {
-			return kvpb.NewWriteTooOldError(
-				sstKey.Timestamp, extKey.Timestamp.Next(), sstKey.Key)
-		}
-
-		// If we are shadowing an existing key, we must update the stats accordingly
-		// to take into account the existing KV pair. The key is considered deleted
-		// at the lowest timestamp where there was an mvcc point tombstone, or an
-		// overlapping range tombstone or new point key.
-		if extValueIsTombstone {
-			statsDiff.AgeTo(extKey.Timestamp.WallTime)
-		} else if sstRangeKeyVersion.Timestamp.Compare(extKey.Timestamp) >= 0 && sstRangeKeyVersion.Timestamp.Compare(sstKey.Timestamp) < 0 {
-			statsDiff.AgeTo(sstRangeKeyVersion.Timestamp.WallTime)
-		} else {
-			statsDiff.AgeTo(sstKey.Timestamp.WallTime)
-		}
-		statsDiff.KeyCount--
-		statsDiff.KeyBytes -= int64(len(extKey.Key) + 1)
-		if !extValueIsTombstone {
-			statsDiff.LiveCount--
-			statsDiff.LiveBytes -= int64(len(extKey.Key) + 1)
-			statsDiff.LiveBytes -= int64(len(extValueRaw)) + MVCCVersionTimestampSize
-		}
-		return nil
+		return statsDiff, nil
 	}
+
+	if err := runNonPrefixSSTConflictChecks(
+		ctx,
+		start,
+		disallowShadowingBelow,
+		sstTimestamp,
+		allowIdempotentHelper,
+		extIter,
+		sstIter,
+		&statsDiff,
+	); err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+	return statsDiff, nil
+}
+
+func runNonPrefixSSTConflictChecks(
+	ctx context.Context,
+	start MVCCKey,
+	disallowShadowingBelow, sstTimestamp hlc.Timestamp,
+	allowIdempotentHelper func(hlc.Timestamp) bool,
+	extIter, sstIter MVCCIterator,
+	statsDiff *enginepb.MVCCStats,
+) error {
+	// In some iterations below, we try to call Next() instead of SeekGE() for a
+	// few iterations, as nexts are more performant. If `numNextsBeforeSeek` nexts
+	// are not sufficient to land at or after a desired SeekGE key, we fall back to
+	// a seek.
+	const numNextsBeforeSeek = 5
 
 	sstIter.SeekGE(start)
 	sstOK, sstErr := sstIter.Valid()
@@ -743,72 +923,14 @@ func CheckSSTConflicts(
 	var sstFirstRangeKey MVCCRangeKeyStack
 	var extPrevKey, extPrevDeletedKey MVCCKey
 
-	if usePrefixSeek {
-		// In the case of prefix seeks, do not look at engine iter exhaustion. This
-		// is because the engine prefix iterator could be exhausted when it has
-		// iterated past its prefix, even if there are other keys after the prefix
-		// that should be checked.
-		for sstErr == nil && sstOK {
-			if err := ctx.Err(); err != nil {
-				return enginepb.MVCCStats{}, err
-			}
-			// extIter is a prefix iterator; it is expected to skip keys that belong
-			// to different prefixes. Only iterate along the sst iterator, and re-seek
-			// extIter each time.
-			extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
-			extOK, extErr = extIter.Valid()
-			if extErr != nil {
-				break
-			}
-			if !extOK {
-				// There is no key in extIter matching this prefix. Check the next key in
-				// sstIter. Note that we can't just use an exhausted extIter as a sign that
-				// we are done with the loop; extIter is a prefix iterator and could
-				// have keys after the current prefix that it will not return unless
-				// re-seeked.
-				sstIter.NextKey()
-				sstOK, sstErr = sstIter.Valid()
-				continue
-			}
-
-			// TODO(sumeer): extValueRaw is not always needed below. In many cases
-			// MVCCValueLenAndIsTombstone() suffices. This will require some
-			// rearrangement of the logic in compareForCollision. This is not a
-			// pressing optimization since currently the value is cheap to retrieve
-			// for the latest version of a key, and we are seeing the latest version
-			// because of the extIter.SeekGE call above.
-			extValueRaw, err := extIter.UnsafeValue()
-			if err != nil {
-				return enginepb.MVCCStats{}, err
-			}
-			sstValueRaw, err := sstIter.UnsafeValue()
-			if err != nil {
-				return enginepb.MVCCStats{}, err
-			}
-			extKey := extIter.UnsafeKey()
-			sstKey := sstIter.UnsafeKey()
-
-			// We just seeked the engine iter. If it has a mismatching prefix, the
-			// iterator is not obeying its contract.
-			if !bytes.Equal(extKey.Key, sstKey.Key) {
-				return enginepb.MVCCStats{}, errors.Errorf("prefix iterator returned mismatching prefix: %s != %s", extKey.Key, sstKey.Key)
-			}
-
-			if err := compareForCollision(sstKey, extKey, sstValueRaw, extValueRaw, MVCCRangeKeyVersion{}); err != nil {
-				return enginepb.MVCCStats{}, err
-			}
-
-			sstIter.NextKey()
-			sstOK, sstErr = sstIter.Valid()
-		}
-	} else if sstOK {
+	if sstOK {
 		extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
 		extOK, extErr = extIter.Valid()
 	}
 
-	for !usePrefixSeek && sstErr == nil && sstOK && extOK && extErr == nil {
+	for sstErr == nil && sstOK && extOK && extErr == nil {
 		if err := ctx.Err(); err != nil {
-			return enginepb.MVCCStats{}, err
+			return err
 		}
 		extHasPoint, extHasRange := extIter.HasPointAndRange()
 		sstHasPoint, sstHasRange := sstIter.HasPointAndRange()
@@ -838,7 +960,7 @@ func CheckSSTConflicts(
 				if sstTombstone.Timestamp.Less(extRangeKeys.Versions[0].Timestamp) {
 					// Conflict. We can't slide an MVCC range tombstone below an
 					// existing MVCC range tombstone in the engine.
-					return enginepb.MVCCStats{}, kvpb.NewWriteTooOldError(
+					return kvpb.NewWriteTooOldError(
 						sstTombstone.Timestamp, extRangeKeys.Versions[0].Timestamp.Next(), sstRangeKeys.Bounds.Key)
 				}
 				if !extRangeKeys.Versions[0].Timestamp.Less(sstTombstone.Timestamp) {
@@ -850,7 +972,7 @@ func CheckSSTConflicts(
 					isIdempotent := extTombstones.Equal(sstRangeKeys.Versions)
 					if ok := allowIdempotentHelper(extRangeKeys.Versions[0].Timestamp); !ok || !isIdempotent {
 						// Idempotence is either not allowed or there's a conflict.
-						return enginepb.MVCCStats{}, kvpb.NewWriteTooOldError(
+						return kvpb.NewWriteTooOldError(
 							sstTombstone.Timestamp, extRangeKeys.Versions[0].Timestamp.Next(), sstRangeKeys.Bounds.Key)
 					}
 				}
@@ -863,7 +985,7 @@ func CheckSSTConflicts(
 			if extRangeKeys.Covers(sstKey) {
 				// A range tombstone in the engine deletes this SST key. Return
 				// a WriteTooOldError.
-				return enginepb.MVCCStats{}, kvpb.NewWriteTooOldError(
+				return kvpb.NewWriteTooOldError(
 					sstKey.Timestamp, extRangeKeys.Versions[0].Timestamp.Next(), sstKey.Key)
 			}
 		}
@@ -879,15 +1001,15 @@ func CheckSSTConflicts(
 			if extKey.IsValue() {
 				extValueLen, extValueIsTombstone, err = extIter.MVCCValueLenAndIsTombstone()
 				if err != nil {
-					return enginepb.MVCCStats{}, err
+					return err
 				}
 			} else {
-				return enginepb.MVCCStats{}, errors.AssertionFailedf("found intent after ScanLocks call")
+				return errors.AssertionFailedf("found intent after ScanLocks call")
 			}
 
 			if sstBottomTombstone.Timestamp.LessEq(extKey.Timestamp) {
 				// Conflict.
-				return enginepb.MVCCStats{}, kvpb.NewWriteTooOldError(
+				return kvpb.NewWriteTooOldError(
 					sstBottomTombstone.Timestamp, extKey.Timestamp.Next(), sstRangeKeys.Bounds.Key)
 			}
 			if sstRangeKeys.Covers(extKey) {
@@ -898,13 +1020,13 @@ func CheckSSTConflicts(
 					// Note that we don't check for value equality here, unlike in the
 					// point key shadow case. This is because a range key and a point key
 					// by definition have different values.
-					return enginepb.MVCCStats{}, errors.Errorf(
+					return errors.Errorf(
 						"ingested range key collides with an existing one: %s", sstTopTombstone)
 				}
 				if !extValueDeleted {
 					sstRangeKeyVersion, ok := sstRangeKeys.FirstAtOrAbove(extKey.Timestamp)
 					if !ok {
-						return enginepb.MVCCStats{}, errors.AssertionFailedf("expected range tombstone above timestamp %v", extKey.Timestamp)
+						return errors.AssertionFailedf("expected range tombstone above timestamp %v", extKey.Timestamp)
 					}
 					sstPointShadowsExtPoint := sstHasPoint && sstIter.UnsafeKey().Key.Equal(extKey.Key)
 					if (extKeyChanged || sstRangeKeysChanged) && !sstPointShadowsExtPoint && !extKey.Equal(extPrevDeletedKey) {
@@ -914,7 +1036,7 @@ func CheckSSTConflicts(
 					} else if extKey.Equal(extPrevDeletedKey) && sstPointShadowsExtPoint {
 						// This is either a conflict, shadow, or idempotent operation.
 						// Subtract the RangeKeyCover stats diff from the last iteration, as
-						// compareForCollision will account for the shadow.
+						// compareForSSTCollision will account for the shadow.
 						statsDiff.Subtract(updateStatsOnRangeKeyCover(
 							sstRangeKeyVersion.Timestamp, extKey, extValueLen, extValueIsTombstone))
 					}
@@ -1040,7 +1162,7 @@ func CheckSSTConflicts(
 				savedExtKey := extIter.UnsafeKey().Clone()
 				pos, peekedExtRangeKeys, err := PeekRangeKeysLeft(extIter, sstRangeKeys.Bounds.Key)
 				if err != nil {
-					return enginepb.MVCCStats{}, err
+					return err
 				}
 				if pos == 0 && peekedExtRangeKeys.CanMergeRight(sstRangeKeys) {
 					statsDiff.Add(updateStatsOnRangeKeyMerge(sstRangeKeys.Bounds.Key, sstRangeKeys.Versions))
@@ -1161,7 +1283,7 @@ func CheckSSTConflicts(
 		extKey := extIter.UnsafeKey()
 		sstValueRaw, err := sstIter.UnsafeValue()
 		if err != nil {
-			return enginepb.MVCCStats{}, err
+			return err
 		}
 		sstKey := sstIter.UnsafeKey()
 
@@ -1169,7 +1291,7 @@ func CheckSSTConflicts(
 		if cmp := bytes.Compare(extKey.Key, sstKey.Key); cmp < 0 {
 			// sstIter is further ahead. This should never happen; we always seek
 			// extIter after seeking/nexting sstIter.
-			return enginepb.MVCCStats{}, errors.AssertionFailedf("expected engine iter to be ahead of sst iter")
+			return errors.AssertionFailedf("expected engine iter to be ahead of sst iter")
 		} else if cmp > 0 && sstHasPoint && !extHasRange {
 			// We exclude !sstHasPoint above in case we were at a range key pause
 			// point that matches extKey. In that case, the below SeekGE would make
@@ -1213,23 +1335,30 @@ func CheckSSTConflicts(
 			if sstHasPoint && extHasPoint && !extValueDeletedByRange {
 				// TODO(sumeer): extValueRaw is not always needed below. In many cases
 				// MVCCValueLenAndIsTombstone() suffices. This will require some
-				// rearrangement of the logic in compareForCollision.
-				extValueRaw, err := extIter.UnsafeValue()
+				// rearrangement of the logic in compareForSSTCollision.
+				ext, err := loadExistingSSTCollisionEntry(extIter)
 				if err != nil {
-					return enginepb.MVCCStats{}, err
+					return err
 				}
 				var sstRangeKeyVersion MVCCRangeKeyVersion
-				if sstHasRange && sstRangeKeys.Covers(extKey) {
-					sstRangeKeyVersion, _ = sstRangeKeys.FirstAtOrAbove(extKey.Timestamp)
+				if sstHasRange && sstRangeKeys.Covers(ext.key) {
+					sstRangeKeyVersion, _ = sstRangeKeys.FirstAtOrAbove(ext.key.Timestamp)
 				}
-				if err := compareForCollision(sstKey, extKey, sstValueRaw, extValueRaw, sstRangeKeyVersion); err != nil {
-					return enginepb.MVCCStats{}, err
+				if err := compareForSSTCollision(
+					disallowShadowingBelow,
+					statsDiff,
+					sstKey,
+					sstValueRaw,
+					ext,
+					sstRangeKeyVersion,
+				); err != nil {
+					return err
 				}
 			} else if sstHasPoint && extValueDeletedByRange {
 				// Don't double-count the current key.
 				var deletedAt hlc.Timestamp
 				if _, isTombstone, err := extIter.MVCCValueLenAndIsTombstone(); err != nil {
-					return enginepb.MVCCStats{}, err
+					return err
 				} else if isTombstone {
 					deletedAt = extKey.Timestamp
 				} else {
@@ -1373,7 +1502,7 @@ func CheckSSTConflicts(
 				extIter.NextKey()
 				extOK, extErr = extIter.Valid()
 				if extErr != nil {
-					return enginepb.MVCCStats{}, extErr
+					return extErr
 				}
 				sstIter.NextKey()
 				sstOK, sstErr = sstIter.Valid()
@@ -1405,7 +1534,7 @@ func CheckSSTConflicts(
 				maybeReseekExtIter = true
 			}
 			if extErr != nil {
-				return enginepb.MVCCStats{}, extErr
+				return extErr
 			}
 			if maybeReseekExtIter && sstOK && (!extOK || extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key) < 0) {
 				extIter.SeekGE(MVCCKey{Key: sstIter.UnsafeKey().Key})
@@ -1421,7 +1550,7 @@ func CheckSSTConflicts(
 				steppedExtIter = true
 				extOK, extErr = extIter.Valid()
 				if extErr != nil {
-					return enginepb.MVCCStats{}, extErr
+					return extErr
 				}
 				if !extOK || !extIter.UnsafeKey().Key.Equal(oldExtKey.Key) {
 					// extIter either went out of bounds or stepped one key ahead. If the
@@ -1450,7 +1579,7 @@ func CheckSSTConflicts(
 				sstIter.Next()
 				sstOK, sstErr = sstIter.Valid()
 				if sstErr != nil {
-					return enginepb.MVCCStats{}, sstErr
+					return sstErr
 				}
 				if sstOK && !sstIter.UnsafeKey().Key.Equal(oldKey.Key) && extIter.UnsafeKey().Key.Compare(sstIter.UnsafeKey().Key) < 0 {
 					// sstIter stepped one key ahead. Re-seek both iterators at the next
@@ -1554,7 +1683,7 @@ func CheckSSTConflicts(
 			if !sstRangeKeys.Bounds.Equal(sstPrevRangeKeys.Bounds) {
 				pos, peekedExtRangeKeys, err := PeekRangeKeysLeft(extIter, sstRangeKeys.Bounds.Key)
 				if err != nil {
-					return enginepb.MVCCStats{}, err
+					return err
 				}
 				if pos == 0 && peekedExtRangeKeys.CanMergeRight(sstRangeKeys) {
 					statsDiff.Add(updateStatsOnRangeKeyMerge(sstRangeKeys.Bounds.Key, sstRangeKeys.Versions))
@@ -1564,13 +1693,13 @@ func CheckSSTConflicts(
 	}
 
 	if extErr != nil {
-		return enginepb.MVCCStats{}, extErr
+		return extErr
 	}
 	if sstErr != nil {
-		return enginepb.MVCCStats{}, sstErr
+		return sstErr
 	}
 
-	return statsDiff, nil
+	return nil
 }
 
 // UpdateSSTTimestamps replaces all MVCC timestamp in the provided SST to the

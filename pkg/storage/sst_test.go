@@ -119,6 +119,241 @@ func TestCheckSSTConflictsMaxLockConflicts(t *testing.T) {
 	}
 }
 
+type sstConflictTestPoint struct {
+	key   string
+	ts    int
+	value string
+}
+
+type sstConflictTestRangeKey struct {
+	start string
+	end   string
+	ts    int
+}
+
+func makeCheckSSTConflictsTestSST(
+	t *testing.T,
+	ctx context.Context,
+	st *cluster.Settings,
+	points []sstConflictTestPoint,
+	rangeKeys []sstConflictTestRangeKey,
+) []byte {
+	t.Helper()
+
+	sstFile := &MemObject{}
+	writer := MakeIngestionSSTWriter(ctx, st, sstFile)
+	defer writer.Close()
+
+	for _, point := range points {
+		require.NoError(t, writer.PutMVCC(
+			MVCCKey{Key: roachpb.Key(point.key), Timestamp: wallTS(point.ts)},
+			stringValue(point.value),
+		))
+	}
+	for _, rk := range rangeKeys {
+		require.NoError(t, writer.PutMVCCRangeKey(
+			rangeKey(rk.start, rk.end, rk.ts),
+			MVCCValue{},
+		))
+	}
+	require.NoError(t, writer.Finish())
+	return sstFile.Bytes()
+}
+
+func writeCheckSSTConflictsTestPoints(
+	t *testing.T, ctx context.Context, eng Engine, points []sstConflictTestPoint,
+) {
+	t.Helper()
+	for _, point := range points {
+		_, err := MVCCPut(
+			ctx,
+			eng,
+			roachpb.Key(point.key),
+			wallTS(point.ts),
+			roachpb.MakeValueFromString(point.value),
+			MVCCWriteOptions{},
+		)
+		require.NoError(t, err)
+	}
+}
+
+func writeCheckSSTConflictsTestRangeKeys(
+	t *testing.T, eng Engine, rangeKeys []sstConflictTestRangeKey,
+) {
+	t.Helper()
+	for _, rk := range rangeKeys {
+		require.NoError(t, eng.PutMVCCRangeKey(
+			rangeKey(rk.start, rk.end, rk.ts),
+			MVCCValue{},
+		))
+	}
+}
+
+func runCheckSSTConflictsForTest(
+	t *testing.T,
+	ctx context.Context,
+	sst []byte,
+	eng Engine,
+	disallowShadowingBelow hlc.Timestamp,
+	usePrefixSeek bool,
+) (enginepb.MVCCStats, error) {
+	t.Helper()
+	start := MVCCKey{Key: roachpb.Key("a")}
+	end := MVCCKey{Key: roachpb.Key("z")}
+	return CheckSSTConflicts(
+		ctx,
+		sst,
+		eng,
+		start,
+		end,
+		start.Key,
+		end.Key.Next(),
+		disallowShadowingBelow,
+		hlc.Timestamp{}, /* sstTimestamp */
+		0,               /* maxLockConflicts */
+		0,               /* targetLockConflictBytes */
+		usePrefixSeek,
+	)
+}
+
+func formatCheckSSTConflictErr(err error) string {
+	if err == nil {
+		return ""
+	}
+	return fmt.Sprintf("%T:%v", err, err)
+}
+
+func TestCheckSSTConflictsIdempotentPointStatsDiff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	eng := NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	points := []sstConflictTestPoint{{key: "a", ts: 5, value: "same"}}
+	writeCheckSSTConflictsTestPoints(t, ctx, eng, points)
+	sst := makeCheckSSTConflictsTestSST(t, ctx, st, points, nil)
+
+	emptyEng := NewDefaultInMemForTesting()
+	defer emptyEng.Close()
+	start := MVCCKey{Key: roachpb.Key("a")}
+	end := MVCCKey{Key: roachpb.Key("b")}
+	expected, err := ComputeSSTStatsDiff(ctx, sst, emptyEng, 0, start, end)
+	require.NoError(t, err)
+	expected.Scale(-1)
+
+	for _, usePrefixSeek := range []bool{false, true} {
+		t.Run(fmt.Sprintf("usePrefixSeek=%v", usePrefixSeek), func(t *testing.T) {
+			statsDiff, err := runCheckSSTConflictsForTest(
+				t, ctx, sst, eng, wallTS(5), usePrefixSeek,
+			)
+			require.NoError(t, err)
+			require.Equal(t, expected, statsDiff)
+		})
+	}
+}
+
+func TestCheckSSTConflictsPrefixSeekMatchesNonPrefixForPoints(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	testCases := []struct {
+		name                   string
+		enginePoints           []sstConflictTestPoint
+		sstPoints              []sstConflictTestPoint
+		disallowShadowingBelow hlc.Timestamp
+	}{
+		{
+			name:      "empty_reader_fast_path",
+			sstPoints: []sstConflictTestPoint{{key: "a", ts: 1, value: "v1"}},
+		},
+		{
+			name:         "write_too_old",
+			enginePoints: []sstConflictTestPoint{{key: "a", ts: 5, value: "existing"}},
+			sstPoints:    []sstConflictTestPoint{{key: "a", ts: 4, value: "incoming"}},
+		},
+		{
+			name:                   "key_collision",
+			enginePoints:           []sstConflictTestPoint{{key: "a", ts: 5, value: "existing"}},
+			sstPoints:              []sstConflictTestPoint{{key: "a", ts: 6, value: "incoming"}},
+			disallowShadowingBelow: wallTS(1),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			eng := NewDefaultInMemForTesting()
+			defer eng.Close()
+			writeCheckSSTConflictsTestPoints(t, ctx, eng, tc.enginePoints)
+			sst := makeCheckSSTConflictsTestSST(t, ctx, st, tc.sstPoints, nil)
+
+			nonPrefixStats, nonPrefixErr := runCheckSSTConflictsForTest(
+				t, ctx, sst, eng, tc.disallowShadowingBelow, false,
+			)
+			prefixStats, prefixErr := runCheckSSTConflictsForTest(
+				t, ctx, sst, eng, tc.disallowShadowingBelow, true,
+			)
+
+			require.Equal(t, formatCheckSSTConflictErr(nonPrefixErr), formatCheckSSTConflictErr(prefixErr))
+			require.Equal(t, nonPrefixStats, prefixStats)
+		})
+	}
+}
+
+func TestCheckSSTConflictsPrefixSeekFallsBackForRangeKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	testCases := []struct {
+		name                   string
+		enginePoints           []sstConflictTestPoint
+		engineRangeKeys        []sstConflictTestRangeKey
+		sstPoints              []sstConflictTestPoint
+		sstRangeKeys           []sstConflictTestRangeKey
+		disallowShadowingBelow hlc.Timestamp
+	}{
+		{
+			name:            "engine_range_keys",
+			engineRangeKeys: []sstConflictTestRangeKey{{start: "a", end: "c", ts: 5}},
+			sstPoints:       []sstConflictTestPoint{{key: "b", ts: 4, value: "incoming"}},
+		},
+		{
+			name:                   "sst_range_keys",
+			enginePoints:           []sstConflictTestPoint{{key: "b", ts: 1, value: "existing"}},
+			sstRangeKeys:           []sstConflictTestRangeKey{{start: "a", end: "c", ts: 2}},
+			disallowShadowingBelow: wallTS(1),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			eng := NewDefaultInMemForTesting()
+			defer eng.Close()
+			writeCheckSSTConflictsTestPoints(t, ctx, eng, tc.enginePoints)
+			writeCheckSSTConflictsTestRangeKeys(t, eng, tc.engineRangeKeys)
+			sst := makeCheckSSTConflictsTestSST(t, ctx, st, tc.sstPoints, tc.sstRangeKeys)
+
+			nonPrefixStats, nonPrefixErr := runCheckSSTConflictsForTest(
+				t, ctx, sst, eng, tc.disallowShadowingBelow, false,
+			)
+			prefixStats, prefixErr := runCheckSSTConflictsForTest(
+				t, ctx, sst, eng, tc.disallowShadowingBelow, true,
+			)
+
+			require.Equal(t, formatCheckSSTConflictErr(nonPrefixErr), formatCheckSSTConflictErr(prefixErr))
+			require.Equal(t, nonPrefixStats, prefixStats)
+		})
+	}
+}
+
 func BenchmarkUpdateSSTTimestamps(b *testing.B) {
 	defer log.Scope(b).Close(b)
 	skip.UnderShort(b)
