@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 # cluster-opt: disable-mvcc-range-tombstones-for-point-deletes
 
 statement ok
