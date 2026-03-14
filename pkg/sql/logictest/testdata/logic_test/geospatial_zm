@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 # All dimensions
 statement ok
 CREATE TABLE geom_all(geom geometry)
