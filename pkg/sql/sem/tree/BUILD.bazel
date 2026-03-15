@@ -74,6 +74,7 @@ go_library(
         "inject_hints.go",
         "insert.go",
         "inspect.go",
+        "lock.go",
         "name_part.go",
         "name_resolution.go",
         "object_name.go",

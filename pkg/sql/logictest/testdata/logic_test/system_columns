@@ -415,6 +415,31 @@ SELECT bool_and(tableoid = $crdb_tables_oid) FROM crdb_internal.tables
 ----
 true
 
+# LOCK TABLE is a no-op when pg_dump_compatibility is enabled.
+statement ok
+LOCK TABLE pg_namespace IN ACCESS SHARE MODE
+
+# Multiple tables work too (pg_dump batches locks).
+statement ok
+LOCK TABLE pg_class, pg_namespace IN ACCESS SHARE MODE
+
+# NOWAIT variant also works.
+statement ok
+LOCK TABLE pg_class IN ACCESS SHARE MODE NOWAIT
+
+# Other lock modes also work.
+statement ok
+LOCK TABLE pg_class IN ROW SHARE MODE
+
+statement ok
+LOCK TABLE pg_class IN ROW EXCLUSIVE MODE
+
+statement ok
+LOCK TABLE pg_class IN SHARE MODE
+
+statement ok
+LOCK TABLE pg_class IN EXCLUSIVE MODE
+
 # Turn it back off and verify default behavior is restored.
 statement ok
 SET pg_dump_compatibility = false
@@ -423,5 +448,9 @@ query O
 SELECT DISTINCT tableoid FROM pg_namespace LIMIT 1
 ----
 4294967048
+
+# LOCK TABLE is not supported by default.
+statement error pgcode 0A000 LOCK TABLE is not supported
+LOCK TABLE pg_namespace IN ACCESS SHARE MODE
 
 subtest end

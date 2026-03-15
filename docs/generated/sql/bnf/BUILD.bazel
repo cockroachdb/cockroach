@@ -188,6 +188,7 @@ FILES = [
     "legacy_transaction_stmt",
     "like_table_option_list",
     "limit_clause",
+    "lock_stmt",
     "move_cursor_stmt",
     "nonpreparable_set_stmt",
     "not_null_column_level",
