@@ -313,6 +313,8 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.ShowCreateTrigger(ctx, n)
 	case *tree.Truncate:
 		return p.Truncate(ctx, n)
+	case *tree.LockTable:
+		return p.LockTable(ctx, n)
 	case *tree.Unlisten:
 		return p.Unlisten(ctx, n)
 	case *pgrepltree.IdentifySystem:
@@ -457,6 +459,7 @@ func init() {
 		&tree.ShowTransactionStatus{},
 		&tree.ShowTriggers{},
 		&tree.ShowCreateTrigger{},
+		&tree.LockTable{},
 		&tree.Truncate{},
 		&tree.Unlisten{},
 

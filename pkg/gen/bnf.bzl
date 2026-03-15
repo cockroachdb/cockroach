@@ -188,6 +188,7 @@ BNF_SRCS = [
     "//docs/generated/sql/bnf:legacy_transaction_stmt.bnf",
     "//docs/generated/sql/bnf:like_table_option_list.bnf",
     "//docs/generated/sql/bnf:limit_clause.bnf",
+    "//docs/generated/sql/bnf:lock_stmt.bnf",
     "//docs/generated/sql/bnf:move_cursor_stmt.bnf",
     "//docs/generated/sql/bnf:nonpreparable_set_stmt.bnf",
     "//docs/generated/sql/bnf:not_null_column_level.bnf",

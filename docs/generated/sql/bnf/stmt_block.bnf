@@ -31,6 +31,7 @@ stmt_without_legacy_transaction ::=
 	| declare_cursor_stmt
 	| fetch_cursor_stmt
 	| move_cursor_stmt
+	| lock_stmt
 	| unlisten_stmt
 	| show_commit_timestamp_stmt
 
@@ -179,6 +180,12 @@ fetch_cursor_stmt ::=
 
 move_cursor_stmt ::=
 	'MOVE' cursor_movement_specifier
+
+lock_stmt ::=
+	'LOCK' opt_table relation_expr_list 'IN' lock_mode 'MODE'
+	| 'LOCK' opt_table relation_expr_list 'IN' lock_mode 'MODE' 'NOWAIT'
+	| 'LOCK' opt_table relation_expr_list
+	| 'LOCK' opt_table relation_expr_list 'NOWAIT'
 
 unlisten_stmt ::=
 	'UNLISTEN' type_name
@@ -549,6 +556,23 @@ cursor_movement_specifier ::=
 	| 'RELATIVE' signed_iconst64 opt_from_or_in cursor_name
 	| 'FIRST' opt_from_or_in cursor_name
 	| 'LAST' opt_from_or_in cursor_name
+
+opt_table ::=
+	'TABLE'
+	| 
+
+relation_expr_list ::=
+	( relation_expr ) ( ( ',' relation_expr ) )*
+
+lock_mode ::=
+	'ACCESS' 'SHARE'
+	| 'ROW' 'SHARE'
+	| 'ROW' 'EXCLUSIVE'
+	| 'SHARE' 'UPDATE' 'EXCLUSIVE'
+	| 'SHARE' 'ROW' 'EXCLUSIVE'
+	| 'SHARE'
+	| 'EXCLUSIVE'
+	| 'ACCESS' 'EXCLUSIVE'
 
 opt_transaction ::=
 	'TRANSACTION'
@@ -1073,13 +1097,6 @@ show_default_privileges_stmt ::=
 show_inspect_errors_stmt ::=
 	'SHOW' 'INSPECT' 'ERRORS' opt_for_table_clause opt_for_job_clause opt_with_details
 
-opt_table ::=
-	'TABLE'
-	| 
-
-relation_expr_list ::=
-	( relation_expr ) ( ( ',' relation_expr ) )*
-
 set_clause_list ::=
 	( set_clause ) ( ( ',' set_clause ) )*
 
@@ -1236,6 +1253,7 @@ unreserved_keyword ::=
 	| 'ESCAPE'
 	| 'EXCLUDE'
 	| 'EXCLUDING'
+	| 'EXCLUSIVE'
 	| 'EXPLICIT'
 	| 'EXECUTE'
 	| 'EXECUTION'
@@ -1333,6 +1351,7 @@ unreserved_keyword ::=
 	| 'LINESTRINGZ'
 	| 'LINESTRINGZM'
 	| 'LIST'
+	| 'LOCK'
 	| 'LOCAL'
 	| 'LOCKED'
 	| 'LOGICAL'
@@ -1751,6 +1770,12 @@ opt_forward_backward ::=
 
 signed_iconst64 ::=
 	signed_iconst
+
+relation_expr ::=
+	table_name
+	| table_name '*'
+	| 'ONLY' table_name
+	| 'ONLY' '(' table_name ')'
 
 alter_table_stmt ::=
 	alter_onetable_stmt
@@ -2324,12 +2349,6 @@ opt_for_job_clause ::=
 opt_with_details ::=
 	'WITH' 'DETAILS'
 	| 
-
-relation_expr ::=
-	table_name
-	| table_name '*'
-	| 'ONLY' table_name
-	| 'ONLY' '(' table_name ')'
 
 set_clause ::=
 	single_set_clause
@@ -4233,6 +4252,7 @@ bare_label_keywords ::=
 	| 'ESCAPE'
 	| 'EXCLUDE'
 	| 'EXCLUDING'
+	| 'EXCLUSIVE'
 	| 'EXPLICIT'
 	| 'EXECUTE'
 	| 'EXECUTION'
@@ -4364,6 +4384,7 @@ bare_label_keywords ::=
 	| 'LINESTRINGZ'
 	| 'LINESTRINGZM'
 	| 'LIST'
+	| 'LOCK'
 	| 'LOCAL'
 	| 'LOCALITY'
 	| 'LOCALTIME'
