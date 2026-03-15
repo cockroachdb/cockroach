@@ -160,6 +160,13 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("changefeed jobs are not restored"),
 	),
 
+	upgrade.NewSystemUpgrade(
+		"flush raft",
+		clusterversion.V25_4_FlushRaft.Version(),
+		flushRaftMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not require this"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
