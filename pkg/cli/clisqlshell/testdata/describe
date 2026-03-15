@@ -2176,9 +2176,9 @@ List of functions:
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
     WHERE TRUE  AND p.proname LIKE 'abs' ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type,Volatility,Owner,Security,Access privileges,Source code,Description
-pg_catalog,abs,float8,float8,func,i,NULL,invoker,,abs,Calculates the absolute value of `val`.
-pg_catalog,abs,int8,int8,func,i,NULL,invoker,,abs,Calculates the absolute value of `val`.
-pg_catalog,abs,numeric,numeric,func,i,NULL,invoker,,abs,Calculates the absolute value of `val`.
+pg_catalog,abs,float8,float8,func,i,node,invoker,,abs,Calculates the absolute value of `val`.
+pg_catalog,abs,int8,int8,func,i,node,invoker,,abs,Calculates the absolute value of `val`.
+pg_catalog,abs,numeric,numeric,func,i,node,invoker,,abs,Calculates the absolute value of `val`.
 
 cli
 \dfw %rank%
@@ -2232,9 +2232,9 @@ List of functions:
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
     WHERE TRUE  AND (FALSE OR p.prokind = 'w') AND p.proname LIKE '%rank%' ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type,Volatility,Owner,Security,Access privileges,Source code,Description
-pg_catalog,dense_rank,int8,,window,i,NULL,invoker,,dense_rank,Calculates the rank of the current row without gaps; this function counts peer groups.
-pg_catalog,percent_rank,float8,,window,i,NULL,invoker,,percent_rank,Calculates the relative rank of the current row: (rank - 1) / (total rows - 1).
-pg_catalog,rank,int8,,window,i,NULL,invoker,,rank,Calculates the rank of the current row with gaps; same as row_number of its first peer.
+pg_catalog,dense_rank,int8,,window,i,node,invoker,,dense_rank,Calculates the rank of the current row without gaps; this function counts peer groups.
+pg_catalog,percent_rank,float8,,window,i,node,invoker,,percent_rank,Calculates the relative rank of the current row: (rank - 1) / (total rows - 1).
+pg_catalog,rank,int8,,window,i,node,invoker,,rank,Calculates the rank of the current row with gaps; same as row_number of its first peer.
 
 cli
 \dfa xor%
@@ -2287,8 +2287,8 @@ List of functions:
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
     WHERE TRUE  AND (FALSE OR p.prokind = 'a') AND p.proname LIKE 'xor%' ORDER BY 1, 2, 4
 Schema,Name,Result data type,Argument data types,Type,Volatility,Owner,Security,Access privileges,Source code,Description
-pg_catalog,xor_agg,bytea,bytea,agg,i,NULL,invoker,,xor_agg,Calculates the bitwise XOR of the selected values.
-pg_catalog,xor_agg,int8,int8,agg,i,NULL,invoker,,xor_agg,Calculates the bitwise XOR of the selected values.
+pg_catalog,xor_agg,bytea,bytea,agg,i,node,invoker,,xor_agg,Calculates the bitwise XOR of the selected values.
+pg_catalog,xor_agg,int8,int8,agg,i,node,invoker,,xor_agg,Calculates the bitwise XOR of the selected values.
 
 cli
 \dfn

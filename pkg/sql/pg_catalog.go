@@ -990,7 +990,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-collation.html`,
 					h.CollationOid(collName),  // oid
 					tree.NewDString(collName), // collname
 					namespaceOid,              // collnamespace
-					tree.DNull,                // collowner
+					nodeOID,                   // collowner
 					builtins.DatEncodingUTFId, // collencoding
 					// It's not clear how to translate a Go collation tag into the format
 					// required by LC_COLLATE and LC_CTYPE.
@@ -2685,7 +2685,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-operator.html`,
 
 				tree.NewDString(opName), // oprname
 				nspOid,                  // oprnamespace
-				tree.DNull,              // oprowner
+				nodeOID,                 // oprowner
 				kind,                    // oprkind
 				tree.DBoolFalse,         // oprcanmerge
 				tree.DBoolFalse,         // oprcanhash
@@ -2937,7 +2937,7 @@ func addPgProcBuiltinRow(name string, addRow func(...tree.Datum) error) error {
 			tree.NewDOid(builtin.Oid),                // oid
 			dName,                                    // proname
 			nspOid,                                   // pronamespace
-			tree.DNull,                               // proowner
+			nodeOID,                                  // proowner
 			languageInternalOid,                      // prolang
 			tree.DNull,                               // procost
 			tree.DNull,                               // prorows
@@ -3613,7 +3613,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-tablespace.html`,
 		return addRow(
 			oidZero,                       // oid
 			tree.NewDString("pg_default"), // spcname
-			tree.DNull,                    // spcowner
+			nodeOID,                       // spcowner
 			tree.DNull,                    // spclocation
 			tree.DNull,                    // spcacl
 			tree.DNull,                    // spcoptions
@@ -4093,7 +4093,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 
 				// Generate rows for all predefined types.
 				for _, typ := range types.OidToType {
-					if err := addPGTypeRow(h, nspOid, tree.DNull /* owner */, typ, false /* isUDT */, nil /* privDesc */, addRow); err != nil {
+					if err := addPGTypeRow(h, nspOid, nodeOID /* owner */, typ, false /* isUDT */, nil /* privDesc */, addRow); err != nil {
 						return err
 					}
 				}
@@ -4146,7 +4146,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				// Check if it is a predefined type.
 				typ, ok := types.OidToType[ooid]
 				if ok {
-					if err := addPGTypeRow(h, nspOid, tree.DNull /* owner */, typ, false /* isUDT */, nil /* privDesc */, addRow); err != nil {
+					if err := addPGTypeRow(h, nspOid, nodeOID /* owner */, typ, false /* isUDT */, nil /* privDesc */, addRow); err != nil {
 						return false, err
 					}
 					return true, nil
@@ -4456,7 +4456,7 @@ https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
 				tableOid(descpb.ID(tableID)), // stxrelid
 				row[1],                       // stxname
 				schemaOid(statSchema),        // stxnamespace
-				tree.DNull,                   // stxowner
+				nodeOID,                      // stxowner
 				statTgt,                      // stxstattarget
 				columnIDs,                    // stxkeys
 				statisticsKind,               // stxkind
