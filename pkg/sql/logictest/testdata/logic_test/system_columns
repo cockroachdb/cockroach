@@ -406,14 +406,19 @@ SELECT bool_and(tableoid = $is_tables_oid2) FROM information_schema.tables
 ----
 true
 
-# crdb_internal tables should also be unaffected.
-let $crdb_tables_oid
-SELECT oid FROM pg_class WHERE relname = 'tables' AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'crdb_internal')
-
-query B
-SELECT bool_and(tableoid = $crdb_tables_oid) FROM crdb_internal.tables
+# crdb_internal tables should be hidden from pg_class so pg_dump does
+# not try to dump them.
+query I
+SELECT count(*) FROM pg_class WHERE relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'crdb_internal')
 ----
-true
+0
+
+# crdb_internal and information_schema functions should be hidden from
+# pg_proc so pg_dump does not try to dump them.
+query I
+SELECT count(*) FROM pg_proc WHERE pronamespace IN (SELECT oid FROM pg_namespace WHERE nspname IN ('crdb_internal', 'information_schema'))
+----
+0
 
 # LOCK TABLE is a no-op when pg_dump_compatibility is enabled.
 statement ok
