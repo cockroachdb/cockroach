@@ -1,3 +1,17 @@
+# dual_cache — Tests the dual (fresh + stable) statistics cache.
+#
+# When a canary window is configured, the stats cache maintains two views of
+# table statistics: "fresh" (the latest stats) and "stable" (older stats that
+# were current before the most recent collection). This lets the optimizer
+# compare plans under old vs new stats during the canary window. The tests
+# below verify:
+#   - Stats retention: stale stats get delayed-delete markers instead of
+#     immediate removal while the canary window is open.
+#   - Stable cache contents: the stable cache picks the correct generation
+#     boundary.
+#   - Partial-stats merging: partial statistics (using_extreme, __merged__)
+#     are handled correctly in both caches.
+
 # Setup a test table with positive canary window, so that the delete of
 # stale stats are delayed.
 exec

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -114,7 +115,7 @@ func checkStatsForTable(
 
 	// Perform the lookup and refresh, and confirm the
 	// returned stats match the expected values.
-	statsList, err := sc.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+	statsList, _, err := sc.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	if err != nil {
 		t.Fatalf("error retrieving stats: %s", err)
 	}
@@ -412,7 +413,7 @@ func TestCacheWait(t *testing.T) {
 		for n := 0; n < 10; n++ {
 			wg.Add(1)
 			go func() {
-				stats, err := sc.getTableStatsFromCache(ctx, id, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+				stats, _, err := sc.getTableStatsFromCache(ctx, id, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 				if err != nil {
 					t.Error(err)
 				} else if !checkStats(stats, expectedStats[id]) {
@@ -840,13 +841,186 @@ func TestDecodeHistogramBucketsEnum(t *testing.T) {
 	}
 }
 
-// TestCanaryDualCache tests the dual cache mechanism that maintains
-// separate fresh and stable statistics caches. The stable cache
-// preserves older stats during canary windows to ensure query plan
-// stability. Uses data-driven testing to validate complex scenarios
-// including stats retention policies, delayed deletion, and partial
-// stats merging.
-func TestCanaryDualCache(t *testing.T) {
+// TestCanaryAndStableStatsDiffer exercises the cacheEntry.canaryAndStableStatsDiffer
+// method with a table-driven test covering all edge cases.
+func TestCanaryAndStableStatsDiffer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	now := hlc.Timestamp{WallTime: 1000 * time.Second.Nanoseconds()}
+	latestTS := hlc.Timestamp{WallTime: 999 * time.Second.Nanoseconds()}
+	stableTS := hlc.Timestamp{WallTime: 990 * time.Second.Nanoseconds()}
+	window := 10 * time.Second
+
+	tests := []struct {
+		name                           string
+		canaryWindowSize               time.Duration
+		asOf                           hlc.Timestamp
+		latestFullStatsTimestamp       hlc.Timestamp
+		latestStableFullStatsTimestamp hlc.Timestamp
+		expected                       bool
+	}{
+		{
+			name:             "no canary window",
+			canaryWindowSize: 0,
+			asOf:             now,
+			expected:         false,
+		},
+		{
+			name:                           "within window, two distinct generations",
+			canaryWindowSize:               window,
+			asOf:                           now,
+			latestFullStatsTimestamp:       latestTS,
+			latestStableFullStatsTimestamp: stableTS,
+			expected:                       true,
+		},
+		{
+			name:                           "past canary window",
+			canaryWindowSize:               window,
+			asOf:                           hlc.Timestamp{WallTime: 1100 * time.Second.Nanoseconds()},
+			latestFullStatsTimestamp:       latestTS,
+			latestStableFullStatsTimestamp: stableTS,
+			expected:                       false,
+		},
+		{
+			name:                     "within window, only one generation (stable is empty set)",
+			canaryWindowSize:         window,
+			asOf:                     now,
+			latestFullStatsTimestamp: latestTS,
+			expected:                 true,
+		},
+		{
+			name:             "empty latestFullStatsTimestamp",
+			canaryWindowSize: window,
+			asOf:             now,
+			expected:         false,
+		},
+		{
+			name:                           "exactly at window boundary (window just expired)",
+			canaryWindowSize:               window,
+			asOf:                           hlc.Timestamp{WallTime: (999*time.Second + window).Nanoseconds()},
+			latestFullStatsTimestamp:       latestTS,
+			latestStableFullStatsTimestamp: stableTS,
+			expected:                       false,
+		},
+		{
+			name:                           "one nanosecond before window expires",
+			canaryWindowSize:               window,
+			asOf:                           hlc.Timestamp{WallTime: (999*time.Second + window).Nanoseconds() - 1},
+			latestFullStatsTimestamp:       latestTS,
+			latestStableFullStatsTimestamp: stableTS,
+			expected:                       true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			e := &cacheEntry{
+				latestFullStatsTimestamp:       tc.latestFullStatsTimestamp,
+				latestStableFullStatsTimestamp: tc.latestStableFullStatsTimestamp,
+			}
+			got := e.canaryAndStableStatsDiffer(tc.canaryWindowSize, tc.asOf)
+			require.Equal(t, tc.expected, got)
+		})
+	}
+}
+
+// runStatsCacheDataDriven is the shared datadriven command handler for
+// stats cache tests. It supports the following commands:
+//
+//   - exec: execute SQL statements
+//   - stats-cache: query the stats cache (args: table, forecast)
+//   - stats-differ: check whether canary and stable stats differ
+//     (args: table, canary-window, asof, no-invalidate)
+func runStatsCacheDataDriven(
+	t *testing.T,
+	d *datadriven.TestData,
+	ctx context.Context,
+	sqlRunner *sqlutils.SQLRunner,
+	kvDB *kv.DB,
+	s serverutils.ApplicationLayerInterface,
+	sc *TableStatisticsCache,
+) string {
+	switch d.Cmd {
+	case "exec":
+		sqlRunner.Exec(t, d.Input)
+		return ""
+	case "stats-cache":
+		tableName := "test"
+		forecast := false
+		if d.HasArg("table") {
+			d.ScanArgs(t, "table", &tableName)
+		}
+		if d.HasArg("forecast") {
+			forecast = true
+		}
+
+		tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
+		stats, stableStats, _, _, _, err := sc.getTableStatsFromDB(ctx, tbl.GetID(), forecast, s.ClusterSettings(), nil)
+		if err != nil {
+			return fmt.Sprintf("error: %v", err)
+		}
+		var result strings.Builder
+
+		formatStats := func(label string, statsCache []*TableStatistic) {
+			result.WriteString(fmt.Sprintf("%s stats (count=%d):\n", label, len(statsCache)))
+			for _, stat := range statsCache {
+				result.WriteString(fmt.Sprintf("created_at=%s, name=%q, row_count=%d, distinct_count=%d, null_count=%d, delayed_delete=%t\n",
+					stat.CreatedAt.Format("2006-01-02 15:04:05"), stat.Name, stat.RowCount, stat.DistinctCount, stat.NullCount, stat.DelayDelete))
+			}
+		}
+
+		formatStats("fresh", stats)
+		formatStats("stable", stableStats)
+		return result.String()
+
+	case "stats-differ":
+		tableName := "test"
+		if d.HasArg("table") {
+			d.ScanArgs(t, "table", &tableName)
+		}
+		var canaryWindow time.Duration
+		if d.HasArg("canary-window") {
+			var windowStr string
+			d.ScanArgs(t, "canary-window", &windowStr)
+			var err error
+			canaryWindow, err = time.ParseDuration(windowStr)
+			if err != nil {
+				return fmt.Sprintf("error parsing canary-window: %v", err)
+			}
+		}
+		var statsAsOf hlc.Timestamp
+		if d.HasArg("asof") {
+			var asofStr string
+			d.ScanArgs(t, "asof", &asofStr)
+			parsed, _, err := tree.ParseDTimestamp(nil, asofStr, time.Microsecond)
+			if err != nil {
+				return fmt.Sprintf("error parsing asof: %v", err)
+			}
+			statsAsOf = hlc.Timestamp{WallTime: parsed.Time.UnixNano()}
+		}
+
+		tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
+		if !d.HasArg("no-invalidate") {
+			sc.InvalidateTableStats(ctx, tbl.GetID())
+		}
+		_, statsDiffer, err := sc.GetTableStatsMaybeStable(
+			ctx, tbl, nil /* typeResolver */, false /* stable */, canaryWindow, statsAsOf,
+		)
+		if err != nil {
+			return fmt.Sprintf("error: %v", err)
+		}
+		return fmt.Sprintf("stats_differ: %t\n", statsDiffer)
+
+	default:
+		return fmt.Sprintf("unknown command: %s", d.Cmd)
+	}
+}
+
+// TestCanaryStatsDataDriven uses data-driven tests under testdata/ to exercise
+// canary-related statistics behaviour. See the header of each file for the testing
+// topic.
+func TestCanaryStatsDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -860,41 +1034,9 @@ func TestCanaryDualCache(t *testing.T) {
 	sc := NewTableStatisticsCache(10 /* cacheSize */, s.ClusterSettings(), db, s.AppStopper())
 	require.NoError(t, sc.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 
-	datadriven.RunTest(t, "testdata/dual_cache", func(t *testing.T, d *datadriven.TestData) string {
-		switch d.Cmd {
-		case "exec":
-			sqlRunner.Exec(t, d.Input)
-			return ""
-		case "stats-cache":
-			tableName := "test"
-			forecast := false
-			if d.HasArg("table") {
-				d.ScanArgs(t, "table", &tableName)
-			}
-			if d.HasArg("forecast") {
-				forecast = true
-			}
-
-			tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "defaultdb", tableName)
-			stats, stableStats, _, _, _, err := sc.getTableStatsFromDB(ctx, tbl.GetID(), forecast, s.ClusterSettings(), nil)
-			if err != nil {
-				return fmt.Sprintf("error: %v", err)
-			}
-			var result strings.Builder
-
-			formatStats := func(label string, statsCache []*TableStatistic) {
-				result.WriteString(fmt.Sprintf("%s stats (count=%d):\n", label, len(statsCache)))
-				for _, stat := range statsCache {
-					result.WriteString(fmt.Sprintf("created_at=%s, name=%q, row_count=%d, distinct_count=%d, null_count=%d, delayed_delete=%t\n",
-						stat.CreatedAt.Format("2006-01-02 15:04:05"), stat.Name, stat.RowCount, stat.DistinctCount, stat.NullCount, stat.DelayDelete))
-				}
-			}
-
-			formatStats("fresh", stats)
-			formatStats("stable", stableStats)
-			return result.String()
-		default:
-			return fmt.Sprintf("unknown command: %s", d.Cmd)
-		}
+	datadriven.Walk(t, "testdata", func(t *testing.T, path string) {
+		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			return runStatsCacheDataDriven(t, d, ctx, sqlRunner, kvDB, s, sc)
+		})
 	})
 }

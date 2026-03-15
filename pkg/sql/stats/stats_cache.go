@@ -288,13 +288,21 @@ func (sc *TableStatisticsCache) GetFreshTableStats(
 		return nil, nil
 	}
 	forecast := forecastAllowed(table, sc.settings)
-	return sc.getTableStatsFromCache(ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+	stats, _, err = sc.getTableStatsFromCache(ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
+	return stats, err
 }
 
-// GetTableStatsMaybeStable is similar to GetFreshTableStats, but maybe return
-// the stable stats cache opposed to the freshest "canary" table statistics.
-// It only differs with GetFreshTableStats if the table has the canary window size
-// set.
+// GetTableStatsMaybeStable is similar to GetFreshTableStats, but may return
+// the stable stats cache instead of the freshest "canary" table statistics.
+// It only differs from GetFreshTableStats when the table has a non-zero canary
+// window size.
+//
+// The returned statsDiffer flag indicates whether the canary (newest)
+// and stable (second-newest) statistics for this table are genuinely
+// different. The flag is not affected by which stats the optimizer
+// uses; it only determines whether this execution is worth recording
+// for canary vs. stable experiment metrics (when false, both paths use
+// identical stats, so recording would add noise).
 func (sc *TableStatisticsCache) GetTableStatsMaybeStable(
 	ctx context.Context,
 	table catalog.TableDescriptor,
@@ -302,9 +310,9 @@ func (sc *TableStatisticsCache) GetTableStatsMaybeStable(
 	stable bool,
 	canaryWindowSize time.Duration,
 	statsAsOf hlc.Timestamp,
-) (stats []*TableStatistic, err error) {
+) (stats []*TableStatistic, statsDiffer bool, err error) {
 	if !sc.statsUsageAllowed(table) {
-		return nil, nil
+		return nil, false, nil
 	}
 	forecast := forecastAllowed(table, sc.settings)
 	return sc.getTableStatsFromCache(ctx, table.GetID(), &forecast, table.UserDefinedTypeColumns(), typeResolver, stable, canaryWindowSize, statsAsOf)
@@ -423,7 +431,7 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 	stable bool,
 	canaryWindowSize time.Duration,
 	statsAsOf hlc.Timestamp,
-) ([]*TableStatistic, error) {
+) ([]*TableStatistic, bool, error) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
 
@@ -437,10 +445,11 @@ func (sc *TableStatisticsCache) getTableStatsFromCache(
 			// Evict the cache entry and build it again.
 			sc.mu.cache.Del(tableID)
 		} else {
+			statsDiffer := e.canaryAndStableStatsDiffer(canaryWindowSize, asOfTs)
 			if stable {
-				return e.getStableStatsLocked(ctx, canaryWindowSize, asOfTs), e.err
+				return e.getStableStatsLocked(ctx, canaryWindowSize, asOfTs), statsDiffer, e.err
 			}
-			return e.stats, e.err
+			return e.stats, statsDiffer, e.err
 		}
 	}
 
@@ -506,6 +515,32 @@ func (e *cacheEntry) getStableStatsLocked(
 	return e.stats
 }
 
+// canaryAndStableStatsDiffer reports whether this table's canary (newest)
+// and stable (second-newest) statistics are genuinely different under the
+// given canary window. It returns true when both conditions hold:
+//
+//  1. The table has a non-zero canary window (canaryWindowSize > 0).
+//  2. We are still within the canary window (the freshest stats have not
+//     yet "ripened" past it).
+//
+// This is used to gate "canary vs stable" metric recording: when canary
+// and stable stats are identical (this returns false), tagging the
+// execution as "canary" or "stable" would only add noise.
+//
+// Note: this does NOT affect which stats the optimizer uses — that is
+// controlled by canaryRollDice (the dice roll) and getStableStatsLocked.
+func (e *cacheEntry) canaryAndStableStatsDiffer(
+	canaryWindowSize time.Duration, asOf hlc.Timestamp,
+) bool {
+	if canaryWindowSize == 0 || e.latestFullStatsTimestamp.IsEmpty() {
+		return false
+	}
+	// Within the canary window, canary and stable stats always differ: either
+	// there is a distinct older generation of stats, or the stable path uses
+	// the empty set while the canary path has actual stats.
+	return e.latestFullStatsTimestamp.AddDuration(canaryWindowSize).After(asOf)
+}
+
 // lookupStatsLocked retrieves any existing stats for the given table.
 //
 // If another goroutine is in the process of retrieving the same stats, this
@@ -550,7 +585,7 @@ func (sc *TableStatisticsCache) lookupStatsLocked(
 // addCacheEntryLocked creates a new cache entry and retrieves table statistics
 // from the database. It does this in a way so that the other goroutines that
 // need the same stats can wait on us:
-//   - an cache entry with wait=true is created;
+//   - a cache entry with wait=true is created;
 //   - mutex is unlocked;
 //   - stats are retrieved from database:
 //   - mutex is locked again and the entry is updated.
@@ -567,7 +602,7 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 	stable bool,
 	canaryWindowSize time.Duration,
 	asOf hlc.Timestamp,
-) (stats []*TableStatistic, err error) {
+) (stats []*TableStatistic, statsDiffer bool, err error) {
 	defer sc.generation.Add(1)
 	// Add a cache entry that other queries can find and wait on until we have the
 	// stats.
@@ -608,11 +643,13 @@ func (sc *TableStatisticsCache) addCacheEntryLocked(
 		sc.mu.cache.Del(tableID)
 	}
 
+	statsDiffer = e.canaryAndStableStatsDiffer(canaryWindowSize, asOf)
+
 	if err == nil && stable {
-		return e.getStableStatsLocked(ctx, canaryWindowSize, asOf), nil
+		return e.getStableStatsLocked(ctx, canaryWindowSize, asOf), statsDiffer, nil
 	}
 
-	return stats, err
+	return stats, statsDiffer, err
 }
 
 // refreshCacheEntry retrieves table statistics from the database and updates
