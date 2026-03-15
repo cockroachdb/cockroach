@@ -883,6 +883,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 	func(ctx context.Context, p *planner, h oidHasher, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor,
 		table catalog.TableDescriptor, _ simpleSchemaResolver, addRow func(...tree.Datum) error,
 	) error {
+		// When pg_dump_compatibility is on, skip crdb_internal tables/views.
+		// pg_dump treats non-pg_catalog schemas as user-defined and tries to
+		// dump their contents, which fails for virtual tables.
+		if sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility) && sc.GetID() == catconstants.CrdbInternalID {
+			return nil
+		}
 		// The only difference between tables, views and sequences are the relkind and relam columns.
 		relKind := relKindTable
 		relAm := forwardIndexOid
@@ -2643,6 +2649,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(ctx context.Context, db catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, db, true /* requiresPrivileges */, false /* includeMetadata */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
+					if sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility) && sc.GetID() == catconstants.CrdbInternalID {
+						return nil
+					}
 					ownerOID := tree.DNull
 					if sc.SchemaKind() == catalog.SchemaUserDefined {
 						var err error
@@ -3234,6 +3243,7 @@ https://www.postgresql.org/docs/16/catalog-pg-proc.html`,
 		// is selected from a different database. But this is probably fine for
 		// builtin function since they don't really belong to any database.
 
+		pgDumpCompat := sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility)
 		err := forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(ctx context.Context, db catalog.DatabaseDescriptor) error {
 				for _, name := range builtins.AllBuiltinNames() {
@@ -3246,6 +3256,16 @@ https://www.postgresql.org/docs/16/catalog-pg-proc.html`,
 					}
 					if unicode.IsUpper(first) {
 						continue
+					}
+					// When pg_dump_compatibility is on, skip crdb_internal and
+					// information_schema functions. pg_dump treats non-pg_catalog
+					// functions with OIDs below 16384 as user-defined and tries to
+					// dump them, which fails.
+					if pgDumpCompat {
+						if strings.HasPrefix(name, catconstants.CRDBInternalSchemaName+".") ||
+							strings.HasPrefix(name, catconstants.InformationSchemaName+".") {
+							continue
+						}
 					}
 					err := addPgProcBuiltinRow(name, addRow)
 					if err != nil {
@@ -4226,6 +4246,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				opts := forEachTableDescOptions{virtualOpts: virtualCurrentDB}
 				if err := forEachTableDesc(ctx, p, dbContext, opts, func(
 					ctx context.Context, descCtx tableDescContext) error {
+					// When pg_dump_compatibility is on, skip crdb_internal tables
+					// to avoid emitting composite types for internal virtual tables.
+					if sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility) && descCtx.schema.GetID() == catconstants.CrdbInternalID {
+						return nil
+					}
 					return addPGTypeRowForTable(ctx, p, h, descCtx.database, descCtx.schema, descCtx.table, addRow)
 				},
 				); err != nil {
@@ -4536,6 +4561,15 @@ https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
 		statTgt := tree.NewDInt(-1)
 
 		for _, row := range rows {
+			// When pg_dump_compatibility is on, skip internal statistics objects
+			// (e.g. __auto__, __auto_partial__, __forecast__, __merged__) to
+			// prevent pg_dump from emitting CREATE STATISTICS statements for them.
+			if sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility) {
+				name := string(tree.MustBeDString(row[1]))
+				if strings.HasPrefix(name, "__") {
+					continue
+				}
+			}
 			tableID := tree.MustBeDInt(row[0])
 			columnIDs := tree.MustBeDArray(row[2])
 			statisticsID := tree.MustBeDInt(row[3])
