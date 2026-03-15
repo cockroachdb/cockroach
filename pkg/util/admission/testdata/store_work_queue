@@ -3,8 +3,8 @@ init
 
 print
 ----
-regular workqueue: closed epoch: 0 tenantHeap len: 0
-elastic workqueue: closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 resourceGroupHeap len: 0
+elastic workqueue: closed epoch: 0 resourceGroupHeap len: 0
 stats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:0 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:1}
 
@@ -22,9 +22,9 @@ storeWriteDone regular: originalTokens 1, doneBytes(write 0,ingested 0) returnin
 
 set-store-request-estimates write-tokens=100
 ----
-regular workqueue: closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 resourceGroupHeap len: 0
  tenant-id: 53 used: 1, w: 1, fifo: -128
-elastic workqueue: closed epoch: 0 tenantHeap len: 0
+elastic workqueue: closed epoch: 0 resourceGroupHeap len: 0
 stats:{workCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
@@ -40,10 +40,10 @@ id 3: admit succeeded with handle {tenantID:{InternalValue:53} writeTokens:100 w
 
 print
 ----
-regular workqueue: closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 resourceGroupHeap len: 0
  tenant-id: 53 used: 101, w: 1, fifo: -128
  tenant-id: 55 used: 100, w: 1, fifo: -128
-elastic workqueue: closed epoch: 0 tenantHeap len: 0
+elastic workqueue: closed epoch: 0 resourceGroupHeap len: 0
 stats:{workCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:1 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
@@ -60,11 +60,11 @@ storeWriteDone regular: originalTokens 100, doneBytes(write 0,ingested 0) return
 
 print
 ----
-regular workqueue: closed epoch: 0 tenantHeap len: 1 top tenant: 57
+regular workqueue: closed epoch: 0 resourceGroupHeap len: 1 top resource-group: 57
  tenant-id: 53 used: 101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 0, w: 1, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 0]
-elastic workqueue: closed epoch: 0 tenantHeap len: 0
+elastic workqueue: closed epoch: 0 resourceGroupHeap len: 0
 stats:{workCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
@@ -76,11 +76,11 @@ granted regular: returned 100
 
 print
 ----
-regular workqueue: closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 resourceGroupHeap len: 0
  tenant-id: 53 used: 101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 100, w: 1, fifo: -128
-elastic workqueue: closed epoch: 0 tenantHeap len: 0
+elastic workqueue: closed epoch: 0 resourceGroupHeap len: 0
 stats:{workCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:2 writeAccountedBytes:0 ingestedAccountedBytes:0} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
@@ -90,21 +90,21 @@ storeWriteDone regular: originalTokens 100, doneBytes(write 0,ingested 1000000) 
 
 print
 ----
-regular workqueue: closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 resourceGroupHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 100, w: 1, fifo: -128
-elastic workqueue: closed epoch: 0 tenantHeap len: 0
+elastic workqueue: closed epoch: 0 resourceGroupHeap len: 0
 stats:{workCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:100}
 
 set-store-request-estimates write-tokens=10000
 ----
-regular workqueue: closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 resourceGroupHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 100, w: 1, fifo: -128
-elastic workqueue: closed epoch: 0 tenantHeap len: 0
+elastic workqueue: closed epoch: 0 resourceGroupHeap len: 0
 stats:{workCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:3 writeAccountedBytes:0 ingestedAccountedBytes:1000000} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:10000}
 
@@ -114,11 +114,11 @@ storeWriteDone regular: originalTokens 100, doneBytes(write 2000,ingested 1000) 
 
 print
 ----
-regular workqueue: closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 resourceGroupHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 2100, w: 1, fifo: -128
-elastic workqueue: closed epoch: 0 tenantHeap len: 0
+elastic workqueue: closed epoch: 0 resourceGroupHeap len: 0
 stats:{workCount:4 writeAccountedBytes:2000 ingestedAccountedBytes:1001000 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:4 writeAccountedBytes:2000 ingestedAccountedBytes:1001000} aux:{bypassedCount:0 writeBypassedAccountedBytes:0 ingestedBypassedAccountedBytes:0}}
 estimates:{writeTokens:10000}
 
@@ -128,21 +128,21 @@ storeWriteDone regular: originalTokens 0, doneBytes(write 1000,ingested 1000000)
 
 print
 ----
-regular workqueue: closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 resourceGroupHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 2100, w: 1, fifo: -128
-elastic workqueue: closed epoch: 0 tenantHeap len: 0
+elastic workqueue: closed epoch: 0 resourceGroupHeap len: 0
 stats:{workCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{ingestStats:{Bytes:0 ApproxIngestedIntoL0Bytes:0 MemtableOverlappingFiles:0} writeBytes:0} aboveRaftStats:{workCount:4 writeAccountedBytes:2000 ingestedAccountedBytes:1001000} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
 estimates:{writeTokens:10000}
 
 stats-to-ignore ingested-bytes=12000 ingested-into-L0-bytes=9000 write-bytes=1500
 ----
-regular workqueue: closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 resourceGroupHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 2100, w: 1, fifo: -128
-elastic workqueue: closed epoch: 0 tenantHeap len: 0
+elastic workqueue: closed epoch: 0 resourceGroupHeap len: 0
 stats:{workCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{ingestStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000 MemtableOverlappingFiles:0} writeBytes:1500} aboveRaftStats:{workCount:4 writeAccountedBytes:2000 ingestedAccountedBytes:1001000} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
 estimates:{writeTokens:10000}
 
@@ -165,11 +165,11 @@ granted elastic: returned 10000
 
 print
 ----
-regular workqueue: closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 resourceGroupHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 2100, w: 1, fifo: -128
-elastic workqueue: closed epoch: 0 tenantHeap len: 0
+elastic workqueue: closed epoch: 0 resourceGroupHeap len: 0
  tenant-id: 53 used: 10000, w: 1, fifo: -128
 stats:{workCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{ingestStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000 MemtableOverlappingFiles:0} writeBytes:1500} aboveRaftStats:{workCount:4 writeAccountedBytes:2000 ingestedAccountedBytes:1001000} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
 estimates:{writeTokens:10000}
@@ -184,11 +184,11 @@ id 6: admit succeeded with handle {tenantID:{InternalValue:54} writeTokens:10000
 
 print
 ----
-regular workqueue: closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 resourceGroupHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 2100, w: 1, fifo: -128
-elastic workqueue: closed epoch: 0 tenantHeap len: 0
+elastic workqueue: closed epoch: 0 resourceGroupHeap len: 0
  tenant-id: 53 used: 10000, w: 1, fifo: -128
  tenant-id: 54 used: 10000, w: 1, fifo: -128
 stats:{workCount:14 writeAccountedBytes:3000 ingestedAccountedBytes:2001000 statsToIgnore:{ingestStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000 MemtableOverlappingFiles:0} writeBytes:1500} aboveRaftStats:{workCount:4 writeAccountedBytes:2000 ingestedAccountedBytes:1001000} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
@@ -200,11 +200,11 @@ storeWriteDone elastic: originalTokens 10000, doneBytes(write 1000,ingested 0) r
 
 print
 ----
-regular workqueue: closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 resourceGroupHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 2100, w: 1, fifo: -128
-elastic workqueue: closed epoch: 0 tenantHeap len: 0
+elastic workqueue: closed epoch: 0 resourceGroupHeap len: 0
  tenant-id: 53 used: 10200, w: 1, fifo: -128
  tenant-id: 54 used: 10000, w: 1, fifo: -128
 stats:{workCount:15 writeAccountedBytes:4000 ingestedAccountedBytes:2001000 statsToIgnore:{ingestStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000 MemtableOverlappingFiles:0} writeBytes:1500} aboveRaftStats:{workCount:5 writeAccountedBytes:3000 ingestedAccountedBytes:1001000} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}
@@ -216,11 +216,11 @@ storeWriteDone elastic: originalTokens 10000, doneBytes(write 0,ingested 500) re
 
 print
 ----
-regular workqueue: closed epoch: 0 tenantHeap len: 0
+regular workqueue: closed epoch: 0 resourceGroupHeap len: 0
  tenant-id: 53 used: 50101, w: 1, fifo: -128
  tenant-id: 55 used: 600, w: 1, fifo: -128
  tenant-id: 57 used: 2100, w: 1, fifo: -128
-elastic workqueue: closed epoch: 0 tenantHeap len: 0
+elastic workqueue: closed epoch: 0 resourceGroupHeap len: 0
  tenant-id: 53 used: 10200, w: 1, fifo: -128
  tenant-id: 54 used: 10500, w: 1, fifo: -128
 stats:{workCount:16 writeAccountedBytes:4000 ingestedAccountedBytes:2001500 statsToIgnore:{ingestStats:{Bytes:12000 ApproxIngestedIntoL0Bytes:9000 MemtableOverlappingFiles:0} writeBytes:1500} aboveRaftStats:{workCount:6 writeAccountedBytes:3000 ingestedAccountedBytes:1001500} aux:{bypassedCount:10 writeBypassedAccountedBytes:1000 ingestedBypassedAccountedBytes:1000000}}

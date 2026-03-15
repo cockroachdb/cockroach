@@ -281,11 +281,17 @@ type WorkQueue struct {
 
 	mu struct {
 		syncutil.Mutex
-		// Tenants with waiting work.
-		tenantHeap tenantHeap
+		// Resource groups with waiting work, ordered by burst qualification
+		// and group used/weight for inter-group fairness.
+		resourceGroupHeap resourceGroupHeap
+		// All resource groups, including those without waiting work.
+		resourceGroups map[uint64]*resourceGroupInfo
 		// All tenants, including those without waiting work. Periodically cleaned.
-		tenants       map[uint64]*tenantInfo
-		tenantWeights struct {
+		tenants map[uint64]*tenantInfo
+		// tenantToResourceGroup maps tenantID to resourceGroupID. nil means
+		// default mapping (tenantID == resourceGroupID).
+		tenantToResourceGroup map[uint64]uint64
+		tenantWeights         struct {
 			mu syncutil.Mutex
 			// active refers to the currently active weights. mu is held for updates
 			// to the inactive weights, to prevent concurrent updates. After
@@ -432,6 +438,7 @@ func initWorkQueue(
 		q.mu.Lock()
 		defer q.mu.Unlock()
 		q.mu.tenants = make(map[uint64]*tenantInfo)
+		q.mu.resourceGroups = make(map[uint64]*resourceGroupInfo)
 		q.sampleEpochLIFOSettingsLocked()
 	}()
 	if !opts.disableGCTenantsAndResetUsed {
@@ -693,12 +700,14 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// dedicated to that tenant yet. When we create the tenantInfo struct
 		// here, we also create the estimator. We init the estimator using a
 		// global estimator that sees workload across all tenants.
-		burstLimitFrac := q.getBurstLimitFracLocked(tenantID)
+		rgID := q.getResourceGroupIDLocked(tenantID)
+		rg := q.getOrCreateResourceGroupLocked(rgID)
 		tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID),
-			q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(),
-			q.mu.burstBucketCapacity, burstLimitFrac,
+			rgID, q.mode,
+			q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(),
 			q.admittedCountPerTenant, q.waitTimeNanosPerTenant)
 		q.mu.tenants[tenantID] = tenant
+		rg.tenants[tenantID] = tenant
 	}
 	// If mode == usesCPUTimeTokens, WorkQueue does CPU time token estimation.
 	// When Admit is called, the request hasn't yet executed, so we do not
@@ -752,13 +761,14 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	// threshold for LIFO queueing based on observed admission latency.
 	tenant.priorityStates.requestAtPriority(info.Priority)
 
-	burstQual := tenant.cpuTimeBurstBucket.burstQualification()
-	if (len(q.mu.tenantHeap) == 0 ||
-		// tenant not in heap, so doesn't have waiting requests, and is canBurst, while
-		// the top of the heap was noBurst.
-		(tenant.heapIndex < 0 &&
+	rg := q.mu.resourceGroups[tenant.resourceGroupID]
+	burstQual := rg.cpuTimeBurstBucket.burstQualification()
+	if (len(q.mu.resourceGroupHeap) == 0 ||
+		// Resource group not in heap (no waiting work in group), and group
+		// is canBurst while top of the heap is noBurst.
+		(rg.heapIndex < 0 &&
 			burstQual == canBurst &&
-			q.mu.tenantHeap[0].cpuTimeBurstBucket.burstQualification() == noBurst)) &&
+			q.mu.resourceGroupHeap[0].cpuTimeBurstBucket.burstQualification() == noBurst)) &&
 		!q.knobs.DisableWorkQueueFastPath {
 		// Fast-path. Try to grab token/slot.
 		// Optimistically update used to avoid locking again.
@@ -829,12 +839,14 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// tenantInfo struct is declared.
 		tenant, ok = q.mu.tenants[tenantID]
 		if !ok {
-			burstLimitFrac := q.getBurstLimitFracLocked(tenantID)
+			rgID := q.getResourceGroupIDLocked(tenantID)
+			rg = q.getOrCreateResourceGroupLocked(rgID)
 			tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID),
-				q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(),
-				q.mu.burstBucketCapacity, burstLimitFrac,
+				rgID, q.mode,
+				q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(),
 				q.admittedCountPerTenant, q.waitTimeNanosPerTenant)
 			q.mu.tenants[tenantID] = tenant
+			rg.tenants[tenantID] = tenant
 		}
 		q.adjustTenantUsedLocked(tenant, -info.RequestedCount)
 	}
@@ -871,9 +883,13 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		heap.Push(&tenant.openEpochsHeap, work)
 	}
 	if !inTenantHeap {
-		heap.Push(&q.mu.tenantHeap, tenant)
+		rg := q.mu.resourceGroups[tenant.resourceGroupID]
+		inResourceGroupHeap := isInResourceGroupHeap(rg)
+		heap.Push(&rg.tenantHeap, tenant)
+		if !inResourceGroupHeap {
+			heap.Push(&q.mu.resourceGroupHeap, rg)
+		}
 	}
-	// Else already in tenantHeap.
 
 	// Release the lock.
 	q.mu.Unlock()
@@ -941,7 +957,11 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 				tenant.openEpochsHeap.remove(work)
 			}
 			if !isInTenantHeap(tenant) {
-				q.mu.tenantHeap.remove(tenant)
+				rg := q.mu.resourceGroups[tenant.resourceGroupID]
+				rg.tenantHeap.remove(tenant)
+				if !isInResourceGroupHeap(rg) {
+					q.mu.resourceGroupHeap.remove(rg)
+				}
 			}
 			q.mu.Unlock()
 		}
@@ -1088,17 +1108,18 @@ func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) 
 func (q *WorkQueue) hasWaitingRequests() (bool, burstQualification) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if len(q.mu.tenantHeap) == 0 {
+	if len(q.mu.resourceGroupHeap) == 0 {
 		return false, noBurst /*arbitrary*/
 	}
-	return true, q.mu.tenantHeap[0].cpuTimeBurstBucket.burstQualification()
+	return true,
+		q.mu.resourceGroupHeap[0].cpuTimeBurstBucket.burstQualification()
 }
 
 func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	// Reduce critical section by getting time before mutex acquisition.
 	now := q.timeNow()
 	q.mu.Lock()
-	if len(q.mu.tenantHeap) == 0 {
+	if len(q.mu.resourceGroupHeap) == 0 {
 		q.mu.Unlock()
 		return 0
 	}
@@ -1106,7 +1127,11 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 		q.mu.Unlock()
 		return 0
 	}
-	tenant := q.mu.tenantHeap[0]
+	// Two-level scheduling: peek the top resource group and top tenant,
+	// then pop a work item. The group and tenant stay in their heaps
+	// (reordered via heap.Fix) unless they have no more waiting work.
+	rg := q.mu.resourceGroupHeap[0]
+	tenant := rg.tenantHeap[0]
 	var item *waitingWork
 	if len(tenant.waitingWorkHeap) > 0 {
 		item = heap.Pop(&tenant.waitingWorkHeap).(*waitingWork)
@@ -1115,13 +1140,16 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	}
 	waitDur := now.Sub(item.enqueueingTime)
 	tenant.priorityStates.updateDelayLocked(item.priority, waitDur, false /* canceled */)
-	q.adjustTenantUsedLocked(tenant, item.requestedCount)
+	q.adjustTenantAndGroupUsedLocked(tenant, rg, item.requestedCount)
 	if tenant.admittedCount != nil {
 		tenant.admittedCount.Inc(1)
 		tenant.waitTimeNanos.Inc(waitDur.Nanoseconds())
 	}
 	if !isInTenantHeap(tenant) {
-		q.mu.tenantHeap.remove(tenant)
+		rg.tenantHeap.remove(tenant)
+		if !isInResourceGroupHeap(rg) {
+			q.mu.resourceGroupHeap.remove(rg)
+		}
 	}
 	// Get the value of requestedCount before releasing the mutex, since after
 	// releasing Admit can notice that item is no longer in the heap and call
@@ -1188,12 +1216,26 @@ func (q *WorkQueue) gcTenantsResetUsedAndUpdateEstimators() {
 	// needed.
 	for id, info := range q.mu.tenants {
 		if info.used == 0 && !isInTenantHeap(info) {
+			// Remove tenant from its resource group.
+			if rg, ok := q.mu.resourceGroups[info.resourceGroupID]; ok {
+				delete(rg.tenants, id)
+			}
 			delete(q.mu.tenants, id)
 			releaseTenantInfo(info)
 		} else {
 			info.cpuTimeTokenEstimator.update()
 			info.used = 0
-			// All the heap members will reset used=0, so no need to change heap
+			// All the heap members will reset used=0, so no need to change
+			// inner heap ordering.
+		}
+	}
+	// GC empty resource groups and reset group used.
+	for id, rg := range q.mu.resourceGroups {
+		if len(rg.tenants) == 0 && !isInResourceGroupHeap(rg) {
+			delete(q.mu.resourceGroups, id)
+		} else {
+			rg.used = 0
+			// All groups reset used=0, so no need to change outer heap
 			// ordering.
 		}
 	}
@@ -1215,54 +1257,38 @@ func (q *WorkQueue) adjustTenantUsed(tenantID roachpb.TenantID, delta int64) {
 }
 
 func (q *WorkQueue) adjustTenantUsedLocked(tenant *tenantInfo, delta int64) {
-	if delta < 0 {
-		toReturn := uint64(-delta)
-		if tenant.used < toReturn {
-			tenant.used = 0
-		} else {
-			tenant.used -= toReturn
-		}
-	} else {
-		tenant.used += uint64(delta)
-	}
-	if q.mode == usesCPUTimeTokens {
-		// Burst bucket tracks available budget, so we negate delta: consuming
-		// resources (positive delta to used) depletes the burst bucket.
-		tenant.cpuTimeBurstBucket.adjust(-delta)
-	}
-	if isInTenantHeap(tenant) {
-		q.mu.tenantHeap.fix(tenant)
-	}
+	rg := q.mu.resourceGroups[tenant.resourceGroupID]
+	q.adjustTenantAndGroupUsedLocked(tenant, rg, delta)
 }
 
-// refillBurstBuckets adds tokens to all tenant burst buckets and updates
-// their capacity. This is called by cpuTimeTokenAllocator periodically
-// (every 1ms). toAdd and capacity represent the 100% CPU rate (normalized
-// by dividing out canBurstTarget in the allocator). These are scaled
-// per-tenant by burstLimitFrac.
+// refillBurstBuckets adds tokens to all resource group burst buckets and
+// updates their capacity. This is called by cpuTimeTokenAllocator
+// periodically (every 1ms). toAdd and capacity represent the 100% CPU
+// rate (normalized by dividing out canBurstTarget in the allocator).
+// These are scaled per-resource-group by burstLimitFrac.
 //
-// The per-tenant scaling ensures that each tenant's burst bucket
+// The per-group scaling ensures that each resource group's burst bucket
 // break-even point (where refill = drain) corresponds to their CPU_MIN
-// fraction of node CPU. For example, a tenant with burstLimitFrac=0.1
+// fraction of node CPU. For example, a group with burstLimitFrac=0.1
 // (CPU_MIN=10%) gets 10% of the 100% CPU refill rate, so its burst
-// bucket drains when the tenant exceeds ~10% of node CPU.
+// bucket drains when the group exceeds ~10% of node CPU.
 //
-// If a tenant's burst qualification changes as a result of the refill,
-// the tenant's position in the tenantHeap is updated to maintain correct
-// priority ordering.
+// If a group's burst qualification changes as a result of the refill,
+// the group's position in the resourceGroupHeap is updated to maintain
+// correct priority ordering.
 func (q *WorkQueue) refillBurstBuckets(toAdd int64, capacity int64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.mu.burstBucketCapacity = capacity
-	for id, tenant := range q.mu.tenants {
+	for id, rg := range q.mu.resourceGroups {
 		burstLimitFrac := q.getBurstLimitFracLocked(id)
 		scaledAdd := int64(float64(toAdd) * burstLimitFrac)
 		scaledCapacity := int64(float64(capacity) * burstLimitFrac)
-		prevBurstQual := tenant.cpuTimeBurstBucket.burstQualification()
-		tenant.cpuTimeBurstBucket.refill(scaledAdd, scaledCapacity)
-		curBurstQual := tenant.cpuTimeBurstBucket.burstQualification()
-		if prevBurstQual != curBurstQual && isInTenantHeap(tenant) {
-			q.mu.tenantHeap.fix(tenant)
+		prevBurstQual := rg.cpuTimeBurstBucket.burstQualification()
+		rg.cpuTimeBurstBucket.refill(scaledAdd, scaledCapacity)
+		curBurstQual := rg.cpuTimeBurstBucket.burstQualification()
+		if prevBurstQual != curBurstQual && isInResourceGroupHeap(rg) {
+			q.mu.resourceGroupHeap.fix(rg)
 		}
 	}
 }
@@ -1276,9 +1302,9 @@ func (q *WorkQueue) SafeFormat(s redact.SafePrinter, _ rune) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	s.Printf("closed epoch: %d ", q.mu.closedEpochThreshold)
-	s.Printf("tenantHeap len: %d", len(q.mu.tenantHeap))
-	if len(q.mu.tenantHeap) > 0 {
-		s.Printf(" top tenant: %d", q.mu.tenantHeap[0].id)
+	s.Printf("resourceGroupHeap len: %d", len(q.mu.resourceGroupHeap))
+	if len(q.mu.resourceGroupHeap) > 0 {
+		s.Printf(" top resource-group: %d", q.mu.resourceGroupHeap[0].id)
 	}
 	var ids []uint64
 	for id := range q.mu.tenants {
@@ -1320,14 +1346,19 @@ func (q *WorkQueue) SafeFormat(s redact.SafePrinter, _ rune) {
 			}
 		}
 	}
-	if q.mode == usesCPUTimeTokens && len(ids) > 0 {
+	if q.mode == usesCPUTimeTokens && len(q.mu.resourceGroups) > 0 {
+		var rgIDs []uint64
+		for rgID := range q.mu.resourceGroups {
+			rgIDs = append(rgIDs, rgID)
+		}
+		sort.Slice(rgIDs, func(i, j int) bool { return rgIDs[i] < rgIDs[j] })
 		s.Printf("\nburst-buckets: ")
-		for i, id := range ids {
+		for i, rgID := range rgIDs {
 			if i > 0 {
 				s.Printf(" ")
 			}
-			tenant := q.mu.tenants[id]
-			s.Printf("t%d=%s", id, &tenant.cpuTimeBurstBucket)
+			rg := q.mu.resourceGroups[rgID]
+			s.Printf("rg%d=%s", rgID, &rg.cpuTimeBurstBucket)
 		}
 	}
 }
@@ -1437,7 +1468,8 @@ func (q *WorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
 			if tenantInfo != nil && tenantInfo.weight != weight {
 				tenantInfo.weight = weight
 				if isInTenantHeap(tenantInfo) {
-					q.mu.tenantHeap.fix(tenantInfo)
+					rg := q.mu.resourceGroups[tenantInfo.resourceGroupID]
+					rg.tenantHeap.fix(tenantInfo)
 				}
 			}
 			index++
@@ -1455,25 +1487,57 @@ func (q *WorkQueue) SetBurstLimits(burstLimits map[uint64]float64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.mu.burstLimits = burstLimits
-	for id, tenant := range q.mu.tenants {
+	for id, rg := range q.mu.resourceGroups {
 		frac := q.getBurstLimitFracLocked(id)
-		if tenant.cpuTimeBurstBucket.burstLimitFrac != frac {
-			prevQual := tenant.cpuTimeBurstBucket.burstQualification()
-			tenant.cpuTimeBurstBucket.burstLimitFrac = frac
-			curQual := tenant.cpuTimeBurstBucket.burstQualification()
-			if prevQual != curQual && isInTenantHeap(tenant) {
-				q.mu.tenantHeap.fix(tenant)
+		if rg.cpuTimeBurstBucket.burstLimitFrac != frac {
+			prevQual := rg.cpuTimeBurstBucket.burstQualification()
+			rg.cpuTimeBurstBucket.burstLimitFrac = frac
+			curQual := rg.cpuTimeBurstBucket.burstQualification()
+			if prevQual != curQual && isInResourceGroupHeap(rg) {
+				q.mu.resourceGroupHeap.fix(rg)
 			}
 		}
 	}
 }
 
-// defaultBurstLimitFrac is the burst limit fraction for tenants not
-// explicitly configured via SetBurstLimits. A value of 0.25 means
-// unconfigured tenants qualify for burst only when using < 25% of node
-// CPU — i.e., they are non-FULLY_UTILIZE by default. FULLY_UTILIZE
-// groups must be explicitly configured with burstLimitFrac=1.0.
-const defaultBurstLimitFrac = 0.25
+// SetResourceGroupWeights sets the weight of resource groups for
+// inter-group fairness in the outer resourceGroupHeap. This updates
+// existing resource group weights; new groups will pick up their
+// weight at creation time.
+func (q *WorkQueue) SetResourceGroupWeights(weights map[uint64]uint32) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	for id, rg := range q.mu.resourceGroups {
+		w, ok := weights[id]
+		if !ok {
+			w = defaultTenantWeight
+		}
+		if rg.weight != w {
+			rg.weight = w
+			if isInResourceGroupHeap(rg) {
+				q.mu.resourceGroupHeap.fix(rg)
+			}
+		}
+	}
+}
+
+// SetTenantToResourceGroupMapping sets the mapping from tenant IDs to
+// resource group IDs. A nil map means default mapping (each tenant is
+// its own resource group). This should be called before tenants are
+// created; changing the mapping while tenants exist is not supported
+// in this initial implementation.
+func (q *WorkQueue) SetTenantToResourceGroupMapping(mapping map[uint64]uint64) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.mu.tenantToResourceGroup = mapping
+}
+
+// defaultBurstLimitFrac is the burst limit fraction for resource groups
+// not explicitly configured via SetBurstLimits. A value of 1.0 means
+// unconfigured groups are FULLY_UTILIZE (always canBurst). Non-
+// FULLY_UTILIZE groups must be explicitly configured with a lower
+// burstLimitFrac via SetResourceGroupConfig.
+const defaultBurstLimitFrac = 1.0
 
 // getBurstLimitFracLocked returns the burst limit fraction for the given
 // tenant. If no override exists, returns defaultBurstLimitFrac.
@@ -1486,6 +1550,96 @@ func (q *WorkQueue) getBurstLimitFracLocked(tenantID uint64) float64 {
 		}
 	}
 	return defaultBurstLimitFrac
+}
+
+// getResourceGroupIDLocked returns the resource group ID for the given
+// tenant. Default: tenantID is its own resource group.
+//
+// REQUIRES: q.mu is held.
+func (q *WorkQueue) getResourceGroupIDLocked(tenantID uint64) uint64 {
+	if q.mu.tenantToResourceGroup != nil {
+		if rgID, ok := q.mu.tenantToResourceGroup[tenantID]; ok {
+			return rgID
+		}
+	}
+	return tenantID
+}
+
+// getOrCreateResourceGroupLocked returns the resource group for the given
+// ID, creating it if it doesn't exist.
+//
+// REQUIRES: q.mu is held.
+func (q *WorkQueue) getOrCreateResourceGroupLocked(rgID uint64) *resourceGroupInfo {
+	rg, ok := q.mu.resourceGroups[rgID]
+	if !ok {
+		rg = &resourceGroupInfo{
+			id:        rgID,
+			weight:    q.getResourceGroupWeightLocked(rgID),
+			tenants:   make(map[uint64]*tenantInfo),
+			heapIndex: -1,
+		}
+		if q.mode == usesCPUTimeTokens {
+			burstLimitFrac := q.getBurstLimitFracLocked(rgID)
+			scaledCapacity := int64(float64(q.mu.burstBucketCapacity) * burstLimitFrac)
+			rg.cpuTimeBurstBucket.init(
+				scaledCapacity, false /* disable */, burstLimitFrac)
+		} else {
+			rg.cpuTimeBurstBucket.init(0, true /* disable */, 0)
+		}
+		q.mu.resourceGroups[rgID] = rg
+	}
+	return rg
+}
+
+// getResourceGroupWeightLocked returns the weight for the given resource
+// group. For now, defaults to the tenant weight of the group ID (which
+// works in the default case where tenantID == resourceGroupID).
+//
+// REQUIRES: q.mu is held.
+func (q *WorkQueue) getResourceGroupWeightLocked(rgID uint64) uint32 {
+	return q.getTenantWeightLocked(rgID)
+}
+
+// adjustTenantAndGroupUsedLocked updates both the tenant's used count
+// and the resource group's aggregate used count, adjusting the burst
+// bucket and fixing heap positions as needed.
+//
+// REQUIRES: q.mu is held.
+func (q *WorkQueue) adjustTenantAndGroupUsedLocked(
+	tenant *tenantInfo, rg *resourceGroupInfo, delta int64,
+) {
+	// Update tenant used.
+	if delta < 0 {
+		toReturn := uint64(-delta)
+		if tenant.used < toReturn {
+			tenant.used = 0
+		} else {
+			tenant.used -= toReturn
+		}
+	} else {
+		tenant.used += uint64(delta)
+	}
+	if isInTenantHeap(tenant) {
+		rg.tenantHeap.fix(tenant)
+	}
+
+	// Update resource group used and burst bucket.
+	if delta < 0 {
+		toReturn := uint64(-delta)
+		if rg.used < toReturn {
+			rg.used = 0
+		} else {
+			rg.used -= toReturn
+		}
+	} else {
+		rg.used += uint64(delta)
+	}
+	if q.mode == usesCPUTimeTokens {
+		rg.cpuTimeBurstBucket.adjust(-delta)
+	}
+	if isInResourceGroupHeap(rg) {
+		q.mu.resourceGroupHeap.fix(rg)
+	}
 }
 
 // close tells the gc goroutine to stop.
@@ -1634,13 +1788,112 @@ func (ps *priorityStates) getFIFOPriorityThresholdAndReset(
 	return priority
 }
 
+// resourceGroupInfo represents a resource group in the outer scheduling
+// heap. A resource group aggregates one or more tenants. It owns the
+// shared burst bucket (for CPU_MIN guarantee) and tracks aggregate
+// resource usage for inter-group fairness. Within a group, tenants
+// compete via an inner tenantHeap ordered by per-tenant used/weight.
+//
+// Default behavior: each tenant is its own resource group (tenantID ==
+// resourceGroupID), so the two-level hierarchy degenerates to a flat
+// heap identical to the previous design.
+type resourceGroupInfo struct {
+	id uint64
+	// The weight assigned to the resource group. Used for inter-group
+	// fairness in the outer resourceGroupHeap (used/weight ordering).
+	weight uint32
+	// Aggregate used across all tenants in this group. Reset periodically
+	// along with per-tenant used.
+	used uint64
+
+	// Shared burst bucket for this resource group. Burst qualification
+	// is per-group: all tenants in the group inherit the group's burst
+	// status. Only used if mode == usesCPUTimeTokens.
+	cpuTimeBurstBucket cpuTimeBurstBucket
+
+	// Inner heap of tenants with waiting work in this group. Ordered
+	// by per-tenant used/weight (no burst qualification at this level).
+	tenantHeap tenantHeap
+
+	// All tenants in this group, including those without waiting work.
+	tenants map[uint64]*tenantInfo
+
+	// heapIndex for position in the outer resourceGroupHeap. -1 when
+	// not in the heap.
+	heapIndex int
+}
+
+// resourceGroupHeap orders resource groups for inter-group scheduling.
+// The ordering mirrors the old tenantHeap.Less: (1) burstQualification
+// from the group's shared burst bucket, (2) group used/weight ratio.
+type resourceGroupHeap []*resourceGroupInfo
+
+var _ heap.Interface = (*resourceGroupHeap)(nil)
+
+func isInResourceGroupHeap(rg *resourceGroupInfo) bool {
+	return len(rg.tenantHeap) > 0
+}
+
+func (rgh *resourceGroupHeap) fix(item *resourceGroupInfo) {
+	heap.Fix(rgh, item.heapIndex)
+}
+
+func (rgh *resourceGroupHeap) remove(item *resourceGroupInfo) {
+	heap.Remove(rgh, item.heapIndex)
+}
+
+func (rgh *resourceGroupHeap) Len() int {
+	return len(*rgh)
+}
+
+func (rgh *resourceGroupHeap) Less(i, j int) bool {
+	iBurstQual := (*rgh)[i].cpuTimeBurstBucket.burstQualification()
+	jBurstQual := (*rgh)[j].cpuTimeBurstBucket.burstQualification()
+	if iBurstQual != jBurstQual {
+		return iBurstQual < jBurstQual
+	}
+	if (*rgh)[i].used*uint64((*rgh)[j].weight) ==
+		(*rgh)[j].used*uint64((*rgh)[i].weight) {
+		if (*rgh)[i].weight == (*rgh)[j].weight {
+			return (*rgh)[i].id < (*rgh)[j].id
+		}
+		return (*rgh)[i].weight > (*rgh)[j].weight
+	}
+	return (*rgh)[i].used*uint64((*rgh)[j].weight) <
+		(*rgh)[j].used*uint64((*rgh)[i].weight)
+}
+
+func (rgh *resourceGroupHeap) Swap(i, j int) {
+	(*rgh)[i], (*rgh)[j] = (*rgh)[j], (*rgh)[i]
+	(*rgh)[i].heapIndex = i
+	(*rgh)[j].heapIndex = j
+}
+
+func (rgh *resourceGroupHeap) Push(x interface{}) {
+	n := len(*rgh)
+	item := x.(*resourceGroupInfo)
+	item.heapIndex = n
+	*rgh = append(*rgh, item)
+}
+
+func (rgh *resourceGroupHeap) Pop() interface{} {
+	old := *rgh
+	n := len(old)
+	item := old[n-1]
+	old[n-1] = nil
+	item.heapIndex = -1
+	*rgh = old[0 : n-1]
+	return item
+}
+
 // tenantInfo is the per-tenant information in the tenantHeap.
 type tenantInfo struct {
 	id uint64
-	// The weight assigned to the tenant. Must be > 0.
+	// The weight assigned to the tenant. Must be > 0. Used for
+	// intra-group fairness in the inner tenantHeap.
 	weight uint32
 	// used is computed over an interval and periodically reset. Ordering
-	// between tenants, for fair sharing, utilizes this value.
+	// between tenants within a resource group utilizes this value.
 	//
 	// - For slots, used represents cpu time duration consumed by the tenant. It
 	//   is incremented by 1 (for non-elastic work) or some prediction of cpu
@@ -1680,17 +1933,18 @@ type tenantInfo struct {
 	fifoPriorityThreshold int
 
 	// The heapIndex is maintained by the heap.Interface methods, and represents
-	// the heapIndex of the item in the heap.
+	// the heapIndex of the item in the inner tenantHeap (within a resource
+	// group). -1 when not in the heap.
 	heapIndex int
+
+	// resourceGroupID is the ID of the resource group this tenant belongs
+	// to. Used for lookups when adjusting group-level used and burst
+	// bucket. Default: tenantID == resourceGroupID.
+	resourceGroupID uint64
 
 	// If mode == usesCPUTimeTokens, WorkQueue does CPU time token estimation.
 	// See the code in Admit that calls estimateTokensToBeUsed for more on this.
 	cpuTimeTokenEstimator cpuTimeTokenEstimator
-
-	// cpuTimeBurstBucket tracks whether this tenant qualifies for burst
-	// priority. Only used if mode == usesCPUTimeTokens. See
-	// cpu_time_token_burst.go for more.
-	cpuTimeBurstBucket cpuTimeBurstBucket
 
 	// Per-tenant admission metric children. Only set when
 	// mode == usesCPUTimeTokens. See cpuTimeTokenMetrics for details.
@@ -1714,10 +1968,9 @@ var tenantInfoPool = sync.Pool{
 func newTenantInfo(
 	id uint64,
 	weight uint32,
+	resourceGroupID uint64,
 	mode workQueueMode,
 	cpuTimeTokenEstimate int64,
-	burstBucketCapacity int64,
-	burstLimitFrac float64,
 	admittedCountPerTenant *aggmetric.AggCounter,
 	waitTimeNanosPerTenant *aggmetric.AggCounter,
 ) *tenantInfo {
@@ -1725,6 +1978,7 @@ func newTenantInfo(
 	*ti = tenantInfo{
 		id:                    id,
 		weight:                weight,
+		resourceGroupID:       resourceGroupID,
 		waitingWorkHeap:       ti.waitingWorkHeap,
 		openEpochsHeap:        ti.openEpochsHeap,
 		priorityStates:        makePriorityStates(ti.priorityStates.ps),
@@ -1733,12 +1987,6 @@ func newTenantInfo(
 	}
 	// This is only used if mode == usesCPUTimeTokens.
 	ti.cpuTimeTokenEstimator.init(cpuTimeTokenEstimate)
-	// If mode != usesCPUTimeTokens, cpuTimeBurstBucket.burstQualification
-	// always returns noBurst. This effectively disables the
-	// burstQualification functionality.
-	scaledCapacity := int64(float64(burstBucketCapacity) * burstLimitFrac)
-	ti.cpuTimeBurstBucket.init(
-		scaledCapacity, mode != usesCPUTimeTokens /* disable */, burstLimitFrac)
 	if admittedCountPerTenant != nil {
 		tid := strconv.FormatUint(id, 10)
 		ti.admittedCount = admittedCountPerTenant.AddChild(tid)
@@ -1785,29 +2033,9 @@ func (th *tenantHeap) Len() int {
 }
 
 func (th *tenantHeap) Less(i, j int) bool {
-	// First, order by burstQualification: canBurst tenants come before
-	// noBurst tenants. canBurst tenants have access to more CPU time
-	// than noBurst -- see cpu_time_token_granter.go for details -- so
-	// it is important that work from a canBurst tenant always sorts
-	// before work from a noBurst tenant -- else available capacity is
-	// left on the table.
-	iBurstQual := (*th)[i].cpuTimeBurstBucket.burstQualification()
-	jBurstQual := (*th)[j].cpuTimeBurstBucket.burstQualification()
-	if iBurstQual != jBurstQual {
-		return iBurstQual < jBurstQual
-	}
-	// Beyond burstQualification (which is only enabled on CPU time token
-	// AC today), for tenant fairness, we use used_i/weight_i <
-	// used_j/weight_j to determine order. In case of a tie, prioritize
-	// items with higher weight, and then items with lower tenant id.
-	//
-	// A reader may wonder if sorting on just used has the same effect
-	// as sorting on burstQualification first and used second. It is indeed
-	// similar, but it is not the same -- for example, used is reset every
-	// 1s, thus right after a reset it can fall out of sync with
-	// cpuTimeBurstBucket's burstQualification method. The source of truth
-	// for whether a tenant can burst is cpuTimeBurstBucket's
-	// burstQualification method, so we must call it here.
+	// tenantHeap is the inner heap within a resource group, used for
+	// intra-group fairness. It orders by used/weight only — burst
+	// qualification is handled at the outer resourceGroupHeap level.
 	if (*th)[i].used*uint64((*th)[j].weight) == (*th)[j].used*uint64((*th)[i].weight) {
 		if (*th)[i].weight == (*th)[j].weight {
 			return (*th)[i].id < (*th)[j].id

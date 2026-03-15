@@ -377,7 +377,7 @@ func (a *cpuTimeTokenAllocator) refill(
 	toAdd tokenCounts, bucketCapacities capacities, bucketMinimums minimums, updateMetrics bool,
 ) {
 	for qual := range toAdd {
-		idx := int(qual)
+		idx := qual
 		if v := toAdd[qual]; v > 0 {
 			a.metrics.RefillAdded[idx].Inc(v)
 		} else if v < 0 {

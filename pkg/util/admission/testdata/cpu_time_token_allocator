@@ -15,7 +15,7 @@ fit(
 	can_burst -> 100%
 )
 cpuTTG can_burst=5000 no_burst=4000
-burstM  1000
+burstM  5000
 
 # set-tokens v=0 simulates tokens being taken due to admitted work.
 set-tokens v=0
@@ -43,27 +43,27 @@ burstM  0
 allocate remaining=5
 ----
 cpuTTG can_burst=1000 no_burst=800
-burstM  200
+burstM  1000
 
 allocate remaining=4
 ----
 cpuTTG can_burst=2000 no_burst=1600
-burstM  400
+burstM  2000
 
 allocate remaining=3
 ----
 cpuTTG can_burst=3000 no_burst=2400
-burstM  600
+burstM  3000
 
 allocate remaining=2
 ----
 cpuTTG can_burst=4000 no_burst=3200
-burstM  800
+burstM  4000
 
 allocate remaining=1
 ----
 cpuTTG can_burst=5000 no_burst=4000
-burstM  1000
+burstM  5000
 
 resetInterval
 ----
@@ -72,7 +72,7 @@ fit(
 	can_burst -> 100%
 )
 cpuTTG can_burst=5000 no_burst=4000
-burstM  1000
+burstM  5000
 
 # resetInterval has been called, so a new interval has started.
 # So in theory more tokens can be added. But in this case the
@@ -82,7 +82,7 @@ burstM  1000
 allocate remaining=5
 ----
 cpuTTG can_burst=5000 no_burst=4000
-burstM  1000
+burstM  5000
 
 set-tokens v=0
 ----
@@ -109,7 +109,7 @@ burstM  0
 allocate remaining=1
 ----
 cpuTTG can_burst=4000 no_burst=3200
-burstM  800
+burstM  4000
 
 resetInterval
 ----
@@ -118,7 +118,7 @@ fit(
 	can_burst -> 100%
 )
 cpuTTG can_burst=4000 no_burst=3200
-burstM  800
+burstM  4000
 
 set-tokens v=0
 ----
@@ -131,7 +131,7 @@ burstM  0
 allocate remaining=1
 ----
 cpuTTG can_burst=5000 no_burst=4000
-burstM  1000
+burstM  5000
 
 resetInterval
 ----
@@ -140,7 +140,7 @@ fit(
 	can_burst -> 100%
 )
 cpuTTG can_burst=5000 no_burst=4000
-burstM  1000
+burstM  5000
 
 set-tokens v=0
 ----
@@ -152,12 +152,12 @@ burstM  0
 allocate remaining=2
 ----
 cpuTTG can_burst=2500 no_burst=2000
-burstM  500
+burstM  2500
 
 allocate remaining=1
 ----
 cpuTTG can_burst=5000 no_burst=4000
-burstM  1000
+burstM  5000
 
 # These final cases test how cpuTimeTokenAllocator handles changes to
 # refillRates. See the comment above deltaRefillRates for a full explanation
@@ -172,7 +172,7 @@ fit(
 	can_burst -> 100%
 )
 cpuTTG can_burst=5001 no_burst=4001
-burstM  1000
+burstM  5001
 
 set-tokens v=0
 ----
@@ -184,7 +184,7 @@ burstM  0
 allocate remaining=1
 ----
 cpuTTG can_burst=5001 no_burst=4001
-burstM  1000
+burstM  5001
 
 # Another test of a change to refillRates. If we decrease refillRates by two
 # (on all buckets), we expect two tokens to be removed from all buckets, as
@@ -196,7 +196,7 @@ fit(
 	can_burst -> 100%
 )
 cpuTTG can_burst=4999 no_burst=3999
-burstM  999
+burstM  4999
 
 set-tokens v=0
 ----
@@ -208,7 +208,7 @@ burstM  0
 allocate remaining=1
 ----
 cpuTTG can_burst=4999 no_burst=3999
-burstM  999
+burstM  4999
 
 set-tokens v=0
 ----
@@ -257,7 +257,7 @@ burstM  -10000000
 allocate remaining=1
 ----
 cpuTTG can_burst=0 no_burst=-1000
-burstM  -249
+burstM  -1785
 
 # Test resetInterval path. Drive buckets deeply negative again. resetInterval
 # has delta=0 (rates unchanged), but the floor still clamps.
@@ -273,4 +273,4 @@ fit(
 	can_burst -> 70%
 )
 cpuTTG can_burst=0 no_burst=-1000
-burstM  -249
+burstM  -1785

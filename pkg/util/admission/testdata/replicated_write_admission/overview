@@ -17,10 +17,10 @@ admit tenant=t1 pri=normal-pri create-time=1.001us size=1B range=r1 log-position
 print
 ----
 physical-stats: work-count=1 written-bytes=1B ingested-bytes=0B
-[regular work queue]: len(tenant-heap)=1 top-tenant=t1
+[regular work queue]: len(resource-group-heap)=1 top-rg=rg1
  tenant=t1 weight=1 fifo-threshold=low-pri used=0B
   [0: pri=normal-pri create-time=1.001µs size=1B range=r1 log-position=4/20]
-[elastic work queue]: len(tenant-heap)=0
+[elastic work queue]: len(resource-group-heap)=0
 
 # Admit a second request. Since there's already a request waiting, we don't get
 # the fast path.
@@ -31,11 +31,11 @@ admit tenant=t1 pri=normal-pri create-time=1.002us size=1B range=r1 log-position
 print
 ----
 physical-stats: work-count=2 written-bytes=1B ingested-bytes=1B
-[regular work queue]: len(tenant-heap)=1 top-tenant=t1
+[regular work queue]: len(resource-group-heap)=1 top-rg=rg1
  tenant=t1 weight=1 fifo-threshold=low-pri used=0B
   [0: pri=normal-pri create-time=1.001µs size=1B range=r1 log-position=4/20]
   [1: pri=normal-pri create-time=1.002µs size=1B range=r1 log-position=4/21 ingested ]
-[elastic work queue]: len(tenant-heap)=0
+[elastic work queue]: len(resource-group-heap)=0
 
 # Produce 2B worth of regular tokens.
 granter class=regular adjust-tokens=+2B
@@ -63,8 +63,8 @@ granter adjust-tokens=+0B
 print
 ----
 physical-stats: work-count=2 written-bytes=1B ingested-bytes=1B
-[regular work queue]: len(tenant-heap)=0
+[regular work queue]: len(resource-group-heap)=0
  tenant=t1 weight=1 fifo-threshold=low-pri used=2B
-[elastic work queue]: len(tenant-heap)=0
+[elastic work queue]: len(resource-group-heap)=0
 
 # vim:ft=sh

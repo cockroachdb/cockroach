@@ -311,9 +311,9 @@ func printWorkQueue(q *WorkQueue) string {
 	var buf strings.Builder
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	buf.WriteString(fmt.Sprintf("len(tenant-heap)=%d", len(q.mu.tenantHeap)))
-	if len(q.mu.tenantHeap) > 0 {
-		buf.WriteString(fmt.Sprintf(" top-tenant=t%d", q.mu.tenantHeap[0].id))
+	buf.WriteString(fmt.Sprintf("len(resource-group-heap)=%d", len(q.mu.resourceGroupHeap)))
+	if len(q.mu.resourceGroupHeap) > 0 {
+		buf.WriteString(fmt.Sprintf(" top-rg=rg%d", q.mu.resourceGroupHeap[0].id))
 	}
 	var ids []uint64
 	for id := range q.mu.tenants {

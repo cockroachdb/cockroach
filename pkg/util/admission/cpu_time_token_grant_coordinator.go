@@ -84,26 +84,29 @@ func (coord *CPUGrantCoordinators) SetTenantWeights(weights map[uint64]uint32) {
 
 // ResourceGroupConfig holds per-resource-group configuration.
 type ResourceGroupConfig struct {
-	Weight        uint32
+	Weight         uint32
 	BurstLimitFrac float64
 }
 
 // SetResourceGroupConfig sets per-resource-group weights and burst limits.
-// Each resource group appears as a tenant with weight = CPU_MIN. The
+// Each resource group has weight = CPU_MIN for inter-group fairness in the
+// outer resourceGroupHeap. Intra-group (inner tenantHeap) weights are NOT
+// set here — those are replica counts, maintained by the periodic
+// SetTenantWeights calls from kvadmission's tenant weight ticker.
+//
 // BurstLimitFrac controls burst qualification:
 //   - >= 1.0: FULLY_UTILIZE (always canBurst)
 //   - < 1.0: canBurst only while usage < burst limit fraction of CPU
-func (coord *CPUGrantCoordinators) SetResourceGroupConfig(
-	config map[uint64]ResourceGroupConfig,
-) {
+func (coord *CPUGrantCoordinators) SetResourceGroupConfig(config map[uint64]ResourceGroupConfig) {
 	weights := make(map[uint64]uint32, len(config))
 	burstLimits := make(map[uint64]float64, len(config))
 	for id, cfg := range config {
 		weights[id] = cfg.Weight
 		burstLimits[id] = cfg.BurstLimitFrac
 	}
-	coord.SetTenantWeights(weights)
-	coord.cpuTimeCoord.getWorkQueue().SetBurstLimits(burstLimits)
+	wq := coord.cpuTimeCoord.getWorkQueue()
+	wq.SetResourceGroupWeights(weights)
+	wq.SetBurstLimits(burstLimits)
 }
 
 // GetRunnableCountCallback returns a callback of type

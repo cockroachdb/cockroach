@@ -25,14 +25,14 @@ admit tenant=t2 pri=normal-pri create-time=1.002us size=1B range=r2 log-position
 print
 ----
 physical-stats: work-count=4 written-bytes=4B ingested-bytes=0B
-[regular work queue]: len(tenant-heap)=2 top-tenant=t1
+[regular work queue]: len(resource-group-heap)=2 top-rg=rg1
  tenant=t1 weight=1 fifo-threshold=low-pri used=0B
   [0: pri=normal-pri create-time=1.001µs size=1B range=r1 log-position=4/20]
   [1: pri=normal-pri create-time=1.002µs size=1B range=r1 log-position=4/21]
  tenant=t2 weight=1 fifo-threshold=low-pri used=0B
   [0: pri=normal-pri create-time=1.001µs size=1B range=r2 log-position=5/20]
   [1: pri=normal-pri create-time=1.002µs size=1B range=r2 log-position=5/21]
-[elastic work queue]: len(tenant-heap)=0
+[elastic work queue]: len(resource-group-heap)=0
 
 # Produce 2B worth of regular tokens.
 granter class=regular adjust-tokens=+2B
@@ -59,11 +59,11 @@ granter adjust-tokens=+0B
 print
 ----
 physical-stats: work-count=4 written-bytes=4B ingested-bytes=0B
-[regular work queue]: len(tenant-heap)=2 top-tenant=t1
+[regular work queue]: len(resource-group-heap)=2 top-rg=rg1
  tenant=t1 weight=1 fifo-threshold=low-pri used=1B
   [0: pri=normal-pri create-time=1.002µs size=1B range=r1 log-position=4/21]
  tenant=t2 weight=1 fifo-threshold=low-pri used=1B
   [0: pri=normal-pri create-time=1.002µs size=1B range=r2 log-position=5/21]
-[elastic work queue]: len(tenant-heap)=0
+[elastic work queue]: len(resource-group-heap)=0
 
 # vim:ft=sh
