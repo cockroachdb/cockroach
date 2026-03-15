@@ -117,6 +117,10 @@ const (
 var forwardIndexOid = stringOid(indexTypeForwardIndex)
 var invertedIndexOid = stringOid(indexTypeInvertedIndex)
 
+// PostgreSQL built-in access method OIDs, used in pg_dump compatibility mode.
+var btreeAmOid = tree.NewDOid(403)
+var heapAmOid = tree.NewDOid(2)
+
 // pgCatalog contains a set of system tables mirroring PostgreSQL's pg_catalog schema.
 // This code attempts to comply as closely as possible to the system catalogs documented
 // in https://www.postgresql.org/docs/9.6/static/catalogs.html.
@@ -276,43 +280,93 @@ var pgCatalogAmTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/catalog-pg-am.html`,
 	schema: vtable.PGCatalogAm,
 	populate: func(_ context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		// add row for forward indexes
+		// When pg_dump_compatibility is on, emit PostgreSQL's built-in access
+		// methods (btree, heap) instead of CockroachDB's (prefix, inverted).
+		// This prevents pg_dump from emitting broken CREATE ACCESS METHOD
+		// statements.
+		prefixOid := forwardIndexOid
+		prefixName := tree.NewDName(indexTypeForwardIndex)
+		if p.SessionData().PgDumpCompatibility {
+			prefixOid = btreeAmOid
+			prefixName = tree.NewDName("btree")
+		}
+		// add row for forward indexes (or btree in compat mode)
 		if err := addRow(
-			forwardIndexOid,                      // oid - all versions
-			tree.NewDName(indexTypeForwardIndex), // amname - all versions
-			zeroVal,                              // amstrategies - < v9.6
-			zeroVal,                              // amsupport - < v9.6
-			tree.DBoolTrue,                       // amcanorder - < v9.6
-			tree.DBoolFalse,                      // amcanorderbyop - < v9.6
-			tree.DBoolTrue,                       // amcanbackward - < v9.6
-			tree.DBoolTrue,                       // amcanunique - < v9.6
-			tree.DBoolTrue,                       // amcanmulticol - < v9.6
-			tree.DBoolTrue,                       // amoptionalkey - < v9.6
-			tree.DBoolTrue,                       // amsearcharray - < v9.6
-			tree.DBoolTrue,                       // amsearchnulls - < v9.6
-			tree.DBoolFalse,                      // amstorage - < v9.6
-			tree.DBoolFalse,                      // amclusterable - < v9.6
-			tree.DBoolFalse,                      // ampredlocks - < v9.6
-			oidZero,                              // amkeytype - < v9.6
-			tree.DNull,                           // aminsert - < v9.6
-			tree.DNull,                           // ambeginscan - < v9.6
-			oidZero,                              // amgettuple - < v9.6
-			oidZero,                              // amgetbitmap - < v9.6
-			tree.DNull,                           // amrescan - < v9.6
-			tree.DNull,                           // amendscan - < v9.6
-			tree.DNull,                           // ammarkpos - < v9.6
-			tree.DNull,                           // amrestrpos - < v9.6
-			tree.DNull,                           // ambuild - < v9.6
-			tree.DNull,                           // ambuildempty - < v9.6
-			tree.DNull,                           // ambulkdelete - < v9.6
-			tree.DNull,                           // amvacuumcleanup - < v9.6
-			tree.DNull,                           // amcanreturn - < v9.6
-			tree.DNull,                           // amcostestimate - < v9.6
-			tree.DNull,                           // amoptions - < v9.6
-			tree.DNull,                           // amhandler - > v9.6
-			tree.NewDString("i"),                 // amtype - > v9.6
+			prefixOid,            // oid - all versions
+			prefixName,           // amname - all versions
+			zeroVal,              // amstrategies - < v9.6
+			zeroVal,              // amsupport - < v9.6
+			tree.DBoolTrue,       // amcanorder - < v9.6
+			tree.DBoolFalse,      // amcanorderbyop - < v9.6
+			tree.DBoolTrue,       // amcanbackward - < v9.6
+			tree.DBoolTrue,       // amcanunique - < v9.6
+			tree.DBoolTrue,       // amcanmulticol - < v9.6
+			tree.DBoolTrue,       // amoptionalkey - < v9.6
+			tree.DBoolTrue,       // amsearcharray - < v9.6
+			tree.DBoolTrue,       // amsearchnulls - < v9.6
+			tree.DBoolFalse,      // amstorage - < v9.6
+			tree.DBoolFalse,      // amclusterable - < v9.6
+			tree.DBoolFalse,      // ampredlocks - < v9.6
+			oidZero,              // amkeytype - < v9.6
+			tree.DNull,           // aminsert - < v9.6
+			tree.DNull,           // ambeginscan - < v9.6
+			oidZero,              // amgettuple - < v9.6
+			oidZero,              // amgetbitmap - < v9.6
+			tree.DNull,           // amrescan - < v9.6
+			tree.DNull,           // amendscan - < v9.6
+			tree.DNull,           // ammarkpos - < v9.6
+			tree.DNull,           // amrestrpos - < v9.6
+			tree.DNull,           // ambuild - < v9.6
+			tree.DNull,           // ambuildempty - < v9.6
+			tree.DNull,           // ambulkdelete - < v9.6
+			tree.DNull,           // amvacuumcleanup - < v9.6
+			tree.DNull,           // amcanreturn - < v9.6
+			tree.DNull,           // amcostestimate - < v9.6
+			tree.DNull,           // amoptions - < v9.6
+			tree.DNull,           // amhandler - > v9.6
+			tree.NewDString("i"), // amtype - > v9.6
 		); err != nil {
 			return err
+		}
+
+		if p.SessionData().PgDumpCompatibility {
+			// In compat mode, emit a heap row (PostgreSQL's default table AM)
+			// and skip the inverted index row.
+			return addRow(
+				heapAmOid,             // oid - all versions
+				tree.NewDName("heap"), // amname - all versions
+				zeroVal,               // amstrategies - < v9.6
+				zeroVal,               // amsupport - < v9.6
+				tree.DBoolFalse,       // amcanorder - < v9.6
+				tree.DBoolFalse,       // amcanorderbyop - < v9.6
+				tree.DBoolFalse,       // amcanbackward - < v9.6
+				tree.DBoolFalse,       // amcanunique - < v9.6
+				tree.DBoolFalse,       // amcanmulticol - < v9.6
+				tree.DBoolFalse,       // amoptionalkey - < v9.6
+				tree.DBoolFalse,       // amsearcharray - < v9.6
+				tree.DBoolFalse,       // amsearchnulls - < v9.6
+				tree.DBoolFalse,       // amstorage - < v9.6
+				tree.DBoolFalse,       // amclusterable - < v9.6
+				tree.DBoolFalse,       // ampredlocks - < v9.6
+				oidZero,               // amkeytype - < v9.6
+				tree.DNull,            // aminsert - < v9.6
+				tree.DNull,            // ambeginscan - < v9.6
+				oidZero,               // amgettuple - < v9.6
+				oidZero,               // amgetbitmap - < v9.6
+				tree.DNull,            // amrescan - < v9.6
+				tree.DNull,            // amendscan - < v9.6
+				tree.DNull,            // ammarkpos - < v9.6
+				tree.DNull,            // amrestrpos - < v9.6
+				tree.DNull,            // ambuild - < v9.6
+				tree.DNull,            // ambuildempty - < v9.6
+				tree.DNull,            // ambulkdelete - < v9.6
+				tree.DNull,            // amvacuumcleanup - < v9.6
+				tree.DNull,            // amcanreturn - < v9.6
+				tree.DNull,            // amcostestimate - < v9.6
+				tree.DNull,            // amoptions - < v9.6
+				tree.DNull,            // amhandler - > v9.6
+				tree.NewDString("t"),  // amtype - > v9.6 ("t" for table)
+			)
 		}
 
 		// add row for inverted indexes
@@ -583,6 +637,8 @@ https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
 	schema: vtable.PGCatalogCast,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
+		pgDumpCompat := p.SessionData().PgDumpCompatibility
+		var castOidCounter oid.Oid = 14000
 		cast.ForEachCast(func(src, tgt oid.Oid, cCtx cast.Context, ctxOrigin cast.ContextOrigin, _ volatility.V) {
 			if ctxOrigin == cast.ContextOriginPgCast {
 				castCtx := cCtx.PGString()
@@ -593,8 +649,15 @@ https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
 						castFunc = tree.NewDOid(v)
 					}
 				}
+				var castOid *tree.DOid
+				if pgDumpCompat {
+					castOid = tree.NewDOid(castOidCounter)
+					castOidCounter++
+				} else {
+					castOid = h.CastOid(src, tgt)
+				}
 				_ = addRow(
-					h.CastOid(src, tgt),      // oid
+					castOid,                  // oid
 					tree.NewDOid(src),        // cast source
 					tree.NewDOid(tgt),        // casttarget
 					castFunc,                 // castfunc
@@ -808,6 +871,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		// The only difference between tables, views and sequences are the relkind and relam columns.
 		relKind := relKindTable
 		relAm := forwardIndexOid
+		if p.SessionData().PgDumpCompatibility {
+			// Use PostgreSQL's heap AM OID for tables so pg_dump doesn't emit
+			// SET default_table_access_method = prefix.
+			relAm = heapAmOid
+		}
 		replIdent := "d" // default;
 		if table.IsView() {
 			relKind = relKindView
@@ -928,6 +996,13 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			indexType := forwardIndexOid
 			if index.GetType() == idxtype.INVERTED {
 				indexType = invertedIndexOid
+			}
+			if p.SessionData().PgDumpCompatibility {
+				if index.GetType() == idxtype.INVERTED {
+					indexType = oidZero
+				} else {
+					indexType = btreeAmOid
+				}
 			}
 			ownerOid, err := getOwnerOID(ctx, p, table)
 			if err != nil {
@@ -3616,7 +3691,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-tablespace.html`,
 	schema: vtable.PGCatalogTablespace,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return addRow(
-			oidZero,                       // oid
+			tree.NewDOid(1663),            // oid - matches PostgreSQL v17
 			tree.NewDString("pg_default"), // spcname
 			nodeOID,                       // spcowner
 			tree.DNull,                    // spclocation

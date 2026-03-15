@@ -1572,3 +1572,26 @@ statement ok
 DROP TABLE stxtest
 
 subtest end
+
+subtest pg_cast_oids_pg_dump_compat
+
+statement ok
+SET pg_dump_compatibility = true
+
+# All cast OIDs should be below 16384 (PostgreSQL's FirstNormalObjectId)
+# so pg_dump treats them as built-in and skips them.
+query B
+SELECT bool_and(oid < 16384) FROM pg_cast
+----
+true
+
+statement ok
+SET pg_dump_compatibility = false
+
+# Without compat mode, cast OIDs should be above 16384.
+query B
+SELECT bool_and(oid > 16384) FROM pg_cast
+----
+true
+
+subtest end
