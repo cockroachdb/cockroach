@@ -535,6 +535,9 @@ func (u *sqlSymUnion) lockingItem() *tree.LockingItem {
 func (u *sqlSymUnion) lockingStrength() tree.LockingStrength {
     return u.val.(tree.LockingStrength)
 }
+func (u *sqlSymUnion) lockMode() tree.LockMode {
+    return u.val.(tree.LockMode)
+}
 func (u *sqlSymUnion) lockingWaitPolicy() tree.LockingWaitPolicy {
     return u.val.(tree.LockingWaitPolicy)
 }
@@ -1026,7 +1029,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> DISABLE DISCARD DISTANCE DISTINCT DO DOMAIN DOUBLE DROP
 
 %token <str> EACH ELSE ENABLE ENCODING ENCRYPTED ENCRYPTION_PASSPHRASE END ENUM ENUMS ERRORS ESCAPE
-%token <str> EXCEPT EXCLUDE EXCLUDING EXPLICIT EXISTS EXECUTE EXECUTION EXPERIMENTAL
+%token <str> EXCEPT EXCLUDE EXCLUDING EXCLUSIVE EXPLICIT EXISTS EXECUTE EXECUTION EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT EXPERIMENTAL_RELOCATE
 %token <str> EXPIRATION EXPLAIN EXPORT EXTENSION EXTERNAL EXTRACT EXTRACT_DURATION EXTREMES
@@ -1059,7 +1062,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> LABEL LANGUAGE LAST LATERAL LATEST LC_CTYPE LC_COLLATE
 %token <str> LEADING LEASE LEAST LEAKPROOF LEFT LESS LEVEL LIKE LIMIT
 %token <str> LINESTRING LINESTRINGM LINESTRINGZ LINESTRINGZM
-%token <str> LIST LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGGED LOGICAL LOGICALLY LOGIN LOOKUP LOW LSHIFT
+%token <str> LIST LOCK LOCAL LOCALITY LOCALTIME LOCALTIMESTAMP LOCKED LOGGED LOGICAL LOGICALLY LOGIN LOOKUP LOW LSHIFT
 
 %token <str> MATCH MATERIALIZED MERGE MINVALUE MAXVALUE METHOD MINUTE MODIFYCLUSTERSETTING MODE MONTH MOVE
 %token <str> MULTILINESTRING MULTILINESTRINGM MULTILINESTRINGZ MULTILINESTRINGZM
@@ -1471,7 +1474,9 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 
 %type <tree.Statement> transaction_stmt legacy_transaction_stmt legacy_begin_stmt legacy_end_stmt
 %type <tree.Statement> truncate_stmt
+%type <tree.Statement> lock_stmt
 %type <tree.Statement> unlisten_stmt
+%type <tree.LockMode> lock_mode
 %type <tree.Statement> update_stmt
 %type <tree.Statement> upsert_stmt
 %type <tree.Statement> use_stmt
@@ -1982,6 +1987,7 @@ stmt_without_legacy_transaction:
 | fetch_cursor_stmt          // EXTEND WITH HELP: FETCH
 | move_cursor_stmt           // EXTEND WITH HELP: MOVE
 | reindex_stmt
+| lock_stmt
 | unlisten_stmt
 | show_commit_timestamp_stmt // EXTEND WITH HELP: SHOW COMMIT TIMESTAMP
 
@@ -15849,6 +15855,36 @@ relation_expr_list:
     $$.val = append($1.tableNames(), name)
   }
 
+// LOCK TABLE. PostgreSQL defaults to ACCESS EXCLUSIVE when no lock mode is
+// specified, but pg_dump always uses the explicit IN ... MODE form.
+lock_stmt:
+  LOCK opt_table relation_expr_list IN lock_mode MODE
+  {
+    $$.val = &tree.LockTable{Tables: $3.tableNames(), Mode: $5.lockMode()}
+  }
+| LOCK opt_table relation_expr_list IN lock_mode MODE NOWAIT
+  {
+    $$.val = &tree.LockTable{Tables: $3.tableNames(), Mode: $5.lockMode(), NoWait: true}
+  }
+| LOCK opt_table relation_expr_list
+  {
+    $$.val = &tree.LockTable{Tables: $3.tableNames(), Mode: tree.LockModeAccessExclusive}
+  }
+| LOCK opt_table relation_expr_list NOWAIT
+  {
+    $$.val = &tree.LockTable{Tables: $3.tableNames(), Mode: tree.LockModeAccessExclusive, NoWait: true}
+  }
+
+lock_mode:
+  ACCESS SHARE              { $$.val = tree.LockModeAccessShare }
+| ROW SHARE                 { $$.val = tree.LockModeRowShare }
+| ROW EXCLUSIVE             { $$.val = tree.LockModeRowExclusive }
+| SHARE UPDATE EXCLUSIVE    { $$.val = tree.LockModeShareUpdateExclusive }
+| SHARE ROW EXCLUSIVE       { $$.val = tree.LockModeShareRowExclusive }
+| SHARE                     { $$.val = tree.LockModeShare }
+| EXCLUSIVE                 { $$.val = tree.LockModeExclusive }
+| ACCESS EXCLUSIVE          { $$.val = tree.LockModeAccessExclusive }
+
 // UNLISTEN
 unlisten_stmt:
    UNLISTEN type_name
@@ -19036,6 +19072,7 @@ unreserved_keyword:
 | ESCAPE
 | EXCLUDE
 | EXCLUDING
+| EXCLUSIVE
 | EXPLICIT
 | EXECUTE
 | EXECUTION
@@ -19133,6 +19170,7 @@ unreserved_keyword:
 | LINESTRINGZ
 | LINESTRINGZM
 | LIST
+| LOCK
 | LOCAL
 | LOCKED
 | LOGICAL
@@ -19581,6 +19619,7 @@ bare_label_keywords:
 | ESCAPE
 | EXCLUDE
 | EXCLUDING
+| EXCLUSIVE
 | EXPLICIT
 | EXECUTE
 | EXECUTION
@@ -19712,6 +19751,7 @@ bare_label_keywords:
 | LINESTRINGZ
 | LINESTRINGZM
 | LIST
+| LOCK
 | LOCAL
 | LOCALITY
 | LOCALTIME

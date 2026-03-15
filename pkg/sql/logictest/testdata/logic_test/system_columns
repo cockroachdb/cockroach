@@ -522,5 +522,4 @@ SET pg_dump_compatibility = 'off'
 
 statement ok
 DROP TABLE t_schema_locked
-
 subtest end
