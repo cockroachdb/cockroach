@@ -752,3 +752,63 @@ SELECT col1 FROM t123548_1 JOIN t123548_2 ON col1 = col2;
 statement ok
 RESET testing_optimizer_random_seed;
 RESET testing_optimizer_disable_rule_probability;
+
+# Regression test: string constants should be implicitly castable to oid[] in
+# comparisons, matching PostgreSQL behavior. This is needed for pg_dump
+# compatibility which compares oid[] columns against string literals like '{0}'.
+subtest oid_array_string_comparison
+
+statement ok
+CREATE TABLE t_oidarr (a OID[])
+
+statement ok
+INSERT INTO t_oidarr VALUES (ARRAY[0::oid])
+
+query B
+SELECT a = '{0}' FROM t_oidarr
+----
+true
+
+query B
+SELECT a = '{0}'::oid[] FROM t_oidarr
+----
+true
+
+statement ok
+DROP TABLE t_oidarr
+
+subtest end
+
+# Regression test: string constants should be resolvable as oid type, matching
+# PostgreSQL behavior. This is needed for pg_dump which uses EXECUTE with
+# string-literal OID arguments like: EXECUTE dumpEnumType('100108')
+subtest oid_string_constant
+
+# String constants should resolve to oid in EXECUTE parameter context.
+statement ok
+PREPARE test_oid_param(oid) AS SELECT $1
+
+query O
+EXECUTE test_oid_param('1234')
+----
+1234
+
+statement ok
+DEALLOCATE test_oid_param
+
+# String constants should be comparable to oid columns.
+statement ok
+CREATE TABLE t_oid_cmp (a OID)
+
+statement ok
+INSERT INTO t_oid_cmp VALUES (1234)
+
+query B
+SELECT a = '1234' FROM t_oid_cmp
+----
+true
+
+statement ok
+DROP TABLE t_oid_cmp
+
+subtest end

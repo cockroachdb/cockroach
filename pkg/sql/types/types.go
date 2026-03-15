@@ -868,6 +868,10 @@ var (
 	VarBitArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: VarBit, Oid: oid.T__varbit, Locale: &emptyLocale}}
 
+	// OidArray is the type of an array value having Oid-typed elements.
+	OidArray = &T{InternalType: InternalType{
+		Family: ArrayFamily, ArrayContents: Oid, Oid: oid.T__oid, Locale: &emptyLocale}}
+
 	// AnyEnumArray is the type of an array value having AnyEnum-typed elements.
 	AnyEnumArray = &T{InternalType: InternalType{
 		Family: ArrayFamily, ArrayContents: AnyEnum, Oid: oid.T_anyarray, Locale: &emptyLocale}}
