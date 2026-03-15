@@ -183,6 +183,7 @@ var sessionVarDescriptions = map[string]string{
 	"parallelize_multi_key_lookup_joins_max_lookup_ratio":             "Sets the maximum lookup ratio threshold for parallelizing multi-key lookup joins.",
 	"parallelize_multi_key_lookup_joins_only_on_mr_mutations":         "Controls whether parallelization of multi-key lookup joins is restricted to multi-row mutations only.",
 	"password_encryption":                                             "The encryption method used for passwords.",
+	"pg_dump_compatibility":                                           "When true, causes virtual pg_catalog tables to report standard PostgreSQL tableoid values instead of CockroachDB's internal descriptor IDs.",
 	"pg_trgm.similarity_threshold":                                    "Sets the value used to compare trigram similarities for the string % string overload.",
 	"plan_cache_mode":                                                 "Controls the method that the optimizer should use to choose between a custom and generic query plan.",
 	"plpgsql_use_strict_into":                                         "Causes PL/pgSQL \"SELECT ... INTO\" and \"RETURNING INTO\" syntax to always behave as if specified with STRICT option.",

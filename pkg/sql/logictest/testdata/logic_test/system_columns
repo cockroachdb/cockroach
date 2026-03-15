@@ -360,3 +360,68 @@ ALTER TABLE tab3 DROP COLUMN crdb_internal_mvcc_timestamp;
 
 statement error pq: cannot alter system column "crdb_internal_mvcc_timestamp"
 ALTER TABLE tab3 ALTER COLUMN crdb_internal_mvcc_timestamp SET NOT NULL;
+
+subtest pg_dump_compatibility
+
+# By default, pg_catalog tables use CockroachDB's internal descriptor IDs as
+# their tableoid.
+query O
+SELECT DISTINCT tableoid FROM pg_namespace LIMIT 1
+----
+4294967048
+
+# Enable pg_dump compatibility mode.
+statement ok
+SET pg_dump_compatibility = true
+
+# With pg_dump_compatibility, pg_catalog tables should return standard
+# PostgreSQL tableoid values.
+query O
+SELECT DISTINCT tableoid FROM pg_namespace LIMIT 1
+----
+2615
+
+query O
+SELECT DISTINCT tableoid FROM pg_class LIMIT 1
+----
+1259
+
+query O
+SELECT DISTINCT tableoid FROM pg_type LIMIT 1
+----
+1247
+
+query O
+SELECT DISTINCT tableoid FROM pg_proc LIMIT 1
+----
+1255
+
+# Non-pg_catalog virtual tables should still return their descriptor IDs even
+# with pg_dump_compatibility enabled.
+let $is_tables_oid2
+SELECT oid FROM pg_class WHERE relname = 'tables' AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'information_schema')
+
+query B
+SELECT bool_and(tableoid = $is_tables_oid2) FROM information_schema.tables
+----
+true
+
+# crdb_internal tables should also be unaffected.
+let $crdb_tables_oid
+SELECT oid FROM pg_class WHERE relname = 'tables' AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'crdb_internal')
+
+query B
+SELECT bool_and(tableoid = $crdb_tables_oid) FROM crdb_internal.tables
+----
+true
+
+# Turn it back off and verify default behavior is restored.
+statement ok
+SET pg_dump_compatibility = false
+
+query O
+SELECT DISTINCT tableoid FROM pg_namespace LIMIT 1
+----
+4294967048
+
+subtest end

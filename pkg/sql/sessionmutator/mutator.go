@@ -1191,6 +1191,10 @@ func (m *SessionDataMutator) SetOptimizerUseMinRowCountAntiJoinFix(val bool) {
 	m.Data.OptimizerUseMinRowCountAntiJoinFix = val
 }
 
+func (m *SessionDataMutator) SetPgDumpCompatibility(val bool) {
+	m.Data.PgDumpCompatibility = val
+}
+
 func (m *SessionDataMutator) SetStatsAsOf(val hlc.Timestamp) {
 	m.Data.StatsAsOf = val
 }
