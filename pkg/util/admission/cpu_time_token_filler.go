@@ -192,6 +192,11 @@ type cpuTimeTokenAllocator struct {
 	// refillRates stores the number of CPU time tokens to add to each bucket
 	// per interval (1s).
 	refillRates rates
+	// canBurstTarget stores the canBurst utilization target (e.g., 1.0 when
+	// KVCPUTimeUtilGoal=0.75 + KVCPUTimeUtilBurstDelta=0.25). Used to
+	// normalize burst bucket refill to the 100% CPU rate, so the per-tenant
+	// break-even is independent of the configured targets.
+	canBurstTarget float64
 	// allocated stores the number of tokens added to each bucket in the current
 	// cpuTimeTokenAllocator. No mutex, since only a single goroutine will call
 	// the allocator.
@@ -299,12 +304,18 @@ func (a *cpuTimeTokenAllocator) allocateTokens(expectedRemainingTicksInInterval 
 	// in CC, we scrape metrics once every 10s.
 	a.refill(allocations, bucketCapacities, bucketMinimums, false /* updateMetrics */)
 
-	// Refill per-tenant burst buckets in the WorkQueue. We pass the
-	// canBurst (= 100% CPU) allocation and rate as the base.
-	// refillBurstBuckets scales these per-tenant by burstLimitFrac
-	// (= CPU_MIN fraction), so a tenant with CPU_MIN=10% gets a refill
-	// rate of 10% of cpuCapacity, breaking even at exactly 10% CPU usage.
-	a.queue.refillBurstBuckets(allocations[canBurst], a.refillRates[canBurst])
+	// Refill per-tenant burst buckets in the WorkQueue. We normalize the
+	// canBurst allocation and rate to 100% CPU by dividing out the canBurst
+	// target. This ensures per-tenant burst bucket break-even is independent
+	// of the configured utilization targets (e.g., if the operator changes
+	// KVCPUTimeUtilGoal + KVCPUTimeUtilBurstDelta to sum to 0.6 instead of
+	// 1.0, the break-even for a CPU_MIN=10% tenant is still 10%, not 6%).
+	// refillBurstBuckets then scales per-tenant by burstLimitFrac.
+	if a.canBurstTarget > 0 {
+		toAdd := int64(float64(allocations[canBurst]) / a.canBurstTarget)
+		burstCapacity := int64(float64(a.refillRates[canBurst]) / a.canBurstTarget)
+		a.queue.refillBurstBuckets(toAdd, burstCapacity)
+	}
 }
 
 // resetInterval is called to signal the beginning of a new interval.
@@ -315,9 +326,13 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 	// noBurst target, and the delta is also configurable by a cluster setting.
 	var targets targetUtilizations
 	burstDelta := KVCPUTimeUtilBurstDelta.Get(&a.settings.SV)
-	target := KVCPUTimeUtilGoal.Get(&a.settings.SV)
-	targets[noBurst] = target
-	targets[canBurst] = target + burstDelta
+	noBurstTarget := KVCPUTimeUtilGoal.Get(&a.settings.SV)
+	targets[noBurst] = noBurstTarget
+	targets[canBurst] = noBurstTarget + burstDelta
+
+	// Store canBurst target for normalizing burst bucket refill to the
+	// 100% CPU rate. See allocateTokens for usage.
+	a.canBurstTarget = targets[canBurst]
 
 	newRefillRates := a.model.fit(ctx, targets)
 
@@ -340,8 +355,13 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 	a.refill(deltaRefillRates, bucketCapacities, bucketMinimums, true /* updateMetrics */)
 	a.refillRates = newRefillRates
 
-	// Apply the delta to the per-tenant burst buckets also.
-	a.queue.refillBurstBuckets(deltaRefillRates[canBurst], bucketCapacities[canBurst])
+	// Apply the delta to the per-tenant burst buckets also, using the
+	// same normalization as allocateTokens.
+	if a.canBurstTarget > 0 {
+		toAdd := int64(float64(deltaRefillRates[canBurst]) / a.canBurstTarget)
+		burstCapacity := int64(float64(bucketCapacities[canBurst]) / a.canBurstTarget)
+		a.queue.refillBurstBuckets(toAdd, burstCapacity)
+	}
 
 	// Reset allocated.
 	for qual := range a.allocated {

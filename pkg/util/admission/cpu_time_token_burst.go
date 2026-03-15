@@ -28,11 +28,11 @@ import "github.com/cockroachdb/redact"
 //   - Burst qualification depends on burstLimitFrac (see burstQualification).
 //   - The bucket can go negative (down to -capacity/4) to allow recovery.
 //
-// The bucket capacity is derived from the noBurst refill rate in
-// cpuTimeTokenAllocator (capacity = noBurst_refill_rate / 4).
-// With cluster settings at their default values, this implies that
-// a tenant can burst if they are using roughly less than ~19% of the
-// CPU on a CRDB node (0.75 * 0.25 = 0.1875).
+// The bucket capacity and refill rate are derived from the 100% CPU rate
+// (canBurstRate / canBurstTarget), scaled per-tenant by burstLimitFrac
+// (= CPU_MIN fraction) in refillBurstBuckets. A tenant with CPU_MIN=10%
+// gets 10% of the 100% CPU rate, so its burst bucket breaks even at
+// exactly 10% CPU usage, regardless of the configured utilization targets.
 type cpuTimeBurstBucket struct {
 	tokens   int64
 	capacity int64

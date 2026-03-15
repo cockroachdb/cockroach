@@ -305,10 +305,12 @@ type WorkQueue struct {
 		maxQueueDelayToSwitchToLifo time.Duration
 		// Only used if mode == usesCPUTimeTokens.
 		defaultCPUTimeTokenEstimator cpuTimeTokenEstimator
-		// burstBucketCapacity is the capacity for newly created tenant burst
-		// buckets. Note that buckets init full, so burstBucketCapacity is also
-		// the starting token count. Updated by refillBurstBuckets. Only used
-		// if mode == usesCPUTimeTokens.
+		// burstBucketCapacity is the base capacity for burst buckets,
+		// representing the 100% CPU rate (normalized by dividing out
+		// canBurstTarget in the allocator). Per-tenant capacity is derived
+		// by scaling this by burstLimitFrac. Updated by refillBurstBuckets.
+		// Also used as the initial capacity for newly created tenants
+		// (buckets init full). Only used if mode == usesCPUTimeTokens.
 		burstBucketCapacity int64
 		// burstLimits maps tenantID to a per-tenant burst limit fraction.
 		// See cpuTimeBurstBucket.burstLimitFrac for semantics. Only used
@@ -692,10 +694,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		// here, we also create the estimator. We init the estimator using a
 		// global estimator that sees workload across all tenants.
 		burstLimitFrac := q.getBurstLimitFracLocked(tenantID)
-		scaledCapacity := int64(float64(q.mu.burstBucketCapacity) * burstLimitFrac)
 		tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID),
-			q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), scaledCapacity,
-			burstLimitFrac,
+			q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(),
+			q.mu.burstBucketCapacity, burstLimitFrac,
 			q.admittedCountPerTenant, q.waitTimeNanosPerTenant)
 		q.mu.tenants[tenantID] = tenant
 	}
@@ -829,10 +830,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		tenant, ok = q.mu.tenants[tenantID]
 		if !ok {
 			burstLimitFrac := q.getBurstLimitFracLocked(tenantID)
-			scaledCapacity := int64(float64(q.mu.burstBucketCapacity) * burstLimitFrac)
 			tenant = newTenantInfo(tenantID, q.getTenantWeightLocked(tenantID),
-				q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(), scaledCapacity,
-				burstLimitFrac,
+				q.mode, q.mu.defaultCPUTimeTokenEstimator.estimateTokensToBeUsed(),
+				q.mu.burstBucketCapacity, burstLimitFrac,
 				q.admittedCountPerTenant, q.waitTimeNanosPerTenant)
 			q.mu.tenants[tenantID] = tenant
 		}
@@ -1237,26 +1237,27 @@ func (q *WorkQueue) adjustTenantUsedLocked(tenant *tenantInfo, delta int64) {
 
 // refillBurstBuckets adds tokens to all tenant burst buckets and updates
 // their capacity. This is called by cpuTimeTokenAllocator periodically
-// (every 1ms). noBurstToAdd and noBurstCapacity are the full noBurst
-// allocation and rate — these are scaled per-tenant by burstLimitFrac.
+// (every 1ms). toAdd and capacity represent the 100% CPU rate (normalized
+// by dividing out canBurstTarget in the allocator). These are scaled
+// per-tenant by burstLimitFrac.
 //
 // The per-tenant scaling ensures that each tenant's burst bucket
 // break-even point (where refill = drain) corresponds to their CPU_MIN
 // fraction of node CPU. For example, a tenant with burstLimitFrac=0.1
-// (CPU_MIN=10%) gets 10% of the noBurst refill rate, so its burst bucket
-// drains when the tenant exceeds ~10% of node CPU.
+// (CPU_MIN=10%) gets 10% of the 100% CPU refill rate, so its burst
+// bucket drains when the tenant exceeds ~10% of node CPU.
 //
 // If a tenant's burst qualification changes as a result of the refill,
 // the tenant's position in the tenantHeap is updated to maintain correct
 // priority ordering.
-func (q *WorkQueue) refillBurstBuckets(noBurstToAdd int64, noBurstCapacity int64) {
+func (q *WorkQueue) refillBurstBuckets(toAdd int64, capacity int64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.mu.burstBucketCapacity = noBurstCapacity
+	q.mu.burstBucketCapacity = capacity
 	for id, tenant := range q.mu.tenants {
 		burstLimitFrac := q.getBurstLimitFracLocked(id)
-		scaledAdd := int64(float64(noBurstToAdd) * burstLimitFrac)
-		scaledCapacity := int64(float64(noBurstCapacity) * burstLimitFrac)
+		scaledAdd := int64(float64(toAdd) * burstLimitFrac)
+		scaledCapacity := int64(float64(capacity) * burstLimitFrac)
 		prevBurstQual := tenant.cpuTimeBurstBucket.burstQualification()
 		tenant.cpuTimeBurstBucket.refill(scaledAdd, scaledCapacity)
 		curBurstQual := tenant.cpuTimeBurstBucket.burstQualification()
