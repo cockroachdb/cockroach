@@ -280,6 +280,24 @@ SELECT tableoid = $pg_class_oid, relname FROM pg_class WHERE oid = 'pg_class'::r
 ----
 true  pg_class
 
+# Verify tableoid works in a virtual table lookup join. This is the pattern
+# pg_dump uses: joining an unnested array against a virtual table's index.
+# Previously this caused an index-out-of-bounds panic in pushRow because the
+# lookup join tried to read the tableoid column from the looked-up row, but
+# the virtual table generator does not produce system columns.
+statement ok
+CREATE TABLE IF NOT EXISTS attrdef_test (id INT PRIMARY KEY, val TEXT DEFAULT 'hello')
+
+query B
+SELECT bool_and(a.tableoid IS NOT NULL)
+FROM unnest(ARRAY[(SELECT 'attrdef_test'::regclass::oid)]::oid[]) AS src(tbloid)
+JOIN pg_catalog.pg_attrdef a ON (src.tbloid = a.adrelid)
+----
+true
+
+statement ok
+DROP TABLE IF EXISTS attrdef_test
+
 subtest origin_id
 
 statement ok
