@@ -533,8 +533,8 @@ view_table_usage              false
 query OTOTT colnames
 SELECT oid, spcname, spcowner, spcacl, spcoptions FROM pg_tablespace
 ----
-oid  spcname     spcowner    spcacl  spcoptions
-0    pg_default  3233629770  NULL    NULL
+oid   spcname     spcowner    spcacl  spcoptions
+1663  pg_default  3233629770  NULL    NULL
 
 ## pg_catalog.pg_views
 
