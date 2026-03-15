@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -832,8 +833,9 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		if table.IsView() && !table.MaterializedView() {
 			// Show view options in reloptions.
 			withOptions, err = table.GetViewOptions(false /* spaceBetweenEqual */)
-		} else {
-			// Show table storage parameters in reloptions.
+		} else if p.SessionData().PgDumpCompatibility != sessiondatapb.PgDumpCompatibilityPostgres {
+			// Show table storage parameters in reloptions. All storage params
+			// are CockroachDB-specific, so skip them in postgres compat mode.
 			withOptions, err = table.GetStorageParams(false /* spaceBetweenEqual */)
 		}
 		if err != nil {

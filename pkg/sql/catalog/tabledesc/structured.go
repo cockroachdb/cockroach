@@ -2668,11 +2668,11 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) ([]string, error) 
 	if count, ok := desc.HistogramBucketsCount(); ok {
 		appendStorageParam(`sql_stats_histogram_buckets_count`, fmt.Sprintf("%d", count))
 	}
-	if desc.IsSchemaLocked() {
-		appendStorageParam(`schema_locked`, `true`)
-	}
 	if desc.StatsCanaryWindow != 0 {
 		appendStorageParam(`sql_stats_canary_window`, fmt.Sprintf(`'%s'`, desc.StatsCanaryWindow.String()))
+	}
+	if desc.IsSchemaLocked() {
+		appendStorageParam(`schema_locked`, `true`)
 	}
 	if usingFK := desc.GetRegionalByRowUsingConstraint(); usingFK != descpb.ConstraintID(0) {
 		// NOTE: when validating the descriptor, we check that the referenced
