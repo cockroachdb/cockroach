@@ -1080,3 +1080,49 @@ query T
 SELECT to_regclass(c) FROM t144384;
 ----
 i144384
+
+subtest pg_get_triggerdef
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TABLE trig_test (id INT PRIMARY KEY, val TEXT)
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE FUNCTION trig_fn() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END; $$
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TRIGGER test_trig BEFORE INSERT ON trig_test FOR EACH ROW EXECUTE FUNCTION trig_fn()
+
+skipif config local-legacy-schema-changer
+query T
+SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgname = 'test_trig'
+----
+CREATE TRIGGER test_trig BEFORE INSERT ON test.public.trig_test FOR EACH ROW EXECUTE FUNCTION test.public.trig_fn()
+
+skipif config local-legacy-schema-changer
+query T
+SELECT pg_get_triggerdef(oid, true) FROM pg_trigger WHERE tgname = 'test_trig'
+----
+CREATE TRIGGER test_trig BEFORE INSERT ON test.public.trig_test FOR EACH ROW EXECUTE FUNCTION test.public.trig_fn()
+
+# Invalid OID returns NULL.
+query T nosort
+SELECT pg_get_triggerdef(0)
+----
+NULL
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP TRIGGER test_trig ON trig_test
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP FUNCTION trig_fn
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP TABLE trig_test
+
+subtest end
