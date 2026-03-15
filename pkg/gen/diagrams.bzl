@@ -188,6 +188,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:legacy_transaction.html",
     "//docs/generated/sql/bnf:like_table_option_list.html",
     "//docs/generated/sql/bnf:limit_clause.html",
+    "//docs/generated/sql/bnf:lock.html",
     "//docs/generated/sql/bnf:move_cursor.html",
     "//docs/generated/sql/bnf:nonpreparable_set.html",
     "//docs/generated/sql/bnf:not_null_column_level.html",
