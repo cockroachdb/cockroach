@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/lib/pq/oid"
 	"golang.org/x/text/language"
 )
 
@@ -778,6 +779,26 @@ func (expr *IndirectionExpr) TypeCheck(
 
 		if OnTypeCheckJSONBSubscript != nil {
 			OnTypeCheckJSONBSubscript()
+		}
+	case types.StringFamily:
+		// Only the name type supports subscripting, matching PostgreSQL where
+		// name has typsubscript => 'raw_array_subscript_handler'.
+		if typ.Oid() != oid.T_name {
+			return nil, pgerror.Newf(pgcode.DatatypeMismatch, "cannot subscript type %s because it is not an array, json, or name object", typ)
+		}
+		expr.typ = types.String
+		for i, t := range expr.Indirection {
+			if t.Slice {
+				return nil, pgerror.Newf(pgcode.DatatypeMismatch, "name subscript does not support slices")
+			}
+			if i > 0 {
+				return nil, pgerror.Newf(pgcode.DatatypeMismatch, "name subscript does not support multidimensional indexing")
+			}
+			beginExpr, err := typeCheckAndRequire(ctx, semaCtx, t.Begin, types.Int, "name subscript")
+			if err != nil {
+				return nil, err
+			}
+			t.Begin = beginExpr
 		}
 	default:
 		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "cannot subscript type %s because it is not an array or json object", typ)
