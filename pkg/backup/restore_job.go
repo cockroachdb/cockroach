@@ -658,6 +658,10 @@ func restore(
 	tasks = append(tasks, tracingAggLoop)
 
 	runRestore := func(ctx context.Context) error {
+		defer close(progCh)
+		defer close(tracingAggCh)
+		defer close(procCompleteCh)
+
 		if details.OnlineImpl() {
 			log.Dev.Warningf(ctx, "EXPERIMENTAL ONLINE RESTORE being used")
 
