@@ -3997,6 +3997,8 @@ func generateTableIndexesRow(
 	// indexes are not reported as a part of ForeachIndex.
 	return catalog.ForEachIndex(table, catalog.IndexOpts{
 		NonPhysicalPrimaryIndex: true,
+		AddMutations:            true,
+		DropMutations:           true,
 	}, func(idx catalog.Index) error {
 		idxType := secondary
 		if idx.Primary() {
