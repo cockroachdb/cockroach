@@ -267,6 +267,11 @@ const (
 	// V26_2_AddSystemStatementsTable adds the system.statements table.
 	// The table stores information about executed statements.
 	V26_2_AddSystemStatementsTable
+
+	// V26_2 is CockroachDB v26.2. It's used for all v26.2.x patch releases.
+	V26_2
+
+	V26_3_Start
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -344,6 +349,11 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_2_StmtDiagnosticsRequestID: {Major: 26, Minor: 1, Internal: 32},
 
 	V26_2_AddSystemStatementsTable: {Major: 26, Minor: 1, Internal: 34},
+
+	V26_2: {Major: 26, Minor: 2, Internal: 0},
+
+	// v26.3 versions. Internal versions must be even.
+	V26_3_Start: {Major: 26, Minor: 2, Internal: 2},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************
@@ -360,13 +370,13 @@ const MinSupported Key = V25_4
 // have at least an RC build published).
 const PreviousRelease Key = V26_1
 
-// V26_2 is a placeholder that will eventually be replaced by the actual 26.2
+// V26_3 is a placeholder that will eventually be replaced by the actual 26.3
 // version Key, but in the meantime it points to the latest Key. The placeholder
 // is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 26.2 and has completed all associated migrations; most
+// a cluster is running 26.3 and has completed all associated migrations; most
 // version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 26.2.
-const V26_2 = Latest
+// only need to check that the cluster has upgraded to 26.3.
+const V26_3 = Latest
 
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only

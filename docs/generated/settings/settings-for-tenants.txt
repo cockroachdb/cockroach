@@ -115,7 +115,6 @@ log.channel_compatibility_mode.enabled	boolean	false	when true, logs will to log
 obs.tablemetadata.automatic_updates.enabled	boolean	false	enables automatic updates of the table metadata cache system.table_metadata	application
 obs.tablemetadata.data_valid_duration	duration	20m0s	the duration for which the data in system.table_metadata is considered valid	application
 schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule	application
-security.client_cert.san_required.enabled	boolean	false	mandates a requirement for client certs to contain SAN	system-visible
 security.client_cert.subject_required.enabled	boolean	false	mandates a requirement for subject role to be set for db user	system-visible
 security.ocsp.mode	enumeration	off	use OCSP to check whether TLS certificates are revoked. If the OCSP server is unreachable, in strict mode all certificates will be rejected and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]	application
 security.ocsp.timeout	duration	3s	timeout before considering the OCSP server unreachable	application
@@ -161,7 +160,6 @@ server.oidc_authentication.provider.custom_ca	string		sets the PEM encoded custo
 server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve)	application
 server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback)	application
 server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`)	application
-server.oidc_authentication.tls_insecure_skip_verify.enabled	boolean	false	if true, TLS certificate verification is skipped for connections to the OIDC provider (insecure)	application
 server.redact_sensitive_settings.enabled	boolean	false	enables or disables the redaction of sensitive settings in the output of SHOW CLUSTER SETTINGS and SHOW ALL CLUSTER SETTINGS for users without the MODIFYCLUSTERSETTING privilege	application
 server.shutdown.connections.timeout (alias: server.shutdown.connection_wait)	duration	0s	the maximum amount of time a server waits for all SQL connections to be closed before proceeding with a drain. (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	application
 server.shutdown.initial_wait (alias: server.shutdown.drain_wait)	duration	0s	the amount of time a server waits in an unready state before proceeding with a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting. --drain-wait is to specify the duration of the whole draining process, while server.shutdown.initial_wait is to set the wait time for health probes to notice that the node is not ready.)	application
@@ -434,4 +432,4 @@ trace.zipkin.collector	string		the address of a Zipkin instance to receive trace
 ui.database_locality_metadata.enabled	boolean	true	if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute	application
 ui.default_timezone	string		the default timezone used to format timestamps in the ui	application
 ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui. This setting is deprecatedand will be removed in a future version. Use the 'ui.default_timezone' setting instead. 'ui.default_timezone' takes precedence over this setting. [etc/utc = 0, america/new_york = 1]	application
-version	version	1000026.1-upgrading-to-1000026.2-step-034	set the active cluster version in the format '<major>.<minor>'	application
+version	version	1000026.2-upgrading-to-1000026.3-step-002	set the active cluster version in the format '<major>.<minor>'	application
