@@ -161,7 +161,8 @@ func WithMetricsServerInterceptor(interceptor RequestMetricsInterceptor) ServerO
 
 // WithDRPCMetricsUnaryServerInterceptor adds a DRPCUnaryServerRequestMetricsInterceptor to the DRPC server.
 func WithDRPCMetricsUnaryServerInterceptor(
-	interceptor DRPCUnaryServerRequestMetricsInterceptor) ServerOption {
+	interceptor DRPCUnaryServerRequestMetricsInterceptor,
+) ServerOption {
 	return func(opts *serverOpts) {
 		opts.drpcUnaryRequestMetricsInterceptor = interceptor
 	}
@@ -169,7 +170,8 @@ func WithDRPCMetricsUnaryServerInterceptor(
 
 // WithDRPCMetricsUnaryServerInterceptor adds a DRPCUnaryServerRequestMetricsInterceptor to the DRPC server.
 func WithDRPCMetricsStreamServerInterceptor(
-	interceptor DRPCStreamServerRequestMetricsInterceptor) ServerOption {
+	interceptor DRPCStreamServerRequestMetricsInterceptor,
+) ServerOption {
 	return func(opts *serverOpts) {
 		opts.drpcStreamRequestMetricsInterceptor = interceptor
 	}
