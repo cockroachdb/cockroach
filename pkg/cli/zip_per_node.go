@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -418,6 +419,15 @@ func (zc *debugZipContext) getLogFiles(
 		// transfers somehow.
 
 		nodePrinter.info("%d log files found", len(logs.Files))
+
+		// Convert validated severity names to proto values for server-side
+		// filtering. These were already validated in runDebugZip.
+		var excludeSeverities []logpb.Severity
+		for _, name := range zipCtx.excludeLogSeverities {
+			sev, _ := logpb.SeverityByName(name)
+			excludeSeverities = append(excludeSeverities, sev)
+		}
+
 		var warnings []string
 		for _, file := range logs.Files {
 			ctime := extractTimeFromFileName(file.Name)
@@ -436,7 +446,10 @@ func (zc *debugZipContext) getLogFiles(
 					var err error
 					entries, err = zc.status.LogFile(
 						ctx, &serverpb.LogFileRequest{
-							NodeId: id, File: file.Name, Redact: zipCtx.redact,
+							NodeId:            id,
+							File:              file.Name,
+							Redact:            zipCtx.redact,
+							ExcludeSeverities: excludeSeverities,
 						})
 					return err
 				}); requestErr != nil {

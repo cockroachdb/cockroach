@@ -1881,6 +1881,21 @@ cluster.
 `,
 	}
 
+	ZipExcludeLogSeverity = FlagInfo{
+		Name: "exclude-log-severities",
+		Description: `
+List of log severities to exclude from the collected log files.
+The list can be specified as a comma-delimited list of severity
+names, or by using the flag multiple times. Valid severity names
+are: INFO, WARNING, ERROR, FATAL.
+<PRE>
+
+</PRE>
+For example, --exclude-log-severities=INFO will skip all INFO-level
+log entries, significantly reducing zip file size for large clusters.
+`,
+	}
+
 	ZipCPUProfileDuration = FlagInfo{
 		Name: "cpu-profile-duration",
 		Description: `
