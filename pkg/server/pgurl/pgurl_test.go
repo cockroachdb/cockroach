@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/url"
+	"os"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -18,6 +19,27 @@ import (
 )
 
 func TestURL(t *testing.T) {
+	// Create certificate files in a temporary directory for use with --inline.
+	tmpdir := t.TempDir()
+	oldWD, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(tmpdir))
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(oldWD))
+	})
+	require.NoError(t, os.Mkdir("certs", 0755))
+	for _, f := range []struct {
+		name     string
+		contents string
+		perm     os.FileMode
+	}{
+		{"certs/ca.crt", "caCertContents", 0644},
+		{"certs/client.root.key", "clientKeyContents", 0600},
+		{"certs/client.root.crt", "clientCertContents", 0644},
+	} {
+		require.NoError(t, os.WriteFile(f.name, []byte(f.contents), f.perm))
+	}
+
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "url"), func(t *testing.T, td *datadriven.TestData) string {
 		var result bytes.Buffer
 
@@ -45,6 +67,11 @@ func TestURL(t *testing.T) {
 		fmt.Fprintf(&result, "pq URL: %s\n", u.ToPQ())
 		fmt.Fprintf(&result, "DSN:    %s\n", u.ToDSN())
 		fmt.Fprintf(&result, "JDBC:   %s\n", u.ToJDBC())
+		if crdbURL, err := u.ToCRDB(); err == nil {
+			fmt.Fprintf(&result, "CRDB:   %s\n", crdbURL)
+		} else {
+			fmt.Fprintf(&result, "CRDB:   (err: %s)\n", err)
+		}
 
 		u.
 			WithDefaultUsername("defaultuser").
@@ -55,6 +82,11 @@ func TestURL(t *testing.T) {
 		fmt.Fprintf(&result, "pq URL: %s\n", u.ToPQ())
 		fmt.Fprintf(&result, "DSN:    %s\n", u.ToDSN())
 		fmt.Fprintf(&result, "JDBC:   %s\n", u.ToJDBC())
+		if crdbURL, err := u.ToCRDB(); err == nil {
+			fmt.Fprintf(&result, "CRDB:   %s\n", crdbURL)
+		} else {
+			fmt.Fprintf(&result, "CRDB:   (err: %s)\n", err)
+		}
 
 		return result.String()
 	})
