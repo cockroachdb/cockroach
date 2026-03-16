@@ -30,12 +30,36 @@ USE multiregion_db;
 SELECT crdb_internal.validate_multi_region_zone_configs()
 ----
 
-stage-query phase=PostCommitPhase stage=:
-SELECT index_name FROM crdb_internal.table_indexes WHERE descriptor_name='table_regional_by_row' ORDER BY index_name;
+stage-query phase=PostCommitPhase stage=1:16
+SELECT c2.relname AS index_name
+  FROM pg_catalog.pg_index i
+  JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
+  JOIN pg_catalog.pg_class c2 ON c2.oid = i.indexrelid
+  WHERE c.relname = 'table_regional_by_row' AND i.indisready AND i.indisvalid
+  ORDER BY c2.relname;
 ----
 idx_v
 table_regional_by_row_pkey
 
+stage-query phase=PostCommitPhase stage=17:
+SELECT c2.relname AS index_name
+  FROM pg_catalog.pg_index i
+  JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
+  JOIN pg_catalog.pg_class c2 ON c2.oid = i.indexrelid
+  WHERE c.relname = 'table_regional_by_row' AND i.indisready AND i.indisvalid
+  ORDER BY c2.relname;
+----
+crdb_internal_idx_v_recreated
+idx_v
+table_regional_by_row_pkey
+
+stage-query phase=PostCommitPhase stage=1
+SELECT count(*) > 0 FROM pg_catalog.pg_index i
+  JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
+  WHERE c.relname = 'table_regional_by_row' AND NOT i.indisready;
+----
+true
+
 stage-query phase=PostCommitPhase stage=:
 SELECT count(*)=$successfulStageCount*2 FROM  multiregion_db.public.table_regional_by_row@idx_v
 ----
@@ -47,8 +71,26 @@ SELECT count(*)=$successfulStageCount*2 FROM  multiregion_db.public.table_region
 ----
 true
 
-stage-query phase=PostCommitNonRevertiblePhase stage=:
-SELECT index_name FROM crdb_internal.table_indexes WHERE descriptor_name='table_regional_by_row' ORDER BY index_name;
+stage-query phase=PostCommitNonRevertiblePhase stage=1:2
+SELECT c2.relname AS index_name
+  FROM pg_catalog.pg_index i
+  JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
+  JOIN pg_catalog.pg_class c2 ON c2.oid = i.indexrelid
+  WHERE c.relname = 'table_regional_by_row' AND i.indisready AND i.indisvalid
+  ORDER BY c2.relname;
+----
+crdb_internal_idx_v_recreated
+idx_v
+table_regional_by_row_k1_key
+table_regional_by_row_pkey
+
+stage-query phase=PostCommitNonRevertiblePhase stage=3:
+SELECT c2.relname AS index_name
+  FROM pg_catalog.pg_index i
+  JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
+  JOIN pg_catalog.pg_class c2 ON c2.oid = i.indexrelid
+  WHERE c.relname = 'table_regional_by_row' AND i.indisready AND i.indisvalid
+  ORDER BY c2.relname;
 ----
 idx_v
 table_regional_by_row_k1_key
