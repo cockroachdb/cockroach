@@ -240,6 +240,49 @@ func (a *Applier) applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 					op := &o.Ops[i]
 					op.Result().Reset() // in case we're a retry
 					if err != nil {
+						// If a previous op failed with a recoverable error and
+						// this op is a savepoint rollback for a savepoint that was
+						// successfully created, attempt the rollback to recover.
+						// This mirrors how SQL uses savepoints to recover from
+						// errors without restarting the entire transaction.
+						//
+						// Only ConditionFailedError and LockConflictError are
+						// recoverable via savepoint rollback — these are
+						// special-cased in the KV layer to not move the txn to
+						// the txnError state. All other errors make the txn
+						// permanently failed.
+						if op.SavepointRollback != nil {
+							if _, ok := spIDToToken[int(op.SavepointRollback.ID)]; ok {
+								if errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) ||
+									errors.HasType(err, (*kvpb.LockConflictError)(nil)) {
+									applyClientOp(ctx, txn, op, true /* inTxn */, &spIDToToken)
+									if op.Result().Type != ResultType_Error {
+										// Rollback succeeded — the txn is no longer in
+										// an error state and subsequent ops can execute.
+										err = nil
+										// Mark sub-ops of any failed batches between the
+										// savepoint create and this rollback as errOmitted.
+										// When a batch fails, the error is propagated to all
+										// sub-ops (even ones that never executed). Without
+										// this fixup, the validator would create phantom
+										// observations from those error results.
+										for j := i - 1; j >= 0; j-- {
+											prev := &o.Ops[j]
+											if prev.SavepointCreate != nil &&
+												int(prev.SavepointCreate.ID) == int(op.SavepointRollback.ID) {
+												break
+											}
+											if prev.Batch != nil && prev.Result().Type == ResultType_Error {
+												for k := range prev.Batch.Ops {
+													*prev.Batch.Ops[k].Result() = resultInit(ctx, errOmitted)
+												}
+											}
+										}
+									}
+									continue
+								}
+							}
+						}
 						// If a previous op failed, mark this op as never invoked. We need
 						// to do this because we want, as an invariant, to have marked all
 						// operations as either failed or succeeded.
