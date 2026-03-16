@@ -289,19 +289,21 @@ func TestDRPCServerUnaryInterceptorAllMetrics(t *testing.T) {
 	_, err := interceptor(ctx, req, rpc, handler)
 	require.NoError(t, err)
 
-	baseLabels := map[string]string{
+	startedLabels := map[string]string{
 		RPCTypeLabel:   "unary",
 		RPCMethodLabel: rpc,
+		RPCState:       "started",
 	}
 	codeLabelsOK := map[string]string{
 		RPCTypeLabel:       "unary",
 		RPCMethodLabel:     rpc,
+		RPCState:           "completed",
 		RPCStatusCodeLabel: "OK",
 	}
 
-	// RequestsTotal with baseLabels (statusCode="") tracks started requests.
-	require.Equal(t, int64(1), requestMetrics.RequestsTotal.Count(baseLabels))
-	// RequestsTotal with codeLabelsOK tracks completed requests.
+	// RequestsTotal with state="started" tracks started requests.
+	require.Equal(t, int64(1), requestMetrics.RequestsTotal.Count(startedLabels))
+	// RequestsTotal with state="completed" tracks completed requests.
 	require.Equal(t, int64(1), requestMetrics.RequestsTotal.Count(codeLabelsOK))
 	// Unary interceptor does not record MsgRecvDuration/MsgSendDuration
 	// (those are only recorded by the streaming interceptor's monitored stream).
@@ -316,11 +318,12 @@ func TestDRPCServerUnaryInterceptorAllMetrics(t *testing.T) {
 	codeLabelsInternal := map[string]string{
 		RPCTypeLabel:       "unary",
 		RPCMethodLabel:     rpc,
+		RPCState:           "completed",
 		RPCStatusCodeLabel: "Internal",
 	}
 
 	// Two RPCs started total.
-	require.Equal(t, int64(2), requestMetrics.RequestsTotal.Count(baseLabels))
+	require.Equal(t, int64(2), requestMetrics.RequestsTotal.Count(startedLabels))
 	// One completed with OK, one with Internal.
 	require.Equal(t, int64(1), requestMetrics.RequestsTotal.Count(codeLabelsOK))
 	require.Equal(t, int64(1), requestMetrics.RequestsTotal.Count(codeLabelsInternal))
@@ -357,6 +360,11 @@ func TestDRPCStreamServerRequestInterceptor(t *testing.T) {
 		RPCTypeLabel:   "stream",
 		RPCMethodLabel: rpc,
 	}
+	startedLabels := map[string]string{
+		RPCTypeLabel:   "stream",
+		RPCMethodLabel: rpc,
+		RPCState:       "started",
+	}
 
 	// Successful stream call. The handler receives a monitoredDRPCServerStream
 	// and calls MsgRecv + MsgSend on it to exercise the wrappers.
@@ -376,10 +384,11 @@ func TestDRPCStreamServerRequestInterceptor(t *testing.T) {
 	codeLabelsOK := map[string]string{
 		RPCTypeLabel:       "stream",
 		RPCMethodLabel:     rpc,
+		RPCState:           "completed",
 		RPCStatusCodeLabel: "OK",
 	}
 
-	require.Equal(t, int64(1), requestMetrics.RequestsTotal.Count(baseLabels))
+	require.Equal(t, int64(1), requestMetrics.RequestsTotal.Count(startedLabels))
 	require.Equal(t, int64(1), requestMetrics.RequestsTotal.Count(codeLabelsOK))
 	require.Equal(t, uint64(1), histogramSampleCount(requestMetrics.MsgRecvDuration, baseLabels))
 	require.Equal(t, uint64(1), histogramSampleCount(requestMetrics.MsgSendDuration, baseLabels))
@@ -394,10 +403,11 @@ func TestDRPCStreamServerRequestInterceptor(t *testing.T) {
 	codeLabelsUnavailable := map[string]string{
 		RPCTypeLabel:       "stream",
 		RPCMethodLabel:     rpc,
+		RPCState:           "completed",
 		RPCStatusCodeLabel: "Unavailable",
 	}
 
-	require.Equal(t, int64(2), requestMetrics.RequestsTotal.Count(baseLabels))
+	require.Equal(t, int64(2), requestMetrics.RequestsTotal.Count(startedLabels))
 	require.Equal(t, int64(1), requestMetrics.RequestsTotal.Count(codeLabelsUnavailable))
 	// MsgReceived/MsgSent should not have incremented from the error call.
 	require.Equal(t, uint64(1), histogramSampleCount(requestMetrics.MsgRecvDuration, baseLabels))
@@ -412,7 +422,7 @@ func TestDRPCStreamServerRequestInterceptor(t *testing.T) {
 	})
 	require.NoError(t, err)
 	// Counts should not have changed.
-	require.Equal(t, int64(2), requestMetrics.RequestsTotal.Count(baseLabels))
+	require.Equal(t, int64(2), requestMetrics.RequestsTotal.Count(startedLabels))
 
 	// Stream call where MsgSend and MsgRecv return errors. The metrics should
 	// not increment for failed send/recv operations.
@@ -428,7 +438,7 @@ func TestDRPCStreamServerRequestInterceptor(t *testing.T) {
 	})
 	require.Error(t, err)
 
-	require.Equal(t, int64(3), requestMetrics.RequestsTotal.Count(baseLabels))
+	require.Equal(t, int64(3), requestMetrics.RequestsTotal.Count(startedLabels))
 	// MsgReceived/MsgSent should not have incremented from failed stream ops.
 	require.Equal(t, uint64(1), histogramSampleCount(requestMetrics.MsgRecvDuration, baseLabels))
 	require.Equal(t, uint64(1), histogramSampleCount(requestMetrics.MsgSendDuration, baseLabels))

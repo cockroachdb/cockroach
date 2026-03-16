@@ -500,6 +500,7 @@ const (
 	RPCMethodLabel     = "methodName"
 	RPCStatusCodeLabel = "statusCode"
 	RPCTypeLabel       = "rpcType"
+	RPCState           = "state"
 
 	rpcProtocolGRPC = "grpc"
 	rpcProtocolDRPC = "drpc"
@@ -625,24 +626,29 @@ type DRPCServerRequestMetrics struct {
 // drpcReporter implements drpcMetricsReporter, recording metrics via pre-computed
 // label maps.
 type drpcReporter struct {
-	kind          drpcMetricsKind
-	clientMetrics *DRPCClientRequestMetrics
-	serverMetrics *DRPCServerRequestMetrics
-	baseLabels    map[string]string // type, method
-	codeLabels    map[string]string // type, method, code (code mutated per-call)
+	kind                drpcMetricsKind
+	clientMetrics       *DRPCClientRequestMetrics
+	serverMetrics       *DRPCServerRequestMetrics
+	baseLabels          map[string]string // type, method
+	baseLabelsWithState map[string]string // type, method, state
+	codeLabels          map[string]string // type, method, code (code mutated per-call)
+	codeLabelsWithState map[string]string // type, method, code, state
 }
 
-// PostCall increments RequestsTotal with the actual status code via codeLabels,
-// marking a request as "completed". The delta between statusCode="" and statusCode!=""
-// gives in-flight requests.
+// PostCall increments RequestsTotal with state="completed" and the actual
+// status code via codeLabels. In-flight requests can be derived as:
+//
+//	started (state="started") - completed (state="completed")
 func (r *drpcReporter) PostCall(err error, rpcDuration time.Duration) {
-	r.codeLabels[RPCStatusCodeLabel] = drpcCodeString(err)
+	errString := drpcCodeString(err)
+	r.codeLabelsWithState[RPCStatusCodeLabel] = errString
+	r.codeLabels[RPCStatusCodeLabel] = errString
 	switch r.kind {
 	case drpcMetricsClient:
-		r.clientMetrics.RequestsTotal.Inc(r.codeLabels, 1)
+		r.clientMetrics.RequestsTotal.Inc(r.codeLabelsWithState, 1)
 		r.clientMetrics.RequestDuration.Observe(r.codeLabels, float64(rpcDuration.Nanoseconds()))
 	case drpcMetricsServer:
-		r.serverMetrics.RequestsTotal.Inc(r.codeLabels, 1)
+		r.serverMetrics.RequestsTotal.Inc(r.codeLabelsWithState, 1)
 		r.serverMetrics.RequestDuration.Observe(r.codeLabels, float64(rpcDuration.Nanoseconds()))
 	}
 }
@@ -677,27 +683,40 @@ func (r *Reportable) reporter(meta drpcCallMeta, kind drpcMetricsKind) drpcMetri
 		RPCTypeLabel:   meta.drpcType,
 		RPCMethodLabel: meta.drpcMethod,
 	}
+	baseLabelsWithState := map[string]string{
+		RPCTypeLabel:   meta.drpcType,
+		RPCMethodLabel: meta.drpcMethod,
+		RPCState:       "started",
+	}
 	codeLabels := map[string]string{
 		RPCTypeLabel:       meta.drpcType,
 		RPCMethodLabel:     meta.drpcMethod,
 		RPCStatusCodeLabel: "", // set per-call in PostCall
 	}
+	codeLabelsWithState := map[string]string{
+		RPCTypeLabel:       meta.drpcType,
+		RPCMethodLabel:     meta.drpcMethod,
+		RPCState:           "completed",
+		RPCStatusCodeLabel: "", // set per-call in PostCall
+	}
 	return &drpcReporter{
-		clientMetrics: r.ClientMetrics,
-		serverMetrics: r.ServerMetrics,
-		kind:          kind,
-		baseLabels:    baseLabels,
-		codeLabels:    codeLabels,
+		clientMetrics:       r.ClientMetrics,
+		serverMetrics:       r.ServerMetrics,
+		kind:                kind,
+		baseLabels:          baseLabels,
+		baseLabelsWithState: baseLabelsWithState,
+		codeLabels:          codeLabels,
+		codeLabelsWithState: codeLabelsWithState,
 	}
 }
 
 // serverReporter builds a DRPC reporter and records the start counter.
 func (r *Reportable) serverReporter(meta drpcCallMeta) drpcMetricsReporter {
 	reporter := r.reporter(meta, drpcMetricsServer)
-	// baseLabels omits statusCode (3 labels vs the 4 declared on
-	// RequestsTotal). The missing key resolves to statusCode="" which marks this
-	// as a "started" request.
-	r.ServerMetrics.RequestsTotal.Inc(reporter.(*drpcReporter).baseLabels, 1)
+	// baseLabelsWithState carries state="started" (with no statusCode), marking
+	// this as an in-flight request. PostCall later increments with
+	// state="completed" and the actual status code.
+	r.ServerMetrics.RequestsTotal.Inc(reporter.(*drpcReporter).baseLabelsWithState, 1)
 	return reporter
 }
 
@@ -737,7 +756,8 @@ func NewDRPCServerRequestMetrics() *DRPCServerRequestMetrics {
 	return &DRPCServerRequestMetrics{
 		RequestsTotal: metric.NewExportedCounterVec(
 			metaServerRequestsTotal,
-			[]string{RPCTypeLabel, RPCMethodLabel, RPCStatusCodeLabel}),
+			[]string{RPCTypeLabel, RPCMethodLabel, RPCState,
+				RPCStatusCodeLabel}),
 		RequestDuration: metric.NewExportedHistogramVec(
 			metaServerRequestDuration,
 			metric.ResponseTime30sBuckets,
@@ -756,7 +776,8 @@ func NewDRPCClientRequestMetrics() *DRPCClientRequestMetrics {
 	return &DRPCClientRequestMetrics{
 		RequestsTotal: metric.NewExportedCounterVec(
 			metaClientRequestsTotal,
-			[]string{RPCTypeLabel, RPCMethodLabel, RPCStatusCodeLabel}),
+			[]string{RPCTypeLabel, RPCMethodLabel, RPCState,
+				RPCStatusCodeLabel}),
 		RequestDuration: metric.NewExportedHistogramVec(
 			metaClientRequestDuration,
 			metric.ResponseTime30sBuckets,
