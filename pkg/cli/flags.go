@@ -758,7 +758,7 @@ func init() {
 
 		f.BoolVar(
 			&convertCtx.sslInline, "inline", convertCtx.sslInline,
-			"replace certificate file paths with their contents inline in the URL",
+			"replace certificate file paths with their contents inline in the URL. If set, forces CRDB URL format output (i.e. --format=crdb)",
 		)
 		f.StringVar(
 			&convertCtx.database, "database", convertCtx.database,
@@ -791,6 +791,11 @@ func init() {
 		f.StringVar(
 			&convertCtx.keyPath, "key", convertCtx.keyPath,
 			"path to key for client-cert authentication",
+		)
+		f.Var(
+			&convertCtx.format,
+			"format",
+			fmt.Sprintf("output url format (one of %v). If not specified, all formats will be printed", convertURLFormats),
 		)
 	}
 

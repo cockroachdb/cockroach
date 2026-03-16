@@ -29,7 +29,16 @@ var convertURLCmd = &cobra.Command{
 	`,
 	Short: "convert a SQL connection string for use with various client drivers",
 	Args:  cobra.NoArgs,
-	RunE:  clierrorplus.MaybeDecorateError(runConvertURL),
+	PreRunE: func(cmd *cobra.Command, _ []string) error {
+		if convertCtx.sslInline {
+			if convertCtx.format != "" && convertCtx.format != convertURLFormatCRDB {
+				return errors.New("--inline only supports --format=crdb")
+			}
+			convertCtx.format = convertURLFormatCRDB
+		}
+		return nil
+	},
+	RunE: clierrorplus.MaybeDecorateError(runConvertURL),
 }
 
 func runConvertURL(cmd *cobra.Command, _ []string) error {
@@ -83,17 +92,40 @@ func runConvertURL(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	return displayConvertedURL(u)
+	return displayConvertedURL(u, convertCtx.format)
 }
 
-func displayConvertedURL(u *pgurl.URL) error {
-	// We perform the CRDB conversion first, as this could fail and we do not
+func displayConvertedURL(u *pgurl.URL, format convertURLFormat) error {
+	// If the user specifies a specific format, we only print the URL without a
+	// header.
+	if format != convertURLFormatAll {
+		switch format {
+		case convertURLFormatPQ:
+			fmt.Println(u.ToPQ())
+		case convertURLFormatDSN:
+			fmt.Println(u.ToDSN())
+		case convertURLFormatJDBC:
+			fmt.Println(u.ToJDBC())
+		case convertURLFormatCRDB:
+			crdbURL, err := u.ToCRDB()
+			if err != nil {
+				return err
+			}
+			fmt.Println(crdbURL)
+		default:
+			return fmt.Errorf("unknown format: %s", format)
+		}
+		return nil
+	}
+
+	// We perform the CRDB converstion first, as this could fail and we do not
 	// want to print to stdout if there is an error.
 	crdbURL, err := u.ToCRDB()
 	if err != nil {
 		return err
 	}
 
+	// The user didn't specify a format, so we display all of them with a header.
 	cp := ttycolor.StdoutProfile
 	yc := cp[ttycolor.Yellow]
 	rc := cp[ttycolor.Reset]

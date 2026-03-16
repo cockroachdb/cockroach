@@ -401,8 +401,8 @@ EOF"
         $0 start drt-ua2 --restart=false
 
         # tell the clusters about eachother.
-        ua2="$(roachprod ssh drt-ua2:1 -- ./cockroach convert-url --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt --url {pgurl:1:system} | tail -1)"
-        ua1="$(roachprod ssh drt-ua1:1 -- ./cockroach convert-url --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt --url {pgurl:1:system} | tail -1)"
+        ua2="$(roachprod ssh drt-ua2:1 -- ./cockroach convert-url --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt --url {pgurl:1:system})"
+        ua1="$(roachprod ssh drt-ua1:1 -- ./cockroach convert-url --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt --url {pgurl:1:system})"
         $0 sql drt-ua1:1 --cluster=system -- -e "CREATE EXTERNAL CONNECTION 'drt-ua2' AS '${ua2}'"
         $0 sql drt-ua2:1 --cluster=system -- -e "CREATE EXTERNAL CONNECTION 'drt-ua1' AS '${ua1}'"
 
@@ -558,8 +558,8 @@ EOF"
         $0 ssh drt-ldr2:1 "./cockroach workload init ycsb --workload=A --insert-count=1000 --families=false --insert-start=4511686018427387904 {pgurl:1}"
 
         # tell the clusters about eachother.
-        ldr2="$(roachprod ssh drt-ldr2:1 -- ./cockroach convert-url --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt --database ycsb --user root --url {pgurl:1} | tail -1)"
-        ldr1="$(roachprod ssh drt-ldr1:1 -- ./cockroach convert-url --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt --database ycsb --user root --url {pgurl:1} | tail -1)"
+        ldr2="$(roachprod ssh drt-ldr2:1 -- ./cockroach convert-url --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt --database ycsb --user root --url {pgurl:1})"
+        ldr1="$(roachprod ssh drt-ldr1:1 -- ./cockroach convert-url --inline --ca-cert ./certs/ca.crt --key ./certs/client.root.key --cert ./certs/client.root.crt --database ycsb --user root --url {pgurl:1})"
         $0 sql drt-ldr1:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ldr2' AS '${ldr2}'"
         $0 sql drt-ldr2:1 -- -e "CREATE EXTERNAL CONNECTION 'drt-ldr1' AS '${ldr1}'"
 

@@ -9,6 +9,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	isatty "github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -640,6 +642,41 @@ func setSqlfmtContextDefaults() {
 	sqlfmtCtx.execStmts = nil
 }
 
+// convertURLFormat enumerates the supported output formats for the `convert-url`
+// command.
+type convertURLFormat string
+
+const (
+	convertURLFormatAll  convertURLFormat = ""
+	convertURLFormatPQ   convertURLFormat = "pq"
+	convertURLFormatDSN  convertURLFormat = "dsn"
+	convertURLFormatJDBC convertURLFormat = "jdbc"
+	convertURLFormatCRDB convertURLFormat = "crdb"
+)
+
+var convertURLFormats = []convertURLFormat{
+	convertURLFormatPQ,
+	convertURLFormatDSN,
+	convertURLFormatJDBC,
+	convertURLFormatCRDB,
+}
+
+func (f *convertURLFormat) String() string {
+	return string(*f)
+}
+
+func (f *convertURLFormat) Set(s string) error {
+	if slices.Contains(convertURLFormats, convertURLFormat(s)) {
+		*f = convertURLFormat(s)
+		return nil
+	}
+	return errors.Newf("must be one of %s", convertURLFormats)
+}
+
+func (f *convertURLFormat) Type() string {
+	return "string"
+}
+
 // convertCtx captures the command-line parameters of the `convert-url` command.
 // See below for defaults.
 var convertCtx struct {
@@ -653,6 +690,7 @@ var convertCtx struct {
 	caCertPath string
 	certPath   string
 	keyPath    string
+	format     convertURLFormat
 }
 
 // setConvContextDefaults set the default values in convertCtx.  This
@@ -669,6 +707,7 @@ func setConvContextDefaults() {
 	convertCtx.caCertPath = ""
 	convertCtx.certPath = ""
 	convertCtx.keyPath = ""
+	convertCtx.format = ""
 }
 
 // demoCtx captures the command-line parameters of the `demo` command.
