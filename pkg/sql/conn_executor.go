@@ -3765,7 +3765,7 @@ var allowBufferedWritesForWeakIsolation = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.txn.write_buffering_for_weak_isolation.enabled",
 	"set to true to allow write buffering for transactions at weak isolation levels",
-	false,
+	true,
 )
 
 func (ex *connExecutor) txnIsolationLevelToKV(
