@@ -11,6 +11,8 @@ import (
 	"testing"
 )
 
+// BenchmarkORMQueries is a benchmark for various ORM-generated introspection queries.
+// benchmark-ci: benchtime=20x
 func BenchmarkORMQueries(b *testing.B) { reg.Run(b) }
 func init() {
 	liquibaseSetup, liquibaseReset := buildNDatabasesWithMTables(15, 40)
@@ -1154,9 +1156,13 @@ func buildNFunctions(n int) string {
 	return b.String()
 }
 
-func buildNTablesWithTriggers(n int) string {
-	b := strings.Builder{}
-	b.WriteString(`
+// buildNTablesWithTriggers returns a SetupEx slice for creating n tables
+// with triggers.
+func buildNTablesWithTriggers(n int) []string {
+	var stmts []string
+	stmts = append(stmts, "SET autocommit_before_ddl = false;")
+	stmts = append(stmts, "BEGIN;")
+	stmts = append(stmts, `
 CREATE OR REPLACE FUNCTION trigger_func()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -1166,16 +1172,27 @@ END;
 $$ LANGUAGE plpgsql;
 `)
 	for i := 0; i < n; i++ {
-		b.WriteString(fmt.Sprintf(`
+		stmts = append(stmts, fmt.Sprintf(`
 CREATE TABLE t%d (a INT, b INT);
+`, i))
+	}
+	stmts = append(stmts, "COMMIT;")
 
+	// Second Exec: SET first so session has unsafe_always, then BEGIN; COMMIT; so
+	// resetExtraTxnState runs and schemaChangerState is recreated with that mode,
+	// then BEGIN; CREATE TRIGGER... COMMIT; so triggers use the declarative schema changer.
+	stmts = append(stmts, "SET use_declarative_schema_changer = 'unsafe_always';")
+	stmts = append(stmts, "BEGIN;")
+	for i := 0; i < n; i++ {
+		stmts = append(stmts, fmt.Sprintf(`
 CREATE TRIGGER trigger_%d
 AFTER INSERT ON t%d
 FOR EACH ROW
 EXECUTE FUNCTION trigger_func();
-`, i, i, i))
+`, i, i))
 	}
-	return b.String()
+	stmts = append(stmts, "COMMIT;")
+	return stmts
 }
 
 func buildNTypes(n int) string {

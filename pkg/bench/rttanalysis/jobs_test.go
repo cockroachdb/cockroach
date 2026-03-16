@@ -18,6 +18,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
+// BenchmarkJobs is a benchmark for job-related statements and internal queries.
+// benchmark-ci: benchtime=20x
 func BenchmarkJobs(b *testing.B) { reg.Run(b) }
 func init() {
 	// Create a minimal table descriptor for the import job.

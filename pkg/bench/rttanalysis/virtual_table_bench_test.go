@@ -11,6 +11,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scheduledlogging"
 )
 
+// BenchmarkVirtualTableQueries is a benchmark for the crdb_internal virtual tables.
+// It is used to test the performance of the crdb_internal virtual tables used by
+// SHOW CREATE ALL ROUTINES, SHOW CREATE ALL TRIGGERS, and scheduled telemetry logging.
+// Limit the number of iterations to 20x to avoid timing out on CI.
+// benchmark-ci: benchtime=20x
 func BenchmarkVirtualTableQueries(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("VirtualTableQueries", []RoundTripBenchTestCase{
@@ -75,9 +80,9 @@ SELECT * FROM t2;`,
 		// This test checks the performance of the crdb_internal virtual tables used by
 		// SHOW CREATE ALL TRIGGERS.
 		{
-			Name:  "show_create_all_triggers",
-			Setup: buildNTablesWithTriggers(100),
-			Stmt:  `SHOW CREATE ALL TRIGGERS;`,
+			Name:    "show_create_all_triggers",
+			SetupEx: buildNTablesWithTriggers(100),
+			Stmt:    `SHOW CREATE ALL TRIGGERS;`,
 		},
 		// This test checks the performance of the query to capture index usage
 		// stats that is executed by scheduled telemetry logging.

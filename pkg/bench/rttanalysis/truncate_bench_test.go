@@ -7,6 +7,8 @@ package rttanalysis
 
 import "testing"
 
+// BenchmarkTruncate is a benchmark for the TRUNCATE statement.
+// benchmark-ci: benchtime=20x
 func BenchmarkTruncate(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("Truncate", []RoundTripBenchTestCase{
