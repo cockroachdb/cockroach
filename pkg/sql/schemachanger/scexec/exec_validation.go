@@ -131,6 +131,30 @@ func executeValidateColumnNotNull(
 	return nil
 }
 
+func executeValidateEnumTypeValueRemoval(
+	ctx context.Context, deps Dependencies, op *scop.ValidateEnumTypeValueRemoval,
+) error {
+	descs, err := deps.Catalog().MustReadImmutableDescriptors(ctx, op.TypeID)
+	if err != nil {
+		return err
+	}
+	desc := descs[0]
+	typeDesc, err := catalog.AsTypeDescriptor(desc)
+	if err != nil {
+		return err
+	}
+
+	// Execute the validation operation as a node user.
+	execOverride := sessiondata.NodeUserSessionDataOverride
+	err = deps.Validator().ValidateEnumTypeValueRemoval(
+		ctx, typeDesc, op.PhysicalRepresentation, op.LogicalRepresentation, execOverride,
+	)
+	if err != nil {
+		return scerrors.SchemaChangerUserError(err)
+	}
+	return nil
+}
+
 func executeValidationOps(ctx context.Context, deps Dependencies, ops []scop.Op) (err error) {
 	v := makeValidationAccumulator(ops)
 	return v.validate(ctx, deps)
@@ -139,9 +163,10 @@ func executeValidationOps(ctx context.Context, deps Dependencies, ops []scop.Op)
 // validationAccumulator batches validation operations on a per-table basis, so
 // that index validations can be batched together.
 type validationAccumulator struct {
-	indexes     map[descpb.ID][]*scop.ValidateIndex
-	constraints map[descpb.ID][]*scop.ValidateConstraint
-	notNulls    map[descpb.ID][]*scop.ValidateColumnNotNull
+	indexes        map[descpb.ID][]*scop.ValidateIndex
+	constraints    map[descpb.ID][]*scop.ValidateConstraint
+	notNulls       map[descpb.ID][]*scop.ValidateColumnNotNull
+	enumValueDrops []*scop.ValidateEnumTypeValueRemoval
 }
 
 // makeValidationAccumulator creates a validationAccumulator from a list of
@@ -160,6 +185,8 @@ func makeValidationAccumulator(ops []scop.Op) validationAccumulator {
 			v.constraints[op.TableID] = append(v.constraints[op.TableID], op)
 		case *scop.ValidateColumnNotNull:
 			v.notNulls[op.TableID] = append(v.notNulls[op.TableID], op)
+		case *scop.ValidateEnumTypeValueRemoval:
+			v.enumValueDrops = append(v.enumValueDrops, op)
 		default:
 			panic("unimplemented")
 		}
@@ -195,6 +222,14 @@ func (v validationAccumulator) validate(ctx context.Context, deps Dependencies) 
 				}
 				return errors.Wrapf(err, "%T: %v", constraint, constraint)
 			}
+		}
+	}
+	for _, enumDrop := range v.enumValueDrops {
+		if err := executeValidateEnumTypeValueRemoval(ctx, deps, enumDrop); err != nil {
+			if scerrors.HasSchemaChangerUserError(err) {
+				return err
+			}
+			return errors.Wrapf(err, "%T: %v", enumDrop, enumDrop)
 		}
 	}
 	return nil

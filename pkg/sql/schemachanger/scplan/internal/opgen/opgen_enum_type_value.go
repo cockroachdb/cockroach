@@ -23,6 +23,7 @@ func init() {
 					}
 				}),
 			),
+			equiv(scpb.Status_VALIDATED),
 			to(scpb.Status_PUBLIC,
 				revertible(false),
 				emit(func(this *scpb.EnumTypeValue) *scop.PromoteEnumTypeValue {
@@ -39,6 +40,18 @@ func init() {
 			to(scpb.Status_WRITE_ONLY,
 				emit(func(this *scpb.EnumTypeValue) *scop.DemoteEnumTypeValue {
 					return &scop.DemoteEnumTypeValue{
+						TypeID:                 this.TypeID,
+						PhysicalRepresentation: this.PhysicalRepresentation,
+						LogicalRepresentation:  this.LogicalRepresentation,
+					}
+				}),
+			),
+			to(scpb.Status_VALIDATED,
+				emit(func(this *scpb.EnumTypeValue, md *opGenContext) *scop.ValidateEnumTypeValueRemoval {
+					if isEnumTypeBeingDropped(this.TypeID, md) {
+						return nil
+					}
+					return &scop.ValidateEnumTypeValueRemoval{
 						TypeID:                 this.TypeID,
 						PhysicalRepresentation: this.PhysicalRepresentation,
 						LogicalRepresentation:  this.LogicalRepresentation,

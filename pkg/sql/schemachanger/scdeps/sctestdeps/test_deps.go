@@ -1253,6 +1253,19 @@ func (s *TestState) ValidateConstraint(
 	return nil
 }
 
+// ValidateEnumTypeValueRemoval implements the validator interface.
+func (s *TestState) ValidateEnumTypeValueRemoval(
+	ctx context.Context,
+	typeDesc catalog.TypeDescriptor,
+	physicalRep []byte,
+	logicalRep string,
+	override sessiondata.InternalExecutorOverride,
+) error {
+	s.LogSideEffectf("validate enum value %q removal in type #%d",
+		logicalRep, typeDesc.GetID())
+	return nil
+}
+
 func (s *TestState) ValidateForeignKeyConstraint(
 	ctx context.Context,
 	out catalog.TableDescriptor,

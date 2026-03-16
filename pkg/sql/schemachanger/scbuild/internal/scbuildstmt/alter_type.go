@@ -36,7 +36,7 @@ var supportedAlterTypeStatements = map[reflect.Type]supportedAlterTypeCommand{
 	reflect.TypeOf((*tree.AlterTypeRename)(nil)):      {fn: alterTypeRename, on: false, checks: nil},
 	reflect.TypeOf((*tree.AlterTypeSetSchema)(nil)):   {fn: alterTypeSetSchema, on: false, checks: nil},
 	reflect.TypeOf((*tree.AlterTypeOwner)(nil)):       {fn: alterTypeOwner, on: false, checks: nil},
-	reflect.TypeOf((*tree.AlterTypeDropValue)(nil)):   {fn: alterTypeDropValue, on: false, checks: nil},
+	reflect.TypeOf((*tree.AlterTypeDropValue)(nil)):   {fn: alterTypeDropValue, on: true, checks: isV263Active},
 }
 
 func init() {
@@ -237,5 +237,31 @@ func alterTypeOwner(
 func alterTypeDropValue(
 	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeDropValue,
 ) {
-	panic(scerrors.NotImplementedErrorf(t, "ALTER TYPE DROP VALUE is not supported"))
+	dropVal := string(t.Val)
+
+	var found bool
+	b.QueryByID(enumType.TypeID).FilterEnumTypeValue().ForEach(
+		func(_ scpb.Status, target scpb.TargetStatus, e *scpb.EnumTypeValue) {
+			if e.LogicalRepresentation != dropVal {
+				return
+			}
+			if target == scpb.ToAbsent {
+				panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"enum value %q is already being dropped", dropVal))
+			}
+			if target != scpb.ToPublic {
+				panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"enum value %q is being added, try again later", dropVal))
+			}
+			found = true
+			b.Drop(e)
+			b.LogEventForExistingPayload(e, &eventpb.AlterType{
+				TypeName: tn.FQString(),
+			})
+		},
+	)
+	if !found {
+		panic(pgerror.Newf(pgcode.UndefinedObject,
+			"enum value %q does not exist", dropVal))
+	}
 }

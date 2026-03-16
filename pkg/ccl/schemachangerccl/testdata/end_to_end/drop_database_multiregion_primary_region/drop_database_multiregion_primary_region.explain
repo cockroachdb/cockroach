@@ -109,9 +109,6 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
- │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east1","PhysicalRepresentation":"QA==","TypeID":106}
- │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east2","PhysicalRepresentation":"gA==","TypeID":106}
- │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east3","PhysicalRepresentation":"wA==","TypeID":106}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":105}}
  │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.Owner"}
@@ -128,6 +125,9 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967292,"TableID":108}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"crdb_internal_re...","SchemaID":105}}
+ │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east1","PhysicalRepresentation":"QA==","TypeID":106}
+ │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east2","PhysicalRepresentation":"gA==","TypeID":106}
+ │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east3","PhysicalRepresentation":"wA==","TypeID":106}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":105,"Name":"public"}}
  │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
@@ -323,9 +323,6 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"public"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
- │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east1","PhysicalRepresentation":"QA==","TypeID":106}
- │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east2","PhysicalRepresentation":"gA==","TypeID":106}
- │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east3","PhysicalRepresentation":"wA==","TypeID":106}
  │              ├── MarkDescriptorAsDropped {"DescriptorID":105}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":105}}
  │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.Owner"}
@@ -343,6 +340,9 @@ Schema change plan for DROP DATABASE ‹multi_region_test_db› CASCADE;
  │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
  │              ├── RemoveDatabaseRoleSettings {"DatabaseID":104}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"crdb_internal_re...","SchemaID":105}}
+ │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east1","PhysicalRepresentation":"QA==","TypeID":106}
+ │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east2","PhysicalRepresentation":"gA==","TypeID":106}
+ │              ├── RemoveEnumTypeValue {"LogicalRepresentation":"us-east3","PhysicalRepresentation":"wA==","TypeID":106}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":105,"Name":"public"}}
  │              ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
  │              ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}

@@ -7,10 +7,6 @@ ALTER TYPE defaultdb.climes RENAME VALUE 'tropical' TO 'equatorial'
 ----
 
 unimplemented
-ALTER TYPE defaultdb.climes DROP VALUE 'arctic'
-----
-
-unimplemented
 ALTER TYPE defaultdb.climes RENAME TO environs
 ----
 
