@@ -1491,3 +1491,60 @@ statement ok
 DROP TABLE trig_test
 
 subtest end
+
+subtest pg_cast_oids_pg_dump_compat
+
+statement ok
+SET pg_dump_compatibility = true
+
+# All cast OIDs should be below 16384 (PostgreSQL's FirstNormalObjectId)
+# so pg_dump treats them as built-in and skips them.
+query B
+SELECT bool_and(oid < 16384) FROM pg_cast
+----
+true
+
+statement ok
+SET pg_dump_compatibility = false
+
+# Without compat mode, cast OIDs should be above 16384.
+query B
+SELECT bool_and(oid > 16384) FROM pg_cast
+----
+true
+
+subtest end
+
+subtest pg_get_statisticsobjdef
+
+statement ok
+CREATE TABLE stxtest (a INT, b INT, c TEXT)
+
+statement ok
+CREATE STATISTICS stxtest_stat ON a, b FROM stxtest
+
+# pg_get_statisticsobjdef returns the CREATE STATISTICS command for a stat object.
+query T
+SELECT pg_get_statisticsobjdef(oid)
+FROM pg_catalog.pg_statistic_ext
+WHERE stxname = 'stxtest_stat'
+LIMIT 1
+----
+CREATE STATISTICS public.stxtest_stat ON a, b FROM public.stxtest
+
+# NULL input returns NULL.
+query T
+SELECT pg_get_statisticsobjdef(NULL)
+----
+NULL
+
+# Non-existent OID returns NULL.
+query T
+SELECT pg_get_statisticsobjdef(0)
+----
+NULL
+
+statement ok
+DROP TABLE stxtest
+
+subtest end
