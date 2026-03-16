@@ -776,6 +776,9 @@ message LogFileRequest {
   // Only admin users can send a request with redact = false.
   bool redact = 3;
   reserved 4;
+  // exclude_severities, if non-empty, causes log entries with the
+  // given severities to be filtered out of the response.
+  repeated cockroach.util.log.Severity exclude_severities = 5;
 }
 
 enum StacksType {
