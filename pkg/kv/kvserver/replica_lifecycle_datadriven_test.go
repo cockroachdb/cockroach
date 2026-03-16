@@ -213,8 +213,8 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 							roachpb.FullReplicaID{RangeID: rs.desc.RangeID, ReplicaID: repl.ReplicaID},
 						)
 					}
-					tc.updateReplicaStateFromStorage(t, ctx, rs, stateBatch, raftBatch, true /* justCreated */)
 				})
+				tc.updateReplicaStateFromStorage(ctx, t, rs, true /* justCreated */)
 				// CreateUninitializedReplica can return an error if the replica is
 				// already destroyed.
 				if errors.HasType(err, &kvpb.RaftGroupDeletedError{}) {
@@ -367,7 +367,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					initClosedTimestamp: hlc.Timestamp{WallTime: 100}, // dummy timestamp
 				}
 				wagWriter := wag.MakeWriter(&tc.wagSeq)
-				return tc.mutate(t, func(stateBatch, raftBatch storage.Batch) {
+				output := tc.mutate(t, func(stateBatch, raftBatch storage.Batch) {
 					// First, apply the stashed batch from split trigger
 					// evaluation.
 					require.NoError(t, stateBatch.ApplyBatchRepr(ps.batchRepr, false /* sync */))
@@ -379,12 +379,13 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					require.NoError(t, wagWriter.Flush(
 						kvstorage.WrapRaft(raftBatch).WO, stateBatch.Repr(),
 					))
-					// If the RHS replica wasn't destroyed, it is now initialized.
-					// Update the in-memory state to reflect this.
-					if !rhsDestroyed {
-						tc.updateReplicaStateFromStorage(t, ctx, rhsRangeState, stateBatch, raftBatch, false /* justCreated */)
-					}
 				})
+				// If the RHS replica wasn't destroyed, it is now initialized. Update
+				// the in-memory state to reflect this.
+				if !rhsDestroyed {
+					tc.updateReplicaStateFromStorage(ctx, t, rhsRangeState, false /* justCreated */)
+				}
+				return output
 
 			case "eval-merge":
 				lhsRangeID := dd.ScanArg[roachpb.RangeID](t, d, "lhs-range-id")
@@ -862,22 +863,18 @@ func (tc *testCtx) preMergeRHSIsSubsumed(rangeID roachpb.RangeID) bool {
 }
 
 func (tc *testCtx) updateReplicaStateFromStorage(
-	t *testing.T,
-	ctx context.Context,
-	rs *rangeState,
-	stateReader, raftReader storage.Reader,
-	justCreated bool,
+	ctx context.Context, t *testing.T, rs *rangeState, justCreated bool,
 ) {
 	if justCreated {
 		// Sanity check that we're not overwriting an existing replica.
 		require.Nil(t, rs.replica)
 	}
 	sl := kvstorage.MakeStateLoader(rs.desc.RangeID)
-	hs, err := sl.LoadHardState(ctx, raftReader)
+	hs, err := sl.LoadHardState(ctx, tc.eng.LogEngine())
 	require.NoError(t, err)
-	ts, err := sl.LoadRaftTruncatedState(ctx, raftReader)
+	ts, err := sl.LoadRaftTruncatedState(ctx, tc.eng.LogEngine())
 	require.NoError(t, err)
-	replID, err := sl.LoadRaftReplicaID(ctx, stateReader)
+	replID, err := sl.LoadRaftReplicaID(ctx, tc.eng.StateEngine())
 	require.NoError(t, err)
 	rs.replica = &replicaInfo{
 		FullReplicaID: roachpb.FullReplicaID{
