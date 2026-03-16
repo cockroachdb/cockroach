@@ -18,6 +18,24 @@ func Example_convert_url() {
 
 	c.RunWithArgs([]string{`convert-url`})
 	c.RunWithArgs([]string{`convert-url`, `--url`, `postgres://foo@bar`, `--cluster`, `app`})
+	c.RunWithArgs([]string{`convert-url`, `--url`, `postgres://foo@bar`, `--format`, `dsn`})
+	c.RunWithArgs([]string{`convert-url`, `--url`, `postgres://foo@bar`, `--format`, `pq`})
+	c.RunWithArgs([]string{`convert-url`, `--url`, `postgres://foo@bar`, `--format`, `jdbc`})
+
+	// --format crdb without --inline includes credentials.
+	c.RunWithArgs([]string{
+		`convert-url`,
+		`--url`, `postgres://bar`,
+		`--user`, `foo`,
+		`--password`, `secret`,
+		`--format`, `crdb`,
+	})
+
+	// Password embedded in the URL is preserved.
+	c.RunWithArgs([]string{`convert-url`, `--url`, `postgres://foo:s3cret@qux`, `--format`, `crdb`})
+
+	// Invalid --format value.
+	c.RunWithArgs([]string{`convert-url`, `--url`, `postgres://foo@bar`, `--format`, `invalid`})
 
 	// Flag overrides take precedence over URL values.
 	c.RunWithArgs([]string{
@@ -54,6 +72,18 @@ func Example_convert_url() {
 	//
 	// # Direct URL to CockroachDB:
 	// postgresql://foo@bar:26257/defaultdb?options=-ccluster%3Dapp
+	// convert-url --url postgres://foo@bar --format dsn
+	// database=defaultdb user=foo host=bar port=26257
+	// convert-url --url postgres://foo@bar --format pq
+	// postgresql://foo@bar:26257/defaultdb
+	// convert-url --url postgres://foo@bar --format jdbc
+	// jdbc:postgresql://bar:26257/defaultdb?user=foo
+	// convert-url --url postgres://bar --user foo --password secret --format crdb
+	// postgresql://foo:secret@bar:26257/defaultdb
+	// convert-url --url postgres://foo:s3cret@qux --format crdb
+	// postgresql://foo:s3cret@qux:26257/defaultdb
+	// convert-url --url postgres://foo@bar --format invalid
+	// ERROR: invalid argument "invalid" for "--format" flag: must be one of [pq dsn jdbc crdb]
 	// convert-url --url postgres://foo@qux/origdb --user baz --database newdb
 	// # Connection URL for libpq (C/C++), psycopg (Python), lib/pq & pgx (Go), node-postgres (JS) and most pq-compatible drivers:
 	// postgresql://baz@qux:26257/newdb
@@ -90,22 +120,48 @@ func Example_convert_url_with_inline() {
 		`--password`, `secret`,
 		`--database`, `mydb`,
 		`--cluster`, `app`,
+		`--format`, `crdb`,
+		`--inline`,
+	})
+	// Inline defaults to --format crdb
+	c.RunWithArgs([]string{
+		`convert-url`,
+		`--url`, `postgres://bar`,
+		`--certs-dir`, `certs/`,
+		`--user`, `foo`,
+		`--password`, `secret`,
+		`--database`, `mydb`,
+		`--cluster`, `app`,
+		`--inline`,
+	})
+	// Inline with explicit cert flags instead of --certs-dir.
+	c.RunWithArgs([]string{
+		`convert-url`,
+		`--url`, `postgres://bar`,
+		`--ca-cert`, `certs/ca.crt`,
+		`--cert`, `certs/client.foo.crt`,
+		`--key`, `certs/client.foo.key`,
+		`--user`, `foo`,
+		`--format`, `crdb`,
+		`--inline`,
+	})
+	// Inline fails on other formats
+	c.RunWithArgs([]string{
+		`convert-url`,
+		`--url`, `postgres://bar`,
+		`--format`, `jdbc`,
 		`--inline`,
 	})
 
 	// Output:
-	// convert-url --url postgres://bar --certs-dir certs/ --user foo --password secret --database mydb --cluster app --inline
-	// # Connection URL for libpq (C/C++), psycopg (Python), lib/pq & pgx (Go), node-postgres (JS) and most pq-compatible drivers:
-	// postgresql://foo:secret@bar:26257/mydb?options=-ccluster%3Dapp&sslcert=certs%2Fclient.foo.crt&sslkey=certs%2Fclient.foo.key&sslmode=verify-full&sslrootcert=certs%2Fca.crt
-	//
-	// # Connection DSN (Data Source Name) for Postgres drivers that accept DSNs - most drivers and also ODBC:
-	// database=mydb user=foo host=bar port=26257 password=secret sslcert=certs/client.foo.crt sslkey=certs/client.foo.key sslrootcert=certs/ca.crt sslmode=verify-full options=-ccluster=app
-	//
-	// # Connection URL for JDBC (Java and JVM-based languages):
-	// jdbc:postgresql://bar:26257/mydb?options=-ccluster%3Dapp&password=secret&sslcert=certs%2Fclient.foo.crt&sslkey=certs%2Fclient.foo.key&sslmode=verify-full&sslrootcert=certs%2Fca.crt&user=foo
-	//
-	// # Direct URL to CockroachDB:
+	// convert-url --url postgres://bar --certs-dir certs/ --user foo --password secret --database mydb --cluster app --format crdb --inline
 	// postgresql://foo:secret@bar:26257/mydb?options=-ccluster%3Dapp&sslcert=clientCertContents&sslinline=true&sslkey=clientKeyContents&sslmode=verify-full&sslrootcert=caCertContents
+	// convert-url --url postgres://bar --certs-dir certs/ --user foo --password secret --database mydb --cluster app --inline
+	// postgresql://foo:secret@bar:26257/mydb?options=-ccluster%3Dapp&sslcert=clientCertContents&sslinline=true&sslkey=clientKeyContents&sslmode=verify-full&sslrootcert=caCertContents
+	// convert-url --url postgres://bar --ca-cert certs/ca.crt --cert certs/client.foo.crt --key certs/client.foo.key --user foo --format crdb --inline
+	// postgresql://foo@bar:26257/defaultdb?sslcert=clientCertContents&sslinline=true&sslkey=clientKeyContents&sslmode=verify-full&sslrootcert=caCertContents
+	// convert-url --url postgres://bar --format jdbc --inline
+	// ERROR: --inline only supports --format=crdb
 }
 
 func Example_convert_url_with_certs() {
