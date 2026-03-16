@@ -37,29 +37,42 @@ func registerIndexBackfill(r registry.Registry) {
 		spec.VolumeType("pd-ssd"),
 		spec.GCEMachineType("n2-standard-8"),
 		spec.GCEZones("us-east1-b"),
+		spec.ReuseNone(),
 	)
 
-	r.Add(registry.TestSpec{
-		Name:             "admission-control/index-backfill",
-		Timeout:          12 * time.Hour,
-		Owner:            registry.OwnerAdmissionControl,
-		Benchmark:        true,
-		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.Nightly),
-		// TODO(aaditya): Revisit this as part of #111614.
-		//Tags:             registry.Tags(`weekly`),
-		Cluster:        clusterSpec,
-		SnapshotPrefix: "index-backfill-tpce-100k",
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runIndexBackfill(ctx, t, c, clusterSpec)
-		},
-	})
+	for _, withProvisionedBandwidth := range []bool{false, true} {
+		snapshotPrefix := "index-backfill-tpce-100k-nobw"
+		if withProvisionedBandwidth {
+			snapshotPrefix = "index-backfill-tpce-100k-bw"
+		}
+
+		r.Add(registry.TestSpec{
+			Name: fmt.Sprintf(
+				"admission-control/index-backfill/provisioned-bandwidth=%t",
+				withProvisionedBandwidth,
+			),
+			Timeout:          12 * time.Hour,
+			Owner:            registry.OwnerAdmissionControl,
+			Benchmark:        true,
+			CompatibleClouds: registry.OnlyGCE,
+			Suites:           registry.Suites(registry.Nightly),
+			Cluster:          clusterSpec,
+			SnapshotPrefix:   snapshotPrefix,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runIndexBackfill(ctx, t, c, clusterSpec, withProvisionedBandwidth)
+			},
+		})
+	}
 }
 
 const indexBackfillDiskBandwidth = 128 << 20 // 128 MiB/s
 
 func runIndexBackfill(
-	ctx context.Context, t test.Test, c cluster.Cluster, clusterSpec spec.ClusterSpec,
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	clusterSpec spec.ClusterSpec,
+	withProvisionedBandwidth bool,
 ) {
 	snapshots, err := c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
 		// TODO(irfansharif): Search by taking in the other parts of the
@@ -171,6 +184,23 @@ func runIndexBackfill(
 				"SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = false",
 			); err != nil {
 				t.Fatal(err)
+			}
+
+			// Optionally tell admission control the disk's provisioned
+			// bandwidth so it can manage elastic vs. foreground work.
+			if withProvisionedBandwidth {
+				if _, err := db.ExecContext(ctx,
+					"SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '128MiB'",
+				); err != nil {
+					t.Fatal(err)
+				}
+				// Allow elastic work to fully utilize the provisioned
+				// bandwidth.
+				if _, err := db.ExecContext(ctx,
+					"SET CLUSTER SETTING kvadmission.store.elastic_disk_bandwidth_max_util = 1.0",
+				); err != nil {
+					t.Fatal(err)
+				}
 			}
 
 			// Limit disk bandwidth to 128 MiB/s via cgroups so that
