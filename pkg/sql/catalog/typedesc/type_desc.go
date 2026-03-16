@@ -526,15 +526,29 @@ func (desc *immutable) validateEnumMembers(vea catalog.ValidationErrorAccumulato
 		vea.Report(errors.AssertionFailedf("enum members are not sorted %v", desc.EnumMembers))
 	}
 	// Ensure there are no duplicate enum physical and logical reps.
-	physicalMap := make(map[string]struct{}, len(desc.EnumMembers))
+	// Track physical reps along with their transition direction so that
+	// renames (one member being added and one being removed with the same
+	// physical representation) are allowed.
+	type physicalRepInfo struct {
+		direction descpb.TypeDescriptor_EnumMember_Direction
+	}
+	physicalMap := make(map[string]physicalRepInfo, len(desc.EnumMembers))
 	logicalMap := make(map[string]struct{}, len(desc.EnumMembers))
 	for _, member := range desc.EnumMembers {
-		// Ensure there are no duplicate enum physical reps.
-		_, duplicatePhysical := physicalMap[string(member.PhysicalRepresentation)]
-		if duplicatePhysical {
-			vea.Report(errors.AssertionFailedf("duplicate enum physical rep %v", member.PhysicalRepresentation))
+		// Ensure there are no duplicate enum physical reps. Two members may
+		// share the same physical representation during a rename transition,
+		// where one member is being removed and another is being added.
+		key := string(member.PhysicalRepresentation)
+		if existing, ok := physicalMap[key]; ok {
+			isRename := (existing.direction == descpb.TypeDescriptor_EnumMember_REMOVE &&
+				member.Direction == descpb.TypeDescriptor_EnumMember_ADD) ||
+				(existing.direction == descpb.TypeDescriptor_EnumMember_ADD &&
+					member.Direction == descpb.TypeDescriptor_EnumMember_REMOVE)
+			if !isRename {
+				vea.Report(errors.AssertionFailedf("duplicate enum physical rep %v", member.PhysicalRepresentation))
+			}
 		}
-		physicalMap[string(member.PhysicalRepresentation)] = struct{}{}
+		physicalMap[key] = physicalRepInfo{direction: member.Direction}
 		// Ensure there are no duplicate enum logical reps.
 		_, duplicateLogical := logicalMap[member.LogicalRepresentation]
 		if duplicateLogical {

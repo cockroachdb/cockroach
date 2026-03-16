@@ -1151,6 +1151,12 @@ func ValidateEnumValueRemoval(
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	override sessiondata.InternalExecutorOverride,
 ) error {
+	// If this removal is part of a rename (another member with the same physical
+	// representation exists and is not being removed), skip validation. The value
+	// is being renamed, not deleted, so data referencing it remains valid.
+	if isEnumValueRename(typeDesc, physicalRep, logicalRep) {
+		return nil
+	}
 	member := descpb.TypeDescriptor_EnumMember{
 		PhysicalRepresentation: physicalRep,
 		LogicalRepresentation:  logicalRep,
@@ -1168,6 +1174,24 @@ func ValidateEnumValueRemoval(
 		}
 		return t.canRemoveEnumValue(ctx, mutableType, txn, &member, txn.Descriptors())
 	})
+}
+
+// isEnumValueRename returns true if the enum value being removed is part of a
+// rename operation rather than an actual deletion. This is detected by checking
+// whether the type descriptor contains another member with the same physical
+// representation that is not being removed (i.e., has ADD or NONE direction).
+func isEnumValueRename(
+	typeDesc catalog.TypeDescriptor, physicalRep []byte, logicalRep string,
+) bool {
+	for _, member := range typeDesc.TypeDesc().EnumMembers {
+		if member.LogicalRepresentation == logicalRep {
+			continue
+		}
+		if bytes.Equal(member.PhysicalRepresentation, physicalRep) {
+			return true
+		}
+	}
+	return false
 }
 
 // findUsagesOfEnumValueInPartitioning is a recursive function to explore all of

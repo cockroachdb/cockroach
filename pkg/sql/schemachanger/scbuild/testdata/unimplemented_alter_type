@@ -3,10 +3,6 @@ CREATE TYPE defaultdb.climes AS ENUM ('tropical', 'arctic', 'mediterranean');
 ----
 
 unimplemented
-ALTER TYPE defaultdb.climes RENAME VALUE 'tropical' TO 'equatorial'
-----
-
-unimplemented
 ALTER TYPE defaultdb.climes RENAME TO environs
 ----
 

@@ -32,7 +32,7 @@ type supportedAlterTypeCommand = supportedStatement
 // only be used with the use_declarative_schema_changer session variable.
 var supportedAlterTypeStatements = map[reflect.Type]supportedAlterTypeCommand{
 	reflect.TypeOf((*tree.AlterTypeAddValue)(nil)):    {fn: alterTypeAddValue, on: true, checks: isV263Active},
-	reflect.TypeOf((*tree.AlterTypeRenameValue)(nil)): {fn: alterTypeRenameValue, on: false, checks: nil},
+	reflect.TypeOf((*tree.AlterTypeRenameValue)(nil)): {fn: alterTypeRenameValue, on: true, checks: isV263Active},
 	reflect.TypeOf((*tree.AlterTypeRename)(nil)):      {fn: alterTypeRename, on: false, checks: nil},
 	reflect.TypeOf((*tree.AlterTypeSetSchema)(nil)):   {fn: alterTypeSetSchema, on: false, checks: nil},
 	reflect.TypeOf((*tree.AlterTypeOwner)(nil)):       {fn: alterTypeOwner, on: false, checks: nil},
@@ -213,7 +213,53 @@ func alterTypeAddValue(
 func alterTypeRenameValue(
 	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeRenameValue,
 ) {
-	panic(scerrors.NotImplementedErrorf(t, "ALTER TYPE RENAME VALUE is not supported"))
+	oldVal := string(t.OldVal)
+	newVal := string(t.NewVal)
+
+	// Short circuit if the name is unchanged.
+	if oldVal == newVal {
+		return
+	}
+
+	var found bool
+	var physicalRep []byte
+	b.QueryByID(enumType.TypeID).FilterEnumTypeValue().ForEach(
+		func(_ scpb.Status, target scpb.TargetStatus, e *scpb.EnumTypeValue) {
+			if e.LogicalRepresentation == newVal && target != scpb.ToAbsent {
+				panic(pgerror.Newf(pgcode.DuplicateObject,
+					"enum value %s already exists", newVal))
+			}
+			if e.LogicalRepresentation != oldVal {
+				return
+			}
+			if target == scpb.ToAbsent {
+				panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"enum value %q is being dropped", oldVal))
+			}
+			if target != scpb.ToPublic {
+				panic(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"enum value %q is being added, try again later", oldVal))
+			}
+			found = true
+			physicalRep = e.PhysicalRepresentation
+			b.Drop(e)
+		},
+	)
+	if !found {
+		panic(pgerror.Newf(pgcode.InvalidParameterValue,
+			"%s is not an existing enum value", oldVal))
+	}
+
+	enumValue := &scpb.EnumTypeValue{
+		TypeID:                 enumType.TypeID,
+		PhysicalRepresentation: physicalRep,
+		LogicalRepresentation:  newVal,
+	}
+	b.Add(enumValue)
+
+	b.LogEventForExistingPayload(enumValue, &eventpb.AlterType{
+		TypeName: tn.FQString(),
+	})
 }
 
 func alterTypeRename(
