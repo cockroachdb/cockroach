@@ -66,10 +66,16 @@ var BufferSize = settings.RegisterIntSetting(
 // logged to the OPS channel. Each summary reports the most
 // frequently sampled (WorkEventType, WorkEvent, WorkloadID)
 // combinations in the ring buffer since the last report.
+//
+// This value is also used as the lookback window by the ASH report
+// profiler when writing reports alongside CPU profiles or goroutine
+// dumps triggered by the env sampler.
 var LogInterval = settings.RegisterDurationSetting(
 	settings.SystemVisible,
 	"obs.ash.log_interval",
-	"interval between periodic ASH top-N workload summary logs",
+	"interval between periodic ASH top-N workload summary logs; "+
+		"also used as the lookback window for ASH reports written "+
+		"by the env sampler profiler",
 	10*time.Minute,
 	settings.PositiveDuration,
 )
@@ -502,6 +508,13 @@ func encodeUint64ToBytes(id uint64) []byte {
 // statement fingerprint ID.
 func encodeStmtFingerprintIDToString(id uint64) string {
 	return hex.EncodeToString(encodeUint64ToBytes(id))
+}
+
+// GetGlobalSampler returns the process-wide ASH sampler, or nil if it
+// has not been initialized. Use this when you need to call
+// Sampler.GetSamples with a reusable buffer to avoid allocations.
+func GetGlobalSampler() *Sampler {
+	return globalSampler.Load()
 }
 
 // GetSamples returns all samples from the global ASH sampler. Returns

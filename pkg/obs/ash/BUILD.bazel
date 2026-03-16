@@ -3,10 +3,12 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "ash",
     srcs = [
+        "aggregate.go",
         "app_name.go",
         "buffer.go",
         "doc.go",
         "metrics.go",
+        "report.go",
         "sampler.go",
         "types.go",
         "work_state.go",
@@ -38,10 +40,13 @@ go_library(
 go_test(
     name = "ash_test",
     srcs = [
+        "aggregate_test.go",
         "buffer_test.go",
+        "report_test.go",
         "sampler_test.go",
         "work_state_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":ash"],
     deps = [
         "//pkg/roachpb",
@@ -52,6 +57,7 @@ go_test(
         "//pkg/util/log/logtestutils",
         "//pkg/util/stop",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_petermattis_goid//:goid",
         "@com_github_stretchr_testify//require",
