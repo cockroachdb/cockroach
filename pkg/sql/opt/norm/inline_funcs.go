@@ -291,13 +291,18 @@ func (c *CustomFuncs) inlineProjections(e opt.Expr, projections memo.Projections
 	return replace(e)
 }
 
+// extractVarEqualsConst extracts a (variable = const) or (variable =
+// placeholder) equality from a filter condition. Placeholder
+// expressions are treated like constants because they are bound to a
+// single value at execution time.
 func (c *CustomFuncs) extractVarEqualsConst(
 	e opt.Expr,
-) (ok bool, left *memo.VariableExpr, right *memo.ConstExpr) {
+) (ok bool, left *memo.VariableExpr, right opt.ScalarExpr) {
 	if eq, ok := e.(*memo.EqExpr); ok {
 		if l, ok := eq.Left.(*memo.VariableExpr); ok {
-			if r, ok := eq.Right.(*memo.ConstExpr); ok {
-				return true, l, r
+			switch eq.Right.(type) {
+			case *memo.ConstExpr, *memo.PlaceholderExpr:
+				return true, l, eq.Right
 			}
 		}
 	}
@@ -327,7 +332,7 @@ func (c *CustomFuncs) CanInlineConstVar(f memo.FiltersExpr) bool {
 				// to composite-ness.
 				continue
 			}
-			if !e.Typ.Equivalent(colType) {
+			if !e.DataType().Equivalent(colType) {
 				continue
 			}
 			if !fixedCols.Contains(l.Col) {
@@ -364,7 +369,7 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 			if colinfo.CanHaveCompositeKeyEncoding(colType) {
 				continue
 			}
-			if !e.Typ.Equivalent(colType) {
+			if !e.DataType().Equivalent(colType) {
 				continue
 			}
 			if _, ok := vals[v.Col]; !ok {
