@@ -7,6 +7,7 @@ package rttanalysis
 
 import "testing"
 
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterTableAddColumn(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("AlterTableAddColumn", []RoundTripBenchTestCase{
@@ -30,6 +31,7 @@ func init() {
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterTableAddCheckConstraint(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("AlterTableAddCheckConstraint", []RoundTripBenchTestCase{
@@ -53,6 +55,7 @@ func init() {
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterTableAddForeignKey(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("AlterTableAddForeignKey", []RoundTripBenchTestCase{
@@ -93,6 +96,7 @@ CREATE TABLE referenced(x INT, y INT, z INT, PRIMARY KEY(x,y,z));`,
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterTableDropColumn(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("AlterTableDropColumn", []RoundTripBenchTestCase{
@@ -115,6 +119,7 @@ func init() {
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterTableDropConstraint(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("AlterTableDropConstraint", []RoundTripBenchTestCase{
@@ -140,6 +145,7 @@ c INT, CONSTRAINT ck3 CHECK (c > 0))`,
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterTableSplit(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("AlterTableSplit", []RoundTripBenchTestCase{
@@ -161,6 +167,7 @@ func init() {
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterTableUnsplit(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("AlterTableUnsplit", []RoundTripBenchTestCase{
@@ -185,6 +192,7 @@ ALTER TABLE alter_table SPLIT AT VALUES (1), (2), (3)`,
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterTableConfigureZone(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("AlterTableConfigureZone", []RoundTripBenchTestCase{

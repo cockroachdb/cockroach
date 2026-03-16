@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
+// benchmark-ci: benchtime=20x
 func BenchmarkGrantRole(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("GrantRole", []RoundTripBenchTestCase{
@@ -32,6 +33,7 @@ CREATE ROLE c;`,
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkShowGrants(b *testing.B) {
 	skip.UnderShort(b, "skipping long benchmark")
 	reg.Run(b)
@@ -105,6 +107,7 @@ DROP ROLE a,b,c,d,e;
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkRevokeRole(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("RevokeRole", []RoundTripBenchTestCase{

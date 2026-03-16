@@ -7,6 +7,7 @@ package rttanalysis
 
 import "testing"
 
+// benchmark-ci: benchtime=20x
 func BenchmarkUDFResolution(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("UDFResolution", []RoundTripBenchTestCase{

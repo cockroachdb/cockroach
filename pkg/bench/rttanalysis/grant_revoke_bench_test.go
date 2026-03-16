@@ -7,6 +7,7 @@ package rttanalysis
 
 import "testing"
 
+// benchmark-ci: benchtime=20x
 func BenchmarkGrant(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("Grant", []RoundTripBenchTestCase{
@@ -37,6 +38,7 @@ CREATE TABLE t2();`,
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkRevoke(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("Revoke", []RoundTripBenchTestCase{

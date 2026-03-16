@@ -7,6 +7,7 @@ package rttanalysis
 
 import "testing"
 
+// benchmark-ci: benchtime=20x
 func BenchmarkDropRole(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("DropRole", []RoundTripBenchTestCase{
@@ -28,6 +29,7 @@ func init() {
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkDropTable(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("DropTable", []RoundTripBenchTestCase{
@@ -49,6 +51,7 @@ func init() {
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkDropView(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("DropView", []RoundTripBenchTestCase{
@@ -75,6 +78,7 @@ CREATE VIEW vx3 AS SELECT x FROM t;`,
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkDropSequence(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("DropSequence", []RoundTripBenchTestCase{
@@ -96,6 +100,7 @@ func init() {
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkDropDatabase(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("DropDatabase", []RoundTripBenchTestCase{

@@ -105,6 +105,7 @@ USE test;`)
 	return b.String()
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterRegions(b *testing.B) { multiRegionReg.Run(b) }
 func init() {
 	multiRegionReg.Register("AlterRegions", []RoundTripBenchTestCase{
@@ -135,6 +136,7 @@ func init() {
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterPrimaryRegion(b *testing.B) { multiRegionReg.Run(b) }
 func init() {
 	multiRegionReg.Register("AlterPrimaryRegion", []RoundTripBenchTestCase{
@@ -178,6 +180,7 @@ CREATE TABLE test10 (p int);
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterSurvivalGoals(b *testing.B) { multiRegionReg.Run(b) }
 func init() {
 	multiRegionReg.Register("AlterSurvivalGoals", []RoundTripBenchTestCase{
@@ -209,6 +212,7 @@ ALTER DATABASE test SURVIVE REGION FAILURE`,
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterTableLocality(b *testing.B) { multiRegionReg.Run(b) }
 func init() {
 	multiRegionReg.Register("AlterTableLocality", []RoundTripBenchTestCase{
@@ -275,6 +279,7 @@ CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL BY ROW;
 	})
 }
 
+// benchmark-ci: benchtime=20x
 func BenchmarkMultiRegionVirtualTableQueries(b *testing.B) { multiRegionReg.Run(b) }
 func init() {
 	multiRegionReg.Register("MultiRegionVirtualTableQueries", []RoundTripBenchTestCase{
