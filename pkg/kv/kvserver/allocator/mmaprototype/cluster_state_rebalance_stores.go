@@ -33,26 +33,9 @@ func rangeSkippedDueToFailedConstraintsShouldLog() bool {
 	return buildutil.CrdbTestBuild || rangeSkippedDueToFailedConstraintsLogEvery.ShouldLog()
 }
 
-var storeAndLeasePreferenceSlicePool = sync.Pool{
-	New: func() interface{} {
-		s := make([]storeAndLeasePreference, 0, 8)
-		return &s
-	},
-}
-
-var storeIDSlicePool = sync.Pool{
-	New: func() interface{} {
-		s := make([]roachpb.StoreID, 0, 10)
-		return &s
-	},
-}
-
-var candidateInfoSlicePool = sync.Pool{
-	New: func() interface{} {
-		s := make([]candidateInfo, 0, 8)
-		return &s
-	},
-}
+var storeAndLeasePreferencePool = newSlicePool[storeAndLeasePreference](8)
+var storeIDPool = newSlicePool[roachpb.StoreID](10)
+var candidateInfoPool = newSlicePool[candidateInfo](8)
 
 var nodeLoadMapPool = sync.Pool{
 	New: func() interface{} {
@@ -481,11 +464,11 @@ func (re *rebalanceEnv) rebalanceReplicas(
 	topKRanges := ss.adjusted.topKRanges[localStoreID]
 	n := topKRanges.len()
 	loadDim := topKRanges.dim
-	pPostMeansExcl := storeIDSlicePool.Get().(*[]roachpb.StoreID)
-	pExistingReplicas := storeIDSlicePool.Get().(*[]roachpb.StoreID)
+	pPostMeansExcl := storeIDPool.get()
+	pExistingReplicas := storeIDPool.get()
 	defer func() {
-		storeIDSlicePool.Put(pPostMeansExcl)
-		storeIDSlicePool.Put(pExistingReplicas)
+		storeIDPool.put(pPostMeansExcl)
+		storeIDPool.put(pExistingReplicas)
 	}()
 	for i := 0; i < n; i++ {
 		if re.rangeMoveCount >= re.maxRangeMoveCount {
@@ -692,18 +675,15 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 	topKRanges := ss.adjusted.topKRanges[localStoreID]
 	var leaseTransferCount int
 	n := topKRanges.len()
-	pLeasePrefs := storeAndLeasePreferenceSlicePool.Get().(*[]storeAndLeasePreference)
-	pCandsPL := storeIDSlicePool.Get().(*[]roachpb.StoreID)
-	pCandInfos := candidateInfoSlicePool.Get().(*[]candidateInfo)
+	pLeasePrefs := storeAndLeasePreferencePool.get()
+	pCandsPL := storeIDPool.get()
+	pCandInfos := candidateInfoPool.get()
 	scratchNodes := nodeLoadMapPool.Get().(map[roachpb.NodeID]*NodeLoad)
 	scratchStores := storeIDStructMapPool.Get().(map[roachpb.StoreID]struct{})
 	defer func() {
-		*pLeasePrefs = (*pLeasePrefs)[:0]
-		storeAndLeasePreferenceSlicePool.Put(pLeasePrefs)
-		*pCandsPL = (*pCandsPL)[:0]
-		storeIDSlicePool.Put(pCandsPL)
-		*pCandInfos = (*pCandInfos)[:0]
-		candidateInfoSlicePool.Put(pCandInfos)
+		storeAndLeasePreferencePool.put(pLeasePrefs)
+		storeIDPool.put(pCandsPL)
+		candidateInfoPool.put(pCandInfos)
 		clear(scratchNodes)
 		nodeLoadMapPool.Put(scratchNodes)
 		clear(scratchStores)

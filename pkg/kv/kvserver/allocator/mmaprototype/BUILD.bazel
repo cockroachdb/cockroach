@@ -20,6 +20,7 @@ go_library(
         "store_set.go",
         "store_status.go",
         "top_k_replicas.go",
+        "util_slice_pool.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype",
     visibility = ["//visibility:public"],
