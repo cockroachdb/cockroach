@@ -25,9 +25,13 @@ type TestingKnobs struct {
 		spec execinfrapb.BulkMergeSpec,
 	) error
 
-	// InjectDuplicateKey is called for each key during merge. Returning true
-	// causes the key to be written twice, injecting a duplicate for testing.
-	InjectDuplicateKey func(iteration, maxIteration int32) bool
+	// InjectDuplicateKey is called for each key during merge. Returning a
+	// non-nil value causes the current key to be written again with that
+	// value, injecting a duplicate for testing. The returned value should
+	// differ from the original to simulate a real uniqueness violation;
+	// identical values are treated as benign checkpoint-and-resume repeats
+	// and silently skipped.
+	InjectDuplicateKey func(iteration, maxIteration int32) []byte
 }
 
 var _ base.ModuleTestingKnobs = &TestingKnobs{}
