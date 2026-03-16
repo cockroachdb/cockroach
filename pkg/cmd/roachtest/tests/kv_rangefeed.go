@@ -423,8 +423,13 @@ func registerKVRangefeed(r registry.Registry) {
 	testConfigs := []kvRangefeedTest{
 		// Adequately provisioned sink
 		{
-			writeMaxRate:              10000,
-			duration:                  30 * time.Minute,
+			writeMaxRate: 10000,
+			// The theoretical catch-up rate is 2,000 events/sec (12,000 sink - 10,000
+			// writes), giving a 25min catch-up time. In practice, the changefeed
+			// achieves ~96% of the sink rate, reducing the effective catch-up rate to
+			// ~1,500/sec and extending catch-up to ~33min. The 35min duration
+			// accommodates this.
+			duration:                  35 * time.Minute,
 			sinkProvisioning:          1.2,
 			splits:                    splits,
 			expectChangefeedCatchesUp: true,
