@@ -34,6 +34,43 @@ import (
 	"golang.org/x/exp/maps"
 )
 
+// opCategory classifies client operations for constraint-based generation.
+// Constraints allow multi-op sequences (batches and transactions) to guarantee
+// the presence of certain operation types, increasing test coverage of
+// meaningful interactions that pure random selection is unlikely to produce.
+type opCategory int
+
+const (
+	// readOp classifies Get, Scan, and ReverseScan operations.
+	readOp opCategory = iota + 1
+	// writeOp classifies Put, Delete, DeleteRange, and AddSSTable operations.
+	writeOp
+)
+
+// opHasCategory returns true if op belongs to the given category.
+func opHasCategory(op Operation, cat opCategory) bool {
+	switch cat {
+	case readOp:
+		return op.Get != nil || op.Scan != nil
+	case writeOp:
+		return op.Put != nil || op.CPut != nil || op.Delete != nil ||
+			op.DeleteRange != nil || op.DeleteRangeUsingTombstone != nil ||
+			op.AddSSTable != nil
+	default:
+		panic(errors.AssertionFailedf("unknown op category: %d", cat))
+	}
+}
+
+// containsCategory returns true if any op in ops belongs to the given category.
+func containsCategory(ops []Operation, cat opCategory) bool {
+	for _, op := range ops {
+		if opHasCategory(op, cat) {
+			return true
+		}
+	}
+	return false
+}
+
 // GeneratorConfig contains all the tunable knobs necessary to run a Generator.
 type GeneratorConfig struct {
 	Ops       OperationConfig
@@ -96,6 +133,17 @@ type ClosureTxnConfig struct {
 	// via the CommitInBatchMethod. This is an important part of the 1pc txn
 	// fastpath.
 	CommitReadCommittedInBatch int
+
+	// MixedReadWrite generates a committing transaction constrained to
+	// contain at least one read and one write operation. The isolation level
+	// is chosen randomly.
+	MixedReadWrite int
+	// SavepointRollbackWithWrite generates a committing transaction that
+	// includes a savepoint create, at least one write inside the savepoint,
+	// and a savepoint rollback, with random ops interspersed. The isolation
+	// level is chosen randomly. This targets interactions between savepoint
+	// rollback and buffered/reverted writes.
+	SavepointRollbackWithWrite int
 
 	TxnClientOps ClientOperationConfig
 	TxnBatchOps  BatchOperationConfig
@@ -324,7 +372,10 @@ type ClientOperationConfig struct {
 // kv.DB.Run or kv.Txn.Run.
 type BatchOperationConfig struct {
 	Batch int
-	Ops   ClientOperationConfig
+	// MixedReadWriteBatch generates a batch constrained to contain at least
+	// one read and one write operation.
+	MixedReadWriteBatch int
+	Ops                 ClientOperationConfig
 }
 
 type TxnConfig struct {
@@ -500,8 +551,9 @@ func newAllOperationsConfig() GeneratorConfig {
 		MutateBatchHeader:                                  1,
 	}
 	batchOpConfig := BatchOperationConfig{
-		Batch: 4,
-		Ops:   clientOpConfig,
+		Batch:               4,
+		MixedReadWriteBatch: 2,
+		Ops:                 clientOpConfig,
 	}
 	// SavepointConfig is only relevant in ClosureTxnConfig.
 	savepointConfig := SavepointConfig{
@@ -522,6 +574,8 @@ func newAllOperationsConfig() GeneratorConfig {
 			CommitSerializableInBatch:  2,
 			CommitSnapshotInBatch:      2,
 			CommitReadCommittedInBatch: 2,
+			MixedReadWrite:             2,
+			SavepointRollbackWithWrite: 2,
 			TxnClientOps:               clientOpConfig,
 			TxnBatchOps:                batchOpConfig,
 			CommitBatchOps:             clientOpConfig,
@@ -1002,6 +1056,75 @@ func (g *generator) selectOp(rng *rand.Rand, contextuallyValid []opGen) Operatio
 	panic(`unreachable`)
 }
 
+// selectOpOfCategory selects a random op from allowed that belongs to the given
+// category. It retries until a matching op is generated.
+func (g *generator) selectOpOfCategory(rng *rand.Rand, allowed []opGen, cat opCategory) Operation {
+	const maxAttempts = 100
+	for i := 0; i < maxAttempts; i++ {
+		op := g.selectOp(rng, allowed)
+		if opHasCategory(op, cat) {
+			return op
+		}
+	}
+	panic(errors.AssertionFailedf(
+		"failed to generate op of category %d after %d attempts", cat, maxAttempts,
+	))
+}
+
+// isSavepointOp returns true if op is a savepoint create, release, or rollback.
+func isSavepointOp(op Operation) bool {
+	return op.SavepointCreate != nil || op.SavepointRelease != nil ||
+		op.SavepointRollback != nil
+}
+
+// enforceCategories ensures that ops contains at least one operation from each
+// required category. If a required category is missing, a randomly chosen op
+// that does not satisfy any other required category is replaced. Savepoint ops
+// are never replaced, as doing so would break the savepoint stack invariants.
+func (g *generator) enforceCategories(
+	rng *rand.Rand, ops []Operation, allowed []opGen, required []opCategory,
+) {
+	for _, cat := range required {
+		if containsCategory(ops, cat) {
+			continue
+		}
+		// Find ops that don't satisfy any required category and are not
+		// savepoint ops — these are safe to replace.
+		var candidates []int
+		for i, op := range ops {
+			if isSavepointOp(op) {
+				continue
+			}
+			satisfiesRequired := false
+			for _, other := range required {
+				if opHasCategory(op, other) {
+					satisfiesRequired = true
+					break
+				}
+			}
+			if !satisfiesRequired {
+				candidates = append(candidates, i)
+			}
+		}
+		if len(candidates) == 0 {
+			// All non-savepoint ops satisfy some required category. Replace a
+			// random non-savepoint op and rely on the next iteration to fix any
+			// newly broken constraint.
+			for i, op := range ops {
+				if !isSavepointOp(op) {
+					candidates = append(candidates, i)
+				}
+			}
+		}
+		if len(candidates) == 0 {
+			// All ops are savepoint ops; nothing safe to replace.
+			continue
+		}
+		idx := candidates[rng.Intn(len(candidates))]
+		ops[idx] = g.selectOpOfCategory(rng, allowed, cat)
+	}
+}
+
 func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig) {
 	addOpGen(allowed, randGetMissing, c.GetMissing)
 	addOpGen(allowed, randGetMissingFollowerRead, c.GetMissingFollowerRead)
@@ -1121,7 +1244,11 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 }
 
 func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) {
-	addOpGen(allowed, makeRandBatch(&c.Ops), c.Batch)
+	addOpGen(allowed, makeRandBatch(&c.Ops, nil /* required */), c.Batch)
+	addOpGen(allowed,
+		makeRandBatch(&c.Ops, []opCategory{readOp, writeOp}),
+		c.MixedReadWriteBatch,
+	)
 }
 
 func randGetMissing(_ *generator, rng *rand.Rand) Operation {
@@ -1936,11 +2063,15 @@ func isFollowerReadEligibleOp(op Operation) bool {
 	return false
 }
 
-func makeRandBatch(c *ClientOperationConfig) opGenFunc {
+func makeRandBatch(c *ClientOperationConfig, required []opCategory) opGenFunc {
 	return func(g *generator, rng *rand.Rand) Operation {
 		var allowed []opGen
 		g.registerClientOps(&allowed, c)
-		numOps := rng.Intn(4)
+		minOps := len(required)
+		if minOps < 0 {
+			minOps = 0
+		}
+		numOps := minOps + rng.Intn(4)
 		ops := make([]Operation, numOps)
 		followerReadEligible := true
 		var addedForwardScan, addedReverseScan bool
@@ -1989,6 +2120,9 @@ func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 				addedBatchHeaderMutation = true
 			}
 		}
+		if len(required) > 0 {
+			g.enforceCategories(rng, ops, allowed, required)
+		}
 		op := batch(ops...)
 		op.Batch.FollowerReadEligible = followerReadEligible
 		return op
@@ -2018,6 +2152,14 @@ func (g *generator) registerClosureTxnOps(allowed *[]opGen, c *ClosureTxnConfig)
 		makeClosureTxn(Commit, SI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSnapshotInBatch)
 	addOpGen(allowed,
 		makeClosureTxn(Commit, RC, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitReadCommittedInBatch)
+
+	addOpGen(allowed,
+		makeConstrainedClosureTxn(g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, &c.SavepointOps,
+			[]opCategory{readOp, writeOp}),
+		c.MixedReadWrite)
+	addOpGen(allowed,
+		makeSavepointRollbackWithWriteTxn(g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps),
+		c.SavepointRollbackWithWrite)
 }
 
 func makeClosureTxn(
@@ -2067,8 +2209,132 @@ func makeClosureTxn(
 			if txnType != ClosureTxnType_Commit {
 				panic(errors.AssertionFailedf(`CommitInBatch must commit got: %s`, txnType))
 			}
-			op.ClosureTxn.CommitInBatch = makeRandBatch(commitInBatch)(g, rng).Batch
+			op.ClosureTxn.CommitInBatch = makeRandBatch(commitInBatch, nil /* required */)(g, rng).Batch
 		}
+		op.ClosureTxn.FollowerReadEligible = followerReadEligible
+		return op
+	}
+}
+
+// randomIsoLevel returns a random isolation level.
+func randomIsoLevel(rng *rand.Rand) isolation.Level {
+	levels := []isolation.Level{
+		isolation.Serializable, isolation.Snapshot, isolation.ReadCommitted,
+	}
+	return levels[rng.Intn(len(levels))]
+}
+
+// makeConstrainedClosureTxn creates a committing transaction with a randomly
+// chosen isolation level, where the generated ops are constrained to include at
+// least one operation from each required category. This increases the
+// likelihood of testing meaningful interactions between different operation
+// types within a single transaction.
+func makeConstrainedClosureTxn(
+	txnConfig TxnConfig,
+	txnClientOps *ClientOperationConfig,
+	txnBatchOps *BatchOperationConfig,
+	savepointOps *SavepointConfig,
+	required []opCategory,
+) opGenFunc {
+	return func(g *generator, rng *rand.Rand) Operation {
+		iso := randomIsoLevel(rng)
+		txnType := ClosureTxnType_Commit
+
+		var allowed []opGen
+		g.registerClientOps(&allowed, txnClientOps)
+		g.registerBatchOps(&allowed, txnBatchOps)
+
+		minOps := len(required)
+		if minOps < 2 {
+			minOps = 2
+		}
+		const maxOps = 20
+		numOps := minOps + rng.Intn(maxOps-minOps+1)
+		ops := make([]Operation, numOps)
+
+		var spIDs []int
+		followerReadEligible := true
+		for i := range ops {
+			allowedIncludingSavepointOps := allowed
+			g.registerSavepointOps(&allowedIncludingSavepointOps, savepointOps, spIDs, i)
+			ops[i] = g.selectOp(rng, allowedIncludingSavepointOps)
+			followerReadEligible = followerReadEligible && isFollowerReadEligibleOp(ops[i])
+			maybeUpdateSavepoints(&spIDs, ops[i])
+		}
+		g.enforceCategories(rng, ops, allowed, required)
+
+		op := closureTxn(txnType, iso, ops...)
+		if txnConfig.RandomUserPriority {
+			op.ClosureTxn.UserPriority = randomUserPriority(rng)
+		}
+		op.ClosureTxn.BufferedWrites = rng.Float64() < txnConfig.BufferedWritesProb
+		op.ClosureTxn.FollowerReadEligible = followerReadEligible
+		return op
+	}
+}
+
+// makeSavepointRollbackWithWriteTxn creates a committing transaction with a
+// randomly chosen isolation level that includes a savepoint create, at least
+// one write inside the savepoint, and a savepoint rollback. Random ops are
+// interspersed before, inside, and after the savepoint section. This targets
+// interactions between savepoint rollback and write reversion (e.g. buffered
+// writes).
+func makeSavepointRollbackWithWriteTxn(
+	txnConfig TxnConfig, txnClientOps *ClientOperationConfig, txnBatchOps *BatchOperationConfig,
+) opGenFunc {
+	return func(g *generator, rng *rand.Rand) Operation {
+		iso := randomIsoLevel(rng)
+
+		var allowed []opGen
+		g.registerClientOps(&allowed, txnClientOps)
+		g.registerBatchOps(&allowed, txnBatchOps)
+
+		numBefore := rng.Intn(4)
+		numInside := 1 + rng.Intn(4) // at least 1 op inside the savepoint
+		numAfter := rng.Intn(4)
+
+		ops := make([]Operation, 0, numBefore+numInside+numAfter+2)
+		followerReadEligible := true
+		appendOp := func(op Operation) {
+			followerReadEligible = followerReadEligible && isFollowerReadEligibleOp(op)
+			ops = append(ops, op)
+		}
+
+		// Random ops before the savepoint.
+		for i := 0; i < numBefore; i++ {
+			appendOp(g.selectOp(rng, allowed))
+		}
+
+		// Savepoint create.
+		spID := len(ops)
+		appendOp(createSavepoint(spID))
+
+		// Ops inside the savepoint, including at least one write.
+		for i := 0; i < numInside; i++ {
+			appendOp(g.selectOp(rng, allowed))
+		}
+		// Enforce that the savepoint section contains a write. Only consider
+		// the ops inside the savepoint (after the create, before the rollback).
+		spStart := numBefore + 1
+		insideOps := ops[spStart:]
+		if !containsCategory(insideOps, writeOp) {
+			idx := rng.Intn(len(insideOps))
+			insideOps[idx] = g.selectOpOfCategory(rng, allowed, writeOp)
+		}
+
+		// Savepoint rollback.
+		appendOp(rollbackSavepoint(spID))
+
+		// Random ops after the rollback.
+		for i := 0; i < numAfter; i++ {
+			appendOp(g.selectOp(rng, allowed))
+		}
+
+		op := closureTxn(ClosureTxnType_Commit, iso, ops...)
+		if txnConfig.RandomUserPriority {
+			op.ClosureTxn.UserPriority = randomUserPriority(rng)
+		}
+		op.ClosureTxn.BufferedWrites = rng.Float64() < txnConfig.BufferedWritesProb
 		op.ClosureTxn.FollowerReadEligible = followerReadEligible
 		return op
 	}

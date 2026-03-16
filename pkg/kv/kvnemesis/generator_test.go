@@ -27,6 +27,23 @@ import (
 	"golang.org/x/exp/maps"
 )
 
+// hasSavepointRollbackWithWrite returns true if ops contains a savepoint
+// create followed by a write and then a savepoint rollback.
+func hasSavepointRollbackWithWrite(ops []Operation) bool {
+	var spCreated, writeAfterCreate bool
+	for _, op := range ops {
+		if op.SavepointCreate != nil {
+			spCreated = true
+			writeAfterCreate = false
+		} else if spCreated && opHasCategory(op, writeOp) {
+			writeAfterCreate = true
+		} else if op.SavepointRollback != nil && writeAfterCreate {
+			return true
+		}
+	}
+	return false
+}
+
 func trueForEachIntField(c *OperationConfig, fn func(int) bool) bool {
 	var forEachIntField func(v reflect.Value) bool
 	forEachIntField = func(v reflect.Value) bool {
@@ -297,8 +314,14 @@ func TestRandStep(t *testing.T) {
 			case *MutateBatchHeaderOperation:
 				client.MutateBatchHeader++
 			case *BatchOperation:
-				batch.Batch++
-				countClientOps(&batch.Ops, nil, o.Ops...)
+				if batch != nil {
+					batch.Batch++
+					if containsCategory(o.Ops, readOp) &&
+						containsCategory(o.Ops, writeOp) {
+						batch.MixedReadWriteBatch++
+					}
+					countClientOps(&batch.Ops, nil, o.Ops...)
+				}
 			case *SavepointCreateOperation, *SavepointRollbackOperation, *SavepointReleaseOperation:
 				// We'll count these separately.
 			default:
@@ -307,7 +330,7 @@ func TestRandStep(t *testing.T) {
 		}
 	}
 
-	countSavepointOps := func(savepoint *SavepointConfig, ops ...Operation) {
+	countSavepointOps := func(savepoint *SavepointConfig, ops []Operation) {
 		for _, op := range ops {
 			switch op.GetValue().(type) {
 			case *SavepointCreateOperation:
@@ -339,7 +362,7 @@ func TestRandStep(t *testing.T) {
 			countClientOps(&counts.DB, &counts.Batch, step.Op)
 		case *ClosureTxnOperation:
 			countClientOps(&counts.ClosureTxn.TxnClientOps, &counts.ClosureTxn.TxnBatchOps, o.Ops...)
-			countSavepointOps(&counts.ClosureTxn.SavepointOps, o.Ops...)
+			countSavepointOps(&counts.ClosureTxn.SavepointOps, o.Ops)
 			if o.CommitInBatch != nil {
 				switch o.IsoLevel {
 				case isolation.Serializable:
@@ -374,6 +397,14 @@ func TestRandStep(t *testing.T) {
 				default:
 					t.Fatalf("unexpected isolation level %s", o.IsoLevel)
 				}
+			}
+			// Count constrained txn variants by checking output properties.
+			// These counts are in addition to the commit/rollback counts above.
+			if containsCategory(o.Ops, readOp) && containsCategory(o.Ops, writeOp) {
+				counts.ClosureTxn.MixedReadWrite++
+			}
+			if hasSavepointRollbackWithWrite(o.Ops) {
+				counts.ClosureTxn.SavepointRollbackWithWrite++
 			}
 		case *SplitOperation:
 			if _, ok := splits[string(o.Key)]; ok {
