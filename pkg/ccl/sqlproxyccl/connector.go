@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/jackc/pgproto3/v2"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -123,7 +124,7 @@ func (c *connector) OpenTenantConnWithToken(
 		return nil, err
 	}
 	c.CancelInfo.setNewBackend(newBackendKeyData, serverConn.RemoteAddr().(*net.TCPAddr))
-	log.Dev.Infof(ctx, "connected to %s through token-based auth", serverConn.RemoteAddr())
+	log.Dev.Infof(ctx, "connected to %s through token-based auth", redact.HashString(serverConn.RemoteAddr().String()))
 	return serverConn, nil
 }
 
@@ -164,7 +165,7 @@ func (c *connector) OpenTenantConnWithAuth(
 	if err != nil {
 		return nil, true, err
 	}
-	log.Dev.Infof(ctx, "connected to %s through normal auth", serverConn.RemoteAddr())
+	log.Dev.Infof(ctx, "connected to %s through normal auth", redact.HashString(serverConn.RemoteAddr().String()))
 	c.CancelInfo.setNewBackend(crdbBackendKeyData, serverConn.RemoteAddr().(*net.TCPAddr))
 	return serverConn, false, nil
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	proxyproto "github.com/pires/go-proxyproto"
 	"github.com/prometheus/common/expfmt"
 )
@@ -443,7 +444,7 @@ func (s *Server) shouldLogError(
 		log.Dev.Errorf(
 			ctx,
 			"unexpected error: cannot extract remote IP from connection; found: %v",
-			conn.RemoteAddr().String(),
+			redact.HashString(conn.RemoteAddr().String()),
 		)
 		return true
 	}
