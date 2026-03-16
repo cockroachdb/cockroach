@@ -184,6 +184,8 @@ var upgrades = []upgradebase.Upgrade{
 			"restore for a cluster predating this table can leave it empty",
 		),
 	),
+
+	newFirstUpgrade(clusterversion.V26_3_Start.Version()),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
