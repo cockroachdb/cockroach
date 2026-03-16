@@ -167,11 +167,8 @@ func undoAllPendingChanges(ctx context.Context, cs *clusterState) {
 
 	for _, p := range toUndo {
 		cs.undoPendingChange(ctx, p.cid)
-	}
-
-	// Reset lastFailedChange on affected ranges (undoPendingChange sets it
-	// to now, which causes a 60s backoff in rebalanceStores).
-	for _, p := range toUndo {
+		// Reset lastFailedChange on affected ranges (undoPendingChange sets it
+		// to now, which causes a 60s backoff in rebalanceStores).
 		if rs, ok := cs.ranges[p.rangeID]; ok {
 			rs.lastFailedChange = time.Time{}
 		}
