@@ -372,7 +372,7 @@ func (b *Batch[B]) State() B {
 
 // Raft returns the LogEngine writer. When engines are separated, the raft
 // batch is lazily created on first access.
-func (b *Batch[B]) Raft() RaftWO {
+func (b *Batch[B]) Raft() storage.WriteBatch {
 	if b.raft == nil {
 		assertTrue(b.separated(), "raft batch unexpectedly nil with non-separated engines")
 		b.raft = b.logEngine.NewWriteBatch()
