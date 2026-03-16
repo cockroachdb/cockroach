@@ -51,7 +51,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":tenantcostclient"],
-    tags = ["no-remote-exec"],
     deps = [
         "//pkg/base",
         "//pkg/ccl",
