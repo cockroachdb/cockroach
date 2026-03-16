@@ -121,6 +121,7 @@ func (r *Replica) SendWithWriteBytes(
 			WorkloadID:    ba.WorkloadID,
 			AppNameID:     ba.AppNameID,
 			GatewayNodeID: ba.GatewayNodeID,
+			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 		},
 		ash.WorkCPU, "ReplicaSend")
 	defer cleanup()
@@ -321,6 +322,7 @@ func (r *Replica) maybeCommitWaitBeforeCommitTrigger(
 			WorkloadID:    ba.WorkloadID,
 			AppNameID:     ba.AppNameID,
 			GatewayNodeID: ba.GatewayNodeID,
+			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 		},
 		ash.WorkOther, "CommitWaitSleep")
 	defer cleanup()
@@ -882,6 +884,7 @@ func (r *Replica) handleInvalidLeaseError(ctx context.Context, ba *kvpb.BatchReq
 			WorkloadID:    ba.WorkloadID,
 			AppNameID:     ba.AppNameID,
 			GatewayNodeID: ba.GatewayNodeID,
+			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 		},
 	)
 	// If we managed to get a lease (i.e. pErr == nil), the request evaluation
@@ -976,6 +979,7 @@ func (r *Replica) executeAdminBatch(
 					WorkloadID:    ba.WorkloadID,
 					AppNameID:     ba.AppNameID,
 					GatewayNodeID: ba.GatewayNodeID,
+					WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
 				},
 			)
 			if pErr != nil {

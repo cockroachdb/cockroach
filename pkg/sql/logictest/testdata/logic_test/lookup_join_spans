@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 statement ok
 CREATE TABLE metrics (
   id       SERIAL PRIMARY KEY,

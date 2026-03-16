@@ -664,8 +664,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.extendedEvalCtx.WorkloadID = uint64(ih.fingerprintId)
 	appNameID := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
 	p.extendedEvalCtx.AppNameID = appNameID
+	p.extendedEvalCtx.WorkloadType = workloadid.WorkloadTypeStatement
 	if p.txn != nil {
-		p.txn.SetWorkloadInfo(uint64(ih.fingerprintId), appNameID)
+		p.txn.SetWorkloadInfo(
+			uint64(ih.fingerprintId), appNameID, workloadid.WorkloadTypeStatement,
+		)
 	}
 
 	// Note that here we always unconditionally defer a function that takes care
@@ -1752,8 +1755,11 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	p.extendedEvalCtx.WorkloadID = uint64(ih.fingerprintId)
 	appNameID2 := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
 	p.extendedEvalCtx.AppNameID = appNameID2
+	p.extendedEvalCtx.WorkloadType = workloadid.WorkloadTypeStatement
 	if p.txn != nil {
-		p.txn.SetWorkloadInfo(uint64(ih.fingerprintId), appNameID2)
+		p.txn.SetWorkloadInfo(
+			uint64(ih.fingerprintId), appNameID2, workloadid.WorkloadTypeStatement,
+		)
 	}
 
 	if buildutil.CrdbTestBuild {

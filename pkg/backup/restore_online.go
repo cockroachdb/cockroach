@@ -196,8 +196,6 @@ func sendAddRemoteSSTs(
 	tracingAggCh chan *execinfrapb.TracingAggregatorEvents,
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
 ) (approxRows int64, approxDataSize int64, err error) {
-	defer close(tracingAggCh)
-
 	const targetRangeSize = 440 << 20
 
 	kr, err := MakeKeyRewriterFromRekeys(execCtx.ExecCfg().Codec, dataToRestore.getRekeys(), dataToRestore.getTenantRekeys(),

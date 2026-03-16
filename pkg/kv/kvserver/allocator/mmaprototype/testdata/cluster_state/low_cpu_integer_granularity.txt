@@ -118,6 +118,7 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 [mmaid=1] load summary for dim=ByteSize (s5): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000000]
 [mmaid=1] load summary for dim=CPURate (n5): loadNormal, reason: load is within 5% of mean [load=6 meanLoad=6 fractionUsed=6.00% meanUtil=6.20% capacity=100]
 [mmaid=1] evaluating s5: node load loadNormal, store load loadNormal, worst dim CPURate
+[mmaid=1] sorted shedding stores: (s3: overloadSlow)
 [mmaid=1] start processing shedding store s3: cpu node load overloadSlow, store load overloadSlow, worst dim CPURate
 [mmaid=1] top-K[CPURate] ranges for s3 with lease on local s1: r3:[cpu:1ns/s, write-bandwidth:0 B/s, byte-size:0 B] r2:[cpu:1ns/s, write-bandwidth:0 B/s, byte-size:0 B] r1:[cpu:1ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=1] skipping remote store s3: in lease shedding grace period
@@ -148,6 +149,7 @@ rebalance-stores store-id=1 max-range-move-count=999 fraction-pending-decrease-t
 [mmaid=2] store s3 was added to shedding store list
 [mmaid=2] evaluating s4: node load loadNormal, store load loadNormal, worst dim CPURate
 [mmaid=2] evaluating s5: node load loadNormal, store load loadNormal, worst dim CPURate
+[mmaid=2] sorted shedding stores: (s3: overloadSlow)
 [mmaid=2] start processing shedding store s3: cpu node load overloadSlow, store load overloadSlow, worst dim CPURate
 [mmaid=2] top-K[CPURate] ranges for s3 with lease on local s1: r3:[cpu:1ns/s, write-bandwidth:0 B/s, byte-size:0 B] r2:[cpu:1ns/s, write-bandwidth:0 B/s, byte-size:0 B] r1:[cpu:1ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=2] attempting to shed replicas next

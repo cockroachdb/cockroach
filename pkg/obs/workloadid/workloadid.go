@@ -42,6 +42,24 @@ const (
 	WORKLOAD_ID_RPC_HEARTBEAT
 )
 
+// Name returns the human-readable name for a system task WorkloadID.
+// For IDs that don't correspond to a known system task, it returns
+// "UNKNOWN".
+func (id WorkloadID) Name() string {
+	switch id {
+	case WORKLOAD_ID_LDR:
+		return WORKLOAD_NAME_LDR
+	case WORKLOAD_ID_RAFT:
+		return WORKLOAD_NAME_RAFT
+	case WORKLOAD_ID_STORELIVENESS:
+		return WORKLOAD_NAME_STORELIVENESS
+	case WORKLOAD_ID_RPC_HEARTBEAT:
+		return WORKLOAD_NAME_RPC_HEARTBEAT
+	default:
+		return WORKLOAD_NAME_UNKNOWN
+	}
+}
+
 const (
 	WORKLOAD_NAME_UNKNOWN       = "UNKNOWN"
 	WORKLOAD_NAME_LDR           = "LDR"
@@ -49,3 +67,44 @@ const (
 	WORKLOAD_NAME_STORELIVENESS = "STORELIVENESS"
 	WORKLOAD_NAME_RPC_HEARTBEAT = "RPC_HEARTBEAT"
 )
+
+// WorkloadType distinguishes the kind of workload that a WorkloadID
+// represents. The sampler uses this to choose the right encoding
+// (hex for statement fingerprints, decimal for job IDs, name for
+// system tasks).
+type WorkloadType uint8
+
+const (
+	// WorkloadTypeUnknown is the zero value. Backward compatible:
+	// existing callers that don't set a type get hex encoding.
+	WorkloadTypeUnknown WorkloadType = iota
+	// WorkloadTypeStatement identifies a SQL statement fingerprint ID,
+	// hex-encoded by the sampler.
+	WorkloadTypeStatement
+	// WorkloadTypeJob identifies a job ID, decimal-encoded by the
+	// sampler.
+	WorkloadTypeJob
+	// WorkloadTypeSystem identifies a system task, encoded using
+	// WorkloadID.Name() by the sampler.
+	WorkloadTypeSystem
+)
+
+// ToUint32 converts a WorkloadType to uint32 for use in protobuf
+// fields.
+func (t WorkloadType) ToUint32() uint32 {
+	return uint32(t)
+}
+
+// String returns the human-readable name for a WorkloadType.
+func (t WorkloadType) String() string {
+	switch t {
+	case WorkloadTypeStatement:
+		return "STATEMENT"
+	case WorkloadTypeJob:
+		return "JOB"
+	case WorkloadTypeSystem:
+		return "SYSTEM"
+	default:
+		return "UNKNOWN"
+	}
+}

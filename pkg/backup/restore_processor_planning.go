@@ -62,9 +62,6 @@ func distRestore(
 	tracingAggCh chan *execinfrapb.TracingAggregatorEvents,
 	procCompleteCh chan struct{},
 ) error {
-	defer close(progCh)
-	defer close(tracingAggCh)
-	defer close(procCompleteCh)
 	var noTxn *kv.Txn
 
 	if md.encryption != nil && md.encryption.Mode == jobspb.EncryptionMode_KMS {

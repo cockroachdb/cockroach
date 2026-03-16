@@ -281,6 +281,7 @@ func (s *ParallelUnorderedSynchronizer) Init(ctx context.Context) {
 						WorkloadID:    s.flowCtx.EvalCtx.WorkloadID,
 						AppNameID:     s.flowCtx.EvalCtx.AppNameID,
 						GatewayNodeID: gatewayNodeID,
+						WorkloadType:  s.flowCtx.EvalCtx.WorkloadType,
 					},
 					ash.WorkOther, "ColExecSync")
 				defer cleanup()

@@ -10,6 +10,7 @@ go_library(
         "//pkg/gossip",
         "//pkg/kv",
         "//pkg/obs/ash",
+        "//pkg/obs/workloadid",
         "//pkg/roachpb",
         "//pkg/server/telemetry",
         "//pkg/sql/catalog/catsessiondata",

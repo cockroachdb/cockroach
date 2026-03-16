@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 # Add JSON columns as primary index.
 statement ok
 CREATE TABLE t (x JSONB PRIMARY KEY)

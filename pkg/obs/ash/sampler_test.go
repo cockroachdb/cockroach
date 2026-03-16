@@ -7,11 +7,13 @@ package ash
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -63,32 +65,135 @@ func TestSamplerTakeSample(t *testing.T) {
 }
 
 func TestSamplerWorkloadIDCache(t *testing.T) {
-	s, stopper := newTestSampler()
-	defer stopper.Stop(context.Background())
+	setup := func(t *testing.T) *Sampler {
+		t.Helper()
+		s, stopper := newTestSampler()
+		t.Cleanup(func() { stopper.Stop(context.Background()) })
+		enabled.Store(true)
+		t.Cleanup(func() { enabled.Store(false) })
+		return s
+	}
 
-	enabled.Store(true)
-	defer enabled.Store(false)
+	t.Run("cache hit", func(t *testing.T) {
+		s := setup(t)
+		tenantID := roachpb.MustMakeTenantID(3)
 
-	tenantID := roachpb.MustMakeTenantID(3)
+		// Take two samples with the same workload ID.
+		cleanup := SetWorkState(tenantID, WorkloadInfo{WorkloadID: 99}, WorkIO, "BatchEval")
+		s.takeSample(context.Background())
+		cleanup()
 
-	// Take two samples with the same workload ID.
-	cleanup := SetWorkState(tenantID, WorkloadInfo{WorkloadID: 99}, WorkIO, "BatchEval")
-	s.takeSample(context.Background())
-	cleanup()
+		cleanup = SetWorkState(tenantID, WorkloadInfo{WorkloadID: 99}, WorkIO, "BatchEval")
+		s.takeSample(context.Background())
+		cleanup()
 
-	cleanup = SetWorkState(tenantID, WorkloadInfo{WorkloadID: 99}, WorkIO, "BatchEval")
-	s.takeSample(context.Background())
-	cleanup()
+		samples := s.GetSamples(nil)
+		require.Len(t, samples, 2)
+		// Both samples should have the same encoded workload ID.
+		require.Equal(t, samples[0].WorkloadID, samples[1].WorkloadID)
+		require.Equal(t, encodeStmtFingerprintIDToString(99), samples[0].WorkloadID)
 
-	samples := s.GetSamples(nil)
-	require.Len(t, samples, 2)
-	// Both samples should have the same encoded workload ID.
-	require.Equal(t, samples[0].WorkloadID, samples[1].WorkloadID)
-	require.Equal(t, encodeStmtFingerprintIDToString(99), samples[0].WorkloadID)
+		// Verify the cache contains the entry (keyed by id + type).
+		_, ok := s.workloadIDCache.Get(workloadCacheKey{id: 99})
+		require.True(t, ok, "workload ID should be cached")
+	})
 
-	// Verify the cache contains the entry.
-	_, ok := s.workloadIDCache.Get(uint64(99))
-	require.True(t, ok, "workload ID should be cached")
+	t.Run("different types do not collide", func(t *testing.T) {
+		s := setup(t)
+		tenantID := roachpb.MustMakeTenantID(3)
+		const id uint64 = 42
+
+		// Sample with the same numeric ID but as a statement fingerprint.
+		cleanup := SetWorkState(tenantID, WorkloadInfo{
+			WorkloadID:   id,
+			WorkloadType: workloadid.WorkloadTypeStatement,
+		}, WorkIO, "BatchEval")
+		s.takeSample(context.Background())
+		cleanup()
+
+		// Sample with the same numeric ID but as a job.
+		cleanup = SetWorkState(tenantID, WorkloadInfo{
+			WorkloadID:   id,
+			WorkloadType: workloadid.WorkloadTypeJob,
+		}, WorkIO, "BatchEval")
+		s.takeSample(context.Background())
+		cleanup()
+
+		samples := s.GetSamples(nil)
+		require.Len(t, samples, 2)
+
+		// The encoded workload IDs must differ: hex vs decimal.
+		require.NotEqual(t, samples[0].WorkloadID, samples[1].WorkloadID,
+			"same numeric ID with different types should produce different encodings")
+
+		// Verify both cache entries exist independently.
+		_, ok := s.workloadIDCache.Get(workloadCacheKey{
+			id: id, typ: workloadid.WorkloadTypeStatement,
+		})
+		require.True(t, ok, "statement cache entry should exist")
+		_, ok = s.workloadIDCache.Get(workloadCacheKey{
+			id: id, typ: workloadid.WorkloadTypeJob,
+		})
+		require.True(t, ok, "job cache entry should exist")
+	})
+}
+
+func TestEncodeWorkloadID(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		id       uint64
+		typ      workloadid.WorkloadType
+		expected string
+	}{
+		{
+			name:     "statement fingerprint",
+			id:       42,
+			typ:      workloadid.WorkloadTypeStatement,
+			expected: encodeStmtFingerprintIDToString(42),
+		},
+		{
+			name:     "unknown type uses hex encoding",
+			id:       42,
+			typ:      workloadid.WorkloadTypeUnknown,
+			expected: encodeStmtFingerprintIDToString(42),
+		},
+		{
+			name:     "job ID uses decimal",
+			id:       12345,
+			typ:      workloadid.WorkloadTypeJob,
+			expected: "12345",
+		},
+		{
+			name:     "job ID zero",
+			id:       0,
+			typ:      workloadid.WorkloadTypeJob,
+			expected: "0",
+		},
+		{
+			name:     "system task LDR",
+			id:       uint64(workloadid.WORKLOAD_ID_LDR),
+			typ:      workloadid.WorkloadTypeSystem,
+			expected: "LDR",
+		},
+		{
+			name:     "system task unknown ID",
+			id:       0,
+			typ:      workloadid.WorkloadTypeSystem,
+			expected: "UNKNOWN",
+		},
+		{
+			name:     "zero ID with unknown type",
+			id:       0,
+			typ:      workloadid.WorkloadTypeUnknown,
+			expected: encodeStmtFingerprintIDToString(0),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result := encodeWorkloadID(tc.id, tc.typ)
+			require.Equal(t, tc.expected, result,
+				fmt.Sprintf("encodeWorkloadID(%d, %s)", tc.id, tc.typ))
+		})
+	}
 }
 
 func TestSamplerMultipleGoroutines(t *testing.T) {

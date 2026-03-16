@@ -1,5 +1,3 @@
-# LogicTest: !local-prepared
-
 statement ok
 CREATE TABLE t_onecol (a INT);
 INSERT INTO t_onecol VALUES (1)

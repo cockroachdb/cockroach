@@ -369,12 +369,12 @@ distribution: local
 └── • render
     │
     └── • hash join (left outer)
-        │ equality: (column80) = (table_id)
+        │ equality: (column85) = (table_id)
         │
         ├── • render
         │   │
         │   └── • hash join (left outer)
-        │       │ equality: (column62) = (table_id)
+        │       │ equality: (column66) = (table_id)
         │       │ right cols are key
         │       │
         │       ├── • render
@@ -423,12 +423,12 @@ distribution: local
 └── • render
     │
     └── • hash join (left outer)
-        │ equality: (column95) = (table_id)
+        │ equality: (column102) = (table_id)
         │
         ├── • render
         │   │
         │   └── • hash join (left outer)
-        │       │ equality: (column77) = (table_id)
+        │       │ equality: (column83) = (table_id)
         │       │ right cols are key
         │       │
         │       ├── • render

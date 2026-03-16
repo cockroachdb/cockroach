@@ -371,6 +371,13 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		return err
 	}
 
+	// Flush the progress before the job terminates, so that an up-to-date
+	// state is written into the job.
+	// Note: This is also a persistent flush when the Drain flag has been set.
+	if err := t.progressTracker.flushFinalProgress(ctx); err != nil {
+		log.Dev.Warningf(ctx, "failed to flush final progress: %v", err)
+	}
+
 	if err := statsGroup.Wait(); err != nil {
 		// If the stats group was cancelled, use that error instead.
 		err = errors.CombineErrors(context.Cause(statsCtx), err)

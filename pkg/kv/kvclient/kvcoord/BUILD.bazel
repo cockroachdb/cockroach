@@ -55,6 +55,7 @@ go_library(
         "//pkg/kv/kvserver/txnwait",
         "//pkg/multitenant",
         "//pkg/obs/ash",
+        "//pkg/obs/workloadid",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
