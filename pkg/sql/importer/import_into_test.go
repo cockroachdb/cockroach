@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -575,6 +576,7 @@ func TestImportIntoRowCountCheckAfterIngestRetry(t *testing.T) {
 			// Use sync.Once so the injected error fires only on the first
 			// successful distImport call inside ingestWithRetry.
 			var once sync.Once
+			var retryTriggered atomic.Bool
 			registry.TestingWrapResumerConstructor(
 				jobspb.TypeImport,
 				func(resumer jobs.Resumer) jobs.Resumer {
@@ -586,6 +588,7 @@ func TestImportIntoRowCountCheckAfterIngestRetry(t *testing.T) {
 					r.TestingSetAfterDistImportKnob(func() error {
 						var err error
 						once.Do(func() {
+							retryTriggered.Store(true)
 							// The "rpc error" substring makes this retryable
 							// per sqlerrors.IsDistSQLRetryableError.
 							err = errors.New("rpc error: injected test retry")
@@ -613,6 +616,8 @@ func TestImportIntoRowCountCheckAfterIngestRetry(t *testing.T) {
 			runner.Exec(t, fmt.Sprintf(
 				`IMPORT INTO %s (k, v) CSV DATA ('nodelocal://1/export_%s/export*-n*.0.csv')`,
 				tc.name, tc.name))
+
+			require.True(t, retryTriggered.Load(), "expected injected error to trigger a retry")
 
 			runner.CheckQueryResults(t,
 				fmt.Sprintf(`SELECT count(*) FROM %s`, tc.name),
