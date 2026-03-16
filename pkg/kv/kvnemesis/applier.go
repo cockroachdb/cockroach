@@ -254,9 +254,21 @@ func (a *Applier) applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 					}
 
 					applyClientOp(ctx, txn, op, true /* inTxn */, &spIDToToken)
-					// The KV api disallows use of a txn after an operation on it errors.
+					// The KV API disallows use of a txn after most errors.
+					// ConditionFailedError and LockConflictError are exceptions:
+					// they don't move the txn to the error state, so we can
+					// continue executing subsequent ops. We only do this for
+					// individual (non-batch) ops because batch errors propagate
+					// to all sub-ops and the validator can't distinguish which
+					// sub-ops actually executed.
 					if r := op.Result(); r.Type == ResultType_Error {
-						err = errors.DecodeError(ctx, *r.Err)
+						opErr := errors.DecodeError(ctx, *r.Err)
+						isCFE := errors.HasType(opErr, (*kvpb.ConditionFailedError)(nil))
+						isLCE := errors.HasType(opErr, (*kvpb.LockConflictError)(nil))
+						if op.Batch == nil && (isCFE || isLCE) {
+							continue
+						}
+						err = opErr
 					}
 				}
 			}
