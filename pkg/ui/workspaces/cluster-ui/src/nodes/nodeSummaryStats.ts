@@ -66,7 +66,11 @@ export function sumNodeStats(
     replicas: 0,
   };
 
-  if (!nodeStatuses?.length || !Object.keys(livenessStatusByNodeID).length) {
+  if (
+    !nodeStatuses?.length ||
+    !livenessStatusByNodeID ||
+    !Object.keys(livenessStatusByNodeID).length
+  ) {
     return result;
   }
 
