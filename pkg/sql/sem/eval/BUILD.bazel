@@ -47,6 +47,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/kvserverbase",
+        "//pkg/obs/workloadid",
         "//pkg/repstream/streampb",
         "//pkg/roachpb",
         "//pkg/security/username",

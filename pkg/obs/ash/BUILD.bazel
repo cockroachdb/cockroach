@@ -17,6 +17,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/base",
+        "//pkg/obs/workloadid",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -49,6 +50,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":ash"],
     deps = [
+        "//pkg/obs/workloadid",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/testutils",
