@@ -367,22 +367,15 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					rhsDesc:             split.RightDesc,
 					initClosedTimestamp: hlc.Timestamp{WallTime: 100}, // dummy timestamp
 				}
-				wagWriter := wag.MakeWriter(&tc.wagSeq)
 				output := tc.mutate(t, func(b *kvstorage.Batch[storage.Batch]) {
-					// First, apply the stashed batch from split trigger
-					// evaluation.
+					// First, apply the stashed batch from split trigger evaluation.
 					require.NoError(t, b.State().ApplyBatchRepr(ps.batchRepr, false /* sync */))
-					// Then run splitPreApply which does the apply-time tweaks
-					// and stages WAG nodes on the writer.
+					// Then run splitPreApply which does the apply-time tweaks and stages
+					// a WAG event in the batch.
 					splitPreApply(ctx, kvstorage.StateRW(b.State()), kvstorage.Raft{
 						RO: tc.eng.LogEngine(),
 						WO: b.Raft(),
-					}, &wagWriter, in)
-					// Flush WAG nodes to the raft batch, mirroring what
-					// ApplyToStateMachine does in production.
-					require.NoError(t, wagWriter.Flush(
-						b.Raft(), b.State().Repr(),
-					))
+					}, b.WagWriter(), in)
 				})
 				// If the RHS replica wasn't destroyed, it is now initialized. Update
 				// the in-memory state to reflect this.
@@ -719,6 +712,7 @@ func (tc *testCtx) mutate(t *testing.T, write func(b *kvstorage.Batch[storage.Ba
 	write(&b)
 
 	stateRepr := b.State().Repr()
+	require.NoError(t, b.TestingFlushWAG())
 	raftRepr := b.Raft().Repr()
 
 	// If the raft batch contains a WAG node with an embedded state engine

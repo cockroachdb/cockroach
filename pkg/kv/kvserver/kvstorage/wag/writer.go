@@ -65,3 +65,9 @@ func (w *Writer) Flush(raftBatch storage.Writer, stateBatchRepr []byte) error {
 		Mutation: wagpb.Mutation{Batch: stateBatchRepr},
 	})
 }
+
+// Clear empties the staged WAG events.
+func (w *Writer) Clear() {
+	clear(w.events)
+	w.events = w.events[:0]
+}
