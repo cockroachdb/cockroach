@@ -3875,81 +3875,71 @@ upsert assn_cast
  │    └── d_comp_cast:19 => d_comp:7
  ├── update-mapping:
  │    ├── d_cast:12 => d:6
- │    └── upsert_d_comp:36 => d_comp:7
+ │    └── d_comp_cast:19 => d_comp:7
  └── project
-      ├── columns: upsert_k:31 upsert_c:32 upsert_qc:33 upsert_i:34 upsert_s:35 upsert_d_comp:36 column1:10!null d_cast:12 c_default:13 qc_default:14 s_default:16 i_cast:17!null d_comp_cast:19 k:20 c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28 d_comp_cast:30
-      ├── project
-      │    ├── columns: d_comp_cast:30 column1:10!null d_cast:12 c_default:13 qc_default:14 s_default:16 i_cast:17!null d_comp_cast:19 k:20 c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
-      │    ├── project
-      │    │    ├── columns: d_comp_comp:29 column1:10!null d_cast:12 c_default:13 qc_default:14 s_default:16 i_cast:17!null d_comp_cast:19 k:20 c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
-      │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:10!null d_cast:12 c_default:13 qc_default:14 s_default:16 i_cast:17!null d_comp_cast:19 k:20 c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
-      │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    ├── columns: column1:10!null d_cast:12 c_default:13 qc_default:14 s_default:16 i_cast:17!null d_comp_cast:19
-      │    │    │    │    ├── grouping columns: column1:10!null
+      ├── columns: upsert_k:29 upsert_c:30 upsert_qc:31 upsert_i:32 upsert_s:33 column1:10!null d_cast:12 c_default:13 qc_default:14 s_default:16 i_cast:17!null d_comp_cast:19 k:20 c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
+      ├── left-join (hash)
+      │    ├── columns: column1:10!null d_cast:12 c_default:13 qc_default:14 s_default:16 i_cast:17!null d_comp_cast:19 k:20 c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
+      │    ├── ensure-upsert-distinct-on
+      │    │    ├── columns: column1:10!null d_cast:12 c_default:13 qc_default:14 s_default:16 i_cast:17!null d_comp_cast:19
+      │    │    ├── grouping columns: column1:10!null
+      │    │    ├── project
+      │    │    │    ├── columns: d_comp_cast:19 column1:10!null d_cast:12 c_default:13 qc_default:14 s_default:16 i_cast:17!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: d_comp_comp:18 column1:10!null d_cast:12 c_default:13 qc_default:14 s_default:16 i_cast:17!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: d_comp_cast:19 column1:10!null d_cast:12 c_default:13 qc_default:14 s_default:16 i_cast:17!null
+      │    │    │    │    │    ├── columns: i_cast:17!null column1:10!null d_cast:12 c_default:13 qc_default:14 s_default:16
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: d_comp_comp:18 column1:10!null d_cast:12 c_default:13 qc_default:14 s_default:16 i_cast:17!null
+      │    │    │    │    │    │    ├── columns: c_default:13 qc_default:14 i_default:15!null s_default:16 column1:10!null d_cast:12
       │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: i_cast:17!null column1:10!null d_cast:12 c_default:13 qc_default:14 s_default:16
-      │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    ├── columns: c_default:13 qc_default:14 i_default:15!null s_default:16 column1:10!null d_cast:12
-      │    │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    │    ├── columns: d_cast:12 column1:10!null
-      │    │    │    │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    │    │    │    ├── columns: column1:10!null column2:11
-      │    │    │    │    │    │    │    │    │    │    └── (1, 1.45::DECIMAL(10,2))
-      │    │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │    │         └── assignment-cast: DECIMAL(10) [as=d_cast:12]
-      │    │    │    │    │    │    │    │    │              └── column2:11
-      │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         ├── NULL::CHAR [as=c_default:13]
-      │    │    │    │    │    │    │    │         ├── NULL::"char" [as=qc_default:14]
-      │    │    │    │    │    │    │    │         ├── 10::INT2 [as=i_default:15]
-      │    │    │    │    │    │    │    │         └── NULL::STRING [as=s_default:16]
+      │    │    │    │    │    │    │    ├── columns: d_cast:12 column1:10!null
+      │    │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    │    ├── columns: column1:10!null column2:11
+      │    │    │    │    │    │    │    │    └── (1, 1.45::DECIMAL(10,2))
       │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │         └── assignment-cast: INT8 [as=i_cast:17]
-      │    │    │    │    │    │    │              └── i_default:15
+      │    │    │    │    │    │    │         └── assignment-cast: DECIMAL(10) [as=d_cast:12]
+      │    │    │    │    │    │    │              └── column2:11
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── d_cast:12 + 10.0 [as=d_comp_comp:18]
+      │    │    │    │    │    │         ├── NULL::CHAR [as=c_default:13]
+      │    │    │    │    │    │         ├── NULL::"char" [as=qc_default:14]
+      │    │    │    │    │    │         ├── 10::INT2 [as=i_default:15]
+      │    │    │    │    │    │         └── NULL::STRING [as=s_default:16]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── assignment-cast: DECIMAL(10) [as=d_comp_cast:19]
-      │    │    │    │    │              └── d_comp_comp:18
-      │    │    │    │    └── aggregations
-      │    │    │    │         ├── first-agg [as=d_cast:12]
-      │    │    │    │         │    └── d_cast:12
-      │    │    │    │         ├── first-agg [as=c_default:13]
-      │    │    │    │         │    └── c_default:13
-      │    │    │    │         ├── first-agg [as=qc_default:14]
-      │    │    │    │         │    └── qc_default:14
-      │    │    │    │         ├── first-agg [as=i_cast:17]
-      │    │    │    │         │    └── i_cast:17
-      │    │    │    │         ├── first-agg [as=s_default:16]
-      │    │    │    │         │    └── s_default:16
-      │    │    │    │         └── first-agg [as=d_comp_cast:19]
-      │    │    │    │              └── d_comp_cast:19
-      │    │    │    ├── scan assn_cast
-      │    │    │    │    ├── columns: k:20!null c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
-      │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    └── d_comp:26
-      │    │    │    │    │         └── assignment-cast: DECIMAL(10)
-      │    │    │    │    │              └── d:25 + 10.0
-      │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
-      │    │    │    └── filters
-      │    │    │         └── column1:10 = k:20
-      │    │    └── projections
-      │    │         └── d_cast:12 + 10.0 [as=d_comp_comp:29]
-      │    └── projections
-      │         └── assignment-cast: DECIMAL(10) [as=d_comp_cast:30]
-      │              └── d_comp_comp:29
+      │    │    │    │    │         └── assignment-cast: INT8 [as=i_cast:17]
+      │    │    │    │    │              └── i_default:15
+      │    │    │    │    └── projections
+      │    │    │    │         └── d_cast:12 + 10.0 [as=d_comp_comp:18]
+      │    │    │    └── projections
+      │    │    │         └── assignment-cast: DECIMAL(10) [as=d_comp_cast:19]
+      │    │    │              └── d_comp_comp:18
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=d_cast:12]
+      │    │         │    └── d_cast:12
+      │    │         ├── first-agg [as=c_default:13]
+      │    │         │    └── c_default:13
+      │    │         ├── first-agg [as=qc_default:14]
+      │    │         │    └── qc_default:14
+      │    │         ├── first-agg [as=i_cast:17]
+      │    │         │    └── i_cast:17
+      │    │         ├── first-agg [as=s_default:16]
+      │    │         │    └── s_default:16
+      │    │         └── first-agg [as=d_comp_cast:19]
+      │    │              └── d_comp_cast:19
+      │    ├── scan assn_cast
+      │    │    ├── columns: k:20!null c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
+      │    │    ├── computed column expressions
+      │    │    │    └── d_comp:26
+      │    │    │         └── assignment-cast: DECIMAL(10)
+      │    │    │              └── d:25 + 10.0
+      │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    └── filters
+      │         └── column1:10 = k:20
       └── projections
-           ├── CASE WHEN k:20 IS NULL THEN column1:10 ELSE k:20 END [as=upsert_k:31]
-           ├── CASE WHEN k:20 IS NULL THEN c_default:13 ELSE c:21 END [as=upsert_c:32]
-           ├── CASE WHEN k:20 IS NULL THEN qc_default:14 ELSE qc:22 END [as=upsert_qc:33]
-           ├── CASE WHEN k:20 IS NULL THEN i_cast:17 ELSE i:23 END [as=upsert_i:34]
-           ├── CASE WHEN k:20 IS NULL THEN s_default:16 ELSE s:24 END [as=upsert_s:35]
-           └── CASE WHEN k:20 IS NULL THEN d_comp_cast:19 ELSE d_comp_cast:30 END [as=upsert_d_comp:36]
+           ├── CASE WHEN k:20 IS NULL THEN column1:10 ELSE k:20 END [as=upsert_k:29]
+           ├── CASE WHEN k:20 IS NULL THEN c_default:13 ELSE c:21 END [as=upsert_c:30]
+           ├── CASE WHEN k:20 IS NULL THEN qc_default:14 ELSE qc:22 END [as=upsert_qc:31]
+           ├── CASE WHEN k:20 IS NULL THEN i_cast:17 ELSE i:23 END [as=upsert_i:32]
+           └── CASE WHEN k:20 IS NULL THEN s_default:16 ELSE s:24 END [as=upsert_s:33]
 
 # Test prepared upsert to a column that requires an assignment cast and a
 # computed column that depends on the new value.
@@ -3971,81 +3961,71 @@ upsert assn_cast
  │    └── d_comp_cast:19 => d_comp:7
  ├── update-mapping:
  │    ├── d_cast:12 => d:6
- │    └── upsert_d_comp:36 => d_comp:7
+ │    └── d_comp_cast:19 => d_comp:7
  └── project
-      ├── columns: upsert_k:31 upsert_c:32 upsert_qc:33 upsert_i:34 upsert_s:35 upsert_d_comp:36!null column1:10!null d_cast:12!null c_default:13 qc_default:14 s_default:16 i_cast:17!null d_comp_cast:19!null k:20 c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28 d_comp_cast:30!null
-      ├── project
-      │    ├── columns: d_comp_cast:30!null column1:10!null d_cast:12!null c_default:13 qc_default:14 s_default:16 i_cast:17!null d_comp_cast:19!null k:20 c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
-      │    ├── project
-      │    │    ├── columns: d_comp_comp:29!null column1:10!null d_cast:12!null c_default:13 qc_default:14 s_default:16 i_cast:17!null d_comp_cast:19!null k:20 c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
-      │    │    ├── left-join (hash)
-      │    │    │    ├── columns: column1:10!null d_cast:12!null c_default:13 qc_default:14 s_default:16 i_cast:17!null d_comp_cast:19!null k:20 c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
-      │    │    │    ├── ensure-upsert-distinct-on
-      │    │    │    │    ├── columns: column1:10!null d_cast:12!null c_default:13 qc_default:14 s_default:16 i_cast:17!null d_comp_cast:19!null
-      │    │    │    │    ├── grouping columns: column1:10!null
+      ├── columns: upsert_k:29 upsert_c:30 upsert_qc:31 upsert_i:32 upsert_s:33 column1:10!null d_cast:12!null c_default:13 qc_default:14 s_default:16 i_cast:17!null d_comp_cast:19!null k:20 c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
+      ├── left-join (hash)
+      │    ├── columns: column1:10!null d_cast:12!null c_default:13 qc_default:14 s_default:16 i_cast:17!null d_comp_cast:19!null k:20 c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
+      │    ├── ensure-upsert-distinct-on
+      │    │    ├── columns: column1:10!null d_cast:12!null c_default:13 qc_default:14 s_default:16 i_cast:17!null d_comp_cast:19!null
+      │    │    ├── grouping columns: column1:10!null
+      │    │    ├── project
+      │    │    │    ├── columns: d_comp_cast:19!null column1:10!null d_cast:12!null c_default:13 qc_default:14 s_default:16 i_cast:17!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: d_comp_comp:18!null column1:10!null d_cast:12!null c_default:13 qc_default:14 s_default:16 i_cast:17!null
       │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: d_comp_cast:19!null column1:10!null d_cast:12!null c_default:13 qc_default:14 s_default:16 i_cast:17!null
+      │    │    │    │    │    ├── columns: i_cast:17!null column1:10!null d_cast:12!null c_default:13 qc_default:14 s_default:16
       │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: d_comp_comp:18!null column1:10!null d_cast:12!null c_default:13 qc_default:14 s_default:16 i_cast:17!null
+      │    │    │    │    │    │    ├── columns: c_default:13 qc_default:14 i_default:15!null s_default:16 column1:10!null d_cast:12!null
       │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    ├── columns: i_cast:17!null column1:10!null d_cast:12!null c_default:13 qc_default:14 s_default:16
-      │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    ├── columns: c_default:13 qc_default:14 i_default:15!null s_default:16 column1:10!null d_cast:12!null
-      │    │    │    │    │    │    │    │    ├── project
-      │    │    │    │    │    │    │    │    │    ├── columns: d_cast:12!null column1:10!null
-      │    │    │    │    │    │    │    │    │    ├── values
-      │    │    │    │    │    │    │    │    │    │    ├── columns: column1:10!null column2:11!null
-      │    │    │    │    │    │    │    │    │    │    └── (1, 1.45)
-      │    │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │    │         └── assignment-cast: DECIMAL(10) [as=d_cast:12]
-      │    │    │    │    │    │    │    │    │              └── column2:11
-      │    │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │    │         ├── NULL::CHAR [as=c_default:13]
-      │    │    │    │    │    │    │    │         ├── NULL::"char" [as=qc_default:14]
-      │    │    │    │    │    │    │    │         ├── 10::INT2 [as=i_default:15]
-      │    │    │    │    │    │    │    │         └── NULL::STRING [as=s_default:16]
+      │    │    │    │    │    │    │    ├── columns: d_cast:12!null column1:10!null
+      │    │    │    │    │    │    │    ├── values
+      │    │    │    │    │    │    │    │    ├── columns: column1:10!null column2:11!null
+      │    │    │    │    │    │    │    │    └── (1, 1.45)
       │    │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │    │         └── assignment-cast: INT8 [as=i_cast:17]
-      │    │    │    │    │    │    │              └── i_default:15
+      │    │    │    │    │    │    │         └── assignment-cast: DECIMAL(10) [as=d_cast:12]
+      │    │    │    │    │    │    │              └── column2:11
       │    │    │    │    │    │    └── projections
-      │    │    │    │    │    │         └── d_cast:12 + 10.0 [as=d_comp_comp:18]
+      │    │    │    │    │    │         ├── NULL::CHAR [as=c_default:13]
+      │    │    │    │    │    │         ├── NULL::"char" [as=qc_default:14]
+      │    │    │    │    │    │         ├── 10::INT2 [as=i_default:15]
+      │    │    │    │    │    │         └── NULL::STRING [as=s_default:16]
       │    │    │    │    │    └── projections
-      │    │    │    │    │         └── assignment-cast: DECIMAL(10) [as=d_comp_cast:19]
-      │    │    │    │    │              └── d_comp_comp:18
-      │    │    │    │    └── aggregations
-      │    │    │    │         ├── first-agg [as=d_cast:12]
-      │    │    │    │         │    └── d_cast:12
-      │    │    │    │         ├── first-agg [as=c_default:13]
-      │    │    │    │         │    └── c_default:13
-      │    │    │    │         ├── first-agg [as=qc_default:14]
-      │    │    │    │         │    └── qc_default:14
-      │    │    │    │         ├── first-agg [as=i_cast:17]
-      │    │    │    │         │    └── i_cast:17
-      │    │    │    │         ├── first-agg [as=s_default:16]
-      │    │    │    │         │    └── s_default:16
-      │    │    │    │         └── first-agg [as=d_comp_cast:19]
-      │    │    │    │              └── d_comp_cast:19
-      │    │    │    ├── scan assn_cast
-      │    │    │    │    ├── columns: k:20!null c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
-      │    │    │    │    ├── computed column expressions
-      │    │    │    │    │    └── d_comp:26
-      │    │    │    │    │         └── assignment-cast: DECIMAL(10)
-      │    │    │    │    │              └── d:25 + 10.0
-      │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
-      │    │    │    └── filters
-      │    │    │         └── column1:10 = k:20
-      │    │    └── projections
-      │    │         └── d_cast:12 + 10.0 [as=d_comp_comp:29]
-      │    └── projections
-      │         └── assignment-cast: DECIMAL(10) [as=d_comp_cast:30]
-      │              └── d_comp_comp:29
+      │    │    │    │    │         └── assignment-cast: INT8 [as=i_cast:17]
+      │    │    │    │    │              └── i_default:15
+      │    │    │    │    └── projections
+      │    │    │    │         └── d_cast:12 + 10.0 [as=d_comp_comp:18]
+      │    │    │    └── projections
+      │    │    │         └── assignment-cast: DECIMAL(10) [as=d_comp_cast:19]
+      │    │    │              └── d_comp_comp:18
+      │    │    └── aggregations
+      │    │         ├── first-agg [as=d_cast:12]
+      │    │         │    └── d_cast:12
+      │    │         ├── first-agg [as=c_default:13]
+      │    │         │    └── c_default:13
+      │    │         ├── first-agg [as=qc_default:14]
+      │    │         │    └── qc_default:14
+      │    │         ├── first-agg [as=i_cast:17]
+      │    │         │    └── i_cast:17
+      │    │         ├── first-agg [as=s_default:16]
+      │    │         │    └── s_default:16
+      │    │         └── first-agg [as=d_comp_cast:19]
+      │    │              └── d_comp_cast:19
+      │    ├── scan assn_cast
+      │    │    ├── columns: k:20!null c:21 qc:22 i:23 s:24 d:25 d_comp:26 crdb_internal_mvcc_timestamp:27 tableoid:28
+      │    │    ├── computed column expressions
+      │    │    │    └── d_comp:26
+      │    │    │         └── assignment-cast: DECIMAL(10)
+      │    │    │              └── d:25 + 10.0
+      │    │    └── flags: avoid-full-scan disabled not visible index feature
+      │    └── filters
+      │         └── column1:10 = k:20
       └── projections
-           ├── CASE WHEN k:20 IS NULL THEN column1:10 ELSE k:20 END [as=upsert_k:31]
-           ├── CASE WHEN k:20 IS NULL THEN c_default:13 ELSE c:21 END [as=upsert_c:32]
-           ├── CASE WHEN k:20 IS NULL THEN qc_default:14 ELSE qc:22 END [as=upsert_qc:33]
-           ├── CASE WHEN k:20 IS NULL THEN i_cast:17 ELSE i:23 END [as=upsert_i:34]
-           ├── CASE WHEN k:20 IS NULL THEN s_default:16 ELSE s:24 END [as=upsert_s:35]
-           └── CASE WHEN k:20 IS NULL THEN d_comp_cast:19 ELSE d_comp_cast:30 END [as=upsert_d_comp:36]
+           ├── CASE WHEN k:20 IS NULL THEN column1:10 ELSE k:20 END [as=upsert_k:29]
+           ├── CASE WHEN k:20 IS NULL THEN c_default:13 ELSE c:21 END [as=upsert_c:30]
+           ├── CASE WHEN k:20 IS NULL THEN qc_default:14 ELSE qc:22 END [as=upsert_qc:31]
+           ├── CASE WHEN k:20 IS NULL THEN i_cast:17 ELSE i:23 END [as=upsert_i:32]
+           └── CASE WHEN k:20 IS NULL THEN s_default:16 ELSE s:24 END [as=upsert_s:33]
 
 # Test insert-do-nothing to a column that requires an assignment cast and a
 # computed column that depends on the new value.
