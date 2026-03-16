@@ -457,7 +457,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 				attRelID,                        // attrelid
 				tree.NewDName(column.GetName()), // attname
 				typOid(colTyp),                  // atttypid
-				zeroVal,                         // attstattarget
+				tree.DNull,                      // attstattarget
 				typLen(colTyp),                  // attlen
 				tree.NewDInt(tree.DInt(attNum)), // attnum
 				zeroVal,                         // attndims
@@ -514,7 +514,7 @@ https://www.postgresql.org/docs/12/catalog-pg-attribute.html`,
 					tableID,                             // attrelid
 					tree.NewDName(colName),              // attname
 					oidZero,                             // atttypid
-					zeroVal,                             // attstattarget
+					tree.DNull,                          // attstattarget
 					negOneVal,                           // attlen
 					tree.NewDInt(tree.DInt(colOrdinal)), // attnum
 					zeroVal,                             // attndims
@@ -4026,7 +4026,7 @@ func addPGAttributeRowForCompositeType(
 			tree.NewDOid(typ.Oid()),      // attrelid
 			tree.NewDName(tupLabels[i]),  // attname
 			typOid(colTyp),               // atttypid
-			zeroVal,                      // attstattarget
+			tree.DNull,                   // attstattarget
 			typLen(colTyp),               // attlen
 			tree.NewDInt(tree.DInt(i+1)), // attnum
 			zeroVal,                      // attndims
