@@ -271,10 +271,10 @@ SELECT * FROM crdb_internal.feature_usage WHERE feature_name = ''
 ----
 feature_name  usage_count
 
-query TTB colnames
+query TTBT colnames
 SELECT * FROM crdb_internal.session_variables WHERE variable = ''
 ----
-variable  value  hidden
+variable  value  hidden  description
 
 query TTITTTTTTBTBTTTII colnames
 SELECT * FROM crdb_internal.node_queries WHERE node_id < 0
