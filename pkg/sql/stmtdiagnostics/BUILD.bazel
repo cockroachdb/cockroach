@@ -32,7 +32,6 @@ go_test(
         "statement_diagnostics_test.go",
     ],
     embed = [":stmtdiagnostics"],
-    tags = ["no-remote-exec"],
     deps = [
         "//pkg/base",
         "//pkg/keys",
