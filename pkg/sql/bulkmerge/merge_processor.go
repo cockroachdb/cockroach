@@ -377,10 +377,15 @@ func (m *bulkMergeProcessor) processMergedData(
 	duplicateInjected := false
 
 	// When enforcing uniqueness with multiple SSTs, keys are suffixed to prevent
-	// shadowing. Track previous base key for duplicate detection.
+	// shadowing. Track previous base key and value for duplicate detection.
 	var prevBaseKeyBuf []byte
+	var prevValBuf []byte
 	var baseKey roachpb.Key
 	var keyToWrite storage.MVCCKey
+	// injectedVal holds a value from the InjectDuplicateKey testing hook.
+	// When non-nil, it replaces the iterator value for the replayed key so
+	// the duplicate carries the test-specified value.
+	var injectedVal []byte
 
 	for {
 		ok, err := iter.Valid()
@@ -396,13 +401,21 @@ func (m *bulkMergeProcessor) processMergedData(
 		if err != nil {
 			return execinfrapb.BulkMergeSpec_Output{}, err
 		}
+		if injectedVal != nil {
+			val = injectedVal
+			injectedVal = nil
+		}
 
 		// Extract base key and check for duplicates when using suffixed iterators.
-		baseKey, keyToWrite, prevBaseKeyBuf, err = m.extractKeyAndCheckDuplicate(
-			key, val, prevBaseKeyBuf,
-		)
+		var skip bool
+		baseKey, keyToWrite, prevBaseKeyBuf, prevValBuf, skip, err =
+			m.extractKeyAndCheckDuplicate(key, val, prevBaseKeyBuf, prevValBuf)
 		if err != nil {
 			return execinfrapb.BulkMergeSpec_Output{}, err
+		}
+		if skip {
+			iter.NextKey()
+			continue
 		}
 
 		// Check span boundary using the base key (without suffix).
@@ -436,10 +449,12 @@ func (m *bulkMergeProcessor) processMergedData(
 		}
 
 		// Testing hook: if duplicate requested and not already injected for this
-		// key, skip advancing the iterator so the key is processed again.
+		// key, skip advancing the iterator so the key is processed again with
+		// the hook-provided value.
 		if !duplicateInjected && knobs != nil && knobs.InjectDuplicateKey != nil {
-			if knobs.InjectDuplicateKey(m.spec.Iteration, m.spec.MaxIterations) {
+			if v := knobs.InjectDuplicateKey(m.spec.Iteration, m.spec.MaxIterations); v != nil {
 				duplicateInjected = true
+				injectedVal = v
 				continue
 			}
 		}
@@ -453,11 +468,19 @@ func (m *bulkMergeProcessor) processMergedData(
 
 // extractKeyAndCheckDuplicate extracts the base key from a potentially
 // suffixed key and checks for duplicates when enforcing uniqueness.
+//
+// When a duplicate base key is found, the value is compared with the previous
+// entry. Identical duplicates (same key and value) are benign — they arise
+// from checkpoint-and-resume overlap where some input rows are re-processed,
+// producing SSTs that partially overlap with previously checkpointed SSTs.
+// These are signaled by returning skip=true so the caller can advance past
+// them. A true uniqueness violation (same key, different value) returns a
+// DuplicateKeyError.
 func (m *bulkMergeProcessor) extractKeyAndCheckDuplicate(
-	key storage.MVCCKey, val []byte, prevBaseKeyBuf []byte,
-) (roachpb.Key, storage.MVCCKey, []byte, error) {
+	key storage.MVCCKey, val []byte, prevBaseKeyBuf []byte, prevValBuf []byte,
+) (roachpb.Key, storage.MVCCKey, []byte, []byte, bool, error) {
 	if !m.spec.EnforceUniqueness {
-		return key.Key, key, prevBaseKeyBuf, nil
+		return key.Key, key, prevBaseKeyBuf, prevValBuf, false, nil
 	}
 
 	var baseKey roachpb.Key
@@ -468,7 +491,7 @@ func (m *bulkMergeProcessor) extractKeyAndCheckDuplicate(
 		var err error
 		baseKey, err = removeKeySuffix(key.Key)
 		if err != nil {
-			return nil, storage.MVCCKey{}, prevBaseKeyBuf, err
+			return nil, storage.MVCCKey{}, prevBaseKeyBuf, prevValBuf, false, err
 		}
 		keyToWrite = storage.MVCCKey{Key: baseKey, Timestamp: key.Timestamp}
 	} else {
@@ -478,11 +501,19 @@ func (m *bulkMergeProcessor) extractKeyAndCheckDuplicate(
 
 	// Check for duplicates.
 	if len(prevBaseKeyBuf) > 0 && baseKey.Equal(prevBaseKeyBuf) {
-		return nil, storage.MVCCKey{}, prevBaseKeyBuf, kvserverbase.NewDuplicateKeyError(baseKey, val)
+		if bytes.Equal(val, prevValBuf) {
+			// Identical duplicate from checkpoint-and-resume overlap. The same
+			// input row was processed in both the previous and current run,
+			// producing identical KVs in separate SSTs. Safe to skip.
+			return nil, storage.MVCCKey{}, prevBaseKeyBuf, prevValBuf, true, nil
+		}
+		return nil, storage.MVCCKey{}, prevBaseKeyBuf, prevValBuf, false,
+			kvserverbase.NewDuplicateKeyError(baseKey, val)
 	}
 
 	prevBaseKeyBuf = append(prevBaseKeyBuf[:0], baseKey...)
-	return baseKey, keyToWrite, prevBaseKeyBuf, nil
+	prevValBuf = append(prevValBuf[:0], val...)
+	return baseKey, keyToWrite, prevBaseKeyBuf, prevValBuf, false, nil
 }
 
 func (m *bulkMergeProcessor) ingestFinalIteration(

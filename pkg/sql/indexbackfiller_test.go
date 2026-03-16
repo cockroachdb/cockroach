@@ -2040,15 +2040,15 @@ func TestMergeSameSSTDuplicateDetection(t *testing.T) {
 			var rowCounter atomic.Int64
 
 			bulkMergeKnobs := &bulkmerge.TestingKnobs{
-				InjectDuplicateKey: func(iteration, maxIteration int32) bool {
+				InjectDuplicateKey: func(iteration, maxIteration int32) []byte {
 					// Only count rows during the target iteration.
 					if iteration != tc.injectIteration {
-						return false
+						return nil
 					}
 
 					// Only inject if we haven't already done so.
 					if duplicateInjected.Load() {
-						return false
+						return nil
 					}
 
 					currentRow := rowCounter.Add(1) - 1 // Get and increment, 0-indexed.
@@ -2056,9 +2056,9 @@ func TestMergeSameSSTDuplicateDetection(t *testing.T) {
 					// Check if we've reached the target row count.
 					if tc.injectAfterRows == 0 || currentRow >= tc.injectAfterRows {
 						duplicateInjected.Store(true)
-						return true
+						return []byte("injected-duplicate-value")
 					}
-					return false
+					return nil
 				},
 			}
 

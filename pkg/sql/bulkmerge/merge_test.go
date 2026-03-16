@@ -783,11 +783,24 @@ func writeSpecificKeys(
 	codec keys.SQLCodec,
 ) {
 	t.Helper()
+	writeSpecificKeysWithValuePrefix(t, ctx, batcher, keyIndices, ts, codec, "value")
+}
+
+func writeSpecificKeysWithValuePrefix(
+	t *testing.T,
+	ctx context.Context,
+	batcher *bulksst.Writer,
+	keyIndices []int,
+	ts hlc.Timestamp,
+	codec keys.SQLCodec,
+	valuePrefix string,
+) {
+	t.Helper()
 	for _, i := range keyIndices {
 		keyStr := fmt.Sprintf("key-%d", i)
 		key := storageutils.PointKey(codec, keyStr, int(ts.WallTime))
 		// Properly encode the value as an MVCC value.
-		mvccVal := roachpb.MakeValueFromBytes([]byte(fmt.Sprintf("value-%d", i)))
+		mvccVal := roachpb.MakeValueFromBytes([]byte(fmt.Sprintf("%s-%d", valuePrefix, i)))
 		encMVCCVal, err := storage.EncodeMVCCValue(storage.MVCCValue{Value: mvccVal})
 		require.NoError(t, err)
 		require.NoError(t, batcher.AddMVCCKey(ctx, key, encMVCCVal))
@@ -795,8 +808,12 @@ func writeSpecificKeys(
 	require.NoError(t, batcher.CloseWithError(ctx))
 }
 
-// TestCrossSSTDuplicateHandling verifies that duplicate keys across SSTs are
-// detected when EnforceUniqueness is true and allowed when it is false.
+// TestCrossSSTDuplicateHandling verifies duplicate key behavior across SSTs
+// under various configurations of EnforceUniqueness.
+//
+// When EnforceUniqueness is true, identical duplicates (same key and value)
+// are tolerated because they arise naturally from checkpoint-and-resume
+// overlap. Only true conflicts (same key, different value) produce an error.
 func TestCrossSSTDuplicateHandling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -804,12 +821,22 @@ func TestCrossSSTDuplicateHandling(t *testing.T) {
 	testCases := []struct {
 		name              string
 		enforceUniqueness bool
-		expectDupError    bool
+		// useDifferentValues causes the overlapping key to have a different
+		// value in the second SST, simulating a real uniqueness violation
+		// rather than a checkpoint-and-resume repeat.
+		useDifferentValues bool
+		expectDupError     bool
 	}{
 		{
-			name:              "unique_enforcement_detects_duplicates",
+			name:              "identical_duplicates_skipped_with_uniqueness",
 			enforceUniqueness: true,
-			expectDupError:    true,
+			expectDupError:    false,
+		},
+		{
+			name:               "different_value_duplicates_detected_with_uniqueness",
+			enforceUniqueness:  true,
+			useDifferentValues: true,
+			expectDupError:     true,
 		},
 		{
 			name:              "non_unique_allows_duplicates",
@@ -856,7 +883,13 @@ func TestCrossSSTDuplicateHandling(t *testing.T) {
 			require.NoError(t, err)
 			fileAllocator2 := bulksst.NewExternalFileAllocator(store2, prefixURI2, s.Clock())
 			batcher2 := bulksst.NewUnsortedSSTBatcher(s.ClusterSettings(), fileAllocator2)
-			writeSpecificKeys(t, ctx, batcher2, []int{2, 3, 4}, writeTS, s.Codec())
+			if tc.useDifferentValues {
+				writeSpecificKeysWithValuePrefix(
+					t, ctx, batcher2, []int{2, 3, 4}, writeTS, s.Codec(), "other-value",
+				)
+			} else {
+				writeSpecificKeys(t, ctx, batcher2, []int{2, 3, 4}, writeTS, s.Codec())
+			}
 
 			// Combine SSTs from both allocators.
 			ssts1 := importToMerge(fileAllocator1.GetFileList())
