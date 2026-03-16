@@ -237,7 +237,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				}
 
 				require.NoError(t, kvstorage.MakeStateLoader(rangeID).SetHardState(
-					ctx, tc.raftStorage, rs.replica.hs,
+					ctx, tc.eng.LogEngine(), rs.replica.hs,
 				))
 				return fmt.Sprintf("HardState %+v", rs.replica.hs)
 
@@ -300,7 +300,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				// generated for replication. Stash it away. This represents the
 				// raft log entry that will be applied as part of split
 				// application.
-				batch := tc.stateStorage.NewBatch()
+				batch := tc.eng.StateEngine().NewBatch()
 				rec := tc.makeEvalCtx(rs, &desc)
 
 				in := batcheval.SplitTriggerHelperInput{
@@ -412,7 +412,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					RightDesc: rhsRS.desc,
 				}
 
-				batch := tc.stateStorage.NewBatch()
+				batch := tc.eng.StateEngine().NewBatch()
 				rec := tc.makeEvalCtx(lhsRS, &lhsDesc)
 
 				var ms enginepb.MVCCStats
@@ -664,8 +664,7 @@ type testCtx struct {
 	// The storage engines correspond to a single store, (n1, s1). The engines
 	// are logically separated into two -- one for the state machine, and one
 	// for Raft.
-	stateStorage storage.Engine
-	raftStorage  storage.Engine
+	eng kvstorage.Engines
 
 	wagSeq wag.Seq
 }
@@ -675,17 +674,17 @@ func newTestCtx() *testCtx {
 	st := cluster.MakeTestingClusterSettings()
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 10))
 	clock := hlc.NewClockForTesting(manual)
+	eng := storage.NewDefaultInMemForTesting()
 	return &testCtx{
 		st:                 st,
 		clock:              clock,
 		rangeLeaseDuration: 99 * time.Nanosecond,
 
-		nextRangeID:  1,
-		ranges:       make(map[roachpb.RangeID]*rangeState),
-		splits:       make(map[roachpb.RangeID]pendingSplit),
-		merges:       make(map[roachpb.RangeID]pendingMerge),
-		stateStorage: storage.NewDefaultInMemForTesting(),
-		raftStorage:  storage.NewDefaultInMemForTesting(),
+		nextRangeID: 1,
+		ranges:      make(map[roachpb.RangeID]*rangeState),
+		splits:      make(map[roachpb.RangeID]pendingSplit),
+		merges:      make(map[roachpb.RangeID]pendingMerge),
+		eng:         kvstorage.MakeSeparatedEnginesForTesting(eng, eng),
 	}
 }
 
@@ -705,8 +704,7 @@ func (tc *testCtx) makeEvalCtx(
 
 // close closes the test context's storage engines.
 func (tc *testCtx) close() {
-	tc.stateStorage.Close()
-	tc.raftStorage.Close()
+	tc.eng.Close()
 }
 
 // mutate executes a write operation on both state and raft storage batches
@@ -714,9 +712,9 @@ func (tc *testCtx) close() {
 // string for the benefit of the datadriven test output, with explicit labels
 // for each engine.
 func (tc *testCtx) mutate(t *testing.T, write func(stateBatch, raftBatch storage.Batch)) string {
-	stateBatch := tc.stateStorage.NewBatch()
+	stateBatch := tc.eng.StateEngine().NewBatch()
 	defer stateBatch.Close()
-	raftBatch := tc.raftStorage.NewBatch()
+	raftBatch := tc.eng.LogEngine().NewBatch()
 	defer raftBatch.Close()
 
 	write(stateBatch, raftBatch)
