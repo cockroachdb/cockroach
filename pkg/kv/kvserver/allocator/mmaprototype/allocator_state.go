@@ -464,32 +464,6 @@ func (i ignoreLevel) String() string {
 // is the possibility that will result in more range movement until we reach
 // the goal state, but so be it.
 
-// formatCandidatesLog builds a redactable log string summarizing the given
-// candidates. Returns "" when verbose logging at level 2 is not enabled,
-// allowing callers to skip the log call entirely.
-func formatCandidatesLog(
-	ctx context.Context, candidates []candidateInfo, overloadedDim LoadDimension,
-) redact.RedactableString {
-	if !log.ExpensiveLogEnabled(ctx, 2) {
-		return ""
-	}
-	var buf redact.StringBuilder
-	for _, c := range candidates {
-		if overloadedDim != NumLoadDimensions {
-			buf.Printf(
-				" s%v(SLS:%v, overloadedDimLoadSummary:%v)",
-				c.StoreID, c.sls, c.dimSummary[overloadedDim],
-			)
-		} else {
-			buf.Printf(" s%v(SLS:%v)", c.StoreID, c.storeLoadSummary)
-		}
-	}
-	if len(candidates) > 0 {
-		buf.Printf(", overloadedDim:%v", overloadedDim)
-	}
-	return buf.RedactableString()
-}
-
 // In the set of candidates it is possible that some are overloaded, or have
 // too many pending changes. It divides them into sets with equal diversity
 // score and sorts such that the set with higher diversity score is considered
@@ -801,6 +775,32 @@ func sortTargetCandidateSetAndPick(
 			cands.candidates[j].sls, ignoreLevel))
 	}
 	return cands.candidates[j].StoreID
+}
+
+// formatCandidatesLog builds a redactable log string summarizing the given
+// candidates. Returns "" when verbose logging at level 2 is not enabled,
+// allowing callers to skip the log call entirely.
+func formatCandidatesLog(
+	ctx context.Context, candidates []candidateInfo, overloadedDim LoadDimension,
+) redact.RedactableString {
+	if !log.ExpensiveLogEnabled(ctx, 2) {
+		return ""
+	}
+	var buf redact.StringBuilder
+	for _, c := range candidates {
+		if overloadedDim != NumLoadDimensions {
+			buf.Printf(
+				" s%v(SLS:%v, overloadedDimLoadSummary:%v)",
+				c.StoreID, c.sls, c.dimSummary[overloadedDim],
+			)
+		} else {
+			buf.Printf(" s%v(SLS:%v)", c.StoreID, c.storeLoadSummary)
+		}
+	}
+	if len(candidates) > 0 {
+		buf.Printf(", overloadedDim:%v", overloadedDim)
+	}
+	return buf.RedactableString()
 }
 
 // ensureAnalyzedConstraints ensures that the constraints field of rangeState is
