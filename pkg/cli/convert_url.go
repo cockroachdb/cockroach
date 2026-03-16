@@ -9,9 +9,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
+	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/ttycolor"
 	"github.com/spf13/cobra"
 )
@@ -22,8 +24,9 @@ var convertURLCmd = &cobra.Command{
   convert-url --url postgres://root@localhost:26257/defaultdb
 
   convert-url "postgresql://example.com?sslcert=certs%2Fclient.root.crt&sslkey=certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=certs%2Fca.crt"
-`,
 
+  convert-url --url postgres://localhost --user root --password secret --database mydb --cluster app --certs-dir certs --inline
+	`,
 	Short: "convert a SQL connection string for use with various client drivers",
 	Args:  cobra.NoArgs,
 	RunE:  clierrorplus.MaybeDecorateError(runConvertURL),
@@ -43,13 +46,51 @@ func runConvertURL(cmd *cobra.Command, _ []string) error {
 			return err
 		}
 	}
+	if convertCtx.database != "" {
+		u.WithDatabase(convertCtx.database)
+	}
+	if convertCtx.username != "" {
+		u.WithUsername(convertCtx.username)
+	}
+	if convertCtx.password != "" {
+		u.WithAuthn(pgurl.AuthnPassword(true, convertCtx.password))
+	}
+	if convertCtx.sslInline {
+		if err := u.SetOption("sslinline", "true"); err != nil {
+			return err
+		}
+	}
+	if convertCtx.cluster != "" {
+		if err := u.SetOption("options", "-ccluster="+convertCtx.cluster); err != nil {
+			return err
+		}
+	}
+	// If no username/database were specified in the options, and the URL didn't
+	// specify them either, we set some sensible defaults.
 	u.
 		WithDefaultUsername(username.RootUser).
 		WithDefaultDatabase(catalogkeys.DefaultDatabaseName).
 		WithDefaultHost("localhost").
 		WithDefaultPort(cliCtx.clientOpts.ServerPort)
 
+	// Since the certificate paths are derived from the username, we need to set
+	// it after the username defaults.
+	if err := setURLCertOptions(u); err != nil {
+		return errors.Wrap(err, "cannot load certificates")
+	}
+
 	if err := u.Validate(); err != nil {
+		return err
+	}
+
+	return displayConvertedURL(u)
+}
+
+func displayConvertedURL(u *pgurl.URL) error {
+	// We perform the CRDB conversion first, as this could fail and we do not
+	// want to print to stdout if there is an error.
+	crdbURL, err := u.ToCRDB()
+	if err != nil {
 		return err
 	}
 
@@ -68,6 +109,65 @@ func runConvertURL(cmd *cobra.Command, _ []string) error {
 	fmt.Printf("# Connection URL for JDBC (%[1]sJava%[2]s and %[1]sJVM%[2]s-based languages):\n", yc, rc)
 	fmt.Println(u.ToJDBC())
 	fmt.Println()
+
+	fmt.Printf("# Direct URL to %[1]sCockroachDB%[2]s:\n", yc, rc)
+	fmt.Println(crdbURL)
+
+	return nil
+}
+
+// setURLCertOptions modifies the given URL to include any SSL-options that can
+// be resolved from the command-line options.
+func setURLCertOptions(u *pgurl.URL) error {
+	sqlUser, err := username.MakeSQLUsernameFromPreNormalizedStringChecked(u.GetUsername())
+	if err != nil {
+		return err
+	}
+
+	var sslmode string
+	caCertPath := convertCtx.caCertPath
+	certPath := convertCtx.certPath
+	keyPath := convertCtx.keyPath
+
+	if convertCtx.certsDir != "" {
+		cm, err := security.NewCertificateManager(convertCtx.certsDir, security.CommandTLSSettings{})
+		if err != nil {
+			return err
+		}
+		if caCertPath == "" {
+			caCertPath = cm.CACertPath()
+		}
+		if certPath == "" {
+			certPath = cm.ClientCertPath(sqlUser)
+		}
+		if keyPath == "" {
+			keyPath = cm.ClientKeyPath(sqlUser)
+		}
+	}
+	if caCertPath != "" {
+		sslmode = "verify-full"
+	}
+
+	if caCertPath != "" {
+		if err := u.SetOption("sslrootcert", caCertPath); err != nil {
+			return err
+		}
+	}
+	if certPath != "" {
+		if err := u.SetOption("sslcert", certPath); err != nil {
+			return err
+		}
+	}
+	if keyPath != "" {
+		if err := u.SetOption("sslkey", keyPath); err != nil {
+			return err
+		}
+	}
+	if sslmode != "" {
+		if err := u.SetOption("sslmode", sslmode); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

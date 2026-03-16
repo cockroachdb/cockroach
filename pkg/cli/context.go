@@ -640,8 +640,19 @@ func setSqlfmtContextDefaults() {
 	sqlfmtCtx.execStmts = nil
 }
 
+// convertCtx captures the command-line parameters of the `convert-url` command.
+// See below for defaults.
 var convertCtx struct {
-	url string
+	url        string
+	sslInline  bool
+	database   string
+	username   string
+	password   string
+	cluster    string
+	certsDir   string
+	caCertPath string
+	certPath   string
+	keyPath    string
 }
 
 // setConvContextDefaults set the default values in convertCtx.  This
@@ -649,6 +660,15 @@ var convertCtx struct {
 // test that exercises command-line parsing.
 func setConvContextDefaults() {
 	convertCtx.url = ""
+	convertCtx.sslInline = false
+	convertCtx.database = ""
+	convertCtx.username = ""
+	convertCtx.password = ""
+	convertCtx.cluster = ""
+	convertCtx.certsDir = ""
+	convertCtx.caCertPath = ""
+	convertCtx.certPath = ""
+	convertCtx.keyPath = ""
 }
 
 // demoCtx captures the command-line parameters of the `demo` command.

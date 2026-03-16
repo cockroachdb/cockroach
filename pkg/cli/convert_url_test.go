@@ -5,6 +5,11 @@
 
 package cli
 
+import (
+	"fmt"
+	"os"
+)
+
 func Example_convert_url() {
 	c := NewCLITest(TestCLIParams{
 		NoServer: true,
@@ -12,7 +17,15 @@ func Example_convert_url() {
 	defer c.Cleanup()
 
 	c.RunWithArgs([]string{`convert-url`})
-	c.RunWithArgs([]string{`convert-url`, `--url`, `postgres://foo@bar`})
+	c.RunWithArgs([]string{`convert-url`, `--url`, `postgres://foo@bar`, `--cluster`, `app`})
+
+	// Flag overrides take precedence over URL values.
+	c.RunWithArgs([]string{
+		`convert-url`,
+		`--url`, `postgres://foo@qux/origdb`,
+		`--user`, `baz`,
+		`--database`, `newdb`,
+	})
 
 	// Output:
 	// convert-url
@@ -27,14 +40,175 @@ func Example_convert_url() {
 	// # Connection URL for JDBC (Java and JVM-based languages):
 	// jdbc:postgresql://localhost:26257/defaultdb?user=root
 	//
-	// convert-url --url postgres://foo@bar
+	// # Direct URL to CockroachDB:
+	// postgresql://root@localhost:26257/defaultdb
+	// convert-url --url postgres://foo@bar --cluster app
 	// # Connection URL for libpq (C/C++), psycopg (Python), lib/pq & pgx (Go), node-postgres (JS) and most pq-compatible drivers:
-	// postgresql://foo@bar:26257/defaultdb
+	// postgresql://foo@bar:26257/defaultdb?options=-ccluster%3Dapp
 	//
 	// # Connection DSN (Data Source Name) for Postgres drivers that accept DSNs - most drivers and also ODBC:
-	// database=defaultdb user=foo host=bar port=26257
+	// database=defaultdb user=foo host=bar port=26257 options=-ccluster=app
 	//
 	// # Connection URL for JDBC (Java and JVM-based languages):
-	// jdbc:postgresql://bar:26257/defaultdb?user=foo
+	// jdbc:postgresql://bar:26257/defaultdb?options=-ccluster%3Dapp&user=foo
 	//
+	// # Direct URL to CockroachDB:
+	// postgresql://foo@bar:26257/defaultdb?options=-ccluster%3Dapp
+	// convert-url --url postgres://foo@qux/origdb --user baz --database newdb
+	// # Connection URL for libpq (C/C++), psycopg (Python), lib/pq & pgx (Go), node-postgres (JS) and most pq-compatible drivers:
+	// postgresql://baz@qux:26257/newdb
+	//
+	// # Connection DSN (Data Source Name) for Postgres drivers that accept DSNs - most drivers and also ODBC:
+	// database=newdb user=baz host=qux port=26257
+	//
+	// # Connection URL for JDBC (Java and JVM-based languages):
+	// jdbc:postgresql://qux:26257/newdb?user=baz
+	//
+	// # Direct URL to CockroachDB:
+	// postgresql://baz@qux:26257/newdb
+}
+
+func Example_convert_url_with_inline() {
+	c := NewCLITest(TestCLIParams{
+		NoServer: true,
+	})
+	defer c.Cleanup()
+
+	cleanup, err := setupTestCertsDir()
+	if err != nil {
+		fmt.Println("could not set up test certs directory:", err)
+		return
+	}
+	defer cleanup()
+
+	// Happy path
+	c.RunWithArgs([]string{
+		`convert-url`,
+		`--url`, `postgres://bar`,
+		`--certs-dir`, `certs/`,
+		`--user`, `foo`,
+		`--password`, `secret`,
+		`--database`, `mydb`,
+		`--cluster`, `app`,
+		`--inline`,
+	})
+
+	// Output:
+	// convert-url --url postgres://bar --certs-dir certs/ --user foo --password secret --database mydb --cluster app --inline
+	// # Connection URL for libpq (C/C++), psycopg (Python), lib/pq & pgx (Go), node-postgres (JS) and most pq-compatible drivers:
+	// postgresql://foo:secret@bar:26257/mydb?options=-ccluster%3Dapp&sslcert=certs%2Fclient.foo.crt&sslinline=true&sslkey=certs%2Fclient.foo.key&sslmode=verify-full&sslrootcert=certs%2Fca.crt
+	//
+	// # Connection DSN (Data Source Name) for Postgres drivers that accept DSNs - most drivers and also ODBC:
+	// database=mydb user=foo host=bar port=26257 password=secret sslcert=certs/client.foo.crt sslkey=certs/client.foo.key sslrootcert=certs/ca.crt sslmode=verify-full options=-ccluster=app sslinline=true
+	//
+	// # Connection URL for JDBC (Java and JVM-based languages):
+	// jdbc:postgresql://bar:26257/mydb?options=-ccluster%3Dapp&password=secret&sslcert=certs%2Fclient.foo.crt&sslinline=true&sslkey=certs%2Fclient.foo.key&sslmode=verify-full&sslrootcert=certs%2Fca.crt&user=foo
+	//
+	// # Direct URL to CockroachDB:
+	// postgresql://foo:secret@bar:26257/mydb?options=-ccluster%3Dapp&sslcert=clientCertContents&sslinline=true&sslkey=clientKeyContents&sslmode=verify-full&sslrootcert=caCertContents
+}
+
+func Example_convert_url_with_certs() {
+	c := NewCLITest(TestCLIParams{
+		NoServer: true,
+	})
+	defer c.Cleanup()
+
+	cleanup, err := setupTestCertsDir()
+	if err != nil {
+		fmt.Println("could not set up test certs directory:", err)
+		return
+	}
+	defer cleanup()
+
+	// Individual cert flags without --certs-dir.
+	c.RunWithArgs([]string{
+		`convert-url`,
+		`--url`, `postgres://foo@bar`,
+		`--ca-cert`, `path/to/ca.crt`,
+		`--cert`, `path/to/client.crt`,
+		`--key`, `path/to/client.key`,
+	})
+
+	// --certs-dir with explicit --ca-cert override.
+	c.RunWithArgs([]string{
+		`convert-url`,
+		`--url`, `postgres://bar`,
+		`--user`, `foo`,
+		`--certs-dir`, `certs/`,
+		`--ca-cert`, `custom/ca.crt`,
+	})
+
+	// Output:
+	// convert-url --url postgres://foo@bar --ca-cert path/to/ca.crt --cert path/to/client.crt --key path/to/client.key
+	// # Connection URL for libpq (C/C++), psycopg (Python), lib/pq & pgx (Go), node-postgres (JS) and most pq-compatible drivers:
+	// postgresql://foo@bar:26257/defaultdb?sslcert=path%2Fto%2Fclient.crt&sslkey=path%2Fto%2Fclient.key&sslmode=verify-full&sslrootcert=path%2Fto%2Fca.crt
+	//
+	// # Connection DSN (Data Source Name) for Postgres drivers that accept DSNs - most drivers and also ODBC:
+	// database=defaultdb user=foo host=bar port=26257 sslcert=path/to/client.crt sslkey=path/to/client.key sslrootcert=path/to/ca.crt sslmode=verify-full
+	//
+	// # Connection URL for JDBC (Java and JVM-based languages):
+	// jdbc:postgresql://bar:26257/defaultdb?sslcert=path%2Fto%2Fclient.crt&sslkey=path%2Fto%2Fclient.key&sslmode=verify-full&sslrootcert=path%2Fto%2Fca.crt&user=foo
+	//
+	// # Direct URL to CockroachDB:
+	// postgresql://foo@bar:26257/defaultdb?sslcert=path%2Fto%2Fclient.crt&sslkey=path%2Fto%2Fclient.key&sslmode=verify-full&sslrootcert=path%2Fto%2Fca.crt
+	// convert-url --url postgres://bar --user foo --certs-dir certs/ --ca-cert custom/ca.crt
+	// # Connection URL for libpq (C/C++), psycopg (Python), lib/pq & pgx (Go), node-postgres (JS) and most pq-compatible drivers:
+	// postgresql://foo@bar:26257/defaultdb?sslcert=certs%2Fclient.foo.crt&sslkey=certs%2Fclient.foo.key&sslmode=verify-full&sslrootcert=custom%2Fca.crt
+	//
+	// # Connection DSN (Data Source Name) for Postgres drivers that accept DSNs - most drivers and also ODBC:
+	// database=defaultdb user=foo host=bar port=26257 sslcert=certs/client.foo.crt sslkey=certs/client.foo.key sslrootcert=custom/ca.crt sslmode=verify-full
+	//
+	// # Connection URL for JDBC (Java and JVM-based languages):
+	// jdbc:postgresql://bar:26257/defaultdb?sslcert=certs%2Fclient.foo.crt&sslkey=certs%2Fclient.foo.key&sslmode=verify-full&sslrootcert=custom%2Fca.crt&user=foo
+	//
+	// # Direct URL to CockroachDB:
+	// postgresql://foo@bar:26257/defaultdb?sslcert=certs%2Fclient.foo.crt&sslkey=certs%2Fclient.foo.key&sslmode=verify-full&sslrootcert=custom%2Fca.crt
+}
+
+// setupTestCertsDir sets up a temp working directory with test certs.
+func setupTestCertsDir() (cleanup func(), retErr error) {
+	tmpdir, err := os.MkdirTemp("", "*")
+	if err != nil {
+		return nil, err
+	}
+	oldWD, err := os.Getwd()
+	if err != nil {
+		_ = os.RemoveAll(tmpdir)
+		return nil, err
+	}
+	if err := os.Chdir(tmpdir); err != nil {
+		_ = os.RemoveAll(tmpdir)
+		return nil, err
+	}
+	cleanupFn := func() {
+		if err := os.Chdir(oldWD); err != nil {
+			fmt.Println("could not restore working directory:", err)
+		}
+		if err := os.RemoveAll(tmpdir); err != nil {
+			fmt.Println("could not remove temporary directory:", err)
+		}
+	}
+	defer func() {
+		if retErr != nil {
+			cleanupFn()
+		}
+	}()
+	if err := os.Mkdir("certs", 0755); err != nil {
+		return nil, err
+	}
+	for _, f := range []struct {
+		name     string
+		contents string
+		perm     os.FileMode
+	}{
+		{"certs/ca.crt", "caCertContents", 0644},
+		{"certs/client.foo.key", "clientKeyContents", 0600},
+		{"certs/client.foo.crt", "clientCertContents", 0644},
+	} {
+		if err := os.WriteFile(f.name, []byte(f.contents), f.perm); err != nil {
+			return nil, err
+		}
+	}
+	return cleanupFn, nil
 }
