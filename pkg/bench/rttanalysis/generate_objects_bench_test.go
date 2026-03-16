@@ -7,6 +7,8 @@ package rttanalysis
 
 import "testing"
 
+// BenchmarkGenerateObjects is a benchmark for the generate_test_objects function.
+// benchmark-ci: benchtime=20x
 func BenchmarkGenerateObjects(b *testing.B) { reg.Run(b) }
 func init() {
 	// Note: we have 1 db auto-generated every time because it's just too

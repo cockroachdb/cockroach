@@ -11,6 +11,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
+// BenchmarkSystemDatabaseQueries is a benchmark for queries against system tables.
+// benchmark-ci: benchtime=20x
 func BenchmarkSystemDatabaseQueries(b *testing.B) {
 	skip.UnderShort(b, "skipping long benchmark")
 	reg.Run(b)

@@ -7,6 +7,8 @@ package rttanalysis
 
 import "testing"
 
+// BenchmarkAudit is a benchmark for audited table operations.
+// benchmark-ci: benchtime=20x
 func BenchmarkAudit(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("Audit", []RoundTripBenchTestCase{
