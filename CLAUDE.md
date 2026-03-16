@@ -103,6 +103,9 @@ compatibility issues.  See `pkg/clusterversion` for more on this.
 When adding or reviewing a newly added file with a license header the year on
 the header should be the current year.
 
+Favor modern Go idioms in new or updated code and use the standard library (e.g.
+the `slices`, `maps`, and `cmp` packages) where appropriate.
+
 ### Resources
 
 - **Main Documentation**: https://cockroachlabs.com/docs/stable/
