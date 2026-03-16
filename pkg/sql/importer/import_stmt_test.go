@@ -204,8 +204,11 @@ func TestImportDistributedMergeDuplicateDetection(t *testing.T) {
 				serverArgs.Knobs = base.TestingKnobs{
 					DistSQL: &execinfra.TestingKnobs{
 						BulkMergeTestingKnobs: &bulkmerge.TestingKnobs{
-							InjectDuplicateKey: func(iteration, maxIteration int32) bool {
-								return !injected.Swap(true)
+							InjectDuplicateKey: func(iteration, maxIteration int32) []byte {
+								if !injected.Swap(true) {
+									return []byte("injected-duplicate-value")
+								}
+								return nil
 							},
 						},
 					},
