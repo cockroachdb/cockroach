@@ -2887,6 +2887,8 @@ var builtinOidsArray = []string{
 	2932: `st_asmvt(arg1: tuple, arg2: string, arg3: int, arg4: string) -> bytes`,
 	2933: `st_asmvt(arg1: tuple, arg2: string, arg3: int, arg4: string, arg5: string) -> bytes`,
 	2934: `information_schema.crdb_set_session_variable_hint(statement_fingerprint: string, variable_name: string, variable_value: string, database: string) -> int`,
+	2935: `pg_get_triggerdef(trigger_oid: oid) -> string`,
+	2936: `pg_get_triggerdef(trigger_oid: oid, pretty_bool: bool) -> string`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
