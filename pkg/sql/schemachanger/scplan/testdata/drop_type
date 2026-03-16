@@ -57,11 +57,6 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 104
       User: root
-    *scop.RemoveEnumTypeValue
-      LogicalRepresentation: a
-      PhysicalRepresentation:
-      - 128
-      TypeID: 104
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -80,6 +75,11 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 105
       User: root
+    *scop.RemoveEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 104
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
     [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100, IntValue: 101}, ABSENT], ABSENT] -> PUBLIC
@@ -151,11 +151,6 @@ PreCommitPhase stage 2 of 2 with 19 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 104
       User: root
-    *scop.RemoveEnumTypeValue
-      LogicalRepresentation: a
-      PhysicalRepresentation:
-      - 128
-      TypeID: 104
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 100
@@ -174,6 +169,11 @@ PreCommitPhase stage 2 of 2 with 19 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 105
       User: root
+    *scop.RemoveEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true

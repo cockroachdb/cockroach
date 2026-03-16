@@ -1001,11 +1001,6 @@ StatementPhase stage 1 of 1 with 326 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 115
       User: root
-    *scop.RemoveEnumTypeValue
-      LogicalRepresentation: a
-      PhysicalRepresentation:
-      - 128
-      TypeID: 115
     *scop.NotImplementedForPublicObjects
       DescID: 116
       ElementType: scpb.Owner
@@ -1250,6 +1245,11 @@ StatementPhase stage 1 of 1 with 326 MutationType ops
         DescriptorID: 115
         Name: typ
         SchemaID: 106
+    *scop.RemoveEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 115
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 104
@@ -2618,11 +2618,6 @@ PreCommitPhase stage 2 of 2 with 342 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 115
       User: root
-    *scop.RemoveEnumTypeValue
-      LogicalRepresentation: a
-      PhysicalRepresentation:
-      - 128
-      TypeID: 115
     *scop.NotImplementedForPublicObjects
       DescID: 116
       ElementType: scpb.Owner
@@ -2869,6 +2864,11 @@ PreCommitPhase stage 2 of 2 with 342 MutationType ops
         DescriptorID: 115
         Name: typ
         SchemaID: 106
+    *scop.RemoveEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 115
     *scop.DrainDescriptorName
       Namespace:
         DatabaseID: 104

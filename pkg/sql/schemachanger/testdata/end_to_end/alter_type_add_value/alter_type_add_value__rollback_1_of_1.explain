@@ -1,0 +1,21 @@
+/* setup */
+CREATE TYPE salmon AS ENUM ('sockeye', 'king');
+
+/* test */
+ALTER TYPE salmon ADD VALUE 'atlantic';
+EXPLAIN (DDL) rollback at post-commit stage 1 of 1;
+----
+Schema change plan for rolling back ALTER TYPE defaultdb.public.salmon ADD VALUE ‹'atlantic'›;
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 1 element transitioning toward ABSENT
+      │    │    └── WRITE_ONLY → VALIDATED EnumTypeValue:{DescID: 104 (salmon), Name: "atlantic"}
+      │    └── 1 Validation operation
+      │         └── ValidateEnumTypeValueRemoval {"LogicalRepresentation":"atlantic","PhysicalRepresentation":"wA==","TypeID":104}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward ABSENT
+           │    └── VALIDATED → ABSENT EnumTypeValue:{DescID: 104 (salmon), Name: "atlantic"}
+           └── 3 Mutation operations
+                ├── RemoveEnumTypeValue {"LogicalRepresentation":"atlantic","PhysicalRepresentation":"wA==","TypeID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

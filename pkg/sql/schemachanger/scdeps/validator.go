@@ -60,20 +60,33 @@ type ValidateConstraintFn func(
 	execOverride sessiondata.InternalExecutorOverride,
 ) error
 
+// ValidateEnumTypeValueRemovalFn callback function for validating
+// that an enum value is safe to remove.
+type ValidateEnumTypeValueRemovalFn func(
+	ctx context.Context,
+	codec keys.SQLCodec,
+	typeDesc catalog.TypeDescriptor,
+	physicalRep []byte,
+	logicalRep string,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
+	execOverride sessiondata.InternalExecutorOverride,
+) error
+
 // NewFakeSessionDataFn callback function used to create session data
 // for the internal executor.
 type NewFakeSessionDataFn func(ctx context.Context, settings *cluster.Settings, opName redact.SafeString) *sessiondata.SessionData
 
 type validator struct {
-	db                         *kv.DB
-	codec                      keys.SQLCodec
-	settings                   *cluster.Settings
-	ieFactory                  isql.DB
-	validateForwardIndexes     ValidateForwardIndexesFn
-	validateInvertedIndexes    ValidateInvertedIndexesFn
-	validateConstraint         ValidateConstraintFn
-	newFakeSessionData         NewFakeSessionDataFn
-	protectedTimestampProvider scexec.ProtectedTimestampManager
+	db                           *kv.DB
+	codec                        keys.SQLCodec
+	settings                     *cluster.Settings
+	ieFactory                    isql.DB
+	validateForwardIndexes       ValidateForwardIndexesFn
+	validateInvertedIndexes      ValidateInvertedIndexesFn
+	validateConstraint           ValidateConstraintFn
+	validateEnumTypeValueRemoval ValidateEnumTypeValueRemovalFn
+	newFakeSessionData           NewFakeSessionDataFn
+	protectedTimestampProvider   scexec.ProtectedTimestampManager
 }
 
 // ValidateForwardIndexes checks that the indexes have entries for all the rows.
@@ -120,6 +133,19 @@ func (vd validator) ValidateConstraint(
 		vd.makeHistoricalInternalExecTxnRunner(), override)
 }
 
+func (vd validator) ValidateEnumTypeValueRemoval(
+	ctx context.Context,
+	typeDesc catalog.TypeDescriptor,
+	physicalRep []byte,
+	logicalRep string,
+	override sessiondata.InternalExecutorOverride,
+) error {
+	return vd.validateEnumTypeValueRemoval(
+		ctx, vd.codec, typeDesc, physicalRep, logicalRep,
+		vd.makeHistoricalInternalExecTxnRunner(), override,
+	)
+}
+
 // makeHistoricalInternalExecTxnRunner creates a new transaction runner which
 // always runs at the same time and that time is the current time as of when
 // this constructor was called.
@@ -148,17 +174,19 @@ func NewValidator(
 	validateForwardIndexes ValidateForwardIndexesFn,
 	validateInvertedIndexes ValidateInvertedIndexesFn,
 	validateCheckConstraint ValidateConstraintFn,
+	validateEnumTypeValueRemoval ValidateEnumTypeValueRemovalFn,
 	newFakeSessionData NewFakeSessionDataFn,
 ) scexec.Validator {
 	return validator{
-		db:                         db,
-		codec:                      codec,
-		settings:                   settings,
-		ieFactory:                  ieFactory,
-		validateForwardIndexes:     validateForwardIndexes,
-		validateInvertedIndexes:    validateInvertedIndexes,
-		validateConstraint:         validateCheckConstraint,
-		newFakeSessionData:         newFakeSessionData,
-		protectedTimestampProvider: protectedTimestampProvider,
+		db:                           db,
+		codec:                        codec,
+		settings:                     settings,
+		ieFactory:                    ieFactory,
+		validateForwardIndexes:       validateForwardIndexes,
+		validateInvertedIndexes:      validateInvertedIndexes,
+		validateConstraint:           validateCheckConstraint,
+		validateEnumTypeValueRemoval: validateEnumTypeValueRemoval,
+		newFakeSessionData:           newFakeSessionData,
+		protectedTimestampProvider:   protectedTimestampProvider,
 	}
 }

@@ -503,6 +503,16 @@ func (noopValidator) ValidateConstraint(
 	return nil
 }
 
+func (noopValidator) ValidateEnumTypeValueRemoval(
+	ctx context.Context,
+	typeDesc catalog.TypeDescriptor,
+	physicalRep []byte,
+	logicalRep string,
+	override sessiondata.InternalExecutorOverride,
+) error {
+	return nil
+}
+
 type noopStatsReferesher struct{}
 
 var _ scexec.StatsRefresher = noopStatsReferesher{}

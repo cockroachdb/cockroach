@@ -1141,6 +1141,35 @@ func (t *typeSchemaChanger) canRemoveEnumValue(
 	return t.canRemoveEnumValueFromArrayUsages(ctx, arrayTypeDesc, member, txn, descsCol)
 }
 
+// ValidateEnumValueRemoval checks that the given enum value is unused and safe to remove.
+func ValidateEnumValueRemoval(
+	ctx context.Context,
+	codec keys.SQLCodec,
+	typeDesc catalog.TypeDescriptor,
+	physicalRep []byte,
+	logicalRep string,
+	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
+	override sessiondata.InternalExecutorOverride,
+) error {
+	member := descpb.TypeDescriptor_EnumMember{
+		PhysicalRepresentation: physicalRep,
+		LogicalRepresentation:  logicalRep,
+		Capability:             descpb.TypeDescriptor_EnumMember_READ_ONLY,
+		Direction:              descpb.TypeDescriptor_EnumMember_REMOVE,
+	}
+	return runHistoricalTxn.Exec(ctx, func(ctx context.Context, txn descs.Txn) error {
+		mutableType, err := txn.Descriptors().MutableByID(txn.KV()).Type(ctx, typeDesc.GetID())
+		if err != nil {
+			return err
+		}
+		t := &typeSchemaChanger{
+			typeID:  typeDesc.GetID(),
+			execCfg: &ExecutorConfig{Codec: codec},
+		}
+		return t.canRemoveEnumValue(ctx, mutableType, txn, &member, txn.Descriptors())
+	})
+}
+
 // findUsagesOfEnumValueInPartitioning is a recursive function to explore all of
 // the values used in partitioning and its subpartitions. The fakePrefixDatums
 // should be nil when first calling this function. They are needed to support

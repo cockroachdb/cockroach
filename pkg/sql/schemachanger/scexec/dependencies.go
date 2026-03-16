@@ -220,7 +220,8 @@ type Merger interface {
 	MergeIndexes(context.Context, *jobs.Job, MergeProgress, BackfillerProgressWriter, catalog.TableDescriptor) error
 }
 
-// Validator provides interfaces that allow indexes and check constraints to be validated.
+// Validator provides interfaces that allow indexes, check constraints,
+// and enum type values to be validated.
 type Validator interface {
 	ValidateForwardIndexes(
 		ctx context.Context,
@@ -243,6 +244,14 @@ type Validator interface {
 		tbl catalog.TableDescriptor,
 		constraint catalog.Constraint,
 		indexIDForValidation descpb.IndexID,
+		override sessiondata.InternalExecutorOverride,
+	) error
+
+	ValidateEnumTypeValueRemoval(
+		ctx context.Context,
+		typeDesc catalog.TypeDescriptor,
+		physicalRep []byte,
+		logicalRep string,
 		override sessiondata.InternalExecutorOverride,
 	) error
 }

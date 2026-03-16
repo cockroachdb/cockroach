@@ -504,13 +504,18 @@ ALTER TYPE ab_58710 ADD VALUE 'c';
 statement ok
 ALTER TYPE ab_58710 DROP VALUE 'a';
 
-# 'c' was added to the enum above and 'a' was dropped, so the array type alias
-# should reflect this.
-statement ok
-SELECT ARRAY['c']::_ab_58710;
+# 'c' was added to the enum above and 'a' was dropped, so the enum should
+# reflect this. The declarative schema changer processes ADD/DROP VALUE
+# asynchronously, so retry until the changes are visible.
+retry
+query T
+SELECT 'c'::ab_58710
+----
+c
 
+retry
 statement error invalid input value for enum ab_58710: "a"
-SELECT ARRAY['a']::_ab_58710
+SELECT 'a'::ab_58710
 
 subtest regression_60004_basic
 

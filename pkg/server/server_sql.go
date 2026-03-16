@@ -1259,6 +1259,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		sql.ValidateForwardIndexes,
 		sql.ValidateInvertedIndexes,
 		sql.ValidateConstraint,
+		sql.ValidateEnumValueRemoval,
 		sql.NewInternalSessionData,
 	)
 
