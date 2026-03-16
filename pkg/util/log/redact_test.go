@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
@@ -386,6 +388,84 @@ func TestHashRedaction(t *testing.T) {
 
 		require.Equal(t, "user=‹×›", hashAlice())
 	})
+}
+
+// TestHashRedactionPerSink verifies that hash-based redaction respects
+// per-sink redaction settings: a sink with redact=true should hash
+// HashString values while a sink with redact=false should show cleartext.
+func TestHashRedactionPerSink(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	redact.DisableHashing()
+	t.Cleanup(redact.DisableHashing)
+
+	s := ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+
+	// Configure two file sinks:
+	//   "redacted" on SESSIONS channel with redact=true
+	//   "unredacted" on OPS channel with redact=false
+	cfg := logconfig.DefaultConfig()
+	bt, bf := true, false
+	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
+		"redacted": {
+			FileDefaults: logconfig.FileDefaults{
+				CommonSinkConfig: logconfig.CommonSinkConfig{
+					Redact:     &bt,
+					Redactable: &bt,
+				},
+			},
+			Channels: logconfig.SelectChannels(channel.SESSIONS),
+		},
+		"unredacted": {
+			FileDefaults: logconfig.FileDefaults{
+				CommonSinkConfig: logconfig.CommonSinkConfig{
+					Redact:     &bf,
+					Redactable: &bt,
+				},
+			},
+			Channels: logconfig.SelectChannels(channel.OPS),
+		},
+	}
+	cfg.Redaction.Hashing.Enabled = true
+	cfg.Redaction.Hashing.Salt = "test-salt"
+	if err := cfg.Validate(&s.logDir); err != nil {
+		t.Fatal(err)
+	}
+
+	cleanup, err := ApplyConfigForReconfig(cfg, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
+	// Log the same HashString value to both channels.
+	Sessions.Infof(context.Background(), "user=%s", redact.HashString("alice"))
+	Ops.Infof(context.Background(), "user=%s", redact.HashString("alice"))
+
+	FlushFiles()
+
+	// Read back the redacted sink — should contain a hash, not cleartext.
+	redactedLogger := logging.getLogger(channel.SESSIONS)
+	redactedFile := redactedLogger.getFileSink().getFileName(t)
+	redactedContents, err := os.ReadFile(redactedFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.NotContains(t, string(redactedContents), "alice",
+		"redacted sink should not contain cleartext")
+	require.Contains(t, string(redactedContents), "user=‹",
+		"redacted sink should contain hashed value in markers")
+
+	// Read back the unredacted sink — should contain cleartext.
+	unredactedLogger := logging.getLogger(channel.OPS)
+	unredactedFile := unredactedLogger.getFileSink().getFileName(t)
+	unredactedContents, err := os.ReadFile(unredactedFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.Contains(t, string(unredactedContents), "alice",
+		"unredacted sink should contain cleartext")
 }
 
 func BenchmarkDefaultSafeRedaction(b *testing.B) {

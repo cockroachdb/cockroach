@@ -173,7 +173,7 @@ func (c *conn) handleAuthentication(
 			c.sessionArgs.SessionDefaults["database"],
 		)
 	if err != nil {
-		log.Dev.Warningf(ctx, "user retrieval failed for user=%q: %+v", dbUser, err)
+		log.Dev.Warningf(ctx, "user retrieval failed for user=%q: %+v", redact.HashString(dbUser.Normalized()), err)
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
 		return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
@@ -182,7 +182,7 @@ func (c *conn) handleAuthentication(
 		if behaviors.IsProvisioningEnabled(execCfg.Settings, hbaEntry.Method.String()) {
 			err := behaviors.MaybeProvisionUser(ctx, execCfg.Settings, hbaEntry.Method.String())
 			if err != nil {
-				log.Dev.Warningf(ctx, "user provisioning failed for user=%q: %+v", dbUser, err)
+				log.Dev.Warningf(ctx, "user provisioning failed for user=%q: %+v", redact.HashString(dbUser.Normalized()), err)
 				ac.LogAuthFailed(ctx, eventpb.AuthFailReason_PROVISIONING_ERROR, err)
 				return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 			}
@@ -194,7 +194,7 @@ func (c *conn) handleAuthentication(
 					c.sessionArgs.SessionDefaults["database"],
 				)
 			if err != nil {
-				log.Dev.Warningf(ctx, "user retrieval failed for user=%q: %+v", dbUser, err)
+				log.Dev.Warningf(ctx, "user retrieval failed for user=%q: %+v", redact.HashString(dbUser.Normalized()), err)
 				ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
 				return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 			}
@@ -251,11 +251,11 @@ func (c *conn) handleAuthentication(
 		for _, setting := range settingEntry.Settings {
 			keyVal := strings.SplitN(setting, "=", 2)
 			if len(keyVal) != 2 {
-				log.Ops.Warningf(ctx, "%s has malformed default setting: %q", dbUser, setting)
+				log.Ops.Warningf(ctx, "%s has malformed default setting: %q", redact.HashString(dbUser.Normalized()), setting)
 				continue
 			}
 			if err := sql.CheckSessionVariableValueValid(ctx, execCfg.Settings, keyVal[0], keyVal[1]); err != nil {
-				log.Ops.Warningf(ctx, "%s has invalid default setting: %v", dbUser, err)
+				log.Ops.Warningf(ctx, "%s has invalid default setting: %v", redact.HashString(dbUser.Normalized()), err)
 				continue
 			}
 			if _, ok := c.sessionArgs.SessionDefaults[keyVal[0]]; !ok {
