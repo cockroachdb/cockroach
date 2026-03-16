@@ -389,6 +389,21 @@ func (b *Batch[B]) WagWriter() *wag.Writer {
 	return &b.w
 }
 
+// TestingFlushWAG flushes the WAG node to the Raft() batch and empties the
+// staged WAG events. The batch can be then committed with the Commit method.
+//
+// Used only in tests for introspecting into the Raft() batch before the commit.
+func (b *Batch[B]) TestingFlushWAG() error {
+	if !b.separated() || b.w.Empty() {
+		return nil
+	}
+	if err := b.w.Flush(b.Raft(), b.state.Repr()); err != nil {
+		return err
+	}
+	b.w.Clear()
+	return nil
+}
+
 // Commit commits the batch to storage.
 //
 // The sync flag is one-way. If true, the sync is guaranteed. If false, syncing
