@@ -81,15 +81,14 @@ func IsDescriptor(e scpb.Element) bool {
 }
 
 func isSubjectTo2VersionInvariant(e scpb.Element) bool {
-	// TODO(ajwerner): This should include constraints and enum values but it
-	// currently does not because we do not support dropping them unless we're
-	// dropping the descriptor and we do not support adding them.
-	if isIndex(e) || isColumn(e) {
+	if isIndex(e) ||
+		isColumn(e) ||
+		isValidatedNonIndexBackedConstraint(e) {
 		return true
 	}
+
 	switch e.(type) {
-	case *scpb.CheckConstraint, *scpb.UniqueWithoutIndexConstraint, *scpb.ForeignKeyConstraint,
-		*scpb.ColumnNotNull, *scpb.TableSchemaLocked:
+	case *scpb.TableSchemaLocked:
 		return true
 	}
 	return false
@@ -298,10 +297,20 @@ func isConstraint(e scpb.Element) bool {
 
 // isNonIndexBackedConstraint returns true if `e` is a non-index-backed constraint.
 func isNonIndexBackedConstraint(e scpb.Element) bool {
+	return isValidatedNonIndexBackedConstraint(e) || isUnvalidatedConstraint(e)
+}
+
+func isValidatedNonIndexBackedConstraint(e scpb.Element) bool {
 	switch e.(type) {
 	case *scpb.CheckConstraint, *scpb.UniqueWithoutIndexConstraint, *scpb.ForeignKeyConstraint,
 		*scpb.ColumnNotNull:
 		return true
+	}
+	return false
+}
+
+func isUnvalidatedConstraint(e scpb.Element) bool {
+	switch e.(type) {
 	case *scpb.CheckConstraintUnvalidated, *scpb.UniqueWithoutIndexConstraintUnvalidated,
 		*scpb.ForeignKeyConstraintUnvalidated:
 		return true
