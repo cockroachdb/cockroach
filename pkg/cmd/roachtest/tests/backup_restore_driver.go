@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/version"
 )
 
 const (
@@ -214,6 +213,9 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 // that the contents after the restore match the contents when the backup was
 // taken. For cluster level backups, the cluster needs to be wiped before
 // verifyBackupCollection is called or else the cluster restore will fail.
+//
+// NB: Deprecated in favor of using Restore/RestoreSync and ValidateRestore
+// directly.
 func (d *BackupRestoreTestDriver) verifyBackupCollection(
 	ctx context.Context,
 	l *logger.Logger,
@@ -223,95 +225,11 @@ func (d *BackupRestoreTestDriver) verifyBackupCollection(
 	internalSystemJobs bool,
 	mvHelper *mixedversion.Helper,
 ) error {
-	restoredTables, _, err := d.runRestore(ctx, l, rng, bc, checkFiles, internalSystemJobs, mvHelper)
+	rj, err := d.RestoreSync(ctx, l, rng, bc, checkFiles, internalSystemJobs, mvHelper)
 	if err != nil {
 		return fmt.Errorf("error restoring backup: %w", err)
 	}
-	restoredContents, err := d.getRestoredContents(
-		ctx, l, rng, restoredTables, bc, internalSystemJobs,
-	)
-	if err != nil {
-		return err
-	}
-
-	for j, contents := range bc.contents {
-		table := bc.tables[j]
-		restoredTableContents := restoredContents[j]
-		l.Printf("%s: verifying %s", bc.name, table)
-		if err := contents.ValidateRestore(ctx, l, restoredTableContents); err != nil {
-			return fmt.Errorf("backup %s: %w", bc.name, err)
-		}
-	}
-	_, db := d.testUtils.RandomDB(rng, d.testUtils.roachNodes)
-	if err := roachtestutil.CheckInvalidDescriptors(ctx, l, db); err != nil {
-		return fmt.Errorf("failed descriptor check: %w", err)
-	}
-
-	l.Printf("%s: OK", bc.name)
-	return nil
-}
-
-// runRestore runs the restore statement for the backup collection and waits for
-// a job success. It returns the tables that were restored and the database that
-// was restored into.
-func (d *BackupRestoreTestDriver) runRestore(
-	ctx context.Context,
-	l *logger.Logger,
-	rng *rand.Rand,
-	bc *backupCollection,
-	checkFiles bool,
-	internalSystemJobs bool,
-	mvHelper *mixedversion.Helper,
-) ([]string, string, error) {
-	restoreStmt, restoredTables, restoreDB := d.buildRestoreStatement(bc)
-	if _, isTableBackup := bc.btype.(*tableBackup); isTableBackup {
-		// If we are restoring a table backup , we need to create the database
-		// first.
-		if err := d.testUtils.Exec(ctx, rng, fmt.Sprintf("CREATE DATABASE %s", restoreDB)); err != nil {
-			return nil, "", fmt.Errorf("backup %s: error creating database %s: %w", bc.name, restoreDB, err)
-		}
-	}
-	// As a sanity check, make sure that a `check_files` check passes
-	// before attempting a restore.
-	if checkFiles {
-		if err := d.testUtils.checkFiles(ctx, rng, bc); err != nil {
-			return nil, "", fmt.Errorf("backup %s: check_files failed: %w", bc.name, err)
-		}
-	}
-	l.Printf("Running restore: %s", restoreStmt)
-	var jobID int
-	if err := d.testUtils.QueryRow(ctx, rng, restoreStmt).Scan(&jobID); err != nil {
-		return nil, "", fmt.Errorf("backup %s: error in restore statement: %w", bc.name, err)
-	}
-	if jobErr := d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); jobErr != nil {
-		if mvHelper == nil {
-			return nil, "", jobErr
-		}
-		v25_4 := version.MajorVersion{Year: 25, Ordinal: 4}
-		isUpgradeTo25_4 := mvHelper.System.ToVersion.Major().Equals(v25_4) &&
-			mvHelper.System.FromVersion.Major().LessThan(v25_4)
-		if !isUpgradeTo25_4 {
-			return nil, "", jobErr
-		}
-		// In the 25.4 upgrade, all descriptors are rewritten in the migration to use
-		// the new serialization format. If this upgrade occurs in the middle of the
-		// restore, we may encounter a version mismatch error. As a short-term fix for
-		// this test flake, we retry the restore if we encounter this error.
-		if !strings.Contains(jobErr.Error(), "version mismatch for descriptor") {
-			return nil, "", jobErr
-		}
-		l.Printf(
-			"encountered version mismatch error due to mixed-version upgrade, retrying restore: %v", jobErr,
-		)
-		if err := d.testUtils.QueryRow(ctx, rng, restoreStmt).Scan(&jobID); err != nil {
-			return nil, "", fmt.Errorf("backup %s: error in restore statement: %w", bc.name, err)
-		}
-		if jobErr = d.testUtils.waitForJobSuccess(ctx, l, rng, jobID, internalSystemJobs); jobErr != nil {
-			return nil, "", jobErr
-		}
-	}
-
-	return restoredTables, restoreDB, nil
+	return rj.ValidateRestore(ctx)
 }
 
 // getRestoredContents loads the contents (e.g. non system table fingerprints)
@@ -645,6 +563,144 @@ func (d *BackupRestoreTestDriver) deleteSSTFromBackupLayers(
 			)
 		}
 	}
+	return nil
+}
+
+// Restore starts a restore of the given backup collection and returns a
+// RestoreJob that can be used to wait for completion and validate the results.
+// For cluster level backups, the cluster needs to be wiped before calling
+// Restore or else the cluster restore will fail.
+func (d *BackupRestoreTestDriver) Restore(
+	ctx context.Context,
+	l *logger.Logger,
+	rng *rand.Rand,
+	bc *backupCollection,
+	checkFiles bool,
+	internalSystemJobs bool,
+	mvHelper *mixedversion.Helper,
+) (*RestoreJob, error) {
+	restoreStmt, restoredTables, restoreDB := d.buildRestoreStatement(bc)
+	if _, isTableBackup := bc.btype.(*tableBackup); isTableBackup {
+		if err := d.testUtils.Exec(
+			ctx, rng, fmt.Sprintf("CREATE DATABASE %s", restoreDB),
+		); err != nil {
+			return nil, fmt.Errorf(
+				"backup %s: error creating database %s: %w", bc.name, restoreDB, err,
+			)
+		}
+	}
+	if checkFiles {
+		if err := d.testUtils.checkFiles(ctx, rng, bc); err != nil {
+			return nil, fmt.Errorf("backup %s: check_files failed: %w", bc.name, err)
+		}
+	}
+	l.Printf("Running restore: %s", restoreStmt)
+	var jobID int
+	if err := d.testUtils.QueryRow(ctx, rng, restoreStmt).Scan(&jobID); err != nil {
+		return nil, fmt.Errorf("backup %s: error in restore statement: %w", bc.name, err)
+	}
+
+	return &RestoreJob{
+		driver:             d,
+		l:                  l,
+		rng:                rng,
+		bc:                 bc,
+		jobID:              jobID,
+		restoredTables:     restoredTables,
+		restoreDB:          restoreDB,
+		restoreStmt:        restoreStmt,
+		internalSystemJobs: internalSystemJobs,
+		mvHelper:           mvHelper,
+	}, nil
+}
+
+// RestoreSync starts a restore and waits for it to complete successfully.
+func (d *BackupRestoreTestDriver) RestoreSync(
+	ctx context.Context,
+	l *logger.Logger,
+	rng *rand.Rand,
+	bc *backupCollection,
+	checkFiles bool,
+	internalSystemJobs bool,
+	mvHelper *mixedversion.Helper,
+) (*RestoreJob, error) {
+	rj, err := d.Restore(ctx, l, rng, bc, checkFiles, internalSystemJobs, mvHelper)
+	if err != nil {
+		return nil, err
+	}
+	if err := rj.WaitForJobSuccess(ctx); err != nil {
+		return nil, err
+	}
+	return rj, nil
+}
+
+type RestoreJob struct {
+	driver             *BackupRestoreTestDriver
+	l                  *logger.Logger
+	rng                *rand.Rand
+	bc                 *backupCollection
+	jobID              int
+	restoredTables     []string
+	restoreDB          string
+	restoreStmt        string
+	internalSystemJobs bool
+	mvHelper           *mixedversion.Helper
+	succeeded          bool
+}
+
+func (rj *RestoreJob) ID() int {
+	return rj.jobID
+}
+
+// WaitForJobSuccess waits for the restore job to complete successfully.
+// Returns an error if the job does not succeed.
+func (rj *RestoreJob) WaitForJobSuccess(ctx context.Context) error {
+	if rj.succeeded {
+		return nil
+	}
+
+	if err := rj.driver.testUtils.waitForJobSuccess(
+		ctx, rj.l, rj.rng, rj.jobID, rj.internalSystemJobs,
+	); err != nil {
+		return err
+	}
+
+	rj.succeeded = true
+	return nil
+}
+
+// ValidateRestore validates that the contents of the restored tables match
+// the contents that were captured when the backup was taken. For an
+// asynchronous restore, WaitForJobSuccess must be called successfully before
+// ValidateRestore.
+func (rj *RestoreJob) ValidateRestore(ctx context.Context) error {
+	if !rj.succeeded {
+		return errors.New(
+			"cannot validate restore: job has not succeeded; call WaitForJobSuccess first",
+		)
+	}
+
+	restoredContents, err := rj.driver.getRestoredContents(
+		ctx, rj.l, rj.rng, rj.restoredTables, rj.bc, rj.internalSystemJobs,
+	)
+	if err != nil {
+		return err
+	}
+
+	for j, contents := range rj.bc.contents {
+		table := rj.bc.tables[j]
+		restoredTableContents := restoredContents[j]
+		rj.l.Printf("%s: verifying %s", rj.bc.name, table)
+		if err := contents.ValidateRestore(ctx, rj.l, restoredTableContents); err != nil {
+			return fmt.Errorf("backup %s: %w", rj.bc.name, err)
+		}
+	}
+	_, db := rj.driver.testUtils.RandomDB(rj.rng, rj.driver.testUtils.roachNodes)
+	if err := roachtestutil.CheckInvalidDescriptors(ctx, rj.l, db); err != nil {
+		return fmt.Errorf("failed descriptor check: %w", err)
+	}
+
+	rj.l.Printf("%s: OK", rj.bc.name)
 	return nil
 }
 

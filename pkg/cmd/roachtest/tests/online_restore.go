@@ -941,7 +941,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 		}
 
 		t.L().Printf("performing online restore of backup")
-		if _, _, err := d.runRestore(
+		if _, err := d.RestoreSync(
 			ctx, t.L(), testRNG, collection,
 			false /* checkFiles */, true /* internalSystemJobs */, nil, /* mvHelper */
 		); err != nil {
