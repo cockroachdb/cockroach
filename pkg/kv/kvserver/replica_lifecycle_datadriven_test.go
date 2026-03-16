@@ -662,12 +662,13 @@ type testCtx struct {
 	ranges      map[roachpb.RangeID]*rangeState
 	splits      map[roachpb.RangeID]pendingSplit
 	merges      map[roachpb.RangeID]pendingMerge
+
 	// The storage engines correspond to a single store, (n1, s1). The engines
 	// are logically separated into two -- one for the state machine, and one
 	// for Raft.
-	eng kvstorage.Engines
-
+	eng    kvstorage.Engines
 	wagSeq wag.Seq
+	bf     kvstorage.BatchFactory
 }
 
 // newTestCtx constructs and returns a new testCtx.
@@ -676,7 +677,7 @@ func newTestCtx() *testCtx {
 	manual := timeutil.NewManualTime(timeutil.Unix(0, 10))
 	clock := hlc.NewClockForTesting(manual)
 	eng := storage.NewDefaultInMemForTesting()
-	return &testCtx{
+	tc := &testCtx{
 		st:                 st,
 		clock:              clock,
 		rangeLeaseDuration: 99 * time.Nanosecond,
@@ -687,6 +688,8 @@ func newTestCtx() *testCtx {
 		merges:      make(map[roachpb.RangeID]pendingMerge),
 		eng:         kvstorage.MakeSeparatedEnginesForTesting(eng, eng),
 	}
+	tc.bf = kvstorage.MakeBatchFactory(&tc.eng, &tc.wagSeq)
+	return tc
 }
 
 // makeEvalCtx constructs a batcheval.EvalContext for the given range.
