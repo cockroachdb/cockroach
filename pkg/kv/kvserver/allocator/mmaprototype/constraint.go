@@ -2104,9 +2104,9 @@ type storeAndLeasePreference struct {
 // buf, if non-nil, is reused for the returned slice to avoid allocation.
 func (rac *rangeAnalyzedConstraints) candidatesToMoveLease(
 	buf []storeAndLeasePreference,
-) ([]storeAndLeasePreference, int32) {
-	cands := buf[:0]
-	curLeasePreferenceIndex := rac.leaseholderPreferenceIndex
+) (cands []storeAndLeasePreference, curLeasePreferenceIndex int32) {
+	cands = buf[:0]
+	curLeasePreferenceIndex = rac.leaseholderPreferenceIndex
 	for i := range rac.leasePreferenceIndices {
 		if rac.leasePreferenceIndices[i] <= curLeasePreferenceIndex &&
 			rac.replicas[voterIndex][i].StoreID != rac.leaseholderID {
