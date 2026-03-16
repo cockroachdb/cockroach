@@ -8,55 +8,39 @@ import {
   SortedTable,
   util,
   Timestamp,
+  useNodesSummary,
+  useNodeLogs,
 } from "@cockroachlabs/cluster-ui";
 import sortBy from "lodash/sortBy";
-import React, { useEffect } from "react";
+import React from "react";
 import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
-import { RouteComponentProps, withRouter } from "react-router-dom";
+import { useRouteMatch } from "react-router-dom";
 
 import * as protos from "src/js/protos";
-import { refreshLogs, refreshNodes } from "src/redux/apiReducers";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { getDisplayName } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
-import { LogEntriesResponseMessage } from "src/util/api";
 import { nodeIDAttr } from "src/util/constants";
-import { INodeStatus } from "src/util/proto";
 import { getMatchParamByName } from "src/util/query";
-import { currentNode } from "src/views/cluster/containers/nodeOverview";
 import "./logs.scss";
 
 type LogEntries = protos.cockroach.util.log.IEntry;
 
-interface LogProps {
-  logs: CachedDataReducerState<LogEntriesResponseMessage>;
-  currentNode: INodeStatus;
-  refreshLogs: typeof refreshLogs;
-  refreshNodes: typeof refreshNodes;
-}
-
 /**
  * Renders the main content of the logs page.
  */
-export function Logs({
-  logs,
-  currentNode,
-  refreshLogs: refreshLogsAction,
-  refreshNodes: refreshNodesAction,
-  match,
-}: LogProps & RouteComponentProps): React.ReactElement {
+export function Logs(): React.ReactElement {
+  const match = useRouteMatch();
   const nodeId = getMatchParamByName(match, nodeIDAttr);
 
-  useEffect(() => {
-    refreshNodesAction();
-    refreshLogsAction(
-      new protos.cockroach.server.serverpb.LogsRequest({ node_id: nodeId }),
-    );
-  }, [nodeId, refreshLogsAction, refreshNodesAction]);
+  const { nodeDisplayNameByID, nodeStatusByID } = useNodesSummary();
+  const {
+    data: logs,
+    isLoading: logsLoading,
+    error: logsError,
+  } = useNodeLogs(nodeId);
+
+  const node = nodeStatusByID?.[nodeId];
 
   const renderContent = () => {
-    const logEntries = sortBy(logs.data.entries, e => e.time);
+    const logEntries = sortBy(logs.entries, e => e.time);
     const columns = [
       {
         title: "Time",
@@ -95,11 +79,9 @@ export function Logs({
     );
   };
 
-  const nodeAddress = currentNode
-    ? currentNode.desc.address.address_field
-    : null;
-  const title = currentNode
-    ? `Logs | ${getDisplayName(currentNode)} | Nodes`
+  const nodeAddress = node ? node.desc.address.address_field : null;
+  const title = node
+    ? `Logs | ${nodeDisplayNameByID[nodeId]} | Nodes`
     : `Logs | Node ${nodeId} | Nodes`;
 
   return (
@@ -112,9 +94,9 @@ export function Logs({
       </div>
       <section className="section">
         <Loading
-          loading={!logs.data}
+          loading={logsLoading || !logs}
           page={"node logs"}
-          error={logs.lastError}
+          error={logsError}
           render={renderContent}
         />
       </section>
@@ -122,20 +104,4 @@ export function Logs({
   );
 }
 
-// Connect the EventsList class with our redux store.
-const logsConnected = withRouter(
-  connect(
-    (state: AdminUIState, ownProps: RouteComponentProps) => {
-      return {
-        logs: state.cachedData.logs,
-        currentNode: currentNode(state, ownProps),
-      };
-    },
-    {
-      refreshLogs,
-      refreshNodes,
-    },
-  )(Logs),
-);
-
-export default logsConnected;
+export default Logs;

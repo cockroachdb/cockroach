@@ -138,13 +138,6 @@ export const invalidateIndexStats =
   indexStatsReducerObj.cachedDataReducer.invalidateData;
 export const refreshIndexStats = indexStatsReducerObj.refresh;
 
-const logsReducerObj = new CachedDataReducer(
-  api.getLogs,
-  "logs",
-  moment.duration(10, "s"),
-);
-export const refreshLogs = logsReducerObj.refresh;
-
 export const livenessReducerObj = new CachedDataReducer(
   api.getLiveness,
   "liveness",
@@ -434,7 +427,6 @@ export interface APIReducersState {
   locations: CachedDataReducerState<api.LocationsResponseMessage>;
   databases: CachedDataReducerState<clusterUiApi.DatabasesListResponse>;
   indexStats: KeyedCachedDataReducerState<api.IndexStatsResponseMessage>;
-  logs: CachedDataReducerState<api.LogEntriesResponseMessage>;
   liveness: CachedDataReducerState<api.LivenessResponseMessage>;
   problemRanges: KeyedCachedDataReducerState<api.ProblemRangesResponseMessage>;
   certificates: KeyedCachedDataReducerState<api.CertificatesResponseMessage>;
@@ -481,7 +473,6 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [locationsReducerObj.actionNamespace]: locationsReducerObj.reducer,
   [databasesReducerObj.actionNamespace]: databasesReducerObj.reducer,
   [indexStatsReducerObj.actionNamespace]: indexStatsReducerObj.reducer,
-  [logsReducerObj.actionNamespace]: logsReducerObj.reducer,
   [livenessReducerObj.actionNamespace]: livenessReducerObj.reducer,
   [problemRangesReducerObj.actionNamespace]: problemRangesReducerObj.reducer,
   [certificatesReducerObj.actionNamespace]: certificatesReducerObj.reducer,
