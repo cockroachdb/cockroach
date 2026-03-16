@@ -934,6 +934,31 @@ FROM defaults_parsed
 		},
 	),
 
+	// pg_get_statisticsobjdef returns the CREATE STATISTICS command for
+	// an extended statistics object.
+	"pg_get_statisticsobjdef": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "statobj_oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Body: `SELECT 'CREATE STATISTICS ' || quote_ident(n.nspname) || '.' || quote_ident(s.stxname) ||
+				' ON ' ||
+				(SELECT string_agg(quote_ident(a.attname), ', ' ORDER BY ordinality)
+				 FROM unnest(s.stxkeys::INT2[]) WITH ORDINALITY AS u(attnum, ordinality)
+				 JOIN pg_catalog.pg_attribute a ON a.attrelid = s.stxrelid AND a.attnum = u.attnum::INT8) ||
+				' FROM ' || quote_ident(n2.nspname) || '.' || quote_ident(c.relname)
+			FROM pg_catalog.pg_statistic_ext s
+			JOIN pg_catalog.pg_namespace n ON n.oid = s.stxnamespace
+			JOIN pg_catalog.pg_class c ON c.oid = s.stxrelid
+			JOIN pg_catalog.pg_namespace n2 ON n2.oid = c.relnamespace
+			WHERE s.oid = $1`,
+			Info:              "Returns the CREATE STATISTICS command for an extended statistics object.",
+			Volatility:        volatility.Stable,
+			CalledOnNullInput: true,
+			Language:          tree.RoutineLangSQL,
+		},
+	),
+
 	// pg_get_viewdef functions like SHOW CREATE VIEW but returns the same format as
 	// PostgreSQL leaving out the actual 'CREATE VIEW table_name AS' portion of the statement.
 	"pg_get_viewdef": makeBuiltin(

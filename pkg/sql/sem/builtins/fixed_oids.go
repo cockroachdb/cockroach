@@ -2902,6 +2902,7 @@ var builtinOidsArray = []string{
 	2947: `information_schema.crdb_enable_statement_hints(enabled: bool, statement_fingerprint: string) -> int`,
 	2948: `information_schema.crdb_delete_statement_hints(statement_fingerprint: string, database: string) -> int`,
 	2949: `information_schema.crdb_enable_statement_hints(enabled: bool, statement_fingerprint: string, database: string) -> int`,
+	2950: `pg_get_statisticsobjdef(statobj_oid: oid) -> string`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
