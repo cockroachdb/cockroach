@@ -698,8 +698,11 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 	scratchNodes := nodeLoadMapPool.Get().(map[roachpb.NodeID]*NodeLoad)
 	scratchStores := storeIDStructMapPool.Get().(map[roachpb.StoreID]struct{})
 	defer func() {
+		*pLeasePrefs = (*pLeasePrefs)[:0]
 		storeAndLeasePreferenceSlicePool.Put(pLeasePrefs)
+		*pCandsPL = (*pCandsPL)[:0]
 		storeIDSlicePool.Put(pCandsPL)
+		*pCandInfos = (*pCandInfos)[:0]
 		candidateInfoSlicePool.Put(pCandInfos)
 		clear(scratchNodes)
 		nodeLoadMapPool.Put(scratchNodes)
