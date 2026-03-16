@@ -1154,8 +1154,13 @@ func buildNFunctions(n int) string {
 	return b.String()
 }
 
-func buildNTablesWithTriggers(n int) string {
+// buildNTablesWithTriggers returns a SetupEx slice for creating n tables
+// with triggers.
+func buildNTablesWithTriggers(n int) []string {
 	b := strings.Builder{}
+	createTrigger := strings.Builder{}
+	b.WriteString("BEGIN;")
+	b.WriteString("SET LOCAL autocommit_before_ddl = false;")
 	b.WriteString(`
 CREATE OR REPLACE FUNCTION trigger_func()
 RETURNS TRIGGER AS $$
@@ -1165,17 +1170,27 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 `)
+	// Second Exec: SET first so session has unsafe_always, then BEGIN; COMMIT; so
+	// resetExtraTxnState runs and schemaChangerState is recreated with that mode,
+	// then BEGIN; CREATE TRIGGER... COMMIT; so triggers use the declarative schema changer.
+	createTrigger.WriteString("SET use_declarative_schema_changer = 'unsafe_always';")
+	createTrigger.WriteString("SET autocommit_before_ddl = false;")
+	createTrigger.WriteString("BEGIN; COMMIT;")
+	createTrigger.WriteString("BEGIN;")
 	for i := 0; i < n; i++ {
 		b.WriteString(fmt.Sprintf(`
 CREATE TABLE t%d (a INT, b INT);
-
+`, i))
+		createTrigger.WriteString(fmt.Sprintf(`
 CREATE TRIGGER trigger_%d
 AFTER INSERT ON t%d
 FOR EACH ROW
 EXECUTE FUNCTION trigger_func();
-`, i, i, i))
+`, i, i))
 	}
-	return b.String()
+	b.WriteString("COMMIT;")
+	createTrigger.WriteString("COMMIT;")
+	return []string{b.String(), createTrigger.String()}
 }
 
 func buildNTypes(n int) string {
