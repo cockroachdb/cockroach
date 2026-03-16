@@ -181,6 +181,12 @@ func TestRaftTracing(t *testing.T) {
 		tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
 		tc.WaitForVotersOrFatal(t, key, tc.Targets(1, 2)...)
 
+		// Exclude the possibility that the lease upgrade races with the writes
+		// below. A lease request can combine with a write request in one committed
+		// batch and prevent the early ack of the write at apply time, which we
+		// expect to find in the trace. See #165793 for the flake this fixes.
+		tc.MaybeWaitForLeaseUpgrade(context.Background(), t, tc.LookupRangeOrFatal(t, key))
+
 		for i := 0; i < 100; i++ {
 			var finish func() tracingpb.Recording
 			ctx := context.Background()
