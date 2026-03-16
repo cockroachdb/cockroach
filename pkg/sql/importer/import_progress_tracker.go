@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -86,7 +85,7 @@ type checkpointSnapshot struct {
 	rowProgress       []int64
 	fractionProgress  []float32
 	bulkSummary       kvpb.BulkOpSummary
-	manifestData      []byte
+	manifests         []jobspb.BulkSSTManifest
 	hasDirtyManifests bool
 }
 
@@ -104,15 +103,7 @@ func (t *importCheckpointTracker) snapshot() (checkpointSnapshot, error) {
 
 	snap.hasDirtyManifests = t.manifestBuf != nil && t.manifestBuf.Dirty()
 	if snap.hasDirtyManifests {
-		manifests := t.manifestBuf.SnapshotAndMarkClean()
-		var err error
-		snap.manifestData, err = protoutil.Marshal(
-			&jobspb.BulkSSTManifests{Manifests: manifests},
-		)
-		if err != nil {
-			t.manifestBuf.MarkDirty()
-			return checkpointSnapshot{}, errors.Wrap(err, "marshaling SST manifests")
-		}
+		snap.manifests = t.manifestBuf.SnapshotAndMarkClean()
 	}
 	return snap, nil
 }
@@ -154,9 +145,9 @@ func (t *importCheckpointTracker) Persist(ctx context.Context, job *jobs.Job) er
 		}
 		prog.Summary = snap.bulkSummary
 
-		if len(snap.manifestData) > 0 {
-			if err := jobs.WriteChunkedFileToJobInfo(
-				ctx, importSSTManifestsInfoKey, snap.manifestData, txn, job.ID(),
+		if len(snap.manifests) > 0 {
+			if err := jobs.WriteChunkedProtos(
+				ctx, importSSTManifestsInfoKey, snap.manifests, txn, job.ID(),
 			); err != nil {
 				return errors.Wrap(err, "writing SST manifests to job info")
 			}
