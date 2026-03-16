@@ -69,7 +69,7 @@ testdata files.
 
 ---
 
-## PR 3: Production integration + metrics
+## PR 3: Production integration + metrics — [#165526](https://github.com/cockroachdb/cockroach/pull/165526) ✅
 
 **Content:**
 - `LBRebalancingMultiMetricRepairAndRebalance` mode added to
