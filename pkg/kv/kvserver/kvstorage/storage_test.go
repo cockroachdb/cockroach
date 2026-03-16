@@ -30,6 +30,9 @@ func TestValidateIsStateEngineSpan(t *testing.T) {
 		// Full state engine spans.
 		{span: s(roachpb.KeyMin, keys.LocalRangeIDPrefix.AsRawKey())},
 		{span: s(keys.RangeForceFlushKey(1), keys.RangeLeaseKey(1))},
+		{span: s(keys.MakeRangeIDReplicatedPrefix(1), keys.RangeTombstoneKey(1))},
+		{span: s(keys.MakeRangeIDUnreplicatedPrefix(1), nil)},
+		{span: s(keys.MakeRangeIDUnreplicatedPrefix(1).PrefixEnd().Prevish(1), nil)},
 		{span: s(keys.LocalStoreMax, roachpb.KeyMax)},
 
 		// Full non-state engine spans.
@@ -64,10 +67,8 @@ func TestValidateIsStateEngineSpan(t *testing.T) {
 		{span: s(roachpb.KeyMax, nil)},
 
 		// Point non-state engine spans.
-		{span: s(keys.MakeRangeIDUnreplicatedPrefix(1), nil), notOk: true},
 		{span: s(keys.RaftTruncatedStateKey(1), nil), notOk: true},
 		{span: s(keys.RaftTruncatedStateKey(2), nil), notOk: true},
-		{span: s(keys.MakeRangeIDUnreplicatedPrefix(1).PrefixEnd().Prevish(1), nil), notOk: true},
 		{span: s(keys.LocalStorePrefix, nil), notOk: true},
 		{span: s(keys.StoreGossipKey(), nil), notOk: true},
 		{span: s(keys.LocalStoreMax.Prevish(1), nil), notOk: true},
@@ -76,13 +77,13 @@ func TestValidateIsStateEngineSpan(t *testing.T) {
 		{span: s(nil, keys.LocalRangeIDPrefix.AsRawKey())},
 		{span: s(nil, keys.MakeRangeIDUnreplicatedPrefix(1))},
 		{span: s(nil, keys.RangeForceFlushKey(1))},
+		{span: s(nil, keys.MakeRangeIDUnreplicatedPrefix(1).Next())},
 		{span: s(nil, keys.MakeRangeIDUnreplicatedPrefix(1).PrefixEnd().Next())},
 		{span: s(nil, keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd().Next())},
 		{span: s(nil, keys.LocalStorePrefix)},
 		{span: s(nil, keys.LocalStoreMax.Next())},
 
 		// Tricky non-state engine spans.
-		{span: s(nil, keys.MakeRangeIDUnreplicatedPrefix(1).Next()), notOk: true},
 		{span: s(nil, keys.RaftTruncatedStateKey(1).Next()), notOk: true},
 		{span: s(nil, keys.RaftTruncatedStateKey(2).Next()), notOk: true},
 		{span: s(nil, keys.MakeRangeIDUnreplicatedPrefix(1).PrefixEnd()), notOk: true},
