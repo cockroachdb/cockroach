@@ -82,3 +82,72 @@ func GetOldStatementHintsDescriptor(tableID descpb.ID) *descpb.TableDescriptor {
 		NextConstraintID: 3,
 	}
 }
+
+// GetStatementHintsDescriptorWithoutHashWithDatabase returns a descriptor for
+// system.statement_hints as it existed before the hash_with_database column was
+// added. This includes all columns through database (ID 9) but not
+// hash_with_database (ID 10) or hash_with_database_idx (ID 3).
+func GetStatementHintsDescriptorWithoutHashWithDatabase(tableID descpb.ID) *descpb.TableDescriptor {
+	uniqueRowIDString := "unique_rowid()"
+	nowTZString := "now():::TIMESTAMPTZ"
+	trueBoolString := "true"
+	statementHintsComputeExpr := "fnv64(fingerprint)"
+
+	return &descpb.TableDescriptor{
+		Name:                    string(catconstants.StatementHintsTableName),
+		ID:                      tableID,
+		ParentID:                keys.SystemDatabaseID,
+		UnexposedParentSchemaID: keys.PublicSchemaID,
+		Version:                 1,
+		Columns: []descpb.ColumnDescriptor{
+			{Name: "row_id", ID: 1, Type: types.Int, DefaultExpr: &uniqueRowIDString, Nullable: false},
+			{Name: "hash", ID: 2, Type: types.Int, Hidden: true, ComputeExpr: &statementHintsComputeExpr, Nullable: false},
+			{Name: "fingerprint", ID: 3, Type: types.String, Nullable: false},
+			{Name: "hint", ID: 4, Type: types.Bytes, Nullable: false},
+			{Name: "created_at", ID: 5, Type: types.TimestampTZ, DefaultExpr: &nowTZString, Nullable: false},
+			{Name: "hint_type", ID: 6, Type: types.String, Nullable: false},
+			{Name: "hint_name", ID: 7, Type: types.String, Nullable: true},
+			{Name: "enabled", ID: 8, Type: types.Bool, DefaultExpr: &trueBoolString, Nullable: false},
+			{Name: "database", ID: 9, Type: types.String, Nullable: true},
+			// NOTE: hash_with_database column (ID 10) is NOT included.
+		},
+		NextColumnID: 10,
+		Families: []descpb.ColumnFamilyDescriptor{
+			{
+				Name:            "primary",
+				ID:              0,
+				ColumnNames:     []string{"row_id", "hash", "fingerprint", "hint", "created_at", "hint_type", "hint_name", "enabled", "database"},
+				ColumnIDs:       []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
+				DefaultColumnID: 9,
+			},
+		},
+		NextFamilyID: 2,
+		PrimaryIndex: descpb.IndexDescriptor{
+			Name:                "primary",
+			ID:                  1,
+			Unique:              true,
+			KeyColumnNames:      []string{"row_id"},
+			KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+			KeyColumnIDs:        []descpb.ColumnID{1},
+			ConstraintID:        1,
+		},
+		Indexes: []descpb.IndexDescriptor{
+			{
+				Name:                "hash_idx",
+				ID:                  2,
+				KeyColumnNames:      []string{"hash"},
+				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC},
+				KeyColumnIDs:        []descpb.ColumnID{2},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				ConstraintID:        2,
+			},
+			// NOTE: hash_with_database_idx (ID 3) is NOT included.
+		},
+		NextIndexID:      3,
+		Privileges:       catpb.NewCustomSuperuserPrivilegeDescriptor(privilege.ReadWriteData, username.NodeUserName()),
+		NextMutationID:   1,
+		FormatVersion:    3,
+		NextConstraintID: 3,
+	}
+}

@@ -1300,9 +1300,11 @@ CREATE TABLE system.statement_hints (
     hint_name   STRING NULL,
     enabled     BOOL NOT NULL DEFAULT true,
     database    STRING NULL,
+    hash_with_database INT8 NOT VISIBLE NOT NULL AS (fnv64(fingerprint, database)) STORED,
     CONSTRAINT "primary" PRIMARY KEY ("row_id" ASC),
     INDEX hash_idx (hash ASC),
-    FAMILY "primary" (row_id, hash, fingerprint, hint, created_at, hint_type, hint_name, enabled, database)
+    INDEX hash_with_database_idx (hash_with_database ASC),
+    FAMILY "primary" (row_id, hash, fingerprint, hint, created_at, hint_type, hint_name, enabled, database, hash_with_database)
   );`
 
 	// ClusterMetricsTableSchema defines the schema for the system.cluster_metrics
@@ -5250,9 +5252,11 @@ var (
 		},
 	)
 
-	statementHintsComputeExpr                = "fnv64(fingerprint)"
-	StatementHintsHashIndexID descpb.IndexID = 2
-	StatementHintsTable                      = makeSystemTable(
+	statementHintsComputeExpr                                = "fnv64(fingerprint)"
+	statementHintsHashWithDatabaseComputeExpr                = "fnv64(fingerprint, database)"
+	StatementHintsHashIndexID                 descpb.IndexID = 2
+	StatementHintsHashWithDatabaseIndexID     descpb.IndexID = 3
+	StatementHintsTable                                      = makeSystemTable(
 		StatementHintsTableSchema,
 		systemTable(
 			catconstants.StatementHintsTableName,
@@ -5267,13 +5271,14 @@ var (
 				{Name: "hint_name", ID: 7, Type: types.String, Nullable: true},
 				{Name: "enabled", ID: 8, Type: types.Bool, DefaultExpr: &trueBoolString},
 				{Name: "database", ID: 9, Type: types.String, Nullable: true},
+				{Name: "hash_with_database", ID: 10, Type: types.Int, Hidden: true, ComputeExpr: &statementHintsHashWithDatabaseComputeExpr},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:        "primary",
 					ID:          0,
-					ColumnNames: []string{"row_id", "hash", "fingerprint", "hint", "created_at", "hint_type", "hint_name", "enabled", "database"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
+					ColumnNames: []string{"row_id", "hash", "fingerprint", "hint", "created_at", "hint_type", "hint_name", "enabled", "database", "hash_with_database"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
 				},
 			},
 			descpb.IndexDescriptor{
@@ -5292,6 +5297,16 @@ var (
 				KeyColumnNames:      []string{"hash"},
 				KeyColumnDirections: singleASC,
 				KeyColumnIDs:        []descpb.ColumnID{2},
+				KeySuffixColumnIDs:  []descpb.ColumnID{1},
+			},
+			descpb.IndexDescriptor{
+				Name:                "hash_with_database_idx",
+				ID:                  StatementHintsHashWithDatabaseIndexID,
+				Unique:              false,
+				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
+				KeyColumnNames:      []string{"hash_with_database"},
+				KeyColumnDirections: singleASC,
+				KeyColumnIDs:        []descpb.ColumnID{10},
 				KeySuffixColumnIDs:  []descpb.ColumnID{1},
 			},
 		),

@@ -250,6 +250,10 @@ const (
 	// changefeeds no longer have span-level checkpoints.
 	V26_2_ChangefeedsNoLongerHaveSpanLevelCheckpoints
 
+	// V26_2_StatementHintsHashWithDatabaseColumn adds a hash_with_database
+	// computed column and index to the system.statement_hints table.
+	V26_2_StatementHintsHashWithDatabaseColumn
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -319,6 +323,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_2_ChangefeedsStopWritingSpanLevelCheckpoints: {Major: 26, Minor: 1, Internal: 24},
 
 	V26_2_ChangefeedsNoLongerHaveSpanLevelCheckpoints: {Major: 26, Minor: 1, Internal: 26},
+
+	V26_2_StatementHintsHashWithDatabaseColumn: {Major: 26, Minor: 1, Internal: 28},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

@@ -160,6 +160,14 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("changefeed jobs are not restored"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"add hash_with_database column and index to system.statement_hints",
+		clusterversion.V26_2_StatementHintsHashWithDatabaseColumn.Version(),
+		upgrade.NoPrecondition,
+		statementHintsHashWithDatabaseMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore computed columns"),
+	),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

@@ -1,0 +1,59 @@
+# LogicTest: cockroach-go-testserver-configs
+
+# This test verifies that the hash_with_database computed column and index are
+# correctly added to system.statement_hints during upgrade.
+
+# Before upgrade, the statement_hints table has the old schema from the
+# bootstrap binary. Insert a row using only the columns available in the old
+# schema (row_id, hash, fingerprint, hint, created_at).
+statement ok
+INSERT INTO system.statement_hints (fingerprint, hint)
+VALUES ('SELECT 1', 'hint1'::BYTES)
+
+# Verify hash_with_database column does not exist before upgrade.
+query error column "hash_with_database" does not exist
+SELECT hash_with_database FROM system.statement_hints LIMIT 0
+
+# Upgrade all nodes and finalize the cluster version.
+upgrade all
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version()
+
+# After upgrade, the hash_with_database column should exist. It's NOT VISIBLE, so
+# SELECT * won't show it, but we can reference it explicitly.
+query I
+SELECT count(*) FROM system.statement_hints WHERE hash_with_database IS NOT NULL
+----
+1
+
+# Verify the hash_with_database_idx index was created.
+query B
+SELECT count(*) > 0
+FROM [SHOW INDEXES FROM system.statement_hints]
+WHERE index_name = 'hash_with_database_idx'
+----
+true
+
+# For the pre-existing row (inserted before upgrade with no database column),
+# hash_with_database should equal hash, because fnv64(fingerprint, NULL) = fnv64(fingerprint).
+query B
+SELECT hash = hash_with_database
+FROM system.statement_hints
+WHERE fingerprint = 'SELECT 1'
+----
+true
+
+# Insert a row with an explicit database value.
+statement ok
+INSERT INTO system.statement_hints (fingerprint, hint, hint_type, database)
+VALUES ('SELECT 1', 'hint2'::BYTES, 'rewrite_inline_hints', 'mydb')
+
+# The hash_with_database for the row with database='mydb' should differ from the one
+# with database IS NULL, since the database is incorporated into the hash.
+query B
+SELECT count(DISTINCT hash_with_database) = 2
+FROM system.statement_hints
+WHERE fingerprint = 'SELECT 1'
+----
+true

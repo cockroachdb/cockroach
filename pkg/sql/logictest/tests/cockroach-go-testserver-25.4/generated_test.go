@@ -90,6 +90,13 @@ func TestLogic_mixed_version_can_login(
 	runLogicTest(t, "mixed_version_can_login")
 }
 
+func TestLogic_mixed_version_statement_hints_hash_with_database(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_statement_hints_hash_with_database")
+}
+
 func TestLogic_mixed_version_statement_hints_session_settings(
 	t *testing.T,
 ) {
