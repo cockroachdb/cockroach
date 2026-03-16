@@ -2442,13 +2442,13 @@ func (cs *clusterState) canShedAndAddLoad(
 	srcNS.adjustedCPU += delta[CPURate]
 
 	var failureReason redact.StringBuilder
-	populateFailureReason := log.ExpensiveLogEnabled(ctx, 2)
+	populateFailureReason := log.ExpensiveLogEnabled(ctx, 3)
 	defer func() {
 		if canAddLoad {
 			log.KvDistribution.VEventf(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 				targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
 		} else if populateFailureReason {
-			log.KvDistribution.VEventf(ctx, 2,
+			log.KvDistribution.VEventf(ctx, 3,
 				"cannot add load from n%vs%v to n%vs%v for r%v due to %v: delta(%v) targetSLS[%v] srcSLS[%v]",
 				srcNS.NodeID, srcSS.StoreID, targetNS.NodeID, targetSS.StoreID, rangeID,
 				&failureReason, delta, targetSLS, srcSLS)
@@ -2536,7 +2536,7 @@ func (cs *clusterState) canShedAndAddLoad(
 			dimFractionIncrease := float64(deltaToAdd[dim]) / float64(targetSS.adjusted.load[dim])
 			// The use of 33% is arbitrary.
 			if dimFractionIncrease > overloadedDimFractionIncrease/3 {
-				log.KvDistribution.VEventf(ctx, 2, "%v: %f > %f/3", dim, dimFractionIncrease, overloadedDimFractionIncrease)
+				log.KvDistribution.VEventf(ctx, 3, "%v: %f > %f/3", dim, dimFractionIncrease, overloadedDimFractionIncrease)
 				otherDimensionsBecameWorseInTarget = true
 				break
 			}
