@@ -10,6 +10,13 @@ import (
 	"os"
 )
 
+func printHeader(name string) {
+	fmt.Println()
+	fmt.Println("---------------------------------------------")
+	fmt.Println(name)
+	fmt.Println("---------------------------------------------")
+}
+
 func Example_convert_url() {
 	c := NewCLITest(TestCLIParams{
 		NoServer: true,
@@ -17,12 +24,20 @@ func Example_convert_url() {
 	defer c.Cleanup()
 
 	c.RunWithArgs([]string{`convert-url`})
+
+	printHeader("all formats with cluster")
 	c.RunWithArgs([]string{`convert-url`, `--url`, `postgres://foo@bar`, `--cluster`, `app`})
+
+	printHeader("format: dsn")
 	c.RunWithArgs([]string{`convert-url`, `--url`, `postgres://foo@bar`, `--format`, `dsn`})
+
+	printHeader("format: pq")
 	c.RunWithArgs([]string{`convert-url`, `--url`, `postgres://foo@bar`, `--format`, `pq`})
+
+	printHeader("format: jdbc")
 	c.RunWithArgs([]string{`convert-url`, `--url`, `postgres://foo@bar`, `--format`, `jdbc`})
 
-	// --format crdb without --inline includes credentials.
+	printHeader("format: crdb with credentials")
 	c.RunWithArgs([]string{
 		`convert-url`,
 		`--url`, `postgres://bar`,
@@ -31,13 +46,13 @@ func Example_convert_url() {
 		`--format`, `crdb`,
 	})
 
-	// Password embedded in the URL is preserved.
+	printHeader("format: crdb with password in URL")
 	c.RunWithArgs([]string{`convert-url`, `--url`, `postgres://foo:s3cret@qux`, `--format`, `crdb`})
 
-	// Invalid --format value.
+	printHeader("invalid format")
 	c.RunWithArgs([]string{`convert-url`, `--url`, `postgres://foo@bar`, `--format`, `invalid`})
 
-	// Flag overrides take precedence over URL values.
+	printHeader("flag overrides")
 	c.RunWithArgs([]string{
 		`convert-url`,
 		`--url`, `postgres://foo@qux/origdb`,
@@ -60,6 +75,10 @@ func Example_convert_url() {
 	//
 	// # Direct URL to CockroachDB:
 	// postgresql://root@localhost:26257/defaultdb
+	//
+	// ---------------------------------------------
+	// all formats with cluster
+	// ---------------------------------------------
 	// convert-url --url postgres://foo@bar --cluster app
 	// # Connection URL for libpq (C/C++), psycopg (Python), lib/pq & pgx (Go), node-postgres (JS) and most pq-compatible drivers:
 	// postgresql://foo@bar:26257/defaultdb?options=-ccluster%3Dapp
@@ -72,18 +91,46 @@ func Example_convert_url() {
 	//
 	// # Direct URL to CockroachDB:
 	// postgresql://foo@bar:26257/defaultdb?options=-ccluster%3Dapp
+	//
+	// ---------------------------------------------
+	// format: dsn
+	// ---------------------------------------------
 	// convert-url --url postgres://foo@bar --format dsn
 	// database=defaultdb user=foo host=bar port=26257
+	//
+	// ---------------------------------------------
+	// format: pq
+	// ---------------------------------------------
 	// convert-url --url postgres://foo@bar --format pq
 	// postgresql://foo@bar:26257/defaultdb
+	//
+	// ---------------------------------------------
+	// format: jdbc
+	// ---------------------------------------------
 	// convert-url --url postgres://foo@bar --format jdbc
 	// jdbc:postgresql://bar:26257/defaultdb?user=foo
+	//
+	// ---------------------------------------------
+	// format: crdb with credentials
+	// ---------------------------------------------
 	// convert-url --url postgres://bar --user foo --password secret --format crdb
 	// postgresql://foo:secret@bar:26257/defaultdb
+	//
+	// ---------------------------------------------
+	// format: crdb with password in URL
+	// ---------------------------------------------
 	// convert-url --url postgres://foo:s3cret@qux --format crdb
 	// postgresql://foo:s3cret@qux:26257/defaultdb
+	//
+	// ---------------------------------------------
+	// invalid format
+	// ---------------------------------------------
 	// convert-url --url postgres://foo@bar --format invalid
 	// ERROR: invalid argument "invalid" for "--format" flag: must be one of [pq dsn jdbc crdb]
+	//
+	// ---------------------------------------------
+	// flag overrides
+	// ---------------------------------------------
 	// convert-url --url postgres://foo@qux/origdb --user baz --database newdb
 	// # Connection URL for libpq (C/C++), psycopg (Python), lib/pq & pgx (Go), node-postgres (JS) and most pq-compatible drivers:
 	// postgresql://baz@qux:26257/newdb
@@ -123,7 +170,8 @@ func Example_convert_url_with_inline() {
 		`--format`, `crdb`,
 		`--inline`,
 	})
-	// Inline defaults to --format crdb
+
+	printHeader("inline defaults to crdb")
 	c.RunWithArgs([]string{
 		`convert-url`,
 		`--url`, `postgres://bar`,
@@ -134,7 +182,8 @@ func Example_convert_url_with_inline() {
 		`--cluster`, `app`,
 		`--inline`,
 	})
-	// Inline with explicit cert flags instead of --certs-dir.
+
+	printHeader("inline with explicit cert flags")
 	c.RunWithArgs([]string{
 		`convert-url`,
 		`--url`, `postgres://bar`,
@@ -145,7 +194,7 @@ func Example_convert_url_with_inline() {
 		`--format`, `crdb`,
 		`--inline`,
 	})
-	// Inline without specifying user should default to root certs.
+	printHeader("inline without specifying user")
 	c.RunWithArgs([]string{
 		`convert-url`,
 		`--url`, `postgres://bar`,
@@ -153,7 +202,8 @@ func Example_convert_url_with_inline() {
 		`--format`, `crdb`,
 		`--inline`,
 	})
-	// Inline fails on other formats
+
+	printHeader("inline fails on other formats")
 	c.RunWithArgs([]string{
 		`convert-url`,
 		`--url`, `postgres://bar`,
@@ -164,12 +214,28 @@ func Example_convert_url_with_inline() {
 	// Output:
 	// convert-url --url postgres://bar --certs-dir certs/ --user root --password secret --database mydb --cluster app --format crdb --inline
 	// postgresql://root:secret@bar:26257/mydb?options=-ccluster%3Dapp&sslcert=clientCertContents&sslinline=true&sslkey=clientKeyContents&sslmode=verify-full&sslrootcert=caCertContents
+	//
+	// ---------------------------------------------
+	// inline defaults to crdb
+	// ---------------------------------------------
 	// convert-url --url postgres://bar --certs-dir certs/ --user root --password secret --database mydb --cluster app --inline
 	// postgresql://root:secret@bar:26257/mydb?options=-ccluster%3Dapp&sslcert=clientCertContents&sslinline=true&sslkey=clientKeyContents&sslmode=verify-full&sslrootcert=caCertContents
+	//
+	// ---------------------------------------------
+	// inline with explicit cert flags
+	// ---------------------------------------------
 	// convert-url --url postgres://bar --ca-cert certs/ca.crt --cert certs/client.root.crt --key certs/client.root.key --user root --format crdb --inline
 	// postgresql://root@bar:26257/defaultdb?sslcert=clientCertContents&sslinline=true&sslkey=clientKeyContents&sslmode=verify-full&sslrootcert=caCertContents
+	//
+	// ---------------------------------------------
+	// inline without specifying user
+	// ---------------------------------------------
 	// convert-url --url postgres://bar --certs-dir certs/ --format crdb --inline
 	// postgresql://root@bar:26257/defaultdb?sslcert=clientCertContents&sslinline=true&sslkey=clientKeyContents&sslmode=verify-full&sslrootcert=caCertContents
+	//
+	// ---------------------------------------------
+	// inline fails on other formats
+	// ---------------------------------------------
 	// convert-url --url postgres://bar --format jdbc --inline
 	// ERROR: --inline only supports --format=crdb
 }
@@ -196,7 +262,7 @@ func Example_convert_url_with_certs() {
 		`--key`, `path/to/client.key`,
 	})
 
-	// --certs-dir with explicit --ca-cert override.
+	printHeader("certs-dir with ca-cert override")
 	c.RunWithArgs([]string{
 		`convert-url`,
 		`--url`, `postgres://bar`,
@@ -218,6 +284,10 @@ func Example_convert_url_with_certs() {
 	//
 	// # Direct URL to CockroachDB:
 	// postgresql://foo@bar:26257/defaultdb?sslcert=path%2Fto%2Fclient.crt&sslkey=path%2Fto%2Fclient.key&sslmode=verify-full&sslrootcert=path%2Fto%2Fca.crt
+	//
+	// ---------------------------------------------
+	// certs-dir with ca-cert override
+	// ---------------------------------------------
 	// convert-url --url postgres://bar --user foo --certs-dir certs/ --ca-cert custom/ca.crt
 	// # Connection URL for libpq (C/C++), psycopg (Python), lib/pq & pgx (Go), node-postgres (JS) and most pq-compatible drivers:
 	// postgresql://foo@bar:26257/defaultdb?sslcert=certs%2Fclient.foo.crt&sslkey=certs%2Fclient.foo.key&sslmode=verify-full&sslrootcert=custom%2Fca.crt
