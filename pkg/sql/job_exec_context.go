@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
@@ -27,7 +28,9 @@ type plannerJobExecContext struct {
 	p *planner
 }
 
-// MakeJobExecContext makes a JobExecContext.
+// MakeJobExecContext makes a JobExecContext. If the context carries a
+// workload ID (via kv.ContextWithWorkloadInfo), EvalCtx.WorkloadID is
+// set so that DistSQL flows propagate attribution to remote nodes.
 func MakeJobExecContext(
 	ctx context.Context,
 	opName redact.SafeString,
@@ -42,6 +45,7 @@ func MakeJobExecContext(
 		memMetrics,
 		execCfg,
 		NewInternalSessionData(ctx, execCfg.Settings, opName),
+		WithWorkloadInfo(kv.WorkloadInfoFromContext(ctx)),
 	)
 	p := plannerInterface.(*planner)
 	return &plannerJobExecContext{p: p}, close
@@ -81,6 +85,12 @@ func (e *plannerJobExecContext) SpanStatsConsumer() keyvisualizer.SpanStatsConsu
 // methods that defined in terms of "the" txn, such as privilege/name accessors.
 // (though note that ExtendedEvalContext may transitively include methods that
 // close over/expect a txn so use it with caution).
+//
+// Workload attribution for ASH is handled via context propagation: the
+// jobs registry injects the job's ID into the context using
+// kv.ContextWithWorkloadInfo before calling the resumer. Any DB or
+// InternalDB transaction created with that context will automatically
+// carry the workload ID in KV BatchRequest headers.
 type JobExecContext interface {
 	SemaCtx() *tree.SemaContext
 	ExtendedEvalContext() *extendedEvalContext

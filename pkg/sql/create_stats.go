@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1031,6 +1032,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) (r
 			&MemoryMetrics{},
 			jobsPlanner.ExecCfg(),
 			jobsPlanner.SessionData(),
+			WithWorkloadInfo(kv.WorkloadInfoFromContext(ctx)),
 		)
 		defer cleanup()
 		innerP := innerPlanner.(*planner)
