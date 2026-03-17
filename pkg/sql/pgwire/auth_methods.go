@@ -1110,7 +1110,7 @@ func AuthorizeLDAPHelper(
 			return redact.Sprint(detailedErr), clientErr
 		}
 		if !found {
-			log.Dev.VInfof(ctx, 1, "LDAP authorization: skipping group %s for user %s as it lacks a common name (CN)", ldapGroup.String(), user.Normalized())
+			log.Dev.VInfof(ctx, 1, "LDAP authorization: skipping group %s for user %s as it lacks a common name (CN)", ldapGroup.String(), redact.HashString(user.Normalized()))
 			continue
 		}
 		sqlRoles = append(sqlRoles, sqlRole)
@@ -1118,7 +1118,7 @@ func AuthorizeLDAPHelper(
 
 	// Assign roles to the user.
 	if err := sql.EnsureUserOnlyBelongsToRoles(ctx, execCfg, user, sqlRoles); err != nil {
-		detailedErr := errors.Wrapf(err, "LDAP authorization: error assigning roles to user %s", user)
+		detailedErr := errors.Wrapf(err, "LDAP authorization: error assigning roles to user %s", redact.HashString(user.Normalized()))
 		clientErr := errors.New("LDAP authorization: failed to synchronize roles")
 		return redact.Sprint(detailedErr), clientErr
 	}
