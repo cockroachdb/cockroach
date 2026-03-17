@@ -44,7 +44,7 @@ sudo find /usr/local/lib/node_modules/npm/bin -type f -exec chmod 755 {} \;
 		tarball := ""
 		checksum := ""
 		switch c.Architecture() {
-		case vm.ArchAMD64:
+		case vm.ArchAMD64, vm.ArchFIPS:
 			tarball = fmt.Sprintf(NODE_TARBALL, "x64")
 			checksum = AMD64_SHA256SUM
 		case vm.ArchARM64:
