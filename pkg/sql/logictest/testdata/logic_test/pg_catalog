@@ -557,38 +557,38 @@ public      mv1          root          NULL        false       true         SELE
 
 ## pg_catalog.pg_class
 
-query OTOOOOOOO colnames,rowsort
-SELECT c.oid, relname, relnamespace, reltype, reloftype, relowner, relam, relfilenode, reltablespace
+query TTBOOOO colnames,rowsort
+SELECT relname, n.nspname, reltype != 0 AS has_reltype, reloftype, relowner, relam, reltablespace
 FROM pg_catalog.pg_class c
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-oid         relname            relnamespace  reltype  reloftype  relowner    relam       relfilenode  reltablespace
-110         t1                 109           100110   0          1546506610  2631952481  0            0
-3687884466  t1_pkey            109           0        0          1546506610  2631952481  0            0
-3687884465  t1_a_key           109           0        0          1546506610  2631952481  0            0
-3687884464  index_key          109           0        0          1546506610  2631952481  0            0
-111         t1_m_seq           109           100111   0          1546506610  0           0            0
-112         t1_n_seq           109           100112   0          1546506610  0           0            0
-113         t2                 109           100113   0          1546506610  2631952481  0            0
-2955071325  t2_pkey            109           0        0          1546506610  2631952481  0            0
-2955071326  t2_t1_id_idx       109           0        0          1546506610  2631952481  0            0
-114         t3                 109           100114   0          1546506610  2631952481  0            0
-2695335054  t3_pkey            109           0        0          1546506610  2631952481  0            0
-2695335053  t3_a_b_idx         109           0        0          1546506610  2631952481  0            0
-115         v1                 109           100115   0          1546506610  0           0            0
-116         t4                 109           100116   0          1546506610  2631952481  0            0
-3214807592  t4_pkey            109           0        0          1546506610  2631952481  0            0
-117         t5                 109           100117   0          1546506610  2631952481  0            0
-1869730585  t5_pkey            109           0        0          1546506610  2631952481  0            0
-120         t6                 109           100120   0          1546506610  2631952481  0            0
-2129466852  t6_pkey            109           0        0          1546506610  2631952481  0            0
-2129466855  t6_expr_idx        109           0        0          1546506610  2631952481  0            0
-2129466854  t6_expr_expr1_idx  109           0        0          1546506610  2631952481  0            0
-2129466848  t6_expr_key        109           0        0          1546506610  2631952481  0            0
-2129466850  t6_expr_idx1       109           0        0          1546506610  2631952481  0            0
-121         mv1                109           100121   0          1546506610  0           0            0
-784389845   mv1_pkey           109           0        0          1546506610  2631952481  0            0
+relname            nspname  has_reltype  reloftype  relowner    relam       reltablespace
+t1                 public   true         0          1546506610  2631952481  0
+t1_pkey            public   false        0          1546506610  2631952481  0
+t1_a_key           public   false        0          1546506610  2631952481  0
+index_key          public   false        0          1546506610  2631952481  0
+t1_m_seq           public   true         0          1546506610  0           0
+t1_n_seq           public   true         0          1546506610  0           0
+t2                 public   true         0          1546506610  2631952481  0
+t2_pkey            public   false        0          1546506610  2631952481  0
+t2_t1_id_idx       public   false        0          1546506610  2631952481  0
+t3                 public   true         0          1546506610  2631952481  0
+t3_pkey            public   false        0          1546506610  2631952481  0
+t3_a_b_idx         public   false        0          1546506610  2631952481  0
+v1                 public   true         0          1546506610  0           0
+t4                 public   true         0          1546506610  2631952481  0
+t4_pkey            public   false        0          1546506610  2631952481  0
+t5                 public   true         0          1546506610  2631952481  0
+t5_pkey            public   false        0          1546506610  2631952481  0
+t6                 public   true         0          1546506610  2631952481  0
+t6_pkey            public   false        0          1546506610  2631952481  0
+t6_expr_idx        public   false        0          1546506610  2631952481  0
+t6_expr_expr1_idx  public   false        0          1546506610  2631952481  0
+t6_expr_key        public   false        0          1546506610  2631952481  0
+t6_expr_idx1       public   false        0          1546506610  2631952481  0
+mv1                public   true         0          1546506610  0           0
+mv1_pkey           public   false        0          1546506610  2631952481  0
 
 query TIRIOBBT colnames,rowsort
 SELECT relname, relpages, reltuples, relallvisible, reltoastrelid, relhasindex, relisshared, relpersistence
@@ -691,78 +691,78 @@ mv1_pkey           false        false           false           0             NU
 
 ## pg_catalog.pg_attribute
 
-query OTTOIIIII colnames,rowsort
-SELECT attrelid, c.relname, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff
+query TTOIIIII colnames,rowsort
+SELECT c.relname, attname, atttypid, attstattarget, attlen, attnum, attndims, attcacheoff
 FROM pg_catalog.pg_attribute a
 JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
 JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
-attrelid    relname            attname                       atttypid  attstattarget  attlen  attnum  attndims  attcacheoff
-110         t1                 p                             701       0              8       1       0         -1
-110         t1                 a                             20        0              8       2       0         -1
-110         t1                 b                             20        0              8       3       0         -1
-110         t1                 c                             20        0              8       4       0         -1
-110         t1                 d                             1043      0              -1      5       0         -1
-110         t1                 e                             1560      0              -1      6       0         -1
-110         t1                 f                             1700      0              -1      7       0         -1
-110         t1                 g                             20        0              8       8       0         -1
-110         t1                 h                             1014      0              -1      9       0         -1
-110         t1                 i                             1015      0              -1      10      0         -1
-110         t1                 j                             18        0              1       11      0         -1
-110         t1                 k                             1043      0              -1      12      0         -1
-110         t1                 l                             20        0              8       13      0         -1
-110         t1                 m                             20        0              8       14      0         -1
-110         t1                 n                             20        0              8       15      0         -1
-3687884466  t1_pkey            p                             701       0              8       1       0         -1
-3687884465  t1_a_key           a                             20        0              8       1       0         -1
-3687884464  index_key          b                             20        0              8       1       0         -1
-3687884464  index_key          c                             20        0              8       2       0         -1
-111         t1_m_seq           value                         20        0              8       1       0         -1
-112         t1_n_seq           value                         20        0              8       1       0         -1
-113         t2                 t1_id                         20        0              8       1       0         -1
-113         t2                 rowid                         20        0              8       2       0         -1
-2955071325  t2_pkey            rowid                         20        0              8       1       0         -1
-2955071326  t2_t1_id_idx       t1_id                         20        0              8       1       0         -1
-114         t3                 a                             20        0              8       1       0         -1
-114         t3                 b                             20        0              8       2       0         -1
-114         t3                 c                             25        0              -1      3       0         -1
-114         t3                 rowid                         20        0              8       4       0         -1
-2695335054  t3_pkey            rowid                         20        0              8       1       0         -1
-2695335053  t3_a_b_idx         a                             20        0              8       1       0         -1
-2695335053  t3_a_b_idx         b                             20        0              8       2       0         -1
-2695335053  t3_a_b_idx         c                             25        0              -1      3       0         -1
-115         v1                 p                             701       0              8       1       0         -1
-115         v1                 a                             20        0              8       2       0         -1
-115         v1                 b                             20        0              8       3       0         -1
-115         v1                 c                             20        0              8       4       0         -1
-116         t4                 a                             20        0              8       1       0         -1
-116         t4                 b                             701       0              8       2       0         -1
-116         t4                 c                             25        0              -1      3       0         -1
-116         t4                 rowid                         20        0              8       4       0         -1
-3214807592  t4_pkey            rowid                         20        0              8       1       0         -1
-117         t5                 a                             20        0              8       1       0         -1
-117         t5                 b                             701       0              8       2       0         -1
-117         t5                 c                             25        0              -1      3       0         -1
-117         t5                 rowid                         20        0              8       4       0         -1
-1869730585  t5_pkey            rowid                         20        0              8       1       0         -1
-120         t6                 a                             20        0              8       1       0         -1
-120         t6                 b                             20        0              8       2       0         -1
-120         t6                 c                             25        0              -1      3       0         -1
-120         t6                 m                             100118    0              -1      4       0         -1
-120         t6                 rowid                         20        0              8       6       0         -1
-120         t6                 ........pg.dropped.5........  0         0              -1      5       0         -1
-120         t6                 ........pg.dropped.7........  0         0              -1      7       0         -1
-120         t6                 ........pg.dropped.8........  0         0              -1      8       0         -1
-2129466852  t6_pkey            rowid                         20        0              8       1       0         -1
-2129466855  t6_expr_idx        crdb_internal_idx_expr        20        0              8       1       0         -1
-2129466854  t6_expr_expr1_idx  crdb_internal_idx_expr_1      25        0              -1      1       0         -1
-2129466854  t6_expr_expr1_idx  crdb_internal_idx_expr        20        0              8       2       0         -1
-2129466848  t6_expr_key        crdb_internal_idx_expr_1      25        0              -1      1       0         -1
-2129466850  t6_expr_idx1       crdb_internal_idx_expr_2      16        0              1       1       0         -1
-121         mv1                ?column?                      20        0              8       1       0         -1
-121         mv1                rowid                         20        0              8       2       0         -1
-784389845   mv1_pkey           rowid                         20        0              8       1       0         -1
+relname            attname                       atttypid  attstattarget  attlen  attnum  attndims  attcacheoff
+t1                 p                             701       0              8       1       0         -1
+t1                 a                             20        0              8       2       0         -1
+t1                 b                             20        0              8       3       0         -1
+t1                 c                             20        0              8       4       0         -1
+t1                 d                             1043      0              -1      5       0         -1
+t1                 e                             1560      0              -1      6       0         -1
+t1                 f                             1700      0              -1      7       0         -1
+t1                 g                             20        0              8       8       0         -1
+t1                 h                             1014      0              -1      9       0         -1
+t1                 i                             1015      0              -1      10      0         -1
+t1                 j                             18        0              1       11      0         -1
+t1                 k                             1043      0              -1      12      0         -1
+t1                 l                             20        0              8       13      0         -1
+t1                 m                             20        0              8       14      0         -1
+t1                 n                             20        0              8       15      0         -1
+t1_pkey            p                             701       0              8       1       0         -1
+t1_a_key           a                             20        0              8       1       0         -1
+index_key          b                             20        0              8       1       0         -1
+index_key          c                             20        0              8       2       0         -1
+t1_m_seq           value                         20        0              8       1       0         -1
+t1_n_seq           value                         20        0              8       1       0         -1
+t2                 t1_id                         20        0              8       1       0         -1
+t2                 rowid                         20        0              8       2       0         -1
+t2_pkey            rowid                         20        0              8       1       0         -1
+t2_t1_id_idx       t1_id                         20        0              8       1       0         -1
+t3                 a                             20        0              8       1       0         -1
+t3                 b                             20        0              8       2       0         -1
+t3                 c                             25        0              -1      3       0         -1
+t3                 rowid                         20        0              8       4       0         -1
+t3_pkey            rowid                         20        0              8       1       0         -1
+t3_a_b_idx         a                             20        0              8       1       0         -1
+t3_a_b_idx         b                             20        0              8       2       0         -1
+t3_a_b_idx         c                             25        0              -1      3       0         -1
+v1                 p                             701       0              8       1       0         -1
+v1                 a                             20        0              8       2       0         -1
+v1                 b                             20        0              8       3       0         -1
+v1                 c                             20        0              8       4       0         -1
+t4                 a                             20        0              8       1       0         -1
+t4                 b                             701       0              8       2       0         -1
+t4                 c                             25        0              -1      3       0         -1
+t4                 rowid                         20        0              8       4       0         -1
+t4_pkey            rowid                         20        0              8       1       0         -1
+t5                 a                             20        0              8       1       0         -1
+t5                 b                             701       0              8       2       0         -1
+t5                 c                             25        0              -1      3       0         -1
+t5                 rowid                         20        0              8       4       0         -1
+t5_pkey            rowid                         20        0              8       1       0         -1
+t6                 a                             20        0              8       1       0         -1
+t6                 b                             20        0              8       2       0         -1
+t6                 c                             25        0              -1      3       0         -1
+t6                 m                             100118    0              -1      4       0         -1
+t6                 rowid                         20        0              8       6       0         -1
+t6                 ........pg.dropped.5........  0         0              -1      5       0         -1
+t6                 ........pg.dropped.7........  0         0              -1      7       0         -1
+t6                 ........pg.dropped.8........  0         0              -1      8       0         -1
+t6_pkey            rowid                         20        0              8       1       0         -1
+t6_expr_idx        crdb_internal_idx_expr        20        0              8       1       0         -1
+t6_expr_expr1_idx  crdb_internal_idx_expr_1      25        0              -1      1       0         -1
+t6_expr_expr1_idx  crdb_internal_idx_expr        20        0              8       2       0         -1
+t6_expr_key        crdb_internal_idx_expr_1      25        0              -1      1       0         -1
+t6_expr_idx1       crdb_internal_idx_expr_2      16        0              1       1       0         -1
+mv1                ?column?                      20        0              8       1       0         -1
+mv1                rowid                         20        0              8       2       0         -1
+mv1_pkey           rowid                         20        0              8       1       0         -1
 
 query TTIBTTBBTT colnames,rowsort
 SELECT c.relname, attname, atttypmod, attbyval, attstorage, attalign, attnotnull, atthasdef, attidentity, attgenerated
@@ -1177,36 +1177,45 @@ DROP TABLE pg_index_backfill_test
 
 subtest end
 
-query OOIBBBB colnames,rowsort
-SELECT indexrelid, indrelid, indnatts, indisunique, indnullsnotdistinct, indisprimary, indisexclusion
-FROM pg_catalog.pg_index
+query TTIBBBB colnames,rowsort
+SELECT ic.relname AS index_name, tc.relname AS table_name,
+       indnatts, indisunique, indnullsnotdistinct, indisprimary, indisexclusion
+FROM pg_catalog.pg_index i
+JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
+JOIN pg_catalog.pg_class tc ON tc.oid = i.indrelid
 WHERE indnkeyatts = 2
 ----
-indexrelid  indrelid  indnatts  indisunique  indnullsnotdistinct  indisprimary  indisexclusion
-3687884464  110       2         true         false                false         false
-2695335053  114       3         false        false                false         false
-2129466854  120       2         false        false                false         false
+index_name         table_name  indnatts  indisunique  indnullsnotdistinct  indisprimary  indisexclusion
+index_key          t1          2         true         false                false         false
+t3_a_b_idx         t3          3         false        false                false         false
+t6_expr_expr1_idx  t6          2         false        false                false         false
 
-query OBBBBB colnames,rowsort
-SELECT indexrelid, indimmediate, indisclustered, indisvalid, indcheckxmin, indisready
-FROM pg_catalog.pg_index
+query TTBBBBB colnames,rowsort
+SELECT ic.relname AS index_name, tc.relname AS table_name,
+       indimmediate, indisclustered, indisvalid, indcheckxmin, indisready
+FROM pg_catalog.pg_index i
+JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
+JOIN pg_catalog.pg_class tc ON tc.oid = i.indrelid
 WHERE indnkeyatts = 2
 ----
-indexrelid  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready
-3687884464  true          false           true        false         true
-2695335053  false         false           true        false         true
-2129466854  false         false           true        false         true
+index_name         table_name  indimmediate  indisclustered  indisvalid  indcheckxmin  indisready
+index_key          t1          true          false           true        false         true
+t3_a_b_idx         t3          false         false           true        false         true
+t6_expr_expr1_idx  t6          false         false           true        false         true
 
-query OOBBTTTTTT colnames
-SELECT indexrelid, indrelid, indislive, indisreplident, indkey, indcollation, indclass, indoption, indexprs, indpred
-FROM pg_catalog.pg_index
+query TTBBTTTTTT colnames
+SELECT ic.relname AS index_name, tc.relname AS table_name,
+       indislive, indisreplident, indkey, indcollation, indclass, indoption, indexprs, indpred
+FROM pg_catalog.pg_index i
+JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
+JOIN pg_catalog.pg_class tc ON tc.oid = i.indrelid
 WHERE indnkeyatts = 2
-ORDER BY indexrelid DESC
+ORDER BY ic.relname
 ----
-indexrelid  indrelid  indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs                indpred
-3687884464  110       true       false           3 4     0 0           0 0       2 2        NULL                    NULL
-2695335053  114       true       false           1 2 3   0 0           0 0       2 1        NULL                    NULL
-2129466854  120       true       false           0 0     3403232968 0  0 0       2 2        {(lower(c)),"(a + b)"}  NULL
+index_name         table_name  indislive  indisreplident  indkey  indcollation  indclass  indoption  indexprs                indpred
+index_key          t1          true       false           3 4     0 0           0 0       2 2        NULL                    NULL
+t3_a_b_idx         t3          true       false           1 2 3   0 0           0 0       2 1        NULL                    NULL
+t6_expr_expr1_idx  t6          true       false           0 0     3403232968 0  0 0       2 2        {(lower(c)),"(a + b)"}  NULL
 
 # Index expression elements should have an indkey of 0 and be included in
 # indexprs.
@@ -1965,14 +1974,16 @@ pg_rewrite      pg_class        source_table  depend_view            b          
 pg_rewrite      pg_class        source_table  depend_view            c            n
 
 # Testing pg_rewrite
-query OTOTTBTT colnames
-SELECT * FROM pg_rewrite WHERE ev_class IN (
-  SELECT oid FROM pg_class WHERE relname IN ('depend_view', 'view_dependingon_view')
-) ORDER BY oid
+query TTTTBT colnames
+SELECT r.rulename, c.relname, r.ev_type, r.ev_enabled, r.is_instead, r.ev_qual
+FROM pg_rewrite r
+JOIN pg_class c ON c.oid = r.ev_class
+WHERE c.relname IN ('depend_view', 'view_dependingon_view')
+ORDER BY c.relname
 ----
-oid         rulename  ev_class  ev_type  ev_enabled  is_instead  ev_qual  ev_action
-1640247955  _RETURN   133       1        NULL        true        NULL     NULL
-2985324961  _RETURN   134       1        NULL        true        NULL     NULL
+rulename  relname                ev_type  ev_enabled  is_instead  ev_qual
+_RETURN   depend_view            1        NULL        true        NULL
+_RETURN   view_dependingon_view  1        NULL        true        NULL
 
 ## pg_catalog.pg_enum
 statement ok
