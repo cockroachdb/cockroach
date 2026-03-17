@@ -1,0 +1,58 @@
+
+query T
+SELECT pg_typeof(NULL:::float);
+----
+unknown
+
+query T
+SELECT pg_typeof(NULL:::int:::float);
+----
+unknown
+
+query T
+SELECT pg_typeof(min(NULL:::FLOAT))
+----
+unknown
+
+query T
+SELECT pg_typeof(min(CASE WHEN true THEN NULL:::FLOAT END))
+----
+unknown
+
+query T
+SELECT pg_typeof(min((CASE WHEN true THEN NULL END):::FLOAT))
+----
+unknown
+
+query B
+SELECT min(NULL:::FLOAT) IS NOT NAN;
+----
+NULL
+
+query B
+SELECT min((CASE WHEN true THEN NULL END):::FLOAT) IS NOT NAN;
+----
+NULL
+
+query T
+SELECT CASE WHEN true THEN ('a', 2) ELSE NULL:::RECORD END
+----
+(a,2)
+
+
+query T
+SELECT CASE WHEN true THEN NULL:::RECORD ELSE ('a', 2) END
+----
+NULL
+
+
+query T
+SELECT (SELECT NULL):::FLOAT
+----
+NULL
+
+
+query T
+SELECT (SELECT NULL):::RECORD
+----
+NULL

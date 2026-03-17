@@ -19,6 +19,7 @@ import "context"
 type ExprEvaluator interface {
 	EvalAllColumnsSelector(context.Context, *AllColumnsSelector) (Datum, error)
 	EvalAndExpr(context.Context, *AndExpr) (Datum, error)
+	EvalAnnotateTypeExpr(context.Context, *AnnotateTypeExpr) (Datum, error)
 	EvalArray(context.Context, *Array) (Datum, error)
 	EvalArrayFlatten(context.Context, *ArrayFlatten) (Datum, error)
 	EvalBinaryExpr(context.Context, *BinaryExpr) (Datum, error)
@@ -64,6 +65,11 @@ func (node *AllColumnsSelector) Eval(ctx context.Context, v ExprEvaluator) (Datu
 // Eval is part of the TypedExpr interface.
 func (node *AndExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
 	return v.EvalAndExpr(ctx, node)
+}
+
+// Eval is part of the TypedExpr interface.
+func (node *AnnotateTypeExpr) Eval(ctx context.Context, v ExprEvaluator) (Datum, error) {
+	return v.EvalAnnotateTypeExpr(ctx, node)
 }
 
 // Eval is part of the TypedExpr interface.

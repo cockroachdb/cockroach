@@ -814,7 +814,16 @@ func (expr *AnnotateTypeExpr) TypeCheck(
 	if err != nil {
 		return nil, err
 	}
-	return subExpr, nil
+
+	// Return subExpr if the AnnotateTypeExpr is redundant.
+	if subExpr.ResolvedType() != types.Unknown || annotateType.IsAmbiguous() || cast.ValidCast(annotateType, desired, cast.ContextImplicit) {
+		return subExpr, nil
+	}
+
+	expr.Expr = subExpr
+	expr.typ = annotateType
+
+	return expr, nil
 }
 
 // TypeCheck implements the Expr interface.

@@ -4829,3 +4829,73 @@ scalar-group-by
  └── aggregations
       └── const-agg [as=array_agg:6]
            └── array_agg:6
+
+build format=(show-types,show-scalars)
+SELECT min(NULL:::FLOAT);
+----
+scalar-group-by
+ ├── columns: min:2(float)
+ ├── project
+ │    ├── columns: column1:1(float)
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── projections
+ │         └── cast: FLOAT8 [as=column1:1, type=float]
+ │              └── null [type=unknown]
+ └── aggregations
+      └── min [as=min:2, type=float]
+           └── variable: column1:1 [type=float]
+
+
+build format=(show-types,show-scalars)
+SELECT min(1:::FLOAT);
+----
+scalar-group-by
+ ├── columns: min:2(float)
+ ├── project
+ │    ├── columns: column1:1(float!null)
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── projections
+ │         └── const: 1.0 [as=column1:1, type=float]
+ └── aggregations
+      └── min [as=min:2, type=float]
+           └── variable: column1:1 [type=float]
+
+build
+SELECT min(CASE WHEN true THEN NULL:::FLOAT END) IS NOT NAN;
+----
+project
+ ├── columns: "?column?":3
+ ├── scalar-group-by
+ │    ├── columns: min:2
+ │    ├── project
+ │    │    ├── columns: column1:1
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         └── CASE WHEN true THEN NULL::FLOAT8 ELSE CAST(NULL AS FLOAT8) END [as=column1:1]
+ │    └── aggregations
+ │         └── min [as=min:2]
+ │              └── column1:1
+ └── projections
+      └── min:2 != NaN [as="?column?":3]
+
+build
+SELECT min((CASE WHEN true THEN NULL END):::FLOAT) IS NOT NAN;
+----
+project
+ ├── columns: "?column?":3
+ ├── scalar-group-by
+ │    ├── columns: min:2
+ │    ├── project
+ │    │    ├── columns: column1:1
+ │    │    ├── values
+ │    │    │    └── ()
+ │    │    └── projections
+ │    │         └── CASE WHEN true THEN NULL::FLOAT8 ELSE CAST(NULL AS FLOAT8) END [as=column1:1]
+ │    └── aggregations
+ │         └── min [as=min:2]
+ │              └── column1:1
+ └── projections
+      └── min:2 != NaN [as="?column?":3]
