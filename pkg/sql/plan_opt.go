@@ -300,6 +300,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 			WorkloadID:    p.extendedEvalCtx.WorkloadID,
 			AppNameID:     p.extendedEvalCtx.AppNameID,
 			GatewayNodeID: roachpb.NodeID(p.extendedEvalCtx.NodeID.SQLInstanceID()),
+			WorkloadType:  p.extendedEvalCtx.WorkloadType,
 		},
 		ash.WorkCPU, "Optimize")
 	defer cleanup()
@@ -506,7 +507,8 @@ func (opc *optPlanningCtx) reset(ctx context.Context) {
 		// potential reuse of versions. To avoid these issues, we prevent saving a
 		// memo (for prepare) or reusing a saved memo (for execute).
 		// We only allow reusing memo if this plan is not going to use canary stats.
-		opc.allowMemoReuse = !p.Descriptors().HasUncommittedTables() && !p.EvalContext().UseCanaryStats
+		opc.allowMemoReuse = !p.Descriptors().HasUncommittedTables() &&
+			p.EvalContext().StatsRollout != eval.StatsRolloutCanary
 		opc.useCache = opc.allowMemoReuse && queryCacheEnabled.Get(&p.execCfg.Settings.SV)
 
 		if _, isCanned := p.stmt.AST.(*tree.CannedOptPlan); isCanned {

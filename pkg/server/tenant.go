@@ -449,6 +449,9 @@ func newTenantServer(
 	// Instantiate the migration API server.
 	tms := newTenantMigrationServer(sqlServer)
 	serverpb.RegisterMigrationServer(args.grpc.Server, tms)
+	if err := serverpb.DRPCRegisterMigration(args.drpc.DRPCServer, tms); err != nil {
+		return nil, err
+	}
 	sqlServer.migrationServer = tms // only for testing via testTenant
 
 	// Tell the authz server how to connect to SQL.

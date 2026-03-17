@@ -479,7 +479,7 @@ func (c *cdcOptCatalog) newCDCDataSource(
 	if err != nil {
 		return nil, err
 	}
-	return newOptTable(ctx, d, c.codec(), nil /* stats */, emptyZoneConfig)
+	return newOptTable(ctx, d, c.codec(), nil /* stats */, emptyZoneConfig, false /* canaryAndStableStatsDiffer */)
 }
 
 // familyTableDescriptor wraps underlying catalog.TableDescriptor,

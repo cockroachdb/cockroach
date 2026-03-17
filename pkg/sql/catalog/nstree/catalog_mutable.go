@@ -28,6 +28,7 @@ func (mc *MutableCatalog) maybeInitialize() {
 	}
 	mc.byID = makeByIDMap()
 	mc.byName = makeByNameMap()
+	mc.nsEntryByID = make(map[descpb.ID]*byNameEntry)
 }
 
 // Clear empties the MutableCatalog.
@@ -104,6 +105,7 @@ func (mc *MutableCatalog) DeleteByName(key catalog.NameKey) {
 	}
 	if removed := mc.byName.delete(key); removed != nil {
 		mc.byteSize -= removed.(catalogEntry).ByteSize()
+		delete(mc.nsEntryByID, removed.GetID())
 	}
 }
 
@@ -117,6 +119,7 @@ func (mc *MutableCatalog) UpsertNamespaceEntry(
 	e := mc.ensureForName(key)
 	e.id = id
 	e.timestamp = mvccTimestamp
+	mc.nsEntryByID[id] = e
 }
 
 // DeleteByID removes all by-ID mappings from the MutableCatalog.
@@ -220,6 +223,7 @@ func (mc *MutableCatalog) AddAll(c Catalog) {
 			mc.byteSize -= e.ByteSize()
 			mc.byteSize += ne.ByteSize()
 		}
+		mc.nsEntryByID[ne.GetID()] = ne
 		return nil
 	})
 	_ = c.byID.ascend(func(entry catalog.NameEntry) error {

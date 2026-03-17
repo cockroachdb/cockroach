@@ -166,25 +166,26 @@ func (m *Manager) WaitForNoVersion(
 	defer decAfterWait()
 	wsTracker := startWaitStatsTracker(ctx)
 	defer wsTracker.end()
-	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
+	for lastCount, r := 0, retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		now := m.storage.clock.Now()
 		detail, err := countLeasesWithDetail(ctx, m.storage.db, m.Codec(), regions, m.settings, versions, now, true /*forAnyVersion*/)
 		if err != nil {
 			return err
 		}
 		if detail.count == 0 {
-			break
+			return nil
 		}
 		if detail.count != lastCount {
 			lastCount = detail.count
 			wsTracker.updateProgress(detail)
 			log.Dev.Infof(ctx, "waiting for %d leases to expire: desc=%d", detail.count, id)
 		}
-		if lastCount == 0 {
-			break
-		}
 	}
-	return nil
+	// Return context cancellation back if detected.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return errors.New("exited lease wait loop before success")
 }
 
 // maybeGetDescriptorsWithoutValidation gets descriptors without validating from
@@ -376,7 +377,8 @@ func (m *Manager) WaitForInitialVersion(
 	for _, id := range descriptorsIds {
 		ids.Add(id)
 	}
-	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
+	success := false
+	for lastCount, r := 0, retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		descs, err := m.maybeGetDescriptorsWithoutValidation(ctx, ids.Ordered(), false /* existenceExpected */)
 		if err != nil {
 			return err
@@ -538,6 +540,7 @@ func (m *Manager) WaitForInitialVersion(
 		}
 		// All the expected sessions are there now.
 		if totalCount == totalExpectedCount {
+			success = true
 			break
 		}
 		if totalCount != lastCount {
@@ -548,6 +551,12 @@ func (m *Manager) WaitForInitialVersion(
 			})
 		}
 		lastCount = totalCount
+	}
+	if !success {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return errors.New("exited lease wait loop before success")
 	}
 	return nil
 }
@@ -578,7 +587,8 @@ func (m *Manager) WaitForOneVersion(
 	defer wsTracker.end()
 
 	var desc catalog.Descriptor
-	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
+	success := false
+	for lastCount, r := 0, retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		var err error
 		desc, err = m.maybeGetDescriptorWithoutValidation(ctx, id, true)
 		if err != nil {
@@ -594,6 +604,7 @@ func (m *Manager) WaitForOneVersion(
 			return nil, err
 		}
 		if detail.count == 0 {
+			success = true
 			log.Dev.Infof(ctx, "all leases have expired at %v: desc=%v", now, descs)
 			break
 		}
@@ -603,7 +614,9 @@ func (m *Manager) WaitForOneVersion(
 			log.Dev.Infof(ctx, "waiting for %d leases to expire: desc=%v", detail.count, descs)
 		}
 	}
-
+	if !success && ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 	return desc, nil
 }
 
@@ -633,7 +646,7 @@ func (m *Manager) WaitForNewVersion(
 	// also holds a lease on the current version of the descriptor (`for all
 	// session: (session in Prev => session in Curr)` for the set theory
 	// enjoyers).
-	for r := retry.Start(retryOpts); r.Next(); {
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		var err error
 		desc, err = m.maybeGetDescriptorWithoutValidation(ctx, id, true)
 		if err != nil {
@@ -703,6 +716,10 @@ func (m *Manager) WaitForNewVersion(
 		}
 	}
 	if !success {
+		// Return context cancellation back if detected.
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		return nil, errors.New("Exited lease acquisition loop before success")
 	}
 
@@ -1207,10 +1224,24 @@ func (m *Manager) generateDescriptorTxnInfo(
 				timestamp: timestamp,
 			}
 			update.mu.DescriptorUpdates = updateEntry
-			select {
-			case <-m.stopper.ShouldQuiesce():
-			case <-ctx.Done():
-			case m.descMetaDataUpdateCh <- update:
+			// Process the update directly inside here. If the timestamp
+			// has already moved ahead it can be skipped.
+			allApplied, remaining := m.hasDescUpdateBeenApplied(update.mu.DescriptorUpdates)
+			update.mu.DescriptorUpdates = remaining
+			advanceTimestamp := func() bool {
+				m.mu.Lock()
+				defer m.mu.Unlock()
+				m.mu.hasUpdatesToDelete = true
+				minUpdate, hasMin := m.mu.descriptorTxnUpdatesToProcess.Min()
+				if allApplied && (!hasMin ||
+					!minUpdate.timestamp.Less(update.timestamp)) {
+					return true
+				}
+				m.mu.descriptorTxnUpdatesToProcess.ReplaceOrInsert(update)
+				return false
+			}()
+			if advanceTimestamp {
+				m.advanceCloseTimestamp(ctx, update.timestamp)
 			}
 			return nil, nil
 		})
@@ -1994,9 +2025,8 @@ type Manager struct {
 	descUpdateCh chan catalog.Descriptor
 	// descDelCh receives deleted descriptors from the range feed.
 	descDelCh chan descpb.ID
-	// descMetaDataUpdateCh receives updated transaction metadata from the
-	// range feed.
-	descMetaDataUpdateCh chan *descriptorTxnUpdate
+	// rangeFeedCheckpointCh receives rangefeed checkpoints from the rangefeed.
+	rangeFeedCheckpointCh chan *kvpb.RangeFeedCheckpoint
 	// rangefeedErrCh receives any terminal errors from the rangefeed.
 	rangefeedErrCh chan error
 	// leaseGeneration increments any time a new or existing descriptor is
@@ -2152,7 +2182,7 @@ func NewLeaseManager(
 	lm.draining.Store(false)
 	lm.descUpdateCh = make(chan catalog.Descriptor)
 	lm.descDelCh = make(chan descpb.ID)
-	lm.descMetaDataUpdateCh = make(chan *descriptorTxnUpdate)
+	lm.rangeFeedCheckpointCh = make(chan *kvpb.RangeFeedCheckpoint)
 	lm.rangefeedErrCh = make(chan error)
 	// Allow the bytes monitor to have allocation buffering
 	// by default. When we specify the minimum memory acquired
@@ -2932,27 +2962,23 @@ func (m *Manager) StartRefreshLeasesTask(ctx context.Context, s *stop.Stopper, d
 				if evFunc := m.testingKnobs.TestingDescriptorRefreshedEvent; evFunc != nil {
 					evFunc(desc.DescriptorProto())
 				}
-			case descUpdate := <-m.descMetaDataUpdateCh:
-				// Check if the update has been applied.
-				allApplied, remaining := m.hasDescUpdateBeenApplied(descUpdate.mu.DescriptorUpdates)
-				descUpdate.mu.DescriptorUpdates = remaining
-				advanceTimestamp := func() bool {
+			case checkpoint := <-m.rangeFeedCheckpointCh:
+				func() {
+					// Track checkpoints that occur from the rangefeed to make sure progress
+					// is always made.
+					m.advanceCloseTimestamp(ctx, checkpoint.ResolvedTS)
 					m.mu.Lock()
 					defer m.mu.Unlock()
-					m.mu.hasUpdatesToDelete = true
-					// If there are no other earlier pending updates, advance the timestamp.
-					minUpdate, hasMin := m.mu.descriptorTxnUpdatesToProcess.Min()
-					if allApplied && (!hasMin ||
-						!minUpdate.timestamp.Less(descUpdate.timestamp)) {
-						return true
+					m.mu.rangeFeedCheckpoints += 1
+					// Clean up all entries before the resolve timestamp.
+					for {
+						minTS, hasMin := m.mu.descriptorTxnUpdatesToProcess.Min()
+						if !hasMin || !minTS.timestamp.Less(checkpoint.ResolvedTS) {
+							break
+						}
+						m.mu.descriptorTxnUpdatesToProcess.Delete(minTS)
 					}
-					// Otherwise, insert this into the queue of pending updates
-					m.mu.descriptorTxnUpdatesToProcess.ReplaceOrInsert(descUpdate)
-					return false
 				}()
-				if advanceTimestamp {
-					m.advanceCloseTimestamp(ctx, descUpdate.timestamp)
-				}
 			case <-s.ShouldQuiesce():
 				return
 			}
@@ -3070,19 +3096,10 @@ func (m *Manager) watchForUpdates(ctx context.Context) {
 		if m.TestingDisableRangeFeedCheckpoint.Load() {
 			return
 		}
-		// Track checkpoints that occur from the rangefeed to make sure progress
-		// is always made.
-		m.advanceCloseTimestamp(ctx, checkpoint.ResolvedTS)
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		m.mu.rangeFeedCheckpoints += 1
-		// Clean up all entries before the resolve timestamp.
-		for {
-			minTS, hasMin := m.mu.descriptorTxnUpdatesToProcess.Min()
-			if !hasMin || !minTS.timestamp.Less(checkpoint.ResolvedTS) {
-				break
-			}
-			m.mu.descriptorTxnUpdatesToProcess.Delete(minTS)
+		select {
+		case <-m.stopper.ShouldQuiesce():
+		case <-ctx.Done():
+		case m.rangeFeedCheckpointCh <- checkpoint:
 		}
 	}
 

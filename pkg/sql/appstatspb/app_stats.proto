@@ -147,6 +147,19 @@ message StatementStatistics {
   // (ex/ not replication related work).
   optional NumericStat kv_cpu_time_nanos = 38 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVCPUTimeNanos"];
 
+  // canary_stats tracks execution statistics for the subset of executions
+  // that used canary (newest) table statistics for planning. This is used
+  // to compare performance between canary and stable statistics rollout
+  // paths.
+  optional ExperimentStatsInfo canary_stats = 39 [(gogoproto.nullable) = false];
+
+  // stable_stats tracks execution statistics for the subset of executions
+  // that used stable (second-newest) table statistics while the canary
+  // experiment was active (i.e. sql.stats.canary_fraction > 0). Executions
+  // where the canary experiment is off are neither canary nor stable — they
+  // are unclassified and not counted here.
+  optional ExperimentStatsInfo stable_stats = 40 [(gogoproto.nullable) = false];
+
   // Note: be sure to update `sql/app_stats.go` when adding/removing fields here!
 
   reserved 13, 14, 17, 18, 19, 20;
@@ -200,6 +213,15 @@ message TransactionStatistics {
   optional NumericStat kv_cpu_time_nanos = 12 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVCPUTimeNanos"];
 }
 
+
+// ExperimentStatsInfo groups the count and latency statistics for a single
+// bucket of the canary-vs-stable table statistics experiment. Two instances
+// are embedded in StatementStatistics: one for canary and one for stable.
+message ExperimentStatsInfo {
+  optional int64 count = 1 [(gogoproto.nullable) = false];
+  optional NumericStat run_lat = 2 [(gogoproto.nullable) = false];
+  optional NumericStat plan_lat = 3 [(gogoproto.nullable) = false];
+}
 
 message SensitiveInfo {
   option (gogoproto.equal) = true;

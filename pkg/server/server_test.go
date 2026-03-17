@@ -215,16 +215,15 @@ func TestPlainHTTPServer(t *testing.T) {
 	if !strings.HasPrefix(url, "http://") {
 		t.Fatalf("expected insecure admin url to start with http://, but got %s", url)
 	}
-	if resp, err := httputil.Get(context.Background(), url); err != nil {
-		t.Error(err)
-	} else {
-		func() {
-			defer resp.Body.Close()
-			if _, err := io.Copy(io.Discard, resp.Body); err != nil {
-				t.Error(err)
-			}
-		}()
-	}
+	testutils.SucceedsSoon(t, func() error {
+		resp, err := httputil.Get(context.Background(), url)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		_, err = io.Copy(io.Discard, resp.Body)
+		return err
+	})
 
 	// Attempting to connect to the insecure server with HTTPS doesn't work.
 	secureURL := strings.Replace(url, "http://", "https://", 1)

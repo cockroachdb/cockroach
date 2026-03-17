@@ -156,35 +156,31 @@ var detailedLatencyMetrics = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
-// canaryRollDice performs the probabilistic check to determine if a query
-// should use the "canary path" for statistics.
-// This selection is atomic per query, meaning that if a query is chosen to use
-// canary stats, all the tables involved in this query will use canary stats for
-// planning, if applicable.
-// This canary stats decision is made only for non-internal queries.
-func canaryRollDice(evalCtx *eval.Context, rng *rand.Rand) bool {
-	switch m := evalCtx.SessionData().CanaryStatsMode; m {
-	case sessiondatapb.CanaryStatsModeAuto:
-		threshold := stats.CanaryFraction.Get(&evalCtx.Settings.SV)
-		// If the fraction is 0, never use canary stats.
-		if threshold == 0 {
-			return false
-		}
-		// If the fraction is 1, always use canary stats.
-		if threshold == 1 {
-			return true
-		}
-
-		actual := rng.Float64()
-		return actual < threshold
-	case sessiondatapb.CanaryStatsModeOff:
-		return false
-	case sessiondatapb.CanaryStatsModeOn:
-		return true
+// canaryRollDice determines the stats rollout selection for a query.
+// The result is one of:
+//   - StatsRolloutDefault: experiment not active, use default stats.
+//   - StatsRolloutCanary:  experiment active, dice selected canary (newest) stats.
+//   - StatsRolloutStable:  experiment active, dice selected stable (second-newest) stats.
+//
+// The selection is atomic per query — all tables in the query use the same
+// rollout path. Only called for non-internal queries.
+func canaryRollDice(evalCtx *eval.Context, rng *rand.Rand) eval.StatsRolloutSelection {
+	threshold := stats.CanaryFraction.Get(&evalCtx.Settings.SV)
+	if threshold == 0 {
+		return eval.StatsRolloutDefault
 	}
-	// This should not happen but just in case of an unknown mode, we
-	// default to not using canary stats.
-	return false
+	switch m := evalCtx.SessionData().CanaryStatsMode; m {
+	case sessiondatapb.CanaryStatsModeOff:
+		return eval.StatsRolloutStable
+	case sessiondatapb.CanaryStatsModeOn:
+		return eval.StatsRolloutCanary
+	case sessiondatapb.CanaryStatsModeAuto:
+		if rng.Float64() < threshold {
+			return eval.StatsRolloutCanary
+		}
+		return eval.StatsRolloutStable
+	}
+	return eval.StatsRolloutDefault
 }
 
 // The metric label name we'll use to facet latency metrics by statement fingerprint.
@@ -3878,11 +3874,11 @@ func (ex *connExecutor) omitInRangefeeds() bool {
 	return ex.sessionData().DisableChangefeedReplication
 }
 
-func (ex *connExecutor) bufferedWritesEnabled(ctx context.Context) bool {
+func (ex *connExecutor) bufferedWritesEnabled(typ txnType) bool {
 	if ex.sessionData() == nil {
 		return false
 	}
-	return ex.sessionData().BufferedWritesEnabled
+	return ex.sessionData().BufferedWritesEnabled && (typ == explicitTxn || ex.sessionData().BufferedWritesImplicitTxnsEnabled)
 }
 
 func (ex *connExecutor) bufferedWritesIsAllowedForIsolationLevel(
@@ -4026,7 +4022,7 @@ func (ex *connExecutor) resetEvalCtx(evalCtx *extendedEvalContext, txn *kv.Txn, 
 	evalCtx.SkipNormalize = false
 	evalCtx.SchemaChangerState = ex.extraTxnState.schemaChangerState
 	evalCtx.DescIDGenerator = ex.getDescIDGenerator()
-	evalCtx.UseCanaryStats = false
+	evalCtx.StatsRollout = eval.StatsRolloutDefault
 
 	// See resetPlanner for more context on setting the maximum timestamp for
 	// AOST read retries.
@@ -4173,8 +4169,18 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			if err != nil {
 				return advanceInfo{}, err
 			}
-			if advInfo.txnEvent.eventType == txnUpgradeToExplicit {
-				ex.extraTxnState.txnFinishClosure.implicit = false
+		}
+		if advInfo.txnEvent.eventType == txnUpgradeToExplicit {
+			ex.extraTxnState.txnFinishClosure.implicit = false
+			// Update whether the buffered writes are enabled on the txn since
+			// it was upgraded to the explicit one.
+			if !ex.state.mu.txn.Active() {
+				// In an edge case, when multiple statements are sent via a
+				// single SimpleQuery pgwire message, the txn might have already
+				// issued some BatchRequests. We don't allow enabling buffered
+				// writes on such txn, so we'll keep the buffered writes
+				// enablement unchanged.
+				ex.state.mu.txn.SetBufferedWritesEnabled(ex.bufferedWritesEnabled(explicitTxn))
 			}
 		}
 	case txnStart:
@@ -4254,25 +4260,33 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 		// wait for one version (if no job exists) or the initial version to be
 		// acquired.
 		if ex.extraTxnState.descCollection.HasUncommittedDescriptors() {
-			cachedRegions, err := regions.NewCachedDatabaseRegions(ex.Ctx(), ex.server.cfg.DB, ex.server.cfg.LeaseManager)
+			// Apply statement timeout on any waiting logic.
+			err = ex.runWithStatementTimeout(func(ctx context.Context) error {
+				cachedRegions, err := regions.NewCachedDatabaseRegions(ctx, ex.server.cfg.DB, ex.server.cfg.LeaseManager)
+				if err != nil {
+					return err
+				}
+				if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(ctx, descIDsInJobs, cachedRegions); err != nil {
+					return err
+				}
+				if err := ex.waitForNewVersionPropagation(ctx, descIDsInJobs, cachedRegions); err != nil {
+					return err
+				}
+				if err := ex.waitForInitialVersionForNewDescriptors(ctx, cachedRegions); err != nil {
+					return err
+				}
+				// If a repair query was executed, then we need to confirm that the lease manager
+				// is handing out the new descriptor version. This is covered by the previous waits
+				// if the prior version was valid, but if it was invalid, then we need the lease manager
+				// to have a new timestamp available.
+				return ex.extraTxnState.descCollection.MaybeWaitForLeaseTimestampBump(ctx, advInfo.txnEvent.commitTimestamp)
+			}, func() error {
+				return ex.planner.noticeSender.SendNotice(ex.Ctx(), pgnotice.Newf("The statement has timed out while waiting for the "+
+					"schema change to be visible on all nodes."), true /* immediateFlush */)
+			})
 			if err != nil {
-				return advanceInfo{}, err
+				handleErr(err)
 			}
-			if err := ex.waitOneVersionForNewVersionDescriptorsWithoutJobs(descIDsInJobs, cachedRegions); err != nil {
-				return advanceInfo{}, err
-			}
-			if err := ex.waitForNewVersionPropagation(descIDsInJobs, cachedRegions); err != nil {
-				return advanceInfo{}, err
-			}
-			if err := ex.waitForInitialVersionForNewDescriptors(cachedRegions); err != nil {
-				return advanceInfo{}, err
-			}
-			// If a repair query was executed, then we need to confirm that the lease manager
-			// is handing out the new descirptor version. This is covered by the previous waits
-			// if the prior version was valid, but if it was invalid then we need the lease manager
-			// to have a new timestamp available.
-			ex.extraTxnState.descCollection.MaybeWaitForLeaseTimestampBump(ex.Ctx(), advInfo.txnEvent.commitTimestamp)
-
 			execCfg := ex.planner.ExecCfg()
 			if err := UpdateDescriptorCount(ex.Ctx(), execCfg, execCfg.SchemaChangerMetrics); err != nil {
 				log.Dev.Warningf(ex.Ctx(), "failed to update descriptor count metric: %v", err)
@@ -4316,7 +4330,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 				ex.QualityOfService(),
 				chainModes.isoLevel,
 				ex.omitInRangefeeds(),
-				ex.bufferedWritesEnabled(ex.Ctx()),
+				ex.bufferedWritesEnabled(explicitTxn),
 				ex.rng.internal,
 			)
 			chainEvent := eventTxnStart{ImplicitTxn: fsm.False}
@@ -4349,21 +4363,15 @@ func (ex *connExecutor) onTxnStart(txnID uuid.UUID) error {
 	return ex.maybeSetSQLLivenessSessionAndGeneration()
 }
 
-// waitForTxnJobs waits for any jobs created inside this txn
-// and respects the statement timeout for implicit transactions.
-func (ex *connExecutor) waitForTxnJobs() error {
-	var retErr error
-	if len(ex.extraTxnState.jobs.created) == 0 {
-		return nil
-	}
-	ex.mu.IdleInSessionTimeout.Stop()
-	defer ex.startIdleInSessionTimeout()
-	ex.server.cfg.JobRegistry.NotifyToResume(
-		ex.ctxHolder.connCtx, ex.extraTxnState.jobs.created...,
-	)
-	// Set up a context for waiting for the jobs, which can be cancelled if
-	// a statement timeout exists.
-	jobWaitCtx := ex.ctxHolder.ctx()
+// runWithStatementTimeout runs the given function with a context that has
+// the statement timeout applied. If the statement timeout is exceeded,
+// the onTimeoutError function is called and the return value of the function
+// is returned.
+func (ex *connExecutor) runWithStatementTimeout(
+	execFn func(ctx context.Context) error, onTimeoutError func() error,
+) error {
+	// Set up a context that can be cancelled when the statement timeout is exceeded.
+	waitCtx := ex.ctxHolder.ctx()
 	var queryTimedout atomic.Bool
 	if ex.sessionData().StmtTimeout > 0 {
 		timePassed := ex.phaseTimes.GetSessionPhaseTime(sessionphase.SessionQueryReceived).Elapsed()
@@ -4371,7 +4379,7 @@ func (ex *connExecutor) waitForTxnJobs() error {
 			queryTimedout.Store(true)
 		} else {
 			var cancelFn context.CancelFunc
-			jobWaitCtx, cancelFn = context.WithCancel(jobWaitCtx)
+			waitCtx, cancelFn = context.WithCancel(waitCtx)
 			queryTimeTicker := time.AfterFunc(ex.sessionData().StmtTimeout-timePassed, func() {
 				cancelFn()
 				queryTimedout.Store(true)
@@ -4380,7 +4388,38 @@ func (ex *connExecutor) waitForTxnJobs() error {
 			defer queryTimeTicker.Stop()
 		}
 	}
-	if !queryTimedout.Load() && len(ex.extraTxnState.jobs.created) > 0 {
+	if queryTimedout.Load() {
+		if err := onTimeoutError(); err != nil {
+			log.Dev.Warningf(ex.Ctx(), "failed to send timeout notice: %v", err)
+		}
+		return sqlerrors.QueryTimeoutError
+	}
+	err := execFn(waitCtx)
+	// Detect a context cancelled or a query cancelled error.
+	if (errors.Is(err, context.Canceled) ||
+		errors.Is(err, cancelchecker.QueryCanceledError)) && queryTimedout.Load() {
+		if err := onTimeoutError(); err != nil {
+			log.Dev.Warningf(ex.Ctx(), "failed to send timeout notice: %v", err)
+		}
+		return sqlerrors.QueryTimeoutError
+	}
+	return err
+}
+
+// waitForTxnJobs waits for any jobs created inside this txn
+// and respects the statement timeout for implicit transactions.
+func (ex *connExecutor) waitForTxnJobs() error {
+	if len(ex.extraTxnState.jobs.created) == 0 {
+		return nil
+	}
+
+	ex.mu.IdleInSessionTimeout.Stop()
+	defer ex.startIdleInSessionTimeout()
+	ex.server.cfg.JobRegistry.NotifyToResume(
+		ex.ctxHolder.connCtx, ex.extraTxnState.jobs.created...,
+	)
+
+	return ex.runWithStatementTimeout(func(ctx context.Context) error {
 		if !ex.sessionData().DisableWaitForJobsNotice {
 			jobIDs := strings.Builder{}
 			for i, jobID := range ex.extraTxnState.jobs.created {
@@ -4396,37 +4435,29 @@ func (ex *connExecutor) waitForTxnJobs() error {
 				return err
 			}
 		}
-		if err := ex.server.cfg.JobRegistry.WaitForJobs(jobWaitCtx,
-			ex.extraTxnState.jobs.created); err != nil {
-			if errors.Is(err, context.Canceled) && queryTimedout.Load() {
-				retErr = sqlerrors.QueryTimeoutError
-				err = nil
-			} else {
+		return ex.server.cfg.JobRegistry.WaitForJobs(ctx,
+			ex.extraTxnState.jobs.created)
+	},
+		func() error {
+			jobList := strings.Builder{}
+			for i, j := range ex.extraTxnState.jobs.created {
+				if i > 0 {
+					jobList.WriteString(",")
+				}
+				jobList.WriteString(j.String())
+			}
+			if err := ex.planner.noticeSender.SendNotice(
+				ex.ctxHolder.connCtx,
+				pgnotice.Newf(
+					"The statement has timed out, but the following "+
+						"background jobs have been created and will continue running: %s.",
+					jobList.String()),
+				false, /* immediateFlush */
+			); err != nil {
 				return err
 			}
-		}
-	}
-	// If the query timed out indicate that there are jobs left behind.
-	if queryTimedout.Load() {
-		jobList := strings.Builder{}
-		for i, j := range ex.extraTxnState.jobs.created {
-			if i > 0 {
-				jobList.WriteString(",")
-			}
-			jobList.WriteString(j.String())
-		}
-		if err := ex.planner.noticeSender.SendNotice(
-			ex.ctxHolder.connCtx,
-			pgnotice.Newf(
-				"The statement has timed out, but the following "+
-					"background jobs have been created and will continue running: %s.",
-				jobList.String()),
-			false, /* immediateFlush */
-		); err != nil {
-			return err
-		}
-	}
-	return retErr
+			return nil
+		})
 }
 
 func (ex *connExecutor) maybeSetSQLLivenessSessionAndGeneration() error {

@@ -11,18 +11,47 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
+
+type indexBackfillVariant struct {
+	nameSuffix               string
+	snapshotPrefix           string
+	withCgroupLimiting       bool
+	withProvisionedBandwidth bool
+}
+
+var indexBackfillVariants = []indexBackfillVariant{
+	{
+		nameSuffix:     "/no-disk-limit",
+		snapshotPrefix: "index-backfill-tpce-100k-nodisklimit",
+	},
+	{
+		nameSuffix:         "/provisioned-bandwidth=false",
+		snapshotPrefix:     "index-backfill-tpce-100k-nobw",
+		withCgroupLimiting: true,
+	},
+	{
+		nameSuffix:               "/provisioned-bandwidth=true",
+		snapshotPrefix:           "index-backfill-tpce-100k-bw",
+		withCgroupLimiting:       true,
+		withProvisionedBandwidth: true,
+	},
+}
 
 func registerIndexBackfill(r registry.Registry) {
 	clusterSpec := r.MakeClusterSpec(
@@ -37,185 +66,384 @@ func registerIndexBackfill(r registry.Registry) {
 		spec.VolumeType("pd-ssd"),
 		spec.GCEMachineType("n2-standard-8"),
 		spec.GCEZones("us-east1-b"),
+		spec.ReuseNone(),
 	)
 
-	r.Add(registry.TestSpec{
-		Name:             "admission-control/index-backfill",
-		Timeout:          6 * time.Hour,
-		Owner:            registry.OwnerAdmissionControl,
-		Benchmark:        true,
-		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.ManualOnly,
-		// TODO(aaditya): Revisit this as part of #111614.
-		//Suites:           registry.Suites(registry.Weekly),
-		//Tags:             registry.Tags(`weekly`),
-		Cluster:        clusterSpec,
-		SnapshotPrefix: "index-backfill-tpce-100k",
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			snapshots, err := c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
-				// TODO(irfansharif): Search by taking in the other parts of the
-				// snapshot fingerprint, i.e. the node count, the version, etc.
-				NamePrefix: t.SnapshotPrefix(),
-			})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(snapshots) == 0 {
-				t.L().Printf("no existing snapshots found for %s (%s), doing pre-work",
-					t.Name(), t.SnapshotPrefix())
+	for _, v := range indexBackfillVariants {
+		r.Add(registry.TestSpec{
+			Name:             "admission-control/index-backfill" + v.nameSuffix,
+			Timeout:          12 * time.Hour,
+			Owner:            registry.OwnerAdmissionControl,
+			Benchmark:        true,
+			CompatibleClouds: registry.OnlyGCE,
+			Suites:           registry.Suites(registry.Nightly),
+			Cluster:          clusterSpec,
+			SnapshotPrefix:   v.snapshotPrefix,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runIndexBackfill(ctx, t, c, clusterSpec, v.withCgroupLimiting, v.withProvisionedBandwidth)
+			},
+		})
+	}
+}
 
-				// Set up TPC-E with 100k customers. Do so using a published
-				// CRDB release, since we'll use this state to generate disk
-				// snapshots.
-				runTPCE(ctx, t, c, tpceOptions{
-					start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						pred, err := release.LatestPredecessor(t.BuildVersion())
-						if err != nil {
-							t.Fatal(err)
-						}
+const indexBackfillDiskBandwidth = 128 << 20 // 128 MiB/s
 
-						path, err := clusterupgrade.UploadCockroach(
-							ctx, t, t.L(), c, c.All(), clusterupgrade.MustParseVersion(pred),
-						)
-						if err != nil {
-							t.Fatal(err)
-						}
+func runIndexBackfill(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	clusterSpec spec.ClusterSpec,
+	withCgroupLimiting bool,
+	withProvisionedBandwidth bool,
+) {
+	snapshots, err := c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
+		// TODO(irfansharif): Search by taking in the other parts of the
+		// snapshot fingerprint, i.e. the node count, the version, etc.
+		NamePrefix: t.SnapshotPrefix(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshots) == 0 {
+		t.L().Printf("no existing snapshots found for %s (%s), doing pre-work",
+			t.Name(), t.SnapshotPrefix())
 
-						// Copy over the binary to ./cockroach and run it from
-						// there. This test captures disk snapshots, which are
-						// fingerprinted using the binary version found in this
-						// path. The reason it can't just poke at the running
-						// CRDB process is because when grabbing snapshots, CRDB
-						// is not running.
-						c.Run(ctx, option.WithNodes(c.All()), fmt.Sprintf("cp %s ./cockroach", path))
-						settings := install.MakeClusterSettings(install.NumRacksOption(len(c.CRDBNodes())))
-						startOpts := option.NewStartOpts(option.NoBackupSchedule)
-						roachtestutil.SetDefaultSQLPort(c, &startOpts.RoachprodOpts)
-						if err := c.StartE(ctx, t.L(), startOpts, settings, c.CRDBNodes()); err != nil {
-							t.Fatal(err)
-						}
-					},
-					customers:          100_000,
-					disablePrometheus:  true,
-					setupType:          usingTPCEInit,
-					estimatedSetupTime: 4 * time.Hour,
-					nodes:              len(c.CRDBNodes()),
-					cpus:               clusterSpec.CPUs,
-					ssds:               1,
-					onlySetup:          true,
-				})
-
-				// Stop all nodes before capturing cluster snapshots.
-				c.Stop(ctx, t.L(), option.DefaultStopOpts())
-
-				// Create the aforementioned snapshots.
-				snapshots, err = c.CreateSnapshot(ctx, t.SnapshotPrefix())
+		// Set up TPC-E with 100k customers. Do so using a published
+		// CRDB release, since we'll use this state to generate disk
+		// snapshots.
+		runTPCE(ctx, t, c, tpceOptions{
+			start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				pred, err := release.LatestPredecessor(t.BuildVersion())
 				if err != nil {
 					t.Fatal(err)
 				}
-				t.L().Printf("created %d new snapshot(s) with prefix %q, using this state",
-					len(snapshots), t.SnapshotPrefix())
-			} else {
-				t.L().Printf("using %d pre-existing snapshot(s) with prefix %q",
-					len(snapshots), t.SnapshotPrefix())
 
-				if !t.SkipInit() {
-					// Creating and attaching volumes takes some time. This test
-					// is written to be re-entrant. Assume the user passing in
-					// --skip-init knows this particular test behavior.
-					if err := c.ApplySnapshots(ctx, snapshots); err != nil {
-						t.Fatal(err)
-					}
-				}
-			}
-
-			promCfg := &prometheus.Config{}
-			promCfg.WithPrometheusNode(c.WorkloadNode().InstallNodes()[0]).
-				WithNodeExporter(c.CRDBNodes().InstallNodes()).
-				WithCluster(c.CRDBNodes().InstallNodes()).
-				WithGrafanaDashboard("https://go.crdb.dev/p/index-admission-control-grafana").
-				WithScrapeConfigs(
-					prometheus.MakeWorkloadScrapeConfig("workload", "/",
-						makeWorkloadScrapeNodes(
-							c.WorkloadNode().InstallNodes()[0],
-							[]workloadInstance{{nodes: c.WorkloadNode()}},
-						),
-					),
+				path, err := clusterupgrade.UploadCockroach(
+					ctx, t, t.L(), c, c.All(), clusterupgrade.MustParseVersion(pred),
 				)
+				if err != nil {
+					t.Fatal(err)
+				}
 
-			// Run the foreground TPC-E workload for 20k customers for 1hr. Run
-			// large index backfills while it's running.
-			runTPCE(ctx, t, c, tpceOptions{
-				start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					startOpts := option.NewStartOpts(option.NoBackupSchedule)
-					roachtestutil.SetDefaultSQLPort(c, &startOpts.RoachprodOpts)
-					roachtestutil.SetDefaultAdminUIPort(c, &startOpts.RoachprodOpts)
-					settings := install.MakeClusterSettings(install.NumRacksOption(len(c.CRDBNodes())))
-					if err := c.StartE(ctx, t.L(), startOpts, settings, c.CRDBNodes()); err != nil {
-						t.Fatal(err)
-					}
-				},
-				customers:        100_000,
-				activeCustomers:  20_000,
-				threads:          400,
-				skipCleanup:      true,
-				ssds:             1,
-				setupType:        usingExistingTPCEData,
-				nodes:            clusterSpec.NodeCount - 1,
-				cpus:             clusterSpec.CPUs,
-				prometheusConfig: promCfg,
-				workloadDuration: time.Hour + 30*time.Minute,
-				during: func(ctx context.Context) error {
-					db := c.Conn(ctx, t.L(), 1)
-					defer db.Close()
+				// Copy over the binary to ./cockroach and run it from
+				// there. This test captures disk snapshots, which are
+				// fingerprinted using the binary version found in this
+				// path. The reason it can't just poke at the running
+				// CRDB process is because when grabbing snapshots, CRDB
+				// is not running.
+				c.Run(ctx, option.WithNodes(c.All()), fmt.Sprintf("cp %s ./cockroach", path))
+				settings := install.MakeClusterSettings(install.NumRacksOption(len(c.CRDBNodes())))
+				startOpts := option.NewStartOpts(option.NoBackupSchedule)
+				roachtestutil.SetDefaultSQLPort(c, &startOpts.RoachprodOpts)
+				if err := c.StartE(ctx, t.L(), startOpts, settings, c.CRDBNodes()); err != nil {
+					t.Fatal(err)
+				}
+			},
+			customers:          100_000,
+			disablePrometheus:  true,
+			setupType:          usingTPCEInit,
+			estimatedSetupTime: 4 * time.Hour,
+			nodes:              len(c.CRDBNodes()),
+			cpus:               clusterSpec.CPUs,
+			ssds:               1,
+			onlySetup:          true,
+		})
 
-					// Defeat https://github.com/cockroachdb/cockroach/issues/98311.
-					if _, err := db.ExecContext(ctx,
-						"SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = false;",
-					); err != nil {
-						t.Fatal(err)
-					}
+		// Stop all nodes before capturing cluster snapshots.
+		c.Stop(ctx, t.L(), option.DefaultStopOpts())
 
-					t.Status(fmt.Sprintf("recording baseline performance (<%s)", 5*time.Minute))
-					time.Sleep(5 * time.Minute)
+		// Create the aforementioned snapshots.
+		snapshots, err = c.CreateSnapshot(ctx, t.SnapshotPrefix())
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.L().Printf("created %d new snapshot(s) with prefix %q, using this state",
+			len(snapshots), t.SnapshotPrefix())
+	} else {
+		t.L().Printf("using %d pre-existing snapshot(s) with prefix %q",
+			len(snapshots), t.SnapshotPrefix())
 
-					// Choose index creations and primary key changes that would
-					// take ~30 minutes each. Offset them by 5 minutes.
-					//
-					// TODO(irfansharif): These now take closer to an hour after
-					// https://github.com/cockroachdb/cockroach/pull/109085. Do
-					// something about it if customers complain.
-					m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-					m.Go(func(ctx context.Context) error {
-						t.Status(fmt.Sprintf("starting index creation (<%s)", 30*time.Minute))
-						_, err := db.ExecContext(ctx,
-							fmt.Sprintf("CREATE INDEX index_%s ON tpce.cash_transaction (ct_dts)",
-								timeutil.Now().Format("20060102_T150405"),
-							),
-						)
-						t.Status("finished index creation")
-						return err
-					})
-					m.Go(func(ctx context.Context) error {
-						// TODO(irfansharif): Is the re-entrant? As in,
-						// effective when re-running the roachtest against the
-						// same cluster that's already run the test once? Useful
-						// to make it so if possible, to run things more
-						// iteratively.
-						time.Sleep(5 * time.Minute)
-						t.Status(fmt.Sprintf("starting primary key change (<%s)", 30*time.Minute))
-						_, err := db.ExecContext(ctx,
-							"ALTER TABLE tpce.holding_history ALTER PRIMARY KEY USING COLUMNS (hh_h_t_id ASC, hh_t_id ASC, hh_before_qty ASC)",
-						)
-						t.Status("finished primary key change")
-						return err
-					})
-					m.Wait()
+		if !t.SkipInit() {
+			roachtestutil.CopySnapshotDataToNodes(ctx, t, c, snapshots)
+		}
+	}
 
-					t.Status(fmt.Sprintf("waiting for workload to finish (<%s)", 50*time.Minute))
+	// Set up prometheus for metrics collection.
+	promCfg := &prometheus.Config{}
+	promCfg.WithPrometheusNode(c.WorkloadNode().InstallNodes()[0]).
+		WithNodeExporter(c.CRDBNodes().InstallNodes()).
+		WithCluster(c.CRDBNodes().InstallNodes()).
+		WithGrafanaDashboard("https://go.crdb.dev/p/index-admission-control-grafana").
+		WithScrapeConfigs(
+			prometheus.MakeWorkloadScrapeConfig("workload", "/",
+				makeWorkloadScrapeNodes(
+					c.WorkloadNode().InstallNodes()[0],
+					[]workloadInstance{{nodes: c.WorkloadNode()}},
+				),
+			),
+		)
+	if err := c.StartGrafana(ctx, t.L(), promCfg); err != nil {
+		t.Fatal(err)
+	}
+
+	// Set up prometheus client and stat collector for roachperf export.
+	promClient, err := clusterstats.SetupCollectorPromClient(ctx, c, t.L(), promCfg)
+	require.NoError(t, err)
+	statCollector := clusterstats.NewStatsCollector(ctx, promClient)
+
+	// Start the cluster.
+	t.Status("starting cluster for workload")
+	startOpts := option.NewStartOpts(option.NoBackupSchedule)
+	roachtestutil.SetDefaultSQLPort(c, &startOpts.RoachprodOpts)
+	roachtestutil.SetDefaultAdminUIPort(c, &startOpts.RoachprodOpts)
+	settings := install.MakeClusterSettings(install.NumRacksOption(len(c.CRDBNodes())))
+	if err := c.StartE(ctx, t.L(), startOpts, settings, c.CRDBNodes()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Configure cluster settings before workload begins.
+	db := c.Conn(ctx, t.L(), 1)
+	defer db.Close()
+
+	// Work around https://github.com/cockroachdb/cockroach/issues/98311.
+	// TPC-E tables use a 300s GC TTL. When admission control delays
+	// AddSSTable requests beyond this TTL, the GC threshold advances
+	// past the batch timestamp and the request fails.
+	if _, err := db.ExecContext(ctx,
+		"SET CLUSTER SETTING kv.gc_ttl.strict_enforcement.enabled = false",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if withCgroupLimiting {
+		// Optionally tell admission control the disk's provisioned
+		// bandwidth so it can manage elastic vs. foreground work.
+		if withProvisionedBandwidth {
+			if _, err := db.ExecContext(ctx,
+				"SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '128MiB'",
+			); err != nil {
+				t.Fatal(err)
+			}
+			// Allow elastic work to fully utilize the provisioned
+			// bandwidth.
+			if _, err := db.ExecContext(ctx,
+				"SET CLUSTER SETTING kvadmission.store.elastic_disk_bandwidth_max_util = 1.0",
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Limit disk bandwidth to 128 MiB/s via cgroups so that disk I/O
+		// becomes the bottleneck. Without this, pd-ssd disks are fast enough
+		// that admission control has nothing meaningful to manage. This must
+		// run after c.StartE, since the cgroup path for the cockroach systemd
+		// service only exists after the service has been created.
+		t.Status(fmt.Sprintf("limiting disk bandwidth to %d bytes/s via cgroups",
+			indexBackfillDiskBandwidth))
+		staller := roachtestutil.MakeCgroupDiskStaller(t, c,
+			true /* readsToo */, false /* logsToo */, false /* disableStateValidation */)
+		staller.Setup(ctx)
+		staller.Slow(ctx, c.CRDBNodes(), indexBackfillDiskBandwidth)
+	}
+
+	// Initialize TPC-E spec for running workload commands.
+	tpceSpec, err := initTPCESpec(ctx, t.L(), c)
+	require.NoError(t, err)
+
+	// Run TPC-E workload and schema changes concurrently, collecting
+	// disk bandwidth metrics during the schema changes.
+	const (
+		workloadDuration = 90 * time.Minute
+		baselineWait     = 5 * time.Minute
+	)
+	var backfillDuration time.Duration
+	var pkChangeDuration time.Duration
+	var totalBWSamples []float64
+	var metricsStart, metricsEnd time.Time
+
+	g := t.NewGroup(task.WithContext(ctx))
+
+	// Goroutine 1: Run TPC-E workload.
+	g.Go(func(ctx context.Context, l *logger.Logger) error {
+		t.Status(fmt.Sprintf("starting TPC-E workload with 20000 active customers (<%s)",
+			workloadDuration))
+		runOptions := tpceCmdOptions{
+			customers:       100_000,
+			activeCustomers: 20_000,
+			racks:           len(c.CRDBNodes()),
+			duration:        workloadDuration,
+			threads:         400,
+			skipCleanup:     true,
+			connectionOpts:  defaultTPCEConnectionOpts(),
+		}
+		result, err := tpceSpec.run(ctx, t, c, runOptions)
+		if err != nil {
+			l.Printf("TPC-E workload error: %v", err)
+			return err
+		}
+		l.Printf("TPC-E workload output:\n%s\n", result.Stdout)
+		return nil
+	}, task.Name("tpce-workload"))
+
+	// Goroutine 2: Run index creation after baseline period.
+	g.Go(func(ctx context.Context, l *logger.Logger) error {
+		t.Status(fmt.Sprintf("recording baseline performance (<%s)", baselineWait))
+		time.Sleep(baselineWait)
+
+		t.Status("starting index creation on tpce.cash_transaction")
+		indexName := fmt.Sprintf("index_%s", timeutil.Now().Format("20060102_T150405"))
+
+		backfillStart := timeutil.Now()
+		_, err := db.ExecContext(ctx,
+			fmt.Sprintf("CREATE INDEX %s ON tpce.cash_transaction (ct_dts)", indexName),
+		)
+		backfillDuration = timeutil.Since(backfillStart)
+		if err != nil {
+			l.Printf("index creation error: %v", err)
+			return err
+		}
+		l.Printf("index backfill completed in %s", backfillDuration)
+		t.Status("finished index creation")
+		return nil
+	}, task.Name("index-backfill"))
+
+	// Goroutine 3: Run primary key change, starting 10 minutes after
+	// test start (5 minutes after the index backfill starts).
+	g.Go(func(ctx context.Context, l *logger.Logger) error {
+		time.Sleep(baselineWait + 5*time.Minute)
+
+		t.Status("starting primary key change on tpce.holding_history")
+		pkChangeStart := timeutil.Now()
+		_, err := db.ExecContext(ctx,
+			"ALTER TABLE tpce.holding_history ALTER PRIMARY KEY USING COLUMNS (hh_h_t_id ASC, hh_t_id ASC, hh_before_qty ASC)",
+		)
+		pkChangeDuration = timeutil.Since(pkChangeStart)
+		if err != nil {
+			l.Printf("primary key change error: %v", err)
+			return err
+		}
+		l.Printf("primary key change completed in %s", pkChangeDuration)
+		t.Status("finished primary key change")
+		return nil
+	}, task.Name("pk-change"))
+
+	// Collect disk bandwidth metrics in a separate goroutine outside the
+	// group, so g.Wait() only blocks on the workload and schema changes.
+	stopMetrics := make(chan struct{})
+	metricsDone := make(chan struct{})
+	t.Go(func(ctx context.Context, l *logger.Logger) error {
+		defer close(metricsDone)
+
+		// Wait for baseline period before starting collection.
+		time.Sleep(baselineWait)
+
+		metricsStart = timeutil.Now()
+		defer func() { metricsEnd = timeutil.Now() }()
+
+		// Use avg() across nodes to get per-node average bandwidth,
+		// which is comparable to the 128 MiB/s cgroup limit.
+		writeBWQuery := divQuery("avg(rate(sys_host_disk_write_bytes[1m]))", 1<<20)
+		readBWQuery := divQuery("avg(rate(sys_host_disk_read_bytes[1m]))", 1<<20)
+
+		getMetricVal := func(query string) (float64, error) {
+			point, err := statCollector.CollectPoint(ctx, t.L(), timeutil.Now(), query)
+			if err != nil {
+				return 0, err
+			}
+			for _, v := range point[""] {
+				return v.Value, nil
+			}
+			return 0, fmt.Errorf("no data for query %s", query)
+		}
+
+		l.Printf("=== DISK BANDWIDTH METRICS COLLECTION STARTED (1m interval) ===")
+		ticker := time.NewTicker(1 * time.Minute)
+		defer ticker.Stop()
+
+		iteration := 0
+		for {
+			select {
+			case <-ticker.C:
+				iteration++
+				writeBW, writeErr := getMetricVal(writeBWQuery)
+				readBW, readErr := getMetricVal(readBWQuery)
+				if writeErr != nil || readErr != nil {
+					l.Printf("[metrics %d] error collecting: write=%v, read=%v",
+						iteration, writeErr, readErr)
+					continue
+				}
+				totalBW := writeBW + readBW
+				totalBWSamples = append(totalBWSamples, totalBW)
+				l.Printf("[metrics %d] disk bandwidth: read=%.2f MiB/s, write=%.2f MiB/s, total=%.2f MiB/s",
+					iteration, readBW, writeBW, totalBW)
+			case <-stopMetrics:
+				l.Printf("=== DISK BANDWIDTH METRICS COLLECTION STOPPED ===")
+				return nil
+			case <-ctx.Done():
+				return nil
+			}
+		}
+	}, task.Name("metrics-collector"))
+
+	// Wait for workload and schema changes, then stop metrics collection.
+	g.Wait()
+	close(stopMetrics)
+	<-metricsDone
+
+	t.L().Printf("index backfill duration: %s", backfillDuration)
+	t.L().Printf("primary key change duration: %s", pkChangeDuration)
+
+	// Compute mean total bandwidth from the samples collected during
+	// schema changes.
+	var avgTotalBW float64
+	if len(totalBWSamples) > 0 {
+		var sum float64
+		for _, s := range totalBWSamples {
+			sum += s
+		}
+		avgTotalBW = sum / float64(len(totalBWSamples))
+		t.L().Printf("average total disk bandwidth during schema changes: %.2f MiB/s (%d samples)",
+			avgTotalBW, len(totalBWSamples))
+	}
+
+	// Export metrics to roachperf.
+	if !metricsStart.IsZero() && !metricsEnd.IsZero() {
+		_, err := statCollector.Exporter().Export(
+			ctx, c, t, false, /* dryRun */
+			metricsStart, metricsEnd,
+			[]clusterstats.AggQuery{},
+			func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+				return &roachtestutil.AggregatedMetric{
+					Name:           "index_backfill_duration",
+					Value:          roachtestutil.MetricPoint(backfillDuration.Seconds()),
+					Unit:           "s",
+					IsHigherBetter: false,
+				}
+			},
+			func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+				return &roachtestutil.AggregatedMetric{
+					Name:           "primary_key_change_duration",
+					Value:          roachtestutil.MetricPoint(pkChangeDuration.Seconds()),
+					Unit:           "s",
+					IsHigherBetter: false,
+				}
+			},
+			func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
+				if avgTotalBW == 0 {
 					return nil
-				},
-			})
-		},
-	})
+				}
+				return &roachtestutil.AggregatedMetric{
+					Name:           "mean_total_bandwidth",
+					Value:          roachtestutil.MetricPoint(avgTotalBW),
+					Unit:           "MiB/s",
+					IsHigherBetter: true,
+				}
+			},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Status("test completed successfully")
 }

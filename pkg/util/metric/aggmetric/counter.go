@@ -7,7 +7,6 @@ package aggmetric
 
 import (
 	"sync/atomic"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -309,6 +308,7 @@ type HighCardinalityCounter struct {
 	g *metric.Counter
 	*baseAggMetric
 	labelSliceCache *metric.LabelSliceCache
+	opts            metric.HighCardinalityMetricOptions
 }
 
 var _ metric.Iterable = (*HighCardinalityCounter)(nil)
@@ -316,15 +316,15 @@ var _ metric.PrometheusEvictable = (*HighCardinalityCounter)(nil)
 
 // NewHighCardinalityCounter constructs a new HighCardinalityCounter that uses cache storage
 // with eviction for child metrics. The opts parameter contains the metadata and allows configuring
-// the maximum number of label combinations (MaxLabelValues) and retention time (RetentionTimeTillEviction).
-// If opts has zero values for MaxLabelValues or RetentionTimeTillEviction, defaults will be used.
+// the maximum number of label combinations (MaxLabelValues). If opts has a zero value for
+// MaxLabelValues, defaults will be used.
 func NewHighCardinalityCounter(
-	opts metric.HighCardinalityMetricOptions, childLabels ...string,
+	metadata metric.Metadata, opts metric.HighCardinalityMetricOptions, childLabels []string,
 ) *HighCardinalityCounter {
-	counter := metric.NewCounter(opts.Metadata)
+	counter := metric.NewCounter(metadata)
 	base := newBaseAggMetric(counter)
-	c := &HighCardinalityCounter{g: counter, baseAggMetric: base}
-	c.initWithCacheStorageType(childLabels, opts.Metadata.Name, opts)
+	c := &HighCardinalityCounter{g: counter, baseAggMetric: base, opts: opts}
+	c.initWithCacheStorageType(childLabels)
 	return c
 }
 
@@ -389,11 +389,12 @@ func (c *HighCardinalityCounter) GetOrAddChild(labelVals ...string) *HighCardina
 func (c *HighCardinalityCounter) createHighCardinalityChildCounter(
 	key uint64, cache *metric.LabelSliceCache,
 ) LabelSliceCachedChildMetric {
-	return &HighCardinalityChildCounter{
+	child := &HighCardinalityChildCounter{
 		LabelSliceCacheKey: metric.LabelSliceCacheKey(key),
 		LabelSliceCache:    cache,
-		createdAt:          timeutil.Now(),
 	}
+	child.updatedAt.Store(timeutil.Now().Unix())
+	return child
 }
 
 // HighCardinalityChildCounter is a child of a HighCardinalityCounter. When metrics are
@@ -403,11 +404,11 @@ type HighCardinalityChildCounter struct {
 	metric.LabelSliceCacheKey
 	value metric.Counter
 	*metric.LabelSliceCache
-	createdAt time.Time
+	updatedAt atomic.Int64
 }
 
-func (c *HighCardinalityChildCounter) CreatedAt() time.Time {
-	return c.createdAt
+func (c *HighCardinalityChildCounter) UpdatedAt() int64 {
+	return c.updatedAt.Load()
 }
 
 func (c *HighCardinalityChildCounter) DecrementLabelSliceCacheReference() {
@@ -439,4 +440,5 @@ func (c *HighCardinalityChildCounter) Value() int64 {
 // Inc increments the HighCardinalityChildCounter's value.
 func (c *HighCardinalityChildCounter) Inc(i int64) {
 	c.value.Inc(i)
+	c.updatedAt.Store(timeutil.Now().Unix())
 }

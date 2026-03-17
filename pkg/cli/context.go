@@ -371,6 +371,10 @@ type zipContext struct {
 	// The log/heap/etc files to include.
 	files fileSelection
 
+	// excludeLogSeverities lists log severity names (e.g. "INFO") to
+	// exclude from log file collection.
+	excludeLogSeverities []string
+
 	// validateZipFile indicates whether the generated zip file should be validated
 	// post debug zip file generation.
 	validateZipFile bool

@@ -6,6 +6,7 @@
 package sql
 
 import (
+	"context"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -26,7 +27,9 @@ import (
 // for mutated descriptors. Some descriptors only have their versions bumped and
 // those are not waited on.
 func (ex *connExecutor) waitOneVersionForNewVersionDescriptorsWithoutJobs(
-	descIDsInJobs catalog.DescriptorIDSet, cachedRegions *regions.CachedDatabaseRegions,
+	ctx context.Context,
+	descIDsInJobs catalog.DescriptorIDSet,
+	cachedRegions *regions.CachedDatabaseRegions,
 ) error {
 	withNewVersion, err := ex.extraTxnState.descCollection.GetOriginalPreviousIDVersionsForUncommitted()
 	if err != nil {
@@ -43,7 +46,7 @@ func (ex *connExecutor) waitOneVersionForNewVersionDescriptorsWithoutJobs(
 		if ex.extraTxnState.descCollection.IsVersionBumpOfUncommittedDescriptor(idVersion.ID) {
 			continue
 		}
-		if _, err := WaitToUpdateLeases(ex.Ctx(), ex.planner.LeaseMgr(), cachedRegions, idVersion.ID); err != nil {
+		if _, err := WaitToUpdateLeases(ctx, ex.planner.LeaseMgr(), cachedRegions, idVersion.ID); err != nil {
 			// In most cases (normal schema changes), deleted descriptor should have
 			// been handled by jobs. So, normally we won't hit into the situation of
 			// wait for one version of a deleted descriptor. However, we need catch
@@ -66,7 +69,9 @@ func (ex *connExecutor) waitOneVersionForNewVersionDescriptorsWithoutJobs(
 // This is used to support cache invalidation of the internal user and role
 // tables without blocking on long-running transactions.
 func (ex *connExecutor) waitForNewVersionPropagation(
-	descIDsInJobs catalog.DescriptorIDSet, cachedRegions *regions.CachedDatabaseRegions,
+	ctx context.Context,
+	descIDsInJobs catalog.DescriptorIDSet,
+	cachedRegions *regions.CachedDatabaseRegions,
 ) error {
 	withNewVersion, err := ex.extraTxnState.descCollection.GetOriginalPreviousIDVersionsForUncommitted()
 	if err != nil {
@@ -84,7 +89,7 @@ func (ex *connExecutor) waitForNewVersionPropagation(
 			continue
 		}
 
-		if _, err := ex.planner.LeaseMgr().WaitForNewVersion(ex.Ctx(), idVersion.ID, cachedRegions,
+		if _, err := ex.planner.LeaseMgr().WaitForNewVersion(ctx, idVersion.ID, cachedRegions,
 			retry.Options{
 				InitialBackoff: time.Millisecond,
 				MaxBackoff:     time.Second,
@@ -97,7 +102,7 @@ func (ex *connExecutor) waitForNewVersionPropagation(
 }
 
 func (ex *connExecutor) waitForInitialVersionForNewDescriptors(
-	cachedRegions *regions.CachedDatabaseRegions,
+	ctx context.Context, cachedRegions *regions.CachedDatabaseRegions,
 ) error {
 	// Detect any tables that have just been created, we will confirm that all
 	// nodes that have leased the schema for them out are aware of the new object.
@@ -109,7 +114,7 @@ func (ex *connExecutor) waitForInitialVersionForNewDescriptors(
 			descriptorIDs = append(descriptorIDs, tbl.GetID())
 		}
 	}
-	return ex.planner.LeaseMgr().WaitForInitialVersion(ex.Ctx(), descriptorIDs, cachedRegions, retry.Options{
+	return ex.planner.LeaseMgr().WaitForInitialVersion(ctx, descriptorIDs, cachedRegions, retry.Options{
 		InitialBackoff: time.Millisecond,
 		MaxBackoff:     time.Second,
 		Multiplier:     1.5,

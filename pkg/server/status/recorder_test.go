@@ -218,6 +218,28 @@ func TestMetricsRecorderLabels(t *testing.T) {
 				},
 			},
 		},
+		// The scrape meta-metrics are updated by the PrintAsText calls above.
+		// The system recorder sees 6 metric families and 10 time series.
+		{
+			Name:   "cr.node.obs.metric_export.name.count",
+			Source: "7",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: manual.Now().UnixNano(),
+					Value:          6,
+				},
+			},
+		},
+		{
+			Name:   "cr.node.obs.metric_export.line.count",
+			Source: "7",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: manual.Now().UnixNano(),
+					Value:          10,
+				},
+			},
+		},
 		{
 			Name:   "cr.node.some_metric",
 			Source: "7",
@@ -246,6 +268,27 @@ func TestMetricsRecorderLabels(t *testing.T) {
 				{
 					TimestampNanos: manual.Now().UnixNano(),
 					Value:          float64(nodeDesc.NodeID),
+				},
+			},
+		},
+		// The tenant recorder sees 6 metric families and 6 time series.
+		{
+			Name:   "cr.node.obs.metric_export.name.count",
+			Source: "7-123",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: manual.Now().UnixNano(),
+					Value:          6,
+				},
+			},
+		},
+		{
+			Name:   "cr.node.obs.metric_export.line.count",
+			Source: "7-123",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: manual.Now().UnixNano(),
+					Value:          6,
 				},
 			},
 		},
@@ -847,6 +890,12 @@ func TestMetricsRecorder(t *testing.T) {
 	g.Update(int64(nodeDesc.NodeID))
 	addExpected("", "node-id", 1, 100, g.Value(), true)
 
+	// The scrape meta-metrics (obs.metric_export.name.count and
+	// obs.metric_export.line.count) are registered in the node registry
+	// via AddNode and start at zero.
+	addExpected("", "obs.metric_export.name.count", 1, 100, 0, true)
+	addExpected("", "obs.metric_export.line.count", 1, 100, 0, true)
+
 	for _, reg := range regList {
 		for _, data := range metricNames {
 			switch data.typ {
@@ -1345,4 +1394,144 @@ func BenchmarkRecordChangefeedChildMetrics(b *testing.B) {
 			}
 		})
 	}
+}
+
+// TestScrapeMetrics verifies that the scrape meta-metrics (name.count,
+// line.count, child.count) report correct values and follow the expected
+// chicken-and-egg lifecycle: first scrape exports zeros, second scrape
+// exports the counts from the first.
+func TestScrapeMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	st := cluster.MakeTestingClusterSettings()
+	ChildMetricsEnabled.Override(context.Background(), &st.SV, true)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 100))
+
+	recorder := NewMetricsRecorder(
+		roachpb.SystemTenantID,
+		roachpb.NewTenantNameContainer(""),
+		nil, nil, manual, st,
+	)
+	nodeReg := metric.NewRegistry()
+	appReg := metric.NewRegistry()
+	logReg := metric.NewRegistry()
+	sysReg := metric.NewRegistry()
+	clusterReg := metric.NewRegistry()
+	recorder.AddNode(
+		nodeReg, appReg, logReg, sysReg, clusterReg,
+		roachpb.NodeDescriptor{NodeID: 1}, 50,
+		"foo:26257", "foo:26258", "foo:5432",
+	)
+
+	// Add a plain gauge, an agg-metric with children, and a histogram.
+	g := metric.NewGauge(metric.Metadata{Name: "test_gauge"})
+	nodeReg.AddMetric(g)
+	g.Update(42)
+
+	ac := aggmetric.NewCounter(metric.Metadata{Name: "test_agg"}, "label")
+	nodeReg.AddMetric(ac)
+	ac.AddChild("a").Inc(1)
+	ac.AddChild("b").Inc(2)
+	ac.AddChild("c").Inc(3)
+
+	ah := aggmetric.NewHistogram(metric.HistogramOptions{
+		Metadata: metric.Metadata{Name: "test_agg_histo"},
+		Duration: time.Second,
+		Buckets:  []float64{1.0, 10.0, 100.0},
+		Mode:     metric.HistogramModePrometheus,
+	}, "label")
+	nodeReg.AddMetric(ah)
+	ah.AddChild("x").RecordValue(5)
+	ah.AddChild("y").RecordValue(50)
+
+	// Histogram with 4 explicit buckets. The text encoder expands this into
+	// bucket lines + _count + _sum, so line.count must reflect the actual
+	// output volume, not just len(family.Metric).
+	h := metric.NewHistogram(metric.HistogramOptions{
+		Metadata: metric.Metadata{Name: "test_histo"},
+		Duration: time.Second,
+		Buckets:  []float64{1.0, 10.0, 100.0, 1000.0},
+		Mode:     metric.HistogramModePrometheus,
+	})
+	nodeReg.AddMetric(h)
+	h.RecordValue(5)
+
+	// First scrape: meta-metrics should be zero in the output because the
+	// gauges haven't been updated yet.
+	var buf bytes.Buffer
+	require.NoError(t, recorder.PrintAsText(&buf, expfmt.FmtText, false))
+	firstOutput := buf.String()
+
+	require.Contains(t, firstOutput, "obs_metric_export_name_count")
+	require.Contains(t, firstOutput, "obs_metric_export_line_count")
+	// The gauges were zero before this scrape, so the output shows 0.
+	// Labels are present on the metric line, so match the suffix.
+	require.Contains(t, firstOutput, `obs_metric_export_name_count{node_id="1",tenant=""} 0`)
+	require.Contains(t, firstOutput, `obs_metric_export_line_count{node_id="1",tenant=""} 0`)
+
+	// After the first scrape, the gauges have been updated internally.
+	// Verify the gauge values are nonzero now.
+	require.Greater(t, recorder.scrapeMetrics.NameCount.Value(), int64(0))
+	require.Greater(t, recorder.scrapeMetrics.LineCount.Value(), int64(0))
+
+	nameCount := recorder.scrapeMetrics.NameCount.Value()
+	lineCount := recorder.scrapeMetrics.LineCount.Value()
+
+	// Verify line count includes expanded histogram buckets, not just 1
+	// per histogram Metric object. The histogram has 4 explicit buckets
+	// plus +Inf, _count, _sum = 7 lines. A naive Gather()-based count
+	// would report 1.
+	histoLines := int64(strings.Count(firstOutput, "test_histo"))
+	require.Greater(t, histoLines, int64(1),
+		"histogram should expand to multiple output lines")
+	require.Equal(t, lineCount, countTimeSeriesLines([]byte(firstOutput)),
+		"line count should match actual output lines")
+
+	// Second scrape: the output should now contain the counts from the
+	// first scrape. This proves values survive across cycles and are not
+	// prematurely cleared.
+	buf.Reset()
+	require.NoError(t, recorder.PrintAsText(&buf, expfmt.FmtText, false))
+	secondOutput := buf.String()
+
+	require.Contains(t, secondOutput,
+		fmt.Sprintf(`obs_metric_export_name_count{node_id="1",tenant=""} %d`, nameCount))
+	require.Contains(t, secondOutput,
+		fmt.Sprintf(`obs_metric_export_line_count{node_id="1",tenant=""} %d`, lineCount))
+
+	// Child count: the agg-metric has 3 children. With child metrics
+	// enabled, the child.count GaugeVec should report this. The GaugeVec
+	// carries its own labels plus the registry labels.
+	require.Contains(t, secondOutput, `metric_name="test_agg"`)
+	require.Contains(t, secondOutput, `obs_metric_export_child_count`)
+	// Verify the count value is 3.
+	require.Regexp(t, `obs_metric_export_child_count\{[^}]*metric_name="test_agg"[^}]*\} 3`,
+		secondOutput)
+
+	// Histogram children are weighted by exported Prometheus lines: each
+	// histogram child expands to len(Bucket)+3 lines (+Inf, _count, _sum).
+	// The test histogram has 3 explicit buckets, so each child = 6 lines.
+	expectedHistoWeight := 2 * (3 + 3) // 2 children * (3 buckets + Inf + count + sum)
+	require.Regexp(t,
+		fmt.Sprintf(
+			`obs_metric_export_child_count\{[^}]*metric_name="test_agg_histo"[^}]*\} %d`,
+			expectedHistoWeight,
+		),
+		secondOutput)
+
+	// Third scrape after adding a child: the output still shows the
+	// previous cycle's count (3) because of the chicken-and-egg delay.
+	// The fourth scrape should show the updated count (4).
+	ac.AddChild("d").Inc(4)
+	buf.Reset()
+	require.NoError(t, recorder.PrintAsText(&buf, expfmt.FmtText, false))
+	thirdOutput := buf.String()
+	require.Regexp(t, `obs_metric_export_child_count\{[^}]*metric_name="test_agg"[^}]*\} 3`,
+		thirdOutput)
+
+	buf.Reset()
+	require.NoError(t, recorder.PrintAsText(&buf, expfmt.FmtText, false))
+	fourthOutput := buf.String()
+	require.Regexp(t, `obs_metric_export_child_count\{[^}]*metric_name="test_agg"[^}]*\} 4`,
+		fourthOutput)
 }

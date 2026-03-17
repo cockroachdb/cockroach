@@ -8,6 +8,7 @@ package ash
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
@@ -57,6 +58,9 @@ type WorkloadInfo struct {
 	AppNameID uint64
 	// GatewayNodeID is the node that initiated the workload.
 	GatewayNodeID roachpb.NodeID
+	// WorkloadType distinguishes the kind of workload that WorkloadID
+	// represents, controlling how the sampler encodes the ID.
+	WorkloadType workloadid.WorkloadType
 }
 
 // ASHSample represents a single Active Session History sample.
@@ -73,6 +77,9 @@ type ASHSample struct {
 	TenantID roachpb.TenantID
 	// WorkloadID identifies the workload (e.g., statement fingerprint).
 	WorkloadID string
+	// WorkloadType distinguishes the kind of workload (e.g., "STATEMENT",
+	// "JOB", "SYSTEM", "UNKNOWN").
+	WorkloadType string
 	// AppName is the application name string. Set when the workload is from
 	// SQL execution.
 	AppName string

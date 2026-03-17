@@ -61,6 +61,9 @@ type progressTracker interface {
 	handleProgressUpdate(ctx context.Context, meta *execinfrapb.ProducerMetadata) error
 	// terminateTracker performs any necessary cleanup when the job completes or fails.
 	terminateTracker()
+	// flushFinalProgress flushes the progress one last time before job completion. This
+	// also terminates the tracker's background flushes.
+	flushFinalProgress(ctx context.Context) error
 }
 
 // legacyProgressTracker tracks TTL job progress without span checkpointing.
@@ -229,6 +232,11 @@ func (t *legacyProgressTracker) handleProgressUpdate(
 
 // terminateTracker implements the progressTracker interface.
 func (t *legacyProgressTracker) terminateTracker() {
+}
+
+// flushFinalProgress implements the progressTracker interface.
+func (t *legacyProgressTracker) flushFinalProgress(ctx context.Context) error {
+	return nil
 }
 
 // checkpointProgressTracker tracks TTL job progress with span checkpointing.
@@ -477,6 +485,10 @@ func (t *checkpointProgressTracker) startPeriodicUpdates(ctx context.Context) (s
 		write func(context.Context) error,
 		interval func() time.Duration,
 	) error {
+		// Always do an initial flush, so that a valid baseline exists in the job record.
+		if err := write(ctx); err != nil {
+			log.Dev.Warningf(ctx, "could not write initial progress: %v", err)
+		}
 		timer := t.clock.NewTimer()
 		defer timer.Stop()
 		for {
@@ -623,4 +635,11 @@ func (t *checkpointProgressTracker) flushCheckpointUpdate(ctx context.Context) e
 		defer frontier.Release()
 		return jobfrontier.Store(ctx, txn, t.jobID, ttlCompletedSpansKey, frontier)
 	})
+}
+
+// flushFinalProgress implements the progressTracker interface.
+func (t *checkpointProgressTracker) flushFinalProgress(ctx context.Context) error {
+	// Stop periodic flushes in the background, and push one final flush.
+	t.terminateTracker()
+	return errors.CombineErrors(t.flushCheckpointUpdate(ctx), t.flushProgress(ctx))
 }

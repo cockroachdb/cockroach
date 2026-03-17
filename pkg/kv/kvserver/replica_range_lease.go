@@ -53,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -664,6 +665,17 @@ func (p *pendingLeaseRequest) requestLease(
 	ba := &kvpb.BatchRequest{}
 	ba.Timestamp = p.repl.store.Clock().Now()
 	ba.RangeID = p.repl.RangeID
+	// NB: redirectOnOrAcquireLeaseForRequest already attributes the
+	// caller's goroutine via ash.SetWorkState using the originating
+	// request's WorkloadInfo (e.g. a SQL statement fingerprint). Here we
+	// hardcode the workload as LEASE_ACQUISITION rather than plumbing
+	// the originating WorkloadInfo through requestLeaseLocked,
+	// InitOrJoinRequest, and requestLeaseAsync. The lease request is a
+	// system operation regardless of what triggered it, and multiple
+	// callers with different workloads may join onto the same pending
+	// request via JoinRequest.
+	ba.Header.WorkloadID = uint64(workloadid.WORKLOAD_ID_LEASE_ACQUISITION)
+	ba.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
 	// NB:
 	// RequestLease always bypasses the circuit breaker (i.e. will prefer to
 	// get stuck on an unavailable range rather than failing fast; see
@@ -1279,11 +1291,12 @@ func (r *Replica) leaseGoodToGo(
 func (r *Replica) redirectOnOrAcquireLease(
 	ctx context.Context,
 ) (kvserverpb.LeaseStatus, *kvpb.Error) {
-	// TODO(alyshan): Create hardcoded WorkloadInfo constants for system-level
-	// tasks like lease acquisition so that these internal operations are visible
-	// in ASH samples.
 	return r.redirectOnOrAcquireLeaseForRequest(
-		ctx, hlc.Timestamp{}, r.breaker.Signal(), roachpb.TenantID{}, ash.WorkloadInfo{},
+		ctx, hlc.Timestamp{}, r.breaker.Signal(), roachpb.SystemTenantID,
+		ash.WorkloadInfo{
+			WorkloadID:   uint64(workloadid.WORKLOAD_ID_LEASE_ACQUISITION),
+			WorkloadType: workloadid.WorkloadTypeSystem,
+		},
 	)
 }
 
@@ -1309,7 +1322,7 @@ func (s *Store) rangeLeaseAcquireTimeout() time.Duration {
 // tenantID and info are used for ASH instrumentation. When called from
 // a request path, these should be populated from the batch request.
 // When called without request context (e.g. from redirectOnOrAcquireLease),
-// zero values may be passed.
+// the system tenant ID and a system task WorkloadInfo should be used.
 func (r *Replica) redirectOnOrAcquireLeaseForRequest(
 	ctx context.Context,
 	reqTS hlc.Timestamp,

@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -213,6 +214,8 @@ func sendProbe(ctx context.Context, r replicaInCircuitBreaker) error {
 	ba := &kvpb.BatchRequest{}
 	ba.Timestamp = r.Clock().Now()
 	ba.RangeID = r.Desc().RangeID
+	ba.Header.WorkloadID = uint64(workloadid.WORKLOAD_ID_CIRCUIT_BREAKER_PROBE)
+	ba.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
 	probeReq := &kvpb.ProbeRequest{}
 	probeReq.Key = desc.StartKey.AsRawKey()
 	ba.Add(probeReq)

@@ -852,6 +852,22 @@ func AddConstraintsForSuperRegion(
 	srConfig := regionConfig.WithRegions(regions)
 	numVoters, numReplicas := GetNumVotersAndNumReplicas(srConfig)
 
+	// If a zone config extension will override num_replicas, use the
+	// effective value for constraint generation so constraints are
+	// consistent with the final num_replicas after extensions are applied
+	// by ExtendZoneConfigWithRegionalIn.
+	exts := regionConfig.ZoneConfigExtensions()
+	if ext := exts.Regional; ext != nil && ext.NumReplicas != nil && *ext.NumReplicas > 0 {
+		if *ext.NumReplicas >= numVoters {
+			numReplicas = *ext.NumReplicas
+		}
+	}
+	if ext, ok := exts.RegionalIn[affinityRegion]; ok && ext.NumReplicas != nil && *ext.NumReplicas > 0 {
+		if *ext.NumReplicas >= numVoters {
+			numReplicas = *ext.NumReplicas
+		}
+	}
+
 	zc.NumReplicas = &numReplicas
 
 	var minAffinity int32

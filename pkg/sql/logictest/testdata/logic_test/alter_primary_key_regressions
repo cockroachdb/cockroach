@@ -1,4 +1,4 @@
-# LogicTest: !local-vec-off !local-read-committed !local-repeatable-read !local-prepared !fakedist !fakedist-vec-off !fakedist-disk
+# LogicTest: !local-vec-off !local-read-committed !local-repeatable-read !fakedist !fakedist-vec-off !fakedist-disk
 skip under race
 
 # Regression for #49079.

@@ -1071,6 +1071,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	stmt := makeOpStmt(OpStmtDDL)
 	isStoringVirtualComputed := false
 	regionColStored := false
+	storingPKCol := false
 	columnNames = columnNames[len(def.Columns):]
 	if n := len(columnNames); n > 0 {
 		def.Storing = make(tree.NameList, og.randIntn(1+n))
@@ -1082,22 +1083,24 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 				regionColStored = true
 			}
 
+			colIsPK, err := og.colIsPrimaryKey(ctx, tx, tableName, columnNames[i].name)
+			if err != nil {
+				return nil, err
+			}
+			if colIsPK {
+				storingPKCol = true
+			}
+
 			// Virtual computed columns are not allowed to be indexed, but
 			// PK columns are silently dropped from STORING by the DSC
 			// before the virtual column check, so skip the check for PK cols.
-			if columnNames[i].generated && !isStoringVirtualComputed {
-				colIsPK, err := og.colIsPrimaryKey(ctx, tx, tableName, columnNames[i].name)
+			if columnNames[i].generated && !isStoringVirtualComputed && !colIsPK {
+				isVirtualComputed, err := og.columnIsVirtualComputed(ctx, tx, tableName, columnNames[i].name)
 				if err != nil {
 					return nil, err
 				}
-				if !colIsPK {
-					isVirtualComputed, err := og.columnIsVirtualComputed(ctx, tx, tableName, columnNames[i].name)
-					if err != nil {
-						return nil, err
-					}
-					if isVirtualComputed {
-						isStoringVirtualComputed = true
-					}
+				if isVirtualComputed {
+					isStoringVirtualComputed = true
 				}
 			}
 		}
@@ -1129,6 +1132,15 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		stmt.expectedExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
 	}
 
+	// In v26.1, the DSC errors with DuplicateColumn when a STORING column
+	// overlaps with a PK column. In v26.2+, it silently drops the column
+	// with a NOTICE instead. During mixed-version upgrades, the statement
+	// may be routed to a v26.1 node.
+	storingPKColNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_2.Version())
+	if err != nil {
+		return nil, err
+	}
+
 	// When an index exists, but `IF NOT EXISTS` is used, then
 	// the index will not be created and the op will complete without errors.
 	if !(indexExists && def.IfNotExists) {
@@ -1158,6 +1170,9 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		// new.
 		stmt.potentialExecErrors.addAll(codesWithConditions{
 			{code: pgcode.UniqueViolation, condition: !uniqueViolationWillNotOccur},
+			// In mixed-version clusters, v26.1 nodes error when a STORING
+			// column is also a PK column. v26.2+ nodes handle this gracefully.
+			{code: pgcode.DuplicateColumn, condition: storingPKCol && storingPKColNotSupported},
 		})
 		// We can still hit an error on commit if data is inserted that
 		// violates the unique constraint.

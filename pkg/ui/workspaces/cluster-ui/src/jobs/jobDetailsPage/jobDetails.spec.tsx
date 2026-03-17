@@ -11,13 +11,14 @@ import React from "react";
 import { MemoryRouter, Route } from "react-router";
 import { SWRConfig } from "swr";
 
+import * as jobProfilerApi from "src/api/jobProfilerApi";
 import * as jobApi from "src/api/jobsApi";
 import * as userApi from "src/api/userApi";
 import { CockroachCloudContext } from "src/contexts";
 
 import { JOB_STATUS_RUNNING, JOB_STATUS_SUCCEEDED } from "../util";
 
-import { JobDetailsPropsV2, JobDetailsV2 } from "./jobDetails";
+import { JobDetailsV2 } from "./jobDetails";
 
 const mockGetJob = (jobStatus: string | null) => {
   jest.spyOn(jobApi, "getJob").mockResolvedValue({
@@ -39,24 +40,24 @@ const mockGetJob = (jobStatus: string | null) => {
   });
 };
 
-const mockFetchExecutionDetailFiles = jest.fn().mockResolvedValue({
-  files: ["file1", "file2"],
-});
+const mockFetchExecutionDetailFiles = jest
+  .spyOn(jobProfilerApi, "listExecutionDetailFiles")
+  .mockResolvedValue({
+    files: ["file1", "file2"],
+  } as any);
 
-const mockCollectExecutionDetails = jest.fn().mockImplementation(() => {
-  mockFetchExecutionDetailFiles.mockResolvedValue({
-    files: ["file1", "file2", "file3"],
+const _mockCollectExecutionDetails = jest
+  .spyOn(jobProfilerApi, "collectExecutionDetails")
+  .mockImplementation(() => {
+    mockFetchExecutionDetailFiles.mockResolvedValue({
+      files: ["file1", "file2", "file3"],
+    } as any);
+    return Promise.resolve({ req_resp: true } as any);
   });
-  return Promise.resolve({ req_resp: true });
-});
 
-const createJobDetailsPageProps = (): JobDetailsPropsV2 => {
-  return {
-    onFetchExecutionDetailFiles: mockFetchExecutionDetailFiles,
-    onCollectExecutionDetails: mockCollectExecutionDetails,
-    onDownloadExecutionFile: jest.fn(),
-  };
-};
+jest
+  .spyOn(jobProfilerApi, "getExecutionDetailFile")
+  .mockResolvedValue({} as any);
 
 describe("JobDetailsV2", () => {
   beforeEach(() => {
@@ -80,7 +81,7 @@ describe("JobDetailsV2", () => {
         <CockroachCloudContext.Provider value={false}>
           <MemoryRouter initialEntries={["/job/1"]}>
             <Route path="/job/:id">
-              <JobDetailsV2 {...createJobDetailsPageProps()} />
+              <JobDetailsV2 />
             </Route>
           </MemoryRouter>
         </CockroachCloudContext.Provider>

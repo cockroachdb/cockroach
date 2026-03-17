@@ -776,6 +776,9 @@ message LogFileRequest {
   // Only admin users can send a request with redact = false.
   bool redact = 3;
   reserved 4;
+  // exclude_severities, if non-empty, causes log entries with the
+  // given severities to be filtered out of the response.
+  repeated cockroach.util.log.Severity exclude_severities = 5;
 }
 
 enum StacksType {
@@ -1206,6 +1209,9 @@ message ASHSample {
   // AppName is the application name string. Set when the sample corresponds
   // to SQL execution.
   string app_name = 8;
+  // WorkloadType distinguishes the kind of workload (e.g., "STATEMENT",
+  // "JOB", "SYSTEM", "UNKNOWN").
+  string workload_type = 9;
 }
 
 // An error wrapper for ListActiveSessionHistory fan-out.
@@ -1880,6 +1886,15 @@ message StatementDetailsResponse {
     google.protobuf.Timestamp aggregated_ts = 2 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
     uint64 plan_hash = 3;
     string plan_gist = 4;
+    // canary_execution_count is the number of executions that used canary
+    // (newest) table statistics during the canary experiment.
+    int64 canary_execution_count = 5;
+    // stable_execution_count is the number of executions that used stable
+    // (second-newest) table statistics while the canary experiment was
+    // active. This is tracked explicitly rather than derived from
+    // execution_count - canary_execution_count, because executions where
+    // the canary experiment is off should not count as stable.
+    int64 stable_execution_count = 6;
   }
 
   // statement returns the total statistics for the statement.

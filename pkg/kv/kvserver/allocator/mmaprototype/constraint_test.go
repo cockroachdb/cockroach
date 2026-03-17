@@ -523,7 +523,7 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 						}
 					}
 				}
-				cands, leaseholderPrefIndex := rac.candidatesToMoveLease()
+				cands, leaseholderPrefIndex := rac.candidatesToMoveLease(nil)
 				fmt.Fprintf(&buf, "toMoveLease\n")
 				fmt.Fprintf(&buf, "  leaseholder-pref-index: %s cands:",
 					leasePrefIndexStr(leaseholderPrefIndex))

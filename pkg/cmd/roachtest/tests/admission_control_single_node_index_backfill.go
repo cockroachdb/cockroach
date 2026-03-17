@@ -8,7 +8,6 @@ package tests
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -537,125 +536,9 @@ func doInitSingleNodeIndexBackfill(ctx context.Context, t test.Test, c cluster.C
 		}
 		t.L().Printf("=== CREATED %d NEW SNAPSHOT(S) with prefix %q ===", len(snapshots), t.SnapshotPrefix())
 	} else {
-		// Existing snapshots found - copy data from snapshot to local disk.
-		// We use a different approach than ApplySnapshots to avoid the GCE
-		// snapshot hydration problem where reads from a snapshot-based disk
-		// are very slow (~50 MB/s with 250ms latency) until fully hydrated.
-		//
-		// Instead, we:
-		// 1. Create a temporary disk from the snapshot
-		// 2. Attach it as a secondary disk
-		// 3. Copy files to the primary (non-snapshot) disk
-		// 4. Detach and delete the temporary disk
-		//
-		// This way, reads and writes to the primary disk are fast, and we
-		// only pay the slow snapshot read cost once during the copy.
-		t.L().Printf("=== FOUND %d EXISTING SNAPSHOT(S) with prefix %q ===", len(snapshots), t.SnapshotPrefix())
-		t.L().Printf("=== WILL COPY DATA FROM SNAPSHOT (avoiding hydration problem) ===")
-
-		// Find the snapshot for the CRDB node (node 1).
-		var crdbSnapshot vm.VolumeSnapshot
-		for _, snap := range snapshots {
-			// Snapshot names end with node number, e.g., "...-n2-0001"
-			if strings.HasSuffix(snap.Name, "-0001") {
-				crdbSnapshot = snap
-				break
-			}
-		}
-		if crdbSnapshot.ID == "" {
-			t.Fatal("could not find snapshot for CRDB node (node 1)")
-		}
-		t.L().Printf("Using snapshot %s (ID: %s)", crdbSnapshot.Name, crdbSnapshot.ID)
-
-		// Get the zone once from GCE metadata and validate it.
-		// This is more robust than repeating the metadata call for each gcloud command.
-		t.Status("getting GCE zone from instance metadata")
-		getZoneCmd := `curl -sf -H "Metadata-Flavor: Google" ` +
-			`http://metadata.google.internal/computeMetadata/v1/instance/zone`
-		zoneOutput, err := c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.CRDBNodes()), getZoneCmd)
-		if err != nil {
-			t.Fatalf("failed to get zone from GCE metadata: %v", err)
-		}
-		// Zone format: projects/PROJECT_NUMBER/zones/ZONE_NAME
-		zoneParts := strings.Split(strings.TrimSpace(zoneOutput.Stdout), "/")
-		if len(zoneParts) < 4 || zoneParts[len(zoneParts)-2] != "zones" {
-			t.Fatalf("unexpected zone format from metadata: %q", zoneOutput.Stdout)
-		}
-		zone := zoneParts[len(zoneParts)-1]
-		t.L().Printf("GCE zone: %s", zone)
-
-		// Create a temporary disk from the snapshot.
-		tempDiskName := fmt.Sprintf("%s-temp-snapshot", c.Name())
-		t.Status("creating temporary disk from snapshot")
-		t.L().Printf("=== CREATING TEMP DISK %s FROM SNAPSHOT ===", tempDiskName)
-
-		createDiskCmd := fmt.Sprintf(
-			`gcloud compute disks create %s --source-snapshot=%s --zone=%s --type=pd-ssd --quiet`,
-			tempDiskName, crdbSnapshot.ID, zone)
-		if err := c.RunE(ctx, option.WithNodes(c.CRDBNodes()), createDiskCmd); err != nil {
-			t.Fatalf("failed to create disk from snapshot: %v", err)
-		}
-
-		// Attach the temporary disk to the CRDB node.
-		t.Status("attaching temporary snapshot disk")
-		t.L().Printf("=== ATTACHING TEMP DISK ===")
-		attachCmd := fmt.Sprintf(
-			`gcloud compute instances attach-disk $(hostname) --disk=%s --zone=%s --device-name=snapshot-disk --quiet`,
-			tempDiskName, zone)
-		if err := c.RunE(ctx, option.WithNodes(c.CRDBNodes()), attachCmd); err != nil {
-			t.Fatalf("failed to attach snapshot disk: %v", err)
-		}
-
-		// Mount the temporary disk.
-		t.Status("mounting snapshot disk")
-		t.L().Printf("=== MOUNTING SNAPSHOT DISK ===")
-		mountCmd := `sudo mkdir -p /mnt/snapshot && ` +
-			`sudo mount -o ro /dev/disk/by-id/google-snapshot-disk /mnt/snapshot`
-		if err := c.RunE(ctx, option.WithNodes(c.CRDBNodes()), mountCmd); err != nil {
-			t.Fatalf("failed to mount snapshot disk: %v", err)
-		}
-
-		// Wipe existing data and copy from snapshot with progress indicator.
-		// Using rsync -ah --progress to show progress during copy.
-		t.Status("copying data from snapshot to local disk")
-		t.L().Printf("=== COPYING DATA FROM SNAPSHOT (this may take a few minutes) ===")
-		copyCmd := `echo "Source data size:" && du -sh /mnt/snapshot/cockroach && ` +
-			`echo "Wiping /mnt/data1/cockroach..." && ` +
-			`sudo rm -rf /mnt/data1/cockroach && ` +
-			`echo "Starting copy with rsync..." && ` +
-			`sudo rsync -ah --info=progress2 /mnt/snapshot/cockroach /mnt/data1/ && ` +
-			`echo "Copy complete. Final size:" && ` +
-			`du -sh /mnt/data1/cockroach`
-		if err := c.RunE(ctx, option.WithNodes(c.CRDBNodes()), copyCmd); err != nil {
-			t.Fatalf("failed to copy data from snapshot: %v", err)
-		}
-		t.L().Printf("=== DATA COPY COMPLETE ===")
-
-		// Unmount and detach the temporary disk.
-		t.Status("cleaning up temporary snapshot disk")
-		t.L().Printf("=== UNMOUNTING AND DETACHING TEMP DISK ===")
-		unmountCmd := `sudo umount /mnt/snapshot && sudo rmdir /mnt/snapshot`
-		if err := c.RunE(ctx, option.WithNodes(c.CRDBNodes()), unmountCmd); err != nil {
-			t.L().Printf("Warning: failed to unmount snapshot disk: %v", err)
-		}
-
-		detachCmd := fmt.Sprintf(
-			`gcloud compute instances detach-disk $(hostname) --disk=%s --zone=%s --quiet`,
-			tempDiskName, zone)
-		if err := c.RunE(ctx, option.WithNodes(c.CRDBNodes()), detachCmd); err != nil {
-			t.L().Printf("Warning: failed to detach snapshot disk: %v", err)
-		}
-
-		// Delete the temporary disk.
-		t.L().Printf("=== DELETING TEMP DISK ===")
-		deleteCmd := fmt.Sprintf(
-			`gcloud compute disks delete %s --zone=%s --quiet`,
-			tempDiskName, zone)
-		if err := c.RunE(ctx, option.WithNodes(c.CRDBNodes()), deleteCmd); err != nil {
-			t.L().Printf("Warning: failed to delete temporary disk: %v", err)
-		}
-
-		t.L().Printf("=== SNAPSHOT DATA SUCCESSFULLY COPIED TO LOCAL DISK ===")
+		t.L().Printf("found %d existing snapshot(s) with prefix %q",
+			len(snapshots), t.SnapshotPrefix())
+		roachtestutil.CopySnapshotDataToNodes(ctx, t, c, snapshots)
 	}
 }
 

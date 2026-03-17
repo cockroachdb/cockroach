@@ -377,6 +377,14 @@ func distImport(
 		return kvpb.BulkOpSummary{}, err
 	}
 
+	// Persist the final checkpoint so the job progress summary reflects
+	// all rows ingested in this distImport call. The periodic ticker may
+	// not have fired since the last batch completed, so without this
+	// explicit flush the summary could be stale.
+	if err := checkpoint.Persist(ctx, job); err != nil {
+		return kvpb.BulkOpSummary{}, err
+	}
+
 	return res, nil
 }
 

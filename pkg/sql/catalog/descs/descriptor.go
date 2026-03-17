@@ -429,6 +429,11 @@ func (q *byIDLookupContext) lookupTemporary(
 ) (catalog.Descriptor, catalog.ValidationLevel, error) {
 	td := q.tc.getTemporarySchemaByID(id)
 	if td == nil {
+		// Check if this ID corresponds to a temp schema from another session
+		// that we've seen in the namespace cache.
+		td = q.tc.getOtherSessionTemporarySchemaByID(id)
+	}
+	if td == nil {
 		return nil, catalog.NoValidation, nil
 	}
 	if q.flags.isMutable {

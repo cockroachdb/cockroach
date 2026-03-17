@@ -140,6 +140,7 @@ func processInboundStreamHelper(
 					WorkloadID:    admissionInfo.WorkloadID,
 					AppNameID:     admissionInfo.AppNameID,
 					GatewayNodeID: admissionInfo.GatewayNodeID,
+					WorkloadType:  admissionInfo.WorkloadType,
 				},
 				ash.WorkNetwork, "InboxRecv")
 			msg, err := stream.Recv()

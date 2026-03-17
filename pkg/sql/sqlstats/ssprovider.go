@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -101,6 +102,7 @@ type RecordedStmtStats struct {
 	Indexes                  []string
 	QueryTags                []sqlcommenter.QueryTag
 	UnderOuterTxn            bool
+	StatsRollout             eval.StatsRolloutSelection
 }
 
 var recordedStmtStatsSize = int64(unsafe.Sizeof(RecordedStmtStats{}))
@@ -410,6 +412,16 @@ func (b *RecordedStatementStatsBuilder) AppliedStatementHints() *RecordedStateme
 		return b
 	}
 	b.stmtStats.AppliedStmtHints = true
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) CanaryStatsRollout(
+	sel eval.StatsRolloutSelection,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.StatsRollout = sel
 	return b
 }
 

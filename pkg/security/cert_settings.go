@@ -35,6 +35,6 @@ var ClientCertSANRequired = settings.RegisterBoolSetting(
 	ClientCertSANRequiredSettingName,
 	"mandates a requirement for client certs to contain SAN",
 	false,
-	settings.WithVisibility(settings.Reserved),
-	settings.WithReportable(false),
+	settings.WithPublic,
+	settings.WithReportable(true),
 )

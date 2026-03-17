@@ -946,6 +946,7 @@ func (pb *ProcessorBaseNoHelper) StartInternal(
 				WorkloadID:    pb.FlowCtx.EvalCtx.WorkloadID,
 				AppNameID:     pb.FlowCtx.EvalCtx.AppNameID,
 				GatewayNodeID: gatewayNodeID,
+				WorkloadType:  pb.FlowCtx.EvalCtx.WorkloadType,
 			},
 			ash.WorkCPU, name)
 	}

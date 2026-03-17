@@ -38,7 +38,7 @@ message CommonConnectionDetails {
   // The remote address of the SQL client. Note that when using a
   // proxy or other intermediate server, this field will contain the
   // address of the intermediate server.
-  string remote_address = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string remote_address = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];
   // The connection's hex encoded session id.
   string session_id = 4 [(gogoproto.customname) = "SessionID", (gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
@@ -53,13 +53,13 @@ message CommonSessionDetails {
   string transport = 1 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The database username the session is for. This username will have
   // undergone case-folding and Unicode normalization.
-  string user = 2 [(gogoproto.jsontag) = ",omitempty"];
+  string user = 2 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];
   // The original system identity provided by the client, if an identity
   // mapping was used per Host-Based Authentication rules. This may be a
   // GSSAPI or X.509 principal or any other external value, so no
   // specific assumptions should be made about the contents of this
   // field.
-  string system_identity = 3 [(gogoproto.jsontag) = ",omitempty"];
+  string system_identity = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];
 }
 
 // ClientConnectionStart is reported when a client connection

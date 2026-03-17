@@ -176,6 +176,12 @@ func invokeBackup(
 		select {
 		case res := <-resultCh:
 			event, err = getBackupFnTelemetry(ctx, registry, txn, res)
+			if sql.ErrIsRetryable(err) {
+				log.Dev.Warningf(ctx,
+					"best effort operation 'get-backup-telemetry' failed with retryable error: %+v", err,
+				)
+				return nil
+			}
 			return err
 		case <-ctx.Done():
 			return ctx.Err()

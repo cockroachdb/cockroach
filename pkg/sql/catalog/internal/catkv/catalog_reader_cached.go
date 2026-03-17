@@ -133,6 +133,10 @@ func (c *cachedCatalogReader) IsDescIDKnownToNotExist(id, maybeParentID descpb.I
 		return false
 	}
 	if c.hasScanAll {
+		// Temp schemas have namespace entries but no descriptors.
+		if c.cache.LookupNamespaceEntryByID(id) != nil {
+			return false
+		}
 		return true
 	}
 	if c.byIDState[maybeParentID].hasScanNamespaceForDatabaseEntries {

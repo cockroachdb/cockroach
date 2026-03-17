@@ -1,4 +1,4 @@
-# LogicTest: !enterprise-configs !local-prepared
+# LogicTest: !enterprise-configs
 
 query IBIT colnames
 SELECT id, active, length(info), name FROM system.tenants ORDER BY id

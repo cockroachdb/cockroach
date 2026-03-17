@@ -1194,3 +1194,7 @@ func (m *SessionDataMutator) SetOptimizerUseMinRowCountAntiJoinFix(val bool) {
 func (m *SessionDataMutator) SetStatsAsOf(val hlc.Timestamp) {
 	m.Data.StatsAsOf = val
 }
+
+func (m *SessionDataMutator) SetBufferedWritesImplicitTxnsEnabled(val bool) {
+	m.Data.BufferedWritesImplicitTxnsEnabled = val
+}

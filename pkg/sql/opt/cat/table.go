@@ -208,6 +208,12 @@ type Table interface {
 
 	// Policies returns all the policies defined for this table.
 	Policies() *Policies
+
+	// CanaryAndStableStatsDiffer returns true when the canary (newest) and
+	// stable (second-newest) statistics for this table genuinely differ
+	// within the canary window. This is used solely to gate canary/stable
+	// experiment metric recording.
+	CanaryAndStableStatsDiffer() bool
 }
 
 // CheckConstraint represents a check constraint on a table. Check constraints
