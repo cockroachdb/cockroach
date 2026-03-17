@@ -44,6 +44,10 @@ type pebbleMapBatchWriter struct {
 	// onFlush will be called after every batch commit.
 	onFlush                func()
 	numMutationsSinceFlush int
+
+	// makeStartKey is set when allowDuplicates is true; used by Delete for range
+	// delete. Nil otherwise.
+	makeSequenceStartKey func(k []byte) []byte
 }
 
 // pebbleMapIterator iterates over the keys of a pebbleMap in sorted order.
@@ -135,13 +139,16 @@ func (r *pebbleMap) NewBatchWriter() diskmap.SortedDiskMapBatchWriter {
 // NewBatchWriterCapacity implements the SortedDiskMap interface.
 func (r *pebbleMap) NewBatchWriterCapacity(capacityBytes int) diskmap.SortedDiskMapBatchWriter {
 	makeKey := r.makeKey
+	var makeSequenceStartKey func([]byte) []byte
 	if r.allowDuplicates {
 		makeKey = r.makeKeyWithSequence
+		makeSequenceStartKey = r.makeKey
 	}
 	b := &pebbleMapBatchWriter{
-		capacity: capacityBytes,
-		makeKey:  makeKey,
-		batch:    r.store.NewBatch(),
+		capacity:             capacityBytes,
+		makeKey:              makeKey,
+		batch:                r.store.NewBatch(),
+		makeSequenceStartKey: makeSequenceStartKey,
 	}
 	b.onFlush = func() {
 		// If we happened to have Put very large keys, we want to lose
@@ -251,9 +258,17 @@ func (b *pebbleMapBatchWriter) Put(k []byte, v []byte) error {
 
 // Delete implements the SortedDiskMapBatchWriter interface.
 func (b *pebbleMapBatchWriter) Delete(k []byte) error {
-	key := b.makeKey(k)
-	if err := b.batch.Delete(key, nil); err != nil {
-		return err
+	if b.makeSequenceStartKey != nil {
+		startKey := b.makeSequenceStartKey(k)
+		endKey := roachpb.Key(startKey).PrefixEnd()
+		if err := b.batch.DeleteRange(startKey, endKey, nil); err != nil {
+			return err
+		}
+	} else {
+		key := b.makeKey(k)
+		if err := b.batch.Delete(key, nil); err != nil {
+			return err
+		}
 	}
 	b.numMutationsSinceFlush++
 	if len(b.batch.Repr()) >= b.capacity {

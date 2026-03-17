@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/stretchr/testify/require"
 )
 
 // Helper function to run a datadriven test for a provided diskMap
@@ -120,6 +121,13 @@ func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine
 					if err != nil {
 						return err.Error()
 					}
+				case "delete":
+					if len(parts) != 2 {
+						return "delete <key>\n"
+					}
+					if err := batch.Delete([]byte(strings.TrimSpace(parts[1]))); err != nil {
+						return err.Error()
+					}
 				default:
 					return fmt.Sprintf("unknown op: %s", parts[0])
 				}
@@ -204,6 +212,38 @@ func TestPebbleMultiMap(t *testing.T) {
 
 	runTestForEngine(ctx, t, datapathutils.TestDataPath(t, "diskmap_duplicates_pebble"), e)
 
+}
+
+func TestPebbleMapNumMutationsSinceFlush(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	e, _, err := newTempEngine(ctx, base.TempStorageConfig{
+		Path:     dir,
+		Settings: cluster.MakeClusterSettings(),
+	}, disk.NewWriteStatsManager(vfs.Default))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+
+	diskMap := newPebbleMap(e.db, false /* allowDuplicates */)
+	bw := diskMap.NewBatchWriter()
+	defer func() { _ = bw.Close(ctx) }()
+
+	require.Equal(t, 0, bw.NumMutationsSinceFlush())
+	require.NoError(t, bw.Put([]byte("a"), []byte("1")))
+	require.Equal(t, 1, bw.NumMutationsSinceFlush())
+	require.NoError(t, bw.Put([]byte("b"), []byte("2")))
+	require.Equal(t, 2, bw.NumMutationsSinceFlush())
+	require.NoError(t, bw.Delete([]byte("a")))
+	require.Equal(t, 3, bw.NumMutationsSinceFlush())
+	require.NoError(t, bw.Flush())
+	require.Equal(t, 0, bw.NumMutationsSinceFlush())
+	require.NoError(t, bw.Delete([]byte("b")))
+	require.Equal(t, 1, bw.NumMutationsSinceFlush())
 }
 
 func TestPebbleMapClose(t *testing.T) {

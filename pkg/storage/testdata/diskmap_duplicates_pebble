@@ -62,5 +62,31 @@ cd:2
 d3:3
 .
 
+batch dups
+put x 1
+put x 2
+put y 1
+delete x
+----
+
+iter dups
+rewind
+next
+next
+next
+next
+next
+next
+next
+----
+a:1
+a:3
+b:2
+c:1
+cd:2
+d3:3
+y:1
+.
+
 close-map dups
 ----
