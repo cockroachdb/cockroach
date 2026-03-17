@@ -5751,11 +5751,6 @@ func (d *DOidWrapper) AmbiguousFormat() bool {
 
 // Format implements the NodeFormatter interface.
 func (d *DOidWrapper) Format(ctx *FmtCtx) {
-	if d.Oid == oid.T_refcursor {
-		wrapped := MustBeDString(d.Wrapped)
-		wrapped.Format(ctx)
-		return
-	}
 	ctx.FormatNode(d.Wrapped)
 }
 
