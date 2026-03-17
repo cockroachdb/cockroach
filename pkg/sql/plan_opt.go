@@ -1060,6 +1060,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 		result = explainPlan.WrappedPlan.(*planComponents)
 		planTop.instrumentation.RecordExplainPlan(explainPlan)
 	}
+	planTop.instrumentation.tableStatsRollout = evalCtx.StatsRollout
 	planTop.instrumentation.maxFullScanRows = bld.MaxFullScanRows
 	planTop.instrumentation.totalScanRows = bld.TotalScanRows
 	planTop.instrumentation.totalScanRowsWithoutForecasts = bld.TotalScanRowsWithoutForecasts

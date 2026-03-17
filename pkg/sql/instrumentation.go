@@ -159,6 +159,10 @@ type instrumentationHelper struct {
 	// optimized is true if the plan was optimized or re-optimized during the
 	// current execution.
 	optimized bool
+	// tableStatsRollout records the canary table stats rollout selection for
+	// this query. Used by EXPLAIN ANALYZE to emit the table stats mode
+	// annotation.
+	tableStatsRollout eval.StatsRolloutSelection
 
 	traceMetadata execNodeTraceMetadata
 
@@ -871,6 +875,7 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 	ob.AddDistribution(ih.distribution.String())
 	ob.AddVectorized(ih.vectorized)
 	ob.AddPlanType(ih.generic, ih.optimized)
+	ob.AddTableStatsMode(ih.tableStatsRollout.String())
 	ob.AddStmtHintCount(ih.stmtHintsCount)
 	ob.AddRetryCount("transaction", ih.retryCount)
 	ob.AddRetryTime("transaction", phaseTimes.GetTransactionRetryLatency())

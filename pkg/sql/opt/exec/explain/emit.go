@@ -708,6 +708,12 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 				}
 			}
 		}
+		// Canary window is a table property, shown regardless of whether
+		// the current stats path found usable stats (e.g. helps explain
+		// "missing stats" on the stable path).
+		if n.op == scanOp && s.CanaryStatsActive {
+			e.ob.AddField("canary window", fmt.Sprintf("%s", s.CanaryWindowSize))
+		}
 		// TODO(radu): we may want to emit estimated cost in Verbose mode.
 	}
 

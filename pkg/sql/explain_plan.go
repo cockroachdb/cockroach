@@ -120,6 +120,13 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			}
 		}
 
+		// TODO(janexing): consider extending EXPLAIN / EXPLAIN ANALYZE syntax
+		// to accept an explicit stats mode option, e.g.
+		// EXPLAIN (STATS_MODE=canary) SELECT ..., so users can preview plans
+		// under a specific rollout path without changing the canary_stats_mode
+		// session variable.
+		ob.AddTableStatsMode(params.EvalContext().StatsRollout.String())
+
 		if len(params.p.stmt.Hints) > 0 {
 			var hintCount uint64
 			for _, hint := range params.p.stmt.Hints {

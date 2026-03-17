@@ -214,6 +214,11 @@ type Table interface {
 	// within the canary window. This is used solely to gate canary/stable
 	// experiment metric recording.
 	CanaryAndStableStatsDiffer() bool
+
+	// StatsCanaryWindow returns the configured canary window duration for
+	// this table. A non-zero value means the table participates in canary
+	// statistics rollout.
+	StatsCanaryWindow() time.Duration
 }
 
 // CheckConstraint represents a check constraint on a table. Check constraints

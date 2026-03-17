@@ -432,6 +432,10 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 					}
 				}
 			}
+			if tab.CanaryAndStableStatsDiffer() {
+				val.CanaryStatsActive = true
+				val.CanaryWindowSize = tab.StatsCanaryWindow()
+			}
 		}
 		ef.AnnotateNode(node, exec.EstimatedStatsID, &val)
 	}
