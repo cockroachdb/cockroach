@@ -213,7 +213,7 @@ jobs:
         run: |
           ./build/github/get-engflow-keys.sh
           ENGFLOW_ARGS=$(./build/github/engflow-args.sh)
-          echo "build $ENGFLOW_ARGS" > .bazelrc.user
+          echo "build $ENGFLOW_ARGS --config=crosslinux" > .bazelrc.user
 
       - name: Fix CI failures
         id: fix
