@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -415,6 +416,30 @@ func vecToDatum(
 					}
 				}
 				v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+				if !hasSel || deselect {
+					//gcassert:bce
+				}
+				converted[destIdx] = v
+			}
+			return
+		}
+		if ct.Oid() == oidext.T_aclitem {
+			for idx = 0; idx < length; idx++ {
+				setDestIdx(destIdx, idx, sel, hasSel, deselect)
+				setSrcIdx(srcIdx, idx, sel, hasSel)
+				if hasNulls {
+					if nulls.NullAt(srcIdx) {
+						if !hasSel || deselect {
+							//gcassert:bce
+						}
+						converted[destIdx] = tree.DNull
+						continue
+					}
+				}
+				v, err := da.NewDACLItem(tree.DString(bytes.Get(srcIdx)))
+				if err != nil {
+					colexecerror.ExpectedError(err)
+				}
 				if !hasSel || deselect {
 					//gcassert:bce
 				}

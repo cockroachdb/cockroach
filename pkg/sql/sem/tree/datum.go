@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -5655,6 +5656,7 @@ func (d *DOid) Name() string {
 // Types that currently benefit from DOidWrapper are:
 // - DName => DOidWrapper(*DString, oid.T_name)
 // - DRefCursor => DOidWrapper(*DString, oid.T_refcursor)
+// - DACLItem => DOidWrapper(*DString, oidext.T_aclitem)
 // - DCIText => DOidWrapper(*DCollatedString, oidext.T_citext)
 type DOidWrapper struct {
 	Wrapped Datum
@@ -5829,6 +5831,24 @@ func NewDNameFromDString(d *DString) Datum {
 // initialized from a string.
 func NewDName(d string) Datum {
 	return NewDNameFromDString(NewDString(d))
+}
+
+// NewDACLItemFromDString is a helper routine to create a *DOidWrapper with
+// aclitem OID, initialized from an existing *DString. It validates the format
+// and returns an error if the string is not a valid aclitem.
+func NewDACLItemFromDString(d *DString) (Datum, error) {
+	if err := privilege.ValidateACLItemString(string(*d)); err != nil {
+		return nil, err
+	}
+	return wrapWithOid(d, oidext.T_aclitem), nil
+}
+
+// NewDACLItem is a helper routine to create a *DOidWrapper with aclitem OID,
+// initialized from a string in the format "grantee=privchars/grantor".
+// It validates the format and returns an error if the string is not valid.
+func NewDACLItem(d string) (Datum, error) {
+	s := DString(d)
+	return NewDACLItemFromDString(&s)
 }
 
 // NewDCIText is a helper routine to create a *DCIText (implemented as a *DOidWrapper)

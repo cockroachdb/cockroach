@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -316,6 +317,29 @@ func ColVecToDatumAndDeselect(
 							continue
 						}
 						v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+						//gcassert:bce
+						converted[destIdx] = v
+					}
+					goto vecToDatum_true_true_true_return_0
+				}
+				if ct.Oid() == oidext.T_aclitem {
+					for idx = 0; idx < length; idx++ {
+						{
+							destIdx = idx
+						}
+						{
+							//gcassert:bce
+							srcIdx = sel[idx]
+						}
+						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
+							converted[destIdx] = tree.DNull
+							continue
+						}
+						v, err := da.NewDACLItem(tree.DString(bytes.Get(srcIdx)))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
 						//gcassert:bce
 						converted[destIdx] = v
 					}
@@ -791,6 +815,24 @@ func ColVecToDatumAndDeselect(
 					}
 					goto vecToDatum_false_true_true_return_1
 				}
+				if ct.Oid() == oidext.T_aclitem {
+					for idx = 0; idx < length; idx++ {
+						{
+							destIdx = idx
+						}
+						{
+							//gcassert:bce
+							srcIdx = sel[idx]
+						}
+						v, err := da.NewDACLItem(tree.DString(bytes.Get(srcIdx)))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
+						//gcassert:bce
+						converted[destIdx] = v
+					}
+					goto vecToDatum_false_true_true_return_1
+				}
 				for idx = 0; idx < length; idx++ {
 					{
 						destIdx = idx
@@ -1194,6 +1236,28 @@ func ColVecToDatum(
 								continue
 							}
 							v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+							converted[destIdx] = v
+						}
+						goto vecToDatum_true_true_false_return_2
+					}
+					if ct.Oid() == oidext.T_aclitem {
+						for idx = 0; idx < length; idx++ {
+							{
+								//gcassert:bce
+								destIdx = sel[idx]
+							}
+							{
+								//gcassert:bce
+								srcIdx = sel[idx]
+							}
+							if nulls.NullAt(srcIdx) {
+								converted[destIdx] = tree.DNull
+								continue
+							}
+							v, err := da.NewDACLItem(tree.DString(bytes.Get(srcIdx)))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
 							converted[destIdx] = v
 						}
 						goto vecToDatum_true_true_false_return_2
@@ -1649,6 +1713,28 @@ func ColVecToDatum(
 								continue
 							}
 							v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+							//gcassert:bce
+							converted[destIdx] = v
+						}
+						goto vecToDatum_true_false_false_return_3
+					}
+					if ct.Oid() == oidext.T_aclitem {
+						for idx = 0; idx < length; idx++ {
+							{
+								destIdx = idx
+							}
+							{
+								srcIdx = idx
+							}
+							if nulls.NullAt(srcIdx) {
+								//gcassert:bce
+								converted[destIdx] = tree.DNull
+								continue
+							}
+							v, err := da.NewDACLItem(tree.DString(bytes.Get(srcIdx)))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
 							//gcassert:bce
 							converted[destIdx] = v
 						}
@@ -2128,6 +2214,24 @@ func ColVecToDatum(
 						}
 						goto vecToDatum_false_true_false_return_4
 					}
+					if ct.Oid() == oidext.T_aclitem {
+						for idx = 0; idx < length; idx++ {
+							{
+								//gcassert:bce
+								destIdx = sel[idx]
+							}
+							{
+								//gcassert:bce
+								srcIdx = sel[idx]
+							}
+							v, err := da.NewDACLItem(tree.DString(bytes.Get(srcIdx)))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
+							converted[destIdx] = v
+						}
+						goto vecToDatum_false_true_false_return_4
+					}
 					for idx = 0; idx < length; idx++ {
 						{
 							//gcassert:bce
@@ -2506,6 +2610,23 @@ func ColVecToDatum(
 								srcIdx = idx
 							}
 							v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+							//gcassert:bce
+							converted[destIdx] = v
+						}
+						goto vecToDatum_false_false_false_return_5
+					}
+					if ct.Oid() == oidext.T_aclitem {
+						for idx = 0; idx < length; idx++ {
+							{
+								destIdx = idx
+							}
+							{
+								srcIdx = idx
+							}
+							v, err := da.NewDACLItem(tree.DString(bytes.Get(srcIdx)))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
 							//gcassert:bce
 							converted[destIdx] = v
 						}

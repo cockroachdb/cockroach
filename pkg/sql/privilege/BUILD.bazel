@@ -11,6 +11,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/privilege",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/lexbase",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "@com_github_cockroachdb_errors//:errors",

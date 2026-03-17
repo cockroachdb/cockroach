@@ -2475,6 +2475,176 @@ SELECT
 			Language:          tree.RoutineLangSQL,
 		},
 	),
+
+	"makeaclitem": makeBuiltin(
+		tree.FunctionProperties{DistsqlBlocklist: true},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "grantee", Typ: types.Oid},
+				{Name: "grantor", Typ: types.Oid},
+				{Name: "privileges", Typ: types.String},
+				{Name: "is_grantable", Typ: types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.AclItem),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				granteeOid := tree.MustBeDOid(args[0]).Oid
+				grantorOid := tree.MustBeDOid(args[1]).Oid
+				privileges := string(tree.MustBeDString(args[2]))
+				isGrantable := bool(tree.MustBeDBool(args[3]))
+
+				// Parse privilege names and convert to ACL characters.
+				var privChars strings.Builder
+				privNames := strings.Split(privileges, ",")
+				for _, name := range privNames {
+					name = strings.TrimSpace(name)
+					if name == "" {
+						continue
+					}
+					ch, ok := privilege.PrivNameToACLChar[strings.ToUpper(name)]
+					if !ok {
+						return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+							"unrecognized privilege type: %q", name)
+					}
+					privChars.WriteByte(ch)
+					if isGrantable {
+						privChars.WriteByte('*')
+					}
+				}
+
+				// Resolve OIDs to role names. OID 0 = PUBLIC (empty grantee).
+				// Like postgres, fall back to the numeric OID if the role
+				// doesn't exist.
+				granteeName := ""
+				if granteeOid != 0 {
+					name, err := getNameForArg(
+						ctx, evalCtx, tree.NewDOid(granteeOid), "pg_roles", "rolname",
+					)
+					if err != nil {
+						return nil, err
+					}
+					if name == "" {
+						granteeName = fmt.Sprintf("%d", granteeOid)
+					} else {
+						granteeName = name
+					}
+				}
+				grantorName, err := getNameForArg(
+					ctx, evalCtx, tree.NewDOid(grantorOid), "pg_roles", "rolname",
+				)
+				if err != nil {
+					return nil, err
+				}
+				if grantorName == "" {
+					grantorName = fmt.Sprintf("%d", grantorOid)
+				}
+
+				// Build the aclitem string: "grantee=privchars/grantor".
+				// Role names that contain special characters (e.g. hyphens,
+				// spaces) must be double-quoted, matching PostgreSQL's putid().
+				var result strings.Builder
+				result.WriteString(privilege.QuoteACLIdentifier(granteeName))
+				result.WriteByte('=')
+				result.WriteString(privChars.String())
+				result.WriteByte('/')
+				result.WriteString(privilege.QuoteACLIdentifier(grantorName))
+
+				return tree.NewDACLItem(result.String())
+			},
+			Info: "Constructs an aclitem from the given grantee, grantor, privileges, and grant option.",
+			// Marked immutable to match postgres. Our implementation resolves
+			// OIDs to role names (a catalog lookup), but the risk of stale
+			// results from constant-folding is low: these functions are
+			// almost always called with column references, and CRDB does
+			// not support role renames.
+			Volatility: volatility.Immutable,
+		},
+	),
+
+	"acldefault": makeBuiltin(
+		tree.FunctionProperties{DistsqlBlocklist: true},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "type", Typ: types.QChar},
+				{Name: "ownerId", Typ: types.Oid},
+			},
+			ReturnType: tree.FixedReturnType(types.MakeArray(types.AclItem)),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				typeChar := string(tree.MustBeDString(tree.UnwrapDOidWrapper(args[0])))
+				ownerOid := tree.MustBeDOid(args[1]).Oid
+
+				// Resolve owner OID to role name. Like postgres, fall back to
+				// the numeric OID if the role doesn't exist.
+				ownerName, err := getNameForArg(
+					ctx, evalCtx, tree.NewDOid(ownerOid), "pg_roles", "rolname",
+				)
+				if err != nil {
+					return nil, err
+				}
+				if ownerName == "" {
+					ownerName = fmt.Sprintf("%d", ownerOid)
+				}
+
+				// PostgreSQL hard-wired default ACLs per object type.
+				// See src/backend/catalog/aclchk.c acldefault().
+				type aclDefault struct {
+					ownerPrivs  string
+					publicPrivs string
+				}
+				defaults := map[string]aclDefault{
+					"r": {ownerPrivs: "arwdDxtm"},               // TABLE
+					"s": {ownerPrivs: "rwU"},                    // SEQUENCE
+					"d": {ownerPrivs: "CTc", publicPrivs: "Tc"}, // DATABASE
+					"f": {ownerPrivs: "X", publicPrivs: "X"},    // FUNCTION
+					"l": {publicPrivs: "U"},                     // LANGUAGE
+					"n": {ownerPrivs: "UC"},                     // SCHEMA
+					"T": {ownerPrivs: "U", publicPrivs: "U"},    // TYPE
+					"c": {},                                     // COLUMN
+					"L": {ownerPrivs: "rw"},                     // LARGE OBJECT
+					"t": {ownerPrivs: "C"},                      // TABLESPACE
+					"F": {ownerPrivs: "U"},                      // FDW
+					"S": {ownerPrivs: "U"},                      // FOREIGN SERVER
+					"p": {ownerPrivs: "sA"},                     // PARAMETER
+				}
+
+				def, ok := defaults[typeChar]
+				if !ok {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"unrecognized object type abbreviation: %q", typeChar)
+				}
+
+				arr := tree.NewDArray(types.AclItem)
+				quotedOwner := privilege.QuoteACLIdentifier(ownerName)
+				// If PUBLIC has privileges, add that first.
+				if def.publicPrivs != "" {
+					item := "=" + def.publicPrivs + "/" + quotedOwner
+					d, err := tree.NewDACLItem(item)
+					if err != nil {
+						return nil, err
+					}
+					if err := arr.Append(d); err != nil {
+						return nil, err
+					}
+				}
+				// If owner has privileges, add that next.
+				if def.ownerPrivs != "" {
+					item := quotedOwner + "=" + def.ownerPrivs + "/" + quotedOwner
+					d, err := tree.NewDACLItem(item)
+					if err != nil {
+						return nil, err
+					}
+					if err := arr.Append(d); err != nil {
+						return nil, err
+					}
+				}
+
+				return arr, nil
+			},
+			Info: "Returns the default access privileges for an object of the given type belonging to the given owner.",
+			// Marked immutable to match postgres. See the comment on
+			// makeaclitem for justification.
+			Volatility: volatility.Immutable,
+		},
+	),
 }
 
 func getSessionVar(

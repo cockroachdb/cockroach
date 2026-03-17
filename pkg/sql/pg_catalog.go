@@ -1543,7 +1543,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 						c = "f"
 					}
 					privilegeObjectType := targetObjectToPrivilegeObject[objectType]
-					arr := tree.NewDArray(types.String)
+					arr := tree.NewDArray(types.AclItem)
 					for _, userPrivs := range privs.Users {
 						var user string
 						if userPrivs.UserProto.Decode().IsPublicRole() {
@@ -1569,8 +1569,11 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 						if err != nil {
 							return err
 						}
-						if err := arr.Append(
-							tree.NewDString(defaclItem)); err != nil {
+						aclDatum, err := tree.NewDACLItem(defaclItem)
+						if err != nil {
+							return err
+						}
+						if err := arr.Append(aclDatum); err != nil {
 							return err
 						}
 					}
@@ -1613,7 +1616,11 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 							if err != nil {
 								return err
 							}
-							if err := arr.Append(tree.NewDString(defaclItem)); err != nil {
+							aclDatum, err := tree.NewDACLItem(defaclItem)
+							if err != nil {
+								return err
+							}
+							if err := arr.Append(aclDatum); err != nil {
 								return err
 							}
 						} else if roleHasAllPrivileges {
@@ -1624,7 +1631,11 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 							if err != nil {
 								return err
 							}
-							if err := arr.Append(tree.NewDString(defaclItem)); err != nil {
+							aclDatum, err := tree.NewDACLItem(defaclItem)
+							if err != nil {
+								return err
+							}
+							if err := arr.Append(aclDatum); err != nil {
 								return err
 							}
 						} else if len(privs.Users) == 0 && schemaID != descpb.InvalidID {

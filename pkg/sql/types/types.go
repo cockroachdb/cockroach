@@ -234,8 +234,12 @@ func (t *T) Canonical() *T {
 		return Interval
 	case StringFamily:
 		if t.Oid() == oid.T_name {
-			// Name uses StringFamily and DOidWrapper
+			// Name uses StringFamily and DOidWrapper.
 			return Name
+		}
+		if t.Oid() == oidext.T_aclitem {
+			// AclItem uses StringFamily and DOidWrapper.
+			return AclItem
 		}
 		return String
 	case BytesFamily:
@@ -454,6 +458,12 @@ var (
 	// compatibility with PostgreSQL.
 	Name = &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_name, Locale: &emptyLocale}}
+
+	// AclItem is a type-alias for String with a different OID (T_aclitem).
+	// It represents a PostgreSQL access control list item in the format
+	// "grantee=privchars/grantor".
+	AclItem = &T{InternalType: InternalType{
+		Family: StringFamily, Oid: oidext.T_aclitem, Locale: &emptyLocale}}
 
 	// Bytes is the type of a list of raw byte values.
 	Bytes = &T{InternalType: InternalType{
@@ -1763,6 +1773,8 @@ func (t *T) Name() string {
 			return "name"
 		case oidext.T_citext:
 			return "citext"
+		case oidext.T_aclitem:
+			return "aclitem"
 		}
 		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 
@@ -1980,6 +1992,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 			return "name"
 		case oidext.T_citext:
 			return "citext"
+		case oidext.T_aclitem:
+			return "aclitem"
 		default:
 			panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 		}
@@ -3020,6 +3034,8 @@ func (t *T) stringTypeSQL() string {
 		typName = `"char"`
 	case oid.T_name:
 		typName = "NAME"
+	case oidext.T_aclitem:
+		typName = "ACLITEM"
 	}
 
 	// In general, if there is a specified width we want to print it next to the

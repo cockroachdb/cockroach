@@ -976,6 +976,15 @@ func DecodeDatum(
 			return nil, err
 		}
 		return da.NewDName(tree.DString(bs)), nil
+	case oidext.T_aclitem:
+		if err := validateStringBytes(b); err != nil {
+			return nil, err
+		}
+		d, err := tree.NewDACLItem(bs)
+		if err != nil {
+			return nil, err
+		}
+		return d, nil
 	case oidext.T_citext:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err

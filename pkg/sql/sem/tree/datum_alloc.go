@@ -269,6 +269,11 @@ func (a *DatumAlloc) NewDRefCursor(v DString) Datum {
 	return NewDRefCursorFromDString(a.NewDString(v))
 }
 
+// NewDACLItem allocates a DACLItem.
+func (a *DatumAlloc) NewDACLItem(v DString) (Datum, error) {
+	return NewDACLItemFromDString(a.NewDString(v))
+}
+
 // NewDBytes allocates a DBytes.
 func (a *DatumAlloc) NewDBytes(v DBytes) *DBytes {
 	if a == nil {
