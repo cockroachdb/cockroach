@@ -58,6 +58,17 @@ func newImportCheckpointTracker(
 	}
 }
 
+// CorrectEntryCounts replaces the entry counts in the bulk summary with the
+// provided counts. This is used after distmerge to replace the inflated
+// map-phase counts with the actual ingested counts from the merge processor's
+// KV ingest summary, so that the next Persist writes correct row counts to
+// the job progress.
+func (t *importCheckpointTracker) CorrectEntryCounts(counts map[uint64]int64) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.bulkSummary.EntryCounts = counts
+}
+
 // RecordProcessorUpdate updates progress state from a single processor
 // metadata message. The caller must provide any decoded SST manifests
 // separately so that the tracker does not need to know about protobuf
