@@ -1557,6 +1557,8 @@ func (w *workerCoordinator) performRequestAsync(
 		}
 
 		// Do admission control after we've finalized the memory accounting.
+		// Note: this goroutine is registered for SQL CPU accounting via
+		// RegisterGoroutine in performRequestAsync.
 		if br != nil && w.responseAdmissionQ != nil {
 			responseAdmission := admission.WorkInfo{
 				TenantID:   roachpb.SystemTenantID,
@@ -1601,6 +1603,12 @@ func (w *workerCoordinator) performRequestAsync(
 	}
 	go func(ctx context.Context) {
 		defer hdl.Activate(ctx).Release(ctx)
+		// Register this goroutine for CPU accounting. The SQLCPUHandle is
+		// on the context from the SQL execution path.
+		if cpuHandle := admission.SQLCPUHandleFromContext(ctx); cpuHandle != nil {
+			gh := cpuHandle.RegisterGoroutine()
+			defer gh.Close(ctx)
+		}
 		work(ctx)
 	}(ctx)
 }

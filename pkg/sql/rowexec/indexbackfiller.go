@@ -566,6 +566,13 @@ func (ib *indexBackfiller) Run(ctx context.Context, output execinfra.RowReceiver
 	defer execinfra.SendTraceData(ctx, ib.flowCtx, output)
 	defer ib.Close(ctx)
 
+	// TODO(wenyihu): Evaluate whether SQLCPUHandle integration is needed here.
+	// Currently, all CPU work under Run is already governed by elastic CPU
+	// admission: ingestIndexEntries is directly paced by admission.Pacer, and
+	// constructIndexEntries is indirectly throttled via KV admission
+	// (BulkNormalPri) and backpressure from the Pacer-controlled ingestion
+	// channel. The Run goroutine itself only forwards progress metadata.
+
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	var err error
 	// We don't have to worry about this go routine leaking because next we loop

@@ -132,6 +132,13 @@ func processInboundStreamHelper(
 	f.GetWaitGroup().Add(1)
 	go func() {
 		defer f.GetWaitGroup().Done()
+		// Register this goroutine for CPU accounting. The context here is the
+		// RPC handler's context (not the flow's context), so we get the handle
+		// from FlowBase directly.
+		if cpuHandle := f.GetCPUHandle(); cpuHandle != nil {
+			gh := cpuHandle.RegisterGoroutine()
+			defer gh.Close(ctx)
+		}
 		admissionInfo := f.GetAdmissionInfo()
 		for {
 			recvCleanup := ash.SetWorkState(
@@ -216,6 +223,8 @@ func processProducerMessage(
 			consumerClosed: false,
 		}
 	}
+	// Note: this goroutine is registered for SQL CPU accounting via
+	// RegisterGoroutine in processInboundStreamHelper.
 	var admissionQ *admission.WorkQueue
 	if flowBase.Cfg != nil {
 		admissionQ = flowBase.Cfg.SQLSQLResponseAdmissionQ

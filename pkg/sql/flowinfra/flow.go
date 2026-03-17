@@ -253,6 +253,11 @@ type FlowBase struct {
 	spec *execinfrapb.FlowSpec
 
 	admissionInfo admission.WorkInfo
+
+	// cpuHandle is the SQLCPUHandle for CPU accounting. It is stored here so
+	// that inbound stream handler goroutines (which receive the RPC handler's
+	// context, not the flow's context) can access it.
+	cpuHandle *admission.SQLCPUHandle
 }
 
 func (f *FlowBase) getStatus() flowStatus {
@@ -456,6 +461,11 @@ func (f *FlowBase) GetAdmissionInfo() admission.WorkInfo {
 	return f.admissionInfo
 }
 
+// GetCPUHandle returns the SQLCPUHandle for this flow, or nil if none was set.
+func (f *FlowBase) GetCPUHandle() *admission.SQLCPUHandle {
+	return f.cpuHandle
+}
+
 // StartInternal starts the flow. All processors are started, each in their own
 // goroutine. The caller must forward any returned error to rowSyncFlowConsumer if
 // set.
@@ -467,6 +477,7 @@ func (f *FlowBase) StartInternal(
 	)
 
 	cpuHandle := admission.SQLCPUHandleFromContext(ctx)
+	f.cpuHandle = cpuHandle
 	// Only register the flow if it is a part of the distributed plan. This is
 	// needed to satisfy two different use cases:
 	// 1. there are inbound stream connections that need to look up this flow in

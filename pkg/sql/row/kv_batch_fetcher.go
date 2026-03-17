@@ -793,6 +793,10 @@ func (f *txnKVFetcher) maybeAdmitBatchResponse(ctx context.Context, br *kvpb.Bat
 			return err
 		}
 	} else if f.responseAdmissionQ != nil {
+		// Note: this runs on the processor goroutine, which is registered for
+		// SQL CPU accounting via RegisterGoroutine in FlowBase.StartInternal,
+		// or on the conn_executor goroutine which has a SQLCPUHandle on its
+		// context via MakeCPUHandle in conn_executor_exec.go.
 		responseAdmission := admission.WorkInfo{
 			TenantID:   roachpb.SystemTenantID,
 			Priority:   admissionpb.WorkPriority(f.requestAdmissionHeader.Priority),

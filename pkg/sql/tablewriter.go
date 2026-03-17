@@ -206,7 +206,9 @@ func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
 
 func (tb *tableWriterBase) tryDoResponseAdmission(ctx context.Context) error {
 	// Do admission control for response processing. This is the shared write
-	// path for most SQL mutations.
+	// path for most SQL mutations. Note: this runs on the conn_executor
+	// goroutine, which has a SQLCPUHandle injected into its context via
+	// MakeCPUHandle in conn_executor_exec.go.
 	responseAdmissionQ := tb.txn.DB().SQLKVResponseAdmissionQ
 	if responseAdmissionQ != nil {
 		requestAdmissionHeader := tb.txn.AdmissionHeader()
