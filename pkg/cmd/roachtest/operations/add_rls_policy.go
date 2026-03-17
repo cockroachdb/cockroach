@@ -52,7 +52,7 @@ func (cl *cleanupRLSPolicy) Cleanup(ctx context.Context, o operation.Operation, 
 		// Switch to the database where the table is located
 		o.Status(fmt.Sprintf("switching to database %s for cleanup", cl.db))
 		if _, err := conn.ExecContext(ctx, fmt.Sprintf("USE %s", cl.db)); err != nil {
-			o.Fatal(err)
+			o.Error(err)
 		}
 
 		// Drop all policies that were created
@@ -60,7 +60,7 @@ func (cl *cleanupRLSPolicy) Cleanup(ctx context.Context, o operation.Operation, 
 			o.Status(fmt.Sprintf("dropping policy %s on table %s.%s", policy, cl.db, cl.table))
 			_, err := conn.ExecContext(ctx, fmt.Sprintf("DROP POLICY %s ON %s.%s", policy, cl.db, cl.table))
 			if err != nil {
-				o.Fatal(err)
+				o.Error(err)
 			}
 		}
 
@@ -69,14 +69,14 @@ func (cl *cleanupRLSPolicy) Cleanup(ctx context.Context, o operation.Operation, 
 			// Restore the original RLS state
 			o.Status(fmt.Sprintf("restoring original row level security state for %s.%s", cl.db, cl.table))
 			if _, err := conn.ExecContext(ctx, cl.originalRLSStmt); err != nil {
-				o.Fatal(err)
+				o.Error(err)
 			}
 		} else {
 			// If the table didn't have RLS before, disable it
 			o.Status(fmt.Sprintf("disabling row level security for %s.%s", cl.db, cl.table))
 			_, err := conn.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s.%s DISABLE ROW LEVEL SECURITY, NO FORCE ROW LEVEL SECURITY", cl.db, cl.table))
 			if err != nil {
-				o.Fatal(err)
+				o.Error(err)
 			}
 		}
 	}()
