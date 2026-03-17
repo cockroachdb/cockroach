@@ -48,6 +48,12 @@ export { useNodesSummary } from "./api/nodesSummaryApi";
 export { useHealth } from "./api/healthApi";
 export type { NodesSummary } from "./api/nodesSummaryApi";
 export { useConnectivity } from "./api/connectivityApi";
+export { useLocations, buildLocalityTree } from "./api/locationsApi";
+export type {
+  LocalityTier,
+  LocalityTree,
+  LocationTree,
+} from "./api/locationsApi";
 export { useNodeLogs } from "./api/nodeLogsApi";
 export * from "./nodes/nodeSummaryStats";
 export * from "./sessions";
