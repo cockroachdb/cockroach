@@ -163,6 +163,10 @@ func (p *planner) createDatabase(
 	}
 
 	if database.SuperRegion.Name != "" {
+		if !db.IsMultiRegion() {
+			return nil, false, pgerror.New(pgcode.InvalidDatabaseDefinition,
+				"cannot add super region to a non-multi-region database")
+		}
 		typeID, err := db.MultiRegionEnumID()
 		if err != nil {
 			return nil, false, err
