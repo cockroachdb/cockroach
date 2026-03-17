@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1388,6 +1389,168 @@ ORDER BY
 	// Check that the data was cleaned up.
 	tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), parentDesc.TableSpan(codec), 0)
 	tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), childDesc.TableSpan(codec), 0)
+}
+
+// TestCreateTableFKRollbackCleansBackrefs verifies that when a CREATE TABLE
+// with an inline FOREIGN KEY constraint is rolled back (because the schema
+// change job fails), the InboundFK back-reference on the referenced table is
+// properly cleaned up.
+//
+// This is a regression test for a bug where rollbackSchemaChange() would mark
+// the new table as Dropped and GC it, but never remove the InboundFK entry
+// from the referenced table, leaving an orphaned back-reference to a
+// non-existent descriptor.
+func TestCreateTableFKRollbackCleansBackrefs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// injectedJobError is a permanent error that will cause the schema change
+	// job for the new table to fail permanently and trigger rollback.
+	injectedJobError := jobs.MarkAsPermanentJobError(
+		errors.New("injected error to force rollback"),
+	)
+
+	// Track the ID of the child table so we can target its schema change job.
+	var childTableID uint32
+	var srv serverutils.TestServerInterface
+
+	params := base.TestServerArgs{}
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeResume: func(jobID jobspb.JobID) error {
+				id := atomic.LoadUint32(&childTableID)
+				if id == 0 {
+					return nil
+				}
+				// Only fail schema change jobs that target our child table.
+				scJob, err := srv.ApplicationLayer().JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
+				if err != nil {
+					return err
+				}
+				for _, descID := range scJob.Payload().DescriptorIDs {
+					if uint32(descID) == id {
+						return injectedJobError
+					}
+				}
+				return nil
+			},
+		},
+		// Decrease the adopt loop interval so that retries happen quickly.
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+
+	var sqlDB *gosql.DB
+	var kvDB *kv.DB
+	srv, sqlDB, kvDB = serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	codec := srv.ApplicationLayer().Codec()
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	systemDB := srv.SystemLayer().SQLConn(t)
+
+	// Disable the declarative schema changer so we exercise the legacy path.
+	sqlRun.Exec(t, `SET use_declarative_schema_changer = 'off'`)
+	sqlRun.Exec(t, `SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off'`)
+
+	// Configure fast GC so the child descriptor is fully deleted (not just
+	// DROPPED) before we check invalid_objects. This reproduces the exact
+	// production error: "referenced descriptor not found" vs "is dropped".
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, systemDB)()
+	_, err := systemDB.Exec(`SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s'`)
+	require.NoError(t, err)
+	_, err = systemDB.Exec(`SET CLUSTER SETTING kv.protectedts.poll_interval = '1s'`)
+	require.NoError(t, err)
+
+	// Create the referenced (parent) table.
+	sqlRun.Exec(t, `CREATE DATABASE t`)
+	sqlRun.Exec(t, `CREATE TABLE t.parent (id INT PRIMARY KEY)`)
+
+	parentDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "parent")
+	require.Empty(t, parentDesc.InboundForeignKeys(),
+		"parent should have no InboundFKs before child creation")
+
+	// Now create the child table with an inline FK. The CREATE TABLE will
+	// succeed (the SQL transaction commits), but the async schema change job
+	// will be failed by our injected error, triggering rollback.
+	//
+	// We need to set childTableID BEFORE executing the CREATE TABLE so that
+	// the RunBeforeResume knob can target the right job.
+	//
+	// First, figure out what the next descriptor ID will be by querying.
+	var nextID uint32
+	sqlRun.QueryRow(t, `SELECT max(id) + 1 FROM system.descriptor`).Scan(&nextID)
+	atomic.StoreUint32(&childTableID, nextID)
+
+	// CREATE TABLE with inline FK. This will fail because the schema change
+	// job is injected with a permanent error.
+	_, err = sqlDB.Exec(`CREATE TABLE t.child (
+		id INT PRIMARY KEY,
+		parent_id INT,
+		CONSTRAINT fk_child_parent FOREIGN KEY (parent_id) REFERENCES t.parent (id)
+	)`)
+	require.Error(t, err)
+
+	// Wait for the schema change job to reach a terminal state (failed).
+	sqlRun.CheckQueryResultsRetry(t,
+		`SELECT count(*) FROM [SHOW JOBS]
+			 WHERE job_type = 'SCHEMA CHANGE'
+			   AND description LIKE '%CREATE TABLE t.public.child%'
+			   AND status = 'failed'`,
+		[][]string{{"1"}},
+	)
+
+	// The child table should not exist anymore (it was in ADD state and
+	// got rolled back).
+	var tableCount int
+	sqlRun.QueryRow(t, `
+		SELECT count(*) FROM crdb_internal.tables
+		WHERE database_name = 't' AND name = 'child' AND state != 'DROP'
+	`).Scan(&tableCount)
+	require.Equal(t, 0, tableCount, "child table should not exist after rollback")
+
+	// Set an immediate GC zone config on the database so the child
+	// descriptor is fully deleted (not just marked DROPPED).
+	parentDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "parent")
+	_, err = sqltestutils.AddImmediateGCZoneConfig(sqlDB, parentDesc.GetParentID())
+	require.NoError(t, err)
+
+	// Wait for the GC job to complete, fully removing the child descriptor.
+	sqlRun.CheckQueryResultsRetry(t, `
+		SELECT count(*) FROM [SHOW JOBS]
+		WHERE job_type = 'SCHEMA CHANGE GC'
+		  AND description LIKE '%ROLLBACK OF CREATE TABLE%child%'
+		  AND status = 'succeeded'`,
+		[][]string{{"1"}},
+	)
+
+	// Verify via crdb_internal.invalid_objects that the parent is valid.
+	rows, err := sqlDB.Query(`
+		SELECT id, database_name, schema_name, obj_name, error
+		FROM "".crdb_internal.invalid_objects
+		WHERE database_name = 't' AND obj_name = 'parent'
+	`)
+	require.NoError(t, err)
+	defer rows.Close()
+	var invalidCount int
+	for rows.Next() {
+		var id int
+		var dbName, schemaName, objName, errMsg string
+		require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errMsg))
+		t.Logf("invalid_objects row: id=%d db=%s schema=%s obj=%s error=%s",
+			id, dbName, schemaName, objName, errMsg)
+		invalidCount++
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(t, 0, invalidCount,
+		"parent table should not appear in invalid_objects")
+
+	// Also, verify the parent table has no orphaned InboundFKs (reads directly
+	// from KV, bypassing descriptor leases).
+	parentDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "parent")
+	require.Empty(t, parentDesc.InboundForeignKeys(),
+		"parent should have no InboundFKs after child rollback, but has %d",
+		len(parentDesc.InboundForeignKeys()))
 }
 
 // Test that non-physical table deletions like DROP VIEW are immediate instead

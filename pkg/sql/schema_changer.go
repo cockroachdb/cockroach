@@ -1264,6 +1264,82 @@ func (sc *SchemaChanger) dropViewDeps(
 	return nil
 }
 
+// dropFKDeps cleans up foreign key references when rolling back a table that
+// was in ADD state. For each outbound FK, it removes the corresponding
+// InboundFK from the referenced table. For each inbound FK, it removes the
+// corresponding OutboundFK from the origin table. Without this cleanup,
+// rolling back a CREATE TABLE with inline FOREIGN KEY constraints leaves
+// orphaned back-references on the referenced tables.
+//
+// Errors during cleanup are logged as warnings and skipped because this
+// function is only called during rollback, where the descriptor state may be
+// inconsistent or partially committed.
+func (sc *SchemaChanger) dropFKDeps(
+	ctx context.Context,
+	descsCol *descs.Collection,
+	txn *kv.Txn,
+	b *kv.Batch,
+	tableDesc *tabledesc.Mutable,
+) error {
+	for i := range tableDesc.OutboundFKs {
+		fk := &tableDesc.OutboundFKs[i]
+		if fk.ReferencedTableID == tableDesc.ID {
+			continue // self-reference, will be dropped with the table
+		}
+		backrefTable, err := descsCol.MutableByID(txn).Table(ctx, fk.ReferencedTableID)
+		if err != nil {
+			log.Dev.Warningf(ctx, "error resolving referenced table %d for FK cleanup during rollback: %v",
+				fk.ReferencedTableID, err)
+			continue
+		}
+		if backrefTable.Dropped() {
+			continue
+		}
+		if err := removeFKBackReferenceFromTable(backrefTable, fk.Name, tableDesc); err != nil {
+			log.Dev.Warningf(ctx, "error removing FK backreference %q during rollback: %v", fk.Name, err)
+			continue
+		}
+		if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, backrefTable, b); err != nil {
+			return err
+		}
+	}
+	tableDesc.OutboundFKs = nil
+
+	for i := range tableDesc.InboundFKs {
+		fk := &tableDesc.InboundFKs[i]
+		if fk.OriginTableID == tableDesc.ID {
+			continue // self-reference
+		}
+		originTable, err := descsCol.MutableByID(txn).Table(ctx, fk.OriginTableID)
+		if err != nil {
+			log.Dev.Warningf(ctx, "error resolving origin table %d for FK cleanup during rollback: %v",
+				fk.OriginTableID, err)
+			continue
+		}
+		if originTable.Dropped() {
+			continue
+		}
+		matchIdx := -1
+		for j, outFK := range originTable.OutboundFKs {
+			if outFK.ReferencedTableID == tableDesc.ID && outFK.Name == fk.Name {
+				matchIdx = j
+				break
+			}
+		}
+		if matchIdx != -1 {
+			originTable.OutboundFKs = append(
+				originTable.OutboundFKs[:matchIdx],
+				originTable.OutboundFKs[matchIdx+1:]...)
+			if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, originTable, b); err != nil {
+				return err
+			}
+		}
+	}
+	tableDesc.InboundFKs = nil
+
+	return nil
+}
+
 func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) error {
 	log.Dev.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", sc.job.ID(), err)
 	if errReverse := sc.maybeReverseMutations(ctx, err); errReverse != nil {
@@ -1302,6 +1378,11 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 				return err
 			}
 		}
+
+		if err := sc.dropFKDeps(ctx, txn.Descriptors(), txn.KV(), b, scTable); err != nil {
+			return err
+		}
+
 		scTable.SetDropped()
 		scTable.DropTime = timeutil.Now().UnixNano()
 		const kvTrace = false
