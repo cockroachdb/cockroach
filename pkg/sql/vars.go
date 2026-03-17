@@ -4999,6 +4999,26 @@ var varGen = map[string]sessionVar{
 			return ""
 		},
 	},
+
+	// CockroachDB extension.
+	`buffered_writes_implicit_txns_enabled`: {
+		Description:  sessionVarDescriptions["buffered_writes_implicit_txns_enabled"],
+		GetStringVal: makePostgresBoolGetStringValFn(`buffered_writes_implicit_txns_enabled`),
+		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
+			b, err := paramparse.ParseBoolVar("buffered_writes_implicit_txns_enabled", s)
+			if err != nil {
+				return err
+			}
+			m.SetBufferedWritesImplicitTxnsEnabled(b)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatBoolAsPostgresSetting(evalCtx.SessionData().BufferedWritesImplicitTxnsEnabled), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatBoolAsPostgresSetting(bufferedWritesImplicitTxnsEnabledDefault)
+		},
+	},
 }
 
 func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) {
@@ -5019,7 +5039,9 @@ func ReplicationModeFromString(s string) (sessiondatapb.ReplicationMode, error) 
 }
 
 // We want test coverage for this on and off so make it metamorphic.
-var copyFastPathDefault bool = metamorphic.ConstantWithTestBool("copy-fast-path-enabled-default", true)
+var copyFastPathDefault = metamorphic.ConstantWithTestBool("copy-fast-path-enabled-default", true)
+
+var bufferedWritesImplicitTxnsEnabledDefault = metamorphic.ConstantWithTestBool("buffered_writes_implicit_txns_enabled", false)
 
 const compatErrMsg = "this parameter is currently recognized only for compatibility and has no effect in CockroachDB."
 
