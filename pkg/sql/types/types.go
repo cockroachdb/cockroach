@@ -2090,8 +2090,9 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		return "tsvector"
 	case TupleFamily:
 		if t.UserDefined() {
-			// If we have a user-defined tuple type, use its user-defined name.
-			return t.TypeMeta.Name.Basename()
+			// If we have a user-defined tuple type, use its user-defined name
+			// with schema qualification but without catalog.
+			return t.TypeMeta.Name.FQName(false /* explicitCatalog */)
 		}
 		return "record"
 	case UnknownFamily:
@@ -2101,7 +2102,7 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 	case VoidFamily:
 		return "void"
 	case EnumFamily:
-		return t.TypeMeta.Name.Basename()
+		return t.TypeMeta.Name.FQName(false /* explicitCatalog */)
 	case LTreeFamily:
 		return t.Name()
 	default:
