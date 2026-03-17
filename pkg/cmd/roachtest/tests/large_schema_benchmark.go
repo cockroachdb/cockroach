@@ -186,6 +186,11 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						// test with a large number of tables.
 						_, err = conn.Exec("SET CLUSTER SETTING sql.schema.approx_max_object_count = 0")
 						require.NoError(t, err)
+						// Disable the automatic INSPECT job that runs after each
+						// IMPORT. With high-concurrency imports of many tables, the
+						// INSPECT jobs exhaust the memory budget.
+						_, err = conn.Exec("SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'off'")
+						require.NoError(t, err)
 						// Create a user that will be used for authentication for the REST
 						// API calls.
 						_, err = conn.Exec("CREATE USER roachadmin password 'roacher'")
