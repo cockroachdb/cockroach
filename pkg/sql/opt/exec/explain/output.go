@@ -305,6 +305,16 @@ func (ob *OutputBuilder) AddVectorized(value bool) {
 	}
 }
 
+// AddTableStatsMode adds a top-level field indicating which table
+// statistics rollout path was used for planning. Only emitted when the
+// canary experiment is active (mode is "canary" or "stable"). Cannot
+// be called while inside a node.
+func (ob *OutputBuilder) AddTableStatsMode(mode string) {
+	if mode != "default" {
+		ob.AddTopLevelField("table stats mode", mode)
+	}
+}
+
 // AddPlanType adds a top-level generic field, if value is true. Cannot be called
 // while inside a node.
 func (ob *OutputBuilder) AddPlanType(generic, optimized bool) {
