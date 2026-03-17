@@ -2016,7 +2016,7 @@ WHERE a.attrelid = 'table_71776'::regclass
     AND NOT a.attisdropped
 ORDER BY a.attnum
 ----
-interval_col  interval  'P3Y'::INTERVAL
+interval_col  interval  'P3Y'::interval
 rowid         bigint    unique_rowid()
 
 statement error pq: unsupported comparison operator: <tuple> < <string>
@@ -2161,4 +2161,4 @@ query T rowsort
 SELECT details FROM [SHOW CONSTRAINTS FROM t97643];
 ----
 PRIMARY KEY (rowid ASC)
-CHECK ((parse_time('abc'::STRING) = parse_time('abc'::STRING)))
+CHECK ((parse_time('abc'::text) = parse_time('abc'::text)))
