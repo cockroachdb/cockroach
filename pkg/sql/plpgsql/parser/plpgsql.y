@@ -416,6 +416,7 @@ pl_block: opt_block_label decl_sect BEGIN proc_sect exception_sect END opt_label
       return setErr(plpgsqllex, err)
     }
     $$.val = &plpgsqltree.Block{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[3].pos)},
       Label: $1,
       Decls: $2.statements(),
       Body: $4.statements(),
@@ -790,7 +791,10 @@ stmt_call: CALL expr_until_semi ';'
     }
     // Set the InCall flag to true to indicate that this is a CALL statement.
     proc.InCall = true
-    $$.val = &plpgsqltree.Call{Proc: proc}
+    $$.val = &plpgsqltree.Call{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
+      Proc: proc,
+    }
   }
 ;
 
@@ -801,6 +805,7 @@ stmt_do:
     if err != nil {
       return setErrNoDetails(plpgsqllex, err)
     }
+    doBlock.LineNo = plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)
     $$.val = doBlock
   }
 ;
@@ -838,6 +843,7 @@ stmt_assign: IDENT assign_operator expr_until_semi ';'
       return setErr(plpgsqllex, err)
     }
     $$.val = &plpgsqltree.Assignment{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
       Var: plpgsqltree.Variable($1),
       Value: expr,
     }
@@ -850,6 +856,7 @@ stmt_assign: IDENT assign_operator expr_until_semi ';'
       return setErr(plpgsqllex, err)
     }
     $$.val = &plpgsqltree.Assignment{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
       Var: plpgsqltree.Variable($1),
       Value: expr,
       Indirection: tree.Name($3),
@@ -860,6 +867,7 @@ stmt_assign: IDENT assign_operator expr_until_semi ';'
 stmt_getdiag: GET getdiag_area_opt DIAGNOSTICS getdiag_list ';'
   {
   $$.val = &plpgsqltree.GetDiagnostics{
+    StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
     IsStacked: $2.bool(),
     DiagItems: $4.getDiagnosticsItemList(),
   }
@@ -948,6 +956,7 @@ stmt_if: IF expr_until_then THEN proc_sect stmt_elsifs stmt_else END_IF IF ';'
       return setErr(plpgsqllex, err)
     }
     $$.val = &plpgsqltree.If{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
       Condition: cond,
       ThenBody: $4.statements(),
       ElseIfList: $5.elseIf(),
@@ -987,6 +996,7 @@ stmt_else:
 stmt_case: CASE opt_expr_until_when case_when_list opt_case_else END_CASE CASE ';'
   {
     expr := &plpgsqltree.Case {
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
       TestExpr: $2,
       CaseWhenList: $3.caseWhens(),
     }
@@ -1053,6 +1063,7 @@ stmt_loop: opt_loop_label LOOP loop_body opt_label ';'
       return setErr(plpgsqllex, err)
     }
     $$.val = &plpgsqltree.Loop{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[2].pos)},
       Label: loopLabel,
       Body: $3.statements(),
     }
@@ -1070,6 +1081,7 @@ stmt_while: opt_loop_label WHILE expr_until_loop LOOP loop_body opt_label ';'
       return setErr(plpgsqllex, err)
     }
     $$.val = &plpgsqltree.While{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[2].pos)},
       Label: loopLabel,
       Condition: cond,
       Body: $5.statements(),
@@ -1084,6 +1096,7 @@ stmt_for: opt_loop_label FOR for_target IN for_control loop_body opt_label ';'
       return setErr(plpgsqllex, err)
     }
     $$.val = &plpgsqltree.ForLoop{
+			StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[2].pos)},
 			Label: loopLabel,
 			Target: $3.variables(),
 			Control: $5.forLoopControl(),
@@ -1141,6 +1154,7 @@ foreach_slice:
 stmt_exit: EXIT opt_label opt_exitcond
   {
     $$.val = &plpgsqltree.Exit{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
       Label: $2,
       Condition: $3.expr(),
     }
@@ -1150,6 +1164,7 @@ stmt_exit: EXIT opt_label opt_exitcond
 stmt_continue: CONTINUE opt_label opt_exitcond
   {
     $$.val = &plpgsqltree.Continue{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
       Label: $2,
       Condition: $3.expr(),
     }
@@ -1158,15 +1173,23 @@ stmt_continue: CONTINUE opt_label opt_exitcond
 
 stmt_return: RETURN return_expr ';'
   {
-    $$.val = &plpgsqltree.Return{Expr: $2.expr()}
+    $$.val = &plpgsqltree.Return{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
+      Expr: $2.expr(),
+    }
   }
 | RETURN_NEXT NEXT return_expr ';'
   {
-    $$.val = &plpgsqltree.ReturnNext{Expr: $3.expr()}
+    $$.val = &plpgsqltree.ReturnNext{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
+      Expr: $3.expr(),
+    }
   }
 | RETURN_QUERY QUERY return_query ';'
   {
-    $$.val = $3.statement()
+    retStmt := $3.statement()
+    retStmt.SetLineNo(plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos))
+    $$.val = retStmt
   }
 ;
 
@@ -1204,6 +1227,7 @@ stmt_raise:
 | RAISE opt_error_level SCONST opt_format_exprs opt_option_exprs ';'
   {
     $$.val = &plpgsqltree.Raise{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
       LogLevel: $2,
       Message: $3,
       Params: $4.exprs(),
@@ -1213,6 +1237,7 @@ stmt_raise:
 | RAISE opt_error_level IDENT opt_option_exprs ';'
   {
     $$.val = &plpgsqltree.Raise{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
       LogLevel: $2,
       CodeName: $3,
       Options: $4.raiseOptions(),
@@ -1221,6 +1246,7 @@ stmt_raise:
 | RAISE opt_error_level SQLSTATE SCONST opt_option_exprs ';'
   {
     $$.val = &plpgsqltree.Raise{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
       LogLevel: $2,
       Code: $4,
       Options: $5.raiseOptions(),
@@ -1229,6 +1255,7 @@ stmt_raise:
 | RAISE opt_error_level USING option_exprs ';'
   {
     $$.val = &plpgsqltree.Raise{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
       LogLevel: $2,
       Options: $4.raiseOptions(),
     }
@@ -1342,7 +1369,9 @@ format_expr: ','
 
 stmt_assert: ASSERT assert_cond ';'
   {
-    $$.val = &plpgsqltree.Assert{}
+    $$.val = &plpgsqltree.Assert{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
+    }
   }
 ;
 
@@ -1373,6 +1402,7 @@ stmt_execsql: stmt_execsql_start
     if err != nil {
       return setErr(plpgsqllex, err)
     }
+    stmt.LineNo = plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)
     $$.val = stmt
   }
 ;
@@ -1391,13 +1421,17 @@ stmt_dynexecute: EXECUTE
     if err != nil {
       return setErr(plpgsqllex, err)
     }
+    stmt.LineNo = plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)
     $$.val = stmt
   }
 ;
 
 stmt_open: OPEN IDENT ';'
   {
-    $$.val = &plpgsqltree.Open{CurVar: plpgsqltree.Variable($2)}
+    $$.val = &plpgsqltree.Open{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
+      CurVar: plpgsqltree.Variable($2),
+    }
   }
 | OPEN IDENT opt_scrollable FOR EXECUTE 
   {
@@ -1413,6 +1447,7 @@ stmt_open: OPEN IDENT ';'
       return setErr(plpgsqllex, errors.New("expected exactly one SQL statement for cursor"))
     }
     $$.val = &plpgsqltree.Open{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
       CurVar: plpgsqltree.Variable($2),
       Scroll: $3.cursorScrollOption(),
       Query: stmts[0].AST,
@@ -1426,6 +1461,7 @@ stmt_fetch: FETCH
     if err != nil {
       return setErr(plpgsqllex, err)
     }
+    fetch.SetLineNo(plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos))
     $$.val = fetch
   }
 ;
@@ -1436,31 +1472,44 @@ stmt_move: MOVE
     if err != nil {
       return setErr(plpgsqllex, err)
     }
+    move.SetLineNo(plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos))
     $$.val = move
   }
 ;
 
 stmt_close: CLOSE IDENT ';'
   {
-    $$.val = &plpgsqltree.Close{CurVar: plpgsqltree.Variable($2)}
+    $$.val = &plpgsqltree.Close{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
+      CurVar: plpgsqltree.Variable($2),
+    }
   }
 ;
 
 stmt_null: NULL ';'
   {
-    $$.val = &plpgsqltree.Null{};
+    $$.val = &plpgsqltree.Null{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
+    };
   }
 ;
 
 stmt_commit: COMMIT opt_transaction_chain ';'
   {
-    $$.val = &plpgsqltree.TransactionControl{Chain: $2.bool()}
+    $$.val = &plpgsqltree.TransactionControl{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
+      Chain: $2.bool(),
+    }
   }
 ;
 
 stmt_rollback: ROLLBACK opt_transaction_chain ';'
   {
-    $$.val = &plpgsqltree.TransactionControl{Chain: $2.bool(), Rollback: true}
+    $$.val = &plpgsqltree.TransactionControl{
+      StatementImpl: plpgsqltree.StatementImpl{LineNo: plpgsqllex.(*lexer).lineFromPos(plpgsqlDollar[1].pos)},
+      Chain: $2.bool(),
+      Rollback: true,
+    }
   }
 ;
 

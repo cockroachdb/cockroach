@@ -73,6 +73,7 @@ const (
 	ServerErrFieldSrcLine              ServerErrFieldType = 'L'
 	ServerErrFieldSrcFunction          ServerErrFieldType = 'R'
 	ServerErrFieldConstraintName       ServerErrFieldType = 'n'
+	ServerErrFieldContext              ServerErrFieldType = 'W'
 )
 
 // PrepareType represents a subtype for prepare messages.

@@ -1911,6 +1911,14 @@ func (b *builderState) WrapFunctionBody(
 	if !lazilyEvalSQL {
 		bodyStr = b.replaceSeqNamesWithIDs(bodyStr, lang)
 		bodyStr = b.serializeUserDefinedTypes(bodyStr, lang)
+		if lang == catpb.Function_PLPGSQL {
+			// The re-formatting above strips the original leading newline from
+			// the dollar-quoted body. Prepend it back to match PostgreSQL's
+			// convention, where the body starts on the line after the opening $$
+			// delimiter. This ensures PLpgSQL line numbers in error context
+			// match PostgreSQL's behavior.
+			bodyStr = "\n" + bodyStr
+		}
 	}
 	fnBody := &scpb.FunctionBody{
 		FunctionID: fnID,
