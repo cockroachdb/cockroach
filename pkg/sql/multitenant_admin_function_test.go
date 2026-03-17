@@ -347,15 +347,24 @@ func (tc testCase) runTest(
 		fn()
 	}
 
-	execQueries(testCluster, systemDB, "system", tc.system)
+	// Re-enable queues before each execQueries call so that queues
+	// disabled by a prior tenant's run don't block replication.
+	runExecQueries := func(db *gosql.DB, tenant string, tExp tenantExpected) {
+		testCluster.ToggleReplicateQueues(true)
+		testCluster.ToggleSplitQueues(true)
+		testCluster.ToggleLeaseQueues(true)
+		execQueries(testCluster, db, tenant, tExp)
+	}
+
+	runExecQueries(systemDB, "system", tc.system)
 	if tc.secondary.isSet() {
-		execQueries(testCluster, secondaryDB, "secondary", tc.secondary)
+		runExecQueries(secondaryDB, "secondary", tc.secondary)
 	}
 	if tc.secondaryWithoutClusterSetting.isSet() {
-		execQueries(testCluster, secondaryWithoutClusterSettingDB, "secondary_without_cluster_setting", tc.secondaryWithoutClusterSetting)
+		runExecQueries(secondaryWithoutClusterSettingDB, "secondary_without_cluster_setting", tc.secondaryWithoutClusterSetting)
 	}
 	if tc.secondaryWithoutCapability.isSet() {
-		execQueries(testCluster, secondaryWithoutCapabilityDB, "secondary_without_capability", tc.secondaryWithoutCapability)
+		runExecQueries(secondaryWithoutCapabilityDB, "secondary_without_capability", tc.secondaryWithoutCapability)
 	}
 }
 
