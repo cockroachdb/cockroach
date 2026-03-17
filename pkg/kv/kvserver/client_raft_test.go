@@ -3178,7 +3178,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	// Wait for the removal to be processed.
 	testutils.SucceedsSoon(t, func() error {
 		for i := range tc.Servers[1:] {
-			store := tc.GetFirstStoreFromServer(t, i)
+			store := tc.GetFirstStoreFromServer(t, i+1)
 			_, err := store.GetReplica(desc.RangeID)
 			if !errors.HasType(err, (*kvpb.RangeNotFoundError)(nil)) {
 				return errors.Wrapf(err, "range %d not yet removed from %s", desc.RangeID, store)
