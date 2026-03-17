@@ -71,7 +71,10 @@ func setShortGCTTLInSystemZoneConfig(
 }
 
 // executeSupportedDDLs tests DDL statements supported by the declarative
-// schema changer, gated by the active cluster version.
+// schema changer, gated by the active cluster version. setDBOnAllConns
+// is used to temporarily switch the session database on all connections
+// to avoid "cross-db references not supported" errors for DDLs that
+// reference functions or other objects with fully-qualified names.
 func executeSupportedDDLs(
 	ctx context.Context,
 	c cluster.Cluster,
@@ -79,6 +82,7 @@ func executeSupportedDDLs(
 	helper *mixedversion.Helper,
 	r *rand.Rand,
 	testingUpgradedNodes bool,
+	setDBOnAllConns func(helper *mixedversion.Helper, r *rand.Rand, db string) error,
 ) error {
 	nodes := c.All().SeededRandNode(r)
 	// We are not always guaranteed to be in a mixed-version binary state.
@@ -115,7 +119,6 @@ func executeSupportedDDLs(
 		`ALTER TABLE testdb.testsc.t2 ALTER COLUMN i DROP NOT NULL`,
 		`DROP TRIGGER trg ON testdb.testsc.t`,
 		`CREATE TRIGGER trg BEFORE INSERT ON testdb.testsc.t FOR EACH ROW EXECUTE FUNCTION testdb.testsc.trg_fn()`,
-		`CREATE OR REPLACE TRIGGER trg BEFORE UPDATE ON testdb.testsc.t FOR EACH ROW EXECUTE FUNCTION testdb.testsc.trg_fn()`,
 	}
 
 	// DDLs supported in V25_4.
@@ -150,13 +153,18 @@ func executeSupportedDDLs(
 		`ALTER TABLE testdb.testsc.t ENABLE TRIGGER ALL`,
 		`ALTER TABLE testdb.testsc.t DISABLE TRIGGER USER`,
 		`ALTER TABLE testdb.testsc.t ENABLE TRIGGER USER`,
+		`CREATE OR REPLACE TRIGGER trg BEFORE UPDATE ON testdb.testsc.t FOR EACH ROW EXECUTE FUNCTION testdb.testsc.trg_fn()`,
 		`CREATE OR REPLACE FUNCTION testdb.testsc.trg_fn() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END; $$`,
 	}
 
 	// Used to clean up our CREATE-d elements after we are done with them.
-	cleanup := []string{
+	// The trigger and function must be dropped while connected to testdb
+	// to avoid "cross-database function references not allowed" errors.
+	cleanupFromTestDB := []string{
 		`DROP TRIGGER IF EXISTS trg ON testdb.testsc.t`,
 		`DROP FUNCTION IF EXISTS testdb.testsc.trg_fn`,
+	}
+	cleanupFromDefaultDB := []string{
 		`DROP INDEX testdb.testsc.t@idx`,
 		`DROP SEQUENCE testdb.testsc.s`,
 		`DROP TYPE testdb.testsc.typ`,
@@ -173,6 +181,15 @@ func executeSupportedDDLs(
 	if err != nil {
 		return err
 	}
+
+	// Switch to testdb before DDL execution. Some DDLs (CREATE TRIGGER,
+	// CREATE FUNCTION) reference testdb.testsc objects and are rejected
+	// with "cross-db references not supported" if the session's current
+	// database differs from the catalog name in the reference.
+	if err := setDBOnAllConns(helper, r, "testdb"); err != nil {
+		return err
+	}
+
 	for _, ddl := range v253DDLs {
 		if err := helper.ExecWithGateway(r, nodes, ddl); err != nil {
 			return err
@@ -200,7 +217,20 @@ func executeSupportedDDLs(
 		}
 	}
 
-	for _, ddl := range cleanup {
+	// Drop trigger and function while still connected to testdb to
+	// avoid "cross-database function references not allowed" errors.
+	for _, ddl := range cleanupFromTestDB {
+		if err := helper.ExecWithGateway(r, nodes, ddl); err != nil {
+			return err
+		}
+	}
+
+	// Switch back to defaultdb before dropping testdb itself.
+	if err := setDBOnAllConns(helper, r, "defaultdb"); err != nil {
+		return err
+	}
+
+	for _, ddl := range cleanupFromDefaultDB {
 		if err := helper.ExecWithGateway(r, nodes, ddl); err != nil {
 			return err
 		}
@@ -225,6 +255,19 @@ func runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(
 	// transfers) that can occur during setup and DDL execution.
 	retryOpts := retry.Options{MaxBackoff: 5 * time.Second, MaxRetries: 5}
 
+	// setDBOnAllConns temporarily sets the current database on all node
+	// connections. This is needed because CREATE [OR REPLACE] FUNCTION
+	// with a fully-qualified name that differs from the session's current
+	// database is rejected with "cross-db references not supported".
+	setDBOnAllConns := func(helper *mixedversion.Helper, r *rand.Rand, db string) error {
+		for _, node := range c.All() {
+			if err := helper.ExecWithRetry(r, option.NodeListOption{node}, retryOpts, "USE "+db); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	testSetupResetStep := func(ctx context.Context, l *logger.Logger, r *rand.Rand, helper *mixedversion.Helper) error {
 
 		// Ensure that the declarative schema changer is off so that we do not get failures related to unimplemented
@@ -239,6 +282,7 @@ func runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(
 			}
 		}
 
+		// These setup queries run with DSC off (set above).
 		setUpQueries := []string{
 			"CREATE DATABASE IF NOT EXISTS testdb;",
 			"CREATE SCHEMA IF NOT EXISTS testdb.testsc;",
@@ -251,9 +295,6 @@ func runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(
 			"CREATE TYPE IF NOT EXISTS testdb.testsc.typ AS ENUM ('a', 'b');",
 			"CREATE SEQUENCE IF NOT EXISTS testdb.testsc.s;",
 			"CREATE VIEW IF NOT EXISTS testdb.testsc.v AS (SELECT i*2 FROM testdb.testsc.t);",
-			`CREATE OR REPLACE FUNCTION testdb.testsc.trg_fn() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END; $$;`,
-			"DROP TRIGGER IF EXISTS trg ON testdb.testsc.t;",
-			"CREATE TRIGGER trg BEFORE INSERT ON testdb.testsc.t FOR EACH ROW EXECUTE FUNCTION testdb.testsc.trg_fn();",
 		}
 		// Execute queries one at a time with an implicit txn and retry logic,
 		// since transient errors (e.g. lease transfers from the
@@ -264,6 +305,19 @@ func runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(
 			}
 		}
 
+		// Create the trigger function with DSC off. The DSC only added
+		// support for CREATE OR REPLACE FUNCTION in v26.2, so on older
+		// versions this must go through the legacy schema changer.
+		// Switch to testdb first to avoid cross-database reference errors.
+		if err := setDBOnAllConns(helper, r, "testdb"); err != nil {
+			return err
+		}
+		if err := helper.ExecWithRetry(r, c.All(), retryOpts,
+			`CREATE OR REPLACE FUNCTION testdb.testsc.trg_fn() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END; $$;`,
+		); err != nil {
+			return err
+		}
+
 		// Set all nodes to always use declarative schema changer
 		// so that we don't fall back to legacy schema changer implicitly.
 		// Being explicit can help catch bugs that will otherwise be
@@ -272,6 +326,22 @@ func runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(
 			if err := helper.ExecWithRetry(r, option.NodeListOption{node}, retryOpts, "SET use_declarative_schema_changer = unsafe_always"); err != nil {
 				return err
 			}
+		}
+
+		// DROP TRIGGER and CREATE TRIGGER require the DSC (the legacy
+		// schema changer does not support them). Run these still
+		// connected to testdb, then switch back to defaultdb.
+		triggerQueries := []string{
+			"DROP TRIGGER IF EXISTS trg ON testdb.testsc.t;",
+			"CREATE TRIGGER trg BEFORE INSERT ON testdb.testsc.t FOR EACH ROW EXECUTE FUNCTION testdb.testsc.trg_fn();",
+		}
+		for _, setupQuery := range triggerQueries {
+			if err := helper.ExecWithRetry(r, c.All(), retryOpts, setupQuery); err != nil {
+				return err
+			}
+		}
+		if err := setDBOnAllConns(helper, r, "defaultdb"); err != nil {
+			return err
 		}
 		return nil
 	}
@@ -285,7 +355,7 @@ func runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(
 		//   - older nodes: adopt and execute schema changer jobs
 		// Testing that declarative schema change jobs created by nodes running newer binary version can be adopted and
 		// finished by nodes running older binary versions.
-		if err := executeSupportedDDLs(ctx, c, t, helper, r, true /* testingUpgradedNodes */); err != nil {
+		if err := executeSupportedDDLs(ctx, c, t, helper, r, true /* testingUpgradedNodes */, setDBOnAllConns); err != nil {
 			return err
 		}
 		// Recreate testing state.
@@ -297,7 +367,7 @@ func runDeclarativeSchemaChangerJobCompatibilityInMixedVersion(
 		//   - upgraded nodes: adopt and execute schema changer jobs
 		// Testing that declarative schema change jobs created by nodes running older binary version can be adopted and
 		// finished by nodes running newer binary versions.
-		return executeSupportedDDLs(ctx, c, t, helper, r, false /* testingUpgradedNodes */)
+		return executeSupportedDDLs(ctx, c, t, helper, r, false /* testingUpgradedNodes */, setDBOnAllConns)
 	}
 
 	// We want declarative schema change jobs to be adopted quickly after creation
