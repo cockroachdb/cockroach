@@ -47,6 +47,7 @@ var (
 	_ jsonMarshaler = (*int64Array)(nil)
 	_ jsonMarshaler = (*int32Array)(nil)
 	_ jsonMarshaler = &latencyInfo{}
+	_ jsonMarshaler = &experimentStatsInfo{}
 )
 
 type txnStats appstatspb.TransactionStatistics
@@ -352,12 +353,51 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 	}
 }
 
+// canaryJsonFields returns the JSON fields for canary stats tracking.
+// These are separated from jsonFields() so they can be conditionally
+// encoded only when canary/stable data is present, avoiding storage
+// overhead per row in system.statement_statistics for the common case
+// where the canary experiment is not active.
+func (s *innerStmtStats) canaryJsonFields() jsonFields {
+	return jsonFields{
+		{"canaryStats", (*experimentStatsInfo)(&s.CanaryStats)},
+	}
+}
+
+// stableJsonFields returns the JSON fields for stable stats tracking.
+// Like canaryJsonFields, these are conditionally encoded.
+func (s *innerStmtStats) stableJsonFields() jsonFields {
+	return jsonFields{
+		{"stableStats", (*experimentStatsInfo)(&s.StableStats)},
+	}
+}
+
 func (s *innerStmtStats) decodeJSON(js json.JSON) error {
-	return s.jsonFields().decodeJSON(js)
+	if err := s.jsonFields().decodeJSON(js); err != nil {
+		return err
+	}
+	// Canary and stable fields are optional in the JSON — they are only
+	// present when the canary experiment was active. Decode them if present;
+	// missing fields are left at their zero values by decodeJSON.
+	if err := s.canaryJsonFields().decodeJSON(js); err != nil {
+		return err
+	}
+	return s.stableJsonFields().decodeJSON(js)
 }
 
 func (s *innerStmtStats) encodeJSON() (json.JSON, error) {
-	return s.jsonFields().encodeJSON()
+	fields := s.jsonFields()
+	// Only include canary/stable fields when the respective stats were
+	// actually collected. This avoids adding zero-valued JSON to every
+	// row in system.statement_statistics when the canary experiment is
+	// not in use.
+	if s.CanaryStats.Count > 0 {
+		fields = append(fields, s.canaryJsonFields()...)
+	}
+	if s.StableStats.Count > 0 {
+		fields = append(fields, s.stableJsonFields()...)
+	}
+	return fields.encodeJSON()
 }
 
 type execStats appstatspb.ExecStats
@@ -444,6 +484,24 @@ func (l *latencyInfo) decodeJSON(js json.JSON) error {
 
 func (l *latencyInfo) encodeJSON() (json.JSON, error) {
 	return l.jsonFields().encodeJSON()
+}
+
+type experimentStatsInfo appstatspb.ExperimentStatsInfo
+
+func (e *experimentStatsInfo) jsonFields() jsonFields {
+	return jsonFields{
+		{"count", (*jsonInt)(&e.Count)},
+		{"runLat", (*numericStats)(&e.RunLat)},
+		{"planLat", (*numericStats)(&e.PlanLat)},
+	}
+}
+
+func (e *experimentStatsInfo) decodeJSON(js json.JSON) error {
+	return e.jsonFields().decodeJSON(js)
+}
+
+func (e *experimentStatsInfo) encodeJSON() (json.JSON, error) {
+	return e.jsonFields().encodeJSON()
 }
 
 type jsonFields []jsonField

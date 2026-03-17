@@ -3494,10 +3494,14 @@ func (ex *connExecutor) makeExecPlan(
 		return ctx, err
 	}
 
-	// For each non-internal query, we roll the dice to decide to use
-	// canary stats or stable stats for planning.
+	// For each non-internal query, roll the dice to determine the canary
+	// stats rollout path. The result is one of three states:
+	//   - StatsRolloutDefault: experiment off, use default stats
+	//   - StatsRolloutCanary:  experiment on, use canary (newest) stats
+	//   - StatsRolloutStable:  experiment on, use stable (second-newest) stats
 	if !planner.SessionData().Internal {
-		planner.EvalContext().UseCanaryStats = canaryRollDice(planner.EvalContext(), ex.rng.internal)
+		planner.EvalContext().StatsRollout =
+			canaryRollDice(planner.EvalContext(), ex.rng.internal)
 	}
 
 	if err := planner.makeOptimizerPlan(ctx); err != nil {

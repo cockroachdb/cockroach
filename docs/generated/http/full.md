@@ -4726,6 +4726,8 @@ StatementDetailsRequest requests the details of a Statement, based on its keys.
 | aggregated_ts | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDetailsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
 | plan_hash | [uint64](#cockroach.server.serverpb.StatementDetailsResponse-uint64) |  |  | [reserved](#support-status) |
 | plan_gist | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  |  | [reserved](#support-status) |
+| canary_execution_count | [int64](#cockroach.server.serverpb.StatementDetailsResponse-int64) |  | canary_execution_count is the number of executions that used canary (newest) table statistics during the canary experiment. | [reserved](#support-status) |
+| stable_execution_count | [int64](#cockroach.server.serverpb.StatementDetailsResponse-int64) |  | stable_execution_count is the number of executions that used stable (second-newest) table statistics while the canary experiment was active. This is tracked explicitly rather than derived from execution_count - canary_execution_count, because executions where the canary experiment is off should not count as stable. | [reserved](#support-status) |
 
 
 
