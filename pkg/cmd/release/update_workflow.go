@@ -131,7 +131,7 @@ func addBranchToWorkflow(branch string) error {
 	}
 
 	var workflow yaml.Node
-	if err := yaml.Unmarshal(data, &workflow); err != nil {
+	if err := yaml.Unmarshal(data, &workflow); err != nil { //nolint:yaml
 		return fmt.Errorf("failed to parse workflow YAML: %w", err)
 	}
 

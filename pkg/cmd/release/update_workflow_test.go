@@ -32,7 +32,7 @@ func TestWorkflowFileStructure(t *testing.T) {
 	}
 
 	var workflow yaml.Node
-	if err := yaml.Unmarshal(data, &workflow); err != nil {
+	if err := yaml.Unmarshal(data, &workflow); err != nil { //nolint:yaml
 		t.Fatalf("Failed to parse workflow YAML: %v", err)
 	}
 
@@ -78,7 +78,7 @@ func TestAddBranchToWorkflow_NoOp(t *testing.T) {
 	}
 
 	var workflow yaml.Node
-	if err := yaml.Unmarshal(originalData, &workflow); err != nil {
+	if err := yaml.Unmarshal(originalData, &workflow); err != nil { //nolint:yaml
 		t.Fatalf("Failed to parse workflow YAML: %v", err)
 	}
 
