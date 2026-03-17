@@ -187,6 +187,8 @@ func distImport(
 		}
 	}
 
+	lastSummary := getLastImportSummary(job)
+	priorRunSummary := lastSummary.DeepCopy()
 	checkpoint := newImportCheckpointTracker(
 		len(from), getLastImportSummary(job), nil, /* manifestBuf */
 	)
@@ -353,7 +355,7 @@ func distImport(
 		}
 
 		writeTS := &hlc.Timestamp{WallTime: walltime}
-		_, err = bulkmerge.Merge(ctx, execCtx, inputSSTs, spans, func(instanceID base.SQLInstanceID) (string, error) {
+		mergeResult, err := bulkmerge.Merge(ctx, execCtx, inputSSTs, spans, func(instanceID base.SQLInstanceID) (string, error) {
 			// Record the storage prefix before any SSTs are written
 			prefix := fmt.Sprintf("nodelocal://%d/", instanceID)
 			if err := addStoragePrefix(ctx, prefix); err != nil {
@@ -367,8 +369,29 @@ func distImport(
 			EnforceUniqueness: true,
 			MemoryMonitor:     execinfrapb.BulkMergeSpec_BULK_MONITOR,
 		})
+		if err != nil {
+			return err
+		}
 
-		return err
+		// Correct res to exclude identical duplicates skipped during
+		// the merge. The map-phase res counts all rows produced in
+		// this run, including duplicates from checkpoint-and-resume
+		// overlap. The merge ingest summary counts all unique rows
+		// actually written to KV (from both old and new SSTs). To
+		// get the current run's contribution, subtract the rows
+		// already counted in prior runs (from the checkpointed
+		// progress summary).
+		if len(mergeResult.IngestSummary.EntryCounts) > 0 {
+			for id, ingestCount := range mergeResult.IngestSummary.EntryCounts {
+				priorCount := priorRunSummary.EntryCounts[id]
+				thisRunCount := ingestCount - priorCount
+				if thisRunCount >= 0 {
+					res.EntryCounts[id] = thisRunCount
+				}
+			}
+		}
+
+		return nil
 	})
 
 	g.GoCtx(replanChecker)

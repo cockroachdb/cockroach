@@ -185,7 +185,7 @@ func TestDistributedMergeMultiPassIngestsIntoKV(t *testing.T) {
 	spans := []roachpb.Span{{Key: start, EndKey: end}}
 
 	// First iteration produces merged SSTs to external storage.
-	iter1Out, err := Merge(
+	iter1Result, err := Merge(
 		ctx,
 		jobExecCtx,
 		inputSSTs,
@@ -199,14 +199,14 @@ func TestDistributedMergeMultiPassIngestsIntoKV(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	require.NotEmpty(t, iter1Out)
+	require.NotEmpty(t, iter1Result.SSTs)
 
 	// Second (final) iteration ingests directly into KV.
 	writeTS := execCfg.Clock.Now()
-	iter2Out, err := Merge(
+	iter2Result, err := Merge(
 		ctx,
 		jobExecCtx,
-		iter1Out,
+		iter1Result.SSTs,
 		spans,
 		func(instanceID base.SQLInstanceID) (string, error) {
 			return fmt.Sprintf("nodelocal://%d/merge/iter-2/", instanceID), nil
@@ -218,7 +218,7 @@ func TestDistributedMergeMultiPassIngestsIntoKV(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
-	require.Nil(t, iter2Out, "final iteration should not produce SST outputs")
+	require.Nil(t, iter2Result.SSTs, "final iteration should not produce SST outputs")
 
 	rows, err := s.DB().Scan(ctx, start, end, 0 /* maxRows */)
 	require.NoError(t, err)

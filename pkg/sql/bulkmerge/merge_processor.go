@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -95,6 +96,11 @@ type bulkMergeProcessor struct {
 	// rpcMemAcct reserves memory for estimated in-flight RPC transport
 	// buffers when streaming remote SST files.
 	rpcMemAcct mon.BoundAccount
+	// kvIngestSummary accumulates the BulkOpSummary from the SSTBatcher
+	// during the final merge iteration. This tracks the actual number of
+	// rows ingested into KV (excluding skipped duplicates) and is emitted
+	// as metadata when the processor finishes draining.
+	kvIngestSummary kvpb.BulkOpSummary
 }
 
 type mergeProcessorInput struct {
@@ -160,6 +166,18 @@ func (m *bulkMergeProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMe
 		row, meta := m.input.Next()
 		switch {
 		case row == nil && meta == nil:
+			// All input consumed. If this was the final iteration, emit
+			// the accumulated KV ingest summary as metadata so the caller
+			// can use the actual ingested row count rather than the
+			// map-phase count (which includes skipped duplicates).
+			if m.isFinalIteration() {
+				m.MoveToDraining(nil /* err */)
+				return nil, &execinfrapb.ProducerMetadata{
+					BulkProcessorProgress: &execinfrapb.RemoteProducerMetadata_BulkProcessorProgress{
+						BulkSummary: m.kvIngestSummary,
+					},
+				}
+			}
 			m.MoveToDraining(nil /* err */)
 		case meta != nil && meta.Err != nil:
 			m.MoveToDraining(meta.Err)
@@ -178,6 +196,10 @@ func (m *bulkMergeProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMe
 		}
 	}
 	return nil, m.DrainHelper()
+}
+
+func (m *bulkMergeProcessor) isFinalIteration() bool {
+	return m.spec.Iteration == m.spec.MaxIterations
 }
 
 func (m *bulkMergeProcessor) handleRow(row rowenc.EncDatumRow) (rowenc.EncDatumRow, error) {
@@ -554,7 +576,12 @@ func (m *bulkMergeProcessor) ingestFinalIteration(
 
 	writer := newKVStorageWriter(batcher, writeTS)
 	defer writer.Close(ctx)
-	return m.processMergedData(ctx, iter, mergeSpan, writer)
+	output, err := m.processMergedData(ctx, iter, mergeSpan, writer)
+	if err != nil {
+		return output, err
+	}
+	m.kvIngestSummary.Add(batcher.GetSummary())
+	return output, nil
 }
 
 // resolveMemoryMonitor returns the BytesMonitor indicated by the given
