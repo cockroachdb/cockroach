@@ -430,10 +430,6 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				return err
 			}
 
-			// Read the total imported row count from the job progress
-			// summary. This is the single source of truth that correctly
-			// accounts for rows across all distImport attempts (including
-			// retries within ingestWithRetry) and previous Resume runs.
 			prog := r.job.Progress()
 			var totalImportedRows int64
 			if importProgress := prog.GetImport(); importProgress != nil {
