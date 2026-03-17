@@ -7,6 +7,8 @@ package testutils
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -88,3 +90,78 @@ func SucceedsSoonDuration() time.Duration {
 	}
 	return DefaultSucceedsSoonDuration
 }
+
+// Soon retries fn until it succeeds (no assertion failures) or the
+// SucceedsSoonDuration elapses. Returns nil on success, or an error on timeout.
+//
+// The fn receives a *RetryT that supports both testify assert and require:
+// assert failures are collected and cause a retry; require failures (FailNow)
+// panic with a sentinel value that is caught and also causes a retry. Real
+// panics escape to the caller.
+//
+// Usage:
+//
+//	require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
+//		x, err := someCall()
+//		require.NoError(t, err)
+//		require.Equal(t, 1234, x)
+//	}))
+func Soon(fn func(t *RetryT)) error {
+	return SoonDuration(fn, SucceedsSoonDuration())
+}
+
+// SoonDuration is like Soon but with a custom timeout duration.
+func SoonDuration(fn func(t *RetryT), duration time.Duration) error {
+	return SucceedsWithinError(func() (retErr error) {
+		var rt RetryT
+		defer func() {
+			r := recover()
+			if r == nil {
+				return
+			} else if _, ok := r.(retryPanic); ok {
+				// FailNow was called; errors were already collected via Errorf.
+				if retErr = rt.toError(); retErr == nil {
+					// No errors collected, FailNow was called directly.
+					retErr = errors.New("FailNow called")
+				}
+				return
+			}
+			panic(r) // it was a real panic
+		}()
+		fn(&rt)
+		return rt.toError()
+	}, duration)
+}
+
+// RetryT implements testify's TestingT interface (Errorf, FailNow, Helper) and
+// collects assertion failures as errors. FailNow calls, and assertion failures
+// collected via Errorf, cause the enclosing Soon* call to retry the closure.
+type RetryT struct {
+	errors []string
+}
+
+// Helper is a no-op to satisfy testify's TestingT interface.
+func (r *RetryT) Helper() {}
+
+// Errorf records an assertion failure message.
+func (r *RetryT) Errorf(format string, args ...interface{}) {
+	r.errors = append(r.errors, fmt.Sprintf(format, args...))
+}
+
+// FailNow panics with a sentinel retryPanic value. This stops the current
+// closure execution and lets Soon* catch the panic and retry.
+func (r *RetryT) FailNow() {
+	panic(retryPanic{})
+}
+
+func (r *RetryT) toError() error {
+	if len(r.errors) == 0 {
+		return nil
+	}
+	return errors.Newf("%s", strings.Join(r.errors, "\n"))
+}
+
+// retryPanic is a sentinel value used by RetryT.FailNow to abort the current
+// attempt via panic/recover without killing the test goroutine. This lets
+// require.* calls trigger a retry instead of a fatal exit.
+type retryPanic struct{}
