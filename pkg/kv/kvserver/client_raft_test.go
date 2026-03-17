@@ -313,33 +313,27 @@ func TestReplicateRange(t *testing.T) {
 	}
 	// Verify that in time, no intents remain on meta addressing
 	// keys, and that range descriptor on the meta records is correct.
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		meta2 := keys.RangeMetaKey(roachpb.RKeyMax)
 		meta1 := keys.RangeMetaKey(meta2)
 		for _, key := range []roachpb.RKey{meta2, meta1} {
 			metaDesc := roachpb.RangeDescriptor{}
-			if ok, err := storage.MVCCGetProto(ctx, store.StateEngine(), key.AsRawKey(),
-				store.Clock().Now(), &metaDesc, storage.MVCCGetOptions{}); err != nil {
-				return err
-			} else if !ok {
-				return errors.Errorf("failed to resolve %s", key.AsRawKey())
-			}
+			ok, err := storage.MVCCGetProto(ctx, store.StateEngine(), key.AsRawKey(),
+				store.Clock().Now(), &metaDesc, storage.MVCCGetOptions{})
+			require.NoError(rt, err)
+			require.True(rt, ok, "failed to resolve %s", key.AsRawKey())
 		}
-		return nil
-	})
+	}))
 
 	// Verify that the same data is available on the replica.
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		getArgs := getArgs(keyA)
-		if reply, err := kv.SendWrappedWith(ctx, tc.GetFirstStoreFromServer(t, 1).TestSender(), kvpb.Header{
+		reply, pErr := kv.SendWrappedWith(ctx, tc.GetFirstStoreFromServer(t, 1).TestSender(), kvpb.Header{
 			ReadConsistency: kvpb.INCONSISTENT,
-		}, getArgs); err != nil {
-			return errors.Errorf("failed to read data: %s", err)
-		} else if e, v := int64(5), mustGetInt(reply.(*kvpb.GetResponse).Value); v != e {
-			return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
-		}
-		return nil
-	})
+		}, getArgs)
+		require.Nil(rt, pErr, "failed to read data")
+		require.Equal(rt, int64(5), mustGetInt(reply.(*kvpb.GetResponse).Value), "failed to read correct data")
+	}))
 }
 
 // TestRestoreReplicas ensures that consensus group membership is properly
@@ -397,31 +391,27 @@ func TestRestoreReplicas(t *testing.T) {
 	// bit, so we loop until we find the leaseholder and able to propose the
 	// second increment.
 	incArgs = incrementArgs(key, 5)
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		var pErr *kvpb.Error
 		for i := 0; i < tc.NumServers(); i++ {
 			_, pErr = kv.SendWrapped(ctx, tc.GetFirstStoreFromServer(t, i).TestSender(), incArgs)
 			if pErr == nil {
-				return nil
+				return
 			}
-			require.IsType(t, &kvpb.NotLeaseHolderError{}, pErr.GetDetail())
 		}
-		return pErr.GoError()
-	})
+		require.NoError(rt, pErr.GoError())
+	}))
 
 	// Both servers should eventually observe the new value.
 	for i := 0; i < tc.NumServers(); i++ {
-		testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 			getArgs := getArgs(key)
-			if reply, err := kv.SendWrappedWith(ctx, tc.GetFirstStoreFromServer(t, i).TestSender(), kvpb.Header{
+			reply, pErr := kv.SendWrappedWith(ctx, tc.GetFirstStoreFromServer(t, i).TestSender(), kvpb.Header{
 				ReadConsistency: kvpb.INCONSISTENT,
-			}, getArgs); err != nil {
-				return errors.Errorf("failed to read data: %s", err)
-			} else if e, v := int64(28), mustGetInt(reply.(*kvpb.GetResponse).Value); v != e {
-				return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
-			}
-			return nil
-		})
+			}, getArgs)
+			require.Nil(rt, pErr, "failed to read data")
+			require.Equal(rt, int64(28), mustGetInt(reply.(*kvpb.GetResponse).Value), "failed to read correct data")
+		}))
 	}
 
 	validate := func(s *kvserver.Store) {
@@ -553,26 +543,21 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	tc.AddVotersOrFatal(t, key, tc.Target(1))
 
 	// Once it catches up, the effects of both commands can be seen.
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		getArgs := getArgs([]byte("a"))
-		if reply, err := kv.SendWrappedWith(ctx, tc.GetFirstStoreFromServer(t, 1).TestSender(), kvpb.Header{
+		reply, pErr := kv.SendWrappedWith(ctx, tc.GetFirstStoreFromServer(t, 1).TestSender(), kvpb.Header{
 			ReadConsistency: kvpb.INCONSISTENT,
-		}, getArgs); err != nil {
-			return errors.Errorf("failed to read data: %s", err)
-		} else if e, v := int64(16), mustGetInt(reply.(*kvpb.GetResponse).Value); v != e {
-			return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
-		}
-		return nil
-	})
+		}, getArgs)
+		require.Nil(rt, pErr, "failed to read data")
+		require.Equal(rt, int64(16), mustGetInt(reply.(*kvpb.GetResponse).Value), "failed to read correct data")
+	}))
 
 	repl2 := tc.GetFirstStoreFromServer(t, 1).LookupReplica(key)
 
-	testutils.SucceedsSoon(t, func() error {
-		if mvcc, mvcc2 := repl.GetMVCCStats(), repl2.GetMVCCStats(); mvcc2 != mvcc {
-			return errors.Errorf("expected stats on new range:\n%+v\not equal old:\n%+v", mvcc2, mvcc)
-		}
-		return nil
-	})
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
+		mvcc, mvcc2 := repl.GetMVCCStats(), repl2.GetMVCCStats()
+		require.Equal(rt, mvcc, mvcc2, "expected stats on new range to equal old")
+	}))
 
 	// Send a third command to verify that the log states are synced up so the
 	// new node can accept new commands.
@@ -581,17 +566,14 @@ func TestReplicateAfterTruncation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		getArgs := getArgs([]byte("a"))
-		if reply, err := kv.SendWrappedWith(ctx, tc.GetFirstStoreFromServer(t, 1).TestSender(), kvpb.Header{
+		reply, pErr := kv.SendWrappedWith(ctx, tc.GetFirstStoreFromServer(t, 1).TestSender(), kvpb.Header{
 			ReadConsistency: kvpb.INCONSISTENT,
-		}, getArgs); err != nil {
-			return errors.Errorf("failed to read data: %s", err)
-		} else if e, v := int64(39), mustGetInt(reply.(*kvpb.GetResponse).Value); v != e {
-			return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
-		}
-		return nil
-	})
+		}, getArgs)
+		require.Nil(rt, pErr, "failed to read data")
+		require.Equal(rt, int64(39), mustGetInt(reply.(*kvpb.GetResponse).Value), "failed to read correct data")
+	}))
 }
 
 func TestRaftLogSizeAfterTruncation(t *testing.T) {
@@ -757,23 +739,21 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 				// election. In this case, a successful heartbeat won't be
 				// possible until we re-enable snapshots.
 				require.NoError(t, tc.RestartServer(stoppedStore))
-				testutils.SucceedsSoon(t, func() error {
+				require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 					hasLeader := false
 					term := uint64(0)
 					for i := 0; i < len(tc.Servers); i++ {
 						repl := tc.GetFirstStoreFromServer(t, i).LookupReplica(key)
-						require.NotNil(t, repl)
+						require.NotNil(rt, repl)
 						status := repl.RaftStatus()
-						if status == nil {
-							return errors.New("raft status not initialized")
-						}
+						require.NotNil(rt, status, "raft status not initialized")
 						if status.RaftState == raftpb.StateLeader {
 							hasLeader = true
 						}
 						if term == 0 {
 							term = status.Term
-						} else if status.Term != term {
-							return errors.Errorf("terms do not agree: %d vs %d", status.Term, term)
+						} else {
+							require.Equal(rt, term, status.Term, "terms do not agree")
 						}
 						if !hasLeader {
 							// If we haven't been able to establish a  leader yet, send a get
@@ -783,15 +763,12 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 							// It should be fine if we get a NLHE for some reason.
 							nlhe := &kvpb.NotLeaseHolderError{}
 							if !errors.As(err.GetDetail(), &nlhe) {
-								return err.GetDetail()
+								require.NoError(rt, err.GetDetail())
 							}
 						}
 					}
-					if !hasLeader {
-						return errors.New("no leader")
-					}
-					return nil
-				})
+					require.True(rt, hasLeader, "no leader")
+				}))
 
 				// Turn the queues back on and wait for the snapshot to be sent and processed.
 				for i := 0; i < len(tc.Servers)-1; i++ {
@@ -805,48 +782,37 @@ func TestSnapshotAfterTruncation(t *testing.T) {
 			}
 			tc.WaitForValues(t, key, []int64{incAB, incAB, incAB})
 
-			testutils.SucceedsSoon(t, func() error {
+			require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 				// Verify that the cached index and term (Replica.mu.last{Index,Term}))
 				// on all of the replicas is the same. #18327 fixed an issue where the
 				// cached term was left unchanged after applying a snapshot leading to a
 				// persistently unavailable range.
 				repl0 = tc.GetFirstStoreFromServer(t, otherStore1).LookupReplica(key)
-				require.NotNil(t, repl0)
+				require.NotNil(rt, repl0)
 				expectedLastIndex := repl0.GetLastIndex()
 				expectedLastTerm := repl0.GetCachedLastTerm()
 
-				verifyIndexAndTerm := func(i int) error {
+				verifyIndexAndTerm := func(i int) {
 					repl1 := tc.GetFirstStoreFromServer(t, i).LookupReplica(key)
-					require.NotNil(t, repl1)
-					if lastIndex := repl1.GetLastIndex(); expectedLastIndex != lastIndex {
-						return fmt.Errorf("%d: expected last index %d, but found %d", i, expectedLastIndex, lastIndex)
-					}
-					if lastTerm := repl1.GetCachedLastTerm(); expectedLastTerm != lastTerm {
-						return fmt.Errorf("%d: expected last term %d, but found %d", i, expectedLastTerm, lastTerm)
-					}
-					return nil
+					require.NotNil(rt, repl1)
+					require.Equal(rt, expectedLastIndex, repl1.GetLastIndex(),
+						"%d: unexpected last index", i)
+					require.Equal(rt, expectedLastTerm, repl1.GetCachedLastTerm(),
+						"%d: unexpected last term", i)
 				}
-				if err := verifyIndexAndTerm(otherStore2); err != nil {
-					return err
-				}
-				if err := verifyIndexAndTerm(stoppedStore); err != nil {
-					return err
-				}
-				return nil
-			})
+				verifyIndexAndTerm(otherStore2)
+				verifyIndexAndTerm(stoppedStore)
+			}))
 		})
 	}
 }
 
 func waitForTruncationForTesting(t *testing.T, r *kvserver.Replica, compacted kvpb.RaftIndex) {
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		// Flush the engine to advance durability, which triggers truncation.
-		require.NoError(t, r.Store().StateEngine().Flush())
-		if index := r.GetCompactedIndex(); index != compacted {
-			return errors.Errorf("expected compacted index == %d, got %d", compacted, index)
-		}
-		return nil
-	})
+		require.NoError(rt, r.Store().StateEngine().Flush())
+		require.Equal(rt, compacted, r.GetCompactedIndex(), "unexpected compacted index")
+	}))
 }
 
 // TestSnapshotAfterTruncationWithUncommittedTail is similar in spirit to
@@ -980,27 +946,22 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	// Have StoreLiveness support for the partitioned store expire.
 	manualClock.Increment(store.GetStoreConfig().LeaseExpiration())
 
-	testutils.SucceedsSoon(t, func() error {
-		if partRepl.RaftStatus().RaftState == raftpb.StateLeader {
-			return errors.New("partitioned replica should have stepped down")
-		}
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
+		require.NotEqual(rt, raftpb.StateLeader, partRepl.RaftStatus().RaftState,
+			"partitioned replica should have stepped down")
 		lead := otherRepl.RaftStatus().Lead
-		if lead == raft.None {
-			return errors.New("no leader yet")
-		}
-		if roachpb.ReplicaID(lead) == partReplDesc.ReplicaID {
-			return errors.New("partitioned replica is still leader")
-		}
+		require.NotEqual(rt, raft.None, lead, "no leader yet")
+		require.NotEqual(rt, partReplDesc.ReplicaID, roachpb.ReplicaID(lead),
+			"partitioned replica is still leader")
 
 		// Remember who the leader/leaseholder is and also send it a write request.
 		newLeaderReplDesc, found := desc.GetReplicaDescriptorByID(roachpb.ReplicaID(lead))
-		require.True(t, found)
+		require.True(rt, found)
 		newLeaderRepl = tc.GetFirstStoreFromServer(t, int(newLeaderReplDesc.NodeID-1)).LookupReplica(roachpb.RKey(key))
 		newLeaderReplSender = tc.GetFirstStoreFromServer(t, int(newLeaderReplDesc.NodeID-1)).TestSender()
 		_, pErr := kv.SendWrapped(ctx, newLeaderReplSender, incArgs)
-		require.Nil(t, pErr)
-		return nil
-	})
+		require.Nil(rt, pErr)
+	}))
 
 	log.KvExec.Infof(ctx, "test: waiting for values...")
 	tc.WaitForValues(t, key, []int64{incA, incAB, incAB})
@@ -1013,16 +974,11 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	log.KvExec.Infof(ctx, "test: truncating log")
 	truncArgs := truncateLogArgs(index+1, partRepl.RangeID)
 	truncArgs.Key = partRepl.Desc().StartKey.AsRawKey()
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		manualClock.Increment(store.GetStoreConfig().LeaseExpiration())
 		_, pErr := kv.SendWrappedWith(ctx, newLeaderReplSender, kvpb.Header{RangeID: partRepl.RangeID}, truncArgs)
-		if _, ok := pErr.GetDetail().(*kvpb.NotLeaseHolderError); ok {
-			return pErr.GoError()
-		} else if pErr != nil {
-			t.Fatal(pErr)
-		}
-		return nil
-	})
+		require.NoError(rt, pErr.GoError())
+	}))
 	waitForTruncationForTesting(t, newLeaderRepl, index)
 
 	snapsMetric := tc.GetFirstStoreFromServer(t, partStore).Metrics().RangeSnapshotsAppliedByVoters
@@ -1054,13 +1010,11 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	}
 
 	// The partitioned replica should catch up after a snapshot.
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		snapsAfter := snapsMetric.Count()
-		if !(snapsAfter > snapsBefore) {
-			return errors.New("expected at least 1 snapshot to catch the partitioned replica up")
-		}
-		return nil
-	})
+		require.Greater(rt, snapsAfter, snapsBefore,
+			"expected at least 1 snapshot to catch the partitioned replica up")
+	}))
 	tc.WaitForValues(t, key, []int64{incAB, incAB, incAB})
 
 	// Perform another write. The partitioned replica should be able to receive
@@ -1228,14 +1182,11 @@ func TestRequestsOnLaggingReplica(t *testing.T) {
 			// In asymmetric partition, wait for the partitioned node to learn about
 			// the new leader before continuing. We do this because we expect it to
 			// reply with a speculative lease below.
-			testutils.SucceedsSoon(t, func() error {
+			require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 				status := partitionedReplica.RaftStatus()
-				if status.Lead != 2 && status.Lead != 3 {
-					return errors.Errorf("partitioned replica doesn't know about new leader yet: lead=%d",
-						status.Lead)
-				}
-				return nil
-			})
+				require.True(rt, status.Lead == 2 || status.Lead == 3,
+					"partitioned replica doesn't know about new leader yet: lead=%d", status.Lead)
+			}))
 		}
 
 		getRequest := getArgs(key)
@@ -1431,22 +1382,19 @@ func TestRequestsOnFollowerWithNonLiveLeaseholder(t *testing.T) {
 
 	// Wait until the lease expires.
 	log.KvExec.Infof(ctx, "test: waiting for lease expiration on r%d", store0Repl.RangeID)
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		dur, _ := store0.GetStoreConfig().NodeLivenessDurations()
 		manualClock.Increment(dur.Nanoseconds())
 		leaseStatus = store0Repl.CurrentLeaseStatus(ctx)
 		// If we failed to pin the lease, it likely won't ever expire due to the particular
 		// partition we've set up. Bail early instead of wasting 45s.
-		require.True(t, leaseStatus.Lease.OwnedBy(store0.StoreID()), "failed to pin lease")
+		require.True(rt, leaseStatus.Lease.OwnedBy(store0.StoreID()), "failed to pin lease")
 
 		// Lease is on s1, and it should be invalid now. The only reason there's a
 		// retry loop is that there could be a race where we bump the clock while a
 		// heartbeat is inflight (and which picks up the new expiration).
-		if leaseStatus.IsValid() {
-			return errors.Errorf("lease still valid: %+v", leaseStatus)
-		}
-		return nil
-	})
+		require.False(rt, leaseStatus.IsValid(), "lease still valid: %+v", leaseStatus)
+	}))
 	log.KvExec.Infof(ctx, "test: lease expired")
 
 	{
@@ -1980,18 +1928,17 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 			if !(leaseType == roachpb.LeaseLeader && proposeOnFollower) {
 				tc.MaybeWaitForLeaseUpgrade(ctx, t, *leaderRepl.Desc())
 			}
-			testutils.SucceedsSoon(t, func() error {
+			require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 				// Lease transfers may not be immediately observed by the new
 				// leaseholder. Wait until the new leaseholder is aware.
 				repl, err := tc.GetFirstStoreFromServer(t, propIdx).GetReplica(leaderRepl.RangeID)
-				require.NoError(t, err)
+				require.NoError(rt, err)
 				repDesc, err := repl.GetReplicaDescriptor()
-				require.NoError(t, err)
-				if lease, _ := repl.GetLease(); !lease.Replica.Equal(repDesc) {
-					return errors.Errorf("lease not transferred yet; found %v", lease)
-				}
-				return nil
-			})
+				require.NoError(rt, err)
+				lease, _ := repl.GetLease()
+				require.True(rt, lease.Replica.Equal(repDesc),
+					"lease not transferred yet; found %v", lease)
+			}))
 
 			// Stop enough nodes to prevent a quorum.
 			for i := 2; i < len(tc.Servers); i++ {
@@ -2083,10 +2030,10 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 
 	// Wait until all under-replicated ranges are up-replicated to all nodes.
 	var replicaCount int64
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		var replicaCounts [numServers]int64
 		for i := range tc.Servers {
-			var err error
+			var notFullyInit bool
 			tc.GetFirstStoreFromServer(t, i).VisitReplicas(func(r *kvserver.Replica) bool {
 				replicaCounts[i]++
 				r.RaftLock()
@@ -2094,24 +2041,18 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 				if len(r.Desc().InternalReplicas) != 3 {
 					// This fails even after the snapshot has arrived and only
 					// goes through once the replica has applied the conf change.
-					err = errors.Errorf("not fully initialized")
+					notFullyInit = true
 					return false
 				}
 				return true
 			})
-			if err != nil {
-				return err
-			}
-			if replicaCounts[i] != replicaCounts[0] {
-				return errors.Errorf("not fully upreplicated")
-			}
-			if n := tc.GetFirstStoreFromServer(t, i).ReservationCount(); n != 0 {
-				return errors.Errorf("expected 0 reservations, but found %d", n)
-			}
+			require.False(rt, notFullyInit, "not fully initialized")
+			require.Equal(rt, replicaCounts[0], replicaCounts[i], "not fully upreplicated")
+			require.Zero(rt, tc.GetFirstStoreFromServer(t, i).ReservationCount(),
+				"expected 0 reservations")
 		}
 		replicaCount = replicaCounts[0]
-		return nil
-	})
+	}))
 
 	var generated int64
 	var learnerApplied, raftApplied int64
@@ -2164,13 +2105,10 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	if err := addReplica(1, &origDesc); err != nil {
 		t.Fatal(err)
 	}
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		r := tc.GetFirstStoreFromServer(t, 1).LookupReplica(key)
-		if r == nil {
-			return errors.Errorf(`expected replica for key "a"`)
-		}
-		return nil
-	})
+		require.NotNil(rt, r, `expected replica for key "a"`)
+	}))
 
 	before := store2.Metrics().RangeSnapshotsAppliedForInitialUpreplication.Count()
 	// Attempt to add replica to the third store with the original descriptor.
@@ -2194,20 +2132,14 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		after := store2.Metrics().RangeSnapshotsAppliedForInitialUpreplication.Count()
 		// The failed ChangeReplicas call should have applied a learner snapshot.
-		if after != before+1 {
-			return errors.Errorf(
-				"ChangeReplicas call should have applied a learner snapshot, before %d after %d",
-				before, after)
-		}
+		require.Equal(rt, before+1, after,
+			"ChangeReplicas call should have applied a learner snapshot")
 		r := store2.LookupReplica(key)
-		if r == nil {
-			return errors.Errorf(`expected replica for key "a"`)
-		}
-		return nil
-	})
+		require.NotNil(rt, r, `expected replica for key "a"`)
+	}))
 }
 
 // TestProgressWithDownNode verifies that a surviving quorum can make progress
@@ -2380,16 +2312,12 @@ func runReplicateRestartAfterTruncation(t *testing.T, removeBeforeTruncateAndReA
 		// Verify old replica is GC'd. Wait out the replica gc queue
 		// inactivity threshold and force a gc scan.
 		manualClock.Increment(int64(kvserver.ReplicaGCQueueCheckInterval + 1))
-		testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 			tc.GetFirstStoreFromServer(t, 1).MustForceReplicaGCScanAndProcess()
 			_, err := tc.GetFirstStoreFromServer(t, 1).GetReplica(desc.RangeID)
-			if !errors.HasType(err, (*kvpb.RangeNotFoundError)(nil)) {
-				// NB: errors.Wrapf(nil, ...) returns nil.
-				// nolint:errwrap
-				return errors.Errorf("expected replica to be garbage collected, got %v %T", err, err)
-			}
-			return nil
-		})
+			require.True(rt, errors.HasType(err, (*kvpb.RangeNotFoundError)(nil)),
+				"expected replica to be garbage collected, got %v %T", err, err)
+		}))
 
 		tc.AddVotersOrFatal(t, key, tc.Target(1))
 	}
@@ -2572,17 +2500,14 @@ func TestQuotaPool(t *testing.T) {
 	// Wait until the follower will is not ignored by updateProposalQuotaRaftMuLocked.
 	// Otherwise the quota gets prematurely released into the pool. We can use status.Applied
 	// instead of proposalQuotaBaseIndex because it's strictly ahead or the same.
-	testutils.SucceedsSoon(t, func() error {
-		var err error
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		status := leaderRepl.RaftStatus()
 		minIndex := status.Applied
 		for id, progress := range status.Progress {
-			if progress.Match < minIndex {
-				err = errors.Errorf("Replica %d is behind leader expected %d but was %d", id, minIndex, progress.Match)
-			}
+			require.GreaterOrEqual(rt, progress.Match, minIndex,
+				"Replica %d is behind leader", id)
 		}
-		return err
-	})
+	}))
 
 	followerRepl := func() *kvserver.Replica {
 		for i := range tc.Servers {
@@ -2633,12 +2558,10 @@ func TestQuotaPool(t *testing.T) {
 			t.Fatalf("didn't observe the expected quota acquisition, available: %d", curQuota)
 		}
 
-		testutils.SucceedsSoon(t, func() error {
-			if qLen := leaderRepl.QuotaReleaseQueueLen(); qLen < 1 {
-				return errors.Errorf("expected at least 1 queued quota release, found: %d", qLen)
-			}
-			return nil
-		})
+		require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
+			require.GreaterOrEqual(rt, leaderRepl.QuotaReleaseQueueLen(), 1,
+				"expected at least 1 queued quota release")
+		}))
 
 		go func() {
 			ba := &kvpb.BatchRequest{}
@@ -2652,15 +2575,10 @@ func TestQuotaPool(t *testing.T) {
 		}()
 	}()
 
-	testutils.SucceedsSoon(t, func() error {
-		if curQuota := leaderRepl.QuotaAvailable(); curQuota != quota {
-			return errors.Errorf("expected available quota %d, got %d", quota, curQuota)
-		}
-		if qLen := leaderRepl.QuotaReleaseQueueLen(); qLen != 0 {
-			return errors.Errorf("expected no queued quota releases, found: %d", qLen)
-		}
-		return nil
-	})
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
+		require.Equal(rt, uint64(quota), leaderRepl.QuotaAvailable(), "unexpected available quota")
+		require.Zero(rt, leaderRepl.QuotaReleaseQueueLen(), "expected no queued quota releases")
+	}))
 
 	if pErr := <-ch; pErr != nil {
 		t.Fatal(pErr)
@@ -2746,13 +2664,11 @@ func TestWedgedReplicaDetection(t *testing.T) {
 		// flakiness. It is possible that the WaitForValues call above returned as
 		// soon as one of the followers appended and applied a log entry, but before
 		// its response was delivered to the leader.
-		testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 			lastUpdateTimes := leaderRepl.LastUpdateTimes()
-			if len(lastUpdateTimes) == 3 {
-				return nil
-			}
-			return errors.Errorf("expected leader replica to have 3 entries in lastUpdateTimes map, found %s", lastUpdateTimes)
-		})
+			require.Len(rt, lastUpdateTimes, 3,
+				"expected leader replica to have 3 entries in lastUpdateTimes map")
+		}))
 
 		// Lock the follower replica to prevent it from making progress from now
 		// on. NB: See TestRaftBlockedReplica/#9914 for why we use a separate
@@ -2799,25 +2715,23 @@ func TestWedgedReplicaDetection(t *testing.T) {
 		// followerRepl from before it was locked. The receipt of one of these
 		// would bump the last active timestamp on the leader. Because of this,
 		// we check whether the follower is eventually considered inactive.
-		testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 			// Increment the clock to past inactivityThreshold.
 			manual.Increment(inactivityThreshold.Nanoseconds() + 1)
 
 			// Send another request to the leader replica. followerRepl is locked
 			// so it will not respond.
 			if _, pErr := kvserver.ToSenderForTesting(leaderRepl).Send(ctx, ba); pErr != nil {
-				t.Fatal(pErr)
+				require.NoError(rt, pErr.GoError())
 			}
 
 			// The follower should no longer be considered active.
 			leaderNow = leaderClock.PhysicalTime()
-			if leaderRepl.IsFollowerActiveSince(followerID, leaderNow, inactivityThreshold) {
-				return errors.Errorf("expected follower to be considered inactive; "+
+			require.False(rt, leaderRepl.IsFollowerActiveSince(followerID, leaderNow, inactivityThreshold),
+				"expected follower to be considered inactive; "+
 					"follower id: %d, last update times: %s, leader clock: %s",
-					followerID, leaderRepl.LastUpdateTimes(), leaderNow)
-			}
-			return nil
-		})
+				followerID, leaderRepl.LastUpdateTimes(), leaderNow)
+		}))
 	})
 }
 
@@ -2941,18 +2855,18 @@ func TestReportUnreachableRemoveRace(t *testing.T) {
 		// Find the Raft leader.
 		var leaderIdx int
 		var leaderRepl *kvserver.Replica
-		testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 			for idx := range tc.Servers {
 				repl := tc.GetFirstStoreFromServer(t, idx).LookupReplica(roachpb.RKey(key))
-				require.NotNil(t, repl)
+				require.NotNil(rt, repl)
 				if repl.RaftStatus().SoftState.RaftState == raftpb.StateLeader {
 					leaderIdx = idx
 					leaderRepl = repl
-					return nil
+					return
 				}
 			}
-			return errors.New("no Raft leader found")
-		})
+			require.Fail(rt, "no Raft leader found")
+		}))
 
 		// Raft leader found. Make sure it doesn't have the lease (transferring it
 		// away if necessary, which entails picking a random other node and sending
@@ -2998,14 +2912,12 @@ func TestReportUnreachableRemoveRace(t *testing.T) {
 		// something on the order of a election timeout plus
 		// ReplicaGCQueueSuspectTimeout before replicaGC will be attempted (and will
 		// then succeed on the first try).
-		testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 			s := tc.GetFirstStoreFromServer(t, leaderIdx)
 			s.MustForceReplicaGCScanAndProcess()
-			if oldRepl := tc.GetFirstStoreFromServer(t, leaderIdx).LookupReplica(roachpb.RKey(key)); oldRepl != nil {
-				return errors.Errorf("Expected replica %s to be removed", oldRepl)
-			}
-			return nil
-		})
+			oldRepl := tc.GetFirstStoreFromServer(t, leaderIdx).LookupReplica(roachpb.RKey(key))
+			require.Nil(rt, oldRepl, "Expected replica to be removed")
+		}))
 		t.Logf("re-adding leader")
 		tc.AddVotersOrFatal(t, key, tc.Target(leaderIdx))
 		require.NoError(t, tc.WaitForVoters(key, tc.Target(leaderIdx)))
@@ -3044,18 +2956,15 @@ func TestReplicateAfterSplit(t *testing.T) {
 		t.Error("Range MaxBytes is not set after snapshot applied")
 	}
 	// Once it catches up, the effects of increment commands can be seen.
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		getArgs := getArgs(key)
 		// Reading on non-lease holder replica should use inconsistent read
-		if reply, err := kv.SendWrappedWith(ctx, tc.GetFirstStoreFromServer(t, 1).TestSender(), kvpb.Header{
+		reply, pErr := kv.SendWrappedWith(ctx, tc.GetFirstStoreFromServer(t, 1).TestSender(), kvpb.Header{
 			ReadConsistency: kvpb.INCONSISTENT,
-		}, getArgs); err != nil {
-			return errors.Errorf("failed to read data: %s", err)
-		} else if e, v := int64(11), mustGetInt(reply.(*kvpb.GetResponse).Value); v != e {
-			return errors.Errorf("failed to read correct data: expected %d, got %d", e, v)
-		}
-		return nil
-	})
+		}, getArgs)
+		require.Nil(rt, pErr, "failed to read data")
+		require.Equal(rt, int64(11), mustGetInt(reply.(*kvpb.GetResponse).Value), "failed to read correct data")
+	}))
 }
 
 // TestReplicaRemovalCampaign verifies that a new replica after a split can be
@@ -3125,18 +3034,15 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 
 			var latestTerm uint64
 			if td.expectAdvance {
-				testutils.SucceedsSoon(t, func() error {
-					if raftStatus := replica2.RaftStatus(); raftStatus != nil {
-						if term := raftStatus.Term; term <= latestTerm {
-							return errors.Errorf("%d: raft term has not yet advanced: %d", i, term)
-						} else if latestTerm == 0 {
-							latestTerm = term
-						}
-					} else {
-						return errors.Errorf("%d: raft group is not yet initialized", i)
+				require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
+					raftStatus := replica2.RaftStatus()
+					require.NotNil(rt, raftStatus, "%d: raft group is not yet initialized", i)
+					term := raftStatus.Term
+					require.Greater(rt, term, latestTerm, "%d: raft term has not yet advanced", i)
+					if latestTerm == 0 {
+						latestTerm = term
 					}
-					return nil
-				})
+				}))
 			} else {
 				for start := timeutil.Now(); timeutil.Since(start) < time.Second; time.Sleep(10 * time.Millisecond) {
 					if raftStatus := replica2.RaftStatus(); raftStatus != nil {
@@ -3176,16 +3082,14 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 	tc.RemoveVotersOrFatal(t, key, tc.Target(1))
 
 	// Wait for the removal to be processed.
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		for i := range tc.Servers[1:] {
 			store := tc.GetFirstStoreFromServer(t, i)
 			_, err := store.GetReplica(desc.RangeID)
-			if !errors.HasType(err, (*kvpb.RangeNotFoundError)(nil)) {
-				return errors.Wrapf(err, "range %d not yet removed from %s", desc.RangeID, store)
-			}
+			require.True(rt, errors.HasType(err, (*kvpb.RangeNotFoundError)(nil)),
+				"range %d not yet removed from %s: %v", desc.RangeID, store, err)
 		}
-		return nil
-	})
+	}))
 
 	target1 := tc.Target(1)
 	target2 := tc.Target(2)
@@ -3424,22 +3328,17 @@ func TestReplicaGCRace(t *testing.T) {
 
 	// Wait for the victim's raft log to be non-empty, then configure the heartbeat
 	// with the raft state.
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		status := repl.RaftStatus()
 		progressByID := status.Progress
 		progress, ok := progressByID[raftpb.PeerID(toReplicaDesc.ReplicaID)]
-		if !ok {
-			return errors.Errorf("%+v does not yet contain %s", progressByID, toReplicaDesc)
-		}
-		if progress.Match == 0 {
-			return errors.Errorf("%+v has not yet advanced", progress)
-		}
+		require.True(rt, ok, "%+v does not yet contain %s", progressByID, toReplicaDesc)
+		require.NotZero(rt, progress.Match, "%+v has not yet advanced", progress)
 		for i := range hbReq.Heartbeats {
 			hbReq.Heartbeats[i].Term = kvpb.RaftTerm(status.Term)
 			hbReq.Heartbeats[i].Commit = kvpb.RaftIndex(progress.Match)
 		}
-		return nil
-	})
+	}))
 
 	// Remove the victim replica and manually GC it.
 	chgs[0].ChangeType = roachpb.REMOVE_VOTER
@@ -3631,7 +3530,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// TODO(bdarnell): if the call to RemoveReplica in replicaGCQueue.process can be
 	// moved under the lock, then the GC scan can be moved out of this loop.
 	tc.GetFirstStoreFromServer(t, 1).SetReplicaGCQueueActive(true)
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		manualClock.Increment(store.GetStoreConfig().LeaseExpiration())
 		manualClock.Increment(int64(
 			kvserver.ReplicaGCQueueCheckInterval) + 1)
@@ -3639,11 +3538,8 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 
 		actual := tc.ReadIntFromStores(key)
 		expected := []int64{16, 0, 0 /* stopped */}
-		if !reflect.DeepEqual(expected, actual) {
-			return errors.Errorf("expected %v, got %v", expected, actual)
-		}
-		return nil
-	})
+		require.Equal(rt, expected, actual)
+	}))
 	// Partition nodes 1 and 2 from node 0. Otherwise they'd get a
 	// ReplicaTooOldError from node 0 and proceed to remove themselves.
 	partRange.activate()
@@ -3697,7 +3593,7 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 	// Now the tombstone on node 1 prevents it from rejoining the rogue
 	// copy of the group.
 	time.Sleep(100 * time.Millisecond)
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		actual := tc.ReadIntFromStores(key)
 		// Normally, replica GC has not happened yet on store 2, so we
 		// expect {16, 0, 5}. However, it is possible (on a
@@ -3711,11 +3607,9 @@ func TestReplicateRogueRemovedNode(t *testing.T) {
 		// we should just combine this check with the following one.
 		expected1 := []int64{16, 0, 5}
 		expected2 := []int64{16, 0, 0}
-		if !reflect.DeepEqual(expected1, actual) && !reflect.DeepEqual(expected2, actual) {
-			return errors.Errorf("expected %v or %v, got %v", expected1, expected2, actual)
-		}
-		return nil
-	})
+		require.True(rt, reflect.DeepEqual(expected1, actual) || reflect.DeepEqual(expected2, actual),
+			"expected %v or %v, got %v", expected1, expected2, actual)
+	}))
 
 	// Run garbage collection on node 2. The lack of an active lease holder
 	// lease will cause GC to do a consistent range lookup, where it
@@ -3803,20 +3697,14 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 	tc.WaitForValues(t, key, []int64{0, value, value, value})
 
 	// 3. Wait for the lease holder to obtain raft leadership too.
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		hint := tc.Target(1)
 		leadReplica := tc.GetRaftLeader(t, roachpb.RKey(key))
 		leaseReplica, err := tc.FindRangeLeaseHolder(*leadReplica.Desc(), &hint)
-		if err != nil {
-			return err
-		}
-		if leaseReplica.StoreID != leadReplica.StoreID() {
-			return errors.Errorf("leaseReplica %s does not match leadReplica %s",
-				leaseReplica, leadReplica)
-		}
-
-		return nil
-	})
+		require.NoError(rt, err)
+		require.Equal(rt, leadReplica.StoreID(), leaseReplica.StoreID,
+			"leaseReplica %s does not match leadReplica %s", leaseReplica, leadReplica)
+	}))
 
 	// Save the current term, which is the latest among the live stores.
 	findTerm := func() uint64 {
@@ -3987,20 +3875,18 @@ func TestReplicaTooOldGC(t *testing.T) {
 	// to get created in order to get the replica talking to the other replicas.
 	tc.GetFirstStoreFromServer(t, 3).EnqueueRaftUpdateCheck(desc.RangeID)
 
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		replica, err := tc.GetFirstStoreFromServer(t, 3).GetReplica(desc.RangeID)
 		if err != nil {
-			if errors.HasType(err, (*kvpb.RangeNotFoundError)(nil)) {
-				return nil
-			}
-			return err
-		} else if replica != nil {
-			// Make sure the replica is unquiesced so that it will tick and
-			// contact the leader to discover it's no longer part of the range.
-			replica.MaybeUnquiesce()
+			require.True(rt, errors.HasType(err, (*kvpb.RangeNotFoundError)(nil)),
+				"unexpected error: %v", err)
+			return
 		}
-		return errors.Errorf("found %s, waiting for it to be GC'd", replica)
-	})
+		// Make sure the replica is unquiesced so that it will tick and
+		// contact the leader to discover it's no longer part of the range.
+		replica.MaybeUnquiesce()
+		require.Fail(rt, "found replica, waiting for it to be GC'd", "%s", replica)
+	}))
 }
 
 func TestReplicateReAddAfterDown(t *testing.T) {
@@ -4220,20 +4106,19 @@ func TestRemovedReplicaError(t *testing.T) {
 	// the commit quorum for the removal itself. That is to say, we will only
 	// start seeing the RangeNotFoundError after a little bit of time has passed.
 	getArgs := getArgs(key)
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		_, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store), kvpb.Header{}, getArgs)
 		switch pErr.GetDetail().(type) {
 		case *kvpb.AmbiguousResultError:
-			return pErr.GoError()
+			require.NoError(rt, pErr.GoError())
 		case *kvpb.NotLeaseHolderError:
-			return pErr.GoError()
+			require.NoError(rt, pErr.GoError())
 		case *kvpb.RangeNotFoundError:
-			return nil
+			// Expected.
 		default:
+			require.NoError(rt, pErr.GoError())
 		}
-		t.Fatal(pErr)
-		return errors.New("unreachable")
-	})
+	}))
 }
 
 // Test that the Raft leadership is transferred to follow the lease.
@@ -4292,14 +4177,12 @@ func TestTransferRaftLeadership(t *testing.T) {
 			require.NoError(t, pErr.GoError())
 
 			// Verify leadership is transferred.
-			testutils.SucceedsSoon(t, func() error {
-				if status := repl0.RaftStatus(); status == nil {
-					return errors.New("raft status is nil")
-				} else if a, e := status.Lead, raftpb.PeerID(rd1.ReplicaID); a != e {
-					return errors.Errorf("expected raft leader be %d; got %d", e, a)
-				}
-				return nil
-			})
+			require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
+				status := repl0.RaftStatus()
+				require.NotNil(rt, status, "raft status is nil")
+				require.Equal(rt, raftpb.PeerID(rd1.ReplicaID), status.Lead,
+					"unexpected raft leader")
+			}))
 			// And metrics are updated.
 			require.Greater(t, store0.Metrics().RangeRaftLeaderTransfers.Count(), origCount0)
 		})
@@ -4400,24 +4283,20 @@ func TestFollowersFallAsleep(t *testing.T) {
 	oldLeaderServerIdx := int(oldLeader.NodeID()) - 1
 
 	checkSleep := func(expected bool) {
-		testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 			for i := range tc.Servers {
 				rep := tc.GetFirstStoreFromServer(t, i).LookupReplica(roachpb.RKey(key))
-				require.NotNil(t, rep)
+				require.NotNil(rt, rep)
 				isLeader := rep.ID() == oldLeader.ID()
 				if isLeader {
-					require.False(t, rep.IsAsleep())
+					require.False(rt, rep.IsAsleep())
+				} else if expected {
+					require.True(rt, rep.IsAsleep(), "%s not asleep yet", rep)
 				} else {
-					if expected && !rep.IsAsleep() {
-						return errors.Errorf("%s not asleep yet", rep)
-					}
-					if !expected && rep.IsAsleep() {
-						return errors.Errorf("%s not awake yet", rep)
-					}
+					require.False(rt, rep.IsAsleep(), "%s not awake yet", rep)
 				}
 			}
-			return nil
-		})
+		}))
 	}
 
 	// Wait for the followers to fall asleep.
@@ -4426,13 +4305,10 @@ func TestFollowersFallAsleep(t *testing.T) {
 	// Stop the leader, and ensure a new leader is elected.
 	tc.StopServer(oldLeaderServerIdx)
 	checkSleep(false /* expected */)
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		newLeader := tc.GetRaftLeader(t, roachpb.RKey(key))
-		if oldLeader.ID() == newLeader.ID() {
-			return errors.Errorf("no new leader yet")
-		}
-		return nil
-	})
+		require.NotEqual(rt, oldLeader.ID(), newLeader.ID(), "no new leader yet")
+	}))
 }
 
 // TestUninitializedReplicaQuiescence tests the uninitialized replica quiescence
@@ -4490,17 +4366,15 @@ func TestUninitializedReplicaQuiescence(t *testing.T) {
 			case <-tc.Stopper().ShouldQuiesce():
 			}
 		}()
-		testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 			repl, err := s2.GetReplica(desc.RangeID)
-			if err == nil {
-				// IMPORTANT: the replica should always be quiescent while uninitialized.
-				require.False(t, repl.IsInitialized())
-				require.True(t, repl.IsQuiescent())
-				// But it's always awake for the purposes of store liveness quiescence.
-				require.False(t, repl.IsAsleep())
-			}
-			return err
-		})
+			require.NoError(rt, err)
+			// IMPORTANT: the replica should always be quiescent while uninitialized.
+			require.False(rt, repl.IsInitialized())
+			require.True(rt, repl.IsQuiescent())
+			// But it's always awake for the purposes of store liveness quiescence.
+			require.False(rt, repl.IsAsleep())
+		}))
 
 		// Let the snapshot through. The up-replication attempt should succeed. The
 		// replica should now be initialized, and the replica should quiesce again
@@ -4515,23 +4389,17 @@ func TestUninitializedReplicaQuiescence(t *testing.T) {
 		require.False(t, repl.IsQuiescent())
 		switch leaseType {
 		case roachpb.LeaseEpoch:
-			testutils.SucceedsSoon(t, func() error {
-				if !repl.IsQuiescent() {
-					return errors.Errorf("%s not quiescent", repl)
-				}
-				return nil
-			})
+			require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
+				require.True(rt, repl.IsQuiescent(), "%s not quiescent", repl)
+			}))
 		case roachpb.LeaseLeader:
 			require.Never(t, func() bool {
 				return repl.IsQuiescent()
 			},
 				time.Second*3, 100*time.Millisecond, "replica shouldn't quiesce")
-			testutils.SucceedsSoon(t, func() error {
-				if !repl.IsAsleep() {
-					return errors.Errorf("%s not asleep", repl)
-				}
-				return nil
-			})
+			require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
+				require.True(rt, repl.IsAsleep(), "%s not asleep", repl)
+			}))
 		case roachpb.LeaseExpiration:
 			require.Never(t, func() bool {
 				return repl.IsQuiescent() || repl.IsAsleep()
@@ -4617,17 +4485,13 @@ func TestFailedConfChange(t *testing.T) {
 	// Transfer leadership to the second node and wait for it to become leader.
 	tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(1))
 
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 		repl, err := tc.GetFirstStoreFromServer(t, 1).GetReplica(desc.RangeID)
-		if err != nil {
-			return err
-		}
+		require.NoError(rt, err)
 		status := repl.RaftStatus()
-		if status.RaftState != raftpb.StateLeader {
-			return errors.Errorf("store %d: expected StateLeader, was %s", 1, status.RaftState)
-		}
-		return nil
-	})
+		require.Equal(rt, raftpb.StateLeader, status.RaftState,
+			"store %d: unexpected raft state", 1)
+	}))
 
 	if err := checkLeaderStore(1); err != nil {
 		t.Fatal(err)
@@ -4870,7 +4734,7 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 		// before does the trick.
 		const unusedRangeID = 1234
 		var repl *kvserver.Replica
-		testutils.SucceedsSoon(t, func() (err error) {
+		require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 			// Try several times, as the message may be dropped (see #18355).
 			tc.Servers[0].RaftTransport().(*kvserver.RaftTransport).SendAsync(&kvserverpb.RaftMessageRequest{
 				ToReplica: roachpb.ReplicaDescriptor{
@@ -4879,9 +4743,10 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 				},
 				Heartbeats: []kvserverpb.RaftHeartbeat{{RangeID: unusedRangeID, ToReplicaID: 1}},
 			}, rpcbase.DefaultClass)
+			var err error
 			repl, err = store.GetReplica(unusedRangeID)
-			return err
-		})
+			require.NoError(rt, err)
+		}))
 		if repl.IsInitialized() {
 			t.Fatalf("test bug: range %d is initialized", unusedRangeID)
 		}
@@ -6097,12 +5962,10 @@ func TestRaftCheckQuorum(t *testing.T) {
 
 			// Wait for the followers to wake up.
 			if sleep {
-				testutils.SucceedsSoon(t, func() error {
-					if repl2.IsAsleep() || repl3.IsAsleep() {
-						return errors.Errorf("at least one follower still asleep")
-					}
-					return nil
-				})
+				require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
+					require.False(rt, repl2.IsAsleep() || repl3.IsAsleep(),
+						"at least one follower still asleep")
+				}))
 				t.Logf("n2 and n3 woke up")
 			} else {
 				require.False(t, repl1.IsAsleep() || repl2.IsAsleep() || repl3.IsAsleep())
