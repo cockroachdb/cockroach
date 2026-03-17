@@ -1,6 +1,9 @@
 # LogicTest: !local-prepared
 
 statement ok
+SET kv_transaction_buffered_writes_enabled = false;
+
+statement ok
 CREATE TABLE t(a INT PRIMARY KEY);
 INSERT INTO t VALUES(1);
 GRANT ALL ON t TO testuser;
@@ -9,6 +12,9 @@ GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser;
 GRANT ALL ON t TO testuser2;
 
 user testuser
+
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
 
 statement ok
 SET enable_shared_locking_for_serializable = true;
@@ -38,6 +44,9 @@ SELECT * FROM t  WHERE a = 1 FOR SHARE;
 1
 
 user testuser2
+
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
 
 statement async writeReq count 1
 UPDATE t SET a = 2 WHERE a = 1

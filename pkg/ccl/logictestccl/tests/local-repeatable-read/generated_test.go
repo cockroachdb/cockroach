@@ -1830,6 +1830,13 @@ func TestRepeatableReadLogic_select_for_share(
 	runLogicTest(t, "select_for_share")
 }
 
+func TestRepeatableReadLogic_select_for_share_write_buffering(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "select_for_share_write_buffering")
+}
+
 func TestRepeatableReadLogic_select_index(
 	t *testing.T,
 ) {

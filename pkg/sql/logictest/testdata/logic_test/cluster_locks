@@ -151,6 +151,12 @@ database_name schema_name table_name  lock_key_pretty     lock_strength   durabi
 # check that we can't see keys, potentially revealing PII, with VIEWACTIVITYREDACTED
 user testuser2
 
+statement ok
+SET kv_transaction_buffered_writes_enabled = false;
+
+statement ok
+SET default_transaction_isolation = 'SERIALIZABLE'
+
 query TTTTTTTBB colnames,rowsort
 SELECT database_name, schema_name, table_name, lock_key_pretty, lock_strength, durability, isolation_level, granted, contended FROM crdb_internal.cluster_locks WHERE range_id=$r1 AND txn_id='$txn1'
 ----

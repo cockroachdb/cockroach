@@ -82,6 +82,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -3761,7 +3762,9 @@ var allowBufferedWritesForWeakIsolation = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.txn.write_buffering_for_weak_isolation.enabled",
 	"set to true to allow write buffering for transactions at weak isolation levels",
-	false,
+	metamorphic.ConstantWithTestBool(
+		"sql.txn.write_buffering_for_weak_isolation.enabled", false, /* defaultValue */
+	),
 )
 
 func (ex *connExecutor) txnIsolationLevelToKV(
