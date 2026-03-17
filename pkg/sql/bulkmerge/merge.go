@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -66,6 +67,20 @@ type MergeOptions struct {
 	OnProgress func(context.Context, *execinfrapb.ProducerMetadata) error
 }
 
+// MergeResult contains the output of a distributed merge operation.
+type MergeResult struct {
+	// SSTs contains output SSTs from intermediate merge iterations.
+	// Empty for the final iteration which writes directly to KV.
+	SSTs []execinfrapb.BulkMergeSpec_SST
+
+	// IngestSummary contains the BulkOpSummary from the final merge
+	// iteration's KV ingest. It reflects the actual row count written
+	// to KV (excluding skipped identical duplicates from
+	// checkpoint-and-resume overlap). Only populated for the final
+	// iteration.
+	IngestSummary kvpb.BulkOpSummary
+}
+
 // Merge creates and waits on a DistSQL flow that merges the provided SSTs into
 // the ranges defined by the input splits.
 func Merge(
@@ -75,26 +90,40 @@ func Merge(
 	spans []roachpb.Span,
 	genOutputURIAndRecordPrefix func(sqlInstance base.SQLInstanceID) (string, error),
 	opts MergeOptions,
-) ([]execinfrapb.BulkMergeSpec_SST, error) {
+) (MergeResult, error) {
 	logMergeInputs(ctx, ssts, opts.Iteration, opts.MaxIterations)
 
 	// Proactive availability gate: wait for all required nodes to be alive
 	// before planning or executing the merge.
 	if err := waitForRequiredInstances(ctx, execCtx, ssts); err != nil {
-		return nil, err
+		return MergeResult{}, err
 	}
 
 	plan, planCtx, err := newBulkMergePlan(ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix, opts)
 	if err != nil {
-		return nil, err
+		return MergeResult{}, err
 	}
 
+	var mergeResult MergeResult
 	var result execinfrapb.BulkMergeSpec_Output
 	rowWriter := sql.NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		return protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &result)
 	})
 
-	sqlReceiver := makeMergeReceiver(ctx, execCtx, rowWriter, opts.OnProgress)
+	// Wrap the caller's OnProgress callback to intercept the KV ingest
+	// summary emitted by the merge processor at the end of the final
+	// iteration.
+	onProgress := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
+		if meta.BulkProcessorProgress != nil {
+			mergeResult.IngestSummary.Add(meta.BulkProcessorProgress.BulkSummary)
+		}
+		if opts.OnProgress != nil {
+			return opts.OnProgress(ctx, meta)
+		}
+		return nil
+	}
+
+	sqlReceiver := makeMergeReceiver(ctx, execCtx, rowWriter, onProgress)
 	defer sqlReceiver.Release()
 
 	execCtx.DistSQLPlanner().Run(
@@ -108,12 +137,12 @@ func Merge(
 	)
 
 	if err := rowWriter.Err(); err != nil {
-		return nil, err
+		return MergeResult{}, err
 	}
 
 	if opts.Iteration == opts.MaxIterations {
 		// Final iteration writes directly to KV; no SST outputs expected.
-		return nil, nil
+		return mergeResult, nil
 	}
 
 	// Sort the SSTs by their range start key. Ingest requires that SSTs are
@@ -123,7 +152,8 @@ func Merge(
 		return bytes.Compare(i.StartKey, j.StartKey)
 	})
 
-	return result.SSTs, nil
+	mergeResult.SSTs = result.SSTs
+	return mergeResult, nil
 }
 
 // makeMergeReceiver creates a DistSQLReceiver for the merge flow. If an
@@ -256,7 +286,7 @@ func init() {
 		onProgress func(context.Context, *execinfrapb.ProducerMetadata) error,
 		memoryMonitor execinfrapb.BulkMergeSpec_MemoryMonitor,
 	) ([]execinfrapb.BulkMergeSpec_SST, error) {
-		return Merge(ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix, MergeOptions{
+		result, err := Merge(ctx, execCtx, ssts, spans, genOutputURIAndRecordPrefix, MergeOptions{
 			Iteration:         iteration,
 			MaxIterations:     maxIterations,
 			WriteTimestamp:    writeTimestamp,
@@ -264,5 +294,6 @@ func init() {
 			MemoryMonitor:     memoryMonitor,
 			OnProgress:        onProgress,
 		})
+		return result.SSTs, err
 	})
 }

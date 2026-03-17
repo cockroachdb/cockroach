@@ -187,8 +187,10 @@ func distImport(
 		}
 	}
 
+	lastSummary := getLastImportSummary(job)
+	priorRunSummary := lastSummary.DeepCopy()
 	checkpoint := newImportCheckpointTracker(
-		len(from), getLastImportSummary(job), nil, /* manifestBuf */
+		len(from), lastSummary, nil, /* manifestBuf */
 	)
 
 	var res kvpb.BulkOpSummary
@@ -353,7 +355,7 @@ func distImport(
 		}
 
 		writeTS := &hlc.Timestamp{WallTime: walltime}
-		_, err = bulkmerge.Merge(ctx, execCtx, inputSSTs, spans, func(instanceID base.SQLInstanceID) (string, error) {
+		mergeResult, err := bulkmerge.Merge(ctx, execCtx, inputSSTs, spans, func(instanceID base.SQLInstanceID) (string, error) {
 			// Record the storage prefix before any SSTs are written
 			prefix := fmt.Sprintf("nodelocal://%d/", instanceID)
 			if err := addStoragePrefix(ctx, prefix); err != nil {
@@ -367,8 +369,33 @@ func distImport(
 			EnforceUniqueness: true,
 			MemoryMonitor:     execinfrapb.BulkMergeSpec_BULK_MONITOR,
 		})
+		if err != nil {
+			return err
+		}
 
-		return err
+		// Correct res to exclude identical duplicates skipped during
+		// the merge. The map-phase res counts all rows produced in
+		// this run, including duplicates from checkpoint-and-resume
+		// overlap. The merge ingest summary counts all unique rows
+		// actually written to KV (from both old and new SSTs). To
+		// get the current run's contribution, subtract the rows
+		// already counted in prior runs (from the checkpointed
+		// progress summary).
+		if len(mergeResult.IngestSummary.EntryCounts) > 0 {
+			if res.EntryCounts == nil {
+				res.EntryCounts = make(map[uint64]int64)
+			}
+			for id, ingestCount := range mergeResult.IngestSummary.EntryCounts {
+				priorCount := priorRunSummary.EntryCounts[id]
+				res.EntryCounts[id] = ingestCount - priorCount
+			}
+			// Update the checkpoint's entry counts to reflect the
+			// actual KV-ingested totals so the final Persist writes
+			// the correct row count to the job progress.
+			checkpoint.CorrectEntryCounts(mergeResult.IngestSummary.EntryCounts)
+		}
+
+		return nil
 	})
 
 	g.GoCtx(replanChecker)
