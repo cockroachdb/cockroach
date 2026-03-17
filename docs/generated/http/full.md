@@ -2610,6 +2610,7 @@ ASHSample represents a single active session history sample.
 | goroutine_id | [int64](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-int64) |  | GoroutineID is the ID of the goroutine that was sampled. | [reserved](#support-status) |
 | tenant_id | [cockroach.roachpb.TenantID](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.roachpb.TenantID) |  | TenantID identifies which tenant this sample belongs to. | [reserved](#support-status) |
 | app_name | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | AppName is the application name string. Set when the sample corresponds to SQL execution. | [reserved](#support-status) |
+| workload_type | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | WorkloadType distinguishes the kind of workload (e.g., "STATEMENT", "JOB", "SYSTEM", "UNKNOWN"). | [reserved](#support-status) |
 
 
 
@@ -2691,6 +2692,7 @@ ASHSample represents a single active session history sample.
 | goroutine_id | [int64](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-int64) |  | GoroutineID is the ID of the goroutine that was sampled. | [reserved](#support-status) |
 | tenant_id | [cockroach.roachpb.TenantID](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.roachpb.TenantID) |  | TenantID identifies which tenant this sample belongs to. | [reserved](#support-status) |
 | app_name | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | AppName is the application name string. Set when the sample corresponds to SQL execution. | [reserved](#support-status) |
+| workload_type | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | WorkloadType distinguishes the kind of workload (e.g., "STATEMENT", "JOB", "SYSTEM", "UNKNOWN"). | [reserved](#support-status) |
 
 
 

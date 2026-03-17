@@ -77,6 +77,9 @@ type ASHSample struct {
 	TenantID roachpb.TenantID
 	// WorkloadID identifies the workload (e.g., statement fingerprint).
 	WorkloadID string
+	// WorkloadType distinguishes the kind of workload (e.g., "STATEMENT",
+	// "JOB", "SYSTEM", "UNKNOWN").
+	WorkloadType string
 	// AppName is the application name string. Set when the workload is from
 	// SQL execution.
 	AppName string
