@@ -467,7 +467,11 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		})
 		checkStmtVolatility(targetVolatility, stmtScope, stmt)
 
-		// Format the statements with qualified datasource names.
+		// Prepend a newline to match PostgreSQL's convention, where the body text
+		// after the opening $$ delimiter starts on its own line. This ensures
+		// PLpgSQL line numbers in error context match PostgreSQL's behavior.
+		// See src/pl/plpgsql/src/pl_comp.c:plpgsql_compile_inline() in PostgreSQL.
+		fmtCtx.WriteString("\n")
 		formatFuncBodyStmt(fmtCtx, stmt.AST, language, false /* newLine */)
 		afterBuildStmt()
 	default:
