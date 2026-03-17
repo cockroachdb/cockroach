@@ -543,19 +543,14 @@ func mergeCheckingTimestampCaches(
 
 	if disjointLeaseholders {
 		tc.TransferRangeLeaseOrFatal(t, *rhsDesc, tc.Target(1))
-		testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
 			rhsRepl, err := rhsStore.GetReplica(rhsDesc.RangeID)
-			if err != nil {
-				return err
-			}
-			if !rhsRepl.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
-				return errors.New("rhs store does not own valid lease for rhs range")
-			}
-			if rhsRepl.CurrentLeaseStatus(ctx).Lease.Type() != roachpb.LeaseEpoch {
-				return errors.Errorf("lease still an expiration based lease")
-			}
-			return nil
-		})
+			require.NoError(t, err)
+			require.True(t, rhsRepl.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()),
+				"rhs store does not own valid lease for rhs range")
+			require.Equal(t, roachpb.LeaseEpoch, rhsRepl.CurrentLeaseStatus(ctx).Lease.Type(),
+				"lease still an expiration based lease")
+		}))
 	}
 
 	// Write a key to the RHS.
@@ -753,17 +748,16 @@ func mergeCheckingTimestampCaches(
 			}()
 			// NB: the operation won't complete, so peek below Raft and wait for
 			// the result to apply on the majority quorum.
-			testutils.SucceedsSoon(t, func() error {
+			require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
 				for _, r := range lhsRepls[1:] {
 					// Loosely-coupled truncation requires the state engine flush to
 					// advance guaranteed durability.
 					require.NoError(t, r.Store().StateEngine().Flush())
-					if firstIndex := r.GetCompactedIndex() + 1; firstIndex < truncIndex {
-						return errors.Errorf("truncate not applied, %d < %d", firstIndex, truncIndex)
-					}
+					firstIndex := r.GetCompactedIndex() + 1
+					require.GreaterOrEqual(t, firstIndex, truncIndex,
+						"truncate not applied")
 				}
-				return nil
-			})
+			}))
 		}
 
 		// Begin blocking txn heartbeats and GC requests. They cause issues
@@ -788,15 +782,12 @@ func mergeCheckingTimestampCaches(
 		}()
 		// NB: the operation won't complete, so peek below Raft and wait for
 		// the result to apply on the majority quorum.
-		testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
 			for _, r := range lhsRepls[1:] {
 				desc := r.Desc()
-				if !desc.EndKey.Equal(rhsDesc.EndKey) {
-					return errors.Errorf("merge not applied")
-				}
+				require.True(t, desc.EndKey.Equal(rhsDesc.EndKey), "merge not applied")
 			}
-			return nil
-		})
+		}))
 
 		// Remove the partition. A snapshot to the leaseholder should follow.
 		// This snapshot will inform the leaseholder about the range merge.
@@ -1021,21 +1012,16 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 		// clock, s3 must not send or receive any requests before it transfers the
 		// lease, as those requests could bump s3's clock through other code paths.
 		tc.TransferRangeLeaseOrFatal(t, *lhsRangeDesc, tc.Target(1))
-		testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
 			lhsRepl1, err := tc.GetFirstStoreFromServer(t, 1).GetReplica(lhsRangeDesc.RangeID)
-			if err != nil {
-				return err
-			}
-			if !lhsRepl1.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()) {
-				return errors.New("s2 does not own valid lease for lhs range")
-			}
+			require.NoError(rt, err)
+			require.True(rt, lhsRepl1.OwnsValidLease(ctx, tc.Servers[1].Clock().NowAsClockTimestamp()),
+				"s2 does not own valid lease for lhs range")
 			if leaseType != roachpb.LeaseExpiration {
-				if lhsRepl1.CurrentLeaseStatus(ctx).Lease.Type() != leaseType {
-					return errors.Errorf("lease still an expiration based lease")
-				}
+				require.Equal(rt, leaseType, lhsRepl1.CurrentLeaseStatus(ctx).Lease.Type(),
+					"lease still an expiration based lease")
 			}
-			return nil
-		})
+		}))
 
 		// Attempt to write at the same time as the read. The write's timestamp
 		// should be forwarded to after the read.
@@ -2132,14 +2118,11 @@ func TestStoreRangeMergeLHSLeaseTransfersAfterFreezeTime(t *testing.T) {
 
 	store1 := tc.GetFirstStoreFromServer(t, 1)
 	lhsLeaseholder := store1.LookupReplica(lhsDesc.StartKey)
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
 		// Wait for the new leaseholder to notice that it received the lease.
 		now := tc.Servers[1].Clock().NowAsClockTimestamp()
-		if !lhsLeaseholder.OwnsValidLease(ctx, now) {
-			return errors.New("not leaseholder")
-		}
-		return nil
-	})
+		require.True(t, lhsLeaseholder.OwnsValidLease(ctx, now), "not leaseholder")
+	}))
 	lhsClosedTS := lhsLeaseholder.GetCurrentClosedTimestamp(ctx)
 	require.NotEmpty(t, lhsClosedTS)
 
@@ -2246,11 +2229,10 @@ func TestStoreRangeMergeCheckConsistencyAfterSubsumption(t *testing.T) {
 	require.IsType(t, (*kvpb.Error)(nil), pErr)
 	require.Regexp(t, "abort the merge for test", pErr.String())
 
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
 		pErr := <-checkConsistencyResp
 		require.Nil(t, pErr)
-		return nil
-	})
+	}))
 }
 
 // TestStoreRangeMergeConcurrentRequests tests merging ranges that are serving
@@ -2661,14 +2643,11 @@ func TestStoreRangeMergeSlowUnabandonedFollower_NoSplit(t *testing.T) {
 	}
 
 	// Wait for store2 to hear about the split.
-	testutils.SucceedsSoon(t, func() error {
-		if rhsRepl2, err := store2.GetReplica(rhsDesc.RangeID); err != nil || !rhsRepl2.IsInitialized() {
-			// NB: errors.Wrapf(nil, ...) returns nil.
-			// nolint:errwrap
-			return errors.Errorf("store2 has not yet processed split. err: %v", err)
-		}
-		return nil
-	})
+	require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
+		rhsRepl2, err := store2.GetReplica(rhsDesc.RangeID)
+		require.NoError(t, err)
+		require.True(t, rhsRepl2.IsInitialized(), "store2 has not yet processed split")
+	}))
 
 	// Block Raft traffic to the LHS replica on store2, by holding its raftMu, so
 	// that its LHS isn't aware there's a merge in progress.
@@ -2727,10 +2706,10 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 	}
 
 	// Wait for store2 to hear about the split.
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
 		_, err := store2.GetReplica(rhsDesc.RangeID)
-		return err
-	})
+		require.NoError(t, err)
+	}))
 
 	// Start dropping all Raft traffic to the LHS on store2 so that it won't be
 	// aware that there is a merge in progress.
@@ -2767,19 +2746,15 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 	// indirectly tests that the replica GC queue cleans up both the LHS replica
 	// and the old RHS replica. The replica may still be in StateSnapshot, so we
 	// retry the lease transfer until it succeeds.
-	testutils.SucceedsSoon(t, func() error {
-		return tc.TransferRangeLease(*newRHSDesc, tc.Target(2))
-	})
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
+		require.NoError(t, tc.TransferRangeLease(*newRHSDesc, tc.Target(2)))
+	}))
+	require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
 		rhsRepl, err := store2.GetReplica(newRHSDesc.RangeID)
-		if err != nil {
-			return err
-		}
-		if !rhsRepl.OwnsValidLease(ctx, tc.Servers[2].Clock().NowAsClockTimestamp()) {
-			return errors.New("rhs store does not own valid lease for rhs range")
-		}
-		return nil
-	})
+		require.NoError(t, err)
+		require.True(t, rhsRepl.OwnsValidLease(ctx, tc.Servers[2].Clock().NowAsClockTimestamp()),
+			"rhs store does not own valid lease for rhs range")
+	}))
 }
 
 func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
@@ -2811,12 +2786,12 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 
 	// Wait for store2 to hear about the split.
 	var rhsRepl2 *kvserver.Replica
-	testutils.SucceedsSoon(t, func() error {
-		if rhsRepl2, err = store2.GetReplica(rhsDesc.RangeID); err != nil || !rhsRepl2.IsInitialized() {
-			return errors.New("store2 has not yet processed split")
-		}
-		return nil
-	})
+	require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
+		var err error
+		rhsRepl2, err = store2.GetReplica(rhsDesc.RangeID)
+		require.NoError(t, err)
+		require.True(t, rhsRepl2.IsInitialized(), "store2 has not yet processed split")
+	}))
 
 	// Block Raft traffic to the LHS replica on store2, by holding its raftMu, so
 	// that its LHS isn't aware there's a merge in progress.
@@ -2859,27 +2834,24 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 	// In general this will happen due to receiving a ReplicaTooOldError but
 	// it may require the replica GC queue. In rare cases the LHS will never
 	// hear about the merge and may need to be GC'd on its own.
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
 		// Make the LHS gets destroyed.
 		if lhsRepl, err := store2.GetReplica(lhsDesc.RangeID); err == nil {
 			if err := store2.ManualReplicaGC(lhsRepl); err != nil {
-				if !kvserver.IsReplicaGCDelayedDueToLeftNeighborError(err) {
-					t.Fatal(err)
-				}
-				return err // retry
+				require.True(t, kvserver.IsReplicaGCDelayedDueToLeftNeighborError(err),
+					"unexpected error: %+v", err)
+				require.NoError(t, err) // retry
 			}
 		}
 		if rhsRepl, err := store2.GetReplica(rhsDesc.RangeID); err == nil {
 			if err := store2.ManualReplicaGC(rhsRepl); err != nil {
-				if !kvserver.IsReplicaGCDelayedDueToLeftNeighborError(err) {
-					t.Fatal(err)
-				}
-				return err // retry
+				require.True(t, kvserver.IsReplicaGCDelayedDueToLeftNeighborError(err),
+					"unexpected error: %+v", err)
+				require.NoError(t, err) // retry
 			}
-			return errors.New("rhs not yet destroyed")
+			require.Fail(t, "rhs not yet destroyed")
 		}
-		return nil
-	})
+	}))
 }
 
 func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
@@ -2917,17 +2889,16 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 
 	// Wait for store2 to hear about all three splits.
 	var repls []*kvserver.Replica
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
 		repls = nil
 		for _, key := range keys {
 			repl := store2.LookupReplica(key) /* end */
-			if repl == nil || !repl.Desc().StartKey.Equal(key) {
-				return fmt.Errorf("replica for key %q is missing or has wrong start key: %s", key, repl)
-			}
+			require.NotNil(t, repl, "replica for key %q is missing", key)
+			require.True(t, repl.Desc().StartKey.Equal(key),
+				"replica for key %q has wrong start key: %s", key, repl)
 			repls = append(repls, repl)
 		}
-		return nil
-	})
+	}))
 
 	// Remove all replicas from store2.
 	for _, repl := range repls {
@@ -3023,23 +2994,18 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 		// Make store2 the leaseholder for the RHS and wait for the lease transfer to
 		// apply.
 		tc.TransferRangeLeaseOrFatal(t, *rhsDesc, tc.Target(2))
-		testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
 			rhsRepl, err := store2.GetReplica(rhsDesc.RangeID)
-			if err != nil {
-				return err
-			}
-			if !rhsRepl.OwnsValidLease(ctx, tc.Servers[2].Clock().NowAsClockTimestamp()) {
-				return errors.New("store2 does not own valid lease for rhs range")
-			}
+			require.NoError(t, err)
+			require.True(t, rhsRepl.OwnsValidLease(ctx, tc.Servers[2].Clock().NowAsClockTimestamp()),
+				"store2 does not own valid lease for rhs range")
 
 			// This is important for leader leases to avoid a race between us stopping
 			// Raft traffic below, and Raft attempting to transfer the lease leadership
 			// to the leaseholder.
-			if rhsRepl.RaftStatus().ID != rhsRepl.RaftStatus().Lead {
-				return errors.New("store2 isn't the leader for rhs range")
-			}
-			return nil
-		})
+			require.Equal(t, rhsRepl.RaftStatus().Lead, rhsRepl.RaftStatus().ID,
+				"store2 isn't the leader for rhs range")
+		}))
 
 		// Start dropping all Raft traffic to the LHS replica on store2 so that it
 		// won't be aware that there is a merge in progress.
@@ -3071,15 +3037,12 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 		// calls replicaGCQueue.process directly, bypassing the logic in
 		// baseQueue.MaybeAdd and baseQueue.Add. We specifically want to test that
 		// queuing logic, which has been broken in the past.
-		testutils.SucceedsSoon(t, func() error {
-			if _, err := store2.GetReplica(lhsDesc.RangeID); err == nil {
-				return errors.New("lhs not destroyed")
-			}
-			if _, err := store2.GetReplica(rhsDesc.RangeID); err == nil {
-				return errors.New("rhs not destroyed")
-			}
-			return nil
-		})
+		require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
+			_, err := store2.GetReplica(lhsDesc.RangeID)
+			require.Error(t, err, "lhs not destroyed")
+			_, err = store2.GetReplica(rhsDesc.RangeID)
+			require.Error(t, err, "rhs not destroyed")
+		}))
 	})
 }
 
@@ -3277,26 +3240,22 @@ func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
 		// Abandon a replica of the LHS on store2.
 		tc.AddVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(2))
 		var lhsRepl2 *kvserver.Replica
-		testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
+			var err error
 			lhsRepl2, err = store2.GetReplica(lhsDesc.RangeID)
-			if err != nil {
-				return err
-			}
-			if !lhsRepl2.IsInitialized() {
-				// Make sure the replica is initialized before unreplicating.
-				// Uninitialized replicas that have a replicaID are hard to
-				// GC (not implemented at the time of writing).
-				return errors.Errorf("%s not initialized", lhsRepl2)
-			}
-			return nil
-		})
+			require.NoError(t, err)
+			// Make sure the replica is initialized before unreplicating.
+			// Uninitialized replicas that have a replicaID are hard to
+			// GC (not implemented at the time of writing).
+			require.True(t, lhsRepl2.IsInitialized(), "%s not initialized", lhsRepl2)
+		}))
 		// Need to retry because removing voters could fail while snapshots are
 		// still in flight and cause "cannot remove learner while snapshot is in
 		// flight" error.
-		testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
 			_, err := tc.RemoveVoters(lhsDesc.StartKey.AsRawKey(), tc.Target(2))
-			return err
-		})
+			require.NoError(t, err)
+		}))
 
 		if withMerge {
 			// Merge the two ranges together.
@@ -3430,12 +3389,12 @@ func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 	// Create range B and wait for store2 to process the split.
 	bRangeID := split(bKey)
 	var bRepl2 *kvserver.Replica
-	testutils.SucceedsSoon(t, func() (err error) {
-		if bRepl2, err = store2.GetReplica(bRangeID); err != nil || !bRepl2.IsInitialized() {
-			return errors.New("store2 has not yet processed split of c")
-		}
-		return nil
-	})
+	require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
+		var err error
+		bRepl2, err = store2.GetReplica(bRangeID)
+		require.NoError(t, err)
+		require.True(t, bRepl2.IsInitialized(), "store2 has not yet processed split of c")
+	}))
 
 	// Now we want to create range A, but we need to make sure store2's replica of
 	// A is not initialized. This requires dropping all Raft traffic to store2
@@ -3478,15 +3437,11 @@ func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 			t.Fatal(err)
 		}
 		tc.RemoveVotersOrFatal(t, desc.StartKey.AsRawKey(), tc.Target(2))
-		testutils.SucceedsSoon(t, func() error {
-			if err := store2.ManualReplicaGC(r1Repl2); err != nil {
-				return err
-			}
-			if _, err := store2.GetReplica(desc.RangeID); err == nil {
-				return errors.New("r1Repl2 still exists")
-			}
-			return nil
-		})
+		require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
+			require.NoError(t, store2.ManualReplicaGC(r1Repl2))
+			_, err := store2.GetReplica(desc.RangeID)
+			require.Error(t, err, "r1Repl2 still exists")
+		}))
 	}
 
 	// Launch the merge of A and B.
@@ -3620,12 +3575,9 @@ func testMergeWatcher(t *testing.T, injectFailures bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	testutils.SucceedsSoon(t, func() error {
-		if !lhsRepl2.Desc().Equal(lhsDesc) {
-			return errors.New("store2 has not processed split")
-		}
-		return nil
-	})
+	require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
+		require.True(t, lhsRepl2.Desc().Equal(lhsDesc), "store2 has not processed split")
+	}))
 	lhsRepl2.RaftLock()
 
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
@@ -4232,16 +4184,13 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		if rebalanceRHSAway {
 			scanEnd = keyD
 		}
-		testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
 			afterRaftSnaps := store3.Metrics().RangeSnapshotsAppliedByVoters.Count()
-			if afterRaftSnaps <= beforeRaftSnaps {
-				return errors.New("expected store3 to apply at least 1 additional raft snapshot")
-			}
+			require.Greater(t, afterRaftSnaps, beforeRaftSnaps,
+				"expected store3 to apply at least 1 additional raft snapshot")
 			getKeySet := func(engine storage.Engine) map[string]struct{} {
 				kvs, err := storage.Scan(context.Background(), engine, keyStart, scanEnd, 0)
-				if err != nil {
-					t.Fatal(err)
-				}
+				require.NoError(t, err)
 				out := map[string]struct{}{}
 				for _, kv := range kvs {
 					out[string(kv.Key.Key)] = struct{}{}
@@ -4253,17 +4202,14 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			storeKeys1 := getKeySet(store1.StateEngine())
 			storeKeys3 := getKeySet(store3.StateEngine())
 			for k := range storeKeys1 {
-				if _, ok := storeKeys3[k]; !ok {
-					return fmt.Errorf("store3 missing key %s", roachpb.Key(k))
-				}
+				_, ok := storeKeys3[k]
+				require.True(t, ok, "store3 missing key %s", roachpb.Key(k))
 			}
 			for k := range storeKeys3 {
-				if _, ok := storeKeys1[k]; !ok {
-					return fmt.Errorf("store3 has extra key %s", roachpb.Key(k))
-				}
+				_, ok := storeKeys1[k]
+				require.True(t, ok, "store3 has extra key %s", roachpb.Key(k))
 			}
-			return nil
-		})
+		}))
 	})
 }
 
@@ -4363,17 +4309,14 @@ func verifyMergedSoon(t *testing.T, store *kvserver.Store, lhsStartKey, rhsStart
 		store.SetMergeQueueActive(false)
 		store.MustForceMergeScanAndProcess() // drain any merges that might already be queued
 	}()
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
 		store.MustForceMergeScanAndProcess()
 		repl := store.LookupReplica(rhsStartKey)
-		if repl == nil {
-			t.Fatal("replica doesn't exist")
-		}
-		if !repl.Desc().StartKey.Equal(lhsStartKey) {
-			return errors.Newf("ranges unexpectedly unmerged expected startKey %s, but got %s", lhsStartKey, repl.Desc().StartKey)
-		}
-		return nil
-	})
+		require.NotNil(t, repl, "replica doesn't exist")
+		require.True(t, repl.Desc().StartKey.Equal(lhsStartKey),
+			"ranges unexpectedly unmerged expected startKey %s, but got %s",
+			lhsStartKey, repl.Desc().StartKey)
+	}))
 }
 
 func verifyUnmergedSoon(
@@ -4385,17 +4328,13 @@ func verifyUnmergedSoon(
 		store.SetMergeQueueActive(false)
 		store.MustForceMergeScanAndProcess() // drain any merges that might already be queued
 	}()
-	testutils.SucceedsSoon(t, func() error {
+	require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
 		store.MustForceMergeScanAndProcess()
 		repl := store.LookupReplica(rhsStartKey)
-		if repl == nil {
-			t.Fatal("replica doesn't exist")
-		}
-		if repl.Desc().StartKey.Equal(lhsStartKey) {
-			return errors.Newf("ranges unexpectedly merged")
-		}
-		return nil
-	})
+		require.NotNil(t, repl, "replica doesn't exist")
+		require.False(t, repl.Desc().StartKey.Equal(lhsStartKey),
+			"ranges unexpectedly merged")
+	}))
 }
 
 func TestMergeQueue(t *testing.T) {
@@ -5299,22 +5238,18 @@ func setupClusterWithSubsumedRange(
 	require.NoError(t, err)
 	add := func(desc *roachpb.RangeDescriptor) *roachpb.RangeDescriptor {
 		var newDesc roachpb.RangeDescriptor
-		testutils.SucceedsSoon(t, func() error {
+		require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
 			var err error
 			newDesc, err = tc.AddVoters(desc.StartKey.AsRawKey(), tc.Target(1))
-			if kvtestutils.IsExpectedRelocateError(err) {
-				// Retry.
-				return errors.Wrap(err, "ChangeReplicas received error")
-			}
-			return nil
-		})
+			require.False(t, kvtestutils.IsExpectedRelocateError(err),
+				"ChangeReplicas received error: %v", err)
+		}))
 		require.NoError(t, tc.(*testcluster.TestCluster).WaitForFullReplication())
-		testutils.SucceedsSoon(t, func() error {
-			if count := len(replsForRange(ctx, t, tc, newDesc)); count != 2 {
-				return errors.Newf("expected %d replicas for range %d; found %d", 2, newDesc.RangeID, count)
-			}
-			return nil
-		})
+		require.NoError(t, testutils.Soon(func(rt *testutils.RetryT) {
+			count := len(replsForRange(ctx, t, tc, newDesc))
+			require.Equal(rt, 2, count,
+				"unexpected replica count for range %d", newDesc.RangeID)
+		}))
 		require.NoError(t, tc.(*testcluster.TestCluster).WaitForVoters(newDesc.StartKey.AsRawKey(), tc.Target(1)))
 		require.NoError(t, tc.(*testcluster.TestCluster).WaitForVoters(newDesc.StartKey.AsRawKey(), tc.Target(0)))
 		return &newDesc
@@ -5349,12 +5284,11 @@ func setupClusterWithSubsumedRange(
 		require.NoError(t, <-errCh)
 	}
 	waitForBlocked = func() {
-		testutils.SucceedsSoon(t, func() error {
-			if actualBlocked := atomic.LoadInt32(&blockedRequestCount); actualBlocked < 1 {
-				return errors.Newf("expected at least 1 blocked request but found none")
-			}
-			return nil
-		})
+		require.NoError(t, testutils.Soon(func(t *testutils.RetryT) {
+			actualBlocked := atomic.LoadInt32(&blockedRequestCount)
+			require.GreaterOrEqual(t, actualBlocked, int32(1),
+				"expected at least 1 blocked request but found none")
+		}))
 	}
 	return tc, store, rhsDesc, freezeStart, waitForBlocked, cleanupFunc
 }
