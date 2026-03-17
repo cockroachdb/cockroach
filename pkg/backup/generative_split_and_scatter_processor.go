@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -159,6 +160,7 @@ func (s dbSplitAndScatterer) split(
 		newSplitKey = splitAt
 	}
 	log.VEventf(ctx, 1, "presplitting new key %+v", newSplitKey)
+	splitStart := timeutil.Now()
 	retryOpts := retry.Options{
 		InitialBackoff: 100 * time.Millisecond,
 		MaxBackoff:     5 * time.Second,
@@ -171,6 +173,9 @@ func (s dbSplitAndScatterer) split(
 				ctx, 1, "attempt %d failed to split at key %s: %v", r.CurrentAttempt(), newSplitKey, err,
 			)
 			continue
+		}
+		if elapsed := timeutil.Since(splitStart); elapsed > 5*time.Second {
+			log.Dev.Infof(ctx, "slow split at key %s took %s (%d attempts)", newSplitKey, elapsed, r.CurrentAttempt())
 		}
 		return nil
 	}
@@ -469,8 +474,12 @@ func runGenerativeSplitAndScatter(
 
 	// This goroutine generates import spans one at a time and sends them to
 	// restoreSpanEntriesCh.
+	genStart := timeutil.Now()
 	g.GoCtx(func(ctx context.Context) error {
-		defer close(restoreSpanEntriesCh)
+		defer func() {
+			log.Dev.Infof(ctx, "span generation complete in %s", timeutil.Since(genStart))
+			close(restoreSpanEntriesCh)
+		}()
 
 		backups, layerToFileIterFactory, err := makeBackupMetadata(ctx,
 			flowCtx, spec)
@@ -549,6 +558,7 @@ func runGenerativeSplitAndScatter(
 			chunk.entries = append(chunk.entries, entry)
 		}
 
+		log.Dev.Infof(ctx, "chunked %d import span entries into chunks of size %d", idx, spec.ChunkSize)
 		if len(chunk.entries) > 0 {
 			select {
 			case <-ctx.Done():
