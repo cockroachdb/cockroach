@@ -352,22 +352,11 @@ func GetValidPrivilegesForObject(objectType ObjectType) (List, error) {
 	}
 }
 
-// privToACL is a map of privilege -> ACL character
-var privToACL = map[Kind]string{
-	CREATE:   "C",
-	SELECT:   "r",
-	INSERT:   "a",
-	DELETE:   "d",
-	UPDATE:   "w",
-	USAGE:    "U",
-	CONNECT:  "c",
-	EXECUTE:  "X",
-	MAINTAIN: "m",
-	TRIGGER:  "t",
-}
-
 // ACLCharToPrivName maps PostgreSQL ACL abbreviation characters to privilege
-// names as used in aclexplode output.
+// names as used in aclexplode output. This is the single source of truth for
+// all ACL character ↔ privilege name mappings; the reverse map
+// PrivNameToACLChar and the Kind-based map privToACL are derived from it in
+// init().
 var ACLCharToPrivName = map[byte]string{
 	'r': "SELECT",
 	'a': "INSERT",
@@ -382,24 +371,30 @@ var ACLCharToPrivName = map[byte]string{
 	'T': "TEMPORARY",
 	'c': "CONNECT",
 	'm': "MAINTAIN",
+	's': "SET",
+	'A': "ALTER SYSTEM",
 }
 
 // PrivNameToACLChar maps privilege names (uppercase) to PostgreSQL ACL
-// abbreviation characters, for use in makeaclitem.
-var PrivNameToACLChar = map[string]byte{
-	"SELECT":     'r',
-	"INSERT":     'a',
-	"UPDATE":     'w',
-	"DELETE":     'd',
-	"TRUNCATE":   'D',
-	"REFERENCES": 'x',
-	"TRIGGER":    't',
-	"EXECUTE":    'X',
-	"USAGE":      'U',
-	"CREATE":     'C',
-	"TEMPORARY":  'T',
-	"CONNECT":    'c',
-	"MAINTAIN":   'm',
+// abbreviation characters. Derived from ACLCharToPrivName in init().
+var PrivNameToACLChar map[string]byte
+
+// privToACL maps a CockroachDB privilege Kind to its PostgreSQL ACL
+// abbreviation character string. Derived from ACLCharToPrivName in init().
+var privToACL map[Kind]string
+
+func init() {
+	PrivNameToACLChar = make(map[string]byte, len(ACLCharToPrivName))
+	for ch, name := range ACLCharToPrivName {
+		PrivNameToACLChar[name] = ch
+	}
+
+	privToACL = make(map[Kind]string)
+	for ch, name := range ACLCharToPrivName {
+		if kind, ok := ByDisplayName[KindDisplayName(name)]; ok {
+			privToACL[kind] = string(ch)
+		}
+	}
 }
 
 // ValidACLChars is the set of valid privilege characters in an aclitem string,

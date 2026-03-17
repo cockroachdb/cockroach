@@ -2548,7 +2548,7 @@ SELECT
 				result.WriteByte('/')
 				result.WriteString(privilege.QuoteACLIdentifier(grantorName))
 
-				return tree.NewDACLItem(result.String()), nil
+				return tree.NewDACLItem(result.String())
 			},
 			Info: "Constructs an aclitem from the given grantee, grantor, privileges, and grant option.",
 			// Marked immutable to match postgres. Our implementation resolves
@@ -2617,14 +2617,22 @@ SELECT
 				// If PUBLIC has privileges, add that first.
 				if def.publicPrivs != "" {
 					item := "=" + def.publicPrivs + "/" + quotedOwner
-					if err := arr.Append(tree.NewDACLItem(item)); err != nil {
+					d, err := tree.NewDACLItem(item)
+					if err != nil {
+						return nil, err
+					}
+					if err := arr.Append(d); err != nil {
 						return nil, err
 					}
 				}
 				// If owner has privileges, add that next.
 				if def.ownerPrivs != "" {
 					item := quotedOwner + "=" + def.ownerPrivs + "/" + quotedOwner
-					if err := arr.Append(tree.NewDACLItem(item)); err != nil {
+					d, err := tree.NewDACLItem(item)
+					if err != nil {
+						return nil, err
+					}
+					if err := arr.Append(d); err != nil {
 						return nil, err
 					}
 				}

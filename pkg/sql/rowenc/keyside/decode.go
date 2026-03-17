@@ -120,7 +120,11 @@ func Decode(
 		case oid.T_name:
 			return a.NewDName(tree.DString(r)), rkey, err
 		case oidext.T_aclitem:
-			return a.NewDACLItem(tree.DString(r)), rkey, err
+			d, aclErr := a.NewDACLItem(tree.DString(r))
+			if aclErr != nil {
+				return nil, rkey, aclErr
+			}
+			return d, rkey, err
 		}
 		return a.NewDString(tree.DString(r)), rkey, err
 	case types.CollatedStringFamily:

@@ -234,8 +234,12 @@ func (t *T) Canonical() *T {
 		return Interval
 	case StringFamily:
 		if t.Oid() == oid.T_name {
-			// Name uses StringFamily and DOidWrapper
+			// Name uses StringFamily and DOidWrapper.
 			return Name
+		}
+		if t.Oid() == oidext.T_aclitem {
+			// AclItem uses StringFamily and DOidWrapper.
+			return AclItem
 		}
 		return String
 	case BytesFamily:

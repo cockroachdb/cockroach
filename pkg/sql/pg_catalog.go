@@ -1569,8 +1569,11 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 						if err != nil {
 							return err
 						}
-						if err := arr.Append(
-							tree.NewDACLItem(defaclItem)); err != nil {
+						aclDatum, err := tree.NewDACLItem(defaclItem)
+						if err != nil {
+							return err
+						}
+						if err := arr.Append(aclDatum); err != nil {
 							return err
 						}
 					}
@@ -1613,7 +1616,11 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 							if err != nil {
 								return err
 							}
-							if err := arr.Append(tree.NewDACLItem(defaclItem)); err != nil {
+							aclDatum, err := tree.NewDACLItem(defaclItem)
+							if err != nil {
+								return err
+							}
+							if err := arr.Append(aclDatum); err != nil {
 								return err
 							}
 						} else if roleHasAllPrivileges {
@@ -1624,7 +1631,11 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 							if err != nil {
 								return err
 							}
-							if err := arr.Append(tree.NewDACLItem(defaclItem)); err != nil {
+							aclDatum, err := tree.NewDACLItem(defaclItem)
+							if err != nil {
+								return err
+							}
+							if err := arr.Append(aclDatum); err != nil {
 								return err
 							}
 						} else if len(privs.Users) == 0 && schemaID != descpb.InvalidID {
