@@ -8,6 +8,7 @@ package mmaprototype
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
@@ -50,6 +51,194 @@ func (p *testLoadInfoProvider) computeLoadSummary(
 	fmt.Fprintf(&p.b, "called computeLoadSummary: returning seqnum %d", p.returnedLoadSeqNum)
 	return storeLoadSummary{
 		loadSeqNum: p.returnedLoadSeqNum,
+	}
+}
+
+func TestLoadSummaryForDimension(t *testing.T) {
+	ctx := context.Background()
+	const (
+		dummyStoreID roachpb.StoreID = 1
+		dummyNodeID  roachpb.NodeID  = 1
+
+		vCPU LoadValue = 1_000_000_000 // 1 vCPU = 1e9 ns/s
+	)
+	// Derive test parameters from the floor so tests don't hardcode floor
+	// values. meanLoad is set to 0, so the denominator is exactly the floor
+	// and fractionAbove = load / floor. We compute exact thresholds using
+	// floating-point multiplication rounded up via +1, since the floor may
+	// not be evenly divisible.
+	wbFloor := writeBandwidthSignificanceFloor
+	// Exact 5% and 10% thresholds (rounded up to ensure >= threshold).
+	wbNoChangeDelta := LoadValue(math.Ceil(float64(wbFloor) * 0.05))
+	wbOverloadDelta := LoadValue(math.Ceil(float64(wbFloor) * 0.1))
+
+	testCases := []struct {
+		name     string
+		dim      LoadDimension
+		load     LoadValue
+		capacity LoadValue
+		meanLoad LoadValue
+		meanUtil float64
+		expected loadSummary
+	}{
+		//
+		// WriteBandwidth (UnknownCapacity).
+		// Tests the denominator clamp: denom = max(meanLoad, wbFloor).
+		// meanLoad is 0 so the denominator is exactly wbFloor.
+		//
+		{
+			// Just below the 5% boundary → loadNormal.
+			name:     "WB below 5pct loadNormal",
+			dim:      WriteBandwidth,
+			load:     wbNoChangeDelta - 1,
+			capacity: UnknownCapacity,
+			meanLoad: 0,
+			expected: loadNormal,
+		},
+		{
+			// At the 5% boundary → loadNoChange.
+			name:     "WB at 5pct loadNoChange",
+			dim:      WriteBandwidth,
+			load:     wbNoChangeDelta,
+			capacity: UnknownCapacity,
+			meanLoad: 0,
+			expected: loadNoChange,
+		},
+		{
+			// Just above the 10% boundary → overloadSlow.
+			name:     "WB above 10pct overloadSlow",
+			dim:      WriteBandwidth,
+			load:     wbOverloadDelta + 1,
+			capacity: UnknownCapacity,
+			meanLoad: 0,
+			expected: overloadSlow,
+		},
+		{
+			// Just below the -10% boundary → loadLow.
+			name:     "WB below -10pct loadLow",
+			dim:      WriteBandwidth,
+			load:     -wbOverloadDelta - 1,
+			capacity: UnknownCapacity,
+			meanLoad: 0,
+			expected: loadLow,
+		},
+		{
+			// Mean above floor, clamp inactive (denom = meanLoad, not floor).
+			// Just above 10%: delta / meanLoad > 0.1 → overloadSlow.
+			name:     "WB high mean clamp inactive",
+			dim:      WriteBandwidth,
+			load:     wbFloor*20 + wbFloor*2 + 1,
+			capacity: UnknownCapacity,
+			meanLoad: wbFloor * 20,
+			expected: overloadSlow,
+		},
+		{
+			// Mean = 0: denominator falls back to floor (no division by zero).
+			// Small load / floor is well under 5% → loadNormal.
+			name:     "WB mean zero floor fallback",
+			dim:      WriteBandwidth,
+			load:     wbFloor / 100,
+			capacity: UnknownCapacity,
+			meanLoad: 0,
+			expected: loadNormal,
+		},
+		//
+		// CPURate (capacity = 2 vCPU).
+		// CPU below 5% utilization is not worth rebalancing, so the
+		// result is capped at loadNormal. Above 90% is overloadUrgent.
+		//
+		{
+			// Using < 5% of CPU capacity → not worth rebalancing.
+			name:     "CPU below 5pct capped",
+			dim:      CPURate,
+			load:     vCPU/10 - 1,
+			capacity: 2 * vCPU,
+			meanLoad: vCPU / 20,
+			meanUtil: 0.04,
+			expected: loadNormal,
+		},
+		{
+			// Using exactly 5% of CPU capacity → rebalancing allowed.
+			// 50ms/s above mean on a 100ms/s floor → overloadSlow.
+			name:     "CPU at 5pct uncapped",
+			dim:      CPURate,
+			load:     vCPU / 10,
+			capacity: 2 * vCPU,
+			meanLoad: vCPU / 20,
+			meanUtil: 0.05,
+			expected: overloadSlow,
+		},
+		{
+			// Using > 90% of CPU capacity → overloadUrgent.
+			name:     "CPU above 90pct overloadUrgent",
+			dim:      CPURate,
+			load:     9*vCPU/5 + 1,
+			capacity: 2 * vCPU,
+			meanLoad: vCPU,
+			meanUtil: 0.5,
+			expected: overloadUrgent,
+		},
+		//
+		// ByteSize (capacity = 100 mib).
+		// Disk below 50% full is not worth rebalancing for ByteSize,
+		// so the result is capped at loadNormal. Above 90% is
+		// overloadUrgent.
+		//
+		{
+			// Disk < 50% full → not worth rebalancing.
+			name:     "ByteSize below 50pct capped",
+			dim:      ByteSize,
+			load:     50*byteSizeSignificanceFloor - 1,
+			capacity: 100 * byteSizeSignificanceFloor,
+			meanLoad: 20 * byteSizeSignificanceFloor,
+			meanUtil: 0.2,
+			expected: loadNormal,
+		},
+		{
+			// Disk exactly 50% full → rebalancing allowed.
+			// 10 units above mean on a 40 unit denom → overloadSlow.
+			name:     "ByteSize at 50pct uncapped",
+			dim:      ByteSize,
+			load:     50 * byteSizeSignificanceFloor,
+			capacity: 100 * byteSizeSignificanceFloor,
+			meanLoad: 40 * byteSizeSignificanceFloor,
+			meanUtil: 0.5,
+			expected: overloadSlow,
+		},
+		{
+			// Disk > 90% full → overloadUrgent.
+			name:     "ByteSize above 90pct overloadUrgent",
+			dim:      ByteSize,
+			load:     90*byteSizeSignificanceFloor + 1,
+			capacity: 100 * byteSizeSignificanceFloor,
+			meanLoad: 50 * byteSizeSignificanceFloor,
+			meanUtil: 0.5,
+			expected: overloadUrgent,
+		},
+		//
+		// Edge cases.
+		//
+		{
+			// Adjusted load can be negative. A large negative delta
+			// relative to the floor → loadLow.
+			name:     "WB negative load",
+			dim:      WriteBandwidth,
+			load:     -wbFloor*10/100 - 1,
+			capacity: UnknownCapacity,
+			meanLoad: 0,
+			expected: loadLow,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := loadSummaryForDimension(
+				ctx, dummyStoreID, dummyNodeID,
+				tc.dim, tc.load, tc.capacity, tc.meanLoad, tc.meanUtil,
+			)
+			require.Equal(t, tc.expected, got,
+				"dim=%v load=%d meanLoad=%d capacity=%d",
+				tc.dim, tc.load, tc.meanLoad, tc.capacity)
+		})
 	}
 }
 
