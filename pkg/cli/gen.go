@@ -20,6 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
+	"github.com/cockroachdb/cockroach/pkg/internal/metricscan"
+	"github.com/cockroachdb/cockroach/pkg/internal/reporoot"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -48,6 +51,7 @@ type MetricInfo struct {
 	Derivative   string `yaml:"derivative"`
 	HowToUse     string `yaml:"how_to_use,omitempty"`
 	Visibility   string `yaml:"visibility,omitempty"`
+	Owner        string `yaml:"owner,omitempty"`
 }
 
 type Category struct {
@@ -65,6 +69,7 @@ type YAMLOutput struct {
 }
 
 var manPath string
+var metricOwnersFile string
 
 var genManCmd = &cobra.Command{
 	Use:   "man",
@@ -382,11 +387,50 @@ func init() {
 		"label to use in the output for the various setting classes")
 
 	genMetricListCmd.Flags().Bool("essential", false, "only emit essential metrics")
+	genMetricListCmd.Flags().StringVar(&metricOwnersFile, "metric-owners", "",
+		"path to pre-computed metric owners YAML file (avoids AST scan + CODEOWNERS)")
 
 	GenCmd.AddCommand(genCmds...)
 }
 
 func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*Layer, error) {
+	// Determine the owning team for each metric. When
+	// --metric-owners is provided (Bazel genrule), load the
+	// pre-computed mapping. Otherwise fall back to AST scanning +
+	// CODEOWNERS resolution, which requires Go source files (not
+	// available in a sandbox).
+	var metricOwners *metricscan.MetricOwners
+	if metricOwnersFile != "" {
+		data, err := os.ReadFile(metricOwnersFile)
+		if err != nil {
+			return nil, errors.Wrap(err, "reading metric owners")
+		}
+		metricOwners, err = metricscan.LoadMetricOwners(data)
+		if err != nil {
+			return nil, errors.Wrap(err, "parsing metric owners")
+		}
+	} else if repoRoot := reporoot.Get(); repoRoot != "" {
+		scanResult, scanErr := metricscan.Scan(repoRoot)
+		if scanErr != nil {
+			fmt.Fprintf(os.Stderr,
+				"metric source scan failed (owner will be omitted): %v\n", scanErr)
+		}
+		owners, ownersErr := codeowners.DefaultLoadCodeOwners()
+		if ownersErr != nil {
+			fmt.Fprintf(os.Stderr,
+				"CODEOWNERS load failed (owner will be omitted): %v\n", ownersErr)
+		}
+		if scanResult != nil && owners != nil {
+			metricOwners = metricscan.BuildMetricOwners(scanResult, func(file string) string {
+				teams := owners.Match(file)
+				if len(teams) > 0 {
+					return string(teams[0].Name())
+				}
+				return ""
+			})
+		}
+	}
+
 	sArgs := base.TestServerArgs{
 		Insecure:          true,
 		DefaultTestTenant: base.ExternalTestTenantAlwaysEnabled,
@@ -499,6 +543,12 @@ func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*La
 			if visibility == "INTERNAL" {
 				visibility = ""
 			}
+			// Resolve the owning team for this metric.
+			var owner string
+			if metricOwners != nil {
+				exportedName := chart.Metrics[0].ExportedName
+				owner, _ = metricOwners.Resolve(exportedName)
+			}
 			metric := MetricInfo{
 				Name:         chart.Metrics[0].Name,
 				ExportedName: chart.Metrics[0].ExportedName,
@@ -511,6 +561,7 @@ func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*La
 				Derivative:   chart.Derivative.String(),
 				HowToUse:     strings.TrimSpace(chart.Metrics[0].HowToUse),
 				Visibility:   visibility,
+				Owner:        owner,
 			}
 			category.Metrics = append(category.Metrics, metric)
 		}
