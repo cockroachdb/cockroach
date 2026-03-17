@@ -387,6 +387,27 @@ func TestZipExcludeRangeInfo(t *testing.T) {
 	)
 }
 
+func TestZipExcludeLogSeverityValidation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	c := NewCLITest(TestCLIParams{
+		StoreSpecs: []base.StoreSpec{{
+			Path: dir,
+		}},
+	})
+	defer c.Cleanup()
+
+	// Invalid severity name should produce an error.
+	out, err := c.RunWithCapture(
+		"debug zip --exclude-log-severities=INVALID " + os.DevNull)
+	require.NoError(t, err)
+	require.Contains(t, out, `unknown log severity "INVALID"`)
+}
+
 // This tests the operation of zip running concurrently.
 func TestConcurrentZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()

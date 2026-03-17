@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -34,10 +35,12 @@ import (
 	tablemetadatacacheutil "github.com/cockroachdb/cockroach/pkg/sql/tablemetadatacache/util"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
@@ -1075,4 +1078,118 @@ func TestHotRangesNodeLimit(t *testing.T) {
 		require.Equal(t, 5, len(resp.Ranges))
 		return nil
 	})
+}
+
+// TestLogFileExcludeSeverities verifies that the LogFile RPC filters
+// out entries whose severity is in the ExcludeSeverities set.
+func TestLogFileExcludeSeverities(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	if log.V(3) {
+		skip.IgnoreLint(t, "Test only works with low verbosity levels")
+	}
+
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+	defer sc.SetupSingleFileLogging()()
+
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+	})
+	defer srv.Stopper().Stop(context.Background())
+
+	logCtx := srv.ApplicationLayer().AnnotateCtx(context.Background())
+
+	// Write log entries at different severities.
+	log.Dev.Errorf(logCtx, "sev-filter-test error msg")
+	log.Dev.Warningf(logCtx, "sev-filter-test warning msg")
+	log.Dev.Infof(logCtx, "sev-filter-test info msg")
+	log.FlushAllSync()
+
+	// Find the log file.
+	files, err := log.ListLogFiles()
+	require.NoError(t, err)
+	require.Len(t, files, 1)
+	fileName := files[0].Name
+
+	ss := srv.StatusServer().(*systemStatusServer)
+	ctx := context.Background()
+
+	// Exclude INFO entries.
+	resp, err := ss.LogFile(ctx, &serverpb.LogFileRequest{
+		NodeId:            "local",
+		File:              fileName,
+		ExcludeSeverities: []logpb.Severity{logpb.Severity_INFO},
+	})
+	require.NoError(t, err)
+
+	for _, entry := range resp.Entries {
+		if entry.Severity == logpb.Severity_INFO &&
+			strings.Contains(entry.Message, "sev-filter-test") {
+			t.Errorf("INFO entry should have been filtered out: %s",
+				entry.Message)
+		}
+	}
+	var foundError, foundWarning bool
+	for _, entry := range resp.Entries {
+		msg := strings.TrimSpace(entry.Message)
+		switch {
+		case msg == "sev-filter-test error msg":
+			foundError = true
+		case msg == "sev-filter-test warning msg":
+			foundWarning = true
+		}
+	}
+	require.True(t, foundError, "ERROR entry should be present")
+	require.True(t, foundWarning, "WARNING entry should be present")
+
+	// Exclude both ERROR and WARNING.
+	resp, err = ss.LogFile(ctx, &serverpb.LogFileRequest{
+		NodeId: "local",
+		File:   fileName,
+		ExcludeSeverities: []logpb.Severity{
+			logpb.Severity_ERROR, logpb.Severity_WARNING,
+		},
+	})
+	require.NoError(t, err)
+	for _, entry := range resp.Entries {
+		if !strings.Contains(entry.Message, "sev-filter-test") {
+			continue
+		}
+		if entry.Severity == logpb.Severity_ERROR ||
+			entry.Severity == logpb.Severity_WARNING {
+			t.Errorf(
+				"entry with severity %s should have been filtered: %s",
+				entry.Severity, entry.Message,
+			)
+		}
+	}
+	var foundInfo bool
+	for _, entry := range resp.Entries {
+		if strings.TrimSpace(entry.Message) == "sev-filter-test info msg" {
+			foundInfo = true
+		}
+	}
+	require.True(t, foundInfo, "INFO entry should be present")
+
+	// Empty ExcludeSeverities returns everything (default behavior).
+	resp, err = ss.LogFile(ctx, &serverpb.LogFileRequest{
+		NodeId: "local",
+		File:   fileName,
+	})
+	require.NoError(t, err)
+	foundError, foundWarning, foundInfo = false, false, false
+	for _, entry := range resp.Entries {
+		msg := strings.TrimSpace(entry.Message)
+		switch {
+		case msg == "sev-filter-test error msg":
+			foundError = true
+		case msg == "sev-filter-test warning msg":
+			foundWarning = true
+		case msg == "sev-filter-test info msg":
+			foundInfo = true
+		}
+	}
+	require.True(t, foundError, "ERROR entry should be present")
+	require.True(t, foundWarning, "WARNING entry should be present")
+	require.True(t, foundInfo, "INFO entry should be present")
 }

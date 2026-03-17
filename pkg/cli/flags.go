@@ -803,6 +803,7 @@ func init() {
 		cliflagcfg.BoolFlag(f, &zipCtx.includeRangeInfo, cliflags.ZipIncludeRangeInfo)
 		cliflagcfg.BoolFlag(f, &zipCtx.includeStacks, cliflags.ZipIncludeGoroutineStacks)
 		cliflagcfg.BoolFlag(f, &zipCtx.includeRunningJobTraces, cliflags.ZipIncludeRunningJobTraces)
+		cliflagcfg.StringSliceFlag(f, &zipCtx.excludeLogSeverities, cliflags.ZipExcludeLogSeverity)
 		cliflagcfg.BoolFlag(f, &zipCtx.validateZipFile, cliflags.ZipValidateFile)
 		cliflagcfg.BoolFlag(f, &baseCfg.UseDRPC, cliflags.UseNewRPC)
 		_ = f.MarkHidden(cliflags.UseNewRPC.Name)
