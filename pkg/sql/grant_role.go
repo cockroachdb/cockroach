@@ -28,6 +28,7 @@ import (
 // This is called from GRANT <ROLE>
 type GrantRoleNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	roles       []username.SQLUsername
 	members     []username.SQLUsername
 	adminOption bool

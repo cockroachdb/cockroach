@@ -26,6 +26,7 @@ const alterTenantCapabilityOp = "ALTER VIRTUAL CLUSTER CAPABILITY"
 
 type alterTenantCapabilityNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n          *tree.AlterTenantCapability
 	tenantSpec tenantSpec
 

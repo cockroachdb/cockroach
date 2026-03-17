@@ -359,7 +359,13 @@ func (b *Builder) tryBuildFastPathInsert(
 		ins.InsertCols, ins.CheckCols, ins.PartialIndexPutCols,
 		ins.VectorIndexDelPartitionCols, ins.VectorIndexPutQuantizedVecCols,
 	)
+	// Disable placeholder evaluation, which replaces placeholders with constant
+	// values, when building the input rows. This keeps the InsertFastPath node
+	// dissociated from this specific execution so that it can be reused for
+	// future executions.
+	b.preservePlaceholders = true
 	rows, err := b.buildValuesRows(values)
+	b.preservePlaceholders = false
 	if err != nil {
 		return execPlan{}, colOrdMap{}, false, err
 	}

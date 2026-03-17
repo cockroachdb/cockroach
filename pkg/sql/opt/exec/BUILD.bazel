@@ -1,9 +1,10 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "exec",
     srcs = [
         "factory.go",
+        "metrics.go",
         ":gen-factory",  # keep
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/exec",
@@ -48,4 +49,11 @@ genrule(
         ":__pkg__",
         "//pkg/gen:__pkg__",
     ],
+)
+
+go_test(
+    name = "exec_test",
+    srcs = ["metrics_test.go"],
+    embed = [":exec"],
+    deps = ["//pkg/sql/catalog/descpb"],
 )

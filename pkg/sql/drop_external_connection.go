@@ -19,6 +19,7 @@ const dropExternalConnectionOp = "DROP EXTERNAL CONNECTION"
 
 type dropExternalConnectionNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n *tree.DropExternalConnection
 }
 

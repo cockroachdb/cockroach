@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -852,7 +851,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
 			"only VectorSearch operators can use vector indexes")
 	}
-	b.IndexesUsed.add(tab.ID(), idx.ID())
+	b.Metrics.IndexesUsed.Add(tab.ID(), idx.ID())
 
 	// Save if we planned a full (large) table/index scan on the builder so that
 	// the planner can be made aware later. We only do this for non-virtual
@@ -876,27 +875,36 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 				b.flags.Set(exec.PlanFlagContainsLargeFullIndexScan)
 			}
 		}
-		if stats.Available && stats.RowCount > b.MaxFullScanRows {
-			b.MaxFullScanRows = stats.RowCount
+		if stats.Available && stats.RowCount > b.Metrics.MaxFullScanRows {
+			b.Metrics.MaxFullScanRows = stats.RowCount
 		}
 	}
 
 	var statsCreatedAt time.Time
 	// Save some instrumentation info.
-	b.ScanCounts[exec.ScanCount]++
+	b.Metrics.ScanCounts[exec.ScanCount]++
 	if stats.Available {
-		b.TotalScanRows += stats.RowCount
-		b.ScanCounts[exec.ScanWithStatsCount]++
+		b.Metrics.TotalScanRows += stats.RowCount
+		b.Metrics.ScanCounts[exec.ScanWithStatsCount]++
 
 		sd := b.evalCtx.SessionData()
 		first := cat.FindLatestFullStat(tab, sd)
 		if first < tab.StatisticCount() && tab.Statistic(first).IsForecast() {
-			b.ScanCounts[exec.ScanWithStatsForecastCount]++
+			if b.evalCtx.SessionData().OptimizerUseForecasts {
+				b.Metrics.ScanCounts[exec.ScanWithStatsForecastCount]++
 
-			// Calculate time since the forecast (or negative time until the forecast).
-			nanosSinceStatsForecasted := timeutil.Since(tab.Statistic(first).CreatedAt())
-			if nanosSinceStatsForecasted.Abs() > b.NanosSinceStatsForecasted.Abs() {
-				b.NanosSinceStatsForecasted = nanosSinceStatsForecasted
+				// Calculate time since the forecast (or negative time until the
+				// forecast).
+				// TODO: Track negative time or update the comment.
+				if t := tab.Statistic(first).CreatedAt(); t.After(b.Metrics.StatsForecastedAt) {
+					b.Metrics.StatsForecastedAt = t
+				}
+			}
+
+			// Find the first non-forecast full stat.
+			for first < tab.StatisticCount() &&
+				(tab.Statistic(first).IsPartial() || tab.Statistic(first).IsForecast()) {
+				first++
 			}
 
 			// Since currently 'first' points at the forecast, then usage of the
@@ -910,9 +918,8 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 		if first < tab.StatisticCount() {
 			tabStat := tab.Statistic(first)
 
-			nanosSinceStatsCollected := timeutil.Since(tabStat.CreatedAt())
-			if nanosSinceStatsCollected > b.NanosSinceStatsCollected {
-				b.NanosSinceStatsCollected = nanosSinceStatsCollected
+			if b.Metrics.StatsCollectedAt.IsZero() || tabStat.CreatedAt().Before(b.Metrics.StatsCollectedAt) {
+				b.Metrics.StatsCollectedAt = tabStat.CreatedAt()
 			}
 
 			// Calculate another row count estimate using these (non-forecast)
@@ -926,7 +933,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 			} else if rowCountWithoutForecast < float64(minCardinality) {
 				rowCountWithoutForecast = float64(minCardinality)
 			}
-			b.TotalScanRowsWithoutForecasts += rowCountWithoutForecast
+			b.Metrics.TotalScanRowsWithoutForecasts += rowCountWithoutForecast
 			statsCreatedAt = tabStat.CreatedAt()
 		}
 	}
@@ -1002,7 +1009,7 @@ func (b *Builder) buildPlaceholderScan(
 	md := b.mem.Metadata()
 	tab := md.Table(scan.Table)
 	idx := tab.Index(scan.Index)
-	b.IndexesUsed.add(tab.ID(), idx.ID())
+	b.Metrics.IndexesUsed.Add(tab.ID(), idx.ID())
 
 	// Build the index constraint.
 	spanColumns := make([]opt.OrderingColumn, len(scan.Span))
@@ -1390,8 +1397,8 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 
 	var ep execPlan
 
-	b.recordJoinType(joinType)
-	b.recordJoinAlgorithm(exec.ApplyJoin)
+	b.Metrics.RecordJoinType(joinType)
+	b.Metrics.RecordJoinAlgorithm(exec.ApplyJoin)
 	ep.root, err = b.factory.ConstructApplyJoin(
 		joinType,
 		leftPlan.root,
@@ -1553,11 +1560,11 @@ func (b *Builder) buildHashJoin(join memo.RelExpr) (_ execPlan, outputCols colOr
 		rightRowCount = uint64(rightExpr.Relational().Statistics().RowCount)
 	}
 
-	b.recordJoinType(joinType)
+	b.Metrics.RecordJoinType(joinType)
 	if isCrossJoin {
-		b.recordJoinAlgorithm(exec.CrossJoin)
+		b.Metrics.RecordJoinAlgorithm(exec.CrossJoin)
 	} else {
-		b.recordJoinAlgorithm(exec.HashJoin)
+		b.Metrics.RecordJoinAlgorithm(exec.HashJoin)
 	}
 	var ep execPlan
 	ep.root, err = b.factory.ConstructHashJoin(
@@ -1661,8 +1668,8 @@ func (b *Builder) buildMergeJoin(
 	if rightExpr.Relational().Statistics().Available {
 		rightRowCount = uint64(rightExpr.Relational().Statistics().RowCount)
 	}
-	b.recordJoinType(joinType)
-	b.recordJoinAlgorithm(exec.MergeJoin)
+	b.Metrics.RecordJoinType(joinType)
+	b.Metrics.RecordJoinAlgorithm(exec.MergeJoin)
 	var ep execPlan
 	ep.root, err = b.factory.ConstructMergeJoin(
 		joinType,
@@ -2077,9 +2084,9 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (_ execPlan, outputCols colOrdMap
 
 	switch typ {
 	case tree.IntersectOp:
-		b.recordJoinType(descpb.IntersectAllJoin)
+		b.Metrics.RecordJoinType(descpb.IntersectAllJoin)
 	case tree.ExceptOp:
-		b.recordJoinType(descpb.ExceptAllJoin)
+		b.Metrics.RecordJoinType(descpb.ExceptAllJoin)
 	}
 
 	hardLimit := uint64(0)
@@ -2133,7 +2140,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (_ execPlan, outputCols colOrdMap
 		)
 	} else if len(streamingOrdering) > 0 {
 		if typ != tree.UnionOp {
-			b.recordJoinAlgorithm(exec.MergeJoin)
+			b.Metrics.RecordJoinAlgorithm(exec.MergeJoin)
 		}
 		ep.root, err = b.factory.ConstructStreamingSetOp(
 			typ, all, left.root, right.root,
@@ -2144,7 +2151,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (_ execPlan, outputCols colOrdMap
 			return execPlan{}, colOrdMap{}, errors.AssertionFailedf("hash set op is not supported with a required ordering")
 		}
 		if typ != tree.UnionOp {
-			b.recordJoinAlgorithm(exec.HashJoin)
+			b.Metrics.RecordJoinAlgorithm(exec.HashJoin)
 		}
 		ep.root, err = b.factory.ConstructHashSetOp(typ, all, left.root, right.root)
 	}
@@ -2468,7 +2475,7 @@ func (b *Builder) buildIndexJoin(
 	// TODO(radu): the distsql implementation of index join assumes that the input
 	// starts with the PK columns in order (#40749).
 	pri := tab.Index(cat.PrimaryIndex)
-	b.IndexesUsed.add(tab.ID(), pri.ID())
+	b.Metrics.IndexesUsed.Add(tab.ID(), pri.ID())
 	keyCols := make([]exec.NodeColumnOrdinal, pri.KeyColumnCount())
 	for i := range keyCols {
 		keyCols[i], err = getNodeColumnOrdinal(inputCols, join.Table.ColumnID(pri.Column(i).Ordinal()))
@@ -2488,7 +2495,7 @@ func (b *Builder) buildIndexJoin(
 		return execPlan{}, colOrdMap{}, err
 	}
 
-	b.recordJoinAlgorithm(exec.IndexJoin)
+	b.Metrics.RecordJoinAlgorithm(exec.IndexJoin)
 	reqOrdering, err := reqOrdering(join, outputCols)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -2992,7 +2999,7 @@ func (b *Builder) buildLookupJoin(
 
 	tab := md.Table(join.Table)
 	idx := tab.Index(join.Index)
-	b.IndexesUsed.add(tab.ID(), idx.ID())
+	b.Metrics.IndexesUsed.Add(tab.ID(), idx.ID())
 
 	locking, err := b.buildLocking(join.Table, join.Locking)
 	if err != nil {
@@ -3003,8 +3010,8 @@ func (b *Builder) buildLookupJoin(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	b.recordJoinType(joinType)
-	b.recordJoinAlgorithm(exec.LookupJoin)
+	b.Metrics.RecordJoinType(joinType)
+	b.Metrics.RecordJoinAlgorithm(exec.LookupJoin)
 	reqOrdering, err := reqOrdering(join, outputCols)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -3190,7 +3197,7 @@ func (b *Builder) buildInvertedJoin(
 	md := b.mem.Metadata()
 	tab := md.Table(join.Table)
 	idx := tab.Index(join.Index)
-	b.IndexesUsed.add(tab.ID(), idx.ID())
+	b.Metrics.IndexesUsed.Add(tab.ID(), idx.ID())
 
 	prefixEqCols := make([]exec.NodeColumnOrdinal, len(join.PrefixKeyCols))
 	for i, c := range join.PrefixKeyCols {
@@ -3295,8 +3302,8 @@ func (b *Builder) buildInvertedJoin(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	b.recordJoinType(joinType)
-	b.recordJoinAlgorithm(exec.InvertedJoin)
+	b.Metrics.RecordJoinType(joinType)
+	b.Metrics.RecordJoinAlgorithm(exec.InvertedJoin)
 	reqOrdering, err := reqOrdering(join, outputCols)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -3332,8 +3339,8 @@ func (b *Builder) buildZigzagJoin(
 	rightTable := md.Table(join.RightTable)
 	leftIndex := leftTable.Index(join.LeftIndex)
 	rightIndex := rightTable.Index(join.RightIndex)
-	b.IndexesUsed.add(leftTable.ID(), leftIndex.ID())
-	b.IndexesUsed.add(rightTable.ID(), rightIndex.ID())
+	b.Metrics.IndexesUsed.Add(leftTable.ID(), leftIndex.ID())
+	b.Metrics.IndexesUsed.Add(rightTable.ID(), rightIndex.ID())
 
 	leftEqCols := make([]exec.TableColumnOrdinal, len(join.LeftEqCols))
 	rightEqCols := make([]exec.TableColumnOrdinal, len(join.RightEqCols))
@@ -3410,7 +3417,7 @@ func (b *Builder) buildZigzagJoin(
 		return execPlan{}, colOrdMap{}, err
 	}
 
-	b.recordJoinAlgorithm(exec.ZigZagJoin)
+	b.Metrics.RecordJoinAlgorithm(exec.ZigZagJoin)
 	reqOrdering, err := reqOrdering(join, outputCols)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -4116,7 +4123,7 @@ func (b *Builder) buildVectorSearch(
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
 			"vector search is only supported on vector indexes")
 	}
-	b.IndexesUsed.add(table.ID(), index.ID())
+	b.Metrics.IndexesUsed.Add(table.ID(), index.ID())
 	primaryKeyCols := md.TableMeta(search.Table).IndexKeyColumns(cat.PrimaryIndex)
 	for col, ok := search.Cols.Next(0); ok; col, ok = search.Cols.Next(col + 1) {
 		if !primaryKeyCols.Contains(col) {
@@ -4163,7 +4170,7 @@ func (b *Builder) buildVectorMutationSearch(
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
 			"vector mutation search is only supported on vector indexes")
 	}
-	b.IndexesUsed.add(table.ID(), index.ID())
+	b.Metrics.IndexesUsed.Add(table.ID(), index.ID())
 
 	input, inputCols, err := b.buildRelational(search.Input)
 	if err != nil {
@@ -4392,31 +4399,6 @@ func (b *Builder) statementTag(expr memo.RelExpr) string {
 		return "SELECT " + expr.Private().(*memo.LockPrivate).Locking.Strength.String()
 	default:
 		return expr.Op().SyntaxTag()
-	}
-}
-
-// recordJoinType increments the counter for the given join type for telemetry
-// reporting.
-func (b *Builder) recordJoinType(joinType descpb.JoinType) {
-	// Don't bother distinguishing between left and right.
-	switch joinType {
-	case descpb.RightOuterJoin:
-		joinType = descpb.LeftOuterJoin
-	case descpb.RightSemiJoin:
-		joinType = descpb.LeftSemiJoin
-	case descpb.RightAntiJoin:
-		joinType = descpb.LeftAntiJoin
-	}
-	if b.JoinTypeCounts[joinType]+1 > b.JoinTypeCounts[joinType] {
-		b.JoinTypeCounts[joinType]++
-	}
-}
-
-// recordJoinAlgorithm increments the counter for the given join algorithm for
-// telemetry reporting.
-func (b *Builder) recordJoinAlgorithm(joinAlgorithm exec.JoinAlgorithm) {
-	if b.JoinAlgorithmCounts[joinAlgorithm]+1 > b.JoinAlgorithmCounts[joinAlgorithm] {
-		b.JoinAlgorithmCounts[joinAlgorithm]++
 	}
 }
 

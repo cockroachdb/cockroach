@@ -14,6 +14,7 @@ import (
 
 type scrubNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	optColumnsSlot
 }
 

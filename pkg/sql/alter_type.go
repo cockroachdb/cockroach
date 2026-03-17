@@ -26,6 +26,7 @@ import (
 
 type alterTypeNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n      *tree.AlterType
 	prefix catalog.ResolvedObjectPrefix
 	desc   *typedesc.Mutable

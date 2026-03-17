@@ -20,6 +20,7 @@ import (
 type cancelSessionsNode struct {
 	singleInputPlanNode
 	rowsAffectedOutputHelper
+	nonReusablePlanNode
 	ifExists bool
 }
 

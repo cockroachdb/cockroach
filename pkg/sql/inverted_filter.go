@@ -17,6 +17,7 @@ import (
 
 type invertedFilterNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	invertedFilterPlanningInfo
 	columns colinfo.ResultColumns
 }

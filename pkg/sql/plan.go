@@ -62,9 +62,7 @@ func (r *runParams) Ann() *tree.Annotations {
 // The following methods apply to planNodes and contain special cases
 // for each type; they thus need to be extended when adding/removing
 // planNode instances:
-// - planVisitor.visit()           (walk.go)
-// - planNodeNames                 (walk.go)
-// - setLimitHint()                (limit_hint.go)
+// - planNodeNames                 (plan_names.go)
 // - planColumns()                 (plan_columns.go)
 type planNode interface {
 	startExec(params runParams) error
@@ -84,22 +82,43 @@ type planNode interface {
 	// Available after Next().
 	Values() tree.Datums
 
-	// Close terminates the planNode execution and releases its resources.
-	// This method should be called if the node has been used in any way (any
-	// methods on it have been called) after it was constructed. Note that this
-	// doesn't imply that startExec() has been necessarily called.
+	// Close terminates the planNode execution and, if Reuse was not called or
+	// returned ok=false, releases its resources. This method should be called
+	// if the node has been used in any way (any methods on it have been called)
+	// after it was constructed. Note that this doesn't imply that startExec()
+	// has been necessarily called.
 	//
-	// This method must not be called during execution - the planNode
-	// tree must remain "live" and readable via walk() even after
-	// execution completes.
+	// If Reuse was called and returned ok=true, Close must reset the state of
+	// the planNode so that startExec, Next, and Values can be called again for
+	// a future execution. The releasing of resources must be deferred until
+	// Destroy is called. Reusable planNodes should not be returned to memory
+	// pools on Close.
 	//
-	// The node must not be used again after this method is called. Some nodes put
-	// themselves back into memory pools on Close.
+	// If Reuse was not called or it returned ok=false, then the node must not
+	// be used again after Close is called.
+	//
+	// This method must not be called during execution - the planNode tree must
+	// remain "live" and traversable via Input even after execution completes.
 	Close(ctx context.Context)
 
 	InputCount() int
 	Input(i int) (planNode, error)
 	SetInput(i int, p planNode) error
+
+	// Reuse is called to prepare a planNode tree for reuse across multiple
+	// executions. It returns the estimated memory size of the planNode and its
+	// children. It returns ok=true if every node in the tree can be reused, and
+	// ok=false otherwise. It must be called before startExec.
+	//
+	// If ok=true is returned, Close must reset the state of the planNode so
+	// that startExec, Next, and Values can be called again for a future
+	// execution, and releasing the planNode's resources must be deferred until
+	// Destroy is called.
+	Reuse() (ok bool)
+	// Destroy releases the planNode's resources if Reuse was called and
+	// returned ok=true. In otherwords, it behaves the same as Close does for
+	// non-reusable planNodes.
+	Destroy(ctx context.Context)
 }
 
 // zeroInputPlanNode is embedded in planNode implementations that have no input
@@ -140,6 +159,13 @@ func (n *singleInputPlanNode) SetInput(i int, p planNode) error {
 	}
 	return errors.AssertionFailedf("input index %d is out of range", i)
 }
+
+// nonReusablePlanNode is embedded in planNode implementations that are not
+// resuable. It implements the Reuse and Destroy methods of planNode.
+type nonReusablePlanNode struct{}
+
+func (nonReusablePlanNode) Reuse() (ok bool)            { return false }
+func (nonReusablePlanNode) Destroy(ctx context.Context) {}
 
 // mutationPlanNode is a specification of planNode for mutations operations
 // (those that insert/update/detele/etc rows).
@@ -190,25 +216,68 @@ type planNodeReadingOwnWrites interface {
 	ReadingOwnWrites()
 }
 
+var _ planNode = &alterDatabaseAddRegionNode{}
+var _ planNode = &alterDatabaseAddSuperRegion{}
+var _ planNode = &alterDatabaseAlterSuperRegion{}
+var _ planNode = &alterDatabaseDropRegionNode{}
+var _ planNode = &alterDatabaseDropSecondaryRegion{}
+var _ planNode = &alterDatabaseDropSuperRegion{}
+var _ planNode = &alterDatabasePlacementNode{}
+var _ planNode = &alterDatabasePrimaryRegionNode{}
+var _ planNode = &alterDatabaseSecondaryRegion{}
+var _ planNode = &alterDatabaseSetZoneConfigExtensionNode{}
+var _ planNode = &alterDatabaseSurvivalGoalNode{}
+var _ planNode = &alterDatabaseOwnerNode{}
+var _ planNode = &alterDefaultPrivilegesNode{}
+var _ planNode = &alterExternalConnectionNode{}
+var _ planNode = &alterFunctionDepExtensionNode{}
+var _ planNode = &alterFunctionOptionsNode{}
+var _ planNode = &alterFunctionRenameNode{}
+var _ planNode = &alterFunctionSetOwnerNode{}
+var _ planNode = &alterFunctionSetSchemaNode{}
 var _ planNode = &alterIndexNode{}
 var _ planNode = &alterIndexVisibleNode{}
+var _ planNode = &alterJobOwnerNode{}
+var _ planNode = &alterRoleNode{}
+var _ planNode = &alterRoleSetNode{}
 var _ planNode = &alterSchemaNode{}
 var _ planNode = &alterSequenceNode{}
 var _ planNode = &alterTableNode{}
 var _ planNode = &alterTableOwnerNode{}
+var _ planNode = &alterTableSetLocalityNode{}
 var _ planNode = &alterTableSetSchemaNode{}
+var _ planNode = &alterTenantCapabilityNode{}
+var _ planNode = &alterTenantServiceNode{}
+var _ planNode = &alterTenantSetClusterSettingNode{}
 var _ planNode = &alterTypeNode{}
+var _ planNode = &applyJoinNode{}
 var _ planNode = &bufferNode{}
+var _ planNode = &callNode{}
 var _ planNode = &cancelQueriesNode{}
 var _ planNode = &cancelSessionsNode{}
+var _ planNode = &cdcValuesNode{}
 var _ planNode = &changeDescriptorBackedPrivilegesNode{}
+var _ planNode = &changeNonDescriptorBackedPrivilegesNode{}
+var _ planNode = &checkExternalConnectionNode{}
+var _ planNode = &commentOnColumnNode{}
+var _ planNode = &commentOnConstraintNode{}
+var _ planNode = &commentOnDatabaseNode{}
+var _ planNode = &commentOnIndexNode{}
+var _ planNode = &commentOnSchemaNode{}
+var _ planNode = &commentOnTableNode{}
 var _ planNode = &completionsNode{}
+var _ planNode = &controlJobsNode{}
+var _ planNode = &controlSchedulesNode{}
 var _ planNode = &createDatabaseNode{}
+var _ planNode = &createExtensionNode{}
+var _ planNode = &createExternalConnectionNode{}
 var _ planNode = &createFunctionNode{}
 var _ planNode = &createIndexNode{}
+var _ planNode = &createSchemaNode{}
 var _ planNode = &createSequenceNode{}
 var _ planNode = &createStatsNode{}
 var _ planNode = &createTableNode{}
+var _ planNode = &createTenantNode{}
 var _ planNode = &createTypeNode{}
 var _ planNode = &CreateRoleNode{}
 var _ planNode = &createViewNode{}
@@ -216,27 +285,39 @@ var _ planNode = &delayedNode{}
 var _ planNode = &deleteNode{}
 var _ planNode = &deleteSwapNode{}
 var _ planNode = &deleteRangeNode{}
+var _ planNode = &discardNode{}
 var _ planNode = &distinctNode{}
 var _ planNode = &dropDatabaseNode{}
+var _ planNode = &dropExternalConnectionNode{}
+var _ planNode = &dropFunctionNode{}
 var _ planNode = &dropIndexNode{}
 var _ planNode = &dropSchemaNode{}
 var _ planNode = &dropSequenceNode{}
 var _ planNode = &dropTableNode{}
+var _ planNode = &dropTenantNode{}
 var _ planNode = &dropTypeNode{}
 var _ planNode = &DropRoleNode{}
 var _ planNode = &dropViewNode{}
-var _ planNode = &errorIfRowsNode{}
-var _ planNode = &explainVecNode{}
-var _ planNode = &filterNode{}
 var _ planNode = &endPreparedTxnNode{}
+var _ planNode = &errorIfRowsNode{}
+var _ planNode = &explainDDLNode{}
+var _ planNode = &explainPlanNode{}
+var _ planNode = &explainVecNode{}
+var _ planNode = &exportNode{}
+var _ planNode = &filterNode{}
+var _ planNode = &fetchNode{}
 var _ planNode = &GrantRoleNode{}
 var _ planNode = &groupNode{}
 var _ planNode = &hookFnNode{}
+var _ planNode = &identifySystemNode{}
 var _ planNode = &indexJoinNode{}
 var _ planNode = &insertNode{}
 var _ planNode = &insertFastPathNode{}
+var _ planNode = &invertedFilterNode{}
+var _ planNode = &invertedJoinNode{}
 var _ planNode = &joinNode{}
 var _ planNode = &limitNode{}
+var _ planNode = &lookupJoinNode{}
 var _ planNode = &max1RowNode{}
 var _ planNode = &ordinalityNode{}
 var _ planNode = &projectSetNode{}
@@ -249,14 +330,28 @@ var _ planNode = &renameColumnNode{}
 var _ planNode = &renameDatabaseNode{}
 var _ planNode = &renameIndexNode{}
 var _ planNode = &renameTableNode{}
+var _ planNode = &renameTenantNode{}
 var _ planNode = &renderNode{}
+var _ planNode = &resetAllNode{}
 var _ planNode = &RevokeRoleNode{}
+var _ planNode = &rowSourceToPlanNode{}
+var _ planNode = &saveTableNode{}
 var _ planNode = &scanBufferNode{}
 var _ planNode = &scanNode{}
 var _ planNode = &scatterNode{}
+var _ planNode = &schemaChangePlanNode{}
+var _ planNode = &scrubNode{}
 var _ planNode = &sequenceSelectNode{}
+var _ planNode = &setClusterSettingNode{}
+var _ planNode = &setSessionAuthorizationDefaultNode{}
+var _ planNode = &setVarNode{}
+var _ planNode = &setZoneConfigNode{}
 var _ planNode = &showFingerprintsNode{}
+var _ planNode = &showTenantNode{}
 var _ planNode = &showTraceNode{}
+var _ planNode = &showTraceNode{}
+var _ planNode = &showTraceReplicaNode{}
+var _ planNode = &showVarNode{}
 var _ planNode = &sortNode{}
 var _ planNode = &splitNode{}
 var _ planNode = &topKNode{}
@@ -272,8 +367,10 @@ var _ planNode = &valuesNode{}
 var _ planNode = &vectorMutationSearchNode{}
 var _ planNode = &vectorSearchNode{}
 var _ planNode = &virtualTableNode{}
+var _ planNode = &vTableLookupJoinNode{}
 var _ planNode = &windowNode{}
 var _ planNode = &zeroNode{}
+var _ planNode = &zigzagJoinNode{}
 
 var _ planNodeReadingOwnWrites = &alterIndexNode{}
 var _ planNodeReadingOwnWrites = &alterSchemaNode{}
@@ -396,6 +493,15 @@ func (p *planMaybePhysical) planColumns() colinfo.ResultColumns {
 	return planColumns(p.planNode)
 }
 
+// reuse prepares the planNode tree for reuse, and returns ok=true if
+// successful. It returns ok=false if the plan is a physical plan.
+func (p *planMaybePhysical) reuse() (ok bool) {
+	if p.physPlan != nil {
+		return false
+	}
+	return p.planNode.Reuse()
+}
+
 // Close closes the pieces of the plan that haven't been yet closed. Note that
 // it also resets the corresponding fields.
 func (p *planMaybePhysical) Close(ctx context.Context) {
@@ -470,6 +576,24 @@ type postQueryMetadata struct {
 // return an error (for example, foreign key violation).
 type checkPlan struct {
 	plan planMaybePhysical
+}
+
+// reuse prepares the main planNode tree for reuse, and returns ok=true if
+// successful. It returns ok=false the plan has any subqueries, FK cascades, FK or uniqueness checks, or triggers.
+func (p *planComponents) reuse() (ok bool) {
+	if len(p.subqueryPlans) > 0 {
+		return false
+	}
+	if len(p.cascades) > 0 {
+		return false
+	}
+	if len(p.checkPlans) > 0 {
+		return false
+	}
+	if len(p.triggers) > 0 {
+		return false
+	}
+	return p.main.reuse()
 }
 
 // close calls Close on all plan trees.

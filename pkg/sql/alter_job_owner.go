@@ -22,6 +22,7 @@ import (
 
 type alterJobOwnerNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	jobID tree.TypedExpr
 	owner username.SQLUsername
 }

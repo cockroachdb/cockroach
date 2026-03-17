@@ -21,6 +21,7 @@ import (
 
 type refreshMaterializedViewNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n *tree.RefreshMaterializedView
 }
 

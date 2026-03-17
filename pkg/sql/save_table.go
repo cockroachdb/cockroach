@@ -20,6 +20,7 @@ import (
 // The node creates the table on startup. If the table exists, it errors out.
 type saveTableNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 
 	target tree.TableName
 

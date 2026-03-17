@@ -22,6 +22,7 @@ import (
 
 type alterTableSetSchemaNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	newSchema string
 	prefix    catalog.ResolvedObjectPrefix
 	tableDesc *tabledesc.Mutable

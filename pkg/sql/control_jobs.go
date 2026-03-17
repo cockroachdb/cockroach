@@ -20,6 +20,7 @@ import (
 
 type controlJobsNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	rowsAffectedOutputHelper
 	desiredStatus jobs.State
 	reason        string

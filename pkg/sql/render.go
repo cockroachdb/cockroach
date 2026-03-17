@@ -25,6 +25,7 @@ type renderNode struct {
 	_ util.NoCopy
 
 	singleInputPlanNode
+	nonReusablePlanNode
 
 	// Rendering expressions for rows and corresponding output columns.
 	render []tree.TypedExpr

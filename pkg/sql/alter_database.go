@@ -45,6 +45,7 @@ import (
 
 type alterDatabaseOwnerNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n    *tree.AlterDatabaseOwner
 	desc *dbdesc.Mutable
 }
@@ -131,6 +132,7 @@ func (n *alterDatabaseOwnerNode) Close(context.Context)        {}
 
 type alterDatabaseAddRegionNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n    *tree.AlterDatabaseAddRegion
 	desc *dbdesc.Mutable
 }
@@ -314,6 +316,7 @@ func (n *alterDatabaseAddRegionNode) Close(context.Context)        {}
 
 type alterDatabaseDropRegionNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n                     *tree.AlterDatabaseDropRegion
 	desc                  *dbdesc.Mutable
 	removingPrimaryRegion bool
@@ -895,6 +898,7 @@ func (n *alterDatabaseDropRegionNode) Close(context.Context)        {}
 
 type alterDatabasePrimaryRegionNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n    *tree.AlterDatabasePrimaryRegion
 	desc *dbdesc.Mutable
 }
@@ -1307,6 +1311,7 @@ func (n *alterDatabasePrimaryRegionNode) ReadingOwnWrites()            {}
 
 type alterDatabaseSurvivalGoalNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n    *tree.AlterDatabaseSurvivalGoal
 	desc *dbdesc.Mutable
 }
@@ -1447,6 +1452,7 @@ func (n *alterDatabaseSurvivalGoalNode) Close(context.Context)        {}
 
 type alterDatabasePlacementNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n    *tree.AlterDatabasePlacement
 	desc *dbdesc.Mutable
 }
@@ -1591,6 +1597,7 @@ func (n *alterDatabasePlacementNode) Close(context.Context)        {}
 
 type alterDatabaseAddSuperRegion struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n    *tree.AlterDatabaseAddSuperRegion
 	desc *dbdesc.Mutable
 }
@@ -1692,6 +1699,7 @@ func (n *alterDatabaseAddSuperRegion) Close(context.Context)        {}
 
 type alterDatabaseDropSuperRegion struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n    *tree.AlterDatabaseDropSuperRegion
 	desc *dbdesc.Mutable
 }
@@ -1797,6 +1805,7 @@ func (p *planner) getSuperRegionsForDatabase(
 
 type alterDatabaseAlterSuperRegion struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n    *tree.AlterDatabaseAlterSuperRegion
 	desc *dbdesc.Mutable
 }
@@ -1961,6 +1970,7 @@ func (p *planner) addSuperRegion(
 
 type alterDatabaseSecondaryRegion struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n    *tree.AlterDatabaseSecondaryRegion
 	desc *dbdesc.Mutable
 }
@@ -2110,6 +2120,7 @@ func (n *alterDatabaseSecondaryRegion) Close(context.Context)        {}
 
 type alterDatabaseDropSecondaryRegion struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n    *tree.AlterDatabaseDropSecondaryRegion
 	desc *dbdesc.Mutable
 }
@@ -2260,6 +2271,7 @@ func (n *alterDatabaseDropSecondaryRegion) Close(context.Context)        {}
 
 type alterDatabaseSetZoneConfigExtensionNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n          *tree.AlterDatabaseSetZoneConfigExtension
 	desc       *dbdesc.Mutable
 	yamlConfig tree.TypedExpr

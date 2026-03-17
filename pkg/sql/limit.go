@@ -18,6 +18,7 @@ import (
 // returned or only return them past a given number (offset).
 type limitNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	countExpr  tree.TypedExpr
 	offsetExpr tree.TypedExpr
 }

@@ -24,6 +24,7 @@ import (
 // be planned, see the comment in rowexec/zigzagjoiner.go.
 type zigzagJoinNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	// sides contains information about each individual "side" of a
 	// zigzag join. Must contain 2 or more zigzagJoinSides.
 	sides []zigzagJoinSide

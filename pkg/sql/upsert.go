@@ -24,6 +24,7 @@ var upsertNodePool = sync.Pool{
 
 type upsertNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 
 	// columns is set if this UPDATE is returning any rows, to be
 	// consumed by a renderNode upstream. This occurs when there is a

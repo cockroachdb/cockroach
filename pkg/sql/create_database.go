@@ -23,6 +23,7 @@ import (
 
 type createDatabaseNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	n *tree.CreateDatabase
 }
 

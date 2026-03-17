@@ -12,6 +12,8 @@ go_library(
     deps = [
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/hints",
+        "//pkg/sql/opt/exec",
+        "//pkg/sql/opt/exec/explain",
         "//pkg/sql/opt/memo",
         "//pkg/sql/parser/statements",
         "//pkg/sql/sem/tree",

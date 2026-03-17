@@ -27,6 +27,7 @@ import (
 
 type changeNonDescriptorBackedPrivilegesNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	changePrivilegesNode
 }
 

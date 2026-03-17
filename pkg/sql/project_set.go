@@ -28,6 +28,7 @@ import (
 // with zip(a,b,c).
 type projectSetNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	projectSetPlanningInfo
 }
 

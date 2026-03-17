@@ -15,6 +15,7 @@ import (
 
 type sequenceSelectNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	optColumnsSlot
 
 	desc catalog.TableDescriptor

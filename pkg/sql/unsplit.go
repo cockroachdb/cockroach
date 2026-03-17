@@ -17,6 +17,7 @@ import (
 
 type unsplitNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	optColumnsSlot
 
 	tableDesc catalog.TableDescriptor
@@ -68,6 +69,7 @@ func (n *unsplitNode) Close(ctx context.Context) {
 
 type unsplitAllNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	optColumnsSlot
 
 	tableDesc catalog.TableDescriptor

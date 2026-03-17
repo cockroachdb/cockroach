@@ -222,6 +222,7 @@ func (m *moveNode) Close(ctx context.Context) {
 
 type fetchMoveNodeBase struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	cursor *sqlCursor
 	// n is the number of rows requested.
 	n int64

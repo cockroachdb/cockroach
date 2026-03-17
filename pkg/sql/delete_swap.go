@@ -25,6 +25,7 @@ type deleteSwapNode struct {
 	// Unlike insertFastPathNode, deleteSwapNode reads from input in order to
 	// support projections, which are used by some DELETE statements.
 	singleInputPlanNode
+	nonReusablePlanNode
 
 	// columns is set if this DELETE is returning any rows, to be
 	// consumed by a renderNode upstream. This occurs when there is a

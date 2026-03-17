@@ -25,6 +25,7 @@ import (
 // This is called from REVOKE <ROLE>
 type RevokeRoleNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	roles       []username.SQLUsername
 	members     []username.SQLUsername
 	adminOption bool

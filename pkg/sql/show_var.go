@@ -16,6 +16,7 @@ import (
 // This is reached if <var> contains a period.
 type showVarNode struct {
 	zeroInputPlanNode
+	nonReusablePlanNode
 	name  string
 	shown bool
 	val   string

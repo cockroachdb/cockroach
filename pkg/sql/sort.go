@@ -16,6 +16,7 @@ import (
 // sub-node.
 type sortNode struct {
 	singleInputPlanNode
+	nonReusablePlanNode
 	ordering colinfo.ColumnOrdering
 	// When alreadyOrderedPrefix is non-zero, the input is already ordered on
 	// the prefix ordering[:alreadyOrderedPrefix].
