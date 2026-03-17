@@ -604,6 +604,18 @@ func setFuncOptions(
 			if err != nil {
 				return err
 			}
+			if lang == catpb.Function_PLPGSQL {
+				// The re-formatting above strips the original leading newline from
+				// the dollar-quoted body. Prepend it back so that PLpgSQL line numbers
+				// in error context match PostgreSQL's convention, where the body starts
+				// on the line after the opening $$ delimiter.
+				//
+				// NOTE: functions created before this change will not have the leading
+				// newline in their stored body, so error context line numbers for those
+				// functions may be off by one. Fixing this for existing functions would
+				// require a descriptor migration gated on a cluster version bump.
+				body = "\n" + body
+			}
 		}
 		udfDesc.SetFuncBody(body)
 	}

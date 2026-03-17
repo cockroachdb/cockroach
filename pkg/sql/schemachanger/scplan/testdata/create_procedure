@@ -435,6 +435,7 @@ CREATE PROCEDURE p(a notmyworkday) LANGUAGE PLpgSQL AS $$
   END
 $$;
 ----
+----
 StatementPhase stage 1 of 1 with 12 MutationType ops
   transitions:
     [[Function:{DescID: 111}, PUBLIC], ABSENT] -> PUBLIC
@@ -502,7 +503,8 @@ StatementPhase stage 1 of 1 with 12 MutationType ops
         WithGrantOption: 2
     *scop.SetFunctionBody
       Body:
-        Body: |
+        Body: |2
+      
           BEGIN
           SELECT a FROM t;
           SELECT b FROM t@t_idx_b;
@@ -672,7 +674,8 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
         WithGrantOption: 2
     *scop.SetFunctionBody
       Body:
-        Body: |
+        Body: |2
+      
           BEGIN
           SELECT a FROM t;
           SELECT b FROM t@t_idx_b;
@@ -761,6 +764,8 @@ PreCommitPhase stage 2 of 2 with 12 MutationType ops
         SchemaID: 101
     *scop.MarkDescriptorAsPublic
       DescriptorID: 111
+----
+----
 
 deps
 CREATE PROCEDURE p(a notmyworkday) LANGUAGE PLpgSQL AS $$

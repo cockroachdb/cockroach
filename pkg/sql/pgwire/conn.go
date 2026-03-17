@@ -1142,6 +1142,11 @@ func (w *errWriter) writeErrFields(ctx context.Context, err error, out io.Writer
 		w.msgBuilder.writeTerminatedString(pgErr.ConstraintName)
 	}
 
+	if pgErr.Context != "" {
+		w.msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldContext)
+		w.msgBuilder.writeTerminatedString(pgErr.Context)
+	}
+
 	if pgErr.Source != nil {
 		errCtx := pgErr.Source
 		if errCtx.File != "" {
