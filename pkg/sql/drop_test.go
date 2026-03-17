@@ -1394,16 +1394,20 @@ ORDER BY
 	tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), childDesc.TableSpan(codec), 0)
 }
 
-// TestCreateTableFKRollbackCleansBackrefs verifies that when a CREATE TABLE
-// with an inline FOREIGN KEY constraint is rolled back (because the schema
-// change job fails), the InboundFK back-reference on the referenced table is
-// properly cleaned up.
+// TestCreateTableRollbackCleansBackrefs verifies that when a CREATE TABLE
+// with an inline FOREIGN KEY constraint, a user-defined type column, a
+// sequence default, and a UDF default is rolled back (because the schema change
+// job fails), the InboundFK back-reference on the referenced table, the type
+// descriptor's back-reference, the sequence's DependedOnBy, and the function
+// descriptor's DependedOnBy are all properly cleaned up.
 //
-// This is a regression test for a bug where rollbackSchemaChange() would mark
+// This is a regression test for bugs where rollbackSchemaChange() would mark
 // the new table as Dropped and GC it, but never remove the InboundFK entry
-// from the referenced table, leaving an orphaned back-reference to a
+// from the referenced table, the table's ID from the type descriptor's
+// ReferencingDescriptorIDs, the sequence's DependedOnBy entry, or the function
+// descriptor's DependedOnBy entry, leaving orphaned back-references to a
 // non-existent descriptor.
-func TestCreateTableFKRollbackCleansBackrefs(t *testing.T) {
+func TestCreateTableRollbackCleansBackrefs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1465,13 +1469,30 @@ func TestCreateTableFKRollbackCleansBackrefs(t *testing.T) {
 	_, err = systemDB.Exec(`SET CLUSTER SETTING kv.protectedts.poll_interval = '1s'`)
 	require.NoError(t, err)
 
-	// Create the referenced (parent) table.
+	// Create the referenced (parent) table, a user-defined type, a sequence,
+	// and a user-defined function.
 	sqlRun.Exec(t, `CREATE DATABASE t`)
+	sqlRun.Exec(t, `USE t`)
 	sqlRun.Exec(t, `CREATE TABLE t.parent (id INT PRIMARY KEY)`)
+	sqlRun.Exec(t, `CREATE TYPE t.my_enum AS ENUM ('a', 'b', 'c')`)
+	sqlRun.Exec(t, `CREATE SEQUENCE t.my_seq`)
+	sqlRun.Exec(t, `CREATE FUNCTION t.my_func() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$`)
 
 	parentDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "parent")
 	require.Empty(t, parentDesc.InboundForeignKeys(),
 		"parent should have no InboundFKs before child creation")
+
+	typDesc := desctestutils.TestingGetPublicTypeDescriptor(kvDB, codec, "t", "my_enum")
+	require.Zero(t, typDesc.NumReferencingDescriptors(),
+		"type should have no back-references before child creation")
+
+	seqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "my_seq")
+	require.Empty(t, seqDesc.GetDependedOnBy(),
+		"sequence should have no DependedOnBy before child creation")
+
+	fnDesc := desctestutils.TestingGetFunctionDescriptor(kvDB, codec, "t", "public", "my_func")
+	require.Empty(t, fnDesc.GetDependedOnBy(),
+		"function should have no DependedOnBy before child creation")
 
 	// Now create the child table with an inline FK. The CREATE TABLE will
 	// succeed (the SQL transaction commits), but the async schema change job
@@ -1485,10 +1506,14 @@ func TestCreateTableFKRollbackCleansBackrefs(t *testing.T) {
 	sqlRun.QueryRow(t, `SELECT max(id) + 1 FROM system.descriptor`).Scan(&nextID)
 	atomic.StoreUint32(&childTableID, nextID)
 
-	// CREATE TABLE with inline FK. This will fail because the schema change
-	// job is injected with a permanent error.
+	// CREATE TABLE with inline FK, a UDT column, a sequence default, and a UDF
+	// default. This will fail because the schema change job is injected with a
+	// permanent error.
 	_, err = sqlDB.Exec(`CREATE TABLE t.child (
 		id INT PRIMARY KEY,
+		val t.my_enum,
+		seq_val INT DEFAULT nextval('t.my_seq'),
+		fn_val INT DEFAULT my_func(),
 		parent_id INT,
 		CONSTRAINT fk_child_parent FOREIGN KEY (parent_id) REFERENCES t.parent (id)
 	)`)
@@ -1527,11 +1552,13 @@ func TestCreateTableFKRollbackCleansBackrefs(t *testing.T) {
 		[][]string{{"1"}},
 	)
 
-	// Verify via crdb_internal.invalid_objects that the parent is valid.
+	// Verify via crdb_internal.invalid_objects that neither the parent table,
+	// the type, the sequence, nor the function have orphaned references.
 	rows, err := sqlDB.Query(`
 		SELECT id, database_name, schema_name, obj_name, error
 		FROM "".crdb_internal.invalid_objects
-		WHERE database_name = 't' AND obj_name = 'parent'
+		WHERE database_name = 't'
+		  AND obj_name IN ('parent', 'my_enum', 'my_seq', 'my_func')
 	`)
 	require.NoError(t, err)
 	defer rows.Close()
@@ -1546,14 +1573,29 @@ func TestCreateTableFKRollbackCleansBackrefs(t *testing.T) {
 	}
 	require.NoError(t, rows.Err())
 	require.Equal(t, 0, invalidCount,
-		"parent table should not appear in invalid_objects")
+		"parent table, type, sequence, and function should not appear in invalid_objects")
 
-	// Also, verify the parent table has no orphaned InboundFKs (reads directly
+	// Verify the parent table has no orphaned InboundFKs (reads directly
 	// from KV, bypassing descriptor leases).
 	parentDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "parent")
 	require.Empty(t, parentDesc.InboundForeignKeys(),
 		"parent should have no InboundFKs after child rollback, but has %d",
 		len(parentDesc.InboundForeignKeys()))
+
+	// Verify the type has no orphaned back-references.
+	typDesc = desctestutils.TestingGetPublicTypeDescriptor(kvDB, codec, "t", "my_enum")
+	require.Zero(t, typDesc.NumReferencingDescriptors(),
+		"type should have no back-references after child rollback")
+
+	// Verify the sequence has no orphaned DependedOnBy entries.
+	seqDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "my_seq")
+	require.Empty(t, seqDesc.GetDependedOnBy(),
+		"sequence should have no DependedOnBy after child rollback")
+
+	// Verify the function has no orphaned DependedOnBy entries.
+	fnDesc = desctestutils.TestingGetFunctionDescriptor(kvDB, codec, "t", "public", "my_func")
+	require.Empty(t, fnDesc.GetDependedOnBy(),
+		"function should have no DependedOnBy after child rollback")
 }
 
 // Test that non-physical table deletions like DROP VIEW are immediate instead
