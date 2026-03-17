@@ -28,6 +28,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type indexBackfillVariant struct {
+	nameSuffix               string
+	snapshotPrefix           string
+	withCgroupLimiting       bool
+	withProvisionedBandwidth bool
+}
+
+var indexBackfillVariants = []indexBackfillVariant{
+	{
+		nameSuffix:     "/no-disk-limit",
+		snapshotPrefix: "index-backfill-tpce-100k-nodisklimit",
+	},
+	{
+		nameSuffix:         "/provisioned-bandwidth=false",
+		snapshotPrefix:     "index-backfill-tpce-100k-nobw",
+		withCgroupLimiting: true,
+	},
+	{
+		nameSuffix:               "/provisioned-bandwidth=true",
+		snapshotPrefix:           "index-backfill-tpce-100k-bw",
+		withCgroupLimiting:       true,
+		withProvisionedBandwidth: true,
+	},
+}
+
 func registerIndexBackfill(r registry.Registry) {
 	clusterSpec := r.MakeClusterSpec(
 		10, /* nodeCount */
@@ -44,26 +69,18 @@ func registerIndexBackfill(r registry.Registry) {
 		spec.ReuseNone(),
 	)
 
-	for _, withProvisionedBandwidth := range []bool{false, true} {
-		snapshotPrefix := "index-backfill-tpce-100k-nobw"
-		if withProvisionedBandwidth {
-			snapshotPrefix = "index-backfill-tpce-100k-bw"
-		}
-
+	for _, v := range indexBackfillVariants {
 		r.Add(registry.TestSpec{
-			Name: fmt.Sprintf(
-				"admission-control/index-backfill/provisioned-bandwidth=%t",
-				withProvisionedBandwidth,
-			),
+			Name:             "admission-control/index-backfill" + v.nameSuffix,
 			Timeout:          12 * time.Hour,
 			Owner:            registry.OwnerAdmissionControl,
 			Benchmark:        true,
 			CompatibleClouds: registry.OnlyGCE,
 			Suites:           registry.Suites(registry.Nightly),
 			Cluster:          clusterSpec,
-			SnapshotPrefix:   snapshotPrefix,
+			SnapshotPrefix:   v.snapshotPrefix,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runIndexBackfill(ctx, t, c, clusterSpec, withProvisionedBandwidth)
+				runIndexBackfill(ctx, t, c, clusterSpec, v.withCgroupLimiting, v.withProvisionedBandwidth)
 			},
 		})
 	}
@@ -76,6 +93,7 @@ func runIndexBackfill(
 	t test.Test,
 	c cluster.Cluster,
 	clusterSpec spec.ClusterSpec,
+	withCgroupLimiting bool,
 	withProvisionedBandwidth bool,
 ) {
 	snapshots, err := c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
@@ -197,34 +215,36 @@ func runIndexBackfill(
 		t.Fatal(err)
 	}
 
-	// Optionally tell admission control the disk's provisioned
-	// bandwidth so it can manage elastic vs. foreground work.
-	if withProvisionedBandwidth {
-		if _, err := db.ExecContext(ctx,
-			"SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '128MiB'",
-		); err != nil {
-			t.Fatal(err)
+	if withCgroupLimiting {
+		// Optionally tell admission control the disk's provisioned
+		// bandwidth so it can manage elastic vs. foreground work.
+		if withProvisionedBandwidth {
+			if _, err := db.ExecContext(ctx,
+				"SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '128MiB'",
+			); err != nil {
+				t.Fatal(err)
+			}
+			// Allow elastic work to fully utilize the provisioned
+			// bandwidth.
+			if _, err := db.ExecContext(ctx,
+				"SET CLUSTER SETTING kvadmission.store.elastic_disk_bandwidth_max_util = 1.0",
+			); err != nil {
+				t.Fatal(err)
+			}
 		}
-		// Allow elastic work to fully utilize the provisioned
-		// bandwidth.
-		if _, err := db.ExecContext(ctx,
-			"SET CLUSTER SETTING kvadmission.store.elastic_disk_bandwidth_max_util = 1.0",
-		); err != nil {
-			t.Fatal(err)
-		}
-	}
 
-	// Limit disk bandwidth to 128 MiB/s via cgroups so that disk I/O
-	// becomes the bottleneck. Without this, pd-ssd disks are fast enough
-	// that admission control has nothing meaningful to manage. This must
-	// run after c.StartE, since the cgroup path for the cockroach systemd
-	// service only exists after the service has been created.
-	t.Status(fmt.Sprintf("limiting disk bandwidth to %d bytes/s via cgroups",
-		indexBackfillDiskBandwidth))
-	staller := roachtestutil.MakeCgroupDiskStaller(t, c,
-		true /* readsToo */, false /* logsToo */, false /* disableStateValidation */)
-	staller.Setup(ctx)
-	staller.Slow(ctx, c.CRDBNodes(), indexBackfillDiskBandwidth)
+		// Limit disk bandwidth to 128 MiB/s via cgroups so that disk I/O
+		// becomes the bottleneck. Without this, pd-ssd disks are fast enough
+		// that admission control has nothing meaningful to manage. This must
+		// run after c.StartE, since the cgroup path for the cockroach systemd
+		// service only exists after the service has been created.
+		t.Status(fmt.Sprintf("limiting disk bandwidth to %d bytes/s via cgroups",
+			indexBackfillDiskBandwidth))
+		staller := roachtestutil.MakeCgroupDiskStaller(t, c,
+			true /* readsToo */, false /* logsToo */, false /* disableStateValidation */)
+		staller.Setup(ctx)
+		staller.Slow(ctx, c.CRDBNodes(), indexBackfillDiskBandwidth)
+	}
 
 	// Initialize TPC-E spec for running workload commands.
 	tpceSpec, err := initTPCESpec(ctx, t.L(), c)
