@@ -675,6 +675,7 @@ func (r *Registry) innerInsertStatementDiagnostics(
 	diagID = CollectedInstanceID(*row[0].(*tree.DInt))
 
 	if diagnostic.requestID != 0 {
+		var shouldComplete bool
 		if isContinuous && requestIDColumnAvailable {
 			// For continuous requests, count existing bundles for this
 			// request and compare against the cluster setting to decide
@@ -687,19 +688,11 @@ func (r *Registry) innerInsertStatementDiagnostics(
 			if err != nil {
 				return diagID, err
 			}
-			shouldComplete := false
+			shouldComplete = false
 			if row != nil {
 				bundleCount := int(*row[0].(*tree.DInt))
 				maxBundles := int(maxBundlesPerRequest.Get(&r.st.SV))
 				shouldComplete = bundleCount >= maxBundles
-			}
-			_, err = txn.ExecEx(ctx, "stmt-diag-mark-completed", txn.KV(),
-				sessiondata.NodeUserSessionDataOverride,
-				"UPDATE system.statement_diagnostics_requests "+
-					"SET statement_diagnostics_id = $1, completed = $2 WHERE id = $3",
-				diagID, shouldComplete, diagnostic.requestID)
-			if err != nil {
-				return diagID, err
 			}
 		} else {
 			// Non-continuous or pre-migration: mark completed immediately.
@@ -708,15 +701,15 @@ func (r *Registry) innerInsertStatementDiagnostics(
 			// completes and request_id becomes available for COUNT-based
 			// limiting. Pre-migration bundles have NULL request_id, so
 			// the post-migration counter effectively resets to 0.
-			shouldMarkCompleted := !isContinuous
-			_, err := txn.ExecEx(ctx, "stmt-diag-mark-completed", txn.KV(),
-				sessiondata.NodeUserSessionDataOverride,
-				"UPDATE system.statement_diagnostics_requests "+
-					"SET completed = $1, statement_diagnostics_id = $2 WHERE id = $3",
-				shouldMarkCompleted, diagID, diagnostic.requestID)
-			if err != nil {
-				return diagID, err
-			}
+			shouldComplete = !isContinuous
+		}
+		_, err = txn.ExecEx(ctx, "stmt-diag-mark-completed", txn.KV(),
+			sessiondata.NodeUserSessionDataOverride,
+			"UPDATE system.statement_diagnostics_requests "+
+				"SET statement_diagnostics_id = $1, completed = $2 WHERE id = $3",
+			diagID, shouldComplete, diagnostic.requestID)
+		if err != nil {
+			return diagID, err
 		}
 	} else if txnDiagnosticId == 0 {
 		// Insert a completed request into system.statement_diagnostics_request.
