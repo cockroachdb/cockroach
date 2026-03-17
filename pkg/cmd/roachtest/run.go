@@ -226,7 +226,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	// ctx above might be canceled in case a signal was received. If that's
 	// the case, we're running under a 5s timeout until the CtrlC() goroutine
 	// kills the process.
-	l.PrintfCtx(ctx, "runTests destroying all clusters")
+	l.PrintfCtx(ctx, "runTests destroying all unsaved clusters")
 	cr.destroyAllClusters(context.Background(), l)
 
 	if roachtestflags.TeamCity {
