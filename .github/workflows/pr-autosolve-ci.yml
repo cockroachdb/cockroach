@@ -93,6 +93,8 @@ jobs:
               echo ""
               echo "CI has failed again, but the maximum number of automated fix attempts (2) has been reached."
               echo "This PR requires human intervention to resolve the remaining CI failures."
+              echo ""
+              echo "[Workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
             } > "$COMMENT_FILE"
             gh pr comment "$PR_NUMBER" --body-file "$COMMENT_FILE"
             echo "proceed=false" >> "$GITHUB_OUTPUT"
@@ -441,6 +443,8 @@ jobs:
             echo '```'
             echo "$SANITIZED_RESULT"
             echo '```'
+            echo ""
+            echo "[Workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           } > "$COMMENT_FILE"
           gh pr comment "$PR_NUMBER" --body-file "$COMMENT_FILE"
 
@@ -468,6 +472,8 @@ jobs:
             echo '```'
             echo "$SANITIZED_RESULT"
             echo '```'
+            echo ""
+            echo "[Workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           } > "$COMMENT_FILE"
           gh pr comment "$PR_NUMBER" --body-file "$COMMENT_FILE"
 
@@ -495,6 +501,8 @@ jobs:
             echo '```'
             echo ""
             echo "A human may want to re-run CI or investigate the flaky tests."
+            echo ""
+            echo "[Workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           } > "$COMMENT_FILE"
           gh pr comment "$PR_NUMBER" --body-file "$COMMENT_FILE"
 
@@ -527,6 +535,8 @@ jobs:
             echo '```'
             echo ""
             echo "This PR requires human intervention to resolve the CI failures."
+            echo ""
+            echo "[Workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           } > "$COMMENT_FILE"
           gh pr comment "$PR_NUMBER" --body-file "$COMMENT_FILE"
 
