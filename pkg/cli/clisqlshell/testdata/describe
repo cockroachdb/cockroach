@@ -1545,7 +1545,7 @@ Column,Type,Collation,Nullable,Default,Description
 mycolumn,bigint,,,,
 > SELECT pg_catalog.pg_get_viewdef(108::pg_catalog.oid, true) AS "View definition"
 View definition
-SELECT mycolumn FROM defaultdb.public.mytable
+SELECT mycolumn FROM defaultdb.public.mytable;
 
 subtest end
 
@@ -1641,7 +1641,7 @@ Indexes
 "mymview_pkey PRIMARY KEY, btree (rowid ASC)"
 > SELECT pg_catalog.pg_get_viewdef(107::pg_catalog.oid, true) AS "View definition"
 View definition
-SELECT mycolumn FROM defaultdb.public.mytable
+SELECT mycolumn FROM defaultdb.public.mytable;
 
 subtest end
 

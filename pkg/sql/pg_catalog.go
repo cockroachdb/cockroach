@@ -2511,8 +2511,8 @@ https://www.postgresql.org/docs/9.6/view-pg-matviews.html`,
 					owner,                         // matviewowner
 					tree.DNull,                    // tablespace
 					tree.MakeDBool(len(desc.PublicNonPrimaryIndexes()) > 0), // hasindexes
-					tree.DBoolTrue,                       // ispopulated,
-					tree.NewDString(desc.GetViewQuery()), // definition
+					tree.DBoolTrue, // ispopulated,
+					tree.NewDString(desc.GetViewQuery()+";"), // definition
 				)
 			})
 	},
@@ -5504,10 +5504,10 @@ https://www.postgresql.org/docs/9.5/view-pg-views.html`,
 				// TODO(SQL Features): Insert column aliases into view query once we
 				// have a semantic query representation to work with (#10083).
 				return addRow(
-					tree.NewDName(sc.GetName()),          // schemaname
-					tree.NewDName(desc.GetName()),        // viewname
-					owner,                                // viewowner
-					tree.NewDString(desc.GetViewQuery()), // definition
+					tree.NewDName(sc.GetName()),   // schemaname
+					tree.NewDName(desc.GetName()), // viewname
+					owner,                         // viewowner
+					tree.NewDString(desc.GetViewQuery()+";"), // definition
 				)
 			})
 	},

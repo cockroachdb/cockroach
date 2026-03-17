@@ -542,7 +542,7 @@ query TTTT colnames
 SELECT * FROM pg_catalog.pg_views
 ----
 schemaname  viewname  viewowner  definition
-public      v1        root       SELECT p, a, b, c FROM constraint_db.public.t1
+public      v1        root       SELECT p, a, b, c FROM constraint_db.public.t1;
 
 ## pg_catalog.pg_matviews
 
@@ -553,7 +553,7 @@ query TTTTBBT colnames
 SELECT * FROM pg_catalog.pg_matviews
 ----
 schemaname  matviewname  matviewowner  tablespace  hasindexes  ispopulated  definition
-public      mv1          root          NULL        false       true         SELECT 1
+public      mv1          root          NULL        false       true         SELECT 1;
 
 ## pg_catalog.pg_class
 
