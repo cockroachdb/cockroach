@@ -714,6 +714,7 @@ func (b *Builder) buildExistsSubquery(
 				nil,   /* blockState */
 				nil,   /* cursorDeclaration */
 				nil,   /* firstStmtResultWriter */
+				nil,   /* plpgsqlCtx */
 			),
 			tree.DBoolFalse,
 		}, types.Bool), nil
@@ -840,6 +841,7 @@ func (b *Builder) buildSubquery(
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
 			nil,   /* firstStmtResultWriter */
+			nil,   /* plpgsqlCtx */
 		), nil
 	}
 
@@ -920,6 +922,7 @@ func (b *Builder) buildSubquery(
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
 			nil,   /* firstStmtResultWriter */
+			nil,   /* plpgsqlCtx */
 		), nil
 	}
 
@@ -1048,6 +1051,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		blockState,
 		firstStmtOut.CursorDeclaration,
 		firstStmtResultWriter,
+		udf.Def.PLpgSQLCtx,
 	), nil
 }
 
@@ -1108,6 +1112,7 @@ func (b *Builder) initRoutineExceptionHandler(
 			nil,   /* blockState */
 			nil,   /* cursorDeclaration */
 			nil,   /* firstStmtResultWriter */
+			action.PLpgSQLCtx,
 		)
 	}
 	blockState.ExceptionHandler = exceptionHandler

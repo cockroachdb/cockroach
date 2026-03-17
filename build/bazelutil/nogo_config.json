@@ -213,6 +213,7 @@
             "pkg/kv/kvpb/errors\\.go$": "invalid direct cast on error object",
             "pkg/raft/.*": "imported third-party package",
             "pkg/sql/pgwire/pgerror/constraint_name\\.go$": "invalid direct cast on error object",
+            "pkg/sql/pgwire/pgerror/plpgsql_context\\.go$": "invalid direct cast on error object",
             "pkg/sql/pgwire/pgerror/pgcode\\.go$": "invalid direct cast on error object",
             "pkg/testutils/lint/lint_test\\.go$": "invalid direct cast on error object",
             "pkg/util/timeutil/timeout_error\\.go$": "invalid direct cast on error object",

@@ -768,6 +768,10 @@ type UDFDefinition struct {
 	// results to the same buffer. This is used to implement the PL/pgsql
 	// RETURN NEXT and RETURN QUERY statements.
 	ResultBufferID RoutineResultBufferID
+
+	// PLpgSQLCtx, if set, holds PLpgSQL source context (function name, line
+	// number, statement type) for runtime error reporting.
+	PLpgSQLCtx *tree.PLpgSQLErrorContext
 }
 
 // ExceptionBlock contains the information needed to match and handle errors in

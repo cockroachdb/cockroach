@@ -19,6 +19,7 @@ type Expr = tree.Expr
 type Statement interface {
 	tree.NodeFormatter
 	GetLineNo() int
+	SetLineNo(int)
 	GetStmtID() uint
 	plpgsqlStmt()
 	WalkStmt(StatementVisitor) Statement
@@ -26,19 +27,21 @@ type Statement interface {
 }
 
 type StatementImpl struct {
-	// TODO(drewk): figure out how to get line number from scanner.
 	LineNo int
 	/*
 	 * Unique statement ID in this function (starting at 1; 0 is invalid/not
 	 * set).  This can be used by a profiler as the index for an array of
 	 * per-statement metrics.
 	 */
-	// TODO(drewk): figure out how to get statement id from parser.
 	StmtID uint
 }
 
 func (s *StatementImpl) GetLineNo() int {
 	return s.LineNo
+}
+
+func (s *StatementImpl) SetLineNo(lineNo int) {
+	s.LineNo = lineNo
 }
 
 func (s *StatementImpl) GetStmtID() uint {
@@ -1358,6 +1361,75 @@ func (s *Null) PlpgSQLStatementTag() string {
 func (s *Null) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, _ := visitor.Visit(s)
 	return newStmt
+}
+
+// HumanReadableStmtTag converts internal PLpgSQL statement tags to
+// PostgreSQL-compatible human-readable names for error context reporting.
+func HumanReadableStmtTag(tag string) string {
+	switch tag {
+	case "stmt_assign":
+		return "assignment"
+	case "stmt_if":
+		return "IF"
+	case "stmt_if_else_if":
+		return "IF"
+	case "stmt_case":
+		return "CASE"
+	case "stmt_simple_loop":
+		return "LOOP"
+	case "stmt_while":
+		return "WHILE"
+	case "stmt_for_int_loop":
+		return "FOR with integer loop variable"
+	case "stmt_for_unknown":
+		return "FOR"
+	case "stmt_for_each_a":
+		return "FOREACH over array"
+	case "stmt_exit":
+		return "EXIT"
+	case "stmt_continue":
+		return "CONTINUE"
+	case "stmt_return":
+		return "RETURN"
+	case "stmt_return_next":
+		return "RETURN NEXT"
+	case "stmt_return_query":
+		return "RETURN QUERY"
+	case "stmt_raise":
+		return "RAISE"
+	case "stmt_assert":
+		return "ASSERT"
+	case "stmt_exec_sql":
+		return "SQL statement"
+	case "stmt_dyn_exec":
+		return "EXECUTE"
+	case "stmt_perform":
+		return "PERFORM"
+	case "stmt_call":
+		return "CALL"
+	case "stmt_do":
+		return "DO"
+	case "stmt_get_diag":
+		return "GET DIAGNOSTICS"
+	case "stmt_open":
+		return "OPEN"
+	case "stmt_fetch":
+		return "FETCH"
+	case "stmt_move":
+		return "MOVE"
+	case "stmt_close":
+		return "CLOSE"
+	case "stmt_null":
+		return "NULL"
+	case "stmt_block":
+		return "statement block"
+	case "stmt_commit":
+		return "COMMIT"
+	case "stmt_rollback":
+		return "ROLLBACK"
+	default:
+		return tag
+	}
 }
 
 // formatString is a helper function that prints "_" if FmtHideConstants is set,

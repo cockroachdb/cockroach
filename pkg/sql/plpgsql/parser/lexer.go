@@ -39,9 +39,16 @@ type lexer struct {
 	lastError error
 
 	parser plpgsqlParser
+
+	// lineOffset is the number of newlines that were stripped from the input
+	// before the first token. This is needed to produce correct 1-based line
+	// numbers relative to the original function body string.
+	lineOffset int
 }
 
-func (l *lexer) init(sql string, tokens []plpgsqlSymType, nakedIntType *types.T, p plpgsqlParser) {
+func (l *lexer) init(
+	sql string, tokens []plpgsqlSymType, nakedIntType *types.T, p plpgsqlParser, lineOffset int,
+) {
 	l.in = sql
 	l.tokens = tokens
 	l.lastPos = -1
@@ -51,6 +58,7 @@ func (l *lexer) init(sql string, tokens []plpgsqlSymType, nakedIntType *types.T,
 	l.lastError = nil
 	l.nakedIntType = nakedIntType
 	l.parser = p
+	l.lineOffset = lineOffset
 }
 
 // cleanup is used to avoid holding on to memory unnecessarily (for the cases
@@ -59,6 +67,19 @@ func (l *lexer) cleanup() {
 	l.tokens = nil
 	l.stmt = nil
 	l.lastError = nil
+}
+
+// lineFromPos converts a byte position (from plpgsqlSymType.pos) to a 1-based
+// line number by counting newlines in the source string. The lineOffset
+// accounts for newlines stripped from the input before the first token.
+func (l *lexer) lineFromPos(pos int32) int {
+	line := 1 + l.lineOffset
+	for i := 0; i < int(pos) && i < len(l.in); i++ {
+		if l.in[i] == '\n' {
+			line++
+		}
+	}
+	return line
 }
 
 // Lex lexes a token from input.

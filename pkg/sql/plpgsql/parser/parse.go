@@ -49,30 +49,38 @@ func (p *Parser) Parse(sql string) (statements.PLpgStatement, error) {
 	return p.parseWithDepth(1, sql, defaultNakedIntType)
 }
 
-func (p *Parser) scanFnBlock() (sql string, tokens []plpgsqlSymType, done bool) {
+func (p *Parser) scanFnBlock() (sql string, tokens []plpgsqlSymType, done bool, lineOffset int) {
 	var lval plpgsqlSymType
 	tokens = p.tokBuf[:0]
 
 	// Scan the first token.
 	p.scanner.Scan(&lval)
 	if lval.id == 0 {
-		return "", nil, true
+		return "", nil, true, 0
 	}
 
 	startPos := lval.pos
+	// Count newlines in the prefix that is being stripped, so that line numbers
+	// remain accurate relative to the original input.
+	prefix := p.scanner.In()[:startPos]
+	for i := 0; i < len(prefix); i++ {
+		if prefix[i] == '\n' {
+			lineOffset++
+		}
+	}
 	// We make the resulting token positions match the returned string.
 	lval.pos = 0
 	tokens = append(tokens, lval)
 	for {
 		if lval.id == ERROR {
-			return p.scanner.In()[startPos:], tokens, true
+			return p.scanner.In()[startPos:], tokens, true, lineOffset
 		}
 		// Reset the plpgsqlSymType struct before scanning.
 		lval = plpgsqlSymType{}
 		posBeforeScan := p.scanner.Pos()
 		p.scanner.Scan(&lval)
 		if lval.id == 0 {
-			return p.scanner.In()[startPos:posBeforeScan], tokens, (lval.id == 0)
+			return p.scanner.In()[startPos:posBeforeScan], tokens, (lval.id == 0), lineOffset
 		}
 		lval.pos -= startPos
 		tokens = append(tokens, lval)
@@ -84,8 +92,8 @@ func (p *Parser) parseWithDepth(
 ) (statements.PLpgStatement, error) {
 	p.scanner.Init(plpgsql)
 	defer p.scanner.Cleanup()
-	sql, tokens, done := p.scanFnBlock()
-	stmt, err := p.parse(depth+1, sql, tokens, nakedIntType)
+	sql, tokens, done, lineOffset := p.scanFnBlock()
+	stmt, err := p.parse(depth+1, sql, tokens, nakedIntType, lineOffset)
 	if err != nil {
 		return statements.PLpgStatement{}, err
 	}
@@ -97,9 +105,9 @@ func (p *Parser) parseWithDepth(
 
 // parse parses a statement from the given scanned tokens.
 func (p *Parser) parse(
-	depth int, sql string, tokens []plpgsqlSymType, nakedIntType *types.T,
+	depth int, sql string, tokens []plpgsqlSymType, nakedIntType *types.T, lineOffset int,
 ) (statements.PLpgStatement, error) {
-	p.lexer.init(sql, tokens, nakedIntType, &p.parserImpl)
+	p.lexer.init(sql, tokens, nakedIntType, &p.parserImpl, lineOffset)
 	defer p.lexer.cleanup()
 	if p.parserImpl.Parse(&p.lexer) != 0 {
 		if p.lexer.lastError == nil {
