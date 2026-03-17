@@ -62,5 +62,16 @@ cd:2
 d3:3
 .
 
+batch dups
+put e 1
+put e 2
+delete-range e f
+----
+
+iter dups
+seek e
+----
+.
+
 close-map dups
 ----

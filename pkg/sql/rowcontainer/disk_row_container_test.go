@@ -334,7 +334,7 @@ func TestDiskRowContainer(t *testing.T) {
 			addRowCalls := rng.Intn(numRows)
 			for i := 0; i < addRowCalls; i++ {
 				require.NoError(t, d.AddRow(ctx, rows[i]))
-				require.Equal(t, d.bufferedRows.NumPutsSinceFlush(), len(d.deDupCache))
+				require.Equal(t, d.bufferedRows.NumMutationsSinceFlush(), len(d.deDupCache))
 			}
 			// Repeatedly add the same set of rows.
 			for i := 0; i < 3; i++ {

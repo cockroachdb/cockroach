@@ -120,6 +120,19 @@ func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine
 					if err != nil {
 						return err.Error()
 					}
+				case "delete-range":
+					if len(parts) != 3 {
+						return "delete-range <start> <end>\n"
+					}
+					start := []byte(strings.TrimSpace(parts[1]))
+					end := []byte(strings.TrimSpace(parts[2]))
+					// Use "_" as a placeholder for nil/empty keys.
+					if parts[1] == "_" {
+						start = nil
+					}
+					if err := batch.DeleteRange(start, end); err != nil {
+						return err.Error()
+					}
 				default:
 					return fmt.Sprintf("unknown op: %s", parts[0])
 				}
@@ -204,6 +217,64 @@ func TestPebbleMultiMap(t *testing.T) {
 
 	runTestForEngine(ctx, t, datapathutils.TestDataPath(t, "diskmap_duplicates_pebble"), e)
 
+}
+
+func TestPebbleMapNumMutationsSinceFlush(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	e, _, err := newTempEngine(ctx, base.TempStorageConfig{
+		Path:     dir,
+		Settings: cluster.MakeClusterSettings(),
+	}, disk.NewWriteStatsManager(vfs.Default))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+
+	diskMap := newPebbleMap(e.db, false /* allowDuplicates */)
+	bw := diskMap.NewBatchWriter()
+	defer func() {
+		if err := bw.Close(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	if bw.NumMutationsSinceFlush() != 0 {
+		t.Fatalf("expected 0, got %d", bw.NumMutationsSinceFlush())
+	}
+	if err := bw.Put([]byte("a"), []byte("1")); err != nil {
+		t.Fatal(err)
+	}
+	if bw.NumMutationsSinceFlush() != 1 {
+		t.Fatalf("expected 1, got %d", bw.NumMutationsSinceFlush())
+	}
+	if err := bw.Put([]byte("b"), []byte("2")); err != nil {
+		t.Fatal(err)
+	}
+	if bw.NumMutationsSinceFlush() != 2 {
+		t.Fatalf("expected 2, got %d", bw.NumMutationsSinceFlush())
+	}
+	if err := bw.DeleteRange([]byte("a"), []byte("a\x00")); err != nil {
+		t.Fatal(err)
+	}
+	if bw.NumMutationsSinceFlush() != 3 {
+		t.Fatalf("expected 3, got %d", bw.NumMutationsSinceFlush())
+	}
+	if err := bw.Flush(); err != nil {
+		t.Fatal(err)
+	}
+	if bw.NumMutationsSinceFlush() != 0 {
+		t.Fatalf("expected 0, got %d", bw.NumMutationsSinceFlush())
+	}
+	if err := bw.DeleteRange([]byte("b"), []byte("b\x00")); err != nil {
+		t.Fatal(err)
+	}
+	if bw.NumMutationsSinceFlush() != 1 {
+		t.Fatalf("expected 1, got %d", bw.NumMutationsSinceFlush())
+	}
 }
 
 func TestPebbleMapClose(t *testing.T) {
