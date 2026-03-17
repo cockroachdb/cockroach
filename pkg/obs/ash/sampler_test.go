@@ -62,6 +62,9 @@ func TestSamplerTakeSample(t *testing.T) {
 	// Note(alyshan): This may change if we decide to move encoding
 	// out of the sampler and perform it at read time instead.
 	require.Equal(t, encodeStmtFingerprintIDToString(42), sample.WorkloadID)
+
+	// Default WorkloadType is "UNKNOWN" when not explicitly set.
+	require.Equal(t, "UNKNOWN", sample.WorkloadType)
 }
 
 func TestSamplerWorkloadIDCache(t *testing.T) {
@@ -125,6 +128,10 @@ func TestSamplerWorkloadIDCache(t *testing.T) {
 		// The encoded workload IDs must differ: hex vs decimal.
 		require.NotEqual(t, samples[0].WorkloadID, samples[1].WorkloadID,
 			"same numeric ID with different types should produce different encodings")
+
+		// Verify workload type strings are set correctly.
+		require.Equal(t, "STATEMENT", samples[0].WorkloadType)
+		require.Equal(t, "JOB", samples[1].WorkloadType)
 
 		// Verify both cache entries exist independently.
 		_, ok := s.workloadIDCache.Get(workloadCacheKey{

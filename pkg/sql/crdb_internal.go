@@ -9844,6 +9844,7 @@ CREATE TABLE crdb_internal.node_active_session_history (
   node_id          INT NOT NULL,
   tenant_id        INT NOT NULL,
   workload_id      STRING,
+  workload_type    STRING NOT NULL,
   app_name         STRING,
   work_event_type  STRING NOT NULL,
   work_event       STRING NOT NULL,
@@ -9868,11 +9869,16 @@ CREATE TABLE crdb_internal.node_active_session_history (
 			if err != nil {
 				return err
 			}
+			workloadType := sample.WorkloadType
+			if workloadType == "" {
+				workloadType = "UNKNOWN"
+			}
 			if err := addRow(
 				sampleTime,
 				tree.NewDInt(tree.DInt(sample.NodeID)),
 				tree.NewDInt(tree.DInt(sample.TenantID.ToUint64())),
 				tree.NewDString(sample.WorkloadID),
+				tree.NewDString(workloadType),
 				tree.NewDString(sample.AppName),
 				tree.NewDString(ash.WorkEventType(sample.WorkEventType).String()),
 				tree.NewDString(sample.WorkEvent),
@@ -9898,6 +9904,7 @@ CREATE TABLE crdb_internal.cluster_active_session_history (
   node_id          INT NOT NULL,
   tenant_id        INT NOT NULL,
   workload_id      STRING,
+  workload_type    STRING NOT NULL,
   app_name         STRING,
   work_event_type  STRING NOT NULL,
   work_event       STRING NOT NULL,
@@ -9922,11 +9929,16 @@ CREATE TABLE crdb_internal.cluster_active_session_history (
 			if err != nil {
 				return err
 			}
+			workloadType := sample.WorkloadType
+			if workloadType == "" {
+				workloadType = "UNKNOWN"
+			}
 			if err := addRow(
 				sampleTime,
 				tree.NewDInt(tree.DInt(sample.NodeID)),
 				tree.NewDInt(tree.DInt(sample.TenantID.ToUint64())),
 				tree.NewDString(sample.WorkloadID),
+				tree.NewDString(workloadType),
 				tree.NewDString(sample.AppName),
 				tree.NewDString(ash.WorkEventType(sample.WorkEventType).String()),
 				tree.NewDString(sample.WorkEvent),

@@ -1206,6 +1206,9 @@ message ASHSample {
   // AppName is the application name string. Set when the sample corresponds
   // to SQL execution.
   string app_name = 8;
+  // WorkloadType distinguishes the kind of workload (e.g., "STATEMENT",
+  // "JOB", "SYSTEM", "UNKNOWN").
+  string workload_type = 9;
 }
 
 // An error wrapper for ListActiveSessionHistory fan-out.

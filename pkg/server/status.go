@@ -3381,6 +3381,7 @@ func (s *statusServer) ListLocalActiveSessionHistory(
 			NodeID:        sample.NodeID,
 			TenantID:      sample.TenantID,
 			WorkloadID:    sample.WorkloadID,
+			WorkloadType:  sample.WorkloadType,
 			AppName:       sample.AppName,
 			WorkEventType: serverpb.WorkEventType(sample.WorkEventType),
 			WorkEvent:     sample.WorkEvent,

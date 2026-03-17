@@ -303,6 +303,7 @@ func (s *Sampler) takeSample(ctx context.Context) {
 			NodeID:        s.nodeID,
 			TenantID:      ps.state.TenantID,
 			WorkloadID:    ps.workloadIDStr,
+			WorkloadType:  ps.state.WorkloadInfo.WorkloadType.String(),
 			AppName:       ps.appName,
 			WorkEventType: ps.state.WorkEventType,
 			WorkEvent:     ps.state.WorkEvent,
