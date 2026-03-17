@@ -15,6 +15,12 @@ if [[ -z "${DRY_RUN:-}" ]] ; then
   dry_run=false
 fi
 
+# Check for GitHub token early, before any network or build operations.
+if [[ "$dry_run" == "false" ]] && [[ -z "${GH_TOKEN:-}" ]]; then
+  echo "ERROR: GH_TOKEN environment variable must be set"
+  exit 1
+fi
+
 # run git fetch in order to get all remote branches
 git fetch --tags -q origin
 
@@ -31,18 +37,18 @@ export PATH=$PWD/bin:$PATH
 # Build the release tool
 bazel build --config=crosslinux //pkg/cmd/release
 
-# Run the update-workflow-branches command and capture output
-echo "Running release update-workflow-branches command..."
-OUTPUT=$($(bazel info --config=crosslinux bazel-bin)/pkg/cmd/release/release_/release update-workflow-branches 2>&1)
-echo "$OUTPUT"
+RELEASE_BIN=$(bazel info --config=crosslinux bazel-bin)/pkg/cmd/release/release_/release
 
-# Extract the branch name from output (line like "Latest release branch: release-26.1")
-RELEASE_BRANCH=$(echo "$OUTPUT" | grep "Latest release branch:" | sed 's/Latest release branch: //')
+# Get the latest release branch name without modifying any files.
+RELEASE_BRANCH=$("$RELEASE_BIN" update-workflow-branches --print-branch)
 
 if [[ -z "$RELEASE_BRANCH" ]]; then
-  echo "ERROR: Could not determine release branch from command output"
+  echo "ERROR: Could not determine release branch"
   exit 1
 fi
+
+# Update the workflow file.
+"$RELEASE_BIN" update-workflow-branches
 
 # Check if any changes were made
 if git diff --quiet .github/workflows/update_releases.yaml; then
@@ -63,12 +69,6 @@ export GIT_AUTHOR_NAME="Justin Beaver"
 export GIT_COMMITTER_NAME="Justin Beaver"
 export GIT_AUTHOR_EMAIL="teamcity@cockroachlabs.com"
 export GIT_COMMITTER_EMAIL="teamcity@cockroachlabs.com"
-
-# Check for GitHub token
-if [[ -z "${GH_TOKEN:-}" ]]; then
-  echo "ERROR: GH_TOKEN environment variable must be set"
-  exit 1
-fi
 
 # Create a branch for the PR
 BRANCH_NAME="update-workflow-branches-$(date +%Y%m%d-%H%M%S)"
