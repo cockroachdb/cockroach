@@ -183,7 +183,7 @@ SELECT f_allcolsel_alias()
 statement ok
 ALTER TABLE t_twocol ADD COLUMN c INT DEFAULT 5;
 
-statement error pgcode 42P13 pq: return type mismatch in function declared to return t_twocol
+statement error pgcode 42P13 pq: return type mismatch in function declared to return public\.t_twocol
 SELECT f_unqualified_twocol()
 
 # Dropping the new column renders the function usable again.
