@@ -595,7 +595,7 @@ func newAuthPipe(c *conn, logAuthn bool, authOpt authOptions, systemIdentity str
 		log:         logAuthn,
 		connDetails: authOpt.connDetails,
 		authDetails: eventpb.CommonSessionDetails{
-			SystemIdentity: systemIdentity,
+			SystemIdentity: redact.Sprintf("%s", redact.HashString(systemIdentity)),
 			Transport:      authOpt.connType.String(),
 		},
 		ch:         make(chan []byte),
@@ -651,11 +651,11 @@ func (p *authPipe) SetAuthMethod(method redact.SafeString) {
 }
 
 func (p *authPipe) SetDbUser(dbUser username.SQLUsername) {
-	p.authDetails.User = dbUser.Normalized()
+	p.authDetails.User = redact.Sprintf("%s", redact.HashString(dbUser.Normalized()))
 }
 
 func (p *authPipe) SetSystemIdentity(systemIdentity string) {
-	p.authDetails.SystemIdentity = systemIdentity
+	p.authDetails.SystemIdentity = redact.Sprintf("%s", redact.HashString(systemIdentity))
 }
 
 func (p *authPipe) LogAuthOK(ctx context.Context) {
