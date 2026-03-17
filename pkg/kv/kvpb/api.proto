@@ -1853,12 +1853,13 @@ message ExportRequest {
       (gogoproto.customname) = "ResumeKeyTS"
   ];
 
-  // MVCCFilter determines if request exports all data or latest data as of
-  // Timestamp specified in request header. If all data is requested StartTime
-  // is used as a lower bound and header Timestamp as higher bound or exported
-  // entries.
+  // MVCCFilter determines if the request exports all revisions of a key or
+  // only the latest value as of the Timestamp specified in request header.
   MVCCFilter mvcc_filter = 4 [(gogoproto.customname) = "MVCCFilter"];
-  // StartTime is only used when MVCCFilter is set to All.
+  // StartTime specifies the start of the time range (StartTime, Timestamp]
+  // from which keys are exported. NB: When non-empty with MVCCFilter_Latest,
+  // point key tombstones are included in the export so that deletions
+  // that occurred in the interval are preserved.
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
 
   // Split large rows in the middle of key sequence. This option will allow
