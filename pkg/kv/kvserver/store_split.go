@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -183,11 +184,12 @@ func splitPreApply(
 	//
 	// TODO(#152847): remove this workaround when there are no historical
 	// proposals with RaftTruncatedState, e.g. after a below-raft migration.
-	if ts, err := rsl.LoadRaftTruncatedState(ctx, stateRW); err != nil {
+	silentStateRW := spanset.DisableForbiddenSpanAssertions(stateRW)
+	if ts, err := rsl.LoadRaftTruncatedState(ctx, silentStateRW); err != nil {
 		log.KvExec.Fatalf(ctx, "cannot load RaftTruncatedState: %v", err)
 	} else if ts == (kvserverpb.RaftTruncatedState{}) {
 		// Common case. Do nothing.
-	} else if err := rsl.ClearRaftTruncatedState(stateRW); err != nil {
+	} else if err := rsl.ClearRaftTruncatedState(silentStateRW); err != nil {
 		log.KvExec.Fatalf(ctx, "cannot clear RaftTruncatedState: %v", err)
 	}
 	// Similar to RaftTruncatedState above, historical split proposals may write
@@ -199,14 +201,14 @@ func splitPreApply(
 	// proposals with LastReplicaGCTimestamp, e.g. after a below-raft migration.
 	var lhsLastReplicaGC hlc.Timestamp
 	if found, err := storage.MVCCGetProto(
-		ctx, stateRW,
+		ctx, silentStateRW,
 		rsl.RangeLastReplicaGCTimestampKey(), hlc.Timestamp{},
 		&lhsLastReplicaGC, storage.MVCCGetOptions{},
 	); err != nil {
 		log.KvExec.Fatalf(ctx, "cannot load LastReplicaGCTimestamp: %v", err)
 	} else if !found {
 		// Common case. Do nothing.
-	} else if err := stateRW.ClearUnversioned(
+	} else if err := silentStateRW.ClearUnversioned(
 		rsl.RangeLastReplicaGCTimestampKey(), storage.ClearOptions{},
 	); err != nil {
 		log.KvExec.Fatalf(ctx, "cannot clear LastReplicaGCTimestamp: %v", err)
