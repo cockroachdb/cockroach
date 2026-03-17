@@ -54,31 +54,27 @@ replica_moves#2: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  
 hash: df2fd03851620873
 ==========================
 mma-only:
-qps#1: last:  [s1=1993, s2=0, s3=0, s4=1002, s5=1003, s6=1002, s7=2004] (stddev=755.37, mean=1000.57, sum=7004)
-qps#1: thrash_pct: [s1=6%, s2=4%, s3=0%, s4=2%, s5=2%, s6=3%, s7=2%]  (sum=20%)
-replica_moves#1: last:  [s1=3, s2=3, s3=0, s4=1, s5=1, s6=1, s7=0] (stddev=1.16, mean=1.29, sum=9)
-replica_moves#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
-qps#2: last:  [s1=1998, s2=0, s3=0, s4=0, s5=1997, s6=3000, s7=0] (stddev=1194.63, mean=999.29, sum=6995)
-qps#2: thrash_pct: [s1=5%, s2=4%, s3=0%, s4=0%, s5=3%, s6=7%, s7=0%]  (sum=18%)
-replica_moves#2: last:  [s1=4, s2=3, s3=0, s4=0, s5=1, s6=1, s7=0] (stddev=1.48, mean=1.29, sum=9)
-replica_moves#2: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
-hash: 5e91ab9d617def63
+qps#1: last:  [s1=3998, s2=1998, s3=0, s4=0, s5=0, s6=1002, s7=0] (stddev=1413.41, mean=999.71, sum=6998)
+qps#1: thrash_pct: [s1=5%, s2=6%, s3=0%, s4=0%, s5=0%, s6=4%, s7=0%]  (sum=15%)
+qps#2: last:  [s1=3997, s2=2000, s3=0, s4=0, s5=0, s6=1002, s7=0] (stddev=1413.30, mean=999.86, sum=6999)
+qps#2: thrash_pct: [s1=5%, s2=4%, s3=0%, s4=0%, s5=0%, s6=4%, s7=0%]  (sum=13%)
+hash: 5f746caa968e0ee
 failed assertion sample 1
   balance stat=qps threshold=(≤1.15) ticks=6
-	max/mean=2.00 tick=0
-	max/mean=2.00 tick=1
-	max/mean=2.00 tick=2
-	max/mean=2.00 tick=3
-	max/mean=2.00 tick=4
-	max/mean=2.00 tick=5
+	max/mean=4.00 tick=0
+	max/mean=4.00 tick=1
+	max/mean=4.00 tick=2
+	max/mean=4.00 tick=3
+	max/mean=4.00 tick=4
+	max/mean=4.00 tick=5
 failed assertion sample 2
   balance stat=qps threshold=(≤1.15) ticks=6
-	max/mean=3.00 tick=0
-	max/mean=3.00 tick=1
-	max/mean=3.00 tick=2
-	max/mean=3.00 tick=3
-	max/mean=3.00 tick=4
-	max/mean=3.00 tick=5
+	max/mean=4.00 tick=0
+	max/mean=4.00 tick=1
+	max/mean=4.00 tick=2
+	max/mean=4.00 tick=3
+	max/mean=4.00 tick=4
+	max/mean=4.00 tick=5
 ==========================
 Cluster Set Up
 	n1(AU_EAST,AU_EAST_1,8vcpu): {s1:(256GiB)}
@@ -127,29 +123,25 @@ replica_moves#2: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  
 hash: 1bd16e771629608b
 ==========================
 mma-only:
-qps#1: last:  [s1=2992, s2=0, s3=0, s4=999, s5=1002, s6=1002, s7=1005] (stddev=923.36, mean=1000.00, sum=7000)
-qps#1: thrash_pct: [s1=61%, s2=4%, s3=0%, s4=3%, s5=3%, s6=3%, s7=5%]  (sum=79%)
-replica_moves#1: last:  [s1=4, s2=3, s3=0, s4=3, s5=3, s6=3, s7=2] (stddev=1.18, mean=2.57, sum=18)
-replica_moves#1: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
-qps#2: last:  [s1=2000, s2=997, s3=0, s4=0, s5=1995, s6=2004, s7=0] (stddev=925.67, mean=999.43, sum=6996)
-qps#2: thrash_pct: [s1=6%, s2=59%, s3=0%, s4=0%, s5=4%, s6=59%, s7=0%]  (sum=128%)
-replica_moves#2: last:  [s1=4, s2=3, s3=0, s4=0, s5=1, s6=2, s7=0] (stddev=1.50, mean=1.43, sum=10)
-replica_moves#2: thrash_pct: [s1=0%, s2=0%, s3=0%, s4=0%, s5=0%, s6=0%, s7=0%]  (sum=0%)
-hash: 32abf04bba184f2e
+qps#1: last:  [s1=4002, s2=1995, s3=0, s4=0, s5=0, s6=1002, s7=0] (stddev=1414.32, mean=999.86, sum=6999)
+qps#1: thrash_pct: [s1=6%, s2=6%, s3=0%, s4=0%, s5=0%, s6=4%, s7=0%]  (sum=16%)
+qps#2: last:  [s1=3996, s2=2000, s3=0, s4=0, s5=0, s6=1002, s7=0] (stddev=1413.00, mean=999.71, sum=6998)
+qps#2: thrash_pct: [s1=6%, s2=5%, s3=0%, s4=0%, s5=0%, s6=4%, s7=0%]  (sum=15%)
+hash: d714a7f83140a093
 failed assertion sample 1
   balance stat=qps threshold=(≤1.15) ticks=6
-	max/mean=2.99 tick=0
-	max/mean=2.99 tick=1
-	max/mean=2.99 tick=2
-	max/mean=2.99 tick=3
-	max/mean=2.99 tick=4
-	max/mean=2.99 tick=5
+	max/mean=4.00 tick=0
+	max/mean=4.00 tick=1
+	max/mean=4.00 tick=2
+	max/mean=4.00 tick=3
+	max/mean=4.00 tick=4
+	max/mean=4.00 tick=5
 failed assertion sample 2
   balance stat=qps threshold=(≤1.15) ticks=6
-	max/mean=2.01 tick=0
-	max/mean=2.01 tick=1
-	max/mean=2.01 tick=2
-	max/mean=2.01 tick=3
-	max/mean=2.01 tick=4
-	max/mean=2.01 tick=5
+	max/mean=4.00 tick=0
+	max/mean=4.00 tick=1
+	max/mean=4.00 tick=2
+	max/mean=4.00 tick=3
+	max/mean=4.00 tick=4
+	max/mean=4.00 tick=5
 ==========================
