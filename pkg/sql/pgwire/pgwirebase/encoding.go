@@ -980,7 +980,11 @@ func DecodeDatum(
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
-		return tree.NewDACLItem(bs), nil
+		d, err := tree.NewDACLItem(bs)
+		if err != nil {
+			return nil, err
+		}
+		return d, nil
 	case oidext.T_citext:
 		if err := validateStringBytes(b); err != nil {
 			return nil, err

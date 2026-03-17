@@ -132,6 +132,18 @@ SELECT makeaclitem(0::oid, 'root'::regrole, 'EXECUTE', false)
 ----
 =X/root
 
+# SET privilege produces 's' character.
+query T
+SELECT makeaclitem(0::oid, 'root'::regrole, 'SET', false)
+----
+=s/root
+
+# ALTER SYSTEM privilege produces 'A' character.
+query T
+SELECT makeaclitem(0::oid, 'root'::regrole, 'ALTER SYSTEM', false)
+----
+=A/root
+
 # Error on invalid privilege.
 statement error unrecognized privilege type: "BOGUS"
 SELECT makeaclitem('root'::regrole, 'admin'::regrole, 'BOGUS', false)
@@ -182,6 +194,13 @@ SELECT acldefault('c'::"char", 'root'::regrole)
 ----
 {}
 
+# Parameter defaults: owner gets sA (SET + ALTER SYSTEM).
+# Matches PostgreSQL behavior.
+query T
+SELECT acldefault('p'::"char", 'root'::regrole)
+----
+{root=sA/root}
+
 # Error on invalid type char.
 statement error unrecognized object type abbreviation: "Z"
 SELECT acldefault('Z'::"char", 'root'::regrole)
@@ -207,6 +226,25 @@ root     PUBLIC   TEMPORARY       false
 root     root     CONNECT         false
 root     root     CREATE          false
 root     root     TEMPORARY       false
+
+# Round-trip for PARAMETER type: aclexplode(acldefault('p', ...)) should return
+# SET and ALTER SYSTEM privileges. This verifies no silent data loss occurs
+# (previously aclexplode returned 0 rows because 's' and 'A' were missing from
+# ACLCharToPrivName).
+query TTTB colnames
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  COALESCE(e.rolname, 'PUBLIC') AS grantee,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(acldefault('p'::"char", 'root'::regrole)) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+LEFT JOIN pg_roles e ON e.oid = a.grantee
+ORDER BY a.privilege_type
+----
+grantor  grantee  privilege_type  is_grantable
+root     root     ALTER SYSTEM    false
+root     root     SET             false
 
 subtest end
 

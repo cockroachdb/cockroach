@@ -270,7 +270,7 @@ func (a *DatumAlloc) NewDRefCursor(v DString) Datum {
 }
 
 // NewDACLItem allocates a DACLItem.
-func (a *DatumAlloc) NewDACLItem(v DString) Datum {
+func (a *DatumAlloc) NewDACLItem(v DString) (Datum, error) {
 	return NewDACLItemFromDString(a.NewDString(v))
 }
 

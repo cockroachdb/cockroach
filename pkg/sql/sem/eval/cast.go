@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -517,10 +516,7 @@ func performCastWithoutPrecisionTruncation(
 				return tree.NewDName(s), nil
 			}
 			if t.Oid() == oidext.T_aclitem {
-				if err := privilege.ValidateACLItemString(s); err != nil {
-					return nil, err
-				}
-				return tree.NewDACLItem(s), nil
+				return tree.NewDACLItem(s)
 			}
 
 			// bpchar types truncate trailing whitespace.

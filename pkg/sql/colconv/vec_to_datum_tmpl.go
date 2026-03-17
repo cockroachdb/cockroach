@@ -436,7 +436,10 @@ func vecToDatum(
 						continue
 					}
 				}
-				v := da.NewDACLItem(tree.DString(bytes.Get(srcIdx)))
+				v, err := da.NewDACLItem(tree.DString(bytes.Get(srcIdx)))
+				if err != nil {
+					colexecerror.ExpectedError(err)
+				}
 				if !hasSel || deselect {
 					//gcassert:bce
 				}

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -48,6 +49,7 @@ var (
 	_ = lex.DecodeRawBytesToByteArrayAuto
 	_ = uuid.FromBytes
 	_ = oid.T_name
+	_ = oidext.T_aclitem
 	_ = util.TruncateString
 	_ = pgcode.Syntax
 	_ = pgdate.ParseTimestamp
@@ -2132,7 +2134,7 @@ func (c *castBoolStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 							var r []byte
 
 							r = []byte(strconv.FormatBool(v))
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -2178,7 +2180,7 @@ func (c *castBoolStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 							var r []byte
 
 							r = []byte(strconv.FormatBool(v))
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -2224,7 +2226,7 @@ func (c *castBoolStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 							var r []byte
 
 							r = []byte(strconv.FormatBool(v))
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -2270,7 +2272,7 @@ func (c *castBoolStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 							var r []byte
 
 							r = []byte(strconv.FormatBool(v))
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -2353,7 +2355,7 @@ func (c *castBytesStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata
 							_format := evalCtx.SessionData().DataConversionConfig.BytesEncodeFormat
 							r = []byte(lex.EncodeByteArrayToRawBytes(string(v), _format, false /* skipHexPrefix */))
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -2399,7 +2401,7 @@ func (c *castBytesStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata
 							_format := evalCtx.SessionData().DataConversionConfig.BytesEncodeFormat
 							r = []byte(lex.EncodeByteArrayToRawBytes(string(v), _format, false /* skipHexPrefix */))
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -2447,7 +2449,7 @@ func (c *castBytesStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata
 							_format := evalCtx.SessionData().DataConversionConfig.BytesEncodeFormat
 							r = []byte(lex.EncodeByteArrayToRawBytes(string(v), _format, false /* skipHexPrefix */))
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -2493,7 +2495,7 @@ func (c *castBytesStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata
 							_format := evalCtx.SessionData().DataConversionConfig.BytesEncodeFormat
 							r = []byte(lex.EncodeByteArrayToRawBytes(string(v), _format, false /* skipHexPrefix */))
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -3460,7 +3462,7 @@ func (c *castDateStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 							_date.Format(buf)
 							r = []byte(buf.String())
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -3510,7 +3512,7 @@ func (c *castDateStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 							_date.Format(buf)
 							r = []byte(buf.String())
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -3560,7 +3562,7 @@ func (c *castDateStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 							_date.Format(buf)
 							r = []byte(buf.String())
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -3610,7 +3612,7 @@ func (c *castDateStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 							_date.Format(buf)
 							r = []byte(buf.String())
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -4733,7 +4735,7 @@ func (c *castDecimalStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetada
 							var r []byte
 
 							r = []byte(v.String())
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -4779,7 +4781,7 @@ func (c *castDecimalStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetada
 							var r []byte
 
 							r = []byte(v.String())
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -4825,7 +4827,7 @@ func (c *castDecimalStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetada
 							var r []byte
 
 							r = []byte(v.String())
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -4871,7 +4873,7 @@ func (c *castDecimalStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetada
 							var r []byte
 
 							r = []byte(v.String())
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -4958,7 +4960,7 @@ func (c *castEnumStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 							}
 							r = []byte(logical)
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -5007,7 +5009,7 @@ func (c *castEnumStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 							}
 							r = []byte(logical)
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -5058,7 +5060,7 @@ func (c *castEnumStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 							}
 							r = []byte(logical)
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -5107,7 +5109,7 @@ func (c *castEnumStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 							}
 							r = []byte(logical)
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -5945,7 +5947,7 @@ func (c *castFloatStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata
 							dcc := evalCtx.SessionData().DataConversionConfig
 							r = tree.PgwireFormatFloat(nil /* buf */, v, dcc, types.Float)
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -5993,7 +5995,7 @@ func (c *castFloatStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata
 							dcc := evalCtx.SessionData().DataConversionConfig
 							r = tree.PgwireFormatFloat(nil /* buf */, v, dcc, types.Float)
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -6041,7 +6043,7 @@ func (c *castFloatStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata
 							dcc := evalCtx.SessionData().DataConversionConfig
 							r = tree.PgwireFormatFloat(nil /* buf */, v, dcc, types.Float)
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -6089,7 +6091,7 @@ func (c *castFloatStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata
 							dcc := evalCtx.SessionData().DataConversionConfig
 							r = tree.PgwireFormatFloat(nil /* buf */, v, dcc, types.Float)
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -6878,7 +6880,7 @@ func (c *castInt2StringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 								r = []byte(strconv.FormatInt(int64(v), 10))
 							}
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -6937,7 +6939,7 @@ func (c *castInt2StringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 								r = []byte(strconv.FormatInt(int64(v), 10))
 							}
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -6996,7 +6998,7 @@ func (c *castInt2StringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 								r = []byte(strconv.FormatInt(int64(v), 10))
 							}
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -7055,7 +7057,7 @@ func (c *castInt2StringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 								r = []byte(strconv.FormatInt(int64(v), 10))
 							}
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -7868,7 +7870,7 @@ func (c *castInt4StringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 								r = []byte(strconv.FormatInt(int64(v), 10))
 							}
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -7927,7 +7929,7 @@ func (c *castInt4StringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 								r = []byte(strconv.FormatInt(int64(v), 10))
 							}
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -7986,7 +7988,7 @@ func (c *castInt4StringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 								r = []byte(strconv.FormatInt(int64(v), 10))
 							}
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -8045,7 +8047,7 @@ func (c *castInt4StringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 								r = []byte(strconv.FormatInt(int64(v), 10))
 							}
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -8882,7 +8884,7 @@ func (c *castIntStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) 
 								r = []byte(strconv.FormatInt(int64(v), 10))
 							}
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -8941,7 +8943,7 @@ func (c *castIntStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) 
 								r = []byte(strconv.FormatInt(int64(v), 10))
 							}
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -9000,7 +9002,7 @@ func (c *castIntStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) 
 								r = []byte(strconv.FormatInt(int64(v), 10))
 							}
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -9059,7 +9061,7 @@ func (c *castIntStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) 
 								r = []byte(strconv.FormatInt(int64(v), 10))
 							}
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -9144,7 +9146,7 @@ func (c *castIntervalStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetad
 							v.FormatWithStyle(buf, dcc.IntervalStyle)
 							r = []byte(buf.String())
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -9194,7 +9196,7 @@ func (c *castIntervalStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetad
 							v.FormatWithStyle(buf, dcc.IntervalStyle)
 							r = []byte(buf.String())
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -9244,7 +9246,7 @@ func (c *castIntervalStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetad
 							v.FormatWithStyle(buf, dcc.IntervalStyle)
 							r = []byte(buf.String())
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -9294,7 +9296,7 @@ func (c *castIntervalStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetad
 							v.FormatWithStyle(buf, dcc.IntervalStyle)
 							r = []byte(buf.String())
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -9375,7 +9377,7 @@ func (c *castJsonbStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata
 							var r []byte
 
 							r = []byte(v.String())
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -9419,7 +9421,7 @@ func (c *castJsonbStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata
 							var r []byte
 
 							r = []byte(v.String())
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -9465,7 +9467,7 @@ func (c *castJsonbStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata
 							var r []byte
 
 							r = []byte(v.String())
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -9509,7 +9511,7 @@ func (c *castJsonbStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata
 							var r []byte
 
 							r = []byte(v.String())
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -11419,7 +11421,7 @@ func (c *castStringStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadat
 							var r []byte
 
 							r = v
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -11463,7 +11465,7 @@ func (c *castStringStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadat
 							var r []byte
 
 							r = v
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -11509,7 +11511,7 @@ func (c *castStringStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadat
 							var r []byte
 
 							r = v
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -11553,7 +11555,7 @@ func (c *castStringStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadat
 							var r []byte
 
 							r = v
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -12147,7 +12149,7 @@ func (c *castTimestampStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMeta
 							var r []byte
 
 							r = tree.PGWireFormatTimestamp(v, nil, r)
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -12193,7 +12195,7 @@ func (c *castTimestampStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMeta
 							var r []byte
 
 							r = tree.PGWireFormatTimestamp(v, nil, r)
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -12239,7 +12241,7 @@ func (c *castTimestampStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMeta
 							var r []byte
 
 							r = tree.PGWireFormatTimestamp(v, nil, r)
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -12285,7 +12287,7 @@ func (c *castTimestampStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMeta
 							var r []byte
 
 							r = tree.PGWireFormatTimestamp(v, nil, r)
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -12375,7 +12377,7 @@ func (c *castTimestamptzStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMe
 
 							r = tree.PGWireFormatTimestamp(_t, evalCtx.GetLocation(), r)
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -12430,7 +12432,7 @@ func (c *castTimestamptzStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMe
 
 							r = tree.PGWireFormatTimestamp(_t, evalCtx.GetLocation(), r)
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -12485,7 +12487,7 @@ func (c *castTimestamptzStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMe
 
 							r = tree.PGWireFormatTimestamp(_t, evalCtx.GetLocation(), r)
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -12540,7 +12542,7 @@ func (c *castTimestamptzStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMe
 
 							r = tree.PGWireFormatTimestamp(_t, evalCtx.GetLocation(), r)
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -12626,7 +12628,7 @@ func (c *castUuidStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 							}
 							r = []byte(_uuid.String())
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -12675,7 +12677,7 @@ func (c *castUuidStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 							}
 							r = []byte(_uuid.String())
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -12726,7 +12728,7 @@ func (c *castUuidStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 							}
 							r = []byte(_uuid.String())
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
@@ -12775,7 +12777,7 @@ func (c *castUuidStringOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 							}
 							r = []byte(_uuid.String())
 
-							if toType.Oid() != oid.T_name {
+							if toType.Oid() != oid.T_name && toType.Oid() != oidext.T_aclitem {
 								// bpchar types truncate trailing whitespace.
 								if toType.Oid() == oid.T_bpchar {
 									r = bytes.TrimRight(r, " ")
