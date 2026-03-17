@@ -22,7 +22,12 @@ var redactNamesInSQLStatementLog = settings.RegisterBoolSetting(
 func FormatAstAsRedactableString(
 	statement Statement, annotations *Annotations, sv *settings.Values,
 ) redact.RedactableString {
-	fs := FmtSimple | FmtAlwaysQualifyTableNames | FmtMarkRedactionNode
+	fs := FmtSimple | FmtMarkRedactionNode
+	// Only qualify table names when annotations are available, since
+	// qualification requires annotation lookups that panic on nil.
+	if annotations != nil {
+		fs = fs | FmtAlwaysQualifyTableNames
+	}
 	if !redactNamesInSQLStatementLog.Get(sv) {
 		fs = fs | FmtOmitNameRedaction
 	}
