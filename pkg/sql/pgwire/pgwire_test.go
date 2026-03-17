@@ -244,6 +244,149 @@ func TestPGUnwrapError(t *testing.T) {
 	}
 }
 
+// TestPLpgSQLErrorContext verifies that errors from PLpgSQL routines include
+// the CONTEXT field with function name, line number, and statement type.
+func TestPLpgSQLErrorContext(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	// Test RAISE EXCEPTION in a DO block.
+	// The RAISE is on line 3: line 1 is empty (leading newline stripped),
+	// line 2 is BEGIN, line 3 is RAISE EXCEPTION.
+	_, err := db.Exec(`
+DO $$
+BEGIN
+  RAISE EXCEPTION 'test error';
+END;
+$$;
+`)
+	require.Error(t, err)
+
+	var pqErr *pq.Error
+	require.True(t, errors.As(err, &pqErr), "expected pq.Error, got %T: %v", err, err)
+	require.Equal(t, pq.ErrorCode(pgcode.RaiseException.String()), pqErr.Code)
+	require.Equal(t, "test error", pqErr.Message)
+
+	// The CONTEXT (Where) field should include PLpgSQL source context.
+	require.Equal(t, "PL/pgSQL function inline_code_block line 3 at RAISE", pqErr.Where)
+
+	// Test named function with RAISE EXCEPTION.
+	t.Run("named_function_raise", func(t *testing.T) {
+		_, err := db.Exec(`
+CREATE FUNCTION test_check_positive(x INT) RETURNS INT AS $$
+BEGIN
+  IF x <= 0 THEN
+    RAISE EXCEPTION 'value must be positive, got %', x;
+  END IF;
+  RETURN x;
+END;
+$$ LANGUAGE plpgsql;
+`)
+		require.NoError(t, err)
+		defer func() { _, _ = db.Exec(`DROP FUNCTION IF EXISTS test_check_positive`) }()
+
+		_, err = db.Exec(`SELECT test_check_positive(-5)`)
+		require.Error(t, err)
+
+		var pqErr *pq.Error
+		require.True(t, errors.As(err, &pqErr))
+		require.Equal(t, "value must be positive, got -5", pqErr.Message)
+		require.Equal(t, "PL/pgSQL function test_check_positive line 3 at RAISE", pqErr.Where)
+	})
+
+	// Test named function with SQL constraint error.
+	t.Run("named_function_constraint_error", func(t *testing.T) {
+		_, err := db.Exec(`CREATE TABLE test_accounts (id INT PRIMARY KEY, balance INT NOT NULL CHECK (balance >= 0))`)
+		require.NoError(t, err)
+		defer func() { _, _ = db.Exec(`DROP TABLE IF EXISTS test_accounts`) }()
+
+		_, err = db.Exec(`INSERT INTO test_accounts VALUES (1, 100)`)
+		require.NoError(t, err)
+
+		_, err = db.Exec(`
+CREATE FUNCTION test_withdraw(acct_id INT, amount INT) RETURNS VOID AS $$
+DECLARE
+  current_balance INT;
+BEGIN
+  SELECT balance INTO current_balance FROM test_accounts WHERE id = acct_id;
+  UPDATE test_accounts SET balance = balance - amount WHERE id = acct_id;
+END;
+$$ LANGUAGE plpgsql;
+`)
+		require.NoError(t, err)
+		defer func() { _, _ = db.Exec(`DROP FUNCTION IF EXISTS test_withdraw`) }()
+
+		_, err = db.Exec(`SELECT test_withdraw(1, 999)`)
+		require.Error(t, err)
+
+		var pqErr *pq.Error
+		require.True(t, errors.As(err, &pqErr))
+		require.Equal(t, pq.ErrorCode(pgcode.CheckViolation.String()), pqErr.Code)
+		require.Equal(t, "PL/pgSQL function test_withdraw line 5 at SQL statement", pqErr.Where)
+	})
+
+	// Test named procedure called via CALL.
+	t.Run("named_procedure_call", func(t *testing.T) {
+		_, err := db.Exec(`
+CREATE PROCEDURE test_validate_name(name TEXT) AS $$
+BEGIN
+  IF name IS NULL OR length(name) = 0 THEN
+    RAISE EXCEPTION 'name cannot be empty';
+  END IF;
+END;
+$$ LANGUAGE plpgsql;
+`)
+		require.NoError(t, err)
+		defer func() { _, _ = db.Exec(`DROP PROCEDURE IF EXISTS test_validate_name`) }()
+
+		_, err = db.Exec(`CALL test_validate_name('')`)
+		require.Error(t, err)
+
+		var pqErr *pq.Error
+		require.True(t, errors.As(err, &pqErr))
+		require.Equal(t, "name cannot be empty", pqErr.Message)
+		require.Equal(t, "PL/pgSQL function test_validate_name line 3 at RAISE", pqErr.Where)
+	})
+
+	// Test nested function call: outer_fn calls inner_fn which errors.
+	t.Run("nested_function_call", func(t *testing.T) {
+		_, err := db.Exec(`
+CREATE FUNCTION test_inner_fn(x INT) RETURNS INT AS $$
+BEGIN
+  RAISE EXCEPTION 'inner error at %', x;
+  RETURN x;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE FUNCTION test_outer_fn(x INT) RETURNS INT AS $$
+DECLARE
+  result INT;
+BEGIN
+  result := test_inner_fn(x);
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql;
+`)
+		require.NoError(t, err)
+		defer func() {
+			_, _ = db.Exec(`DROP FUNCTION IF EXISTS test_outer_fn`)
+			_, _ = db.Exec(`DROP FUNCTION IF EXISTS test_inner_fn`)
+		}()
+
+		_, err = db.Exec(`SELECT test_outer_fn(42)`)
+		require.Error(t, err)
+
+		var pqErr *pq.Error
+		require.True(t, errors.As(err, &pqErr))
+		require.Equal(t, "inner error at 42", pqErr.Message)
+		// The context should point to the innermost function where the error originated.
+		require.Contains(t, pqErr.Where, "PL/pgSQL function test_inner_fn line 2 at RAISE")
+	})
+}
+
 func TestPGPrepareFail(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

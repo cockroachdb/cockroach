@@ -38,6 +38,7 @@ func Flatten(err error) *Error {
 		Message:        err.Error(),
 		Severity:       GetSeverity(err),
 		ConstraintName: GetConstraintName(err),
+		Context:        GetPLpgSQLContext(err),
 	}
 
 	// Populate the source field if available.

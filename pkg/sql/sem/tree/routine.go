@@ -168,6 +168,27 @@ type RoutineExpr struct {
 	// result of the *first* body statement. It may be unset. Only one of this or
 	// CursorDeclaration may be set.
 	FirstStmtResultWriter RoutineResultWriter
+
+	// PLpgSQLCtx, if set, contains the PLpgSQL source context (function name,
+	// line number, statement type) for error reporting. This allows runtime
+	// errors to include PostgreSQL-compatible CONTEXT information.
+	PLpgSQLCtx *PLpgSQLErrorContext
+}
+
+// PLpgSQLErrorContext holds PLpgSQL source context information for error
+// reporting. It is set during compilation and propagated through execution so
+// that runtime errors can report the originating PLpgSQL source location.
+type PLpgSQLErrorContext struct {
+	// FuncName is the name of the PLpgSQL function or "inline_code_block" for
+	// DO blocks.
+	FuncName string
+
+	// LineNo is the 1-based line number of the PLpgSQL statement.
+	LineNo int
+
+	// StmtTag is a human-readable description of the statement type, e.g.
+	// "assignment", "IF", "SQL statement".
+	StmtTag string
 }
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
@@ -188,6 +209,7 @@ func NewTypedRoutineExpr(
 	blockState *BlockState,
 	cursorDeclaration *RoutineOpenCursor,
 	firstStmtResultWriter RoutineResultWriter,
+	plpgsqlCtx *PLpgSQLErrorContext,
 ) *RoutineExpr {
 	return &RoutineExpr{
 		Args:                  args,
@@ -206,6 +228,7 @@ func NewTypedRoutineExpr(
 		BlockState:            blockState,
 		CursorDeclaration:     cursorDeclaration,
 		FirstStmtResultWriter: firstStmtResultWriter,
+		PLpgSQLCtx:            plpgsqlCtx,
 	}
 }
 

@@ -37,30 +37,38 @@ type Parser struct {
 	tokBuf     [8]plpgsqlSymType
 }
 
-func (p *Parser) scanFnBlock() (sql string, tokens []plpgsqlSymType, done bool) {
+func (p *Parser) scanFnBlock() (sql string, tokens []plpgsqlSymType, done bool, lineOffset int) {
 	var lval plpgsqlSymType
 	tokens = p.tokBuf[:0]
 
 	// Scan the first token.
 	p.scanner.Scan(&lval)
 	if lval.id == 0 {
-		return "", nil, true
+		return "", nil, true, 0
 	}
 
 	startPos := lval.pos
+	// Count newlines in the prefix that is being stripped, so that line numbers
+	// remain accurate relative to the original input.
+	prefix := p.scanner.In()[:startPos]
+	for i := 0; i < len(prefix); i++ {
+		if prefix[i] == '\n' {
+			lineOffset++
+		}
+	}
 	// We make the resulting token positions match the returned string.
 	lval.pos = 0
 	tokens = append(tokens, lval)
 	for {
 		if lval.id == ERROR {
-			return p.scanner.In()[startPos:], tokens, true
+			return p.scanner.In()[startPos:], tokens, true, lineOffset
 		}
 		// Reset the plpgsqlSymType struct before scanning.
 		lval = plpgsqlSymType{}
 		posBeforeScan := p.scanner.Pos()
 		p.scanner.Scan(&lval)
 		if lval.id == 0 {
-			return p.scanner.In()[startPos:posBeforeScan], tokens, (lval.id == 0)
+			return p.scanner.In()[startPos:posBeforeScan], tokens, (lval.id == 0), lineOffset
 		}
 		lval.pos -= startPos
 		tokens = append(tokens, lval)
@@ -68,8 +76,10 @@ func (p *Parser) scanFnBlock() (sql string, tokens []plpgsqlSymType, done bool) 
 }
 
 // parse parses a statement from the given scanned tokens.
-func (p *Parser) parse(sql string, tokens []plpgsqlSymType) (statements.PLpgStatement, error) {
-	p.lexer.init(sql, tokens, &p.parserImpl)
+func (p *Parser) parse(
+	sql string, tokens []plpgsqlSymType, lineOffset int,
+) (statements.PLpgStatement, error) {
+	p.lexer.init(sql, tokens, &p.parserImpl, lineOffset)
 	defer p.lexer.cleanup()
 	if p.parserImpl.Parse(&p.lexer) != 0 {
 		if p.lexer.lastError == nil {
@@ -115,8 +125,8 @@ func Parse(sql string) (statements.PLpgStatement, error) {
 	var p Parser
 	p.scanner.Init(sql)
 	defer p.scanner.Cleanup()
-	sql, tokens, done := p.scanFnBlock()
-	stmt, err := p.parse(sql, tokens)
+	sql, tokens, done, lineOffset := p.scanFnBlock()
+	stmt, err := p.parse(sql, tokens, lineOffset)
 	if err != nil {
 		return statements.PLpgStatement{}, err
 	}
