@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -314,6 +315,8 @@ func (db *DB) tryStoreRollup(ctx context.Context, r Resolution, data []rollupDat
 
 func (db *DB) storeKvs(ctx context.Context, kvs []roachpb.KeyValue) error {
 	b := &kv.Batch{}
+	b.Header.WorkloadID = uint64(workloadid.WORKLOAD_ID_TIMESERIES)
+	b.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
 	for _, kv := range kvs {
 		b.AddRawRequest(&kvpb.MergeRequest{
 			RequestHeader: kvpb.RequestHeader{

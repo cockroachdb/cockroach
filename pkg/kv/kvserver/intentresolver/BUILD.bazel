@@ -17,6 +17,7 @@ go_library(
         "//pkg/kv/kvserver/batcheval/result",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/txnwait",
+        "//pkg/obs/workloadid",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",

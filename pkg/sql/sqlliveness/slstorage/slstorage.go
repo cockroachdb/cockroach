@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -504,6 +505,7 @@ func (s *Storage) Insert(
 ) (err error) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 	if err := s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		txn.SetWorkloadInfo(uint64(workloadid.WORKLOAD_ID_SQL_LIVENESS), 0 /* appNameID */, workloadid.WorkloadTypeSystem)
 		batch := txn.NewBatch()
 
 		k, region, err := s.keyCodec.encode(sid)
@@ -552,6 +554,7 @@ func (s *Storage) Update(
 		return false, hlc.Timestamp{}, err
 	}
 	err = s.txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		txn.SetWorkloadInfo(uint64(workloadid.WORKLOAD_ID_SQL_LIVENESS), 0 /* appNameID */, workloadid.WorkloadTypeSystem)
 		kv, err := txn.Get(ctx, k)
 		if err != nil {
 			return err

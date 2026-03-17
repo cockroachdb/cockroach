@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -199,6 +200,8 @@ func (mq *mergeQueue) requestRangeStats(
 ) {
 
 	ba := &kvpb.BatchRequest{}
+	ba.Header.WorkloadID = uint64(workloadid.WORKLOAD_ID_MERGE_QUEUE)
+	ba.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
 	ba.Add(&kvpb.RangeStatsRequest{
 		RequestHeader: kvpb.RequestHeader{Key: key},
 	})
