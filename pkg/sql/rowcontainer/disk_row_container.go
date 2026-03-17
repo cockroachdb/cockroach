@@ -241,7 +241,7 @@ func (d *DiskRowContainer) AddRow(ctx context.Context, row rowenc.EncDatumRow) e
 	// rows -- we need to track these in the de-dup cache so that later
 	// calls to AddRowWithDeDup() de-duplicate wrt this cache.
 	if d.deDuplicate {
-		if d.bufferedRows.NumPutsSinceFlush() == 0 {
+		if d.bufferedRows.NumMutationsSinceFlush() == 0 {
 			d.clearDeDupCache(ctx)
 		} else {
 			if err := d.memAcc.Grow(ctx, int64(len(d.scratchKey))); err != nil {
@@ -306,7 +306,7 @@ func (d *DiskRowContainer) AddRowWithDeDup(
 	if err := d.bufferedRows.Put(d.scratchKey, d.scratchVal); err != nil {
 		return 0, err
 	}
-	if d.bufferedRows.NumPutsSinceFlush() == 0 {
+	if d.bufferedRows.NumMutationsSinceFlush() == 0 {
 		d.clearDeDupCache(ctx)
 	} else {
 		if err = d.memAcc.Grow(ctx, int64(len(d.scratchKey))); err != nil {
