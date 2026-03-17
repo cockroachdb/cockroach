@@ -1000,11 +1000,6 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		args.SSLCertsDir = demoDir
 	}
 
-	// Allow access to system and crdb_internal tables in demo mode.
-	// Demo mode is for development/testing, so we want to allow access
-	// to these tables for debugging and introspection.
-	serverutils.SetUnsafeOverride(&args.Knobs)
-
 	return args
 }
 
@@ -1648,16 +1643,30 @@ func (c *transientCluster) GetSQLCredentials() (
 	return c.adminUser, c.adminPassword, c.demoDir
 }
 
+// internalDBConn opens a SQL connection to the given server using an internal
+// application name. This allows the connection to access system tables and
+// crdb_internal without setting the allow_unsafe_internals session variable.
+func (c *transientCluster) internalDBConn(
+	ctx context.Context, target serverSelection,
+) (*gosql.DB, error) {
+	u, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, target)
+	if err != nil {
+		return nil, err
+	}
+	if err := u.SetOption(
+		"application_name", catconstants.InternalAppNamePrefix+" cockroach demo",
+	); err != nil {
+		return nil, err
+	}
+	return gosql.Open("postgres", u.ToPQ().String())
+}
+
 func (c *transientCluster) maybeEnableMultiTenantMultiRegion(ctx context.Context) error {
 	if !c.demoCtx.Multitenant {
 		return nil
 	}
 
-	storageURL, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, forSystemTenant)
-	if err != nil {
-		return err
-	}
-	db, err := gosql.Open("postgres", storageURL.ToPQ().String())
+	db, err := c.internalDBConn(ctx, forSystemTenant)
 	if err != nil {
 		return err
 	}
@@ -1674,11 +1683,7 @@ func (c *transientCluster) maybeEnableMultiTenantMultiRegion(ctx context.Context
 func (c *transientCluster) SetClusterSetting(
 	ctx context.Context, setting string, value interface{},
 ) error {
-	storageURL, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, forSystemTenant)
-	if err != nil {
-		return err
-	}
-	db, err := gosql.Open("postgres", storageURL.ToPQ().String())
+	db, err := c.internalDBConn(ctx, forSystemTenant)
 	if err != nil {
 		return err
 	}
@@ -1688,7 +1693,9 @@ func (c *transientCluster) SetClusterSetting(
 		return err
 	}
 	if c.demoCtx.Multitenant {
-		_, err = db.Exec(fmt.Sprintf("ALTER TENANT ALL SET CLUSTER SETTING %s = '%v'", setting, value))
+		_, err = db.Exec(fmt.Sprintf(
+			"ALTER TENANT ALL SET CLUSTER SETTING %s = '%v'", setting, value,
+		))
 	}
 	return err
 }
@@ -1702,7 +1709,13 @@ func (c *transientCluster) SetupWorkload(ctx context.Context) error {
 	// fixture.
 	gen := c.demoCtx.WorkloadGenerator
 	if gen != nil {
-		db, err := gosql.Open("postgres", c.connURL)
+		// Use an internal connection for workload setup because the
+		// workload initialization code may access crdb_internal tables.
+		targetServer := forSystemTenant
+		if c.demoCtx.Multitenant {
+			targetServer = forSecondaryTenant
+		}
+		db, err := c.internalDBConn(ctx, targetServer)
 		if err != nil {
 			return err
 		}
@@ -1726,13 +1739,13 @@ func (c *transientCluster) SetupWorkload(ctx context.Context) error {
 				fmt.Println("#\n# Partitioning the demo database, please wait...")
 			}
 
-			db, err := gosql.Open("postgres", c.connURL)
+			pdb, err := c.internalDBConn(ctx, targetServer)
 			if err != nil {
 				return err
 			}
-			defer db.Close()
+			defer pdb.Close()
 			// Based on validation done in setup, we know that this workload has a partitioning step.
-			if err := gen.(workload.Hookser).Hooks().Partition(db); err != nil {
+			if err := gen.(workload.Hookser).Hooks().Partition(pdb); err != nil {
 				return errors.Wrapf(err, "partitioning the demo database")
 			}
 		}
@@ -1889,12 +1902,7 @@ func (c *transientCluster) runWorkload(
 
 // EnableEnterprise enables enterprise features for this demo.
 func (c *transientCluster) EnableEnterprise(ctx context.Context) error {
-	purl, err := c.getNetworkURLForServer(ctx, 0, true /* includeAppName */, forSystemTenant)
-	if err != nil {
-		return err
-	}
-	connURL := purl.ToPQ().String()
-	db, err := gosql.Open("postgres", connURL)
+	db, err := c.internalDBConn(ctx, forSystemTenant)
 	if err != nil {
 		return err
 	}
