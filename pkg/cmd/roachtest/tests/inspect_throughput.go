@@ -39,6 +39,12 @@ func registerInspectThoughput(r registry.Registry) {
 	// to be measured independently of elastic CPU control.
 	r.Add(makeInspectThroughputTest(r, 12, 8, 500_000_000, 3*time.Hour, 1, false))
 	r.Add(makeInspectThroughputTest(r, 12, 8, 1_000_000_000, 11*time.Hour, indexesForLongRun, false))
+
+	// Multi-region: 12 CRDB nodes (4 per region) × 8 CPUs, 500M rows, 1 index check.
+	// Measures INSPECT throughput on a geo-distributed cluster to establish a
+	// cross-region performance baseline.
+	r.Add(makeInspectMultiRegionThroughputTest(r, 4, 8, 500_000_000, 5*time.Hour, true, false /* uniquenessCheck */))
+	r.Add(makeInspectMultiRegionThroughputTest(r, 4, 8, 500_000_000, 5*time.Hour, true, true /* uniquenessCheck */))
 }
 
 // initInspectHistograms creates a histogram registry with multiple named metrics.
@@ -141,7 +147,7 @@ func makeInspectThroughputTest(
 			cNum := 1000
 			aNum := numRows / (bNum * cNum)
 			if c.IsLocal() {
-				aNum = 100000
+				aNum = 10
 				bNum = 1
 				cNum = 1
 			}
@@ -285,6 +291,294 @@ func makeInspectThroughputTest(
 	}
 }
 
+// makeInspectMultiRegionThroughputTest creates a benchmark that measures INSPECT
+// throughput on a three-region cluster.
+func makeInspectMultiRegionThroughputTest(
+	r registry.Registry,
+	nodesPerRegion, numCPUs, numRows int,
+	length time.Duration,
+	admissionControl bool,
+	uniquenessCheck bool,
+) registry.TestSpec {
+	type regionSpec struct {
+		name string
+		zone string
+	}
+	regions := []regionSpec{
+		{name: "us-east1", zone: "us-east1-b"},
+		{name: "us-west1", zone: "us-west1-b"},
+		{name: "europe-west2", zone: "europe-west2-b"},
+	}
+	numRegions := len(regions)
+	numCRDBNodes := nodesPerRegion * numRegions
+
+	var zones []string
+	for _, reg := range regions {
+		for j := 0; j < nodesPerRegion; j++ {
+			zones = append(zones, reg.zone)
+		}
+	}
+	zones = append(zones, regions[0].zone) // workload node in primary region
+
+	name := fmt.Sprintf(
+		"inspect/throughput/multiregion/nodes=%d/cpu=%d/rows=%d/uniqueness=%t",
+		numCRDBNodes, numCPUs, numRows, uniquenessCheck,
+	)
+	if !admissionControl {
+		name += "/elastic=false"
+	}
+
+	return registry.TestSpec{
+		Name:      name,
+		Owner:     registry.OwnerSQLFoundations,
+		Benchmark: true,
+		Cluster: r.MakeClusterSpec(
+			numCRDBNodes+1, // +1 for workload node
+			spec.CPU(numCPUs),
+			spec.WorkloadNode(),
+			spec.Geo(),
+			spec.GCEZones(strings.Join(zones, ",")),
+		),
+		CompatibleClouds:    registry.OnlyGCE,
+		Suites:              registry.Suites(registry.Nightly),
+		Leases:              registry.LeaderLeases,
+		Timeout:             length,
+		SkipPostValidations: registry.PostValidationInspect,
+		PostProcessPerfMetrics: func(
+			test string, histogram *roachtestutil.HistogramMetric,
+		) (roachtestutil.AggregatedPerfMetrics, error) {
+			metrics := roachtestutil.AggregatedPerfMetrics{}
+
+			for _, summary := range histogram.Summaries {
+				totalElapsed := summary.TotalElapsed
+				if totalElapsed == 0 {
+					continue
+				}
+
+				inspectDuration := totalElapsed / 1000
+				if inspectDuration == 0 {
+					inspectDuration = 1
+				}
+				totalCPUs := int64(numCRDBNodes * numCPUs)
+				throughput := roachtestutil.MetricPoint(
+					float64(numRows) / float64(totalCPUs*inspectDuration),
+				)
+
+				metrics = append(metrics, &roachtestutil.AggregatedMetric{
+					Name:           fmt.Sprintf("%s_%s_throughput", test, summary.Name),
+					Value:          throughput,
+					Unit:           "rows/s/cpu",
+					IsHigherBetter: true,
+				})
+			}
+
+			return metrics, nil
+		},
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			bNum := 1000
+			cNum := 1000
+			aNum := numRows / (bNum * cNum)
+			if c.IsLocal() {
+				aNum = 10
+				bNum = 1
+				cNum = 1
+			}
+			payloadBytes := 40
+
+			settings := install.MakeClusterSettings()
+
+			for i, reg := range regions {
+				startNode := i*nodesPerRegion + 1
+				endNode := startNode + nodesPerRegion - 1
+				nodes := c.Range(startNode, endNode)
+				startOpts := option.DefaultStartOpts()
+				startOpts.RoachprodOpts.ExtraArgs = append(
+					startOpts.RoachprodOpts.ExtraArgs,
+					fmt.Sprintf("--locality=region=%s,zone=%s", reg.name, reg.zone),
+				)
+				c.Start(ctx, t.L(), startOpts, settings, nodes)
+			}
+
+			db := c.Conn(ctx, t.L(), 1)
+			defer db.Close()
+
+			disableRowCountValidation(t, db)
+
+			if !admissionControl {
+				t.L().Printf("Disabling admission control for INSPECT")
+				if _, err := db.ExecContext(ctx,
+					"SET CLUSTER SETTING sql.inspect.admission_control.enabled = false",
+				); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Import bulkingest data without the default index.
+			cmdImport := fmt.Sprintf(
+				"./cockroach workload fixtures import bulkingest"+
+					" {pgurl:1} --a %d --b %d --c %d --payload-bytes %d --index-b-c-a=false",
+				aNum, bNum, cNum, payloadBytes,
+			)
+			t.L().Printf("Importing bulkingest data")
+			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmdImport)
+
+			t.L().Printf("Setting up multi-region database with %d regions", numRegions)
+			primaryRegion := regions[0].name
+			if _, err := db.ExecContext(ctx, fmt.Sprintf(
+				`ALTER DATABASE bulkingest SET PRIMARY REGION '%s'`, primaryRegion,
+			)); err != nil {
+				t.Fatal(err)
+			}
+			for _, reg := range regions[1:] {
+				t.L().Printf("Adding region %s", reg.name)
+				if _, err := db.ExecContext(ctx, fmt.Sprintf(
+					`ALTER DATABASE bulkingest ADD REGION '%s'`, reg.name,
+				)); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Create a REGIONAL BY ROW table with a complex key structure:
+			// PK becomes (crdb_region, filler_val, unique_val) where unique_val
+			// does not immediately follow crdb_region.
+			const tableName = "inspect_test"
+			createTableSQL := fmt.Sprintf(`CREATE TABLE bulkingest.%s (
+				filler_val INT NOT NULL,
+				unique_val INT NOT NULL,
+				payload STRING,
+				PRIMARY KEY (filler_val, unique_val)
+			) LOCALITY REGIONAL BY ROW`, tableName)
+			t.L().Printf("Creating REGIONAL BY ROW table: %s", tableName)
+			if _, err := db.ExecContext(ctx, createTableSQL); err != nil {
+				t.Fatal(err)
+			}
+
+			// Open a connection scoped to the bulkingest database so that
+			// INSERTs into the REGIONAL BY ROW table resolve the crdb_region
+			// column correctly. The default db pool can dispatch USE to a
+			// different connection than subsequent queries.
+			bulkDB := c.Conn(ctx, t.L(), 1, option.DBName("bulkingest"))
+			defer bulkDB.Close()
+
+			// Populate the new table from bulkingest data in batches (one per
+			// 'a' value, ~bNum*cNum rows each). filler_val maps to b (non-unique,
+			// 1000 distinct values) and unique_val is derived from (a, b, c) to
+			// be globally unique.
+			t.L().Printf(
+				"Populating %s from bulkingest (%d batches)",
+				tableName, aNum,
+			)
+			for a := 0; a < aNum; a++ {
+				insertSQL := fmt.Sprintf(
+					`INSERT INTO %s (filler_val, unique_val, payload)
+					SELECT b, (%d * %d * %d + b * %d + c), payload
+					FROM bulkingest
+					WHERE a = %d`,
+					tableName, a, bNum, cNum, cNum, a,
+				)
+				if _, err := bulkDB.ExecContext(ctx, insertSQL); err != nil {
+					t.Fatal(err)
+				}
+				if (a+1)%100 == 0 || a == aNum-1 {
+					t.L().Printf(
+						"Populated %d/%d batches", a+1, aNum,
+					)
+				}
+			}
+
+			t.L().Printf("Dropping original bulkingest table")
+			if _, err := bulkDB.ExecContext(ctx,
+				"DROP TABLE bulkingest",
+			); err != nil {
+				t.Fatal(err)
+			}
+
+			indexName := tableName + "_idx"
+			indexSQL := fmt.Sprintf(
+				"CREATE INDEX %s ON %s (unique_val, filler_val)",
+				indexName, tableName,
+			)
+			t.L().Printf("Creating index: %s", indexSQL)
+			if _, err := bulkDB.Exec(indexSQL); err != nil {
+				t.Fatal(err)
+			}
+
+			t.L().Printf("Computing table statistics")
+			if _, err := bulkDB.Exec(fmt.Sprintf(
+				"CREATE STATISTICS stats FROM %s", tableName,
+			)); err != nil {
+				t.Fatal(err)
+			}
+
+			if uniquenessCheck {
+				enableUniquenessValidation(t, bulkDB)
+			}
+
+			metricName := "inspect"
+			exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+			reg, perfBuf := initInspectHistograms(
+				length*2, t, exporter, []string{metricName},
+			)
+			defer roachtestutil.CloseExporter(
+				ctx, exporter, t, c, perfBuf, c.Node(1), "",
+			)
+
+			tickHistogram := func(name string) {
+				reg.Tick(func(tick histogram.Tick) {
+					if tick.Name == name {
+						_ = tick.Exporter.SnapshotAndWrite(
+							tick.Hist, tick.Now, tick.Elapsed, &tick.Name,
+						)
+					}
+				})
+			}
+
+			inspectSQL := fmt.Sprintf(
+				"INSPECT TABLE %s WITH OPTIONS INDEX (%s), DETACHED",
+				tableName, indexName,
+			)
+
+			t.L().Printf("Running INSPECT on multi-region cluster")
+			tickHistogram(metricName)
+			before := timeutil.Now()
+
+			jobID := runInspectInBackground(ctx, t, bulkDB, inspectSQL)
+
+			tickHistogram(metricName)
+			duration := timeutil.Since(before)
+			t.L().Printf("INSPECT on multi-region cluster took %v\n", duration)
+
+			var jobTotalCheckCount int64
+			querySQL := `
+				SELECT coalesce(
+					(crdb_internal.pb_to_json(
+						'cockroach.sql.jobs.jobspb.Progress',
+						value
+					)->'inspect'->>'jobTotalCheckCount')::INT8,
+					0
+				)
+				FROM system.job_info
+				WHERE job_id = $1
+				AND info_key = 'legacy_progress'`
+			err := bulkDB.QueryRow(querySQL, jobID).Scan(&jobTotalCheckCount)
+			if err != nil {
+				t.L().Printf(
+					"Warning: failed to query job total check count: %v", err,
+				)
+			} else {
+				spanCount := int(jobTotalCheckCount)
+				totalCPUs := numCRDBNodes * numCPUs
+				spansPerCPU := float64(spanCount) / float64(totalCPUs)
+				t.L().Printf(
+					"INSPECT completed %d checks across %d spans"+
+						" (%.2f spans/CPU with %d total CPUs)\n",
+					jobTotalCheckCount, spanCount, spansPerCPU, totalCPUs,
+				)
+			}
+		},
+	}
+}
+
 // disableRowCountValidation disables automatic row count validation during import.
 // This is necessary for INSPECT tests because row count validation uses INSPECT
 // behind the covers, and we want to control when INSPECT runs.
@@ -292,6 +586,17 @@ func disableRowCountValidation(t test.Test, db *gosql.DB) {
 	t.Helper()
 	t.L().Printf("Disabling automatic row count validation")
 	_, err := db.Exec("SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'off'")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// enableUniquenessValidation enables validation of complex keys (i.e. the unique column does not
+// immediately follow the region column) during the uniqueness check.
+func enableUniquenessValidation(t test.Test, db *gosql.DB) {
+	t.Helper()
+	t.L().Printf("Enabling complex key uniqueness validation")
+	_, err := db.Exec("SET CLUSTER SETTING sql.inspect.uniqueness_check.complex_keys.enabled = true;")
 	if err != nil {
 		t.Fatal(err)
 	}
