@@ -145,7 +145,7 @@ func (c *conn) handleAuthentication(
 	// client-provided username matches one of the mappings.
 	matchedIdentity, err := c.checkClientUsernameMatchesMapping(ctx, ac, behaviors, systemIdentity)
 	if err != nil {
-		log.Dev.Warningf(ctx, "unable to map incoming identity %q, or san identities %q to any database user: %+v", systemIdentity, behaviors.GetSANIdentities(), err)
+		log.Dev.Warningf(ctx, "unable to map incoming identity %q, or san identities %q to any database user: %+v", redact.HashString(systemIdentity), behaviors.GetSANIdentities(), err)
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_NOT_FOUND, err)
 		return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
@@ -162,6 +162,7 @@ func (c *conn) handleAuthentication(
 	// Once chooseDbRole() returns, we know that the actual DB username
 	// will be present in c.sessionArgs.User.
 	dbUser := c.sessionArgs.User
+	hashedUser := redact.HashString(dbUser.Normalized())
 
 	// Check that the requested user exists and retrieve the hashed
 	// password in case password authentication is needed.
@@ -173,7 +174,7 @@ func (c *conn) handleAuthentication(
 			c.sessionArgs.SessionDefaults["database"],
 		)
 	if err != nil {
-		log.Dev.Warningf(ctx, "user retrieval failed for user=%q: %+v", dbUser, err)
+		log.Dev.Warningf(ctx, "user retrieval failed for user=%q: %+v", hashedUser, err)
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
 		return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
@@ -182,7 +183,7 @@ func (c *conn) handleAuthentication(
 		if behaviors.IsProvisioningEnabled(execCfg.Settings, hbaEntry.Method.String()) {
 			err := behaviors.MaybeProvisionUser(ctx, execCfg.Settings, hbaEntry.Method.String())
 			if err != nil {
-				log.Dev.Warningf(ctx, "user provisioning failed for user=%q: %+v", dbUser, err)
+				log.Dev.Warningf(ctx, "user provisioning failed for user=%q: %+v", hashedUser, err)
 				ac.LogAuthFailed(ctx, eventpb.AuthFailReason_PROVISIONING_ERROR, err)
 				return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 			}
@@ -194,7 +195,7 @@ func (c *conn) handleAuthentication(
 					c.sessionArgs.SessionDefaults["database"],
 				)
 			if err != nil {
-				log.Dev.Warningf(ctx, "user retrieval failed for user=%q: %+v", dbUser, err)
+				log.Dev.Warningf(ctx, "user retrieval failed for user=%q: %+v", hashedUser, err)
 				ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
 				return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 			}
@@ -251,11 +252,11 @@ func (c *conn) handleAuthentication(
 		for _, setting := range settingEntry.Settings {
 			keyVal := strings.SplitN(setting, "=", 2)
 			if len(keyVal) != 2 {
-				log.Ops.Warningf(ctx, "%s has malformed default setting: %q", dbUser, setting)
+				log.Ops.Warningf(ctx, "%s has malformed default setting: %q", hashedUser, setting)
 				continue
 			}
 			if err := sql.CheckSessionVariableValueValid(ctx, execCfg.Settings, keyVal[0], keyVal[1]); err != nil {
-				log.Ops.Warningf(ctx, "%s has invalid default setting: %v", dbUser, err)
+				log.Ops.Warningf(ctx, "%s has invalid default setting: %v", hashedUser, err)
 				continue
 			}
 			if _, ok := c.sessionArgs.SessionDefaults[keyVal[0]]; !ok {
@@ -594,12 +595,14 @@ func newAuthPipe(c *conn, logAuthn bool, authOpt authOptions, systemIdentity str
 		log:         logAuthn,
 		connDetails: authOpt.connDetails,
 		authDetails: eventpb.CommonSessionDetails{
-			SystemIdentity: systemIdentity,
-			Transport:      authOpt.connType.String(),
+			Transport: authOpt.connType.String(),
 		},
 		ch:         make(chan []byte),
 		writerDone: make(chan struct{}),
 		readerDone: make(chan authRes, 1),
+	}
+	if systemIdentity != "" {
+		ap.authDetails.SystemIdentity = redact.Sprintf("%s", redact.HashString(systemIdentity))
 	}
 	return ap
 }
@@ -650,11 +653,19 @@ func (p *authPipe) SetAuthMethod(method redact.SafeString) {
 }
 
 func (p *authPipe) SetDbUser(dbUser username.SQLUsername) {
-	p.authDetails.User = dbUser.Normalized()
+	if n := dbUser.Normalized(); n != "" {
+		p.authDetails.User = redact.Sprintf("%s", redact.HashString(n))
+	} else {
+		p.authDetails.User = ""
+	}
 }
 
 func (p *authPipe) SetSystemIdentity(systemIdentity string) {
-	p.authDetails.SystemIdentity = systemIdentity
+	if systemIdentity != "" {
+		p.authDetails.SystemIdentity = redact.Sprintf("%s", redact.HashString(systemIdentity))
+	} else {
+		p.authDetails.SystemIdentity = ""
+	}
 }
 
 func (p *authPipe) LogAuthOK(ctx context.Context) {

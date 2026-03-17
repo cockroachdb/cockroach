@@ -932,10 +932,11 @@ func (s *Server) ServeConn(
 	defer onCloseFn()
 
 	sessionID := s.execCfg.GenerateID()
+	remoteAddr := conn.RemoteAddr().String()
 	connDetails := eventpb.CommonConnectionDetails{
 		InstanceID:    int32(s.execCfg.NodeInfo.NodeID.SQLInstanceID()),
 		Network:       conn.RemoteAddr().Network(),
-		RemoteAddress: conn.RemoteAddr().String(),
+		RemoteAddress: redact.Sprintf("%s", redact.HashString(remoteAddr)),
 		SessionID:     sessionID.String(),
 	}
 
@@ -989,14 +990,15 @@ func (s *Server) ServeConn(
 	// shared struct for structured logging.
 	// Only now do we know the remote client address for sure (it may have
 	// been overridden by a status parameter).
-	connDetails.RemoteAddress = sArgs.RemoteAddr.String()
+	remoteAddr = sArgs.RemoteAddr.String()
+	connDetails.RemoteAddress = redact.Sprintf("%s", redact.HashString(remoteAddr))
 	sp := tracing.SpanFromContext(ctx)
 	tags := logtags.BuildBuffer()
-	tags.Add("client", log.SafeOperational(connDetails.RemoteAddress))
+	tags.Add("client", log.SafeOperational(remoteAddr))
 	tags.Add(preServeStatus.ConnType.String(), nil)
 	ctx = logtags.AddTags(ctx, tags.Finish())
 	sp.SetTag("conn_type", attribute.StringValue(preServeStatus.ConnType.String()))
-	sp.SetTag("client", attribute.StringValue(connDetails.RemoteAddress))
+	sp.SetTag("client", attribute.StringValue(remoteAddr))
 
 	// If a test is hooking in some authentication option, load it.
 	var testingAuthHook func(context.Context) error
