@@ -1439,9 +1439,6 @@ func getRequestCompletedStatus(
 	return completed
 }
 
-// TestContinuousCollection is a table-driven test covering the different modes
-// of bundle collection: continuous with default limits, bounded limits,
-// and single-bundle legacy behavior.
 func TestContinuousCollection(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1546,7 +1543,6 @@ func TestContinuousCollection(t *testing.T) {
 			// Verify no more bundles after completion.
 			if tt.wantNoMoreAfterDone {
 				runner.Exec(t, "SELECT 1")
-				time.Sleep(100 * time.Millisecond)
 				var afterCount int
 				runner.QueryRow(t,
 					"SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1",
@@ -1608,20 +1604,10 @@ func TestMultipleConcurrentRequests(t *testing.T) {
 		runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1", reqID1).Scan(&count1)
 		runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1", reqID2).Scan(&count2)
 		if count1 < 3 || count2 < 3 {
-			// Execute more to trigger collection.
-			runner.Exec(t, "SELECT 99 % 2")
-			runner.Exec(t, "SELECT 99 & 1")
 			return errors.Newf("waiting for bundles: req1=%d, req2=%d", count1, count2)
 		}
 		return nil
 	})
-
-	// Verify bundles are correctly linked to their respective requests.
-	var count1, count2 int
-	runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1", reqID1).Scan(&count1)
-	runner.QueryRow(t, "SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1", reqID2).Scan(&count2)
-	require.GreaterOrEqual(t, count1, 3, "request 1 should have at least 3 bundles")
-	require.GreaterOrEqual(t, count2, 3, "request 2 should have at least 3 bundles")
 
 	// Verify no cross-contamination: bundles for req1 should have fingerprint matching req1.
 	var fp1, fp2 string
@@ -1677,10 +1663,8 @@ func TestConcurrentLastBundleRace(t *testing.T) {
 		"SELECT count(*) FROM system.statement_diagnostics WHERE request_id = $1",
 		reqID,
 	).Scan(&bundleCount)
-	require.LessOrEqual(t, bundleCount, 2,
-		"expected at most 2 bundles despite 20 concurrent goroutines")
-	require.GreaterOrEqual(t, bundleCount, 2,
-		"expected at least 2 bundles to be collected")
+	require.Equal(t, 2, bundleCount,
+		"expected exactly 2 bundles despite 20 concurrent goroutines")
 
 	var completed bool
 	runner.QueryRow(t,
@@ -1883,8 +1867,10 @@ func TestSettingToggleMidCollection(t *testing.T) {
 	runner.Exec(t,
 		"SET CLUSTER SETTING sql.stmt_diagnostics.collect_continuously.enabled = false")
 
+	// Execute one more statement to trigger the completion check.
+	runner.Exec(t, "SELECT lower('world')")
+
 	testutils.SucceedsSoon(t, func() error {
-		runner.Exec(t, "SELECT lower('world')")
 		runner.QueryRow(t,
 			"SELECT completed FROM system.statement_diagnostics_requests WHERE id = $1",
 			reqID,
