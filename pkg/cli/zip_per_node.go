@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -418,6 +419,10 @@ func (zc *debugZipContext) getLogFiles(
 		// transfers somehow.
 
 		nodePrinter.info("%d log files found", len(logs.Files))
+		useParquet := zipCtx.logFormat == "parquet"
+		if useParquet {
+			nodePrinter.info("using parquet format for log files (ZSTD compression)")
+		}
 		var warnings []string
 		for _, file := range logs.Files {
 			ctime := extractTimeFromFileName(file.Name)
@@ -428,7 +433,15 @@ func (zc *debugZipContext) getLogFiles(
 			}
 
 			logPrinter := nodePrinter.withPrefix(redact.Sprintf("log file: %s", file.Name))
-			name := prefix + "/logs/" + file.Name
+			// Determine output file name based on format
+			var name string
+			if useParquet {
+				// Replace .log extension with .parquet
+				baseName := strings.TrimSuffix(file.Name, ".log")
+				name = prefix + "/logs/" + baseName + ".parquet"
+			} else {
+				name = prefix + "/logs/" + file.Name
+			}
 			var entries *serverpb.LogEntriesResponse
 			sf := logPrinter.start("requesting file")
 			if requestErr := zc.runZipFn(ctx, sf,
@@ -455,39 +468,47 @@ func (zc *debugZipContext) getLogFiles(
 			}
 			sf = logPrinter.start("writing output")
 			warnRedactLeak := false
-			if err := func() error {
-				// Use a closure so that the zipper is only locked once per
-				// created log file.
-				zc.z.Lock()
-				defer zc.z.Unlock()
-
-				logOut, err := zc.z.createLocked(name, timeutil.Unix(0, file.ModTimeNanos))
-				if err != nil {
-					return err
+			if useParquet {
+				// Write log entries in parquet format
+				if err := zc.writeLogEntriesAsParquet(name, entries.Entries, file.ModTimeNanos, &warnRedactLeak); err != nil {
+					return sf.fail(err)
 				}
-				for _, e := range entries.Entries {
-					// If the user requests redaction, and some non-redactable
-					// data was found in the log, *despite KeepRedactable
-					// being set*, this means that this zip client is talking
-					// to a node that doesn't yet know how to redact. This
-					// also means that node may be leaking sensitive data.
-					//
-					// In that case, we do the redaction work ourselves in the
-					// most conservative way possible. (It's not great that
-					// possibly confidential data flew over the network, but
-					// at least it stops here.)
-					if zipCtx.redact && !e.Redactable {
-						e.Message = "REDACTEDBYZIP"
-						// We're also going to print a warning at the end.
-						warnRedactLeak = true
-					}
-					if err := log.FormatLegacyEntry(e, logOut); err != nil {
+			} else {
+				// Write log entries in text format (original behavior)
+				if err := func() error {
+					// Use a closure so that the zipper is only locked once per
+					// created log file.
+					zc.z.Lock()
+					defer zc.z.Unlock()
+
+					logOut, err := zc.z.createLocked(name, timeutil.Unix(0, file.ModTimeNanos))
+					if err != nil {
 						return err
 					}
+					for _, e := range entries.Entries {
+						// If the user requests redaction, and some non-redactable
+						// data was found in the log, *despite KeepRedactable
+						// being set*, this means that this zip client is talking
+						// to a node that doesn't yet know how to redact. This
+						// also means that node may be leaking sensitive data.
+						//
+						// In that case, we do the redaction work ourselves in the
+						// most conservative way possible. (It's not great that
+						// possibly confidential data flew over the network, but
+						// at least it stops here.)
+						if zipCtx.redact && !e.Redactable {
+							e.Message = "REDACTEDBYZIP"
+							// We're also going to print a warning at the end.
+							warnRedactLeak = true
+						}
+						if err := log.FormatLegacyEntry(e, logOut); err != nil {
+							return err
+						}
+					}
+					return nil
+				}(); err != nil {
+					return sf.fail(err)
 				}
-				return nil
-			}(); err != nil {
-				return sf.fail(err)
 			}
 			sf.done()
 			if warnRedactLeak {
@@ -502,6 +523,37 @@ func (zc *debugZipContext) getLogFiles(
 		}
 	}
 	return nil
+}
+
+// writeLogEntriesAsParquet writes log entries to the zip in parquet format.
+func (zc *debugZipContext) writeLogEntriesAsParquet(
+	name string, entries []logpb.Entry, modTimeNanos int64, warnRedactLeak *bool,
+) error {
+	zc.z.Lock()
+	defer zc.z.Unlock()
+
+	logOut, err := zc.z.createLocked(name, timeutil.Unix(0, modTimeNanos))
+	if err != nil {
+		return err
+	}
+
+	parquetWriter, err := newLogParquetWriter(logOut)
+	if err != nil {
+		return err
+	}
+
+	for _, e := range entries {
+		// Handle redaction the same way as text format
+		if zipCtx.redact && !e.Redactable {
+			e.Message = "REDACTEDBYZIP"
+			*warnRedactLeak = true
+		}
+		if err := parquetWriter.AddEntry(e); err != nil {
+			return err
+		}
+	}
+
+	return parquetWriter.Close()
 }
 
 func (zc *debugZipContext) getProfiles(

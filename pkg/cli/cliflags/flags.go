@@ -1905,6 +1905,27 @@ whether the generated zip file is valid and not corrupted.
 `,
 	}
 
+	ZipLogFormat = FlagInfo{
+		Name: "log-format",
+		Description: `
+Specifies the format for storing log files in the debug zip.
+Valid values are "text" (default) and "parquet".
+<PRE>
+
+</PRE>
+The "parquet" format provides significantly better compression (typically 40-60%
+smaller than gzip-compressed text) due to columnar storage and built-in ZSTD
+compression. Parquet files can be analyzed using tools like DuckDB, pandas, or
+other data analysis software that supports the Parquet format.
+<PRE>
+
+</PRE>
+Note: When using parquet format, log files will have .parquet extension instead
+of .log, and require specialized tools to read (e.g., 'duckdb -c "SELECT * FROM
+read_parquet('cockroach.parquet')"').
+`,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,

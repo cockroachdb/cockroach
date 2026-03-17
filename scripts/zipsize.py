@@ -451,8 +451,8 @@ def format_count(n: int) -> str:
 
 def is_log_file(filename: str) -> bool:
     """Check if a filename is a log file we want to analyze."""
-    # Match patterns like nodes/*/logs/*.log
-    return '/logs/' in filename and filename.endswith('.log')
+    # Match patterns like nodes/*/logs/*.log or nodes/*/logs/*.parquet
+    return '/logs/' in filename and (filename.endswith('.log') or filename.endswith('.parquet'))
 
 
 def categorize_file(filename: str) -> str:
@@ -487,7 +487,7 @@ def categorize_file(filename: str) -> str:
             return 'cluster'
 
     # It's a node file - categorize further
-    if '/logs/' in path:
+    if '/logs/' in path and (path.endswith('.log') or path.endswith('.parquet')):
         return 'node_logs'
     elif 'crdb_internal.' in path and path.endswith('.txt'):
         return 'node_tables'
