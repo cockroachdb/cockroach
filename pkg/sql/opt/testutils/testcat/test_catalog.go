@@ -1247,6 +1247,9 @@ func (tt *Table) Policies() *cat.Policies {
 	return &tt.policies
 }
 
+// CanaryAndStableStatsDiffer is part of the cat.Table interface.
+func (tt *Table) CanaryAndStableStatsDiffer() bool { return false }
+
 // findPolicyByName will lookup the policy by its name. It returns it's policy
 // type and index within that policy type slice so that callers can do removal
 // if needed.

@@ -124,6 +124,9 @@ func constructPlan(
 	if flags.IsSet(exec.PlanFlagUsesRLS) {
 		res.flags.Set(planFlagUsesRLS)
 	}
+	if flags.IsSet(exec.PlanFlagCanaryAndStableStatsDiffer) {
+		res.flags.Set(planFlagCanaryAndStableStatsDiffer)
+	}
 
 	return res, nil
 }
