@@ -96,6 +96,10 @@ message EvalContext {
   // enrich samples with more workload context.
   optional uint64 app_name_id = 18 [(gogoproto.nullable) = false,
     (gogoproto.customname) = "AppNameID"];
+  // WorkloadType distinguishes the kind of workload that workload_id
+  // represents. Used by the ASH sampler to choose the right encoding.
+  optional uint32 workload_type = 19 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "WorkloadType"];
 }
 
 message SimpleResponse {

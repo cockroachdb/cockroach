@@ -6,8 +6,6 @@
 import {
   defaultFilters,
   WorkloadInsightEventFilters,
-  insightType,
-  SchemaInsightEventFilters,
   SortSetting,
   selectID,
   selectTransactionFingerprintID,
@@ -153,60 +151,4 @@ export const selectStatementInsightDetails = createSelector(
   selectStmtInsights,
   selectID,
   selectStatementInsightDetailsCombiner,
-);
-
-export const schemaInsightsFiltersLocalSetting = new LocalSetting<
-  AdminUIState,
-  SchemaInsightEventFilters
->("filters/SchemaInsightsPage", (state: AdminUIState) => state.localSettings, {
-  database: defaultFilters.database,
-  schemaInsightType: defaultFilters.schemaInsightType,
-});
-
-export const schemaInsightsSortLocalSetting = new LocalSetting<
-  AdminUIState,
-  SortSetting
->(
-  "sortSetting/SchemaInsightsPage",
-  (state: AdminUIState) => state.localSettings,
-  {
-    ascending: false,
-    columnTitle: "insights",
-  },
-);
-
-export const selectSchemaInsights = createSelector(
-  (state: AdminUIState) => state.cachedData,
-  adminUiState => {
-    if (!adminUiState?.schemaInsights) return [];
-    return adminUiState?.schemaInsights.data?.results;
-  },
-);
-
-export const selectSchemaInsightsMaxApiReached = (
-  state: AdminUIState,
-): boolean => {
-  return !!state.cachedData.schemaInsights?.data?.maxSizeReached;
-};
-
-export const selectSchemaInsightsDatabases = createSelector(
-  selectSchemaInsights,
-  schemaInsights => {
-    if (!schemaInsights) return [];
-    return Array.from(
-      new Set(schemaInsights.map(schemaInsight => schemaInsight.database)),
-    ).sort();
-  },
-);
-
-export const selectSchemaInsightsTypes = createSelector(
-  selectSchemaInsights,
-  schemaInsights => {
-    if (!schemaInsights) return [];
-    return Array.from(
-      new Set(
-        schemaInsights.map(schemaInsight => insightType(schemaInsight.type)),
-      ),
-    ).sort();
-  },
 );

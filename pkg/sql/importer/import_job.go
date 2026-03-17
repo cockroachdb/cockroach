@@ -64,6 +64,10 @@ type importTestingKnobs struct {
 	// expectedRowCountOffset is added to the expected row count passed to the
 	// inspect row count check.
 	expectedRowCountOffset int64
+	// afterDistImport, if set, is called after each successful distImport
+	// call inside ingestWithRetry. If it returns an error, that error
+	// replaces the nil err and triggers a retry.
+	afterDistImport func() error
 }
 
 type importResumer struct {
@@ -92,6 +96,10 @@ func (r *importResumer) TestingSetExpectedRowCountOffset(offset int64) {
 
 func (r *importResumer) TestingSetAlwaysFlushJobProgress() {
 	r.testingKnobs.alwaysFlushJobProgress = true
+}
+
+func (r *importResumer) TestingSetAfterDistImportKnob(fn func() error) {
+	r.testingKnobs.afterDistImport = fn
 }
 
 var _ jobs.TraceableJob = &importResumer{}
@@ -324,18 +332,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	procsPerNode := int(processorsPerNode.Get(&p.ExecCfg().Settings.SV))
 	initialSplitsPerProc := int(initialSplitsPerProcessor.Get(&p.ExecCfg().Settings.SV))
 
-	// Capture the cumulative imported row count from previous runs before
-	// starting the current ingest. The progress summary is overwritten during
-	// ingest, so we must read it beforehand. This is needed because r.res.Rows
-	// only reflects the current run's ingested rows.
 	pkID := kvpb.BulkOpSummaryID(uint64(table.Desc.ID), uint64(table.Desc.PrimaryIndex.ID))
-	var previouslyImportedRows int64
-	{
-		prog := r.job.Progress()
-		if importProgress := prog.GetImport(); importProgress != nil {
-			previouslyImportedRows = importProgress.Summary.EntryCounts[pkID]
-		}
-	}
 
 	res, err := ingestWithRetry(
 		ctx, p, r.job, importTable, typeDescs, files, format, details.Walltime,
@@ -344,6 +341,14 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 	if err != nil {
 		return err
 	}
+
+	// Reload the job to pick up progress updates that may have been
+	// written to a reloaded job pointer during ingestWithRetry retries.
+	reloadedJob, err := p.ExecCfg().JobRegistry.LoadClaimedJob(ctx, r.job.ID())
+	if err != nil {
+		return err
+	}
+	r.job = reloadedJob
 
 	r.res.DataSize = res.DataSize
 	for id, count := range res.EntryCounts {
@@ -412,7 +417,16 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 				return err
 			}
 
-			expectedRowCount := uint64(r.res.Rows + previouslyImportedRows + int64(table.InitialRowCount) + r.testingKnobs.expectedRowCountOffset)
+			// Read the total imported row count from the job progress
+			// summary. This is the single source of truth that correctly
+			// accounts for rows across all distImport attempts (including
+			// retries within ingestWithRetry) and previous Resume runs.
+			prog := r.job.Progress()
+			var totalImportedRows int64
+			if importProgress := prog.GetImport(); importProgress != nil {
+				totalImportedRows = importProgress.Summary.EntryCounts[pkID]
+			}
+			expectedRowCount := uint64(totalImportedRows + int64(table.InitialRowCount) + r.testingKnobs.expectedRowCountOffset)
 			checks, err = inspect.ChecksForTable(ctx, p.ExecCfg(), tblDesc, &expectedRowCount)
 			return err
 		}); err != nil {
@@ -888,6 +902,9 @@ func ingestWithRetry(
 			if err == nil || !errors.Is(err, sql.ErrPlanChanged) {
 				break
 			}
+		}
+		if err == nil && testingKnobs.afterDistImport != nil {
+			err = testingKnobs.afterDistImport()
 		}
 		if err == nil {
 			break

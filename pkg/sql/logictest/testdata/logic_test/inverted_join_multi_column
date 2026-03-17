@@ -1,5 +1,3 @@
-# LogicTest: !local-prepared
-
 # Tests for inverted joins with multi-column inverted indexes.
 
 statement ok

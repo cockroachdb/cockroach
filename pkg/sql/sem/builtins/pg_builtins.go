@@ -352,7 +352,24 @@ func makePGGetConstraintDef(paramTypes tree.ParamTypes) tree.Overload {
 		Types:      paramTypes,
 		ReturnType: tree.FixedReturnType(types.String),
 		Body:       `SELECT condef FROM pg_catalog.pg_constraint WHERE oid=$1 LIMIT 1`,
-		Info:       notUsableInfo,
+		Info:       "Returns the definition of the specified constraint.",
+		Volatility: volatility.Stable,
+		Language:   tree.RoutineLangSQL,
+	}
+}
+
+// makePGGetTriggerDef makes a pg_get_triggerdef function with the given arguments.
+func makePGGetTriggerDef(paramTypes tree.ParamTypes) tree.Overload {
+	return tree.Overload{
+		Types:      paramTypes,
+		ReturnType: tree.FixedReturnType(types.String),
+		Body: `SELECT c.create_statement
+           FROM pg_catalog.pg_trigger t
+           JOIN crdb_internal.create_trigger_statements c
+             ON c.table_id = t.tgrelid::INT8 AND c.trigger_name = t.tgname
+           WHERE t.oid = $1
+           LIMIT 1`,
+		Info:       "Returns the CREATE TRIGGER statement for the specified trigger.",
 		Volatility: volatility.Stable,
 		Language:   tree.RoutineLangSQL,
 	}
@@ -730,6 +747,13 @@ var pgBuiltins = map[string]builtinDefinition{
 		makePGGetConstraintDef(tree.ParamTypes{
 			{Name: "constraint_oid", Typ: types.Oid}, {Name: "pretty_bool", Typ: types.Bool}}),
 		makePGGetConstraintDef(tree.ParamTypes{{Name: "constraint_oid", Typ: types.Oid}}),
+	),
+
+	// pg_get_triggerdef functions like SHOW CREATE TRIGGER.
+	"pg_get_triggerdef": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
+		makePGGetTriggerDef(tree.ParamTypes{{Name: "trigger_oid", Typ: types.Oid}}),
+		makePGGetTriggerDef(tree.ParamTypes{
+			{Name: "trigger_oid", Typ: types.Oid}, {Name: "pretty_bool", Typ: types.Bool}}),
 	),
 
 	// pg_get_partkeydef is only provided for compatibility and always returns

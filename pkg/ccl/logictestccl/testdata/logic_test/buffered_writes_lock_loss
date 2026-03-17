@@ -25,6 +25,9 @@ statement ok
 SET kv_transaction_buffered_writes_enabled=true
 
 statement ok
+SET buffered_writes_implicit_txns_enabled=true
+
+statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
 
 statement ok

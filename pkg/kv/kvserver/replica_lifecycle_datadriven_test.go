@@ -73,7 +73,7 @@ import (
 //	Updates the specified fields of the existing replica's HardState. Other
 //	fields of the HardState are retained.
 //
-// eval-split range-id=<int> split-key=<key> [verbose]
+// eval-split range-id=<int> split-key=<key> [legacy] [verbose]
 // ----
 //
 //	Evaluates a split for the specified range at the given split key. This
@@ -83,7 +83,8 @@ import (
 //	applied. However, the range state is updated to reflect the split -- the LHS
 //	narrows, and a new range descriptor is created for the RHS with the same
 //	replica set as the LHS. Optionally, we print the evaluated batch if
-//	running with the verbose flag.
+//	running with the verbose flag. The "legacy" flag generates a batch that can
+//	be inherited from older CRDB versions.
 //
 // set-lease range-id=<int> replica=<int> [lease-type=leader-lease|epoch|expiration]
 // ----
@@ -277,7 +278,8 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 			case "eval-split":
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
 				splitKey := roachpb.RKey(dd.ScanArg[string](t, d, "split-key"))
-				verbose := d.HasArg("verbose")
+				legacy, verbose := d.HasArg("legacy"), d.HasArg("verbose")
+
 				rs := tc.mustGetRangeState(t, rangeID)
 				desc := rs.desc
 				require.True(
@@ -310,9 +312,11 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					ReplicaVersion: rs.version,
 				}
 				_, _, err := batcheval.TestingSplitTrigger(
-					ctx, rec, batch, enginepb.MVCCStats{}, &split, in, hlc.Timestamp{},
-				)
+					ctx, rec, batch, enginepb.MVCCStats{}, &split, in, hlc.Timestamp{})
 				require.NoError(t, err)
+				if legacy {
+					writeLegacySplitTriggerKeys(ctx, t, batch, rightDesc.RangeID)
+				}
 
 				batchRepr := batch.Repr()
 				lhsRepl := rs.replica
@@ -365,6 +369,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					rhsDestroyed:        rhsDestroyed,
 					rhsDesc:             split.RightDesc,
 					initClosedTimestamp: hlc.Timestamp{WallTime: 100}, // dummy timestamp
+					lhsLastReplicaGC:    hlc.Timestamp{},              // dummy timestamp
 				}
 				wagWriter := wag.MakeWriter(&tc.wagSeq)
 				return tc.mutate(t, func(stateBatch, raftBatch storage.Batch) {
@@ -959,4 +964,30 @@ func (r *replicaInfo) String() string {
 	sb.WriteString(fmt.Sprintf(" TruncatedState={Index:%d,Term:%d}", r.ts.Index, r.ts.Term))
 	sb.WriteString(fmt.Sprintf(" LastIdx=%d", r.lastIdx))
 	return sb.String()
+}
+
+// writeLegacySplitTriggerKeys simulates the legacy split trigger behavior where
+// some unreplicated keys of the RHS were written to the evaluated batch (now
+// written at apply time instead). This includes writing RaftTruncatedState and
+// LastReplicaGCTimestamp.
+//
+// TODO(#152847): remove when there are no historical proposals with these keys,
+// e.g. after a below-raft migration.
+func writeLegacySplitTriggerKeys(
+	ctx context.Context, t *testing.T, w storage.Writer, rhsRangeID roachpb.RangeID,
+) {
+	t.Helper()
+	require.NoError(t, storage.MVCCBlindPutProto(
+		ctx, w,
+		keys.RangeLastReplicaGCTimestampKey(rhsRangeID), hlc.Timestamp{},
+		&hlc.Timestamp{WallTime: 1234}, storage.MVCCWriteOptions{},
+	))
+	require.NoError(t, storage.MVCCBlindPutProto(
+		ctx, w,
+		keys.RaftTruncatedStateKey(rhsRangeID), hlc.Timestamp{},
+		&kvserverpb.RaftTruncatedState{
+			Index: kvstorage.RaftInitialLogIndex,
+			Term:  kvstorage.RaftInitialLogTerm,
+		}, storage.MVCCWriteOptions{},
+	))
 }

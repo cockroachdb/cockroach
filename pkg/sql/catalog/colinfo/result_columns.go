@@ -198,6 +198,8 @@ var ShowStatementHintsColumns = ResultColumns{
 	{Name: "row_id", Typ: types.Int},
 	{Name: "fingerprint", Typ: types.String},
 	{Name: "hint_type", Typ: types.String},
+	{Name: "database", Typ: types.String},
+	{Name: "enabled", Typ: types.Bool},
 	{Name: "created_at", Typ: types.TimestampTZ},
 }
 
@@ -207,6 +209,8 @@ var ShowStatementHintsDetailsColumns = ResultColumns{
 	{Name: "row_id", Typ: types.Int},
 	{Name: "fingerprint", Typ: types.String},
 	{Name: "hint_type", Typ: types.String},
+	{Name: "database", Typ: types.String},
+	{Name: "enabled", Typ: types.Bool},
 	{Name: "created_at", Typ: types.TimestampTZ},
 	{Name: "details", Typ: types.Jsonb},
 }

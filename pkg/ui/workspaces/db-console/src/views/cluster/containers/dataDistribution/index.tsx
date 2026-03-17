@@ -3,30 +3,24 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Loading } from "@cockroachlabs/cluster-ui";
+import {
+  Loading,
+  api as clusterUiApi,
+  useNodesSummary,
+} from "@cockroachlabs/cluster-ui";
+import filter from "lodash/filter";
 import forEach from "lodash/forEach";
+import isNil from "lodash/isNil";
 import map from "lodash/map";
 import sortBy from "lodash/sortBy";
-import React, { useEffect } from "react";
+import React, { useMemo } from "react";
 import Helmet from "react-helmet";
-import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { createSelector } from "reselect";
 
 import { InfoTooltip } from "src/components/infoTooltip";
 import { cockroach } from "src/js/protos";
-import {
-  refreshDataDistribution,
-  refreshNodes,
-  refreshLiveness,
-  CachedDataReducerState,
-} from "src/redux/apiReducers";
 import { LocalityTree, selectLocalityTree } from "src/redux/localities";
-import {
-  selectLivenessRequestStatus,
-  selectNodeRequestStatus,
-} from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+import { LivenessStatus } from "src/redux/nodes";
 import * as docsURL from "src/util/docs";
 import { FixLong } from "src/util/fixLong";
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
@@ -68,7 +62,7 @@ const RANGE_COALESCING_ADVICE = (
 );
 
 interface DataDistributionProps {
-  dataDistribution: CachedDataReducerState<DataDistributionResponse>;
+  dataDistribution: DataDistributionResponse;
   localityTree: LocalityTree;
   sortedZoneConfigs: ZoneConfig$Properties[];
 }
@@ -81,7 +75,7 @@ function DataDistribution({
   const getCellValue = (dbPath: TreePath, nodePath: TreePath): number => {
     const [dbName, tableName] = dbPath;
     const nodeID = nodePath[nodePath.length - 1];
-    const databaseInfo = dataDistribution.data.database_info;
+    const databaseInfo = dataDistribution.database_info;
 
     const res =
       databaseInfo[dbName].table_info[tableName].replica_count_by_node_id[
@@ -95,7 +89,7 @@ function DataDistribution({
 
   const nodeTree = nodeTreeFromLocalityTree("Cluster", localityTree);
 
-  const databaseInfo = dataDistribution.data.database_info;
+  const databaseInfo = dataDistribution.database_info;
   const dbTree: TreeNode<SchemaObject> = {
     name: "Cluster",
     data: {
@@ -149,31 +143,47 @@ function DataDistribution({
   );
 }
 
-interface DataDistributionPageProps {
-  dataDistribution: CachedDataReducerState<DataDistributionResponse>;
-  localityTree: LocalityTree;
-  localityTreeErrors: Error[];
-  sortedZoneConfigs: ZoneConfig$Properties[];
-  refreshDataDistribution: typeof refreshDataDistribution;
-  refreshNodes: typeof refreshNodes;
-  refreshLiveness: typeof refreshLiveness;
-}
-
 export function DataDistributionPage({
-  dataDistribution,
-  localityTree,
-  localityTreeErrors,
-  sortedZoneConfigs: sortedZoneConfigsProp,
-  refreshDataDistribution: refreshDataDistributionAction,
-  refreshNodes: refreshNodesAction,
-  refreshLiveness: refreshLivenessAction,
   history,
-}: DataDistributionPageProps & RouteComponentProps): React.ReactElement {
-  useEffect(() => {
-    refreshDataDistributionAction();
-    refreshNodesAction();
-    refreshLivenessAction();
-  });
+}: RouteComponentProps): React.ReactElement {
+  const {
+    nodeStatuses,
+    livenessStatusByNodeID,
+    isLoading: nodesLoading,
+    error: nodesError,
+  } = useNodesSummary();
+
+  const {
+    data: dataDistribution,
+    isLoading: ddLoading,
+    error: ddError,
+  } = clusterUiApi.useDataDistribution();
+
+  const commissioned = useMemo(
+    () =>
+      filter(nodeStatuses, node => {
+        const livenessStatus = livenessStatusByNodeID[`${node.desc.node_id}`];
+        return (
+          isNil(livenessStatus) ||
+          livenessStatus !== LivenessStatus.NODE_STATUS_DECOMMISSIONED
+        );
+      }),
+    [nodeStatuses, livenessStatusByNodeID],
+  );
+
+  const localityTree = useMemo(
+    () => selectLocalityTree.resultFunc(commissioned),
+    [commissioned],
+  );
+
+  const sortedZoneConfigs = useMemo(() => {
+    if (!dataDistribution) {
+      return null;
+    }
+    return sortBy(dataDistribution.zone_configs, zc => zc.target);
+  }, [dataDistribution]);
+
+  const isLoading = nodesLoading || ddLoading;
 
   return (
     <div>
@@ -190,14 +200,14 @@ export function DataDistributionPage({
       </section>
       <section className="section">
         <Loading
-          loading={!dataDistribution.data || !localityTree}
+          loading={isLoading || !dataDistribution || !localityTree}
           page={"data distribution"}
-          error={[dataDistribution.lastError, ...localityTreeErrors]}
+          error={[ddError, nodesError]}
           render={() => (
             <DataDistribution
               localityTree={localityTree}
               dataDistribution={dataDistribution}
-              sortedZoneConfigs={sortedZoneConfigsProp}
+              sortedZoneConfigs={sortedZoneConfigs}
             />
           )}
         />
@@ -206,39 +216,7 @@ export function DataDistributionPage({
   );
 }
 
-const sortedZoneConfigs = createSelector(
-  (state: AdminUIState) => state.cachedData.dataDistribution,
-  dataDistributionState => {
-    if (!dataDistributionState.data) {
-      return null;
-    }
-    return sortBy(dataDistributionState.data.zone_configs, zc => zc.target);
-  },
-);
-
-const localityTreeErrors = createSelector(
-  selectNodeRequestStatus,
-  selectLivenessRequestStatus,
-  (nodes, liveness) => [nodes.lastError, liveness.lastError],
-);
-
-const DataDistributionPageConnected = withRouter(
-  connect(
-    (state: AdminUIState, _: RouteComponentProps) => ({
-      dataDistribution: state.cachedData.dataDistribution,
-      sortedZoneConfigs: sortedZoneConfigs(state),
-      localityTree: selectLocalityTree(state),
-      localityTreeErrors: localityTreeErrors(state),
-    }),
-    {
-      refreshDataDistribution,
-      refreshNodes,
-      refreshLiveness,
-    },
-  )(DataDistributionPage),
-);
-
-export default DataDistributionPageConnected;
+export default withRouter(DataDistributionPage);
 
 // Helpers
 

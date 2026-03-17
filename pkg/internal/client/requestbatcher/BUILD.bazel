@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//pkg/kv",
         "//pkg/kv/kvpb",
+        "//pkg/obs/workloadid",
         "//pkg/roachpb",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",

@@ -671,6 +671,9 @@ func (u *unknownTable) IsRowLevelSecurityForced() bool { return false }
 // Policies is part of the cat.Table interface.
 func (u *unknownTable) Policies() *cat.Policies { return nil }
 
+// CanaryAndStableStatsDiffer is part of the cat.Table interface.
+func (u *unknownTable) CanaryAndStableStatsDiffer() bool { return false }
+
 var _ cat.Table = &unknownTable{}
 
 // unknownTable implements the cat.Index interface and is used to represent

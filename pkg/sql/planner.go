@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -361,6 +362,11 @@ func (p *planner) resumeFlowForPausablePortal(recv *DistSQLReceiver) error {
 // are set in newInternalPlanner.
 type internalPlannerParams struct {
 	collection *descs.Collection
+	// workloadID and workloadType, when set, are propagated to the
+	// planner's eval context so that DistSQL flows carry workload
+	// attribution for ASH sampling.
+	workloadID   uint64
+	workloadType workloadid.WorkloadType
 }
 
 // InternalPlannerParamsOption is an option that can be passed to
@@ -372,6 +378,20 @@ type InternalPlannerParamsOption func(*internalPlannerParams)
 func WithDescCollection(collection *descs.Collection) InternalPlannerParamsOption {
 	return func(params *internalPlannerParams) {
 		params.collection = collection
+	}
+}
+
+// WithWorkloadInfo propagates workload attribution to the planner's
+// EvalContext so that DistSQL flows carry the workload ID for ASH
+// sampling. Callers that create an internal planner outside of
+// MakeJobExecContext (e.g. job resumers that need a txn-bound planner,
+// or system tasks) should use this option to preserve attribution.
+func WithWorkloadInfo(
+	workloadID uint64, workloadType workloadid.WorkloadType,
+) InternalPlannerParamsOption {
+	return func(params *internalPlannerParams) {
+		params.workloadID = workloadID
+		params.workloadType = workloadType
 	}
 }
 
@@ -513,6 +533,11 @@ func newInternalPlanner(
 	p.evalCatalogBuiltins.Init(execCfg.Codec, p.txn, p.Descriptors(), p)
 	p.extendedEvalCtx.CatalogBuiltins = &p.evalCatalogBuiltins
 	p.statsCollector = &sslocal.StatsCollector{}
+
+	if params.workloadID != 0 {
+		p.extendedEvalCtx.WorkloadID = params.workloadID
+		p.extendedEvalCtx.WorkloadType = params.workloadType
+	}
 
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create

@@ -472,27 +472,18 @@ func validateIsStateEngineSpan(span spanset.TrickySpan) error {
 			"could not decode range ID for span: %s", span)
 	}
 
-	// If the span is inside RangeIDLocalSpans but outside RangeIDUnreplicated,
-	// it cannot overlap local raft keys.
-	rangeIDPrefixBuf := keys.MakeRangeIDPrefixBuf(rangeID)
+	// The only RangeID-local keys not belonging to StateEngine are unreplicated
+	// keys > RangeTombstoneKey, with one exception of the RaftReplicaIDKey.
+	rangeIDBuf := keys.MakeRangeIDPrefixBuf(rangeID)
+	unreplEnd := rangeIDBuf.UnreplicatedPrefix().PrefixEnd() // NB: copies
 	if !spanset.Overlaps(roachpb.Span{
-		Key:    rangeIDPrefixBuf.UnreplicatedPrefix(),
-		EndKey: rangeIDPrefixBuf.UnreplicatedPrefix().PrefixEnd(),
+		Key:    rangeIDBuf.RangeTombstoneKey().Next(),
+		EndKey: unreplEnd,
 	}, span) {
 		return nil
 	}
-
-	// RangeTombstoneKey and RaftReplicaIDKey belong to the StateEngine, and can
-	// be accessed as point keys.
-	if roachpb.Span(span).Equal(roachpb.Span{
-		Key: rangeIDPrefixBuf.RangeTombstoneKey(),
-	}) {
-		return nil
-	}
-
-	if roachpb.Span(span).Equal(roachpb.Span{
-		Key: rangeIDPrefixBuf.RaftReplicaIDKey(),
-	}) {
+	// RaftReplicaIDKey is in the StateEngine, and can be accessed as a point key.
+	if roachpb.Span(span).Equal(roachpb.Span{Key: rangeIDBuf.RaftReplicaIDKey()}) {
 		return nil
 	}
 

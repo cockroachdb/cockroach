@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -121,6 +122,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 			WorkloadID:    req.Batch.WorkloadID,
 			AppNameID:     req.Batch.AppNameID,
 			GatewayNodeID: req.Batch.GatewayNodeID,
+			WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
 		}
 	}
 	cleanup := ash.SetWorkState(

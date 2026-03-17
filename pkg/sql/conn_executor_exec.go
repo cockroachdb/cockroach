@@ -664,8 +664,11 @@ func (ex *connExecutor) execStmtInOpenState(
 	p.extendedEvalCtx.WorkloadID = uint64(ih.fingerprintId)
 	appNameID := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
 	p.extendedEvalCtx.AppNameID = appNameID
+	p.extendedEvalCtx.WorkloadType = workloadid.WorkloadTypeStatement
 	if p.txn != nil {
-		p.txn.SetWorkloadInfo(uint64(ih.fingerprintId), appNameID)
+		p.txn.SetWorkloadInfo(
+			uint64(ih.fingerprintId), appNameID, workloadid.WorkloadTypeStatement,
+		)
 	}
 
 	// Note that here we always unconditionally defer a function that takes care
@@ -1752,8 +1755,11 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	p.extendedEvalCtx.WorkloadID = uint64(ih.fingerprintId)
 	appNameID2 := ash.GetOrStoreAppNameID(p.SessionData().ApplicationName)
 	p.extendedEvalCtx.AppNameID = appNameID2
+	p.extendedEvalCtx.WorkloadType = workloadid.WorkloadTypeStatement
 	if p.txn != nil {
-		p.txn.SetWorkloadInfo(uint64(ih.fingerprintId), appNameID2)
+		p.txn.SetWorkloadInfo(
+			uint64(ih.fingerprintId), appNameID2, workloadid.WorkloadTypeStatement,
+		)
 	}
 
 	if buildutil.CrdbTestBuild {
@@ -3488,10 +3494,14 @@ func (ex *connExecutor) makeExecPlan(
 		return ctx, err
 	}
 
-	// For each non-internal query, we roll the dice to decide to use
-	// canary stats or stable stats for planning.
+	// For each non-internal query, roll the dice to determine the canary
+	// stats rollout path. The result is one of three states:
+	//   - StatsRolloutDefault: experiment off, use default stats
+	//   - StatsRolloutCanary:  experiment on, use canary (newest) stats
+	//   - StatsRolloutStable:  experiment on, use stable (second-newest) stats
 	if !planner.SessionData().Internal {
-		planner.EvalContext().UseCanaryStats = canaryRollDice(planner.EvalContext(), ex.rng.internal)
+		planner.EvalContext().StatsRollout =
+			canaryRollDice(planner.EvalContext(), ex.rng.internal)
 	}
 
 	if err := planner.makeOptimizerPlan(ctx); err != nil {
@@ -3845,7 +3855,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				ex.QualityOfService(),
 				ex.txnIsolationLevelToKV(ctx, s.Modes.Isolation),
 				ex.omitInRangefeeds(),
-				ex.bufferedWritesEnabled(ctx),
+				ex.bufferedWritesEnabled(explicitTxn),
 				ex.rng.internal,
 			)
 	case *tree.ShowCommitTimestamp:
@@ -3880,7 +3890,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 				ex.QualityOfService(),
 				ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation),
 				ex.omitInRangefeeds(),
-				ex.bufferedWritesEnabled(ctx),
+				ex.bufferedWritesEnabled(implicitTxn),
 				ex.rng.internal,
 			)
 	}
@@ -3915,7 +3925,7 @@ func (ex *connExecutor) beginImplicitTxn(
 			qos,
 			ex.txnIsolationLevelToKV(ctx, tree.UnspecifiedIsolation),
 			ex.omitInRangefeeds(),
-			ex.bufferedWritesEnabled(ctx),
+			ex.bufferedWritesEnabled(implicitTxn),
 			ex.rng.internal,
 		)
 }

@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 # knob-opt: allow-unsafe
 # TODO(andyk): Remove this once 25.3 is our minimum supported version.
 

@@ -58,11 +58,6 @@ export type IndexStatsRequestMessage =
 export type IndexStatsResponseMessage =
   protos.cockroach.server.serverpb.TableIndexStatsResponse;
 
-export type NonTableStatsRequestMessage =
-  protos.cockroach.server.serverpb.NonTableStatsRequest;
-export type NonTableStatsResponseMessage =
-  protos.cockroach.server.serverpb.NonTableStatsResponse;
-
 export type LogsRequestMessage = protos.cockroach.server.serverpb.LogsRequest;
 export type LogEntriesResponseMessage =
   protos.cockroach.server.serverpb.LogEntriesResponse;
@@ -82,11 +77,6 @@ export type ListJobProfilerExecutionDetailsRequestMessage =
   protos.cockroach.server.serverpb.ListJobProfilerExecutionDetailsRequest;
 export type ListJobProfilerExecutionDetailsResponseMessage =
   protos.cockroach.server.serverpb.ListJobProfilerExecutionDetailsResponse;
-
-export type QueryPlanRequestMessage =
-  protos.cockroach.server.serverpb.QueryPlanRequest;
-export type QueryPlanResponseMessage =
-  protos.cockroach.server.serverpb.QueryPlanResponse;
 
 export type ProblemRangesRequestMessage =
   protos.cockroach.server.serverpb.ProblemRangesRequest;
@@ -149,9 +139,6 @@ export type StatementsResponseMessage =
   protos.cockroach.server.serverpb.StatementsResponse;
 export type StatementDetailsResponseMessage =
   protos.cockroach.server.serverpb.StatementDetailsResponse;
-
-export type DataDistributionResponseMessage =
-  protos.cockroach.server.serverpb.DataDistributionResponse;
 
 export type EnqueueRangeRequestMessage =
   protos.cockroach.server.serverpb.EnqueueRangeRequest;
@@ -495,20 +482,6 @@ export function getIndexStats(
   );
 }
 
-// getNonTableStats gets detailed stats about non-table data ranges on the
-// cluster.
-export function getNonTableStats(
-  _req: NonTableStatsRequestMessage,
-  timeout?: moment.Duration,
-): Promise<NonTableStatsResponseMessage> {
-  return timeoutFetch(
-    serverpb.NonTableStatsResponse,
-    `${API_PREFIX}/nontablestats`,
-    null,
-    timeout,
-  );
-}
-
 // TODO (maxlang): add filtering
 // getLogs gets the logs for a specific node
 export function getLogs(
@@ -531,19 +504,6 @@ export function getLiveness(
   return timeoutFetch(
     serverpb.LivenessResponse,
     `${API_PREFIX}/liveness`,
-    null,
-    timeout,
-  );
-}
-
-// getQueryPlan gets physical query plan JSON for the provided query.
-export function getQueryPlan(
-  req: QueryPlanRequestMessage,
-  timeout?: moment.Duration,
-): Promise<QueryPlanResponseMessage> {
-  return timeoutFetch(
-    serverpb.QueryPlanResponse,
-    `${API_PREFIX}/queryplan?query=${encodeURIComponent(req.query)}`,
     null,
     timeout,
   );
@@ -716,18 +676,6 @@ export function getStatementDetails(
   return timeoutFetch(
     serverpb.StatementDetailsResponse,
     `${STATUS_PREFIX}/stmtdetails/${req.fingerprint_id}?${queryStr}`,
-    null,
-    timeout,
-  );
-}
-
-// getDataDistribution returns information about how replicas are distributed across nodes.
-export function getDataDistribution(
-  timeout?: moment.Duration,
-): Promise<DataDistributionResponseMessage> {
-  return timeoutFetch(
-    serverpb.DataDistributionResponse,
-    `${API_PREFIX}/data_distribution`,
     null,
     timeout,
   );

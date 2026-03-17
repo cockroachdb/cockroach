@@ -3,25 +3,19 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Button, util, Timestamp } from "@cockroachlabs/cluster-ui";
-import { ArrowLeft } from "@cockroachlabs/icons";
-import find from "lodash/find";
-import map from "lodash/map";
-import React, { useEffect } from "react";
-import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
-import { Link, RouteComponentProps, withRouter } from "react-router-dom";
-import { createSelector } from "reselect";
-
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
 import {
-  livenessNomenclature,
-  LivenessStatus,
-  NodesSummary,
-  nodesSummarySelector,
-  selectNodesSummaryValid,
-} from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+  Button,
+  util,
+  Timestamp,
+  useNodesSummary,
+} from "@cockroachlabs/cluster-ui";
+import { ArrowLeft } from "@cockroachlabs/icons";
+import map from "lodash/map";
+import React from "react";
+import { Helmet } from "react-helmet";
+import { Link, useHistory, useRouteMatch } from "react-router-dom";
+
+import { livenessNomenclature, LivenessStatus } from "src/redux/nodes";
 import { nodeIDAttr } from "src/util/constants";
 import { INodeStatus, MetricConstants, StatusMetrics } from "src/util/proto";
 import { getMatchParamByName } from "src/util/query";
@@ -83,33 +77,17 @@ function TableRow(props: {
   );
 }
 
-interface NodeOverviewProps extends RouteComponentProps {
-  node: INodeStatus;
-  nodesSummary: NodesSummary;
-  refreshNodes: typeof refreshNodes;
-  refreshLiveness: typeof refreshLiveness;
-  // True if current status results are still valid. Needed so that this
-  // component refreshes status query when it becomes invalid.
-  nodesSummaryValid: boolean;
-}
-
 /**
  * Renders the Node Overview page.
  */
-export function NodeOverview({
-  node,
-  nodesSummary,
-  refreshNodes: refreshNodesAction,
-  refreshLiveness: refreshLivenessAction,
-  history,
-}: NodeOverviewProps): React.ReactElement {
-  useEffect(() => {
-    // Refresh nodes status query when mounting and when props change;
-    // this will immediately trigger a new request if previous results
-    // are invalidated.
-    refreshNodesAction();
-    refreshLivenessAction();
-  });
+export function NodeOverview(): React.ReactElement {
+  const history = useHistory();
+  const match = useRouteMatch();
+  const nodeId = parseInt(getMatchParamByName(match, nodeIDAttr), 10);
+  const { nodeStatusByID, livenessStatusByNodeID, nodeDisplayNameByID } =
+    useNodesSummary();
+
+  const node = nodeStatusByID?.[nodeId?.toString()] as INodeStatus | undefined;
 
   const { Bytes, Percentage, DATE_FORMAT_24_TZ } = util;
 
@@ -122,15 +100,13 @@ export function NodeOverview({
   }
 
   const liveness =
-    nodesSummary.livenessStatusByNodeID[node.desc.node_id] ||
+    livenessStatusByNodeID[node.desc.node_id] ||
     LivenessStatus.NODE_STATUS_LIVE;
   const livenessString = livenessNomenclature(liveness);
 
   return (
     <div>
-      <Helmet
-        title={`${nodesSummary.nodeDisplayNameByID[node.desc.node_id]} | Nodes`}
-      />
+      <Helmet title={`${nodeDisplayNameByID[node.desc.node_id]} | Nodes`} />
       <div className="section section--heading">
         <Button
           onClick={() => history.goBack()}
@@ -167,21 +143,21 @@ export function NodeOverview({
                 data={node}
                 title="Live Bytes"
                 valueFn={metrics => Bytes(metrics[MetricConstants.liveBytes])}
-                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                nodeName={nodeDisplayNameByID[node.desc.node_id]}
                 CellTooltip={LiveBytesTooltip}
               />
               <TableRow
                 data={node}
                 title="Key Bytes"
                 valueFn={metrics => Bytes(metrics[MetricConstants.keyBytes])}
-                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                nodeName={nodeDisplayNameByID[node.desc.node_id]}
                 CellTooltip={KeyBytesTooltip}
               />
               <TableRow
                 data={node}
                 title="Value Bytes"
                 valueFn={metrics => Bytes(metrics[MetricConstants.valBytes])}
-                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                nodeName={nodeDisplayNameByID[node.desc.node_id]}
                 CellTooltip={ValueBytesTooltip}
               />
               <TableRow
@@ -190,7 +166,7 @@ export function NodeOverview({
                 valueFn={metrics =>
                   Bytes(metrics[MetricConstants.rangeKeyBytes] || 0)
                 }
-                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                nodeName={nodeDisplayNameByID[node.desc.node_id]}
                 CellTooltip={MVCCRangeKeyBytesTooltip}
               />
               <TableRow
@@ -199,7 +175,7 @@ export function NodeOverview({
                 valueFn={metrics =>
                   Bytes(metrics[MetricConstants.rangeValBytes] || 0)
                 }
-                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                nodeName={nodeDisplayNameByID[node.desc.node_id]}
                 CellTooltip={MVCCRangeValueBytesTooltip}
               />
               <TableRow
@@ -212,7 +188,7 @@ export function NodeOverview({
                 data={node}
                 title="System Bytes"
                 valueFn={metrics => Bytes(metrics[MetricConstants.sysBytes])}
-                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                nodeName={nodeDisplayNameByID[node.desc.node_id]}
                 CellTooltip={SystemBytesTooltip}
               />
               <TableRow
@@ -267,7 +243,7 @@ export function NodeOverview({
                 valueFn={metrics =>
                   Bytes(metrics[MetricConstants.usedCapacity])
                 }
-                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                nodeName={nodeDisplayNameByID[node.desc.node_id]}
                 CellTooltip={NodeUsedCapacityTooltip}
               />
               <TableRow
@@ -276,14 +252,14 @@ export function NodeOverview({
                 valueFn={metrics =>
                   Bytes(metrics[MetricConstants.availableCapacity])
                 }
-                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                nodeName={nodeDisplayNameByID[node.desc.node_id]}
                 CellTooltip={NodeAvailableCapacityTooltip}
               />
               <TableRow
                 data={node}
                 title="Maximum Capacity"
                 valueFn={metrics => Bytes(metrics[MetricConstants.capacity])}
-                nodeName={nodesSummary.nodeDisplayNameByID[node.desc.node_id]}
+                nodeName={nodeDisplayNameByID[node.desc.node_id]}
                 CellTooltip={NodeMaximumCapacityTooltip}
               />
             </tbody>
@@ -321,31 +297,4 @@ export function NodeOverview({
   );
 }
 
-export const currentNode = createSelector(
-  (state: AdminUIState, _props: RouteComponentProps): INodeStatus[] =>
-    state.cachedData.nodes.data,
-  (_state: AdminUIState, props: RouteComponentProps): number =>
-    parseInt(getMatchParamByName(props.match, nodeIDAttr), 10),
-  (nodes, id) => {
-    if (!nodes || !id) {
-      return undefined;
-    }
-    return find(nodes, ns => ns.desc.node_id === id);
-  },
-);
-
-export default withRouter(
-  connect(
-    (state: AdminUIState, ownProps: RouteComponentProps) => {
-      return {
-        node: currentNode(state, ownProps),
-        nodesSummary: nodesSummarySelector(state),
-        nodesSummaryValid: selectNodesSummaryValid(state),
-      };
-    },
-    {
-      refreshNodes,
-      refreshLiveness,
-    },
-  )(NodeOverview),
-);
+export default NodeOverview;

@@ -131,13 +131,13 @@ func (p *planner) ShowStatementHints(
 			var query string
 			if versionHasHintTypeCol {
 				query = `
-SELECT row_id, fingerprint, hint, created_at, hint_type
+SELECT row_id, fingerprint, hint, created_at, hint_type, database, enabled
 FROM system.statement_hints
 WHERE fingerprint = $1
 ORDER BY created_at DESC, row_id DESC`
 			} else {
 				query = `
-SELECT row_id, fingerprint, hint, created_at, NULL::STRING AS hint_type
+SELECT row_id, fingerprint, hint, created_at, NULL::STRING AS hint_type, NULL::STRING AS database, true::BOOL AS enabled
 FROM system.statement_hints
 WHERE fingerprint = $1
 ORDER BY created_at DESC, row_id DESC`
@@ -163,6 +163,8 @@ ORDER BY created_at DESC, row_id DESC`
 				hintBytes := row[2] // BYTES
 				createdAt := row[3] // TIMESTAMPTZ
 				hintType := row[4]  // STRING (hint_type column)
+				database := row[5]  // STRING (database column, nullable)
+				enabled := row[6]   // BOOL (enabled column)
 
 				var details = tree.DNull
 				if (!versionHasHintTypeCol || n.Options.Details) && hintBytes != tree.DNull {
@@ -186,9 +188,9 @@ ORDER BY created_at DESC, row_id DESC`
 
 				var outputRow tree.Datums
 				if n.Options.Details {
-					outputRow = tree.Datums{rowID, fp, hintType, createdAt, details}
+					outputRow = tree.Datums{rowID, fp, hintType, database, enabled, createdAt, details}
 				} else {
-					outputRow = tree.Datums{rowID, fp, hintType, createdAt}
+					outputRow = tree.Datums{rowID, fp, hintType, database, enabled, createdAt}
 				}
 
 				if _, err := v.rows.AddRow(ctx, outputRow); err != nil {

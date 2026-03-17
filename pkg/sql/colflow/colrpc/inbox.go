@@ -342,6 +342,7 @@ func (i *Inbox) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 				WorkloadID:    i.admissionInfo.WorkloadID,
 				AppNameID:     i.admissionInfo.AppNameID,
 				GatewayNodeID: i.admissionInfo.GatewayNodeID,
+				WorkloadType:  i.admissionInfo.WorkloadType,
 			},
 			ash.WorkNetwork, "InboxRecv")
 		m, err := i.stream.Recv()

@@ -1463,6 +1463,13 @@ func (s *statusServer) LogFile(
 	if s.rpcCtx.TenantID != roachpb.SystemTenantID {
 		tenantIDFilter = s.rpcCtx.TenantID.String()
 	}
+
+	// Build an exclusion set for severity-based filtering.
+	excludeSev := make(map[logpb.Severity]struct{}, len(req.ExcludeSeverities))
+	for _, sev := range req.ExcludeSeverities {
+		excludeSev[sev] = struct{}{}
+	}
+
 	for {
 		var entry logpb.Entry
 		if err := decoder.Decode(&entry); err != nil {
@@ -1490,6 +1497,9 @@ func (s *statusServer) LogFile(
 			return nil, srverrors.ServerError(ctx, err)
 		}
 		if tenantIDFilter != "" && entry.TenantID != tenantIDFilter {
+			continue
+		}
+		if _, excluded := excludeSev[entry.Severity]; excluded {
 			continue
 		}
 		resp.Entries = append(resp.Entries, entry)
@@ -3381,6 +3391,7 @@ func (s *statusServer) ListLocalActiveSessionHistory(
 			NodeID:        sample.NodeID,
 			TenantID:      sample.TenantID,
 			WorkloadID:    sample.WorkloadID,
+			WorkloadType:  sample.WorkloadType,
 			AppName:       sample.AppName,
 			WorkEventType: serverpb.WorkEventType(sample.WorkEventType),
 			WorkEvent:     sample.WorkEvent,

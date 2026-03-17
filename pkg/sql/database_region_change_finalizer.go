@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -48,6 +49,7 @@ func newDatabaseRegionChangeFinalizer(
 		execCfg,
 		txn.SessionData(),
 		WithDescCollection(txn.Descriptors()),
+		WithWorkloadInfo(kv.WorkloadInfoFromContext(ctx)),
 	)
 	localPlanner := p.(*planner)
 

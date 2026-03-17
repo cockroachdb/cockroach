@@ -1,5 +1,3 @@
-# LogicTest: !local-prepared
-
 # Disable declarative schema changer for this test and schema locked by
 # default for this test.
 statement ok

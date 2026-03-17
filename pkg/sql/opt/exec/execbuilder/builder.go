@@ -316,6 +316,16 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 		}
 	}
 
+	// If any table in the plan has divergent canary vs. stable statistics,
+	// mark the execution so that it is counted in canary/stable experiment
+	// metrics.
+	for _, tabMeta := range b.mem.Metadata().AllTables() {
+		if tabMeta.Table.CanaryAndStableStatsDiffer() {
+			b.flags.Set(exec.PlanFlagCanaryAndStableStatsDiffer)
+			break
+		}
+	}
+
 	rootRowCount := int64(b.e.(memo.RelExpr).Relational().Statistics().RowCountIfAvailable())
 	return b.factory.ConstructPlan(
 		plan.root, b.subqueries, b.cascades, b.triggers, b.checks, rootRowCount, b.flags,

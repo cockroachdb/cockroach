@@ -315,6 +315,10 @@ subtest end
 
 subtest simple_auto_stats_collection
 
+# Set sql.stats.canary_fraction to be non-zero so that we're in "experiment on" mode.
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction='0.1';
+
 statement ok
 SET optimizer_use_forecasts = off
 
@@ -980,6 +984,237 @@ FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE 'time-travel stats limitation:%'
 ----
 true
+
+subtest end
+
+subtest stats_differ_metrics
+
+# This subtest verifies that canary/stable execution counts are recorded in
+# statement statistics when planFlagCanaryAndStableStatsDiffer is set (i.e.
+# canary and stable stats genuinely diverge within the canary window).
+
+# crdb_internal.cluster_statement_statistics reads from the in-memory
+# stats store. We need to prevent stats from being flushed and cleared
+# from the in-memory store.
+statement ok
+SET CLUSTER SETTING sql.stats.flush.enabled = false
+
+statement ok
+SET optimizer_use_forecasts = off
+
+statement ok
+DROP TABLE IF EXISTS t_metrics;
+
+statement ok
+CREATE TABLE t_metrics (k INT PRIMARY KEY) WITH (sql_stats_canary_window = '3600s');
+
+# Inject two generations of stats so canary != stable within the canary window.
+statement ok
+ALTER TABLE t_metrics INJECT STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": ["k"],
+    "created_at": "2000-01-01 00:00:00.000000",
+    "distinct_count": 10,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "avg_size": 1,
+    "columns": ["k"],
+    "created_at": "2000-01-01 00:01:00.000000",
+    "distinct_count": 20,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 20
+  }
+]'
+
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction = '0.1'
+
+statement ok
+SET stats_as_of = '2000-01-01 00:01:10.000000'
+
+# ── Test 1: canary path records canary count ──
+
+# Truncate system.statement_statistics.
+statement ok
+SELECT crdb_internal.reset_sql_stats()
+
+statement ok
+SET canary_stats_mode = on
+
+statement ok
+SELECT * FROM t_metrics
+
+query III retry
+SELECT
+  (statistics->'statistics'->>'cnt')::INT,
+  COALESCE((statistics->'statistics'->'canaryStats'->>'count')::INT, 0),
+  COALESCE((statistics->'statistics'->'stableStats'->>'count')::INT, 0)
+FROM crdb_internal.cluster_statement_statistics
+WHERE metadata->>'query' LIKE 'SELECT * FROM %t_metrics'
+----
+1  1  0
+
+# ── Test 2: stable path records stable count ──
+
+# Truncate system.statement_statistics.
+statement ok
+SELECT crdb_internal.reset_sql_stats()
+
+statement ok
+SET canary_stats_mode = off
+
+statement ok
+SELECT * FROM t_metrics
+
+# "retry" is needed for queries against crdb_internal.cluster_statement_statistics,
+# which is ingested asynchronously via SQLStatsIngester with a 500ms timer.
+query III retry
+SELECT
+  (statistics->'statistics'->>'cnt')::INT,
+  COALESCE((statistics->'statistics'->'canaryStats'->>'count')::INT, 0),
+  COALESCE((statistics->'statistics'->'stableStats'->>'count')::INT, 0)
+FROM crdb_internal.cluster_statement_statistics
+WHERE metadata->>'query' LIKE 'SELECT * FROM %t_metrics'
+----
+1  0  1
+
+# ── Test 3: stats don't differ -> no canary/stable counts ──
+
+# Move stats_as_of past the canary window (latest stats at 00:01:00 + 3600s
+# canary window = 01:01:00) so that the stats have "ripened" and
+# canaryAndStableStatsDiffer returns false.
+statement ok
+SET stats_as_of = '2000-01-01 02:00:00.000000'
+
+# Truncate system.statement_statistics.
+statement ok
+SELECT crdb_internal.reset_sql_stats()
+
+statement ok
+SET canary_stats_mode = on
+
+statement ok
+SELECT * FROM t_metrics
+
+# Both canary and stable counts should be zero since stats_as_of is past
+# the canary window, so canaryAndStableStatsDiffer returns false.
+query III retry
+SELECT
+  (statistics->'statistics'->>'cnt')::INT,
+  COALESCE((statistics->'statistics'->'canaryStats'->>'count')::INT, 0),
+  COALESCE((statistics->'statistics'->'stableStats'->>'count')::INT, 0)
+FROM crdb_internal.cluster_statement_statistics
+WHERE metadata->>'query' LIKE 'SELECT * FROM %t_metrics'
+----
+1  0  0
+
+# ── Test 4: cached memo (prepared statement) preserves the flag ──
+
+# Move stats_as_of back within the canary window.
+statement ok
+SET stats_as_of = '2000-01-01 00:01:10.000000'
+
+statement ok
+DEALLOCATE ALL
+
+# Truncate system.statement_statistics.
+statement ok
+SELECT crdb_internal.reset_sql_stats()
+
+# Use stable path so the memo gets cached inside the prepared statement.
+# We only need to test with stable path since the canary path doesn't
+# reuse memo.
+statement ok
+SET canary_stats_mode = off
+
+statement ok
+PREPARE p_metrics AS SELECT * FROM t_metrics
+
+statement ok
+EXECUTE p_metrics
+
+query III retry
+SELECT
+  (statistics->'statistics'->>'cnt')::INT,
+  COALESCE((statistics->'statistics'->'canaryStats'->>'count')::INT, 0),
+  COALESCE((statistics->'statistics'->'stableStats'->>'count')::INT, 0)
+FROM crdb_internal.cluster_statement_statistics
+WHERE metadata->>'query' LIKE 'SELECT * FROM %t_metrics'
+----
+1  0  1
+
+# Truncate system.statement_statistics and execute again — the cached
+# memo should still be marked with statsDiff = true.
+statement ok
+SELECT crdb_internal.reset_sql_stats()
+
+statement ok
+SET TRACING = "on", cluster
+
+statement ok
+EXECUTE p_metrics
+
+statement ok
+SET TRACING = "off"
+
+# Confirm the cached memo was reused.
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%cached memo%'
+----
+reusing cached memo
+
+query III retry
+SELECT
+  (statistics->'statistics'->>'cnt')::INT,
+  COALESCE((statistics->'statistics'->'canaryStats'->>'count')::INT, 0),
+  COALESCE((statistics->'statistics'->'stableStats'->>'count')::INT, 0)
+FROM crdb_internal.cluster_statement_statistics
+WHERE metadata->>'query' LIKE 'SELECT * FROM %t_metrics'
+----
+1  0  1
+
+# Turn off the experiment.
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction = '0'
+
+statement ok
+SELECT crdb_internal.reset_sql_stats()
+
+statement ok
+EXECUTE p_metrics
+
+statement ok
+SET TRACING = "off"
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%cached memo%'
+----
+reusing cached memo
+
+# Though the experiment is off _now_, we are executing a prepared statement
+# whose plan was built while the experiment was on, so it's execution
+# statistics still serves as useful datapoint for stable table stats
+# evaluation.
+query III retry
+SELECT
+  (statistics->'statistics'->>'cnt')::INT,
+  COALESCE((statistics->'statistics'->'canaryStats'->>'count')::INT, 0),
+  COALESCE((statistics->'statistics'->'stableStats'->>'count')::INT, 0)
+FROM crdb_internal.cluster_statement_statistics
+WHERE metadata->>'query' LIKE 'SELECT * FROM %t_metrics'
+----
+1  0  0
+
+statement ok
+SET CLUSTER SETTING sql.stats.flush.enabled = true
+
+statement ok
+DEALLOCATE ALL
 
 subtest end
 

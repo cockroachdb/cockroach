@@ -804,6 +804,9 @@ message LocalOnlySessionData {
   // in the stable stats cache, a trace message would be logged, and
   // still the whole stable stats cache will be used for planning.
   util.hlc.Timestamp stats_as_of = 204 [(gogoproto.nullable) = false];
+  // BufferedWritesImplicitTxnsEnabled, if set, will make it so that the
+  // buffered writes feature is used for implicit txns.
+  bool buffered_writes_implicit_txns_enabled = 205;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

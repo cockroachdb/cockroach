@@ -64,7 +64,7 @@ jobs:
         run: |
           ./build/github/get-engflow-keys.sh
           ENGFLOW_ARGS=$(./build/github/engflow-args.sh)
-          echo "build $ENGFLOW_ARGS" > .bazelrc.user
+          echo "build $ENGFLOW_ARGS --config=crosslinux" > .bazelrc.user
 
       - name: Stage 1 - Assess Issue Feasibility
         id: assess
@@ -512,7 +512,9 @@ jobs:
           gh issue comment ${{ github.event.issue.number }} --body \
             "Auto-solver has created a draft PR to address this issue: ${{ steps.create_pr.outputs.pr_url }}
 
-          Please review the changes carefully before approving."
+          Please review the changes carefully before approving.
+
+          [Workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
 
       - name: Comment on issue - Skipped
         if: steps.assess_result.outputs.assessment == 'SKIP'
@@ -540,6 +542,8 @@ jobs:
             echo '```'
             echo ""
             echo "This issue may require human intervention due to complexity, architectural considerations, or ambiguity."
+            echo ""
+            echo "[Workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
           } > "$COMMENT_FILE"
           gh issue comment ${{ github.event.issue.number }} --body-file "$COMMENT_FILE"
 
@@ -555,7 +559,9 @@ jobs:
           gh issue comment ${{ github.event.issue.number }} --body \
             "Auto-solver attempted to fix this issue but was unable to complete the implementation.
 
-          This issue may require human intervention."
+          This issue may require human intervention.
+
+          [Workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
 
       - name: Remove c-autosolve label
         # Only remove label after assessment has run (success or failure).

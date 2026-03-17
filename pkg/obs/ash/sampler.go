@@ -9,10 +9,12 @@ import (
 	"context"
 	"encoding/hex"
 	"sort"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -66,10 +68,16 @@ var BufferSize = settings.RegisterIntSetting(
 // logged to the OPS channel. Each summary reports the most
 // frequently sampled (WorkEventType, WorkEvent, WorkloadID)
 // combinations in the ring buffer since the last report.
+//
+// This value is also used as the lookback window by the ASH report
+// profiler when writing reports alongside CPU profiles or goroutine
+// dumps triggered by the env sampler.
 var LogInterval = settings.RegisterDurationSetting(
 	settings.SystemVisible,
 	"obs.ash.log_interval",
-	"interval between periodic ASH top-N workload summary logs",
+	"interval between periodic ASH top-N workload summary logs; "+
+		"also used as the lookback window for ASH reports written "+
+		"by the env sampler profiler",
 	10*time.Minute,
 	settings.PositiveDuration,
 )
@@ -132,8 +140,8 @@ type Sampler struct {
 	// interval caches the sample interval so the timer loop can read it
 	// without locking, while the SetOnChange callback updates it.
 	interval atomic.Int64
-	// workloadIDCache caches the result of encodeStmtFingerprintIDToString
-	// to avoid repeated allocations for the same workload ID.
+	// workloadIDCache caches workload ID string encodings keyed by
+	// (id, type) to avoid repeated allocations for the same workload.
 	workloadIDCache *cache.UnorderedCache
 	// resolver, when set, fetches app name mappings from remote nodes
 	// for work states whose app name could not be resolved locally.
@@ -255,11 +263,18 @@ func (s *Sampler) takeSample(ctx context.Context) {
 		// Encode the workloadID to a string for the ASHSample.
 		// Note(alyshan): Consider encoding at read time.
 		if ps.state.WorkloadInfo.WorkloadID != 0 {
-			if cached, ok := s.workloadIDCache.Get(ps.state.WorkloadInfo.WorkloadID); ok {
+			cacheKey := workloadCacheKey{
+				id:  ps.state.WorkloadInfo.WorkloadID,
+				typ: ps.state.WorkloadInfo.WorkloadType,
+			}
+			if cached, ok := s.workloadIDCache.Get(cacheKey); ok {
 				ps.workloadIDStr = cached.(string)
 			} else {
-				ps.workloadIDStr = encodeStmtFingerprintIDToString(ps.state.WorkloadInfo.WorkloadID)
-				s.workloadIDCache.Add(ps.state.WorkloadInfo.WorkloadID, ps.workloadIDStr)
+				ps.workloadIDStr = encodeWorkloadID(
+					ps.state.WorkloadInfo.WorkloadID,
+					ps.state.WorkloadInfo.WorkloadType,
+				)
+				s.workloadIDCache.Add(cacheKey, ps.workloadIDStr)
 			}
 		}
 
@@ -288,6 +303,7 @@ func (s *Sampler) takeSample(ctx context.Context) {
 			NodeID:        s.nodeID,
 			TenantID:      ps.state.TenantID,
 			WorkloadID:    ps.workloadIDStr,
+			WorkloadType:  ps.state.WorkloadInfo.WorkloadType.String(),
 			AppName:       ps.appName,
 			WorkEventType: ps.state.WorkEventType,
 			WorkEvent:     ps.state.WorkEvent,
@@ -492,6 +508,27 @@ func GlobalSamplerMetrics() *Metrics {
 	return nil
 }
 
+// workloadCacheKey is the composite key for the workload ID string
+// cache. Using both the numeric ID and the type prevents collisions
+// when the same numeric value appears across different workload types.
+type workloadCacheKey struct {
+	id  uint64
+	typ workloadid.WorkloadType
+}
+
+// encodeWorkloadID returns the string representation of a workload ID,
+// choosing the encoding based on workload type.
+func encodeWorkloadID(id uint64, typ workloadid.WorkloadType) string {
+	switch typ {
+	case workloadid.WorkloadTypeJob:
+		return strconv.FormatUint(id, 10)
+	case workloadid.WorkloadTypeSystem:
+		return workloadid.WorkloadID(id).Name()
+	default: // WorkloadTypeUnknown + WorkloadTypeStatement
+		return encodeStmtFingerprintIDToString(id)
+	}
+}
+
 // encodeUint64ToBytes returns the []byte representation of a uint64 value.
 func encodeUint64ToBytes(id uint64) []byte {
 	result := make([]byte, 0, 8)
@@ -502,6 +539,13 @@ func encodeUint64ToBytes(id uint64) []byte {
 // statement fingerprint ID.
 func encodeStmtFingerprintIDToString(id uint64) string {
 	return hex.EncodeToString(encodeUint64ToBytes(id))
+}
+
+// GetGlobalSampler returns the process-wide ASH sampler, or nil if it
+// has not been initialized. Use this when you need to call
+// Sampler.GetSamples with a reusable buffer to avoid allocations.
+func GetGlobalSampler() *Sampler {
+	return globalSampler.Load()
 }
 
 // GetSamples returns all samples from the global ASH sampler. Returns
