@@ -513,6 +513,72 @@ func TestHintCacheGeneration(t *testing.T) {
 	getGenerationAssertNoChange()
 }
 
+// TestHintCacheMemoryAccounting verifies that the memory accounting tracks
+// allocations and deallocations for both hintedHashes and hintCache entries.
+func TestHintCacheMemoryAccounting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+	r := sqlutils.MakeSQLRunner(db)
+	setTestDefaults(t, srv)
+
+	st := cluster.MakeTestingClusterSettings()
+	fingerprintFlags := tree.FmtFlags(
+		tree.QueryFormattingForFingerprintsMask.Get(&st.SV),
+	)
+
+	hc := ts.ExecutorConfig().(sql.ExecutorConfig).StatementHintsCache
+
+	testutils.SucceedsSoon(t, func() error {
+		if mem := hc.TestingMemoryUsage(); mem != 0 {
+			return errors.Errorf("expected 0 memory usage initially, got %d", mem)
+		}
+		return nil
+	})
+
+	fingerprint1 := "SELECT a FROM t WHERE b = $1"
+	insertStatementHint(t, r, fingerprint1)
+	waitForUpdateOnFingerprintHash(t, ctx, hc, fingerprint1, fingerprintFlags, 1)
+
+	memAfterInsert := hc.TestingMemoryUsage()
+	require.Greater(t, memAfterInsert, int64(0))
+
+	requireHintsCount(t, hc, ctx, fingerprint1, fingerprintFlags, 1)
+	memAfterLookup := hc.TestingMemoryUsage()
+	require.Greater(t, memAfterLookup, memAfterInsert)
+
+	fingerprint2 := "SELECT c FROM t WHERE d = $1"
+	insertStatementHint(t, r, fingerprint2)
+	waitForUpdateOnFingerprintHash(t, ctx, hc, fingerprint2, fingerprintFlags, 1)
+	requireHintsCount(t, hc, ctx, fingerprint2, fingerprintFlags, 1)
+
+	memAfterSecond := hc.TestingMemoryUsage()
+	require.Greater(t, memAfterSecond, memAfterLookup)
+
+	deleteStatementHints(t, r, fingerprint1, 0)
+	waitForUpdateOnFingerprintHash(t, ctx, hc, fingerprint1, fingerprintFlags, 0)
+
+	memAfterDelete := hc.TestingMemoryUsage()
+	require.Less(t, memAfterDelete, memAfterSecond)
+
+	deleteStatementHints(t, r, fingerprint2, 0)
+	waitForUpdateOnFingerprintHash(t, ctx, hc, fingerprint2, fingerprintFlags, 0)
+
+	testutils.SucceedsSoon(t, func() error {
+		requireHintsCount(t, hc, ctx, fingerprint2, fingerprintFlags, 0)
+		if mem := hc.TestingMemoryUsage(); mem != 0 {
+			return errors.Errorf(
+				"expected 0 memory after deleting all hints, got %d", mem,
+			)
+		}
+		return nil
+	})
+}
+
 func setTestDefaults(t *testing.T, srv serverutils.TestServerInterface) {
 	// These settings can only be set on the system tenant.
 	r := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))

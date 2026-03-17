@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -33,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -45,7 +47,6 @@ import (
 // without having to perform DB reads. Because it is kept up to date via a
 // rangefeed, there can be a delay between when hints are added/removed and when
 // they become visible to statements.
-// TODO(drewk): add memory monitoring for the hintedHashes and hintCache maps.
 type StatementHintsCache struct {
 	mu struct {
 		// NB: This can't be a RWMutex for lookup because UnorderedCache.Get
@@ -68,6 +69,9 @@ type StatementHintsCache struct {
 		// system.statement_hints table. Cached hints are never modified after being
 		// added to the cache, and so can be returned directly without copying.
 		hintCache *cache.UnorderedCache
+
+		// acc tracks the memory usage of the hintedHashes map and hintCache.
+		acc mon.BoundAccount
 
 		// Used for testing; keeps track of how many times we actually read hints
 		// from the system table. Note that this count only includes reads used for
@@ -96,6 +100,13 @@ type StatementHintsCache struct {
 	// polled by goroutines in Await.
 	frontier atomic.Int64
 }
+
+const (
+	hintedHashesEntrySize = int64(unsafe.Sizeof(int64(0))) +
+		int64(unsafe.Sizeof(hlc.Timestamp{}))
+	cacheEntryOverhead = int64(unsafe.Sizeof(cache.Entry{})) +
+		int64(unsafe.Sizeof(cacheEntry{}))
+)
 
 // cacheSize is the size of the entries to store in the cache.
 // In general this should be larger than the number of active statement
@@ -130,12 +141,22 @@ func NewStatementHintsCache(
 	codec keys.SQLCodec,
 	db descs.DB,
 	st *cluster.Settings,
+	acc mon.BoundAccount,
 ) *StatementHintsCache {
 	hintsCache := &StatementHintsCache{clock: clock, f: f, stopper: stopper, codec: codec, db: db}
+	hintsCache.mu.acc = acc
 	hintsCache.mu.hintCache = cache.NewUnorderedCache(cache.Config{
 		Policy: cache.CacheLRU,
 		ShouldEvict: func(s int, key, value interface{}) bool {
 			return s > int(cacheSize.Get(&st.SV))
+		},
+		OnEvictedEntry: func(entry *cache.Entry) {
+			if entry.Value != nil {
+				e := entry.Value.(*cacheEntry)
+				hintsCache.mu.acc.Shrink(
+					context.Background(), cacheEntryOverhead+e.memUsage(),
+				)
+			}
 		},
 	})
 	hintsCache.generation.Store(1)
@@ -253,7 +274,21 @@ func (c *StatementHintsCache) handleInitialScan(update rangefeedcache.Update[*bu
 		// Invalidate all cache entries. In most cases the cache will already be
 		// empty, but if the first attempted initial scan failed, server startup
 		// will have proceeded and some statements may have populated the cache.
+		// The OnEvictedEntry callback handles shrinking for hintCache entries.
 		c.mu.hintCache.Clear()
+
+		// Re-account for hintedHashes memory.
+		c.mu.acc.Empty(context.Background())
+		if n := int64(len(hintedHashes)); n > 0 {
+			if err := c.mu.acc.Grow(
+				context.Background(), n*hintedHashesEntrySize,
+			); err != nil {
+				log.Ops.Warningf(
+					context.Background(),
+					"no memory available to account for hints cache: %v", err,
+				)
+			}
+		}
 	}()
 }
 
@@ -267,24 +302,34 @@ func (c *StatementHintsCache) handleIncrementalUpdate(
 	defer c.mu.Unlock()
 
 	for _, ev := range update.Events {
-		// Drop outdated entries from hintCache.
+		// Drop outdated entries from hintCache. The OnEvictedEntry callback
+		// handles shrinking the account for the evicted entry.
 		c.mu.hintCache.Del(ev.hash)
 		if pendingTS := c.mu.hintedHashes[ev.hash]; pendingTS.IsSet() {
 			// The hintedHashes entry for this hash is already being refreshed.
 			if pendingTS.Less(ev.ts) {
-				// Forward the refresh timestamp. The worker will perform another read
-				// at or after this timestamp after the first read returns.
+				// Forward the refresh timestamp. The worker will perform another
+				// read at or after this timestamp after the first read returns.
 				c.mu.hintedHashes[ev.hash] = ev.ts
 			}
 			continue
 		}
-		// Launch a goroutine to check the system table for hints on the hash. The
-		// refresh will observe the effect of this rangefeed event as well as all
-		// others that happened before the current timestamp.
-		// TODO(drewk): an insertion event implies on its own that there is at least
-		// one hint at that timestamp, so we could skip the DB read for insertions.
+		// Launch a goroutine to check the system table for hints on the hash.
+		// The refresh will observe the effect of this rangefeed event as well
+		// as all others that happened before the current timestamp.
+		// TODO(drewk): an insertion event implies on its own that there is at
+		// least one hint at that timestamp, so we could skip the DB read for
+		// insertions.
 		refreshTS := c.clock.Now()
+		_, existed := c.mu.hintedHashes[ev.hash]
 		c.mu.hintedHashes[ev.hash] = refreshTS
+		if !existed {
+			if err := c.mu.acc.Grow(ctx, hintedHashesEntrySize); err != nil {
+				log.Ops.Warningf(
+					ctx, "no memory available to account for hints cache: %v", err,
+				)
+			}
+		}
 		c.checkHashHasHintsAsync(ctx, ev.hash, refreshTS)
 	}
 }
@@ -329,6 +374,7 @@ func (c *StatementHintsCache) checkHashHasHintsAsync(
 					c.mu.hintedHashes[hash] = hlc.Timestamp{}
 				} else {
 					delete(c.mu.hintedHashes, hash)
+					c.mu.acc.Shrink(ctx, hintedHashesEntrySize)
 				}
 				return true
 			}()
@@ -479,6 +525,11 @@ func (c *StatementHintsCache) addCacheEntryLocked(
 		mustWait: true,
 		waitCond: sync.Cond{L: &c.mu},
 	}
+	if err := c.mu.acc.Grow(ctx, cacheEntryOverhead); err != nil {
+		log.Ops.Warningf(
+			ctx, "no memory available to account for hints cache: %v", err,
+		)
+	}
 	c.mu.hintCache.Add(statementHash, entry)
 	c.mu.numInternalQueries++
 
@@ -491,6 +542,21 @@ func (c *StatementHintsCache) addCacheEntryLocked(
 			GetStatementHintsFromDB(ctx, c.db.Executor(), statementHash, fingerprintFlags)
 		log.VEventf(ctx, 1, "finished reading hints for query %s", statementFingerprint)
 	}()
+
+	// Only account for the data if the entry is still in the cache (it may
+	// have been evicted by a concurrent rangefeed update while the lock was
+	// released for the DB read).
+	_, stillCached := c.mu.hintCache.StealthyGet(statementHash)
+	if stillCached {
+		if dataSize := entry.memUsage(); dataSize > 0 {
+			if err := c.mu.acc.Grow(ctx, dataSize); err != nil {
+				log.Ops.Warningf(
+					ctx,
+					"no memory available to account for hints cache: %v", err,
+				)
+			}
+		}
+	}
 
 	// Allow any concurrent queries to proceed.
 	entry.mustWait = false
@@ -528,8 +594,18 @@ type cacheEntry struct {
 	ids          []int64
 }
 
-// getMatchingHints returns the plan hints and row IDs for the given
-// fingerprint, or nil if they don't exist. The results are in order of row ID.
+func (entry *cacheEntry) memUsage() int64 {
+	var size int64
+	for i := range entry.hints {
+		size += entry.hints[i].Size()
+	}
+	for _, fp := range entry.fingerprints {
+		size += int64(len(fp))
+	}
+	size += int64(len(entry.ids)) * int64(unsafe.Sizeof(int64(0)))
+	return size
+}
+
 func (entry *cacheEntry) getMatchingHints(statementFingerprint string) (hints []Hint, ids []int64) {
 	for i := range entry.hints {
 		if entry.fingerprints[i] == statementFingerprint {
@@ -566,4 +642,12 @@ func (c *StatementHintsCache) TestingNumTableReads() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.mu.numInternalQueries
+}
+
+// TestingMemoryUsage returns the current memory usage tracked by the cache's
+// bound account.
+func (c *StatementHintsCache) TestingMemoryUsage() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.mu.acc.Used()
 }
