@@ -355,6 +355,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
 distribution: local
 vectorized: true
+table stats mode: canary
 ·
 • group (scalar)
 │ columns: (count)
@@ -376,6 +377,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
 distribution: local
 vectorized: true
+table stats mode: stable
 ·
 • group (scalar)
 │ columns: (count)
@@ -470,6 +472,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
 distribution: local
 vectorized: true
+table stats mode: canary
 ·
 • group (scalar)
 │ columns: (count)
@@ -494,6 +497,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
 distribution: local
 vectorized: true
+table stats mode: stable
 ·
 • group (scalar)
 │ columns: (count)
@@ -532,6 +536,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
 distribution: local
 vectorized: true
+table stats mode: canary
 ·
 • group (scalar)
 │ columns: (count)
@@ -554,6 +559,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
 distribution: local
 vectorized: true
+table stats mode: stable
 ·
 • group (scalar)
 │ columns: (count)
@@ -712,6 +718,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
 distribution: local
 vectorized: true
+table stats mode: canary
 ·
 • group (scalar)
 │ columns: (count)
@@ -732,6 +739,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
 distribution: local
 vectorized: true
+table stats mode: stable
 ·
 • group (scalar)
 │ columns: (count)
@@ -797,6 +805,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
 distribution: local
 vectorized: true
+table stats mode: canary
 ·
 • group (scalar)
 │ columns: (count)
@@ -818,6 +827,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
 distribution: local
 vectorized: true
+table stats mode: stable
 ·
 • group (scalar)
 │ columns: (count)
@@ -889,6 +899,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
 distribution: local
 vectorized: true
+table stats mode: canary
 ·
 • group (scalar)
 │ columns: (count)
@@ -910,6 +921,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
 distribution: local
 vectorized: true
+table stats mode: stable
 ·
 • group (scalar)
 │ columns: (count)
@@ -963,6 +975,7 @@ EXPLAIN (VERBOSE) SELECT count(*) FROM t;
 ----
 distribution: local
 vectorized: true
+table stats mode: stable
 ·
 • group (scalar)
 │ columns: (count)
@@ -1215,6 +1228,206 @@ SET CLUSTER SETTING sql.stats.flush.enabled = true
 
 statement ok
 DEALLOCATE ALL
+
+subtest end
+
+subtest multi_table_canary_window
+
+# Verify that the query-level "table stats mode" is shown when joining
+# tables with different canary window configurations.
+
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction = '0.1'
+
+statement ok
+SET optimizer_use_forecasts = off
+
+statement ok
+DROP TABLE IF EXISTS t_canary;
+
+statement ok
+DROP TABLE IF EXISTS t_normal;
+
+statement ok
+CREATE TABLE t_canary (k INT PRIMARY KEY, v INT) WITH (sql_stats_canary_window = '60s')
+
+statement ok
+CREATE TABLE t_normal (k INT PRIMARY KEY, v INT)
+
+# Inject two generations of stats for t_canary so canary != stable.
+statement ok
+ALTER TABLE t_canary INJECT STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": ["k"],
+    "created_at": "2000-01-01 00:00:00.000000",
+    "distinct_count": 100,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "avg_size": 1,
+    "columns": ["k"],
+    "created_at": "2000-01-01 00:01:00.000000",
+    "distinct_count": 200,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 200
+  }
+]'
+
+# Inject stats for t_normal (no canary window, single generation).
+statement ok
+ALTER TABLE t_normal INJECT STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": ["k"],
+    "created_at": "2000-01-01 00:01:00.000000",
+    "distinct_count": 50,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 50
+  }
+]'
+
+statement ok
+SET stats_as_of = '2000-01-01 00:01:30.000000'
+
+# Canary path.
+statement ok
+SET canary_stats_mode = on
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t_canary JOIN t_normal ON t_canary.k = t_normal.k;
+----
+distribution: local
+vectorized: true
+table stats mode: canary
+·
+• merge join (inner)
+│ columns: (k, v, k, v)
+│ estimated row count: 50
+│ equality: (k) = (k)
+│ left cols are key
+│ right cols are key
+│ merge ordering: +"(k=k)"
+│
+├── • scan
+│     columns: (k, v)
+│     ordering: +k
+│     estimated row count: 200 (100% of the table; stats collected <hidden> ago)
+│     table: t_canary@t_canary_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (k, v)
+      ordering: +k
+      estimated row count: 50 (100% of the table; stats collected <hidden> ago)
+      table: t_normal@t_normal_pkey
+      spans: FULL SCAN
+
+# Stable path.
+statement ok
+SET canary_stats_mode = off
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM t_canary JOIN t_normal ON t_canary.k = t_normal.k;
+----
+distribution: local
+vectorized: true
+table stats mode: stable
+·
+• merge join (inner)
+│ columns: (k, v, k, v)
+│ estimated row count: 50
+│ equality: (k) = (k)
+│ left cols are key
+│ right cols are key
+│ merge ordering: +"(k=k)"
+│
+├── • scan
+│     columns: (k, v)
+│     ordering: +k
+│     estimated row count: 100 (100% of the table; stats collected <hidden> ago)
+│     table: t_canary@t_canary_pkey
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (k, v)
+      ordering: +k
+      estimated row count: 50 (100% of the table; stats collected <hidden> ago)
+      table: t_normal@t_normal_pkey
+      spans: FULL SCAN
+
+# EXPLAIN ANALYZE (VERBOSE) should show the query-level table stats mode.
+statement ok
+SET canary_stats_mode = on
+
+query T
+EXPLAIN ANALYZE (VERBOSE) SELECT count(*) FROM t_canary;
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+table stats mode: canary
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• group (scalar)
+│ columns: (count)
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ vectorized batch count: 0
+│ execution time: 0µs
+│ actual row count: 1
+│ estimated row count: 1
+│ aggregate 0: count_rows()
+│
+└── • scan
+      columns: ()
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      vectorized batch count: 0
+      KV time: 0µs
+      KV rows decoded: 0
+      KV pairs read: 0
+      KV bytes read: 0 B
+      KV gRPC calls: 0
+      estimated max memory allocated: 0 B
+      MVCC step count (ext/int): 0/0
+      MVCC seek count (ext/int): 0/0
+      actual row count: 0
+      estimated row count: 200 (100% of the table; stats collected <hidden> ago)
+      table: t_canary@t_canary_pkey  ----------------------  WARNING: the row count estimate is inaccurate, consider running 'ANALYZE t_canary'
+      spans: FULL SCAN
+·
+WARNING: the row count estimate on table "t_canary" is inaccurate, consider running 'ANALYZE t_canary'
+
+statement ok
+RESET canary_stats_mode
+
+statement ok
+RESET stats_as_of
+
+statement ok
+RESET optimizer_use_forecasts
+
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction = 0
+
+statement ok
+DROP TABLE IF EXISTS t_canary;
+
+statement ok
+DROP TABLE IF EXISTS t_normal;
 
 subtest end
 
