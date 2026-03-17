@@ -1,5 +1,8 @@
 # LogicTest: multiregion-15node-5region-3azs
 
+statement error cannot add super region to a non-multi-region database
+CREATE DATABASE nosuperregion SUPER REGION "sr" VALUES "us-east-1"
+
 statement ok
 CREATE DATABASE oncreate PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SUPER REGION "create" VALUES "ap-southeast-2", "us-east-1"
 

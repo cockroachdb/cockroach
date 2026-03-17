@@ -535,9 +535,9 @@ func TestRandomSyntaxSchemaChangeDatabase(t *testing.T) {
 		"create_database_stmt",
 		"drop_database_stmt",
 		"alter_rename_database_stmt",
-		"create_user_stmt",
-		"drop_user_stmt",
-		"alter_user_stmt",
+		"create_role_stmt",
+		"drop_role_stmt",
+		"alter_role_stmt",
 	}
 	// Create multiple databases, so that in concurrent scenarios two connections
 	// will always share the same database.
@@ -548,6 +548,11 @@ func TestRandomSyntaxSchemaChangeDatabase(t *testing.T) {
 	}
 	var nextDatabaseName atomic.Int64
 	testRandomSyntax(t, true, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+		for _, root := range roots {
+			if !r.HasProduction(root) {
+				return errors.Newf("grammar rule %q not found in sql.y; rule may have been renamed", root)
+			}
+		}
 		if err := db.exec(t, ctx, "SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '30s'"); err != nil {
 			return err
 		}
@@ -589,6 +594,11 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 	}
 
 	testRandomSyntax(t, true, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+		for _, root := range roots {
+			if !r.HasProduction(root) {
+				return errors.Newf("grammar rule %q not found in sql.y; rule may have been renamed", root)
+			}
+		}
 		if err := db.exec(t, ctx, "SET CLUSTER SETTING sql.catalog.descriptor_lease_duration = '30s'"); err != nil {
 			return err
 		}
