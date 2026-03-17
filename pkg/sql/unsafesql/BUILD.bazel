@@ -30,6 +30,7 @@ go_test(
         "//pkg/server",
         "//pkg/settings",
         "//pkg/sql/isql",
+        "//pkg/sql/parser",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlerrors",
