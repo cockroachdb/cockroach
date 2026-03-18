@@ -222,6 +222,13 @@ func (s *CrossRangeTxnWrapperSender) Send(
 		log.KvExec.Fatalf(ctx, "CrossRangeTxnWrapperSender can't handle transactional requests")
 	}
 
+	if ba.Header.WorkloadID == 0 {
+		if wid, wtype := WorkloadInfoFromContext(ctx); wid != 0 {
+			ba.Header.WorkloadID = wid
+			ba.Header.WorkloadType = wtype.ToUint32()
+		}
+	}
+
 	br, pErr := s.wrapped.Send(ctx, ba)
 	if _, ok := pErr.GetDetail().(*kvpb.OpRequiresTxnError); !ok {
 		return br, pErr
