@@ -508,6 +508,8 @@ func (n *controllerImpl) AdmitRangefeedRequest(
 			Priority:        admissionpb.WorkPriority(request.AdmissionHeader.Priority),
 			CreateTime:      request.AdmissionHeader.CreateTime,
 			BypassAdmission: false,
+			WorkloadID:      uint64(workloadid.WORKLOAD_ID_RANGEFEED),
+			WorkloadType:    workloadid.WorkloadTypeSystem,
 		})
 }
 
