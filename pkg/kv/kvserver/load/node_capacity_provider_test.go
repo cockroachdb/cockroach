@@ -41,7 +41,7 @@ func TestNodeCapacityProvider(t *testing.T) {
 		storeCount: 3,
 	}
 
-	provider := load.NewNodeCapacityProvider(stopper, mockStores, admission.NewSQLCPUProvider(), load.NodeCapacityProviderConfig{
+	provider := load.NewNodeCapacityProvider(stopper, mockStores, admission.NewSQLCPUProvider(nil, nil), load.NodeCapacityProviderConfig{
 		CPUUsageRefreshInterval:    1 * time.Millisecond,
 		CPUCapacityRefreshInterval: 1 * time.Millisecond,
 		CPUUsageMovingAverageAge:   20,
