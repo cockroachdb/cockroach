@@ -10,6 +10,7 @@ import Select, { Option } from "react-select";
 
 import * as protos from "src/js/protos";
 import { isSystemTenant } from "src/redux/tenants";
+import { trackMetricSelected } from "src/util/analytics";
 import Dropdown, { DropdownOption } from "src/views/shared/components/dropdown";
 
 import { MetricOption } from "./metricOption";
@@ -111,9 +112,12 @@ export function CustomMetricRow({
             searchable={true}
             value={metric}
             options={metricOptions}
-            onChange={(opt: Option<string>) =>
-              changeState({ metric: opt.value })
-            }
+            onChange={(opt: Option<string>) => {
+              changeState({ metric: opt.value });
+              if (opt.value) {
+                trackMetricSelected(opt.value);
+              }
+            }}
             placeholder="Select a metric..."
             optionComponent={MetricOption}
             matchProp="label"
