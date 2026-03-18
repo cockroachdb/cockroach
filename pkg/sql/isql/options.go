@@ -62,7 +62,7 @@ func (tc *TxnConfig) GetAdmissionPriority() (admissionpb.WorkPriority, bool) {
 	if tc.priority != nil {
 		return *tc.priority, true
 	}
-	return 0, false
+	return admissionpb.NormalPri, false
 }
 
 func (tc *TxnConfig) Init(opts ...TxnOption) {
