@@ -30,6 +30,10 @@ type Hint struct {
 	// The hint should only be applied to statements if Enabled is true.
 	Enabled bool
 
+	// Database is the database to which this hint is scoped. If empty, the hint
+	// applies regardless of the current database.
+	Database string
+
 	// If Err is not nil it was an error encountered while loading the hint from
 	// system.statement_hints, and Enabled will be false.
 	Err error
@@ -74,14 +78,30 @@ func CheckForStatementHintsInDB(
 // error. If one of the hints cannot be unmarshalled, the hint (and associated
 // fingerprint and ID) will be skipped but no error will be returned.
 func GetStatementHintsFromDB(
-	ctx context.Context, ex isql.Executor, statementHash int64, fingerprintFlags tree.FmtFlags,
+	ctx context.Context,
+	settings *cluster.Settings,
+	ex isql.Executor,
+	statementHash int64,
+	fingerprintFlags tree.FmtFlags,
 ) (hintIDs []int64, fingerprints []string, hints []Hint, retErr error) {
 	const opName = "get-plan-hints"
-	const getHintsStmt = `
-    SELECT "row_id", "fingerprint", "hint"
+	var getHintsStmt string
+	hasEnabledCol := settings.Version.IsActive(
+		ctx, clusterversion.V26_2_StatementHintsTypeNameEnabledColumnsAdded,
+	)
+	if hasEnabledCol {
+		getHintsStmt = `
+    SELECT "row_id", "fingerprint", "hint", "enabled", "database"
     FROM system.statement_hints
     WHERE "hash" = $1
     ORDER BY "created_at" DESC, "row_id" DESC`
+	} else {
+		getHintsStmt = `
+    SELECT "row_id", "fingerprint", "hint", true AS "enabled", NULL AS "database"
+    FROM system.statement_hints
+    WHERE "hash" = $1
+    ORDER BY "created_at" DESC, "row_id" DESC`
+	}
 	it, queryErr := ex.QueryIteratorEx(
 		ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride,
 		getHintsStmt, statementHash,
@@ -170,7 +190,10 @@ func parseHint(
 			return hintID, fingerprint, hint
 		}
 	}
-	hint.Enabled = true
+	hint.Enabled = bool(tree.MustBeDBool(datums[3]))
+	if datums[4] != tree.DNull {
+		hint.Database = string(tree.MustBeDString(datums[4]))
+	}
 	return hintID, fingerprint, hint
 }
 
@@ -277,10 +300,110 @@ func DeleteHintFromDB(
 	return rowIDs, fingerprints, hintBytes, nil
 }
 
+// SetHintEnabledInDB updates the enabled status of statement hints in
+// system.statement_hints, filtered by row ID or fingerprint. If the provided
+// rowID is zero, we don't filter on row ID. If the fingerprint is empty string,
+// we don't filter on fingerprint. Returns the number of affected rows.
+func SetHintEnabledInDB(
+	ctx context.Context,
+	settings *cluster.Settings,
+	txn isql.Txn,
+	rowID int64,
+	fingerprint string,
+	enabled bool,
+) (int64, error) {
+	const opName = "set-statement-hint-enabled"
+
+	// This is implemented as a DELETE followed by an INSERT (rather than an
+	// UPDATE) so that secondary index entries are recreated, which triggers
+	// rangefeed cache invalidation. A simple UPDATE on the enabled column would
+	// not fire a rangefeed event because the watched hash_idx index doesn't
+	// include that column.
+	if !settings.Version.IsActive(ctx, clusterversion.V26_2_StatementHintsTypeNameEnabledColumnsAdded) {
+		return 0, errors.New("cannot set statement hint enabled: enabled column not yet available")
+	}
+	filterCols := make([]string, 0, 2)
+	vals := make([]interface{}, 0, 2)
+	if rowID != 0 {
+		filterCols = append(filterCols, `"row_id"`)
+		vals = append(vals, rowID)
+	}
+	if fingerprint != "" {
+		filterCols = append(filterCols, `"fingerprint"`)
+		vals = append(vals, fingerprint)
+	}
+
+	if len(filterCols) == 0 {
+		return 0, errors.New(
+			"set statement hint enabled must specify at least one of row_id or fingerprint",
+		)
+	}
+
+	// Step 1: DELETE matching rows and capture their data.
+	var whereClause strings.Builder
+	for i, filterCol := range filterCols {
+		if i > 0 {
+			whereClause.WriteString(" AND ")
+		}
+		if _, err := fmt.Fprintf(&whereClause, "%s = $%d", filterCol, i+1); err != nil {
+			return 0, err
+		}
+	}
+	deletedRows, err := txn.QueryBufferedEx(
+		ctx, opName, txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf(
+			`DELETE FROM system.statement_hints WHERE %s`+
+				` RETURNING row_id, fingerprint, hint, created_at, hint_type, hint_name, database`,
+			whereClause.String(),
+		),
+		vals...,
+	)
+	if err != nil {
+		return 0, err
+	}
+	if len(deletedRows) == 0 {
+		return 0, nil
+	}
+
+	// Step 2: INSERT all rows back with the new enabled value. The hash column
+	// is computed/stored and will be recomputed automatically.
+	var insertBuf strings.Builder
+	insertBuf.WriteString(
+		`INSERT INTO system.statement_hints` +
+			` (row_id, fingerprint, hint, created_at, hint_type, hint_name, enabled, database)` +
+			` VALUES `,
+	)
+	insertArgs := make([]interface{}, 0, len(deletedRows)*8)
+	for i, row := range deletedRows {
+		if i > 0 {
+			insertBuf.WriteString(", ")
+		}
+		base := i*8 + 1
+		fmt.Fprintf(&insertBuf, "($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
+			base, base+1, base+2, base+3, base+4, base+5, base+6, base+7,
+		)
+		// row columns: 0=row_id, 1=fingerprint, 2=hint, 3=created_at,
+		// 4=hint_type, 5=hint_name, 6=database
+		insertArgs = append(insertArgs,
+			row[0], row[1], row[2], row[3], row[4], row[5], enabled, row[6],
+		)
+	}
+	_, err = txn.ExecEx(
+		ctx, opName, txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		insertBuf.String(),
+		insertArgs...,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return int64(len(deletedRows)), nil
+}
+
 // Size returns an estimate of the memory usage of the Hint in bytes.
 func (hint *Hint) Size() int64 {
 	res := int64(unsafe.Sizeof(*hint))
 	res += int64(hint.StatementHintUnion.Size())
+	res += int64(len(hint.Database))
 	if hint.HintInjectionDonor != nil {
 		res += hint.HintInjectionDonor.Size()
 	}

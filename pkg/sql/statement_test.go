@@ -100,10 +100,12 @@ SELECT 1 /*action='%2Fparam*d',controller='index',framework='spring',
 							}
 							stmt = makeStatementFromPrepared(
 								ctx, ps, clusterunique.ID{}, tree.FmtSimple, nil, /* statementHintsCache */
+								"", /* currentDB */
 							)
 						} else {
 							stmt = makeStatement(
 								ctx, stmts[0], clusterunique.ID{}, tree.FmtSimple, nil, /* statementHintsCache */
+								"", /* currentDB */
 							)
 						}
 						if withComments {

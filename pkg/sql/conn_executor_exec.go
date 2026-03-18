@@ -451,9 +451,9 @@ func (ex *connExecutor) execStmtInOpenState(
 
 	var stmt Statement
 	if isExtendedProtocol {
-		stmt = makeStatementFromPrepared(ctx, prepared, queryID, stmtFingerprintFmtMask, statementHintsCache)
+		stmt = makeStatementFromPrepared(ctx, prepared, queryID, stmtFingerprintFmtMask, statementHintsCache, ex.sessionData().Database)
 	} else {
-		stmt = makeStatement(ctx, parserStmt, queryID, stmtFingerprintFmtMask, statementHintsCache)
+		stmt = makeStatement(ctx, parserStmt, queryID, stmtFingerprintFmtMask, statementHintsCache, ex.sessionData().Database)
 	}
 
 	if len(stmt.QueryTags) > 0 {
@@ -633,7 +633,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		stmt.HintIDs = ps.HintIDs
 		stmt.HintsGeneration = ps.HintsGeneration
 		stmt.ASTWithInjectedHints = ps.ASTWithInjectedHints
-		stmt.ReloadHintsIfStale(ctx, stmtFingerprintFmtMask, statementHintsCache)
+		stmt.ReloadHintsIfStale(ctx, stmtFingerprintFmtMask, statementHintsCache, ex.sessionData().Database)
 		// Don't reset the statement type if we're within EXPLAIN ANALYZE, as this
 		// would break the special case handling in GetFormatCode that relies on
 		// cmdCompleteTag being "EXPLAIN". For EXPLAIN ANALYZE EXECUTE, the format
@@ -1012,6 +1012,7 @@ func (ex *connExecutor) execStmtInOpenState(
 			ex.server.cfg.GenerateID(),
 			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
 			statementHintsCache,
+			ex.sessionData().Database,
 		)
 		var rawTypeHints []oid.Oid
 
@@ -1369,9 +1370,9 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 	}
 
 	if isExtendedProtocol {
-		vars.stmt = makeStatementFromPrepared(ctx, portal.Stmt, queryID, stmtFingerprintFmtMask, statementHintsCache)
+		vars.stmt = makeStatementFromPrepared(ctx, portal.Stmt, queryID, stmtFingerprintFmtMask, statementHintsCache, ex.sessionData().Database)
 	} else {
-		vars.stmt = makeStatement(ctx, parserStmt, queryID, stmtFingerprintFmtMask, statementHintsCache)
+		vars.stmt = makeStatement(ctx, parserStmt, queryID, stmtFingerprintFmtMask, statementHintsCache, ex.sessionData().Database)
 	}
 
 	var queryTimeoutTicker *time.Timer
@@ -1569,7 +1570,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		vars.stmt.HintIDs = ps.HintIDs
 		vars.stmt.HintsGeneration = ps.HintsGeneration
 		vars.stmt.ASTWithInjectedHints = ps.ASTWithInjectedHints
-		vars.stmt.ReloadHintsIfStale(ctx, stmtFingerprintFmtMask, statementHintsCache)
+		vars.stmt.ReloadHintsIfStale(ctx, stmtFingerprintFmtMask, statementHintsCache, ex.sessionData().Database)
 		// Don't reset the statement type if we're within EXPLAIN ANALYZE, as this
 		// would break the special case handling in GetFormatCode that relies on
 		// cmdCompleteTag being "EXPLAIN". For EXPLAIN ANALYZE EXECUTE, the format
@@ -2027,6 +2028,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			ex.server.cfg.GenerateID(),
 			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
 			statementHintsCache,
+			ex.sessionData().Database,
 		)
 		var rawTypeHints []oid.Oid
 
@@ -3800,6 +3802,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			ctx, parserStmt, ex.server.cfg.GenerateID(),
 			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&ex.server.cfg.Settings.SV)),
 			nil, /* statementHintsCache */
+			ex.sessionData().Database,
 		)
 		p.stmt = stmt
 		p.semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)

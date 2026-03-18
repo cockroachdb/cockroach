@@ -83,6 +83,7 @@ func (ex *connExecutor) execPrepare(
 		ctx, parseCmd.Statement, ex.server.cfg.GenerateID(),
 		tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(ex.server.cfg.SV())),
 		statementHintsCache,
+		ex.sessionData().Database,
 	)
 	_, err := ex.addPreparedStmt(
 		ctx,

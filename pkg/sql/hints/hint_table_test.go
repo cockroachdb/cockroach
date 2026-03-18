@@ -67,7 +67,7 @@ func TestHintTableOperations(t *testing.T) {
 
 	// Retrieve nonexistent hints.
 	hintIDs, fingerprints, hintsFromDB, err := hints.GetStatementHintsFromDB(
-		ctx, ex, hash1, fingerprintFlags,
+		ctx, ts.ClusterSettings(), ex, hash1, fingerprintFlags,
 	)
 	require.NoError(t, err)
 	require.Empty(t, hintIDs)
@@ -90,7 +90,7 @@ func TestHintTableOperations(t *testing.T) {
 
 	// Fetch the inserted hint.
 	hintIDs, fingerprints, hintsFromDB, err = hints.GetStatementHintsFromDB(
-		ctx, ex, hash1, fingerprintFlags,
+		ctx, ts.ClusterSettings(), ex, hash1, fingerprintFlags,
 	)
 	require.NoError(t, err)
 	require.Len(t, hintIDs, 1)
@@ -112,7 +112,7 @@ func TestHintTableOperations(t *testing.T) {
 
 	// Fetch all hints for the fingerprint.
 	hintIDs, fingerprints, hintsFromDB, err = hints.GetStatementHintsFromDB(
-		ctx, ex, hash1, fingerprintFlags,
+		ctx, ts.ClusterSettings(), ex, hash1, fingerprintFlags,
 	)
 	require.NoError(t, err)
 	require.Len(t, hintIDs, 2)
@@ -133,7 +133,7 @@ func TestHintTableOperations(t *testing.T) {
 
 	// Retrieve hint for the new fingerprint.
 	hintIDs2, fingerprints2, hintsFromDB2, err := hints.GetStatementHintsFromDB(
-		ctx, ex, hash2, fingerprintFlags,
+		ctx, ts.ClusterSettings(), ex, hash2, fingerprintFlags,
 	)
 	require.NoError(t, err)
 	require.Len(t, hintIDs2, 1)
@@ -152,4 +152,68 @@ func TestHintTableOperations(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Greater(t, emptyFingerprintHintID, int64(0))
+
+	// Test SetHintEnabledInDB by rowID.
+	var numAffected int64
+	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		numAffected, err = hints.SetHintEnabledInDB(
+			ctx, ts.ClusterSettings(), txn,
+			insertedHintID1, "", /* fingerprint */
+			false, /* enabled */
+		)
+		return err
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), numAffected)
+
+	// Verify the hint is now disabled.
+	_, _, hintsFromDB, err = hints.GetStatementHintsFromDB(
+		ctx, ts.ClusterSettings(), ex, hash1, fingerprintFlags,
+	)
+	require.NoError(t, err)
+	found := false
+	for _, h := range hintsFromDB {
+		if !h.Enabled {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "expected to find a disabled hint")
+
+	// Test SetHintEnabledInDB by fingerprint.
+	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		numAffected, err = hints.SetHintEnabledInDB(
+			ctx, ts.ClusterSettings(), txn,
+			0,                   /* rowID */
+			fingerprint1, false, /* enabled */
+		)
+		return err
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), numAffected)
+
+	// Re-enable by fingerprint.
+	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		numAffected, err = hints.SetHintEnabledInDB(
+			ctx, ts.ClusterSettings(), txn,
+			0,                  /* rowID */
+			fingerprint1, true, /* enabled */
+		)
+		return err
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2), numAffected)
+
+	// Test SetHintEnabledInDB with no filter returns error.
+	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, err = hints.SetHintEnabledInDB(
+			ctx, ts.ClusterSettings(), txn,
+			0,     /* rowID */
+			"",    /* fingerprint */
+			false, /* enabled */
+		)
+		return err
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must specify at least one of row_id or fingerprint")
 }

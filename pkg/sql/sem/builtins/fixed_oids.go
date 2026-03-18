@@ -2898,6 +2898,8 @@ var builtinOidsArray = []string{
 	2943: `aclitemout(aclitem: aclitem) -> bytes`,
 	2944: `aclitem(string: string) -> aclitem`,
 	2945: `aclitem(citext: citext) -> aclitem`,
+	2946: `information_schema.crdb_enable_statement_hints(enabled: bool, rowid: int) -> int`,
+	2947: `information_schema.crdb_enable_statement_hints(enabled: bool, statement_fingerprint: string) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
