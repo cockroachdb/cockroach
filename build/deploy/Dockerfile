@@ -16,11 +16,15 @@ RUN microdnf update -y && microdnf install -y \
       xz \
     && rm -rf /var/cache/yum
 
+# TARGETARCH is set automatically by `docker buildx build --platform`.
+# The build context must place per-arch files under ${TARGETARCH}/ subdirectories
+# (e.g. amd64/cockroach, amd64/cockroach.sh, amd64/libgeos.so, etc.).
+ARG TARGETARCH
 RUN mkdir /usr/local/lib/cockroach /cockroach /licenses /docker-entrypoint-initdb.d
-COPY cockroach.sh cockroach /cockroach/
-COPY LICENSE THIRD-PARTY-NOTICES.txt /licenses/
+COPY ${TARGETARCH}/cockroach.sh ${TARGETARCH}/cockroach /cockroach/
+COPY ${TARGETARCH}/LICENSE ${TARGETARCH}/THIRD-PARTY-NOTICES.txt /licenses/
 # Install GEOS libraries.
-COPY libgeos.so libgeos_c.so /usr/local/lib/cockroach/
+COPY ${TARGETARCH}/libgeos.so ${TARGETARCH}/libgeos_c.so /usr/local/lib/cockroach/
 
 # Set working directory so that relative paths
 # are resolved appropriately when passed as args.
