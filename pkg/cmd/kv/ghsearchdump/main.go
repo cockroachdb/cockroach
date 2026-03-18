@@ -479,8 +479,9 @@ func cleanPRDetail(repo string, pr *PRDetail, lastPush time.Time) CleanPR {
 		if body == "" {
 			continue
 		}
-		// Skip "bors r+" type comments.
-		if strings.HasPrefix(strings.ToLower(body), "bors r") {
+		// Skip merge queue command comments (bors and trunk).
+		if strings.HasPrefix(strings.ToLower(body), "bors r") ||
+			strings.HasPrefix(strings.ToLower(body), "/trunk") {
 			continue
 		}
 		// Skip Reviewable status-only comments.
