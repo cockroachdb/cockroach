@@ -93,6 +93,7 @@ func TestPrivilege(t *testing.T) {
 					{Kind: privilege.REPLICATIONDEST},
 					{Kind: privilege.REPLICATIONSOURCE},
 					{Kind: privilege.TRIGGER},
+					{Kind: privilege.TRUNCATE},
 					{Kind: privilege.UPDATE},
 					{Kind: privilege.ZONECONFIG},
 				}},

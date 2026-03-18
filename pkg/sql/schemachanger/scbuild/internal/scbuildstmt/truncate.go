@@ -40,11 +40,12 @@ func Truncate(b BuildCtx, stmt *tree.Truncate) {
 	for i := range stmt.Tables {
 		tblName := &stmt.Tables[i]
 		elts := b.ResolveTable(tblName.ToUnresolvedObjectName(), ResolveParams{
-			RequiredPrivilege: privilege.DROP,
-			WithOffline:       stmt.ImportRollback,
+			WithOffline: stmt.ImportRollback,
 		})
 		tbl := elts.FilterTable().MustGetOneElement()
 		tblName.ObjectNamePrefix = b.NamePrefix(tbl)
+		// Accept either TRUNCATE or DROP privilege for backward compatibility.
+		checkTruncateOrDropPrivilege(b, tbl)
 		tablesToTruncate.Add(tbl.TableID)
 	}
 
@@ -67,10 +68,8 @@ func Truncate(b BuildCtx, stmt *tree.Truncate) {
 			// Queue this table to process dependencies.
 			truncatesToProcess = append(truncatesToProcess, referencingTableID)
 		}
-		// Validate we have permission to drop this table.
-		if err := b.CheckPrivilege(refElts.FilterTable().MustGetOneElement(), privilege.DROP); err != nil {
-			panic(err)
-		}
+		// Accept either TRUNCATE or DROP privilege for backward compatibility.
+		checkTruncateOrDropPrivilege(b, refElts.FilterTable().MustGetOneElement())
 	}
 	for len(truncatesToProcess) > 0 {
 		// Pop the first element and process it.
@@ -212,4 +211,21 @@ func truncateTable(b BuildCtx, n *tree.Truncate, elts ElementResultSet) {
 			panic(err)
 		}
 	})
+}
+
+// checkTruncateOrDropPrivilege panics if the current user has neither
+// TRUNCATE nor DROP privilege on the table. DROP is accepted for
+// backward compatibility.
+func checkTruncateOrDropPrivilege(b BuildCtx, tbl *scpb.Table) {
+	truncateErr := b.CheckPrivilege(tbl, privilege.TRUNCATE)
+	if truncateErr == nil {
+		return
+	}
+	dropErr := b.CheckPrivilege(tbl, privilege.DROP)
+	if dropErr == nil {
+		return
+	}
+	// Neither privilege is held. Panic with the TRUNCATE error since that is
+	// the canonical privilege for this operation.
+	panic(truncateErr)
 }

@@ -109,7 +109,7 @@ UPDATE t SET v = 0
 statement error user testuser does not have UPDATE privilege on relation t
 UPDATE t SET v = 2 WHERE k = 2
 
-statement error user testuser does not have DROP privilege on relation t
+statement error user testuser does not have TRUNCATE privilege on relation t
 TRUNCATE t
 
 statement error user testuser does not have DROP privilege on relation t
@@ -159,7 +159,7 @@ UPDATE t SET v = 0
 statement error user testuser does not have UPDATE privilege on relation t
 UPDATE t SET v = 2 WHERE k = 2
 
-statement error user testuser does not have DROP privilege on relation t
+statement error user testuser does not have TRUNCATE privilege on relation t
 TRUNCATE t
 
 statement error user testuser does not have DROP privilege on relation t

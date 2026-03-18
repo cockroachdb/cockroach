@@ -37,7 +37,7 @@ const (
 	USAGE                    Kind = 9
 	ZONECONFIG               Kind = 10
 	CONNECT                  Kind = 11
-	RULE                     Kind = 12
+	TRUNCATE                 Kind = 12
 	MODIFYCLUSTERSETTING     Kind = 13
 	EXTERNALCONNECTION       Kind = 14
 	VIEWACTIVITY             Kind = 15
@@ -75,11 +75,14 @@ const (
 	TEMPORARY              Kind = 44
 	largestKind                 = TEMPORARY
 
-	// SET and ALTERSYSTEM are PostgreSQL ACL-only pseudo-privileges.
-	// They exist solely for ACL character mapping ('s' and 'A') used
-	// by acldefault, aclexplode, and makeaclitem. They have no
+	// RULE, SET, and ALTERSYSTEM are PostgreSQL ACL-only pseudo-privileges.
+	// They exist solely for ACL character mapping used by acldefault, aclexplode,
+	// and makeaclitem and PG-compatible privilege functions. They have no
 	// corresponding CockroachDB privilege and must never be used in
-	// bitmask operations (Mask/ToBitField/ListFromBitField).
+	// bitmask operations (Mask/ToBitField/ListFromBitField). The values of these
+	// constants can be modified freely if we decide to implement these privileges
+	// for real.
+	RULE        Kind = math.MaxUint32 - 2
 	SET         Kind = math.MaxUint32 - 1
 	ALTERSYSTEM Kind = math.MaxUint32
 )
@@ -187,6 +190,8 @@ func (k Kind) InternalKey() KindInternalKey {
 		return "SET"
 	case ALTERSYSTEM:
 		return "ALTERSYSTEM"
+	case TRUNCATE:
+		return "TRUNCATE"
 	default:
 		panic(errors.AssertionFailedf("unhandled kind: %d", int(k)))
 	}
