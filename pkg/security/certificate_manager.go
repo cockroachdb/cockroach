@@ -286,6 +286,30 @@ func (cm *CertificateManager) NodeCert() *CertInfo {
 	return cm.nodeCert
 }
 
+// NodeClientCert returns the Node client cert. May be nil.
+// Callers should check for an internal Error field.
+func (cm *CertificateManager) NodeClientCert() *CertInfo {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.nodeClientCert
+}
+
+// TenantCert returns the Tenant cert. May be nil.
+// Callers should check for an internal Error field.
+func (cm *CertificateManager) TenantCert() *CertInfo {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.tenantCert
+}
+
+// TenantCACert returns the Tenant CA cert. May be nil.
+// Callers should check for an internal Error field.
+func (cm *CertificateManager) TenantCACert() *CertInfo {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.tenantCACert
+}
+
 // ClientCerts returns the Client certs.
 // Callers should check for internal Error fields.
 func (cm *CertificateManager) ClientCerts() map[username.SQLUsername]*CertInfo {
