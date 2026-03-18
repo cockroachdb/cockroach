@@ -37,6 +37,7 @@ jobs:
           PR_NUMBER: ${{ github.event.client_payload.pr_number }}
           BRANCHES: ${{ github.event.client_payload.branches }}
           PR_AUTHOR: ${{ github.event.client_payload.pr_author }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
 
@@ -159,7 +160,9 @@ jobs:
               SUCCESS_MSG="$SUCCESS_MSG
 
           Failed to backport to:$FAILED_BRANCHES
-          Please create these backports manually using the [backport tool](https://github.com/cockroachdb/backport)."
+          Please create these backports manually using the [backport tool](https://github.com/cockroachdb/backport).
+
+          [See action run for details]($RUN_URL)."
             fi
             gh pr comment "$PR_NUMBER" --body "$SUCCESS_MSG"
           fi
@@ -173,6 +176,8 @@ jobs:
           3. The backport branch contained merge commits.
 
           You might need to create your backport manually using the [backport](https://github.com/cockroachdb/backport) tool.
+
+          [See action run for details]($RUN_URL).
 
           ----
 
