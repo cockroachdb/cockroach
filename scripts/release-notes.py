@@ -246,7 +246,7 @@ fixannot = re.compile(r'^([fF]ix(es|ed)?|[cC]lose(d|s)?) #', flags=re.M)
 #
 # Merge pull request #XXXXX from ...      <- GitHub merges
 # .... (#XXXX)                            <- GitHub merges (alt format)
-# Merge #XXXXX #XXXXX #XXXXX              <- Bors merges
+# Merge #XXXXX #XXXXX #XXXXX              <- Bors/Trunk merges
 merge_numbers = re.compile(r'^Merge( pull request)?(?P<numbers>( #[0-9]+)+)')
 simple_merge = re.compile(r'.*\((?P<numbers>#[0-9]+)\)$', re.M)
 
