@@ -30,7 +30,7 @@ func (cl *cleanupAddedDatabase) Cleanup(
 	defer conn.Close()
 
 	o.Status(fmt.Sprintf("dropping database %s", cl.db))
-	_, err := conn.ExecContext(ctx, fmt.Sprintf("DROP DATABASE %s", cl.db))
+	_, err := conn.ExecContext(ctx, fmt.Sprintf("DROP DATABASE IF EXISTS %s CASCADE", cl.db))
 	if err != nil {
 		o.Fatal(err)
 	}

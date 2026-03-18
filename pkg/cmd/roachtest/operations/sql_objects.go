@@ -36,7 +36,7 @@ func (cl *genericSQLCleanup) Cleanup(
 
 	o.Status(fmt.Sprintf("dropping %s %s", cl.objectType, cl.objectName))
 	_, err := conn.ExecContext(ctx,
-		fmt.Sprintf("DROP %s %s", cl.objectType, cl.objectName))
+		fmt.Sprintf("DROP %s IF EXISTS %s", cl.objectType, cl.objectName))
 	if err != nil {
 		o.Fatal(err)
 	}

@@ -36,15 +36,17 @@ func (cl *revokeRole) Cleanup(ctx context.Context, o operation.Operation, c clus
 
 	o.Status(fmt.Sprintf("Revoking role %s from role %s", cl.grantedRole, cl.granteeRole))
 	_, err := conn.ExecContext(ctx, fmt.Sprintf("REVOKE %s FROM %s", cl.grantedRole, cl.granteeRole))
+	status := "succeeded"
 	if err != nil {
-		o.Fatal(err)
+		status = "failed"
+		o.Error(err)
 	}
-	o.Status(fmt.Sprintf("Revoked role %s from role %s", cl.grantedRole, cl.granteeRole))
+	o.Status(fmt.Sprintf("Revoked role %s from role %s, status: %s", cl.grantedRole, cl.granteeRole, status))
 
 	// Drop both roles
 	for _, role := range []string{cl.granteeRole, cl.grantedRole} {
 		o.Status(fmt.Sprintf("Dropping role %s", role))
-		_, err = conn.ExecContext(ctx, fmt.Sprintf("DROP ROLE %s", role))
+		_, err = conn.ExecContext(ctx, fmt.Sprintf("DROP ROLE IF EXISTS %s", role))
 		if err != nil {
 			o.Fatal(err)
 		}

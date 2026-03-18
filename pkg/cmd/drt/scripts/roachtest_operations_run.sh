@@ -81,6 +81,11 @@ if [ -z "${DD_API_KEY}" ]; then
   exit 1
 fi
 
+# Ignore SIGINT in the shell so that tee (which inherits the signal
+# disposition) stays alive when Ctrl+C is pressed. Only
+# roachtest-operations receives SIGINT and handles cleanup gracefully.
+trap '' INT
+
 ./roachtest-operations run-operation "${CLUSTER}" ".*" \
   --datadog-api-key "${DD_API_KEY}" \
   --datadog-app-key "unused" \
