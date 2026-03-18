@@ -1250,6 +1250,9 @@ func (tt *Table) Policies() *cat.Policies {
 // CanaryAndStableStatsDiffer is part of the cat.Table interface.
 func (tt *Table) CanaryAndStableStatsDiffer() bool { return false }
 
+// StatsCanaryWindow is part of the cat.Table interface.
+func (tt *Table) StatsCanaryWindow() time.Duration { return 0 }
+
 // findPolicyByName will lookup the policy by its name. It returns it's policy
 // type and index within that policy type slice so that callers can do removal
 // if needed.
