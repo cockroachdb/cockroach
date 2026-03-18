@@ -220,12 +220,12 @@ func TestDefaultACLItems(t *testing.T) {
 		{
 			objectType: privilege.Table,
 			owner:      username.RootUserName(),
-			expected:   []string{"admin=Cradwtm/root", "root=Cradwtm/root"},
+			expected:   []string{"admin=CradwDtm/root", "root=CradwDtm/root"},
 		},
 		{
 			objectType: privilege.Table,
 			owner:      username.MakeSQLUsernameFromPreNormalizedString("myuser"),
-			expected:   []string{"admin=Cradwtm/myuser", "root=Cradwtm/myuser", "myuser=Cradwtm/myuser"},
+			expected:   []string{"admin=CradwDtm/myuser", "root=CradwDtm/myuser", "myuser=CradwDtm/myuser"},
 		},
 		{
 			objectType: privilege.Sequence,

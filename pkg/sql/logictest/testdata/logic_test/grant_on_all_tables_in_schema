@@ -78,6 +78,7 @@ test           s            t            table        testuser   MAINTAIN       
 test           s            t            table        testuser   REPLICATIONDEST    false
 test           s            t            table        testuser   REPLICATIONSOURCE  false
 test           s            t            table        testuser   TRIGGER            false
+test           s            t            table        testuser   TRUNCATE           false
 test           s            t            table        testuser   UPDATE             false
 test           s            t            table        testuser   ZONECONFIG         false
 test           s            t            table        testuser2  BACKUP             false
@@ -90,6 +91,7 @@ test           s            t            table        testuser2  MAINTAIN       
 test           s            t            table        testuser2  REPLICATIONDEST    false
 test           s            t            table        testuser2  REPLICATIONSOURCE  false
 test           s            t            table        testuser2  TRIGGER            false
+test           s            t            table        testuser2  TRUNCATE           false
 test           s            t            table        testuser2  UPDATE             false
 test           s            t            table        testuser2  ZONECONFIG         false
 test           s2           t            table        testuser   BACKUP             false
@@ -102,6 +104,7 @@ test           s2           t            table        testuser   MAINTAIN       
 test           s2           t            table        testuser   REPLICATIONDEST    false
 test           s2           t            table        testuser   REPLICATIONSOURCE  false
 test           s2           t            table        testuser   TRIGGER            false
+test           s2           t            table        testuser   TRUNCATE           false
 test           s2           t            table        testuser   UPDATE             false
 test           s2           t            table        testuser   ZONECONFIG         false
 test           s2           t            table        testuser2  BACKUP             false
@@ -114,6 +117,7 @@ test           s2           t            table        testuser2  MAINTAIN       
 test           s2           t            table        testuser2  REPLICATIONDEST    false
 test           s2           t            table        testuser2  REPLICATIONSOURCE  false
 test           s2           t            table        testuser2  TRIGGER            false
+test           s2           t            table        testuser2  TRUNCATE           false
 test           s2           t            table        testuser2  UPDATE             false
 test           s2           t            table        testuser2  ZONECONFIG         false
 

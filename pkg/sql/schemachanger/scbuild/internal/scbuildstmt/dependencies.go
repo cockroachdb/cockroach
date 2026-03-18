@@ -250,7 +250,7 @@ type PrivilegeChecker interface {
 	// to descriptors. However, privileges can also live in the
 	// `system.privileges` table (i.e. system-level privileges) and checking those
 	// global privileges are done by the CheckGlobalPrivilege method below.
-	CheckPrivilege(e scpb.Element, privilege privilege.Kind) error
+	CheckPrivilege(e scpb.Element, privileges ...privilege.Kind) error
 
 	// CheckGlobalPrivilege panics if the current user does not have the specified
 	// global privilege.

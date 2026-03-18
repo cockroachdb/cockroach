@@ -9,12 +9,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
@@ -72,15 +70,7 @@ func (tzo *tableZoneConfigObj) checkPrivilegeForSetZoneConfig(
 	}
 	// Can configure zone of a table (or its index) if user has either CREATE or
 	// ZONECONFIG privilege on the table.
-	tableCreatePrivilegeErr := b.CheckPrivilege(tblElem, privilege.CREATE)
-	tableZoneConfigPrivilegeErr := b.CheckPrivilege(tblElem, privilege.ZONECONFIG)
-	if tableCreatePrivilegeErr == nil || tableZoneConfigPrivilegeErr == nil {
-		return nil
-	}
-
-	reqNonAdminPrivs := []privilege.Kind{privilege.ZONECONFIG, privilege.CREATE}
-	return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(b.CurrentUser(),
-		reqNonAdminPrivs, string(catalog.Table), tblNamespaceElem.Name)
+	return b.CheckPrivilege(tblElem, privilege.CREATE, privilege.ZONECONFIG)
 }
 
 func (tzo *tableZoneConfigObj) checkZoneConfigChangePermittedForMultiRegion(
