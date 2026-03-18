@@ -2,48 +2,36 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
-import {
-  StatementInsightDetails,
-  StatementInsightDetailsStateProps,
-  StatementInsightDetailsDispatchProps,
-} from "@cockroachlabs/cluster-ui";
-import { connect } from "react-redux";
+import { StatementInsightDetails } from "@cockroachlabs/cluster-ui";
+import React from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
 import { refreshUserSQLRoles } from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
 import { selectHasAdminRole } from "src/redux/user";
-import { selectStatementInsightDetails } from "src/views/insights/insightsSelectors";
 
-const mapStateToProps = (
-  state: AdminUIState,
-  props: RouteComponentProps,
-): StatementInsightDetailsStateProps => {
-  return {
-    insightEventDetails: selectStatementInsightDetails(state, props),
-    insightError: state.cachedData?.stmtInsights?.lastError,
-    timeScale: selectTimeScale(state),
-    hasAdminRole: selectHasAdminRole(state),
-  };
-};
+const StatementInsightDetailsPageInner: React.FC<
+  RouteComponentProps
+> = props => {
+  const dispatch = useDispatch();
+  const timeScale = useSelector(selectTimeScale);
+  const hasAdminRole = useSelector(selectHasAdminRole);
 
-const mapDispatchToProps: StatementInsightDetailsDispatchProps = {
-  setTimeScale: setGlobalTimeScaleAction,
-  refreshUserSQLRoles: refreshUserSQLRoles,
+  return (
+    <StatementInsightDetails
+      {...props}
+      timeScale={timeScale}
+      hasAdminRole={hasAdminRole}
+      setTimeScale={ts => dispatch(setGlobalTimeScaleAction(ts))}
+      refreshUserSQLRoles={() => dispatch(refreshUserSQLRoles())}
+    />
+  );
 };
 
 const StatementInsightDetailsPage = withRouter(
-  connect<
-    StatementInsightDetailsStateProps,
-    StatementInsightDetailsDispatchProps,
-    RouteComponentProps,
-    AdminUIState
-  >(
-    mapStateToProps,
-    mapDispatchToProps,
-  )(StatementInsightDetails),
+  StatementInsightDetailsPageInner,
 );
 
 export default StatementInsightDetailsPage;

@@ -10,7 +10,7 @@ import Helmet from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 
 import { getExplainPlanFromGist } from "src/api/decodePlanGistApi";
-import { getStmtInsightsApi } from "src/api/stmtInsightsApi";
+import { useStmtInsightDetails } from "src/api/stmtInsightsApi";
 import { Button } from "src/button";
 import { commonStyles } from "src/common";
 import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
@@ -19,9 +19,8 @@ import { SqlBox, SqlBoxSize } from "src/sql";
 import { getMatchParamByName, idAttr } from "src/util";
 // Styles
 
-import { TimeScale, toDateRange } from "../../timeScaleDropdown";
+import { TimeScale } from "../../timeScaleDropdown";
 import { InsightsError } from "../insightsErrorComponent";
-import { StmtInsightEvent } from "../types";
 
 import { StatementInsightDetailsOverviewTab } from "./statementInsightDetailsOverviewTab";
 
@@ -32,8 +31,6 @@ enum TabKeysEnum {
   EXPLAIN = "explain",
 }
 export interface StatementInsightDetailsStateProps {
-  insightEventDetails: StmtInsightEvent;
-  insightError: Error | null;
   timeScale?: TimeScale;
   hasAdminRole: boolean;
 }
@@ -53,36 +50,26 @@ type ExplainPlanState = {
   error?: Error;
 };
 
-type StmtInsightsState = {
-  details: StmtInsightEvent;
-  loaded: boolean;
-  error?: Error;
-};
-
 export const StatementInsightDetails: React.FC<
   StatementInsightDetailsProps
-> = ({
-  history,
-  insightEventDetails,
-  insightError,
-  match,
-  timeScale,
-  hasAdminRole,
-  refreshUserSQLRoles,
-}) => {
+> = ({ history, match, timeScale, hasAdminRole, refreshUserSQLRoles }) => {
   const [explainPlanState, setExplainPlanState] = useState<ExplainPlanState>({
     explainPlan: null,
     loaded: false,
     error: null,
   });
-  const [insightDetails, setInsightDetails] =
-    useState<StmtInsightsState | null>({
-      details: insightEventDetails,
-      loaded: insightEventDetails != null,
-      error: insightError,
-    });
 
-  const details = insightDetails?.details;
+  const executionID = getMatchParamByName(match, idAttr);
+  const { data: stmtInsightsResp, error: stmtInsightsErr } =
+    useStmtInsightDetails(executionID, timeScale);
+
+  const details = stmtInsightsResp?.results.length
+    ? stmtInsightsResp.results[0]
+    : null;
+
+  useEffect(() => {
+    refreshUserSQLRoles();
+  }, [refreshUserSQLRoles]);
 
   const prevPage = (): void => history.goBack();
 
@@ -103,29 +90,7 @@ export const StatementInsightDetails: React.FC<
     }
   };
 
-  const executionID = getMatchParamByName(match, idAttr);
-
-  useEffect(() => {
-    refreshUserSQLRoles();
-    if (details != null) {
-      return;
-    }
-    const [start, end] = toDateRange(timeScale);
-    getStmtInsightsApi({
-      stmtExecutionID: executionID,
-      start,
-      end,
-    })
-      .then(res => {
-        setInsightDetails({
-          details: res?.results?.length ? res.results[0] : null,
-          loaded: true,
-        });
-      })
-      .catch(e => {
-        setInsightDetails({ details: null, error: e, loaded: true });
-      });
-  }, [details, executionID, timeScale, refreshUserSQLRoles]);
+  const isLoading = !stmtInsightsResp && !stmtInsightsErr;
 
   return (
     <div>
@@ -145,10 +110,10 @@ export const StatementInsightDetails: React.FC<
       </h3>
       <div>
         <Loading
-          loading={!insightDetails?.loaded}
+          loading={isLoading}
           page="Statement Insight details"
-          error={insightDetails?.error}
-          renderError={() => InsightsError(insightDetails?.error?.message)}
+          error={stmtInsightsErr}
+          renderError={() => InsightsError(stmtInsightsErr?.message)}
         >
           <section className={cx("section")}>
             <Row>

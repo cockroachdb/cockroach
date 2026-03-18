@@ -6,61 +6,100 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import React from "react";
 import { MemoryRouter as Router } from "react-router-dom";
-import { createSandbox } from "sinon";
+import { SWRConfig } from "swr";
 
 import * as sqlApi from "../../api/sqlApi";
-import { SqlApiResponse } from "../../api/sqlApi";
 import * as stmtInsightsApi from "../../api/stmtInsightsApi";
+import { ClusterDetailsContext } from "../../contexts";
 import { CollapseWhitespace, MockSqlResponse } from "../../util/testing";
-import { StmtInsightEvent } from "../types";
 
-import { getStatementInsightPropsFixture } from "./insightDetails.fixture";
+import {
+  getStatementInsightPropsFixture,
+  insightEventFixture,
+} from "./insightDetails.fixture";
 import {
   StatementInsightDetails,
   StatementInsightDetailsProps,
 } from "./statementInsightDetails";
 
-const sandbox = createSandbox();
+// Mock the SWR hook used by StatementInsightDetails.
+jest.mock("../../api/stmtInsightsApi", () => {
+  const actual = jest.requireActual("../../api/stmtInsightsApi");
+  return {
+    ...actual,
+    useStmtInsightDetails: jest.fn(),
+  };
+});
+
+const useStmtInsightDetailsMock =
+  stmtInsightsApi.useStmtInsightDetails as jest.Mock;
+
+function renderWithProviders(ui: React.ReactElement) {
+  return render(
+    <SWRConfig value={{ provider: () => new Map() }}>
+      <ClusterDetailsContext.Provider
+        value={{
+          isTenant: false,
+          clusterId: "test-cluster",
+        }}
+      >
+        <Router>{ui}</Router>
+      </ClusterDetailsContext.Provider>
+    </SWRConfig>,
+  );
+}
 
 describe("StatementInsightDetails page", () => {
   let props: StatementInsightDetailsProps;
 
   beforeEach(() => {
-    sandbox.reset();
     props = getStatementInsightPropsFixture();
-
-    // The StmtInsights API will be triggered on render to refresh data.
-    const resp: SqlApiResponse<StmtInsightEvent[]> = {
-      maxSizeReached: false,
-      results: [props.insightEventDetails],
-    };
-    jest
-      .spyOn(stmtInsightsApi, "getStmtInsightsApi")
-      .mockReturnValueOnce(Promise.resolve(resp));
   });
 
   it("shows loading indicator when data is not ready yet", async () => {
-    // Clear insights to trigger a loading state.
-    props.insightEventDetails = null;
+    // SWR hook returns no data yet (loading state).
+    useStmtInsightDetailsMock.mockReturnValue({
+      data: undefined,
+      error: undefined,
+      isLoading: true,
+      isValidating: true,
+      mutate: jest.fn(),
+    });
 
-    render(
-      <Router>
-        <StatementInsightDetails {...props} />
-      </Router>,
-    );
+    renderWithProviders(<StatementInsightDetails {...props} />);
 
     screen.getByLabelText("Loading...");
 
-    // Wait for the StmtInsights API call to refresh the data.
+    // Now simulate data arriving.
+    useStmtInsightDetailsMock.mockReturnValue({
+      data: {
+        maxSizeReached: false,
+        results: [insightEventFixture],
+      },
+      error: undefined,
+      isLoading: false,
+      isValidating: false,
+      mutate: jest.fn(),
+    });
+
+    renderWithProviders(<StatementInsightDetails {...props} />);
+
     await screen.findByText("Explain Plan");
   });
 
   it("shows two workload insights for a query", () => {
-    render(
-      <Router>
-        <StatementInsightDetails {...props} />
-      </Router>,
-    );
+    useStmtInsightDetailsMock.mockReturnValue({
+      data: {
+        maxSizeReached: false,
+        results: [insightEventFixture],
+      },
+      error: undefined,
+      isLoading: false,
+      isValidating: false,
+      mutate: jest.fn(),
+    });
+
+    renderWithProviders(<StatementInsightDetails {...props} />);
 
     // Query should be shown in UI.
     screen.getAllByText(
@@ -74,11 +113,18 @@ describe("StatementInsightDetails page", () => {
   });
 
   it("switches to the Explain Plan tab and shows the plan", async () => {
-    render(
-      <Router>
-        <StatementInsightDetails {...props} />
-      </Router>,
-    );
+    useStmtInsightDetailsMock.mockReturnValue({
+      data: {
+        maxSizeReached: false,
+        results: [insightEventFixture],
+      },
+      error: undefined,
+      isLoading: false,
+      isValidating: false,
+      mutate: jest.fn(),
+    });
+
+    renderWithProviders(<StatementInsightDetails {...props} />);
 
     // Click on the Explain tab. Mock a response to executeInternalSql, which
     // should be called in order to decode the plan gist.
