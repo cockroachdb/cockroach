@@ -155,36 +155,51 @@ func (c *Cloud) ListCloud(ctx context.Context, l *logger.Logger, options vm.List
 		g.SetLimit(options.LimitConcurrency)
 	}
 
-	vmListLock := syncutil.Mutex{}
+	mu := syncutil.Mutex{}
+	var providerErrors []error
 	for _, provider := range providers {
 		g.GoCtx(func(ctx context.Context) error {
 			pVms, err := provider.List(ctx, l, options)
 			if err != nil {
-				return errors.Wrapf(err, "provider %s", provider.String())
+				wrappedErr := errors.Wrapf(err, "provider %s", provider.String())
+				if options.BailOnProviderError {
+					// On the roachprod-centralized path, we want to fail fast
+					// if a provider errors out or the context is cancelled or
+					// its deadline is exceeded. Returning the error cancels the
+					// shared context, aborting all other providers.
+					return wrappedErr
+				}
+				// When not bailing on provider errors, absorb the error so
+				// that the errgroup context is not cancelled. A returned error
+				// would cancel the shared context, killing in-flight work for
+				// all other providers (e.g. AWS CLI subprocesses get SIGKILL'd).
+				func() {
+					mu.Lock()
+					defer mu.Unlock()
+					providerErrors = append(providerErrors, wrappedErr)
+				}()
+				return nil
 			}
 
 			// Lock the map to avoid concurrent writes.
-			vmListLock.Lock()
-			defer vmListLock.Unlock()
+			mu.Lock()
+			defer mu.Unlock()
 			providerVMs[provider.String()] = pVms
 			return nil
 		})
 	}
-	providerErr := g.Wait()
-	if providerErr != nil {
+	if waitErr := g.Wait(); waitErr != nil {
+		providerErrors = append(providerErrors, waitErr)
+	}
+	if len(providerErrors) > 0 {
+		providerErr := errors.CombineErrors(providerErrors[0], errors.Join(providerErrors[1:]...))
 		if options.BailOnProviderError {
-			// On the roachprod-centralized path, this is executed as part
-			// of an async task, and we want to fail fast if a provider errors out
-			// or the context is cancelled or its deadline is exceeded.
-			// This avoids partial/incomplete listings when DNS entries are updated
-			// or when the results are stored in the repository.
 			return providerErr
-		} else {
-			// We continue despite the error as we don't want to fail for all providers if only one
-			// has an issue. The function that calls ListCloud may not even use the erring provider,
-			// so log a warning and let the caller decide how to handle the error.
-			l.Printf("WARNING: Error listing VMs, continuing but list may be incomplete. %s \n", providerErr.Error())
 		}
+		// We continue despite the error as we don't want to fail for all providers if only one
+		// has an issue. The function that calls ListCloud may not even use the erring provider,
+		// so log a warning and let the caller decide how to handle the error.
+		l.Printf("WARNING: Error listing VMs, continuing but list may be incomplete. %s \n", providerErr.Error())
 	}
 
 	for providerID, vms := range providerVMs {
