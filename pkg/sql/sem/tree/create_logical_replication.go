@@ -33,6 +33,7 @@ type LogicalReplicationOptions struct {
 	DefaultFunction  Expr
 	Discard          Expr
 	SkipSchemaCheck  *DBool
+	SkipForeignKeys  *DBool
 	Unidirectional   *DBool
 	BidirectionalURI Expr
 	ParentID         Expr
@@ -146,6 +147,11 @@ func (lro *LogicalReplicationOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("SKIP SCHEMA CHECK")
 	}
 
+	if lro.SkipForeignKeys != nil && *lro.SkipForeignKeys {
+		maybeAddSep()
+		ctx.WriteString("SKIP FOREIGN KEYS")
+	}
+
 	if lro.MetricsLabel != nil {
 		maybeAddSep()
 		ctx.WriteString("LABEL = ")
@@ -220,6 +226,13 @@ func (o *LogicalReplicationOptions) CombineWith(other *LogicalReplicationOptions
 	} else {
 		o.SkipSchemaCheck = other.SkipSchemaCheck
 	}
+	if o.SkipForeignKeys != nil {
+		if other.SkipForeignKeys != nil {
+			return errors.New("SKIP FOREIGN KEYS option specified multiple times")
+		}
+	} else {
+		o.SkipForeignKeys = other.SkipForeignKeys
+	}
 
 	if o.MetricsLabel != nil {
 		if other.MetricsLabel != nil {
@@ -263,6 +276,7 @@ func (o LogicalReplicationOptions) IsDefault() bool {
 		o.UserFunctions == nil &&
 		o.Discard == options.Discard &&
 		o.SkipSchemaCheck == options.SkipSchemaCheck &&
+		o.SkipForeignKeys == options.SkipForeignKeys &&
 		o.MetricsLabel == options.MetricsLabel &&
 		o.Unidirectional == options.Unidirectional &&
 		o.BidirectionalURI == options.BidirectionalURI &&

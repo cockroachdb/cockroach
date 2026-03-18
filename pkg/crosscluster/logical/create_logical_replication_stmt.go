@@ -318,6 +318,7 @@ func createLogicalReplicationStreamPlanHook(
 				ParentID:                  int64(options.ParentID),
 				Command:                   stmt.String(),
 				SkipSchemaCheck:           options.SkipSchemaCheck(),
+				SkipForeignKeys:           options.SkipForeignKeys(),
 			},
 			Progress: progress,
 		}
@@ -439,7 +440,7 @@ func doLDRPlan(
 			for i := range resolvedDestObjects.TableNames {
 				ingestingTableNames[i] = resolvedDestObjects.TableNames[i].Table()
 			}
-			ingestedCatalog, err = externalcatalog.IngestExternalCatalog(ctx, execCfg, user, srcExternalCatalog, txn, txn.Descriptors(), resolvedDestObjects.ParentDatabaseID, resolvedDestObjects.ParentSchemaID, true /* setOffline */, ingestingTableNames)
+			ingestedCatalog, err = externalcatalog.IngestExternalCatalog(ctx, execCfg, user, srcExternalCatalog, txn, txn.Descriptors(), resolvedDestObjects.ParentDatabaseID, resolvedDestObjects.ParentSchemaID, true /* setOffline */, ingestingTableNames, details.SkipForeignKeys)
 			if err != nil {
 				return err
 			}
@@ -522,6 +523,7 @@ func createLogicalReplicationStreamTypeCheck(
 		exprutil.Ints{stmt.Options.ParentID},
 		exprutil.Bools{
 			stmt.Options.SkipSchemaCheck,
+			stmt.Options.SkipForeignKeys,
 			stmt.Options.Unidirectional,
 		},
 	}
@@ -542,6 +544,7 @@ type resolvedLogicalReplicationOptions struct {
 	userFunctions    map[string]int32
 	discard          string
 	skipSchemaCheck  bool
+	skipForeignKeys  bool
 	metricsLabel     string
 	bidirectionalURI string
 	ParentID         catpb.JobID
@@ -637,6 +640,9 @@ func evalLogicalReplicationOptions(
 	if options.SkipSchemaCheck == tree.DBoolTrue {
 		r.skipSchemaCheck = true
 	}
+	if options.SkipForeignKeys == tree.DBoolTrue {
+		r.skipForeignKeys = true
+	}
 	if options.ParentID != nil {
 		parentID, err := eval.Int(ctx, options.ParentID)
 		if err != nil {
@@ -726,6 +732,13 @@ func (r *resolvedLogicalReplicationOptions) SkipSchemaCheck() bool {
 		return false
 	}
 	return r.skipSchemaCheck
+}
+
+func (r *resolvedLogicalReplicationOptions) SkipForeignKeys() bool {
+	if r == nil {
+		return false
+	}
+	return r.skipForeignKeys
 }
 
 func (r *resolvedLogicalReplicationOptions) BidirectionalURI() string {

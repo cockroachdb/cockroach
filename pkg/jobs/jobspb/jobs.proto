@@ -295,7 +295,9 @@ message LogicalReplicationDetails {
 
   bool skip_schema_check = 17;
 
-  // Next ID: 17.
+  bool skip_foreign_keys = 18;
+
+  // Next ID: 19.
 }
 
 message LogicalReplicationProgress {
