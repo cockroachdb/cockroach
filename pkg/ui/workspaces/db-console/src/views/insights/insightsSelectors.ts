@@ -4,38 +4,17 @@
 // included in the /LICENSE file.
 
 import {
-  defaultFilters,
-  WorkloadInsightEventFilters,
-  SortSetting,
   selectID,
   selectTransactionFingerprintID,
   selectStatementInsightDetailsCombiner,
   selectTxnInsightDetailsCombiner,
-  InsightEnumToLabel,
   TxnInsightDetails,
   api,
   util,
 } from "@cockroachlabs/cluster-ui";
 import { createSelector } from "reselect";
 
-import { LocalSetting } from "src/redux/localsettings";
 import { AdminUIState } from "src/redux/state";
-
-export const filtersLocalSetting = new LocalSetting<
-  AdminUIState,
-  WorkloadInsightEventFilters
->("filters/InsightsPage", (state: AdminUIState) => state.localSettings, {
-  app: defaultFilters.app,
-  workloadInsightType: defaultFilters.workloadInsightType,
-});
-
-export const sortSettingLocalSetting = new LocalSetting<
-  AdminUIState,
-  SortSetting
->("sortSetting/InsightsPage", (state: AdminUIState) => state.localSettings, {
-  ascending: false,
-  columnTitle: "startTime",
-});
 
 export const selectTransactionInsightsLoading = (state: AdminUIState) =>
   state.cachedData.txnInsights?.inFlight &&
@@ -138,14 +117,6 @@ export const selectTxnInsightsByFingerprint = createSelector(
     return execInsights?.filter(txn => txn.transactionFingerprintID === id);
   },
 );
-
-export const selectInsightTypes = () => {
-  const insights: string[] = [];
-  InsightEnumToLabel.forEach(insight => {
-    insights.push(insight);
-  });
-  return insights;
-};
 
 export const selectStatementInsightDetails = createSelector(
   selectStmtInsights,

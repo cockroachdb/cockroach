@@ -5,7 +5,6 @@
 
 import { createSelector } from "reselect";
 
-import { InsightEnumToLabel } from "src/insights";
 import {
   selectStatementFingerprintID,
   selectID,
@@ -29,14 +28,6 @@ export const selectStmtInsightDetails = createSelector(
   selectID,
   selectStatementInsightDetailsCombiner,
 );
-
-export const selectInsightTypes = (): string[] => {
-  const insights: string[] = [];
-  InsightEnumToLabel.forEach(insight => {
-    insights.push(insight);
-  });
-  return insights;
-};
 
 export const selectColumns = createSelector(
   localStorageSelector,
