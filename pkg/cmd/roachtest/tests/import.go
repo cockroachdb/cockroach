@@ -191,6 +191,17 @@ func anyDataset(rng *rand.Rand) []string {
 	return nDatasets(rng, 1)
 }
 
+func anySmallDataset(rng *rand.Rand) []string {
+	all := allDatasets(rng)
+	small := slices.DeleteFunc(all, func(name string) bool {
+		return name == "tpch/lineitem"
+	})
+	rng.Shuffle(len(small), func(i, j int) {
+		small[i], small[j] = small[j], small[i]
+	})
+	return small[:1]
+}
+
 // importTestSpec represents a subtest within the import test.
 type importTestSpec struct {
 	// subtestName is the name to register for this test.
@@ -257,11 +268,12 @@ var tests = []importTestSpec{
 		nodes:        []int{4},
 		datasetNames: FromFunc(anyThreeDatasets),
 	},
-	// Test with a decommissioned node.
+	// Test with a decommissioned node. Exclude lineitem (the largest dataset)
+	// to avoid timeouts when running with only 3 active nodes.
 	{
 		subtestName:  "decommissioned",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anySmallDataset),
 		preTestHook: func(ctx context.Context, t test.Test, c cluster.Cluster, _ *rand.Rand) {
 			nodeToDecommission := 2
 			t.Status(fmt.Sprintf("decommissioning node %d", nodeToDecommission))
