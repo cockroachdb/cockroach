@@ -916,6 +916,13 @@ func TestTransportClusterSettingToggle(t *testing.T) {
 	)
 	require.Equal(t, 2, receivedMsgs)
 
+	// Block the smearing sender so we can observe that msg3 is queued but not
+	// yet delivered while in smearing mode.
+	unblockSmearing := make(chan struct{})
+	tt.transports[sender.NodeID].knobs.BeforeSmearingSend = func() {
+		<-unblockSmearing
+	}
+
 	// Now toggle back to heartbeat smearing mode.
 	HeartbeatSmearingEnabled.Override(ctx, &st.SV, true)
 
@@ -924,18 +931,14 @@ func TestTransportClusterSettingToggle(t *testing.T) {
 	msg3 := slpb.Message{Type: slpb.MsgHeartbeat, From: sender, To: receiver}
 	require.True(t, tt.transports[sender.NodeID].EnqueueMessage(ctx, msg3))
 
-	// Give the smearing sender time to drain the queue (reproduces CI flake).
-	time.Sleep(50 * time.Millisecond)
-
-	// Verify the message is enqueued but NOT delivered (waiting in smearing mode).
-	// Use SucceedsSoon to give the system time to stabilize in the correct state.
+	// Verify the message is enqueued but NOT delivered (waiting in smearing
+	// mode). The BeforeSmearingSend knob blocks the smearing sender, so the
+	// message remains in the queue deterministically.
 	testutils.SucceedsSoon(t, func() error {
-		// Message should be in the queue.
 		if tt.transports[sender.NodeID].metrics.SendQueueSize.Value() != 1 {
 			return errors.Newf("expected queue size 1, got %d",
 				tt.transports[sender.NodeID].metrics.SendQueueSize.Value())
 		}
-		// But should NOT have been received yet.
 		select {
 		case <-handler.messages:
 			return errors.New(
@@ -945,9 +948,8 @@ func TestTransportClusterSettingToggle(t *testing.T) {
 		return nil
 	})
 
-	// Signal to send messages.
-
-	// Verify the message is received.
+	// Unblock the smearing sender and verify the message is received.
+	close(unblockSmearing)
 	testutils.SucceedsSoon(
 		t, func() error {
 			select {

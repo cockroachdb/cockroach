@@ -271,6 +271,10 @@ func (t *Transport) smearingSenderLoop(ctx context.Context) {
 			// In this case, t.sendAllMessages will be set again, and we will
 			// pick it up in the next iteration of the for loop.
 
+			if fn := t.knobs.BeforeSmearingSend; fn != nil {
+				fn()
+			}
+
 			// Pace the signalling of the channels.
 			pacer.StartTask(crtime.NowMono())
 			workLeft := len(toSignal)

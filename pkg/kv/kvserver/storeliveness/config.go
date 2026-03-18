@@ -64,6 +64,10 @@ type TransportKnobs struct {
 	// long until an instance of processQueue winds down after not observing any
 	// messages.
 	OverrideIdleTimeout func() time.Duration
+	// BeforeSmearingSend, if set, is called in smearingSenderLoop after
+	// collecting queues but before signaling them to send. This can be used
+	// to block the smearing sender and observe queue state in tests.
+	BeforeSmearingSend func()
 }
 
 // SupportManagerKnobs includes all knobs that facilitate testing the
