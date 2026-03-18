@@ -491,6 +491,7 @@
 /pkg/cmd/roachtest/*.go               @cockroachdb/test-eng
 /pkg/cmd/roachtest/cluster/           @cockroachdb/test-eng
 /pkg/cmd/roachtest/clusterstats/      @cockroachdb/test-eng
+/pkg/cmd/roachtest/datadog/           @cockroachdb/test-eng
 /pkg/cmd/roachtest/grafana/           @cockroachdb/test-eng
 /pkg/cmd/roachtest/fixtures/          @cockroachdb/test-eng
 /pkg/cmd/roachtest/operation/         @cockroachdb/drp-eng
