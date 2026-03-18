@@ -124,6 +124,7 @@ func IngestExternalCatalog(
 	schemaID descpb.ID,
 	setOffline bool,
 	ingestingUnqualifiedTableNames []string,
+	skipForeignKeys bool,
 ) (externalpb.ExternalCatalog, error) {
 
 	ingestedCatalog := externalpb.ExternalCatalog{}
@@ -157,6 +158,10 @@ func IngestExternalCatalog(
 		mutTable.ParentID = dbDesc.GetID()
 		mutTable.Version = 1
 		mutTable.ID = newID
+		if skipForeignKeys {
+			mutTable.OutboundFKs = nil
+			mutTable.InboundFKs = nil
+		}
 		tablesToWrite = append(tablesToWrite, mutTable)
 		ingestedCatalog.Tables = append(ingestedCatalog.Tables, mutTable.TableDescriptor)
 	}
