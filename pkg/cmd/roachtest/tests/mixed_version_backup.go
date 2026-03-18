@@ -415,7 +415,7 @@ func (mvb *mixedVersionBackup) verifySomeBackups(
 	for _, collection := range toBeRestored {
 		l.Printf("mixed-version: verifying %s", collection.name)
 		if err := mvb.backupRestoreTestDriver.verifyBackupCollection(
-			ctx, l, rng, collection, checkFiles, internalSystemJobs, h,
+			ctx, l, rng, collection, checkFiles, internalSystemJobs,
 		); err != nil {
 			return errors.Wrap(err, "mixed-version")
 		}
@@ -497,7 +497,7 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 			}
 
 			if err := mvb.backupRestoreTestDriver.verifyBackupCollection(
-				ctx, l, rng, collection, checkFiles, internalSystemJobs, h,
+				ctx, l, rng, collection, checkFiles, internalSystemJobs,
 			); err != nil {
 				err := errors.Wrapf(err, "%s", v)
 				l.Printf("restore error: %v", err)
