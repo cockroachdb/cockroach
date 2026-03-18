@@ -130,7 +130,7 @@ require (
 	github.com/biogo/store v0.0.0-20160505134755-913427a1d5e8
 	github.com/blevesearch/snowballstem v0.9.0
 	github.com/charmbracelet/bubbles v0.15.1-0.20230123181021-a6a12c4a31eb
-	github.com/cockroachdb/apd/v3 v3.2.1
+	github.com/cockroachdb/apd/v3 v3.2.2
 	github.com/cockroachdb/changefeedpb v0.0.0-20250818184245-aab9e65dff20
 	github.com/cockroachdb/cmux v0.0.0-20250514152509-914d3bf9ec58
 	github.com/cockroachdb/cockroach-go/v2 v2.4.1
