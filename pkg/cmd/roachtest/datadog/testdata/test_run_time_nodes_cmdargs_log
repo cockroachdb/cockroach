@@ -1,0 +1,26 @@
+teamcity-21260621-1773728561-75-n10cpu2:[1]: Get Disk Device
+sdb 8:16
+run_094348.528407890_n1-9_Setup: 2026/03/17 09:43:49 failure.go:116: running cmd: echo '/dev/sdb' > /tmp/dmsetup-disk-stall-device
+teamcity-21260621-1773728561-75-n10cpu2:[1 2 3 4 5 6 7 8 9]: dmsetup-disk-stall-[1 2 3 4 5 6 7 8 9]
+   1: 	<ok>
+   2: 	<ok>
+   3: 	<ok>
+   4: 	<ok>
+   5: 	<ok>
+   6: 	<ok>
+   7: 	<ok>
+   8: 	<ok>
+   9: 	<ok>
+run_094348.528407890_n1-9_Setup: 2026/03/17 09:43:50 failure.go:116: running cmd: echo '# disabled during tests' | sudo tee /etc/udev/rules.d/66-snapd-autoimport.rules >/dev/null; \
+sudo udevadm control --reload; \
+sudo udevadm settle
+teamcity-21260621-1773728561-75-n10cpu2:[1 2 3 4 5 6 7 8 9]: dmsetup-disk-stall-[1 2 3 4 5 6 7 8 9]
+   1: 	<ok>
+   2: 	<ok>
+   3: 	<ok>
+   4: 	<ok>
+   5: 	<ok>
+   6: 	<ok>
+   7: 	<ok>
+   8: 	<ok>
+   9: 	<ok>
