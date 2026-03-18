@@ -208,8 +208,7 @@ func TestDataDriven(t *testing.T) {
 					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(txn)
 					var err error
 					records, err = sqlTranslator.Translate(ctx, descIDs, generateSystemSpanConfigs)
-					require.NoError(t, err)
-					return nil
+					return err
 				})
 				require.NoError(t, err)
 
