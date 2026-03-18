@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -641,6 +642,11 @@ func (lrw *logicalReplicationWriterProcessor) handleStreamBuffer(
 	ctx context.Context, kvs []streampb.StreamEvent_KV,
 ) error {
 	const notRetry = false
+
+	if err := lrw.setupBatchHandlers(ctx); err != nil {
+		return err
+	}
+
 	unapplied, unappliedBytes, err := lrw.flushBuffer(ctx, kvs, notRetry, lrw.purgatory.Enabled())
 	if err != nil {
 		return err
@@ -670,10 +676,6 @@ func filterRemaining(kvs []streampb.StreamEvent_KV) []streampb.StreamEvent_KV {
 }
 
 func (lrw *logicalReplicationWriterProcessor) setupBatchHandlers(ctx context.Context) error {
-	if lrw.FlowCtx == nil {
-		return nil
-	}
-
 	poolSize := writerWorkers.Get(&lrw.FlowCtx.Cfg.Settings.SV)
 
 	if len(lrw.bh) >= int(poolSize) {
@@ -770,10 +772,6 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 		return nil, 0, nil
 	}
 
-	if err := lrw.setupBatchHandlers(ctx); err != nil {
-		return kvs, int64(len(kvs)), err
-	}
-
 	preFlushTime := timeutil.Now()
 
 	// Inform the debugging helper that a flush is starting and configure failure
@@ -836,10 +834,7 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	// if it takes longer to process some keys in a chunk, the other 3/4 can be
 	// stolen by other workers. That said, we don't want tiny chunks that are more
 	// channel overhead than work, nor giant chunks, so bound it by the settings.
-	minChunk, maxChunk := minChunkSize.Default(), maxChunkSize.Default()
-	if lrw.FlowCtx != nil {
-		minChunk, maxChunk = minChunkSize.Get(&lrw.FlowCtx.Cfg.Settings.SV), maxChunkSize.Get(&lrw.FlowCtx.Cfg.Settings.SV)
-	}
+	minChunk, maxChunk := minChunkSize.Get(&lrw.FlowCtx.Cfg.Settings.SV), maxChunkSize.Get(&lrw.FlowCtx.Cfg.Settings.SV)
 	chunkSize := min(max(len(kvs)/(len(lrw.bh)*4), int(minChunk)), int(maxChunk))
 
 	// Figure out how many workers we can utilize from the pool for the number of
@@ -854,11 +849,28 @@ func (lrw *logicalReplicationWriterProcessor) flushBuffer(
 	// rather than starting new ones for each flush.
 	chunks := make(chan []streampb.StreamEvent_KV)
 
+	// The LDR processor is running inside of a distsql flow and this
+	// goroutine will be executing SQL inside that flow. By default, the flow
+	// has a CPU handle that has `AtGateway: false`. This is an issue because
+	// the multi metric allocator assumes non-gateway sql cpu usage will
+	// follow the leaseholder when the leaseholder moves. LDR work is
+	// not collocated with leaseholders in the destination cluster.
+	handle := lrw.FlowCtx.Cfg.SQLCPUProvider.GetHandle(admission.SQLWorkInfo{
+		AtGateway:  false,
+		TenantID:   lrw.FlowCtx.Codec().TenantID,
+		Priority:   admissionpb.LowPri,
+		CreateTime: timeutil.Now().UnixNano(),
+	})
+	defer handle.Close()
+
+	ctx = admission.ContextWithSQLCPUHandle(ctx, handle)
 	g := ctxgroup.WithContext(ctx)
 	for worker := range lrw.bh[:requiredWorkers] {
 		w := worker
 		lrw.bhStats[w] = flushStats{}
 		g.GoCtx(func(ctx context.Context) error {
+			defer handle.RegisterGoroutine().Close(ctx)
+
 			for chunk := range chunks {
 				s, err := lrw.flushChunk(ctx, lrw.bh[w], chunk, canRetry)
 				if err != nil {
@@ -994,18 +1006,16 @@ func (lrw *logicalReplicationWriterProcessor) flushChunk(
 		chunk = chunk[len(batch):]
 
 		// Make sure we're not ingesting events with origin TS in the future.
-		if lrw.FlowCtx != nil { // Some unit tests don't set this and that's fine.
-			hlcNow := lrw.FlowCtx.Cfg.DB.KV().Clock().Now()
-			logClock := true
-			for _, kv := range batch {
-				if ts := kv.KeyValue.Value.Timestamp; ts.After(hlcNow) {
-					if logClock || log.V(1) {
-						log.Dev.Warningf(ctx, "event timestamp %s is ahead of local clock %s; delaying batch...", ts, hlcNow)
-						logClock = false
-					}
-					if err := lrw.FlowCtx.Cfg.DB.KV().Clock().SleepUntil(ctx, ts); err != nil {
-						return flushStats{}, err
-					}
+		hlcNow := lrw.FlowCtx.Cfg.DB.KV().Clock().Now()
+		logClock := true
+		for _, kv := range batch {
+			if ts := kv.KeyValue.Value.Timestamp; ts.After(hlcNow) {
+				if logClock || log.V(1) {
+					log.Dev.Warningf(ctx, "event timestamp %s is ahead of local clock %s; delaying batch...", ts, hlcNow)
+					logClock = false
+				}
+				if err := lrw.FlowCtx.Cfg.DB.KV().Clock().SleepUntil(ctx, ts); err != nil {
+					return flushStats{}, err
 				}
 			}
 		}

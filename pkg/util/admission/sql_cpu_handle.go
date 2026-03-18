@@ -114,6 +114,26 @@ func (h *SQLCPUHandle) reportCPU(diff time.Duration) {
 // https://github.com/cockroachdb/cockroach/pull/161952#pullrequestreview-3741525716
 // on additional integrations that may need to call RegisterGoroutine.
 
+// WorkInfo returns the SQLWorkInfo that was used to create this handle.
+func (h *SQLCPUHandle) WorkInfo() SQLWorkInfo {
+	return h.workInfo
+}
+
+// IsGoroutineRegistered returns true if the calling goroutine already has a
+// registered handle. Unlike RegisterGoroutine, this does not create a new
+// handle as a side effect.
+func (h *SQLCPUHandle) IsGoroutineRegistered() bool {
+	gid := goid.Get()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for _, gh := range h.mu.gHandles {
+		if gh.gid == gid {
+			return true
+		}
+	}
+	return false
+}
+
 // RegisterGoroutine returns a GoroutineCPUHandle to use for reporting and
 // admission. If the goroutine was already registered, the existing handle
 // will be returned. CPU time is accounted for at this goroutine from the
