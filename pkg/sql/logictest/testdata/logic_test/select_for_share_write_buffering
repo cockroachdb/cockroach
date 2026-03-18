@@ -13,6 +13,12 @@ SET CLUSTER SETTING kv.transaction.write_buffering.transformations.get.enabled =
 statement ok
 SET CLUSTER SETTING kv.transaction.write_buffering.transformations.scans.enabled = true;
 
+# Pin the buffer size to avoid a small metamorphic max_buffer_size causing an
+# immediate flush, which would disable write buffering and its lock durability
+# transformations for the rest of the transaction.
+statement ok
+SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '2KiB';
+
 statement ok
 SET kv_transaction_buffered_writes_enabled = true;
 
