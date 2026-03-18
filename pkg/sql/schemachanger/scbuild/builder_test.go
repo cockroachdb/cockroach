@@ -139,7 +139,17 @@ func TestBuildDataDrivenWithTestDependencies(t *testing.T) {
 	}
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+		s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{Knobs: base.TestingKnobs{
+			SQLLeaseManager: &lease.ManagerTestingKnobs{
+				// Debug knob for #165510, will be removed when the issue is resolved.
+				TestingLeaseUpsertEventForID: func(id descpb.ID, version descpb.DescriptorVersion, msg string) {
+					if id > 103 && id < 107 {
+						t.Logf("upsert lease: descriptor %d version %d: %s", id, version, msg)
+					}
+				},
+			},
+		},
+		})
 		defer s.Stopper().Stop(ctx)
 		tt := s.ApplicationLayer()
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
