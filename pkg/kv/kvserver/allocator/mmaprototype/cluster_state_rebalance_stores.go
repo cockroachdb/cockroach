@@ -245,11 +245,13 @@ func (re *rebalanceEnv) rebalanceStores(
 			cmp.Compare(a.StoreID, b.StoreID))
 	})
 
-	if log.V(2) {
-		log.KvDistribution.VEventf(ctx, 2, "sorted shedding stores:")
+	if re.passObs != nil && len(sheddingStores) > 0 {
+		var buf redact.StringBuilder
+		buf.SafeString("sorted shedding stores:")
 		for _, store := range sheddingStores {
-			log.KvDistribution.VEventf(ctx, 2, "  (s%d: %s)", store.StoreID, store.sls)
+			buf.Printf(" (s%d: %s)", store.StoreID, store.sls)
 		}
+		log.KvDistribution.Infof(ctx, "%s", buf.RedactableString())
 	}
 
 	i := 0
@@ -479,12 +481,12 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		rstate := re.ranges[rangeID]
 		if len(rstate.pendingChanges) > 0 {
 			// If the range has pending changes, don't make more changes.
-			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: has pending changes", rangeID)
+			log.KvDistribution.VEventf(ctx, 3, "skipping r%d: has pending changes", rangeID)
 			re.passObs.replicaShed(rangeTransient)
 			continue
 		}
 		if re.now.Sub(rstate.lastFailedChange) < re.lastFailedChangeDelayDuration {
-			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
+			log.KvDistribution.VEventf(ctx, 3, "skipping r%d: too soon after failed change", rangeID)
 			re.passObs.replicaShed(rangeTransient)
 			continue
 		}
@@ -520,7 +522,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 			// This range has some constraints that are violated. Let those be
 			// fixed first.
 			re.passObs.replicaShed(rangeConstraintsViolated)
-			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: constraint violation needs fixing first: %v", rangeID, err)
+			log.KvDistribution.VEventf(ctx, 3, "skipping r%d: constraint violation needs fixing first: %v", rangeID, err)
 			continue
 		}
 		// Build post-means exclusions: stores whose load is included in the mean
@@ -555,7 +557,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		//
 		// TODO(sumeer): eliminate cands allocations by passing a scratch slice.
 		cands, ssSLS := re.computeCandidatesForReplicaTransfer(ctx, conj, existingReplicas, re.scratch.postMeansExclusions, store.StoreID, re.passObs)
-		log.KvDistribution.VEventf(ctx, 2, "considering replica-transfer r%v from s%v: store load %v",
+		log.KvDistribution.VEventf(ctx, 3, "considering replica-transfer r%v from s%v: store load %v",
 			rangeID, store.StoreID, ss.adjusted.load)
 		if log.ExpensiveLogEnabled(ctx, 3) {
 			var buf redact.StringBuilder
@@ -567,7 +569,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 		}
 
 		if len(cands.candidates) == 0 {
-			log.KvDistribution.VEventf(ctx, 2, "result(failed): no candidates found for r%d after exclusions", rangeID)
+			log.KvDistribution.VEventf(ctx, 3, "result(failed): no candidates found for r%d after exclusions", rangeID)
 			continue
 		}
 		var rlocalities replicasLocalityTiers
@@ -599,7 +601,7 @@ func (re *rebalanceEnv) rebalanceReplicas(
 			ctx, cands, ssSLS.sls, ignoreLevel, loadDim, re.rng,
 			re.fractionPendingIncreaseOrDecreaseThreshold, re.passObs.replicaShed)
 		if targetStoreID == 0 {
-			log.KvDistribution.VEventf(ctx, 2, "result(failed): no suitable target found among candidates for r%d "+
+			log.KvDistribution.VEventf(ctx, 3, "result(failed): no suitable target found among candidates for r%d "+
 				"(threshold %s; %s)", rangeID, ssSLS.sls, ignoreLevel)
 			continue
 		}
@@ -676,7 +678,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		rstate := re.ranges[rangeID]
 		if len(rstate.pendingChanges) > 0 {
 			// If the range has pending changes, don't make more changes.
-			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: has pending changes", rangeID)
+			log.KvDistribution.VEventf(ctx, 3, "skipping r%d: has pending changes", rangeID)
 			re.passObs.leaseShed(rangeTransient)
 			continue
 		}
@@ -706,7 +708,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 				ctx, "internal state inconsistency: local store is not a replica: %+v", rstate)
 		}
 		if re.now.Sub(rstate.lastFailedChange) < re.lastFailedChangeDelayDuration {
-			log.KvDistribution.VEventf(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
+			log.KvDistribution.VEventf(ctx, 3, "skipping r%d: too soon after failed change", rangeID)
 			re.passObs.leaseShed(rangeTransient)
 			continue
 		}
@@ -757,7 +759,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		}
 		// NB: intentionally log before re-adding the current leaseholder so
 		// we don't list it as a candidate.
-		log.KvDistribution.VEventf(ctx, 2, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
+		log.KvDistribution.VEventf(ctx, 3, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
 		// Now candsPL is ready for computing the means.
 		candsPL.insert(store.StoreID)
 
@@ -770,7 +772,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		// INVARIANT: candsPL - {store.StoreID} \subset cands
 		if len(candsPL) == 0 || (len(candsPL) == 1 && candsPL[0] == store.StoreID) {
 			re.passObs.leaseShed(noHealthyCandidate)
-			log.KvDistribution.VEventf(ctx, 2,
+			log.KvDistribution.VEventf(ctx, 3,
 				"result(failed): no candidates to move lease from n%vs%v for r%v after retainReadyLeaseTargetStoresOnly",
 				ss.NodeID, ss.StoreID, rangeID)
 			continue
@@ -786,7 +788,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 		if sls.dimSummary[CPURate] < overloadSlow {
 			// This store is not cpu overloaded relative to these candidates for
 			// this range.
-			log.KvDistribution.VEventf(ctx, 2, "result(failed): skipping r%d since store not overloaded relative to candidates", rangeID)
+			log.KvDistribution.VEventf(ctx, 3, "result(failed): skipping r%d since store not overloaded relative to candidates", rangeID)
 			re.passObs.leaseShed(notOverloaded)
 			continue
 		}
@@ -818,7 +820,7 @@ func (re *rebalanceEnv) rebalanceLeasesFromLocalStoreID(
 			re.fractionPendingIncreaseOrDecreaseThreshold, re.passObs.leaseShed)
 		if targetStoreID == 0 {
 			log.KvDistribution.VEventf(
-				ctx, 2,
+				ctx, 3,
 				"result(failed): no candidates to move lease from n%vs%v for r%v after sortTargetCandidateSetAndPick",
 				ss.NodeID, ss.StoreID, rangeID)
 			continue
@@ -901,9 +903,9 @@ func retainReadyLeaseTargetStoresOnly(
 		s := stores[storeID].status
 		switch {
 		case s.Disposition.Lease != LeaseDispositionOK:
-			log.KvDistribution.VEventf(ctx, 2, "skipping s%d for lease transfer: lease disposition %v (health %v)", storeID, s.Disposition.Lease, s.Health)
+			log.KvDistribution.VEventf(ctx, 3, "skipping s%d for lease transfer: lease disposition %v (health %v)", storeID, s.Disposition.Lease, s.Health)
 		case stores[storeID].adjusted.replicas[rangeID].LeaseDisposition != LeaseDispositionOK:
-			log.KvDistribution.VEventf(ctx, 2, "skipping s%d for lease transfer: replica lease disposition %v (health %v)", storeID, stores[storeID].adjusted.replicas[rangeID].LeaseDisposition, s.Health)
+			log.KvDistribution.VEventf(ctx, 3, "skipping s%d for lease transfer: replica lease disposition %v (health %v)", storeID, stores[storeID].adjusted.replicas[rangeID].LeaseDisposition, s.Health)
 		default:
 			out = append(out, storeID)
 		}

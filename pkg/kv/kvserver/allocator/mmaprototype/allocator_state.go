@@ -567,7 +567,7 @@ func sortTargetCandidateSetAndPick(
 		if !diversityScoresAlmostEqual(bestDiversity, cand.diversityScore) {
 			// Have a set of candidates with the best diversity.
 			if s := formatCandidatesLog(cands.candidates[i:]); s != "" {
-				log.KvDistribution.VEventf(ctx, 2, "discarding candidates due to lower diversity score: %s", s)
+				log.KvDistribution.VEventf(ctx, 3, "discarding candidates due to lower diversity score: %s", s)
 			}
 			break
 		}
@@ -599,7 +599,7 @@ func sortTargetCandidateSetAndPick(
 				// pending changes. We will wait for those to have no pending changes
 				// before we consider later sets.
 				if s := formatCandidatesLog(cands.candidates[i:]); s != "" {
-					log.KvDistribution.VEventf(ctx, 2,
+					log.KvDistribution.VEventf(ctx, 3,
 						"candidate with pending changes was discarded, discarding remaining candidates with higher load: %s", s)
 				}
 				break
@@ -613,7 +613,7 @@ func sortTargetCandidateSetAndPick(
 			} else if ignoreLevel < ignoreHigherThanLoadThreshold || overloadedDim == NumLoadDimensions {
 				// Past the lowestLoad set. We don't care about these.
 				if s := formatCandidatesLog(cands.candidates[i:]); s != "" {
-					log.KvDistribution.VEventf(ctx, 2,
+					log.KvDistribution.VEventf(ctx, 3,
 						"discarding candidates with higher load than lowestLoadSet(%v): %s", lowestLoadSet, s)
 				}
 				break
@@ -624,7 +624,7 @@ func sortTargetCandidateSetAndPick(
 		}
 		if cand.sls > loadThreshold {
 			if s := formatCandidatesLog(cands.candidates[i:]); s != "" {
-				log.KvDistribution.VEventf(ctx, 2,
+				log.KvDistribution.VEventf(ctx, 3,
 					"discarding candidates with higher load than loadThreshold(%v): %s", loadThreshold, s)
 			}
 			break
@@ -639,7 +639,7 @@ func sortTargetCandidateSetAndPick(
 			if cand.maxFractionPendingIncrease > epsilon && discardedCandsHadNoPendingChanges {
 				discardedCandsHadNoPendingChanges = false
 			}
-			log.KvDistribution.VEventf(ctx, 2,
+			log.KvDistribution.VEventf(ctx, 3,
 				"candidate store %v was discarded due to (nls=%t overloadDim=%t pending_thresh=%t): sls=%v", cand.StoreID,
 				candDiscardedByNLS, candDiscardedByOverloadDim, candDiscardedByPendingThreshold, cand.storeLoadSummary)
 			continue
@@ -648,7 +648,7 @@ func sortTargetCandidateSetAndPick(
 		j++
 	}
 	if j == 0 {
-		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to load")
+		log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to load")
 		failLogger(noCandidateDueToLoad)
 		return 0
 	}
@@ -680,7 +680,7 @@ func sortTargetCandidateSetAndPick(
 	}
 	// INVARIANT: lowestLoad <= loadThreshold.
 	if lowestLoadSet == loadThreshold && ignoreLevel < ignoreHigherThanLoadThreshold {
-		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to equal to loadThreshold")
+		log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to equal to loadThreshold")
 		failLogger(noCandidateDueToLoad)
 		return 0
 	}
@@ -691,7 +691,7 @@ func sortTargetCandidateSetAndPick(
 	// [loadNoChange, loadThreshold), or loadThreshold && ignoreHigherThanLoadThreshold.
 	if lowestLoadSet >= loadNoChange &&
 		(!discardedCandsHadNoPendingChanges || ignoreLevel == ignoreLoadNoChangeAndHigher) {
-		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to loadNoChange")
+		log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to loadNoChange")
 		failLogger(noCandidateDueToLoad)
 		return 0
 	}
@@ -747,7 +747,7 @@ func sortTargetCandidateSetAndPick(
 		j++
 	}
 	if j == 0 {
-		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to lease preference")
+		log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to lease preference")
 		failLogger(noCandidateDueToUnmatchedLeasePreference)
 		return 0
 	}
@@ -761,7 +761,7 @@ func sortTargetCandidateSetAndPick(
 		})
 		lowestOverloadedLoad := cands.candidates[0].dimSummary[overloadedDim]
 		if lowestOverloadedLoad >= loadNoChange {
-			log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to overloadedDim")
+			log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to overloadedDim")
 			failLogger(noCandidateDueToLoad)
 			return 0
 		}
@@ -773,13 +773,13 @@ func sortTargetCandidateSetAndPick(
 			j++
 		}
 		if s := formatCandidatesLog(cands.candidates[j:]); s != "" {
-			log.KvDistribution.VEventf(ctx, 2, "discarding candidates due to overloadedDim: %s", s)
+			log.KvDistribution.VEventf(ctx, 3, "discarding candidates due to overloadedDim: %s", s)
 		}
 		cands.candidates = cands.candidates[:j]
 	}
 	s := formatCandidatesLog(cands.candidates)
 	j = rng.Intn(j)
-	log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: candidates:%s, picked s%v", s, cands.candidates[j].StoreID)
+	log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: candidates:%s, picked s%v", s, cands.candidates[j].StoreID)
 	if ignoreLevel == ignoreLoadNoChangeAndHigher && cands.candidates[j].sls >= loadNoChange ||
 		ignoreLevel == ignoreLoadThresholdAndHigher && cands.candidates[j].sls >= loadThreshold ||
 		ignoreLevel == ignoreHigherThanLoadThreshold && cands.candidates[j].sls > loadThreshold {
@@ -945,7 +945,7 @@ func (cs *clusterState) computeCandidatesForReplicaTransfer(
 		cs.scratchMeans = computeMeansForStoreSet(
 			cs, filteredStores, cs.meansMemo.scratchNodes, cs.meansMemo.scratchStores)
 		effectiveMeans = &cs.scratchMeans
-		log.KvDistribution.VEventf(ctx, 2,
+		log.KvDistribution.VEventf(ctx, 3,
 			"pre-means filtered %d stores → remaining %v, means: store=%v node=%v",
 			len(means.stores)-len(filteredStores), filteredStores,
 			effectiveMeans.storeLoad, effectiveMeans.nodeLoad)
@@ -1016,7 +1016,7 @@ func retainReadyReplicaTargetStoresOnly(
 		ss := stores[storeID]
 		switch {
 		case ss.status.Disposition.Replica != ReplicaDispositionOK:
-			log.KvDistribution.VEventf(ctx, 2, "skipping s%d for replica transfer: replica disposition %v (health %v)", storeID, ss.status.Disposition.Replica, ss.status.Health)
+			log.KvDistribution.VEventf(ctx, 3, "skipping s%d for replica transfer: replica disposition %v (health %v)", storeID, ss.status.Disposition.Replica, ss.status.Health)
 		default:
 			out = append(out, storeID)
 		}
