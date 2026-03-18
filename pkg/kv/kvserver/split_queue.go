@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -218,6 +219,11 @@ var _ PurgatoryError = unsplittableRangeError{}
 func (sq *splitQueue) process(
 	ctx context.Context, r *Replica, confReader spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
+	ctx = kv.ContextWithWorkloadInfo(
+		ctx,
+		uint64(workloadid.WORKLOAD_ID_SPLIT_QUEUE),
+		workloadid.WorkloadTypeSystem,
+	)
 	processed, err = sq.processAttemptWithTracing(ctx, r, confReader)
 	if errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
 		// ConditionFailedErrors are an expected outcome for range split
