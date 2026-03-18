@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -843,6 +844,7 @@ func newCPUPacerFactory(ctx context.Context, cfg *execinfra.ServerConfig) func()
 			if !ok {
 				tenantID = roachpb.SystemTenantID
 			}
+			wid, wtype := kv.WorkloadInfoFromContext(ctx)
 
 			pacer = cfg.AdmissionPacerFactory.NewPacer(
 				pacerRequestUnit,
@@ -851,6 +853,8 @@ func newCPUPacerFactory(ctx context.Context, cfg *execinfra.ServerConfig) func()
 					Priority:        admissionpb.BulkNormalPri,
 					CreateTime:      timeutil.Now().UnixNano(),
 					BypassAdmission: false,
+					WorkloadID:      wid,
+					WorkloadType:    wtype,
 				},
 			)
 		}
