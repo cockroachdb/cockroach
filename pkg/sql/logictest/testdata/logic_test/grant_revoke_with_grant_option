@@ -313,6 +313,7 @@ test           public       t            table        testuser  REPLICATIONDEST 
 test           public       t            table        testuser  REPLICATIONSOURCE  true
 test           public       t            table        testuser  SELECT             true
 test           public       t            table        testuser  TRIGGER            true
+test           public       t            table        testuser  TRUNCATE           true
 test           public       t            table        testuser  UPDATE             true
 test           public       t            table        testuser  ZONECONFIG         true
 

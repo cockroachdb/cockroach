@@ -316,7 +316,7 @@ type cachedDesc struct {
 	backrefs         catalog.DescriptorIDSet
 	outputIndexes    []int
 	cachedCollection *scpb.ElementCollection[scpb.Element]
-	privileges       map[privilege.Kind]error
+	privileges       map[privilege.Kind]bool
 	hasOwnership     bool
 	backrefsResolved bool
 

@@ -164,7 +164,7 @@ func (p *planner) checkTruncatePrivilege(
 		return nil
 	}
 	return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(
-		p.User(), []privilege.Kind{privilege.TRUNCATE},
+		p.User(), []privilege.Kind{privilege.TRUNCATE, privilege.DROP},
 		"relation", tableDesc.GetName(),
 	)
 }

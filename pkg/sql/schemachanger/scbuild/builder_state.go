@@ -391,35 +391,49 @@ func (b *builderState) mustOwn(id catid.DescID) {
 }
 
 // CheckPrivilege implements the scbuildstmt.PrivilegeChecker interface.
-func (b *builderState) CheckPrivilege(e scpb.Element, privilege privilege.Kind) error {
-	return b.checkPrivilege(screl.GetDescID(e), privilege)
+func (b *builderState) CheckPrivilege(e scpb.Element, privileges ...privilege.Kind) error {
+	return b.checkPrivilege(screl.GetDescID(e), privileges...)
 }
 
-// checkPrivilege checks if current user has privilege `priv` on descriptor with `id`.
-func (b *builderState) checkPrivilege(id catid.DescID, priv privilege.Kind) error {
+// checkPrivilege checks if current user has any of the given privileges on
+// descriptor with `id`. If multiple privileges are given, the user needs at
+// least one of them (OR semantics).
+func (b *builderState) checkPrivilege(id catid.DescID, privs ...privilege.Kind) error {
 	b.ensureDescriptor(id)
 	c := b.descCache[id]
 	if c.hasOwnership {
 		return nil
 	}
-	err, found := c.privileges[priv]
-	if !found {
-		// Validate if this descriptor can be resolved under the current schema.
-		if c.desc.DescriptorType() != catalog.Schema &&
-			c.desc.DescriptorType() != catalog.Database {
-			scpb.ForEachSchemaParent(
-				b.QueryByID(id),
-				func(current scpb.Status, _ scpb.TargetStatus, e *scpb.SchemaParent) {
-					if current == scpb.Status_PUBLIC {
-						b.requirePrivilege(e.SchemaID, privilege.USAGE)
-					}
-				},
-			)
-		}
-		err = b.auth.CheckPrivilege(b.ctx, c.desc, priv)
-		c.privileges[priv] = err
+	// Validate if this descriptor can be resolved under the current schema.
+	if c.desc.DescriptorType() != catalog.Schema &&
+		c.desc.DescriptorType() != catalog.Database {
+		scpb.ForEachSchemaParent(
+			b.QueryByID(id),
+			func(current scpb.Status, _ scpb.TargetStatus, e *scpb.SchemaParent) {
+				if current == scpb.Status_PUBLIC {
+					b.requirePrivilege(e.SchemaID, privilege.USAGE)
+				}
+			},
+		)
 	}
-	return err
+	for _, priv := range privs {
+		has, found := c.privileges[priv]
+		if !found {
+			var err error
+			has, err = b.auth.HasPrivilege(b.ctx, c.desc, priv, b.CurrentUser())
+			if err != nil {
+				return err
+			}
+			c.privileges[priv] = has
+		}
+		if has {
+			return nil
+		}
+	}
+	return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(
+		b.CurrentUser(), privs,
+		string(c.desc.DescriptorType()), c.desc.GetName(),
+	)
 }
 
 // requirePrivilege is a must version of checkPrivilege where it panics if non-nil error.
@@ -1290,18 +1304,25 @@ func (b *builderState) resolveRelation(
 		return c
 	}
 
-	err, found := c.privileges[p.RequiredPrivilege]
+	has, found := c.privileges[p.RequiredPrivilege]
 	if !found {
 		// Validate if this descriptor can be resolved under the current schema.
 		b.requirePrivilege(rel.GetParentSchemaID(), privilege.USAGE)
-		err = b.auth.CheckPrivilege(b.ctx, rel, p.RequiredPrivilege)
-		c.privileges[p.RequiredPrivilege] = err
+		var err error
+		has, err = b.auth.HasPrivilege(b.ctx, rel, p.RequiredPrivilege, b.CurrentUser())
+		if err != nil {
+			panic(err)
+		}
+		c.privileges[p.RequiredPrivilege] = has
 	}
-	if err == nil {
+	if has {
 		return c
 	}
 	if p.RequiredPrivilege != privilege.CREATE {
-		panic(err)
+		panic(sqlerrors.NewInsufficientPrivilegeOnDescriptorError(
+			b.CurrentUser(), []privilege.Kind{p.RequiredPrivilege},
+			string(rel.DescriptorType()), rel.GetName(),
+		))
 	}
 	relationType := "relation"
 	if t, isTable := rel.(catalog.TableDescriptor); isTable {
@@ -1649,7 +1670,7 @@ func (b *builderState) ResolvePolicy(
 func (b *builderState) newCachedDesc(id descpb.ID) *cachedDesc {
 	return &cachedDesc{
 		desc:            b.readDescriptor(id),
-		privileges:      make(map[privilege.Kind]error),
+		privileges:      make(map[privilege.Kind]bool),
 		hasOwnership:    b.hasAdmin,
 		elementIndexMap: map[string]int{},
 	}
@@ -1657,7 +1678,7 @@ func (b *builderState) newCachedDesc(id descpb.ID) *cachedDesc {
 
 func (b *builderState) newCachedDescForNewDesc() *cachedDesc {
 	return &cachedDesc{
-		privileges:      make(map[privilege.Kind]error),
+		privileges:      make(map[privilege.Kind]bool),
 		hasOwnership:    true,
 		elementIndexMap: map[string]int{},
 	}
