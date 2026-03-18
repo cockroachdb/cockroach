@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1126,7 +1127,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		}
 
 		return nil
-	}); err != nil {
+	}, isql.WithPriority(admissionpb.BulkNormalPri)); err != nil {
 		return err
 	}
 
@@ -1162,7 +1163,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) (r
 				TableName: details.FQTableName,
 			},
 		)
-	})
+	}, isql.WithPriority(admissionpb.BulkNormalPri))
 }
 
 // checkRunningJobs checks whether there are any other CreateStats jobs in the

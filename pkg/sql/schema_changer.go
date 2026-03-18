@@ -547,7 +547,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			}
 		})
 		return planAndRunErr
-	})
+	}, isql.WithPriority(admissionpb.BulkNormalPri))
 
 	// BatchTimestampBeforeGCError is retryable for the schema changer, but we
 	// will not ever move the timestamp forward so this will fail forever. Mark

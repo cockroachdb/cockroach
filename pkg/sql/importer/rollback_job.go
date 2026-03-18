@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -109,7 +110,7 @@ func (r *importRollbackResumer) rollbackTable(
 			return errors.Wrapf(err, "publishing table %d", desc.ID)
 		}
 		return txn.KV().Run(ctx, b)
-	})
+	}, isql.WithPriority(admissionpb.BulkNormalPri))
 }
 
 func (*importRollbackResumer) CollectProfile(context.Context, interface{}) error {
