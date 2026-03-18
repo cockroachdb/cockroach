@@ -93,6 +93,9 @@ func CheckInternalsAccess(
 	return sqlerrors.ErrUnsafeTableAccess
 }
 
+// PanickedQueryFormat is the placeholder used when query formatting panics.
+const PanickedQueryFormat = "<panicked query format>"
+
 // SafeFormatQuery attempts to format the query for logging, but recovers from
 // any panics that may occur during formatting.
 func SafeFormatQuery(
@@ -104,7 +107,7 @@ func SafeFormatQuery(
 	defer func() {
 		if r := recover(); r != nil {
 			log.Dev.Errorf(context.TODO(), "panic in SafeFormatQuery: %v", r)
-			s = "<panicked query format>"
+			s = PanickedQueryFormat
 		}
 	}()
 	return tree.FormatAstAsRedactableString(stmt, ann, sv)
