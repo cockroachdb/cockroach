@@ -113,6 +113,11 @@ const (
 	alterTableSetStorageParams        // ALTER TABLE <table> SET (<storage_param>=<val>)
 	alterTableResetStorageParams      // ALTER TABLE <table> RESET <storage_param>
 
+	// ALTER VIEW ...
+
+	alterViewSetViewOption   // ALTER VIEW <view> SET (security_invoker = <bool>)
+	alterViewResetViewOption // ALTER VIEW <view> RESET (security_invoker)
+
 	// ALTER TYPE ...
 
 	alterTypeDropValue // ALTER TYPE <type> DROP VALUE <value>
@@ -246,6 +251,8 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	alterTableSetColumnNotNull:        (*operationGenerator).setColumnNotNull,
 	alterTableSetStorageParams:        (*operationGenerator).setTableStorageParam,
 	alterTableResetStorageParams:      (*operationGenerator).resetTableStorageParam,
+	alterViewSetViewOption:            (*operationGenerator).alterViewSetViewOption,
+	alterViewResetViewOption:          (*operationGenerator).alterViewResetViewOption,
 	alterTypeDropValue:                (*operationGenerator).alterTypeDropValue,
 	commentOn:                         (*operationGenerator).commentOn,
 	createFunction:                    (*operationGenerator).createFunction,
@@ -307,6 +314,8 @@ var opWeights = []int{
 	alterTableSetColumnNotNull:        1,
 	alterTableSetStorageParams:        1,
 	alterTableResetStorageParams:      1,
+	alterViewSetViewOption:            1,
+	alterViewResetViewOption:          1,
 	alterTypeDropValue:                1,
 	commentOn:                         1,
 	createFunction:                    1,
