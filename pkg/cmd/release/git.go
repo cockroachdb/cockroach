@@ -6,15 +6,25 @@
 package main
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
 	"slices"
 	"strings"
 
 	"github.com/cockroachdb/version"
 )
+
+// base64Credentials encodes the token in the format expected by HTTP
+// basic authentication (username:password, base64-encoded). GitHub
+// accepts any non-empty username with a personal access token as the
+// password.
+func base64Credentials(token string) string {
+	return base64.StdEncoding.EncodeToString([]byte("x-access-token:" + token))
+}
 
 const remoteOrigin = "origin"
 
@@ -91,8 +101,18 @@ func bumpVersion(versionStr string) (version.Version, error) {
 }
 
 // listRemoteBranches retrieves a list of remote branches using a pattern, assuming the remote name is `origin`.
+// When the GH_TOKEN environment variable is set, it is used to authenticate
+// the request via an Authorization header so that the command works in CI
+// environments where no other git credentials are configured.
 func listRemoteBranches(pattern string) ([]string, error) {
-	cmd := exec.Command("git", "ls-remote", "--refs", remoteOrigin, "refs/heads/"+pattern)
+	args := []string{"ls-remote", "--refs", remoteOrigin, "refs/heads/" + pattern}
+	if token := os.Getenv("GH_TOKEN"); token != "" {
+		args = append([]string{
+			"-c", fmt.Sprintf("http.extraheader=Authorization: basic %s",
+				base64Credentials(token)),
+		}, args...)
+	}
+	cmd := exec.Command("git", args...)
 	out, err := cmd.Output()
 	if err != nil {
 		return []string{}, fmt.Errorf("git ls-remote: %w", err)
