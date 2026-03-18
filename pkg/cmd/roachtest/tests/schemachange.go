@@ -401,14 +401,16 @@ func makeSchemaChangeBulkIngestTest(
 				aNum, bNum, cNum, payloadBytes,
 			)
 
-			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmdWrite)
-
 			// Set up histogram exporter for performance metrics.
 			exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
 			tickHistogram, perfBuf := initBulkJobPerfArtifacts(length*2, t, exporter)
 			defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, c.Node(1), "")
 
+			// Create the monitor before running the workload so that disk stalls
+			// and other node failures are detected immediately.
 			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+
+			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmdWrite)
 
 			indexDuration := length
 			if c.IsLocal() {
@@ -419,8 +421,7 @@ func makeSchemaChangeBulkIngestTest(
 				indexDuration.String(), c.Spec().NodeCount-1, aNum, bNum, cNum, payloadBytes,
 			)
 			m.Go(func(ctx context.Context) error {
-				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmdWriteAndRead)
-				return nil
+				return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmdWriteAndRead)
 			})
 
 			m.Go(func(ctx context.Context) error {
