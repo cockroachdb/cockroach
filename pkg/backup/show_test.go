@@ -369,7 +369,7 @@ GRANT UPDATE ON top_secret TO agent_bond;
 		want := [][]string{
 			{`mi5`, `database`, `GRANT ALL ON DATABASE mi5 TO admin WITH GRANT OPTION; ` +
 				`GRANT ALL ON DATABASE mi5 TO agents; ` +
-				`GRANT CONNECT ON DATABASE mi5 TO public; ` +
+				`GRANT CONNECT, TEMPORARY ON DATABASE mi5 TO public; ` +
 				`GRANT ALL ON DATABASE mi5 TO root WITH GRANT OPTION; `, `root`},
 			{`public`, `schema`, `GRANT ALL ON SCHEMA public TO admin WITH GRANT OPTION; ` +
 				`GRANT CREATE, USAGE ON SCHEMA public TO public; ` +

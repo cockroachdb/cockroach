@@ -6,6 +6,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -475,23 +476,27 @@ func resolveTemporaryStatus(name tree.ObjectNamePrefix, persistence tree.Persist
 
 // resolveSchemaForCreateTable is the same as resolveSchemaForCreate but
 // specific for tables.
-func (b *Builder) resolveSchemaForCreateTable(name *tree.TableName) (cat.Schema, cat.SchemaName) {
-	return b.resolveSchemaForCreate(&name.ObjectNamePrefix, name)
+func (b *Builder) resolveSchemaForCreateTable(
+	name *tree.TableName, isTemporaryObject bool,
+) (cat.Schema, cat.SchemaName) {
+	return b.resolveSchemaForCreate(&name.ObjectNamePrefix, name, isTemporaryObject)
 }
 
 // resolveSchemaForCreateFunction is the same as resolveSchemaForCreate but
 // specific for functions.
 func (b *Builder) resolveSchemaForCreateFunction(
-	name *tree.RoutineName,
+	name *tree.RoutineName, isTemporaryObject bool,
 ) (cat.Schema, cat.SchemaName) {
-	return b.resolveSchemaForCreate(&name.ObjectNamePrefix, name)
+	return b.resolveSchemaForCreate(&name.ObjectNamePrefix, name, isTemporaryObject)
 }
 
 // resolveSchemaForCreate returns the schema that will contain a newly created
 // catalog object with the given name. If the current user does not have the
 // CREATE privilege, then resolveSchemaForCreate raises an error.
+// For temporary objects after V26_2, the TEMPORARY privilege on the database is
+// checked instead of the CREATE privilege on the schema.
 func (b *Builder) resolveSchemaForCreate(
-	prefix *tree.ObjectNamePrefix, name tree.NodeFormatter,
+	prefix *tree.ObjectNamePrefix, name tree.NodeFormatter, isTemporaryObject bool,
 ) (cat.Schema, cat.SchemaName) {
 	flags := cat.Flags{AvoidDescriptorCaches: true}
 	sch, resName, err := b.catalog.ResolveSchema(b.ctx, flags, prefix)
@@ -510,8 +515,17 @@ func (b *Builder) resolveSchemaForCreate(
 		panic(err)
 	}
 
-	if err := b.catalog.CheckPrivilege(b.ctx, sch, b.catalog.GetCurrentUser(), privilege.CREATE); err != nil {
-		panic(err)
+	if isTemporaryObject && b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V26_2) {
+		// After V26_2, check the TEMPORARY privilege on the database instead of
+		// the CREATE privilege on the schema. sch is a cat.Schema that has a
+		// reference to the database descriptor.
+		if err := b.catalog.CheckPrivilege(b.ctx, sch, b.catalog.GetCurrentUser(), privilege.TEMPORARY); err != nil {
+			panic(err)
+		}
+	} else {
+		if err := b.catalog.CheckPrivilege(b.ctx, sch, b.catalog.GetCurrentUser(), privilege.CREATE); err != nil {
+			panic(err)
+		}
 	}
 
 	return sch, resName

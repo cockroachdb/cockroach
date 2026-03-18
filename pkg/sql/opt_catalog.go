@@ -440,6 +440,13 @@ func (oc *optCatalog) CheckPrivilege(
 	if o.ID() == cat.DefaultStableID {
 		return oc.planner.CheckPrivilegeForUser(ctx, syntheticprivilege.GlobalPrivilegeObject, priv, user)
 	}
+	// TEMPORARY is a database-level privilege, so for schema objects we need
+	// to check against the database descriptor rather than the schema.
+	if priv == privilege.TEMPORARY {
+		if s, ok := o.(*optSchema); ok {
+			return oc.planner.CheckPrivilegeForUser(ctx, s.database, priv, user)
+		}
+	}
 	desc, err := getDescFromCatalogObjectForPermissions(o)
 	if err != nil {
 		return err

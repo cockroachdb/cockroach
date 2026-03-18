@@ -53,12 +53,12 @@ func TestAdminAPIDatabases(t *testing.T) {
 	if _, err := db.Exec(query); err != nil {
 		t.Fatal(err)
 	}
-	// Test needs to revoke CONNECT on the public database to properly exercise
-	// fine-grained permissions logic.
-	if _, err := db.Exec(fmt.Sprintf("REVOKE CONNECT ON DATABASE %s FROM public", testDbEscaped)); err != nil {
+	// Test needs to revoke CONNECT and TEMPORARY on the public database to
+	// properly exercise fine-grained permissions logic.
+	if _, err := db.Exec(fmt.Sprintf("REVOKE CONNECT, TEMPORARY ON DATABASE %s FROM public", testDbEscaped)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec("REVOKE CONNECT ON DATABASE defaultdb FROM public"); err != nil {
+	if _, err := db.Exec("REVOKE CONNECT, TEMPORARY ON DATABASE defaultdb FROM public"); err != nil {
 		t.Fatal(err)
 	}
 

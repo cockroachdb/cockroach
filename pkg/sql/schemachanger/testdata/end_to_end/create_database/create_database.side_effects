@@ -34,7 +34,7 @@ upsert descriptor #104
   +    - privileges: "2"
   +      userProto: admin
   +      withGrantOption: "2"
-  +    - privileges: "2048"
+  +    - privileges: "17592186046464"
   +      userProto: public
   +    - privileges: "2"
   +      userProto: root
@@ -85,7 +85,7 @@ upsert descriptor #104
   +    - privileges: "2"
   +      userProto: admin
   +      withGrantOption: "2"
-  +    - privileges: "2048"
+  +    - privileges: "17592186046464"
   +      userProto: public
   +    - privileges: "2"
   +      userProto: root

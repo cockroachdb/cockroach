@@ -1048,6 +1048,7 @@ SELECT * FROM crdb_internal.cluster_database_privileges
 database_name  grantee  privilege_type  is_grantable
 other_db       admin    ALL             YES
 other_db       public   CONNECT         NO
+other_db       public   TEMPORARY       NO
 other_db       root     ALL             YES
 
 statement ok
@@ -1060,6 +1061,7 @@ SELECT * FROM crdb_internal.cluster_database_privileges
 database_name  grantee   privilege_type  is_grantable
 other_db       admin     ALL             YES
 other_db       public    CONNECT         NO
+other_db       public    TEMPORARY       NO
 other_db       root      ALL             YES
 other_db       testuser  CONNECT         NO
 other_db       testuser  DROP            NO
@@ -1112,22 +1114,27 @@ SELECT * FROM "".crdb_internal.cluster_database_privileges ORDER BY 1,2,3
 database_name  grantee   privilege_type  is_grantable
 defaultdb      admin     ALL             YES
 defaultdb      public    CONNECT         NO
+defaultdb      public    TEMPORARY       NO
 defaultdb      root      ALL             YES
 other_db       admin     ALL             YES
 other_db       public    CONNECT         NO
+other_db       public    TEMPORARY       NO
 other_db       root      ALL             YES
 other_db       testuser  CONNECT         NO
 other_db       testuser  DROP            NO
 postgres       admin     ALL             YES
 postgres       public    CONNECT         NO
+postgres       public    TEMPORARY       NO
 postgres       root      ALL             YES
 system         admin     CONNECT         YES
 system         root      CONNECT         YES
 test           admin     ALL             YES
 test           public    CONNECT         NO
+test           public    TEMPORARY       NO
 test           root      ALL             YES
 testdb         admin     ALL             YES
 testdb         public    CONNECT         NO
+testdb         public    TEMPORARY       NO
 testdb         root      ALL             YES
 
 statement ok
@@ -1139,22 +1146,27 @@ SELECT * FROM crdb_internal.cluster_database_privileges ORDER BY 1,2,3
 database_name  grantee   privilege_type  is_grantable
 defaultdb      admin     ALL             YES
 defaultdb      public    CONNECT         NO
+defaultdb      public    TEMPORARY       NO
 defaultdb      root      ALL             YES
 other_db       admin     ALL             YES
 other_db       public    CONNECT         NO
+other_db       public    TEMPORARY       NO
 other_db       root      ALL             YES
 other_db       testuser  CONNECT         NO
 other_db       testuser  DROP            NO
 postgres       admin     ALL             YES
 postgres       public    CONNECT         NO
+postgres       public    TEMPORARY       NO
 postgres       root      ALL             YES
 system         admin     CONNECT         YES
 system         root      CONNECT         YES
 test           admin     ALL             YES
 test           public    CONNECT         NO
+test           public    TEMPORARY       NO
 test           root      ALL             YES
 testdb         admin     ALL             YES
 testdb         public    CONNECT         NO
+testdb         public    TEMPORARY       NO
 testdb         root      ALL             YES
 
 statement ok

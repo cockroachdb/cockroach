@@ -15,6 +15,7 @@ SHOW GRANTS ON DATABASE a
 database_name  grantee    privilege_type  is_grantable
 a              admin      ALL             true
 a              public     CONNECT         false
+a              public     TEMPORARY       false
 a              readwrite  ALL             false
 a              root       ALL             true
 
@@ -2017,6 +2018,7 @@ SHOW GRANTS ON DATABASE a
 database_name  grantee    privilege_type  is_grantable
 a              admin      ALL             true
 a              public     CONNECT         false
+a              public     TEMPORARY       false
 a              readwrite  ALL             false
 a              root       ALL             true
 

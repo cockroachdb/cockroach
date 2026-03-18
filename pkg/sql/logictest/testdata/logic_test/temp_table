@@ -629,3 +629,140 @@ statement ok
 DROP TABLE tmp_table;
 
 subtest end
+
+# Test that TEMPORARY privilege controls temp table creation, and that
+# CREATE on public schema is not required for temp tables.
+subtest temp_table_privileges
+
+user root
+
+statement ok
+CREATE DATABASE temp_priv_db
+
+statement ok
+CREATE USER temp_test_user
+
+statement ok
+GRANT temp_test_user TO testuser
+
+statement ok
+GRANT CONNECT ON DATABASE temp_priv_db TO temp_test_user
+
+statement ok
+GRANT TEMPORARY ON DATABASE temp_priv_db TO temp_test_user
+
+# Revoke CREATE from public schema so that temp_test_user does NOT have CREATE
+# on the public schema.
+statement ok
+REVOKE CREATE ON SCHEMA temp_priv_db.public FROM public
+
+user testuser
+
+statement ok
+SET ROLE temp_test_user
+
+statement ok
+USE temp_priv_db
+
+# temp_test_user has TEMPORARY but no CREATE on public schema.
+# After V26_2, creating a temp table should succeed because only TEMPORARY is
+# needed, not CREATE on the schema.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TEMP TABLE temp_priv_t (a INT PRIMARY KEY)
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TEMP VIEW temp_priv_v AS SELECT 1
+
+# On mixed-version configs, temp table creation still requires CREATE on the
+# public schema, so it should fail.
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement error user temp_test_user does not have CREATE privilege on schema public
+CREATE TEMP TABLE temp_priv_t (a INT PRIMARY KEY)
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement error user temp_test_user does not have CREATE privilege on schema public
+CREATE TEMP VIEW temp_priv_v AS SELECT 1
+
+# Regular table creation should fail because CREATE on schema is required.
+statement error user temp_test_user does not have CREATE privilege on schema public
+CREATE TABLE regular_t (a INT PRIMARY KEY)
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP VIEW temp_priv_v
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE temp_priv_t
+
+# Revoke TEMPORARY from both the user and public to verify temp table
+# creation is disallowed.
+user root
+
+statement ok
+REVOKE TEMPORARY ON DATABASE temp_priv_db FROM temp_test_user, public
+
+user testuser
+
+statement ok
+SET ROLE temp_test_user
+
+statement ok
+USE temp_priv_db
+
+# After V26_2, creating a temp table should fail with a TEMPORARY privilege
+# error. On mixed-version configs, it fails with a CREATE privilege error
+# since TEMPORARY is not yet checked.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error user temp_test_user does not have TEMPORARY privilege on database temp_priv_db
+CREATE TEMP TABLE temp_priv_t2 (a INT PRIMARY KEY)
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement error user temp_test_user does not have CREATE privilege on schema public
+CREATE TEMP TABLE temp_priv_t2 (a INT PRIMARY KEY)
+
+# Re-grant TEMPORARY and verify it works again.
+user root
+
+statement ok
+GRANT TEMPORARY ON DATABASE temp_priv_db TO temp_test_user
+
+user testuser
+
+statement ok
+SET ROLE temp_test_user
+
+statement ok
+USE temp_priv_db
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TEMP TABLE temp_priv_t2 (a INT PRIMARY KEY)
+
+# On mixed-version configs, temp table creation still requires CREATE on the
+# public schema.
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement error user temp_test_user does not have CREATE privilege on schema public
+CREATE TEMP TABLE temp_priv_t2 (a INT PRIMARY KEY)
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE temp_priv_t2
+
+user root
+
+statement ok
+SET ROLE root
+
+statement ok
+USE defaultdb
+
+statement ok
+DROP DATABASE temp_priv_db CASCADE
+
+statement ok
+DROP USER temp_test_user
+
+subtest end

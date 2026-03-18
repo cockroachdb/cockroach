@@ -39,7 +39,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	if isTemp {
 		panic(unimplemented.NewWithIssue(104687, "cannot create user-defined functions under a temporary schema"))
 	}
-	sch, resName := b.resolveSchemaForCreateFunction(&cf.Name)
+	sch, resName := b.resolveSchemaForCreateFunction(&cf.Name, isTemp)
 	schID := b.factory.Metadata().AddSchema(sch)
 	cf.Name.ObjectNamePrefix = resName
 

@@ -153,6 +153,7 @@ SHOW GRANTS ON DATABASE d;
 ----
 d admin ALL true
 d public CONNECT false
+d public TEMPORARY false
 d root ALL true
 
 # testuser should not be able to backup any table, verify the deprecation notice is accurate.

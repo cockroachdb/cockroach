@@ -85,7 +85,7 @@ Schema change plan for CREATE SCHEMA ‹db›.‹sc› AUTHORIZATION foo; follow
                 ├── AddDescriptorName {"Namespace":{"DescriptorID":104,"Name":"db"}}
                 ├── UpdateOwner {"Owner":{"DescriptorID":104,"Owner":"root"}}
                 ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":104,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
-                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":104,"Privileges":2048,"UserName":"public"}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":104,"Privileges":17592186046464,"UserName":"public"}}
                 ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":104,"Privileges":2,"UserName":"root","WithGrantOption":2}}
                 ├── MarkDescriptorAsPublic {"DescriptorID":104}
                 ├── SetNameInDescriptor {"DescriptorID":105,"Name":"public"}

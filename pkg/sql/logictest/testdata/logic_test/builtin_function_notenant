@@ -46,7 +46,7 @@ user root
 
 statement ok
 CREATE DATABASE root_test;
-REVOKE CONNECT ON DATABASE root_test FROM public
+REVOKE CONNECT, TEMPORARY ON DATABASE root_test FROM public
 
 statement ok
 CREATE TABLE root_test.t(a int)

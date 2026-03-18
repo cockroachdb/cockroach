@@ -29,7 +29,7 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE DATABASE ‹db
  │              ├── AddDescriptorName {"Namespace":{"DescriptorID":106,"Name":"db"}}
  │              ├── UpdateOwner {"Owner":{"DescriptorID":106,"Owner":"root"}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
- │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2048,"UserName":"public"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":17592186046464,"UserName":"public"}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2,"UserName":"root","WithGrantOption":2}}
  │              ├── CreateSchemaDescriptor {"SchemaID":107}
  │              ├── SetNameInDescriptor {"DescriptorID":107,"Name":"public"}
@@ -90,7 +90,7 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE DATABASE ‹db
                 ├── AddDescriptorName {"Namespace":{"DescriptorID":106,"Name":"db"}}
                 ├── UpdateOwner {"Owner":{"DescriptorID":106,"Owner":"root"}}
                 ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
-                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2048,"UserName":"public"}}
+                ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":17592186046464,"UserName":"public"}}
                 ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":106,"Privileges":2,"UserName":"root","WithGrantOption":2}}
                 ├── CreateSchemaDescriptor {"SchemaID":107}
                 ├── SetNameInDescriptor {"DescriptorID":107,"Name":"public"}
