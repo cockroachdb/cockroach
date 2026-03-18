@@ -278,3 +278,8 @@ func (hi *hypotheticalIndex) hasPrefixOfExplicitCols(
 	}
 	return true
 }
+
+// IsTemporaryIndexForBackfill is part of the cat.Index interface.
+func (h *hypotheticalIndex) IsTemporaryIndexForBackfill() bool {
+	return false
+}
