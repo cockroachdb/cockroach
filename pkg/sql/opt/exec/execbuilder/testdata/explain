@@ -1490,7 +1490,7 @@ query T
 EXPLAIN (OPT,REDACT) SELECT 1 AS r
 ----
 values
- └── ‹(‹×›,)›
+ └── (‹×›,)
 
 query T
 EXPLAIN (OPT,VERBOSE) SELECT 1 AS r
@@ -1518,7 +1518,7 @@ values
  ├── fd: ()-->(1)
  ├── distribution: test
  ├── prune: (1)
- └── ‹(‹×›,)›
+ └── (‹×›,)
 
 query T
 EXPLAIN (OPT,TYPES) SELECT 1 AS r
