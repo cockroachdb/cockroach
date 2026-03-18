@@ -1,6 +1,7 @@
 # Verify that restoring a database backup containing default privileges that
 # reference non-existent users does not leave dangling user references in the
-# restored database descriptor. This is a regression test for #164961.
+# restored database or schema descriptors. This is a regression test for
+# #164961.
 
 new-cluster name=s1 allow-implicit-access
 ----
@@ -14,8 +15,8 @@ CREATE DATABASE mydb;
 USE mydb;
 ----
 
-# Set default privileges where "max" appears as both a role (FOR ROLE max) and
-# a grantee (TO max).
+# Set database-level default privileges where "max" appears as both a role
+# (FOR ROLE max) and a grantee (TO max).
 exec-sql
 ALTER DEFAULT PRIVILEGES FOR ROLE root GRANT SELECT ON TABLES TO max;
 ALTER DEFAULT PRIVILEGES FOR ROLE max GRANT INSERT ON TABLES TO root;
@@ -32,6 +33,17 @@ query-sql
 SELECT role, grantee, privilege_type FROM [SHOW DEFAULT PRIVILEGES FOR ROLE max] WHERE grantee = 'root' ORDER BY role, grantee, privilege_type;
 ----
 max root INSERT
+
+# Also set schema-level default privileges referencing "max".
+exec-sql
+CREATE SCHEMA sc;
+ALTER DEFAULT PRIVILEGES FOR ROLE root IN SCHEMA sc GRANT SELECT ON TABLES TO max;
+----
+
+query-sql
+SELECT role, grantee, privilege_type FROM [SHOW DEFAULT PRIVILEGES IN SCHEMA sc] WHERE grantee = 'max' ORDER BY role, grantee, privilege_type;
+----
+root max SELECT
 
 exec-sql
 BACKUP DATABASE mydb INTO 'nodelocal://1/test/';
@@ -63,5 +75,12 @@ SELECT count(*) FROM "".crdb_internal.invalid_objects WHERE id = (
 # up during restore.
 query-sql
 SELECT count(*) FROM [SHOW DEFAULT PRIVILEGES FOR ROLE root] WHERE grantee = 'max';
+----
+0
+
+# Schema-level default privileges referencing "max" should also have been
+# cleaned up during restore.
+query-sql
+SELECT count(*) FROM [SHOW DEFAULT PRIVILEGES IN SCHEMA sc] WHERE grantee = 'max';
 ----
 0
