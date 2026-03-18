@@ -609,3 +609,89 @@ func TestMemMetricsCorrectlyRegistered(t *testing.T) {
 	})
 	require.ElementsMatch(t, expectedMetrics, registered)
 }
+
+func TestUDFCallMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
+	// Create UDFs and a table for testing.
+	for _, stmt := range []string{
+		"CREATE FUNCTION f_add(a INT, b INT) RETURNS INT LANGUAGE SQL AS 'SELECT a + b'",
+		"CREATE FUNCTION f_volatile(a INT) RETURNS INT VOLATILE LANGUAGE SQL AS 'SELECT a + 1'",
+		"CREATE PROCEDURE p_noop() LANGUAGE SQL AS 'SELECT 1'",
+		"CREATE TABLE t_udf (x INT, y INT)",
+		"INSERT INTO t_udf VALUES (1, 2), (3, 4)",
+	} {
+		if _, err := sqlDB.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	testCases := []struct {
+		name     string
+		query    string
+		udfDelta int64
+	}{
+		{
+			name:     "no UDF",
+			query:    "SELECT 1",
+			udfDelta: 0,
+		},
+		{
+			name:     "single UDF call",
+			query:    "SELECT f_add(1, 2)",
+			udfDelta: 1,
+		},
+		{
+			name:     "UDF over multiple rows counts once per statement",
+			query:    "SELECT f_add(x, y) FROM t_udf",
+			udfDelta: 1,
+		},
+		{
+			name:     "multiple UDF calls in one statement counts once",
+			query:    "SELECT f_add(1, 2), f_add(3, 4)",
+			udfDelta: 1,
+		},
+		{
+			name:     "volatile UDF that cannot be inlined",
+			query:    "SELECT f_volatile(1)",
+			udfDelta: 1,
+		},
+		{
+			name:     "stored procedure does not increment UDF counter",
+			query:    "CALL p_noop()",
+			udfDelta: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			before := s.MustGetSQLCounter(sql.MetaUDFCall.Name)
+			if _, err := sqlDB.Exec(tc.query); err != nil {
+				t.Fatal(err)
+			}
+			after := s.MustGetSQLCounter(sql.MetaUDFCall.Name)
+			require.Equal(t, tc.udfDelta, after-before, "UDF count delta")
+		})
+	}
+
+	// The counter is incremented at planning time and does not distinguish
+	// between executions that succeed and executions that fail. Use a volatile
+	// UDF with division by zero so the error occurs at execution time (after
+	// planning has already counted it) rather than during planning.
+	t.Run("counter increments even when execution fails", func(t *testing.T) {
+		_, err := sqlDB.Exec(
+			"CREATE FUNCTION f_div(a INT, b INT) RETURNS INT VOLATILE LANGUAGE SQL AS 'SELECT a / b'",
+		)
+		require.NoError(t, err)
+		before := s.MustGetSQLCounter(sql.MetaUDFCall.Name)
+		_, err = sqlDB.Exec("SELECT f_div(1, 0)")
+		require.Error(t, err)
+		after := s.MustGetSQLCounter(sql.MetaUDFCall.Name)
+		require.Equal(t, int64(1), after-before, "UDF count delta")
+	})
+}
