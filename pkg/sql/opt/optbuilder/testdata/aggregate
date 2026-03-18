@@ -4829,3 +4829,33 @@ scalar-group-by
  └── aggregations
       └── const-agg [as=array_agg:6]
            └── array_agg:6
+
+exec-ddl
+CREATE TABLE t165002 (id INT PRIMARY KEY, b INT, c VARCHAR(255))
+----
+
+build
+SELECT string_agg(
+  CASE WHEN t165002.b < 10 THEN t165002.c ELSE NULL END,
+  ','
+  ORDER BY t165002.id DESC
+) FROM t165002
+----
+scalar-group-by
+ ├── columns: string_agg:8
+ ├── window partition=() ordering=-1
+ │    ├── columns: id:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5 column6:6 column7:7!null string_agg:8
+ │    ├── project
+ │    │    ├── columns: column6:6 column7:7!null id:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    │    ├── scan t165002
+ │    │    │    └── columns: id:1!null b:2 c:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+ │    │    └── projections
+ │    │         ├── CASE WHEN b:2 < 10 THEN c:3::VARCHAR ELSE NULL::VARCHAR END [as=column6:6]
+ │    │         └── ',' [as=column7:7]
+ │    └── windows
+ │         └── string-agg [as=string_agg:8, frame="range from unbounded to unbounded"]
+ │              ├── column6:6
+ │              └── column7:7
+ └── aggregations
+      └── const-agg [as=string_agg:8]
+           └── string_agg:8

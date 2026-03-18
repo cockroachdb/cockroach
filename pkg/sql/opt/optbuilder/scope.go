@@ -622,7 +622,10 @@ func findExistingColInList(
 		if expr == col {
 			return col
 		}
-		if col.typ.Identical(expr.ResolvedType()) && exprStr == col.getExprStr() {
+		// TODO(yuzefovich): using equivalent type condition is not exactly the
+		// right thing to do. See discussion on PR #165860 the right fix in the
+		// type-checker.
+		if col.typ.Equivalent(expr.ResolvedType()) && exprStr == col.getExprStr() {
 			if allowSideEffects || col.scalar == nil {
 				return col
 			}
@@ -639,7 +642,7 @@ func findExistingColInList(
 // findExistingCol finds the given expression among the bound variables in this
 // scope. Returns nil if the expression is not found (or an expression is found
 // but it has side-effects and allowSideEffects is false). The types of the
-// given expression and the bound variable need to be identical.
+// given expression and the bound variable need to be equivalent.
 //
 // If a column is found and we are tracking view dependencies, we add the column
 // to the view dependencies since it means this column is being referenced.
