@@ -25,6 +25,7 @@ go_library(
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_pebble//metrics",
         "@com_github_cockroachdb_pebble//rangekey",
+        "@com_github_cockroachdb_pebble//vfs",
     ],
 )
 

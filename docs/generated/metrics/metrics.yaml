@@ -11394,6 +11394,26 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric reports the number of a node's LSM compactions. If the number of compactions remains elevated while the LSM health does not improve, compactions are not keeping up with the workload. If the condition persists for an extended period, the cluster will initially exhibit performance issues that will eventually escalate into stability issues.
       visibility: ESSENTIAL
+    - name: storage.wal.failover.secondary.disk.available
+      exported_name: storage_wal_failover_secondary_disk_available
+      description: Available disk space on the secondary WAL failover volume.
+      y_axis_label: Storage
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Only populated when WAL failover is configured.
+      visibility: ESSENTIAL
+    - name: storage.wal.failover.secondary.disk.capacity
+      exported_name: storage_wal_failover_secondary_disk_capacity
+      description: Total disk capacity of the secondary WAL failover volume.
+      y_axis_label: Storage
+      type: GAUGE
+      unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Only populated when WAL failover is configured.
+      visibility: ESSENTIAL
     - name: storage.wal.failover.write_and_sync.latency
       exported_name: storage_wal_failover_write_and_sync_latency
       description: The observed latency for writing and syncing to the logical Write-Ahead Log.

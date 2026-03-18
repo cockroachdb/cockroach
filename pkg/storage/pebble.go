@@ -2067,6 +2067,16 @@ func (p *Pebble) Capacity() (roachpb.StoreCapacity, error) {
 	}, nil
 }
 
+// WALFailoverDiskUsage implements the Engine interface.
+func (p *Pebble) WALFailoverDiskUsage() (vfs.DiskUsage, error) {
+	if p.cfg.opts.WALFailover == nil {
+		return vfs.DiskUsage{}, vfs.ErrUnsupported
+	}
+	return p.cfg.opts.WALFailover.Secondary.FS.GetDiskUsage(
+		p.cfg.opts.WALFailover.Secondary.Dirname,
+	)
+}
+
 // auxiliaryDirSize computes the size of the auxiliary directory. There are
 // multiple Cockroach subsystems that write into the auxiliary directory, and
 // they don't incrementally account for their disk space usage. This function
