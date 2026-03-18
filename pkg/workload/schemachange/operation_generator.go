@@ -3000,7 +3000,12 @@ func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt
 	}
 	if og.useDeclarativeSchemaChanger && !commentOnTypeNotSupported {
 		onType = `UNION ALL
-	SELECT 'TYPE ' || quote_ident(schema) || '.' || quote_ident(name) FROM [SHOW TYPES]`
+	SELECT 'TYPE ' || quote_ident(nsp.nspname) || '.' || quote_ident(types.typname)
+	  FROM pg_catalog.pg_type AS types
+	  JOIN pg_catalog.pg_namespace AS nsp ON (types.typnamespace = nsp.oid)
+	  WHERE types.typtype IN ('e','c')
+	    AND types.typrelid IN (0, types.oid)
+	    AND nsp.nspname NOT IN ('information_schema', 'pg_catalog', 'crdb_internal', 'pg_extension')`
 	}
 	q := With([]CTE{
 		{"descriptors", descJSONQuery},
@@ -3009,7 +3014,7 @@ func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt
 		{"indexes", `SELECT schema_id::REGNAMESPACE::TEXT as schema_name, name AS table_name, jsonb_array_elements(descriptor->'table'->'indexes') AS index FROM tables`},
 		{"constraints", `SELECT schema_id::REGNAMESPACE::TEXT as schema_name, name AS table_name, jsonb_array_elements(descriptor->'table'->'checks') AS constraint FROM tables`},
 	}, fmt.Sprintf(`
-	SELECT 'SCHEMA ' || quote_ident(schema_name) FROM [SHOW SCHEMAS] WHERE owner != 'node'
+	SELECT 'SCHEMA ' || quote_ident(schema_name) FROM information_schema.schemata WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')
 		UNION ALL
 	SELECT 'TABLE ' || quote_ident(table_schema) || '.' || quote_ident(table_name) FROM information_schema.tables WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')
 		UNION ALL
@@ -3985,9 +3990,13 @@ func (og *operationGenerator) randTypeName(
 		return &typeName, false, nil
 	}
 	var q = fmt.Sprintf(`
-		SELECT schema, name
-		    FROM [SHOW TYPES]
-		   WHERE name LIKE '%s'
+		SELECT nsp.nspname AS schema, types.typname AS name
+		    FROM pg_catalog.pg_type AS types
+		    JOIN pg_catalog.pg_namespace AS nsp ON (types.typnamespace = nsp.oid)
+		   WHERE types.typtype IN ('e','c')
+		     AND types.typrelid IN (0, types.oid)
+		     AND nsp.nspname NOT IN ('information_schema', 'pg_catalog', 'crdb_internal', 'pg_extension')
+		     AND types.typname LIKE '%s'
 		ORDER BY random()
 		   LIMIT 1;
 		`, prefix+"%")
