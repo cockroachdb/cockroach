@@ -11,6 +11,7 @@ go_library(
         "update_helm.go",
         "update_releases.go",
         "update_versions.go",
+        "update_workflow.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/release",
     visibility = ["//visibility:private"],
@@ -23,6 +24,7 @@ go_library(
         "@com_github_jordan_wright_email//:email",
         "@com_github_spf13_cobra//:cobra",
         "@in_gopkg_yaml_v2//:yaml_v2",
+        "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )
 
@@ -37,16 +39,21 @@ go_test(
     srcs = [
         "git_test.go",
         "update_releases_test.go",
+        "update_workflow_test.go",
     ],
     data = glob([
         "templates/**",
         "testdata/**",
-    ]),
+    ]) + [
+        "//.github:workflows/update_releases.yaml",
+    ],
     embed = [":release_lib"],
     deps = [
+        "//pkg/testutils/datapathutils",
         "//pkg/testutils/release",
         "@com_github_cockroachdb_version//:version",
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
+        "@in_gopkg_yaml_v3//:yaml_v3",
     ],
 )

@@ -38,4 +38,5 @@ func main() {
 func init() {
 	rootCmd.AddCommand(updateReleasesTestFilesCmd)
 	rootCmd.AddCommand(updateVersionsCmd)
+	rootCmd.AddCommand(updateWorkflowBranchesCmd)
 }
