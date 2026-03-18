@@ -210,8 +210,8 @@ type Index interface {
 	// definition, where i < PartitionCount.
 	Partition(i int) Partition
 
-	// IsTemporaryIndexForBackfill returns true iff the index is an index being
-	// used as the temporary index being used by an in-progress index backfill.
+	// IsTemporaryIndexForBackfill returns true if the index is a temporary index
+	// for an in-progress index backfill.
 	IsTemporaryIndexForBackfill() bool
 }
 
@@ -230,6 +230,12 @@ type IndexColumn struct {
 // the given ordinal position is a mutation index.
 func IsMutationIndex(table Table, ord IndexOrdinal) bool {
 	return ord >= table.IndexCount()
+}
+
+// IsTemporaryMutationIndex is a convenience function that returns true if the index at
+// the given ordinal position is a mutation index and is temporary.
+func IsTemporaryMutationIndex(table Table, ord IndexOrdinal) bool {
+	return IsMutationIndex(table, ord) && table.Index(ord).IsTemporaryIndexForBackfill()
 }
 
 // Partition is an interface to a PARTITION BY LIST partition of an index. The
