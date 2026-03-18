@@ -2,60 +2,36 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
-import {
-  TransactionInsightDetails,
-  TransactionInsightDetailsStateProps,
-  TransactionInsightDetailsDispatchProps,
-} from "@cockroachlabs/cluster-ui";
-import { connect } from "react-redux";
+import { TransactionInsightDetails } from "@cockroachlabs/cluster-ui";
+import React from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 
-import {
-  refreshTxnInsightDetails,
-  refreshUserSQLRoles,
-} from "src/redux/apiReducers";
-import { AdminUIState } from "src/redux/state";
+import { refreshUserSQLRoles } from "src/redux/apiReducers";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
 import { selectHasAdminRole } from "src/redux/user";
-import {
-  selectTxnInsightDetails,
-  selectTransactionInsightDetailsError,
-  selectTransactionInsightDetailsMaxSizeReached,
-} from "src/views/insights/insightsSelectors";
 
-const mapStateToProps = (
-  state: AdminUIState,
-  props: RouteComponentProps,
-): TransactionInsightDetailsStateProps => {
-  return {
-    insightDetails: selectTxnInsightDetails(state, props),
-    insightError: selectTransactionInsightDetailsError(state, props),
-    timeScale: selectTimeScale(state),
-    hasAdminRole: selectHasAdminRole(state),
-    maxSizeApiReached: selectTransactionInsightDetailsMaxSizeReached(
-      state,
-      props,
-    ),
-  };
-};
+const TransactionInsightDetailsPageInner: React.FC<
+  RouteComponentProps
+> = props => {
+  const dispatch = useDispatch();
+  const timeScale = useSelector(selectTimeScale);
+  const hasAdminRole = useSelector(selectHasAdminRole);
 
-const mapDispatchToProps: TransactionInsightDetailsDispatchProps = {
-  refreshTransactionInsightDetails: refreshTxnInsightDetails,
-  setTimeScale: setGlobalTimeScaleAction,
-  refreshUserSQLRoles: refreshUserSQLRoles,
+  return (
+    <TransactionInsightDetails
+      {...props}
+      timeScale={timeScale}
+      hasAdminRole={hasAdminRole}
+      setTimeScale={ts => dispatch(setGlobalTimeScaleAction(ts))}
+      refreshUserSQLRoles={() => dispatch(refreshUserSQLRoles())}
+    />
+  );
 };
 
 const TransactionInsightDetailsPage = withRouter(
-  connect<
-    TransactionInsightDetailsStateProps,
-    TransactionInsightDetailsDispatchProps,
-    RouteComponentProps,
-    AdminUIState
-  >(
-    mapStateToProps,
-    mapDispatchToProps,
-  )(TransactionInsightDetails),
+  TransactionInsightDetailsPageInner,
 );
 
 export default TransactionInsightDetailsPage;
