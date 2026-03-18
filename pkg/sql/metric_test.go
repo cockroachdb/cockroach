@@ -594,3 +594,66 @@ func TestMemMetricsCorrectlyRegistered(t *testing.T) {
 	})
 	require.ElementsMatch(t, expectedMetrics, registered)
 }
+
+func TestUDFCallMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
+	// Create a UDF and a table for testing.
+	if _, err := sqlDB.Exec(
+		"CREATE FUNCTION f_add(a INT, b INT) RETURNS INT LANGUAGE SQL AS 'SELECT a + b'",
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec("CREATE TABLE t_udf (x INT, y INT)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec("INSERT INTO t_udf VALUES (1, 2), (3, 4)"); err != nil {
+		t.Fatal(err)
+	}
+
+	testCases := []struct {
+		name     string
+		query    string
+		udfDelta int64
+	}{
+		{
+			name:     "no UDF",
+			query:    "SELECT 1",
+			udfDelta: 0,
+		},
+		{
+			name:     "single UDF call",
+			query:    "SELECT f_add(1, 2)",
+			udfDelta: 1,
+		},
+		{
+			name:     "UDF over multiple rows counts once",
+			query:    "SELECT f_add(x, y) FROM t_udf",
+			udfDelta: 1,
+		},
+		{
+			name:     "multiple UDF calls in one statement counts once",
+			query:    "SELECT f_add(1, 2), f_add(3, 4)",
+			udfDelta: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			beforeStarted := s.MustGetSQLCounter(sql.MetaUDFCallStarted.Name)
+			beforeExecuted := s.MustGetSQLCounter(sql.MetaUDFCallExecuted.Name)
+			if _, err := sqlDB.Exec(tc.query); err != nil {
+				t.Fatal(err)
+			}
+			afterStarted := s.MustGetSQLCounter(sql.MetaUDFCallStarted.Name)
+			afterExecuted := s.MustGetSQLCounter(sql.MetaUDFCallExecuted.Name)
+			require.Equal(t, tc.udfDelta, afterStarted-beforeStarted, "UDF started count delta")
+			require.Equal(t, tc.udfDelta, afterExecuted-beforeExecuted, "UDF executed count delta")
+		})
+	}
+}

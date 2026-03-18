@@ -694,6 +694,10 @@ const (
 
 	// planFlagUsesRLS is set if the plan applies row-level security policies.
 	planFlagUsesRLS
+
+	// planFlagContainsUDF is set if the plan invokes at least one
+	// user-defined function.
+	planFlagContainsUDF
 )
 
 // IsSet returns true if the receiver has all of the given flags set.
