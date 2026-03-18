@@ -127,6 +127,9 @@ func constructPlan(
 	if flags.IsSet(exec.PlanFlagCanaryAndStableStatsDiffer) {
 		res.flags.Set(planFlagCanaryAndStableStatsDiffer)
 	}
+	if flags.IsSet(exec.PlanFlagContainsUDF) {
+		res.flags.Set(planFlagContainsUDF)
+	}
 
 	return res, nil
 }

@@ -9311,6 +9311,38 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.udf.count
+      exported_name: sql_udf_count
+      description: Number of successfully executed SQL statements that invoked user-defined functions
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.udf.count.internal
+      exported_name: sql_udf_count_internal
+      description: Number of successfully executed SQL statements that invoked user-defined functions (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.udf.started.count
+      exported_name: sql_udf_started_count
+      description: Number of SQL statements that invoked user-defined functions
+      y_axis_label: SQL Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sql.udf.started.count.internal
+      exported_name: sql_udf_started_count_internal
+      description: Number of SQL statements that invoked user-defined functions (internal queries)
+      y_axis_label: SQL Internal Statements
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sql.vecindex.pending_splits_merges
       exported_name: sql_vecindex_pending_splits_merges
       description: Total number of vector index splits and merges waiting to be processed

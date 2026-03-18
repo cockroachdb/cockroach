@@ -99,6 +99,10 @@ const (
 	// stable (second-newest) statistics within its canary window. This
 	// gates canary/stable experiment metric recording.
 	PlanFlagCanaryAndStableStatsDiffer
+
+	// PlanFlagContainsUDF is set if the plan invokes at least one
+	// user-defined function.
+	PlanFlagContainsUDF
 )
 
 // IsSet returns true if the receiver has all of the given flags set.
