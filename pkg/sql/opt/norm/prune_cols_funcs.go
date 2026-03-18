@@ -178,7 +178,11 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 				predFilters := *pred.(*memo.FiltersExpr)
 				indexAndPredCols.UnionWith(predFilters.OuterCols())
 			}
-			if !indexAndPredCols.Intersects(updateCols) {
+			// If a secondary index is being built, then there will be points where
+			// all values will be forced with a Put. As a result, runtime expects temporary
+			// mutated indexes to always have values available for writes during index
+			// construction, even if the mutation does not touch those columns.
+			if !indexAndPredCols.Intersects(updateCols) && !cat.IsTemporaryMutationIndex(tabMeta.Table, i) {
 				continue
 			}
 
