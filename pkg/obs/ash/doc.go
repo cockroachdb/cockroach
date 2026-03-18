@@ -10,19 +10,11 @@
 // # Motivation
 //
 // Users investigating performance issues need to answer the question:
-// "what was running when performance changed?" ASH provides an indirect
-// but statistically reliable view of where database time is spent by
-// periodically sampling the state of in-flight work (SQL queries, jobs,
-// internal tasks) and recording whether each unit of work is running on
-// CPU or waiting on a specific subsystem such as I/O, locks, admission
-// control, or network. Aggregating these samples over time yields a
-// picture of resource and wait-time accountability often described as
-// "DB seconds."
-//
-// # Architecture
-//
-// The package is structured around three core components: work state
-// registration, sampling, and storage.
+// "what was running when performance changed?" ASH answers this by
+// periodically sampling in-flight work and recording whether each
+// unit of work is running on CPU or waiting on a specific subsystem.
+// Aggregating these samples over time yields a picture of resource
+// and wait-time accountability often described as "DB seconds."
 //
 // # Work State Registration
 //
@@ -47,9 +39,65 @@
 // active states. The sampler drains the retired list after each
 // iteration.
 //
+// Each WorkState records a WorkEvent (a specific label like
+// "LockWait", "ReplicaSend", "DistSenderRemote") and a WorkEventType
+// that categorizes the resource involved:
+//
+//   - CPU: active computation (e.g., optimizer planning, replica
+//     evaluation).
+//   - IO: storage I/O (e.g., batch evaluation in the storage layer).
+//   - LOCK: lock or latch contention.
+//   - NETWORK: waiting on remote RPCs.
+//   - ADMISSION: queued in admission control.
+//   - OTHER: other wait points (e.g., commit wait, backpressure).
+//
 // When ASH is disabled (obs.ash.enabled = false), SetWorkState is a
 // no-op that returns a pre-allocated no-op function, so there is
 // zero overhead on the hot path.
+//
+// # Instrumentation Guidance
+//
+// ASH should instrument goroutines that are tightly bound to a unit
+// of work — actively computing, actively waiting on a specific
+// resource, or actively performing I/O. It should NOT instrument
+// orchestration goroutines that are idle while work happens elsewhere
+// in the call graph.
+//
+// Good candidates for SetWorkState are goroutines that spend the
+// overwhelming majority of their time in the instrumented region
+// doing the thing the label describes:
+//
+//   - lock_table_waiter.go "LockWait": the goroutine is blocked
+//     waiting to acquire a lock. It enters this state when it
+//     discovers a conflicting lock and exits when the lock is
+//     released or the wait is interrupted. The goroutine is doing
+//     nothing else during this time.
+//   - plan_opt.go "Optimize": the goroutine is actively running the
+//     cost-based optimizer. This is CPU-bound work that dominates the
+//     goroutine's time for the duration of the call.
+//   - transport.go "DistSenderRemote": the goroutine is blocked on a
+//     remote RPC. It enters the state immediately before the RPC and
+//     exits immediately after the reply arrives.
+//
+// A poor candidate is connExecutor.execStmt
+// (conn_executor_exec.go), even though it is the entry point for all
+// SQL query execution. The connExecutor goroutine spends most of its
+// lifetime idle, blocked in stmtBuf.CurCmd waiting for the next
+// client command (conn_io.go). During the brief window when execStmt
+// IS running, it acts as an orchestrator: dispatching to the
+// optimizer, the execution engine, and KV — all of which already
+// have their own fine-grained SetWorkState calls. Instrumenting at
+// the execStmt level would either capture idle time (inflating
+// "active" counts) or add a coarse "executing a statement" label
+// that provides no diagnostic value beyond the existing
+// instrumentation.
+//
+// As a rule of thumb: if the goroutine you are considering
+// instrumenting spends significant time blocked on channels,
+// condition variables, or select statements waiting for OTHER
+// goroutines to do the real work, it is an orchestration goroutine
+// and should not be instrumented. Instrument the goroutines doing
+// the work instead.
 //
 // # Sampler
 //
@@ -73,15 +121,12 @@
 // shared-process multi-tenant environment, multiple SQL servers share
 // the single sampler instance.
 //
-// # App Name Resolution
-//
 // To correlate samples with applications, the SQL layer hashes each
 // session's application name to a uint64 ID (via GetOrStoreAppNameID)
 // and stores the ID-to-string mapping in a process-wide cache. The ID
 // is propagated through BatchRequest headers and DistSQL
-// SetupFlowRequests, avoiding string copies on the hot path.
-//
-// During sampling, the sampler resolves app name IDs in two phases:
+// SetupFlowRequests, avoiding string copies on the hot path. During
+// sampling, the sampler resolves app name IDs in two phases:
 //
 //  1. Local resolution: look up the ID in the process-wide cache.
 //     This succeeds for work originating from the local node and for
@@ -94,15 +139,13 @@
 //     gateway node, with a 250ms timeout to avoid stalling the
 //     sampling loop.
 //
-// # Ring Buffer
+// # Storage and Access
 //
 // ASH samples are stored in a RingBuffer, a thread-safe circular
 // buffer with a configurable capacity (obs.ash.buffer_size, default
 // 1M samples, ~200MB at ~200 bytes per sample). When the buffer is
 // full the oldest samples are overwritten. The buffer supports dynamic
 // resizing via cluster setting changes.
-//
-// # SQL Interface
 //
 // Samples are exposed through two crdb_internal virtual tables:
 //
@@ -113,28 +156,66 @@
 //     ListActiveSessionHistory / ListLocalActiveSessionHistory status
 //     server RPCs.
 //
-// # Work Events and Types
-//
-// Each sample records a WorkEvent (a specific label like "LockWait",
-// "ReplicaSend", "DistSenderRemote") and a WorkEventType that
-// categorizes the resource involved:
-//
-//   - CPU: active computation (e.g., optimizer planning, replica
-//     evaluation).
-//   - IO: storage I/O (e.g., batch evaluation in the storage layer).
-//   - LOCK: lock or latch contention.
-//   - NETWORK: waiting on remote RPCs.
-//   - ADMISSION: queued in admission control.
-//   - OTHER: other wait points (e.g., commit wait, backpressure).
-//
 // # Workload Attribution
 //
-// To attribute samples to workloads, the SQL layer plumbs a compact
-// integer workload identifier (e.g., statement fingerprint ID) through
-// BatchRequest headers and DistSQL SetupFlowRequests. This avoids
-// string allocations on the hot path. The sampler converts these IDs
-// to hex-encoded strings when writing samples, caching the conversion
-// to avoid repeated allocations.
+// Every ASH sample includes a WorkloadID that identifies the
+// workload responsible for the sampled work: a statement fingerprint
+// ID for SQL queries, a job ID for jobs, or a system task
+// name for internal work. ASH instrumentation points throughout the
+// KV stack read the WorkloadID from the BatchRequest header and pass
+// it to SetWorkState. The challenge is getting the WorkloadID onto
+// BatchRequest headers in the first place. Three propagation
+// mechanisms are used, each suited to a different class of work.
+//
+// SQL statements use the kv.Txn as the carrier. At the start of
+// each statement, the connExecutor computes the statement fingerprint
+// ID and calls Txn.SetWorkloadInfo on the planner's transaction
+// (conn_executor_exec.go). Txn.Send then auto-stamps the WorkloadID
+// onto every BatchRequest header. The transaction is the right
+// carrier because in an explicit transaction (BEGIN; stmt1; stmt2;
+// COMMIT), the connExecutor's context spans multiple statements with
+// different fingerprint IDs, whereas Txn.SetWorkloadInfo can be
+// updated per-statement and immediately applies to all subsequent
+// batches.
+//
+// Jobs use the Go context as the carrier. The jobs registry calls
+// kv.ContextWithWorkloadInfo(ctx, jobID, WorkloadTypeJob) before
+// invoking the job's Resume method (jobs/adopt.go). This context
+// value is then picked up at two points:
+//
+//   - Transactional path: DB.NewTxn(ctx) extracts the workload info
+//     from the context and calls SetWorkloadInfo on the new
+//     transaction. Every transaction the job creates automatically
+//     carries the job ID.
+//   - Non-transactional path: CrossRangeTxnWrapperSender.Send
+//     (kv/db.go) extracts the workload info from the context and
+//     stamps it onto the batch header. This covers operations like
+//     SSTBatcher AddSSTable requests (IMPORT, RESTORE) and backup
+//     ExportRequests that bypass transactions.
+//
+// Context is the right carrier for jobs because a job creates many
+// transactions and non-transactional operations over its lifetime,
+// and the job ID is constant throughout.
+//
+// For DistSQL flows (whether spawned by SQL statements or jobs), the
+// gateway includes the WorkloadID in SetupFlowRequest.EvalContext.
+// On the remote node, the DistSQL server (distsql/server.go) uses
+// this to: (1) stamp the leaf transaction via SetWorkloadInfo,
+// (2) populate the flow's EvalContext for ASH sampling, and
+// (3) inject kv.ContextWithWorkloadInfo so non-transactional KV
+// operations and admission control pacers inherit the identity.
+//
+// System tasks are internal KV operations that do not originate from
+// SQL or jobs — node liveness heartbeats, intent resolution, MVCC
+// garbage collection, Raft log truncation, and so on. For tasks that
+// create individual batches or transactions directly (e.g., node
+// liveness heartbeats, MVCC GC), each call site stamps the workload
+// ID explicitly on the batch header or transaction. For store-level
+// queues with a well-defined processing entry point (e.g., replicate
+// queue, split queue), the workload ID is stamped on the Go context
+// via kv.ContextWithWorkloadInfo at the queue's process() method,
+// propagating to all downstream transactions and batches. The set of
+// system workload IDs is defined in obs/workloadid/workloadid.go.
 //
 // # Multi-Tenancy
 //
@@ -170,6 +251,18 @@
 // show ASH adds a near-fixed ~600-700 bytes and ~17-21 allocations per
 // operation with no statistically significant impact on latency or
 // throughput.
+//
+// Plumbing workload identity also has allocation cost.
+// context.WithValue allocates, so context-based propagation
+// (kv.ContextWithWorkloadInfo) is used only at coarse-grained entry
+// points — job adoption, queue processing — where the context is
+// already being set up. For DistSQL flows, the allocation is
+// acceptable because SetupFlow already performs many allocations.
+// On the per-batch hot path, the workload ID is carried on the
+// transaction or batch header instead. Workload identifiers in proto
+// messages (BatchRequest headers, SetupFlowRequest) use integer
+// fields rather than strings to avoid per-message string allocations
+// on the send path.
 //
 // The off-hot-path cost is the sampler tick, which iterates the
 // sync.Map of active work states. The sampling interval does not
