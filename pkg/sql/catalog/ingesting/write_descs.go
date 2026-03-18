@@ -128,6 +128,11 @@ func WriteDescriptors(
 		if updatedPrivileges != nil {
 			if mut, ok := sc.(*schemadesc.Mutable); ok {
 				mut.Privileges = updatedPrivileges
+				// Clear default privileges as well. Like regular privileges, we
+				// reset to defaults rather than selectively filtering since the
+				// backup's user set may not match this cluster's.
+				mut.DefaultPrivileges = catprivilege.MakeDefaultPrivilegeDescriptor(
+					catpb.DefaultPrivilegeDescriptor_SCHEMA)
 			} else {
 				log.Dev.Fatalf(ctx, "wrong type for schema %d, %T, expected Mutable",
 					sc.GetID(), sc)
