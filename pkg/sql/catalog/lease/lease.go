@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -815,6 +816,8 @@ func getDescriptorsFromStoreForInterval(
 	batchRequestHeader := kvpb.Header{
 		Timestamp:                   upperBound.Prev(),
 		ReturnElasticCPUResumeSpans: true,
+		WorkloadID:                  uint64(workloadid.WORKLOAD_ID_DESCRIPTOR_LEASE),
+		WorkloadType:                workloadid.WorkloadTypeSystem.ToUint32(),
 	}
 	descriptorKey := catalogkeys.MakeDescMetadataKey(codec, id)
 	// Even if we resume below, the end key should stay constant.
@@ -1068,6 +1071,8 @@ func (m *Manager) getDescriptorsInTxnAtTimestamp(
 	batchRequestHeader := kvpb.Header{
 		Timestamp:                   timestamp,
 		ReturnElasticCPUResumeSpans: true,
+		WorkloadID:                  uint64(workloadid.WORKLOAD_ID_DESCRIPTOR_LEASE),
+		WorkloadType:                workloadid.WorkloadTypeSystem.ToUint32(),
 	}
 	descriptorKey := catalogkeys.MakeAllDescsMetadataKey(m.Codec())
 	descriptorKeyEnd := descriptorKey.PrefixEnd()
