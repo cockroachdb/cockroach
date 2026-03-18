@@ -34,7 +34,7 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 		ct.Table.ObjectNamePrefix.ExplicitSchema = false
 		ct.Persistence = tree.PersistenceTemporary
 	}
-	sch, resName := b.resolveSchemaForCreateTable(&ct.Table)
+	sch, resName := b.resolveSchemaForCreateTable(&ct.Table, isTemp)
 	ct.Table.ObjectNamePrefix = resName
 	schID := b.factory.Metadata().AddSchema(sch)
 

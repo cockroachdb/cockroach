@@ -73,6 +73,7 @@ SHOW GRANTS ON DATABASE testdb;
 ----
 testdb admin ALL true
 testdb public CONNECT false
+testdb public TEMPORARY false
 testdb root ALL true
 testdb testuser ALL true
 testdb user1 ALL true
@@ -164,6 +165,7 @@ SHOW GRANTS ON DATABASE testdb;
 ----
 testdb admin ALL true
 testdb public CONNECT false
+testdb public TEMPORARY false
 testdb root ALL true
 testdb testuser ALL true
 testdb user1 ALL true
@@ -266,6 +268,7 @@ SHOW GRANTS ON DATABASE testuser_db;
 ----
 testuser_db admin ALL true
 testuser_db public CONNECT false
+testuser_db public TEMPORARY false
 testuser_db root ALL true
 testuser_db testuser CREATE false
 
@@ -355,6 +358,7 @@ SHOW GRANTS ON DATABASE root_db;
 ----
 root_db admin ALL true
 root_db public CONNECT false
+root_db public TEMPORARY false
 root_db root ALL true
 
 query-sql
@@ -430,6 +434,7 @@ SHOW GRANTS ON DATABASE testdb
 ----
 testdb admin ALL true
 testdb public CONNECT false
+testdb public TEMPORARY false
 testdb root ALL true
 
 query-sql
@@ -520,6 +525,7 @@ SHOW GRANTS ON DATABASE testdb
 ----
 testdb admin ALL true
 testdb public CONNECT false
+testdb public TEMPORARY false
 testdb root ALL true
 testdb testuser ALL true
 

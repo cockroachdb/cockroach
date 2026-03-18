@@ -58,7 +58,7 @@ func TestGetDatabaseGrants(t *testing.T) {
 	conn.Exec(t, `GRANT CREATE, CONNECT ON DATABASE test_db TO user1`)
 	conn.Exec(t, `GRANT ZONECONFIG, BACKUP ON DATABASE test_db TO user2`)
 	conn.Exec(t, `GRANT ALL ON DATABASE test_db TO user3`)
-	conn.Exec(t, `REVOKE CONNECT ON DATABASE no_access_db FROM public`)
+	conn.Exec(t, `REVOKE CONNECT, TEMPORARY ON DATABASE no_access_db FROM public`)
 
 	// Define test cases.
 	testCases := []struct {
@@ -81,10 +81,11 @@ func TestGetDatabaseGrants(t *testing.T) {
 			pageSize:       0,
 			pageNum:        0,
 			expectedStatus: http.StatusOK,
-			expectedTotal:  8,
+			expectedTotal:  9,
 			expected: []grantRecord{
 				{Grantee: "admin", Privilege: "ALL"},
 				{Grantee: "public", Privilege: "CONNECT"},
+				{Grantee: "public", Privilege: "TEMPORARY"},
 				{Grantee: "root", Privilege: "ALL"},
 				{Grantee: "user1", Privilege: "CONNECT"},
 				{Grantee: "user1", Privilege: "CREATE"},
@@ -101,7 +102,7 @@ func TestGetDatabaseGrants(t *testing.T) {
 			sortBy:         "grantee",
 			sortOrder:      "desc",
 			expectedStatus: http.StatusOK,
-			expectedTotal:  8,
+			expectedTotal:  9,
 			expected: []grantRecord{
 				{Grantee: "user3", Privilege: "ALL"},
 				{Grantee: "user2", Privilege: "BACKUP"},
@@ -110,6 +111,7 @@ func TestGetDatabaseGrants(t *testing.T) {
 				{Grantee: "user1", Privilege: "CREATE"},
 				{Grantee: "root", Privilege: "ALL"},
 				{Grantee: "public", Privilege: "CONNECT"},
+				{Grantee: "public", Privilege: "TEMPORARY"},
 				{Grantee: "admin", Privilege: "ALL"},
 			},
 		},
@@ -120,7 +122,7 @@ func TestGetDatabaseGrants(t *testing.T) {
 			pageNum:        0,
 			sortBy:         "privilege",
 			expectedStatus: http.StatusOK,
-			expectedTotal:  8,
+			expectedTotal:  9,
 			expected: []grantRecord{
 				{Grantee: "admin", Privilege: "ALL"},
 				{Grantee: "root", Privilege: "ALL"},
@@ -129,6 +131,7 @@ func TestGetDatabaseGrants(t *testing.T) {
 				{Grantee: "public", Privilege: "CONNECT"},
 				{Grantee: "user1", Privilege: "CONNECT"},
 				{Grantee: "user1", Privilege: "CREATE"},
+				{Grantee: "public", Privilege: "TEMPORARY"},
 				{Grantee: "user2", Privilege: "ZONECONFIG"},
 			},
 		},
@@ -138,13 +141,13 @@ func TestGetDatabaseGrants(t *testing.T) {
 			pageSize:       5,
 			pageNum:        0,
 			expectedStatus: http.StatusOK,
-			expectedTotal:  8,
+			expectedTotal:  9,
 			expected: []grantRecord{
 				{Grantee: "admin", Privilege: "ALL"},
 				{Grantee: "public", Privilege: "CONNECT"},
+				{Grantee: "public", Privilege: "TEMPORARY"},
 				{Grantee: "root", Privilege: "ALL"},
 				{Grantee: "user1", Privilege: "CONNECT"},
-				{Grantee: "user1", Privilege: "CREATE"},
 			},
 		},
 		{
@@ -176,10 +179,10 @@ func TestGetDatabaseGrants(t *testing.T) {
 			pageSize:       2,
 			pageNum:        3,
 			expectedStatus: http.StatusOK,
-			expectedTotal:  8,
+			expectedTotal:  9,
 			expected: []grantRecord{
+				{Grantee: "user1", Privilege: "CONNECT"},
 				{Grantee: "user1", Privilege: "CREATE"},
-				{Grantee: "user2", Privilege: "BACKUP"},
 			},
 		},
 	}
@@ -331,7 +334,7 @@ func TestGetTableGrants(t *testing.T) {
 	conn.Exec(t, `GRANT SELECT, INSERT ON TABLE test_db.test_table TO user1`)
 	conn.Exec(t, `GRANT UPDATE, DELETE ON TABLE test_db.test_table TO user2`)
 	conn.Exec(t, `GRANT ALL ON TABLE test_db.test_table TO user3`)
-	conn.Exec(t, `REVOKE CONNECT ON DATABASE no_access_db FROM public`)
+	conn.Exec(t, `REVOKE CONNECT, TEMPORARY ON DATABASE no_access_db FROM public`)
 
 	// Define test cases.
 	testCases := []struct {

@@ -45,7 +45,7 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 	}
 
 	viewName := &cv.Name
-	sch, resName := b.resolveSchemaForCreateTable(viewName)
+	sch, resName := b.resolveSchemaForCreateTable(viewName, isTemp)
 	viewName.ObjectNamePrefix = resName
 	schID := b.factory.Metadata().AddSchema(sch)
 

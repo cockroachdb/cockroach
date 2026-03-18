@@ -40,7 +40,7 @@ StatementPhase stage 1 of 1 with 17 MutationType ops
     *scop.UpdateUserPrivileges
       Privileges:
         DescriptorID: 104
-        Privileges: 2048
+        Privileges: 17592186046464
         UserName: public
     *scop.UpdateUserPrivileges
       Privileges:
@@ -145,7 +145,7 @@ PreCommitPhase stage 2 of 2 with 17 MutationType ops
     *scop.UpdateUserPrivileges
       Privileges:
         DescriptorID: 104
-        Privileges: 2048
+        Privileges: 17592186046464
         UserName: public
     *scop.UpdateUserPrivileges
       Privileges:

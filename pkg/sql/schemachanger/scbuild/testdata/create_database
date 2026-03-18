@@ -16,7 +16,7 @@ CREATE DATABASE db OWNER roacher;
 - [[UserPrivileges:{DescID: 104, Name: admin}, PUBLIC], ABSENT]
   {descriptorId: 104, privileges: "2", userName: admin, withGrantOption: "2"}
 - [[UserPrivileges:{DescID: 104, Name: public}, PUBLIC], ABSENT]
-  {descriptorId: 104, privileges: "2048", userName: public}
+  {descriptorId: 104, privileges: "17592186046464", userName: public}
 - [[UserPrivileges:{DescID: 104, Name: root}, PUBLIC], ABSENT]
   {descriptorId: 104, privileges: "2", userName: root, withGrantOption: "2"}
 - [[Schema:{DescID: 105}, PUBLIC], ABSENT]

@@ -87,7 +87,7 @@ var (
 	ReadData              = List{SELECT}
 	ReadWriteData         = List{SELECT, INSERT, DELETE, UPDATE}
 	ReadWriteSequenceData = List{SELECT, UPDATE, USAGE}
-	DBPrivileges          = List{ALL, BACKUP, CHANGEFEED, CONNECT, CREATE, DROP, RESTORE, ZONECONFIG}
+	DBPrivileges          = List{ALL, BACKUP, CHANGEFEED, CONNECT, CREATE, DROP, RESTORE, TEMPORARY, ZONECONFIG}
 	TablePrivileges       = List{ALL, BACKUP, CHANGEFEED, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG, TRIGGER, REPLICATIONDEST, REPLICATIONSOURCE, MAINTAIN}
 	SchemaPrivileges      = List{ALL, CREATE, CHANGEFEED, USAGE}
 	TypePrivileges        = List{ALL, USAGE}
@@ -559,8 +559,8 @@ func isValidACLChar(c byte) bool {
 	return strings.IndexByte(ValidACLChars, c) >= 0
 }
 
-// orderedPrivs is the list of privileges sorted in alphanumeric order based on the ACL character -> CUacdmrtwX
-var orderedPrivs = List{CREATE, USAGE, INSERT, CONNECT, DELETE, MAINTAIN, SELECT, TRIGGER, UPDATE, EXECUTE}
+// orderedPrivs is the list of privileges sorted in alphanumeric order based on the ACL character -> CTUacdmrtwX
+var orderedPrivs = List{CREATE, TEMPORARY, USAGE, INSERT, CONNECT, DELETE, MAINTAIN, SELECT, TRIGGER, UPDATE, EXECUTE}
 
 // ListToACL converts a list of privileges to a list of Postgres
 // ACL items.

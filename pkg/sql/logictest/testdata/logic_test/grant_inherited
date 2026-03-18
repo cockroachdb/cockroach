@@ -67,6 +67,7 @@ SHOW GRANTS ON DATABASE defaultdb FOR alice
 database_name  grantee  privilege_type  is_grantable
 defaultdb      meeter   ALL             true
 defaultdb      public   CONNECT         false
+defaultdb      public   TEMPORARY       false
 
 statement ok
 CREATE SCHEMA sc
