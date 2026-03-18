@@ -7,7 +7,6 @@ import { PayloadAction } from "@reduxjs/toolkit";
 import { AnyAction } from "redux";
 import { all, call, takeEvery, takeLatest, put } from "redux-saga/effects";
 
-import { actions as stmtInsightActions } from "src/store/insights/statementInsights";
 import { actions as txnInsightActions } from "src/store/insights/transactionInsights";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
 import { actions as txnStatsActions } from "src/store/transactionStats";
@@ -33,7 +32,6 @@ export function* updateTimeScale(
 ) {
   yield all([
     put(sqlStatsActions.invalidated()),
-    put(stmtInsightActions.invalidated()),
     put(txnInsightActions.invalidated()),
     put(txnStatsActions.invalidated()),
   ]);
