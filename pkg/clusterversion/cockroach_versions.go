@@ -255,6 +255,11 @@ const (
 	// commands. This unreplicated key is now written at apply time locally.
 	V26_2_NoLastReplicaGCTimestampKeyOnEval
 
+	// V26_2_GrantTemporaryToPublic grants the TEMPORARY privilege to the
+	// public role on all existing databases. This matches PostgreSQL behavior
+	// where TEMPORARY is granted to PUBLIC by default on all databases.
+	V26_2_GrantTemporaryToPublic
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -326,6 +331,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_2_ChangefeedsNoLongerHaveSpanLevelCheckpoints: {Major: 26, Minor: 1, Internal: 26},
 
 	V26_2_NoLastReplicaGCTimestampKeyOnEval: {Major: 26, Minor: 1, Internal: 28},
+
+	V26_2_GrantTemporaryToPublic: {Major: 26, Minor: 1, Internal: 30},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.
