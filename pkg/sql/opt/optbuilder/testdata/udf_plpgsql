@@ -278,14 +278,7 @@ project
                      │                                  │    ├── variable: a:1
                      │                                  │    ├── variable: b:2
                      │                                  │    └── variable: c:3
-                     │                                  ├── params: a:4 b:5 c:6
-                     │                                  └── body
-                     │                                       └── project
-                     │                                            ├── columns: stmt_return_2:7
-                     │                                            ├── values
-                     │                                            │    └── tuple
-                     │                                            └── projections
-                     │                                                 └── variable: c:6 [as=stmt_return_2:7]
+                     │                                  └── repetitive-call
                      └── const: 1
 
 exec-ddl
@@ -375,14 +368,7 @@ project
                      │                                  │    ├── variable: a:1
                      │                                  │    ├── variable: b:2
                      │                                  │    └── variable: c:10
-                     │                                  ├── params: a:4 b:5 c:6
-                     │                                  └── body
-                     │                                       └── project
-                     │                                            ├── columns: stmt_return_2:7
-                     │                                            ├── values
-                     │                                            │    └── tuple
-                     │                                            └── projections
-                     │                                                 └── variable: c:6 [as=stmt_return_2:7]
+                     │                                  └── repetitive-call
                      └── const: 1
 
 exec-ddl
@@ -1182,14 +1168,7 @@ project
                      │                                  │    ├── variable: b:2
                      │                                  │    ├── variable: sum:3
                      │                                  │    └── variable: i:4
-                     │                                  ├── params: a:5 b:6 sum:7 i:8
-                     │                                  └── body
-                     │                                       └── project
-                     │                                            ├── columns: stmt_return_2:9
-                     │                                            ├── values
-                     │                                            │    └── tuple
-                     │                                            └── projections
-                     │                                                 └── variable: sum:7 [as=stmt_return_2:9]
+                     │                                  └── repetitive-call
                      └── const: 1
 
 exec-ddl
@@ -3374,53 +3353,7 @@ project
                      │                                                                                              ├── tail-call
                      │                                                                                              ├── args
                      │                                                                                              │    └── variable: i:8
-                     │                                                                                              ├── params: i:9
-                     │                                                                                              └── body
-                     │                                                                                                   └── project
-                     │                                                                                                        ├── columns: "_stmt_raise_8":14
-                     │                                                                                                        ├── values
-                     │                                                                                                        │    └── tuple
-                     │                                                                                                        └── projections
-                     │                                                                                                             └── udf: _stmt_raise_8 [as="_stmt_raise_8":14]
-                     │                                                                                                                  ├── tail-call
-                     │                                                                                                                  ├── args
-                     │                                                                                                                  │    └── variable: i:9
-                     │                                                                                                                  ├── params: i:10
-                     │                                                                                                                  └── body
-                     │                                                                                                                       ├── project
-                     │                                                                                                                       │    ├── columns: stmt_raise_9:11
-                     │                                                                                                                       │    ├── values
-                     │                                                                                                                       │    │    └── tuple
-                     │                                                                                                                       │    └── projections
-                     │                                                                                                                       │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_9:11]
-                     │                                                                                                                       │              ├── const: 'NOTICE'
-                     │                                                                                                                       │              ├── concat
-                     │                                                                                                                       │              │    ├── concat
-                     │                                                                                                                       │              │    │    ├── const: 'i = '
-                     │                                                                                                                       │              │    │    └── coalesce
-                     │                                                                                                                       │              │    │         ├── cast: STRING
-                     │                                                                                                                       │              │    │         │    └── variable: i:10
-                     │                                                                                                                       │              │    │         └── const: '<NULL>'
-                     │                                                                                                                       │              │    └── const: ''
-                     │                                                                                                                       │              ├── const: ''
-                     │                                                                                                                       │              ├── const: ''
-                     │                                                                                                                       │              └── const: '00000'
-                     │                                                                                                                       └── project
-                     │                                                                                                                            ├── columns: stmt_loop_5:13
-                     │                                                                                                                            ├── project
-                     │                                                                                                                            │    ├── columns: i:12
-                     │                                                                                                                            │    ├── values
-                     │                                                                                                                            │    │    └── tuple
-                     │                                                                                                                            │    └── projections
-                     │                                                                                                                            │         └── plus [as=i:12]
-                     │                                                                                                                            │              ├── variable: i:10
-                     │                                                                                                                            │              └── const: 1
-                     │                                                                                                                            └── projections
-                     │                                                                                                                                 └── udf: stmt_loop_5 [as=stmt_loop_5:13]
-                     │                                                                                                                                      ├── tail-call
-                     │                                                                                                                                      ├── args
-                     │                                                                                                                                      │    └── variable: i:12
-                     │                                                                                                                                      └── recursive-call
+                     │                                                                                              └── repetitive-call
                      └── const: 1
 
 exec-ddl
@@ -3720,14 +3653,7 @@ project
                      │                                  ├── args
                      │                                  │    ├── variable: n:1
                      │                                  │    └── variable: i:2
-                     │                                  ├── params: n:3 i:4
-                     │                                  └── body
-                     │                                       └── project
-                     │                                            ├── columns: stmt_return_2:5
-                     │                                            ├── values
-                     │                                            │    └── tuple
-                     │                                            └── projections
-                     │                                                 └── variable: i:4 [as=stmt_return_2:5]
+                     │                                  └── repetitive-call
                      └── const: 1
 
 # Testing EXCEPTION blocks.
@@ -4438,14 +4364,7 @@ project
                      │              │                                                                               ├── args
                      │              │                                                                               │    ├── variable: i:23
                      │              │                                                                               │    └── variable: x:24
-                     │              │                                                                               ├── params: i:8 x:9
-                     │              │                                                                               └── body
-                     │              │                                                                                    └── project
-                     │              │                                                                                         ├── columns: stmt_return_5:10!null
-                     │              │                                                                                         ├── values
-                     │              │                                                                                         │    └── tuple
-                     │              │                                                                                         └── projections
-                     │              │                                                                                              └── const: 0 [as=stmt_return_5:10]
+                     │              │                                                                               └── repetitive-call
                      │              └── exception-handler
                      │                   └── SQLSTATE '22012'
                      │                        └── project
