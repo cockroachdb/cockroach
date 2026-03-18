@@ -28,8 +28,8 @@ tc_end_block "Variable Setup"
 
 
 docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
-docker pull "${gcr_staged_repository}:amd64-${version}"
-docker pull "${gcr_staged_repository}:arm64-${version}"
+docker pull --platform linux/amd64 "${gcr_staged_repository}:amd64-${version}"
+docker pull --platform linux/arm64 "${gcr_staged_repository}:arm64-${version}"
 
 cloud_release=
 for i in $(seq 1 10); do
