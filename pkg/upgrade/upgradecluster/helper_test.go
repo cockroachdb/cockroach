@@ -52,7 +52,9 @@ func TestHelperEveryNode(t *testing.T) {
 		h := New(ClusterConfig{
 			NodeLiveness: tc,
 			Dialer:       NoopDialer{},
-			UseDRPC:      false, // TODO(server): enable DRPC
+			// UseDRPC is irrelevant here since NoopDialer returns nil for both
+			// Dial and DRPCDial; the dialer is never actually used in these tests.
+			UseDRPC: false,
 		})
 		opCount := 0
 		err := h.UntilClusterStable(ctx, retry.Options{
@@ -92,7 +94,9 @@ func TestHelperEveryNode(t *testing.T) {
 		h := New(ClusterConfig{
 			NodeLiveness: tc,
 			Dialer:       NoopDialer{},
-			UseDRPC:      false, // TODO(server): enable DRPC
+			// UseDRPC is irrelevant here since NoopDialer returns nil for both
+			// Dial and DRPCDial; the dialer is never actually used in these tests.
+			UseDRPC: false,
 		})
 		opCount := 0
 		err := h.UntilClusterStable(ctx, retry.Options{
@@ -133,7 +137,9 @@ func TestHelperEveryNode(t *testing.T) {
 		h := New(ClusterConfig{
 			NodeLiveness: tc,
 			Dialer:       NoopDialer{},
-			UseDRPC:      false, // TODO(server): enable DRPC
+			// UseDRPC is irrelevant here since NoopDialer returns nil for both
+			// Dial and DRPCDial; the dialer is never actually used in these tests.
+			UseDRPC: false,
 		})
 		expRe := "cluster not stable, nodes: n\\{1,2,3\\}, unavailable: n\\{2\\}"
 		opCount := 0
