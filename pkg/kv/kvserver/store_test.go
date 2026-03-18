@@ -64,6 +64,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -2153,6 +2154,14 @@ func TestStoreScanIntents(t *testing.T) {
 	defer stopper.Stop(ctx)
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
+	// Metamorphically lower the max conflicts per lock conflict error to exercise
+	// VIR intent condensing with fewer intents.
+	rng, _ := randutil.NewTestRand()
+	maxConflicts := []int64{1, 3, 5, 20, storage.MaxConflictsPerLockConflictErrorDefault}
+	storage.MaxConflictsPerLockConflictError.Override(
+		ctx, &store.cfg.Settings.SV, maxConflicts[rng.Intn(len(maxConflicts))],
+	)
+
 	testCases := []struct {
 		consistent bool
 		canPush    bool  // can the txn be pushed?
@@ -2402,10 +2411,16 @@ func TestVirtualIntentResolutionReentryAfterEvaluationLiveLock(t *testing.T) {
 
 	// Enable VIR, set low lock table size, and low max conflicts per error to
 	// force multi-round intent discovery with frequent lock table eviction.
+	// Setting DiscoveredLocksThresholdToConsultTxnStatusCache to 1 causes
+	// intents to bypass the lock table and go directly to toResolve when the
+	// txn is in the status cache. For VIR, this previously caused a livelock:
+	// toResolve was cleared on re-entry to ScanAndEnqueue, and without the
+	// lock in the lock table, the same intents were rediscovered every round.
 	st := tc.Server(0).ClusterSettings()
 	concurrency.VirtualIntentResolution.Override(ctx, &st.SV, true)
 	concurrency.DefaultLockTableSize.Override(ctx, &st.SV, 4)
 	storage.MaxConflictsPerLockConflictError.Override(ctx, &st.SV, 3)
+	concurrency.DiscoveredLocksThresholdToConsultTxnStatusCache.Override(ctx, &st.SV, 1)
 
 	store, err := tc.Server(0).GetStores().(*Stores).GetStore(tc.Server(0).GetFirstStoreID())
 	require.NoError(t, err)
@@ -2745,6 +2760,14 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 	defer stopper.Stop(ctx)
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
+	// Metamorphically lower the max conflicts per lock conflict error to exercise
+	// VIR intent condensing with fewer intents.
+	rng, _ := randutil.NewTestRand()
+	maxConflicts := []int64{1, 3, 5, 20, storage.MaxConflictsPerLockConflictErrorDefault}
+	storage.MaxConflictsPerLockConflictError.Override(
+		ctx, &store.cfg.Settings.SV, maxConflicts[rng.Intn(len(maxConflicts))],
+	)
+
 	// Lay down ten intents from a single txn.
 	key1 := roachpb.Key("key00")
 	key10 := roachpb.Key("key09")
@@ -2784,6 +2807,83 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 			return nil
 		})
 	}
+}
+
+// TestStoreScanVirtualIntentResolutionWithRangeResolves verifies that when VIR
+// accumulates enough conflicting intents, they are merged into ranged
+// ResolveIntent requests that span the entire read, allowing a scan to
+// complete even when there are many more intents than maxLockConflicts.
+func TestStoreScanVirtualIntentResolutionWithRangeResolves(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	store := createTestStoreWithConfig(
+		ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg,
+	)
+
+	// Force VIR on and set maxLockConflicts=1 so the pre-evaluation scan
+	// discovers at most one intent per attempt. This also sets the threshold
+	// at which accumulated per-key resolves are merged into ranged resolves.
+	concurrency.VirtualIntentResolution.Override(ctx, &store.cfg.Settings.SV, true)
+	storage.MaxConflictsPerLockConflictError.Override(ctx, &store.cfg.Settings.SV, 1)
+
+	// Write ten intents from a single txn, then expire it.
+	key1 := roachpb.Key("key00")
+	key10 := roachpb.Key("key09")
+	txn := newTransaction("test", key1, 1, store.cfg.Clock)
+	ba := &kvpb.BatchRequest{}
+	for i := 0; i < 10; i++ {
+		pArgs := putArgs(roachpb.Key(fmt.Sprintf("key%02d", i)), []byte("value"))
+		ba.Add(&pArgs)
+		assignSeqNumsForReqs(txn, &pArgs)
+	}
+	ba.Header = kvpb.Header{Txn: txn}
+	_, pErr := store.TestSender().Send(ctx, ba)
+	require.Nil(t, pErr)
+	manual.Advance(time.Duration(txnwait.TxnLivenessThreshold.Load()) + 1)
+
+	m := store.Metrics()
+	pointBefore := m.VirtualResolveIntentCount.Count()
+	rangeBefore := m.VirtualResolveIntentRangeCount.Count()
+	batchesBefore := m.VirtualResolveBatches.Count()
+	condenseBefore := m.VirtualResolveCondenseCount.Count()
+
+	sArgs := scanArgs(key1, key10.Next())
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), sArgs)
+	require.Nil(t, pErr)
+
+	// The scan completes in 3 evaluation attempts:
+	//
+	// Attempt 1: pre-scan discovers key00 → LockConflictError. Txn gets
+	//   pushed. key00 queued for per-key virtual resolution (1 entry, does
+	//   not exceed threshold).
+	//
+	// Attempt 2: key00 resolved virtually (point). Pre-scan discovers key01
+	//   → LockConflictError. key00 (persisted) + key00 + key01 (re-scanned
+	//   from lock table) = 3 entries, exceeds threshold → merged into a
+	//   single ranged resolve [key00, key01.Next()).
+	//
+	// Attempt 3: ranged resolve is expanded to cover the full scan span
+	//   [key00, key09.Next()), clearing all 10 intents. Pre-scan finds
+	//   nothing. Scan succeeds.
+	// The scan completes in 2 evaluation attempts:
+	//
+	// Attempt 1: pre-scan discovers key00 → LockConflictError. Txn gets
+	//   pushed. key00 queued for per-key virtual resolution (1 entry,
+	//   meets threshold of 1 → condensed into a ranged resolve).
+	//
+	// Attempt 2: ranged resolve is expanded to cover the full scan span
+	//   [key00, key09.Next()), clearing all 10 intents. Pre-scan finds
+	//   nothing. Scan succeeds.
+	require.Equal(t, int64(0), m.VirtualResolveIntentCount.Count()-pointBefore)
+	require.Equal(t, int64(1), m.VirtualResolveIntentRangeCount.Count()-rangeBefore)
+	require.Equal(t, int64(1), m.VirtualResolveBatches.Count()-batchesBefore)
+	require.Equal(t, int64(1), m.VirtualResolveCondenseCount.Count()-condenseBefore)
 }
 
 // TestStoreBadRequests verifies that Send returns errors for

@@ -125,7 +125,7 @@ func (mg mockGuard) IsKeyLockedByConflictingTxn(
 func (mg mockGuard) IntentsToResolveVirtually() []roachpb.LockUpdate {
 	return mg.intentsToResolveVirtually
 }
-func (mg mockGuard) PrepareForLockConflictRetry(context.Context) {}
+func (mg mockGuard) HasCondensedIntents() bool { return false }
 
 var _ concurrency.Guard = (*mockGuard)(nil)
 

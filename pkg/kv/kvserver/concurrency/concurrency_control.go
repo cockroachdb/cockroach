@@ -523,10 +523,10 @@ type Guard interface {
 	// lock table guard.
 	IntentsToResolveVirtually() []roachpb.LockUpdate
 
-	// PrepareForLockConflictRetry is called on the lock conflict error path,
-	// before the guard is re-sequenced. It condenses point resolve entries into
-	// range entries that persist across re-sequencing.
-	PrepareForLockConflictRetry(context.Context)
+	// HasCondensedIntents returns true if point intents have been condensed
+	// into range entries, indicating that the pre-scan should prefer
+	// discovering distinct conflicting transactions.
+	HasCondensedIntents() bool
 }
 
 // guardImpl implements the Guard interface.
@@ -904,14 +904,13 @@ type lockTableGuard interface {
 	// virtually during evaluation rather than physically before re-scanning.
 	VirtuallyResolvesIntents() bool
 
+	// HasCondensedIntents returns true if point intents have been condensed
+	// into range entries.
+	HasCondensedIntents() bool
+
 	// AddReplicatedToResolveAndSignal adds a lock update for a replicated lock
 	// to the guard's resolve list and signals the guard to rescan.
 	AddReplicatedToResolveAndSignal(roachpb.LockUpdate)
-
-	// PrepareForLockConflictRetry is called when handling a LockConflictError
-	// after evaluation. It condenses point resolve entries into range entries
-	// that persist across re-sequencing.
-	PrepareForLockConflictRetry(context.Context)
 
 	// CheckOptimisticNoConflicts uses the LockSpanSet representing the spans that
 	// were actually read, to check for conflicting locks, after an optimistic

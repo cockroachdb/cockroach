@@ -556,11 +556,11 @@ type lockTableGuardImpl struct {
 // and resolvableTxns persist across scans so the guard does not re-conflict on
 // locks whose txnStatusCache entry has been evicted.
 type resolvableLocks struct {
-	// toResolve holds point LockUpdates accumulated during scanning. This is
-	// cleared on every entry to ScanAndEnqueue.
-	//
-	// For VIR transactions, we rely on previously encountered transactions being
-	// in resolvableTxns
+	// toResolve holds point LockUpdates accumulated during scanning. For
+	// non-VIR guards, this is cleared on every entry to ScanAndEnqueue. For
+	// VIR guards, points persist across scans (since VIR results are
+	// ephemeral and must be re-applied) and are condensed into
+	// toResolveRange when exceeding condenseOnScanThreshold.
 	toResolve []roachpb.LockUpdate
 
 	// toResolveRange maps txn IDs to range LockUpdates that persist across
@@ -608,7 +608,7 @@ func (rl *resolvableLocks) condense() {
 // maybeCondense condenses point entries into range entries if toResolve has
 // grown beyond the configured threshold.
 func (rl *resolvableLocks) maybeCondense(threshold int) bool {
-	if rl.virEnabled && len(rl.toResolve) > threshold {
+	if rl.virEnabled && threshold > 0 && len(rl.toResolve) >= threshold {
 		rl.condense()
 		return true
 	}
@@ -785,6 +785,11 @@ func (g *lockTableGuardImpl) IntentsToResolveVirtually() []roachpb.LockUpdate {
 // VirtuallyResolvesIntents implements the lockTableGuard interface.
 func (g *lockTableGuardImpl) VirtuallyResolvesIntents() bool {
 	return g.virtuallyResolveIntents
+}
+
+// HasCondensedIntents implements the lockTableGuard interface.
+func (g *lockTableGuardImpl) HasCondensedIntents() bool {
+	return len(g.toResolve.toResolveRange) > 0
 }
 
 func (g *lockTableGuardImpl) NewStateChan() chan struct{} {
@@ -1336,20 +1341,6 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) error {
 		g.notify()
 	}
 	return nil
-}
-
-// PrepareForLockConflictRetry implements the lockTableGuard interface.
-func (g *lockTableGuardImpl) PrepareForLockConflictRetry(_ context.Context) {
-	// If we encountered a LockConflict during evaluation, we need to consider the
-	// possibility that we _won't_ encounter the lock again from the lock table.
-	//
-	// We handle that by condensing _everything_ into resolve ranges. We could
-	// have alternatively handled this by keep toResolve across invocations of
-	// ScanAndEnqueue. If we find that overzealous range resolutions are a
-	// problem, we can re-consider that decision.
-	if g.toResolve.maybeCondense(0) {
-		g.lt.virtualResolveCondenseCount.Inc(1)
-	}
 }
 
 func (g *lockTableGuardImpl) maybeDisableVIR(ctx context.Context) {
@@ -4546,17 +4537,19 @@ func (t *lockTableImpl) ScanAndEnqueue(
 		g.mu.mustComputeWaitingState = false
 		g.mu.Unlock()
 		if g.virtuallyResolveIntents {
-			// Condense accumulated point entries into range entries if the list has
-			// grown large.
-			//
-			// If we've also accumulated too many range resolves, give up trying to
-			// virtually resolve.
+			// Condense accumulated point entries into range entries if the list
+			// has grown large. Point entries are not cleared for VIR guards;
+			// they persist across scans so that they can be re-resolved
+			// virtually on each evaluation attempt (VIR results are ephemeral).
 			if g.toResolve.maybeCondense(g.condenseOnScanThreshold) {
 				g.lt.virtualResolveCondenseCount.Inc(1)
 			}
+			// If we've accumulated too many range resolves, give up trying to
+			// virtually resolve.
 			g.maybeDisableVIR(ctx)
+		} else {
+			g.toResolve.clear()
 		}
-		g.toResolve.clear()
 	}
 	t.doSnapshotForGuard(g)
 
@@ -4586,6 +4579,7 @@ func (t *lockTableImpl) ScanAndEnqueue(
 
 // defaultMaxToResolveRangeTxns is the default maximum number of distinct txns
 // tracked in toResolveRange.
+// TODO(mira): consider making this tunable or increasing it.
 const defaultMaxToResolveRangeTxns = 128
 
 func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
