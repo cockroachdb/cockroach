@@ -954,6 +954,13 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Category:    metric.Metadata_SQL,
 	}
+	MetaUDFCall = metric.Metadata{
+		Name:        "sql.udf.count",
+		Help:        "Number of SQL statements that invoked a user-defined function",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_SQL,
+	}
 	MetaTxnAbort = metric.Metadata{
 		Name:        "sql.txn.abort.count",
 		Help:        "Number of SQL transaction abort errors",

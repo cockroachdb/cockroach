@@ -106,6 +106,12 @@ type EngineMetrics struct {
 	// RLSPoliciesAppliedCount counts the number of SQL statements where
 	// row-level security policies were applied during query planning.
 	RLSPoliciesAppliedCount *metric.Counter
+
+	// UDFCallCount counts the number of SQL statements that invoked at least
+	// one user-defined function. A statement is counted once regardless of how
+	// many UDFs it invokes or how many times each is evaluated, and regardless
+	// of whether the statement ultimately succeeds or fails during execution.
+	UDFCallCount *metric.Counter
 }
 
 // EngineMetrics implements the metric.Struct interface.
