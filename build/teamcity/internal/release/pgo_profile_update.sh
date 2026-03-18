@@ -185,7 +185,7 @@ git add WORKSPACE
 
 # Create commit with descriptive message
 # Note: Full benchstat comparison is in the PR description, not in commit message
-commit_message="build: update PGO profile to $filename
+commit_message="build: update PGO profile
 
 This commit updates the PGO profile used for building CockroachDB.
 
@@ -219,7 +219,7 @@ Release note: none"
 
 gh pr create \
     --head "$gh_username:$branch_name" \
-    --title "build: update PGO profile to $filename" \
+    --title "build: update PGO profile" \
     --body "$pr_body" \
     --reviewer "cockroachdb/release-eng-prs" \
     --base master | tee artifacts/pgo_profile_pr_url.txt
