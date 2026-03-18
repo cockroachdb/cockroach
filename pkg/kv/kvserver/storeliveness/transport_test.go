@@ -924,6 +924,9 @@ func TestTransportClusterSettingToggle(t *testing.T) {
 	msg3 := slpb.Message{Type: slpb.MsgHeartbeat, From: sender, To: receiver}
 	require.True(t, tt.transports[sender.NodeID].EnqueueMessage(ctx, msg3))
 
+	// Give the smearing sender time to drain the queue (reproduces CI flake).
+	time.Sleep(50 * time.Millisecond)
+
 	// Verify the message is enqueued but NOT delivered (waiting in smearing mode).
 	// Use SucceedsSoon to give the system time to stabilize in the correct state.
 	testutils.SucceedsSoon(t, func() error {
