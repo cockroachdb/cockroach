@@ -990,7 +990,7 @@ SELECT has_table_privilege('bar', 't', 'SELECT'),
        has_table_privilege('bar', 't', 'INSERT, UPDATE'),
        has_table_privilege('bar', 't', 'RULE')
 ----
-false  false  false  true  true  false  false  false  true  false  false
+false  false  false  true  false  false  false  false  false  false  false
 
 query BBBBBBBBBBB
 SELECT has_table_privilege('bar', 't', 'SELECT WITH GRANT OPTION'),

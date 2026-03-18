@@ -37,7 +37,7 @@ const (
 	USAGE                    Kind = 9
 	ZONECONFIG               Kind = 10
 	CONNECT                  Kind = 11
-	RULE                     Kind = 12
+	TRUNCATE                 Kind = 12
 	MODIFYCLUSTERSETTING     Kind = 13
 	EXTERNALCONNECTION       Kind = 14
 	VIEWACTIVITY             Kind = 15
@@ -75,13 +75,17 @@ const (
 	TEMPORARY              Kind = 44
 	largestKind                 = TEMPORARY
 
-	// SET and ALTERSYSTEM are PostgreSQL ACL-only pseudo-privileges.
-	// They exist solely for ACL character mapping ('s' and 'A') used
-	// by acldefault, aclexplode, and makeaclitem. They have no
+	// RULE, SET, and ALTERSYSTEM are PostgreSQL ACL-only pseudo-privileges.
+	// They exist solely for ACL character mapping used by acldefault, aclexplode,
+	// and makeaclitem and PG-compatible privilege functions. They have no
 	// corresponding CockroachDB privilege and must never be used in
-	// bitmask operations (Mask/ToBitField/ListFromBitField).
-	SET         Kind = math.MaxUint32 - 1
-	ALTERSYSTEM Kind = math.MaxUint32
+	// bitmask operations (Mask/ToBitField/ListFromBitField). The values of these
+	// constants can be modified freely if we decide to implement these privileges
+	// for real.
+	smallestPseudoKind      = RULE
+	RULE               Kind = math.MaxUint32 - 2
+	SET                Kind = math.MaxUint32 - 1
+	ALTERSYSTEM        Kind = math.MaxUint32
 )
 
 var isDeprecatedKind = map[Kind]bool{
@@ -187,6 +191,8 @@ func (k Kind) InternalKey() KindInternalKey {
 		return "SET"
 	case ALTERSYSTEM:
 		return "ALTERSYSTEM"
+	case TRUNCATE:
+		return "TRUNCATE"
 	default:
 		panic(errors.AssertionFailedf("unhandled kind: %d", int(k)))
 	}
@@ -268,7 +274,7 @@ func init() {
 	// Register ACL-only pseudo-privileges. These are above largestKind
 	// so they're excluded from AllPrivileges and privilege validation,
 	// but they need ByDisplayName entries for ACL char mapping.
-	for _, k := range []Kind{SET, ALTERSYSTEM} {
+	for k := ALTERSYSTEM; k >= smallestPseudoKind; k-- {
 		ByDisplayName[k.DisplayName()] = k
 		ByDisplayName[KindDisplayName(k.InternalKey())] = k
 		ByInternalKey[k.InternalKey()] = k
