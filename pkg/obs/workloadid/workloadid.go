@@ -51,6 +51,8 @@ const (
 	WORKLOAD_ID_CIRCUIT_BREAKER_PROBE                   // 13
 	WORKLOAD_ID_GC                                      // 14
 	WORKLOAD_ID_RANGEFEED                               // 15
+	WORKLOAD_ID_REPLICATE_QUEUE                         // 16
+	WORKLOAD_ID_SPLIT_QUEUE                             // 17
 )
 
 // Name returns the human-readable name for a system task WorkloadID.
@@ -88,6 +90,10 @@ func (id WorkloadID) Name() string {
 		return WORKLOAD_NAME_GC
 	case WORKLOAD_ID_RANGEFEED:
 		return WORKLOAD_NAME_RANGEFEED
+	case WORKLOAD_ID_REPLICATE_QUEUE:
+		return WORKLOAD_NAME_REPLICATE_QUEUE
+	case WORKLOAD_ID_SPLIT_QUEUE:
+		return WORKLOAD_NAME_SPLIT_QUEUE
 	default:
 		return WORKLOAD_NAME_UNKNOWN
 	}
@@ -110,6 +116,8 @@ const (
 	WORKLOAD_NAME_CIRCUIT_BREAKER_PROBE = "CIRCUIT_BREAKER_PROBE"
 	WORKLOAD_NAME_GC                    = "GC"
 	WORKLOAD_NAME_RANGEFEED             = "RANGEFEED"
+	WORKLOAD_NAME_REPLICATE_QUEUE       = "REPLICATE_QUEUE"
+	WORKLOAD_NAME_SPLIT_QUEUE           = "SPLIT_QUEUE"
 )
 
 // WorkloadType distinguishes the kind of workload that a WorkloadID
