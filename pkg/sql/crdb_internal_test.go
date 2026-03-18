@@ -209,7 +209,13 @@ func TestOldBitColumnMetadata(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		// This test directly manipulates descriptors via KV and relies on
+		// TestingDisableTableLeases to make those changes immediately visible.
+		// This is incompatible with external process virtual clusters where
+		// the lease disable doesn't take effect.
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(165980),
+	})
 	defer s.Stopper().Stop(ctx)
 
 	// The descriptor changes made must have an immediate effect
@@ -425,7 +431,13 @@ func TestInvalidObjects(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	var params base.TestServerArgs
+	params := base.TestServerArgs{
+		// This test directly manipulates descriptors via KV and relies on
+		// TestingDisableTableLeases to make those changes immediately visible.
+		// This is incompatible with external process virtual clusters where
+		// the lease disable doesn't take effect.
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(165980),
+	}
 	params.Knobs = base.TestingKnobs{
 		Store: &kvserver.StoreTestingKnobs{
 			DisableMergeQueue: true,

@@ -165,7 +165,13 @@ func TestUpsertWithColumnMutationAndNotNullDefault(t *testing.T) {
 	// no job associated with the added mutations, those mutations stay on the
 	// table descriptor but don't do anything, which is what we want.
 
-	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		// This test directly manipulates descriptors via KV and relies on
+		// TestingDisableTableLeases to make those changes immediately visible.
+		// This is incompatible with external process virtual clusters where
+		// the lease disable doesn't take effect.
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(165980),
+	})
 	ctx := context.Background()
 	defer server.Stopper().Stop(ctx)
 	// The descriptor changes made must have an immediate effect
@@ -225,7 +231,13 @@ func TestOperationsWithColumnMutation(t *testing.T) {
 
 	// Disable external processing of mutations.
 	ctx := context.Background()
-	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		// This test directly manipulates descriptors via KV and relies on
+		// TestingDisableTableLeases to make those changes immediately visible.
+		// This is incompatible with external process virtual clusters where
+		// the lease disable doesn't take effect.
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(165980),
+	})
 	defer server.Stopper().Stop(ctx)
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -491,7 +503,13 @@ func TestOperationsWithIndexMutation(t *testing.T) {
 	// no job associated with the added mutations, those mutations stay on the
 	// table descriptor but don't do anything, which is what we want.
 
-	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		// This test directly manipulates descriptors via KV and relies on
+		// TestingDisableTableLeases to make those changes immediately visible.
+		// This is incompatible with external process virtual clusters where
+		// the lease disable doesn't take effect.
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(165980),
+	})
 	defer server.Stopper().Stop(context.Background())
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 	// The descriptor changes made must have an immediate effect.
@@ -656,7 +674,13 @@ func TestOperationsWithColumnAndIndexMutation(t *testing.T) {
 	// no job associated with the added mutations, those mutations stay on the
 	// table descriptor but don't do anything, which is what we want.
 
-	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		// This test directly manipulates descriptors via KV and relies on
+		// TestingDisableTableLeases to make those changes immediately visible.
+		// This is incompatible with external process virtual clusters where
+		// the lease disable doesn't take effect.
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(165980),
+	})
 	ctx := context.Background()
 	defer server.Stopper().Stop(ctx)
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
@@ -872,7 +896,13 @@ func TestSchemaChangeCommandsWithPendingMutations(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Disable external processing of mutations.
-	var params base.TestServerArgs
+	params := base.TestServerArgs{
+		// This test directly manipulates descriptors via KV and relies on
+		// TestingDisableTableLeases to make those changes immediately visible.
+		// This is incompatible with external process virtual clusters where
+		// the lease disable doesn't take effect.
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(165980),
+	}
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			SchemaChangeJobNoOp: func() bool {

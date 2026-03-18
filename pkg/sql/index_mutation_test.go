@@ -35,7 +35,13 @@ func TestIndexMutationKVOps(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	var params base.TestServerArgs
+	params := base.TestServerArgs{
+		// This test directly manipulates descriptors via KV and relies on
+		// TestingDisableTableLeases to make those changes immediately visible.
+		// This is incompatible with external process virtual clusters where
+		// the lease disable doesn't take effect.
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(165980),
+	}
 	// Decrease the adopt loop interval so that retries happen quickly.
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.Knobs.SQLEvalContext = &eval.TestingKnobs{
