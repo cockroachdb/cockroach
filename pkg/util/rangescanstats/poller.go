@@ -91,6 +91,10 @@ func computeRangeStats(
 	ranges rangedesc.IteratorFactory,
 	laggingSpanThreshold time.Duration,
 ) (rangescanstatspb.RangeStats, error) {
+	// Copy the frontier so we don't hold its lock during the range iteration.
+	frontierCopy := frontier.Copy()
+	defer frontierCopy.Release()
+
 	var stats rangescanstatspb.RangeStats
 	for _, initialSpan := range spans {
 		lazyIterator, err := ranges.NewLazyIterator(ctx, initialSpan, 100)
@@ -104,7 +108,7 @@ func computeRangeStats(
 				EndKey: lazyIterator.CurRangeDescriptor().EndKey.AsRawKey(),
 			}
 			stats.RangeCount += 1
-			for _, timestamp := range frontier.SpanEntries(rangeSpan) {
+			for _, timestamp := range frontierCopy.SpanEntries(rangeSpan) {
 				if timestamp.IsEmpty() {
 					stats.ScanningRangeCount += 1
 					break

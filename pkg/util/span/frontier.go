@@ -81,6 +81,9 @@ type ReadOnlyFrontier interface {
 	// Updates to the frontier are restricted until iteration is stopped.
 	SpanEntries(span roachpb.Span) iter.Seq2[roachpb.Span, hlc.Timestamp]
 
+	// Copy returns a copy of all frontier entries as a new Frontier.
+	Copy() Frontier
+
 	// Len returns the number of spans tracked by the frontier.
 	Len() int
 
@@ -609,6 +612,16 @@ func (f *btreeFrontier) String() string {
 	return buf.String()
 }
 
+// Copy implements Frontier.
+func (f *btreeFrontier) Copy() Frontier {
+	copy := newFrontier()
+	it := f.tree.MakeIter()
+	for it.First(); it.Valid(); it.Next() {
+		_ = copy.AddSpansAt(it.Cur().ts, it.Cur().span())
+	}
+	return copy
+}
+
 // Len implements Frontier.
 func (f *btreeFrontier) Len() int {
 	return f.tree.Len()
@@ -866,6 +879,13 @@ func (f *concurrentFrontier) SpanEntries(span roachpb.Span) iter.Seq2[roachpb.Sp
 			}
 		}
 	}
+}
+
+// Copy implements Frontier.
+func (f *concurrentFrontier) Copy() Frontier {
+	f.Lock()
+	defer f.Unlock()
+	return f.f.Copy()
 }
 
 // Len implements Frontier.
