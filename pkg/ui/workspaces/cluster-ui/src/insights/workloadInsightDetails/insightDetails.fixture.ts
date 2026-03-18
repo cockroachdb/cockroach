@@ -51,7 +51,7 @@ const insightEventBaseFixture: InsightEventBase = {
   errorMsg: "",
 };
 
-const insightEventFixture: StmtInsightEvent = Object.assign(
+export const insightEventFixture: StmtInsightEvent = Object.assign(
   insightEventBaseFixture,
   {
     statementExecutionID: "17a8d80bd38900b80000000000000005",
@@ -88,8 +88,6 @@ export const getStatementInsightPropsFixture =
         fixedWindowEnd: moment.utc("2021-12-12"),
         key: "Custom",
       },
-      insightEventDetails: insightEventFixture,
-      insightError: null,
       hasAdminRole: true,
       setTimeScale: noop,
       refreshUserSQLRoles: noop,
