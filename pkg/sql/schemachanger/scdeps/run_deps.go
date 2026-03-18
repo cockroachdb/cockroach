@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -134,6 +136,38 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 		ctx context.Context, txn descs.Txn,
 	) error {
 		pl := d.job.Payload()
+
+		// Read SST manifests from job info keys. Each backfill progress
+		// entry may have manifests stored separately to avoid bloating
+		// the job payload proto.
+		sc := pl.GetNewSchemaChange()
+		var manifestsMap map[backfiller.BackfillManifestKey][]jobspb.BulkSSTManifest
+		for _, bp := range sc.BackfillProgress {
+			infoKey := backfiller.BackfillSSTManifestsInfoKey(bp.TableID, bp.SourceIndexID)
+			data, err := jobs.ReadChunkedFileToJobInfo(
+				ctx, infoKey, txn, d.job.ID(),
+			)
+			if err != nil {
+				return err
+			}
+			if len(data) > 0 {
+				var stored jobspb.BulkSSTManifests
+				if err := protoutil.Unmarshal(data, &stored); err != nil {
+					return err
+				}
+				if manifestsMap == nil {
+					manifestsMap = make(map[backfiller.BackfillManifestKey][]jobspb.BulkSSTManifest)
+				}
+				key := backfiller.BackfillManifestKey{
+					TableID:       bp.TableID,
+					SourceIndexID: bp.SourceIndexID,
+				}
+				manifestsMap[key] = backfill.AddTenantPrefixToSSTManifests(
+					d.codec, stored.Manifests,
+				)
+			}
+		}
+
 		ed := &execDeps{
 			txnDeps: txnDeps{
 				txn:                txn,
@@ -156,9 +190,10 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				d.rangeCounter,
 				d.job,
 				d.db,
-				pl.GetNewSchemaChange().BackfillProgress,
-				pl.GetNewSchemaChange().MergeProgress,
+				sc.BackfillProgress,
+				sc.MergeProgress,
 				cleaner,
+				manifestsMap,
 			),
 			periodicProgressFlusher: backfiller.NewPeriodicProgressFlusherForIndexBackfill(d.settings),
 			statements:              d.statements,
