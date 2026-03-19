@@ -423,6 +423,15 @@ type IterOptions struct {
 	// complications with MVCCIncrementalIterator. See:
 	// https://github.com/cockroachdb/cockroach/issues/86260
 	MinTimestamp, MaxTimestamp hlc.Timestamp
+	// BlockOnlyMaxTimestamp, if set, installs a block property filter that skips
+	// SST data blocks whose MVCC wall time range is entirely above this timestamp.
+	// Unlike MaxTimestamp, this does NOT install a per-key SkipPoint callback, so
+	// individual keys within non-skipped blocks are returned normally. This is
+	// useful as a performance hint in contexts where block-level pruning is safe
+	// but per-key filtering would break MVCC point-in-time reads.
+	//
+	// BlockOnlyMaxTimestamp is mutually exclusive with MaxTimestamp.
+	BlockOnlyMaxTimestamp hlc.Timestamp
 	// KeyTypes specifies the types of keys to surface: point and/or range keys.
 	// Use HasPointAndRange() to determine which key type is present at a given
 	// iterator position, and RangeBounds() and RangeKeys() to access range keys.

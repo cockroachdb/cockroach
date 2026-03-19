@@ -212,3 +212,40 @@ func TestPebbleIterator_SkipPointIfOutsideTimeBounds(t *testing.T) {
 		return sb.String()
 	})
 }
+
+func TestPebbleIterator_BlockOnlyMaxTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	t.Run("sets PointKeyFilters without SkipPoint", func(t *testing.T) {
+		var iter pebbleIterator
+		iter.setOptions(context.Background(), IterOptions{
+			LowerBound:           []byte{0x00},
+			BlockOnlyMaxTimestamp: hlc.Timestamp{WallTime: 100},
+		}, StandardDurability)
+		require.NotNil(t, iter.options.PointKeyFilters,
+			"expected PointKeyFilters to be set")
+		require.Nil(t, iter.options.SkipPoint,
+			"expected SkipPoint to NOT be set for block-only filtering")
+	})
+
+	t.Run("mutual exclusion with MaxTimestamp", func(t *testing.T) {
+		var iter pebbleIterator
+		require.Panics(t, func() {
+			iter.setOptions(context.Background(), IterOptions{
+				LowerBound:           []byte{0x00},
+				MaxTimestamp:          hlc.Timestamp{WallTime: 200},
+				BlockOnlyMaxTimestamp: hlc.Timestamp{WallTime: 100},
+			}, StandardDurability)
+		}, "expected panic when both MaxTimestamp and BlockOnlyMaxTimestamp are set")
+	})
+
+	t.Run("not set when zero", func(t *testing.T) {
+		var iter pebbleIterator
+		iter.setOptions(context.Background(), IterOptions{
+			LowerBound: []byte{0x00},
+		}, StandardDurability)
+		require.Nil(t, iter.options.PointKeyFilters,
+			"expected PointKeyFilters to not be set when BlockOnlyMaxTimestamp is zero")
+		require.Nil(t, iter.options.SkipPoint)
+	})
+}

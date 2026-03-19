@@ -10,14 +10,17 @@ import (
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/errors"
 )
 
@@ -84,6 +87,14 @@ var (
 			"and any value greater than GOMAXPROCS will be capped at GOMAXPROCS)",
 		0,
 		settings.NonNegativeInt,
+	)
+	blockSkippingEnabled = settings.RegisterBoolSetting(
+		settings.ApplicationLevel,
+		"sql.ttl.mvcc_block_skipping.enabled",
+		"if true, TTL scans use MVCC timestamp block property filters to skip "+
+			"SST blocks that cannot contain expired rows (duration-based TTL only)",
+		true,
+		settings.WithPublic,
 	)
 )
 
@@ -168,6 +179,47 @@ func GetProcessorConcurrency(settingsValues *settings.Values, defaultConcurrency
 		return min(override, defaultConcurrency)
 	}
 	return defaultConcurrency
+}
+
+// GetBlockSkippingEnabled returns whether MVCC block skipping is enabled.
+func GetBlockSkippingEnabled(sv *settings.Values) bool {
+	return blockSkippingEnabled.Get(sv)
+}
+
+// ParseTTLDurationExprToNanos parses a SQL interval expression (e.g.
+// "'30 days':::INTERVAL") into nanoseconds. Months are approximated as 30 days
+// (conservative: overestimating duration means we skip fewer blocks, which is
+// safe).
+func ParseTTLDurationExprToNanos(durationExpr catpb.Expression) (int64, error) {
+	// The DurationExpr from the catalog may be in various formats:
+	//   "'30 days':::INTERVAL"  (tree.Serialize output)
+	//   "INTERVAL '30 days'"   (SQL keyword form)
+	//   "'30 days'"            (simple quoted string)
+	s := string(durationExpr)
+	// Strip type annotation suffix (e.g. ":::INTERVAL").
+	if idx := strings.Index(s, ":::"); idx >= 0 {
+		s = s[:idx]
+	}
+	// Strip INTERVAL keyword prefix.
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "INTERVAL ")
+	s = strings.TrimPrefix(s, "interval ")
+	// Strip surrounding single quotes.
+	s = strings.TrimSpace(s)
+	s = strings.Trim(s, "'")
+
+	d, err := tree.ParseDInterval(duration.IntervalStyle_POSTGRES, s)
+	if err != nil {
+		return 0, errors.Wrapf(err, "parsing TTL duration expression %q", durationExpr)
+	}
+	// Convert to nanoseconds. Months are approximated as 30 days.
+	nanos := d.Duration.Nanos() +
+		d.Duration.Days*int64(24*time.Hour) +
+		d.Duration.Months*30*int64(24*time.Hour)
+	if nanos <= 0 {
+		return 0, errors.Newf("TTL duration must be positive, got %s", durationExpr)
+	}
+	return nanos, nil
 }
 
 // BuildScheduleLabel returns a string value intended for use as the

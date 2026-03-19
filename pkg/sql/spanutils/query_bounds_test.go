@@ -203,7 +203,7 @@ func TestSpanToQueryBounds(t *testing.T) {
 			actualBounds, actualHasRows, err := spanutils.SpanToQueryBounds(ctx, kvDB, codec, pkColIDs, pkColTypes, pkColDirs, 1, roachpb.Span{
 				Key:    startKey,
 				EndKey: endKey,
-			}, &alloc, hlc.Timestamp{})
+			}, &alloc, hlc.Timestamp{}, hlc.Timestamp{})
 
 			// Verify results.
 			require.NoError(t, err)
@@ -424,6 +424,7 @@ func TestSpanToQueryBoundsCompositeKeys(t *testing.T) {
 						EndKey: endKey,
 					},
 					&alloc,
+					hlc.Timestamp{},
 					hlc.Timestamp{},
 				)
 

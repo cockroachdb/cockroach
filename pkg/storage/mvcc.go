@@ -4944,6 +4944,11 @@ type MVCCScanOptions struct {
 	// WorkloadID identifies the workload that triggered the scan (e.g.
 	// statement fingerprint ID, job ID). Used for ASH sampling.
 	WorkloadID uint64
+	// BlockOnlyMaxTimestamp, if set, installs a block property filter that
+	// skips SST data blocks whose MVCC timestamps are entirely above this
+	// value. Unlike a time-bound iterator, this does not filter individual
+	// keys - all keys in non-skipped blocks are returned normally.
+	BlockOnlyMaxTimestamp hlc.Timestamp
 }
 
 func (opts *MVCCScanOptions) validate() error {
@@ -5039,10 +5044,11 @@ func MVCCScan(
 ) (MVCCScanResult, error) {
 	iter, err := newMVCCIterator(
 		ctx, reader, timestamp, !opts.Tombstones, opts.DontInterleaveIntents, IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
-			LowerBound:   key,
-			UpperBound:   endKey,
-			ReadCategory: opts.ReadCategory,
+			KeyTypes:             IterKeyTypePointsAndRanges,
+			LowerBound:           key,
+			UpperBound:           endKey,
+			ReadCategory:         opts.ReadCategory,
+			BlockOnlyMaxTimestamp: opts.BlockOnlyMaxTimestamp,
 		},
 	)
 	if err != nil {
@@ -5062,10 +5068,11 @@ func MVCCScanToBytes(
 ) (MVCCScanResult, error) {
 	iter, err := newMVCCIterator(
 		ctx, reader, timestamp, !opts.Tombstones, opts.DontInterleaveIntents, IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
-			LowerBound:   key,
-			UpperBound:   endKey,
-			ReadCategory: opts.ReadCategory,
+			KeyTypes:             IterKeyTypePointsAndRanges,
+			LowerBound:           key,
+			UpperBound:           endKey,
+			ReadCategory:         opts.ReadCategory,
+			BlockOnlyMaxTimestamp: opts.BlockOnlyMaxTimestamp,
 		},
 	)
 	if err != nil {
@@ -5116,10 +5123,11 @@ func MVCCIterate(
 ) ([]roachpb.Intent, error) {
 	iter, err := newMVCCIterator(
 		ctx, reader, timestamp, !opts.Tombstones, opts.DontInterleaveIntents, IterOptions{
-			KeyTypes:     IterKeyTypePointsAndRanges,
-			LowerBound:   key,
-			UpperBound:   endKey,
-			ReadCategory: opts.ReadCategory,
+			KeyTypes:             IterKeyTypePointsAndRanges,
+			LowerBound:           key,
+			UpperBound:           endKey,
+			ReadCategory:         opts.ReadCategory,
+			BlockOnlyMaxTimestamp: opts.BlockOnlyMaxTimestamp,
 		},
 	)
 	if err != nil {

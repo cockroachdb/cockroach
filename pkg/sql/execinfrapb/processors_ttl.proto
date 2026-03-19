@@ -88,4 +88,10 @@ message TTLSpec {
   // DisableChangefeedReplication controls whether the deletes performed
   // should not be replicated via changefeed.
   optional bool disable_changefeed_replication = 15 [(gogoproto.nullable) = false];
+
+  // TTLDurationNanos is the TTL duration in nanoseconds, derived from
+  // ttl_expire_after. Only set when using duration-based TTL (not custom
+  // expiration expression). Used to compute MVCC block skip thresholds.
+  optional int64 ttl_duration_nanos = 16
+    [(gogoproto.nullable) = false, (gogoproto.customname) = "TTLDurationNanos"];
 }

@@ -220,6 +220,10 @@ func (p *pebbleIterator) setOptions(
 	if opts.Prefix && opts.RangeKeyMaskingBelow.IsSet() {
 		panic(errors.AssertionFailedf("can't use range key masking with prefix iterators")) // very high overhead
 	}
+	if opts.BlockOnlyMaxTimestamp.IsSet() && opts.MaxTimestamp.IsSet() {
+		panic(errors.AssertionFailedf(
+			"BlockOnlyMaxTimestamp and MaxTimestamp are mutually exclusive"))
+	}
 
 	// Generate new Pebble iterator options.
 	p.options = makeIterOptions(opts.ReadCategory, durability)
@@ -298,6 +302,21 @@ func (p *pebbleIterator) setOptions(
 		// However, we do collect block properties for range keys, in case we enable
 		// this later.
 		p.options.RangeKeyFilters = nil
+	}
+
+	if opts.BlockOnlyMaxTimestamp.IsSet() && !opts.MaxTimestamp.IsSet() {
+		// Install only a block property filter - no per-key SkipPoint callback.
+		// This skips entire SST data blocks whose MVCC wall times are all above
+		// the threshold, but returns all keys within non-skipped blocks.
+		pkf := [2]pebble.BlockPropertyFilter{
+			cockroachkvs.NewMVCCTimeIntervalFilter(
+				0, // no lower bound
+				uint64(opts.BlockOnlyMaxTimestamp.WallTime)+1, // exclusive upper
+			),
+		}
+		p.options.PointKeyFilters = pkf[:1:2]
+		// Explicitly do NOT set p.options.SkipPoint - all keys in non-skipped
+		// blocks remain visible.
 	}
 
 	// Set the new iterator options. We unconditionally do so, since Pebble will

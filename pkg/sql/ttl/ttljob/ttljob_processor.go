@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -297,6 +298,17 @@ func (t *ttlProcessor) work(ctx context.Context, output execinfra.RowReceiver) e
 		// Iterate over every span to feed work for the goroutine processors.
 		kvDB := db.KV()
 		var alloc tree.DatumAlloc
+
+		// Compute the MVCC block skip threshold. When using duration-based TTL,
+		// any SST block whose MVCC timestamps are all above this threshold
+		// cannot contain expired rows and can be safely skipped.
+		var blockMaxTS hlc.Timestamp
+		if ttlSpec.TTLDurationNanos > 0 &&
+			ttlbase.GetBlockSkippingEnabled(&flowCtx.Cfg.Settings.SV) {
+			threshold := cutoff.Add(-time.Duration(ttlSpec.TTLDurationNanos))
+			blockMaxTS = hlc.Timestamp{WallTime: threshold.UnixNano()}
+		}
+
 		// Compute the AOST timestamp for SpanToQueryBounds. This aligns the bounds
 		// computation with the historical time used by the SELECT queries, reducing
 		// contention with foreground traffic.
@@ -313,6 +325,7 @@ func (t *ttlProcessor) work(ctx context.Context, output execinfra.RowReceiver) e
 				span,
 				&alloc,
 				aostTimestamp,
+				blockMaxTS,
 			); err != nil {
 				return errors.Wrapf(err, "SpanToQueryBounds error index=%d span=%s", i, span)
 			} else if hasRows {

@@ -831,6 +831,58 @@ func (txn *Txn) ReverseScanForShare(
 	return txn.scan(ctx, begin, end, maxRows, true /* isReverse */, kvpb.ForShare, dur)
 }
 
+// ScanWithBlockTimestampHint is like Scan but attaches a BlockOnlyMaxTimestamp
+// hint to the ScanRequest. The storage layer may skip SST data blocks whose
+// MVCC timestamps are entirely above blockMaxTS.
+func (txn *Txn) ScanWithBlockTimestampHint(
+	ctx context.Context, begin, end interface{}, maxRows int64, blockMaxTS hlc.Timestamp,
+) ([]KeyValue, error) {
+	b := txn.NewBatch()
+	if maxRows > 0 {
+		b.Header.MaxSpanRequestKeys = maxRows
+	}
+	beginKey, err := marshalKey(begin)
+	if err != nil {
+		return nil, err
+	}
+	endKey, err := marshalKey(end)
+	if err != nil {
+		return nil, err
+	}
+	req := kvpb.NewScan(beginKey, endKey).(*kvpb.ScanRequest)
+	req.BlockOnlyMaxTimestamp = blockMaxTS
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+	r, err := getOneResult(txn.Run(ctx, b), b)
+	return r.Rows, err
+}
+
+// ReverseScanWithBlockTimestampHint is like ReverseScan but attaches a
+// BlockOnlyMaxTimestamp hint to the ReverseScanRequest.
+func (txn *Txn) ReverseScanWithBlockTimestampHint(
+	ctx context.Context, begin, end interface{}, maxRows int64, blockMaxTS hlc.Timestamp,
+) ([]KeyValue, error) {
+	b := txn.NewBatch()
+	if maxRows > 0 {
+		b.Header.MaxSpanRequestKeys = maxRows
+	}
+	b.Header.IsReverse = true
+	beginKey, err := marshalKey(begin)
+	if err != nil {
+		return nil, err
+	}
+	endKey, err := marshalKey(end)
+	if err != nil {
+		return nil, err
+	}
+	req := kvpb.NewReverseScan(beginKey, endKey).(*kvpb.ReverseScanRequest)
+	req.BlockOnlyMaxTimestamp = blockMaxTS
+	b.appendReqs(req)
+	b.initResult(1, 0, notRaw, nil)
+	r, err := getOneResult(txn.Run(ctx, b), b)
+	return r.Rows, err
+}
+
 // Iterate performs a paginated scan and applying the function f to every page.
 // The semantics of retrieval and ordering are the same as for Scan. Note that
 // Txn auto-retries the transaction if necessary. Hence, the paginated data
