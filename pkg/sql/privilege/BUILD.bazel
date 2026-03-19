@@ -4,6 +4,7 @@ load("//build:STRINGER.bzl", "stringer")
 go_library(
     name = "privilege",
     srcs = [
+        "aclitem.go",
         "kind.go",
         "privilege.go",
         "target_object_type.go",
@@ -25,12 +26,16 @@ go_test(
     name = "privilege_test",
     size = "small",
     srcs = [
+        "aclitem_test.go",
         "main_test.go",
         "privilege_test.go",
     ],
+    data = glob(["testdata/**"]),
     deps = [
         ":privilege",
         "//pkg/security/username",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/echotest",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_cockroachdb_redact//:redact",

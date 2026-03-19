@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/redact"
@@ -69,48 +68,6 @@ func TestPrivilegeListFormat(t *testing.T) {
 
 		require.Equal(t, tc.sortedDisplayNames, tc.privileges.SortedDisplayNames())
 		require.Equal(t, tc.sortedKeys, tc.privileges.SortedKeys())
-	}
-}
-
-func TestValidateACLItemString(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testCases := []struct {
-		input string
-		err   string
-	}{
-		// Valid cases.
-		{input: "user1=r/"},
-		{input: "user1=r/grantor"},
-		{input: "=rw/root"},
-		{input: "user1=arwdDxtXUCTcsAm/"},
-		{input: "user1=r*w/"},
-		{input: "user1=/"},
-		{input: "user1=r"},
-		{input: `"user with spaces"=r/`},
-		{input: `"user-1"=rw/`},
-		{input: `"user""quote"=r/`},
-		{input: `user1=r/"grantor-1"`},
-
-		// Invalid cases.
-		{input: "user1=z/", err: `invalid mode character: "z"`},
-		{input: "user1rw/", err: `missing "=" sign`},
-		{input: "user1=*r/", err: `"*" must follow a privilege character`},
-		{input: "user1=r/grantor extra", err: "extra characters after aclitem specification"},
-		{input: `"unterminated=r/`, err: "unterminated quoted identifier"},
-		{input: `user1=r/"unterminated`, err: "unterminated quoted identifier"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.input, func(t *testing.T) {
-			err := privilege.ValidateACLItemString(tc.input)
-			if tc.err == "" {
-				require.NoError(t, err)
-			} else {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.err)
-			}
-		})
 	}
 }
 
@@ -243,64 +200,5 @@ func TestModifyPrivHasCorrespondingViewPriv(t *testing.T) {
 			}
 		}
 		require.True(t, foundCorrespondingViewPriv, "missing VIEW privilege for %s", modifyPriv.DisplayName())
-	}
-}
-
-func TestDefaultACLItems(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testCases := []struct {
-		objectType privilege.ObjectType
-		owner      username.SQLUsername
-		expected   []string
-	}{
-		{
-			objectType: privilege.Table,
-			owner:      username.RootUserName(),
-			expected:   []string{"admin=Cradwtm/root", "root=Cradwtm/root"},
-		},
-		{
-			objectType: privilege.Table,
-			owner:      username.MakeSQLUsernameFromPreNormalizedString("myuser"),
-			expected:   []string{"admin=Cradwtm/myuser", "root=Cradwtm/myuser", "myuser=Cradwtm/myuser"},
-		},
-		{
-			objectType: privilege.Sequence,
-			owner:      username.RootUserName(),
-			expected:   []string{"admin=CradwU/root", "root=CradwU/root"},
-		},
-		{
-			objectType: privilege.Database,
-			owner:      username.RootUserName(),
-			expected:   []string{"=cT/root", "admin=CcT/root", "root=CcT/root"},
-		},
-		{
-			objectType: privilege.Schema,
-			owner:      username.RootUserName(),
-			expected:   []string{"admin=CU/root", "root=CU/root"},
-		},
-		{
-			objectType: privilege.Routine,
-			owner:      username.RootUserName(),
-			expected:   []string{"=X/root", "admin=X/root", "root=X/root"},
-		},
-		{
-			objectType: privilege.Type,
-			owner:      username.RootUserName(),
-			expected:   []string{"=U/root", "admin=U/root", "root=U/root"},
-		},
-		{
-			objectType: privilege.Database,
-			owner:      username.MakeSQLUsernameFromPreNormalizedString("myuser"),
-			expected:   []string{"=cT/myuser", "admin=CcT/myuser", "root=CcT/myuser", "myuser=CcT/myuser"},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(fmt.Sprintf("%s/%s", tc.objectType, tc.owner), func(t *testing.T) {
-			items, err := privilege.DefaultACLItems(tc.objectType, tc.owner)
-			require.NoError(t, err)
-			require.Equal(t, tc.expected, items)
-		})
 	}
 }
