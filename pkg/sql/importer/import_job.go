@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -280,7 +281,7 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			}
 
 			return updateDetails(txn, rowCountDetails)
-		}); err != nil {
+		}, isql.WithPriority(admissionpb.BulkNormalPri)); err != nil {
 			return err
 		}
 
