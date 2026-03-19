@@ -2675,3 +2675,7 @@ statement hints: 1
       estimated row count: 1,000 (missing stats)
       table: t_hints@t_hints_v_idx
       spans: FULL SCAN
+·
+applied statement hints: 1
+ └── REWRITE INLINE HINTS
+     donor: SELECT k FROM t_hints@t_hints_v_idx WHERE k >= _

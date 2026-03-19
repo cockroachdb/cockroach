@@ -215,8 +215,9 @@ type instrumentationHelper struct {
 	// stmtHints and stmtHintIDs are the statement hints loaded for this query.
 	// Hint counts are computed from these at output time (rather than at Setup
 	// time) so that hints which fail during application are correctly reflected.
-	stmtHints   []hints.Hint
-	stmtHintIDs []int64
+	stmtHints            []hints.Hint
+	stmtHintIDs          []int64
+	deterministicExplain bool
 
 	// runtimeHintErrors stores per-hint runtime errors, keyed by hint index
 	// into stmtHints. It is lazily allocated on first error. Errors are stored
@@ -448,6 +449,7 @@ func (ih *instrumentationHelper) Setup(
 	ih.txnBufferedWritesEnabled = p.txn.BufferedWritesEnabled()
 	ih.stmtHints = stmt.Hints
 	ih.stmtHintIDs = stmt.HintIDs
+	ih.deterministicExplain = cfg.TestingKnobs.DeterministicExplain
 	ih.retryCount = uint64(retryCount)
 	ih.codec = cfg.Codec
 	ih.origCtx = ctx
@@ -1016,6 +1018,12 @@ func (ih *instrumentationHelper) setExplainAnalyzeResult(
 
 	ob := ih.emitExplainAnalyzePlanToOutputBuilder(ctx, ih.explainFlags, phaseTimes, queryLevelStats)
 	rows := ob.BuildStringRows()
+	if ih.explainFlags.Verbose && len(ih.stmtHints) > 0 {
+		rows = append(rows, buildStmtHintTreeRows(
+			ih.stmtHints, ih.stmtHintIDs, ih.deterministicExplain,
+			ih.runtimeHintErrors,
+		)...)
+	}
 	if distSQLFlowInfos != nil {
 		rows = append(rows, "")
 		for i, d := range distSQLFlowInfos {

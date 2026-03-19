@@ -73,7 +73,10 @@ func (p *planner) prepareUsingOptimizer(
 			return flags, udts, err
 		}
 		// Do not return the error. If semantic analysis failed, try preparing again
-		// without injected hints.
+		// without injected hints. Note: don't bother recording the hint error,
+		// since we'll attempt to re-plan with the hint again during EXECUTE.
+		// TODO(drewk): should we just not cache the plan instead of retrying
+		// without the hint?
 		log.Eventf(ctx, "preparing with injected hints failed with: %v", err)
 		opc.log(ctx, "falling back to preparing without injected hints")
 	}

@@ -1813,7 +1813,7 @@ SELECT crdb_internal.await_statement_hints_cache()
 
 # The newer hint (empty value = no disabled rules) wins over the older one,
 # so the plan should go back to using the constrained index scan.
-# The hint count is still 1 because the older hint is de-duplicated.
+# The total hint count is 2 (both are loaded), but only 1 is applied.
 query T
 EXPLAIN SELECT * FROM abc WHERE b = 5
 ----
@@ -1860,7 +1860,7 @@ statement ok
 SELECT crdb_internal.await_statement_hints_cache()
 
 # After deletion, the plan should be the same as the unhinted plan (no
-# "statement hints count" annotation).
+# "statement hints" annotation).
 query T
 EXPLAIN SELECT * FROM abc WHERE b = 5
 ----
@@ -1966,6 +1966,499 @@ applied session variable hint: testing_optimizer_cost_perturbation = 0.5
 
 statement ok
 SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM xy WHERE x = _')
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+# ==============================================================================
+# EXPLAIN (VERBOSE) hint details
+# ==============================================================================
+
+# Start fresh: clear all hints for the tables we use.
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT a FROM abc WHERE a = _')
+
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM abc WHERE b = _')
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+# Test 1: EXPLAIN (VERBOSE) with a single applied rewrite inline hint.
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT a FROM abc WHERE a = _',
+  'SELECT a FROM abc@abc_b_idx WHERE a = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+# Verbose EXPLAIN should show the applied hint tree with hint type and details.
+# Hint IDs are hidden in test mode (DeterministicExplain).
+query T
+EXPLAIN (VERBOSE) SELECT a FROM abc WHERE a = 10
+----
+distribution: local
+vectorized: true
+statement hints: 1
+·
+• filter
+│ columns: (a)
+│ estimated row count: 1 (missing stats)
+│ filter: a = 10
+│
+└── • scan
+      columns: (a)
+      estimated row count: 1,000 (missing stats)
+      table: abc@abc_b_idx
+      spans: FULL SCAN
+·
+applied statement hints: 1
+ └── REWRITE INLINE HINTS
+     donor: SELECT a FROM abc@abc_b_idx WHERE a = _
+
+# Non-verbose EXPLAIN should not show hint details.
+query T
+EXPLAIN SELECT a FROM abc WHERE a = 10
+----
+distribution: local
+statement hints: 1
+·
+• filter
+│ filter: a = 10
+│
+└── • scan
+      missing stats
+      table: abc@abc_b_idx
+      spans: FULL SCAN
+
+# Test 2: EXPLAIN (VERBOSE) with a single applied session variable hint.
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT a FROM abc WHERE a = _')
+
+statement ok
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM abc WHERE b = _',
+  'disable_optimizer_rules',
+  'GenerateConstrainedScans'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+# Verbose EXPLAIN should show the session variable hint with variable and value.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc WHERE b = 5
+----
+distribution: local
+vectorized: true
+statement hints: 1
+·
+• filter
+│ columns: (a, b, c)
+│ estimated row count: 10 (missing stats)
+│ filter: b = 5
+│
+└── • scan
+      columns: (a, b, c)
+      estimated row count: 1,000 (missing stats)
+      table: abc@abc_pkey
+      spans: FULL SCAN
+·
+applied statement hints: 1
+ └── SET VARIABLE
+     variable: disable_optimizer_rules
+     value: GenerateConstrainedScans
+
+# Test 3: EXPLAIN (VERBOSE) with both applied and skipped (de-duplicated) hints.
+# Add a second session variable hint for the same fingerprint + variable.
+# The newer hint wins; the older one is skipped (de-duplicated).
+statement ok
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM abc WHERE b = _',
+  'disable_optimizer_rules',
+  ''
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+# Non-verbose shows the applied/skipped breakdown.
+query T
+EXPLAIN SELECT * FROM abc WHERE b = 5
+----
+distribution: local
+statement hints: 2 (1 applied, 1 skipped)
+·
+• index join
+│ table: abc@abc_pkey
+│
+└── • scan
+      missing stats
+      table: abc@abc_b_idx
+      spans: [/5 - /5]
+
+# Verbose EXPLAIN shows separate trees for applied and skipped hints.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM abc WHERE b = 5
+----
+distribution: local
+vectorized: true
+statement hints: 2 (1 applied, 1 skipped)
+·
+• index join
+│ columns: (a, b, c)
+│ estimated row count: 10 (missing stats)
+│ table: abc@abc_pkey
+│ key columns: a
+│ parallel
+│
+└── • scan
+      columns: (a, b)
+      estimated row count: 10 (missing stats)
+      table: abc@abc_b_idx
+      spans: /5-/6
+·
+applied statement hints: 1
+ └── SET VARIABLE
+     variable: disable_optimizer_rules
+     value:
+·
+skipped statement hints: 1
+ └── SET VARIABLE
+     variable: disable_optimizer_rules
+     value: GenerateConstrainedScans
+     skip reason: superseded by a newer hint
+
+# Test 4: EXPLAIN (VERBOSE) with a single hint that is skipped because it
+# references a nonexistent index. The hint loads fine but causes a planning
+# error, so the optimizer falls back to the unhinted plan.
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM abc WHERE b = _')
+
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT a FROM abc WHERE a = _')
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT a FROM abc WHERE a = _',
+  'SELECT a FROM abc@nonexistent_idx WHERE a = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+# The nonexistent index hint fails during planning and falls back to the
+# unhinted plan. It shows as skipped with the planning error.
+query T
+EXPLAIN (VERBOSE) SELECT a FROM abc WHERE a = 10
+----
+distribution: local
+vectorized: true
+statement hints: 1 (0 applied, 1 skipped)
+·
+• scan
+  columns: (a)
+  estimated row count: 1 (missing stats)
+  table: abc@abc_pkey
+  spans: /10/0
+·
+skipped statement hints: 1
+ └── REWRITE INLINE HINTS
+     donor: SELECT a FROM abc@nonexistent_idx WHERE a = _
+     skip reason: index "nonexistent_idx" not found
+
+# Clean up test 4.
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT a FROM abc WHERE a = _')
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+# ==============================================================================
+# EXPLAIN ANALYZE (VERBOSE) hint details
+# ==============================================================================
+
+# Test 5: EXPLAIN ANALYZE (VERBOSE) with a single applied rewrite inline hint.
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT a FROM abc WHERE a = _',
+  'SELECT a FROM abc@abc_b_idx WHERE a = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+query T
+EXPLAIN ANALYZE (VERBOSE) SELECT a FROM abc WHERE a = 10
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: custom
+statement hints: 1
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• filter
+│ columns: (a)
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ vectorized batch count: 0
+│ execution time: 0µs
+│ actual row count: 0
+│ estimated row count: 1 (missing stats)
+│ filter: a = 10
+│
+└── • scan
+      columns: (a)
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      vectorized batch count: 0
+      KV time: 0µs
+      KV rows decoded: 0
+      KV pairs read: 0
+      KV bytes read: 0 B
+      KV gRPC calls: 0
+      estimated max memory allocated: 0 B
+      MVCC step count (ext/int): 0/0
+      MVCC seek count (ext/int): 0/0
+      actual row count: 0
+      estimated row count: 1,000 (missing stats)
+      table: abc@abc_b_idx
+      spans: FULL SCAN
+·
+applied statement hints: 1
+ └── REWRITE INLINE HINTS
+     donor: SELECT a FROM abc@abc_b_idx WHERE a = _
+
+# Test 6: EXPLAIN ANALYZE (VERBOSE) with a skipped hint (nonexistent index).
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT a FROM abc WHERE a = _')
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT a FROM abc WHERE a = _',
+  'SELECT a FROM abc@nonexistent_idx WHERE a = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+query T
+EXPLAIN ANALYZE (VERBOSE) SELECT a FROM abc WHERE a = 10
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, re-optimized
+statement hints: 1 (0 applied, 1 skipped)
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• scan
+  columns: (a)
+  sql nodes: <hidden>
+  kv nodes: <hidden>
+  regions: <hidden>
+  vectorized batch count: 0
+  KV time: 0µs
+  KV rows decoded: 0
+  KV pairs read: 0
+  KV bytes read: 0 B
+  KV gRPC calls: 0
+  estimated max memory allocated: 0 B
+  MVCC step count (ext/int): 0/0
+  MVCC seek count (ext/int): 0/0
+  actual row count: 0
+  estimated row count: 1 (missing stats)
+  table: abc@abc_pkey
+  spans: /10/0
+·
+skipped statement hints: 1
+ └── REWRITE INLINE HINTS
+     donor: SELECT a FROM abc@nonexistent_idx WHERE a = _
+     skip reason: index "nonexistent_idx" not found
+
+# Clean up.
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT a FROM abc WHERE a = _')
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+# ==============================================================================
+# PREPARE/EXECUTE: hint retry after schema change
+# ==============================================================================
+
+# Verify that a rewrite inline hint forcing a nonexistent index is retried
+# after the index is created, even when using a prepared statement. The hint
+# should initially fail and succeed after the index exists.
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT c FROM abc WHERE a = _',
+  'SELECT c FROM abc@abc_c_idx WHERE a = _'
+)
+
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+statement ok
+PREPARE hint_retry_stmt AS SELECT c FROM abc WHERE a = 10
+
+# First EXECUTE: abc_c_idx doesn't exist, so the hint should fail and fall
+# back to the unhinted plan.
+statement ok
+SET tracing = on
+
+query T
+EXPLAIN ANALYZE (VERBOSE) EXECUTE hint_retry_stmt
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, re-optimized
+statement hints: 1 (0 applied, 1 skipped)
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• project
+│ columns: (c)
+│
+└── • scan
+      columns: (a, c)
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      vectorized batch count: 0
+      KV time: 0µs
+      KV rows decoded: 0
+      KV pairs read: 0
+      KV bytes read: 0 B
+      KV gRPC calls: 0
+      estimated max memory allocated: 0 B
+      MVCC step count (ext/int): 0/0
+      MVCC seek count (ext/int): 0/0
+      actual row count: 0
+      estimated row count: 1 (missing stats)
+      table: abc@abc_pkey
+      spans: /10/0
+·
+skipped statement hints: 1
+ └── REWRITE INLINE HINTS
+     donor: SELECT c FROM abc@abc_c_idx WHERE a = _
+     skip reason: index "abc_c_idx" not found
+
+statement ok
+SET tracing = off
+
+query T
+SELECT regexp_replace(split_part(message, ': SELECT', 1), E'\\d+', 'x')
+FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%injected hints%' OR message LIKE '%planning with%'
+----
+trying planning with injected hints
+planning with injected hints failed with: index "abc_c_idx" not found
+falling back to planning without injected hints
+
+# Create the index that the hint forces.
+statement ok
+CREATE INDEX abc_c_idx ON abc(c)
+
+# Second EXECUTE: abc_c_idx now exists, so the runtime error from the first
+# execution should be cleared and the hint should succeed.
+statement ok
+SET tracing = on
+
+query T
+EXPLAIN ANALYZE (VERBOSE) EXECUTE hint_retry_stmt
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, re-optimized
+statement hints: 1
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• project
+│ columns: (c)
+│
+└── • filter
+    │ columns: (a, c)
+    │ sql nodes: <hidden>
+    │ regions: <hidden>
+    │ vectorized batch count: 0
+    │ execution time: 0µs
+    │ actual row count: 0
+    │ estimated row count: 1 (missing stats)
+    │ filter: a = 10
+    │
+    └── • scan
+          columns: (a, c)
+          sql nodes: <hidden>
+          kv nodes: <hidden>
+          regions: <hidden>
+          vectorized batch count: 0
+          KV time: 0µs
+          KV rows decoded: 0
+          KV pairs read: 0
+          KV bytes read: 0 B
+          KV gRPC calls: 0
+          estimated max memory allocated: 0 B
+          MVCC step count (ext/int): 0/0
+          MVCC seek count (ext/int): 0/0
+          actual row count: 0
+          estimated row count: 1,000 (missing stats)
+          table: abc@abc_c_idx
+          spans: FULL SCAN
+·
+applied statement hints: 1
+ └── REWRITE INLINE HINTS
+     donor: SELECT c FROM abc@abc_c_idx WHERE a = _
+
+statement ok
+SET tracing = off
+
+query T
+SELECT regexp_replace(split_part(message, ': SELECT', 1), E'\\d+', 'x')
+FROM [SHOW TRACE FOR SESSION]
+WHERE message LIKE '%injected hints%' OR message LIKE '%planning with%'
+----
+trying planning with injected hints
+
+# Clean up.
+statement ok
+DEALLOCATE hint_retry_stmt
+
+statement ok
+DROP INDEX abc@abc_c_idx
+
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT c FROM abc WHERE a = _')
 
 statement ok
 SELECT crdb_internal.await_statement_hints_cache()
