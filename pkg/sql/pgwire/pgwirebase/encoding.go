@@ -980,7 +980,8 @@ func DecodeDatum(
 		if err := validateStringBytes(b); err != nil {
 			return nil, err
 		}
-		d, err := tree.NewDACLItem(bs)
+		s := tree.DString(bs)
+		d, err := tree.NewDACLItemFromDString(&s)
 		if err != nil {
 			return nil, err
 		}

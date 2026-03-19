@@ -1587,11 +1587,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 						if err != nil {
 							return err
 						}
-						aclDatum, err := tree.NewDACLItem(defaclItem)
-						if err != nil {
-							return err
-						}
-						if err := arr.Append(aclDatum); err != nil {
+						if err := arr.Append(tree.NewDACLItem(defaclItem)); err != nil {
 							return err
 						}
 					}
@@ -1634,11 +1630,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 							if err != nil {
 								return err
 							}
-							aclDatum, err := tree.NewDACLItem(defaclItem)
-							if err != nil {
-								return err
-							}
-							if err := arr.Append(aclDatum); err != nil {
+							if err := arr.Append(tree.NewDACLItem(defaclItem)); err != nil {
 								return err
 							}
 						} else if roleHasAllPrivileges {
@@ -1649,11 +1641,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 							if err != nil {
 								return err
 							}
-							aclDatum, err := tree.NewDACLItem(defaclItem)
-							if err != nil {
-								return err
-							}
-							if err := arr.Append(aclDatum); err != nil {
+							if err := arr.Append(tree.NewDACLItem(defaclItem)); err != nil {
 								return err
 							}
 						} else if len(privs.Users) == 0 && schemaID != descpb.InvalidID {
@@ -1716,14 +1704,14 @@ func createDefACLItem(
 	privileges privilege.List,
 	grantOptions privilege.List,
 	privilegeObjectType privilege.ObjectType,
-) (string, error) {
+) (privilege.ACLItem, error) {
 	// Expand ALL into the underlying privileges for this object type.
 	expanded := privileges
 	if privileges.Contains(privilege.ALL) {
 		var err error
 		expanded, err = privilege.GetValidPrivilegesForObject(privilegeObjectType)
 		if err != nil {
-			return "", err
+			return privilege.ACLItem{}, err
 		}
 	}
 	expandedGO := grantOptions
@@ -1731,17 +1719,16 @@ func createDefACLItem(
 		var err error
 		expandedGO, err = privilege.GetValidPrivilegesForObject(privilegeObjectType)
 		if err != nil {
-			return "", err
+			return privilege.ACLItem{}, err
 		}
 	}
 	// Empty grantor: CockroachDB does not track grantors.
 	// See: https://github.com/cockroachdb/cockroach/issues/67442.
-	item := privilege.NewACLItem(
+	return privilege.NewACLItem(
 		user,
 		username.MakeSQLUsernameFromPreNormalizedString(""),
 		expanded, expandedGO,
-	)
-	return item.String(), nil
+	), nil
 }
 
 // privilegeDescriptorToACLArray converts a PrivilegeDescriptor into a
@@ -1811,11 +1798,7 @@ func privilegeDescriptorToACLArray(
 
 	arr := tree.NewDArray(types.AclItem)
 	for _, item := range aclItems {
-		d, err := tree.NewDACLItem(item.String())
-		if err != nil {
-			return nil, err
-		}
-		if err := arr.Append(d); err != nil {
+		if err := arr.Append(tree.NewDACLItem(item)); err != nil {
 			return nil, err
 		}
 	}

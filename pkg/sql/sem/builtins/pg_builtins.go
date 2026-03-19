@@ -2547,7 +2547,7 @@ SELECT
 				grantor := username.MakeSQLUsernameFromPreNormalizedString(grantorName)
 
 				item := privilege.NewACLItem(grantee, grantor, privList, grantOptions)
-				return tree.NewDACLItem(item.String())
+				return tree.NewDACLItem(item), nil
 			},
 			Info: "Constructs an aclitem from the given grantee, grantor, privileges, and grant option.",
 			// Marked immutable to match postgres. Our implementation resolves
@@ -2604,11 +2604,7 @@ SELECT
 					}
 					arr := tree.NewDArray(types.AclItem)
 					for _, item := range items {
-						d, err := tree.NewDACLItem(item.String())
-						if err != nil {
-							return nil, err
-						}
-						if err := arr.Append(d); err != nil {
+						if err := arr.Append(tree.NewDACLItem(item)); err != nil {
 							return nil, err
 						}
 					}
@@ -2640,11 +2636,7 @@ SELECT
 				arr := tree.NewDArray(types.AclItem)
 
 				appendItem := func(item privilege.ACLItem) error {
-					d, err := tree.NewDACLItem(item.String())
-					if err != nil {
-						return err
-					}
-					return arr.Append(d)
+					return arr.Append(tree.NewDACLItem(item))
 				}
 
 				if len(def.publicPrivs) > 0 {
