@@ -648,8 +648,20 @@ func (ih *instrumentationHelper) Finish(
 	statsCollector := ex.statsCollector
 	txnStats := &ex.extraTxnState.accumulatedStats
 	txnHelper := &ex.state.txnInstrumentationHelper
+	inTxnMode := txnHelper.diagnosticsCollector.InProgress()
 	if _, ok := ih.Tracing(); !ok {
 		return retErr
+	}
+	// 'ctx' is likely to not have a tracing span associated with it, so we
+	// don't use log.VEvent and record events directly.
+	//
+	// There is no point in logging the exit from this method into ih.sp because
+	// we're collecting the trace recording next, so that event won't show up in
+	// the stmt bundle's trace.
+	ih.sp.Record("in instrumenationHelper.Finish")
+	if inTxnMode {
+		txnHelper.diagnosticsCollector.span.Record("instrumenationHelper.Finish start")
+		defer txnHelper.diagnosticsCollector.span.Record("instrumenationHelper.Finish end")
 	}
 
 	if ih.shouldFinishSpan {
@@ -746,7 +758,7 @@ func (ih *instrumentationHelper) Finish(
 				payloadErr, retErr, &p.extendedEvalCtx.Settings.SV, ih.inFlightTraceCollector,
 			)
 
-			if !txnHelper.diagnosticsCollector.InProgress() {
+			if !inTxnMode {
 				// Include all non-critical errors as warnings. Note that these
 				// error strings might contain PII, but the warnings are only shown
 				// to the current user and aren't included into the bundle.
@@ -759,7 +771,7 @@ func (ih *instrumentationHelper) Finish(
 		}
 	}
 
-	if txnHelper.diagnosticsCollector.InProgress() {
+	if inTxnMode {
 		// If we're collecting a transaction bundle, add the statement to the
 		// current txn diagnostic bundle. These will be persisted at the end
 		// of the transaction if the transaction matches the request.
