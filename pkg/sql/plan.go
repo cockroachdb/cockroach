@@ -702,6 +702,10 @@ const (
 	// recorded in canary/stable experiment buckets even if StatsRollout is
 	// Canary or Stable.
 	planFlagCanaryAndStableStatsDiffer
+
+	// planFlagContainsUDF is set if the plan invokes at least one
+	// user-defined function.
+	planFlagContainsUDF
 )
 
 // IsSet returns true if the receiver has all of the given flags set.

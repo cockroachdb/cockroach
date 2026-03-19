@@ -594,3 +594,94 @@ func TestMemMetricsCorrectlyRegistered(t *testing.T) {
 	})
 	require.ElementsMatch(t, expectedMetrics, registered)
 }
+
+func TestUDFCallMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
+	// Create UDFs and a table for testing.
+	for _, stmt := range []string{
+		"CREATE FUNCTION f_add(a INT, b INT) RETURNS INT LANGUAGE SQL AS 'SELECT a + b'",
+		"CREATE FUNCTION f_volatile(a INT) RETURNS INT VOLATILE LANGUAGE SQL AS 'SELECT a + 1'",
+		"CREATE PROCEDURE p_noop() LANGUAGE SQL AS 'SELECT 1'",
+		"CREATE TABLE t_udf (x INT, y INT)",
+		"INSERT INTO t_udf VALUES (1, 2), (3, 4)",
+	} {
+		if _, err := sqlDB.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	testCases := []struct {
+		name     string
+		query    string
+		udfDelta int64
+	}{
+		{
+			name:     "no UDF",
+			query:    "SELECT 1",
+			udfDelta: 0,
+		},
+		{
+			name:     "single UDF call",
+			query:    "SELECT f_add(1, 2)",
+			udfDelta: 1,
+		},
+		{
+			name:     "UDF over multiple rows counts once per statement",
+			query:    "SELECT f_add(x, y) FROM t_udf",
+			udfDelta: 1,
+		},
+		{
+			name:     "multiple UDF calls in one statement counts once",
+			query:    "SELECT f_add(1, 2), f_add(3, 4)",
+			udfDelta: 1,
+		},
+		{
+			name:     "volatile UDF that cannot be inlined",
+			query:    "SELECT f_volatile(1)",
+			udfDelta: 1,
+		},
+		{
+			name:     "stored procedure does not increment UDF counter",
+			query:    "CALL p_noop()",
+			udfDelta: 0,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			beforeStarted := s.MustGetSQLCounter(sql.MetaUDFCallStarted.Name)
+			beforeExecuted := s.MustGetSQLCounter(sql.MetaUDFCallExecuted.Name)
+			if _, err := sqlDB.Exec(tc.query); err != nil {
+				t.Fatal(err)
+			}
+			afterStarted := s.MustGetSQLCounter(sql.MetaUDFCallStarted.Name)
+			afterExecuted := s.MustGetSQLCounter(sql.MetaUDFCallExecuted.Name)
+			require.Equal(t, tc.udfDelta, afterStarted-beforeStarted, "UDF started count delta")
+			require.Equal(t, tc.udfDelta, afterExecuted-beforeExecuted, "UDF executed count delta")
+		})
+	}
+
+	// Verify that a failed UDF execution increments started but not executed.
+	// Use a volatile UDF with division by zero so the error occurs at
+	// execution time, not during planning.
+	t.Run("failed UDF increments started but not executed", func(t *testing.T) {
+		_, err := sqlDB.Exec(
+			"CREATE FUNCTION f_div(a INT, b INT) RETURNS INT VOLATILE LANGUAGE SQL AS 'SELECT a / b'",
+		)
+		require.NoError(t, err)
+		beforeStarted := s.MustGetSQLCounter(sql.MetaUDFCallStarted.Name)
+		beforeExecuted := s.MustGetSQLCounter(sql.MetaUDFCallExecuted.Name)
+		_, err = sqlDB.Exec("SELECT f_div(1, 0)")
+		require.Error(t, err)
+		afterStarted := s.MustGetSQLCounter(sql.MetaUDFCallStarted.Name)
+		afterExecuted := s.MustGetSQLCounter(sql.MetaUDFCallExecuted.Name)
+		require.Equal(t, int64(1), afterStarted-beforeStarted, "UDF started count delta")
+		require.Equal(t, int64(0), afterExecuted-beforeExecuted, "UDF executed count delta")
+	})
+}

@@ -2742,6 +2742,10 @@ sql_txn_upgraded_iso_level_count: sql.txn.upgraded_iso_level.count
 sql_txn_upgraded_iso_level_count_internal: sql.txn.upgraded_iso_level.count.internal
 sql_txns_open: sql.txns.open
 sql_txns_open_internal: sql.txns.open.internal
+sql_udf_count: sql.udf.count
+sql_udf_count_internal: sql.udf.count.internal
+sql_udf_started_count: sql.udf.started.count
+sql_udf_started_count_internal: sql.udf.started.count.internal
 sql_update_count: sql.update.count
 sql_update_count_internal: sql.update.internal
 sql_update_started_count: sql.update.started.count

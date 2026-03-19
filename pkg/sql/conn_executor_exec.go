@@ -483,6 +483,14 @@ func (ex *connExecutor) execStmtInOpenState(
 	defer func() {
 		if retErr == nil && !payloadHasError(retPayload) {
 			ex.incrementExecutedStmtCounter(ast)
+			// Increment the UDF executed counter here rather than in
+			// incrementExecutedStmtCounter, because curPlan.flags is only
+			// valid when a plan was built. Other callers of
+			// incrementExecutedStmtCounter (e.g. BEGIN, COMMIT, COPY)
+			// don't build plans and could read stale flags.
+			if ex.planner.curPlan.flags.IsSet(planFlagContainsUDF) {
+				ex.metrics.ExecutedStatementCounters.UDFCallCount.Inc()
+			}
 		}
 	}()
 
@@ -1409,6 +1417,9 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 					}
 					if retErr == nil && !payloadHasError(retPayload) {
 						ex.incrementExecutedStmtCounter(vars.ast)
+						if ex.planner.curPlan.flags.IsSet(planFlagContainsUDF) {
+							ex.metrics.ExecutedStatementCounters.UDFCallCount.Inc()
+						}
 					}
 				},
 			)
@@ -3109,6 +3120,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		err = addPlanningErrorHints(ctx, err, &stmt, ex.server.cfg.Settings, planner)
 		res.SetError(err)
 		return nil
+	}
+
+	// Increment the UDF started counter if the plan contains a UDF invocation.
+	if planner.curPlan.flags.IsSet(planFlagContainsUDF) {
+		ex.metrics.StartedStatementCounters.UDFCallCount.Inc()
 	}
 
 	var cols colinfo.ResultColumns
