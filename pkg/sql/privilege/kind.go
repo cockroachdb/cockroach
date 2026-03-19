@@ -72,7 +72,9 @@ const (
 	BUILTIN_UNSAFE_ALLOWED Kind = 42
 	MAINTAIN               Kind = 43
 	TEMPORARY              Kind = 44
-	largestKind                 = TEMPORARY
+	SET                    Kind = 45
+	ALTERSYSTEM            Kind = 46
+	largestKind                 = ALTERSYSTEM
 )
 
 var isDeprecatedKind = map[Kind]bool{
@@ -174,6 +176,10 @@ func (k Kind) InternalKey() KindInternalKey {
 		return "MAINTAIN"
 	case TEMPORARY:
 		return "TEMPORARY"
+	case SET:
+		return "SET"
+	case ALTERSYSTEM:
+		return "ALTERSYSTEM"
 	default:
 		panic(errors.AssertionFailedf("unhandled kind: %d", int(k)))
 	}
@@ -191,6 +197,8 @@ func (k Kind) DisplayName() KindDisplayName {
 		return "MANAGEVIRTUALCLUSTER"
 	case REPAIRCLUSTER:
 		return "REPAIRCLUSTER"
+	case ALTERSYSTEM:
+		return "ALTER SYSTEM"
 	default:
 		// Unless we have an exception above, the internal
 		// key is also a valid display name.

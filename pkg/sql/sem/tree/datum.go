@@ -5843,7 +5843,7 @@ func NewDName(d string) Datum {
 // aclitem OID, initialized from an existing *DString. It validates the format
 // and returns an error if the string is not a valid aclitem.
 func NewDACLItemFromDString(d *DString) (Datum, error) {
-	if err := privilege.ValidateACLItemString(string(*d)); err != nil {
+	if _, err := privilege.ParseACLItem(string(*d)); err != nil {
 		return nil, err
 	}
 	return wrapWithOid(d, oidext.T_aclitem), nil
