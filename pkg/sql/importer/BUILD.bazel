@@ -93,6 +93,7 @@ go_library(
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/besteffort",
         "//pkg/util/bufalloc",
         "//pkg/util/ctxgroup",

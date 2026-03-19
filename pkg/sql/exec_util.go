@@ -3619,10 +3619,11 @@ func DescsTxn(
 	ctx context.Context,
 	execCfg *ExecutorConfig,
 	f func(ctx context.Context, txn isql.Txn, col *descs.Collection) error,
+	opts ...isql.TxnOption,
 ) error {
 	return execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		return f(ctx, txn, txn.Descriptors())
-	})
+	}, opts...)
 }
 
 // NewRowMetrics creates a rowinfra.Metrics struct for either internal or user
