@@ -2648,7 +2648,7 @@ query T
 EXPLAIN SELECT k FROM t_hints WHERE k >= 100
 ----
 distribution: local
-statement hints count: 1
+statement hints: 1
 ·
 • filter
 │ filter: k >= 100
@@ -2663,7 +2663,7 @@ EXPLAIN (VERBOSE) SELECT k FROM t_hints WHERE k >= 100
 ----
 distribution: local
 vectorized: true
-statement hints count: 1
+statement hints: 1
 ·
 • filter
 │ columns: (k)

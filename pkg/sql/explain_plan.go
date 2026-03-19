@@ -121,16 +121,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		}
 
 		ob.AddTableStatsMode(params.EvalContext().StatsRollout.String())
-
-		if len(params.p.stmt.Hints) > 0 {
-			var hintCount uint64
-			for _, hint := range params.p.stmt.Hints {
-				if hint.Enabled && hint.Err == nil {
-					hintCount += 1
-				}
-			}
-			ob.AddStmtHintCount(hintCount)
-		}
+		ob.AddStmtHintCount(params.p.stmt.Hints, params.p.instrumentation.runtimeHintErrors)
 
 		if e.options.Flags[tree.ExplainFlagJSON] {
 			// For the JSON flag, we only want to emit the diagram JSON.
