@@ -1102,38 +1102,46 @@ func (ir *IntentResolver) resolveIntents(
 		return nil
 	}
 	// ... using their corresponding request batcher.
-	respChan := make(chan requestbatcher.Response, len(reqs))
 	batcherBypassAdmission := batchBypassAdmissionControl.Get(&ir.settings.SV)
 	if batcherBypassAdmission {
 		h = kv.AdmissionHeaderForBypass(h)
 	}
-	for _, req := range reqs {
-		var batcher *requestbatcher.RequestBatcher
-		switch req.Method() {
-		case kvpb.ResolveIntent:
-			batcher = ir.irBatcher
-		case kvpb.ResolveIntentRange:
-			batcher = ir.irRangeBatcher
-		default:
-			panic("unexpected")
-		}
-		rangeID := ir.lookupRangeID(ctx, req.Header().Key)
-		if err := batcher.SendWithChan(ctx, respChan, rangeID, req, h); err != nil {
-			return kvpb.NewError(err)
-		}
-	}
-	// Collect responses.
-	for range reqs {
-		select {
-		case resp := <-respChan:
-			if resp.Err != nil {
-				return kvpb.NewError(resp.Err)
+	// Submit intents in chunks to avoid overwhelming the node with
+	// goroutines when a transaction has many intents (e.g. 70k intents
+	// would create ~700 batcher goroutines without chunking).
+	const maxIntentsInFlightPerCaller = 1000
+	for start := 0; start < len(reqs); start += maxIntentsInFlightPerCaller {
+		end := min(start+maxIntentsInFlightPerCaller, len(reqs))
+		chunk := reqs[start:end]
+		respChan := make(chan requestbatcher.Response, len(chunk))
+		for _, req := range chunk {
+			var batcher *requestbatcher.RequestBatcher
+			switch req.Method() {
+			case kvpb.ResolveIntent:
+				batcher = ir.irBatcher
+			case kvpb.ResolveIntentRange:
+				batcher = ir.irRangeBatcher
+			default:
+				panic("unexpected")
 			}
-			_ = resp.Resp // ignore the response
-		case <-ctx.Done():
-			return kvpb.NewError(ctx.Err())
-		case <-ir.stopper.ShouldQuiesce():
-			return kvpb.NewError(&kvpb.NodeUnavailableError{})
+			rangeID := ir.lookupRangeID(ctx, req.Header().Key)
+			if err := batcher.SendWithChan(ctx, respChan, rangeID, req, h); err != nil {
+				return kvpb.NewError(err)
+			}
+		}
+		// Collect responses for this chunk before submitting the next.
+		for range chunk {
+			select {
+			case resp := <-respChan:
+				if resp.Err != nil {
+					return kvpb.NewError(resp.Err)
+				}
+				_ = resp.Resp // ignore the response
+			case <-ctx.Done():
+				return kvpb.NewError(ctx.Err())
+			case <-ir.stopper.ShouldQuiesce():
+				return kvpb.NewError(&kvpb.NodeUnavailableError{})
+			}
 		}
 	}
 	return nil
