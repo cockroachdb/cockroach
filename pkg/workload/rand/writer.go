@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package conflict
+package rand
 
 import (
 	"context"
@@ -11,22 +11,22 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/workload/rand"
 	"github.com/cockroachdb/errors"
 )
 
-type writer struct {
+// TableWriter provides upsert and delete operations for a Table.
+type TableWriter struct {
 	conn  *gosql.DB
-	table rand.Table
+	table Table
 
 	upsertStmt string
 	deleteStmt string
 }
 
-func newWriter(ctx context.Context, conn *gosql.DB, table rand.Table) (*writer, error) {
+// NewTableWriter creates a TableWriter for the given table and connection.
+func NewTableWriter(conn *gosql.DB, table Table) *TableWriter {
 	var columns, params, updates []string
 	for _, col := range table.Cols {
-		// Can't update a computed column, so skip it
 		if col.IsComputed {
 			continue
 		}
@@ -41,12 +41,8 @@ func newWriter(ctx context.Context, conn *gosql.DB, table rand.Table) (*writer, 
 		pkColumns = append(pkColumns, fmt.Sprintf(`"%s"`, table.Cols[col].Name))
 	}
 
-	upsertStmt := fmt.Sprintf(`
-			INSERT INTO %s (%s)
-			VALUES (%s)
-			ON CONFLICT (%s) DO UPDATE
-			SET %s
-		`,
+	upsertStmt := fmt.Sprintf(
+		`INSERT INTO %s (%s) VALUES (%s) ON CONFLICT (%s) DO UPDATE SET %s`,
 		table.Name,
 		strings.Join(columns, ", "),
 		strings.Join(params, ", "),
@@ -64,20 +60,28 @@ func newWriter(ctx context.Context, conn *gosql.DB, table rand.Table) (*writer, 
 				fmt.Sprintf(`"%s" = $%d::%s`, col.Name, len(pkComponents)+1, col.DataType.SQLString()))
 		}
 	}
-	deleteStmt := fmt.Sprintf(`
-		DELETE FROM %s
-		WHERE %s
-	`, table.Name, strings.Join(pkComponents, " AND "))
+	deleteStmt := fmt.Sprintf(
+		`DELETE FROM %s WHERE %s`,
+		table.Name, strings.Join(pkComponents, " AND "),
+	)
 
-	return &writer{conn: conn, upsertStmt: upsertStmt, deleteStmt: deleteStmt, table: table}, nil
+	return &TableWriter{
+		conn:       conn,
+		table:      table,
+		upsertStmt: upsertStmt,
+		deleteStmt: deleteStmt,
+	}
 }
 
-func (w *writer) upsertRow(ctx context.Context, row []any) error {
+// UpsertRow inserts or updates a row. The row values must correspond to
+// the non-computed columns of the table.
+func (w *TableWriter) UpsertRow(ctx context.Context, row []any) error {
 	_, err := w.conn.ExecContext(ctx, w.upsertStmt, row...)
-	return errors.Wrapf(err, "upsertRow '%s'", w.upsertStmt)
+	return errors.Wrapf(err, "UpsertRow '%s'", w.upsertStmt)
 }
 
-func (w *writer) deleteRow(ctx context.Context, row []any) error {
+// DeleteRow deletes the row identified by the primary key values in row.
+func (w *TableWriter) DeleteRow(ctx context.Context, row []any) error {
 	pkValues := []any{}
 	valIndex := 0
 	for schemaIndex, col := range w.table.Cols {
@@ -90,5 +94,5 @@ func (w *writer) deleteRow(ctx context.Context, row []any) error {
 		valIndex++
 	}
 	_, err := w.conn.ExecContext(ctx, w.deleteStmt, pkValues...)
-	return errors.Wrapf(err, "deleteRow '%s'", w.deleteStmt)
+	return errors.Wrapf(err, "DeleteRow '%s'", w.deleteStmt)
 }
