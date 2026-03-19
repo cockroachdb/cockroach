@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "rand.go",
         "schema.go",
+        "writer.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/rand",
     visibility = ["//visibility:public"],
@@ -27,16 +28,22 @@ go_library(
 go_test(
     name = "rand_test",
     size = "small",
-    srcs = ["rand_test.go"],
+    srcs = [
+        "rand_test.go",
+        "writer_test.go",
+    ],
+    data = ["//c-deps:libgeos"],
     embed = [":rand"],
     deps = [
         "//pkg/base",
+        "//pkg/crosscluster/ldrrandgen",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
         "//pkg/testutils/sqlutils",
