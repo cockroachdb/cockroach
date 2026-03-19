@@ -84,7 +84,7 @@ admin    PUBLIC   EXECUTE         false
 admin    root     SELECT          false
 
 # aclexplode also works with aclitem[] type via acldefault round-trip.
-query TTTB colnames,rowsort
+query TTTB colnames
 SELECT
   COALESCE(g.rolname, 'PUBLIC') AS grantor,
   COALESCE(e.rolname, 'PUBLIC') AS grantee,
@@ -93,20 +93,23 @@ SELECT
 FROM aclexplode(acldefault('r'::"char", 'root'::regrole)) a
 LEFT JOIN pg_roles g ON g.oid = a.grantor
 LEFT JOIN pg_roles e ON e.oid = a.grantee
+ORDER BY 1, 2, 3
 ----
 grantor  grantee  privilege_type  is_grantable
-root     admin    INSERT          false
+root     admin    CREATE          false
 root     admin    DELETE          false
+root     admin    INSERT          false
 root     admin    MAINTAIN        false
 root     admin    SELECT          false
 root     admin    TRIGGER         false
 root     admin    UPDATE          false
-root     root     UPDATE          false
-root     root     INSERT          false
+root     root     CREATE          false
 root     root     DELETE          false
+root     root     INSERT          false
 root     root     MAINTAIN        false
 root     root     SELECT          false
 root     root     TRIGGER         false
+root     root     UPDATE          false
 
 subtest end
 
@@ -156,42 +159,43 @@ subtest end
 
 subtest acldefault
 
-# Table defaults: admin and root get all table privs, PUBLIC gets nothing.
-# Grant options are implicit for admin/root/owner so not marked with '*'.
+# Table defaults: admin and root get all CRDB table privs,
+# PUBLIC gets nothing. Grant options are implicit for admin/root/owner.
 query T
 SELECT acldefault('r'::"char", 'root'::regrole)
 ----
-{admin=admrtw/root,root=admrtw/root}
+{admin=Cradwtm/root,root=Cradwtm/root}
 
-# Database defaults: admin and root get CREATE and CONNECT, PUBLIC gets CONNECT.
+# Database defaults: admin and root get CREATE, CONNECT, TEMPORARY.
+# PUBLIC gets CONNECT and TEMPORARY.
 query T
 SELECT acldefault('d'::"char", 'root'::regrole)
 ----
-{admin=Cc/root,=c/root,root=Cc/root}
+{=cT/root,admin=CcT/root,root=CcT/root}
 
 # Function defaults: admin and root get EXECUTE, PUBLIC gets EXECUTE.
 query T
 SELECT acldefault('f'::"char", 'root'::regrole)
 ----
-{admin=X/root,=X/root,root=X/root}
+{=X/root,admin=X/root,root=X/root}
 
 # Type defaults: admin and root get USAGE, PUBLIC gets USAGE.
 query T
 SELECT acldefault('T'::"char", 'root'::regrole)
 ----
-{admin=U/root,=U/root,root=U/root}
+{=U/root,admin=U/root,root=U/root}
 
 # Schema defaults: admin and root get USAGE and CREATE, PUBLIC gets nothing.
 query T
 SELECT acldefault('n'::"char", 'root'::regrole)
 ----
-{admin=UC/root,root=UC/root}
+{admin=CU/root,root=CU/root}
 
-# Language defaults: PUBLIC gets USAGE (matches PostgreSQL).
+# Language defaults: admin, root, and PUBLIC get USAGE.
 query T
 SELECT acldefault('l'::"char", 'root'::regrole)
 ----
-{=U/root}
+{=U/root,admin=U/root,root=U/root}
 
 # Column defaults: nobody gets anything.
 query T
@@ -214,7 +218,7 @@ subtest end
 subtest aclitem_roundtrip
 
 # Round-trip: aclexplode(acldefault(...)) should produce correct rows.
-query TTTB colnames,rowsort
+query TTTB colnames
 SELECT
   COALESCE(g.rolname, 'PUBLIC') AS grantor,
   COALESCE(e.rolname, 'PUBLIC') AS grantee,
@@ -223,13 +227,17 @@ SELECT
 FROM aclexplode(acldefault('d'::"char", 'root'::regrole)) a
 LEFT JOIN pg_roles g ON g.oid = a.grantor
 LEFT JOIN pg_roles e ON e.oid = a.grantee
+ORDER BY 1, 2, 3
 ----
 grantor  grantee  privilege_type  is_grantable
-root     admin    CREATE          false
+root     PUBLIC   CONNECT         false
+root     PUBLIC   TEMPORARY       false
 root     admin    CONNECT         false
+root     admin    CREATE          false
+root     admin    TEMPORARY       false
 root     root     CONNECT         false
 root     root     CREATE          false
-root     PUBLIC   CONNECT         false
+root     root     TEMPORARY       false
 
 # Round-trip for PARAMETER type: aclexplode(acldefault('p', ...)) should return
 # SET and ALTER SYSTEM privileges. This verifies no silent data loss occurs
