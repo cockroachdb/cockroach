@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -606,6 +607,59 @@ func (pl List) ListToACL(grantOptions List, objectType ObjectType) (string, erro
 // system.privileges.
 func (o ObjectType) IsDescriptorBacked() bool {
 	return isDescriptorBacked[o]
+}
+
+// pgDefaultPublicPrivs lists the privileges granted to PUBLIC by default
+// for each object type, matching CockroachDB's actual defaults (see
+// NewBaseDatabasePrivilegeDescriptor, NewBaseFunctionPrivilegeDescriptor,
+// etc.).
+var pgDefaultPublicPrivs = map[ObjectType]List{
+	Database: {CONNECT, TEMPORARY},
+	Routine:  {EXECUTE},
+	Type:     {USAGE},
+}
+
+// DefaultACLItems computes the expected default aclitem strings for the given
+// object type and owner. This is used both by privilegeDescriptorToACLArray
+// (to detect default privileges and return NULL) and by the acldefault builtin.
+//
+// The returned items follow PostgreSQL conventions:
+//   - No '*' grant option markers for admin, root, or owner (implicit).
+//   - Only privileges with a PG ACL character equivalent are included
+//     (ListToACL silently skips CRDB-specific privileges).
+//   - PUBLIC entries (empty grantee) come first.
+func DefaultACLItems(objectType ObjectType, owner username.SQLUsername) ([]string, error) {
+	// Compute the owner privilege string by expanding ALL for this object
+	// type. ListToACL skips privileges without a PG ACL character (BACKUP,
+	// CHANGEFEED, ZONECONFIG, DROP, etc.) and orders by Kind bit position.
+	ownerPrivs, err := List{ALL}.ListToACL(nil, objectType)
+	if err != nil {
+		return nil, err
+	}
+
+	quotedOwner := QuoteACLIdentifier(owner.Normalized())
+
+	var items []string
+
+	// PUBLIC entry (empty grantee sorts first).
+	if publicPrivs, ok := pgDefaultPublicPrivs[objectType]; ok {
+		pubACL, err := publicPrivs.ListToACL(nil, objectType)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, "="+pubACL+"/"+quotedOwner)
+	}
+
+	// Admin and root entries.
+	items = append(items, username.AdminRole+"="+ownerPrivs+"/"+quotedOwner)
+	items = append(items, username.RootUser+"="+ownerPrivs+"/"+quotedOwner)
+
+	// Owner entry (if different from admin and root).
+	if !owner.IsAdminRole() && !owner.IsRootUser() {
+		items = append(items, quotedOwner+"="+ownerPrivs+"/"+quotedOwner)
+	}
+
+	return items, nil
 }
 
 // Object represents an object that can have privileges. The privileges

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/redact"
@@ -242,5 +243,64 @@ func TestModifyPrivHasCorrespondingViewPriv(t *testing.T) {
 			}
 		}
 		require.True(t, foundCorrespondingViewPriv, "missing VIEW privilege for %s", modifyPriv.DisplayName())
+	}
+}
+
+func TestDefaultACLItems(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testCases := []struct {
+		objectType privilege.ObjectType
+		owner      username.SQLUsername
+		expected   []string
+	}{
+		{
+			objectType: privilege.Table,
+			owner:      username.RootUserName(),
+			expected:   []string{"admin=Cradwtm/root", "root=Cradwtm/root"},
+		},
+		{
+			objectType: privilege.Table,
+			owner:      username.MakeSQLUsernameFromPreNormalizedString("myuser"),
+			expected:   []string{"admin=Cradwtm/myuser", "root=Cradwtm/myuser", "myuser=Cradwtm/myuser"},
+		},
+		{
+			objectType: privilege.Sequence,
+			owner:      username.RootUserName(),
+			expected:   []string{"admin=CradwU/root", "root=CradwU/root"},
+		},
+		{
+			objectType: privilege.Database,
+			owner:      username.RootUserName(),
+			expected:   []string{"=cT/root", "admin=CcT/root", "root=CcT/root"},
+		},
+		{
+			objectType: privilege.Schema,
+			owner:      username.RootUserName(),
+			expected:   []string{"admin=CU/root", "root=CU/root"},
+		},
+		{
+			objectType: privilege.Routine,
+			owner:      username.RootUserName(),
+			expected:   []string{"=X/root", "admin=X/root", "root=X/root"},
+		},
+		{
+			objectType: privilege.Type,
+			owner:      username.RootUserName(),
+			expected:   []string{"=U/root", "admin=U/root", "root=U/root"},
+		},
+		{
+			objectType: privilege.Database,
+			owner:      username.MakeSQLUsernameFromPreNormalizedString("myuser"),
+			expected:   []string{"=cT/myuser", "admin=CcT/myuser", "root=CcT/myuser", "myuser=CcT/myuser"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%s/%s", tc.objectType, tc.owner), func(t *testing.T) {
+			items, err := privilege.DefaultACLItems(tc.objectType, tc.owner)
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, items)
+		})
 	}
 }

@@ -2584,30 +2584,51 @@ SELECT
 					ownerName = fmt.Sprintf("%d", ownerOid)
 				}
 
-				// Default ACLs per object type, matching CockroachDB's actual
-				// default privileges. CockroachDB grants ALL (with grant
-				// option) to both admin and root by default via
-				// NewCustomSuperuserPrivilegeDescriptor, and has different
-				// public-role defaults than PostgreSQL for some types.
+				// Map type chars to CRDB object types for descriptor-backed
+				// objects. For these, use DefaultACLItems to ensure consistency
+				// with privilegeDescriptorToACLArray's default detection.
 				// See also PostgreSQL's src/backend/catalog/aclchk.c acldefault().
+				charToObjectType := map[string]privilege.ObjectType{
+					"r": privilege.Table,
+					"s": privilege.Sequence,
+					"d": privilege.Database,
+					"f": privilege.Routine,
+					"n": privilege.Schema,
+					"T": privilege.Type,
+				}
+
+				if objType, ok := charToObjectType[typeChar]; ok {
+					owner := username.MakeSQLUsernameFromPreNormalizedString(ownerName)
+					items, err := privilege.DefaultACLItems(objType, owner)
+					if err != nil {
+						return nil, err
+					}
+					arr := tree.NewDArray(types.AclItem)
+					for _, item := range items {
+						d, err := tree.NewDACLItem(item)
+						if err != nil {
+							return nil, err
+						}
+						if err := arr.Append(d); err != nil {
+							return nil, err
+						}
+					}
+					return arr, nil
+				}
+
+				// Non-CRDB object types: use hardcoded defaults.
 				type aclDefault struct {
 					ownerPrivs  string
 					publicPrivs string
 				}
 				defaults := map[string]aclDefault{
-					"r": {ownerPrivs: "admrtw"},               // TABLE
-					"s": {ownerPrivs: "rwU"},                  // SEQUENCE
-					"d": {ownerPrivs: "Cc", publicPrivs: "c"}, // DATABASE
-					"f": {ownerPrivs: "X", publicPrivs: "X"},  // FUNCTION
-					"l": {publicPrivs: "U"},                   // LANGUAGE
-					"n": {ownerPrivs: "UC"},                   // SCHEMA
-					"T": {ownerPrivs: "U", publicPrivs: "U"},  // TYPE
-					"c": {},                                   // COLUMN
-					"L": {ownerPrivs: "rw"},                   // LARGE OBJECT
-					"t": {ownerPrivs: "C"},                    // TABLESPACE
-					"F": {ownerPrivs: "U"},                    // FDW
-					"S": {ownerPrivs: "U"},                    // FOREIGN SERVER
-					"p": {ownerPrivs: "sA"},                   // PARAMETER
+					"l": {ownerPrivs: "U", publicPrivs: "U"}, // LANGUAGE
+					"c": {},                                  // COLUMN
+					"L": {ownerPrivs: "rw"},                  // LARGE OBJECT
+					"t": {ownerPrivs: "C"},                   // TABLESPACE
+					"F": {ownerPrivs: "U"},                   // FDW
+					"S": {ownerPrivs: "U"},                   // FOREIGN SERVER
+					"p": {ownerPrivs: "sA"},                  // PARAMETER
 				}
 
 				def, ok := defaults[typeChar]
@@ -2618,24 +2639,10 @@ SELECT
 
 				arr := tree.NewDArray(types.AclItem)
 				quotedOwner := privilege.QuoteACLIdentifier(ownerName)
-				quotedAdmin := privilege.QuoteACLIdentifier(username.AdminRole)
-				quotedRoot := privilege.QuoteACLIdentifier(username.RootUser)
 
-				// CockroachDB default: admin and root both get all
-				// privileges with grant option, matching
-				// NewCustomSuperuserPrivilegeDescriptor. Grant options
-				// are not marked with '*' because they are implicit
-				// (matching PostgreSQL behavior for owner defaults).
-				if def.ownerPrivs != "" {
-					item := quotedAdmin + "=" + def.ownerPrivs + "/" + quotedOwner
-					d, err := tree.NewDACLItem(item)
-					if err != nil {
-						return nil, err
-					}
-					if err := arr.Append(d); err != nil {
-						return nil, err
-					}
-				}
+				// Grant options are not marked with '*' because they
+				// are implicit (matching PostgreSQL behavior for
+				// owner defaults).
 				if def.publicPrivs != "" {
 					item := "=" + def.publicPrivs + "/" + quotedOwner
 					d, err := tree.NewDACLItem(item)
@@ -2647,7 +2654,17 @@ SELECT
 					}
 				}
 				if def.ownerPrivs != "" {
-					item := quotedRoot + "=" + def.ownerPrivs + "/" + quotedOwner
+					item := username.AdminRole + "=" + def.ownerPrivs + "/" + quotedOwner
+					d, err := tree.NewDACLItem(item)
+					if err != nil {
+						return nil, err
+					}
+					if err := arr.Append(d); err != nil {
+						return nil, err
+					}
+				}
+				if def.ownerPrivs != "" {
+					item := username.RootUser + "=" + def.ownerPrivs + "/" + quotedOwner
 					d, err := tree.NewDACLItem(item)
 					if err != nil {
 						return nil, err
@@ -2658,7 +2675,7 @@ SELECT
 				}
 				// If the owner is neither admin nor root, add their
 				// entry too (they get implicit ALL via ownership).
-				if ownerName != "admin" && ownerName != "root" && def.ownerPrivs != "" {
+				if ownerName != username.AdminRole && ownerName != username.RootUser && def.ownerPrivs != "" {
 					item := quotedOwner + "=" + def.ownerPrivs + "/" + quotedOwner
 					d, err := tree.NewDACLItem(item)
 					if err != nil {
