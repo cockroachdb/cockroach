@@ -199,6 +199,10 @@ type saramaConfig struct {
 		Messages    int          `json:",omitempty"`
 		Frequency   jsonDuration `json:",omitempty"`
 		MaxMessages int          `json:",omitempty"`
+		// MaxBytes overrides the cluster setting
+		// changefeed.kafka.max_request_size for this changefeed.
+		// int32 to match kgo.ProducerBatchMaxBytes.
+		MaxBytes int32 `json:",omitempty"`
 	}
 
 	Compression      compressionCodec `json:",omitempty"`
