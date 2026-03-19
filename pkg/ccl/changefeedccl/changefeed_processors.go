@@ -1726,10 +1726,9 @@ func (cf *changeFrontier) checkpointJobProgress(
 ) (bool, error) {
 	defer cf.sliMetrics.Timers.CheckpointJobProgress.Start()()
 
-	if cf.knobs.RaiseRetryableError != nil {
-		if err := cf.knobs.RaiseRetryableError(); err != nil {
-			return false, changefeedbase.MarkRetryableError(
-				errors.New("cf.knobs.RaiseRetryableError"))
+	if cf.knobs.BeforeCheckpoint != nil {
+		if err := cf.knobs.BeforeCheckpoint(); err != nil {
+			return false, changefeedbase.MarkRetryableError(err)
 		}
 	}
 
