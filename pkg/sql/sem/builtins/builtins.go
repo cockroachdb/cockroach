@@ -9927,6 +9927,7 @@ WHERE object_id = table_descriptor_id
 		},
 		deleteStatementHintsByRowIDOverload,
 		deleteStatementHintsByFingerprintOverload,
+		deleteStatementHintsByFingerprintAndDatabaseOverload,
 	),
 	"information_schema.crdb_enable_statement_hints": makeBuiltin(
 		tree.FunctionProperties{
@@ -9935,6 +9936,7 @@ WHERE object_id = table_descriptor_id
 		},
 		setStatementHintEnabledByRowIDOverload,
 		setStatementHintEnabledByFingerprintOverload,
+		setStatementHintEnabledByFingerprintAndDatabaseOverload,
 	),
 	"information_schema.crdb_set_session_variable_hint": makeBuiltin(
 		tree.FunctionProperties{
@@ -13211,7 +13213,7 @@ func logDeleteHintEvent(
 		return evalCtx.Planner.LogEvent(ctx, &eventpb.DeleteRewriteInlineHints{
 			HintID:               hintID,
 			StatementFingerprint: fingerprint,
-			DonorSQL:             t.DonorSQL,
+			DonorSql:             t.DonorSQL,
 			Database:             database,
 		})
 	case *hintpb.SessionVariableHint:
@@ -13262,53 +13264,79 @@ var deleteStatementHintsByRowIDOverload = tree.Overload{
 	Volatility: volatility.Volatile,
 }
 
+// deleteStatementHintsByFingerprintImpl is the shared implementation for the
+// fingerprint-only and fingerprint+database overloads of
+// crdb_delete_statement_hints.
+func deleteStatementHintsByFingerprintImpl(
+	ctx context.Context, evalCtx *eval.Context, fingerprintArg string, optDatabase string,
+) (tree.Datum, error) {
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+	); err != nil {
+		return nil, err
+	}
+	fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
+		&evalCtx.Settings.SV,
+	))
+	normalizedFingerprint, err := parserutils.FingerprintStatement(
+		parserutils.FingerprintTagStatementFingerprint, fingerprintArg, fingerprintFlags,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if normalizedFingerprint != fingerprintArg {
+		evalCtx.ClientNoticeSender.BufferClientNotice(
+			ctx, pgnotice.Newf("statement fingerprint changed to: %s", normalizedFingerprint),
+		)
+	}
+	rowIDs, fingerprints, rawHintBytes, databases, err := evalCtx.Planner.DeleteStatementHint(
+		ctx, 0 /* rowID */, normalizedFingerprint, optDatabase,
+	)
+	if err != nil {
+		return nil, err
+	}
+	for i := range rowIDs {
+		hint, err := hintpb.ParseHintProto(rawHintBytes[i])
+		if err != nil {
+			log.Dev.Warningf(ctx, "could not unmarshal hint for row %d: %v", rowIDs[i], err)
+			continue
+		}
+		if err := logDeleteHintEvent(ctx, evalCtx, hint, rowIDs[i], fingerprints[i], databases[i]); err != nil {
+			return nil, err
+		}
+	}
+	return tree.NewDInt(tree.DInt(len(rowIDs))), nil
+}
+
 var deleteStatementHintsByFingerprintOverload = tree.Overload{
 	Types: tree.ParamTypes{
 		{Name: "statement_fingerprint", Typ: types.String},
 	},
 	ReturnType: tree.FixedReturnType(types.Int),
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-		if err := evalCtx.SessionAccessor.CheckPrivilege(
-			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
-		); err != nil {
-			return nil, err
-		}
-		arg := string(tree.MustBeDString(args[0]))
-		fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
-			&evalCtx.Settings.SV,
-		))
-		fingerprintArg, err := parserutils.FingerprintStatement(
-			parserutils.FingerprintTagStatementFingerprint, arg, fingerprintFlags,
-		)
-		if err != nil {
-			return nil, err
-		}
-		if fingerprintArg != arg {
-			evalCtx.ClientNoticeSender.BufferClientNotice(
-				ctx, pgnotice.Newf("statement fingerprint changed to: %s", fingerprintArg),
-			)
-		}
-		rowIDs, fingerprints, rawHintBytes, databases, err := evalCtx.Planner.DeleteStatementHint(
-			ctx, 0 /* rowID */, fingerprintArg, "", /* optDatabase */
-		)
-		if err != nil {
-			return nil, err
-		}
-		for i := range rowIDs {
-			hint, err := hintpb.ParseHintProto(rawHintBytes[i])
-			if err != nil {
-				log.Dev.Warningf(ctx, "could not unmarshal hint for row %d: %v", rowIDs[i], err)
-				continue
-			}
-			if err := logDeleteHintEvent(ctx, evalCtx, hint, rowIDs[i], fingerprints[i], databases[i]); err != nil {
-				return nil, err
-			}
-		}
-		return tree.NewDInt(tree.DInt(len(rowIDs))), nil
+		return deleteStatementHintsByFingerprintImpl(ctx, evalCtx, string(tree.MustBeDString(args[0])), "" /* optDatabase */)
 	},
 	Info: `This function deletes all statement hints matching the ` +
 		`given statement fingerprint. The statement fingerprint argument is ` +
 		`normalized before matching. It returns the number of deleted rows.`,
+	Volatility: volatility.Volatile,
+}
+
+var deleteStatementHintsByFingerprintAndDatabaseOverload = tree.Overload{
+	Types: tree.ParamTypes{
+		{Name: "statement_fingerprint", Typ: types.String},
+		{Name: "database", Typ: types.String},
+	},
+	ReturnType: tree.FixedReturnType(types.Int),
+	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+		return deleteStatementHintsByFingerprintImpl(
+			ctx, evalCtx, string(tree.MustBeDString(args[0])), string(tree.MustBeDString(args[1])),
+		)
+	},
+	Info: `This function deletes all statement hints matching the ` +
+		`given statement fingerprint and database. The statement fingerprint ` +
+		`argument is normalized before matching. It returns the number of ` +
+		`deleted rows.`,
 	Volatility: volatility.Volatile,
 }
 
@@ -13378,6 +13406,44 @@ var setStatementHintEnabledByRowIDOverload = tree.Overload{
 	Volatility: volatility.Volatile,
 }
 
+// setStatementHintEnabledByFingerprintImpl is the shared implementation for
+// the fingerprint-only and fingerprint+database overloads of
+// crdb_enable_statement_hints.
+func setStatementHintEnabledByFingerprintImpl(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	enabled bool,
+	fingerprintArg string,
+	optDatabase string,
+) (tree.Datum, error) {
+	if err := evalCtx.SessionAccessor.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+	); err != nil {
+		return nil, err
+	}
+	fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
+		&evalCtx.Settings.SV,
+	))
+	normalizedFingerprint, err := parserutils.FingerprintStatement(
+		parserutils.FingerprintTagStatementFingerprint, fingerprintArg, fingerprintFlags,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if normalizedFingerprint != fingerprintArg {
+		evalCtx.ClientNoticeSender.BufferClientNotice(
+			ctx, pgnotice.Newf("statement fingerprint changed to: %s", normalizedFingerprint),
+		)
+	}
+	numAffected, err := evalCtx.Planner.SetStatementHintEnabled(
+		ctx, 0 /* rowID */, normalizedFingerprint, enabled, optDatabase,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDInt(tree.DInt(numAffected)), nil
+}
+
 var setStatementHintEnabledByFingerprintOverload = tree.Overload{
 	Types: tree.ParamTypes{
 		{Name: "enabled", Typ: types.Bool},
@@ -13385,38 +13451,32 @@ var setStatementHintEnabledByFingerprintOverload = tree.Overload{
 	},
 	ReturnType: tree.FixedReturnType(types.Int),
 	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-		if err := evalCtx.SessionAccessor.CheckPrivilege(
-			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
-		); err != nil {
-			return nil, err
-		}
-		enabled := bool(tree.MustBeDBool(args[0]))
-		arg := string(tree.MustBeDString(args[1]))
-		fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
-			&evalCtx.Settings.SV,
-		))
-		fingerprintArg, err := parserutils.FingerprintStatement(
-			parserutils.FingerprintTagStatementFingerprint, arg, fingerprintFlags,
+		return setStatementHintEnabledByFingerprintImpl(
+			ctx, evalCtx, bool(tree.MustBeDBool(args[0])), string(tree.MustBeDString(args[1])), "", /* optDatabase */
 		)
-		if err != nil {
-			return nil, err
-		}
-		if fingerprintArg != arg {
-			evalCtx.ClientNoticeSender.BufferClientNotice(
-				ctx, pgnotice.Newf("statement fingerprint changed to: %s", fingerprintArg),
-			)
-		}
-		numAffected, err := evalCtx.Planner.SetStatementHintEnabled(
-			ctx, 0 /* rowID */, fingerprintArg, enabled, "", /* optDatabase */
-		)
-		if err != nil {
-			return nil, err
-		}
-		return tree.NewDInt(tree.DInt(numAffected)), nil
 	},
 	Info: `This function enables or disables all statement hints matching the given ` +
 		`statement fingerprint. The statement fingerprint argument is normalized ` +
 		`before matching. It returns the number of affected rows.`,
+	Volatility: volatility.Volatile,
+}
+
+var setStatementHintEnabledByFingerprintAndDatabaseOverload = tree.Overload{
+	Types: tree.ParamTypes{
+		{Name: "enabled", Typ: types.Bool},
+		{Name: "statement_fingerprint", Typ: types.String},
+		{Name: "database", Typ: types.String},
+	},
+	ReturnType: tree.FixedReturnType(types.Int),
+	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+		return setStatementHintEnabledByFingerprintImpl(
+			ctx, evalCtx,
+			bool(tree.MustBeDBool(args[0])), string(tree.MustBeDString(args[1])), string(tree.MustBeDString(args[2])),
+		)
+	},
+	Info: `This function enables or disables all statement hints matching the given ` +
+		`statement fingerprint and database. The statement fingerprint argument is ` +
+		`normalized before matching. It returns the number of affected rows.`,
 	Volatility: volatility.Volatile,
 }
 

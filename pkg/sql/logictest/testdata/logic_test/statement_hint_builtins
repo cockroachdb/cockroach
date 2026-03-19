@@ -821,3 +821,166 @@ skipif config local-mixed-25.4 local-mixed-26.1
 user root
 
 subtest end
+
+# Clean up all hints before database filtering tests.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement count 2
+DELETE FROM system.statement_hints WHERE true
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+subtest delete_by_fingerprint_and_database
+
+# Insert hints scoped to different databases.
+skipif config local-mixed-25.4 local-mixed-26.1
+let $db1_hint
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@primary WHERE y = 10',
+  'db1'
+);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+let $db2_hint
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@xy_y_idx WHERE y = 10',
+  'db2'
+);
+
+# Verify both hints exist.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT count(*) FROM system.statement_hints WHERE row_id IN ($db1_hint, $db2_hint);
+----
+2
+
+# Delete only the db1 hint by fingerprint+database.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM xy WHERE y = 10', 'db1');
+----
+1
+
+# Verify db1 hint is gone but db2 hint remains.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT count(*) FROM system.statement_hints WHERE row_id = $db1_hint;
+----
+0
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT count(*) FROM system.statement_hints WHERE row_id = $db2_hint;
+----
+1
+
+# Delete the db2 hint.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM xy WHERE y = 10', 'db2');
+----
+1
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT count(*) FROM system.statement_hints WHERE row_id = $db2_hint;
+----
+0
+
+# Delete with non-matching database returns 0.
+skipif config local-mixed-25.4 local-mixed-26.1
+let $tmp_hint
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@primary WHERE y = 10',
+  'db1'
+);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM xy WHERE y = 10', 'nonexistent');
+----
+0
+
+# Clean up.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT information_schema.crdb_delete_statement_hints($tmp_hint);
+----
+1
+
+skipif config local-mixed-25.4 local-mixed-26.1
+subtest end
+
+subtest enable_disable_by_fingerprint_and_database
+
+# Insert hints scoped to different databases.
+skipif config local-mixed-25.4 local-mixed-26.1
+let $edb1
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM ab WHERE b = 10',
+  'SELECT * FROM ab@primary WHERE b = 10',
+  'db1'
+);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+let $edb2
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM ab WHERE b = 10',
+  'SELECT * FROM ab@ab_b_idx WHERE b = 10',
+  'db2'
+);
+
+# Verify both start enabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+query B rowsort
+SELECT enabled FROM system.statement_hints WHERE row_id IN ($edb1, $edb2);
+----
+true
+true
+
+# Disable only the db1 hint.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT information_schema.crdb_enable_statement_hints(false, 'SELECT * FROM ab WHERE b = 10', 'db1');
+----
+1
+
+# Verify db1 is disabled, db2 is still enabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+query B
+SELECT enabled FROM system.statement_hints WHERE row_id = $edb1;
+----
+false
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query B
+SELECT enabled FROM system.statement_hints WHERE row_id = $edb2;
+----
+true
+
+# Re-enable the db1 hint.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT information_schema.crdb_enable_statement_hints(true, 'SELECT * FROM ab WHERE b = 10', 'db1');
+----
+1
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query B
+SELECT enabled FROM system.statement_hints WHERE row_id = $edb1;
+----
+true
+
+# Enable with non-matching database returns 0.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT information_schema.crdb_enable_statement_hints(false, 'SELECT * FROM ab WHERE b = 10', 'nonexistent');
+----
+0
+
+skipif config local-mixed-25.4 local-mixed-26.1
+subtest end

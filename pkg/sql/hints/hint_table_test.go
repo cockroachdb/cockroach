@@ -24,7 +24,8 @@ import (
 )
 
 // TestHintTableOperations tests the DB-interfacing functions in hint_table.go:
-// CheckForStatementHintsInDB, GetStatementHintsFromDB, and InsertHintIntoDB.
+// CheckForStatementHintsInDB, GetStatementHintsFromDB, InsertHintIntoDB,
+// DeleteHintFromDB, and SetHintEnabledInDB.
 func TestHintTableOperations(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -222,4 +223,105 @@ func TestHintTableOperations(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "must specify at least one of row_id or fingerprint")
+
+	// Test database filtering: insert hints with different databases.
+	fingerprint3 := "SELECT e FROM t WHERE f = $1"
+	var hintDB1 hintpb.StatementHintUnion
+	hintDB1.SetValue(&hintpb.InjectHints{DonorSQL: "SELECT e FROM t@t_f_idx WHERE f = $1"})
+
+	var hintIDDB1, hintIDDB2, hintIDNoDB int64
+	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		hintIDDB1, err = hints.InsertHintIntoDB(ctx, ts.ClusterSettings(), txn, fingerprint3, hintDB1, "db1")
+		return err
+	})
+	require.NoError(t, err)
+	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		hintIDDB2, err = hints.InsertHintIntoDB(ctx, ts.ClusterSettings(), txn, fingerprint3, hintDB1, "db2")
+		return err
+	})
+	require.NoError(t, err)
+	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		hintIDNoDB, err = hints.InsertHintIntoDB(ctx, ts.ClusterSettings(), txn, fingerprint3, hintDB1, "" /* optDatabase */)
+		return err
+	})
+	require.NoError(t, err)
+
+	// Delete only db1 hints by fingerprint+database.
+	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		rowIDs, _, _, dbs, deleteErr := hints.DeleteHintFromDB(ctx, ts.ClusterSettings(), txn, 0, fingerprint3, "db1")
+		require.Len(t, rowIDs, 1)
+		require.Equal(t, hintIDDB1, rowIDs[0])
+		require.Equal(t, "db1", dbs[0])
+		return deleteErr
+	})
+	require.NoError(t, err)
+
+	// Verify db2 and no-database hints remain.
+	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		rowIDs, _, _, _, deleteErr := hints.DeleteHintFromDB(ctx, ts.ClusterSettings(), txn, 0, fingerprint3, "" /* optDatabase */)
+		require.Len(t, rowIDs, 2)
+		return deleteErr
+	})
+	require.NoError(t, err)
+
+	// Re-insert for enable/disable test.
+	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		hintIDDB1, err = hints.InsertHintIntoDB(ctx, ts.ClusterSettings(), txn, fingerprint3, hintDB1, "db1")
+		return err
+	})
+	require.NoError(t, err)
+	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		hintIDDB2, err = hints.InsertHintIntoDB(ctx, ts.ClusterSettings(), txn, fingerprint3, hintDB1, "db2")
+		return err
+	})
+	require.NoError(t, err)
+	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		hintIDNoDB, err = hints.InsertHintIntoDB(ctx, ts.ClusterSettings(), txn, fingerprint3, hintDB1, "" /* optDatabase */)
+		return err
+	})
+	require.NoError(t, err)
+
+	// Disable only db1 hints.
+	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		numAffected, setErr := hints.SetHintEnabledInDB(
+			ctx, ts.ClusterSettings(), txn,
+			0,            /* rowID */
+			fingerprint3, /* fingerprint */
+			false,        /* enabled */
+			"db1",        /* optDatabase */
+		)
+		require.Equal(t, int64(1), numAffected)
+		return setErr
+	})
+	require.NoError(t, err)
+
+	// Verify db2 and no-database hints are still enabled by deleting and
+	// re-inserting (we can't read enabled status via hints package alone
+	// without the cache, so just verify the count of affected rows when
+	// disabling the rest).
+	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		numAffected, setErr := hints.SetHintEnabledInDB(
+			ctx, ts.ClusterSettings(), txn,
+			0,            /* rowID */
+			fingerprint3, /* fingerprint */
+			false,        /* enabled */
+			"",           /* optDatabase */
+		)
+		// All 3 hints (db1 already disabled, db2 and no-db still enabled) should
+		// be affected.
+		require.Equal(t, int64(3), numAffected)
+		return setErr
+	})
+	require.NoError(t, err)
+
+	// Verify database-only filter is rejected (database alone is not
+	// sufficient).
+	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		_, _, _, _, deleteErr := hints.DeleteHintFromDB(ctx, ts.ClusterSettings(), txn, 0, "" /* fingerprint */, "db1")
+		return deleteErr
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must specify at least one of row_id or fingerprint")
+	_ = hintIDDB2
+	_ = hintIDNoDB
 }
