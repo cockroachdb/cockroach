@@ -30,12 +30,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -79,6 +81,22 @@ var (
 		sort.Strings(names)
 		return names
 	}()
+
+	// retry options while waiting for a backup to complete
+	backupCompletionRetryOptions = retry.Options{
+		InitialBackoff: 10 * time.Second,
+		MaxBackoff:     1 * time.Minute,
+		Multiplier:     1.5,
+		MaxRetries:     80,
+	}
+
+	// retry options while waiting for a job to pass a certain progress threshold
+	jobProgRetryOptions = retry.Options{
+		InitialBackoff: 1 * time.Second,
+		MaxBackoff:     5 * time.Second,
+		Multiplier:     1.5,
+		MaxDuration:    60 * time.Minute,
+	}
 
 	fewBankRows      = 100
 	bankPossibleRows = []int{
@@ -439,9 +457,19 @@ func (u *CommonTestUtils) setClusterSettings(
 // error if the job doesn't succeed within the attempted retries.
 func (u *CommonTestUtils) waitForJobSuccess(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, jobID int, internalSystemJobs bool,
+) error {
+	return u.waitForJobSuccessWithNode(
+		ctx, l, u.RandomNode(rng, u.roachNodes), jobID, internalSystemJobs,
+	)
+}
+
+// waitForJobSuccessWithNode waits for the given job with the given ID to
+// succeed (according to `backupCompletionRetryOptions`) via the provided node.
+// Returns an error if the job doesn't succeed within the attempted retries.
+func (u *CommonTestUtils) waitForJobSuccessWithNode(
+	ctx context.Context, l *logger.Logger, node int, jobID int, internalSystemJobs bool,
 ) (resErr error) {
 	var lastErr error
-	node := u.RandomNode(rng, u.roachNodes)
 	l.Printf("querying job status through node %d", node)
 
 	db, err := u.cluster.ConnE(ctx, l, node, option.DBName("system"))
@@ -498,6 +526,79 @@ func (u *CommonTestUtils) waitForJobSuccess(
 	}
 
 	return fmt.Errorf("error waiting for job to finish: %w", lastErr)
+}
+
+// waitForJobFractionCompletedWithNode waits for the given job to reach at the
+// least the provided progress fraction, querying through the provided node.
+func (u *CommonTestUtils) waitForJobFractionCompletedWithNode(
+	ctx context.Context, l *logger.Logger, node int, jobID int, fraction float64,
+) (resErr error) {
+	l.Printf("querying job progress through node %d", node)
+
+	db, err := u.cluster.ConnE(ctx, l, node, option.DBName("system"))
+	if err != nil {
+		l.Printf("error connecting to node %d: %v", node, err)
+		return err
+	}
+	defer func() {
+		err := db.Close()
+		resErr = errors.CombineErrors(resErr, err)
+	}()
+
+	logThrottler := util.EveryMono(30 * time.Second)
+	const progQuery = `SELECT coordinator_id, fraction_completed, status FROM crdb_internal.jobs WHERE job_id = $1`
+	var claimInstanceID gosql.NullInt64
+	var fractionCompleted gosql.NullFloat64
+	var status string
+	for r := retry.StartWithCtx(ctx, jobProgRetryOptions); r.Next(); {
+		unclaimed := !claimInstanceID.Valid
+		err := db.QueryRowContext(ctx, progQuery, jobID).Scan(
+			&claimInstanceID, &fractionCompleted, &status,
+		)
+		if err != nil {
+			resErr = errors.Newf("error querying progress for job %d: %w", jobID, err)
+			l.Printf("%v", resErr)
+			continue
+		}
+		if unclaimed && claimInstanceID.Valid {
+			l.Printf("job %d claimed by instance %d", jobID, claimInstanceID.Int64)
+		}
+
+		if fractionCompleted.Valid {
+			if fractionCompleted.Float64 >= fraction {
+				l.Printf(
+					"job %d passed %.2f%% progress (current progress: %.2f%%)",
+					jobID, fraction*100, fractionCompleted.Float64*100,
+				)
+				return nil
+			}
+			if logThrottler.ShouldProcess(crtime.NowMono()) {
+				l.Printf(
+					"waiting for job %d to pass %.2f%% (current progress: %.2f%%)",
+					jobID, fraction*100, fractionCompleted.Float64*100,
+				)
+			}
+		}
+
+		jobStatus := jobs.State(status)
+		if jobStatus != jobs.StateSucceeded && jobStatus != jobs.StateRunning {
+			resErr = errors.Newf("job %d unexpectedly in state %s while tracking progress", jobID, jobStatus)
+			break
+		}
+	}
+
+	if err := ctx.Err(); err != nil {
+		resErr = errors.CombineErrors(resErr, err)
+	}
+	if resErr != nil {
+		return errors.Wrapf(
+			resErr, "error waiting for job %d to pass %.2f%% progress", jobID, fraction*100,
+		)
+	}
+
+	return errors.Newf(
+		"retries exhausted waiting for job %d to pass %.2f%% progress", jobID, fraction*100,
+	)
 }
 
 // runJobOnOneOf disables job adoption on cockroach nodes that are not
@@ -665,6 +766,16 @@ func (u *CommonTestUtils) collectFailureArtifacts(
 	return fmt.Errorf("%w (artifacts collected in %s)", restoreErr, dirName), nil
 }
 
+// takeDebugZip fetches a debug.zip from the cluster and saves it with the
+// current timestamp in the test artifacts.
+func (u *CommonTestUtils) takeDebugZip(ctx context.Context, l *logger.Logger) {
+	zipPath := fmt.Sprintf("debug-%d.zip", timeutil.Now().Unix())
+	err := u.cluster.FetchDebugZip(ctx, l, zipPath)
+	if err != nil {
+		l.Printf("failed to fetch debug zip: %v", err)
+	}
+}
+
 // resetCluster wipes the entire cluster and starts it again with the
 // specified version binary. This is done before we attempt restoring a
 // full cluster backup.
@@ -676,7 +787,11 @@ func (u *CommonTestUtils) resetCluster(
 	settings []install.ClusterSettingOption,
 ) error {
 	l.Printf("resetting cluster using version %q", version.String())
-	expectDeathsFn(len(u.roachNodes))
+	// TODO (kev-cao): Once we've migrated off of the deprecated cluster Monitor,
+	// we can remove expectDeathsFn entirely.
+	if expectDeathsFn != nil {
+		expectDeathsFn(len(u.roachNodes))
+	}
 	if err := u.cluster.WipeE(ctx, l, u.roachNodes); err != nil {
 		return fmt.Errorf("failed to wipe cluster: %w", err)
 	}
@@ -732,6 +847,10 @@ func hasInternalSystemJobs(
 
 func randIntBetween(rng *rand.Rand, min, max int) int {
 	return rng.Intn(max-min) + min
+}
+
+func randFloatBetween(rng *rand.Rand, min, max float64) float64 {
+	return rng.Float64()*(max-min) + min
 }
 
 func randString(rng *rand.Rand, strLen int) string {

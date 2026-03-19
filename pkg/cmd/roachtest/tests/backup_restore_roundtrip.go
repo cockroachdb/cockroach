@@ -145,7 +145,7 @@ func backupRestoreRoundTrip(
 
 		dbs := []string{"bank", "tpcc", schemaChangeDB}
 		d, runBackgroundWorkload, _, err := createDriversForBackupRestore(
-			ctx, t, c, testRNG, workloadSeed, testUtils, dbs,
+			ctx, t, c, testRNG, workloadSeed, testUtils, dbs, nil, /* excludedWorkloads */
 		)
 		if err != nil {
 			return err
@@ -233,7 +233,8 @@ func backupRestoreRoundTrip(
 }
 
 // initBackgroundWorkloads returns a function that starts a TPCC, bank, and a
-// system table workload in the background.
+// system table workload in the background. Workloads in excludedWorkloads will
+// not be started.
 func initBackgroundWorkloads(
 	ctx context.Context,
 	t test.Test,
@@ -244,6 +245,7 @@ func initBackgroundWorkloads(
 	roachNodes, workloadNode option.NodeListOption,
 	testUtils *CommonTestUtils,
 	dbs []string,
+	excludedWorkloads []string,
 ) (func() (func(), error), error) {
 	// numWarehouses is picked as a number that provides enough work
 	// for the cluster used in this test without overloading it,
@@ -252,28 +254,39 @@ func initBackgroundWorkloads(
 	if testUtils.mock {
 		numWarehouses = 10
 	}
+	excluded := make(map[string]bool, len(excludedWorkloads))
+	for _, w := range excludedWorkloads {
+		excluded[w] = true
+	}
+
 	tpccInit, tpccRun := tpccWorkloadCmd(l, testRNG, seed, numWarehouses, roachNodes)
 	bankInit, bankRun := bankWorkloadCmd(l, testRNG, seed, roachNodes, testUtils.mock)
 	scInit, scRun := schemaChangeWorkloadCmd(l, testRNG, seed, roachNodes, testUtils.mock)
 
 	initGroup := t.NewErrorGroup(task.WithContext(ctx))
-	initGroup.Go(func(ctx context.Context, l *logger.Logger) error {
-		return c.RunE(ctx, option.WithNodes(workloadNode), bankInit.String())
-	}, task.Name("init-bank"))
-	initGroup.Go(func(ctx context.Context, l *logger.Logger) error {
-		return c.RunE(ctx, option.WithNodes(workloadNode), tpccInit.String())
-	}, task.Name("init-tpcc"))
-	initGroup.Go(func(ctx context.Context, l *logger.Logger) (err error) {
-		defer func() {
-			if err != nil {
-				err = handleSchemaChangeWorkloadError(err)
+	if !excluded["bank"] {
+		initGroup.Go(func(ctx context.Context, l *logger.Logger) error {
+			return c.RunE(ctx, option.WithNodes(workloadNode), bankInit.String())
+		}, task.Name("init-bank"))
+	}
+	if !excluded["tpcc"] {
+		initGroup.Go(func(ctx context.Context, l *logger.Logger) error {
+			return c.RunE(ctx, option.WithNodes(workloadNode), tpccInit.String())
+		}, task.Name("init-tpcc"))
+	}
+	if !excluded["schemachange"] {
+		initGroup.Go(func(ctx context.Context, l *logger.Logger) (err error) {
+			defer func() {
+				if err != nil {
+					err = handleSchemaChangeWorkloadError(err)
+				}
+			}()
+			if err := prepSchemaChangeWorkload(ctx, workloadNode, testUtils, testRNG); err != nil {
+				return err
 			}
-		}()
-		if err := prepSchemaChangeWorkload(ctx, workloadNode, testUtils, testRNG); err != nil {
-			return err
-		}
-		return c.RunE(ctx, option.WithNodes(workloadNode), scInit.String())
-	}, task.Name("init-schemachange"))
+			return c.RunE(ctx, option.WithNodes(workloadNode), scInit.String())
+		}, task.Name("init-schemachange"))
+	}
 	if err := initGroup.WaitE(); err != nil {
 		return nil, err
 	}
@@ -285,25 +298,33 @@ func initBackgroundWorkloads(
 		}
 
 		runGroup := t.NewGroup()
-		runGroup.Go(func(ctx context.Context, l *logger.Logger) error {
-			return c.RunE(ctx, option.WithNodes(workloadNode), bankRun.String())
-		}, task.Name("run-bank"))
-		runGroup.Go(func(ctx context.Context, l *logger.Logger) error {
-			return c.RunE(ctx, option.WithNodes(workloadNode), tpccRun.String())
-		}, task.Name("run-tpcc"))
-		runGroup.Go(func(ctx context.Context, l *logger.Logger) error {
-			return handleSchemaChangeWorkloadError(
-				c.RunE(ctx, option.WithNodes(workloadNode), scRun.String()),
-			)
-		}, task.Name("run-schemachange"))
-		runGroup.Go(func(ctx context.Context, l *logger.Logger) error {
-			// We use a separate RNG for the system table writer to avoid
-			// non-determinism of the RNG usage due to the time-based nature of
-			// the system writer workload. See
-			// https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/roachtestutil/mixedversion/README.md#note-non-deterministic-use-of-the-randrand-instance
-			systemTableRNG := rand.New(rand.NewSource(testRNG.Int63()))
-			return testUtils.systemTableWriter(ctx, l, systemTableRNG, dbs, tables)
-		}, task.Name("run-system-table-writer"))
+		if !excluded["bank"] {
+			runGroup.Go(func(ctx context.Context, l *logger.Logger) error {
+				return c.RunE(ctx, option.WithNodes(workloadNode), bankRun.String())
+			}, task.Name("run-bank"))
+		}
+		if !excluded["tpcc"] {
+			runGroup.Go(func(ctx context.Context, l *logger.Logger) error {
+				return c.RunE(ctx, option.WithNodes(workloadNode), tpccRun.String())
+			}, task.Name("run-tpcc"))
+		}
+		if !excluded["schemachange"] {
+			runGroup.Go(func(ctx context.Context, l *logger.Logger) error {
+				return handleSchemaChangeWorkloadError(
+					c.RunE(ctx, option.WithNodes(workloadNode), scRun.String()),
+				)
+			}, task.Name("run-schemachange"))
+		}
+		if !excluded["systemTableWriter"] {
+			runGroup.Go(func(ctx context.Context, l *logger.Logger) error {
+				// We use a separate RNG for the system table writer to avoid
+				// non-determinism of the RNG usage due to the time-based nature of
+				// the system writer workload. See
+				// https://github.com/cockroachdb/cockroach/blob/master/pkg/cmd/roachtest/roachtestutil/mixedversion/README.md#note-non-deterministic-use-of-the-randrand-instance
+				systemTableRNG := rand.New(rand.NewSource(testRNG.Int63()))
+				return testUtils.systemTableWriter(ctx, l, systemTableRNG, dbs, tables)
+			}, task.Name("run-system-table-writer"))
+		}
 
 		return runGroup.Cancel, nil
 	}
@@ -399,9 +420,11 @@ func createDriversForBackupRestore(
 	workloadSeed int64,
 	testUtils *CommonTestUtils,
 	dbs []string,
+	excludedWorkloads []string,
 ) (*BackupRestoreTestDriver, func() (func(), error), [][]string, error) {
 	runBackgroundWorkload, err := initBackgroundWorkloads(
 		ctx, t, t.L(), c, rng, workloadSeed, c.CRDBNodes(), c.WorkloadNode(), testUtils, dbs,
+		excludedWorkloads,
 	)
 	if err != nil {
 		return nil, nil, nil, err
