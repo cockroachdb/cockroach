@@ -2584,26 +2584,30 @@ SELECT
 					ownerName = fmt.Sprintf("%d", ownerOid)
 				}
 
-				// PostgreSQL hard-wired default ACLs per object type.
-				// See src/backend/catalog/aclchk.c acldefault().
+				// Default ACLs per object type, matching CockroachDB's actual
+				// default privileges. CockroachDB grants ALL (with grant
+				// option) to both admin and root by default via
+				// NewCustomSuperuserPrivilegeDescriptor, and has different
+				// public-role defaults than PostgreSQL for some types.
+				// See also PostgreSQL's src/backend/catalog/aclchk.c acldefault().
 				type aclDefault struct {
 					ownerPrivs  string
 					publicPrivs string
 				}
 				defaults := map[string]aclDefault{
-					"r": {ownerPrivs: "arwdDxtm"},               // TABLE
-					"s": {ownerPrivs: "rwU"},                    // SEQUENCE
-					"d": {ownerPrivs: "CTc", publicPrivs: "Tc"}, // DATABASE
-					"f": {ownerPrivs: "X", publicPrivs: "X"},    // FUNCTION
-					"l": {publicPrivs: "U"},                     // LANGUAGE
-					"n": {ownerPrivs: "UC"},                     // SCHEMA
-					"T": {ownerPrivs: "U", publicPrivs: "U"},    // TYPE
-					"c": {},                                     // COLUMN
-					"L": {ownerPrivs: "rw"},                     // LARGE OBJECT
-					"t": {ownerPrivs: "C"},                      // TABLESPACE
-					"F": {ownerPrivs: "U"},                      // FDW
-					"S": {ownerPrivs: "U"},                      // FOREIGN SERVER
-					"p": {ownerPrivs: "sA"},                     // PARAMETER
+					"r": {ownerPrivs: "admrtw"},               // TABLE
+					"s": {ownerPrivs: "rwU"},                  // SEQUENCE
+					"d": {ownerPrivs: "Cc", publicPrivs: "c"}, // DATABASE
+					"f": {ownerPrivs: "X", publicPrivs: "X"},  // FUNCTION
+					"l": {publicPrivs: "U"},                   // LANGUAGE
+					"n": {ownerPrivs: "UC"},                   // SCHEMA
+					"T": {ownerPrivs: "U", publicPrivs: "U"},  // TYPE
+					"c": {},                                   // COLUMN
+					"L": {ownerPrivs: "rw"},                   // LARGE OBJECT
+					"t": {ownerPrivs: "C"},                    // TABLESPACE
+					"F": {ownerPrivs: "U"},                    // FDW
+					"S": {ownerPrivs: "U"},                    // FOREIGN SERVER
+					"p": {ownerPrivs: "sA"},                   // PARAMETER
 				}
 
 				def, ok := defaults[typeChar]
@@ -2614,7 +2618,24 @@ SELECT
 
 				arr := tree.NewDArray(types.AclItem)
 				quotedOwner := privilege.QuoteACLIdentifier(ownerName)
-				// If PUBLIC has privileges, add that first.
+				quotedAdmin := privilege.QuoteACLIdentifier(username.AdminRole)
+				quotedRoot := privilege.QuoteACLIdentifier(username.RootUser)
+
+				// CockroachDB default: admin and root both get all
+				// privileges with grant option, matching
+				// NewCustomSuperuserPrivilegeDescriptor. Grant options
+				// are not marked with '*' because they are implicit
+				// (matching PostgreSQL behavior for owner defaults).
+				if def.ownerPrivs != "" {
+					item := quotedAdmin + "=" + def.ownerPrivs + "/" + quotedOwner
+					d, err := tree.NewDACLItem(item)
+					if err != nil {
+						return nil, err
+					}
+					if err := arr.Append(d); err != nil {
+						return nil, err
+					}
+				}
 				if def.publicPrivs != "" {
 					item := "=" + def.publicPrivs + "/" + quotedOwner
 					d, err := tree.NewDACLItem(item)
@@ -2625,8 +2646,19 @@ SELECT
 						return nil, err
 					}
 				}
-				// If owner has privileges, add that next.
 				if def.ownerPrivs != "" {
+					item := quotedRoot + "=" + def.ownerPrivs + "/" + quotedOwner
+					d, err := tree.NewDACLItem(item)
+					if err != nil {
+						return nil, err
+					}
+					if err := arr.Append(d); err != nil {
+						return nil, err
+					}
+				}
+				// If the owner is neither admin nor root, add their
+				// entry too (they get implicit ALL via ownership).
+				if ownerName != "admin" && ownerName != "root" && def.ownerPrivs != "" {
 					item := quotedOwner + "=" + def.ownerPrivs + "/" + quotedOwner
 					d, err := tree.NewDACLItem(item)
 					if err != nil {
