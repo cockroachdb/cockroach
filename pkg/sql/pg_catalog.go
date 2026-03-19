@@ -1790,6 +1790,29 @@ func privilegeDescriptorToACLArray(
 		))
 	}
 
+	// If the owner is not explicitly listed in the privilege descriptor
+	// (common for non-root, non-admin owners), add their implicit ALL
+	// privileges. This mirrors PostgreSQL behavior where the owner
+	// always appears in the ACL array.
+	if !owner.IsNodeUser() && !owner.Undefined() {
+		sawOwner := false
+		for _, userPriv := range privDesc.Users {
+			if userPriv.User() == owner {
+				sawOwner = true
+				break
+			}
+		}
+		if !sawOwner {
+			ownerPrivs, err := privilege.GetValidPrivilegesForObject(objectType)
+			if err != nil {
+				return nil, err
+			}
+			aclItems = append(aclItems, privilege.NewACLItem(
+				owner, owner, ownerPrivs, privilege.List{},
+			))
+		}
+	}
+
 	// If the actual privileges match the defaults, return NULL.
 	isDefault, err := privilege.IsDefaultACL(aclItems, objectType, owner)
 	if err == nil && isDefault {

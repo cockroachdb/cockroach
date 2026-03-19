@@ -5774,4 +5774,50 @@ SELECT typacl FROM pg_type WHERE typname = 'int4'
 ----
 NULL
 
+# ACL columns for objects owned by a non-root user.
+# The owner's implicit ALL privileges should appear in the ACL array,
+# and default privileges should still return NULL.
+
+statement ok
+CREATE USER testowner
+
+statement ok
+CREATE TABLE testowner_table (id INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE testowner_table OWNER TO testowner
+
+# relacl: NULL for table with default privileges, even with non-root owner.
+query T
+SELECT relacl FROM pg_class WHERE relname = 'testowner_table'
+----
+NULL
+
+# relacl: non-NULL after GRANT, includes the owner entry.
+statement ok
+GRANT SELECT ON testowner_table TO testuser
+
+query T
+SELECT relacl FROM pg_class WHERE relname = 'testowner_table'
+----
+{admin=Cradwtm/testowner,root=Cradwtm/testowner,testuser=r/testowner,testowner=Cradwtm/testowner}
+
+# relacl: returns to NULL after revoking back to defaults.
+statement ok
+REVOKE SELECT ON testowner_table FROM testuser
+
+query T
+SELECT relacl FROM pg_class WHERE relname = 'testowner_table'
+----
+NULL
+
+# nspacl: NULL for schema with default privileges owned by non-root user.
+statement ok
+CREATE SCHEMA testowner_schema AUTHORIZATION testowner
+
+query T
+SELECT nspacl FROM pg_namespace WHERE nspname = 'testowner_schema'
+----
+NULL
+
 subtest end
