@@ -43,12 +43,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
         run: |
-          # workflow_run.pull_requests is empty for fork PRs, so we search by head branch
-          PR_JSON=$(gh pr list \
-            --repo "${{ github.repository }}" \
-            --head "${AUTOSOLVER_FORK_OWNER}:${BRANCH}" \
-            --json number,labels \
-            --limit 1 \
+          # workflow_run.pull_requests is empty for fork PRs, so we search by head branch.
+          # Use the REST API directly because `gh pr list --head` doesn't support the
+          # owner:branch syntax needed to filter to the fork owner's branch.
+          PR_JSON=$(gh api "repos/${{ github.repository }}/pulls?head=${AUTOSOLVER_FORK_OWNER}:${BRANCH}&state=open&per_page=1" \
             --jq '.[0] // empty')
 
           if [ -z "$PR_JSON" ]; then
@@ -60,7 +58,7 @@ jobs:
           PR_NUMBER=$(echo "$PR_JSON" | jq -r '.number')
 
           # Verify the PR has the o-autosolver label
-          HAS_LABEL=$(echo "$PR_JSON" | jq -r '[.labels[].name] | any(. == "o-autosolver")')
+          HAS_LABEL=$(echo "$PR_JSON" | jq -r '[.labels[].name] | any(ascii_downcase == "o-autosolver")')
           if [ "$HAS_LABEL" != "true" ]; then
             echo "PR #${PR_NUMBER} does not have o-autosolver label, skipping"
             echo "found=false" >> "$GITHUB_OUTPUT"
