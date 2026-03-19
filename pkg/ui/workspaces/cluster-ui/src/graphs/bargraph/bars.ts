@@ -10,7 +10,7 @@ import { AxisUnits, AxisDomain } from "../utils/domain";
 
 import { barTooltipPlugin } from "./plugins";
 
-const seriesPalette = [
+export const seriesPalette = [
   "#003EBD",
   "#2AAF44",
   "#F16969",
