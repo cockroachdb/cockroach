@@ -16,9 +16,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -326,6 +328,17 @@ func (ex *connExecutor) populatePrepared(
 		if err := ex.handleAOST(ctx, p.stmt.AST); err != nil {
 			return 0, nil, err
 		}
+	}
+
+	// When the canary experiment is active (canary_fraction > 0), force
+	// StatsRolloutStable during PREPARE so the cached memo is built with
+	// stable (baseline) stats. During EXECUTE, the dice is rolled per
+	// query: stable executions reuse this memo; canary executions skip it
+	// and rebuild from scratch with canary stats (see
+	// skipMemoReuseForCanaryExec).
+	if !p.SessionData().Internal &&
+		stats.CanaryFraction.Get(&p.EvalContext().Settings.SV) > 0 {
+		p.EvalContext().StatsRollout = eval.StatsRolloutStable
 	}
 
 	// PREPARE has a limited subset of statements it can be run with. Postgres
