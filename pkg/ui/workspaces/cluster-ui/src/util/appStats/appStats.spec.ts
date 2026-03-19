@@ -3,8 +3,11 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import Long from "long";
+
 import {
   aggregateNumericStats,
+  addExperimentStatsInfo,
   NumericStat,
   flattenStatementStats,
 } from "./appStats";
@@ -74,6 +77,86 @@ describe("addNumericStats", () => {
     const reversed = aggregateNumericStats(b, a, countB, countA);
 
     expect(reversed).toEqual(combined);
+  });
+});
+
+describe("addExperimentStatsInfo", () => {
+  it("returns empty object when both inputs are null/undefined", () => {
+    expect(addExperimentStatsInfo(null, null)).toEqual({});
+    expect(addExperimentStatsInfo(undefined, undefined)).toEqual({});
+  });
+
+  it("returns b when a is null", () => {
+    const b = {
+      count: Long.fromInt(3),
+      run_lat: { mean: 1.5, squared_diffs: 0.5 },
+      plan_lat: { mean: 0.8, squared_diffs: 0.2 },
+    };
+    expect(addExperimentStatsInfo(null, b)).toBe(b);
+  });
+
+  it("returns a when b is null", () => {
+    const a = {
+      count: Long.fromInt(2),
+      run_lat: { mean: 1.0, squared_diffs: 0.3 },
+      plan_lat: { mean: 0.5, squared_diffs: 0.1 },
+    };
+    expect(addExperimentStatsInfo(a, null)).toBe(a);
+  });
+
+  it("aggregates two non-null inputs", () => {
+    const a = {
+      count: Long.fromInt(3),
+      run_lat: { mean: 2.0, squared_diffs: 1.0 },
+      plan_lat: { mean: 1.0, squared_diffs: 0.5 },
+    };
+    const b = {
+      count: Long.fromInt(2),
+      run_lat: { mean: 3.0, squared_diffs: 0.5 },
+      plan_lat: { mean: 1.5, squared_diffs: 0.2 },
+    };
+
+    const result = addExperimentStatsInfo(a, b);
+
+    // count should be summed.
+    expect(result.count.toInt()).toBe(5);
+
+    // run_lat and plan_lat should produce finite, non-NaN values.
+    expect(Number.isFinite(result.run_lat.mean)).toBe(true);
+    expect(Number.isNaN(result.run_lat.mean)).toBe(false);
+    expect(Number.isFinite(result.run_lat.squared_diffs)).toBe(true);
+    expect(Number.isNaN(result.run_lat.squared_diffs)).toBe(false);
+
+    expect(Number.isFinite(result.plan_lat.mean)).toBe(true);
+    expect(Number.isNaN(result.plan_lat.mean)).toBe(false);
+    expect(Number.isFinite(result.plan_lat.squared_diffs)).toBe(true);
+    expect(Number.isNaN(result.plan_lat.squared_diffs)).toBe(false);
+
+    // Weighted mean: (2.0*3 + 3.0*2) / 5 = 2.4
+    expect(result.run_lat.mean).toBeCloseTo(2.4, 6);
+    // Weighted mean: (1.0*3 + 1.5*2) / 5 = 1.2
+    expect(result.plan_lat.mean).toBeCloseTo(1.2, 6);
+  });
+
+  it("handles zero counts without producing NaN", () => {
+    const a = {
+      count: Long.fromInt(0),
+      run_lat: { mean: 0, squared_diffs: 0 },
+      plan_lat: { mean: 0, squared_diffs: 0 },
+    };
+    const b = {
+      count: Long.fromInt(0),
+      run_lat: { mean: 0, squared_diffs: 0 },
+      plan_lat: { mean: 0, squared_diffs: 0 },
+    };
+
+    const result = addExperimentStatsInfo(a, b);
+
+    expect(result.count.toInt()).toBe(0);
+    // With zero counts the function uses countA || 1 / countB || 1
+    // to avoid division by zero — verify no NaN.
+    expect(Number.isNaN(result.run_lat.mean)).toBe(false);
+    expect(Number.isNaN(result.plan_lat.mean)).toBe(false);
   });
 });
 
