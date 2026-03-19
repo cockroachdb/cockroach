@@ -269,6 +269,8 @@ func (p *Partitioner) RegisterTestingKnobs(id roachpb.NodeID, knobs *ContextTest
 		}
 		return nil
 	}
+	// TODO(pav-kv): fail if the interceptors are already set, instead of silently
+	// overriding them.
 	knobs.UnaryClientInterceptor =
 		func(target string, class rpcbase.ConnectionClass) grpc.UnaryClientInterceptor {
 			return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {

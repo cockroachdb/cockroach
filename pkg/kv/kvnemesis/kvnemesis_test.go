@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -29,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -58,12 +56,7 @@ import (
 var defaultNumSteps = envutil.EnvOrDefaultInt("COCKROACH_KVNEMESIS_STEPS", 100)
 
 func (cfg kvnemesisTestCfg) testClusterArgs(
-	ctx context.Context,
-	t testing.TB,
-	rng *rand.Rand,
-	tr *SeqTracker,
-	partitioner *rpc.Partitioner,
-	mode TestMode,
+	ctx context.Context, t testing.TB, rng *rand.Rand, tr *SeqTracker, mode TestMode,
 ) (base.TestClusterArgs, stop.Closer) {
 	storeKnobs := &kvserver.StoreTestingKnobs{
 		DisableRaftLogQueue:                   true,
@@ -279,12 +272,12 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 	lisReg := listenerutil.NewListenerRegistry()
 	args := base.TestClusterArgs{
 		ReusableListenerReg: lisReg,
+		EnablePartitioner:   true,
 		ServerArgs:          commonServerArgs,
 		ServerArgsPerNode: func() map[int]base.TestServerArgs {
 			perNode := make(map[int]base.TestServerArgs)
 			for i := 0; i < cfg.numNodes; i++ {
 				nodeId := i + 1
-				ctk := rpc.ContextTestingKnobs{}
 				// Test clock injection
 				//
 				// We need to stay away within 80% of the max offset, so we set our
@@ -297,12 +290,10 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 				period := 1 * time.Second
 				clock := NewTestClock(maxOffset, period, rng)
 				t.Logf("n%d using %s", nodeId, clock)
-				partitioner.RegisterTestingKnobs(roachpb.NodeID(nodeId), &ctk)
 				perNodeServerArgs := commonServerArgs
 				perNodeServerArgs.Knobs.Server = &server.TestingKnobs{
-					StickyVFSRegistry:   reg,
-					WallClock:           clock,
-					ContextTestingKnobs: ctk,
+					StickyVFSRegistry: reg,
+					WallClock:         clock,
 				}
 				perNodeServerArgs.Locality = roachpb.Locality{
 					Tiers: []roachpb.Tier{{Key: "node", Value: fmt.Sprintf("n%d", nodeId)}},
@@ -701,17 +692,10 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	// 4 nodes so we have somewhere to move 3x replicated ranges to.
 	ctx := context.Background()
 	tr := &SeqTracker{}
-	var partitioner rpc.Partitioner
-	args, closer := cfg.testClusterArgs(ctx, t, rng, tr, &partitioner, cfg.mode)
+	args, closer := cfg.testClusterArgs(ctx, t, rng, tr, cfg.mode)
 	tc := testcluster.StartTestCluster(t, cfg.numNodes, args)
 	tc.Stopper().AddCloser(closer)
 	defer tc.Stopper().Stop(ctx)
-	for i := 0; i < cfg.numNodes; i++ {
-		g := tc.Servers[i].StorageLayer().GossipI().(*gossip.Gossip)
-		addr := g.GetNodeAddr().String()
-		nodeID := g.NodeID.Get()
-		partitioner.RegisterNodeAddr(addr, nodeID)
-	}
 	dbs, sqlDBs := make([]*kv.DB, cfg.numNodes), make([]*gosql.DB, cfg.numNodes)
 	for i := 0; i < cfg.numNodes; i++ {
 		dbs[i] = tc.Server(i).DB()
@@ -748,7 +732,7 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 
 	logger := newTBridge(t)
 	defer dumpRaftLogsOnFailure(t, logger.ll.dir, tc.Servers)
-	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger, Partitioner: &partitioner, ServerController: tc}
+	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger, Partitioner: tc.Partitioner(), ServerController: tc}
 	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, cfg.mode, dbs...)
 
 	logMetricsReport(t, tc)
