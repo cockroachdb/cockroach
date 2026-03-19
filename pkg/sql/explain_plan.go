@@ -9,12 +9,15 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -24,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 )
 
@@ -141,6 +146,13 @@ func (e *explainPlanNode) startExec(params runParams) error {
 				return err
 			}
 			rows = ob.BuildStringRows()
+			if e.options.Flags[tree.ExplainFlagVerbose] && len(params.p.stmt.Hints) > 0 {
+				hideIDs := params.p.execCfg.TestingKnobs.DeterministicExplain
+				rows = append(rows, buildStmtHintTreeRows(
+					params.p.stmt.Hints, params.p.stmt.HintIDs, hideIDs,
+					params.p.instrumentation.runtimeHintErrors,
+				)...)
+			}
 			if e.options.Mode == tree.ExplainDistSQL {
 				rows = append(rows, "", fmt.Sprintf("Diagram: %s", diagramURL.String()))
 			}
@@ -278,6 +290,108 @@ func closeExplainPlan(ctx context.Context, ep *explain.Plan) {
 			closeExplainPlan(ctx, tp.(*explain.Plan))
 		}
 	}
+}
+
+// buildStmtHintTreeRows builds the verbose EXPLAIN output for statement hints,
+// returning rows for applied and skipped hint trees. If hideIDs is true, hint
+// IDs are omitted for deterministic test output. runtimeErrors contains
+// per-hint runtime errors keyed by hint index, tracked separately from
+// hint.Err to avoid mutating shared hint state.
+func buildStmtHintTreeRows(
+	allHints []hints.Hint, hintIDs []int64, hideIDs bool, runtimeErrors map[int]error,
+) []string {
+	var applied, skipped []int
+	for i := range allHints {
+		if !allHints[i].Enabled() || runtimeErrors[i] != nil {
+			skipped = append(skipped, i)
+		} else {
+			applied = append(applied, i)
+		}
+	}
+
+	var rows []string
+	if len(applied) > 0 {
+		rows = append(rows, "") // blank separator
+		rows = append(rows, buildHintTree(
+			fmt.Sprintf("applied statement hints: %s",
+				humanizeutil.Count(uint64(len(applied)))),
+			allHints, hintIDs, applied, hideIDs, runtimeErrors,
+		)...)
+	}
+	if len(skipped) > 0 {
+		rows = append(rows, "") // blank separator
+		rows = append(rows, buildHintTree(
+			fmt.Sprintf("skipped statement hints: %s",
+				humanizeutil.Count(uint64(len(skipped)))),
+			allHints, hintIDs, skipped, hideIDs, runtimeErrors,
+		)...)
+	}
+	return rows
+}
+
+// getHintErr returns the effective error for a hint, checking both the
+// hint's own Err field and the per-hint runtime errors tracked on the
+// instrumentation helper.
+func getHintErr(allHints []hints.Hint, runtimeErrors map[int]error, idx int) error {
+	if idx < len(allHints) && allHints[idx].Err != nil {
+		return allHints[idx].Err
+	}
+	return runtimeErrors[idx]
+}
+
+// buildHintTree builds a treeprinter tree for a group of hints and returns the
+// formatted rows.
+func buildHintTree(
+	rootLabel string,
+	allHints []hints.Hint,
+	hintIDs []int64,
+	indices []int,
+	hideIDs bool,
+	runtimeErrors map[int]error,
+) []string {
+	tp := treeprinter.New()
+	root := tp.Child(rootLabel)
+	for _, idx := range indices {
+		hint := &allHints[idx]
+		var label string
+		if hideIDs {
+			label = hint.HintType()
+		} else if idx < len(hintIDs) {
+			label = fmt.Sprintf("%s (id: %d)", hint.HintType(), hintIDs[idx])
+		} else {
+			if buildutil.CrdbTestBuild {
+				panic(errors.AssertionFailedf(
+					"hint index %d out of range for hintIDs (len %d)", idx, len(hintIDs),
+				))
+			}
+			label = hint.HintType()
+		}
+		node := root.Child(label)
+
+		switch t := hint.GetValue().(type) {
+		case *hintpb.InjectHints:
+			node.AddLine(fmt.Sprintf("donor: %s", t.DonorSQL))
+		case *hintpb.SessionVariableHint:
+			node.AddLine(fmt.Sprintf("variable: %s", t.VariableName))
+			node.AddLine(fmt.Sprintf("value: %s", t.VariableValue))
+		}
+
+		var skipErr error
+		if idx < len(allHints) && allHints[idx].Err != nil {
+			skipErr = allHints[idx].Err
+		} else {
+			skipErr = runtimeErrors[idx]
+		}
+		if skipErr != nil {
+			errMsg := skipErr.Error()
+			// Ensure the error message is single-line for clean tree output.
+			if i := strings.IndexByte(errMsg, '\n'); i >= 0 {
+				errMsg = errMsg[:i]
+			}
+			node.AddLine(fmt.Sprintf("skip reason: %s", errMsg))
+		}
+	}
+	return tp.FormattedRows()
 }
 
 func (e *explainPlanNode) Close(ctx context.Context) {
