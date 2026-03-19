@@ -16,8 +16,8 @@ bazel build //pkg/cmd/bazci
 
 EXTRA_PARAMS=""
 
-if tc_bors_branch; then
-  # enable up to 1 retry (2 attempts, worst-case) per test executable to report flakes but only on release branches and staging.
+if tc_release_branch || is_trunk_branch; then
+  # enable up to 1 retry (2 attempts, worst-case) per test executable to report flakes on release/trunk branches.
   EXTRA_PARAMS=" --flaky_test_attempts=2"
 fi
 
