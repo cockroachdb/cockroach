@@ -266,9 +266,9 @@ tc_release_branch() {
   [[ "$branch" == master || "$branch" == release-* || "$branch" == provisional_*  || "$branch" == "staging-"* ]]
 }
 
-tc_bors_branch() {
+is_trunk_branch() {
   branch=$(tc_build_branch)
-  [[ "$branch" == staging ]]
+  [[ "$branch" == trunk-merge/* ]]
 }
 
 if_tc() {
