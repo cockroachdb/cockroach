@@ -525,6 +525,18 @@ func (b *Builder) buildScanFromTableRef(
 func (b *Builder) addTable(tab cat.Table, alias *tree.TableName) *opt.TableMeta {
 	md := b.factory.Metadata()
 	tabID := md.AddTable(tab, alias)
+	// If this is a canary execution and any of the referenced tables has
+	// a canary window with genuinely different canary and stable stats,
+	// disable memo reuse so the canary-built memo is never written to the
+	// query cache or prepared-statement cache. When stats don't actually
+	// differ (e.g., the canary window has expired), the canary plan
+	// equals the stable plan, so caching it is safe.
+	if !b.DisableMemoReuse &&
+		tab.StatsCanaryWindow() > 0 &&
+		tab.CanaryAndStableStatsDiffer() &&
+		b.evalCtx.StatsRollout == eval.StatsRolloutCanary {
+		b.DisableMemoReuse = true
+	}
 	return md.TableMeta(tabID)
 }
 

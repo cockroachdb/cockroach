@@ -300,7 +300,7 @@ func (mb *mutationBuilder) init(b *Builder, opName string, tab cat.Table, alias 
 	mb.vectorIndexDelPartitionColIDs = getSlice(numVectorIndexes)
 
 	// Add the table and its columns (including mutation columns) to metadata.
-	mb.tabID = mb.md.AddTable(tab, &mb.alias)
+	mb.tabID = mb.b.addTable(tab, &mb.alias).MetaID
 }
 
 // setFetchColIDs sets the list of columns that are fetched in order to provide
