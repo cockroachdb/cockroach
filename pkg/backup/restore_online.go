@@ -986,42 +986,32 @@ func setDescriptorsOffline(
 		}
 	}
 
+	var descIDs []descpb.ID
 	for i := range details.FunctionDescs {
-		mutableFunc, err := descCol.MutableByID(txn.KV()).Function(ctx, details.FunctionDescs[i].ID)
-		if err != nil {
-			return err
-		}
-		if err := writeDesc(mutableFunc); err != nil {
-			return err
-		}
+		descIDs = append(descIDs, details.FunctionDescs[i].ID)
 	}
-
 	for i := range details.DatabaseDescs {
-		mutableDB, err := descCol.MutableByID(txn.KV()).Database(ctx, details.DatabaseDescs[i].ID)
-		if err != nil {
-			return err
-		}
-		if err := writeDesc(mutableDB); err != nil {
-			return err
-		}
+		descIDs = append(descIDs, details.DatabaseDescs[i].ID)
 	}
-
 	for i := range details.TypeDescs {
-		mutableType, err := descCol.MutableByID(txn.KV()).Type(ctx, details.TypeDescs[i].ID)
-		if err != nil {
-			return err
-		}
-		if err := writeDesc(mutableType); err != nil {
-			return err
-		}
+		descIDs = append(descIDs, details.TypeDescs[i].ID)
+	}
+	for i := range details.SchemaDescs {
+		descIDs = append(descIDs, details.SchemaDescs[i].ID)
 	}
 
-	for i := range details.SchemaDescs {
-		mutableSchema, err := descCol.MutableByID(txn.KV()).Schema(ctx, details.SchemaDescs[i].ID)
+	for _, id := range descIDs {
+		desc, err := descCol.MutableByID(txn.KV()).Desc(ctx, id)
 		if err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				continue
+			}
 			return err
 		}
-		if err := writeDesc(mutableSchema); err != nil {
+		if desc.Dropped() {
+			continue
+		}
+		if err := writeDesc(desc); err != nil {
 			return err
 		}
 	}

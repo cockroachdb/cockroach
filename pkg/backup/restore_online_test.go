@@ -1348,3 +1348,50 @@ func TestOnlineRestoreWithDistFlow(t *testing.T) {
 			"expected non-zero approx_bytes from coordinator path")
 	})
 }
+
+// TestOnlineRestoreCleanupDroppedDescs verifies that reverting an online
+// restore's download job succeeds even if the restored descriptors (table,
+// function, schema, type) have been dropped.
+func TestOnlineRestoreCleanupDroppedDescs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+	defer cleanupFn()
+
+	trueExternalStorage := "nodelocal://1/backup"
+	externalStorage := backuptestutils.GetExternalStorageURI(t, trueExternalStorage, "backup", sqlDB)
+
+	sqlDB.Exec(t, "CREATE SCHEMA data.myschema")
+	sqlDB.Exec(t, "CREATE TYPE data.mytype AS ENUM ('a', 'b', 'c')")
+	sqlDB.Exec(t, "CREATE TABLE data.mytable (id INT PRIMARY KEY, val data.mytype)")
+	sqlDB.Exec(t, "INSERT INTO data.mytable VALUES (1, 'a'), (2, 'b')")
+	sqlDB.Exec(t, "CREATE FUNCTION data.myfunc() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$")
+
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'")
+	var linkJobID int
+	sqlDB.QueryRow(t, fmt.Sprintf(
+		"RESTORE DATABASE data FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, new_db_name=restored, detached",
+		externalStorage,
+	)).Scan(&linkJobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobspb.JobID(linkJobID))
+
+	var downloadJobID int
+	sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
+	jobutils.WaitForJobToPause(t, sqlDB, jobspb.JobID(downloadJobID))
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+
+	sqlDB.Exec(t, "USE restored")
+	sqlDB.Exec(t, "DROP FUNCTION myfunc")
+	sqlDB.Exec(t, "DROP TABLE mytable")
+	sqlDB.Exec(t, "DROP TYPE mytype")
+	sqlDB.Exec(t, "DROP SCHEMA myschema")
+	sqlDB.Exec(t, "USE data")
+
+	sqlDB.Exec(t, fmt.Sprintf("CANCEL JOB %d", downloadJobID))
+	jobutils.WaitForJobToCancel(t, sqlDB, jobspb.JobID(downloadJobID))
+}
