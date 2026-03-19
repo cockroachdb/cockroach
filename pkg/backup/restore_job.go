@@ -3594,9 +3594,15 @@ func (r *restoreResumer) dropDescriptors(
 		// TypeDescriptors don't have a GC job process, so we can just write them
 		// as dropped here.
 		typDesc := details.TypeDescs[i]
-		mutType, err := descsCol.MutableByID(txn.KV()).Type(ctx, typDesc.ID)
+		mutType, err := descsCol.MutableByID(txn.KV()).Desc(ctx, typDesc.ID)
 		if err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				continue
+			}
 			return err
+		}
+		if mutType.Dropped() {
+			continue
 		}
 		mutType.SetDropped()
 
@@ -3618,9 +3624,15 @@ func (r *restoreResumer) dropDescriptors(
 
 	for i := range details.FunctionDescs {
 		fnDesc := details.FunctionDescs[i]
-		mutFn, err := descsCol.MutableByID(txn.KV()).Function(ctx, fnDesc.ID)
+		mutFn, err := descsCol.MutableByID(txn.KV()).Desc(ctx, fnDesc.ID)
 		if err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				continue
+			}
 			return err
+		}
+		if mutFn.Dropped() {
+			continue
 		}
 		mutFn.SetDropped()
 		if err := descsCol.DeleteDescToBatch(ctx, kvTrace, fnDesc.ID, b); err != nil {
@@ -3692,7 +3704,13 @@ func (r *restoreResumer) dropDescriptors(
 
 		mutSchema, err := descsCol.MutableByID(txn.KV()).Desc(ctx, schemaDesc.GetID())
 		if err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				continue
+			}
 			return err
+		}
+		if mutSchema.Dropped() {
+			continue
 		}
 		entry, hasEntry := dbsWithDeletedSchemas[schemaDesc.GetParentID()]
 		if !hasEntry {
@@ -3777,7 +3795,13 @@ func (r *restoreResumer) dropDescriptors(
 
 		db, err := descsCol.MutableByID(txn.KV()).Desc(ctx, dbDesc.GetID())
 		if err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				continue
+			}
 			return err
+		}
+		if db.Dropped() {
+			continue
 		}
 
 		// Mark db as dropped and add uncommitted version to pass pre-txn
