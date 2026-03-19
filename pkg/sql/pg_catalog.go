@@ -1569,13 +1569,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 					privilegeObjectType := targetObjectToPrivilegeObject[objectType]
 					arr := tree.NewDArray(types.AclItem)
 					for _, userPrivs := range privs.Users {
-						var user string
-						if userPrivs.UserProto.Decode().IsPublicRole() {
-							// Postgres represents Public in defacl as an empty string.
-							user = ""
-						} else {
-							user = userPrivs.UserProto.Decode().Normalized()
-						}
+						user := userPrivs.UserProto.Decode()
 
 						privileges, err := privilege.ListFromBitField(
 							userPrivs.Privileges, privilegeObjectType,
@@ -1635,7 +1629,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 						// when objectType is not privilege.Types or privilege.Routines
 						if publicHasUsage {
 							defaclItem, err := createDefACLItem(
-								"" /* public role */, privilege.List{privilegeKind}, privilege.List{}, privilegeObjectType,
+								username.PublicRoleName(), privilege.List{privilegeKind}, privilege.List{}, privilegeObjectType,
 							)
 							if err != nil {
 								return err
@@ -1649,7 +1643,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 							}
 						} else if roleHasAllPrivileges {
 							defaclItem, err := createDefACLItem(
-								defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized(),
+								defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode(),
 								privilege.List{privilege.ALL}, privilege.List{}, privilegeObjectType,
 							)
 							if err != nil {
@@ -1718,25 +1712,36 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 }
 
 func createDefACLItem(
-	user string,
+	user username.SQLUsername,
 	privileges privilege.List,
 	grantOptions privilege.List,
 	privilegeObjectType privilege.ObjectType,
 ) (string, error) {
-	acl, err := privileges.ListToACL(
-		grantOptions,
-		privilegeObjectType,
-	)
-	if err != nil {
-		return "", err
+	// Expand ALL into the underlying privileges for this object type.
+	expanded := privileges
+	if privileges.Contains(privilege.ALL) {
+		var err error
+		expanded, err = privilege.GetValidPrivilegesForObject(privilegeObjectType)
+		if err != nil {
+			return "", err
+		}
 	}
-	return fmt.Sprintf(`%s=%s/%s`,
+	expandedGO := grantOptions
+	if grantOptions.Contains(privilege.ALL) {
+		var err error
+		expandedGO, err = privilege.GetValidPrivilegesForObject(privilegeObjectType)
+		if err != nil {
+			return "", err
+		}
+	}
+	// Empty grantor: CockroachDB does not track grantors.
+	// See: https://github.com/cockroachdb/cockroach/issues/67442.
+	item := privilege.NewACLItem(
 		user,
-		acl,
-		// TODO(richardjcai): CockroachDB currently does not track grantors
-		//    See: https://github.com/cockroachdb/cockroach/issues/67442.
-		"", /* grantor */
-	), nil
+		username.MakeSQLUsernameFromPreNormalizedString(""),
+		expanded, expandedGO,
+	)
+	return item.String(), nil
 }
 
 // privilegeDescriptorToACLArray converts a PrivilegeDescriptor into a
@@ -1759,67 +1764,56 @@ func privilegeDescriptorToACLArray(
 		return tree.DNull, nil
 	}
 	owner := privDesc.Owner()
-	quotedOwner := privilege.QuoteACLIdentifier(owner.Normalized())
 
-	var aclItems []string
+	var aclItems []privilege.ACLItem
 	for _, userPriv := range privDesc.Users {
-		var grantee string
-		if userPriv.User().IsPublicRole() {
-			// Empty grantee means PUBLIC in aclitem format.
-			grantee = ""
-		} else {
-			grantee = privilege.QuoteACLIdentifier(userPriv.User().Normalized())
-		}
+		grantee := userPriv.User()
 		privileges, err := privilege.ListFromBitField(
 			userPriv.Privileges, objectType,
 		)
 		if err != nil {
 			return nil, err
 		}
+		// Expand ALL into the underlying privileges.
+		if privileges.Contains(privilege.ALL) {
+			privileges, err = privilege.GetValidPrivilegesForObject(objectType)
+			if err != nil {
+				return nil, err
+			}
+		}
 		// Strip grant options for admin, root, and owner — their grant
 		// options are implicit in PostgreSQL convention.
 		var grantOptions privilege.List
-		user := userPriv.User()
-		if !user.IsAdminRole() && !user.IsRootUser() && user != owner {
+		if !grantee.IsAdminRole() && !grantee.IsRootUser() && grantee != owner {
 			grantOptions, err = privilege.ListFromBitField(
 				userPriv.WithGrantOption, objectType,
 			)
 			if err != nil {
 				return nil, err
 			}
-		}
-		acl, err := privileges.ListToACL(grantOptions, objectType)
-		if err != nil {
-			return nil, err
+			if grantOptions.Contains(privilege.ALL) {
+				grantOptions, err = privilege.GetValidPrivilegesForObject(objectType)
+				if err != nil {
+					return nil, err
+				}
+			}
 		}
 		// The owner is used as the grantor because CockroachDB does not
 		// track the actual grantor. See #67442.
-		aclItems = append(aclItems, fmt.Sprintf("%s=%s/%s", grantee, acl, quotedOwner))
+		aclItems = append(aclItems, privilege.NewACLItem(
+			grantee, owner, privileges, grantOptions,
+		))
 	}
 
-	// Compare against defaults using set comparison. If the actual
-	// privileges match the defaults, return NULL.
-	defaults, err := privilege.DefaultACLItems(objectType, owner)
-	if err == nil && len(aclItems) == len(defaults) {
-		actualSet := make(map[string]bool, len(aclItems))
-		for _, item := range aclItems {
-			actualSet[item] = true
-		}
-		allMatch := true
-		for _, d := range defaults {
-			if !actualSet[d] {
-				allMatch = false
-				break
-			}
-		}
-		if allMatch {
-			return tree.DNull, nil
-		}
+	// If the actual privileges match the defaults, return NULL.
+	isDefault, err := privilege.IsDefaultACL(aclItems, objectType, owner)
+	if err == nil && isDefault {
+		return tree.DNull, nil
 	}
 
 	arr := tree.NewDArray(types.AclItem)
-	for _, aclItem := range aclItems {
-		d, err := tree.NewDACLItem(aclItem)
+	for _, item := range aclItems {
+		d, err := tree.NewDACLItem(item.String())
 		if err != nil {
 			return nil, err
 		}

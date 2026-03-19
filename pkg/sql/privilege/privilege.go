@@ -108,7 +108,12 @@ var (
 )
 
 // Mask returns the bitmask for a given privilege.
+// Returns 0 if called on a pg-only pseudo-privilege (SET, ALTERSYSTEM) whose
+// Kind value exceeds the valid bitmask range.
 func (k Kind) Mask() uint64 {
+	if k > largestKind {
+		return 0
+	}
 	return 1 << k
 }
 

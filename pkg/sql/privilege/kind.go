@@ -6,6 +6,7 @@
 package privilege
 
 import (
+	"math"
 	"strings"
 
 	"github.com/cockroachdb/errors"
@@ -73,6 +74,14 @@ const (
 	MAINTAIN               Kind = 43
 	TEMPORARY              Kind = 44
 	largestKind                 = TEMPORARY
+
+	// SET and ALTERSYSTEM are PostgreSQL ACL-only pseudo-privileges.
+	// They exist solely for ACL character mapping ('s' and 'A') used
+	// by acldefault, aclexplode, and makeaclitem. They have no
+	// corresponding CockroachDB privilege and must never be used in
+	// bitmask operations (Mask/ToBitField/ListFromBitField).
+	SET         Kind = math.MaxUint32 - 1
+	ALTERSYSTEM Kind = math.MaxUint32
 )
 
 var isDeprecatedKind = map[Kind]bool{
@@ -174,6 +183,10 @@ func (k Kind) InternalKey() KindInternalKey {
 		return "MAINTAIN"
 	case TEMPORARY:
 		return "TEMPORARY"
+	case SET:
+		return "SET"
+	case ALTERSYSTEM:
+		return "ALTERSYSTEM"
 	default:
 		panic(errors.AssertionFailedf("unhandled kind: %d", int(k)))
 	}
@@ -191,6 +204,8 @@ func (k Kind) DisplayName() KindDisplayName {
 		return "MANAGEVIRTUALCLUSTER"
 	case REPAIRCLUSTER:
 		return "REPAIRCLUSTER"
+	case ALTERSYSTEM:
+		return "ALTER SYSTEM"
 	default:
 		// Unless we have an exception above, the internal
 		// key is also a valid display name.
@@ -249,4 +264,13 @@ func init() {
 
 	// TEMP is a PostgreSQL-compatible alias for TEMPORARY.
 	ByDisplayName["TEMP"] = TEMPORARY
+
+	// Register ACL-only pseudo-privileges. These are above largestKind
+	// so they're excluded from AllPrivileges and privilege validation,
+	// but they need ByDisplayName entries for ACL char mapping.
+	for _, k := range []Kind{SET, ALTERSYSTEM} {
+		ByDisplayName[k.DisplayName()] = k
+		ByDisplayName[KindDisplayName(k.InternalKey())] = k
+		ByInternalKey[k.InternalKey()] = k
+	}
 }
