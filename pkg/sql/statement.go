@@ -188,8 +188,9 @@ func (s *Statement) ReloadHintsIfStale(
 		len(s.Hints), s.HintIDs,
 	)
 
-	for i, hint := range s.Hints {
-		if !hint.Enabled || hint.Err != nil {
+	for i := range s.Hints {
+		hint := &s.Hints[i]
+		if !hint.Enabled() {
 			continue
 		}
 		if hd := hint.HintInjectionDonor; hd != nil && s.ASTWithInjectedHints == nil {
@@ -200,6 +201,7 @@ func (s *Statement) ReloadHintsIfStale(
 				)
 				// Do not return the error. Instead we'll simply execute the query
 				// without this hint.
+				hint.Err = err
 				continue
 			}
 			injectedAST, injected, err := hd.InjectHints(ast)
@@ -209,6 +211,7 @@ func (s *Statement) ReloadHintsIfStale(
 				)
 				// Do not return the error. Instead we'll simply execute the query
 				// without this hint.
+				hint.Err = err
 				continue
 			}
 			if injected {

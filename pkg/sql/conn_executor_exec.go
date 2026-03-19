@@ -4802,7 +4802,7 @@ func (ex *connExecutor) applySessionVariableHints(
 	var pushedSessionData bool
 	for i := range stmt.Hints {
 		hint := &stmt.Hints[i]
-		if !hint.Enabled || hint.Err != nil || hint.SessionVariable == nil {
+		if !hint.Enabled() || hint.SessionVariable == nil {
 			continue
 		}
 		varHint := hint.SessionVariable
@@ -4811,6 +4811,7 @@ func (ex *connExecutor) applySessionVariableHints(
 			pushedSessionData = true
 		}
 		if err := ex.applySessionVariableHint(ctx, p, varHint); err != nil {
+			p.instrumentation.recordHintError(i, err)
 			log.Eventf(ctx, "skipping session variable hint for %s: %v",
 				redact.Safe(varHint.VariableName), err)
 		} else {

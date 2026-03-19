@@ -323,6 +323,16 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) error {
 		// planning again without injected hints.
 		log.Eventf(ctx, "planning with injected hints failed with: %v", err)
 		opc.log(ctx, "falling back to planning without injected hints")
+		// Record the injection error so that EXPLAIN output correctly
+		// reflects this hint as skipped. The error is stored on the
+		// instrumentation helper rather than on the hint itself to avoid
+		// mutating shared hint state across prepared statement executions.
+		for i := range p.stmt.Hints {
+			if p.stmt.Hints[i].HintInjectionDonor != nil && p.stmt.Hints[i].Enabled() {
+				p.instrumentation.recordHintError(i, err)
+				break
+			}
+		}
 	}
 	opc.reset(ctx)
 	return p.makeOptimizerPlanInternal(ctx)

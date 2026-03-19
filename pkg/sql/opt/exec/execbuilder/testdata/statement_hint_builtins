@@ -72,7 +72,7 @@ query T
 EXPLAIN SELECT a FROM abc WHERE a = 10
 ----
 distribution: local
-statement hints count: 1
+statement hints: 1
 ·
 • filter
 │ filter: a = 10
@@ -89,7 +89,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 plan type: custom
-statement hints count: 1
+statement hints: 1
 regions: <hidden>
 ·
 • filter
@@ -156,7 +156,7 @@ query T
 EXPLAIN SELECT a, x FROM abc JOIN xy ON y = b WHERE a = 10
 ----
 distribution: local
-statement hints count: 1
+statement hints: 1
 ·
 • hash join
 │ equality: (b) = (y)
@@ -179,7 +179,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 plan type: custom
-statement hints count: 1
+statement hints: 1
 rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
 regions: <hidden>
 ·
@@ -245,7 +245,7 @@ query T
 EXPLAIN SELECT a FROM abc@abc_pkey WHERE b = 10
 ----
 distribution: local
-statement hints count: 1
+statement hints: 1
 ·
 • scan
   missing stats
@@ -259,7 +259,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 plan type: custom
-statement hints count: 1
+statement hints: 1
 regions: <hidden>
 ·
 • scan
@@ -307,7 +307,7 @@ query T
 EXPLAIN SELECT a + 1 FROM abc WHERE a = 10
 ----
 distribution: local
-statement hints count: 1
+statement hints: 1 (0 applied, 1 skipped)
 ·
 • render
 │
@@ -323,7 +323,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 plan type: custom
-statement hints count: 1
+statement hints: 1 (0 applied, 1 skipped)
 regions: <hidden>
 ·
 • render
@@ -375,7 +375,7 @@ query T
 EXPLAIN SELECT c FROM xy JOIN abc ON c = y WHERE x = 10
 ----
 distribution: local
-statement hints count: 1
+statement hints: 1 (0 applied, 1 skipped)
 ·
 • hash join
 │ equality: (c) = (y)
@@ -398,7 +398,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 plan type: generic, re-optimized
-statement hints count: 1
+statement hints: 1 (0 applied, 1 skipped)
 rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
 regions: <hidden>
 ·
@@ -472,7 +472,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 plan type: custom
-statement hints count: 1
+statement hints: 1
 regions: <hidden>
 ·
 • filter
@@ -542,7 +542,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 plan type: custom
-statement hints count: 1
+statement hints: 1
 regions: <hidden>
 ·
 • render
@@ -662,7 +662,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 plan type: custom
-statement hints count: 1
+statement hints: 1 (0 applied, 1 skipped)
 regions: <hidden>
 ·
 • group (scalar)
@@ -732,7 +732,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 plan type: custom
-statement hints count: 1
+statement hints: 1 (0 applied, 1 skipped)
 regions: <hidden>
 ·
 • group (scalar)
@@ -815,7 +815,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 plan type: generic, reused
-statement hints count: 1
+statement hints: 1
 regions: <hidden>
 ·
 • render
@@ -908,7 +908,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 plan type: generic, reused
-statement hints count: 1
+statement hints: 1
 regions: <hidden>
 ·
 • render
@@ -970,7 +970,7 @@ query T
 EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
 ----
 distribution: local
-statement hints count: 1
+statement hints: 1
 ·
 • hash join
 │ equality: (b) = (x)
@@ -994,7 +994,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 plan type: custom
-statement hints count: 1
+statement hints: 1
 rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
 regions: <hidden>
 ·
@@ -1042,7 +1042,7 @@ query T
 EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
 ----
 distribution: local
-statement hints count: 1
+statement hints: 2 (1 applied, 1 skipped)
 ·
 • lookup join
 │ table: xy@xy_pkey
@@ -1064,7 +1064,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 plan type: generic, re-optimized
-statement hints count: 1
+statement hints: 2 (1 applied, 1 skipped)
 regions: <hidden>
 ·
 • lookup join (streamer)
@@ -1131,7 +1131,7 @@ query T
 EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
 ----
 distribution: local
-statement hints count: 1
+statement hints: 3 (0 applied, 3 skipped)
 ·
 • lookup join
 │ table: xy@xy_pkey
@@ -1150,7 +1150,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 plan type: generic, re-optimized
-statement hints count: 1
+statement hints: 3 (0 applied, 3 skipped)
 regions: <hidden>
 ·
 • lookup join (streamer)
@@ -1203,7 +1203,7 @@ query T
 EXPLAIN SELECT y FROM abc JOIN xy ON x = b WHERE a = 10
 ----
 distribution: local
-statement hints count: 1
+statement hints: 5 (1 applied, 4 skipped)
 ·
 • merge join
 │ equality: (b) = (x)
@@ -1227,7 +1227,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 plan type: generic, re-optimized
-statement hints count: 1
+statement hints: 5 (1 applied, 4 skipped)
 rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
 regions: <hidden>
 ·
@@ -1316,7 +1316,7 @@ JOIN (SELECT i FROM generate_series(1, 1) g(i))
 ON b = i
 ----
 distribution: local
-statement hints count: 1
+statement hints: 1
 ·
 • merge join
 │ equality: (b) = (generate_series)
@@ -1348,7 +1348,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 plan type: custom
-statement hints count: 1
+statement hints: 1
 regions: <hidden>
 ·
 • merge join
@@ -1458,7 +1458,7 @@ query T
 EXPLAIN UPDATE abc SET c = c + 1 WHERE a > 5 AND b = 6
 ----
 distribution: local
-statement hints count: 1
+statement hints: 1
 ·
 • update
 │ table: abc
@@ -1503,7 +1503,7 @@ query T
 EXPLAIN DELETE FROM abc WHERE a > 5 AND b = 6
 ----
 distribution: local
-statement hints count: 1
+statement hints: 1
 ·
 • delete
 │ from: abc
@@ -1546,7 +1546,7 @@ query T
 EXPLAIN SELECT x FROM xy WHERE x = 5
 ----
 distribution: local
-statement hints count: 1
+statement hints: 1
 ·
 • filter
 │ filter: x = 5
@@ -1616,7 +1616,7 @@ query T
 EXPLAIN SELECT x FROM xy WHERE x = 5
 ----
 distribution: local
-statement hints count: 1
+statement hints: 1
 ·
 • filter
 │ filter: x = 5
@@ -1678,7 +1678,7 @@ query T
 EXPLAIN SELECT a, b FROM abc WHERE a = 5
 ----
 distribution: local
-statement hints count: 1
+statement hints: 1
 ·
 • filter
 │ filter: a = 5
@@ -1700,6 +1700,7 @@ query T
 EXPLAIN SELECT a, b FROM abc WHERE a = 5
 ----
 distribution: local
+statement hints: 1 (0 applied, 1 skipped)
 ·
 • scan
   missing stats
@@ -1718,7 +1719,7 @@ query T
 EXPLAIN SELECT a, b FROM abc WHERE a = 5
 ----
 distribution: local
-statement hints count: 1
+statement hints: 1
 ·
 • filter
 │ filter: a = 5
@@ -1769,7 +1770,7 @@ query T
 EXPLAIN SELECT * FROM abc WHERE b = 5
 ----
 distribution: local
-statement hints count: 1
+statement hints: 1
 ·
 • filter
 │ filter: b = 5
@@ -1817,7 +1818,7 @@ query T
 EXPLAIN SELECT * FROM abc WHERE b = 5
 ----
 distribution: local
-statement hints count: 1
+statement hints: 2 (1 applied, 1 skipped)
 ·
 • index join
 │ table: abc@abc_pkey
@@ -1839,7 +1840,7 @@ query T
 EXPLAIN SELECT * FROM abc WHERE b = 5
 ----
 distribution: local
-statement hints count: 1
+statement hints: 1
 ·
 • filter
 │ filter: b = 5
