@@ -54,12 +54,21 @@ var defaultTaskLimit = envutil.EnvOrDefaultInt(
 	"COCKROACH_ASYNC_INTENT_RESOLVER_TASK_LIMIT", 1000,
 )
 
+// gcMaxIntentsInFlight is the maximum number of intents that may be in-flight
+// for resolution across all concurrent GC-initiated async cleanup goroutines.
+// When a transaction has more intents than this limit, it still proceeds (the
+// IntPool truncates to capacity), effectively consuming the entire budget until
+// it completes. This prevents a node from being overwhelmed by intent
+// resolution work when MVCC GC encounters many large transactions.
+const gcMaxIntentsInFlight = 1000
+
 // maxIntentsInFlightPerCaller is the maximum number of intents that a single
 // caller of resolveIntents may have in-flight at any time. Intents are
 // submitted to the batcher in chunks of this size, collecting responses for
 // each chunk before submitting the next.
 var maxIntentsInFlightPerCaller = metamorphic.ConstantWithTestRange(
 	"max-intents-in-flight-per-caller", 1000, 1, 1000)
+
 // asyncIntentResolutionTimeout is the timeout when processing a group of
 // intents asynchronously. The timeout prevents async intent resolution from
 // getting stuck. Since processing intents is best effort, we'd rather give
@@ -182,13 +191,14 @@ type RangeCache interface {
 type IntentResolver struct {
 	Metrics Metrics
 
-	clock        *hlc.Clock
-	db           *kv.DB
-	stopper      *stop.Stopper
-	testingKnobs kvserverbase.IntentResolverTestingKnobs
-	settings     *cluster.Settings
-	ambientCtx   log.AmbientContext
-	sem          *quotapool.IntPool // semaphore to limit async goroutines
+	clock          *hlc.Clock
+	db             *kv.DB
+	stopper        *stop.Stopper
+	testingKnobs   kvserverbase.IntentResolverTestingKnobs
+	settings       *cluster.Settings
+	ambientCtx     log.AmbientContext
+	sem            *quotapool.IntPool // semaphore to limit async goroutines
+	gcIntentBudget *quotapool.IntPool // limits in-flight intents during GC
 
 	rdc RangeCache
 
@@ -258,6 +268,8 @@ func New(c Config) *IntentResolver {
 		everyAdmissionHeaderMissing: log.Every(5 * time.Minute),
 	}
 	c.Stopper.AddCloser(ir.sem.Closer("stopper"))
+	ir.gcIntentBudget = quotapool.NewIntPool("gc intent budget", gcMaxIntentsInFlight)
+	c.Stopper.OnQuiesce(func() { ir.gcIntentBudget.Close("quiescing") })
 	ir.mu.inFlightPushes = map[uuid.UUID]int{}
 	ir.mu.inFlightTxnCleanups = map[uuid.UUID]struct{}{}
 	intentResolutionSendBatchTimeout := intentResolverSendBatchTimeout
@@ -762,6 +774,19 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 			return
 		}
 		defer release()
+		// Acquire intent budget to limit the total number of in-flight intents
+		// across all concurrent GC goroutines. For transactions with more intents
+		// than the budget capacity, the IntPool truncates the acquisition to the
+		// capacity, effectively consuming the entire budget until this goroutine
+		// completes. This truncation behavior is tested by TestQuotaPoolMaxQuota
+		// in pkg/util/quotapool.
+		if numIntents := uint64(len(txn.LockSpans)); numIntents > 0 {
+			alloc, err := ir.gcIntentBudget.Acquire(ctx, numIntents)
+			if err != nil {
+				return
+			}
+			defer alloc.Release()
+		}
 		// If the transaction is not yet finalized, but expired, push it
 		// before resolving the intents.
 		if !txn.Status.IsFinalized() {
