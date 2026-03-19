@@ -95,14 +95,18 @@ LEFT JOIN pg_roles g ON g.oid = a.grantor
 LEFT JOIN pg_roles e ON e.oid = a.grantee
 ----
 grantor  grantee  privilege_type  is_grantable
-root     root     DELETE          false
+root     admin    INSERT          false
+root     admin    DELETE          false
+root     admin    MAINTAIN        false
+root     admin    SELECT          false
+root     admin    TRIGGER         false
+root     admin    UPDATE          false
+root     root     UPDATE          false
 root     root     INSERT          false
+root     root     DELETE          false
 root     root     MAINTAIN        false
-root     root     REFERENCES      false
 root     root     SELECT          false
 root     root     TRIGGER         false
-root     root     TRUNCATE        false
-root     root     UPDATE          false
 
 subtest end
 
@@ -152,37 +156,38 @@ subtest end
 
 subtest acldefault
 
-# Table defaults: owner gets arwdDxtm, PUBLIC gets nothing.
+# Table defaults: admin and root get all table privs, PUBLIC gets nothing.
+# Grant options are implicit for admin/root/owner so not marked with '*'.
 query T
 SELECT acldefault('r'::"char", 'root'::regrole)
 ----
-{root=arwdDxtm/root}
+{admin=admrtw/root,root=admrtw/root}
 
-# Database defaults: owner gets CTc, PUBLIC gets Tc.
+# Database defaults: admin and root get CREATE and CONNECT, PUBLIC gets CONNECT.
 query T
 SELECT acldefault('d'::"char", 'root'::regrole)
 ----
-{=Tc/root,root=CTc/root}
+{admin=Cc/root,=c/root,root=Cc/root}
 
-# Function defaults: owner gets X, PUBLIC gets X.
+# Function defaults: admin and root get EXECUTE, PUBLIC gets EXECUTE.
 query T
 SELECT acldefault('f'::"char", 'root'::regrole)
 ----
-{=X/root,root=X/root}
+{admin=X/root,=X/root,root=X/root}
 
-# Type defaults: owner gets U, PUBLIC gets U.
+# Type defaults: admin and root get USAGE, PUBLIC gets USAGE.
 query T
 SELECT acldefault('T'::"char", 'root'::regrole)
 ----
-{=U/root,root=U/root}
+{admin=U/root,=U/root,root=U/root}
 
-# Schema defaults: owner gets UC, no PUBLIC.
+# Schema defaults: admin and root get USAGE and CREATE, PUBLIC gets nothing.
 query T
 SELECT acldefault('n'::"char", 'root'::regrole)
 ----
-{root=UC/root}
+{admin=UC/root,root=UC/root}
 
-# Language defaults: no owner, PUBLIC gets U.
+# Language defaults: PUBLIC gets USAGE (matches PostgreSQL).
 query T
 SELECT acldefault('l'::"char", 'root'::regrole)
 ----
@@ -194,12 +199,11 @@ SELECT acldefault('c'::"char", 'root'::regrole)
 ----
 {}
 
-# Parameter defaults: owner gets sA (SET + ALTER SYSTEM).
-# Matches PostgreSQL behavior.
+# Parameter defaults: admin and root get SET + ALTER SYSTEM.
 query T
 SELECT acldefault('p'::"char", 'root'::regrole)
 ----
-{root=sA/root}
+{admin=sA/root,root=sA/root}
 
 # Error on invalid type char.
 statement error unrecognized object type abbreviation: "Z"
@@ -221,11 +225,11 @@ LEFT JOIN pg_roles g ON g.oid = a.grantor
 LEFT JOIN pg_roles e ON e.oid = a.grantee
 ----
 grantor  grantee  privilege_type  is_grantable
-root     PUBLIC   CONNECT         false
-root     PUBLIC   TEMPORARY       false
+root     admin    CREATE          false
+root     admin    CONNECT         false
 root     root     CONNECT         false
 root     root     CREATE          false
-root     root     TEMPORARY       false
+root     PUBLIC   CONNECT         false
 
 # Round-trip for PARAMETER type: aclexplode(acldefault('p', ...)) should return
 # SET and ALTER SYSTEM privileges. This verifies no silent data loss occurs
@@ -240,9 +244,11 @@ SELECT
 FROM aclexplode(acldefault('p'::"char", 'root'::regrole)) a
 LEFT JOIN pg_roles g ON g.oid = a.grantor
 LEFT JOIN pg_roles e ON e.oid = a.grantee
-ORDER BY a.privilege_type
+ORDER BY 1, 2, 3
 ----
 grantor  grantee  privilege_type  is_grantable
+root     admin    ALTER SYSTEM    false
+root     admin    SET             false
 root     root     ALTER SYSTEM    false
 root     root     SET             false
 
