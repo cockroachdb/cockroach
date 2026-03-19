@@ -397,17 +397,12 @@ func init() {
 	}
 }
 
-// ValidACLChars is the set of valid privilege characters in an aclitem string,
-// matching PostgreSQL's ACL abbreviation characters. 'R' is accepted for
-// backward compatibility (old RULE privilege) but is otherwise ignored.
-const ValidACLChars = "arwdDxtXUCTcsAm"
-
 // ValidateACLItemString validates that s has the PostgreSQL aclitem format:
 //
 //	grantee=privchars/grantor
 //
 // where grantee and grantor are role names (possibly double-quoted, or empty),
-// and privchars is a sequence of privilege characters from ValidACLChars, each
+// and privchars is a sequence of privilege characters from ACLCharToPrivName, each
 // optionally followed by '*' indicating grant option. An empty grantee means
 // PUBLIC. CockroachDB does not track grantors, so the grantor portion is
 // typically empty but still must be present after the '/'.
@@ -556,7 +551,8 @@ func ExtractACLIdentifier(s string, i int) (string, int) {
 
 // isValidACLChar returns true if c is a recognized privilege character.
 func isValidACLChar(c byte) bool {
-	return strings.IndexByte(ValidACLChars, c) >= 0
+	_, ok := ACLCharToPrivName[c]
+	return ok
 }
 
 // ListToACL converts a list of privileges to a list of Postgres
