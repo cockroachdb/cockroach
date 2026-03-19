@@ -53,9 +53,14 @@ CREATE TABLE public.canary_table (
 
 subtest canary_stats_with_query_cache
 
-# Test with stable stats, which should have the normal usage of query cache.
+# Use a positive canary_fraction so that the experiment is active, but force
+# stable stats for this session via canary_stats_mode=off. (fraction=0 would
+# mean experiment-off, i.e. StatsRolloutDefault, not StatsRolloutStable.)
 statement ok
-SET CLUSTER SETTING sql.stats.canary_fraction='0';
+SET CLUSTER SETTING sql.stats.canary_fraction='0.1';
+
+statement ok
+SET canary_stats_mode = off;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -104,13 +109,12 @@ SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message L
 query cache miss
 query cache add
 
-# Now switch to canary_fraction=1.0 so every execution rolls canary.
-# A query on canary_table (has canary window) skips the cache because we
-# cannot reuse a stable memo for canary execution. But a query on
-# no_canary_table (no canary window) should still hit the cache, since
-# canary and stable stats are identical for that table.
+# Now force canary for every execution. A query on canary_table (has canary
+# window) skips the cache because we cannot reuse a stable memo for canary
+# execution. But a query on no_canary_table (no canary window) should still
+# hit the cache, since canary and stable stats are identical for that table.
 statement ok
-SET CLUSTER SETTING sql.stats.canary_fraction='1.0';
+SET canary_stats_mode = on;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -143,10 +147,10 @@ SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message L
 ----
 query cache hit
 
-# Switching back to using stable stats, and queries on both tables should
-# hit the query cache.
+# Switching back to stable stats. Queries on both tables should still
+# hit the query cache — canary executions never evicted the cached entries.
 statement ok
-SET CLUSTER SETTING sql.stats.canary_fraction='0.0';
+SET canary_stats_mode = off;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -242,7 +246,7 @@ subtest end
 subtest prepared_statements
 
 statement ok
-SET CLUSTER SETTING sql.stats.canary_fraction='1.0';
+SET canary_stats_mode = on;
 
 statement ok
 PREPARE p1 AS SELECT * FROM canary_table WHERE x = $1;
@@ -262,7 +266,7 @@ EXECUTE p2;
 1  1
 
 statement ok
-SET CLUSTER SETTING sql.stats.canary_fraction='0';
+SET canary_stats_mode = off;
 
 subtest end
 
@@ -319,12 +323,11 @@ reusing cached memo
 reusing cached memo
 reusing cached memo
 
-# We are using canary stats for all queries now, but we don't roll the dice
-# for prepared statement. I.e. the prepare stmt would still be cached,
-# and memo would still be built with stable stats and cached within the prepared
-# statement.
+# Force canary stats for all queries now. The canary_stats_mode session
+# variable only affects execution, not PREPARE, so the prepared statement
+# memo is still built with stable stats and cached normally.
 statement ok
-SET CLUSTER SETTING sql.stats.canary_fraction='1.0';
+SET canary_stats_mode = on;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -407,11 +410,11 @@ SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message L
 reusing cached memo
 reusing cached memo
 
-# We now switch back to the "everyone use stable stats" mode. At this moment
-# executing a prepared stmt that is created while canary_fration == 1.0 should
-# still be able to use the cached memo.
+# We now switch back to stable stats. Executing a prepared stmt that was
+# created while canary_stats_mode=on should still be able to use the
+# cached memo.
 statement ok
-SET CLUSTER SETTING sql.stats.canary_fraction='0';
+SET canary_stats_mode = off;
 
 statement ok
 SET TRACING = "on", cluster;
