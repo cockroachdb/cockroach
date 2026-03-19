@@ -15,19 +15,16 @@ tc_start_block "Variable Setup"
 version=$(grep -v "^#" "$dir/../pkg/build/version.txt" | head -n1)
 if [[ -z "${DRY_RUN}" ]] ; then
   gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/cockroach"
-  gcr_staged_credentials="$GCS_CREDENTIALS_PROD"
   gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
   gcr_credentials="$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS"
 else
   gcr_staged_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/cockroach"
-  gcr_staged_credentials="$GCS_CREDENTIALS_DEV"
   gcr_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/cockroach-cloud-only"
   gcr_credentials="$GCS_CREDENTIALS_DEV"
 fi
 tc_end_block "Variable Setup"
 
-
-docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
+docker_login_gcr "$gcr_repository" "$gcr_credentials"
 
 cloud_release=
 for i in $(seq 1 10); do
@@ -48,8 +45,6 @@ fi
 
 version_cloudonly="${version}-cloudonly.${cloud_release}"
 manifest="${gcr_repository}:${version_cloudonly}"
-
-docker_login_gcr "$gcr_repository" "$gcr_credentials"
 
 # Copy the multi-arch manifest from the staged repo to the cloud-only repo
 # server-side using docker buildx imagetools.
