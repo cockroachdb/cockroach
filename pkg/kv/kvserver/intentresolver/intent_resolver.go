@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -53,6 +54,12 @@ var defaultTaskLimit = envutil.EnvOrDefaultInt(
 	"COCKROACH_ASYNC_INTENT_RESOLVER_TASK_LIMIT", 1000,
 )
 
+// maxIntentsInFlightPerCaller is the maximum number of intents that a single
+// caller of resolveIntents may have in-flight at any time. Intents are
+// submitted to the batcher in chunks of this size, collecting responses for
+// each chunk before submitting the next.
+var maxIntentsInFlightPerCaller = metamorphic.ConstantWithTestRange(
+	"max-intents-in-flight-per-caller", 1000, 1, 1000)
 // asyncIntentResolutionTimeout is the timeout when processing a group of
 // intents asynchronously. The timeout prevents async intent resolution from
 // getting stuck. Since processing intents is best effort, we'd rather give
@@ -1102,38 +1109,45 @@ func (ir *IntentResolver) resolveIntents(
 		return nil
 	}
 	// ... using their corresponding request batcher.
-	respChan := make(chan requestbatcher.Response, len(reqs))
 	batcherBypassAdmission := batchBypassAdmissionControl.Get(&ir.settings.SV)
 	if batcherBypassAdmission {
 		h = kv.AdmissionHeaderForBypass(h)
 	}
-	for _, req := range reqs {
-		var batcher *requestbatcher.RequestBatcher
-		switch req.Method() {
-		case kvpb.ResolveIntent:
-			batcher = ir.irBatcher
-		case kvpb.ResolveIntentRange:
-			batcher = ir.irRangeBatcher
-		default:
-			panic("unexpected")
-		}
-		rangeID := ir.lookupRangeID(ctx, req.Header().Key)
-		if err := batcher.SendWithChan(ctx, respChan, rangeID, req, h); err != nil {
-			return kvpb.NewError(err)
-		}
-	}
-	// Collect responses.
-	for range reqs {
-		select {
-		case resp := <-respChan:
-			if resp.Err != nil {
-				return kvpb.NewError(resp.Err)
+	// Submit intents in chunks to avoid overwhelming the node with
+	// goroutines when a transaction has many intents (e.g. 70k intents
+	// would create ~700 batcher goroutines without chunking).
+	for todoReqs := reqs; len(todoReqs) > 0; {
+		chunk := todoReqs[:min(len(todoReqs), maxIntentsInFlightPerCaller)]
+		todoReqs = todoReqs[len(chunk):]
+		respChan := make(chan requestbatcher.Response, len(chunk))
+		for _, req := range chunk {
+			var batcher *requestbatcher.RequestBatcher
+			switch req.Method() {
+			case kvpb.ResolveIntent:
+				batcher = ir.irBatcher
+			case kvpb.ResolveIntentRange:
+				batcher = ir.irRangeBatcher
+			default:
+				panic("unexpected")
 			}
-			_ = resp.Resp // ignore the response
-		case <-ctx.Done():
-			return kvpb.NewError(ctx.Err())
-		case <-ir.stopper.ShouldQuiesce():
-			return kvpb.NewError(&kvpb.NodeUnavailableError{})
+			rangeID := ir.lookupRangeID(ctx, req.Header().Key)
+			if err := batcher.SendWithChan(ctx, respChan, rangeID, req, h); err != nil {
+				return kvpb.NewError(err)
+			}
+		}
+		// Collect responses for this chunk before submitting the next.
+		for range chunk {
+			select {
+			case resp := <-respChan:
+				if resp.Err != nil {
+					return kvpb.NewError(resp.Err)
+				}
+				_ = resp.Resp // ignore the response
+			case <-ctx.Done():
+				return kvpb.NewError(ctx.Err())
+			case <-ir.stopper.ShouldQuiesce():
+				return kvpb.NewError(&kvpb.NodeUnavailableError{})
+			}
 		}
 	}
 	return nil
