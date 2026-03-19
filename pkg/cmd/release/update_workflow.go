@@ -36,7 +36,9 @@ func init() {
 
 // updateWorkflowBranches is the main command handler.
 func updateWorkflowBranches(_ *cobra.Command, _ []string) error {
-	fmt.Println("Finding latest release branch...")
+	if !printBranchOnly {
+		fmt.Fprintln(os.Stderr, "Finding latest release branch...")
+	}
 	latestBranch, err := findLatestReleaseBranch()
 	if err != nil {
 		return fmt.Errorf("failed to find latest release branch: %w", err)
@@ -47,14 +49,14 @@ func updateWorkflowBranches(_ *cobra.Command, _ []string) error {
 		return nil
 	}
 
-	fmt.Printf("Latest release branch: %s\n", latestBranch)
+	fmt.Fprintf(os.Stderr, "Latest release branch: %s\n", latestBranch)
 
-	fmt.Println("Updating workflow file...")
+	fmt.Fprintln(os.Stderr, "Updating workflow file...")
 	if err := addBranchToWorkflow(latestBranch); err != nil {
 		return fmt.Errorf("failed to update workflow file: %w", err)
 	}
 
-	fmt.Println("Successfully updated workflow file")
+	fmt.Fprintln(os.Stderr, "Successfully updated workflow file")
 	return nil
 }
 
@@ -95,7 +97,7 @@ func selectLatestBranch(branches []string) (string, error) {
 		// add .0 for patch to make it a valid semantic version
 		v, err := version.Parse("v" + versionStr + ".0")
 		if err != nil {
-			fmt.Printf("WARNING: cannot parse version from branch %s: %v\n", branch, err)
+			// Silently skip branches with non-parseable version strings (e.g. release-1.0, release-2.0).
 			continue
 		}
 		versions = append(versions, branchVersion{branch, v})
@@ -179,7 +181,7 @@ func addBranchToWorkflowFile(branch, path string) error {
 
 	// check if branch already exists
 	if slices.Contains(currentBranches, branch) {
-		fmt.Printf("Branch %s is already in the workflow file\n", branch)
+		fmt.Fprintf(os.Stderr, "Branch %s is already in the workflow file\n", branch)
 		return nil
 	}
 
@@ -213,7 +215,7 @@ func addBranchToWorkflowFile(branch, path string) error {
 		return fmt.Errorf("failed to write workflow file: %w", err)
 	}
 
-	fmt.Printf("Added branch %s to workflow file\n", branch)
+	fmt.Fprintf(os.Stderr, "Added branch %s to workflow file\n", branch)
 	return nil
 }
 
