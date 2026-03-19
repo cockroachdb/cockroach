@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/errors"
 )
 
 // TableDescriptorPollInterval controls how fast table descriptors are polled. A
@@ -401,6 +403,30 @@ var KafkaV2ErrorDetailsEnabled = settings.RegisterBoolSetting(
 	"changefeed.kafka_v2_error_details.enabled",
 	"if enabled, Kafka v2 sinks will include the message key, size, and MVCC timestamp in message too large errors",
 	true,
+	settings.WithPublic,
+)
+
+// KafkaProducerBatchMaxBytes controls the maximum size of a record batch sent
+// to Kafka by the v2 sink. franz-go enforces a minimum of 512 bytes and a
+// maximum of 256 MiB. Lowering this from the default can prevent spurious
+// MessageTooLarge errors caused by franz-go coalescing multiple in-flight
+// batches into a single broker request. See #165387.
+var KafkaProducerBatchMaxBytes = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"changefeed.kafka.producer_batch_max_bytes",
+	"the maximum size of a record batch sent to Kafka by the v2 sink "+
+		"(has no effect on the legacy v1 sink); lowering this can prevent "+
+		"spurious message-too-large errors when multiple batches are coalesced "+
+		"into a single broker request",
+	256<<20, // 256 MiB
+	settings.ByteSizeWithMinimum(512),
+	settings.WithValidateInt(func(v int64) error {
+		if v > 256<<20 {
+			return errors.Errorf("cannot be set to a value larger than %s",
+				humanizeutil.IBytes(256<<20))
+		}
+		return nil
+	}),
 	settings.WithPublic,
 )
 

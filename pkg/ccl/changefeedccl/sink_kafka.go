@@ -207,6 +207,12 @@ type saramaConfig struct {
 	RequiredAcks string `json:",omitempty"`
 
 	Version string `json:",omitempty"`
+
+	// ProducerBatchMaxBytes overrides the cluster setting
+	// changefeed.kafka.producer_batch_max_bytes for this changefeed. It controls
+	// the maximum size of a record batch sent to Kafka. Must be between 512
+	// bytes and 256 MiB.
+	ProducerBatchMaxBytes int32 `json:",omitempty"`
 }
 
 func (c saramaConfig) Validate() error {
@@ -217,6 +223,16 @@ func (c saramaConfig) Validate() error {
 	// where our call to Flush() would block forever.
 	if (c.Flush.Bytes > 0 || c.Flush.Messages > 1) && c.Flush.Frequency == 0 {
 		return errors.New("Flush.Frequency must be > 0 when Flush.Bytes > 0 or Flush.Messages > 1")
+	}
+	if c.ProducerBatchMaxBytes != 0 {
+		if c.ProducerBatchMaxBytes < 512 {
+			return errors.Errorf("ProducerBatchMaxBytes must be at least 512 bytes, got %d",
+				c.ProducerBatchMaxBytes)
+		}
+		if c.ProducerBatchMaxBytes > 256<<20 {
+			return errors.Errorf("ProducerBatchMaxBytes must be at most 256 MiB, got %d",
+				c.ProducerBatchMaxBytes)
+		}
 	}
 	return nil
 }

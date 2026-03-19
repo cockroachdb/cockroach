@@ -827,11 +827,99 @@ func TestProducerBatchMaxBytes(t *testing.T) {
 	client := fx.bs.client.(*kafkaSinkClientV2).client.(*kgo.Client)
 	actual := client.OptValue("ProducerBatchMaxBytes").(int32)
 
-	t.Run("passing", func(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
 		require.Equal(t, int32(256<<20), actual)
 	})
 
-	t.Run("failing", func(t *testing.T) {
+	t.Run("cluster_setting", func(t *testing.T) {
+		fx := newKafkaSinkV2Fx(t, withRealClient(), withSettings(func(s *cluster.Settings) {
+			changefeedbase.KafkaProducerBatchMaxBytes.Override(
+				context.Background(), &s.SV, 1<<20, /* 1 MiB */
+			)
+		}))
+		defer fx.close()
+
+		client := fx.bs.client.(*kafkaSinkClientV2).client.(*kgo.Client)
+		actual := client.OptValue("ProducerBatchMaxBytes").(int32)
 		require.Equal(t, int32(1<<20), actual)
+	})
+
+	t.Run("per_changefeed_override", func(t *testing.T) {
+		cfg := map[string]any{"ProducerBatchMaxBytes": 2 << 20} // 2 MiB
+		jsonBs, err := json.Marshal(cfg)
+		require.NoError(t, err)
+
+		fx := newKafkaSinkV2Fx(t, withRealClient(), withJSONConfig(string(jsonBs)))
+		defer fx.close()
+
+		client := fx.bs.client.(*kafkaSinkClientV2).client.(*kgo.Client)
+		actual := client.OptValue("ProducerBatchMaxBytes").(int32)
+		require.Equal(t, int32(2<<20), actual)
+	})
+
+	t.Run("per_changefeed_overrides_cluster_setting", func(t *testing.T) {
+		cfg := map[string]any{"ProducerBatchMaxBytes": 4 << 20} // 4 MiB
+		jsonBs, err := json.Marshal(cfg)
+		require.NoError(t, err)
+
+		fx := newKafkaSinkV2Fx(t, withRealClient(),
+			withJSONConfig(string(jsonBs)),
+			withSettings(func(s *cluster.Settings) {
+				changefeedbase.KafkaProducerBatchMaxBytes.Override(
+					context.Background(), &s.SV, 1<<20, /* 1 MiB */
+				)
+			}),
+		)
+		defer fx.close()
+
+		client := fx.bs.client.(*kafkaSinkClientV2).client.(*kgo.Client)
+		actual := client.OptValue("ProducerBatchMaxBytes").(int32)
+		require.Equal(t, int32(4<<20), actual)
+	})
+
+	t.Run("per_changefeed_not_set_falls_back_to_cluster_setting", func(t *testing.T) {
+		fx := newKafkaSinkV2Fx(t, withRealClient(),
+			withJSONConfig("{}"),
+			withSettings(func(s *cluster.Settings) {
+				changefeedbase.KafkaProducerBatchMaxBytes.Override(
+					context.Background(), &s.SV, 3<<20, /* 3 MiB */
+				)
+			}),
+		)
+		defer fx.close()
+
+		client := fx.bs.client.(*kafkaSinkClientV2).client.(*kgo.Client)
+		actual := client.OptValue("ProducerBatchMaxBytes").(int32)
+		require.Equal(t, int32(3<<20), actual)
+	})
+
+	t.Run("validation_too_small", func(t *testing.T) {
+		cfg := map[string]any{"ProducerBatchMaxBytes": 100} // below 512 minimum
+		jsonBs, err := json.Marshal(cfg)
+		require.NoError(t, err)
+
+		var createErr error
+		fx := newKafkaSinkV2Fx(t, withRealClient(),
+			withJSONConfig(string(jsonBs)),
+			withCreateClientErrorCb(func(err error) { createErr = err }),
+		)
+		defer fx.close()
+		require.Error(t, createErr)
+		require.Contains(t, createErr.Error(), "at least 512")
+	})
+
+	t.Run("validation_too_large", func(t *testing.T) {
+		cfg := map[string]any{"ProducerBatchMaxBytes": 256<<20 + 1} // above 256 MiB
+		jsonBs, err := json.Marshal(cfg)
+		require.NoError(t, err)
+
+		var createErr error
+		fx := newKafkaSinkV2Fx(t, withRealClient(),
+			withJSONConfig(string(jsonBs)),
+			withCreateClientErrorCb(func(err error) { createErr = err }),
+		)
+		defer fx.close()
+		require.Error(t, createErr)
+		require.Contains(t, createErr.Error(), "at most 256 MiB")
 	})
 }
