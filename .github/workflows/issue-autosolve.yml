@@ -18,7 +18,7 @@ jobs:
   auto-solve-issue:
     runs-on: [self-hosted, ubuntu_2404]
     timeout-minutes: 180
-    if: github.event.label.name == 'c-autosolve'
+    if: github.event.label.name == 'autosolve' || github.event.label.name == 'c-autosolve'
     permissions:
       contents: write
       pull-requests: write
@@ -469,7 +469,7 @@ jobs:
         if: steps.push.conclusion == 'success'
         env:
           GH_TOKEN: ${{ secrets.AUTOSOLVER_CREATE_PRS_PAT }}
-          # The user who added the c-autosolve label, passed via env to avoid injection.
+          # The user who added the autosolve label, passed via env to avoid injection.
           TRIGGER_USER: ${{ github.event.sender.login }}
         run: |
           # For single-commit PRs, the PR title matches the commit subject
@@ -568,14 +568,15 @@ jobs:
 
           [Workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
 
-      - name: Remove c-autosolve label
+      - name: Remove autosolve label
         # Only remove label after assessment has run (success or failure).
         # This allows retrying if the workflow fails before assessment completes.
         if: always() && (steps.assess.conclusion == 'success' || steps.assess.conclusion == 'failure')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TRIGGER_LABEL: ${{ github.event.label.name }}
         run: |
-          gh issue edit ${{ github.event.issue.number }} --remove-label "c-autosolve" || true
+          gh issue edit ${{ github.event.issue.number }} --remove-label "$TRIGGER_LABEL" || true
 
       - name: Cleanup credentials and keys
         if: always()
