@@ -50,8 +50,13 @@ type TestingKnobs struct {
 	NullSinkIsExternalIOAccounted bool
 	// OnDistflowSpec is called when specs for distflow planning have been created
 	OnDistflowSpec func(aggregatorSpecs []*execinfrapb.ChangeAggregatorSpec, frontierSpec *execinfrapb.ChangeFrontierSpec)
-	// RaiseRetryableError is a knob used to possibly return an error.
-	RaiseRetryableError func() error
+	// BeforeCheckpoint, if set, is called at the start of
+	// checkpointJobProgress. Returning a non-nil error causes a retryable
+	// failure before the checkpoint is persisted.
+	BeforeCheckpoint func() error
+	// OnRetryBackoffReset, if set, is called when the changefeed retry loop
+	// resets its backoff due to changefeed progress.
+	OnRetryBackoffReset func()
 	// StartDistChangefeedInitialHighwater is called when starting the dist changefeed with the initial highwater
 	// of the changefeed. Note that this will be called when the changefeed starts and subsequently when the changefeed
 	// is retried.

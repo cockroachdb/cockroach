@@ -9380,7 +9380,7 @@ func TestCoreChangefeedBackfillScanCheckpoint(t *testing.T) {
 
 		emittedCount := 0
 		errorCount := 0
-		knobs.RaiseRetryableError = func() error {
+		knobs.BeforeCheckpoint = func() error {
 			emittedCount++
 			if emittedCount%200 == 0 {
 				errorCount++
@@ -11520,7 +11520,7 @@ func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
 
 		// A flag we toggle on to put the changefeed in a retrying state.
 		var changefeedIsRetrying atomic.Bool
-		knobs.RaiseRetryableError = func() error {
+		knobs.BeforeCheckpoint = func() error {
 			if changefeedIsRetrying.Load() {
 				return errors.New("test retryable error")
 			}
@@ -11603,7 +11603,7 @@ func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
 		// Check that the following happens soon.
 		//
 		// Step 2: Since `changefeedIsRetrying` is true, the changefeed will now attempt retries in
-		//         via `knobs.RaiseRetryableError`.
+		//         via `knobs.BeforeCheckpoint`.
 		// Step 3: `knobs.LoadJobErr` will result an in error when reading the job record a couple of times, causing
 		//          more retries.
 		// Step 4: Eventually, a dist changefeed is started at a certain highwater timestamp.
@@ -12030,6 +12030,61 @@ func TestChangefeedHeadersJSONVals(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestChangefeedRetryBackoffResetOnHighwaterAdvance verifies that the retry
+// backoff is reset when a changefeed advances its highwater mark before
+// encountering a retryable error. This ensures that transient errors after
+// meaningful forward progress don't leave the backoff unnecessarily elevated.
+func TestChangefeedRetryBackoffResetOnHighwaterAdvance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+		changefeedbase.ResetBackoffOnHighwaterAdvance.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, true)
+
+		knobs := s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+
+		// Let the first few checkpoints succeed so the highwater gets
+		// persisted to the job record, then fire a retryable error. The
+		// retry loop should detect that the highwater advanced past its
+		// initial value and reset the backoff.
+		var checkpointCount atomic.Int32
+		knobs.BeforeCheckpoint = func() error {
+			if checkpointCount.Add(1) == 3 {
+				return errors.New("test transient error")
+			}
+			return nil
+		}
+
+		backoffResetCh := make(chan struct{}, 1)
+		knobs.OnRetryBackoffReset = func() {
+			select {
+			case backoffResetCh <- struct{}{}:
+			default:
+			}
+		}
+
+		feed := feed(t, f, `CREATE CHANGEFEED FOR foo WITH initial_scan='no'`)
+		defer closeFeed(t, feed)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		assertPayloads(t, feed, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+		})
+
+		select {
+		case <-backoffResetCh:
+		case <-time.After(testutils.DefaultSucceedsSoonDuration):
+			t.Fatal("timed out waiting for retry backoff reset after highwater advance")
+		}
+	}
+
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
 // TestPubsubAttributes tests that the "attributes" field in the
