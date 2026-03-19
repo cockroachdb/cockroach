@@ -634,115 +634,121 @@ func TestAvroSchemaNaming(t *testing.T) {
 		changefeedbase.EventConsumerWorkers.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, -1)
 
-		sqlDB.Exec(t, `CREATE DATABASE movr`)
-		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
-		sqlDB.Exec(t,
-			`INSERT INTO movr.drivers VALUES (1, 'Alice')`,
-		)
+		t.Run("single_family", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE DATABASE movr`)
+			sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
+			sqlDB.Exec(t,
+				`INSERT INTO movr.drivers VALUES (1, 'Alice')`,
+			)
 
-		movrFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s`, changefeedbase.OptFormatAvro), optOutOfMetamorphicDBLevelChangefeed{
-			reason: "changefeed watches tables not in the default database",
-		})
-		defer closeFeed(t, movrFeed)
-
-		foo := movrFeed.(*kafkaFeed)
-
-		assertPayloads(t, movrFeed, []string{
-			`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
-		})
-
-		assertRegisteredSubjects(t, foo.registry, []string{
-			`drivers-key`,
-			`drivers-value`,
-		})
-
-		fqnFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, full_table_name`, changefeedbase.OptFormatAvro),
-			optOutOfMetamorphicDBLevelChangefeed{
+			movrFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+				`WITH format=%s`, changefeedbase.OptFormatAvro), optOutOfMetamorphicDBLevelChangefeed{
 				reason: "changefeed watches tables not in the default database",
 			})
-		defer closeFeed(t, fqnFeed)
+			defer closeFeed(t, movrFeed)
 
-		foo = fqnFeed.(*kafkaFeed)
+			foo := movrFeed.(*kafkaFeed)
 
-		assertPayloads(t, fqnFeed, []string{
-			`movr.public.drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
-		})
-
-		assertRegisteredSubjects(t, foo.registry, []string{
-			`movr.public.drivers-key`,
-			`movr.public.drivers-value`,
-		})
-
-		prefixFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, avro_schema_prefix=super`, changefeedbase.OptFormatAvro),
-			optOutOfMetamorphicDBLevelChangefeed{
-				reason: "changefeed watches tables not in the default database",
+			assertPayloads(t, movrFeed, []string{
+				`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
 			})
-		defer closeFeed(t, prefixFeed)
 
-		foo = prefixFeed.(*kafkaFeed)
-
-		assertPayloads(t, prefixFeed, []string{
-			`drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
-		})
-
-		assertRegisteredSubjects(t, foo.registry, []string{
-			`superdrivers-key`,
-			`superdrivers-value`,
-		})
-
-		prefixFQNFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, avro_schema_prefix=super, full_table_name`, changefeedbase.OptFormatAvro),
-			optOutOfMetamorphicDBLevelChangefeed{
-				reason: "changefeed watches tables not in the default database",
+			assertRegisteredSubjects(t, foo.registry, []string{
+				`drivers-key`,
+				`drivers-value`,
 			})
-		defer closeFeed(t, prefixFQNFeed)
 
-		foo = prefixFQNFeed.(*kafkaFeed)
+			fqnFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+				`WITH format=%s, full_table_name`, changefeedbase.OptFormatAvro),
+				optOutOfMetamorphicDBLevelChangefeed{
+					reason: "changefeed watches tables not in the default database",
+				})
+			defer closeFeed(t, fqnFeed)
 
-		assertPayloads(t, prefixFQNFeed, []string{
-			`movr.public.drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
-		})
+			foo = fqnFeed.(*kafkaFeed)
 
-		assertRegisteredSubjects(t, foo.registry, []string{
-			`supermovr.public.drivers-key`,
-			`supermovr.public.drivers-value`,
-		})
-
-		//Both changes to the subject are also reflected in the schema name in the posted schemas
-		require.Contains(t, foo.registry.SchemaForSubject(`supermovr.public.drivers-key`), `supermovr`)
-		require.Contains(t, foo.registry.SchemaForSubject(`supermovr.public.drivers-value`), `supermovr`)
-
-		sqlDB.Exec(t, `ALTER TABLE movr.drivers ADD COLUMN vehicle_id int CREATE FAMILY volatile`)
-		multiFamilyFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, %s`, changefeedbase.OptFormatAvro, changefeedbase.OptSplitColumnFamilies),
-			optOutOfMetamorphicDBLevelChangefeed{
-				reason: "changefeed watches tables not in the default database",
+			assertPayloads(t, fqnFeed, []string{
+				`movr.public.drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
 			})
-		defer closeFeed(t, multiFamilyFeed)
-		foo = multiFamilyFeed.(*kafkaFeed)
 
-		sqlDB.Exec(t, `UPDATE movr.drivers SET vehicle_id = 1 WHERE id=1`)
+			assertRegisteredSubjects(t, foo.registry, []string{
+				`movr.public.drivers-key`,
+				`movr.public.drivers-value`,
+			})
 
-		assertPayloads(t, multiFamilyFeed, []string{
-			`drivers.primary: {"id":{"long":1}}->{"after":{"drivers_u002e_primary":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
-			`drivers.volatile: {"id":{"long":1}}->{"after":{"drivers_u002e_volatile":{"vehicle_id":{"long":1}}}}`,
+			prefixFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+				`WITH format=%s, avro_schema_prefix=super`, changefeedbase.OptFormatAvro),
+				optOutOfMetamorphicDBLevelChangefeed{
+					reason: "changefeed watches tables not in the default database",
+				})
+			defer closeFeed(t, prefixFeed)
+
+			foo = prefixFeed.(*kafkaFeed)
+
+			assertPayloads(t, prefixFeed, []string{
+				`drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+			})
+
+			assertRegisteredSubjects(t, foo.registry, []string{
+				`superdrivers-key`,
+				`superdrivers-value`,
+			})
+
+			prefixFQNFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+				`WITH format=%s, avro_schema_prefix=super, full_table_name`, changefeedbase.OptFormatAvro),
+				optOutOfMetamorphicDBLevelChangefeed{
+					reason: "changefeed watches tables not in the default database",
+				})
+			defer closeFeed(t, prefixFQNFeed)
+
+			foo = prefixFQNFeed.(*kafkaFeed)
+
+			assertPayloads(t, prefixFQNFeed, []string{
+				`movr.public.drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+			})
+
+			assertRegisteredSubjects(t, foo.registry, []string{
+				`supermovr.public.drivers-key`,
+				`supermovr.public.drivers-value`,
+			})
+
+			// Both changes to the subject are also reflected in the schema name in the posted schemas.
+			require.Contains(t, foo.registry.SchemaForSubject(`supermovr.public.drivers-key`), `supermovr`)
+			require.Contains(t, foo.registry.SchemaForSubject(`supermovr.public.drivers-value`), `supermovr`)
 		})
 
-		assertRegisteredSubjects(t, foo.registry, []string{
-			`drivers.primary-key`,
-			`drivers.primary-value`,
-			`drivers.volatile-value`,
-		})
+		t.Run("multi_family", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE DATABASE movr2`)
+			sqlDB.Exec(t, `CREATE TABLE movr2.drivers (id INT PRIMARY KEY, name STRING)`)
+			sqlDB.Exec(t,
+				`INSERT INTO movr2.drivers VALUES (1, 'Alice')`,
+			)
 
+			sqlDB.Exec(t, `ALTER TABLE movr2.drivers ADD COLUMN vehicle_id int CREATE FAMILY volatile`)
+			multiFamilyFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr2.drivers `+
+				`WITH format=%s, %s`, changefeedbase.OptFormatAvro, changefeedbase.OptSplitColumnFamilies),
+				optOutOfMetamorphicDBLevelChangefeed{
+					reason: "changefeed watches tables not in the default database",
+				})
+			defer closeFeed(t, multiFamilyFeed)
+			foo := multiFamilyFeed.(*kafkaFeed)
+
+			sqlDB.Exec(t, `UPDATE movr2.drivers SET vehicle_id = 1 WHERE id=1`)
+
+			assertPayloads(t, multiFamilyFeed, []string{
+				`drivers.primary: {"id":{"long":1}}->{"after":{"drivers_u002e_primary":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+				`drivers.volatile: {"id":{"long":1}}->{"after":{"drivers_u002e_volatile":{"vehicle_id":{"long":1}}}}`,
+			})
+
+			assertRegisteredSubjects(t, foo.registry, []string{
+				`drivers.primary-key`,
+				`drivers.primary-value`,
+				`drivers.volatile-value`,
+			})
+		})
 	}
 
-	// TODO(#150537): This test sometimes encounters errors like "CHANGEFEED
-	// created on a table with a single column family (drivers) cannot now
-	// target a table with 2 families". Why?
-	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection, withAllowChangefeedErr("inexplicable errors"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection)
 }
 
 func TestAvroSchemaNamespace(t *testing.T) {
