@@ -14,6 +14,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -209,6 +210,32 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 
 	if cfg.testSettings != nil {
 		cfg.testSettings(ctx, st)
+	}
+
+	if cs := cfg.crashSync; cs != nil {
+		// Block snapshot SST ingestion until CrashClone has been taken. At this
+		// point in handleRaftReadyRaftMuLocked, MsgAppResp has already been sent
+		// via sendRaftMessages (line ~1028), so the leader's match index is
+		// advanced. But the SSTs haven't been ingested yet, so CrashClone will
+		// capture VFS state without the snapshot data.
+		storeKnobs.BeforeSnapshotSSTIngestion = func(
+			_ kvserver.IncomingSnapshot, _ []string,
+		) error {
+			if !cs.armed.Load() {
+				return nil
+			}
+			select {
+			case cs.snapshotBlocked <- struct{}{}:
+				// Wait for CrashClone to complete before proceeding with ingestion.
+				select {
+				case <-cs.snapshotProceed:
+				case <-time.After(5 * time.Second):
+				}
+			default:
+				// Another snapshot is already blocked; don't double-block.
+			}
+			return nil
+		}
 	}
 
 	commonServerArgs := base.TestServerArgs{
@@ -431,7 +458,28 @@ type kvnemesisTestCfg struct {
 	// useful if a test configuration does not yet support particular operations.
 	testGeneratorConfig func(*GeneratorConfig)
 
+	// crashSync, if set, enables synchronization between CrashNode and raft
+	// snapshot application for reproducing race conditions.
+	crashSync *snapshotCrashSync
+
 	mode TestMode
+}
+
+// snapshotCrashSync coordinates CrashNode with raft snapshot application to
+// reproduce the race where MsgAppResp escapes after CrashClone. The channels
+// are set by testClusterArgs and read by PostCrashCloneFn.
+//
+// Flow:
+//  1. BeforeSnapshotSSTIngestion fires (MsgAppResp already sent, SSTs not
+//     ingested). Sends on snapshotBlocked, then waits on snapshotProceed.
+//  2. PostCrashCloneFn (after CrashClone) receives from snapshotBlocked,
+//     sends on snapshotProceed (releasing the snapshot to proceed), then
+//     sleeps to let the snapshot complete and MsgAppResp escape before
+//     stopServerLocked.
+type snapshotCrashSync struct {
+	armed           atomic.Bool
+	snapshotBlocked chan struct{}
+	snapshotProceed chan struct{}
 }
 
 func defaultTestConfiguration(numNodes int) kvnemesisTestCfg {
@@ -601,7 +649,7 @@ func TestKVNemesisMultiNode_Crash(t *testing.T) {
 		numNodes:                     4,
 		numSteps:                     defaultNumSteps,
 		concurrency:                  5,
-		seedOverride:                 0,
+		seedOverride:                 8118922776049008518,
 		invalidLeaseAppliedIndexProb: 0.2,
 		injectReproposalErrorProb:    0.2,
 		// assertRaftApply is disabled because the asserter assumes no node
@@ -622,6 +670,15 @@ func TestKVNemesisMultiNode_Crash(t *testing.T) {
 		// when assertRaftApply is true.
 		assertRaftApply: false,
 		mode:            Liveness,
+		// Synchronize CrashNode with raft snapshot application to reproduce the
+		// race where MsgAppResp (sent in sendRaftMessages before snapshot SST
+		// ingestion) escapes after CrashClone, advancing the leader's match
+		// index. On restart, the follower's log doesn't have the snapshot data,
+		// causing match > lastIndex panic.
+		crashSync: &snapshotCrashSync{
+			snapshotBlocked: make(chan struct{}, 1),
+			snapshotProceed: make(chan struct{}, 1),
+		},
 		testGeneratorConfig: func(cfg *GeneratorConfig) {
 			cfg.Ops.Fault.CrashNode = 1
 			cfg.Ops.Fault.RestartNode = 1
@@ -704,6 +761,20 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	var partitioner rpc.Partitioner
 	args, closer := cfg.testClusterArgs(ctx, t, rng, tr, &partitioner, cfg.mode)
 	tc := testcluster.StartTestCluster(t, cfg.numNodes, args)
+	if cs := cfg.crashSync; cs != nil {
+		tc.PostCrashCloneFn = func(idx int) {
+			// CrashClone just completed. If a snapshot is blocked (waiting in
+			// BeforeSnapshotSSTIngestion), release it so the SSTs get ingested and
+			// MsgAppResp escapes via msgAppRespCh. Then sleep to let the snapshot
+			// complete before stopServerLocked kills the server.
+			select {
+			case <-cs.snapshotBlocked:
+				cs.snapshotProceed <- struct{}{}
+				time.Sleep(500 * time.Millisecond)
+			default:
+			}
+		}
+	}
 	tc.Stopper().AddCloser(closer)
 	defer tc.Stopper().Stop(ctx)
 	for i := 0; i < cfg.numNodes; i++ {
@@ -749,6 +820,9 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	logger := newTBridge(t)
 	defer dumpRaftLogsOnFailure(t, logger.ll.dir, tc.Servers)
 	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger, Partitioner: &partitioner, ServerController: tc}
+	if cs := cfg.crashSync; cs != nil {
+		cs.armed.Store(true)
+	}
 	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, cfg.mode, dbs...)
 
 	logMetricsReport(t, tc)
