@@ -874,7 +874,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 
 		dbs := []string{"bank", "tpcc", schemaChangeDB}
 		d, runBackgroundWorkload, _, err := createDriversForBackupRestore(
-			ctx, t, c, testRNG, workloadSeed, testUtils, dbs,
+			ctx, t, c, testRNG, workloadSeed, testUtils, dbs, nil, /* excludedWorkloads */
 		)
 		if err != nil {
 			return err
