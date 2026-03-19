@@ -290,10 +290,10 @@ func RandDatumWithNullChance(
 			for i := range privs {
 				privs[i] = validPrivChars[rng.Intn(len(validPrivChars))]
 			}
-			s := string(grantee) + "=" + string(privs) + "/"
-			d, err := tree.NewDACLItem(s)
+			s := tree.DString(string(grantee) + "=" + string(privs) + "/")
+			d, err := tree.NewDACLItemFromDString(&s)
 			if err != nil {
-				panic(errors.NewAssertionErrorWithWrappedErrf(err, "generated invalid aclitem %q", s))
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "generated invalid aclitem %q", string(s)))
 			}
 			return d
 		}
@@ -475,7 +475,8 @@ func adjustDatum(datum tree.Datum, typ *types.T) tree.Datum {
 			// Return a fixed valid aclitem rather than trying to adapt
 			// the generic string datum, since special characters like
 			// quotes break the aclitem parser.
-			d, err := tree.NewDACLItem("=r/")
+			s := tree.DString("=r/")
+			d, err := tree.NewDACLItemFromDString(&s)
 			if err != nil {
 				panic(errors.NewAssertionErrorWithWrappedErrf(err, "generated invalid aclitem"))
 			}
