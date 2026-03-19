@@ -1,5 +1,4 @@
 # Trunk configuration file
-# This configuration replicates the bors.toml settings for merge queue functionality
 
 version: 0.1
 
@@ -7,7 +6,7 @@ version: 0.1
 cli:
   version: 1.22.2
 
-# Merge queue configuration (equivalent to bors.toml)
+# Merge queue configuration
 merge:
   # Use Trunk's merge queue service
   service: queue

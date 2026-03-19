@@ -266,11 +266,6 @@ tc_release_branch() {
   [[ "$branch" == master || "$branch" == release-* || "$branch" == provisional_*  || "$branch" == "staging-"* ]]
 }
 
-tc_bors_branch() {
-  branch=$(tc_build_branch)
-  [[ "$branch" == staging ]]
-}
-
 if_tc() {
   if [[ "${TC_BUILD_ID-}" ]]; then
     "$@"
