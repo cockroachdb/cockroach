@@ -568,15 +568,6 @@ jobs:
 
           [Workflow run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})"
 
-      - name: Remove autosolve label
-        # Only remove label after assessment has run (success or failure).
-        # This allows retrying if the workflow fails before assessment completes.
-        if: always() && (steps.assess.conclusion == 'success' || steps.assess.conclusion == 'failure')
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TRIGGER_LABEL: ${{ github.event.label.name }}
-        run: |
-          gh issue edit ${{ github.event.issue.number }} --remove-label "$TRIGGER_LABEL" || true
 
       - name: Cleanup credentials and keys
         if: always()
