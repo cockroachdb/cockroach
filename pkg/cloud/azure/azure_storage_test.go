@@ -181,7 +181,7 @@ func TestAzureFaultInjection(t *testing.T) {
 
 	args := cloud.EarlyBootExternalStorageContext{
 		IOConf:          base.ExternalIODirConfig{},
-		Settings:        cluster.MakeTestingClusterSettings(),
+		Settings:        settings,
 		Options:         nil,
 		Limiters:        nil,
 		MetricsRecorder: cloud.NilMetrics,
