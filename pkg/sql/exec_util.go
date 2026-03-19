@@ -2163,6 +2163,11 @@ type ExecutorTestingKnobs struct {
 	// BeforeIndexSplitAndScatter is invoked with the split and scatter of an index
 	// occurs.
 	BeforeIndexSplitAndScatter func(splitPoints [][]byte)
+
+	// SessionWrapper, if set, wraps every isql.Session created by the
+	// internal executor. This can be used in tests to intercept session
+	// method calls like ExecutePrepared.
+	SessionWrapper func(isql.Session) isql.Session
 }
 
 // PGWireTestingKnobs contains knobs for the pgwire module.
