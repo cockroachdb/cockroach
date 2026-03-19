@@ -105,10 +105,11 @@ func (coord *CPUGrantCoordinators) AdmitSQLCPU(
 ) (AdmitResponse, *WorkQueue, error) {
 	q := coord.cpuTimeCoord.getWorkQueue(tierForTenant(work.TenantID))
 	resp, err := q.Admit(ctx, WorkInfo{
-		TenantID:       work.TenantID,
-		Priority:       work.Priority,
-		CreateTime:     work.CreateTime,
-		RequestedCount: requestedCount,
+		TenantID:                     work.TenantID,
+		Priority:                     work.Priority,
+		CreateTime:                   work.CreateTime,
+		RequestedCount:               requestedCount,
+		BypassCPUTimeTokenEstimation: true,
 	})
 	return resp, q, err
 }

@@ -191,7 +191,11 @@ func (h *SQLCPUHandle) consumeCPU(ctx context.Context, d time.Duration) error {
 			return nil
 		}
 		if haveTurn {
-			resp, q, err := h.p.cpuCoords.AdmitSQLCPU(ctx, h.workInfo, int64(d))
+			// Request 5x the measured CPU as the budget. This means roughly
+			// 1 in 5 measureAndAdmit calls goes through admission; the rest
+			// are fast-path deductions from the remaining budget.
+			budget := 5 * d
+			resp, q, err := h.p.cpuCoords.AdmitSQLCPU(ctx, h.workInfo, int64(budget))
 			if err != nil {
 				<-h.acquiringCh
 				return err
@@ -202,7 +206,8 @@ func (h *SQLCPUHandle) consumeCPU(ctx context.Context, d time.Duration) error {
 				h.mu.admitResp = resp
 				h.mu.admitQueue = q
 				if resp.Enabled {
-					h.mu.remaining = time.Duration(resp.requestedCount)
+					// Use our own budget, not the estimator's requestedCount.
+					h.mu.remaining = budget
 				} else {
 					// AC disabled; set a large budget so we don't keep calling Admit.
 					h.mu.remaining = 1000 * time.Hour
