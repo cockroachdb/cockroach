@@ -728,6 +728,47 @@ func TestMemoIsStale(t *testing.T) {
 	stale()
 	evalCtx.SessionData().RowSecurity = false
 	notStale()
+
+	// Stale stats rollout mode: Default → Stable.
+	evalCtx.StatsRollout = eval.StatsRolloutStable
+	stale()
+	evalCtx.StatsRollout = eval.StatsRolloutDefault
+	notStale()
+
+	// Default→Canary: not stale (both use newest stats).
+	evalCtx.StatsRollout = eval.StatsRolloutCanary
+	notStale()
+	evalCtx.StatsRollout = eval.StatsRolloutDefault
+	notStale()
+
+	// A canary-built memo can legitimately be cached when the query
+	// doesn't reference canary-window tables (canary and default use
+	// the same stats). Verify IsStale handles this correctly.
+	evalCtx.StatsRollout = eval.StatsRolloutCanary
+	var o2 xform.Optimizer
+	opttestutils.BuildQuery(t, &o2, catalog, &evalCtx, query)
+	// Canary→Canary: not stale.
+	if isStale, err := o2.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if isStale {
+		t.Errorf("canary-built memo should not be stale for canary execution")
+	}
+	// Canary→Stable: not stale. A canary-built memo is only cached when
+	// canary and stable stats are identical (write-side guard prevents
+	// caching otherwise), so reuse is safe.
+	evalCtx.StatsRollout = eval.StatsRolloutStable
+	if isStale, err := o2.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if isStale {
+		t.Errorf("canary-built memo should not be stale for stable execution")
+	}
+	// Canary→Default: not stale (canary and default use the same stats).
+	evalCtx.StatsRollout = eval.StatsRolloutDefault
+	if isStale, err := o2.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if isStale {
+		t.Errorf("canary-built memo should not be stale for default execution")
+	}
 }
 
 // TestStatsAvailable tests that the statisticsBuilder correctly identifies
