@@ -469,6 +469,8 @@ jobs:
         if: steps.push.conclusion == 'success'
         env:
           GH_TOKEN: ${{ secrets.AUTOSOLVER_CREATE_PRS_PAT }}
+          # The user who added the c-autosolve label, passed via env to avoid injection.
+          TRIGGER_USER: ${{ github.event.sender.login }}
         run: |
           # For single-commit PRs, the PR title matches the commit subject
           # and the PR body matches the commit body (per commit-helper guidelines).
@@ -491,7 +493,8 @@ jobs:
             echo "*Please review carefully before approving.*"
           )
 
-          # Create the PR from fork to upstream
+          # Create the PR from fork to upstream.
+          # Assign and request review from the user who triggered autosolve.
           PR_URL=$(gh pr create \
             --repo ${{ github.repository }} \
             --head "${AUTOSOLVER_FORK_OWNER}:${{ steps.push.outputs.branch_name }}" \
@@ -499,7 +502,9 @@ jobs:
             --draft \
             --title "$COMMIT_TITLE" \
             --body "$PR_BODY" \
-            --label "o-autosolver")
+            --label "o-autosolver" \
+            --assignee "$TRIGGER_USER" \
+            --reviewer "$TRIGGER_USER")
 
           echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
           echo "Created PR: $PR_URL"
