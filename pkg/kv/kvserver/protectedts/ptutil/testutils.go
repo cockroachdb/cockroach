@@ -27,7 +27,7 @@ import (
 // on all the supplied spans. It fatals if this doesn't happen in time.
 func TestingWaitForProtectedTimestampToExistOnSpans(
 	ctx context.Context,
-	t *testing.T,
+	t testutils.TestFataler,
 	srv serverutils.TestServerInterface,
 	ptsReader spanconfig.ProtectedTSReader,
 	protectedTimestamp hlc.Timestamp,
