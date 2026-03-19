@@ -28,14 +28,11 @@ tc_end_block "Variable Setup"
 
 
 docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
-docker pull --platform linux/amd64 "${gcr_staged_repository}:amd64-${version}"
-docker pull --platform linux/arm64 "${gcr_staged_repository}:arm64-${version}"
-docker pull --platform linux/s390x "${gcr_staged_repository}:s390x-${version}"
 
 cloud_release=
 for i in $(seq 1 10); do
   maybe_manifest="${gcr_repository}:$version-cloudonly.$i"
-  if ! docker manifest inspect "$maybe_manifest"; then
+  if ! docker buildx imagetools inspect "$maybe_manifest" > /dev/null 2>&1; then
     echo "$maybe_manifest not found, assuming this is what we need"
     cloud_release="$i"
     break
@@ -54,24 +51,11 @@ manifest="${gcr_repository}:${version_cloudonly}"
 
 docker_login_gcr "$gcr_repository" "$gcr_credentials"
 
-docker tag \
-  "${gcr_staged_repository}:amd64-${version}" \
-  "${gcr_repository}:amd64-${version_cloudonly}"
-docker tag \
-  "${gcr_staged_repository}:arm64-${version}" \
-  "${gcr_repository}:arm64-${version_cloudonly}"
-docker tag \
-  "${gcr_staged_repository}:s390x-${version}" \
-  "${gcr_repository}:s390x-${version_cloudonly}"
-
-docker push "${gcr_repository}:amd64-${version_cloudonly}"
-docker push "${gcr_repository}:arm64-${version_cloudonly}"
-docker push "${gcr_repository}:s390x-${version_cloudonly}"
-
-create_and_push_multi_arch_manifest "$manifest" \
-  "${gcr_repository}:amd64-${version_cloudonly}" \
-  "${gcr_repository}:arm64-${version_cloudonly}" \
-  "${gcr_repository}:s390x-${version_cloudonly}"
+# Copy the multi-arch manifest from the staged repo to the cloud-only repo
+# server-side using docker buildx imagetools.
+docker buildx imagetools create \
+  -t "$manifest" \
+  "${gcr_staged_repository}:${version}"
 echo "==========="
 echo "published to"
 echo "$manifest"
