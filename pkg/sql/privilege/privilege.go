@@ -559,9 +559,6 @@ func isValidACLChar(c byte) bool {
 	return strings.IndexByte(ValidACLChars, c) >= 0
 }
 
-// orderedPrivs is the list of privileges sorted in alphanumeric order based on the ACL character -> CTUacdmrtwX
-var orderedPrivs = List{CREATE, TEMPORARY, USAGE, INSERT, CONNECT, DELETE, MAINTAIN, SELECT, TRIGGER, UPDATE, EXECUTE}
-
 // ListToACL converts a list of privileges to a list of Postgres
 // ACL items.
 // See: https://www.postgresql.org/docs/13/ddl-priv.html#PRIVILEGE-ABBREVS-TABLE
@@ -583,14 +580,22 @@ func (pl List) ListToACL(grantOptions List, objectType ObjectType) (string, erro
 			}
 		}
 	}
-	chars := make([]string, len(privileges))
-	for _, privilege := range orderedPrivs {
-		if _, ok := privToACL[privilege]; !ok {
-			return "", errors.AssertionFailedf("unknown privilege type %s", privilege.DisplayName())
+	// Sort privileges by Kind value so that ACL characters appear in a
+	// deterministic order matching their bit positions.
+	sorted := make(List, len(privileges))
+	copy(sorted, privileges)
+	sort.Sort(sorted)
+
+	var chars []string
+	for _, privilege := range sorted {
+		aclChar, ok := privToACL[privilege]
+		if !ok {
+			// Skip privileges that have no PostgreSQL ACL character
+			// equivalent (e.g. ALL after expansion, or CockroachDB-specific
+			// privileges like BACKUP, CHANGEFEED, ZONECONFIG).
+			continue
 		}
-		if privileges.Contains(privilege) {
-			chars = append(chars, privToACL[privilege])
-		}
+		chars = append(chars, aclChar)
 		if grantOptions.Contains(privilege) {
 			chars = append(chars, "*")
 		}
