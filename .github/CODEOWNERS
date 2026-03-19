@@ -166,7 +166,6 @@
 /pkg/cli/democluster/        @cockroachdb/sql-foundations   @cockroachdb/server-prs @cockroachdb/cli-prs
 /pkg/cli/doctor*.go          @cockroachdb/sql-foundations     @cockroachdb/cli-prs
 /pkg/cli/flags*.go           @cockroachdb/cli-prs
-/pkg/cli/import*.go          @cockroachdb/sql-foundations   @cockroachdb/cli-prs
 /pkg/cli/init.go             @cockroachdb/kv-prs         @cockroachdb/cli-prs
 /pkg/cli/log*.go             @cockroachdb/obs-prs    @cockroachdb/cli-prs @cockroachdb/obs-india-prs
 /pkg/cli/mt_cert*            @cockroachdb/security-engineering
@@ -180,7 +179,6 @@
 /pkg/cli/start*.go           @cockroachdb/server-prs     @cockroachdb/cli-prs
 /pkg/cli/statement*.go       @cockroachdb/obs-prs @cockroachdb/cli-prs
 /pkg/cli/syncbench/          @cockroachdb/storage @cockroachdb/kv-prs
-/pkg/cli/swappable_fs*       @cockroachdb/storage
 /pkg/cli/testutils.go        @cockroachdb/test-eng
 /pkg/cli/tsdump*.go          @cockroachdb/obs-prs @cockroachdb/obs-india-prs
 /pkg/cli/userfile.go         @cockroachdb/disaster-recovery
@@ -195,9 +193,7 @@
 #!/pkg/server/                           @cockroachdb/unowned
 /pkg/server/admin*.go                    @cockroachdb/obs-prs
 /pkg/server/api_v2*.go                   @cockroachdb/obs-prs @cockroachdb/server-prs
-/pkg/server/api_v2_auth*.go              @cockroachdb/obs-prs @cockroachdb/security-engineering
 /pkg/server/application_api/             @cockroachdb/obs-prs
-/pkg/server/authentication*.go           @cockroachdb/security-engineering
 /pkg/server/authserver/                  @cockroachdb/product-security
 /pkg/server/clock_monotonicity.go        @cockroachdb/kv-prs
 /pkg/server/combined_statement_stats*.go @cockroachdb/obs-prs
@@ -234,7 +230,6 @@
 # DB Server will eventually competely own server_http*
 /pkg/server/server_http*.go              @cockroachdb/obs-prs @cockroachdb/server-prs
 /pkg/server/server_import_ts*.go         @cockroachdb/obs-prs @cockroachdb/kv-prs
-/pkg/server/server_obs*                  @cockroachdb/obs-prs
 /pkg/server/server_systemlog*            @cockroachdb/obs-prs
 /pkg/server/serverpb/                    @cockroachdb/obs-prs @cockroachdb/server-prs
 /pkg/server/serverpb/authentication*     @cockroachdb/obs-prs @cockroachdb/security-engineering
@@ -248,7 +243,6 @@
 /pkg/server/status*go                    @cockroachdb/obs-prs
 /pkg/server/status*go                    @cockroachdb/obs-prs
 /pkg/server/status/                      @cockroachdb/obs-prs
-/pkg/server/sticky_vfs*                  @cockroachdb/storage
 /pkg/server/storage_api/                 @cockroachdb/obs-prs
 /pkg/server/structlogging/               @cockroachdb/obs-prs
 /pkg/server/systemconfigwatcher/         @cockroachdb/kv-prs
@@ -407,7 +401,6 @@
 /pkg/ccl/serverccl/statusccl/ @cockroachdb/obs-prs
 /pkg/ccl/serverccl/admin_*   @cockroachdb/obs-prs
 /pkg/ccl/serverccl/api_*     @cockroachdb/obs-prs
-/pkg/ccl/serverccl/chart_*   @cockroachdb/obs-prs
 
 /pkg/ccl/telemetryccl/       @cockroachdb/obs-prs
 
@@ -444,7 +437,6 @@
 /pkg/cmd/generate-staticcheck/ @cockroachdb/dev-inf
 /pkg/cmd/generate-cgo/       @cockroachdb/dev-inf
 /pkg/cmd/geoviz/             @cockroachdb/spatial
-/pkg/cmd/github-action-poller/            @cockroachdb/dev-inf
 /pkg/cmd/github-post/        @cockroachdb/test-eng
 /pkg/cmd/github-pull-request-make/ @cockroachdb/dev-inf
 /pkg/cmd/gossipsim/          @cockroachdb/kv-prs
