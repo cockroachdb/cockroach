@@ -516,7 +516,8 @@ func performCastWithoutPrecisionTruncation(
 				return tree.NewDName(s), nil
 			}
 			if t.Oid() == oidext.T_aclitem {
-				return tree.NewDACLItem(s)
+				ds := tree.DString(s)
+				return tree.NewDACLItemFromDString(&ds)
 			}
 
 			// bpchar types truncate trailing whitespace.
