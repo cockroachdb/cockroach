@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 statement ok
 CREATE TABLE t (i INT)
 
@@ -87,6 +86,9 @@ statement ok
 EXPLAIN SELECT * FROM t AS OF SYSTEM TIME '-1us'
 
 skipif config 3node-tenant-default-configs
+# In local-prepared, the placeholder $1 is resolved differently, producing a
+# different error message about constant expressions in AOST.
+skipif config local-prepared
 # Regression test for out of bounds error during the type-checking of AOST with
 # a placeholder (#56488).
 statement error pq: no value provided for placeholder: \$1
@@ -147,9 +149,14 @@ statement error pq: AS OF SYSTEM TIME: expected timestamp, decimal, or interval,
 SELECT * FROM t AS OF SYSTEM TIME ('' BETWEEN '' AND '')
 
 # Check that AOST in multi-stmt implicit transaction has the proper error.
+# In local-prepared, multi-statement strings are prepared individually so
+# the cross-statement AOST consistency check does not apply.
+skipif config local-prepared
 statement error inconsistent AS OF SYSTEM TIME timestamp
 insert into t values(1); select * from t as of system time '-1s';
 
+# Same as above.
+skipif config local-prepared
 statement error inconsistent AS OF SYSTEM TIME timestamp
 select * from t as of system time '-1s'; select * from t as of system time '-2s';
 
