@@ -2166,6 +2166,157 @@ func runMessageTooLarge(ctx context.Context, t test.Test, c cluster.Cluster) {
 	require.Regexp(t, `mvcc=[\d\.]+,\d+`, logStr, "log should include mvcc")
 }
 
+// runCDCCoalescedMessageTooLarge reproduces the bug in #165387: when multiple
+// parallel batches are submitted to franz-go, they get coalesced into
+// per-broker requests. If that coalesced request exceeds the broker's
+// message.max.bytes, every record in the batch fails with MessageTooLarge —
+// even if each individual message would have fit on its own. This test uses
+// artificial network latency between CRDB and Kafka along with high sink
+// concurrency to reliably trigger coalescing, and asserts the changefeed does
+// not fail.
+func runCDCCoalescedMessageTooLarge(ctx context.Context, t test.Test, c cluster.Cluster) {
+	// Use the lower-level setup so we can configure Kafka's
+	// message.max.bytes before starting the broker.
+	crdbNodes := c.Range(1, c.Spec().NodeCount-1)
+	kafkaNode := c.Node(c.Spec().NodeCount)
+
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
+		"--vmodule=changefeed=2",
+	)
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), crdbNodes)
+
+	kafka := kafkaManager{
+		t:              t,
+		c:              c,
+		kafkaSinkNodes: kafkaNode,
+	}
+	kafka.install(ctx)
+
+	// Set a low message.max.bytes on the broker (2 MiB). Individual messages
+	// will be ~8 KB each, well under this limit. But with high sink
+	// concurrency and artificial latency to the Kafka node, franz-go
+	// accumulates many in-flight records and coalesces them into a single
+	// broker request that exceeds 2 MiB.
+	c.Run(ctx, option.WithNodes(kafkaNode),
+		`echo "message.max.bytes=2097152" >> `+
+			filepath.Join(kafka.configDir(), "server.properties"))
+
+	kafka.start(ctx, "kafka")
+	kafka.waitForKafkaAvailable(ctx)
+
+	// Inject 100ms of latency from CRDB nodes to the Kafka node. This
+	// widens the window during which multiple ProduceSync calls are in
+	// flight, making franz-go coalescing nearly guaranteed.
+	t.Status("injecting network latency between CRDB and Kafka")
+	failer, latencyArgs, err := roachtestutil.MakeNetworkLatencyFailer(
+		t.L(), c, crdbNodes, kafkaNode, 100*time.Millisecond,
+	)
+	if err != nil {
+		t.Fatalf("failed to create latency failer: %v", err)
+	}
+	if err := failer.Inject(ctx, t.L(), latencyArgs); err != nil {
+		t.Fatalf("failed to inject latency: %v", err)
+	}
+	defer func() {
+		if err := failer.Recover(ctx, t.L()); err != nil {
+			t.L().Printf("failed to recover latency injection: %v", err)
+		}
+	}()
+
+	db := c.Conn(ctx, t.L(), 1)
+	defer func() { _ = db.Close() }()
+	defer stopFeeds(db)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	settings := []string{
+		`SET CLUSTER SETTING changefeed.new_kafka_sink.enabled = true`,
+		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
+		`SET CLUSTER SETTING changefeed.batch_reduction_retry_enabled = true`,
+		// Maximize concurrent flushes to increase the chance of franz-go
+		// coalescing multiple batches into a single broker request.
+		`SET CLUSTER SETTING changefeed.sink_io_workers = 16`,
+	}
+	for _, stmt := range settings {
+		tdb.Exec(t, stmt)
+	}
+
+	tdb.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, val STRING)`)
+
+	// Insert 1000 rows with ~8 KB values. Each is far under the 2 MiB
+	// broker limit individually, but with 16 sink IO workers and 100ms of
+	// latency, franz-go accumulates hundreds of records in its internal
+	// buffer and coalesces them into requests exceeding 2 MiB.
+	t.Status("inserting rows with ~8KB values")
+	buf := make([]byte, 8_000)
+	for i := range buf {
+		buf[i] = 'x'
+	}
+	for i := 0; i < 1000; i++ {
+		tdb.Exec(t, `INSERT INTO foo VALUES ($1, $2)`, i, string(buf))
+	}
+
+	sinkURL := kafka.sinkURL(ctx)
+	jobID, err := newChangefeedCreator(db, db, t.L(), globalRand,
+		"foo", sinkURL, makeDefaultFeatureFlags()).
+		With(map[string]string{
+			"min_checkpoint_frequency": "'2s'",
+			"resolved":                 "",
+			"kafka_sink_config":        `'{"Flush": {"Messages": 1, "Frequency": "1s"}}'`,
+		}).Create()
+	if err != nil {
+		t.Fatalf("failed to create changefeed: %v", err)
+	}
+
+	// Monitor the changefeed for 2 minutes. It should stay running without
+	// hitting spurious MessageTooLarge errors. The bug causes the changefeed
+	// to restart, which surfaces as a "failed" status or a retryable error
+	// in the logs.
+	t.Status("monitoring changefeed for spurious MessageTooLarge errors")
+	const monitorDuration = 2 * time.Minute
+	deadline := timeutil.Now().Add(monitorDuration)
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		if timeutil.Now().After(deadline) {
+			break
+		}
+
+		var status string
+		var runningStatus gosql.NullString
+		err := db.QueryRow(
+			`SELECT status, running_status FROM [SHOW CHANGEFEED JOB $1]`, jobID,
+		).Scan(&status, &runningStatus)
+		if err != nil {
+			t.L().Printf("error querying changefeed status: %v", err)
+			continue
+		}
+
+		t.L().Printf("changefeed status=%s running_status=%s", status, runningStatus.String)
+		if status == "failed" {
+			t.Fatalf("changefeed failed (likely due to coalesced MessageTooLarge): %s",
+				runningStatus.String)
+		}
+	}
+
+	// Also check the logs for any MessageTooLarge errors that caused retries
+	// but didn't fully fail the job.
+	if err := c.FetchLogs(ctx, t.L()); err != nil {
+		t.L().Printf("could not fetch logs: %v", err)
+	}
+	logPath := filepath.Join(t.ArtifactsDir(), "logs", "1.cockroach.log")
+	logs, err := os.ReadFile(logPath)
+	if err != nil {
+		t.L().Printf("could not read log file: %v", err)
+	} else if bytes.Contains(logs, []byte("MessageTooLarge")) {
+		t.Fatalf("found spurious MessageTooLarge errors in logs")
+	}
+
+	t.Status("changefeed completed without spurious MessageTooLarge errors")
+}
+
 type multiTablePTSBenchmarkParams struct {
 	numTables   int
 	numRanges   int
@@ -3488,6 +3639,16 @@ CONFIGURE ZONE USING
 		Timeout:          15 * time.Minute,
 		CompatibleClouds: registry.AllExceptIBM,
 		Run:              runMessageTooLarge,
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/coalesced-message-too-large",
+		Owner:            registry.OwnerCDC,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(4)),
+		Leases:           registry.MetamorphicLeases,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          15 * time.Minute,
+		CompatibleClouds: registry.AllExceptIBM,
+		Run:              runCDCCoalescedMessageTooLarge,
 	})
 	for _, perTablePTS := range []bool{false} {
 		for _, config := range []struct {
