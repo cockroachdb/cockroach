@@ -21,12 +21,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -109,6 +111,23 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 			},
 		})
 	}
+
+	r.Add(registry.TestSpec{
+		Name:                      "backup-restore/chaos",
+		Monitor:                   true,
+		Timeout:                   4 * time.Hour,
+		Owner:                     registry.OwnerDisasterRecovery,
+		Cluster:                   r.MakeClusterSpec(4, spec.WorkloadNode()),
+		EncryptionSupport:         registry.EncryptionMetamorphic,
+		NativeLibs:                registry.LibGEOS,
+		CompatibleClouds:          registry.Clouds(spec.GCE, spec.AWS, spec.Azure, spec.Local),
+		Suites:                    registry.Suites(registry.Nightly),
+		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		Randomized:                true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			backupRestoreChaos(ctx, t, c)
+		},
+	})
 }
 
 // backup-restore/round-trip tests that a round trip of creating a backup and
@@ -230,6 +249,192 @@ func backupRestoreRoundTrip(
 	})
 
 	m.Wait()
+}
+
+func backupRestoreChaos(ctx context.Context, t test.Test, c cluster.Cluster) {
+	testRNG, seed := randutil.NewLockedPseudoRand()
+	t.L().Printf("random seed: %d", seed)
+
+	workloadSeed := testRNG.Int63()
+	t.L().Printf("workload seed: %d", workloadSeed)
+
+	startOpts := roachtestutil.MaybeUseMemoryBudget(t, 50)
+	startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=split_queue=3,cloud_logging_transport=1"}
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.CRDBNodes())
+
+	const numToKill = 1
+	failureNodes := c.CRDBNodes()[:numToKill]
+	liveNodes := c.CRDBNodes()[numToKill:] // The set of nodes that will not be failure injected
+	isGraceful := testRNG.Intn(2) == 0
+	t.Monitor().ExpectProcessDead(failureNodes)
+	t.L().Printf("process kill failure isGraceful: %t", isGraceful)
+	// To clarify, the grace period refers to the amount of time we wait when
+	// draining gracefully before sending a SIGKILL and is unrelated to the wait
+	// in injectAndRecoverFailure.
+	failer, args, err := roachtestutil.MakeProcessKillFailer(
+		t.L(), c, failureNodes, isGraceful, 5*time.Minute, /* gracePeriod */
+	)
+	require.NoError(t, err)
+	require.NoError(t, failer.Setup(ctx, t.L(), args))
+	defer func() {
+		if err := failer.Cleanup(ctx, t.L()); err != nil {
+			t.L().Printf("failed to clean up failure: %v", err)
+		}
+	}()
+
+	doOnlineRestore := testRNG.Intn(2) == 0
+	// TODO (kev-cao): Running this test with withMock(true) causes the
+	// backups to complete too quickly, but the default workload sizes also take
+	// quite a while to backup. Considering the goal of this test, it'd be good
+	// to add some options to provide the caller with more flexibility over the
+	// workload.
+	testUtils, err := setupBackupRestoreTestUtils(
+		ctx, t, c, testRNG,
+		withCompaction(true), withOnlineRestore(doOnlineRestore),
+	)
+	require.NoError(t, err)
+	defer testUtils.CloseConnections()
+
+	dbs := []string{"bank", "tpcc"}
+	// TODO (kev-cao): The schemachange workload currently run without tolerating
+	// errors so that we can catch schemachange errors, which means it is not
+	// resilient to node failures. We could update our helpers to give us more
+	// granular control over error tolerance, but for now we skip it.
+	excludedWorkloads := []string{"schemachange"}
+	d, runWorkloads, _, err := createDriversForBackupRestore(
+		ctx, t, c, testRNG, workloadSeed, testUtils, dbs, excludedWorkloads,
+	)
+	require.NoError(t, err)
+	stopWorkloads, err := runWorkloads()
+	require.NoError(t, err)
+	defer stopWorkloads()
+
+	bspec := backupSpec{
+		// We query for job progress via plannodes, so we don't want to use nodes
+		// subject to failure injection in the Plan spec.
+		Plan:    labeledNodes{Nodes: liveNodes, Version: clusterupgrade.CurrentVersion().String()},
+		Execute: labeledNodes{Nodes: c.CRDBNodes(), Version: clusterupgrade.CurrentVersion().String()},
+	}
+	builder := d.NewCollectionBuilder(
+		t.L(), t, testRNG, "backup-restore-chaos", bspec, bspec, true /* internalSystemsJobs */, false, /* isMultitenant */
+		WithClusterScope(),
+	)
+	jobID, err := builder.TakeFull(ctx)
+	require.NoError(t, err)
+	injectAndRecoverFailure(
+		ctx, t, t.L(), testUtils, testUtils.RandomNode(testRNG, liveNodes), jobID, failer, args,
+		randFloatBetween(testRNG, 0.15, 0.65),
+		// We use a number greater than 1.0 so that there is a chance of a node
+		// failing until the backup is complete.
+		min(randFloatBetween(testRNG, 0.65, 1.1), 1),
+	)
+	require.NoError(t, builder.WaitForLastJob(ctx))
+
+	for i := 0; i < 3; i++ {
+		jobID, err = builder.TakeInc(ctx)
+		require.NoError(t, err)
+		injectAndRecoverFailure(
+			ctx, t, t.L(), testUtils, testUtils.RandomNode(testRNG, liveNodes), jobID, failer, args,
+			randFloatBetween(testRNG, 0.15, 0.65),
+			min(randFloatBetween(testRNG, 0.65, 1.1), 1),
+		)
+		require.NoError(t, builder.WaitForLastJob(ctx))
+	}
+
+	jobID, err = builder.TakeCompacted(ctx, 1, 3)
+	require.NoError(t, err)
+	injectAndRecoverFailure(
+		ctx, t, t.L(), testUtils, testUtils.RandomNode(testRNG, liveNodes), jobID, failer, args,
+		randFloatBetween(testRNG, 0.15, 0.65),
+		min(randFloatBetween(testRNG, 0.65, 1.1), 1),
+	)
+	require.NoError(t, builder.WaitForLastJob(ctx))
+	collection, err := builder.Finalize(ctx)
+	require.NoError(t, err)
+
+	stopWorkloads()
+	testUtils.takeDebugZip(ctx, t.L())
+	err = testUtils.resetCluster(ctx, t.L(), clusterupgrade.CurrentVersion(), nil, nil)
+	require.NoError(t, err)
+
+	// TODO (kev-cao): Perform failure injection in restore path as well.
+	err = d.verifyBackupCollection(
+		ctx, t.L(), testRNG, collection,
+		true /* checkFiles */, true /* internalSystemJobs */, nil, /* mvHelper */
+	)
+	require.NoError(t, err)
+}
+
+// injectAndRecoverFailure waits for the job to progress past
+// failFractionCompleted, then injects the specified failure, waits for the
+// failure to propagate, waits for the job to progress past
+// recoverFractionCompleted, and then recovers from the failure. It
+// synchronously waits until the job succeeds before returning.
+// queryNode is the node used to poll for job status and should not be the
+// node that is subject to failure injection.
+func injectAndRecoverFailure(
+	ctx context.Context,
+	t test.Test,
+	l *logger.Logger,
+	testUtils *CommonTestUtils,
+	queryNode int,
+	jobID int,
+	failer *failures.Failer,
+	args failures.FailureArgs,
+	failFractionCompleted float64,
+	recoverFractionCompleted float64,
+) {
+	require.LessOrEqual(t, failFractionCompleted, 1.0, "failFractionCompleted should be <= 1.0")
+	require.LessOrEqual(t, recoverFractionCompleted, 1.0, "recoverFractionCompleted should be <= 1.0")
+
+	grp := t.NewErrorGroup(task.WithContext(ctx))
+	cancelFailer := grp.GoWithCancel(func(ctx context.Context, l *logger.Logger) error {
+		l.Printf(
+			"waiting for job %d to progress past %.2f%% before injecting failure",
+			jobID, failFractionCompleted*100,
+		)
+		if err := testUtils.waitForJobFractionCompletedWithNode(
+			ctx, l, queryNode, jobID, failFractionCompleted,
+		); err != nil {
+			return err
+		}
+		l.Printf("injecting failure")
+		if err := failer.Inject(ctx, l, args); err != nil {
+			return err
+		}
+		if err := failer.WaitForFailureToPropagate(ctx, l); err != nil {
+			return err
+		}
+		l.Printf(
+			"failure propagated, waiting for job %d to progress past %.2f%% before recovering",
+			jobID, recoverFractionCompleted*100,
+		)
+		if err := testUtils.waitForJobFractionCompletedWithNode(
+			ctx, l, queryNode, jobID, recoverFractionCompleted,
+		); err != nil {
+			return err
+		}
+		l.Printf("job %d progressed past %.2f%%, recovering from failure", jobID, recoverFractionCompleted*100)
+
+		if err := failer.Recover(ctx, l); err != nil {
+			return err
+		}
+		return failer.WaitForFailureToRecover(ctx, l)
+	}, task.Name(fmt.Sprintf("inject-failure-and-recovery-job-%d", jobID)))
+
+	grp.Go(func(ctx context.Context, l *logger.Logger) error {
+		l.Printf("waiting for job %d to succeed", jobID)
+		if err := testUtils.waitForJobSuccessWithNode(
+			ctx, l, queryNode, jobID, true, /* internalSystemJobs */
+		); err != nil {
+			// If the job fails, the test fails, so no need to attempt to recover.
+			cancelFailer()
+			return err
+		}
+		return nil
+	}, task.Name(fmt.Sprintf("wait-for-job-%d-success", jobID)))
+
+	require.NoError(t, grp.WaitE())
 }
 
 // initBackgroundWorkloads returns a function that starts a TPCC, bank, and a
