@@ -816,3 +816,22 @@ func (f fnMatcher) String() string {
 }
 
 var _ gomock.Matcher = fnMatcher(nil)
+
+func TestProducerBatchMaxBytes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	fx := newKafkaSinkV2Fx(t, withRealClient())
+	defer fx.close()
+
+	client := fx.bs.client.(*kafkaSinkClientV2).client.(*kgo.Client)
+	actual := client.OptValue("ProducerBatchMaxBytes").(int32)
+
+	t.Run("passing", func(t *testing.T) {
+		require.Equal(t, int32(256<<20), actual)
+	})
+
+	t.Run("failing", func(t *testing.T) {
+		require.Equal(t, int32(1<<20), actual)
+	})
+}
