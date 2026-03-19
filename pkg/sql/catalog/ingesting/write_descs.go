@@ -13,6 +13,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
@@ -83,6 +85,11 @@ func WriteDescriptors(
 		if updatedPrivileges != nil {
 			if mut, ok := desc.(*dbdesc.Mutable); ok {
 				mut.Privileges = updatedPrivileges
+				// Clear default privileges as well. Like regular privileges, we
+				// reset to defaults rather than selectively filtering since the
+				// backup's user set may not match this cluster's.
+				mut.DefaultPrivileges = catprivilege.MakeDefaultPrivilegeDescriptor(
+					catpb.DefaultPrivilegeDescriptor_DATABASE)
 			} else {
 				log.Dev.Fatalf(ctx, "wrong type for database %d, %T, expected Mutable",
 					desc.GetID(), desc)
@@ -121,6 +128,11 @@ func WriteDescriptors(
 		if updatedPrivileges != nil {
 			if mut, ok := sc.(*schemadesc.Mutable); ok {
 				mut.Privileges = updatedPrivileges
+				// Clear default privileges as well. Like regular privileges, we
+				// reset to defaults rather than selectively filtering since the
+				// backup's user set may not match this cluster's.
+				mut.DefaultPrivileges = catprivilege.MakeDefaultPrivilegeDescriptor(
+					catpb.DefaultPrivilegeDescriptor_SCHEMA)
 			} else {
 				log.Dev.Fatalf(ctx, "wrong type for schema %d, %T, expected Mutable",
 					sc.GetID(), sc)
