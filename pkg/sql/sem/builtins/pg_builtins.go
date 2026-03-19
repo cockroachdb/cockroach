@@ -2492,9 +2492,9 @@ SELECT
 				privileges := string(tree.MustBeDString(args[2]))
 				isGrantable := bool(tree.MustBeDBool(args[3]))
 
-				// Parse privilege names and convert to ACL characters.
-				var privChars strings.Builder
+				// Parse privilege names to a privilege.List.
 				privNames := strings.Split(privileges, ",")
+				var privList privilege.List
 				for _, name := range privNames {
 					name = strings.TrimSpace(name)
 					if name == "" {
@@ -2505,16 +2505,24 @@ SELECT
 						return nil, pgerror.Newf(pgcode.InvalidParameterValue,
 							"unrecognized privilege type: %q", name)
 					}
-					privChars.WriteByte(ch)
-					if isGrantable {
-						privChars.WriteByte('*')
+					privName := privilege.ACLCharToPrivName[ch]
+					kind, ok := privilege.ByDisplayName[privilege.KindDisplayName(privName)]
+					if !ok {
+						continue
 					}
+					privList = append(privList, kind)
+				}
+
+				var grantOptions privilege.List
+				if isGrantable {
+					grantOptions = make(privilege.List, len(privList))
+					copy(grantOptions, privList)
 				}
 
 				// Resolve OIDs to role names. OID 0 = PUBLIC (empty grantee).
 				// Like postgres, fall back to the numeric OID if the role
 				// doesn't exist.
-				granteeName := ""
+				grantee := username.PublicRoleName()
 				if granteeOid != 0 {
 					name, err := getNameForArg(
 						ctx, evalCtx, tree.NewDOid(granteeOid), "pg_roles", "rolname",
@@ -2523,10 +2531,9 @@ SELECT
 						return nil, err
 					}
 					if name == "" {
-						granteeName = fmt.Sprintf("%d", granteeOid)
-					} else {
-						granteeName = name
+						name = fmt.Sprintf("%d", granteeOid)
 					}
+					grantee = username.MakeSQLUsernameFromPreNormalizedString(name)
 				}
 				grantorName, err := getNameForArg(
 					ctx, evalCtx, tree.NewDOid(grantorOid), "pg_roles", "rolname",
@@ -2537,18 +2544,10 @@ SELECT
 				if grantorName == "" {
 					grantorName = fmt.Sprintf("%d", grantorOid)
 				}
+				grantor := username.MakeSQLUsernameFromPreNormalizedString(grantorName)
 
-				// Build the aclitem string: "grantee=privchars/grantor".
-				// Role names that contain special characters (e.g. hyphens,
-				// spaces) must be double-quoted, matching PostgreSQL's putid().
-				var result strings.Builder
-				result.WriteString(privilege.QuoteACLIdentifier(granteeName))
-				result.WriteByte('=')
-				result.WriteString(privChars.String())
-				result.WriteByte('/')
-				result.WriteString(privilege.QuoteACLIdentifier(grantorName))
-
-				return tree.NewDACLItem(result.String())
+				item := privilege.NewACLItem(grantee, grantor, privList, grantOptions)
+				return tree.NewDACLItem(item.String())
 			},
 			Info: "Constructs an aclitem from the given grantee, grantor, privileges, and grant option.",
 			// Marked immutable to match postgres. Our implementation resolves
@@ -2605,7 +2604,7 @@ SELECT
 					}
 					arr := tree.NewDArray(types.AclItem)
 					for _, item := range items {
-						d, err := tree.NewDACLItem(item)
+						d, err := tree.NewDACLItem(item.String())
 						if err != nil {
 							return nil, err
 						}
@@ -2618,17 +2617,17 @@ SELECT
 
 				// Non-CRDB object types: use hardcoded defaults.
 				type aclDefault struct {
-					ownerPrivs  string
-					publicPrivs string
+					ownerPrivs  privilege.List
+					publicPrivs privilege.List
 				}
 				defaults := map[string]aclDefault{
-					"l": {ownerPrivs: "U", publicPrivs: "U"}, // LANGUAGE
-					"c": {},                                  // COLUMN
-					"L": {ownerPrivs: "rw"},                  // LARGE OBJECT
-					"t": {ownerPrivs: "C"},                   // TABLESPACE
-					"F": {ownerPrivs: "U"},                   // FDW
-					"S": {ownerPrivs: "U"},                   // FOREIGN SERVER
-					"p": {ownerPrivs: "sA"},                  // PARAMETER
+					"l": {ownerPrivs: privilege.List{privilege.USAGE}, publicPrivs: privilege.List{privilege.USAGE}},
+					"c": {},
+					"L": {ownerPrivs: privilege.List{privilege.SELECT, privilege.UPDATE}},
+					"t": {ownerPrivs: privilege.List{privilege.CREATE}},
+					"F": {ownerPrivs: privilege.List{privilege.USAGE}},
+					"S": {ownerPrivs: privilege.List{privilege.USAGE}},
+					"p": {ownerPrivs: privilege.List{privilege.SET, privilege.ALTERSYSTEM}},
 				}
 
 				def, ok := defaults[typeChar]
@@ -2637,52 +2636,41 @@ SELECT
 						"unrecognized object type abbreviation: %q", typeChar)
 				}
 
+				owner := username.MakeSQLUsernameFromPreNormalizedString(ownerName)
 				arr := tree.NewDArray(types.AclItem)
-				quotedOwner := privilege.QuoteACLIdentifier(ownerName)
 
-				// Grant options are not marked with '*' because they
-				// are implicit (matching PostgreSQL behavior for
-				// owner defaults).
-				if def.publicPrivs != "" {
-					item := "=" + def.publicPrivs + "/" + quotedOwner
-					d, err := tree.NewDACLItem(item)
+				appendItem := func(item privilege.ACLItem) error {
+					d, err := tree.NewDACLItem(item.String())
 					if err != nil {
-						return nil, err
+						return err
 					}
-					if err := arr.Append(d); err != nil {
+					return arr.Append(d)
+				}
+
+				if len(def.publicPrivs) > 0 {
+					if err := appendItem(privilege.NewACLItem(
+						username.PublicRoleName(), owner, def.publicPrivs, nil,
+					)); err != nil {
 						return nil, err
 					}
 				}
-				if def.ownerPrivs != "" {
-					item := username.AdminRole + "=" + def.ownerPrivs + "/" + quotedOwner
-					d, err := tree.NewDACLItem(item)
-					if err != nil {
-						return nil, err
+				if len(def.ownerPrivs) > 0 {
+					for _, role := range []username.SQLUsername{
+						username.AdminRoleName(),
+						username.RootUserName(),
+					} {
+						if err := appendItem(privilege.NewACLItem(
+							role, owner, def.ownerPrivs, nil,
+						)); err != nil {
+							return nil, err
+						}
 					}
-					if err := arr.Append(d); err != nil {
-						return nil, err
-					}
-				}
-				if def.ownerPrivs != "" {
-					item := username.RootUser + "=" + def.ownerPrivs + "/" + quotedOwner
-					d, err := tree.NewDACLItem(item)
-					if err != nil {
-						return nil, err
-					}
-					if err := arr.Append(d); err != nil {
-						return nil, err
-					}
-				}
-				// If the owner is neither admin nor root, add their
-				// entry too (they get implicit ALL via ownership).
-				if ownerName != username.AdminRole && ownerName != username.RootUser && def.ownerPrivs != "" {
-					item := quotedOwner + "=" + def.ownerPrivs + "/" + quotedOwner
-					d, err := tree.NewDACLItem(item)
-					if err != nil {
-						return nil, err
-					}
-					if err := arr.Append(d); err != nil {
-						return nil, err
+					if !owner.IsAdminRole() && !owner.IsRootUser() {
+						if err := appendItem(privilege.NewACLItem(
+							owner, owner, def.ownerPrivs, nil,
+						)); err != nil {
+							return nil, err
+						}
 					}
 				}
 
