@@ -43,14 +43,14 @@ func BenchmarkMVCCScan_BlockOnlyMaxTimestamp(b *testing.B) {
 		// Number of batches. Each batch is flushed to create separate SST data
 		// blocks, ensuring the block property filter has block boundaries to
 		// work with.
-		numBatches = 50
+		numBatches   = 50
 		keysPerBatch = numKeys / numBatches
 		// Timestamp layout: "old" keys are written at wall times [1..1000],
 		// "new" keys at wall times [2001..3000]. The threshold is set at 1500,
 		// so blocks with only new keys (wall time > 1500) should be skipped.
-		oldTSBase   = int64(1)
-		newTSBase   = int64(2001)
-		threshold   = int64(1500)
+		oldTSBase = int64(1)
+		newTSBase = int64(2001)
+		threshold = int64(1500)
 	)
 
 	// pctNew controls what fraction of batches contain only "new" (skippable)
@@ -136,8 +136,8 @@ func BenchmarkMVCCScan_BlockOnlyMaxTimestamp(b *testing.B) {
 				b.SetBytes(int64(numKeys * valueSize))
 				for b.Loop() {
 					res, err := MVCCScan(ctx, eng, startKey, endKey, scanTS, MVCCScanOptions{
-						MaxKeys:              numKeys,
-						ReadCategory:         fs.BatchEvalReadCategory,
+						MaxKeys:               numKeys,
+						ReadCategory:          fs.BatchEvalReadCategory,
 						BlockOnlyMaxTimestamp: hlc.Timestamp{WallTime: threshold},
 					})
 					if err != nil {

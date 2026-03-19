@@ -26,8 +26,8 @@ go_test(
     srcs = ["ttl_helpers_test.go"],
     embed = [":ttlbase"],
     deps = [
-        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/types",
         "//pkg/util/leaktest",
         "//pkg/util/log",

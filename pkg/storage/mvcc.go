@@ -5044,10 +5044,10 @@ func MVCCScan(
 ) (MVCCScanResult, error) {
 	iter, err := newMVCCIterator(
 		ctx, reader, timestamp, !opts.Tombstones, opts.DontInterleaveIntents, IterOptions{
-			KeyTypes:             IterKeyTypePointsAndRanges,
-			LowerBound:           key,
-			UpperBound:           endKey,
-			ReadCategory:         opts.ReadCategory,
+			KeyTypes:              IterKeyTypePointsAndRanges,
+			LowerBound:            key,
+			UpperBound:            endKey,
+			ReadCategory:          opts.ReadCategory,
 			BlockOnlyMaxTimestamp: opts.BlockOnlyMaxTimestamp,
 		},
 	)
@@ -5068,10 +5068,10 @@ func MVCCScanToBytes(
 ) (MVCCScanResult, error) {
 	iter, err := newMVCCIterator(
 		ctx, reader, timestamp, !opts.Tombstones, opts.DontInterleaveIntents, IterOptions{
-			KeyTypes:             IterKeyTypePointsAndRanges,
-			LowerBound:           key,
-			UpperBound:           endKey,
-			ReadCategory:         opts.ReadCategory,
+			KeyTypes:              IterKeyTypePointsAndRanges,
+			LowerBound:            key,
+			UpperBound:            endKey,
+			ReadCategory:          opts.ReadCategory,
 			BlockOnlyMaxTimestamp: opts.BlockOnlyMaxTimestamp,
 		},
 	)
@@ -5123,10 +5123,10 @@ func MVCCIterate(
 ) ([]roachpb.Intent, error) {
 	iter, err := newMVCCIterator(
 		ctx, reader, timestamp, !opts.Tombstones, opts.DontInterleaveIntents, IterOptions{
-			KeyTypes:             IterKeyTypePointsAndRanges,
-			LowerBound:           key,
-			UpperBound:           endKey,
-			ReadCategory:         opts.ReadCategory,
+			KeyTypes:              IterKeyTypePointsAndRanges,
+			LowerBound:            key,
+			UpperBound:            endKey,
+			ReadCategory:          opts.ReadCategory,
 			BlockOnlyMaxTimestamp: opts.BlockOnlyMaxTimestamp,
 		},
 	)

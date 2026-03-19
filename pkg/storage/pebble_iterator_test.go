@@ -219,7 +219,7 @@ func TestPebbleIterator_BlockOnlyMaxTimestamp(t *testing.T) {
 	t.Run("sets PointKeyFilters without SkipPoint", func(t *testing.T) {
 		var iter pebbleIterator
 		iter.setOptions(context.Background(), IterOptions{
-			LowerBound:           []byte{0x00},
+			LowerBound:            []byte{0x00},
 			BlockOnlyMaxTimestamp: hlc.Timestamp{WallTime: 100},
 		}, StandardDurability)
 		require.NotNil(t, iter.options.PointKeyFilters,
@@ -232,7 +232,7 @@ func TestPebbleIterator_BlockOnlyMaxTimestamp(t *testing.T) {
 		var iter pebbleIterator
 		require.Panics(t, func() {
 			iter.setOptions(context.Background(), IterOptions{
-				LowerBound:           []byte{0x00},
+				LowerBound:            []byte{0x00},
 				MaxTimestamp:          hlc.Timestamp{WallTime: 200},
 				BlockOnlyMaxTimestamp: hlc.Timestamp{WallTime: 100},
 			}, StandardDurability)
