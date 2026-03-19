@@ -11,6 +11,10 @@ statement ok
 CREATE TABLE canary_table (x int primary key, y int, FAMILY (x, y)) WITH (sql_stats_canary_window = '20s');
 INSERT INTO canary_table VALUES (1, 1);
 
+statement ok
+CREATE TABLE no_canary_table (x int primary key);
+INSERT INTO no_canary_table VALUES (1);
+
 query TT
 SHOW CREATE TABLE canary_table
 ----
@@ -49,6 +53,27 @@ CREATE TABLE public.canary_table (
 
 subtest canary_stats_with_query_cache
 
+# This subtest verifies how canary executions interact with the query cache.
+#
+# cached memo exists (warm cache)?
+# ├─ yes → stale?
+# │         ├─ yes → rebuild via buildReusableMemo
+# │         │         (DisableMemoReuse decides whether to cache the rebuilt memo)
+# │         └─ no  → canary + canary-window table?
+# │                   ├─ no  → use cached memo
+# │                   └─ yes → skip cached memo, build from scratch
+# │                             (DisableMemoReuse decides whether to cache)
+# └─ no (cold cache) → build fresh memo
+#                       canary + canary-window table?
+#                       ├─ no  → add to cache
+#                       └─ yes → stats differ?
+#                                ├─ no  → add to cache (nothing to canary yet)
+#                                └─ yes → do NOT add (protect stable baseline)
+
+# --------------------------------------------------------------------------
+# Phase 1: Warm-up — stable executions populate the cache normally.
+# --------------------------------------------------------------------------
+
 # Use a positive canary_fraction so that the experiment is active, but force
 # stable stats for this session via canary_stats_mode=off. (fraction=0 would
 # mean experiment-off, i.e. StatsRolloutDefault, not StatsRolloutStable.)
@@ -67,7 +92,6 @@ SELECT * FROM canary_table;
 statement ok
 SET TRACING = "off";
 
-# The first execution should miss the query cache.
 query T
 SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
 ----
@@ -83,14 +107,204 @@ SELECT * FROM canary_table;
 statement ok
 SET TRACING = "off";
 
-# The second execution should hit the query cache.
 query T
 SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
 ----
 query cache hit
 
-# Now we test the case where always use canary stats, which doesn't
-# interact with query cache at all.
+# Populate the cache for no_canary_table too.
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM no_canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache miss
+query cache add
+
+# --------------------------------------------------------------------------
+# Phase 2a: Canary + warm cache + no stats — the read gate in action.
+# --------------------------------------------------------------------------
+# No table stats have been collected or injected yet, so canary and stable
+# stats are identical (there is nothing to canary).
+
+statement ok
+SET canary_stats_mode = on;
+
+# canary_table (has canary window): the read gate fires — the cached stable
+# memo is skipped. A from-scratch build follows. Because no distinct stats
+# exist yet, canary and stable stats don't differ, so the write gate
+# (DisableMemoReuse) allows caching the from-scratch memo.
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache hit but skipping for canary exec
+query cache miss
+query cache add
+
+# no_canary_table (no canary window): unaffected, cache hit as normal.
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM no_canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache hit
+
+# Switch back to stable. Both tables hit the cache — canary executions
+# only cached equivalent memos (stats don't differ), so stable is unaffected.
+statement ok
+SET canary_stats_mode = off;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache hit
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM no_canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache hit
+
+# --------------------------------------------------------------------------
+# Phase 2b: Canary + warm cache + stats differ — write gate blocks.
+# --------------------------------------------------------------------------
+# Now inject stats so canary and stable genuinely differ. Re-warm the cache
+# with a stable execution (injecting stats invalidates the old entry), then
+# verify a canary execution skips the cached memo AND does NOT cache the
+# from-scratch build (DisableMemoReuse fires because stats differ).
+
+statement ok
+ALTER TABLE canary_table INJECT STATISTICS '[
+  {
+    "avg_size": 1, "columns": ["x"],
+    "created_at": "2000-01-01 00:00:00.000000",
+    "distinct_count": 10, "name": "__auto__",
+    "null_count": 0, "row_count": 10
+  },
+  {
+    "avg_size": 1, "columns": ["x"],
+    "created_at": "2000-01-01 00:01:00.000000",
+    "distinct_count": 20, "name": "__auto__",
+    "null_count": 0, "row_count": 20
+  }
+]'
+
+# Pin stats_as_of within the canary window so canary and stable stats differ.
+statement ok
+SET stats_as_of = '2000-01-01 00:01:10.000000'
+
+# Re-warm the cache: stable execution rebuilds the now-stale entry.
+# (The stale-rebuild path does not log "query cache add".)
+statement ok
+SET canary_stats_mode = off;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache hit (prepare)
+query cache hit but needed update
+
+# Canary execution: skips cached memo, builds from scratch, but does NOT
+# cache the result because canary and stable stats genuinely differ.
+# Contrast with Phase 2a above, where the same path produced a
+# "query cache add" because stats didn't differ there.
+statement ok
+SET canary_stats_mode = on;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' AND operation = 'optimizer';
+----
+query cache hit but needed update
+
+# Stable execution still hits the cache — canary did not corrupt it.
+statement ok
+SET canary_stats_mode = off;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache hit
+
+statement ok
+RESET stats_as_of
+
+# --------------------------------------------------------------------------
+# Phase 3: Canary + cold cache + no stats — the write gate passes.
+# --------------------------------------------------------------------------
+# The table has a canary window but no stats yet, so canary and stable stats
+# are identical. The read gate doesn't fire (nothing cached). The write gate
+# allows caching because there's nothing to canary.
+
+statement ok
+SELECT crdb_internal.clear_query_plan_cache();
+
 statement ok
 SET canary_stats_mode = on;
 
@@ -106,72 +320,207 @@ SET TRACING = "off";
 query T
 SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
 ----
-not using query cache
+query cache miss
+query cache add
+
+# --------------------------------------------------------------------------
+# Phase 4: Canary + cold cache + stats differ — the write gate blocks.
+# --------------------------------------------------------------------------
+# Inject stats and pin stats_as_of within the canary window so that canary
+# and stable stats genuinely differ. The canary memo must NOT be cached,
+# otherwise stable executions would reuse it and corrupt the baseline.
+statement ok
+ALTER TABLE canary_table INJECT STATISTICS '[
+  {
+    "avg_size": 1, "columns": ["x"],
+    "created_at": "2000-01-01 00:00:00.000000",
+    "distinct_count": 10, "name": "__auto__",
+    "null_count": 0, "row_count": 10
+  },
+  {
+    "avg_size": 1, "columns": ["x"],
+    "created_at": "2000-01-01 00:01:00.000000",
+    "distinct_count": 20, "name": "__auto__",
+    "null_count": 0, "row_count": 20
+  }
+]'
+
+# stats_as_of within canary window (00:01:00 + 30s = 00:01:30 > 00:01:10),
+# so canary and stable stats genuinely differ.
+statement ok
+SET stats_as_of = '2000-01-01 00:01:10.000000'
 
 statement ok
-SET TRACING = "on", cluster;
-
-statement ok
-SELECT * FROM canary_table;
-
-statement ok
-SET TRACING = "off";
-
-query T
-SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
-----
-not using query cache
-
-# Switching back to using stable stats, and the same query should still be
-# able to hit the query cache.
-statement ok
-SET CLUSTER SETTING sql.stats.canary_fraction='0.0';
-
-statement ok
-SET TRACING = "on", cluster;
-
-statement ok
-SELECT * FROM canary_table;
-
-statement ok
-SET TRACING = "off";
-
-# We should see the original cache is still there.
-query T
-SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
-----
-query cache hit
-
-subtest end
-
-subtest prepared_statements
+SELECT crdb_internal.clear_query_plan_cache();
 
 statement ok
 SET canary_stats_mode = on;
 
 statement ok
-PREPARE p1 AS SELECT * FROM canary_table WHERE x = $1;
+SET TRACING = "on", cluster;
 
-query II
-EXECUTE p1(1);
-----
-1  1
-
-# Test with prepared statement without placeholder.
 statement ok
-PREPARE p2 AS SELECT * FROM canary_table WHERE x = 1;
+SELECT * FROM canary_table;
 
-query II
-EXECUTE p2;
+statement ok
+SET TRACING = "off";
+
+# Canary execution: miss but NO add — the write gate blocks because canary
+# and stable stats differ.
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' AND operation = 'optimizer';
 ----
-1  1
+query cache miss
+
+# Switch to stable. The cache is still empty, so stable gets a miss + add.
+statement ok
+SET canary_stats_mode = off;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache miss
+query cache add
+
+# Confirm the stable memo was cached correctly.
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache hit
+
+# --------------------------------------------------------------------------
+# Phase 5: Canary + cold cache + canary window expired — write gate passes.
+# --------------------------------------------------------------------------
+# Unlike Phase 3 (no stats at all), here stats exist but stats_as_of is past
+# the canary window, so the newest stats have "ripened" and canary/stable see
+# the same thing. The canary memo is safe to cache.
+#
+# Reuses injected stats from Phase 4:
+#   stats at 2000-01-01 00:00:00 (row_count=10) and 00:01:00 (row_count=20)
+#
+# stats_as_of past the canary window (00:01:00 + 30s = 00:01:30 < 00:02:00),
+# so canary and stable stats are identical.
+statement ok
+SET stats_as_of = '2000-01-01 00:02:00.000000'
+
+statement ok
+SELECT crdb_internal.clear_query_plan_cache();
+
+statement ok
+SET canary_stats_mode = on;
+
+# Confirm we are genuinely on the canary path (not accidentally default).
+# Both canary and stable see row_count=20 because stats_as_of is past the
+# canary window.
+query T
+EXPLAIN (VERBOSE) SELECT * FROM canary_table
+----
+distribution: local
+vectorized: true
+table stats mode: canary
+·
+• scan
+  columns: (x, y)
+  estimated row count: 20 (100% of the table; stats collected <hidden> ago)
+  table: canary_table@canary_table_pkey
+  spans: FULL SCAN
 
 statement ok
 SET canary_stats_mode = off;
 
+query T
+EXPLAIN (VERBOSE) SELECT * FROM canary_table
+----
+distribution: local
+vectorized: true
+table stats mode: stable
+·
+• scan
+  columns: (x, y)
+  estimated row count: 20 (100% of the table; stats collected <hidden> ago)
+  table: canary_table@canary_table_pkey
+  spans: FULL SCAN
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+# Write gate passes — canary memo is cached since stats don't differ.
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache miss
+query cache add
+
+# Stable execution hits the cache that canary just populated (plans are
+# identical, so this is safe).
+statement ok
+SET canary_stats_mode = off;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache hit
+
+statement ok
+RESET stats_as_of
+
+statement ok
+RESET canary_stats_mode
+
 subtest end
 
 subtest prepared_statements_with_query_cache
+
+# This subtest verifies how canary executions interact with prepared
+# statement memos.
+#
+# PREPARE (no dice roll — always uses stable stats):
+#   Normal query cache behavior, no canary gating at all.
+#
+# EXECUTE (dice roll determines canary vs stable):
+#   canary + canary-window table?
+#   ├─ no  → reuse prepared memo
+#   └─ yes → skip prepared memo, rebuild via buildReusableMemo
+#             (DisableMemoReuse decides whether to store the rebuilt memo)
+#
+# Tables without a canary window are always unaffected.
+
+# --------------------------------------------------------------------------
+# Phase 1: Warm-up — PREPARE populates query cache, stable EXECUTE reuses.
+# --------------------------------------------------------------------------
 
 statement ok
 DEALLOCATE ALL;
@@ -182,7 +531,7 @@ SELECT crdb_internal.clear_query_plan_cache();
 statement ok
 SET TRACING = "on", cluster;
 
-# We are using stable stats for every query, so the query cache should be used.
+# PREPARE uses the query cache normally (no canary gating).
 statement ok
 PREPARE p1 AS SELECT * from canary_table;
 PREPARE p2 AS SELECT * from canary_table;
@@ -199,6 +548,10 @@ query cache miss (prepare)
 query cache hit (prepare)
 query cache miss (prepare)
 query cache hit (prepare)
+
+# Stable EXECUTE reuses the prepared memo.
+statement ok
+SET canary_stats_mode = off;
 
 statement ok
 SET TRACING = "on", cluster;
@@ -224,20 +577,17 @@ reusing cached memo
 reusing cached memo
 reusing cached memo
 
-# We are using canary stats for all queries now, but we don't roll the dice
-# for prepared statement. I.e. the prepare stmt would still be cached,
-# and memo would still be built with stable stats and cached within the prepared
-# statement.
+# --------------------------------------------------------------------------
+# Phase 2: Canary — PREPARE still normal, EXECUTE rebuilds from scratch.
+# --------------------------------------------------------------------------
+
 statement ok
 SET canary_stats_mode = on;
 
+# PREPARE still uses the query cache normally (no dice roll).
 statement ok
 SET TRACING = "on", cluster;
 
-# p5, p6 are based on the same queries as p1, p3 respectively, so they
-# should hit the query cache. p7 is a new query so it should see a query
-# cache miss, but itself would be cached. p8 is based on the same query as
-# p7, so it should hit the query cache.
 statement ok
 PREPARE p5 AS SELECT * from canary_table;
 PREPARE p6 AS SELECT * from canary_table WHERE x = $1;
@@ -247,6 +597,7 @@ PREPARE p8 AS SELECT * from canary_table WHERE y = $1;
 statement ok
 SET TRACING = "off";
 
+# p5, p6 hit cache (same queries as p1, p3). p7 misses, p8 hits.
 query T
 SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
 ----
@@ -255,12 +606,15 @@ query cache hit (prepare)
 query cache miss (prepare)
 query cache hit (prepare)
 
+# Canary EXECUTE on canary-window tables: skip the prepared memo and
+# rebuild via buildReusableMemo. DisableMemoReuse decides whether to
+# store the rebuilt memo (here stats don't differ, but the prepared
+# memo is still skipped because the table has a canary window).
+# Each canary EXECUTE emits "skipping cached memo for canary exec"
+# (the read-side guard) followed by "rebuilding cached memo".
 statement ok
 SET TRACING = "on", cluster;
 
-# For execution, since canary_stats_mode=on forces canary for every execution,
-# the cached memo within the prepared statement cannot be reused (it was built
-# with stable stats), so each execution rebuilds the memo from scratch.
 statement ok
 EXECUTE p5;
 EXECUTE p5;
@@ -279,20 +633,54 @@ SET TRACING = "off";
 query T
 SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
 ----
-reusing cached memo
-reusing cached memo
-reusing cached memo
-reusing cached memo
-reusing cached memo
-reusing cached memo
-reusing cached memo
-reusing cached memo
+skipping cached memo for canary exec
+rebuilding cached memo
+skipping cached memo for canary exec
+rebuilding cached memo
+skipping cached memo for canary exec
+rebuilding cached memo
+skipping cached memo for canary exec
+rebuilding cached memo
+skipping cached memo for canary exec
+rebuilding cached memo
+skipping cached memo for canary exec
+rebuilding cached memo
+skipping cached memo for canary exec
+rebuilding cached memo
+skipping cached memo for canary exec
+rebuilding cached memo
+skipping cached memo for canary exec
+rebuilding cached memo
+skipping cached memo for canary exec
+rebuilding cached memo
+
+# --------------------------------------------------------------------------
+# Phase 3: Canary + no canary window — EXECUTE reuses memo normally.
+# --------------------------------------------------------------------------
+
+statement ok
+PREPARE p9 AS SELECT * FROM no_canary_table WHERE x = $1;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE p9(1);
+EXECUTE p9(1);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
 reusing cached memo
 reusing cached memo
 
-# We now switch back to stable stats. Executing a prepared stmt that was
-# created while canary_stats_mode=on should still be able to use the
-# cached memo.
+# --------------------------------------------------------------------------
+# Phase 4: Back to stable — canary never corrupted prepared memos.
+# --------------------------------------------------------------------------
+
 statement ok
 SET canary_stats_mode = off;
 
@@ -315,6 +703,276 @@ reusing cached memo
 reusing cached memo
 reusing cached memo
 reusing cached memo
+
+subtest end
+
+subtest interleaved_canary_stable_execute
+
+# Test that interleaving canary and stable EXECUTEs does not corrupt the
+# prepared statement's cached memo. The sequence is:
+#   1. PREPARE with stable stats (canary_stats_mode=off).
+#   2. Stable EXECUTE → row_count=10 (stable stats).
+#   3. Canary EXECUTE → row_count=20 (canary stats), does NOT write back.
+#   4. Stable EXECUTE → row_count=10 (still the original stable memo).
+#
+# We inject stats that genuinely differ within the canary window so that
+# canary and stable plans are distinguishable. Step 4 asserts row_count=10;
+# if a bug allowed the canary to write back, it would show row_count=20.
+statement ok
+DEALLOCATE ALL;
+
+statement ok
+SELECT crdb_internal.clear_query_plan_cache();
+
+statement ok
+ALTER TABLE canary_table INJECT STATISTICS '[
+  {
+    "avg_size": 1, "columns": ["x"],
+    "created_at": "2000-01-01 00:00:00.000000",
+    "distinct_count": 10, "name": "__auto__",
+    "null_count": 0, "row_count": 10
+  },
+  {
+    "avg_size": 1, "columns": ["x"],
+    "created_at": "2000-01-01 00:01:00.000000",
+    "distinct_count": 20, "name": "__auto__",
+    "null_count": 0, "row_count": 20
+  }
+]'
+
+# Pin stats_as_of within canary window so canary and stable stats differ.
+statement ok
+SET stats_as_of = '2000-01-01 00:01:10.000000'
+
+statement ok
+SET canary_stats_mode = off;
+
+# Use a full scan (no placeholder) so the row estimate directly reflects
+# which stats were used: stable=10, canary=20.
+statement ok
+PREPARE pinterleave AS SELECT * FROM canary_table;
+
+# Step 2: stable execute — should reuse the cached memo with row_count=10.
+# (Can be seen from "plan type: generic, reused")
+query T
+EXPLAIN ANALYZE (VERBOSE) EXECUTE pinterleave
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+table stats mode: stable
+rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• scan
+  columns: (x, y)
+  sql nodes: <hidden>
+  kv nodes: <hidden>
+  regions: <hidden>
+  vectorized batch count: 0
+  KV time: 0µs
+  KV rows decoded: 1
+  KV pairs read: 2
+  KV bytes read: 8 B
+  KV gRPC calls: 1
+  estimated max memory allocated: 0 B
+  MVCC step count (ext/int): 0/0
+  MVCC seek count (ext/int): 0/0
+  actual row count: 1
+  estimated row count: 10 (100% of the table; stats collected <hidden> ago)
+  canary window: 30s
+  table: canary_table@canary_table_pkey
+  spans: FULL SCAN
+
+# Step 3: canary execute — should rebuild from scratch with row_count=20.
+# (Can be seen from "plan type: generic, re-optimized")
+statement ok
+SET canary_stats_mode = on;
+
+query T
+EXPLAIN ANALYZE (VERBOSE) EXECUTE pinterleave
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, re-optimized
+table stats mode: canary
+rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• scan
+  columns: (x, y)
+  sql nodes: <hidden>
+  kv nodes: <hidden>
+  regions: <hidden>
+  vectorized batch count: 0
+  KV time: 0µs
+  KV rows decoded: 1
+  KV pairs read: 2
+  KV bytes read: 8 B
+  KV gRPC calls: 1
+  estimated max memory allocated: 0 B
+  MVCC step count (ext/int): 0/0
+  MVCC seek count (ext/int): 0/0
+  actual row count: 1
+  estimated row count: 20 (100% of the table; stats collected <hidden> ago)
+  canary window: 30s
+  table: canary_table@canary_table_pkey
+  spans: FULL SCAN
+
+# Step 4: back to stable — the original cached memo (row_count = 10) must
+# still be intact.
+# (Can be seen from "plan type: generic, reused")
+statement ok
+SET canary_stats_mode = off;
+
+query T
+EXPLAIN ANALYZE (VERBOSE) EXECUTE pinterleave
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, reused
+table stats mode: stable
+rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• scan
+  columns: (x, y)
+  sql nodes: <hidden>
+  kv nodes: <hidden>
+  regions: <hidden>
+  vectorized batch count: 0
+  KV time: 0µs
+  KV rows decoded: 1
+  KV pairs read: 2
+  KV bytes read: 8 B
+  KV gRPC calls: 1
+  estimated max memory allocated: 0 B
+  MVCC step count (ext/int): 0/0
+  MVCC seek count (ext/int): 0/0
+  actual row count: 1
+  estimated row count: 10 (100% of the table; stats collected <hidden> ago)
+  canary window: 30s
+  table: canary_table@canary_table_pkey
+  spans: FULL SCAN
+
+statement ok
+RESET stats_as_of
+
+subtest end
+
+subtest prepare_uses_stable_with_canary_fraction
+
+# Verify that PREPARE always builds with stable stats when canary_fraction > 0,
+# even via the production canaryRollDice() path. This tests the fix in
+# populatePrepared that forces StatsRolloutStable during PREPARE.
+#
+# We inject stats that genuinely differ within the canary window. Without
+# the fix, PREPARE would roll canary (since fraction=1.0), the optbuilder
+# would set DisableMemoReuse (because canary and stable stats differ), and
+# the prepared memo would NOT be cached. With the fix, PREPARE forces
+# StatsRolloutStable, so memo caching works normally.
+statement ok
+DEALLOCATE ALL;
+
+statement ok
+SELECT crdb_internal.clear_query_plan_cache();
+
+statement ok
+ALTER TABLE canary_table INJECT STATISTICS '[
+  {
+    "avg_size": 1, "columns": ["x"],
+    "created_at": "2000-01-01 00:00:00.000000",
+    "distinct_count": 10, "name": "__auto__",
+    "null_count": 0, "row_count": 10
+  },
+  {
+    "avg_size": 1, "columns": ["x"],
+    "created_at": "2000-01-01 00:01:00.000000",
+    "distinct_count": 20, "name": "__auto__",
+    "null_count": 0, "row_count": 20
+  }
+]'
+
+# Pin stats_as_of within canary window so canary and stable stats differ.
+statement ok
+SET stats_as_of = '2000-01-01 00:01:10.000000'
+
+# Production path: canary_fraction=1.0 means canaryRollDice() always
+# returns StatsRolloutCanary, but PREPARE overrides to StatsRolloutStable.
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction='1.0';
+
+statement ok
+SET canary_stats_mode = auto;
+
+statement ok
+PREPARE pfrac AS SELECT * FROM canary_table WHERE x = $1;
+
+# Stable EXECUTE should reuse the cached memo, proving PREPARE built
+# and cached it with stable stats.
+statement ok
+SET canary_stats_mode = off;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE pfrac(1);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+
+# Canary EXECUTE (via production path) should rebuild since canary_table
+# has a canary window and stats genuinely differ.
+statement ok
+SET canary_stats_mode = auto;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE pfrac(1);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+skipping cached memo for canary exec
+rebuilding cached memo
+
+statement ok
+RESET stats_as_of;
+
+statement ok
+RESET canary_stats_mode;
 
 subtest end
 
@@ -1553,7 +2211,7 @@ SET TRACING = "off"
 query T
 SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%cached memo%'
 ----
-rebuilding cached memo
+reusing cached memo
 
 # Second EXECUTE: fast path sees matching digest → memo reused (row_count=10).
 statement ok
