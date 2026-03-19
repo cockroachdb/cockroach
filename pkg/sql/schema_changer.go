@@ -1203,8 +1203,8 @@ func (sc *SchemaChanger) dropViewDeps(
 	}
 	viewDesc.DependsOn = nil
 	// If anything depends on this table clean up references from that object as well.
-	DependedOnBy := append([]descpb.TableDescriptor_Reference(nil), viewDesc.DependedOnBy...)
-	for _, depRef := range DependedOnBy {
+	dependedOnBy := append([]descpb.TableDescriptor_Reference(nil), viewDesc.DependedOnBy...)
+	for _, depRef := range dependedOnBy {
 		dependencyDesc, err := descsCol.MutableByID(txn).Table(ctx, depRef.ID)
 		if err != nil {
 			log.Dev.Warningf(ctx, "error resolving dependency relation ID %d", depRef.ID)
@@ -1218,41 +1218,76 @@ func (sc *SchemaChanger) dropViewDeps(
 			return err
 		}
 	}
-	// Clean up sequence and type references from the view.
-	for _, col := range viewDesc.DeletableColumns() {
+	// Clean up sequence, type, and function references from the view.
+	return sc.dropColumnDeps(ctx, descsCol, txn, b, viewDesc)
+}
+
+// dropColumnDeps cleans up per-column dependencies (type back-references,
+// function back-references, and sequence back-references) for a table or view.
+// For each column, it removes the descriptor's ID from any referenced type
+// descriptor's ReferencingDescriptorIDs, any referenced function descriptor's
+// DependedOnBy, and any referenced sequence's DependedOnBy.
+//
+// Errors during cleanup are logged as warnings and skipped because this
+// function is called during rollback or view teardown, where the descriptor
+// state may be inconsistent or partially committed.
+func (sc *SchemaChanger) dropColumnDeps(
+	ctx context.Context,
+	descsCol *descs.Collection,
+	txn *kv.Txn,
+	b *kv.Batch,
+	tableDesc *tabledesc.Mutable,
+) error {
+	for _, col := range tableDesc.DeletableColumns() {
 		typeClosure := typedesc.GetTypeDescriptorClosure(col.GetType())
+		// Clean up type back-references.
 		for _, id := range typeClosure.Ordered() {
 			typeDesc, err := descsCol.MutableByID(txn).Type(ctx, id)
 			if err != nil {
-				log.Dev.Warningf(ctx, "error resolving type dependency %d", id)
+				log.Dev.Warningf(ctx, "error resolving type dependency %d during rollback: %v", id, err)
 				continue
 			}
-			if typeDesc.RemoveReferencingDescriptorID(viewDesc.GetID()) {
-				if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace*/, typeDesc, b); err != nil {
-					log.Dev.Warningf(ctx, "error removing dependency from type ID %d", id)
+			if typeDesc.RemoveReferencingDescriptorID(tableDesc.GetID()) {
+				if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, typeDesc, b); err != nil {
+					log.Dev.Warningf(ctx, "error removing dependency from type ID %d during rollback: %v", id, err)
 					return err
 				}
 			}
 		}
-		for i := 0; i < col.NumUsesSequences(); i++ {
-			id := col.GetUsesSequenceID(i)
-			seqDesc, err := descsCol.MutableByID(txn).Table(ctx, id)
+		// Clean up function back-references.
+		for i := 0; i < col.NumUsesFunctions(); i++ {
+			fnID := col.GetUsesFunctionID(i)
+			fnDesc, err := descsCol.MutableByID(txn).Function(ctx, fnID)
 			if err != nil {
-				log.Dev.Warningf(ctx, "error resolving sequence dependency %d", id)
+				log.Dev.Warningf(ctx, "error resolving function dependency %d: %v", fnID, err)
+				continue
+			}
+			fnDesc.RemoveReference(tableDesc.GetID())
+			if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace */, fnDesc, b); err != nil {
+				log.Dev.Warningf(ctx, "error removing dependency from function ID %d: %v", fnID, err)
+				return err
+			}
+		}
+		// Clean up sequence back-references.
+		for i := 0; i < col.NumUsesSequences(); i++ {
+			seqID := col.GetUsesSequenceID(i)
+			seqDesc, err := descsCol.MutableByID(txn).Table(ctx, seqID)
+			if err != nil {
+				log.Dev.Warningf(ctx, "error resolving sequence dependency %d during rollback: %v", seqID, err)
 				continue
 			}
 			if seqDesc.Dropped() {
 				continue
 			}
-			DependedOnBy := seqDesc.DependedOnBy
+			dependedOnBy := seqDesc.DependedOnBy
 			seqDesc.DependedOnBy = seqDesc.DependedOnBy[:0]
-			for _, dep := range DependedOnBy {
-				if dep.ID != viewDesc.ID {
+			for _, dep := range dependedOnBy {
+				if dep.ID != tableDesc.ID {
 					seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, dep)
 				}
 			}
 			if err := descsCol.WriteDescToBatch(ctx, false /* kvTrace*/, seqDesc, b); err != nil {
-				log.Dev.Warningf(ctx, "error removing dependency from sequence ID %d", id)
+				log.Dev.Warningf(ctx, "error removing dependency from sequence ID %d during rollback: %v", seqID, err)
 				return err
 			}
 		}
@@ -1377,6 +1412,13 @@ func (sc *SchemaChanger) rollbackSchemaChange(ctx context.Context, err error) er
 
 		if err := sc.dropFKDeps(ctx, txn.Descriptors(), txn.KV(), b, scTable); err != nil {
 			return err
+		}
+
+		// Column dependencies are cleaned up in dropViewDeps for view.
+		if !scTable.IsView() {
+			if err := sc.dropColumnDeps(ctx, txn.Descriptors(), txn.KV(), b, scTable); err != nil {
+				return err
+			}
 		}
 
 		scTable.SetDropped()
