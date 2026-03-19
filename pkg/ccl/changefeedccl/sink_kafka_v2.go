@@ -81,9 +81,8 @@ func newKafkaSinkClientV2(
 		kgo.SeedBrokers(bootstrapBrokers...),
 		kgo.WithLogger(kgoLogAdapter{ctx: ctx}),
 		kgo.RecordPartitioner(newKgoChangefeedPartitioner(partitionAlg)),
-		// 256MiB. This is the max this library allows. Note that v1 sets the sarama equivalent to math.MaxInt32.
-		kgo.ProducerBatchMaxBytes(256 << 20), // 256MiB
-		kgo.BrokerMaxWriteBytes(1 << 30),     // 1GiB
+		kgo.ProducerBatchMaxBytes(int32(changefeedbase.KafkaProducerBatchMaxBytes.Get(&settings.SV))),
+		kgo.BrokerMaxWriteBytes(1 << 30), // 1GiB
 
 		kgo.AllowAutoTopicCreation(),
 
@@ -491,6 +490,20 @@ func buildKgoConfig(
 	if err != nil {
 		return nil, errors.Wrapf(err,
 			"failed to parse sink config; check %s option", changefeedbase.OptKafkaSinkConfig)
+	}
+	if sinkCfg.ProducerBatchMaxBytes != 0 {
+		if sinkCfg.ProducerBatchMaxBytes < changefeedbase.KafkaProducerBatchMinBytes {
+			return nil, errors.Errorf(
+				"ProducerBatchMaxBytes must be at least %d bytes, got %d",
+				changefeedbase.KafkaProducerBatchMinBytes, sinkCfg.ProducerBatchMaxBytes)
+		}
+		if sinkCfg.ProducerBatchMaxBytes > changefeedbase.KafkaProducerBatchMaxBytesLimit {
+			return nil, errors.Errorf(
+				"ProducerBatchMaxBytes must be at most %d bytes, got %d",
+				changefeedbase.KafkaProducerBatchMaxBytesLimit, sinkCfg.ProducerBatchMaxBytes)
+		}
+		// Override the cluster setting default set in baseOpts; kgo uses last-writer-wins.
+		opts = append(opts, kgo.ProducerBatchMaxBytes(sinkCfg.ProducerBatchMaxBytes))
 	}
 
 	// If the user sets MaxMessages, use that as kgo's overall max batch size.

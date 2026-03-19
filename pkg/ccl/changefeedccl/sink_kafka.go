@@ -207,6 +207,10 @@ type saramaConfig struct {
 	RequiredAcks string `json:",omitempty"`
 
 	Version string `json:",omitempty"`
+
+	// ProducerBatchMaxBytes overrides the cluster setting
+	// changefeed.kafka.producer_batch_max_bytes for this changefeed.
+	ProducerBatchMaxBytes int32 `json:",omitempty"` // int32 to match kgo.ProducerBatchMaxBytes
 }
 
 func (c saramaConfig) Validate() error {

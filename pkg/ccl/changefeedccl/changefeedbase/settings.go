@@ -404,6 +404,31 @@ var KafkaV2ErrorDetailsEnabled = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
+const (
+	// KafkaProducerBatchMinBytes is the minimum value accepted by
+	// kgo.ProducerBatchMaxBytes (defined by franz-go).
+	KafkaProducerBatchMinBytes = 512
+	// KafkaProducerBatchMaxBytesLimit is the maximum value accepted by
+	// kgo.ProducerBatchMaxBytes (defined by franz-go).
+	KafkaProducerBatchMaxBytesLimit = 256 << 20 // 256 MiB
+)
+
+// KafkaProducerBatchMaxBytes controls ProducerBatchMaxBytes for the v2 sink.
+// franz-go coalesces multiple in-flight batches into a single broker request,
+// so a large value can trigger spurious MessageTooLarge errors. See #165387.
+var KafkaProducerBatchMaxBytes = settings.RegisterByteSizeSetting(
+	settings.ApplicationLevel,
+	"changefeed.kafka.producer_batch_max_bytes",
+	"the maximum size of a record batch sent to Kafka by the v2 sink "+
+		"(has no effect on the legacy v1 sink); lowering this can prevent "+
+		"spurious message-too-large errors when multiple batches are coalesced "+
+		"into a single broker request",
+	KafkaProducerBatchMaxBytesLimit,
+	settings.ByteSizeWithMinimum(KafkaProducerBatchMinBytes),
+	settings.ByteSizeWithMaximum(KafkaProducerBatchMaxBytesLimit),
+	settings.WithPublic,
+)
+
 // PartitionAlgEnabled enables the partition_alg changefeed option.
 // TODO(#126991): delete reference to changefeed.new_kafka_sink_enabled
 // when enabled everywhere.
