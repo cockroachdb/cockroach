@@ -9925,85 +9925,8 @@ WHERE object_id = table_descriptor_id
 			Category:         builtinconstants.CategorySystemRepair,
 			DistsqlBlocklist: true,
 		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "rowid", Typ: types.Int},
-			},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				// The user must have REPAIRCLUSTER to use this builtin.
-				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
-				); err != nil {
-					return nil, err
-				}
-				rowIDArg := int64(tree.MustBeDInt(args[0]))
-				rowIDs, fingerprints, rawHintBytes, err := evalCtx.Planner.DeleteStatementHint(ctx, rowIDArg, "" /* statementFingerprint */)
-				if err != nil {
-					return nil, err
-				}
-				for i := range rowIDs {
-					hint, err := hintpb.ParseHintProto(rawHintBytes[i])
-					if err != nil {
-						log.Dev.Warningf(ctx, "could not unmarshal hint for row %d: %v", rowIDs[i], err)
-						continue
-					}
-					if err := logDeleteHintEvent(ctx, evalCtx, hint, rowIDs[i], fingerprints[i]); err != nil {
-						return nil, err
-					}
-				}
-				return tree.NewDInt(tree.DInt(len(rowIDs))), nil
-			},
-			Info: `This function deletes a statement hint by its row ID. ` +
-				`It returns the number of deleted rows.`,
-			Volatility: volatility.Volatile,
-		},
-		tree.Overload{
-			Types: tree.ParamTypes{
-				{Name: "statement_fingerprint", Typ: types.String},
-			},
-			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				// The user must have REPAIRCLUSTER to use this builtin.
-				if err := evalCtx.SessionAccessor.CheckPrivilege(
-					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
-				); err != nil {
-					return nil, err
-				}
-				arg := string(tree.MustBeDString(args[0]))
-				fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
-					&evalCtx.Settings.SV,
-				))
-				fingerprintArg, err := parserutils.FingerprintStatement(parserutils.FingerprintTagStatementFingerprint, arg, fingerprintFlags)
-				if err != nil {
-					return nil, err
-				}
-				if fingerprintArg != arg {
-					evalCtx.ClientNoticeSender.BufferClientNotice(
-						ctx, pgnotice.Newf("statement fingerprint changed to: %s", fingerprintArg),
-					)
-				}
-				rowIDs, fingerprints, rawHintBytes, err := evalCtx.Planner.DeleteStatementHint(ctx, 0 /* rowID */, fingerprintArg)
-				if err != nil {
-					return nil, err
-				}
-				for i := range rowIDs {
-					hint, err := hintpb.ParseHintProto(rawHintBytes[i])
-					if err != nil {
-						log.Dev.Warningf(ctx, "could not unmarshal hint for row %d: %v", rowIDs[i], err)
-						continue
-					}
-					if err := logDeleteHintEvent(ctx, evalCtx, hint, rowIDs[i], fingerprints[i]); err != nil {
-						return nil, err
-					}
-				}
-				return tree.NewDInt(tree.DInt(len(rowIDs))), nil
-			},
-			Info: `This function deletes all statement hints matching the ` +
-				`given statement fingerprint. The statement fingerprint argument is ` +
-				`normalized before matching. It returns the number of deleted rows.`,
-			Volatility: volatility.Volatile,
-		},
+		deleteStatementHintsByRowIDOverload,
+		deleteStatementHintsByFingerprintOverload,
 	),
 	"information_schema.crdb_enable_statement_hints": makeBuiltin(
 		tree.FunctionProperties{
@@ -13281,13 +13204,15 @@ func logDeleteHintEvent(
 	hint hintpb.StatementHintUnion,
 	hintID int64,
 	fingerprint string,
+	database string,
 ) error {
 	switch t := hint.GetValue().(type) {
 	case *hintpb.InjectHints:
 		return evalCtx.Planner.LogEvent(ctx, &eventpb.DeleteRewriteInlineHints{
 			HintID:               hintID,
 			StatementFingerprint: fingerprint,
-			DonorSql:             t.DonorSQL,
+			DonorSQL:             t.DonorSQL,
+			Database:             database,
 		})
 	case *hintpb.SessionVariableHint:
 		return evalCtx.Planner.LogEvent(ctx, &eventpb.DeleteSessionVariableHint{
@@ -13295,10 +13220,96 @@ func logDeleteHintEvent(
 			StatementFingerprint: fingerprint,
 			VariableName:         t.VariableName,
 			VariableValue:        t.VariableValue,
+			Database:             database,
 		})
 	default:
 		return nil
 	}
+}
+
+var deleteStatementHintsByRowIDOverload = tree.Overload{
+	Types: tree.ParamTypes{
+		{Name: "rowid", Typ: types.Int},
+	},
+	ReturnType: tree.FixedReturnType(types.Int),
+	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+		if err := evalCtx.SessionAccessor.CheckPrivilege(
+			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+		); err != nil {
+			return nil, err
+		}
+		rowIDArg := int64(tree.MustBeDInt(args[0]))
+		rowIDs, fingerprints, rawHintBytes, databases, err := evalCtx.Planner.DeleteStatementHint(
+			ctx, rowIDArg, "" /* statementFingerprint */, "", /* optDatabase */
+		)
+		if err != nil {
+			return nil, err
+		}
+		for i := range rowIDs {
+			hint, err := hintpb.ParseHintProto(rawHintBytes[i])
+			if err != nil {
+				log.Dev.Warningf(ctx, "could not unmarshal hint for row %d: %v", rowIDs[i], err)
+				continue
+			}
+			if err := logDeleteHintEvent(ctx, evalCtx, hint, rowIDs[i], fingerprints[i], databases[i]); err != nil {
+				return nil, err
+			}
+		}
+		return tree.NewDInt(tree.DInt(len(rowIDs))), nil
+	},
+	Info: `This function deletes a statement hint by its row ID. ` +
+		`It returns the number of deleted rows.`,
+	Volatility: volatility.Volatile,
+}
+
+var deleteStatementHintsByFingerprintOverload = tree.Overload{
+	Types: tree.ParamTypes{
+		{Name: "statement_fingerprint", Typ: types.String},
+	},
+	ReturnType: tree.FixedReturnType(types.Int),
+	Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+		if err := evalCtx.SessionAccessor.CheckPrivilege(
+			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+		); err != nil {
+			return nil, err
+		}
+		arg := string(tree.MustBeDString(args[0]))
+		fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
+			&evalCtx.Settings.SV,
+		))
+		fingerprintArg, err := parserutils.FingerprintStatement(
+			parserutils.FingerprintTagStatementFingerprint, arg, fingerprintFlags,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if fingerprintArg != arg {
+			evalCtx.ClientNoticeSender.BufferClientNotice(
+				ctx, pgnotice.Newf("statement fingerprint changed to: %s", fingerprintArg),
+			)
+		}
+		rowIDs, fingerprints, rawHintBytes, databases, err := evalCtx.Planner.DeleteStatementHint(
+			ctx, 0 /* rowID */, fingerprintArg, "", /* optDatabase */
+		)
+		if err != nil {
+			return nil, err
+		}
+		for i := range rowIDs {
+			hint, err := hintpb.ParseHintProto(rawHintBytes[i])
+			if err != nil {
+				log.Dev.Warningf(ctx, "could not unmarshal hint for row %d: %v", rowIDs[i], err)
+				continue
+			}
+			if err := logDeleteHintEvent(ctx, evalCtx, hint, rowIDs[i], fingerprints[i], databases[i]); err != nil {
+				return nil, err
+			}
+		}
+		return tree.NewDInt(tree.DInt(len(rowIDs))), nil
+	},
+	Info: `This function deletes all statement hints matching the ` +
+		`given statement fingerprint. The statement fingerprint argument is ` +
+		`normalized before matching. It returns the number of deleted rows.`,
+	Volatility: volatility.Volatile,
 }
 
 var rewriteInlineHintsOverload = tree.Overload{
@@ -13355,7 +13366,7 @@ var setStatementHintEnabledByRowIDOverload = tree.Overload{
 		enabled := bool(tree.MustBeDBool(args[0]))
 		rowID := int64(tree.MustBeDInt(args[1]))
 		numAffected, err := evalCtx.Planner.SetStatementHintEnabled(
-			ctx, rowID, "" /* statementFingerprint */, enabled,
+			ctx, rowID, "" /* statementFingerprint */, enabled, "", /* optDatabase */
 		)
 		if err != nil {
 			return nil, err
@@ -13396,7 +13407,7 @@ var setStatementHintEnabledByFingerprintOverload = tree.Overload{
 			)
 		}
 		numAffected, err := evalCtx.Planner.SetStatementHintEnabled(
-			ctx, 0 /* rowID */, fingerprintArg, enabled,
+			ctx, 0 /* rowID */, fingerprintArg, enabled, "", /* optDatabase */
 		)
 		if err != nil {
 			return nil, err

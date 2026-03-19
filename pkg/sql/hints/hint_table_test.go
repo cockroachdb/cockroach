@@ -160,6 +160,7 @@ func TestHintTableOperations(t *testing.T) {
 			ctx, ts.ClusterSettings(), txn,
 			insertedHintID1, "", /* fingerprint */
 			false, /* enabled */
+			"",    /* optDatabase */
 		)
 		return err
 	})
@@ -184,8 +185,10 @@ func TestHintTableOperations(t *testing.T) {
 	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		numAffected, err = hints.SetHintEnabledInDB(
 			ctx, ts.ClusterSettings(), txn,
-			0,                   /* rowID */
-			fingerprint1, false, /* enabled */
+			0,            /* rowID */
+			fingerprint1, /* fingerprint */
+			false,        /* enabled */
+			"",           /* optDatabase */
 		)
 		return err
 	})
@@ -196,8 +199,10 @@ func TestHintTableOperations(t *testing.T) {
 	err = db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		numAffected, err = hints.SetHintEnabledInDB(
 			ctx, ts.ClusterSettings(), txn,
-			0,                  /* rowID */
-			fingerprint1, true, /* enabled */
+			0,            /* rowID */
+			fingerprint1, /* fingerprint */
+			true,         /* enabled */
+			"",           /* optDatabase */
 		)
 		return err
 	})
@@ -211,6 +216,7 @@ func TestHintTableOperations(t *testing.T) {
 			0,     /* rowID */
 			"",    /* fingerprint */
 			false, /* enabled */
+			"",    /* optDatabase */
 		)
 		return err
 	})

@@ -246,16 +246,25 @@ func InsertHintIntoDB(
 }
 
 // DeleteHintFromDB deletes statement hints from system.statement_hints,
-// filtered by row ID or fingerprint. If the provided rowID is zero, we don't
-// filter on row ID. If the fingerprint is empty string, we don't filter on
-// fingerprint. Returns the row_id, fingerprint, and raw hint protobuf bytes of
-// all deleted rows.
+// filtered by row ID, fingerprint, and/or database. If the provided rowID is
+// zero, we don't filter on row ID. If the fingerprint is empty string, we don't
+// filter on fingerprint. If optDatabase is non-empty, we also filter on
+// database. Returns the row_id, fingerprint, raw hint protobuf bytes, and
+// database of all deleted rows.
 func DeleteHintFromDB(
-	ctx context.Context, txn isql.Txn, rowID int64, fingerprint string,
-) (rowIDs []int64, fingerprints []string, hintBytes [][]byte, err error) {
+	ctx context.Context,
+	settings *cluster.Settings,
+	txn isql.Txn,
+	rowID int64,
+	fingerprint string,
+	optDatabase string,
+) (rowIDs []int64, fingerprints []string, hintBytes [][]byte, databases []string, err error) {
 	const opName = "delete-statement-hint"
-	filterCols := make([]string, 0, 2)
-	vals := make([]interface{}, 0, 2)
+	hasDatabaseCol := settings.Version.IsActive(
+		ctx, clusterversion.V26_2_StatementHintsTypeNameEnabledColumnsAdded,
+	)
+	filterCols := make([]string, 0, 3)
+	vals := make([]interface{}, 0, 3)
 	if rowID != 0 {
 		filterCols = append(filterCols, `"row_id"`)
 		vals = append(vals, rowID)
@@ -264,46 +273,75 @@ func DeleteHintFromDB(
 		filterCols = append(filterCols, "fingerprint")
 		vals = append(vals, fingerprint)
 	}
-
+	// Validate before adding database filter — database alone is not sufficient.
 	if len(filterCols) == 0 {
-		return nil, nil, nil, errors.New("delete statement hint must specify at least one of row_id or fingerprint")
+		return nil, nil, nil, nil, errors.New("delete statement hint must specify at least one of row_id or fingerprint")
+	}
+	if optDatabase != "" {
+		if !hasDatabaseCol {
+			return nil, nil, nil, nil, errors.New("cannot filter by database: database column not yet available")
+		}
+		filterCols = append(filterCols, `"database"`)
+		vals = append(vals, optDatabase)
 	}
 
 	var b strings.Builder
 	for i, filterCol := range filterCols {
 		_, err := fmt.Fprintf(&b, "%s = $%d", filterCol, i+1)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 		if i != len(filterCols)-1 {
 			b.WriteString(" AND ")
 		}
 	}
+	var returningClause string
+	if hasDatabaseCol {
+		returningClause = "RETURNING row_id, fingerprint, hint, database"
+	} else {
+		returningClause = "RETURNING row_id, fingerprint, hint"
+	}
 	rows, err := txn.QueryBufferedEx(
 		ctx, opName, txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		fmt.Sprintf("DELETE FROM system.statement_hints WHERE %s RETURNING row_id, fingerprint, hint", b.String()), vals...,
+		fmt.Sprintf(
+			"DELETE FROM system.statement_hints WHERE %s %s",
+			b.String(), returningClause,
+		),
+		vals...,
 	)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 	for _, row := range rows {
-		if len(row) < 3 {
-			return nil, nil, nil, errors.AssertionFailedf("expecting 3 columns from query, got %d", len(row))
+		if hasDatabaseCol {
+			if len(row) < 4 {
+				return nil, nil, nil, nil, errors.AssertionFailedf("expecting 4 columns from query, got %d", len(row))
+			}
+		} else {
+			if len(row) < 3 {
+				return nil, nil, nil, nil, errors.AssertionFailedf("expecting 3 columns from query, got %d", len(row))
+			}
 		}
 		rowIDs = append(rowIDs, int64(tree.MustBeDInt(row[0])))
 		fingerprints = append(fingerprints, string(tree.MustBeDString(row[1])))
 		hintBytes = append(hintBytes, []byte(tree.MustBeDBytes(row[2])))
+		if hasDatabaseCol && row[3] != tree.DNull {
+			databases = append(databases, string(tree.MustBeDString(row[3])))
+		} else {
+			databases = append(databases, "")
+		}
 	}
 	// TODO(michae2,drewk): Consider calling
 	// StatementHintsCache.handleIncrementalUpdate here to eagerly update the
 	// local node's cache.
-	return rowIDs, fingerprints, hintBytes, nil
+	return rowIDs, fingerprints, hintBytes, databases, nil
 }
 
 // SetHintEnabledInDB updates the enabled status of statement hints in
-// system.statement_hints, filtered by row ID or fingerprint. If the provided
-// rowID is zero, we don't filter on row ID. If the fingerprint is empty string,
-// we don't filter on fingerprint. Returns the number of affected rows.
+// system.statement_hints, filtered by row ID, fingerprint, and/or database. If
+// the provided rowID is zero, we don't filter on row ID. If the fingerprint is
+// empty string, we don't filter on fingerprint. If optDatabase is non-empty, we
+// also filter on database. Returns the number of affected rows.
 func SetHintEnabledInDB(
 	ctx context.Context,
 	settings *cluster.Settings,
@@ -311,6 +349,7 @@ func SetHintEnabledInDB(
 	rowID int64,
 	fingerprint string,
 	enabled bool,
+	optDatabase string,
 ) (int64, error) {
 	const opName = "set-statement-hint-enabled"
 
@@ -322,8 +361,8 @@ func SetHintEnabledInDB(
 	if !settings.Version.IsActive(ctx, clusterversion.V26_2_StatementHintsTypeNameEnabledColumnsAdded) {
 		return 0, errors.New("cannot set statement hint enabled: enabled column not yet available")
 	}
-	filterCols := make([]string, 0, 2)
-	vals := make([]interface{}, 0, 2)
+	filterCols := make([]string, 0, 3)
+	vals := make([]interface{}, 0, 3)
 	if rowID != 0 {
 		filterCols = append(filterCols, `"row_id"`)
 		vals = append(vals, rowID)
@@ -332,11 +371,15 @@ func SetHintEnabledInDB(
 		filterCols = append(filterCols, `"fingerprint"`)
 		vals = append(vals, fingerprint)
 	}
-
+	// Validate before adding database filter — database alone is not sufficient.
 	if len(filterCols) == 0 {
 		return 0, errors.New(
 			"set statement hint enabled must specify at least one of row_id or fingerprint",
 		)
+	}
+	if optDatabase != "" {
+		filterCols = append(filterCols, `"database"`)
+		vals = append(vals, optDatabase)
 	}
 
 	// Step 1: DELETE matching rows and capture their data.

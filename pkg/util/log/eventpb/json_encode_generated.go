@@ -3049,6 +3049,16 @@ func (m *DeleteRewriteInlineHints) AppendJSONFields(printComma bool, b redact.Re
 		b = append(b, '"')
 	}
 
+	if m.Database != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Database\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Database)))
+		b = append(b, '"')
+	}
+
 	return printComma, b
 }
 
@@ -3097,6 +3107,16 @@ func (m *DeleteSessionVariableHint) AppendJSONFields(printComma bool, b redact.R
 		b = append(b, redact.StartMarker()...)
 		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.VariableValue)))))
 		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.Database != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Database\":\""...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(m.Database)))
 		b = append(b, '"')
 	}
 

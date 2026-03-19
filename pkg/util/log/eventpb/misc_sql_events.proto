@@ -79,6 +79,8 @@ message DeleteRewriteInlineHints {
   int64 hint_id = 4 [(gogoproto.customname) = "HintID", (gogoproto.jsontag) = ",omitempty"];
   // The donor sql of the deleted inline hint.
   string donor_sql = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // The database to which the hint was scoped, if any.
+  string database = 6 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // DeleteSessionVariableHint is recorded when a session variable hint is
@@ -94,6 +96,8 @@ message DeleteSessionVariableHint {
   string variable_name = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   // The value of the session variable override.
   string variable_value = 6 [(gogoproto.jsontag) = ",omitempty"];
+  // The database to which the hint was scoped, if any.
+  string database = 7 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
 }
 
 // SetSessionVariableHint is recorded when a new session variable hint is
