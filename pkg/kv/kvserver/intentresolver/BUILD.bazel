@@ -4,6 +4,7 @@ go_library(
     name = "intentresolver",
     srcs = [
         "admission.go",
+        "doc.go",
         "intent_resolver.go",
         "metrics.go",
     ],
