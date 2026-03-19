@@ -506,9 +506,7 @@ func (opc *optPlanningCtx) reset(ctx context.Context) {
 		// are multiple DDL operations; and transactions can be aborted leading to
 		// potential reuse of versions. To avoid these issues, we prevent saving a
 		// memo (for prepare) or reusing a saved memo (for execute).
-		// We only allow reusing memo if this plan is not going to use canary stats.
-		opc.allowMemoReuse = !p.Descriptors().HasUncommittedDescriptors() &&
-			p.EvalContext().StatsRollout != eval.StatsRolloutCanary
+		opc.allowMemoReuse = !p.Descriptors().HasUncommittedDescriptors()
 		opc.useCache = opc.allowMemoReuse && queryCacheEnabled.Get(&p.execCfg.Settings.SV)
 
 		if _, isCanned := p.stmt.AST.(*tree.CannedOptPlan); isCanned {
@@ -819,6 +817,21 @@ func (opc *optPlanningCtx) chooseValidPreparedMemo(ctx context.Context) (*memo.M
 	return prep.BaseMemo, nil
 }
 
+// skipCacheMemoForCanaryExec reports whether memo caching should be
+// skipped (i.e. we don't save it to cache) for the current execution.
+// It returns true when the execution is a canary execution and the memo
+// touches tables with a canary window. This avoids random cache
+// flip-flops and preserves a clean stable baseline: only stable
+// executions participate in memo reuse (query cache or prepared
+// statements).
+func (opc *optPlanningCtx) skipCacheMemoForCanaryExec(m *memo.Memo) bool {
+	if m == nil {
+		return false
+	}
+	return opc.p.EvalContext().StatsRollout == eval.StatsRolloutCanary &&
+		m.Metadata().HasCanaryWindowTables()
+}
+
 // fetchPreparedMemo attempts to fetch a memo from the prepared statement
 // struct. If a valid (i.e., non-stale) memo is found, it is used. Otherwise, a
 // new statement will be built.
@@ -855,8 +868,13 @@ func (opc *optPlanningCtx) fetchPreparedMemo(ctx context.Context) (_ *memo.Memo,
 		return nil, err
 	}
 	if validMemo != nil {
-		opc.log(ctx, "reusing cached memo")
-		return opc.reuseMemo(validMemo)
+		if opc.skipCacheMemoForCanaryExec(validMemo) {
+			opc.allowMemoReuse = false
+			opc.useCache = false
+		} else {
+			opc.log(ctx, "reusing cached memo")
+			return opc.reuseMemo(validMemo)
+		}
 	}
 
 	// Otherwise, we need to rebuild the memo.
@@ -869,6 +887,10 @@ func (opc *optPlanningCtx) fetchPreparedMemo(ctx context.Context) (_ *memo.Memo,
 	newMemo, typ, err := opc.buildReusableMemo(ctx, buildGeneric)
 	if err != nil {
 		return nil, err
+	}
+	if opc.allowMemoReuse && opc.skipCacheMemoForCanaryExec(newMemo) {
+		opc.allowMemoReuse = false
+		opc.useCache = false
 	}
 	if opc.allowMemoReuse {
 		switch typ {
@@ -927,6 +949,10 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	if opc.useCache {
 		// Consult the query cache.
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, opc.p.stmt.SQL)
+		if ok && opc.skipCacheMemoForCanaryExec(cachedData.Memo) {
+			ok = false
+			opc.useCache = false
+		}
 		if ok {
 			if isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog); err != nil {
 				return nil, err
@@ -939,7 +965,12 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 				// Update the plan in the cache. If the cache entry had Metadata
 				// populated, it may no longer be valid.
 				cachedData.Metadata = nil
-				p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
+				// This is a defensive gate for a narrow case where a table gains a
+				// sql_stats_canary_window setting between the time the memo was cached
+				// and when it was deemed stale.
+				if !opc.skipCacheMemoForCanaryExec(cachedData.Memo) {
+					p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
+				}
 				opc.flags.Set(planFlagOptCacheMiss)
 			} else {
 				opc.log(ctx, "query cache hit")
@@ -995,13 +1026,15 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	// placeholders.
 	if opc.useCache && !bld.HadPlaceholders && !bld.DisableMemoReuse &&
 		!f.FoldingControl().PermittedStableFold() {
-		opc.log(ctx, "query cache add")
 		memo := opc.optimizer.DetachMemo(ctx)
 		cachedData := querycache.CachedData{
 			SQL:  opc.p.stmt.SQL,
 			Memo: memo,
 		}
-		p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
+		if !opc.skipCacheMemoForCanaryExec(memo) {
+			opc.log(ctx, "query cache add")
+			p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
+		}
 		return memo, nil
 	}
 

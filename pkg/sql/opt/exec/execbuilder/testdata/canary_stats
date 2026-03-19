@@ -11,6 +11,10 @@ statement ok
 CREATE TABLE canary_table (x int primary key, y int, FAMILY (x, y)) WITH (sql_stats_canary_window = '20s');
 INSERT INTO canary_table VALUES (1, 1);
 
+statement ok
+CREATE TABLE no_canary_table (x int primary key);
+INSERT INTO no_canary_table VALUES (1);
+
 query TT
 SHOW CREATE TABLE canary_table
 ----
@@ -84,8 +88,27 @@ SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message L
 ----
 query cache hit
 
-# Now we test the case where always use canary stats, which doesn't
-# interact with query cache at all.
+# Also populate the cache for no_canary_table (no canary window set).
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM no_canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache miss
+query cache add
+
+# Now switch to canary_fraction=1.0 so every execution rolls canary.
+# A query on canary_table (has canary window) skips the cache because we
+# cannot reuse a stable memo for canary execution. But a query on
+# no_canary_table (no canary window) should still hit the cache, since
+# canary and stable stats are identical for that table.
 statement ok
 SET CLUSTER SETTING sql.stats.canary_fraction='1.0';
 
@@ -98,27 +121,30 @@ SELECT * FROM canary_table;
 statement ok
 SET TRACING = "off";
 
+# canary_table: cache skipped because table has a canary window.
 query T
 SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
 ----
-not using query cache
+query cache miss
 
 statement ok
 SET TRACING = "on", cluster;
 
 statement ok
-SELECT * FROM canary_table;
+SELECT * FROM no_canary_table;
 
 statement ok
 SET TRACING = "off";
 
+# no_canary_table: cache still hit despite canary dice roll, because the
+# table has no canary window so canary and stable stats are the same.
 query T
 SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
 ----
-not using query cache
+query cache hit
 
-# Switching back to using stable stats, and the same query should still be
-# able to hit the query cache.
+# Switching back to using stable stats, and queries on both tables should
+# hit the query cache.
 statement ok
 SET CLUSTER SETTING sql.stats.canary_fraction='0.0';
 
@@ -131,7 +157,81 @@ SELECT * FROM canary_table;
 statement ok
 SET TRACING = "off";
 
-# We should see the original cache is still there.
+# canary_table's cache was never evicted by the canary executions.
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache hit
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM no_canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache hit
+
+# When the first-ever execution on a canary-window table is a canary
+# execution (cache-miss path), the canary-built memo must NOT be added
+# to the query cache. Otherwise subsequent stable executions would reuse
+# the canary memo, silently corrupting the stable baseline.
+statement ok
+SELECT crdb_internal.clear_query_plan_cache();
+
+statement ok
+SET canary_stats_mode = on;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+# The canary execution sees a cache miss.
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache miss
+
+# Switch to stable. We should see a miss and a proper stable-built memo is cached.
+statement ok
+SET canary_stats_mode = off;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
+----
+query cache miss
+query cache add
+
+# Confirm the stable memo was cached correctly: a second stable execution
+# should hit the cache.
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+SELECT * FROM canary_table;
+
+statement ok
+SET TRACING = "off";
+
 query T
 SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%';
 ----
@@ -253,9 +353,9 @@ query cache hit (prepare)
 statement ok
 SET TRACING = "on", cluster;
 
-# For execution, we roll the dice for every one. Since we have canary_fraction=1.0,
-# all execution will not use the query cache nor the cached memo within
-# the prepared statement. Thus we should see "not using query cache" for all executions.
+# For execution, since canary_stats_mode=on forces canary for every execution,
+# the cached memo within the prepared statement cannot be reused (it was built
+# with stable stats), so each execution rebuilds the memo from scratch.
 statement ok
 EXECUTE p5;
 EXECUTE p5;
@@ -274,16 +374,38 @@ SET TRACING = "off";
 query T
 SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
 ----
-not using query cache
-not using query cache
-not using query cache
-not using query cache
-not using query cache
-not using query cache
-not using query cache
-not using query cache
-not using query cache
-not using query cache
+rebuilding cached memo
+rebuilding cached memo
+rebuilding cached memo
+rebuilding cached memo
+rebuilding cached memo
+rebuilding cached memo
+rebuilding cached memo
+rebuilding cached memo
+rebuilding cached memo
+rebuilding cached memo
+
+# Prepared statements on no_canary_table (no canary window) should still
+# reuse the cached memo during canary execution, since canary and stable
+# stats are identical for that table.
+statement ok
+PREPARE p9 AS SELECT * FROM no_canary_table WHERE x = $1;
+
+statement ok
+SET TRACING = "on", cluster;
+
+statement ok
+EXECUTE p9(1);
+EXECUTE p9(1);
+
+statement ok
+SET TRACING = "off";
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%query cache%' OR message LIKE '%cached memo%';
+----
+reusing cached memo
+reusing cached memo
 
 # We now switch back to the "everyone use stable stats" mode. At this moment
 # executing a prepared stmt that is created while canary_fration == 1.0 should
