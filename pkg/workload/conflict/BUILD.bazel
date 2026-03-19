@@ -5,7 +5,6 @@ go_library(
     srcs = [
         "conflict.go",
         "conflict_worker.go",
-        "writer.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/conflict",
     visibility = ["//visibility:public"],
@@ -17,7 +16,6 @@ go_library(
         "//pkg/workload",
         "//pkg/workload/histogram",
         "//pkg/workload/rand",
-        "@com_github_cockroachdb_errors//:errors",
         "@com_github_jackc_pgx_v5//stdlib",
         "@com_github_spf13_pflag//:pflag",
         "@org_golang_x_sync//errgroup",
@@ -26,28 +24,15 @@ go_library(
 
 go_test(
     name = "conflict_test",
-    srcs = [
-        "main_test.go",
-        "writer_test.go",
-    ],
+    srcs = ["main_test.go"],
     data = ["//c-deps:libgeos"],
-    embed = [":conflict"],
     deps = [
-        "//pkg/base",
         "//pkg/ccl",
-        "//pkg/crosscluster/ldrrandgen",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
-        "//pkg/sql/sem/tree",
-        "//pkg/testutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
-        "//pkg/util/leaktest",
-        "//pkg/util/log",
         "//pkg/util/randutil",
-        "//pkg/workload/rand",
-        "@com_github_stretchr_testify//require",
     ],
 )
