@@ -506,9 +506,7 @@ func (opc *optPlanningCtx) reset(ctx context.Context) {
 		// are multiple DDL operations; and transactions can be aborted leading to
 		// potential reuse of versions. To avoid these issues, we prevent saving a
 		// memo (for prepare) or reusing a saved memo (for execute).
-		// We only allow reusing memo if this plan is not going to use canary stats.
-		opc.allowMemoReuse = !p.Descriptors().HasUncommittedTables() &&
-			p.EvalContext().StatsRollout != eval.StatsRolloutCanary
+		opc.allowMemoReuse = !p.Descriptors().HasUncommittedTables()
 		opc.useCache = opc.allowMemoReuse && queryCacheEnabled.Get(&p.execCfg.Settings.SV)
 
 		if _, isCanned := p.stmt.AST.(*tree.CannedOptPlan); isCanned {
@@ -855,8 +853,20 @@ func (opc *optPlanningCtx) fetchPreparedMemo(ctx context.Context) (_ *memo.Memo,
 		return nil, err
 	}
 	if validMemo != nil {
-		opc.log(ctx, "reusing cached memo")
-		return opc.reuseMemo(validMemo)
+		// Avoid frequent, random cache flip-flops and preserve a clean,
+		// fast stable baseline by never caching or reusing memos for canary
+		// executions; only stable executions participate in memo reuse
+		// (query cache or prepared statements). We only do this when the
+		// query actually touches tables with a canary window, so queries on
+		// other tables still benefit from caching.
+		if opc.p.EvalContext().StatsRollout == eval.StatsRolloutCanary &&
+			validMemo.Metadata().HasCanaryWindowTables() {
+			opc.allowMemoReuse = false
+			opc.useCache = false
+		} else {
+			opc.log(ctx, "reusing cached memo")
+			return opc.reuseMemo(validMemo)
+		}
 	}
 
 	// Otherwise, we need to rebuild the memo.
@@ -869,6 +879,13 @@ func (opc *optPlanningCtx) fetchPreparedMemo(ctx context.Context) (_ *memo.Memo,
 	newMemo, typ, err := opc.buildReusableMemo(ctx, buildGeneric)
 	if err != nil {
 		return nil, err
+	}
+	// Prevent saving a canary-stats memo into the cache. See the comment
+	// above about keeping only stable memos in the cache.
+	if opc.allowMemoReuse && opc.p.EvalContext().StatsRollout == eval.StatsRolloutCanary &&
+		newMemo.Metadata().HasCanaryWindowTables() {
+		opc.allowMemoReuse = false
+		opc.useCache = false
 	}
 	if opc.allowMemoReuse {
 		switch typ {
@@ -927,6 +944,14 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	if opc.useCache {
 		// Consult the query cache.
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, opc.p.stmt.SQL)
+		// Skip the cache for canary executions on canary-window tables. See
+		// the comment in fetchPreparedMemo about keeping only stable memos
+		// in the cache.
+		if ok && opc.p.EvalContext().StatsRollout == eval.StatsRolloutCanary &&
+			cachedData.Memo.Metadata().HasCanaryWindowTables() {
+			ok = false
+			opc.useCache = false
+		}
 		if ok {
 			if isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog); err != nil {
 				return nil, err
