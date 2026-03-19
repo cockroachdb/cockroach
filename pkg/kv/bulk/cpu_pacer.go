@@ -41,6 +41,7 @@ func NewCPUPacer(ctx context.Context, db *kv.DB, setting *settings.BoolSetting) 
 	if !ok {
 		tenantID = roachpb.SystemTenantID
 	}
+	wid, wtype := kv.WorkloadInfoFromContext(ctx)
 	return db.AdmissionPacerFactory.NewPacer(
 		cpuPacerRequestDuration.Get(db.SettingsValues()),
 		admission.WorkInfo{
@@ -48,5 +49,7 @@ func NewCPUPacer(ctx context.Context, db *kv.DB, setting *settings.BoolSetting) 
 			Priority:        admissionpb.BulkNormalPri,
 			CreateTime:      timeutil.Now().UnixNano(),
 			BypassAdmission: bypassACQueue,
+			WorkloadID:      wid,
+			WorkloadType:    wtype,
 		})
 }

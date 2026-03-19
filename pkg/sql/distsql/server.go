@@ -778,6 +778,14 @@ func (ds *ServerImpl) SetupFlow(
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow since it outlives the RPC.
 	ctx = ds.AnnotateCtx(context.Background())
+	// Jobs that set up flows rely on the context to carry the workload identity
+	// for ASH sampling.
+	if req.EvalContext.WorkloadID != 0 {
+		ctx = kv.ContextWithWorkloadInfo(
+			ctx, req.EvalContext.WorkloadID,
+			workloadid.WorkloadType(req.EvalContext.WorkloadType),
+		)
+	}
 	if err := func() error {
 		// Reserve some memory for this remote flow which is a poor man's
 		// admission control based on the RAM usage.

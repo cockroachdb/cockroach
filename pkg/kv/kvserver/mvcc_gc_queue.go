@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -600,6 +601,8 @@ func (r *replicaGCer) send(ctx context.Context, req kvpb.GCRequest) error {
 	var b kv.Batch
 	b.AddRawRequest(&req)
 	b.AdmissionHeader = gcAdmissionHeader(r.repl.ClusterSettings())
+	b.Header.WorkloadID = uint64(workloadid.WORKLOAD_ID_GC)
+	b.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
 
 	if err := r.repl.store.cfg.DB.Run(ctx, &b); err != nil {
 		log.KvExec.Infof(ctx, "%s", err)
