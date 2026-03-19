@@ -430,5 +430,6 @@
     "patchedDependencies": {
       "topojson@3.0.2": "patches/topojson@3.0.2.patch"
     }
-  }
+  },
+  "packageManager": "pnpm@9.14.1+sha512.7f1de9cffea40ff4594c48a94776112a0db325e81fb18a9400362ff7b7247f4fbd76c3011611c9f8ac58743c3dc526017894e07948de9b72052f874ee2edfdcd"
 }

@@ -208,9 +208,15 @@
     "uglify-js": "^2.8.15",
     "url-loader": "4.1.1",
     "us-atlas": "^1.0.2",
+<<<<<<< Updated upstream
     "webpack": "^5.97.1",
     "webpack-cli": "^5.1.4",
     "webpack-dev-server": "^5.1.0",
+=======
+    "webpack": "^5.105.4",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^5.2.3",
+>>>>>>> Stashed changes
     "webpack-visualizer-plugin": "^0.1.11",
     "webpackbar": "^5.0.0-3",
     "world-atlas": "^1.1.4"

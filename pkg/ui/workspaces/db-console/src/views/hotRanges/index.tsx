@@ -3,8 +3,6 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { createHash } from "crypto";
-
 import {
   Loading,
   Text,
@@ -58,6 +56,17 @@ const emptyMessages = {
   },
 };
 
+// Simple hash function for analytics key generation (replaces crypto.createHash)
+const simpleHash = (str: string): string => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash).toString(16);
+};
+
 const HotRangesPage = () => {
   const dispatch = useDispatch();
   const hotRanges = useSelector(hotRangesSelector);
@@ -85,9 +94,9 @@ const HotRangesPage = () => {
   }, [filters.nodeIds, dispatch]);
 
   // track analytics on filters, pagination and sort.
-  const analyticsKey = createHash("md5")
-    .update(JSON.stringify([filters, sortSetting, pagination]))
-    .digest("hex");
+  const analyticsKey = simpleHash(
+    JSON.stringify([filters, sortSetting, pagination])
+  );
   useEffect(() => {
     if (!filters.nodeIds.length || !pagination || !sortSetting) {
       return;

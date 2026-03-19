@@ -44,9 +44,38 @@ module.exports = (env, argv) => {
       alias: {
         src: path.resolve(__dirname, "src"),
       },
+<<<<<<< Updated upstream
       // Webpack 5 no longer auto-polyfills Node.js built-ins
       fallback: {
         "path": require.resolve("path-browserify"),
+=======
+      // Webpack 5 no longer includes Node.js polyfills by default.
+      // Explicitly disable them to avoid bundling vulnerable crypto-browserify and related packages.
+      fallback: {
+        assert: false,
+        buffer: false,
+        console: false,
+        constants: false,
+        crypto: false,
+        domain: false,
+        events: false,
+        http: false,
+        https: false,
+        os: false,
+        path: false,
+        punycode: false,
+        process: false,
+        querystring: false,
+        stream: false,
+        string_decoder: false,
+        sys: false,
+        timers: false,
+        tty: false,
+        url: false,
+        util: false,
+        vm: false,
+        zlib: false,
+>>>>>>> Stashed changes
       },
     },
 
