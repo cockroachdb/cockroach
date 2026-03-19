@@ -240,7 +240,7 @@ planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
 plan type: custom
-statement hints count: 1
+statement hints: 1
 rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
 regions: <hidden>
 ·
