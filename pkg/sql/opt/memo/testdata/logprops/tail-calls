@@ -671,19 +671,7 @@ values
                                                    ├── tail-call
                                                    ├── args
                                                    │    └── variable: x
-                                                   ├── params: x
-                                                   └── body
-                                                        └── values
-                                                             └── tuple
-                                                                  └── udf: nested_arg
-                                                                       ├── tail-call
-                                                                       ├── args
-                                                                       │    └── variable: x
-                                                                       ├── params: x
-                                                                       └── body
-                                                                            └── values
-                                                                                 └── tuple
-                                                                                      └── variable: x
+                                                   └── repetitive-call
 
 # Tail-call within a loop.
 exec-ddl
