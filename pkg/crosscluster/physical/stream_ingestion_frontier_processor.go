@@ -241,6 +241,11 @@ func (sf *streamIngestionFrontier) Next() (
 			}
 			sf.MoveToDrainingAndLogError(err)
 			return nil, sf.DrainHelper()
+		default:
+			// If the heartbeat sender is not ready to receive a frontier
+			// update (e.g. it's blocked on a network call to a partitioned
+			// source cluster), skip this update to avoid blocking the
+			// frontier processor. The next iteration will try again.
 		}
 	}
 	return nil, sf.DrainHelper()
