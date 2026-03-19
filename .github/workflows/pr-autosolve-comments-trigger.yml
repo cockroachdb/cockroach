@@ -59,6 +59,8 @@ jobs:
           cp "$GITHUB_EVENT_PATH" /tmp/event-context/event.json
           echo "${{ github.event_name }}" > /tmp/event-context/event_name.txt
           echo "${{ github.actor }}" > /tmp/event-context/actor.txt
+          # Save PR description: .pull_request.body for review events, .issue.body for issue_comment events
+          jq -r '.pull_request.body // .issue.body // empty' "$GITHUB_EVENT_PATH" > /tmp/event-context/pr_body.txt
 
       # For issue_comment events, the PR head repo/ref aren't in the payload.
       # Fetch them via API and verify the head repo matches the expected fork.
