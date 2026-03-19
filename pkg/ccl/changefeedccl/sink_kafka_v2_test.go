@@ -816,3 +816,114 @@ func (f fnMatcher) String() string {
 }
 
 var _ gomock.Matcher = fnMatcher(nil)
+
+func TestMaxRequestSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		name           string
+		clusterSetting int64
+		// perChangefeed is the value set in the config option on the changefeed
+		// as MaxBytes in the json.
+		perChangefeed int
+
+		// wantValue is the expected value of the kgo "ProducerBatchMaxBytes"
+		// option. If we expect the setting to be valid we assert that the
+		// client gets configured with the expected value.
+		wantValue int32
+		// wantErrContains is a substring that we expect to be contained in
+		// the error message if we expect client creation to fail.
+		wantErrContains string
+	}{
+		{
+			name:      "default",
+			wantValue: int32(changefeedbase.KafkaMaxRequestSizeLimit),
+		},
+		{
+			name:           "cluster_setting",
+			clusterSetting: 1 << 20,
+			wantValue:      int32(1 << 20),
+		},
+		{
+			name:          "per_changefeed_override",
+			perChangefeed: 2 << 20,
+			wantValue:     int32(2 << 20),
+		},
+		{
+			name:           "per_changefeed_overrides_cluster_setting",
+			clusterSetting: 1 << 20,
+			perChangefeed:  4 << 20,
+			wantValue:      int32(4 << 20),
+		},
+		{
+			name:           "falls_back_to_cluster_setting",
+			clusterSetting: 3 << 20,
+			wantValue:      int32(3 << 20),
+		},
+		{
+			name:          "boundary_minimum_accepted",
+			perChangefeed: changefeedbase.KafkaMaxRequestSizeMin,
+			wantValue:     int32(changefeedbase.KafkaMaxRequestSizeMin),
+		},
+		{
+			name:          "boundary_maximum_accepted",
+			perChangefeed: changefeedbase.KafkaMaxRequestSizeLimit,
+			wantValue:     int32(changefeedbase.KafkaMaxRequestSizeLimit),
+		},
+		{
+			name:            "validation_too_small",
+			perChangefeed:   100,
+			wantErrContains: "at least 512",
+		},
+		{
+			name:            "validation_too_large",
+			perChangefeed:   256<<20 + 1,
+			wantErrContains: fmt.Sprintf("at most %d", changefeedbase.KafkaMaxRequestSizeLimit),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var opts []fxOpt
+			opts = append(opts, withRealClient())
+
+			if tc.clusterSetting != 0 {
+				v := tc.clusterSetting
+				opts = append(opts, withSettings(func(s *cluster.Settings) {
+					changefeedbase.KafkaMaxRequestSize.Override(
+						context.Background(), &s.SV, v,
+					)
+				}))
+			}
+			if tc.perChangefeed != 0 {
+				jsonBs, err := json.Marshal(map[string]any{
+					"Flush": map[string]any{
+						"MaxBytes": tc.perChangefeed,
+					},
+				})
+				require.NoError(t, err)
+				opts = append(opts, withJSONConfig(string(jsonBs)))
+			}
+
+			var createErr error
+			opts = append(opts, withCreateClientErrorCb(func(err error) {
+				createErr = err
+			}))
+
+			fx := newKafkaSinkV2Fx(t, opts...)
+			defer fx.close()
+
+			if tc.wantErrContains != "" {
+				require.Error(t, createErr)
+				require.Contains(t, createErr.Error(), tc.wantErrContains)
+				return
+			}
+			require.NoError(t, createErr)
+
+			client := fx.bs.client.(*kafkaSinkClientV2).client.(*kgo.Client)
+			actual := client.OptValue("ProducerBatchMaxBytes").(int32)
+			require.Equal(t, tc.wantValue, actual)
+		})
+	}
+}
