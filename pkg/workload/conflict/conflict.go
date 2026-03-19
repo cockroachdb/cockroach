@@ -104,7 +104,7 @@ func (w *conflict) Ops(
 		poolA := clusterA.Get()
 		poolB := clusterB.Get()
 		dbs := []*gosql.DB{stdlib.OpenDBFromPool(poolA), stdlib.OpenDBFromPool(poolB)}
-		worker, err := newConflictWorker(ctx, dbs, w.tableName)
+		worker, err := newConflictWorker(dbs, w.tableName)
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}
