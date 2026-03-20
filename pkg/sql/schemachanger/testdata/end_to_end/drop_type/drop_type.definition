@@ -1,0 +1,8 @@
+setup
+CREATE DATABASE db;
+CREATE TYPE db.blue_fish AS ENUM('salmon');
+----
+
+test
+DROP TYPE db.blue_fish;
+----

@@ -1,0 +1,9 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TYPE db.blue_fish AS ENUM('salmon');
+
+/* test */
+EXPLAIN (DDL, SHAPE) DROP TYPE db.blue_fish;
+----
+Schema change plan for DROP TYPE ‹db›.‹public›.‹blue_fish›;
+ └── execute 2 system table mutations transactions
