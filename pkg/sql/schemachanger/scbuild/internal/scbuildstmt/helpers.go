@@ -986,6 +986,11 @@ func checkTableSchemaChangePrerequisites(
 ) {
 	schemaLocked := tableElements.FilterTableSchemaLocked().MustGetZeroOrOneElement()
 	if schemaLocked != nil && !tree.IsSetOrResetSchemaLocked(n) {
+		// Check if auto-unlock is allowed.
+		if !sqlclustersettings.SchemaLockedAutoUnlockEnabled.Get(&b.ClusterSettings().SV) {
+			ns := tableElements.FilterNamespace().MustGetOneElement()
+			panic(sqlerrors.NewSchemaChangeOnLockedTableErr(ns.Name))
+		}
 		// Before 25.2 we don't support auto-unsetting schema locked.
 		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V25_2) {
 			ns := tableElements.FilterNamespace().MustGetOneElement()

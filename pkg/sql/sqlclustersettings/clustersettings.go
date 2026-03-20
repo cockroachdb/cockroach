@@ -84,6 +84,22 @@ var MultiRegionSystemDatabaseEnabled = settings.RegisterBoolSetting(
 	false,
 )
 
+// SchemaLockedAutoUnlockEnabled controls whether DDL operations will
+// attempt to automatically unlock and re-lock schema_locked tables.
+// When false, DDL on schema-locked tables is blocked unless the user
+// manually unlocks the table first.
+var SchemaLockedAutoUnlockEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.schema.auto_unlock.enabled",
+	"controls whether DDL operations will attempt to automatically unlock "+
+		"and re-lock schema_locked tables. When this setting is false, DDL on "+
+		"schema_locked tables is blocked unless the user manually unlocks the "+
+		"table first. The schema_locked storage parameter improves changefeed "+
+		"performance by locking the table's schema from the perspective of the "+
+		"changefeed.",
+	true,
+	settings.WithPublic)
+
 // RequireSystemTenantOrClusterSetting returns a setting disabled error if
 // executed from inside a secondary tenant that does not have the specified
 // cluster setting.
