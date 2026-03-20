@@ -370,6 +370,13 @@ func TestDockerCLI_test_replication_protocol(t *testing.T) {
 	runTestDockerCLI(t, "test_replication_protocol", "../cli/interactive_tests/test_replication_protocol.tcl")
 }
 
+func TestDockerCLI_test_san_validation(t *testing.T) {
+	s := log.Scope(t)
+	defer s.Close(t)
+
+	runTestDockerCLI(t, "test_san_validation", "../cli/interactive_tests/test_san_validation.tcl")
+}
+
 func TestDockerCLI_test_sb_recreate(t *testing.T) {
 	s := log.Scope(t)
 	defer s.Close(t)
