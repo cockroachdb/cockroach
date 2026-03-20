@@ -507,7 +507,7 @@ func (opc *optPlanningCtx) reset(ctx context.Context) {
 		// potential reuse of versions. To avoid these issues, we prevent saving a
 		// memo (for prepare) or reusing a saved memo (for execute).
 		// We only allow reusing memo if this plan is not going to use canary stats.
-		opc.allowMemoReuse = !p.Descriptors().HasUncommittedTables() &&
+		opc.allowMemoReuse = !p.Descriptors().HasUncommittedDescriptors() &&
 			p.EvalContext().StatsRollout != eval.StatsRolloutCanary
 		opc.useCache = opc.allowMemoReuse && queryCacheEnabled.Get(&p.execCfg.Settings.SV)
 

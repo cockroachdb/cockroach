@@ -302,18 +302,6 @@ func (tc *Collection) GetLeaseGeneration() int64 {
 	return tc.leaseGeneration
 }
 
-// HasUncommittedTables returns true if the Collection contains uncommitted
-// tables.
-func (tc *Collection) HasUncommittedTables() (has bool) {
-	_ = tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
-		if _, has = desc.(catalog.TableDescriptor); has {
-			return iterutil.StopIteration()
-		}
-		return nil
-	})
-	return has
-}
-
 // HasUncommittedDescriptors returns true if the collection contains any
 // uncommitted descriptors.
 func (tc *Collection) HasUncommittedDescriptors() bool {
