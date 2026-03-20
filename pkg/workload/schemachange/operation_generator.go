@@ -4084,7 +4084,8 @@ func (og *operationGenerator) tableColumnsShuffled(
 ) ([]string, error) {
 	q := fmt.Sprintf(`
 SELECT column_name
-FROM [SHOW COLUMNS FROM %s];
+FROM [SHOW COLUMNS FROM %s]
+WHERE NOT is_hidden;
 `, tableName)
 
 	rows, err := tx.Query(ctx, q)
