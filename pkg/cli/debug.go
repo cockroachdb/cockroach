@@ -1677,9 +1677,9 @@ func initPebbleCmds(cmd *cobra.Command, pebbleTool *tool.T) {
 				}
 				wrapper := storage.MakeExternalStorageWrapper(context.Background(), es)
 				factory := remote.MakeSimpleFactory(map[remote.Locator]remote.Storage{
-					"": wrapper,
+					remote.MakeLocator(""): wrapper,
 				})
-				pebbleTool.ConfigureSharedStorage(factory, remote.CreateOnSharedLower, "" /* createOnSharedLocator */)
+				pebbleTool.ConfigureSharedStorage(factory, remote.CreateOnSharedLower, remote.MakeLocator("") /* createOnSharedLocator */)
 			}
 			pebbleCryptoInitializer(cmd.Context())
 			return nil
