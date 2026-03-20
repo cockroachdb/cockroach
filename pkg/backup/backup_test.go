@@ -2885,24 +2885,16 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(at): restructure test to work with OR metamorphic.
-	backuptestutils.DisableFastRestoreForTest(t)
-
 	const numAccounts = 30
-	const createStore = "CREATE DATABASE store"
-	const createStoreStats = "CREATE DATABASE storestats"
 
-	_, origDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	_, origDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	args := base.TestServerArgs{
-		ExternalIODir: dir,
-	}
 
 	// Generate some testdata and back it up.
 	{
 		origDB.Exec(t, "SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE")
-		origDB.Exec(t, createStore)
-		origDB.Exec(t, createStoreStats)
+		origDB.Exec(t, `CREATE DATABASE store`)
+		origDB.Exec(t, `CREATE DATABASE storestats`)
 
 		// customers has multiple inbound FKs, to different indexes.
 		origDB.Exec(t, `CREATE TABLE store.customers (
@@ -2968,257 +2960,239 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 	origOrderCounts := origDB.QueryStr(t, `SELECT * from storestats.ordercounts ORDER BY id`)
 
 	t.Run("restore everything to new cluster", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
-		db := sqlutils.MakeSQLRunner(tc.Conns[0])
-
-		db.Exec(t, createStore)
-		db.Exec(t, `RESTORE TABLE store.* FROM LATEST IN $1`, localFoo)
+		origDB.Exec(t, `CREATE DATABASE store1`)
+		origDB.Exec(t, `RESTORE TABLE store.* FROM LATEST IN $1 WITH into_db = 'store1'`, localFoo)
 		// Restore's Validate checks all the tables point to each other correctly.
 
-		db.CheckQueryResults(t, `SHOW CONSTRAINTS FROM store.customers`, origCustomers)
-		db.CheckQueryResults(t, `SHOW CONSTRAINTS FROM store.orders`, origOrders)
-		db.CheckQueryResults(t, `SHOW CONSTRAINTS FROM store.receipts`, origReceipts)
+		origDB.CheckQueryResults(t, `SHOW CONSTRAINTS FROM store1.customers`, origCustomers)
+		origDB.CheckQueryResults(t, `SHOW CONSTRAINTS FROM store1.orders`, origOrders)
+		origDB.CheckQueryResults(t, `SHOW CONSTRAINTS FROM store1.receipts`, origReceipts)
 
 		// FK validation on customers from receipts is preserved.
-		db.ExpectErr(
+		origDB.ExpectErr(
 			t, "update.*violates foreign key constraint \"receipts_dest_fkey\"",
-			`UPDATE store.customers SET email = concat(id::string, 'nope')`,
+			`UPDATE store1.customers SET email = concat(id::string, 'nope')`,
 		)
 
 		// FK validation on customers from orders is preserved.
-		db.ExpectErr(
+		origDB.ExpectErr(
 			t, "update.*violates foreign key constraint \"orders_customerid_fkey\"",
-			`UPDATE store.customers SET id = id * 1000`,
+			`UPDATE store1.customers SET id = id * 1000`,
 		)
 
 		// FK validation of customer id is preserved.
-		db.ExpectErr(
+		origDB.ExpectErr(
 			t, "insert.*violates foreign key constraint \"orders_customerid_fkey\"",
-			`INSERT INTO store.orders VALUES (999, NULL, 999)`,
+			`INSERT INTO store1.orders VALUES (999, NULL, 999)`,
 		)
 
 		// FK validation of self-FK is preserved.
-		db.ExpectErr(
+		origDB.ExpectErr(
 			t, "insert.*violates foreign key constraint \"receipts_reissue_fkey\"",
-			`INSERT INTO store.receipts VALUES (1, 999, NULL, NULL)`,
+			`INSERT INTO store1.receipts VALUES (1, 999, NULL, NULL)`,
 		)
 	})
 
 	t.Run("restore customers to new cluster", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
-		db := sqlutils.MakeSQLRunner(tc.Conns[0])
-		db.Exec(t, createStore)
-		db.Exec(t, `RESTORE TABLE store.customers, store.orders FROM LATEST IN $1`, localFoo)
+		origDB.Exec(t, `CREATE DATABASE store2`)
+		origDB.Exec(t, `RESTORE TABLE store.customers, store.orders FROM LATEST IN $1 WITH into_db = 'store2'`, localFoo)
 		// Restore's Validate checks all the tables point to each other correctly.
 
 		// FK validation on customers from orders is preserved.
-		db.ExpectErr(
+		origDB.ExpectErr(
 			t, "update.*violates foreign key constraint \"orders_customerid_fkey\"",
-			`UPDATE store.customers SET id = id*100`,
+			`UPDATE store2.customers SET id = id*100`,
 		)
 
 		// FK validation on customers from receipts is gone.
-		db.Exec(t, `UPDATE store.customers SET email = id::string`)
+		origDB.Exec(t, `UPDATE store2.customers SET email = id::string`)
 	})
 
 	t.Run("restore orders to new cluster", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
-		db := sqlutils.MakeSQLRunner(tc.Conns[0])
-		db.Exec(t, createStore)
+		origDB.Exec(t, `CREATE DATABASE store3`)
 
 		// FK validation of self-FK is preserved.
-		db.ExpectErr(
+		origDB.ExpectErr(
 			t, "cannot restore table \"orders\" without referenced table .* \\(or \"skip_missing_foreign_keys\" option\\)",
-			`RESTORE TABLE store.orders FROM LATEST IN $1`, localFoo,
+			`RESTORE TABLE store.orders FROM LATEST IN $1 WITH into_db = 'store3'`, localFoo,
 		)
 
-		db.Exec(t, `RESTORE TABLE store.orders FROM LATEST IN $1 WITH OPTIONS (skip_missing_foreign_keys)`, localFoo)
+		origDB.Exec(t, `RESTORE TABLE store.orders FROM LATEST IN $1 WITH OPTIONS (skip_missing_foreign_keys, into_db = 'store3')`, localFoo)
 		// Restore's Validate checks all the tables point to each other correctly.
 
 		// FK validation is gone.
-		db.Exec(t, `INSERT INTO store.orders VALUES (999, NULL, 999)`)
-		db.Exec(t, `DELETE FROM store.orders`)
+		origDB.Exec(t, `INSERT INTO store3.orders VALUES (999, NULL, 999)`)
+		origDB.Exec(t, `DELETE FROM store3.orders`)
 	})
 
 	t.Run("restore receipts to new cluster", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
-		db := sqlutils.MakeSQLRunner(tc.Conns[0])
-		db.Exec(t, createStore)
-		db.Exec(t, `RESTORE TABLE store.receipts FROM LATEST IN $1 WITH OPTIONS (skip_missing_foreign_keys)`, localFoo)
+		origDB.Exec(t, `CREATE DATABASE store4`)
+		origDB.Exec(t, `RESTORE TABLE store.receipts FROM LATEST IN $1 WITH OPTIONS (skip_missing_foreign_keys, into_db = 'store4')`, localFoo)
 		// Restore's Validate checks all the tables point to each other correctly.
 
 		// FK validation of orders and customer is gone.
-		db.Exec(t, `INSERT INTO store.receipts VALUES (1, NULL, '987', 999)`)
+		origDB.Exec(t, `INSERT INTO store4.receipts VALUES (1, NULL, '987', 999)`)
 
 		// FK validation of self-FK is preserved.
-		db.ExpectErr(
+		origDB.ExpectErr(
 			t, "insert.*violates foreign key constraint \"receipts_reissue_fkey\"",
-			`INSERT INTO store.receipts VALUES (-1, 999, NULL, NULL)`,
+			`INSERT INTO store4.receipts VALUES (-1, 999, NULL, NULL)`,
 		)
 	})
 
 	t.Run("restore receipts and customers to new cluster", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
-		db := sqlutils.MakeSQLRunner(tc.Conns[0])
-		db.Exec(t, createStore)
-		db.Exec(t, `RESTORE TABLE store.receipts, store.customers FROM LATEST IN $1 WITH OPTIONS (skip_missing_foreign_keys)`, localFoo)
+		origDB.Exec(t, `CREATE DATABASE store5`)
+		origDB.Exec(t, `RESTORE TABLE store.receipts, store.customers FROM LATEST IN $1 WITH OPTIONS (skip_missing_foreign_keys, into_db = 'store5')`, localFoo)
 		// Restore's Validate checks all the tables point to each other correctly.
 
 		// FK validation of orders is gone.
-		db.Exec(t, `INSERT INTO store.receipts VALUES (1, NULL, '0', 999)`)
+		origDB.Exec(t, `INSERT INTO store5.receipts VALUES (1, NULL, '0', 999)`)
 
 		// FK validation of customer email is preserved.
-		db.ExpectErr(
+		origDB.ExpectErr(
 			t, "nsert.*violates foreign key constraint \"receipts_dest_fkey\"",
-			`INSERT INTO store.receipts VALUES (-1, NULL, '999', 999)`,
+			`INSERT INTO store5.receipts VALUES (-1, NULL, '999', 999)`,
 		)
 
 		// FK validation on customers from receipts is preserved.
-		db.ExpectErr(
+		origDB.ExpectErr(
 			t, "delete.*violates foreign key constraint \"receipts_dest_fkey\"",
-			`DELETE FROM store.customers`,
+			`DELETE FROM store5.customers`,
 		)
 
 		// FK validation of self-FK is preserved.
-		db.ExpectErr(
+		origDB.ExpectErr(
 			t, "insert.*violates foreign key constraint \"receipts_reissue_fkey\"",
-			`INSERT INTO store.receipts VALUES (-1, 999, NULL, NULL)`,
+			`INSERT INTO store5.receipts VALUES (-1, 999, NULL, NULL)`,
 		)
 	})
 
 	t.Run("restore simple view", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
-		db := sqlutils.MakeSQLRunner(tc.Conns[0])
-		db.Exec(t, createStore)
-		db.ExpectErr(
+		origDB.Exec(t, `CREATE DATABASE store6`)
+		origDB.ExpectErr(
 			t, `cannot restore view "early_customers" without restoring referenced object`,
-			`RESTORE TABLE store.early_customers FROM LATEST IN $1`, localFoo,
+			`RESTORE TABLE store.early_customers FROM LATEST IN $1 WITH into_db = 'store6'`, localFoo,
 		)
-		db.Exec(t, `RESTORE TABLE store.early_customers, store.customers, store.orders FROM LATEST IN $1`, localFoo)
-		db.CheckQueryResults(t, `SELECT * FROM store.early_customers`, origEarlyCustomers)
+		origDB.Exec(t, `RESTORE TABLE store.early_customers, store.customers, store.orders FROM LATEST IN $1 WITH into_db = 'store6'`, localFoo)
+		origDB.CheckQueryResults(t, `SELECT * FROM store6.early_customers`, origEarlyCustomers)
 
 		// nothing depends on orders so it can be dropped.
-		db.Exec(t, `DROP TABLE store.orders`)
+		origDB.Exec(t, `DROP TABLE store6.orders`)
 
 		// customers is aware of the view that depends on it.
-		db.ExpectErr(
+		origDB.ExpectErr(
 			t, `cannot drop relation "customers" because view "early_customers" depends on it`,
-			`DROP TABLE store.customers`,
+			`DROP TABLE store6.customers`,
 		)
 
 		// We want to be able to drop columns not used by the view,
 		// however the detection thereof is currently broken - #17269.
 		//
 		// // columns not depended on by the view are unaffected.
-		// db.Exec(`ALTER TABLE store.customers DROP COLUMN email`)
-		// db.CheckQueryResults(t, `SELECT * FROM store.early_customers`, origEarlyCustomers)
+		// origDB.Exec(`ALTER TABLE store6.customers DROP COLUMN email`)
+		// origDB.CheckQueryResults(t, `SELECT * FROM store6.early_customers`, origEarlyCustomers)
 
-		db.Exec(t, `DROP TABLE store.customers CASCADE`)
+		origDB.Exec(t, `DROP TABLE store6.customers CASCADE`)
 	})
 
 	t.Run("restore multi-table view", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
-		db := sqlutils.MakeSQLRunner(tc.Conns[0])
+		// Drop original databases since the backup is already taken and we need
+		// clean namespaces for cross-database view restores.
+		origDB.Exec(t, `DROP DATABASE store CASCADE`)
+		origDB.Exec(t, `DROP DATABASE storestats CASCADE`)
 
-		db.ExpectErr(
+		origDB.ExpectErr(
 			t, `cannot restore view "ordercounts" without restoring referenced object`,
 			`RESTORE DATABASE storestats FROM LATEST IN $1`, localFoo,
 		)
 
-		db.Exec(t, createStore)
-		db.Exec(t, createStoreStats)
+		origDB.Exec(t, `CREATE DATABASE store`)
+		origDB.Exec(t, `CREATE DATABASE storestats`)
 
-		db.ExpectErr(
+		origDB.ExpectErr(
 			t, `cannot restore view "ordercounts" without restoring referenced object`,
 			`RESTORE TABLE storestats.ordercounts, store.customers FROM LATEST IN $1`, localFoo,
 		)
 
-		db.Exec(t, `RESTORE TABLE store.customers, storestats.ordercounts, store.orders FROM LATEST IN $1`, localFoo)
+		origDB.Exec(t, `RESTORE TABLE store.customers, storestats.ordercounts, store.orders FROM LATEST IN $1`, localFoo)
 
 		// we want to observe just the view-related errors, not fk errors below.
-		db.Exec(t, `ALTER TABLE store.orders DROP CONSTRAINT orders_customerid_fkey`)
+		origDB.Exec(t, `ALTER TABLE store.orders DROP CONSTRAINT orders_customerid_fkey`)
 
 		// customers is aware of the view that depends on it.
-		db.ExpectErr(
+		origDB.ExpectErr(
 			t, `cannot drop relation "customers" because view "storestats.public.ordercounts" depends on it`,
 			`DROP TABLE store.customers`,
 		)
-		db.ExpectErr(
+		origDB.ExpectErr(
 			t, `cannot drop column "email" because view "storestats.public.ordercounts" depends on it`,
 			`ALTER TABLE store.customers DROP COLUMN email`,
 		)
 
 		// orders is aware of the view that depends on it.
-		db.ExpectErr(
+		origDB.ExpectErr(
 			t, `cannot drop relation "orders" because view "storestats.public.ordercounts" depends on it`,
 			`DROP TABLE store.orders`,
 		)
 
-		db.CheckQueryResults(t, `SELECT * FROM storestats.ordercounts ORDER BY id`, origOrderCounts)
+		origDB.CheckQueryResults(t, `SELECT * FROM storestats.ordercounts ORDER BY id`, origOrderCounts)
 
-		db.Exec(t, `CREATE DATABASE otherstore`)
-		db.Exec(t, `RESTORE TABLE store.* FROM LATEST IN $1 WITH into_db = 'otherstore'`, localFoo)
+		origDB.Exec(t, `CREATE DATABASE otherstore`)
+		origDB.Exec(t, `RESTORE TABLE store.* FROM LATEST IN $1 WITH into_db = 'otherstore'`, localFoo)
 		// we want to observe just the view-related errors, not fk errors below.
-		db.Exec(t, `ALTER TABLE otherstore.orders DROP CONSTRAINT orders_customerid_fkey`)
-		db.Exec(t, `DROP TABLE otherstore.receipts`)
+		origDB.Exec(t, `ALTER TABLE otherstore.orders DROP CONSTRAINT orders_customerid_fkey`)
+		origDB.Exec(t, `DROP TABLE otherstore.receipts`)
 
-		db.ExpectErr(
+		origDB.ExpectErr(
 			t, `cannot drop relation "customers" because view "early_customers" depends on it`,
 			`DROP TABLE otherstore.customers`,
 		)
 
-		db.ExpectErr(t, `cannot drop column "email" because view "early_customers" depends on it`,
+		origDB.ExpectErr(t, `cannot drop column "email" because view "early_customers" depends on it`,
 			`ALTER TABLE otherstore.customers DROP COLUMN email`,
 		)
-		db.Exec(t, `DROP DATABASE store CASCADE`)
-		db.CheckQueryResults(t, `SELECT * FROM otherstore.early_customers ORDER BY id`, origEarlyCustomers)
+		origDB.Exec(t, `DROP DATABASE store CASCADE`)
+		origDB.CheckQueryResults(t, `SELECT * FROM otherstore.early_customers ORDER BY id`, origEarlyCustomers)
 	})
 
 	t.Run("restore and skip missing views", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
-		db := sqlutils.MakeSQLRunner(tc.Conns[0])
+		// Clean up databases from prior subtest for a fresh namespace.
+		origDB.Exec(t, `DROP DATABASE IF EXISTS storestats CASCADE`)
+		origDB.Exec(t, `DROP DATABASE IF EXISTS otherstore CASCADE`)
 
 		// Test cases where, after filtering out views that can't be restored, there are no other tables to restore
 
-		db.Exec(t, `RESTORE DATABASE storestats from latest in $1 WITH OPTIONS (skip_missing_views)`, localFoo)
-		db.Exec(t, `RESTORE TABLE storestats.ordercounts from latest in $1 WITH OPTIONS (skip_missing_views)`, localFoo)
+		origDB.Exec(t, `RESTORE DATABASE storestats from latest in $1 WITH OPTIONS (skip_missing_views)`, localFoo)
+		origDB.Exec(t, `RESTORE TABLE storestats.ordercounts from latest in $1 WITH OPTIONS (skip_missing_views)`, localFoo)
 		// Ensure that the views were not restored since they are missing the tables they reference.
-		db.CheckQueryResults(t, `USE storestats; SHOW TABLES;`, [][]string{})
+		origDB.CheckQueryResults(t, `USE storestats; SHOW TABLES;`, [][]string{})
 
 		// Need to specify into_db otherwise the restore gives error:
 		//  a database named "store" needs to exist to restore schema "public".
-		db.Exec(t, `RESTORE TABLE store.early_customers, store.referencing_early_customers from latest in $1 WITH OPTIONS (skip_missing_views, into_db='storestats')`, localFoo)
+		origDB.Exec(t, `RESTORE TABLE store.early_customers, store.referencing_early_customers from latest in $1 WITH OPTIONS (skip_missing_views, into_db='storestats')`, localFoo)
 		// Ensure that the views were not restored since they are missing the tables they reference.
-		db.CheckQueryResults(t, `SHOW TABLES;`, [][]string{})
+		origDB.CheckQueryResults(t, `SHOW TABLES;`, [][]string{})
 
 		// Test that views with valid dependencies are restored
 
-		db.Exec(t, `RESTORE DATABASE store from latest in $1 WITH OPTIONS (skip_missing_views)`, localFoo)
-		db.CheckQueryResults(t, `SELECT * FROM store.early_customers`, origEarlyCustomers)
-		db.CheckQueryResults(t, `SELECT * FROM store.referencing_early_customers`, origEarlyCustomers)
+		origDB.Exec(t, `RESTORE DATABASE store from latest in $1 WITH OPTIONS (skip_missing_views)`, localFoo)
+		origDB.CheckQueryResults(t, `SELECT * FROM store.early_customers`, origEarlyCustomers)
+		origDB.CheckQueryResults(t, `SELECT * FROM store.referencing_early_customers`, origEarlyCustomers)
 		// TODO(lucy, jordan): DROP DATABASE CASCADE doesn't work in the mixed 19.1/
 		// 19.2 state, which is unrelated to backup/restore. See #39504 for a
 		// description of that problem, which is yet to be investigated.
-		// db.Exec(t, `DROP DATABASE store CASCADE`)
+		// origDB.Exec(t, `DROP DATABASE store CASCADE`)
 
 		// Test when some tables (views) are skipped and others are restored
 
 		// See above comment for why we can't delete store and have to create
 		// another database for now....
-		// db.Exec(t, createStore)
+		// origDB.Exec(t, `CREATE DATABASE store`)
 		// storestats.ordercounts depends also on store.orders, so it can't be restored
-		db.Exec(t, `CREATE DATABASE store2`)
-		db.Exec(t, `RESTORE TABLE storestats.ordercounts, store.customers from latest in $1 WITH OPTIONS (skip_missing_views, into_db='store2')`, localFoo)
-		db.CheckQueryResults(t, `SHOW CONSTRAINTS FROM store2.customers`, origCustomers)
-		db.ExpectErr(t, `relation "storestats.ordercounts" does not exist`, `SELECT * FROM storestats.ordercounts`)
+		origDB.Exec(t, `CREATE DATABASE store_skip`)
+		origDB.Exec(t, `RESTORE TABLE storestats.ordercounts, store.customers from latest in $1 WITH OPTIONS (skip_missing_views, into_db='store_skip')`, localFoo)
+		origDB.CheckQueryResults(t, `SHOW CONSTRAINTS FROM store_skip.customers`, origCustomers)
+		origDB.ExpectErr(t, `relation "storestats.ordercounts" does not exist`, `SELECT * FROM storestats.ordercounts`)
 	})
 }
 
@@ -4761,15 +4735,18 @@ func TestRestoredPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(at): restructure test to work with OR metamorphic.
-	backuptestutils.DisableFastRestoreForTest(t)
-
 	const numAccounts = 2
-	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	args := base.TestServerArgs{ExternalIODir: dir}
 
-	rootOnly := sqlDB.QueryStr(t, `SHOW GRANTS ON data.bank`)
+	// Strip the database_name column from SHOW GRANTS output so we can
+	// compare across databases with different names.
+	bankGrantsQuery := func(db string) string {
+		return fmt.Sprintf(
+			`SELECT schema_name, table_name, grantee, privilege_type, is_grantable FROM [SHOW GRANTS ON %s.bank]`, db)
+	}
+
+	rootOnly := sqlDB.QueryStr(t, bankGrantsQuery("data"))
 
 	sqlDB.Exec(t, `CREATE USER someone`)
 	sqlDB.Exec(t, `GRANT SELECT, INSERT, UPDATE, DELETE ON data.bank TO someone`)
@@ -4780,39 +4757,29 @@ func TestRestoredPrivileges(t *testing.T) {
 	data2Grants := sqlDB.QueryStr(t, `SHOW GRANTS ON DATABASE data2`)
 	sqlDB.Exec(t, `GRANT CONNECT, CREATE, DROP, ZONECONFIG ON DATABASE data2 TO someone`)
 
-	withGrants := sqlDB.QueryStr(t, `SHOW GRANTS ON data.bank`)
+	withGrants := sqlDB.QueryStr(t, bankGrantsQuery("data"))
 
 	sqlDB.Exec(t, `BACKUP DATABASE data, data2 INTO $1`, localFoo)
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
 
 	t.Run("into fresh db", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
-		sqlDBRestore := sqlutils.MakeSQLRunner(tc.Conns[0])
-		sqlDBRestore.Exec(t, `CREATE DATABASE data`)
-		sqlDBRestore.Exec(t, `RESTORE TABLE data.bank FROM LATEST IN $1`, localFoo)
-		sqlDBRestore.CheckQueryResults(t, `SHOW GRANTS ON data.bank`, rootOnly)
+		sqlDB.Exec(t, `CREATE DATABASE data_fresh`)
+		sqlDB.Exec(t, `RESTORE TABLE data.bank FROM LATEST IN $1 WITH into_db = 'data_fresh'`, localFoo)
+		sqlDB.CheckQueryResults(t, bankGrantsQuery("data_fresh"), rootOnly)
 	})
 
 	t.Run("into db with added grants", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
-		sqlDBRestore := sqlutils.MakeSQLRunner(tc.Conns[0])
-		sqlDBRestore.Exec(t, `CREATE DATABASE data`)
-		sqlDBRestore.Exec(t, `CREATE USER someone`)
-		sqlDBRestore.Exec(t, `USE data`)
-		sqlDBRestore.Exec(t, `ALTER DEFAULT PRIVILEGES GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO someone`)
-		sqlDBRestore.Exec(t, `RESTORE TABLE data.bank FROM LATEST IN $1`, localFoo)
-		sqlDBRestore.CheckQueryResults(t, `SHOW GRANTS ON data.bank`, withGrants)
+		sqlDB.Exec(t, `CREATE DATABASE data_grants`)
+		sqlDB.Exec(t, `USE data_grants`)
+		sqlDB.Exec(t, `ALTER DEFAULT PRIVILEGES GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO someone`)
+		sqlDB.Exec(t, `RESTORE TABLE data.bank FROM LATEST IN $1 WITH into_db = 'data_grants'`, localFoo)
+		sqlDB.CheckQueryResults(t, bankGrantsQuery("data_grants"), withGrants)
 	})
 
 	t.Run("into db on db grants", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
-		sqlDBRestore := sqlutils.MakeSQLRunner(tc.Conns[0])
-		sqlDBRestore.Exec(t, `CREATE USER someone`)
-		sqlDBRestore.Exec(t, `RESTORE DATABASE data2 FROM LATEST IN $1`, localFoo)
-		sqlDBRestore.CheckQueryResults(t, `SHOW GRANTS ON DATABASE data2`, data2Grants)
+		sqlDB.Exec(t, `DROP DATABASE data2`)
+		sqlDB.Exec(t, `RESTORE DATABASE data2 FROM LATEST IN $1`, localFoo)
+		sqlDB.CheckQueryResults(t, `SHOW GRANTS ON DATABASE data2`, data2Grants)
 	})
 }
 
@@ -4841,14 +4808,9 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(at): restructure test to work with OR metamorphic.
-	backuptestutils.DisableFastRestoreForTest(t)
-
 	const numAccounts = 2
-	tc, origDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	_, origDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	s := tc.ApplicationLayer(0)
-	args := base.TestServerArgs{ExternalIODir: s.ExternalIODir()}
 
 	for _, q := range []string{
 		`CREATE DATABASE d2`,
@@ -4870,80 +4832,68 @@ func TestRestoreDatabaseVersusTable(t *testing.T) {
 	origDB.Exec(t, `BACKUP TABLE d4.foo, d4.bar INTO $1`, d4foobar)
 	origDB.Exec(t, `BACKUP TABLE d4.* INTO $1`, d4star)
 
+	// Drop databases that were only needed for the backup.
+	origDB.Exec(t, `DROP DATABASE d2 CASCADE`)
+	origDB.Exec(t, `DROP DATABASE d3 CASCADE`)
+	origDB.Exec(t, `DROP DATABASE d4 CASCADE`)
+
 	t.Run("incomplete-db", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tcRestore.Stopper().Stop(context.Background())
-		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
+		origDB.Exec(t, `CREATE DATABASE d5`)
 
-		sqlDB.Exec(t, `create database d5`)
-
-		sqlDB.ExpectErr(
+		origDB.ExpectErr(
 			t, "cannot RESTORE DATABASE from a backup of individual tables",
 			`RESTORE DATABASE d4 FROM LATEST IN $1`, d4foo,
 		)
 
-		sqlDB.ExpectErr(
+		origDB.ExpectErr(
 			t, "cannot RESTORE <database>.* from a backup of individual tables",
 			`RESTORE TABLE d4.* FROM LATEST IN $1 WITH into_db = 'd5'`, d4foo,
 		)
 
-		sqlDB.ExpectErr(
+		origDB.ExpectErr(
 			t, "cannot RESTORE DATABASE from a backup of individual tables",
 			`RESTORE DATABASE d4 FROM LATEST IN $1`, d4foobar,
 		)
 
-		sqlDB.ExpectErr(
+		origDB.ExpectErr(
 			t, "cannot RESTORE <database>.* from a backup of individual tables",
 			`RESTORE TABLE d4.* FROM LATEST IN $1 WITH into_db = 'd5'`, d4foobar,
 		)
 
-		sqlDB.ExpectErr(
+		origDB.ExpectErr(
 			t, "cannot RESTORE DATABASE from a backup of individual tables",
 			`RESTORE DATABASE d4 FROM LATEST IN $1`, d4foo,
 		)
 
-		sqlDB.Exec(t, `RESTORE DATABASE d4 FROM LATEST IN $1`, d4star)
+		origDB.Exec(t, `RESTORE DATABASE d4 FROM LATEST IN $1`, d4star)
+		origDB.Exec(t, `DROP DATABASE d4 CASCADE`)
 	})
 
 	t.Run("db", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tcRestore.Stopper().Stop(context.Background())
-		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
-		sqlDB.Exec(t, `RESTORE DATABASE data, d2, d3 FROM LATEST IN $1`, localFoo)
+		origDB.Exec(t, `DROP DATABASE data CASCADE`)
+		origDB.Exec(t, `RESTORE DATABASE data, d2, d3 FROM LATEST IN $1`, localFoo)
+		origDB.Exec(t, `DROP DATABASE d2 CASCADE`)
+		origDB.Exec(t, `DROP DATABASE d3 CASCADE`)
 	})
 
 	t.Run("db-exists", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tcRestore.Stopper().Stop(context.Background())
-		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
-
-		sqlDB.Exec(t, `CREATE DATABASE data`)
-		sqlDB.ExpectErr(t, "already exists", `RESTORE DATABASE data FROM LATEST IN $1`, localFoo)
+		// data exists from the previous subtest's restore.
+		origDB.ExpectErr(t, "already exists", `RESTORE DATABASE data FROM LATEST IN $1`, localFoo)
 	})
 
 	t.Run("tables", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tcRestore.Stopper().Stop(context.Background())
-		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
-
-		sqlDB.Exec(t, `CREATE DATABASE data`)
-		sqlDB.Exec(t, `RESTORE TABLE data.* FROM LATEST IN $1`, localFoo)
+		origDB.Exec(t, `CREATE DATABASE data_tbl`)
+		origDB.Exec(t, `RESTORE TABLE data.* FROM LATEST IN $1 WITH into_db = 'data_tbl'`, localFoo)
 	})
 
 	t.Run("tables-needs-db", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tcRestore.Stopper().Stop(context.Background())
-		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
-
-		sqlDB.ExpectErr(t, "needs to exist", `RESTORE TABLE data.*, d4.* FROM LATEST IN $1`, localFoo)
+		// d4 doesn't exist, so restoring tables from it should error. We need
+		// a database name that doesn't exist in the cluster — d4 was dropped above.
+		origDB.ExpectErr(t, "needs to exist", `RESTORE TABLE d4.*, d3.* FROM LATEST IN $1`, localFoo)
 	})
 
 	t.Run("into_db", func(t *testing.T) {
-		tcRestore := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tcRestore.Stopper().Stop(context.Background())
-		sqlDB := sqlutils.MakeSQLRunner(tcRestore.Conns[0])
-
-		sqlDB.ExpectErr(
+		origDB.ExpectErr(
 			t, `cannot use "into_db"`,
 			`RESTORE DATABASE data FROM LATEST IN $1 WITH into_db = 'other'`, localFoo,
 		)
@@ -5323,15 +5273,9 @@ func TestBackupRestoreSequence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(at): restructure test to work with OR metamorphic.
-	backuptestutils.DisableFastRestoreForTest(t)
-
 	const numAccounts = 2
-	_, origDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	_, origDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	args := base.TestServerArgs{
-		ExternalIODir: dir,
-	}
 
 	backupLoc := localFoo
 
@@ -5342,37 +5286,33 @@ func TestBackupRestoreSequence(t *testing.T) {
 	origDB.Exec(t, `BACKUP DATABASE data INTO $1`, backupLoc)
 
 	t.Run("restore both table & sequence to a new cluster", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
-		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-
-		newDB.Exec(t, `RESTORE DATABASE data FROM LATEST IN $1`, backupLoc)
-		newDB.Exec(t, `USE data`)
+		origDB.Exec(t, `RESTORE DATABASE data FROM LATEST IN $1 WITH new_db_name = 'data_both'`, backupLoc)
+		origDB.Exec(t, `USE data_both`)
 
 		// Verify that the db was restored correctly.
-		newDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{
+		origDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{
 			{"1", "foo"},
 			{"2", "bar"},
 			{"3", "baz"},
 		})
-		newDB.CheckQueryResults(t, `SELECT last_value FROM t_id_seq`, [][]string{
+		origDB.CheckQueryResults(t, `SELECT last_value FROM t_id_seq`, [][]string{
 			{"3"},
 		})
 
 		// Verify that we can keep inserting into the table, without violating a uniqueness constraint.
-		newDB.Exec(t, `INSERT INTO data.t (v) VALUES ('bar')`)
+		origDB.Exec(t, `INSERT INTO data_both.t (v) VALUES ('bar')`)
 
 		// Verify that sequence <=> table dependencies are still in place.
-		newDB.ExpectErr(
+		origDB.ExpectErr(
 			t, "pq: cannot drop sequence t_id_seq because other objects depend on it",
 			`DROP SEQUENCE t_id_seq`,
 		)
 
 		// Check that we can rename the sequence, and the table is fine.
-		newDB.Exec(t, `ALTER SEQUENCE t_id_seq RENAME TO t_id_seq2`)
-		newDB.Exec(t, `INSERT INTO data.t (v) VALUES ('qux')`)
-		newDB.CheckQueryResults(t, `SELECT last_value FROM t_id_seq2`, [][]string{{"5"}})
-		newDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{
+		origDB.Exec(t, `ALTER SEQUENCE t_id_seq RENAME TO t_id_seq2`)
+		origDB.Exec(t, `INSERT INTO data_both.t (v) VALUES ('qux')`)
+		origDB.CheckQueryResults(t, `SELECT last_value FROM t_id_seq2`, [][]string{{"5"}})
+		origDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{
 			{"1", "foo"},
 			{"2", "bar"},
 			{"3", "baz"},
@@ -5381,29 +5321,26 @@ func TestBackupRestoreSequence(t *testing.T) {
 		})
 
 		// Verify that sequence <=> table dependencies are still in place.
-		newDB.ExpectErr(
+		origDB.ExpectErr(
 			t, "pq: cannot drop sequence t_id_seq2 because other objects depend on it",
 			`DROP SEQUENCE t_id_seq2`,
 		)
+		origDB.Exec(t, `USE data`)
 	})
 
 	t.Run("restore just the table to a new cluster", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
-		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+		origDB.Exec(t, `CREATE DATABASE data_tbl`)
+		origDB.Exec(t, `USE data_tbl`)
 
-		newDB.Exec(t, `CREATE DATABASE data`)
-		newDB.Exec(t, `USE data`)
-
-		newDB.ExpectErr(
+		origDB.ExpectErr(
 			t, "pq: cannot restore table \"t\" without referenced sequence \\d+ \\(or \"skip_missing_sequences\" option\\)",
-			`RESTORE TABLE t FROM LATEST IN $1`, localFoo,
+			`RESTORE TABLE data.t FROM LATEST IN $1 WITH into_db = 'data_tbl'`, localFoo,
 		)
 
-		newDB.Exec(t, `RESTORE TABLE t FROM LATEST IN $1 WITH OPTIONS (skip_missing_sequences)`, localFoo)
+		origDB.Exec(t, `RESTORE TABLE data.t FROM LATEST IN $1 WITH OPTIONS (skip_missing_sequences, into_db = 'data_tbl')`, localFoo)
 
 		// Verify that the table was restored correctly.
-		newDB.CheckQueryResults(t, `SELECT * FROM data.t`, [][]string{
+		origDB.CheckQueryResults(t, `SELECT * FROM data_tbl.t`, [][]string{
 			{"1", "foo"},
 			{"2", "bar"},
 			{"3", "baz"},
@@ -5411,34 +5348,32 @@ func TestBackupRestoreSequence(t *testing.T) {
 
 		// Test that insertion without specifying the id column doesn't work, since
 		// the DEFAULT expression has been removed.
-		newDB.ExpectErr(
+		origDB.ExpectErr(
 			t, `pq: missing \"id\" primary key column`,
 			`INSERT INTO t (v) VALUES ('bloop')`,
 		)
 
 		// Test that inserting with a value specified works.
-		newDB.Exec(t, `INSERT INTO t (id, v) VALUES (4, 'bloop')`)
+		origDB.Exec(t, `INSERT INTO t (id, v) VALUES (4, 'bloop')`)
+		origDB.Exec(t, `USE data`)
 	})
 
 	t.Run("restore just the sequence to a new cluster", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
-		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-
-		newDB.Exec(t, `CREATE DATABASE data`)
-		newDB.Exec(t, `USE data`)
+		origDB.Exec(t, `CREATE DATABASE data_seq`)
+		origDB.Exec(t, `USE data_seq`)
 		// TODO(vilterp): create `RESTORE SEQUENCE` instead of `RESTORE TABLE`, and force
 		// people to use that?
-		newDB.Exec(t, `RESTORE TABLE t_id_seq FROM LATEST IN $1`, backupLoc)
+		origDB.Exec(t, `RESTORE TABLE data.t_id_seq FROM LATEST IN $1 WITH into_db = 'data_seq'`, backupLoc)
 
 		// Verify that the sequence value was restored.
-		newDB.CheckQueryResults(t, `SELECT last_value FROM data.t_id_seq`, [][]string{
+		origDB.CheckQueryResults(t, `SELECT last_value FROM data_seq.t_id_seq`, [][]string{
 			{"3"},
 		})
 
 		// Verify that the reference to the table that used it was removed, and
 		// it can be dropped.
-		newDB.Exec(t, `DROP SEQUENCE t_id_seq`)
+		origDB.Exec(t, `DROP SEQUENCE t_id_seq`)
+		origDB.Exec(t, `USE data`)
 	})
 }
 
@@ -5542,13 +5477,9 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(at): restructure test to work with OR metamorphic.
-	backuptestutils.DisableFastRestoreForTest(t)
-
 	const numAccounts = 2
-	_, origDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	tc, origDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	args := base.TestServerArgs{ExternalIODir: dir}
 
 	// Setup for sequence ownership backup/restore tests in the same database.
 	backupLoc := localFoo + `/d`
@@ -5558,7 +5489,7 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 	origDB.Exec(t, `CREATE SEQUENCE d.seq OWNED BY d.t.a`)
 	origDB.Exec(t, `BACKUP DATABASE d INTO $1`, backupLoc)
 
-	getTableDescriptorFromTestCluster := func(tc *testcluster.TestCluster, database string, table string) catalog.TableDescriptor {
+	getTableDesc := func(database string, table string) catalog.TableDescriptor {
 		srv := tc.ApplicationLayer(0)
 		return desctestutils.TestingGetPublicTableDescriptor(srv.DB(), srv.Codec(), database, table)
 	}
@@ -5566,15 +5497,10 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 	// When restoring a database which has a owning table and an owned sequence,
 	// the ownership relationship should be preserved and remapped post restore.
 	t.Run("test restoring database should preserve ownership dependency", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
+		origDB.Exec(t, `RESTORE DATABASE d FROM LATEST IN $1 WITH new_db_name = 'd_own'`, backupLoc)
 
-		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-
-		newDB.Exec(t, `RESTORE DATABASE d FROM LATEST IN $1`, backupLoc)
-
-		tableDesc := getTableDescriptorFromTestCluster(tc, "d", "t")
-		seqDesc := getTableDescriptorFromTestCluster(tc, "d", "seq")
+		tableDesc := getTableDesc("d_own", "t")
+		seqDesc := getTableDesc("d_own", "seq")
 
 		require.True(t, seqDesc.GetSequenceOpts().HasOwner(), "no sequence owner after restore")
 		require.Equal(t, tableDesc.GetID(), seqDesc.GetSequenceOpts().SequenceOwner.OwnerTableID,
@@ -5595,18 +5521,12 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 	// does not exist, the user must specify the `skip_missing_sequence_owners`
 	// flag. When supplied, the sequence should be restored without an owner.
 	t.Run("test restoring sequence when table does not exist", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
+		origDB.Exec(t, `CREATE DATABASE d_seq`)
+		origDB.ExpectErr(t, `pq: cannot restore sequence "seq" without referenced owner`,
+			`RESTORE TABLE d.seq FROM LATEST IN $1 WITH into_db = 'd_seq'`, backupLoc)
 
-		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-
-		newDB.Exec(t, `CREATE DATABASE d`)
-		newDB.Exec(t, `USE d`)
-		newDB.ExpectErr(t, `pq: cannot restore sequence "seq" without referenced owner`,
-			`RESTORE TABLE seq FROM LATEST IN $1`, backupLoc)
-
-		newDB.Exec(t, `RESTORE TABLE seq FROM LATEST IN $1 WITH skip_missing_sequence_owners`, backupLoc)
-		seqDesc := getTableDescriptorFromTestCluster(tc, "d", "seq")
+		origDB.Exec(t, `RESTORE TABLE d.seq FROM LATEST IN $1 WITH skip_missing_sequence_owners, into_db = 'd_seq'`, backupLoc)
+		seqDesc := getTableDesc("d_seq", "seq")
 		require.False(t, seqDesc.GetSequenceOpts().HasOwner(), "unexpected owner of restored sequence.")
 	})
 
@@ -5617,47 +5537,36 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 	// shouldn't have an owner.
 	t.Run("test restoring table then sequence should remove ownership dependency",
 		func(t *testing.T) {
-			tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-			defer tc.Stopper().Stop(context.Background())
+			origDB.Exec(t, `CREATE DATABASE d_ts`)
+			origDB.ExpectErr(t, `pq: cannot restore sequence "seq" without referenced owner table`,
+				`RESTORE TABLE d.seq FROM LATEST IN $1 WITH into_db = 'd_ts'`, backupLoc)
 
-			newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
+			origDB.ExpectErr(t, `pq: cannot restore table "t" without referenced sequence`,
+				`RESTORE TABLE d.t FROM LATEST IN $1 WITH into_db = 'd_ts'`, backupLoc)
+			origDB.Exec(t, `RESTORE TABLE d.t FROM LATEST IN $1 WITH skip_missing_sequence_owners, into_db = 'd_ts'`, backupLoc)
 
-			newDB.Exec(t, `CREATE DATABASE d`)
-			newDB.Exec(t, `USE d`)
-			newDB.ExpectErr(t, `pq: cannot restore sequence "seq" without referenced owner table`,
-				`RESTORE TABLE seq FROM LATEST IN $1`, backupLoc)
-
-			newDB.ExpectErr(t, `pq: cannot restore table "t" without referenced sequence`,
-				`RESTORE TABLE t FROM LATEST IN $1`, backupLoc)
-			newDB.Exec(t, `RESTORE TABLE t FROM LATEST IN $1 WITH skip_missing_sequence_owners`, backupLoc)
-
-			tableDesc := getTableDescriptorFromTestCluster(tc, "d", "t")
+			tableDesc := getTableDesc("d_ts", "t")
 
 			require.Equal(t, 0, tableDesc.PublicColumns()[0].NumOwnsSequences(),
 				"expected restored table to own 0 sequences",
 			)
 
-			newDB.ExpectErr(t, `pq: cannot restore sequence "seq" without referenced owner table`,
-				`RESTORE TABLE seq FROM LATEST IN $1`, backupLoc)
-			newDB.Exec(t, `RESTORE TABLE seq FROM LATEST IN $1 WITH skip_missing_sequence_owners`, backupLoc)
+			origDB.ExpectErr(t, `pq: cannot restore sequence "seq" without referenced owner table`,
+				`RESTORE TABLE d.seq FROM LATEST IN $1 WITH into_db = 'd_ts'`, backupLoc)
+			origDB.Exec(t, `RESTORE TABLE d.seq FROM LATEST IN $1 WITH skip_missing_sequence_owners, into_db = 'd_ts'`, backupLoc)
 
-			seqDesc := getTableDescriptorFromTestCluster(tc, "d", "seq")
+			seqDesc := getTableDesc("d_ts", "seq")
 			require.False(t, seqDesc.GetSequenceOpts().HasOwner(), "unexpected sequence owner after restore")
 		})
 
 	// Ownership dependencies should be preserved and remapped when restoring
 	// both the owned sequence and owning table into a different database.
 	t.Run("test restoring all tables into a different database", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
+		origDB.Exec(t, `CREATE DATABASE restore_db`)
+		origDB.Exec(t, `RESTORE TABLE d.* FROM LATEST IN $1 WITH into_db='restore_db'`, backupLoc)
 
-		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-
-		newDB.Exec(t, `CREATE DATABASE restore_db`)
-		newDB.Exec(t, `RESTORE TABLE d.* FROM LATEST IN $1 WITH into_db='restore_db'`, backupLoc)
-
-		tableDesc := getTableDescriptorFromTestCluster(tc, "restore_db", "t")
-		seqDesc := getTableDescriptorFromTestCluster(tc, "restore_db", "seq")
+		tableDesc := getTableDesc("restore_db", "t")
+		seqDesc := getTableDesc("restore_db", "seq")
 
 		require.True(t, seqDesc.GetSequenceOpts().HasOwner(), "no sequence owner after restore")
 		require.Equal(t, tableDesc.GetID(), seqDesc.GetSequenceOpts().SequenceOwner.OwnerTableID,
@@ -5690,38 +5599,37 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 
 	origDB.Exec(t, `BACKUP DATABASE d2, d3 INTO $1`, backupLocD2D3)
 
+	// Drop d2, d3 so subtests can restore them.
+	origDB.Exec(t, `DROP DATABASE d2 CASCADE`)
+	origDB.Exec(t, `DROP DATABASE d3 CASCADE`)
+
 	// When restoring a database that has a sequence which is owned by a table
 	// in another database, the user must supply the
 	// `skip_missing_sequence_owners` flag. When supplied, the cross-database
 	// ownership dependency should be removed.
 	t.Run("test restoring two databases removes cross-database ownership dependency",
 		func(t *testing.T) {
-			tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-			defer tc.Stopper().Stop(context.Background())
-
-			newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-
-			newDB.ExpectErr(t, "pq: cannot restore sequence \"seq\" without referenced owner|"+
+			origDB.ExpectErr(t, "pq: cannot restore sequence \"seq\" without referenced owner|"+
 				"pq: cannot restore table \"t\" without referenced sequence",
 				`RESTORE DATABASE d2 FROM LATEST IN $1`, backupLocD2D3)
-			newDB.Exec(t, `RESTORE DATABASE d2 FROM LATEST IN $1 WITH skip_missing_sequence_owners`, backupLocD2D3)
+			origDB.Exec(t, `RESTORE DATABASE d2 FROM LATEST IN $1 WITH skip_missing_sequence_owners`, backupLocD2D3)
 
-			tableDesc := getTableDescriptorFromTestCluster(tc, "d2", "t")
+			tableDesc := getTableDesc("d2", "t")
 			require.Equal(t, 0, tableDesc.PublicColumns()[0].NumOwnsSequences(),
 				"expected restored table to own no sequences.",
 			)
 
-			newDB.ExpectErr(t, "pq: cannot restore sequence \"seq\" without referenced owner|"+
+			origDB.ExpectErr(t, "pq: cannot restore sequence \"seq\" without referenced owner|"+
 				"pq: cannot restore table \"t\" without referenced sequence",
 				`RESTORE DATABASE d3 FROM LATEST IN $1`, backupLocD2D3)
-			newDB.Exec(t, `RESTORE DATABASE d3 FROM LATEST IN $1 WITH skip_missing_sequence_owners`, backupLocD2D3)
+			origDB.Exec(t, `RESTORE DATABASE d3 FROM LATEST IN $1 WITH skip_missing_sequence_owners`, backupLocD2D3)
 
-			seqDesc := getTableDescriptorFromTestCluster(tc, "d3", "seq")
+			seqDesc := getTableDesc("d3", "seq")
 			require.False(t, seqDesc.GetSequenceOpts().HasOwner(), "unexpected sequence owner after restore")
 
 			// Sequence dependencies inside the database should still be preserved.
-			sd := getTableDescriptorFromTestCluster(tc, "d3", "seq2")
-			td := getTableDescriptorFromTestCluster(tc, "d3", "t")
+			sd := getTableDesc("d3", "seq2")
+			td := getTableDesc("d3", "t")
 
 			require.True(t, sd.GetSequenceOpts().HasOwner(), "no owner found for seq2")
 			require.Equal(t, td.GetID(), sd.GetSequenceOpts().SequenceOwner.OwnerTableID,
@@ -5735,21 +5643,20 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 			require.Equal(t, sd.GetID(), td.PublicColumns()[0].GetOwnsSequenceID(0),
 				"unexpected ID of sequences owned by d3.t",
 			)
+
+			// Clean up for next subtest.
+			origDB.Exec(t, `DROP DATABASE d2 CASCADE`)
+			origDB.Exec(t, `DROP DATABASE d3 CASCADE`)
 		})
 
 	// When restoring both the databases that contain a cross database ownership
 	// dependency, we should preserve and remap the ownership dependencies.
 	t.Run("test restoring both databases at the same time", func(t *testing.T) {
-		tc := testcluster.StartTestCluster(t, singleNode, base.TestClusterArgs{ServerArgs: args})
-		defer tc.Stopper().Stop(context.Background())
-
-		newDB := sqlutils.MakeSQLRunner(tc.Conns[0])
-
-		newDB.Exec(t, `RESTORE DATABASE d2, d3 FROM LATEST IN $1`, backupLocD2D3)
+		origDB.Exec(t, `RESTORE DATABASE d2, d3 FROM LATEST IN $1`, backupLocD2D3)
 
 		// d2.t owns d3.seq should be preserved.
-		tableDesc := getTableDescriptorFromTestCluster(tc, "d2", "t")
-		seqDesc := getTableDescriptorFromTestCluster(tc, "d3", "seq")
+		tableDesc := getTableDesc("d2", "t")
+		seqDesc := getTableDesc("d3", "seq")
 
 		require.True(t, seqDesc.GetSequenceOpts().HasOwner(), "no sequence owner after restore")
 		require.Equal(t, tableDesc.GetID(), seqDesc.GetSequenceOpts().SequenceOwner.OwnerTableID,
@@ -5766,9 +5673,9 @@ func TestBackupRestoreSequenceOwnership(t *testing.T) {
 		)
 
 		// d3.t owns d2.seq and d3.seq2 should be preserved.
-		td := getTableDescriptorFromTestCluster(tc, "d3", "t")
-		sd := getTableDescriptorFromTestCluster(tc, "d2", "seq")
-		sdSeq2 := getTableDescriptorFromTestCluster(tc, "d3", "seq2")
+		td := getTableDesc("d3", "t")
+		sd := getTableDesc("d2", "seq")
+		sdSeq2 := getTableDesc("d3", "seq2")
 
 		require.True(t, sd.GetSequenceOpts().HasOwner(), "no sequence owner after restore")
 		require.True(t, sdSeq2.GetSequenceOpts().HasOwner(), "no sequence owner after restore")
@@ -6500,27 +6407,18 @@ func TestRestoreErrorPropagates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// TODO(at): restructure test to work with OR metamorphic.
-	backuptestutils.DisableFastRestoreForTest(t)
-
 	skip.UnderRace(t, "multinode cluster setup times out under race, likely due to resource starvation.")
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// Fail conditional put requests that have the word "RESTORE" in the value.
 	// Restore jobs set this value. It would be better to fail based on the job id
 	// itsef, but that value isn't known until after the job is created.
 	var RESTORE = regexp.MustCompile(`RESTORE`)
 
-	dir, dirCleanupFn := testutils.TempDir(t)
-	defer dirCleanupFn()
 	var failures int64
 	var shouldFail atomic.Bool
 
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			ExternalIODir: dir,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
 					TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
@@ -6542,19 +6440,16 @@ func TestRestoreErrorPropagates(t *testing.T) {
 		},
 	}
 
-	tc := testcluster.StartTestCluster(t, 3, params)
-	defer tc.Stopper().Stop(ctx)
-	db := tc.ServerConn(0)
-	runner := sqlutils.MakeSQLRunner(db)
+	_, runner, _, cleanupFn := backupRestoreTestSetupWithParams(t, 3, 0, InitManualReplication, params)
+	defer cleanupFn()
 
 	runner.Exec(t, "CREATE TABLE foo ()")
 	runner.Exec(t, "CREATE DATABASE into_db")
 	url := `nodelocal://1/foo`
 	runner.Exec(t, `BACKUP TABLE foo INTO '`+url+`'`)
 	shouldFail.Store(true)
-	_, err := db.Exec(`RESTORE TABLE foo FROM LATEST IN '` + url + `' WITH into_db = 'into_db'`)
-	// Expect to see the first job write failure.
-	require.Regexp(t, "boom 1", err)
+	runner.ExpectErr(t, "boom 1",
+		`RESTORE TABLE foo FROM LATEST IN '`+url+`' WITH into_db = 'into_db'`)
 }
 
 // Check if export request is from a lease for a descriptor to avoid picking
