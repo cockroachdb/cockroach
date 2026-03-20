@@ -11318,6 +11318,14 @@ layers:
       aggregation: AVG
       derivative: NONE
       owner: cockroachdb/obs-prs
+    - name: sys.gc.assist.enabled
+      exported_name: sys_gc_assist_enabled
+      description: Indicates whether GC assist is currently enabled (1) or disabled (0)
+      y_axis_label: GC Assist
+      type: GAUGE
+      unit: CONST
+      aggregation: AVG
+      derivative: NONE
     - name: sys.gc.assist.ns
       exported_name: sys_gc_assist_ns
       description: Estimated total CPU time user goroutines spent to assist the GC process
