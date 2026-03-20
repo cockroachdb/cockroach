@@ -285,11 +285,12 @@ var tests = []importTestSpec{
 			time.Sleep(10 * time.Second)
 		},
 	},
-	// Test job survival if a worker node is shutdown.
+	// Test job survival if a worker node is shutdown. Exclude lineitem (the
+	// largest dataset) to avoid timeouts when running with only 3 active nodes.
 	{
 		subtestName:  "nodeShutdown/worker",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anySmallDataset),
 		importRunner: func(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, _ *rand.Rand, ds dataset) error {
 			importConn := c.Conn(ctx, l, 2 /* gateway node */)
 			defer importConn.Close()
@@ -299,11 +300,13 @@ var tests = []importTestSpec{
 				})
 		},
 	},
-	// Test job survival if the coordinator node is shutdown.
+	// Test job survival if the coordinator node is shutdown. Exclude lineitem
+	// (the largest dataset) to avoid timeouts when running with only 3 active
+	// nodes.
 	{
 		subtestName:  "nodeShutdown/coordinator",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anySmallDataset),
 		importRunner: func(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, _ *rand.Rand, ds dataset) error {
 			importConn := c.Conn(ctx, l, 2 /* gateway node */)
 			defer importConn.Close()
