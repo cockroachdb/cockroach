@@ -846,6 +846,43 @@ func TestRestoreWithGrants(t *testing.T) {
 			}
 		})
 	}
+
+	// Default privileges should not be restored with WITH GRANTS.
+	t.Run("default-privileges-not-restored", func(t *testing.T) {
+		db.Exec(t, "CREATE DATABASE defprivdb")
+		db.Exec(t, "CREATE SCHEMA defprivdb.myschema")
+		db.Exec(t, "CREATE USER dpuser")
+		db.Exec(t, "GRANT CREATE ON DATABASE defprivdb TO dpuser")
+		db.Exec(t, "GRANT USAGE ON SCHEMA defprivdb.myschema TO dpuser")
+
+		// Set default privileges where dpuser appears as both grantee and role,
+		// at both the database and schema level.
+		db.Exec(t, "USE defprivdb")
+		db.Exec(t, "ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO dpuser")
+		db.Exec(t, "ALTER DEFAULT PRIVILEGES FOR ROLE dpuser GRANT INSERT ON TABLES TO root")
+		db.Exec(t, "ALTER DEFAULT PRIVILEGES IN SCHEMA myschema GRANT INSERT ON TABLES TO dpuser")
+
+		db.Exec(t, "BACKUP DATABASE defprivdb INTO 'nodelocal://1/test-defpriv'")
+		db.Exec(t, "RESTORE DATABASE defprivdb FROM LATEST IN 'nodelocal://1/test-defpriv' WITH GRANTS, new_db_name = newdefprivdb")
+
+		// Regular privileges should be restored.
+		verifyPrivilege(t, db, hasPriv("dpuser", "DATABASE", "newdefprivdb", "CREATE"))
+		verifyPrivilege(t, db, hasPriv("dpuser", "SCHEMA", "newdefprivdb.myschema", "USAGE"))
+
+		// Default privileges should NOT be restored, whether the user appears
+		// as the grantee or as the role, at the database or schema level.
+		db.Exec(t, "USE newdefprivdb")
+
+		noDefaultPrivs := db.QueryStr(t,
+			"SELECT count(*) FROM [SHOW DEFAULT PRIVILEGES] WHERE grantee = 'dpuser' OR role = 'dpuser'")
+		require.Equal(t, "0", noDefaultPrivs[0][0],
+			"expected no default privileges referencing dpuser")
+
+		noSchemaDefaultPrivs := db.QueryStr(t,
+			"SELECT count(*) FROM [SHOW DEFAULT PRIVILEGES IN SCHEMA myschema] WHERE grantee = 'dpuser'")
+		require.Equal(t, "0", noSchemaDefaultPrivs[0][0],
+			"expected no schema-level default privileges referencing dpuser")
+	})
 }
 
 // hasPriv creates a privilege check expecting a non-grantable privilege to be present.
