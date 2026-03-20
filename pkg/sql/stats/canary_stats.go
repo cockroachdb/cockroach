@@ -24,5 +24,5 @@ var CanaryFraction = settings.RegisterFloatSetting(
 	"probability that table statistics will use canary mode instead of stable mode for query planning [0.0-1.0]",
 	0,
 	settings.Fraction,
-	settings.WithVisibility(settings.Reserved),
+	settings.WithPublic,
 )
