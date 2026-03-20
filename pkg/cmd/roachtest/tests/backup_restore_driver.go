@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -43,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 )
 
 const (
@@ -222,10 +224,37 @@ func (d *BackupRestoreTestDriver) verifyBackupCollection(
 	bc *backupCollection,
 	checkFiles bool,
 	internalSystemJobs bool,
+	mvHelper *mixedversion.Helper,
 ) error {
-	rj, err := d.RestoreSync(ctx, l, rng, bc, checkFiles, internalSystemJobs)
+	rj, err := d.Restore(ctx, l, rng, bc, checkFiles, internalSystemJobs)
 	if err != nil {
 		return fmt.Errorf("error restoring backup: %w", err)
+	}
+	if jobErr := rj.WaitForJobSuccess(ctx); jobErr != nil {
+		if mvHelper == nil {
+			return fmt.Errorf("error restoring backup: %w", jobErr)
+		}
+		v25_4 := version.MajorVersion{Year: 25, Ordinal: 4}
+		isUpgradeTo25_4 := mvHelper.System.ToVersion.Major().Equals(v25_4) &&
+			mvHelper.System.FromVersion.Major().LessThan(v25_4)
+		if !isUpgradeTo25_4 || !strings.Contains(jobErr.Error(), "version mismatch for descriptor") {
+			return fmt.Errorf("error restoring backup: %w", jobErr)
+		}
+		// In the 25.4 upgrade, all descriptors are rewritten in the migration to
+		// use the new serialization format. If this upgrade occurs in the middle of
+		// the restore, we may encounter a version mismatch error. Retry the restore
+		// if we encounter this error.
+		l.Printf(
+			"encountered version mismatch error due to mixed-version upgrade, retrying restore: %v",
+			jobErr,
+		)
+		rj, err = d.Restore(ctx, l, rng, bc, checkFiles, internalSystemJobs)
+		if err != nil {
+			return fmt.Errorf("error restoring backup: %w", err)
+		}
+		if err := rj.WaitForJobSuccess(ctx); err != nil {
+			return fmt.Errorf("error restoring backup: %w", err)
+		}
 	}
 	return rj.ValidateRestore(ctx)
 }

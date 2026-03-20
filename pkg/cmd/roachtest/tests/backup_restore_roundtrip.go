@@ -211,7 +211,7 @@ func backupRestoreRoundTrip(
 			// Verify content in backups.
 			err = d.verifyBackupCollection(
 				ctx, t.L(), testRNG, collection,
-				true /* checkFiles */, true, /* internalSystemJobs */
+				true /* checkFiles */, true /* internalSystemJobs */, nil, /* mvHelper */
 			)
 			if err != nil {
 				return err
