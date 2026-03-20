@@ -2214,7 +2214,8 @@ func (ds *DistSender) sendPartialBatch(
 	// Start a retry loop for sending the batch to the range. Each iteration of
 	// this loop uses a new descriptor. Attempts to send to multiple replicas in
 	// this descriptor are done at a lower level.
-	tBegin := crtime.NowMono() // for slow log message
+	tBegin := crtime.NowMono()     // for slow log message
+	var lastSlowRPCLog crtime.Mono // for periodic re-logging
 	var attempts int64
 	// prevTok maintains the EvictionToken used on the previous iteration.
 	var prevTok rangecache.EvictionToken
@@ -2272,7 +2273,14 @@ func (ds *DistSender) sendPartialBatch(
 		prevTok = routingTok
 		reply, err = ds.sendToReplicas(ctx, ba, routingTok, withCommit)
 
-		if dur := tBegin.Elapsed(); dur > slowDistSenderRangeThreshold && tBegin != 0 {
+		var shouldLog bool
+		dur := tBegin.Elapsed()
+		if lastSlowRPCLog == 0 {
+			shouldLog = dur > slowDistSenderRangeThreshold
+		} else {
+			shouldLog = lastSlowRPCLog.Elapsed() > slowDistSenderRangeRelogInterval
+		}
+		if shouldLog {
 			{
 				var s redact.StringBuilder
 				slowRangeRPCWarningStr(&s, ba, dur, attempts, routingTok.Desc(), err, reply)
@@ -2280,7 +2288,7 @@ func (ds *DistSender) sendPartialBatch(
 			}
 			// If the RPC wasn't successful, defer the logging of a message once the
 			// RPC is not retried any more.
-			if err != nil || reply.Error != nil {
+			if lastSlowRPCLog == 0 && (err != nil || reply.Error != nil) {
 				ds.metrics.SlowRPCs.Inc(1)
 				// This defer is intended to run after the loop; this code runs at most once per loop.
 				//nolint:deferloop
@@ -2291,7 +2299,7 @@ func (ds *DistSender) sendPartialBatch(
 					log.KvExec.Warningf(ctx, "slow RPC response: %v", &s)
 				}(tBegin, attempts)
 			}
-			tBegin = 0 // prevent reentering branch for this RPC
+			lastSlowRPCLog = crtime.NowMono()
 		}
 
 		if err != nil {
@@ -2553,6 +2561,10 @@ func selectBestError(ambiguousErr, replicaUnavailableErr, lastAttemptErr error) 
 // requests to a range, potentially involving RPCs to multiple replicas
 // of the range.
 const slowDistSenderRangeThreshold = time.Minute
+
+// slowDistSenderRangeRelogInterval is the interval at which a still-stuck
+// "slow range RPC" warning is re-logged.
+const slowDistSenderRangeRelogInterval = 10 * time.Minute
 
 // slowDistSenderReplicaThreshold is a latency threshold for logging a slow RPC
 // to a single replica.
