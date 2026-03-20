@@ -120,6 +120,8 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			}
 		}
 
+		ob.AddTableStatsMode(params.EvalContext().StatsRollout.String())
+
 		if len(params.p.stmt.Hints) > 0 {
 			var hintCount uint64
 			for _, hint := range params.p.stmt.Hints {

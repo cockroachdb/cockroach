@@ -453,6 +453,12 @@ type EstimatedStats struct {
 	// ForecastAt is set only for scans with forecasted stats; it is the time the
 	// forecast was for (which could be in the past, present, or future).
 	ForecastAt time.Time
+	// CanaryStatsActive is set only for scans; it is true if the table has
+	// divergent canary vs. stable statistics within its canary window.
+	CanaryStatsActive bool
+	// CanaryWindowSize is set only for scans with CanaryStatsActive; it is
+	// the configured canary window duration for the table.
+	CanaryWindowSize time.Duration
 }
 
 // ExecutionStats contain statistics about a given operator gathered from the

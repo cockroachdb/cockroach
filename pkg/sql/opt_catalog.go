@@ -977,6 +977,10 @@ type optTable struct {
 	// canary window.
 	canaryAndStableStatsDiffer bool
 
+	// statsCanaryWindow is the configured canary window duration for this
+	// table.
+	statsCanaryWindow time.Duration
+
 	// Row-level security (RLS) fields
 	rlsEnabled bool
 	rlsForced  bool
@@ -1003,6 +1007,7 @@ func newOptTable(
 		rawStats:                   stats,
 		zone:                       tblZone,
 		canaryAndStableStatsDiffer: canaryAndStableStatsDiffer,
+		statsCanaryWindow:          desc.TableDesc().StatsCanaryWindow,
 	}
 
 	// Determine the primary key columns.
@@ -1719,6 +1724,11 @@ func (ot *optTable) Policies() *cat.Policies {
 // CanaryAndStableStatsDiffer is part of the cat.Table interface.
 func (ot *optTable) CanaryAndStableStatsDiffer() bool {
 	return ot.canaryAndStableStatsDiffer
+}
+
+// StatsCanaryWindow is part of the cat.Table interface.
+func (ot *optTable) StatsCanaryWindow() time.Duration {
+	return ot.statsCanaryWindow
 }
 
 // LookupColumnOrdinal returns the ordinal of the column with the given ID. A
@@ -2890,6 +2900,9 @@ func (ot *optVirtualTable) Policies() *cat.Policies { return nil }
 
 // CanaryAndStableStatsDiffer is part of the cat.Table interface.
 func (ot *optVirtualTable) CanaryAndStableStatsDiffer() bool { return false }
+
+// StatsCanaryWindow is part of the cat.Table interface.
+func (ot *optVirtualTable) StatsCanaryWindow() time.Duration { return 0 }
 
 // optVirtualIndex is a dummy implementation of cat.Index for the indexes
 // reported by a virtual table. The index assumes that table column 0 is a dummy

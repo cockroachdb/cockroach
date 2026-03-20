@@ -68,6 +68,18 @@ const (
 	StatsRolloutStable
 )
 
+// String returns the string representation for the stats rollout selection.
+func (s StatsRolloutSelection) String() string {
+	switch s {
+	case StatsRolloutCanary:
+		return "canary"
+	case StatsRolloutStable:
+		return "stable"
+	default:
+		return "default"
+	}
+}
+
 // Context defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 //
