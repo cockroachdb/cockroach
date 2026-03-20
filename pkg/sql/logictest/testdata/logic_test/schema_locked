@@ -242,3 +242,59 @@ t_147993  CREATE TABLE public.t_147993 (
           ) WITH (schema_locked = true);
 
 subtest end
+
+
+# Test the sql.schema.auto_unlock.enabled cluster setting.
+subtest auto_unlock_cluster_setting
+
+statement ok
+CREATE TABLE t_auto_unlock (i INT PRIMARY KEY, j INT) WITH (schema_locked = true)
+
+# Disable auto-unlock.
+statement ok
+SET CLUSTER SETTING sql.schema.auto_unlock.enabled = false
+
+# DDL should be blocked on schema-locked tables.
+statement error pgcode 57000 pq: this schema change is disallowed because table "t_auto_unlock" is locked
+ALTER TABLE t_auto_unlock ADD COLUMN k INT
+
+statement error pgcode 57000 pq: this schema change is disallowed because table "t_auto_unlock" is locked
+CREATE INDEX ON t_auto_unlock (j)
+
+# Manual unlock should still work.
+statement ok
+ALTER TABLE t_auto_unlock SET (schema_locked = false)
+
+# DDL should work after manual unlock.
+statement ok
+ALTER TABLE t_auto_unlock ADD COLUMN k INT
+
+statement ok
+CREATE INDEX ON t_auto_unlock (j)
+
+# Re-lock the table.
+statement ok
+ALTER TABLE t_auto_unlock SET (schema_locked = true)
+
+# DDL should be blocked again.
+statement error pgcode 57000 pq: this schema change is disallowed because table "t_auto_unlock" is locked
+ALTER TABLE t_auto_unlock ADD COLUMN l INT
+
+# Re-enable auto-unlock.
+statement ok
+SET CLUSTER SETTING sql.schema.auto_unlock.enabled = true
+
+# DDL should work again with auto-unlock re-enabled.
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t_auto_unlock ADD COLUMN l INT
+
+# DDL is still blocked in the legacy schema changer.
+onlyif config local-legacy-schema-changer
+statement error pgcode 57000 pq: this schema change is disallowed because table "t_auto_unlock" is locked
+ALTER TABLE t_auto_unlock ADD COLUMN l INT
+
+statement ok
+DROP TABLE t_auto_unlock
+
+subtest end

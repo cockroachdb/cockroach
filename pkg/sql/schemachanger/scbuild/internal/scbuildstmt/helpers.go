@@ -1193,11 +1193,14 @@ func checkTableSchemaChangePrerequisites(
 	maybeCleanupSchemaLockedFn = func() {}
 	if schemaLocked != nil && !tree.IsSetOrResetSchemaLocked(n) {
 		// Before 25.2 we don't support auto-unsetting schema locked.
-		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V25_2) {
+		// Also check if auto-unlock is disabled via cluster setting.
+		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V25_2) ||
+			!sqlclustersettings.SchemaLockedAutoUnlockEnabled.Get(&b.ClusterSettings().SV) {
 			ns := tableElements.FilterNamespace().MustGetOneElement()
 			panic(sqlerrors.NewSchemaChangeOnLockedTableErr(ns.Name))
 		}
-		// Unset schema_locked for the user.
+		// If the user is not explicitly setting schema_locked, then we should
+		// use the auto-unset logic.
 		b.DropTransient(schemaLocked)
 		maybeCleanupSchemaLockedFn = func() {
 			maybeCleanupSchemaLocked(b, tableElements.FilterTable().MustGetOneElement().TableID)
