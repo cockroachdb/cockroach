@@ -2025,11 +2025,16 @@ func runCDCMultipleSchemaChanges(ctx context.Context, t test.Test, c cluster.Clu
 		fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO 'null://'", strings.Join(tableNames, ", ")),
 	).Scan(&jobID)
 
-	alterStmts := []string{"SET sql_safe_updates = false"}
 	for _, tableName := range tableNames {
-		alterStmts = append(alterStmts, fmt.Sprintf(`ALTER TABLE %s DROP col`, tableName))
+		alterStmt := fmt.Sprintf(`ALTER TABLE %s DROP COLUMN IF EXISTS col`, tableName)
+		testutils.SucceedsSoon(t, func() error {
+			_, err := db.ExecContext(ctx, alterStmt)
+			if err != nil {
+				t.L().Printf("retrying %q due to error: %v", alterStmt, err)
+			}
+			return err
+		})
 	}
-	sqlDB.ExecMultiple(t, alterStmts...)
 	timeAfterSchemaChanges := timeutil.Now()
 
 	t.L().Printf("waiting for changefeed highwater to pass %s", timeAfterSchemaChanges)
