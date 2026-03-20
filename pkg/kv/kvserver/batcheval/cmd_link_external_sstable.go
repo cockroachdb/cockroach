@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/redact"
 )
 
 func init() {
@@ -51,7 +52,7 @@ func EvalLinkExternalSSTable(
 	log.Eventf(ctx, "evaluating External SSTable [%s,%s)", start.Key, end.Key)
 
 	path := args.ExternalFile.Path
-	log.VEventf(ctx, 1, "link External SSTable file %s in %s", path, args.ExternalFile.Locator)
+	log.VEventf(ctx, 1, "link External SSTable file %s in %s", path, redact.RedactableString(args.ExternalFile.Locator))
 
 	// MVCCStats in the linked sst are always estimates, as we currently compute
 	// them with back of the envelope calculations using backup file data.

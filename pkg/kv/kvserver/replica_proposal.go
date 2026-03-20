@@ -760,7 +760,7 @@ func linkExternalSStablePreApply(
 		sst.RemoteFilePath,
 		sst.ApproximatePhysicalSize,
 		sst.Span,
-		sst.RemoteFileLoc,
+		redact.RedactableString(sst.RemoteFileLoc),
 		sst.BackingFileSize,
 		sst.RemoteRewriteTimestamp,
 		roachpb.Key(sst.RemoteSyntheticPrefix),

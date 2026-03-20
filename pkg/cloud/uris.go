@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
+	"github.com/cockroachdb/redact"
 )
 
 const (
@@ -79,6 +80,30 @@ func SanitizeExternalStorageURI(path string, extraParams []string) (string, erro
 
 	uri.RawQuery = params.Encode()
 	return uri.String(), nil
+}
+
+// MakeRedactableURI builds a redact.RedactableString from a storage URI where
+// all query parameter values are treated as unsafe (redacted in log output) but
+// preserved in the underlying string for actual use. The scheme, host, and path
+// are marked safe.
+func MakeRedactableURI(uri string) redact.RedactableString {
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return redact.Sprint(uri)
+	}
+
+	safePart := *parsed
+	safePart.RawQuery = ""
+
+	var b redact.StringBuilder
+	b.Printf("%s", redact.Safe(safePart.String()))
+
+	if parsed.RawQuery != "" {
+		b.Printf("%s", redact.Safe("?"))
+		b.Print(parsed.RawQuery)
+	}
+
+	return b.RedactableString()
 }
 
 // RedactKMSURI redacts the Master Key ID and the ExternalStorage secret
