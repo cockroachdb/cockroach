@@ -611,10 +611,43 @@ func UserAuthCertHook(
 			return errors.Errorf("using tenant client certificate as user certificate is not allowed")
 		}
 
+		certSANs := ExtractSANsFromCertificate(peerCert)
+		if clientCertSANRequired {
+			// Try SAN validation for root and node users. For now, other users
+			// SAN mapping is done using the HBA identity map regex and not exact match.
+			sanMatches := validateSANMatchForUser(certSANs, systemIdentity)
+			if sanMatches {
+				// For root/node/debug users, additionally verify certificate user scope
+				// to ensure the cert is scoped for the correct user and tenant.
+				// For non-root/node/debug users (including HBA-mapped identities),
+				// skip scope validation — identity was verified via SAN identity
+				// mapping, and ValidateUserScope does CN-based matching which is
+				// intentionally bypassed when SAN auth is enabled.
+				if isRootNodeOrDebugUser(systemIdentity) &&
+					!ValidateUserScope(certUserScope, systemIdentity, tenantID, tenantName) {
+					return errors.WithDetailf(
+						errors.Errorf(
+							"certificate authentication failed for user %q (SANs: %q)",
+							systemIdentity,
+							certSANs,
+						),
+						"The client certificate (SANs: %q) is valid for %s.",
+						certSANs, FormatUserScopes(certUserScope))
+				}
+				if certManager != nil {
+					certManager.MaybeUpsertClientExpiration(
+						ctx,
+						systemIdentity,
+						peerCert.SerialNumber.String(),
+						peerCert.NotAfter.Unix(),
+					)
+				}
+				return nil
+			}
+		}
+
 		roleSubject = applyRootOrNodeDNFlag(roleSubject, systemIdentity)
-		// If both subjectRequired and clientCertSANRequired are true, we use OR logic,
-		// so we don't fail here if subject is missing, let ValidateUserScope handle it
-		if subjectRequired && !clientCertSANRequired && roleSubject == nil {
+		if subjectRequired && roleSubject == nil {
 			return errors.Newf(
 				"user %q does not have a distinguished name set which subject_required cluster setting mandates",
 				systemIdentity,
@@ -627,10 +660,28 @@ func UserAuthCertHook(
 			if certSubject, err = distinguishedname.ParseDNFromCertificate(peerCert); err != nil {
 				return errors.Wrapf(err, "could not parse certificate subject DN")
 			}
+
+			if !roleSubject.Equal(certSubject) {
+				return errors.WithDetailf(
+					errors.Errorf(
+						"certificate authentication failed for user %q (DN: %s)",
+						systemIdentity,
+						roleSubject,
+					),
+					"The client certificate (DN: %s) is valid for %s.", certSubject, FormatUserScopes(certUserScope))
+			}
+			return nil
 		}
 
-		certSANs := ExtractSANsFromCertificate(peerCert)
-		if ValidateUserScope(certUserScope, systemIdentity, tenantID, tenantName, roleSubject, certSubject, clientCertSANRequired, certSANs) {
+		if clientCertSANRequired {
+			// Do not fall back to CN if SAN is required and SAN validation failed.
+			return errors.WithDetailf(
+				errors.Errorf(
+					"certificate authentication failed for user %q based on SAN entries in the certificate", systemIdentity),
+				"The client certificate SANs %v do not match the required SAN entries for user %q.", certSANs, systemIdentity)
+		}
+
+		if ValidateUserScope(certUserScope, systemIdentity, tenantID, tenantName) {
 			if certManager != nil {
 				certManager.MaybeUpsertClientExpiration(
 					ctx,
@@ -649,6 +700,10 @@ func UserAuthCertHook(
 			),
 			"The client certificate (DN: %s) is valid for %s.", certSubject, FormatUserScopes(certUserScope))
 	}, nil
+}
+
+func isRootNodeOrDebugUser(user string) bool {
+	return user == username.RootUser || user == username.NodeUser || user == username.DebugUser
 }
 
 // FormatUserScopes formats a list of scopes in a human-readable way,
@@ -754,38 +809,13 @@ func (i *PasswordUserAuthError) FormatError(p errors.Printer) error {
 // is a global certificate. A client certificate is considered global only when
 // it doesn't contain a tenant SAN which is only possible for older client
 // certificates created prior to introducing tenant based scoping for the
-// client. Additionally, if subject role option is set for a user, we check if
-// certificate parsed subject DN matches the set subject.
+// client.
 func ValidateUserScope(
 	certUserScope []CertificateUserScope,
 	user string,
 	tenantID roachpb.TenantID,
 	tenantName roachpb.TenantName,
-	roleSubject *ldap.DN,
-	certSubject *ldap.DN,
-	clientCertSANRequired bool,
-	certSANs []string,
 ) bool {
-	if clientCertSANRequired {
-		// Try SAN validation for root and node users. For now, other users
-		// SAN mapping is done using the HBA identity map regex and not exact match.
-		sanMatches := validateSANMatchForUser(certSANs, user)
-		if sanMatches {
-			return true
-		}
-	}
-
-	// if subject role option is set, it must match the certificate subject
-	if roleSubject != nil {
-		return roleSubject.Equal(certSubject)
-	}
-
-	if clientCertSANRequired {
-		// Do not validate CN in case SAN is required.
-		// We check for SAN OR Subject mapping in case san in enabled.
-		return false
-	}
-
 	for _, scope := range certUserScope {
 		// Check if root login is disallowed and certificate contains "root" as a principal
 		if CheckRootLoginDisallowed() && scope.Username == username.RootUser {

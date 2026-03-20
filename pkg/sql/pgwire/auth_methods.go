@@ -478,7 +478,7 @@ func authCert(
 		if clientCertSANRequired {
 			identityList := security.ExtractSANsFromCertificate(tlsState.PeerCertificates[0])
 			if len(identityList) == 0 {
-				return nil, errors.New("client certificate SAN is required, but no SAN found in the certificate")
+				return b, errors.New("client certificate SAN is required, but no SAN found in the certificate")
 			}
 			b.SetSANIdentities(identityList)
 		} else {
