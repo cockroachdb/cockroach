@@ -452,6 +452,8 @@ func TestRandStep(t *testing.T) {
 			n.mu.Lock()
 			n.crashed[int(o.NodeId)] = struct{}{}
 			n.mu.Unlock()
+		case *MvccGCOperation:
+			counts.MvccGC.MvccGC++
 		default:
 			t.Fatalf("%T", o)
 		}

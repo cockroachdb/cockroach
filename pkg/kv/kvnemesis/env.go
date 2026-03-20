@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -33,14 +34,27 @@ type ServerController interface {
 	CrashNode(idx int)
 }
 
-// Env manipulates the environment (cluster settings, zone configurations) that
-// the Applier operates in.
+type MvccGCController interface {
+	MvccGCRangeForKey(key []byte) error
+}
+
+type PtsController interface {
+	Start(ctx context.Context, timestamp hlc.Timestamp) error
+	Advance(ctx context.Context, timestamp hlc.Timestamp) error
+	Finish(ctx context.Context) error
+}
+
+// Env manipulates the environment (cluster settings, zone configurations,
+// server crashes/restarts, MVCC GC, protected timestamp) that the Applier
+// operates in.
 type Env struct {
 	SQLDBs           []*gosql.DB
 	Tracker          *SeqTracker
 	L                Logger
 	Partitioner      *rpc.Partitioner
 	ServerController ServerController
+	MvccGCController MvccGCController
+	PtsController    PtsController
 }
 
 func (e *Env) anyNode() *gosql.DB {
