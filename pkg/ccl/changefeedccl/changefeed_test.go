@@ -11897,8 +11897,7 @@ func TestSinkClosedOnEventConsumerError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, stopServer := makeServer(t,
-		withAllowChangefeedErr("injected event consumer error expected"))
+	s, stopServer := makeServer(t)
 	defer stopServer()
 
 	sqlDB := sqlutils.MakeSQLRunner(s.DB)
