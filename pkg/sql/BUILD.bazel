@@ -819,6 +819,7 @@ go_test(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator",
+        "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/protectedts",
