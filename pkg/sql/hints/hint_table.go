@@ -23,6 +23,14 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// nodeUserLocalOnly is a session data override that forces local (non-DistSQL)
+// execution. Statement hint queries are simple point lookups that should not
+// incur the overhead of distributed execution.
+var nodeUserLocalOnly = sessiondata.InternalExecutorOverride{
+	User:          sessiondata.NodeUserSessionDataOverride.User,
+	MultiOverride: "distsql=off",
+}
+
 // Hint represents an unmarshaled hint that is ready to apply to statements.
 type Hint struct {
 	hintpb.StatementHintUnion
@@ -52,7 +60,7 @@ func CheckForStatementHintsInDB(
 	const opName = "get-plan-hints"
 	const getHintsStmt = `SELECT hash FROM system.statement_hints WHERE "hash" = $1 LIMIT 1`
 	it, err := ex.QueryIteratorEx(
-		ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride,
+		ctx, opName, nil /* txn */, nodeUserLocalOnly,
 		getHintsStmt, statementHash,
 	)
 	if err != nil {
@@ -103,7 +111,7 @@ func GetStatementHintsFromDB(
     ORDER BY "created_at" DESC, "row_id" DESC`
 	}
 	it, queryErr := ex.QueryIteratorEx(
-		ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride,
+		ctx, opName, nil /* txn */, nodeUserLocalOnly,
 		getHintsStmt, statementHash,
 	)
 	if queryErr != nil {
