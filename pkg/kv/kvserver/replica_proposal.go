@@ -786,7 +786,7 @@ func linkExternalSStablePreApply(
 	}
 
 	externalFile := pebble.ExternalFile{
-		Locator:           remote.Locator(sst.RemoteFileLoc),
+		Locator:           remote.MakeLocator(redact.RedactableString(sst.RemoteFileLoc)),
 		ObjName:           sst.RemoteFilePath,
 		Size:              sst.ApproximatePhysicalSize,
 		StartKey:          start.Encode(),

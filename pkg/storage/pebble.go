@@ -1033,7 +1033,7 @@ type remoteStorageAdaptor struct {
 }
 
 func (r remoteStorageAdaptor) CreateStorage(locator remote.Locator) (remote.Storage, error) {
-	es, err := r.factory.OpenURL(r.ctx, string(locator))
+	es, err := r.factory.OpenURL(r.ctx, locator.RawRedactableString.StripMarkers())
 	return &externalStorageWrapper{p: r.p, ctx: r.ctx, es: es}, err
 }
 
