@@ -1787,6 +1787,15 @@ func TestChangefeedRandomExpressions(t *testing.T) {
 				continue
 			}
 			whereClausesChecked[where] = struct{}{}
+			// Skip expressions that use statement_timestamp or
+			// transaction_timestamp. In CDC context, these functions return the
+			// MVCC timestamp of each row, not the query execution time. This
+			// semantic difference means the oracle SELECT and the changefeed
+			// will evaluate these expressions differently.
+			if strings.Contains(where, "statement_timestamp") || strings.Contains(where, "transaction_timestamp") {
+				t.Logf("Skipping predicate %s because it uses a timestamp function with different CDC semantics", where)
+				continue
+			}
 			// Disable the optimizer and use the row query execution engine. This
 			// helps ensure we avoid cases where the oracle query has different
 			// behavior than the internal query. For example, the vectorized engine
@@ -1873,6 +1882,27 @@ func getWhereClause(query string) (string, bool) {
 		return true, expr, nil
 	})
 	return replaced.String(), err == nil
+}
+
+func TestChangefeedRandomExpressionsSkipTimestampFns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		where    string
+		expected bool
+	}{
+		{"seed._bool AND true", false},
+		{"statement_timestamp():::TIMESTAMP || seed._string SIMILAR TO 'g'", true},
+		{"transaction_timestamp() > '2020-01-01':::TIMESTAMPTZ", true},
+		{"seed._int2 > 0", false},
+	}
+
+	for _, tc := range tests {
+		contains := strings.Contains(tc.where, "statement_timestamp") ||
+			strings.Contains(tc.where, "transaction_timestamp")
+		require.Equal(t, tc.expected, contains, "where=%s", tc.where)
+	}
 }
 
 // Test how Changefeeds react to schema changes that do not require a backfill
