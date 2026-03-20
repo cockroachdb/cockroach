@@ -1378,8 +1378,7 @@ func maybeForceEnrichedEnvelope(
 	// - sinkless feeds can't be tracked by job id
 	// - sql & pulsar are not supported
 	// - cloudstorage uses parquet sometimes which complicates things
-	// - pubsub feeds have an issue with leaking goroutines; see #144102
-	case *sinklessFeedFactory, *tableFeedFactory, *pulsarFeedFactory, *cloudFeedFactory, *pubsubFeedFactory:
+	case *sinklessFeedFactory, *tableFeedFactory, *pulsarFeedFactory, *cloudFeedFactory:
 		t.Logf("did not force enriched envelope for %s because %T is not supported", create, f)
 		return create, args, false, nil
 	}

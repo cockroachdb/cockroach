@@ -13604,3 +13604,122 @@ func TestChangefeedServerlessLocalityFilter(t *testing.T) {
 		`foo: [1]->{"after": {"pk": 1}}`,
 	})
 }
+
+// TestSinkClosedOnEventConsumerError verifies that when newEventConsumer fails
+// during changeAggregator.Start(), the sink is still properly closed. This is a
+// regression test for #144102 where newEventConsumer's error path returned
+// (nil, nil, err), overwriting ca.sink with nil and preventing cleanup.
+func TestSinkClosedOnEventConsumerError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, stopServer := makeServer(t,
+		withAllowChangefeedErr("injected event consumer error expected"))
+	defer stopServer()
+
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	knobs := s.TestingKnobs.
+		DistSQL.(*execinfra.TestingKnobs).
+		Changefeed.(*TestingKnobs)
+
+	// Track how many times Dial and Close are called across retries.
+	var dialCount, closeCount atomic.Int32
+	knobs.WrapSink = func(s Sink, _ jobspb.JobID) Sink {
+		return &closeTrackingSink{
+			wrapped:    s,
+			dialCount:  &dialCount,
+			closeCount: &closeCount,
+		}
+	}
+
+	// Only inject errors a fixed number of times so the changefeed eventually
+	// stabilises and the counters stop moving.
+	const numErrors = 3
+	var errorCount atomic.Int32
+	knobs.EventConsumerError = func() error {
+		if errorCount.Add(1) <= numErrors {
+			return errors.New("injected event consumer error")
+		}
+		return nil
+	}
+
+	sqlDB.Exec(t, `CREATE TABLE foo (pk INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+
+	// The changefeed will retry numErrors times, then succeed. Wait for all
+	// injected errors to fire before cancelling.
+	sqlDB.Exec(t, `CREATE CHANGEFEED FOR foo INTO 'null://'`)
+
+	testutils.SucceedsSoon(t, func() error {
+		if errorCount.Load() < numErrors {
+			return errors.Newf("waiting for all injected errors (errorCount=%d)", errorCount.Load())
+		}
+		return nil
+	})
+
+	// Verify the minimum expected dials occurred: 1 (validateSink) +
+	// numErrors (failed) + 1 (successful). Under stress there may be more
+	// due to other retriable errors (e.g. enriched envelope descriptor lookups).
+	require.GreaterOrEqual(t, dialCount.Load(), int32(numErrors+2))
+
+	// Cancel the changefeed so all sinks are closed and counters stabilize.
+	var jobID int64
+	sqlDB.QueryRow(t,
+		`SELECT job_id FROM [SHOW CHANGEFEED JOBS] ORDER BY created DESC LIMIT 1`,
+	).Scan(&jobID)
+	sqlDB.Exec(t, `CANCEL JOB $1`, jobID)
+
+	// After cancellation, every dialed sink must have been closed.
+	testutils.SucceedsSoon(t, func() error {
+		d := dialCount.Load()
+		c := closeCount.Load()
+		if c != d {
+			return errors.Newf("sink dialed %d times but closed only %d times", d, c)
+		}
+		return nil
+	})
+}
+
+// closeTrackingSink wraps a Sink and counts Dial and Close calls.
+type closeTrackingSink struct {
+	wrapped    Sink
+	dialCount  *atomic.Int32
+	closeCount *atomic.Int32
+}
+
+var _ Sink = (*closeTrackingSink)(nil)
+
+func (s *closeTrackingSink) Dial() error {
+	s.dialCount.Add(1)
+	return s.wrapped.Dial()
+}
+
+func (s *closeTrackingSink) Close() error {
+	s.closeCount.Add(1)
+	return s.wrapped.Close()
+}
+
+func (s *closeTrackingSink) EmitRow(
+	ctx context.Context,
+	topic TopicDescriptor,
+	key, value []byte,
+	updated, mvcc hlc.Timestamp,
+	alloc kvevent.Alloc,
+	headers rowHeaders,
+) error {
+	return s.wrapped.EmitRow(ctx, topic, key, value, updated, mvcc, alloc, headers)
+}
+
+func (s *closeTrackingSink) Flush(ctx context.Context) error {
+	return s.wrapped.Flush(ctx)
+}
+
+func (s *closeTrackingSink) EmitResolvedTimestamp(
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
+) error {
+	return s.wrapped.EmitResolvedTimestamp(ctx, encoder, resolved)
+}
+
+func (s *closeTrackingSink) getConcreteType() sinkType {
+	return s.wrapped.getConcreteType()
+}
