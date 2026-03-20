@@ -20,29 +20,25 @@ func TestingReplaceScalarsWithPlaceholders(s Statement) (Statement, Exprs) {
 // scalarReplacer replaces scalar constants with placeholders. It implements
 // ExtendedVisitor so that WalkStmt also walks into table expressions, join
 // conditions, and statement nodes. The VisitStatementPre method collects
-// constant literals used in ORDER BY, GROUP BY, and DISTINCT ON positions
-// so that VisitPre can skip replacing them. This is necessary because
-// integer constants are interpreted as column ordinals, and non-integer
-// constants produce specific error messages that tests may expect.
+// constants that should not be replaced: column ordinals in ORDER BY,
+// GROUP BY, and DISTINCT ON, and expressions in AS OF SYSTEM TIME
+// clauses (which do not support placeholders).
 type scalarReplacer struct {
 	scalars Exprs
 	// skipExprs tracks specific AST nodes (by pointer identity) that should
-	// not be replaced with placeholders. These are constant literals in
-	// ORDER BY, GROUP BY, and DISTINCT ON positions. Because the map keys
-	// are pointers to the original AST nodes, other nodes with the same
-	// value in different parts of the AST (e.g. SELECT 1 FROM t ORDER BY 1)
-	// are not affected.
+	// not be replaced with placeholders. Because the map keys are pointers
+	// to the original AST nodes, other nodes with the same value in
+	// different parts of the AST (e.g. SELECT 1 FROM t ORDER BY 1) are
+	// not affected.
 	skipExprs map[Expr]struct{}
 }
 
 var _ ExtendedVisitor = &scalarReplacer{}
 
-// skipOrdinal adds expr to the skip set if it is a constant (NumVal,
-// StrVal, or other Constant/Datum). Integer constants in ORDER BY,
-// GROUP BY, and DISTINCT ON are interpreted as column ordinals, and
-// non-integer constants produce specific error messages — both cases
-// require the original literal to be preserved.
-func (s *scalarReplacer) skipOrdinal(expr Expr) {
+// skipConstant adds expr to the skip set if it is a constant (NumVal,
+// StrVal, or other Constant/Datum). This is used for expressions like
+// column ordinals in ORDER BY that must not be replaced.
+func (s *scalarReplacer) skipConstant(expr Expr) {
 	expr = StripParens(expr)
 	switch t := expr.(type) {
 	case Constant, Datum:
@@ -51,6 +47,19 @@ func (s *scalarReplacer) skipOrdinal(expr Expr) {
 		}
 		s.skipExprs[t] = struct{}{}
 	}
+}
+
+// skipAllConstants walks an expression tree and adds all constants found
+// to the skip set. This is used for AS OF SYSTEM TIME expressions, which
+// do not support placeholders.
+func (s *scalarReplacer) skipAllConstants(expr Expr) {
+	if expr == nil {
+		return
+	}
+	_, _ = SimpleVisit(expr, func(e Expr) (bool, Expr, error) {
+		s.skipConstant(e)
+		return true, e, nil
+	})
 }
 
 func (s *scalarReplacer) VisitPre(expr Expr) (recurse bool, newExpr Expr) {
@@ -102,22 +111,23 @@ func (s *scalarReplacer) VisitStatementPre(stmt Statement) (recurse bool, newStm
 	switch t := stmt.(type) {
 	case *SelectClause:
 		for _, e := range t.GroupBy {
-			s.skipOrdinal(e)
+			s.skipConstant(e)
 		}
 		for _, e := range t.DistinctOn {
-			s.skipOrdinal(e)
+			s.skipConstant(e)
 		}
+		s.skipAllConstants(t.From.AsOf.Expr)
 	case *Select:
 		for _, o := range t.OrderBy {
-			s.skipOrdinal(o.Expr)
+			s.skipConstant(o.Expr)
 		}
 	case *Delete:
 		for _, o := range t.OrderBy {
-			s.skipOrdinal(o.Expr)
+			s.skipConstant(o.Expr)
 		}
 	case *Update:
 		for _, o := range t.OrderBy {
-			s.skipOrdinal(o.Expr)
+			s.skipConstant(o.Expr)
 		}
 	}
 	return true, stmt

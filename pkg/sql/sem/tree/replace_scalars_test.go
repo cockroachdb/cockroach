@@ -91,6 +91,10 @@ func TestReplaceScalarsWithPlaceholders(t *testing.T) {
 		name:     "order_by_bool_datum_not_replaced",
 		sql:      "SELECT * FROM t ORDER BY true",
 		expected: "SELECT * FROM t ORDER BY true",
+	}, {
+		name:     "as_of_system_time_not_replaced",
+		sql:      "SELECT x FROM t AS OF SYSTEM TIME 1",
+		expected: "SELECT x FROM t AS OF SYSTEM TIME 1",
 	}}
 
 	for _, tc := range testCases {

@@ -244,6 +244,13 @@ func TestLogic_apply_join(
 	runLogicTest(t, "apply_join")
 }
 
+func TestLogic_as_of(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "as_of")
+}
+
 func TestLogic_asyncpg(
 	t *testing.T,
 ) {
@@ -419,6 +426,13 @@ func TestLogic_crdb_internal_default_privileges(
 	runLogicTest(t, "crdb_internal_default_privileges")
 }
 
+func TestLogic_create_as(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "create_as")
+}
+
 func TestLogic_create_statements(
 	t *testing.T,
 ) {
@@ -473,6 +487,13 @@ func TestLogic_default(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "default")
+}
+
+func TestLogic_delete(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "delete")
 }
 
 func TestLogic_delete_batch(
@@ -685,6 +706,13 @@ func TestLogic_experimental_distsql_planning(
 	runLogicTest(t, "experimental_distsql_planning")
 }
 
+func TestLogic_export(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "export")
+}
+
 func TestLogic_external_connection_privileges(
 	t *testing.T,
 ) {
@@ -697,6 +725,13 @@ func TestLogic_family(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "family")
+}
+
+func TestLogic_fk(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "fk")
 }
 
 func TestLogic_format(
@@ -1434,6 +1469,13 @@ func TestLogic_security_invoker_view(
 	runLogicTest(t, "security_invoker_view")
 }
 
+func TestLogic_select(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "select")
+}
+
 func TestLogic_select_index(
 	t *testing.T,
 ) {
@@ -1826,6 +1868,13 @@ func TestLogic_tuple_local(
 	runLogicTest(t, "tuple_local")
 }
 
+func TestLogic_txn_as_of(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "txn_as_of")
+}
+
 func TestLogic_txn_stats(
 	t *testing.T,
 ) {
@@ -1838,6 +1887,13 @@ func TestLogic_type_privileges(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "type_privileges")
+}
+
+func TestLogic_typing(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "typing")
 }
 
 func TestLogic_udf_calling_udf(
@@ -1922,6 +1978,13 @@ func TestLogic_udf_options(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "udf_options")
+}
+
+func TestLogic_udf_params(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "udf_params")
 }
 
 func TestLogic_udf_polymorphic(

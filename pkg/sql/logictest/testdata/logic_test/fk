@@ -1,4 +1,4 @@
-# LogicTest: !local-prepared default-configs 3node-tenant
+# LogicTest: default-configs 3node-tenant
 statement ok
 SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE
 
@@ -4689,7 +4689,7 @@ ALTER TABLE drop_fk_during_addition
 	ADD CONSTRAINT fk FOREIGN KEY (name) REFERENCES drop_fk_during_addition_ref (name);
 DROP TABLE drop_fk_during_addition_ref;
 
-statement error pgcode XXA00 pq: transaction committed but schema change aborted with error: .* referenced table "drop_fk_during_addition_ref" \(271\) is dropped.*
+statement error pgcode XXA00 pq: transaction committed but schema change aborted with error: .* referenced table "drop_fk_during_addition_ref" \(\d+\) is dropped.*
 COMMIT;
 
 # Regression test for #80828. Do not attempt a fast path cascading delete when

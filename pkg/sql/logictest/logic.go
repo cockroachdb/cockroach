@@ -3895,7 +3895,7 @@ func (t *logicTest) execQuery(query logicQuery) error {
 				}
 			}
 
-			prep, execErr = t.db.Prepare(ast.String())
+			prep, execErr = t.db.Prepare(tree.AsStringWithFlags(ast, tree.FmtShowFullURIs))
 
 			if execErr != nil {
 				// Sometimes, it's impossible to prepare/execute a query with scalars
