@@ -61,12 +61,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	roachprodaws "github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/debug"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	prompb "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/require"
@@ -2025,11 +2027,24 @@ func runCDCMultipleSchemaChanges(ctx context.Context, t test.Test, c cluster.Clu
 		fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO 'null://'", strings.Join(tableNames, ", ")),
 	).Scan(&jobID)
 
-	alterStmts := []string{"SET sql_safe_updates = false"}
 	for _, tableName := range tableNames {
-		alterStmts = append(alterStmts, fmt.Sprintf(`ALTER TABLE %s DROP col`, tableName))
+		alterStmt := fmt.Sprintf(`ALTER TABLE %s DROP col`, tableName)
+		testutils.SucceedsSoon(t, func() error {
+			_, err := db.ExecContext(ctx, alterStmt)
+			if err != nil {
+				// If the column was already dropped by a previous attempt that
+				// succeeded at the KV level but whose connection dropped before
+				// returning, treat it as success.
+				var pgErr *pq.Error
+				if errors.As(err, &pgErr) && string(pgErr.Code) == pgcode.UndefinedColumn.String() {
+					t.L().Printf("%q: column already dropped, continuing", alterStmt)
+					return nil
+				}
+				t.L().Printf("retrying %q due to error: %v", alterStmt, err)
+			}
+			return err
+		})
 	}
-	sqlDB.ExecMultiple(t, alterStmts...)
 	timeAfterSchemaChanges := timeutil.Now()
 
 	t.L().Printf("waiting for changefeed highwater to pass %s", timeAfterSchemaChanges)
