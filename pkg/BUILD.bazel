@@ -2902,6 +2902,7 @@ GO_TARGETS = [
     "//pkg/util/future:future_test",
     "//pkg/util/fuzzystrmatch:fuzzystrmatch",
     "//pkg/util/fuzzystrmatch:fuzzystrmatch_test",
+    "//pkg/util/gcassist:gcassist",
     "//pkg/util/goschedstats:goschedstats",
     "//pkg/util/goschedstats:goschedstats_test",
     "//pkg/util/growstack:growstack",
