@@ -646,7 +646,7 @@ func (rd *restoreDataProcessor) linkFiles(
 		}
 
 		loc := kvpb.LinkExternalSSTableRequest_ExternalFile{
-			Locator:                 file.Dir.URI,
+			Locator:                 cloud.MakeRedactableLocatorURI(file.Dir.URI),
 			Path:                    file.Path,
 			ApproximatePhysicalSize: fileSize,
 			BackingFileSize:         file.BackingFileSize,

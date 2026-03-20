@@ -200,7 +200,7 @@ func (etc *externalSSTTestCluster) linkExternalSSTableToFile(
 		Key:    startKey,
 		EndKey: endKey,
 	}, kvpb.LinkExternalSSTableRequest_ExternalFile{
-		Locator: URI,
+		Locator: cloud.MakeRedactableLocatorURI(URI),
 		Path:    fileName,
 		// Use a dummy file sizes.
 		ApproximatePhysicalSize: uint64(512 * 1024 * 1024),
