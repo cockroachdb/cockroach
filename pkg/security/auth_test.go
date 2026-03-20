@@ -768,8 +768,8 @@ func TestAuthenticationHook(t *testing.T) {
 		{false, "(CN=node)dns:node.example.com,dns:extra.example.com", username.NodeUser, "", "", true, true, true, roachpb.SystemTenantID, false, false, false, false, true, "", "DNS=node.example.com", ``},
 		{false, "(CN=root)dns:root.example.com", username.RootUser, "", "", true, false, false, roachpb.SystemTenantID, false, false, false, false, true, "DNS=root.example.com,DNS=extra.example.com", "", `certificate authentication failed for user "root"`},
 		{false, "(CN=node)dns:node.example.com", username.NodeUser, "", "", true, false, false, roachpb.SystemTenantID, false, false, false, false, true, "", "DNS=node.example.com,DNS=extra.example.com", `certificate authentication failed for user "node"`},
-		{false, "(CN=root)dns:root.example.com", username.RootUser, "", "", true, true, false, roachpb.SystemTenantID, false, false, true, false, true, "DNS=root.example.com", "", `user "root" is not allowed`},
-		{false, "(CN=debug_user)dns:debug.example.com", username.DebugUser, "", "", true, true, false, roachpb.SystemTenantID, false, false, false, false, true, "DNS=debug.example.com", "", `user "debug_user" is not allowed`},
+		{false, "(CN=root)dns:root.example.com", username.RootUser, "", "", true, false, false, roachpb.SystemTenantID, false, false, true, false, true, "DNS=root.example.com", "", `certificate authentication failed for user "root"`},
+		{false, "(CN=debug_user)dns:debug.example.com", username.DebugUser, "", "", true, false, false, roachpb.SystemTenantID, false, false, false, false, true, "DNS=debug.example.com", "", `certificate authentication failed for user "debug_user"`},
 		{false, "(CN=debug_user)dns:debug.example.com", username.DebugUser, "", "", true, true, false, roachpb.SystemTenantID, false, false, false, true, true, "DNS=debug.example.com", "", `user "debug_user" is not allowed`},
 	}
 
