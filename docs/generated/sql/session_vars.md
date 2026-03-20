@@ -38,6 +38,7 @@ SHOW application_name;
 <tr><td><code>buffered_writes_use_locking_on_non_unique_indexes</code></td><td>Controls whether buffered writes use locking on non-unique indexes.</td><td><code>off</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>bypass_pcr_reader_catalog_aost</code></td><td>Disables the AOST used by all user queries on the PCR reader catalog.</td><td><code>off</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>bytea_output</code></td><td>Controls how to encode byte arrays when converting to string.</td><td><code>hex</code></td><td>No</td><td>-</td></tr>
+<tr><td><code>canary_stats_mode</code></td><td>When sql.stats.canary_fraction > 0, controls which table statistics are used for query planning: 'on' always uses the newest stats as soon as they are available, 'off' always uses the second newest (stable) stats, and 'auto' selects probabilistically based on the canary fraction. Has no effect when sql.stats.canary_fraction is 0.</td><td><code>auto</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>check_function_bodies</code></td><td>Controls whether functions are validated during function creation.</td><td><code>on</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>client_encoding</code></td><td>Controls the client-side character encoding. Only UTF8 is supported.</td><td><code>UTF8</code></td><td>No</td><td>-</td></tr>
 <tr><td><code>client_min_messages</code></td><td>Controls which message levels are sent to the client.</td><td><code>notice</code></td><td>No</td><td>-</td></tr>
