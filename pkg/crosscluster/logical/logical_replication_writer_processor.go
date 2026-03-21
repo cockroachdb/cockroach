@@ -406,7 +406,7 @@ func (lrw *logicalReplicationWriterProcessor) Next() (
 
 	case stats := <-lrw.rangeStatsCh:
 		meta, err := replicationutils.StreamRangeStatsToProgressMeta(
-			lrw.FlowCtx, lrw.ProcessorID, stats,
+			lrw.Ctx(), lrw.FlowCtx, lrw.ProcessorID, stats,
 		)
 		if err != nil {
 			lrw.MoveToDrainingAndLogError(err)
