@@ -542,7 +542,7 @@ func (sip *streamIngestionProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Pr
 		return nil, bulkutil.ConstructTracingAggregatorProducerMeta(sip.Ctx(),
 			sip.FlowCtx.NodeID.SQLInstanceID(), sip.FlowCtx.ID, sip.agg)
 	case stats := <-sip.rangeStatsCh:
-		meta, err := replicationutils.StreamRangeStatsToProgressMeta(sip.FlowCtx, sip.ProcessorID, stats)
+		meta, err := replicationutils.StreamRangeStatsToProgressMeta(sip.Ctx(), sip.FlowCtx, sip.ProcessorID, stats)
 		if err != nil {
 			sip.MoveToDrainingAndLogError(err)
 			return nil, sip.DrainHelper()

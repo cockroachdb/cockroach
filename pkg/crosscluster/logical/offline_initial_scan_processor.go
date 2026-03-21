@@ -279,7 +279,7 @@ func (o *offlineInitialScanProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.P
 			return nil, o.DrainHelper()
 		}
 
-		meta, err := replicationutils.StreamRangeStatsToProgressMeta(o.FlowCtx, o.ProcessorID, stats)
+		meta, err := replicationutils.StreamRangeStatsToProgressMeta(o.Ctx(), o.FlowCtx, o.ProcessorID, stats)
 		if err != nil {
 			o.MoveToDrainingAndLogError(err)
 			return nil, o.DrainHelper()

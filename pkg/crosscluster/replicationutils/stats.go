@@ -6,8 +6,11 @@
 package replicationutils
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
@@ -19,10 +22,27 @@ import (
 // StreamRangeStatsToProgressMeta converts a range statistics from a rangefeed
 // StreamEvent and converts it to a ProducerMetadata that can be passed through
 // the DistSQL pipeline.
+//
+// During a mixed-version upgrade from 26.1 to 26.2, we marshal using the old
+// streampb.StreamEvent_RangeStats type so that both 26.1 and 26.2 nodes can
+// unmarshal the Any proto. Once the cluster is fully on 26.2, we switch to
+// the canonical rangescanstatspb.RangeStats type.
 func StreamRangeStatsToProgressMeta(
-	flowCtx *execinfra.FlowCtx, procID int32, stats *rangescanstatspb.RangeStats,
+	ctx context.Context, flowCtx *execinfra.FlowCtx, procID int32, stats *rangescanstatspb.RangeStats,
 ) (*execinfrapb.ProducerMetadata, error) {
-	asAny, err := pbtypes.MarshalAny(stats)
+	var asAny *pbtypes.Any
+	var err error
+	if flowCtx.Cfg.Settings.Version.IsActive(ctx, clusterversion.V26_2) {
+		asAny, err = pbtypes.MarshalAny(stats)
+	} else {
+		// Use the old type for compatibility with 26.1 nodes.
+		oldStats := &streampb.StreamEvent_RangeStats{
+			RangeCount:         stats.RangeCount,
+			ScanningRangeCount: stats.ScanningRangeCount,
+			LaggingRangeCount:  stats.LaggingRangeCount,
+		}
+		asAny, err = pbtypes.MarshalAny(oldStats)
+	}
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to convert range stats to any proto")
 	}
@@ -34,6 +54,28 @@ func StreamRangeStatsToProgressMeta(
 			ProgressDetails: *asAny,
 		},
 	}, nil
+}
+
+// UnmarshalRangeStats attempts to unmarshal range stats from an Any proto,
+// trying both the new rangescanstatspb.RangeStats type and the old
+// streampb.StreamEvent_RangeStats type for mixed-version compatibility.
+//
+// TODO(kev-cao): Remove the fallback to StreamEvent_RangeStats in 26.3.
+func UnmarshalRangeStats(any *pbtypes.Any) (*rangescanstatspb.RangeStats, error) {
+	var stats rangescanstatspb.RangeStats
+	if err := pbtypes.UnmarshalAny(any, &stats); err != nil {
+		// Try the old type for mixed-version compatibility with 26.1 nodes.
+		var oldStats streampb.StreamEvent_RangeStats
+		if err := pbtypes.UnmarshalAny(any, &oldStats); err != nil {
+			return nil, errors.Wrap(err, "unable to unmarshal progress details")
+		}
+		stats = rangescanstatspb.RangeStats{
+			RangeCount:         oldStats.RangeCount,
+			ScanningRangeCount: oldStats.ScanningRangeCount,
+			LaggingRangeCount:  oldStats.LaggingRangeCount,
+		}
+	}
+	return &stats, nil
 }
 
 // AggregateRangeStatsCollector collects rangefeed StreamEvent range stats from
