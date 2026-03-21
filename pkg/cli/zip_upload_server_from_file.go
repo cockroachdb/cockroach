@@ -97,28 +97,21 @@ func runUploadFromZipFile(ctx context.Context, zipPath string) error {
 		nodeID := extractNodeID(relPath)
 		artType := inferArtifactTypeFromPath(relPath)
 
-		rc, err := f.Open()
-		if err != nil {
-			fmt.Fprintf(stderr, "  warning: cannot open %s: %v\n", f.Name, err)
-			errCount++
-			continue
-		}
-		data, err := io.ReadAll(rc)
-		rc.Close()
-		if err != nil {
-			fmt.Fprintf(stderr, "  warning: cannot read %s: %v\n", f.Name, err)
-			errCount++
-			continue
-		}
-
-		uploadErr := client.UploadArtifact(
+		// Stream the zip entry directly to GCS without buffering the
+		// entire entry in memory. zip.File.Open() can be called
+		// multiple times, so on retry the factory obtains a fresh
+		// reader positioned at the start of the entry.
+		zipFile := f // capture loop variable
+		uploadErr := client.UploadArtifactStreaming(
 			ctx,
 			relPath,
 			nodeID,
 			artType,
 			"application/octet-stream",
 			"", // no idempotency key
-			data,
+			func() (io.ReadCloser, error) {
+				return zipFile.Open()
+			},
 		)
 
 		if uploadErr != nil {

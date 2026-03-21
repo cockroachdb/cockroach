@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 	"time"
@@ -443,19 +444,34 @@ func (s *systemStatusServer) uploadLogFiles(
 			continue
 		}
 
-		var buf bytes.Buffer
-		for _, e := range entries.Entries {
-			if redact && !e.Redactable {
-				e.Message = "REDACTEDBYZIP"
-			}
-			if fmtErr := log.FormatLegacyEntry(e, &buf); fmtErr != nil {
-				errs = append(errs, fmt.Sprintf("format log entry %s: %v", file.Name, fmtErr))
-				break
-			}
-		}
-
+		// Stream formatted log entries directly to GCS via io.Pipe,
+		// avoiding a buffer allocation for the formatted output. The
+		// entries slice stays in memory (from the RPC response), but
+		// each call to the factory re-iterates and re-formats into a
+		// fresh pipe.
+		logEntries := entries.Entries
+		doRedact := redact
 		name := fmt.Sprintf("nodes/%d/logs/%s", nodeID, file.Name)
-		if uploadErr := client.uploadArtifactBytes(ctx, name, int32(nodeID), "log", buf.Bytes()); uploadErr != nil {
+		uploadErr := client.uploadArtifactStreaming(
+			ctx, name, int32(nodeID), "log", "text/plain",
+			func() (io.ReadCloser, error) {
+				pr, pw := io.Pipe()
+				go func() {
+					defer func() { _ = pw.Close() }()
+					for _, e := range logEntries {
+						if doRedact && !e.Redactable {
+							e.Message = "REDACTEDBYZIP"
+						}
+						if fmtErr := log.FormatLegacyEntry(e, pw); fmtErr != nil {
+							pw.CloseWithError(fmtErr)
+							return
+						}
+					}
+				}()
+				return pr, nil
+			},
+		)
+		if uploadErr != nil {
 			errs = append(errs, fmt.Sprintf("upload log %s: %v", file.Name, uploadErr))
 		} else {
 			artifacts++

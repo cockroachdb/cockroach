@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -305,6 +306,127 @@ func TestUploadServerClientGetSessionStatus(t *testing.T) {
 	require.Equal(t, "in_progress", status.State)
 	require.Equal(t, 15, status.ArtifactsReceived)
 	require.Len(t, status.ArtifactsByNode, 3)
+}
+
+func TestUploadArtifactStreaming(t *testing.T) {
+	// Verify that the factory is called once on success and the body
+	// is streamed correctly to the GCS mock.
+	var receivedBody []byte
+	gcsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "PUT", r.Method)
+		var err error
+		receivedBody, err = io.ReadAll(r.Body)
+		require.NoError(t, err)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer gcsSrv.Close()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		require.NoError(t, json.NewEncoder(w).Encode(signedURLResponse{
+			SignedURL: gcsSrv.URL + "/bucket/obj?sig=abc",
+			ExpiresAt: "2026-02-21T12:15:00Z",
+		}))
+	}))
+	defer srv.Close()
+
+	client := newUploadServerClientWithToken(
+		uploadServerClientConfig{ServerURL: srv.URL},
+		"ses_abc", "tok_xyz",
+	)
+
+	var factoryCalls atomic.Int32
+	ctx := context.Background()
+	err := client.UploadArtifactStreaming(
+		ctx, "nodes/1/log.txt", 1, artifactTypeLog,
+		"text/plain", "",
+		func() (io.ReadCloser, error) {
+			factoryCalls.Add(1)
+			return io.NopCloser(bytes.NewReader([]byte("streamed-data"))), nil
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), factoryCalls.Load())
+	require.Equal(t, []byte("streamed-data"), receivedBody)
+}
+
+func TestUploadArtifactStreamingRetry(t *testing.T) {
+	// First GCS call returns 403 (expired URL), second succeeds.
+	// The factory should be called twice.
+	var gcsCallCount atomic.Int32
+	gcsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := gcsCallCount.Add(1)
+		if n == 1 {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte("AccessDenied: Request has expired"))
+			return
+		}
+		body, _ := io.ReadAll(r.Body)
+		require.Equal(t, []byte("retry-data"), body)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer gcsSrv.Close()
+
+	var signedURLCallCount atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		signedURLCallCount.Add(1)
+		w.WriteHeader(http.StatusCreated)
+		require.NoError(t, json.NewEncoder(w).Encode(signedURLResponse{
+			SignedURL: gcsSrv.URL + "/bucket/obj?sig=fresh",
+			ExpiresAt: "2026-02-21T12:30:00Z",
+		}))
+	}))
+	defer srv.Close()
+
+	client := newUploadServerClientWithToken(
+		uploadServerClientConfig{ServerURL: srv.URL},
+		"ses_abc", "tok_xyz",
+	)
+
+	var factoryCalls atomic.Int32
+	ctx := context.Background()
+	err := client.UploadArtifactStreaming(
+		ctx, "nodes/1/log.txt", 1, artifactTypeLog,
+		"text/plain", "",
+		func() (io.ReadCloser, error) {
+			factoryCalls.Add(1)
+			return io.NopCloser(bytes.NewReader([]byte("retry-data"))), nil
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, int32(2), factoryCalls.Load())
+	require.Equal(t, int32(2), signedURLCallCount.Load())
+	require.Equal(t, int32(2), gcsCallCount.Load())
+}
+
+func TestUploadArtifactStreamingFactoryError(t *testing.T) {
+	// Factory returns an error — upload should fail with a wrapped error.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		require.NoError(t, json.NewEncoder(w).Encode(signedURLResponse{
+			SignedURL: "https://storage.googleapis.com/bucket/obj?sig=abc",
+			ExpiresAt: "2026-02-21T12:15:00Z",
+		}))
+	}))
+	defer srv.Close()
+
+	client := newUploadServerClientWithToken(
+		uploadServerClientConfig{ServerURL: srv.URL},
+		"ses_abc", "tok_xyz",
+	)
+
+	ctx := context.Background()
+	testErr := errors.New("cannot open source")
+	err := client.UploadArtifactStreaming(
+		ctx, "nodes/1/log.txt", 1, artifactTypeLog,
+		"text/plain", "",
+		func() (io.ReadCloser, error) {
+			return nil, testErr
+		},
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "creating body reader")
+	require.True(t, errors.Is(err, testErr))
 }
 
 func TestUploadServerClientHTTPError(t *testing.T) {

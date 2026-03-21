@@ -261,6 +261,50 @@ func (c *uploadServerClient) UploadToSignedURL(
 	return nil
 }
 
+// UploadArtifactStreaming uploads an artifact using GCS signed URLs
+// without buffering the entire body in memory. The newBody callback
+// is called to obtain a fresh io.ReadCloser for each upload attempt
+// (initial + retry on expired URL). The returned ReadCloser is closed
+// after each attempt to clean up resources (e.g. pipe goroutines).
+func (c *uploadServerClient) UploadArtifactStreaming(
+	ctx context.Context,
+	artifactPath string,
+	nodeID int32,
+	artType artifactType,
+	contentType string,
+	idempotencyKey string,
+	newBody func() (io.ReadCloser, error),
+) error {
+	signedResp, err := c.GetSignedURL(ctx, artifactPath, nodeID, artType, contentType, idempotencyKey)
+	if err != nil {
+		return errors.Wrap(err, "getting signed URL")
+	}
+
+	body, err := newBody()
+	if err != nil {
+		return errors.Wrap(err, "creating body reader")
+	}
+	err = c.UploadToSignedURL(ctx, signedResp.SignedURL, contentType, body)
+	body.Close()
+	if err != nil && isSignedURLExpiredError(err) {
+		// Retry once with a fresh signed URL.
+		signedResp, err = c.GetSignedURL(ctx, artifactPath, nodeID, artType, contentType, idempotencyKey)
+		if err != nil {
+			return errors.Wrap(err, "getting fresh signed URL on retry")
+		}
+		body, err = newBody()
+		if err != nil {
+			return errors.Wrap(err, "creating body reader on retry")
+		}
+		err = c.UploadToSignedURL(ctx, signedResp.SignedURL, contentType, body)
+		body.Close()
+	}
+	if err != nil {
+		return errors.Wrapf(err, "uploading artifact %s", artifactPath)
+	}
+	return nil
+}
+
 // UploadArtifact uploads a single artifact using GCS signed URLs. It
 // requests a signed URL from the upload server, then PUTs the data
 // directly to GCS. If the signed URL has expired (HTTP 403), it
@@ -274,24 +318,12 @@ func (c *uploadServerClient) UploadArtifact(
 	idempotencyKey string,
 	data []byte,
 ) error {
-	signedResp, err := c.GetSignedURL(ctx, artifactPath, nodeID, artType, contentType, idempotencyKey)
-	if err != nil {
-		return errors.Wrap(err, "getting signed URL")
-	}
-
-	err = c.UploadToSignedURL(ctx, signedResp.SignedURL, contentType, bytes.NewReader(data))
-	if err != nil && isSignedURLExpiredError(err) {
-		// Retry once with a fresh signed URL.
-		signedResp, err = c.GetSignedURL(ctx, artifactPath, nodeID, artType, contentType, idempotencyKey)
-		if err != nil {
-			return errors.Wrap(err, "getting fresh signed URL on retry")
-		}
-		err = c.UploadToSignedURL(ctx, signedResp.SignedURL, contentType, bytes.NewReader(data))
-	}
-	if err != nil {
-		return errors.Wrapf(err, "uploading artifact %s", artifactPath)
-	}
-	return nil
+	return c.UploadArtifactStreaming(
+		ctx, artifactPath, nodeID, artType, contentType, idempotencyKey,
+		func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(data)), nil
+		},
+	)
 }
 
 // isSignedURLExpiredError returns true if the error indicates a GCS
