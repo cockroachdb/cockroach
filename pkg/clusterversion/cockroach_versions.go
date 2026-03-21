@@ -267,6 +267,10 @@ const (
 	// V26_2_AddSystemStatementsTable adds the system.statements table.
 	// The table stores information about executed statements.
 	V26_2_AddSystemStatementsTable
+
+	// V26_2_StmtDiagnosticsMaxLatency adds max_execution_latency column to
+	// system.statement_diagnostics_requests for bounded latency range filtering.
+	V26_2_StmtDiagnosticsMaxLatency
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -344,6 +348,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V26_2_StmtDiagnosticsRequestID: {Major: 26, Minor: 1, Internal: 32},
 
 	V26_2_AddSystemStatementsTable: {Major: 26, Minor: 1, Internal: 34},
+
+	V26_2_StmtDiagnosticsMaxLatency: {Major: 26, Minor: 1, Internal: 36},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************

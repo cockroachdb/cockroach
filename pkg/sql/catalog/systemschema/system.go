@@ -563,6 +563,7 @@ CREATE TABLE system.statement_diagnostics_requests(
     statement_diagnostics_id INT8,
     requested_at             TIMESTAMPTZ NOT NULL,
     min_execution_latency    INTERVAL    NULL,
+    max_execution_latency    INTERVAL    NULL,
     expires_at               TIMESTAMPTZ NULL,
     sampling_probability     FLOAT       NULL,
     plan_gist                STRING      NULL,
@@ -571,8 +572,8 @@ CREATE TABLE system.statement_diagnostics_requests(
     username                 STRING      NOT NULL DEFAULT '',
     CONSTRAINT "primary" PRIMARY KEY (id),
     CONSTRAINT check_sampling_probability CHECK (sampling_probability BETWEEN 0.0 AND 1.0),
-    INDEX completed_idx_v2 (completed, id) STORING (statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username),
-    FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username)
+    INDEX completed_idx_v2 (completed, id) STORING (statement_fingerprint, min_execution_latency, max_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username),
+    FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, min_execution_latency, max_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username)
 );`
 
 	StatementDiagnosticsTableSchema = `
@@ -1439,7 +1440,7 @@ const SystemDatabaseName = catconstants.SystemDatabaseName
 // release version).
 //
 // NB: Don't set this to clusterversion.Latest; use a specific version instead.
-var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_2_AddSystemStatementsTable.Version()
+var SystemDatabaseSchemaBootstrapVersion = clusterversion.V26_2_StmtDiagnosticsMaxLatency.Version()
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
@@ -2842,6 +2843,7 @@ var (
 				{Name: "statement_diagnostics_id", ID: 4, Type: types.Int, Nullable: true},
 				{Name: "requested_at", ID: 5, Type: types.TimestampTZ, Nullable: false},
 				{Name: "min_execution_latency", ID: 6, Type: types.Interval, Nullable: true},
+				{Name: "max_execution_latency", ID: 13, Type: types.Interval, Nullable: true},
 				{Name: "expires_at", ID: 7, Type: types.TimestampTZ, Nullable: true},
 				{Name: "sampling_probability", ID: 8, Type: types.Float, Nullable: true},
 				{Name: "plan_gist", ID: 9, Type: types.String, Nullable: true},
@@ -2852,8 +2854,8 @@ var (
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:        "primary",
-					ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at", "min_execution_latency", "expires_at", "sampling_probability", "plan_gist", "anti_plan_gist", "redacted", "username"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
+					ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at", "min_execution_latency", "max_execution_latency", "expires_at", "sampling_probability", "plan_gist", "anti_plan_gist", "redacted", "username"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 13, 7, 8, 9, 10, 11, 12},
 				},
 			},
 			pk("id"),
@@ -2863,10 +2865,10 @@ var (
 				ID:                  2,
 				Unique:              false,
 				KeyColumnNames:      []string{"completed", "id"},
-				StoreColumnNames:    []string{"statement_fingerprint", "min_execution_latency", "expires_at", "sampling_probability", "plan_gist", "anti_plan_gist", "redacted", "username"},
+				StoreColumnNames:    []string{"statement_fingerprint", "min_execution_latency", "max_execution_latency", "expires_at", "sampling_probability", "plan_gist", "anti_plan_gist", "redacted", "username"},
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
-				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7, 8, 9, 10, 11, 12},
+				StoreColumnIDs:      []descpb.ColumnID{3, 6, 13, 7, 8, 9, 10, 11, 12},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		),

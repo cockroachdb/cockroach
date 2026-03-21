@@ -184,6 +184,14 @@ var upgrades = []upgradebase.Upgrade{
 			"restore for a cluster predating this table can leave it empty",
 		),
 	),
+
+	upgrade.NewTenantUpgrade(
+		"add max_execution_latency column to system.statement_diagnostics_requests",
+		clusterversion.V26_2_StmtDiagnosticsMaxLatency.Version(),
+		upgrade.NoPrecondition,
+		stmtDiagnosticsAddMaxLatencyColumn,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
+	),
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }
