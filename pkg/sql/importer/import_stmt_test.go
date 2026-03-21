@@ -4069,6 +4069,10 @@ func TestUniqueUUID(t *testing.T) {
 	connDB := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(connDB)
 
+	// Disable elastic CPU control to avoid timeout — elastic CPU throttling
+	// can push this test past the 15m timeout.
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
+
 	dataSize := parallelImporterReaderBatchSize * 100
 
 	sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE data AS SELECT * FROM generate_series(1, %d);`, dataSize))
