@@ -9,6 +9,7 @@ import (
 	"archive/zip"
 	"context"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -102,6 +103,13 @@ func runUploadFromZipFile(ctx context.Context, zipPath string) error {
 			errCount++
 			continue
 		}
+		data, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			fmt.Fprintf(stderr, "  warning: cannot read %s: %v\n", f.Name, err)
+			errCount++
+			continue
+		}
 
 		uploadErr := client.UploadArtifact(
 			ctx,
@@ -110,9 +118,8 @@ func runUploadFromZipFile(ctx context.Context, zipPath string) error {
 			artType,
 			"application/octet-stream",
 			"", // no idempotency key
-			rc,
+			data,
 		)
-		rc.Close()
 
 		if uploadErr != nil {
 			fmt.Fprintf(stderr, "  warning: upload failed for %s: %v\n", relPath, uploadErr)

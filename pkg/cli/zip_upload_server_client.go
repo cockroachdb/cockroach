@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
@@ -69,11 +70,19 @@ type createSessionResponse struct {
 	ExpiresAt   string `json:"expires_at"`
 }
 
-// uploadArtifactResponse is the JSON response from PUT artifacts.
-type uploadArtifactResponse struct {
-	ArtifactID    string `json:"artifact_id"`
-	BytesReceived int64  `json:"bytes_received"`
-	Status        string `json:"status,omitempty"`
+// signedURLRequest is the JSON body for POST .../signed-url.
+type signedURLRequest struct {
+	ArtifactPath   string `json:"artifact_path"`
+	NodeID         int32  `json:"node_id"`
+	ArtifactType   string `json:"artifact_type"`
+	ContentType    string `json:"content_type"`
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
+}
+
+// signedURLResponse is the JSON response from POST .../signed-url.
+type signedURLResponse struct {
+	SignedURL string `json:"signed_url"`
+	ExpiresAt string `json:"expires_at"`
 }
 
 // completeSessionRequest is the JSON body for POST .../complete.
@@ -85,8 +94,8 @@ type completeSessionRequest struct {
 
 // completeSessionResponse is the JSON response from POST .../complete.
 type completeSessionResponse struct {
-	CloudPath          string `json:"cloud_path"`
-	ParquetFilesCreated int   `json:"parquet_files_created"`
+	CloudPath           string `json:"cloud_path"`
+	ParquetFilesCreated int    `json:"parquet_files_created"`
 }
 
 // sessionStatusResponse is the JSON response from GET .../status.
@@ -177,7 +186,85 @@ func (c *uploadServerClient) CreateSession(
 	return nil
 }
 
-// UploadArtifact uploads a single artifact to the server.
+// GetSignedURL requests a GCS signed URL from the upload server for
+// direct artifact upload.
+func (c *uploadServerClient) GetSignedURL(
+	ctx context.Context,
+	artifactPath string,
+	nodeID int32,
+	artType artifactType,
+	contentType string,
+	idempotencyKey string,
+) (*signedURLResponse, error) {
+	reqBody := signedURLRequest{
+		ArtifactPath:   artifactPath,
+		NodeID:         nodeID,
+		ArtifactType:   string(artType),
+		ContentType:    contentType,
+		IdempotencyKey: idempotencyKey,
+	}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshaling signed URL request")
+	}
+
+	url := fmt.Sprintf(
+		"%s/api/v1/sessions/%s/signed-url",
+		c.serverURL, c.sessionID,
+	)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	if err != nil {
+		return nil, errors.Wrap(err, "creating signed URL request")
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+c.uploadToken)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "requesting signed URL")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		return nil, readHTTPError(resp)
+	}
+
+	var result signedURLResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, errors.Wrap(err, "decoding signed URL response")
+	}
+	return &result, nil
+}
+
+// UploadToSignedURL uploads data directly to a GCS signed URL. No
+// Authorization header is sent — auth is embedded in the URL's query
+// parameters.
+func (c *uploadServerClient) UploadToSignedURL(
+	ctx context.Context, signedURL string, contentType string, body io.Reader,
+) error {
+	req, err := http.NewRequestWithContext(ctx, "PUT", signedURL, body)
+	if err != nil {
+		return errors.Wrap(err, "creating GCS upload request")
+	}
+	req.Header.Set("Content-Type", contentType)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return errors.Wrap(err, "uploading to GCS")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return errors.Newf("GCS upload returned HTTP %d: %s", resp.StatusCode, string(respBody))
+	}
+	return nil
+}
+
+// UploadArtifact uploads a single artifact using GCS signed URLs. It
+// requests a signed URL from the upload server, then PUTs the data
+// directly to GCS. If the signed URL has expired (HTTP 403), it
+// retries once with a fresh URL.
 func (c *uploadServerClient) UploadArtifact(
 	ctx context.Context,
 	artifactPath string,
@@ -185,39 +272,35 @@ func (c *uploadServerClient) UploadArtifact(
 	artType artifactType,
 	contentType string,
 	idempotencyKey string,
-	body io.Reader,
+	data []byte,
 ) error {
-	url := fmt.Sprintf(
-		"%s/api/v1/sessions/%s/artifacts/%s",
-		c.serverURL, c.sessionID, artifactPath,
-	)
-	req, err := http.NewRequestWithContext(ctx, "PUT", url, body)
+	signedResp, err := c.GetSignedURL(ctx, artifactPath, nodeID, artType, contentType, idempotencyKey)
 	if err != nil {
-		return errors.Wrap(err, "creating artifact request")
-	}
-	req.Header.Set("Authorization", "Bearer "+c.uploadToken)
-	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("X-Node-ID", fmt.Sprintf("%d", nodeID))
-	req.Header.Set("X-Artifact-Type", string(artType))
-	if idempotencyKey != "" {
-		req.Header.Set("X-Idempotency-Key", idempotencyKey)
+		return errors.Wrap(err, "getting signed URL")
 	}
 
-	resp, err := c.httpClient.Do(req)
+	err = c.UploadToSignedURL(ctx, signedResp.SignedURL, contentType, bytes.NewReader(data))
+	if err != nil && isSignedURLExpiredError(err) {
+		// Retry once with a fresh signed URL.
+		signedResp, err = c.GetSignedURL(ctx, artifactPath, nodeID, artType, contentType, idempotencyKey)
+		if err != nil {
+			return errors.Wrap(err, "getting fresh signed URL on retry")
+		}
+		err = c.UploadToSignedURL(ctx, signedResp.SignedURL, contentType, bytes.NewReader(data))
+	}
 	if err != nil {
-		return errors.Wrap(err, "uploading artifact")
+		return errors.Wrapf(err, "uploading artifact %s", artifactPath)
 	}
-	defer resp.Body.Close()
+	return nil
+}
 
-	switch resp.StatusCode {
-	case http.StatusCreated:
-		return nil
-	case http.StatusConflict:
-		// Already uploaded (idempotent retry).
-		return nil
-	default:
-		return readHTTPError(resp)
-	}
+// isSignedURLExpiredError returns true if the error indicates a GCS
+// signed URL has expired (HTTP 403).
+func isSignedURLExpiredError(err error) bool {
+	errStr := err.Error()
+	return strings.Contains(errStr, "HTTP 403") ||
+		strings.Contains(errStr, "ExpiredToken") ||
+		strings.Contains(errStr, "AccessDenied")
 }
 
 // CompleteSession signals the server that the upload session is done.
@@ -255,9 +338,7 @@ func (c *uploadServerClient) CompleteSession(
 }
 
 // GetSessionStatus retrieves the current status of the upload session.
-func (c *uploadServerClient) GetSessionStatus(
-	ctx context.Context,
-) (*sessionStatusResponse, error) {
+func (c *uploadServerClient) GetSessionStatus(ctx context.Context) (*sessionStatusResponse, error) {
 	url := fmt.Sprintf("%s/api/v1/sessions/%s/status", c.serverURL, c.sessionID)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {

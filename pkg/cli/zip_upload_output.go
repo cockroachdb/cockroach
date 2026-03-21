@@ -108,9 +108,7 @@ func (u *uploadZipOutput) createRaw(s *zipReporter, name string, b []byte) error
 }
 
 // createJSON marshals a value to JSON and uploads it.
-func (u *uploadZipOutput) createJSON(
-	s *zipReporter, name string, m interface{},
-) error {
+func (u *uploadZipOutput) createJSON(s *zipReporter, name string, m interface{}) error {
 	if !strings.HasSuffix(name, ".json") {
 		return s.fail(errors.Errorf("%s does not have .json suffix", name))
 	}
@@ -161,9 +159,7 @@ func (u *uploadZipOutput) createJSONOrError(
 
 // createRawOrError calls either createError or createRaw depending
 // on whether the error argument is nil.
-func (u *uploadZipOutput) createRawOrError(
-	s *zipReporter, name string, b []byte, e error,
-) error {
+func (u *uploadZipOutput) createRawOrError(s *zipReporter, name string, b []byte, e error) error {
 	if filepath.Ext(name) == "" {
 		return errors.Errorf("%s has no extension", name)
 	}
@@ -194,8 +190,7 @@ func (u *uploadZipOutput) uploadBytes(name string, data []byte) error {
 	idempotencyKey := uuid.MakeV4().String()
 
 	err := u.client.UploadArtifact(
-		u.ctx, name, u.nodeID, artType, contentType, idempotencyKey,
-		bytes.NewReader(data),
+		u.ctx, name, u.nodeID, artType, contentType, idempotencyKey, data,
 	)
 	if err != nil {
 		return err

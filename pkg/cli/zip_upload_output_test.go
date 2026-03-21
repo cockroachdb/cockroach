@@ -18,26 +18,61 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUploadZipOutputCreateRaw(t *testing.T) {
+// newTestSignedURLServers creates a mock upload server (for signed URL
+// requests) and a mock GCS server (for actual data PUTs). The upload
+// server returns signed URLs pointing to the GCS server. The GCS
+// server records all received bodies keyed by URL path.
+func newTestSignedURLServers(
+	t *testing.T,
+) (uploadSrv *httptest.Server, gcsSrv *httptest.Server, gcsUploads func() map[string][]byte) {
+	t.Helper()
+
 	var mu sync.Mutex
 	uploads := map[string][]byte{}
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	gcsSrv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "PUT", r.Method)
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		mu.Lock()
 		uploads[r.URL.Path] = body
 		mu.Unlock()
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	uploadSrv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "POST", r.Method)
+		require.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+		var req signedURLRequest
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
+
 		w.WriteHeader(http.StatusCreated)
-		require.NoError(t, json.NewEncoder(w).Encode(uploadArtifactResponse{
-			ArtifactID:    "art_1",
-			BytesReceived: int64(len(body)),
+		require.NoError(t, json.NewEncoder(w).Encode(signedURLResponse{
+			SignedURL: gcsSrv.URL + "/" + req.ArtifactPath + "?sig=test",
+			ExpiresAt: "2026-02-21T12:15:00Z",
 		}))
 	}))
-	defer srv.Close()
+
+	return uploadSrv, gcsSrv, func() map[string][]byte {
+		mu.Lock()
+		defer mu.Unlock()
+		cp := make(map[string][]byte, len(uploads))
+		for k, v := range uploads {
+			cp[k] = v
+		}
+		return cp
+	}
+}
+
+func TestUploadZipOutputCreateRaw(t *testing.T) {
+	uploadSrv, gcsSrv, gcsUploads := newTestSignedURLServers(t)
+	defer uploadSrv.Close()
+	defer gcsSrv.Close()
 
 	client := newUploadServerClientWithToken(
-		uploadServerClientConfig{ServerURL: srv.URL},
+		uploadServerClientConfig{ServerURL: uploadSrv.URL},
 		"ses_test", "tok_test",
 	)
 
@@ -49,30 +84,17 @@ func TestUploadZipOutputCreateRaw(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, output.artifactsUploaded())
 
-	mu.Lock()
-	require.Equal(t, []byte("profile-data"), uploads["/api/v1/sessions/ses_test/artifacts/nodes/1/cpu.pprof"])
-	mu.Unlock()
+	uploads := gcsUploads()
+	require.Equal(t, []byte("profile-data"), uploads["/nodes/1/cpu.pprof"])
 }
 
 func TestUploadZipOutputCreateJSON(t *testing.T) {
-	var mu sync.Mutex
-	uploads := map[string][]byte{}
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
-		mu.Lock()
-		uploads[r.URL.Path] = body
-		mu.Unlock()
-		w.WriteHeader(http.StatusCreated)
-		require.NoError(t, json.NewEncoder(w).Encode(uploadArtifactResponse{
-			ArtifactID: "art_2",
-		}))
-	}))
-	defer srv.Close()
+	uploadSrv, gcsSrv, gcsUploads := newTestSignedURLServers(t)
+	defer uploadSrv.Close()
+	defer gcsSrv.Close()
 
 	client := newUploadServerClientWithToken(
-		uploadServerClientConfig{ServerURL: srv.URL},
+		uploadServerClientConfig{ServerURL: uploadSrv.URL},
 		"ses_test", "tok_test",
 	)
 
@@ -84,27 +106,18 @@ func TestUploadZipOutputCreateJSON(t *testing.T) {
 	err := output.createJSON(zr, "cluster/settings.json", data)
 	require.NoError(t, err)
 	require.Equal(t, 1, output.artifactsUploaded())
+
+	uploads := gcsUploads()
+	require.Contains(t, string(uploads["/cluster/settings.json"]), `"key"`)
 }
 
 func TestUploadZipOutputCreateLocked(t *testing.T) {
-	var mu sync.Mutex
-	uploads := map[string][]byte{}
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
-		mu.Lock()
-		uploads[r.URL.Path] = body
-		mu.Unlock()
-		w.WriteHeader(http.StatusCreated)
-		require.NoError(t, json.NewEncoder(w).Encode(uploadArtifactResponse{
-			ArtifactID: "art_3",
-		}))
-	}))
-	defer srv.Close()
+	uploadSrv, gcsSrv, gcsUploads := newTestSignedURLServers(t)
+	defer uploadSrv.Close()
+	defer gcsSrv.Close()
 
 	client := newUploadServerClientWithToken(
-		uploadServerClientConfig{ServerURL: srv.URL},
+		uploadServerClientConfig{ServerURL: uploadSrv.URL},
 		"ses_test", "tok_test",
 	)
 
@@ -123,12 +136,11 @@ func TestUploadZipOutputCreateLocked(t *testing.T) {
 
 	require.Equal(t, 1, output.artifactsUploaded())
 
-	mu.Lock()
+	uploads := gcsUploads()
 	require.Equal(t,
 		"table-data-row-1\ntable-data-row-2\n",
-		string(uploads["/api/v1/sessions/ses_test/artifacts/nodes/1/data.txt"]),
+		string(uploads["/nodes/1/data.txt"]),
 	)
-	mu.Unlock()
 }
 
 func TestInferArtifactType(t *testing.T) {

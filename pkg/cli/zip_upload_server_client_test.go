@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -53,25 +54,108 @@ func TestUploadServerClientCreateSession(t *testing.T) {
 	require.Equal(t, "tok_xyz", client.uploadToken)
 }
 
-func TestUploadServerClientUploadArtifact(t *testing.T) {
-	var receivedBody []byte
+func TestGetSignedURL(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "PUT", r.Method)
-		require.Equal(t, "/api/v1/sessions/ses_abc/artifacts/nodes/1/cpu.pprof", r.URL.Path)
+		require.Equal(t, "POST", r.Method)
+		require.Equal(t, "/api/v1/sessions/ses_abc/signed-url", r.URL.Path)
 		require.Equal(t, "Bearer tok_xyz", r.Header.Get("Authorization"))
+		require.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+		var req signedURLRequest
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
+		require.Equal(t, "nodes/1/cpu.pprof", req.ArtifactPath)
+		require.Equal(t, int32(1), req.NodeID)
+		require.Equal(t, "profile", req.ArtifactType)
+		require.Equal(t, "application/octet-stream", req.ContentType)
+		require.Equal(t, "idem-123", req.IdempotencyKey)
+
+		w.WriteHeader(http.StatusCreated)
+		require.NoError(t, json.NewEncoder(w).Encode(signedURLResponse{
+			SignedURL: "https://storage.googleapis.com/bucket/obj?X-Goog-Signature=abc",
+			ExpiresAt: "2026-02-21T12:15:00Z",
+		}))
+	}))
+	defer srv.Close()
+
+	client := newUploadServerClientWithToken(
+		uploadServerClientConfig{ServerURL: srv.URL},
+		"ses_abc", "tok_xyz",
+	)
+
+	ctx := context.Background()
+	resp, err := client.GetSignedURL(
+		ctx, "nodes/1/cpu.pprof", 1, artifactTypeProfile,
+		"application/octet-stream", "idem-123",
+	)
+	require.NoError(t, err)
+	require.Equal(t, "https://storage.googleapis.com/bucket/obj?X-Goog-Signature=abc", resp.SignedURL)
+	require.Equal(t, "2026-02-21T12:15:00Z", resp.ExpiresAt)
+}
+
+func TestUploadToSignedURL(t *testing.T) {
+	var receivedBody []byte
+	gcsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "PUT", r.Method)
 		require.Equal(t, "application/octet-stream", r.Header.Get("Content-Type"))
-		require.Equal(t, "1", r.Header.Get("X-Node-ID"))
-		require.Equal(t, "profile", r.Header.Get("X-Artifact-Type"))
-		require.Equal(t, "idem-123", r.Header.Get("X-Idempotency-Key"))
+		// No Authorization header on GCS uploads.
+		require.Empty(t, r.Header.Get("Authorization"))
 
 		var err error
 		receivedBody, err = io.ReadAll(r.Body)
 		require.NoError(t, err)
 
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer gcsSrv.Close()
+
+	client := newUploadServerClientWithToken(
+		uploadServerClientConfig{ServerURL: "http://unused"},
+		"ses_abc", "tok_xyz",
+	)
+
+	ctx := context.Background()
+	data := []byte("fake-pprof-data")
+	err := client.UploadToSignedURL(
+		ctx, gcsSrv.URL+"/bucket/obj?sig=abc",
+		"application/octet-stream",
+		bytes.NewReader(data),
+	)
+	require.NoError(t, err)
+	require.Equal(t, data, receivedBody)
+}
+
+func TestUploadServerClientUploadArtifact(t *testing.T) {
+	// Mock GCS server that accepts the PUT.
+	var receivedBody []byte
+	gcsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "PUT", r.Method)
+		require.Equal(t, "application/octet-stream", r.Header.Get("Content-Type"))
+		require.Empty(t, r.Header.Get("Authorization"))
+
+		var err error
+		receivedBody, err = io.ReadAll(r.Body)
+		require.NoError(t, err)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer gcsSrv.Close()
+
+	// Mock upload server that returns a signed URL pointing to gcsSrv.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "POST", r.Method)
+		require.Equal(t, "/api/v1/sessions/ses_abc/signed-url", r.URL.Path)
+		require.Equal(t, "Bearer tok_xyz", r.Header.Get("Authorization"))
+
+		var req signedURLRequest
+		err := json.NewDecoder(r.Body).Decode(&req)
+		require.NoError(t, err)
+		require.Equal(t, "nodes/1/cpu.pprof", req.ArtifactPath)
+		require.Equal(t, "idem-123", req.IdempotencyKey)
+
 		w.WriteHeader(http.StatusCreated)
-		require.NoError(t, json.NewEncoder(w).Encode(uploadArtifactResponse{
-			ArtifactID:    "art_001",
-			BytesReceived: int64(len(receivedBody)),
+		require.NoError(t, json.NewEncoder(w).Encode(signedURLResponse{
+			SignedURL: gcsSrv.URL + "/bucket/nodes/1/cpu.pprof?sig=abc",
+			ExpiresAt: "2026-02-21T12:15:00Z",
 		}))
 	}))
 	defer srv.Close()
@@ -85,18 +169,34 @@ func TestUploadServerClientUploadArtifact(t *testing.T) {
 	data := []byte("fake-pprof-data")
 	err := client.UploadArtifact(
 		ctx, "nodes/1/cpu.pprof", 1, artifactTypeProfile,
-		"application/octet-stream", "idem-123", bytes.NewReader(data),
+		"application/octet-stream", "idem-123", data,
 	)
 	require.NoError(t, err)
 	require.Equal(t, data, receivedBody)
 }
 
-func TestUploadServerClientUploadArtifactConflict(t *testing.T) {
+func TestUploadArtifactRetryOnExpiredURL(t *testing.T) {
+	// Track GCS call count. First call returns 403, second succeeds.
+	var gcsCallCount atomic.Int32
+	gcsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := gcsCallCount.Add(1)
+		if n == 1 {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte("AccessDenied: Request has expired"))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer gcsSrv.Close()
+
+	// Track signed URL request count.
+	var signedURLCallCount atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusConflict)
-		require.NoError(t, json.NewEncoder(w).Encode(map[string]string{
-			"artifact_id": "art_001",
-			"status":      "already_uploaded",
+		signedURLCallCount.Add(1)
+		w.WriteHeader(http.StatusCreated)
+		require.NoError(t, json.NewEncoder(w).Encode(signedURLResponse{
+			SignedURL: gcsSrv.URL + "/bucket/obj?sig=fresh",
+			ExpiresAt: "2026-02-21T12:30:00Z",
 		}))
 	}))
 	defer srv.Close()
@@ -109,9 +209,44 @@ func TestUploadServerClientUploadArtifactConflict(t *testing.T) {
 	ctx := context.Background()
 	err := client.UploadArtifact(
 		ctx, "nodes/1/cpu.pprof", 1, artifactTypeProfile,
-		"application/octet-stream", "", bytes.NewReader([]byte("data")),
+		"application/octet-stream", "", []byte("data"),
 	)
-	require.NoError(t, err) // 409 is not an error for idempotent uploads
+	require.NoError(t, err)
+	// Should have requested two signed URLs (original + retry).
+	require.Equal(t, int32(2), signedURLCallCount.Load())
+	// GCS should have been called twice.
+	require.Equal(t, int32(2), gcsCallCount.Load())
+}
+
+func TestUploadArtifactPermanentFailure(t *testing.T) {
+	// GCS always returns 500.
+	gcsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("internal error"))
+	}))
+	defer gcsSrv.Close()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		require.NoError(t, json.NewEncoder(w).Encode(signedURLResponse{
+			SignedURL: gcsSrv.URL + "/bucket/obj?sig=abc",
+			ExpiresAt: "2026-02-21T12:15:00Z",
+		}))
+	}))
+	defer srv.Close()
+
+	client := newUploadServerClientWithToken(
+		uploadServerClientConfig{ServerURL: srv.URL},
+		"ses_abc", "tok_xyz",
+	)
+
+	ctx := context.Background()
+	err := client.UploadArtifact(
+		ctx, "nodes/1/cpu.pprof", 1, artifactTypeProfile,
+		"application/octet-stream", "", []byte("data"),
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "HTTP 500")
 }
 
 func TestUploadServerClientCompleteSession(t *testing.T) {
