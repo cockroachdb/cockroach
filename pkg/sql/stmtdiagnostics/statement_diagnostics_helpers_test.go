@@ -26,13 +26,14 @@ func (r *Registry) InsertRequestInternal(
 	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
+	maxExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 ) (int64, error) {
 	// Note that redacted bundles as well as collected under different user than
 	// the one requesting it are checked in TestExplainAnalyzeDebug.
 	id, err := r.insertRequestInternal(
 		ctx, fprint, planGist, antiPlanGist, samplingProbability,
-		minExecutionLatency, expiresAfter, false /* redacted */, "", /* username */
+		minExecutionLatency, maxExecutionLatency, expiresAfter, false /* redacted */, "", /* username */
 	)
 	return int64(id), err
 }
@@ -52,3 +53,11 @@ func (r *Registry) TestingExpireRequest(requestID int64) {
 
 // PollingInterval is exposed to override in tests.
 var PollingInterval = pollingInterval
+
+// MakeRequest creates a Request for testing purposes.
+func MakeRequest(minExecutionLatency time.Duration, maxExecutionLatency time.Duration) Request {
+	return Request{
+		minExecutionLatency: minExecutionLatency,
+		maxExecutionLatency: maxExecutionLatency,
+	}
+}
