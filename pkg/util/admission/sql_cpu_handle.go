@@ -387,7 +387,7 @@ func (p *sqlCPUProviderImpl) GetCumulativeSQLCPUNanos() (gatewayCPUNanos, distCP
 
 func (p *sqlCPUProviderImpl) GetHandle(workInfo SQLWorkInfo) *SQLCPUHandle {
 	var wq *WorkQueue
-	if p.sv != nil && p.getWorkQueue != nil && cpuTimeTokenACIsEnabled(p.sv) {
+	if p.sv != nil && p.getWorkQueue != nil && sqlCPUTimeTokenACIsEnabled(p.sv) {
 		wq = p.getWorkQueue(workInfo.TenantID)
 	}
 	return newSQLCPUAdmissionHandle(workInfo, p, wq)

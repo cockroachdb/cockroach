@@ -26,6 +26,14 @@ var cpuTimeTokenACEnabled = settings.RegisterBoolSetting(
 		"note that this is not supported in production except on multi-tenant Serverless clusters",
 	false)
 
+var sqlCPUTimeTokenACEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"admission.sql_cpu_time_tokens.enabled",
+	"if true, SQL work will be admitted through the CPU time token WorkQueue via "+
+		"periodic MeasureAndAdmit calls, sharing the same CPU budget as KV work -- "+
+		"requires admission.cpu_time_tokens.enabled to also be true",
+	false)
+
 // cpuTimeTokenACKillSwitch is an env var kill switch that disables CPU time
 // token AC regardless of the cluster setting. This is useful when SQL is
 // unavailable, preventing the cluster setting from being changed.
@@ -37,6 +45,13 @@ var cpuTimeTokenACKillSwitch = envutil.EnvOrDefaultBool(
 // takes precedence over the cluster setting.
 func cpuTimeTokenACIsEnabled(sv *settings.Values) bool {
 	return !cpuTimeTokenACKillSwitch && cpuTimeTokenACEnabled.Get(sv)
+}
+
+// sqlCPUTimeTokenACIsEnabled returns true if SQL CPU time token AC is
+// enabled. Both the SQL-specific setting and the base CTT setting must
+// be true.
+func sqlCPUTimeTokenACIsEnabled(sv *settings.Values) bool {
+	return cpuTimeTokenACIsEnabled(sv) && sqlCPUTimeTokenACEnabled.Get(sv)
 }
 
 // CPUGrantCoordinators's main purpose is to act as a shim. Depending on
