@@ -185,7 +185,7 @@ func (h *SQLCPUHandle) returnUnusedReservation() {
 	}
 	remaining := h.reservation.Load()
 	if remaining > 0 {
-		h.workQueue.granter.returnGrant(remaining)
+		h.workQueue.ReturnTokens(h.workInfo.TenantID, remaining)
 		h.reservation.Store(0)
 	}
 }

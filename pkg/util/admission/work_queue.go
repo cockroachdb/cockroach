@@ -1254,6 +1254,15 @@ func (q *WorkQueue) adjustTenantUsedLocked(tenant *tenantInfo, delta int64) {
 	}
 }
 
+// ReturnTokens returns unused CPU time tokens to the granter and corrects
+// tenant.used to reflect that these tokens were never actually consumed.
+// Used by SQL CTT admission to return unused reservation tokens when a
+// statement closes.
+func (q *WorkQueue) ReturnTokens(tenantID roachpb.TenantID, count int64) {
+	q.granter.returnGrant(count)
+	q.adjustTenantUsed(tenantID, -count)
+}
+
 // refillBurstBuckets adds tokens to all tenant burst buckets and updates
 // their capacity. This is called by cpuTimeTokenAllocator periodically (every
 // 1ms). If a tenant's burst qualification changes as a result of the refill,
