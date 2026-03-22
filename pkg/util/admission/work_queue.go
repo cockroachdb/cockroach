@@ -677,6 +677,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	// the memory overhead of enqueueing each raft command to see whether we
 	// need to do some coalescing at this level.
 
+	// callerSetRequestedCount tracks whether the caller explicitly set
+	// RequestedCount. SQL callers set this to their measured CPU consumption
+	// to bypass the per-tenant estimator. KV callers leave it at 0.
+	callerSetRequestedCount := info.RequestedCount > 0
 	if info.RequestedCount == 0 {
 		// We treat unset RequestCounts as an implicit request of 1.
 		info.RequestedCount = 1
@@ -711,7 +715,12 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	// a measurement of CPU time used servicing the request, courtesy of grunning.
 	// tenant.estimator uses past measurements from grunning to make estimates
 	// in this code path, that is, at admission time.
-	if q.mode == usesCPUTimeTokens && !q.knobs.DisableCPUTimeTokenEstimation {
+	// If mode == usesCPUTimeTokens and the caller has not already set
+	// RequestedCount, use the per-tenant estimator to predict CPU time.
+	// SQL callers set RequestedCount based on measured CPU consumption and
+	// skip the estimator entirely.
+	if q.mode == usesCPUTimeTokens && !q.knobs.DisableCPUTimeTokenEstimation &&
+		!callerSetRequestedCount {
 		info.RequestedCount = tenant.cpuTimeTokenEstimator.estimateTokensToBeUsed()
 	}
 	admitResponse := AdmitResponse{
@@ -1199,6 +1208,19 @@ func (q *WorkQueue) gcTenantsResetUsedAndUpdateEstimators() {
 			// All the heap members will reset used=0, so no need to change heap
 			// ordering.
 		}
+	}
+}
+
+// AdmittedSQLWorkDone adjusts token accounting when a SQL statement closes.
+// remaining is the leftover reservation: positive means unused tokens to
+// return, negative means a deficit (consumed more than granted, e.g. when
+// the noWait BypassAdmission Admit call failed).
+func (q *WorkQueue) AdmittedSQLWorkDone(tenantID roachpb.TenantID, remaining int64) {
+	q.adjustTenantUsed(tenantID, -remaining)
+	if remaining < 0 {
+		q.granter.tookWithoutPermission(-remaining)
+	} else if remaining > 0 {
+		q.granter.returnGrant(remaining)
 	}
 }
 

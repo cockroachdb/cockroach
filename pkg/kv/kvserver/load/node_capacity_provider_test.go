@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -41,7 +43,8 @@ func TestNodeCapacityProvider(t *testing.T) {
 		storeCount: 3,
 	}
 
-	provider := load.NewNodeCapacityProvider(stopper, mockStores, admission.NewSQLCPUProvider(), load.NodeCapacityProviderConfig{
+	st := cluster.MakeTestingClusterSettings()
+	provider := load.NewNodeCapacityProvider(stopper, mockStores, admission.NewSQLCPUProvider(&st.SV, func(roachpb.TenantID) *admission.WorkQueue { return nil }), load.NodeCapacityProviderConfig{
 		CPUUsageRefreshInterval:    1 * time.Millisecond,
 		CPUCapacityRefreshInterval: 1 * time.Millisecond,
 		CPUUsageMovingAverageAge:   20,

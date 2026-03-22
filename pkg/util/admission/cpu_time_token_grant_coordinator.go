@@ -25,17 +25,7 @@ var cpuTimeTokenACEnabled = settings.RegisterBoolSetting(
 	"admission.cpu_time_tokens.enabled",
 	"if true, CPU time token AC will be used for foreground KVWork, instead of slots-based AC -- "+
 		"note that this is not supported in production except on multi-tenant Serverless clusters",
-	false,
-	settings.WithValidateBool(func(sv *settings.Values, val bool) error {
-		if !val && sqlCPUTimeTokenACEnabled.Get(sv) {
-			return errors.New(
-				"admission.cpu_time_tokens.enabled cannot be disabled while " +
-					"admission.sql_cpu_time_tokens.enabled is true; " +
-					"disable admission.sql_cpu_time_tokens.enabled first",
-			)
-		}
-		return nil
-	}))
+	false)
 
 var sqlCPUTimeTokenACEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
@@ -85,6 +75,13 @@ type CPUGrantCoordinators struct {
 	cpuTimeCoord *cpuTimeTokenGrantCoordinator
 }
 
+func (coord *CPUGrantCoordinators) GetCPUWorkQueue(isSystemTenant bool) *WorkQueue {
+	if isSystemTenant {
+		return coord.cpuTimeCoord.getWorkQueue(systemTenant)
+	}
+	return coord.cpuTimeCoord.getWorkQueue(appTenant)
+}
+
 // GetKVWorkQueue returns a WorkQueue to use for KVWork. If
 // admission.cpu_time_tokens.enabled is true, it returns a WorkQueue that
 // implements CPU time token AC. Else it returns a WorkQueue that does
@@ -97,10 +94,7 @@ func (coord *CPUGrantCoordinators) GetKVWorkQueue(isSystemTenant bool) *WorkQueu
 	if !cpuTimeTokenACIsEnabled(&coord.st.SV) {
 		return coord.slotsCoord.GetWorkQueue(KVWork)
 	}
-	if isSystemTenant {
-		return coord.cpuTimeCoord.getWorkQueue(systemTenant)
-	}
-	return coord.cpuTimeCoord.getWorkQueue(appTenant)
+	return coord.GetCPUWorkQueue(isSystemTenant)
 }
 
 // GetSQLWorkQueue returns a WorkQueue for SQLKVResponseWork or

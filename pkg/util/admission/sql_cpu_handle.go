@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
@@ -81,6 +82,21 @@ type SQLCPUHandle struct {
 	workInfo SQLWorkInfo
 	p        *sqlCPUProviderImpl
 
+	// workQueue is the CTT WorkQueue used to acquire CPU tokens. Nil when
+	// CTT admission is disabled.
+	workQueue *WorkQueue
+
+	// refillMu serializes refill attempts. When multiple goroutines
+	// deplete the reservation simultaneously, only one calls Admit while
+	// others wait, then recheck the reservation.
+	refillMu struct {
+		syncutil.Mutex
+		// reservation holds the remaining CPU time tokens (in nanoseconds)
+		// available locally. When this goes negative, a refill from the
+		// WorkQueue is needed. Accessed atomically by multiple goroutines.
+		reservation int64
+	}
+
 	mu struct {
 		syncutil.Mutex
 		closed   bool
@@ -91,10 +107,13 @@ type SQLCPUHandle struct {
 	}
 }
 
-func newSQLCPUAdmissionHandle(workInfo SQLWorkInfo, p *sqlCPUProviderImpl) *SQLCPUHandle {
+func newSQLCPUAdmissionHandle(
+	workInfo SQLWorkInfo, p *sqlCPUProviderImpl, workQueue *WorkQueue,
+) *SQLCPUHandle {
 	h := &SQLCPUHandle{
-		workInfo: workInfo,
-		p:        p,
+		workInfo:  workInfo,
+		p:         p,
+		workQueue: workQueue,
 	}
 	h.mu.gHandles = h.mu.handlesBacking[:0]
 	return h
@@ -108,6 +127,53 @@ func (h *SQLCPUHandle) reportCPU(diff time.Duration) {
 	} else {
 		h.p.cumulativeDistSQLCPUNanos.Add(diff.Nanoseconds())
 	}
+}
+
+func (h *SQLCPUHandle) refillHeuristic(consumed int64) int64 {
+	return consumed
+}
+
+// consumed deducts measured CPU time from the local reservation. If the
+// reservation is depleted, it refills by calling WorkQueue.Admit. When
+// noWait is true (called from GoroutineCPUHandle.Close), Admit is called
+// with BypassAdmission so the consumption is properly accounted in
+// tenant.used and the granter without blocking.
+func (h *SQLCPUHandle) consumed(ctx context.Context, diff time.Duration, noWait bool) error {
+	if h.workQueue == nil {
+		return nil
+	}
+
+	h.refillMu.Lock()
+	defer h.refillMu.Unlock()
+
+	// Deduct consumed CPU from the shared reservation.
+	h.refillMu.reservation -= diff.Nanoseconds()
+	if h.refillMu.reservation >= 0 {
+		return nil
+	}
+
+	// Reservation depleted — need tokens from WorkQueue.
+	var toRequest int64
+	if noWait {
+		// Closing: just cover the deficit, don't wait.
+		toRequest = -h.refillMu.reservation
+	} else {
+		// Normal: request consumed + heuristic for amortization.
+		consumed := diff.Nanoseconds()
+		toRequest = consumed + h.refillHeuristic(consumed)
+	}
+	_, err := h.workQueue.Admit(ctx, WorkInfo{
+		TenantID:        h.workInfo.TenantID,
+		Priority:        h.workInfo.Priority,
+		CreateTime:      h.workInfo.CreateTime,
+		RequestedCount:  toRequest,
+		BypassAdmission: noWait,
+	})
+	if err != nil {
+		return err
+	}
+	h.refillMu.reservation += toRequest
+	return nil
 }
 
 // TODO(sumeer): see the comment
@@ -158,10 +224,22 @@ func (h *SQLCPUHandle) RegisterGoroutine() *GoroutineCPUHandle {
 	return gh
 }
 
+func (h *SQLCPUHandle) returnUnusedReservation() {
+	if h.workQueue == nil {
+		return
+	}
+	h.refillMu.Lock()
+	defer h.refillMu.Unlock()
+	remaining := h.refillMu.reservation
+	h.workQueue.AdmittedSQLWorkDone(h.workInfo.TenantID, remaining)
+	h.refillMu.reservation = 0
+}
+
 // Close is called when no more reporting is needed. It pools
 // GoroutineCPUHandles that have been closed. GoroutineCPUHandles that are not
 // yet closed are left for GC.
 func (h *SQLCPUHandle) Close() {
+	h.returnUnusedReservation()
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.mu.closed = true
@@ -257,7 +335,7 @@ func (h *GoroutineCPUHandle) measureAndAdmit(ctx context.Context, noWait bool) e
 	// needs to reach in and grab whatever CPU has not yet been reported.
 	h.cpuAccounted += diff
 	h.h.reportCPU(diff)
-	return nil
+	return h.h.consumed(ctx, diff, noWait)
 }
 
 // PauseMeasuring is used to pause the CPU accounting for this goroutine. It
@@ -290,6 +368,13 @@ type sqlCPUProviderImpl struct {
 	// increasing and is updated atomically as CPU time is reported via
 	// SQLCPUHandle.reportCPU.
 	cumulativeDistSQLCPUNanos atomic.Int64
+	// sv is the settings values used to check if CTT AC is enabled.
+	sv *settings.Values
+	// getWorkQueue returns the CTT WorkQueue for the given tenant. This
+	// allows SQL to share the KV CTT WorkQueue, using the appropriate
+	// tier (system vs app) based on tenant ID. Nil when CTT is not
+	// available (e.g. in test configurations).
+	getWorkQueue func(roachpb.TenantID) *WorkQueue
 }
 
 func (p *sqlCPUProviderImpl) GetCumulativeSQLCPUNanos() (gatewayCPUNanos, distCPUNanos int64) {
@@ -297,13 +382,23 @@ func (p *sqlCPUProviderImpl) GetCumulativeSQLCPUNanos() (gatewayCPUNanos, distCP
 }
 
 func (p *sqlCPUProviderImpl) GetHandle(workInfo SQLWorkInfo) *SQLCPUHandle {
-	// TODO(sumeer): implement.
-	return newSQLCPUAdmissionHandle(workInfo, p)
+	var wq *WorkQueue
+	if sqlCPUTimeTokenACIsEnabled(p.sv) {
+		wq = p.getWorkQueue(workInfo.TenantID)
+	}
+	return newSQLCPUAdmissionHandle(workInfo, p, wq)
 }
 
-// NewSQLCPUProvider creates a new SQLCPUProvider.
-//
-// TODO(sumeer): real implementation.
-func NewSQLCPUProvider() SQLCPUProvider {
-	return &sqlCPUProviderImpl{}
+// NewSQLCPUProvider creates a new SQLCPUProvider. The sv parameter provides
+// access to cluster settings for checking if CTT AC is enabled. The
+// getWorkQueue function returns the CTT WorkQueue for a given tenant,
+// allowing SQL to share the KV CTT WorkQueue. Both may be nil in test
+// configurations where CTT is not available.
+func NewSQLCPUProvider(
+	sv *settings.Values, getWorkQueue func(roachpb.TenantID) *WorkQueue,
+) SQLCPUProvider {
+	return &sqlCPUProviderImpl{
+		sv:           sv,
+		getWorkQueue: getWorkQueue,
+	}
 }
