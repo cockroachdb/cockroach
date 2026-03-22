@@ -167,7 +167,8 @@ func TestWriterRandom(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	rng, _ := randutil.NewTestRand()
-	stmt := ldrrandgen.GenerateLDRTable(ctx, rng, "test_writer", sqlclustersettings.LDRWriterTypeLegacyKV)
+	writerType := sqlclustersettings.LDRWriterType(sqlclustersettings.LDRImmediateModeWriter.Default())
+	stmt := ldrrandgen.GenerateLDRTable(ctx, rng, "test_writer", writerType)
 	createStmt := tree.AsStringWithFlags(stmt, tree.FmtParsable)
 
 	runWriterTest(t, ctx, db, "test_writer", createStmt)
