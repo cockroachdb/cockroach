@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
 var cpuTimeTokenACEnabled = settings.RegisterBoolSetting(
@@ -24,7 +25,34 @@ var cpuTimeTokenACEnabled = settings.RegisterBoolSetting(
 	"admission.cpu_time_tokens.enabled",
 	"if true, CPU time token AC will be used for foreground KVWork, instead of slots-based AC -- "+
 		"note that this is not supported in production except on multi-tenant Serverless clusters",
-	false)
+	false,
+	settings.WithValidateBool(func(sv *settings.Values, val bool) error {
+		if !val && sqlCPUTimeTokenACEnabled.Get(sv) {
+			return errors.New(
+				"admission.cpu_time_tokens.enabled cannot be disabled while " +
+					"admission.sql_cpu_time_tokens.enabled is true; " +
+					"disable admission.sql_cpu_time_tokens.enabled first",
+			)
+		}
+		return nil
+	}))
+
+var sqlCPUTimeTokenACEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"admission.sql_cpu_time_tokens.enabled",
+	"if true, SQL work will be admitted through the CPU time token WorkQueue via "+
+		"periodic MeasureAndAdmit calls, sharing the same CPU budget as KV work -- "+
+		"requires admission.cpu_time_tokens.enabled to also be true",
+	false,
+	settings.WithValidateBool(func(sv *settings.Values, val bool) error {
+		if val && !cpuTimeTokenACIsEnabled(sv) {
+			return errors.New(
+				"admission.sql_cpu_time_tokens.enabled requires " +
+					"admission.cpu_time_tokens.enabled to also be true",
+			)
+		}
+		return nil
+	}))
 
 // cpuTimeTokenACKillSwitch is an env var kill switch that disables CPU time
 // token AC regardless of the cluster setting. This is useful when SQL is
@@ -37,6 +65,13 @@ var cpuTimeTokenACKillSwitch = envutil.EnvOrDefaultBool(
 // takes precedence over the cluster setting.
 func cpuTimeTokenACIsEnabled(sv *settings.Values) bool {
 	return !cpuTimeTokenACKillSwitch && cpuTimeTokenACEnabled.Get(sv)
+}
+
+// sqlCPUTimeTokenACIsEnabled returns true if SQL CPU time token AC is
+// enabled. Both the SQL-specific setting and the base CTT setting must
+// be true.
+func sqlCPUTimeTokenACIsEnabled(sv *settings.Values) bool {
+	return cpuTimeTokenACIsEnabled(sv) && sqlCPUTimeTokenACEnabled.Get(sv)
 }
 
 // CPUGrantCoordinators's main purpose is to act as a shim. Depending on
