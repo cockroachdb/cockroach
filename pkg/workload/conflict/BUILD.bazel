@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/crosscluster/ldrrandgen",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlclustersettings",
         "//pkg/util/log",
         "//pkg/util/timeutil",
         "//pkg/workload",
@@ -40,6 +41,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlclustersettings",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
