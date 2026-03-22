@@ -637,7 +637,8 @@ var debugDecodeKeyCmd = &cobra.Command{
 	Long: `
 Decode encoded keys provided as command arguments and pretty-print them.
 Decode command could be used with either encoded engine keys that contain
-timestamp or user keys used in range descriptors, range keys etc.
+timestamp, lock table keys (engine keys with a lock version suffix), or user
+keys used in range descriptors, range keys etc.
 Key encoding type could be changed using encoding flag.
 For example:
 
@@ -663,11 +664,30 @@ For example:
 			if decodeKeyOptions.userKey {
 				fmt.Println(roachpb.Key(b))
 			} else {
-				k, err := storage.DecodeMVCCKey(b)
-				if err != nil {
+				if k, err := storage.DecodeMVCCKey(b); err == nil {
+					fmt.Println(k)
+				} else if ek, ok := storage.DecodeEngineKey(b); ok {
+					switch {
+					case ek.IsMVCCKey():
+						mvccKey, err := ek.ToMVCCKey()
+						if err != nil {
+							return errors.Wrap(err, "decode engine key as MVCC")
+						}
+						fmt.Println(mvccKey)
+					case ek.IsLockTableKey():
+						lk, err := ek.ToLockTableKey()
+						if err != nil {
+							return errors.Wrap(err, "decode lock table engine key")
+						}
+						fmt.Println(lk)
+					default:
+						s := print.SprintEngineKey(ek)
+						s = strings.TrimSuffix(s, ": ")
+						fmt.Println(s)
+					}
+				} else {
 					return err
 				}
-				fmt.Println(k)
 			}
 		}
 		return nil
