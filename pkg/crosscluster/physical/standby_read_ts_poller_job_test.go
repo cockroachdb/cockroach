@@ -123,9 +123,11 @@ func maybeOffsetReaderTenantSystemTables(
 	t *testing.T, c *replicationtestutils.TenantStreamingClusters,
 ) (int, func(sql *sqlutils.SQLRunner)) {
 	if c.Rng.Intn(2) == 0 {
-		return 0, func(sql *sqlutils.SQLRunner) {}
+		// Use the default offset of 1 billion.
+		return 1_000_000_000, func(sql *sqlutils.SQLRunner) {}
 	}
-	offset := 100000
+	// Override the offset to 0 to test the no-offset path.
+	offset := 0
 	c.DestSysSQL.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING physical_cluster_replication.reader_system_table_id_offset = %d`, offset))
 	// Set on source to ensure failback works well too.
 	c.SrcSysSQL.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING physical_cluster_replication.reader_system_table_id_offset = %d`, offset))
