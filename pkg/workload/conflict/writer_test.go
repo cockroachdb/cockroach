@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/ldrrandgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -71,7 +72,7 @@ func TestWriterRandom(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
 	rndSrc, _ := randutil.NewTestRand()
-	stmt := ldrrandgen.GenerateLDRTable(ctx, rndSrc, "test_writer", true)
+	stmt := ldrrandgen.GenerateLDRTable(ctx, rndSrc, "test_writer", sqlclustersettings.LDRWriterTypeLegacyKV)
 
 	sqlDB.Exec(t, tree.AsStringWithFlags(stmt, tree.FmtParsable))
 

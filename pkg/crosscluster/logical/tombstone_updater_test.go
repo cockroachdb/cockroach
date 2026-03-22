@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -137,7 +138,7 @@ func TestTombstoneUpdaterRandomTables(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	tableName := "rand_table"
 
-	stmt := tree.SerializeForDisplay(ldrrandgen.GenerateLDRTable(ctx, rng, tableName, true))
+	stmt := tree.SerializeForDisplay(ldrrandgen.GenerateLDRTable(ctx, rng, tableName, sqlclustersettings.LDRWriterTypeLegacyKV))
 	t.Logf("Creating table with schema: %s", stmt)
 	runner.Exec(t, stmt)
 
