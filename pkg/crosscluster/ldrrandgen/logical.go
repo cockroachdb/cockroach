@@ -99,9 +99,10 @@ func GenerateLDRTable(
 						return false
 					}
 					columnDef := columnByName(col.Column, columnDefs)
-					if columnDef != nil && columnDef.IsVirtual() {
-						// Virtual computed columns are not supported in indexes by the
-						// classic sql writer or the kv writer.
+					if columnDef != nil && columnDef.IsVirtual() &&
+						writerType != sqlclustersettings.LDRWriterTypeCRUD {
+						// Virtual computed columns in indexes are only supported by the
+						// crud writer.
 						return false
 					}
 				}
