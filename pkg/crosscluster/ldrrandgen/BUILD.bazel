@@ -9,6 +9,7 @@ go_library(
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlclustersettings",
         "//pkg/sql/types",
     ],
 )
@@ -27,6 +28,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqlclustersettings",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
