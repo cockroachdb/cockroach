@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -43,7 +44,7 @@ func TestGenerateLDRTable(t *testing.T) {
 	rndSrc, _ := randutil.NewTestRand()
 	rndSrc.Seed(time.Now().UnixNano())
 
-	stmt := GenerateLDRTable(ctx, rndSrc, "test_writer", true)
+	stmt := GenerateLDRTable(ctx, rndSrc, "test_writer", sqlclustersettings.LDRWriterTypeLegacyKV)
 	t.Logf("creating table: %s", stmt)
 	dbA.Exec(t, tree.AsStringWithFlags(stmt, tree.FmtParsable))
 
