@@ -58,6 +58,8 @@ func runUploadFromZipFile(ctx context.Context, zipPath string) error {
 		Timeout:   timeout,
 	})
 
+	defer func() { _ = client.Close() }()
+
 	fmt.Fprintf(stderr, "Uploading %s to %s...\n", zipPath, uploadServerCtx.serverURL)
 	start := timeutil.Now()
 
@@ -74,6 +76,13 @@ func runUploadFromZipFile(ctx context.Context, zipPath string) error {
 		return errors.Wrap(err, "creating upload session")
 	}
 	fmt.Fprintf(stderr, "  Session ID: %s\n", client.sessionID)
+
+	// Try to initialize the GCS client for chunked resumable uploads.
+	// If the upload server doesn't support the upload-token endpoint,
+	// we fall back to signed URLs.
+	if err := client.InitGCSClient(ctx); err != nil {
+		fmt.Fprintf(stderr, "  warning: GCS client init failed, using signed URLs: %v\n", err)
+	}
 
 	// Upload each zip entry as an artifact.
 	var (

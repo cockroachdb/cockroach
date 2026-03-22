@@ -12,11 +12,14 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 
+	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/api/option"
 )
 
 func TestUploadServerClientCreateSession(t *testing.T) {
@@ -445,4 +448,180 @@ func TestUploadServerClientHTTPError(t *testing.T) {
 	err := client.CreateSession(ctx, "c1", "test", 1, "v1", false, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "HTTP 500")
+}
+
+func TestGetUploadToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "POST", r.Method)
+		require.Equal(t, "/api/v1/sessions/ses_abc/upload-token", r.URL.Path)
+		require.Equal(t, "Bearer tok_xyz", r.Header.Get("Authorization"))
+
+		w.WriteHeader(http.StatusOK)
+		require.NoError(t, json.NewEncoder(w).Encode(uploadTokenResponse{
+			AccessToken: "gcs-access-token-123",
+			Bucket:      "debug-uploads",
+			Prefix:      "sessions/ses_abc/",
+			ExpiresAt:   "2026-02-21T23:59:59Z",
+		}))
+	}))
+	defer srv.Close()
+
+	client := newUploadServerClientWithToken(
+		uploadServerClientConfig{ServerURL: srv.URL},
+		"ses_abc", "tok_xyz",
+	)
+
+	ctx := context.Background()
+	resp, err := client.GetUploadToken(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "gcs-access-token-123", resp.AccessToken)
+	require.Equal(t, "debug-uploads", resp.Bucket)
+	require.Equal(t, "sessions/ses_abc/", resp.Prefix)
+	require.Equal(t, "2026-02-21T23:59:59Z", resp.ExpiresAt)
+}
+
+func TestGetUploadTokenNotFound(t *testing.T) {
+	// Upload server returns 404 — doesn't support the token endpoint.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("not found"))
+	}))
+	defer srv.Close()
+
+	client := newUploadServerClientWithToken(
+		uploadServerClientConfig{ServerURL: srv.URL},
+		"ses_abc", "tok_xyz",
+	)
+
+	ctx := context.Background()
+	_, err := client.GetUploadToken(ctx)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "HTTP 404")
+}
+
+func TestInitGCSClientFallback(t *testing.T) {
+	// Upload server returns 404 for upload-token — InitGCSClient
+	// should succeed (no error) but leave gcsClient nil.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/sessions/ses_abc/upload-token" {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte("not found"))
+			return
+		}
+		// Signed URL endpoint (should still work).
+		w.WriteHeader(http.StatusCreated)
+		require.NoError(t, json.NewEncoder(w).Encode(signedURLResponse{
+			SignedURL: "https://storage.googleapis.com/bucket/obj?sig=abc",
+			ExpiresAt: "2026-02-21T12:15:00Z",
+		}))
+	}))
+	defer srv.Close()
+
+	client := newUploadServerClientWithToken(
+		uploadServerClientConfig{ServerURL: srv.URL},
+		"ses_abc", "tok_xyz",
+	)
+	defer func() { _ = client.Close() }()
+
+	ctx := context.Background()
+	err := client.InitGCSClient(ctx)
+	require.NoError(t, err)
+	// gcsClient should remain nil — signed URL path will be used.
+	require.Nil(t, client.gcsClient)
+}
+
+func TestUploadArtifactStreamingGCSRouting(t *testing.T) {
+	// When gcsClient is non-nil, UploadArtifactStreaming should NOT
+	// call the signed URL endpoint. We verify this by checking that
+	// the upload server never receives a signed-url request.
+	var signedURLCalled atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "signed-url") {
+			signedURLCalled.Add(1)
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	client := newUploadServerClientWithToken(
+		uploadServerClientConfig{ServerURL: srv.URL},
+		"ses_abc", "tok_xyz",
+	)
+	// Set a non-nil gcsClient to trigger the GCS path. We use a real
+	// storage.Client that points to a non-existent endpoint — the
+	// upload will fail, but we're testing the routing, not the GCS
+	// upload itself.
+	ctx := context.Background()
+	gcsClient, err := storage.NewClient(ctx, option.WithoutAuthentication())
+	require.NoError(t, err)
+	defer func() { _ = gcsClient.Close() }()
+
+	client.gcsClient = gcsClient
+	client.gcsBucket = "test-bucket"
+	client.gcsPrefix = "sessions/ses_abc/"
+
+	// The upload will fail (no real GCS server) but should NOT
+	// have tried the signed URL path.
+	_ = client.UploadArtifactStreaming(
+		ctx, "nodes/1/cpu.pprof", 1, artifactTypeProfile,
+		"application/octet-stream", "",
+		func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader([]byte("test-data"))), nil
+		},
+	)
+	require.Equal(t, int32(0), signedURLCalled.Load(),
+		"signed URL endpoint should not be called when GCS client is available")
+}
+
+func TestUploadArtifactStreamingSignedURLFallback(t *testing.T) {
+	// When gcsClient is nil, UploadArtifactStreaming should use
+	// the signed URL path.
+	var receivedBody []byte
+	gcsSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "PUT", r.Method)
+		var err error
+		receivedBody, err = io.ReadAll(r.Body)
+		require.NoError(t, err)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer gcsSrv.Close()
+
+	var signedURLCalled atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		signedURLCalled.Add(1)
+		w.WriteHeader(http.StatusCreated)
+		require.NoError(t, json.NewEncoder(w).Encode(signedURLResponse{
+			SignedURL: gcsSrv.URL + "/bucket/obj?sig=abc",
+			ExpiresAt: "2026-02-21T12:15:00Z",
+		}))
+	}))
+	defer srv.Close()
+
+	client := newUploadServerClientWithToken(
+		uploadServerClientConfig{ServerURL: srv.URL},
+		"ses_abc", "tok_xyz",
+	)
+	// gcsClient is nil — should use signed URL path.
+
+	ctx := context.Background()
+	err := client.UploadArtifactStreaming(
+		ctx, "nodes/1/cpu.pprof", 1, artifactTypeProfile,
+		"application/octet-stream", "",
+		func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader([]byte("fallback-data"))), nil
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), signedURLCalled.Load())
+	require.Equal(t, []byte("fallback-data"), receivedBody)
+}
+
+func TestCloseNilGCSClient(t *testing.T) {
+	client := newUploadServerClientWithToken(
+		uploadServerClientConfig{ServerURL: "http://unused"},
+		"ses_abc", "tok_xyz",
+	)
+	// Close on a client with no GCS client should be a no-op.
+	err := client.Close()
+	require.NoError(t, err)
 }

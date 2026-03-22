@@ -89,7 +89,13 @@ func (s *systemStatusServer) UploadDebugData(
 	if err := client.createSession(ctx, clusterID, nodeCount, req.Redact, req.Labels); err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
+	defer func() { _ = client.closeGCS() }()
 	log.Ops.Infof(ctx, "upload session created: %s", client.sessionID)
+
+	// Try to initialize the GCS client for chunked resumable uploads.
+	if err := client.initGCSClient(ctx); err != nil {
+		log.Ops.Warningf(ctx, "GCS client init failed, using signed URLs: %v", err)
+	}
 
 	// Collect cluster-level data (coordinator only).
 	clusterArtifacts, clusterDataErrs := s.uploadClusterData(
@@ -229,6 +235,12 @@ func (s *systemStatusServer) UploadNodeDebugData(
 	client := newUploadServerClientForNodeRPC(
 		req.ServerUrl, req.SessionId, req.UploadToken, 5*time.Minute,
 	)
+	defer func() { _ = client.closeGCS() }()
+
+	// Try to initialize the GCS client for chunked resumable uploads.
+	if err := client.initGCSClient(ctx); err != nil {
+		log.Ops.Warningf(ctx, "GCS client init failed for node %d, using signed URLs: %v", nodeID, err)
+	}
 
 	var errs []string
 	var artifacts int32

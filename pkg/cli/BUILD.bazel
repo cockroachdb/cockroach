@@ -301,10 +301,12 @@ go_library(
         "@in_gopkg_yaml_v2//:yaml_v2",
         "@in_yaml_go_yaml_v4//:yaml",
         "@io_storj_drpc//:drpc",
+        "@org_golang_google_api//googleapi",
         "@org_golang_google_api//option",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//status",
+        "@org_golang_x_oauth2//:oauth2",
         "@org_golang_x_oauth2//google",
         "@org_golang_x_sync//errgroup",
     ] + select({
@@ -509,6 +511,8 @@ go_test(
         "@com_github_spf13_pflag//:pflag",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//option",
     ],
 )
 

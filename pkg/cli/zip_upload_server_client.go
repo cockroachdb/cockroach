@@ -11,12 +11,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
+	"cloud.google.com/go/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/oauth2"
+	"google.golang.org/api/googleapi"
+	"google.golang.org/api/option"
 )
 
 // artifactType identifies the kind of artifact being uploaded to the
@@ -43,6 +49,14 @@ type uploadServerClientConfig struct {
 	Timeout     time.Duration
 }
 
+// uploadTokenResponse is the JSON response from POST .../upload-token.
+type uploadTokenResponse struct {
+	AccessToken string `json:"access_token"`
+	Bucket      string `json:"bucket"`
+	Prefix      string `json:"prefix"`
+	ExpiresAt   string `json:"expires_at"`
+}
+
 // uploadServerClient speaks the upload server REST protocol. It
 // manages sessions and uploads artifacts.
 type uploadServerClient struct {
@@ -51,6 +65,14 @@ type uploadServerClient struct {
 	apiKey      string
 	sessionID   string // set after CreateSession
 	uploadToken string // set after CreateSession
+
+	// gcsClient is non-nil when the upload server supports the
+	// upload-token endpoint. When set, uploads use the GCS client
+	// library (chunked resumable uploads with automatic retry)
+	// instead of raw signed URL PUTs.
+	gcsClient *storage.Client
+	gcsBucket string
+	gcsPrefix string
 }
 
 // createSessionRequest is the JSON body for POST /api/v1/sessions.
@@ -261,11 +283,15 @@ func (c *uploadServerClient) UploadToSignedURL(
 	return nil
 }
 
-// UploadArtifactStreaming uploads an artifact using GCS signed URLs
-// without buffering the entire body in memory. The newBody callback
-// is called to obtain a fresh io.ReadCloser for each upload attempt
-// (initial + retry on expired URL). The returned ReadCloser is closed
-// after each attempt to clean up resources (e.g. pipe goroutines).
+// UploadArtifactStreaming uploads an artifact to GCS. When a GCS
+// client is available (via InitGCSClient), it uses the GCS client
+// library which provides chunked resumable uploads with automatic
+// retry. Otherwise, it falls back to signed URL PUTs with a single
+// retry on expired URL.
+//
+// The newBody callback is called to obtain a fresh io.ReadCloser.
+// When using the GCS client, the factory is only called once since
+// the GCS client handles retries internally at the chunk level.
 func (c *uploadServerClient) UploadArtifactStreaming(
 	ctx context.Context,
 	artifactPath string,
@@ -275,6 +301,16 @@ func (c *uploadServerClient) UploadArtifactStreaming(
 	idempotencyKey string,
 	newBody func() (io.ReadCloser, error),
 ) error {
+	if c.gcsClient != nil {
+		body, err := newBody()
+		if err != nil {
+			return errors.Wrap(err, "creating body reader")
+		}
+		defer body.Close()
+		return c.UploadArtifactGCS(ctx, artifactPath, contentType, body)
+	}
+
+	// Signed URL fallback path.
 	signedResp, err := c.GetSignedURL(ctx, artifactPath, nodeID, artType, contentType, idempotencyKey)
 	if err != nil {
 		return errors.Wrap(err, "getting signed URL")
@@ -324,6 +360,132 @@ func (c *uploadServerClient) UploadArtifact(
 			return io.NopCloser(bytes.NewReader(data)), nil
 		},
 	)
+}
+
+// GetUploadToken requests a GCS upload token from the upload server.
+// The token can be used with the GCS client library for chunked
+// resumable uploads.
+func (c *uploadServerClient) GetUploadToken(ctx context.Context) (*uploadTokenResponse, error) {
+	url := fmt.Sprintf(
+		"%s/api/v1/sessions/%s/upload-token",
+		c.serverURL, c.sessionID,
+	)
+	req, err := http.NewRequestWithContext(ctx, "POST", url, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating upload token request")
+	}
+	req.Header.Set("Authorization", "Bearer "+c.uploadToken)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "requesting upload token")
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, readHTTPError(resp)
+	}
+
+	var result uploadTokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, errors.Wrap(err, "decoding upload token response")
+	}
+	return &result, nil
+}
+
+// InitGCSClient requests an upload token and creates a GCS client.
+// Call this once per session. If the upload server doesn't support
+// the upload-token endpoint (HTTP 404), the client falls back to
+// signed URLs and gcsClient remains nil.
+func (c *uploadServerClient) InitGCSClient(ctx context.Context) error {
+	tokenResp, err := c.GetUploadToken(ctx)
+	if err != nil {
+		if strings.Contains(err.Error(), "HTTP 404") {
+			// Server doesn't support tokens — fall back to signed URLs.
+			return nil
+		}
+		return errors.Wrap(err, "getting upload token")
+	}
+	token := &oauth2.Token{AccessToken: tokenResp.AccessToken}
+	client, err := storage.NewClient(ctx,
+		option.WithTokenSource(oauth2.StaticTokenSource(token)),
+	)
+	if err != nil {
+		return errors.Wrap(err, "creating GCS client")
+	}
+	c.gcsClient = client
+	c.gcsBucket = tokenResp.Bucket
+	c.gcsPrefix = tokenResp.Prefix
+	return nil
+}
+
+// UploadArtifactGCS uploads an artifact using the GCS client library
+// with a bearer token. This provides chunked resumable uploads with
+// automatic retry, unlike the raw signed URL PUT.
+func (c *uploadServerClient) UploadArtifactGCS(
+	ctx context.Context, artifactPath string, contentType string, body io.Reader,
+) error {
+	objectPath := c.gcsPrefix + artifactPath
+	obj := c.gcsClient.Bucket(c.gcsBucket).Object(objectPath)
+	w := obj.Retryer(
+		storage.WithPolicy(storage.RetryAlways),
+		storage.WithErrorFunc(shouldRetryGCS),
+	).NewWriter(ctx)
+	w.ContentType = contentType
+	w.ChunkSize = 8 << 20 // 8MB chunks
+	w.ChunkRetryDeadline = 60 * time.Second
+
+	if _, err := io.Copy(w, body); err != nil {
+		_ = w.Close()
+		return errors.Wrapf(err, "writing artifact %s", artifactPath)
+	}
+	if err := w.Close(); err != nil {
+		return errors.Wrapf(err, "finalizing artifact %s", artifactPath)
+	}
+	return nil
+}
+
+// Close releases resources held by the client. It closes the GCS
+// client if one was initialized.
+func (c *uploadServerClient) Close() error {
+	if c.gcsClient != nil {
+		return c.gcsClient.Close()
+	}
+	return nil
+}
+
+// shouldRetryGCS determines whether a GCS client error should be
+// retried. This handles transient errors like network timeouts,
+// HTTP 408/429/5xx, and connection resets.
+func shouldRetryGCS(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+
+	if opErr := (*net.OpError)(nil); errors.As(err, &opErr) {
+		if strings.Contains(opErr.Error(), "use of closed network connection") {
+			return true
+		}
+	}
+	if apiErr := (*googleapi.Error)(nil); errors.As(err, &apiErr) {
+		// Retry on 408, 429, and 5xx per GCS documentation.
+		return apiErr.Code == 408 || apiErr.Code == 429 || (apiErr.Code >= 500 && apiErr.Code < 600)
+	}
+	if urlErr := (*url.Error)(nil); errors.As(err, &urlErr) {
+		retriable := []string{"connection refused", "connection reset"}
+		for _, s := range retriable {
+			if strings.Contains(urlErr.Error(), s) {
+				return true
+			}
+		}
+	}
+	if wrapped := (errors.Wrapper)(nil); errors.As(err, &wrapped) {
+		return shouldRetryGCS(wrapped.Unwrap())
+	}
+	return false
 }
 
 // isSignedURLExpiredError returns true if the error indicates a GCS
