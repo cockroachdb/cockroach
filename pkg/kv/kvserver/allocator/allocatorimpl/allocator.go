@@ -2752,7 +2752,7 @@ const (
 	DontTransferLeaseNoValidTargets
 	// DontTransferLeaseNoStoreDescriptor indicates the lease should not be
 	// transferred because the current leaseholder's store descriptor cannot be
-	// found. This can occur on startup, before gossip has propogated the local
+	// found. This can occur on startup, before gossip has propagated the local
 	// descriptor.
 	DontTransferLeaseNoStoreDescriptor
 	// TransferLeaseForCountBalance indicates the lease should be transferred to

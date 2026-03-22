@@ -104,7 +104,7 @@ func SetupOrAdvanceStandbyReaderCatalog(
 				} else {
 					// Its possible that multiple descriptor versions could have gone by on
 					// the from cluster, which could mean fairly large schema changes have
-					// occured. This should be fine, because the leasing subsystem will look
+					// occurred. This should be fine, because the leasing subsystem will look
 					// at the modification time of a descriptor to determine which version should
 					// be picked up by a txn. Since, we are publishing all descriptors in a single txn,
 					// this would ensure that we don't end up using a mix of "new" descriptors in old txns,
