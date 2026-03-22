@@ -44,7 +44,9 @@ func TestGenerateLDRTable(t *testing.T) {
 	rndSrc, _ := randutil.NewTestRand()
 	rndSrc.Seed(time.Now().UnixNano())
 
-	stmt := GenerateLDRTable(ctx, rndSrc, "test_writer", sqlclustersettings.LDRWriterTypeLegacyKV)
+	writerType := sqlclustersettings.LDRWriterType(sqlclustersettings.LDRImmediateModeWriter.Default())
+	t.Logf("using writer type: %s", writerType)
+	stmt := GenerateLDRTable(ctx, rndSrc, "test_writer", writerType)
 	t.Logf("creating table: %s", stmt)
 	dbA.Exec(t, tree.AsStringWithFlags(stmt, tree.FmtParsable))
 
