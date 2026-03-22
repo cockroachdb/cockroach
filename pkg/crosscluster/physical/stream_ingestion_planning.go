@@ -40,7 +40,7 @@ var readerTenantSystemTableIDOffset = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"physical_cluster_replication.reader_system_table_id_offset",
 	"the offset added to dynamically allocated system table IDs in the reader tenant",
-	0,
+	1_000_000_000,
 	// Max offset is 1000 less than MaxUint32 to leave room 1000 dynamically
 	// allocated system table ids. Hope that never happens.
 	settings.NonNegativeIntWithMaximum(math.MaxUint32-1000),
