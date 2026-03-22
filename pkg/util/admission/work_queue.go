@@ -716,7 +716,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	// tenant.estimator uses past measurements from grunning to make estimates
 	// in this code path, that is, at admission time.
 	// If mode == usesCPUTimeTokens and the caller is not a SQL CPU caller,
-	// use the per-tenant estimator to predict CPU time. SQL callers set
+	// use the per-tenant to predict CPU time. SQL callers set
 	// RequestedCount based on measured CPU consumption and skip the estimator.
 	if q.mode == usesCPUTimeTokens && !q.knobs.DisableCPUTimeTokenEstimation &&
 		!info.IsSQLCPU {

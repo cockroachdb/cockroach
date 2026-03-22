@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/petermattis/goid"
 )
 
@@ -95,6 +96,14 @@ type SQLCPUHandle struct {
 		// available locally. When this goes negative, a refill from the
 		// WorkQueue is needed. Accessed atomically by multiple goroutines.
 		reservation int64
+		// lastRefillTime is the wall-clock time of the last normal refill.
+		// Used by refillHeuristic to determine if the buffer lasted long
+		// enough.
+		lastRefillTime time.Time
+		// lastHeuristic is the heuristic value from the last refill. Grows
+		// exponentially (×2) when refills happen within
+		// refillBackoffThreshold, and decays (÷2) when they last longer.
+		lastHeuristic int64
 	}
 
 	mu struct {
@@ -129,8 +138,59 @@ func (h *SQLCPUHandle) reportCPU(diff time.Duration) {
 	}
 }
 
+const (
+	// refillGrowThreshold is the wall-clock duration below which we consider
+	// refills too frequent and double the heuristic. Below this threshold,
+	// contention on the WorkQueue mutex is the primary concern.
+	refillGrowThreshold = time.Millisecond
+	// refillDecayThreshold is the wall-clock duration above which we
+	// consider the heuristic too large and halve it. Above this threshold,
+	// overcounting in tenant.used is the primary concern. Between
+	// refillGrowThreshold and refillDecayThreshold is the acceptable
+	// deadband where the heuristic is stable.
+	refillDecayThreshold = 5 * time.Millisecond
+	// maxRefillHeuristic caps the heuristic to bound overcounting.
+	// 10ms of CPU tokens per handle.
+	maxRefillHeuristic = int64(10 * time.Millisecond)
+)
+
+// refillHeuristic returns the number of extra tokens to request beyond
+// covering the current checkpoint's consumption. It uses exponential
+// backoff based on wall time between refills:
+//
+//   - elapsed < 1ms: heuristic doubles (refills too frequent, reduce
+//     WorkQueue contention)
+//   - 1ms <= elapsed <= 5ms: heuristic unchanged (acceptable range)
+//   - elapsed > 5ms: heuristic halves (over-requested, reduce
+//     overcounting in tenant.used)
+//
+// This deadband eliminates steady-state oscillation: the heuristic
+// grows until it reaches the acceptable range, then stabilizes. It
+// only decays when the workload genuinely becomes lighter.
+//
+// Must be called under refillMu.
 func (h *SQLCPUHandle) refillHeuristic(consumed int64) int64 {
-	return consumed
+	now := timeutil.Now()
+	if h.refillMu.lastRefillTime.IsZero() {
+		// Bootstrap: start with consumed (same as current 2x behavior).
+		h.refillMu.lastHeuristic = consumed
+	} else {
+		elapsed := now.Sub(h.refillMu.lastRefillTime)
+		if elapsed < refillGrowThreshold {
+			// Came back too soon — double to reduce call frequency.
+			h.refillMu.lastHeuristic = min(
+				h.refillMu.lastHeuristic*2, maxRefillHeuristic,
+			)
+		} else if elapsed > refillDecayThreshold {
+			// Buffer lasted too long — halve to reduce overcounting.
+			h.refillMu.lastHeuristic = max(
+				consumed, h.refillMu.lastHeuristic/2,
+			)
+		}
+		// else: in [1ms, 5ms] deadband — no change.
+	}
+	h.refillMu.lastRefillTime = now
+	return h.refillMu.lastHeuristic
 }
 
 // consumed deducts measured CPU time from the local reservation. If the
