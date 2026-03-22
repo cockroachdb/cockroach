@@ -168,6 +168,7 @@ func (h *SQLCPUHandle) consumed(ctx context.Context, diff time.Duration, noWait 
 		CreateTime:      h.workInfo.CreateTime,
 		RequestedCount:  toRequest,
 		BypassAdmission: noWait,
+		IsSQLCPU:        true,
 	})
 	if err != nil {
 		return err

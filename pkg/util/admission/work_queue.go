@@ -201,6 +201,10 @@ type WorkInfo struct {
 	// WorkloadType distinguishes the kind of workload that WorkloadID
 	// represents. Used for ASH sampling.
 	WorkloadType workloadid.WorkloadType
+	// IsSQLCPU indicates this is a SQL CPU admission request. SQL callers set
+	// RequestedCount based on measured CPU consumption and bypass the
+	// per-tenant CPU time token estimator entirely.
+	IsSQLCPU bool
 }
 
 // ReplicatedWorkInfo groups everything needed to admit replicated writes, done
@@ -677,10 +681,6 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	// the memory overhead of enqueueing each raft command to see whether we
 	// need to do some coalescing at this level.
 
-	// callerSetRequestedCount tracks whether the caller explicitly set
-	// RequestedCount. SQL callers set this to their measured CPU consumption
-	// to bypass the per-tenant estimator. KV callers leave it at 0.
-	callerSetRequestedCount := info.RequestedCount > 0
 	if info.RequestedCount == 0 {
 		// We treat unset RequestCounts as an implicit request of 1.
 		info.RequestedCount = 1
@@ -715,12 +715,11 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	// a measurement of CPU time used servicing the request, courtesy of grunning.
 	// tenant.estimator uses past measurements from grunning to make estimates
 	// in this code path, that is, at admission time.
-	// If mode == usesCPUTimeTokens and the caller has not already set
-	// RequestedCount, use the per-tenant estimator to predict CPU time.
-	// SQL callers set RequestedCount based on measured CPU consumption and
-	// skip the estimator entirely.
+	// If mode == usesCPUTimeTokens and the caller is not a SQL CPU caller,
+	// use the per-tenant estimator to predict CPU time. SQL callers set
+	// RequestedCount based on measured CPU consumption and skip the estimator.
 	if q.mode == usesCPUTimeTokens && !q.knobs.DisableCPUTimeTokenEstimation &&
-		!callerSetRequestedCount {
+		!info.IsSQLCPU {
 		info.RequestedCount = tenant.cpuTimeTokenEstimator.estimateTokensToBeUsed()
 	}
 	admitResponse := AdmitResponse{
