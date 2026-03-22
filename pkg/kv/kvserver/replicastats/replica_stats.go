@@ -82,7 +82,7 @@ type ReplicaStats struct {
 }
 
 type replicaStatsRecord struct {
-	localityCounts *PerLocalityCounts
+	localityCounts PerLocalityCounts
 	sum            float64
 	active         bool
 }
@@ -90,7 +90,7 @@ type replicaStatsRecord struct {
 func (rsr *replicaStatsRecord) reset() {
 	rsr.sum = 0
 
-	if rsr.localityCounts == nil || len(*rsr.localityCounts) == 0 {
+	if len(rsr.localityCounts) == 0 {
 		return
 	}
 
@@ -104,17 +104,16 @@ func (rsr *replicaStatsRecord) reset() {
 	// accumulate, create a new map if there are any unused localities. This is
 	// important when there are many quiesced ranges, that may have previously
 	// had just one request.
-	for _, v := range *rsr.localityCounts {
+	for _, v := range rsr.localityCounts {
 		if v == 0 {
-			rsr.localityCounts = &PerLocalityCounts{}
+			rsr.localityCounts = PerLocalityCounts{}
 			return
 		}
 	}
 
-	for k := range *rsr.localityCounts {
-		(*rsr.localityCounts)[k] = 0
+	for k := range rsr.localityCounts {
+		rsr.localityCounts[k] = 0
 	}
-
 }
 
 // activate sets the active indicator on the record. It assumes that the record
@@ -149,8 +148,8 @@ func (rsr *replicaStatsRecord) mergeReplicaStatsRecords(other replicaStatsRecord
 		return
 	}
 
-	for locality, count := range *other.localityCounts {
-		(*rsr.localityCounts)[locality] += count
+	for locality, count := range other.localityCounts {
+		rsr.localityCounts[locality] += count
 	}
 }
 
@@ -166,8 +165,8 @@ func (rsr *replicaStatsRecord) split(other *replicaStatsRecord) {
 
 	// Halve the calling record's locality counts, so that even if the other
 	// record won't be updated, the calling record has at least halved.
-	for locality, count := range *rsr.localityCounts {
-		(*rsr.localityCounts)[locality] = count / 2.0
+	for locality, count := range rsr.localityCounts {
+		rsr.localityCounts[locality] = count / 2.0
 	}
 
 	// When the other record's locality counts are not set, there is nothing to
@@ -176,8 +175,8 @@ func (rsr *replicaStatsRecord) split(other *replicaStatsRecord) {
 		return
 	}
 
-	for locality := range *rsr.localityCounts {
-		(*other.localityCounts)[locality] = (*rsr.localityCounts)[locality]
+	for locality := range rsr.localityCounts {
+		other.localityCounts[locality] = rsr.localityCounts[locality]
 	}
 }
 
@@ -189,7 +188,7 @@ func NewReplicaStats(now time.Time, getNodeLocality LocalityOracle) *ReplicaStat
 	// Only create the locality counts when a locality oracle is given.
 	if getNodeLocality != nil {
 		for i := range rs.records {
-			rs.records[i].localityCounts = &PerLocalityCounts{}
+			rs.records[i].localityCounts = PerLocalityCounts{}
 		}
 	}
 	// Set the first record to active. All other records will be initially
@@ -252,9 +251,8 @@ func (rs *ReplicaStats) RecordCount(now time.Time, count float64, nodeID roachpb
 	record.sum += count
 
 	if rs.getNodeLocality != nil {
-		(*record.localityCounts)[rs.getNodeLocality(nodeID)] += count
+		record.localityCounts[rs.getNodeLocality(nodeID)] += count
 	}
-
 }
 
 func (rs *ReplicaStats) maybeRotate(now time.Time) {
@@ -302,7 +300,7 @@ func (rs *ReplicaStats) PerLocalityDecayingRate(now time.Time) PerLocalityCounts
 			} else {
 				duration += time.Duration(float64(replStatsRotateInterval) * decay)
 			}
-			for k, v := range *cur.localityCounts {
+			for k, v := range cur.localityCounts {
 				counts[k] += v * decay
 			}
 		}
