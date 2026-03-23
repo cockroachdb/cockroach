@@ -1516,6 +1516,7 @@ func TestFailedImport(t *testing.T) {
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 	sqlDB.Exec(t, "CREATE DATABASE failedimport; USE failedimport;")
 	sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
@@ -1590,6 +1591,7 @@ func TestImportIntoCSVCancel(t *testing.T) {
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 	testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
 
 	sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
@@ -3738,6 +3740,7 @@ func TestImportDefault(t *testing.T) {
 	conn := tc.ServerConn(0)
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 	var data string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
@@ -4169,6 +4172,7 @@ func TestImportDefaultNextVal(t *testing.T) {
 	conn := tc.ServerConn(0)
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 
 	type seqMetadata struct {
 		start                     int
@@ -4449,6 +4453,7 @@ func TestImportComputed(t *testing.T) {
 	conn := tc.ServerConn(0)
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 	var data string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
@@ -4947,6 +4952,7 @@ func TestImportWorkerFailure(t *testing.T) {
 	sqlCodec.Store(&codec)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 	setSmallIngestBufferSizes(t, sqlDB)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -5044,6 +5050,7 @@ func TestImportDelimited(t *testing.T) {
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 
@@ -5134,6 +5141,7 @@ func TestImportPgCopy(t *testing.T) {
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
 
