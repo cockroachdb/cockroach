@@ -20,10 +20,10 @@ import (
 // storage using the provided remote storage.
 func ConfigureForSharedStorage(opts *pebble.Options, remoteStorage remote.Storage) error {
 	opts.Experimental.RemoteStorage = remote.MakeSimpleFactory(map[remote.Locator]remote.Storage{
-		"": remoteStorage,
+		remote.MakeLocator(""): remoteStorage,
 	})
 	opts.Experimental.CreateOnShared = remote.CreateOnSharedLower
-	opts.Experimental.CreateOnSharedLocator = ""
+	opts.Experimental.CreateOnSharedLocator = remote.MakeLocator("")
 	return nil
 }
 

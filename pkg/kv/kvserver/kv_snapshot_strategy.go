@@ -259,7 +259,7 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 		for i := range req.ExternalTables {
 			sst := req.ExternalTables[i]
 			externalSSTs = append(externalSSTs, pebble.ExternalFile{
-				Locator:           remote.Locator(sst.Locator),
+				Locator:           remote.MakeLocator(redact.RedactableString(sst.Locator)),
 				ObjName:           sst.ObjectName,
 				StartKey:          sst.StartKey,
 				EndKey:            sst.EndKey,
@@ -496,7 +496,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			externalVisitor = func(sst *pebble.ExternalFile) error {
 				externalSSTCount++
 				externalSSTs = append(externalSSTs, kvserverpb.SnapshotRequest_ExternalTable{
-					Locator:           []byte(sst.Locator),
+					Locator:           []byte(sst.Locator.RawRedactableString),
 					ObjectName:        sst.ObjName,
 					Size_:             sst.Size,
 					StartKey:          sst.StartKey,
