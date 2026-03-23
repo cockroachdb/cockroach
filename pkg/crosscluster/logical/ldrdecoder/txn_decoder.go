@@ -7,6 +7,7 @@ package ldrdecoder
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -32,6 +33,10 @@ func (t TxnID) Less(s TxnID) bool { return t.Timestamp.Less(s.Timestamp) }
 func (t TxnID) LessEq(s TxnID) bool { return t.Timestamp.LessEq(s.Timestamp) }
 
 func (t TxnID) IsSet() bool { return t.Timestamp.IsSet() }
+
+func (t TxnID) String() string {
+	return fmt.Sprintf("(%d,%d)", t.ApplierID, t.Timestamp.WallTime)
+}
 
 type Transaction struct {
 	TxnID    TxnID

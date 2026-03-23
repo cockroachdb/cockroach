@@ -19,11 +19,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type transactionState struct {
-	ScheduledTransaction
-	applied bool
-}
-
 type appliedTransaction struct {
 	ldrdecoder.Transaction
 	applyResult txnwriter.ApplyResult
@@ -35,6 +30,31 @@ type ScheduledTransaction struct {
 	EventHorizon hlc.Timestamp
 }
 
+// ApplierEvent is an event that can be sent to the Applier's input channel.
+type ApplierEvent interface {
+	applierEvent()
+}
+
+func (ScheduledTransaction) applierEvent() {}
+func (Checkpoint) applierEvent()           {}
+
+// Checkpoint indicates that all transactions with timestamp ≤ Timestamp have
+// been sent (but not applied). This allows idle appliers to advance their
+// frontier.
+//
+// The coordinator sends a Checkpoint to every applier in two cases:
+//  1. Periodically, as an intermediate heartbeat so that idle appliers (those
+//     with no pending transactions) can advance their frontier.
+//  2. Deterministically, when an incoming transaction's EventHorizon is greater
+//     than the previous checkpoint. This ensures that every applier has seen
+//     the checkpoint before any applier attempts to apply the transaction that
+//     depends on it.
+//
+// The Timestamp is set to the incoming replication event's (upstream checkpoint
+// or txn) timestamp minus one, so that the checkpoint strictly precedes the
+// event it was derived from.
+type Checkpoint struct{ Timestamp hlc.Timestamp }
+
 // Applier coordinates applying transactions in parallel while ensuring that a
 // given txn's dependencies have applied first and that the replicated time has
 // advanced past the txn's EventHorizon before application. For example: if t5
@@ -45,61 +65,101 @@ type ScheduledTransaction struct {
 // Also note that the applier assumes it is sent transactions in increasing
 // timestamp order.
 type Applier struct {
+	id          ldrdecoder.ApplierID
+	depResolver DependencyResolver
+
 	mu struct {
 		syncutil.Mutex
-		replicatedTime hlc.Timestamp
 
-		// transactions maps a txn's TxnID to its state.
-		transactions map[ldrdecoder.TxnID]transactionState
+		// committed tracks which local transactions have been applied.
+		committed committedSet
 
-		// waiting maps a pending transaction to its dependents. I.e. if t5 depends
-		// on t2, then waiting[t2] will contain t5.
-		waiting map[ldrdecoder.TxnID][]ldrdecoder.TxnID
+		// transactions maps unapplied txn TxnIDs to their state.
+		transactions map[ldrdecoder.TxnID]ScheduledTransaction
+
+		// localWaiting maps a pending transaction to its dependents. I.e. if t5
+		// depends on t2, then localWaiting[t2] will contain t5.
+		localWaiting map[ldrdecoder.TxnID][]ldrdecoder.TxnID
+
+		// remoteWaiting maps a remote TxnID to the local txns
+		// waiting on it.
+		remoteWaiting map[ldrdecoder.TxnID][]ldrdecoder.TxnID
+
+		// remoteApplierResolvedTimes tracks the latest known resolved time per
+		// remote applier, updated via DependencyResolver notifications.
+		remoteApplierResolvedTimes map[ldrdecoder.ApplierID]hlc.Timestamp
 
 		// txnIDs buffers TxnIDs of transactions in the order they were
 		// received, to help with replicatedTime tracking.
 		txnIDs ring.Buffer[ldrdecoder.TxnID]
 
 		// horizonWaiting tracks transactions that have no remaining
-		// dependencies but cannot be applied yet because the applier's
-		// replicatedTime has not advanced past their EventHorizon.
+		// dependencies but cannot be applied yet because the global
+		// resolved time has not advanced past their EventHorizon.
 		//
 		// TODO(msbutler): consider making this a heap.
 		horizonWaiting []ldrdecoder.TxnID
 	}
 	txnWriters []txnwriter.TransactionWriter
 
-	frontier Latest[hlc.Timestamp]
+	// TODO(msbutler): consider removing and simply call commited.ResolvedTime().
+	localResolvedTime Latest[hlc.Timestamp]
 }
 
-func NewApplier(writers []txnwriter.TransactionWriter) *Applier {
-	a := &Applier{
-		txnWriters: writers,
-		frontier:   MakeLatest[hlc.Timestamp](),
+// NewApplier creates a new Applier with the given ID and writers. allApplierIDs
+// must include all applier IDs in the system (including this applier's own ID)
+// so that the applier can initialize the frontier map used to track when all
+// appliers have advanced past an EventHorizon.
+func NewApplier(
+	id ldrdecoder.ApplierID,
+	writers []txnwriter.TransactionWriter,
+	depResolver DependencyResolver,
+	allApplierIDs []ldrdecoder.ApplierID,
+) (*Applier, error) {
+	if id == 0 {
+		return nil, errors.New("applier ID must be nonzero")
 	}
-	a.mu.transactions = make(map[ldrdecoder.TxnID]transactionState)
-	a.mu.waiting = make(map[ldrdecoder.TxnID][]ldrdecoder.TxnID)
-	return a
+	if depResolver == nil {
+		return nil, errors.New("dependency resolver must not be nil")
+	}
+	a := &Applier{
+		id:                id,
+		depResolver:       depResolver,
+		txnWriters:        writers,
+		localResolvedTime: MakeLatest[hlc.Timestamp](),
+	}
+	a.mu.committed = makeCommittedSet()
+	a.mu.transactions = make(map[ldrdecoder.TxnID]ScheduledTransaction)
+	a.mu.localWaiting = make(map[ldrdecoder.TxnID][]ldrdecoder.TxnID)
+	a.mu.remoteWaiting = make(map[ldrdecoder.TxnID][]ldrdecoder.TxnID)
+	a.mu.remoteApplierResolvedTimes = make(map[ldrdecoder.ApplierID]hlc.Timestamp, len(allApplierIDs))
+	for _, applierID := range allApplierIDs {
+		if applierID == id {
+			continue
+		}
+		a.mu.remoteApplierResolvedTimes[applierID] = hlc.Timestamp{}
+	}
+	return a, nil
 }
 
 func (a *Applier) Close(ctx context.Context) {
-	a.frontier.Close()
+	a.localResolvedTime.Close()
 	for _, writer := range a.txnWriters {
 		writer.Close(ctx)
 	}
 }
 
 func (a *Applier) Frontier() chan hlc.Timestamp {
-	return a.frontier.Chan
+	return a.localResolvedTime.Chan
 }
 
-func (a *Applier) Run(ctx context.Context, input chan ScheduledTransaction) error {
+func (a *Applier) Run(ctx context.Context, input chan ApplierEvent) error {
 	ready := make(chan ldrdecoder.Transaction)
 	applied := make(chan appliedTransaction)
 
 	group := ctxgroup.WithContext(ctx)
 	group.GoCtx(func(ctx context.Context) error {
-		return a.coordinator(ctx, input, ready)
+		return a.coordinator(ctx, input, ready, applied)
 	})
 
 	// TODO make the number of writers a configuration option
@@ -117,23 +177,37 @@ func (a *Applier) Run(ctx context.Context, input chan ScheduledTransaction) erro
 }
 
 func (a *Applier) coordinator(
-	ctx context.Context, input chan ScheduledTransaction, ready chan ldrdecoder.Transaction,
+	ctx context.Context,
+	input chan ApplierEvent,
+	ready chan ldrdecoder.Transaction,
+	applied chan appliedTransaction,
 ) error {
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case transaction := <-input:
-			appliable, err := a.recordTransaction(transaction)
-			if err != nil {
-				return err
-			}
-			if appliable {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case ready <- transaction.Transaction:
-					// done
+		case event := <-input:
+			switch e := event.(type) {
+			case ScheduledTransaction:
+				appliable, err := a.recordTransaction(e)
+				if err != nil {
+					return err
+				}
+				if appliable {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case ready <- e.Transaction:
+					}
+				}
+			case Checkpoint:
+				synthTxn, ok := a.processCheckpoint(e.Timestamp)
+				if ok {
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case applied <- synthTxn:
+					}
 				}
 			}
 		}
@@ -144,43 +218,104 @@ func (a *Applier) recordTransaction(transaction ScheduledTransaction) (bool, err
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	if transaction.TxnID.ApplierID != a.id {
+		return false, errors.AssertionFailedf(
+			"transaction %+v has ApplierID %d, expected %d",
+			transaction.TxnID, transaction.TxnID.ApplierID, a.id)
+	}
+
 	var err error
 	// Clone the slice to avoid mutating the caller's slice.
+	//
+	// TODO(msbutler): once thses are sent over RPCs from the job coordinator, I
+	// don't think we need to clone here.
 	transaction.Dependencies = slices.Clone(transaction.Dependencies)
-	transaction.Dependencies = slices.DeleteFunc(transaction.Dependencies, func(txnID ldrdecoder.TxnID) bool {
-		if txnID.Timestamp.LessEq(a.mu.replicatedTime) {
-			return true
-		}
-		dependency, ok := a.mu.transactions[txnID]
-		if !ok {
-			err = errors.AssertionFailedf("missing dependency %+v", txnID)
-		}
-		return dependency.applied
-	})
+	transaction.Dependencies = slices.DeleteFunc(
+		transaction.Dependencies,
+		func(txnID ldrdecoder.TxnID) bool {
+			if txnID.ApplierID == a.id {
+				// Local dep: prune if already committed.
+				if a.mu.committed.IsResolved(txnID) {
+					return true
+				}
+				if _, ok := a.mu.transactions[txnID]; !ok {
+					err = errors.AssertionFailedf("missing dependency %+v", txnID)
+				}
+				return false
+			}
+			// Remote dep: prune if remote applier's resolvedTime has advanced
+			// past its timestamp.
+			resolvedTime := a.mu.remoteApplierResolvedTimes[txnID.ApplierID]
+			return txnID.Timestamp.LessEq(resolvedTime)
+		})
 	if err != nil {
 		return false, err
 	}
 
-	a.mu.transactions[transaction.TxnID] = transactionState{
-		ScheduledTransaction: transaction,
-		applied:              false,
-	}
+	a.mu.transactions[transaction.TxnID] = transaction
 	if a.mu.txnIDs.Len() != 0 && transaction.TxnID.LessEq(a.mu.txnIDs.GetLast()) {
-		return false, errors.AssertionFailedf("transactions must be sent in increasing timestamp order: got %s, last was %s", transaction.TxnID.Timestamp, a.mu.txnIDs.GetLast().Timestamp)
+		return false, errors.AssertionFailedf(
+			"transactions must be sent in increasing timestamp order: got %s, last was %s",
+			transaction.TxnID.Timestamp, a.mu.txnIDs.GetLast().Timestamp)
 	}
 	a.mu.txnIDs.AddLast(transaction.TxnID)
 
-	for _, dependency := range transaction.Dependencies {
-		a.mu.waiting[dependency] = append(a.mu.waiting[dependency], transaction.TxnID)
+	var newRemoteDeps []ldrdecoder.TxnID
+	for _, dep := range transaction.Dependencies {
+		if dep.ApplierID == a.id {
+			a.mu.localWaiting[dep] = append(a.mu.localWaiting[dep], transaction.TxnID)
+		} else {
+			a.mu.remoteWaiting[dep] = append(a.mu.remoteWaiting[dep], transaction.TxnID)
+			if len(a.mu.remoteWaiting[dep]) == 1 {
+				newRemoteDeps = append(newRemoteDeps, dep)
+			}
+		}
+	}
+
+	// Register remote deps with the dependency resolver.
+	if len(newRemoteDeps) > 0 {
+		a.depResolver.Wait(a.id, newRemoteDeps)
 	}
 
 	if len(transaction.Dependencies) == 0 {
-		if transaction.EventHorizon.LessEq(a.mu.replicatedTime) {
+		if transaction.EventHorizon.LessEq(a.getGlobalFrontierLocked()) {
 			return true, nil
 		}
 		a.mu.horizonWaiting = append(a.mu.horizonWaiting, transaction.TxnID)
+		a.registerHorizonWaitLocked(transaction.EventHorizon)
 	}
 	return false, nil
+}
+
+// processCheckpoint handles a checkpoint event. If the checkpoint is beyond the
+// last recorded txn, it synthesizes an already-applied transaction to advance
+// the frontier.
+func (a *Applier) processCheckpoint(checkpoint hlc.Timestamp) (appliedTransaction, bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	// Drop if checkpoint ts ≤ last txnID ts (no synthetic txn needed;
+	// the real txn's completion will advance the frontier).
+	if a.mu.txnIDs.Len() != 0 &&
+		checkpoint.LessEq(a.mu.txnIDs.GetLast().Timestamp) {
+		return appliedTransaction{}, false
+	}
+
+	// Also drop if checkpoint ts ≤ current resolved time (the aggregator
+	// may have already drained txnIDs past this point).
+	if checkpoint.LessEq(a.mu.committed.ResolvedTime()) {
+		return appliedTransaction{}, false
+	}
+
+	// Synthesize an already-applied txn at the checkpoint timestamp.
+	// Only added to txnIDs (not transactions) since it is already resolved.
+	synthID := ldrdecoder.TxnID{ApplierID: a.id, Timestamp: checkpoint}
+	a.mu.committed.Resolve(synthID)
+	a.mu.txnIDs.AddLast(synthID)
+
+	return appliedTransaction{
+		Transaction: ldrdecoder.Transaction{TxnID: synthID},
+	}, true
 }
 
 func (a *Applier) writer(
@@ -223,6 +358,7 @@ func (a *Applier) aggregator(
 	// WARNING: there is a deadlock risk in aggregator because we are creating a
 	// loop between the channels. We avoid this deadlock by buffering newly ready
 	// transactions.
+	remoteUpdates := a.depResolver.Receive(a.id)
 	readyBuffer := ring.MakeBuffer[ldrdecoder.Transaction](nil)
 	for {
 		if readyBuffer.Len() == 0 {
@@ -232,6 +368,10 @@ func (a *Applier) aggregator(
 			case transaction := <-applied:
 				err := a.recordCompletion(ctx, transaction, &readyBuffer)
 				if err != nil {
+					return err
+				}
+			case update := <-remoteUpdates:
+				if err := a.processRemoteUpdate(update, &readyBuffer); err != nil {
 					return err
 				}
 			}
@@ -244,6 +384,10 @@ func (a *Applier) aggregator(
 			case transaction := <-applied:
 				err := a.recordCompletion(ctx, transaction, &readyBuffer)
 				if err != nil {
+					return err
+				}
+			case update := <-remoteUpdates:
+				if err := a.processRemoteUpdate(update, &readyBuffer); err != nil {
 					return err
 				}
 			}
@@ -260,54 +404,147 @@ func (a *Applier) recordCompletion(
 	defer a.mu.Unlock()
 
 	completedID := completedTxn.TxnID
-	for _, waitingID := range a.mu.waiting[completedID] {
+	if err := a.resolveDependencyLocked(
+		completedID, a.mu.localWaiting[completedID], readyBuffer,
+	); err != nil {
+		return err
+	}
+	delete(a.mu.localWaiting, completedID)
+
+	a.mu.committed.Resolve(completedID)
+	delete(a.mu.transactions, completedID)
+
+	// Advance the resolved time by draining applied txns from the front
+	// of the ordered txnIDs buffer.
+	prevResolvedTime := a.mu.committed.ResolvedTime()
+	for a.mu.txnIDs.Len() != 0 {
+		id := a.mu.txnIDs.GetFirst()
+		if !a.mu.committed.IsResolved(id) {
+			// Advance the resolved time through the gap before this
+			// unapplied txn. Since the coordinator records txns in
+			// timestamp order, if txnIDs contains a txn at timestamp T,
+			// there are no txns for this applier in the interval
+			// (resolvedTime, T). The resolved time can safely advance
+			// to T-1.
+			a.mu.committed.UpdateResolvedTime(id.Timestamp.FloorPrev())
+			break
+		}
+		a.mu.committed.UpdateResolvedTime(id.Timestamp)
+		a.mu.txnIDs.RemoveFirst()
+	}
+
+	resolvedTime := a.mu.committed.ResolvedTime()
+	if prevResolvedTime.Less(resolvedTime) {
+		a.localResolvedTime.Set(resolvedTime)
+	}
+
+	a.drainSatisfiedHorizonWaitersLocked(readyBuffer)
+	a.depResolver.Ready(completedTxn.TxnID, resolvedTime)
+	return nil
+}
+
+// resolveDependencyLocked processes the completion of completedID by removing
+// it from the dependency lists of all waitingIDs. Transactions that become
+// dependency-free are either added to readyBuffer (if their EventHorizon is
+// satisfied) or moved to horizonWaiting.
+//
+// REQUIRES: a.mu is held.
+func (a *Applier) resolveDependencyLocked(
+	completedID ldrdecoder.TxnID,
+	waitingIDs []ldrdecoder.TxnID,
+	readyBuffer *ring.Buffer[ldrdecoder.Transaction],
+) error {
+	for _, waitingID := range waitingIDs {
 		waitingTxn, ok := a.mu.transactions[waitingID]
 		if !ok {
 			return errors.AssertionFailedf("missing transaction %+v", waitingID)
 		}
 
-		waitingTxn.Dependencies = slices.DeleteFunc(waitingTxn.Dependencies, func(id ldrdecoder.TxnID) bool {
-			return id == completedID
-		})
+		waitingTxn.Dependencies = slices.DeleteFunc(
+			waitingTxn.Dependencies,
+			func(id ldrdecoder.TxnID) bool {
+				return id == completedID
+			})
 		a.mu.transactions[waitingID] = waitingTxn
 
 		if len(waitingTxn.Dependencies) == 0 {
-			if waitingTxn.EventHorizon.LessEq(a.mu.replicatedTime) {
+			if waitingTxn.EventHorizon.LessEq(a.getGlobalFrontierLocked()) {
 				readyBuffer.AddLast(waitingTxn.Transaction)
 			} else {
 				a.mu.horizonWaiting = append(a.mu.horizonWaiting, waitingID)
+				a.registerHorizonWaitLocked(waitingTxn.EventHorizon)
 			}
 		}
 	}
+	return nil
+}
 
-	delete(a.mu.waiting, completedID)
-	txnState := a.mu.transactions[completedID]
-	txnState.applied = true
-	a.mu.transactions[completedID] = txnState
-
-	var newReplicatedTime hlc.Timestamp
-	for a.mu.txnIDs.Len() != 0 {
-		id := a.mu.txnIDs.GetFirst()
-		if !a.mu.transactions[id].applied {
-			break
+// getGlobalFrontierLocked returns the minimum frontier across all applier
+// frontiers.
+//
+// REQUIRES: a.mu is held.
+func (a *Applier) getGlobalFrontierLocked() hlc.Timestamp {
+	minFrontier := a.mu.committed.ResolvedTime()
+	for _, frontier := range a.mu.remoteApplierResolvedTimes {
+		if frontier.Less(minFrontier) {
+			minFrontier = frontier
 		}
-		newReplicatedTime = id.Timestamp
-		delete(a.mu.transactions, id)
-		a.mu.txnIDs.RemoveFirst()
 	}
-	if newReplicatedTime.IsSet() {
-		a.mu.replicatedTime = newReplicatedTime
-		a.frontier.Set(newReplicatedTime)
+	return minFrontier
+}
 
-		// Drain transactions whose EventHorizon is now satisfied.
-		a.mu.horizonWaiting = slices.DeleteFunc(a.mu.horizonWaiting, func(id ldrdecoder.TxnID) bool {
+// registerHorizonWaitLocked identifies which remote appliers' frontiers are
+// blocking the given EventHorizon and registers horizon waits with the
+// dependency resolver.
+//
+// REQUIRES: a.mu is held.
+func (a *Applier) registerHorizonWaitLocked(horizon hlc.Timestamp) {
+	for applierID, remoteFrontier := range a.mu.remoteApplierResolvedTimes {
+		if horizon.After(remoteFrontier) {
+			a.depResolver.WaitHorizon(a.id, applierID, horizon)
+		}
+	}
+}
+
+// drainSatisfiedHorizonWaitersLocked checks all horizonWaiting txns and moves
+// any whose EventHorizon ≤ globalFrontier into readyBuffer.
+//
+// REQUIRES: a.mu is held.
+func (a *Applier) drainSatisfiedHorizonWaitersLocked(
+	readyBuffer *ring.Buffer[ldrdecoder.Transaction],
+) {
+	globalFrontier := a.getGlobalFrontierLocked()
+	a.mu.horizonWaiting = slices.DeleteFunc(a.mu.horizonWaiting,
+		func(id ldrdecoder.TxnID) bool {
 			txn := a.mu.transactions[id]
-			if txn.EventHorizon.LessEq(newReplicatedTime) {
+			if txn.EventHorizon.LessEq(globalFrontier) {
 				readyBuffer.AddLast(txn.Transaction)
 				return true
 			}
 			return false
 		})
+}
+
+func (a *Applier) processRemoteUpdate(
+	update DependencyUpdate, readyBuffer *ring.Buffer[ldrdecoder.Transaction],
+) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	// Only advance the frontier, never regress it. Out-of-order updates can
+	// arrive when a WaitHorizon eager response (with an older resolvedTime)
+	// races with a Ready notification (with a newer resolvedTime) from the
+	// same remote applier.
+	if a.mu.remoteApplierResolvedTimes[update.TxnID.ApplierID].Less(update.ResolvedTime) {
+		a.mu.remoteApplierResolvedTimes[update.TxnID.ApplierID] = update.ResolvedTime
 	}
+
+	if err := a.resolveDependencyLocked(
+		update.TxnID, a.mu.remoteWaiting[update.TxnID], readyBuffer,
+	); err != nil {
+		return err
+	}
+	delete(a.mu.remoteWaiting, update.TxnID)
+	a.drainSatisfiedHorizonWaitersLocked(readyBuffer)
 	return nil
 }
