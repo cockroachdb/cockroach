@@ -2005,25 +2005,40 @@ func (s *adminServer) Settings(
 				codes.PermissionDenied, "this operation requires the %s or %s system privileges",
 				privilege.VIEWCLUSTERSETTING.DisplayName(), privilege.MODIFYCLUSTERSETTING.DisplayName())
 		}
-		consoleKeys := settings.ConsoleKeys()
-		for _, k := range consoleKeys {
-			if consoleSetting, ok := settings.LookupForLocalAccessByKey(k, s.sqlServer.execCfg.Codec.ForSystemTenant()); ok {
-				if internalKey, found, _ := settings.NameToKey(consoleSetting.Name()); found &&
-					(len(keyFilter) == 0 || keyFilter[string(internalKey)]) {
-					var responseValue serverpb.SettingsResponse_Value
-					responseValue.Name = string(consoleSetting.Name())
-					responseValue.Value = consoleSetting.String(&s.st.SV)
-					responseValue.Type = consoleSetting.Typ()
-					responseValue.Description = consoleSetting.Description()
-					responseValue.Public = consoleSetting.Visibility() == settings.Public
-					if lastUpdated, found := alteredSettings[internalKey]; found {
-						responseValue.LastUpdated = lastUpdated
-					}
-					respSettings[string(internalKey)] = responseValue
-				}
-			}
-		}
+	}
 
+	// Supplement any missing console keys from in-memory settings. The
+	// ConsoleKeys list contains non-sensitive settings required by the DB
+	// Console UI. This covers two cases:
+	// 1. Users with only VIEWACTIVITY (query failed with InsufficientPrivilege,
+	//    all console keys are missing from respSettings).
+	// 2. Users with MODIFYSQLCLUSTERSETTING (query succeeded but only returned
+	//    sql.defaults.* settings, missing console keys like "version").
+	// See: https://github.com/cockroachdb/cockroach/issues/165444
+	for _, k := range settings.ConsoleKeys() {
+		if _, exists := respSettings[string(k)]; exists {
+			continue
+		}
+		consoleSetting, ok := settings.LookupForLocalAccessByKey(
+			k, s.sqlServer.execCfg.Codec.ForSystemTenant(),
+		)
+		if !ok {
+			continue
+		}
+		internalKey, found, _ := settings.NameToKey(consoleSetting.Name())
+		if !found || (len(keyFilter) > 0 && !keyFilter[string(internalKey)]) {
+			continue
+		}
+		var responseValue serverpb.SettingsResponse_Value
+		responseValue.Name = string(consoleSetting.Name())
+		responseValue.Value = consoleSetting.String(&s.st.SV)
+		responseValue.Type = consoleSetting.Typ()
+		responseValue.Description = consoleSetting.Description()
+		responseValue.Public = consoleSetting.Visibility() == settings.Public
+		if lastUpdated, found := alteredSettings[internalKey]; found {
+			responseValue.LastUpdated = lastUpdated
+		}
+		respSettings[string(internalKey)] = responseValue
 	}
 
 	resp.KeyValues = respSettings

@@ -135,6 +135,28 @@ func TestAdminAPISettings(t *testing.T) {
 			})
 		}
 
+		// Regression test for #165444: a user with MODIFYSQLCLUSTERSETTING +
+		// VIEWACTIVITY should still see console keys like "version". The
+		// MODIFYSQLCLUSTERSETTING privilege causes the cluster_settings
+		// query to succeed but only return sql.defaults.* settings. The
+		// Settings endpoint must supplement missing ConsoleKeys.
+		t.Run("modify_sql_with_viewactivity", func(t *testing.T) {
+			userName := "modify_sql_viewactivity_user"
+			conn.Exec(t, fmt.Sprintf("CREATE USER IF NOT EXISTS %s", userName))
+			conn.Exec(t, fmt.Sprintf("GRANT SYSTEM MODIFYSQLCLUSTERSETTING TO %s", userName))
+			conn.Exec(t, fmt.Sprintf("GRANT SYSTEM VIEWACTIVITY TO %s", userName))
+			authCtx := authserver.ForwardHTTPAuthInfoToRPCCalls(
+				authserver.ContextWithHTTPAuthInfo(ctx, userName, 1), nil,
+			)
+			resp, err := ts.GetAdminClient(t).Settings(authCtx, &serverpb.SettingsRequest{})
+			require.NoError(t, err)
+			// All console keys must be present, including "version".
+			for _, k := range settings.ConsoleKeys() {
+				require.Contains(t, resp.KeyValues, string(k),
+					"expected console key %q in settings response", k)
+			}
+		})
+
 		t.Run("no permission", func(t *testing.T) {
 			userName := "no_permission"
 			conn.Exec(t, fmt.Sprintf("CREATE USER IF NOT EXISTS %s", userName))
