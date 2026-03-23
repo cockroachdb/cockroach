@@ -21,8 +21,6 @@ type LockHash uint64
 
 type Lock struct {
 	Hash LockHash
-	// TODO(jeffswenson): Read will be set to true for foreign key locks that
-	// only require a shared/read lock rather than an exclusive/write lock.
 	Read bool
 }
 
@@ -143,12 +141,22 @@ func (ls *LockSynthesizer) deriveLocks(
 func (ls *LockSynthesizer) dependsOn(
 	ctx context.Context, a, b ldrdecoder.DecodedRow,
 ) (bool, error) {
-	if a.TableID != b.TableID {
-		return false, nil
-	}
-	tc, ok := ls.tableConstraints[a.TableID]
+	tcA, ok := ls.tableConstraints[a.TableID]
 	if !ok {
 		return false, nil
 	}
-	return tc.DependsOn(ctx, a, b)
+
+	if a.TableID == b.TableID {
+		dep, err := tcA.DependsOn(ctx, a, b)
+		if err != nil || dep {
+			return dep, err
+		}
+	}
+
+	tcB, ok := ls.tableConstraints[b.TableID]
+	if !ok {
+		return false, nil
+	}
+
+	return tcA.fkDependsOn(ctx, tcB, a, b)
 }
