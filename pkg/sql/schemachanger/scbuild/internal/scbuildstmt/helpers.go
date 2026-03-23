@@ -1246,6 +1246,14 @@ func checkTableSchemaChangePrerequisites(
 	maybeCleanupSchemaLockedFn = func() {}
 	hasSchemaLockedChange := tree.HasSetOrResetSchemaLocked(n)
 	if schemaLocked != nil && !hasSchemaLockedChange {
+		// Check if auto-unlock is allowed.
+		if !sqlclustersettings.SchemaLockedAutoUnlockEnabled.Get(&b.ClusterSettings().SV) {
+			_, _, ns := scpb.FindNamespace(tableElements)
+			if ns == nil {
+				panic(errors.AssertionFailedf("programming error: Namespace element not found"))
+			}
+			panic(sqlerrors.NewSchemaChangeOnLockedTableErr(ns.Name))
+		}
 		// If the user is not explicitly setting schema_locked, then we should
 		// use the auto-unset logic.
 		b.DropTransient(schemaLocked)
