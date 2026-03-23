@@ -71,6 +71,13 @@ var IdleTimeout = settings.RegisterDurationSetting(
 
 // SpanCheckpointInterval controls how often span-level checkpoints
 // can be written.
+//
+// NB: This setting also controls how often a change aggregator will
+// send its frontier to the coordinator when its local frontier's
+// min timestamp is not advancing (because it's doing a backfill or
+// has lagging spans).
+//
+// TODO(#163256): We may want to rename or retire this setting.
 var SpanCheckpointInterval = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"changefeed.frontier_checkpoint_frequency",
@@ -83,6 +90,13 @@ var SpanCheckpointInterval = settings.RegisterDurationSetting(
 // SpanCheckpointLagThreshold controls the amount of time a changefeed's
 // lagging spans must lag behind its leading spans before a span-level
 // checkpoint is written.
+//
+// NB: This threshold is also checked locally by each change aggregator to
+// determine if it should send its frontier to the coordinator when its
+// local frontier's min timestamp is not advancing and it's not currently
+// doing a backfill.
+//
+// TODO(#163256): We may want to rename or retire this setting.
 var SpanCheckpointLagThreshold = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"changefeed.frontier_highwater_lag_checkpoint_threshold",
@@ -109,6 +123,8 @@ var SpanCheckpointLagThreshold = settings.RegisterDurationSetting(
 //
 // Therefore, we should write at most 6 MB of checkpoint/hour; OR, based on the default
 // SpanCheckpointInterval setting, 1 MB per checkpoint.
+//
+// TODO(#163256): Retire this setting.
 var SpanCheckpointMaxBytes = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
 	"changefeed.frontier_checkpoint_max_bytes",
