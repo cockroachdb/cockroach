@@ -7,14 +7,15 @@ package conflict
 
 import (
 	"context"
-	"math/rand"
+	gosql "database/sql"
+	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/ldrrandgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -60,32 +61,28 @@ func TestWriter(t *testing.T) {
 	)
 }
 
-func TestWriterRandom(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer srv.Stopper().Stop(ctx)
+// runWriterTest executes a CREATE TABLE statement and tests that the writer can
+// insert, mutate, and delete a random row.
+func runWriterTest(
+	t *testing.T, ctx context.Context, db *gosql.DB, tableName string, createStmt string,
+) {
+	t.Helper()
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, createStmt)
 
-	rndSrc, _ := randutil.NewTestRand()
-	stmt := ldrrandgen.GenerateLDRTable(ctx, rndSrc, "test_writer", true)
+	t.Logf("stmt: %s\n", createStmt)
 
-	sqlDB.Exec(t, tree.AsStringWithFlags(stmt, tree.FmtParsable))
-
-	table, err := workloadrand.LoadTable(db, "test_writer")
+	table, err := workloadrand.LoadTable(db, tableName)
 	require.NoError(t, err)
 
 	writer, err := newWriter(ctx, db, table)
 	require.NoError(t, err)
 
-	t.Logf("stmt: %s\n", tree.AsStringWithFlags(stmt, tree.FmtParsable))
 	t.Logf("upsert: %s\n", writer.upsertStmt)
 	t.Logf("delete: %s\n", writer.deleteStmt)
 
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rng, _ := randutil.NewTestRand()
 
 	// NOTE: we retry the insert if it contains computed columns because its
 	// possible the table contains computed columns that combine to overflow
@@ -110,46 +107,117 @@ func TestWriterRandom(t *testing.T) {
 	}
 
 	var row []any
-	require.Eventually(t, func() bool {
+	testutils.SucceedsSoon(t, func() error {
 		var err error
 		row, err = table.RandomRow(rng, 10)
 		if err != nil {
-			return false
+			return err
 		}
 		t.Logf("inserting row: %+v", row)
 		err = writer.upsertRow(ctx, row)
-		if err != nil && !shouldRetryUpdate(err, table) {
-			require.NoError(t, err)
+		if err != nil && shouldRetryUpdate(err, table) {
+			return err
 		}
-		return err == nil
-	}, 5*time.Second, 100*time.Millisecond, "failed to insert random row after retries")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return nil
+	})
 
-	require.Eventually(t, func() bool {
+	testutils.SucceedsSoon(t, func() error {
 		var err error
 		row, err = table.MutateRow(rng, 10, row)
 		if err != nil {
-			return false
+			return err
 		}
 		t.Logf("mutating row: %+v", row)
 		err = writer.upsertRow(ctx, row)
-		if err != nil && !shouldRetryUpdate(err, table) {
-			require.NoError(t, err)
+		if err != nil && shouldRetryUpdate(err, table) {
+			return err
 		}
-		return err == nil
-	}, 5*time.Second, 100*time.Millisecond, "failed to mutate row after retries")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return nil
+	})
 
 	// check there is one row in the table
 	sqlDB.CheckQueryResults(t,
-		`SELECT count(*) FROM test_writer`,
+		fmt.Sprintf("SELECT count(*) FROM %s", tableName),
 		[][]string{{"1"}},
 	)
 
 	t.Logf("deleting row: %+v", row)
 	require.NoError(t, writer.deleteRow(ctx, row))
 
-	rows := sqlDB.QueryStr(t, `SELECT * FROM test_writer`)
+	rows := sqlDB.QueryStr(t, fmt.Sprintf("SELECT * FROM %s", tableName))
 	if len(rows) != 0 {
 		t.Fatalf("expected 0 rows, got %d", len(rows))
 	}
 	require.Equal(t, rows, [][]string{}, "failed to delete row (%+v)", row)
+}
+
+func TestWriterRandom(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	rng, _ := randutil.NewTestRand()
+	stmt := ldrrandgen.GenerateLDRTable(ctx, rng, "test_writer", true)
+	createStmt := tree.AsStringWithFlags(stmt, tree.FmtParsable)
+
+	runWriterTest(t, ctx, db, "test_writer", createStmt)
+}
+
+func TestWriterRegression(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	testCases := []struct {
+		name      string
+		createSQL string
+	}{
+		{
+			// The "char" type requires the parameters to have an explicit cast to
+			// "char" otherwise the type gets inferred as STRING which causes '\x00'
+			// to be interpreted as a string literal instead of a byte literal. The
+			// symptom of this is the delete will fail to find the row because the
+			// "char" column is truncated to 1 byte on insert, but the where clause
+			// casts the char to a string which is not truncated.
+			//
+			//> insert into table cursed values ('\x00'); -- this gets truncated to '\'
+			// INSERT 0 1
+			//> delete from cursed where c = '\x00'; -- this is not truncated
+			// DELETE 0
+			//> select * from cursed;
+			//  c
+			//-----
+			//  a
+			name:      "char_type",
+			createSQL: `CREATE TABLE char_type (col0 "char" NOT NULL, PRIMARY KEY (col0))`,
+		},
+		{
+			// Regression test for integer overflow with computed columns.
+			name: "computed_column_overflow",
+			createSQL: `CREATE TABLE computed_column_overflow (
+				col0 SMALLINT NOT NULL,
+				col1 SMALLINT NOT NULL,
+				col2 SMALLINT NOT NULL AS (col0 + col1) VIRTUAL,
+				PRIMARY KEY (col0)
+			)`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			runWriterTest(t, ctx, db, tc.name, tc.createSQL)
+		})
+	}
 }

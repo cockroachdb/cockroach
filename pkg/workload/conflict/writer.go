@@ -31,7 +31,8 @@ func newWriter(ctx context.Context, conn *gosql.DB, table rand.Table) (*writer, 
 			continue
 		}
 		columns = append(columns, fmt.Sprintf(`"%s"`, col.Name))
-		params = append(params, fmt.Sprintf("$%d", len(params)+1))
+		params = append(params,
+			fmt.Sprintf("$%d::%s", len(params)+1, col.DataType.SQLString()))
 		updates = append(updates, fmt.Sprintf(`"%s" = EXCLUDED."%s"`, col.Name, col.Name))
 	}
 
@@ -59,7 +60,8 @@ func newWriter(ctx context.Context, conn *gosql.DB, table rand.Table) (*writer, 
 			continue
 		}
 		if table.PrimaryKeyComponents[i] {
-			pkComponents = append(pkComponents, fmt.Sprintf(`"%s" = $%d`, col.Name, len(pkComponents)+1))
+			pkComponents = append(pkComponents,
+				fmt.Sprintf(`"%s" = $%d::%s`, col.Name, len(pkComponents)+1, col.DataType.SQLString()))
 		}
 	}
 	deleteStmt := fmt.Sprintf(`
