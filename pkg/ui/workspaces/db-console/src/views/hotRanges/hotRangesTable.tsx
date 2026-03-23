@@ -18,12 +18,9 @@ import { Tooltip } from "antd";
 import classNames from "classnames/bind";
 import round from "lodash/round";
 import React, { useEffect } from "react";
-import { connect } from "react-redux";
 import { Link } from "react-router-dom";
 
 import emptyTableResultsImg from "assets/emptyState/empty-table-results.svg";
-import { sortSettingLocalSetting } from "oss/src/redux/hotRanges";
-import { AdminUIState } from "oss/src/redux/state";
 import { cockroach } from "src/js/protos";
 import {
   performanceBestPracticesHotSpots,
@@ -343,16 +340,4 @@ const HotRangesTable = ({
   );
 };
 
-const mapDispatchToProps = {
-  onSortChange: (ss: SortSetting) =>
-    sortSettingLocalSetting.set({
-      ascending: ss.ascending,
-      columnTitle: ss.columnTitle,
-    }),
-};
-
-const mapStateToProps = (state: AdminUIState) => ({
-  sortSetting: sortSettingLocalSetting.selector(state),
-});
-
-export default connect(mapStateToProps, mapDispatchToProps)(HotRangesTable);
+export default HotRangesTable;
