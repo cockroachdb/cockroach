@@ -658,6 +658,72 @@ func significanceFloorForUnknownCapacity(dim LoadDimension) LoadValue {
 	panic(fmt.Sprintf("unknown dimension: %v", dim))
 }
 
+// computeSummaryUpperBound caps the load summary to loadNormal when absolute
+// utilization is low, even if the store is above the mean in relative terms.
+// This complements the significance floor clamping in computeFractionAbove:
+// clamping addresses statistical significance (preventing small absolute
+// differences from producing large fractions), while this function addresses
+// prioritization (preventing shedding in dimensions that don't matter yet).
+//
+// At low utilizations there is overlap: significance floor clamping dampens
+// fractionAbove, which may already prevent overloadSlow. But the dampening
+// alone isn't always sufficient (see Example 2), so the upper bound provides
+// a hard backstop based on absolute utilization. Raising the significance
+// floor high enough to fully subsume the upper bound is not viable. For
+// fractionAbove to stay below the 0.1 overloadSlow threshold, we need
+// (util - meanUtil) / floor < 0.1, i.e. floor > 10 * (util - meanUtil). In
+// the worst case (one store at threshold X, others near zero, N stores),
+// meanUtil ≈ X/N and the required floor approaches 10*X*(N-1)/N. For
+// CPURate (X=0.05, N=3): floor > 10 * 0.05 * 2/3 ≈ 33%. A 33% floor would
+// cripple detection at moderate utilizations: a store at 30% with a mean of
+// 25% would get fractionAbove = 0.05/0.33 ≈ 0.15 — barely above the
+// threshold, when it should clearly be shedding.
+//
+// Example 1 (ByteSize, threshold 50%): Three stores at 40%, 30%, 30%
+// utilization. The mean is ~33%, well above the 5% significance floor, so
+// clamping has no effect. fractionAbove for the 40% store is
+// (0.4-0.333)/0.333 ≈ 0.18, triggering overloadSlow. But at 40% disk usage,
+// shedding bytes is wasteful — it causes unnecessary data movement and
+// thrashing when multiple leaseholders rebalance concurrently along this
+// low-priority dimension. Capping to loadNormal prevents shedding.
+//
+// Example 2 (CPURate, threshold 5%): Three stores at 4%, 1%, 1% utilization.
+// The mean is 2%, below the 5% significance floor, so the denominator is
+// clamped to 5%. This dampens fractionAbove to (0.04-0.02)/0.05 = 0.4,
+// down from the unclamped (0.04-0.02)/0.02 = 1.0 — but 0.4 still exceeds
+// the 0.1 overloadSlow threshold. The upper bound provides the final
+// protection: at 4% CPU utilization the cluster is essentially idle, so
+// shedding is pointless regardless of relative position.
+func computeSummaryUpperBound(
+	dim LoadDimension, capacity LoadValue, fractionUsed float64,
+) loadSummary {
+	switch dim {
+	case ByteSize:
+		if buildutil.CrdbTestBuild && capacity == UnknownCapacity {
+			panic("ByteSize should always have a known capacity")
+		}
+		// A disk that is less than half full is not considered for shedding to
+		// avoid unnecessary data movement that could cause thrashing.
+		if capacity != UnknownCapacity && fractionUsed < 0.5 {
+			return loadNormal
+		}
+	case CPURate:
+		if buildutil.CrdbTestBuild && capacity == UnknownCapacity {
+			panic("CPURate should always have a known capacity")
+		}
+		// An almost-idle CPU (< 5% utilization) is not considered for shedding.
+		if capacity != UnknownCapacity && fractionUsed < 0.05 {
+			return loadNormal
+		}
+	case WriteBandwidth:
+		// TODO(sumeer): consider adding a summaryUpperBound for small
+		// WriteBandwidth values too.
+	default:
+		panic(fmt.Sprintf("unknown dimension: %v", dim))
+	}
+	return overloadUrgent
+}
+
 // Computes the loadSummary for a particular load dimension.
 //
 // NB: load can be negative since it may be adjusted load.
@@ -695,20 +761,7 @@ func loadSummaryForDimension(
 		fractionUsed = float64(load) / float64(capacity)
 	}
 
-	summaryUpperBound := overloadUrgent
-	// Be less aggressive about the ByteSize dimension when the fractionUsed is
-	// low. Rebalancing along too many dimensions results in more thrashing due
-	// to concurrent rebalancing actions by many leaseholders.
-	if dim == ByteSize && capacity != UnknownCapacity && fractionUsed < 0.5 {
-		summaryUpperBound = loadNormal
-	}
-	// Don't bother equalizing CPURate by shedding, if the utilization is < 5%.
-	// The choice of 5% here is arbitrary.
-	if dim == CPURate && capacity != UnknownCapacity && fractionUsed < 0.05 {
-		summaryUpperBound = loadNormal
-	}
-	// TODO(sumeer): consider adding a summaryUpperBound for small
-	// WriteBandwidth values too.
+	summaryUpperBound := computeSummaryUpperBound(dim, capacity, fractionUsed)
 	const (
 		meanFractionSlow     = 0.1
 		meanFractionLow      = -0.1
