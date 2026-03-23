@@ -1063,6 +1063,11 @@ func registerKVRestartImpact(r registry.Registry) {
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 				"--vmodule=store_rebalancer=2,allocator=2,allocator_scorer=1,replicate_queue=2,lease=2")
 			settings := install.MakeClusterSettings()
+			// Enable continuous Go execution tracing to aid diagnosis of transient
+			// resource spikes (#166364).
+			settings.ClusterSettings["obs.execution_tracer.interval"] = "10s"
+			settings.ClusterSettings["obs.execution_tracer.duration"] = "10s"
+			settings.ClusterSettings["obs.execution_tracer.total_dump_size_limit"] = "10 GiB"
 
 			c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 
