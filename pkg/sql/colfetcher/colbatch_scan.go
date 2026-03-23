@@ -381,6 +381,7 @@ func NewColBatchScan(
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 		spec.FetchSpec.External,
 		flowCtx.EvalCtx.WorkloadID,
+		flowCtx.EvalCtx.WorkloadType,
 	)
 	fetcher := cFetcherPool.Get().(*cFetcher)
 	shouldCollectStats := execstats.ShouldCollectStats(ctx, flowCtx.CollectStats)
@@ -394,6 +395,7 @@ func NewColBatchScan(
 		flowCtx.Txn,
 		flowCtx.Codec().TenantID,
 		flowCtx.EvalCtx.WorkloadID,
+		flowCtx.EvalCtx.WorkloadType,
 	}
 	if err = fetcher.Init(fetcherAllocator, kvFetcher, tableArgs); err != nil {
 		fetcher.Release()

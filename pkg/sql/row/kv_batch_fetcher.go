@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -218,6 +219,8 @@ type txnKVFetcher struct {
 	admissionPacer         *admission.Pacer
 	// workloadID is the statement fingerprint ID or job ID for ASH sampling.
 	workloadID uint64
+	// workloadType distinguishes the kind of workload for ASH sampling.
+	workloadType workloadid.WorkloadType
 }
 
 var _ KVBatchFetcher = &txnKVFetcher{}
@@ -387,6 +390,7 @@ type newTxnKVFetcherArgs struct {
 	kvCPUTime                  *int64
 	rawMVCCValues              bool
 	workloadID                 uint64
+	workloadType               workloadid.WorkloadType
 
 	admission struct { // groups AC-related fields
 		requestHeader  kvpb.AdmissionHeader
@@ -418,6 +422,7 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		requestAdmissionHeader:     args.admission.requestHeader,
 		responseAdmissionQ:         args.admission.responseQ,
 		workloadID:                 args.workloadID,
+		workloadType:               args.workloadType,
 	}
 
 	f.maybeInitAdmissionPacer(
@@ -463,10 +468,11 @@ func (f *txnKVFetcher) maybeInitAdmissionPacer(
 				// nodes running colocated SQL+KV code where all SQL code is run
 				// on behalf of the one tenant. So from an AC perspective, the
 				// tenant ID we pass through here is irrelevant.
-				TenantID:   roachpb.SystemTenantID,
-				Priority:   admissionPri,
-				CreateTime: admissionHeader.CreateTime,
-				WorkloadID: f.workloadID,
+				TenantID:     roachpb.SystemTenantID,
+				Priority:     admissionPri,
+				CreateTime:   admissionHeader.CreateTime,
+				WorkloadID:   f.workloadID,
+				WorkloadType: f.workloadType,
 			})
 	}
 }
@@ -794,10 +800,11 @@ func (f *txnKVFetcher) maybeAdmitBatchResponse(ctx context.Context, br *kvpb.Bat
 		}
 	} else if f.responseAdmissionQ != nil {
 		responseAdmission := admission.WorkInfo{
-			TenantID:   roachpb.SystemTenantID,
-			Priority:   admissionpb.WorkPriority(f.requestAdmissionHeader.Priority),
-			CreateTime: f.requestAdmissionHeader.CreateTime,
-			WorkloadID: f.workloadID,
+			TenantID:     roachpb.SystemTenantID,
+			Priority:     admissionpb.WorkPriority(f.requestAdmissionHeader.Priority),
+			CreateTime:   f.requestAdmissionHeader.CreateTime,
+			WorkloadID:   f.workloadID,
+			WorkloadType: f.workloadType,
 		}
 		if _, err := f.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
 			return err

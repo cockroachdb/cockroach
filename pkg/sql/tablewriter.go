@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -94,6 +95,8 @@ type tableWriterBase struct {
 	originTimestamp hlc.Timestamp
 	// workloadID is the statement fingerprint ID or job ID for ASH sampling.
 	workloadID uint64
+	// workloadType distinguishes the kind of workload for ASH sampling.
+	workloadType workloadid.WorkloadType
 }
 
 var maxBatchBytes = settings.RegisterByteSizeSetting(
@@ -122,6 +125,7 @@ func (tb *tableWriterBase) init(
 		tb.originID = evalCtx.SessionData().OriginIDForLogicalDataReplication
 		tb.originTimestamp = evalCtx.SessionData().OriginTimestampForLogicalDataReplication
 		tb.workloadID = evalCtx.WorkloadID
+		tb.workloadType = evalCtx.WorkloadType
 	}
 	tb.forceProductionBatchSizes = evalCtx != nil && evalCtx.TestingKnobs.ForceProductionValues
 	tb.maxBatchSize = mutations.MaxBatchSize(tb.forceProductionBatchSizes)
@@ -211,10 +215,11 @@ func (tb *tableWriterBase) tryDoResponseAdmission(ctx context.Context) error {
 	if responseAdmissionQ != nil {
 		requestAdmissionHeader := tb.txn.AdmissionHeader()
 		responseAdmission := admission.WorkInfo{
-			TenantID:   roachpb.SystemTenantID,
-			Priority:   admissionpb.WorkPriority(requestAdmissionHeader.Priority),
-			CreateTime: requestAdmissionHeader.CreateTime,
-			WorkloadID: tb.workloadID,
+			TenantID:     roachpb.SystemTenantID,
+			Priority:     admissionpb.WorkPriority(requestAdmissionHeader.Priority),
+			CreateTime:   requestAdmissionHeader.CreateTime,
+			WorkloadID:   tb.workloadID,
+			WorkloadType: tb.workloadType,
 		}
 		if _, err := responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
 			return err
