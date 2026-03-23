@@ -92,6 +92,9 @@ func runMultitenantUpgrade(ctx context.Context, t test.Test, c cluster.Cluster) 
 		mixedversion.EnabledDeploymentModes(mixedversion.SystemOnlyDeployment),
 		// Closer to a Serverless deployment.
 		mixedversion.AlwaysUseLatestPredecessors,
+		// Disable mutators for expiration-based leases. We have seen transient
+		// failures after toggling this setting in this test.
+		mixedversion.DisableMutators(mixedversion.ClusterSettingMutator("kv.expiration_leases_only.enabled")),
 	)
 
 	tenants := makeTenants(mvt.RNG(), minTenants, maxTenants, tenantNodes)
