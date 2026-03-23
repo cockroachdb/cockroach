@@ -81,7 +81,7 @@ export const selectClusterSettingVersion = createSelector(
     if (!settings) {
       return "";
     }
-    return settings["version"].value;
+    return settings["version"]?.value ?? "";
   },
 );
 
