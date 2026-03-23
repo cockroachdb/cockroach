@@ -109,6 +109,14 @@ func TestGenerateHelpCommand(t *testing.T) {
 	generateHelpCommand("acceptance/gossip/locality-address", "foo-cluster", spec.AWS, start, end)(r)
 
 	echotest.Require(t, r.String(), filepath.Join("testdata", "help_command_non_gce.txt"))
+
+	// With TC_BUILD_BRANCH=master, Datadog log upload is enabled and the
+	// help command should include a Datadog Logs link.
+	t.Setenv("TC_BUILD_BRANCH", "master")
+	r = &issues.Renderer{}
+	generateHelpCommand("acceptance/gossip/locality-address", "foo-cluster", spec.GCE, start, end)(r)
+
+	echotest.Require(t, r.String(), filepath.Join("testdata", "help_command_with_dd.txt"))
 }
 
 func TestCreatePostRequest(t *testing.T) {

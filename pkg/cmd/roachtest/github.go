@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/datadog"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
@@ -86,6 +87,22 @@ func generateHelpCommand(
 				)(renderer)
 			} else {
 				renderer.Escaped(fmt.Sprintf("_Grafana is not yet available for %s clusters_", cloud))
+			}
+			// Link to the Datadog Log Explorer with logs for this test run.
+			// ShouldUploadLogsToDatadog(true) is correct because we only
+			// generate help commands for failed tests (which file issues).
+			if datadog.ShouldUploadLogsToDatadog(true /* testFailed */) {
+				ddQuery := fmt.Sprintf("service:roachtest @cluster:%s", clusterName)
+				issues.HelpCommandAsLink(
+					"Datadog Logs",
+					fmt.Sprintf(
+						"https://us5.datadoghq.com/logs?query=%s&from_ts=%d&to_ts=%d&live=false&storage=flex_tier",
+						url.QueryEscape(ddQuery),
+						start.UnixMilli(),
+						end.Add(2*time.Minute).UnixMilli()),
+				)(renderer)
+			} else {
+				renderer.Escaped("\n_Logs were not uploaded to Datadog_")
 			}
 		}
 	}
