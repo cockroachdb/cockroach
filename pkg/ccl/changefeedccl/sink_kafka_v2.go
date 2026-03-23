@@ -495,6 +495,7 @@ func buildKgoConfig(
 
 	if sinkOpts.Compression != "" {
 		if c, ok := saramaCompressionCodecOptions[strings.ToUpper(sinkOpts.Compression)]; ok {
+			// If both top-level and JSON config specify compression, the top-level option wins.
 			sinkCfg.Compression = compressionCodec(c)
 		} else {
 			return nil, errors.Errorf(`unknown compression codec: %v`, sinkOpts.Compression)

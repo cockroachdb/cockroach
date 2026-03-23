@@ -1127,7 +1127,7 @@ func buildAzureKafkaConfig(u *changefeedbase.SinkURL) (dialConfig kafkaDialConfi
 func buildKafkaConfig(
 	ctx context.Context,
 	u *changefeedbase.SinkURL,
-	jsonStr changefeedbase.SinkSpecificJSONConfig,
+	sinkOpts changefeedbase.KafkaSinkOptions,
 	kafkaThrottlingMetrics metrics.Histogram,
 	netMetrics *cidr.NetMetrics,
 ) (*sarama.Config, error) {
@@ -1184,7 +1184,7 @@ func buildKafkaConfig(
 	}
 
 	// Apply statement level overrides.
-	saramaCfg, err := getSaramaConfig(jsonStr)
+	saramaCfg, err := getSaramaConfig(sinkOpts.JSONConfig)
 	if err != nil {
 		return nil, errors.Wrapf(err,
 			"failed to parse sarama config; check %s option", changefeedbase.OptKafkaSinkConfig)
@@ -1192,6 +1192,7 @@ func buildKafkaConfig(
 
 	if sinkOpts.Compression != "" {
 		if c, ok := saramaCompressionCodecOptions[strings.ToUpper(sinkOpts.Compression)]; ok {
+			// If both top-level and JSON config specify compression, the top-level option wins.
 			saramaCfg.Compression = compressionCodec(c)
 		} else {
 			return nil, errors.Errorf(`unknown compression codec: %v`, sinkOpts.Compression)
@@ -1248,7 +1249,7 @@ func makeKafkaSink(
 	}
 
 	m := mb(requiresResourceAccounting)
-	config, err := buildKafkaConfig(ctx, u, jsonStr, m.getKafkaThrottlingMetrics(settings), m.netMetrics())
+	config, err := buildKafkaConfig(ctx, u, sinkOpts, m.getKafkaThrottlingMetrics(settings), m.netMetrics())
 	if err != nil {
 		return nil, err
 	}
