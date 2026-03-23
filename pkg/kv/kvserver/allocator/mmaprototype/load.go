@@ -688,7 +688,7 @@ func loadSummaryForDimension(
 	// different summarization for cpu and ByteSize since the consequence of
 	// running out-of-disk is much more severe.
 	//
-	fractionAbove, _ := computeFractionAbove(dim, load, capacity, meanLoad, meanUtil)
+	fractionAbove, effectiveDenom := computeFractionAbove(dim, load, capacity, meanLoad, meanUtil)
 	var fractionUsed float64
 	if capacity != UnknownCapacity {
 		// NB: capacity can be 0 if nodeCPURateUsage >> nodeCPURateCapacity.
@@ -743,8 +743,16 @@ func loadSummaryForDimension(
 		}
 		buf.Printf("): %v, reason: %v [load=%v meanLoad=%v", summary, redact.SafeString(reason), load, meanLoad)
 		if capacity != UnknownCapacity {
-			buf.Printf(" fractionUsed=%.2f%% meanUtil=%.2f%% capacity=%v",
-				redact.SafeFloat(fractionUsed*100), redact.SafeFloat(meanUtil*100), capacity)
+			// Annotate fractionUsed with * when the significance floor clamped
+			// the denominator used to compute fractionAbove.
+			naturalDenom := meanUtil
+			clamped := ""
+			if effectiveDenom != naturalDenom {
+				clamped = "*"
+			}
+			buf.Printf(" fractionUsed=%.2f%%%s meanUtil=%.2f%% capacity=%v",
+				redact.SafeFloat(fractionUsed*100), redact.SafeString(clamped),
+				redact.SafeFloat(meanUtil*100), capacity)
 		}
 		buf.SafeRune(']')
 		log.KvDistribution.VEventf(ctx, 3, "%s", buf.RedactableString())
