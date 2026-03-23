@@ -1639,3 +1639,28 @@ statement ok
 SET use_declarative_schema_changer = $use_decl_sc
 
 subtest end
+
+subtest create_table_unsafe_always
+
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+SET use_declarative_schema_changer = 'unsafe_always'
+
+statement error pq: \*tree.CreateTable not implemented in the new schema changer
+EXPLAIN (DDL) CREATE TABLE test_table(log int)
+
+statement error pq: \*tree.CreateTable not implemented in the new schema changer
+CREATE TABLE test_table(log int)
+
+statement error pq: \*tree.CreateTable not implemented in the new schema changer
+CREATE TABLE test_table_as AS SELECT 1 AS log
+
+statement error pq: \*tree.CreateView not implemented in the new schema changer
+CREATE VIEW test_view AS SELECT 1 AS log
+
+statement ok
+SET use_declarative_schema_changer = $use_decl_sc
+
+subtest end

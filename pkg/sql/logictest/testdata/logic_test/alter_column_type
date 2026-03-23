@@ -1886,11 +1886,11 @@ subtest alter_dropped_col
 let $schema_changer_state
 SELECT value FROM information_schema.session_variables where variable='use_declarative_schema_changer'
 
-statement ok
-set use_declarative_schema_changer = 'unsafe_always';
-
 statement disable-cf-mutator ok
 create table t_droppedcol (dropme int);
+
+statement ok
+set use_declarative_schema_changer = 'unsafe_always';
 
 statement ok
 SET autocommit_before_ddl = false
@@ -1934,13 +1934,13 @@ let $schema_changer_state
 SELECT value FROM information_schema.session_variables where variable='use_declarative_schema_changer'
 
 statement ok
-set use_declarative_schema_changer = 'unsafe_always';
-
-statement ok
 CREATE TABLE t_multi_alter (c1 INT NOT NULL PRIMARY KEY, c2 TEXT NOT NULL, drop DATE, FAMILY F1 (c1, c2, drop));
 
 statement ok
 INSERT INTO t_multi_alter VALUES (10,'ten','1984-09-06'),(20,'twenty','2024-08-10');
+
+statement ok
+set use_declarative_schema_changer = 'unsafe_always';
 
 # The add column operation creates multiple primary keys, with all but one being
 # temporary. Previously, this caused the alter type to fail because it
