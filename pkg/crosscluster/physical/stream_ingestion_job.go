@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -210,35 +211,12 @@ func startPostCutoverRetentionJob(
 func ingest(
 	ctx context.Context, execCtx sql.JobExecContext, resumer *streamIngestionResumer,
 ) error {
-	ingestionJob := resumer.job
-	// Cutover should be the *first* thing checked upon resumption as it is the
-	// most critical task in disaster recovery.
-	cutoverTimestamp, reverted, err := maybeRevertToCutoverTimestamp(ctx, execCtx, ingestionJob)
-	if err != nil {
-		return err
-	}
-	if reverted {
-		log.Dev.Infof(ctx, "job completed cutover on resume")
-		return completeIngestion(ctx, execCtx, ingestionJob, cutoverTimestamp)
-	}
 	if knobs := execCtx.ExecCfg().StreamingTestingKnobs; knobs != nil && knobs.BeforeIngestionStart != nil {
 		if err := knobs.BeforeIngestionStart(ctx); err != nil {
 			return err
 		}
 	}
-	// A nil error is only possible if the job was signaled to cutover and the
-	// processors shut down gracefully, i.e stopped ingesting any additional
-	// events from the replication stream. At this point it is safe to revert to
-	// the cutoff time to leave the cluster in a consistent state.
-	if err := startDistIngestion(ctx, execCtx, resumer); err != nil {
-		return err
-	}
-
-	cutoverTimestamp, err = revertToCutoverTimestamp(ctx, execCtx, ingestionJob)
-	if err != nil {
-		return err
-	}
-	return completeIngestion(ctx, execCtx, ingestionJob, cutoverTimestamp)
+	return startDistIngestion(ctx, execCtx, resumer)
 }
 
 func getRetryPolicy(knobs *sql.StreamingTestingKnobs) retry.Options {
@@ -256,7 +234,6 @@ func getRetryPolicy(knobs *sql.StreamingTestingKnobs) retry.Options {
 func ingestWithRetries(
 	ctx context.Context, execCtx sql.JobExecContext, resumer *streamIngestionResumer,
 ) error {
-	ingestionJob := resumer.job
 	ro := getRetryPolicy(execCtx.ExecCfg().StreamingTestingKnobs)
 	var (
 		err                    error
@@ -289,24 +266,65 @@ func ingestWithRetries(
 			knobs.AfterRetryIteration(err)
 		}
 	}
-	if err != nil {
-		return err
-	}
-	updateStatus(ctx, ingestionJob, jobspb.ReplicationFailingOver,
-		"stream ingestion finished successfully")
-	return nil
+	return err
 }
 
 // The ingestion job should never fail, only pause, as progress should never be lost.
 func (s *streamIngestionResumer) handleResumeError(
 	ctx context.Context, execCtx sql.JobExecContext, err error,
 ) error {
+	// If the resumer has been canceled/paused, just return that error.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
 	msg := redact.Sprintf("ingestion job failed (%s) but is being paused", err)
 	updateStatus(ctx, s.job, jobspb.ReplicationError, msg)
 	// The ingestion job is paused but the producer job will keep
 	// running until it times out. Users can still resume ingestion before
 	// the producer job times out.
 	return jobs.MarkPauseRequestError(err)
+}
+
+// errCutoverSignaled is returned by watchForCutover when it detects that a
+// cutover has been signaled. When returned from a ctxgroup member, it cancels
+// the group context, which tears down the ingestion phase.
+var errCutoverSignaled = errors.New("cutover signaled")
+
+// watchForCutover periodically polls the job progress to detect when a cutover
+// has been signaled. It returns errCutoverSignaled when cutover is reached,
+// which cancels the ctxgroup context and unblocks all goroutines in the
+// ingestion phase (heartbeat sender, span config stream, replanning, connection
+// refresher) that may be stuck on dead TCP connections.
+//
+// This complements the per-processor cutover polling in checkForCutoverSignal,
+// which only signals individual ingestion processors via cutoverCh but cannot
+// unblock the other goroutines sharing the same ctxgroup context.
+func (s *streamIngestionResumer) watchForCutover(
+	ctx context.Context, execCfg *sql.ExecutorConfig,
+) error {
+	provider := &cutoverFromJobProgress{
+		db:    execCfg.InternalDB,
+		jobID: s.job.ID(),
+	}
+	sv := &execCfg.Settings.SV
+	tick := time.NewTicker(cutoverSignalPollInterval.Get(sv))
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-tick.C:
+			reached, err := provider.cutoverReached(ctx)
+			if err != nil {
+				log.Dev.Warningf(ctx, "error checking cutover signal: %s", err)
+				continue
+			}
+			if reached {
+				log.Dev.Infof(ctx, "cutover signal detected, returning error to cancel ingestion context")
+				return errCutoverSignaled
+			}
+		}
+	}
 }
 
 // Resume is part of the jobs.Resumer interface.  Ensure that any errors
@@ -333,12 +351,71 @@ func (s *streamIngestionResumer) Resume(ctx context.Context, execCtx interface{}
 		return err
 	}
 
-	// Start ingesting KVs from the replication stream.
-	err = ingestWithRetries(ctx, jobExecCtx, s)
+	execCfg := jobExecCtx.ExecCfg()
+
+	// Cutover should be the *first* thing checked upon resumption as it is the
+	// most critical task in disaster recovery. If cutover has already been
+	// signaled, skip ingestion entirely and proceed to the cutover path below.
+	cutoverAlreadySignaled, err := (&cutoverFromJobProgress{
+		db: execCfg.InternalDB, jobID: s.job.ID(),
+	}).cutoverReached(ctx)
 	if err != nil {
 		return s.handleResumeError(ctx, jobExecCtx, err)
 	}
-	return nil
+
+	if !cutoverAlreadySignaled {
+		// Run ingestion and the cutover watcher concurrently. The watcher polls
+		// for cutover independently of the per-processor polling. When the watcher
+		// detects cutover, it returns errCutoverSignaled which cancels the group
+		// context, tearing down the entire ingestion phase including goroutines
+		// that the per-processor poller cannot reach (heartbeat sender, span config
+		// stream, replanning, etc.).
+		err = ctxgroup.GoAndWait(ctx,
+			func(ctx context.Context) error {
+				return ingestWithRetries(ctx, jobExecCtx, s)
+			},
+			func(ctx context.Context) error {
+				return s.watchForCutover(ctx, execCfg)
+			},
+		)
+		if err != nil {
+			if !errors.Is(err, errCutoverSignaled) {
+				return s.handleResumeError(ctx, jobExecCtx, err)
+			}
+		}
+	}
+
+	// Revert to the cutover timestamp and complete the ingestion. This handles
+	// all paths: cutover signaled before ingestion started, per-processor
+	// detection (err == nil), and watcher detection (err == errCutoverSignaled).
+	// Retry transient errors; maybeRevertToCutoverTimestamp is idempotent
+	// (no-ops once ReplicationFailingOver is set), so retrying is safe.
+	var cutoverTimestamp hlc.Timestamp
+	ro := getRetryPolicy(execCfg.StreamingTestingKnobs)
+	for r := retry.Start(ro); r.Next(); {
+		var reverted bool
+		cutoverTimestamp, reverted, err = maybeRevertToCutoverTimestamp(ctx, jobExecCtx, s.job)
+		if err != nil {
+			if jobs.IsPermanentJobError(err) || ctx.Err() != nil {
+				return s.handleResumeError(ctx, jobExecCtx, err)
+			}
+			log.Dev.Infof(ctx, "hit retryable error during cutover: %s", err)
+			continue
+		}
+		if !reverted {
+			return s.handleResumeError(ctx, jobExecCtx,
+				errors.AssertionFailedf("ingestion completed without cutover"))
+		}
+		if err = completeIngestion(ctx, jobExecCtx, s.job, cutoverTimestamp); err != nil {
+			if jobs.IsPermanentJobError(err) || ctx.Err() != nil {
+				return s.handleResumeError(ctx, jobExecCtx, err)
+			}
+			log.Dev.Infof(ctx, "hit retryable error completing ingestion: %s", err)
+			continue
+		}
+		return nil
+	}
+	return s.handleResumeError(ctx, jobExecCtx, err)
 }
 
 func releaseDestinationTenantProtectedTimestamp(
@@ -403,22 +480,6 @@ func (s *streamIngestionResumer) protectDestinationTenant(
 			return nil
 		})
 	})
-}
-
-// revertToCutoverTimestamp attempts a cutover and errors out if one was not
-// executed.
-func revertToCutoverTimestamp(
-	ctx context.Context, execCtx sql.JobExecContext, ingestionJob *jobs.Job,
-) (hlc.Timestamp, error) {
-	cutoverTimestamp, reverted, err := maybeRevertToCutoverTimestamp(ctx, execCtx, ingestionJob)
-	if err != nil {
-		return hlc.Timestamp{}, err
-	}
-	if !reverted {
-		return hlc.Timestamp{}, errors.Errorf("required cutover was not completed")
-	}
-
-	return cutoverTimestamp, nil
 }
 
 func cutoverTimeIsEligibleForCutover(
