@@ -633,6 +633,8 @@
 /pkg/util/stop/              @cockroachdb/kv-prs
 /pkg/util/tracing            @cockroachdb/obs-prs @cockroachdb/obs-india-prs
 /pkg/workload/               @cockroachdb/test-eng
+/pkg/workload/conflict/      @cockroachdb/cdc-prs
+/pkg/workload/rand/          @cockroachdb/cdc-prs
 /pkg/obs/                    @cockroachdb/obs-prs
 /pkg/ccl/auditloggingccl     @cockroachdb/obs-prs
 
