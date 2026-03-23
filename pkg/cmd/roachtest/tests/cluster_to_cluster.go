@@ -2017,6 +2017,17 @@ func runClusterReplicationDisconnect(
 
 	// TODO(msbutler): disconnect nodes during a random phase
 	require.NoError(t, waitForTargetPhase(ctx, rd, dstJobID, phaseSteadyState))
+	waitForReplicatedTimeToReachTimestamp(t, int(dstJobID), rd.setup.dst.db, getStreamIngestionJobInfo, 3*time.Minute, timeutil.Now())
+
+	// 50% of the time: pause the job, start partition, then resume
+	shouldPauseBeforePartition := rd.rng.Intn(2) == 0
+
+	if shouldPauseBeforePartition {
+		rd.t.L().Printf("Pausing stream ingestion job %d before network partition", dstJobID)
+		rd.setup.dst.sysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", dstJobID))
+		require.NoError(t, WaitForPaused(ctx, rd.setup.dst.db, dstJobID, 2*time.Minute))
+		rd.t.L().Printf("Stream ingestion job %d is now paused", dstJobID)
+	}
 
 	rd.t.L().Printf("Disconnecting all src nodes %v from all dst nodes %v",
 		rd.setup.src.nodes, rd.setup.dst.nodes)
@@ -2024,6 +2035,13 @@ func runClusterReplicationDisconnect(
 	blackholeFailer := &blackholeFailer{t: rd.t, c: rd.c, input: true, output: true}
 	for _, srcNode := range rd.setup.src.nodes {
 		blackholeFailer.FailPartial(ctx, srcNode, rd.setup.dst.nodes)
+	}
+
+	if shouldPauseBeforePartition {
+		rd.t.L().Printf("Resuming stream ingestion job %d after partition established", dstJobID)
+		rd.setup.dst.sysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", dstJobID))
+		require.NoError(t, WaitForResume(ctx, rd.setup.dst.db, dstJobID, 2*time.Minute))
+		rd.t.L().Printf("Stream ingestion job %d is now running", dstJobID)
 	}
 
 	if !persistPartition {
