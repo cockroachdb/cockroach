@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -340,7 +341,20 @@ func TestPanickingSQLFormat(t *testing.T) {
 	result := unsafesql.SafeFormatQuery(panickingStatement{}, nil, &settings.Values{})
 	require.Equal(
 		t,
-		"<panicked query format>",
+		unsafesql.PanickedQueryFormat,
 		string(result),
 	)
+}
+
+func TestSafeFormatQueryNilAnnotations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	stmts, err := parser.Parse("SELECT * FROM system.namespace")
+	require.NoError(t, err)
+	require.Len(t, stmts, 1)
+
+	result := unsafesql.SafeFormatQuery(stmts[0].AST, nil, &settings.Values{})
+	require.NotEqual(t, unsafesql.PanickedQueryFormat, result)
+	require.Contains(t, string(result), "system.namespace")
 }
