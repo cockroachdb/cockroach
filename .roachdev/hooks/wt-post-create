@@ -1,0 +1,23 @@
+#!/bin/bash
+set -euo pipefail
+
+SRC="$ROACHDEV_WT_SRC"
+DST="$ROACHDEV_WT_DST"
+
+# Copy .bazelrc.user if it exists in the source repo.
+if [[ -f "$SRC/.bazelrc.user" ]]; then
+  cp -p "$SRC/.bazelrc.user" "$DST/.bazelrc.user"
+fi
+
+# Copy up to 5 most recent dev.<N> binaries from source dev-versions.
+SRC_DEV_VERSIONS="$SRC/bin/dev-versions"
+if [[ -d "$SRC_DEV_VERSIONS" ]]; then
+  DST_DEV_VERSIONS="$DST/bin/dev-versions"
+  mkdir -p "$DST_DEV_VERSIONS"
+  ls "$SRC_DEV_VERSIONS"/dev.* 2>/dev/null \
+    | sort -t. -k2 -n -r \
+    | head -5 \
+    | while read -r f; do
+        cp -p "$f" "$DST_DEV_VERSIONS/$(basename "$f")"
+      done
+fi
