@@ -499,6 +499,17 @@ func InitGlobalSampler(
 	return initialized, initErr
 }
 
+// ResetGlobalSamplerForTesting resets the global ASH sampler so that
+// the next call to InitGlobalSampler will create a fresh sampler. This
+// is needed in test suites where multiple tests start and stop servers
+// in the same process: the first server's stopper quiesces the sampler
+// goroutine, and the sync.Once prevents re-initialization for
+// subsequent servers.
+func ResetGlobalSamplerForTesting() {
+	globalSampler.Store(nil)
+	initSamplerOnce = sync.Once{}
+}
+
 // GlobalSamplerMetrics returns the Metrics for the process-wide ASH
 // sampler, or nil if the sampler has not been initialized yet.
 func GlobalSamplerMetrics() *Metrics {
