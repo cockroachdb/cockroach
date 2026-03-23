@@ -1008,13 +1008,76 @@ func (node *ShowSavepointStatus) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW SAVEPOINT STATUS")
 }
 
+// ShowUsersOptions describes options for the SHOW USERS statement.
+type ShowUsersOptions struct {
+	Source              Expr // SOURCE = 'ldap:...'
+	LastAccessOlderThan Expr // LAST ACCESS TIME OLDER THAN <timestamp>
+}
+
+// Format implements the NodeFormatter interface.
+func (s *ShowUsersOptions) Format(ctx *FmtCtx) {
+	var addSep bool
+	maybeAddSep := func() {
+		if addSep {
+			ctx.WriteString(", ")
+		}
+		addSep = true
+	}
+
+	if s.Source != nil {
+		maybeAddSep()
+		ctx.WriteString("SOURCE = ")
+		ctx.FormatNode(s.Source)
+	}
+	if s.LastAccessOlderThan != nil {
+		maybeAddSep()
+		ctx.WriteString("LAST ACCESS TIME OLDER THAN ")
+		ctx.FormatNode(s.LastAccessOlderThan)
+	}
+}
+
+// CombineWith merges other ShowUsersOptions into this struct.
+// An error is returned if the same option is specified multiple times.
+func (s *ShowUsersOptions) CombineWith(other *ShowUsersOptions) error {
+	var err error
+	s.Source, err = combineExpr(s.Source, other.Source, "SOURCE")
+	if err != nil {
+		return err
+	}
+	s.LastAccessOlderThan, err = combineExpr(
+		s.LastAccessOlderThan, other.LastAccessOlderThan,
+		"LAST ACCESS TIME OLDER THAN",
+	)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// IsDefault returns true if this options struct has the default (zero) value.
+func (s ShowUsersOptions) IsDefault() bool {
+	return s.Source == nil && s.LastAccessOlderThan == nil
+}
+
+var _ NodeFormatter = &ShowUsersOptions{}
+
 // ShowUsers represents a SHOW USERS statement.
 type ShowUsers struct {
+	Options *ShowUsersOptions
+	Limit   *Limit
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowUsers) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW USERS")
+	if node.Options != nil && !node.Options.IsDefault() {
+		ctx.WriteString(" WITH ")
+		ctx.FormatNode(node.Options)
+	}
+	if node.Limit != nil {
+		ctx.WriteByte(' ')
+		ctx.FormatNode(node.Limit)
+	}
 }
 
 // ShowDefaultSessionVariablesForRole represents a SHOW DEFAULT SESSION VARIABLES FOR ROLE <name> statement.
