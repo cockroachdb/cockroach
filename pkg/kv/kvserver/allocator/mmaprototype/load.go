@@ -734,9 +734,6 @@ func loadSummaryForDimension(
 			buf.Printf("s%v", storeID)
 		}
 		buf.Printf("): %v, reason: %v [load=%v meanLoad=%v", summary, redact.SafeString(reason), load, meanLoad)
-		if denominator != meanLoad {
-			buf.Printf(" denom=%v", denominator)
-		}
 		if capacity != UnknownCapacity {
 			buf.Printf(" fractionUsed=%.2f%% meanUtil=%.2f%% capacity=%v",
 				redact.SafeFloat(fractionUsed*100), redact.SafeFloat(meanUtil*100), capacity)
