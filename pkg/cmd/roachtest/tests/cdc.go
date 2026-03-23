@@ -1094,20 +1094,11 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster, cfg cdcBank
 	m.Wait()
 }
 
-type cdcCheckpointType int
-
-const (
-	cdcNormalCheckpoint cdcCheckpointType = iota
-	cdcFrontierPersistence
-)
-
 // runCDCInitialScanRollingRestart runs multiple initial-scan-only changefeeds
 // on a 4-node cluster, using node 1 as the coordinator and continuously
 // restarting nodes 2-4 to hopefully force the changefeed to replan and exercise
 // the checkpoint restore logic.
-func runCDCInitialScanRollingRestart(
-	ctx context.Context, t test.Test, c cluster.Cluster, checkpointType cdcCheckpointType,
-) {
+func runCDCInitialScanRollingRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 	startOpts := option.DefaultStartOpts()
 	ips, err := c.ExternalIP(ctx, t.L(), c.Node(1))
 	sinkURL := fmt.Sprintf("https://%s:%d", ips[0], debug.WebhookServerPort)
@@ -1163,18 +1154,9 @@ func runCDCInitialScanRollingRestart(
 		// Finish splitting, so that drained ranges spread out evenly.
 		fmt.Sprintf(`ALTER TABLE large SPLIT AT SELECT id FROM large ORDER BY random() LIMIT %d`, largeSplitCount),
 		`ALTER TABLE large SCATTER`,
-	}
-	switch checkpointType {
-	case cdcNormalCheckpoint:
-		setupStmts = append(setupStmts,
-			`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '5s'`,
-			`SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '10m'`,
-		)
-	case cdcFrontierPersistence:
-		setupStmts = append(setupStmts,
-			`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '0'`,
-			`SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '5s'`,
-		)
+		// Configure frequent checkpointing.
+		`SET CLUSTER SETTING changefeed.span_checkpoint.interval = '1s'`,
+		`SET CLUSTER SETTING changefeed.progress.frontier_persistence.interval = '5s'`,
 	}
 	for _, s := range setupStmts {
 		t.L().Printf(s)
@@ -2494,29 +2476,15 @@ CONFIGURE ZONE USING
 		},
 	})
 	r.Add(registry.TestSpec{
-		Name:             "cdc/initial-scan-rolling-restart/normal-checkpoint",
+		Name:             "cdc/initial-scan-rolling-restart",
 		Owner:            registry.OwnerCDC,
 		Cluster:          r.MakeClusterSpec(4),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Timeout:          30 * time.Minute,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runCDCInitialScanRollingRestart(ctx, t, c, cdcNormalCheckpoint)
+			runCDCInitialScanRollingRestart(ctx, t, c)
 		},
-	})
-	r.Add(registry.TestSpec{
-		Name:             "cdc/initial-scan-rolling-restart/frontier-persistence",
-		Owner:            registry.OwnerCDC,
-		Cluster:          r.MakeClusterSpec(4),
-		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.Nightly),
-		Timeout:          30 * time.Minute,
-		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runCDCInitialScanRollingRestart(ctx, t, c, cdcFrontierPersistence)
-		},
-		// TODO(#155015): Unskip this test.
-		Skip: "frontier persistence will not happen during an initial-scan only changefeed " +
-			"without periodic aggregator frontier flushes",
 	})
 	r.Add(registry.TestSpec{
 		Name:             "cdc/rolling-restart",
