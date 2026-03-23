@@ -704,6 +704,11 @@ func (ct *cdcTester) runFeedLatencyVerifierWithCallback(
 
 		err := verifier.pollLatencyUntilJobSucceeds(ctx, ct.DB(), cj.jobID, time.Second, ct.doneCh)
 		if err != nil {
+			debugCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			if zipErr := ct.cluster.FetchDebugZip(debugCtx, ct.logger, fmt.Sprintf("latency_debug_%s.zip", cj.Label())); zipErr != nil {
+				ct.logger.Printf("failed to fetch debug zip on latency failure: %s", zipErr)
+			}
 			return err
 		}
 
