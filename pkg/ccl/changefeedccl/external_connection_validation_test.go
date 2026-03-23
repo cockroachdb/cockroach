@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -26,8 +28,8 @@ func TestValidateExternalConnectionSinkURI(t *testing.T) {
 	defer stopServer()
 
 	env := externalconn.ExternalConnEnv{
-		ServerCfg: &s.TestingKnobs.DistSQL.(*execinfra.TestingKnobs).ServerConfig,
-		Username:  "root",
+		ServerCfg: &s.DistSQLServer().(*distsql.ServerImpl).ServerConfig,
+		Username:  username.RootUserName(),
 	}
 
 	t.Run("fails-when-dial-fails", func(t *testing.T) {
