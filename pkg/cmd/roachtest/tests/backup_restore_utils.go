@@ -30,12 +30,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -439,9 +441,18 @@ func (u *CommonTestUtils) setClusterSettings(
 // error if the job doesn't succeed within the attempted retries.
 func (u *CommonTestUtils) waitForJobSuccess(
 	ctx context.Context, l *logger.Logger, rng *rand.Rand, jobID int, internalSystemJobs bool,
+) error {
+	return u.waitForJobSuccessWithNode(
+		ctx, l, u.RandomNode(rng, u.roachNodes), jobID, internalSystemJobs,
+	)
+}
+
+// waitForJobSuccessWithNode waits for the given job with the given ID to
+// succeed (according to `backupCompletionRetryOptions`) via the provided node.
+// Returns an error if the job doesn't succeed within the attempted retries.
+func (u *CommonTestUtils) waitForJobSuccessWithNode(
+	ctx context.Context, l *logger.Logger, node int, jobID int, internalSystemJobs bool,
 ) (resErr error) {
-	var lastErr error
-	node := u.RandomNode(rng, u.roachNodes)
 	l.Printf("querying job status through node %d", node)
 
 	db, err := u.cluster.ConnE(ctx, l, node, option.DBName("system"))
@@ -458,7 +469,11 @@ func (u *CommonTestUtils) waitForJobSuccess(
 	if internalSystemJobs {
 		jobsQuery = fmt.Sprintf("(%s)", jobutils.InternalSystemJobsBaseQuery)
 	}
-	r := retry.StartWithCtx(ctx, backupCompletionRetryOptions)
+	r := retry.StartWithCtx(ctx, retry.Options{
+		InitialBackoff: time.Second,
+		MaxBackoff:     time.Second,
+		MaxDuration:    80 * time.Minute,
+	})
 	for r.Next() {
 		var status string
 		var payloadBytes []byte
@@ -466,26 +481,21 @@ func (u *CommonTestUtils) waitForJobSuccess(
 			fmt.Sprintf(`SELECT status, payload FROM %s`, jobsQuery), jobID,
 		).Scan(&status, &payloadBytes)
 		if err != nil {
-			lastErr = fmt.Errorf("error reading (status, payload) for job %d: %w", jobID, err)
-			l.Printf("%v", lastErr)
+			l.Printf("error reading (status, payload) for job %d: %v", jobID, err)
 			continue
 		}
 
 		if jobs.State(status) == jobs.StateFailed {
 			payload := &jobspb.Payload{}
 			if err := protoutil.Unmarshal(payloadBytes, payload); err == nil {
-				lastErr = fmt.Errorf("job %d failed with error: %s", jobID, payload.Error)
+				return fmt.Errorf("job %d failed with error: %s", jobID, payload.Error)
 			} else {
-				lastErr = fmt.Errorf("job %d failed, and could not unmarshal payload: %w", jobID, err)
+				return fmt.Errorf("job %d failed, and could not unmarshal payload: %w", jobID, err)
 			}
-
-			l.Printf("%v", lastErr)
-			break
 		}
 
 		if expected, actual := jobs.StateSucceeded, jobs.State(status); expected != actual {
-			lastErr = fmt.Errorf("job %d: current status %q, waiting for %q", jobID, actual, expected)
-			l.Printf("%v", lastErr)
+			l.Printf("job %d: current status %q, waiting for %q", jobID, actual, expected)
 			continue
 		}
 
@@ -493,11 +503,83 @@ func (u *CommonTestUtils) waitForJobSuccess(
 		return nil
 	}
 
-	if r.CurrentAttempt() >= backupCompletionRetryOptions.MaxRetries {
-		return fmt.Errorf("exhausted all %d retries waiting for job %d to finish, last err: %w", backupCompletionRetryOptions.MaxRetries, jobID, lastErr)
+	if err := ctx.Err(); err != nil {
+		return errors.Wrapf(err, "error waiting for job %d to finish", jobID)
 	}
 
-	return fmt.Errorf("error waiting for job to finish: %w", lastErr)
+	return errors.Newf("retries exhausted waiting for job %d to finish", jobID)
+}
+
+// waitForJobFractionCompletedWithNode waits for the given job to reach at the
+// least the provided progress fraction, querying through the provided node.
+func (u *CommonTestUtils) waitForJobFractionCompletedWithNode(
+	ctx context.Context, l *logger.Logger, node int, jobID int, fraction float64,
+) (resErr error) {
+	l.Printf("querying job progress through node %d", node)
+
+	db, err := u.cluster.ConnE(ctx, l, node, option.DBName("system"))
+	if err != nil {
+		l.Printf("error connecting to node %d: %v", node, err)
+		return err
+	}
+	defer func() {
+		err := db.Close()
+		resErr = errors.CombineErrors(resErr, err)
+	}()
+
+	logThrottler := util.EveryMono(30 * time.Second)
+	const progQuery = `SELECT coordinator_id, fraction_completed, status FROM crdb_internal.jobs WHERE job_id = $1`
+	var claimInstanceID gosql.NullInt64
+	var fractionCompleted gosql.NullFloat64
+	var status string
+	for r := retry.StartWithCtx(ctx, retry.Options{
+		InitialBackoff: time.Second,
+		MaxBackoff:     time.Second,
+		MaxDuration:    60 * time.Minute,
+	}); r.Next(); {
+		unclaimed := !claimInstanceID.Valid
+		err := db.QueryRowContext(ctx, progQuery, jobID).Scan(
+			&claimInstanceID, &fractionCompleted, &status,
+		)
+		if err != nil {
+			l.Printf("error querying progress for job %d: %v", jobID, err)
+			continue
+		}
+		if unclaimed && claimInstanceID.Valid {
+			l.Printf("job %d claimed by instance %d", jobID, claimInstanceID.Int64)
+		}
+
+		if fractionCompleted.Valid {
+			if fractionCompleted.Float64 >= fraction {
+				l.Printf(
+					"job %d passed %.2f%% progress (current progress: %.2f%%)",
+					jobID, fraction*100, fractionCompleted.Float64*100,
+				)
+				return nil
+			}
+			if logThrottler.ShouldProcess(crtime.NowMono()) {
+				l.Printf(
+					"waiting for job %d to pass %.2f%% (current progress: %.2f%%)",
+					jobID, fraction*100, fractionCompleted.Float64*100,
+				)
+			}
+		}
+
+		jobStatus := jobs.State(status)
+		if jobStatus != jobs.StateSucceeded && jobStatus != jobs.StateRunning {
+			return errors.Newf("job %d unexpectedly in state %s while tracking progress", jobID, jobStatus)
+		}
+	}
+
+	if err := ctx.Err(); err != nil {
+		return errors.Wrapf(
+			err, "error waiting for job %d to pass %.2f%% progress", jobID, fraction*100,
+		)
+	}
+
+	return errors.Newf(
+		"retries exhausted waiting for job %d to pass %.2f%% progress", jobID, fraction*100,
+	)
 }
 
 // runJobOnOneOf disables job adoption on cockroach nodes that are not
@@ -665,6 +747,16 @@ func (u *CommonTestUtils) collectFailureArtifacts(
 	return fmt.Errorf("%w (artifacts collected in %s)", restoreErr, dirName), nil
 }
 
+// takeDebugZip fetches a debug.zip from the cluster and saves it with the
+// current timestamp in the test artifacts.
+func (u *CommonTestUtils) takeDebugZip(ctx context.Context, l *logger.Logger) {
+	zipPath := fmt.Sprintf("debug-%d.zip", timeutil.Now().Unix())
+	err := u.cluster.FetchDebugZip(ctx, l, zipPath)
+	if err != nil {
+		l.Printf("failed to fetch debug zip: %v", err)
+	}
+}
+
 // resetCluster wipes the entire cluster and starts it again with the
 // specified version binary. This is done before we attempt restoring a
 // full cluster backup.
@@ -676,7 +768,11 @@ func (u *CommonTestUtils) resetCluster(
 	settings []install.ClusterSettingOption,
 ) error {
 	l.Printf("resetting cluster using version %q", version.String())
-	expectDeathsFn(len(u.roachNodes))
+	// TODO (kev-cao): Once we've migrated off of the deprecated cluster Monitor,
+	// we can remove expectDeathsFn entirely.
+	if expectDeathsFn != nil {
+		expectDeathsFn(len(u.roachNodes))
+	}
 	if err := u.cluster.WipeE(ctx, l, u.roachNodes); err != nil {
 		return fmt.Errorf("failed to wipe cluster: %w", err)
 	}
@@ -732,6 +828,10 @@ func hasInternalSystemJobs(
 
 func randIntBetween(rng *rand.Rand, min, max int) int {
 	return rng.Intn(max-min) + min
+}
+
+func randFloatBetween(rng *rand.Rand, min, max float64) float64 {
+	return rng.Float64()*(max-min) + min
 }
 
 func randString(rng *rand.Rand, strLen int) string {
