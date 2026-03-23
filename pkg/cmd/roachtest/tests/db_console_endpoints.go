@@ -303,8 +303,12 @@ func withRetries(ctx context.Context, opts retry.Options, f func() error) error 
 func initializeSchemaAndIDs(
 	ctx context.Context, c cluster.Cluster, l *logger.Logger, binaryPath string,
 ) error {
-	// Initialize some schema objects.
-	initTpcc := fmt.Sprintf("%s workload init tpcc --drop {pgurl:1}", binaryPath)
+	// Initialize some schema objects. Note: we intentionally do not use --drop
+	// here because this function may be called multiple times during mixed-version
+	// testing, and --drop can race with background operations on the tables from a
+	// previous invocation (e.g., schema change GC, stats collection), causing
+	// "another operation is currently operating on the table" errors.
+	initTpcc := fmt.Sprintf("%s workload init tpcc {pgurl:1}", binaryPath)
 	c.Run(ctx, option.WithNodes([]int{1}), initTpcc)
 
 	// Get SQL connection to query for a tableID, databaseID and fingerprintID.
