@@ -5,38 +5,29 @@
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import { Tabs } from "antd";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect } from "react";
 import Helmet from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 
 import { Anchor } from "src/anchor";
-import { TxnInsightDetailsRequest, TxnInsightDetailsReqErrs } from "src/api";
+import { useTxnInsightDetails } from "src/api/txnInsightDetailsApi";
 import { Button } from "src/button";
 import { commonStyles } from "src/common";
-import { timeScaleRangeToObj } from "src/timeScaleDropdown/utils";
 import { idAttr, insights } from "src/util";
 import { getMatchParamByName } from "src/util/query";
 
 import { TimeScale } from "../../timeScaleDropdown";
-import {
-  InsightNameEnum,
-  StmtFailureCodesStr,
-  TxnInsightDetails,
-} from "../types";
+import { InsightNameEnum, StmtFailureCodesStr } from "../types";
 
 import { TransactionInsightDetailsOverviewTab } from "./transactionInsightDetailsOverviewTab";
 import { TransactionInsightsDetailsStmtsTab } from "./transactionInsightDetailsStmtsTab";
 
 export interface TransactionInsightDetailsStateProps {
-  insightDetails: TxnInsightDetails;
-  insightError: TxnInsightDetailsReqErrs | null;
   timeScale?: TimeScale;
   hasAdminRole: boolean;
-  maxSizeApiReached?: boolean;
 }
 
 export interface TransactionInsightDetailsDispatchProps {
-  refreshTransactionInsightDetails: (req: TxnInsightDetailsRequest) => void;
   setTimeScale: (ts: TimeScale) => void;
   refreshUserSQLRoles: () => void;
 }
@@ -51,73 +42,51 @@ enum TabKeysEnum {
   STATEMENTS = "statements",
 }
 
-const MAX_REQ_ATTEMPTS = 3;
-
 export const TransactionInsightDetails: React.FC<
   TransactionInsightDetailsProps
 > = ({
-  refreshTransactionInsightDetails,
   setTimeScale,
   history,
-  insightDetails,
-  insightError,
   timeScale,
   match,
   hasAdminRole,
   refreshUserSQLRoles,
-  maxSizeApiReached,
 }) => {
-  const fetches = useRef<number>(0);
   const executionID = getMatchParamByName(match, idAttr);
+
+  const { data: txnInsightDetailsResp } = useTxnInsightDetails(
+    executionID,
+    timeScale,
+  );
+
+  const insightDetails = txnInsightDetailsResp?.results.result;
+  const insightError = txnInsightDetailsResp?.results.errors ?? null;
+  const maxSizeApiReached = txnInsightDetailsResp?.maxSizeReached;
+
+  // Determine if we have loaded data but some sub-queries are still
+  // missing information (partial failure). Once data has arrived, any
+  // missing pieces won't be retried.
+  const hasData = txnInsightDetailsResp != null;
+  const stmtsComplete =
+    insightDetails?.statements != null &&
+    insightDetails.statements.length ===
+      insightDetails?.txnDetails?.stmtExecutionIDs.length;
+  const contentionComplete =
+    insightDetails?.blockingContentionDetails != null ||
+    (insightDetails?.txnDetails != null &&
+      insightDetails.txnDetails.insights.find(
+        i => i.name === InsightNameEnum.HIGH_CONTENTION,
+      ) == null &&
+      insightDetails.txnDetails.errorCode !==
+        StmtFailureCodesStr.RETRY_SERIALIZABLE);
+  const maxRequestsReached =
+    hasData &&
+    insightDetails != null &&
+    (!stmtsComplete || !contentionComplete);
 
   useEffect(() => {
     refreshUserSQLRoles();
   }, [refreshUserSQLRoles]);
-
-  useEffect(() => {
-    if (fetches.current === MAX_REQ_ATTEMPTS) {
-      return;
-    }
-
-    const txnDetails = insightDetails.txnDetails;
-    const stmts = insightDetails.statements;
-    const contentionInfo = insightDetails.blockingContentionDetails;
-
-    const stmtsComplete =
-      stmts != null && stmts.length === txnDetails?.stmtExecutionIDs?.length;
-
-    const contentionComplete =
-      contentionInfo != null ||
-      (txnDetails != null &&
-        txnDetails.insights.find(
-          i => i.name === InsightNameEnum.HIGH_CONTENTION,
-        ) == null &&
-        txnDetails.errorCode !== StmtFailureCodesStr.RETRY_SERIALIZABLE);
-
-    if (!stmtsComplete || !contentionComplete || txnDetails == null) {
-      // Only fetch if we are missing some information.
-      // Note that we will attempt to refetch if we are stll missing some
-      // information only if the results differ from what we already have,
-      // with the maximum number of retries capped at MAX_REQ_ATTEMPTS.
-      const execReq = timeScaleRangeToObj(timeScale);
-      const req = {
-        mergeResultWith: insightDetails,
-        start: execReq.start,
-        end: execReq.end,
-        txnExecutionID: executionID,
-        excludeTxn: txnDetails != null,
-        excludeStmts: stmtsComplete,
-        excludeContention: contentionComplete,
-      };
-      refreshTransactionInsightDetails(req);
-      fetches.current += 1;
-    }
-  }, [
-    timeScale,
-    executionID,
-    refreshTransactionInsightDetails,
-    insightDetails,
-  ]);
 
   const prevPage = (): void => history.goBack();
 
@@ -148,27 +117,24 @@ export const TransactionInsightDetails: React.FC<
         >
           <Tabs.TabPane tab="Overview" key={TabKeysEnum.OVERVIEW}>
             <TransactionInsightDetailsOverviewTab
-              maxRequestsReached={fetches.current === MAX_REQ_ATTEMPTS}
+              maxRequestsReached={maxRequestsReached}
               errors={insightError}
-              statements={insightDetails.statements}
-              txnDetails={insightDetails.txnDetails}
-              contentionDetails={insightDetails.blockingContentionDetails}
+              statements={insightDetails?.statements}
+              txnDetails={insightDetails?.txnDetails}
+              contentionDetails={insightDetails?.blockingContentionDetails}
               setTimeScale={setTimeScale}
               hasAdminRole={hasAdminRole}
               maxApiSizeReached={maxSizeApiReached}
             />
           </Tabs.TabPane>
-          {(insightDetails.txnDetails?.stmtExecutionIDs?.length ||
-            insightDetails.statements?.length) && (
+          {(insightDetails?.txnDetails?.stmtExecutionIDs.length ||
+            insightDetails?.statements?.length) && (
             <Tabs.TabPane
               tab="Statement Executions"
               key={TabKeysEnum.STATEMENTS}
             >
               <TransactionInsightsDetailsStmtsTab
-                isLoading={
-                  insightDetails.statements == null &&
-                  fetches.current < MAX_REQ_ATTEMPTS
-                }
+                isLoading={insightDetails?.statements == null && !hasData}
                 error={insightError?.statementsErr}
                 statements={insightDetails?.statements}
               />

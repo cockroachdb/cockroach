@@ -19,17 +19,9 @@ import {
   reducer as databasesList,
 } from "./databasesList/databasesList.reducers";
 import {
-  reducer as txnInsightDetails,
-  TxnInsightDetailsCachedState,
-} from "./insightDetails/transactionInsightDetails";
-import {
   reducer as statementFingerprintInsights,
   StatementFingerprintInsightsCachedState,
 } from "./insights/statementFingerprintInsights";
-import {
-  reducer as stmtInsights,
-  StmtInsightsState,
-} from "./insights/statementInsights";
 import {
   reducer as txnInsights,
   TxnInsightsState,
@@ -68,8 +60,6 @@ export type AdminUiState = {
   sqlDetailsStats: SQLDetailsStatsReducerState;
   clusterLocks: ClusterLocksReqState;
   databasesList: DatabasesListState;
-  stmtInsights: StmtInsightsState;
-  txnInsightDetails: TxnInsightDetailsCachedState;
   txnInsights: TxnInsightsState;
   statementFingerprintInsights: StatementFingerprintInsightsCachedState;
   clusterSettings: ClusterSettingsState;
@@ -85,8 +75,6 @@ export const reducers = combineReducers<AdminUiState>({
   nodes,
   liveness,
   sessions,
-  txnInsightDetails,
-  stmtInsights,
   txnInsights,
   terminateQuery,
   uiConfig,

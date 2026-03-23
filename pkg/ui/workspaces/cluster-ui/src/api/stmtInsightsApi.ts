@@ -140,6 +140,23 @@ export const stmtInsightsByTxnExecutionQuery = (id: string): string => `
  WHERE txn_id = '${id}'
 `;
 
+export function useStmtInsightDetails(
+  stmtExecutionID: string,
+  timeScale: TimeScale,
+) {
+  return useSwrWithClusterId<SqlApiResponse<StmtInsightEvent[]>>(
+    stmtExecutionID ? { name: "stmtInsightDetails", stmtExecutionID } : null,
+    () => {
+      const { start, end } = timeScaleRangeToObj(timeScale);
+      return getStmtInsightsApi({ stmtExecutionID, start, end });
+    },
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
+  );
+}
+
 export function useStmtInsights(timeScale: TimeScale) {
   const shouldPoll = timeScale?.key !== "Custom";
   return useSwrWithClusterId<SqlApiResponse<StmtInsightEvent[]>>(
