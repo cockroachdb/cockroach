@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -142,7 +143,37 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 	// Using a nil pacer is effectively a noop if snapshot control is disabled.
 	var pacer *admission.SnapshotPacer = nil
 	if admission.DiskBandwidthForSnapshotIngest.Get(&s.cfg.Settings.SV) && snapshotQ != nil {
-		pacer = admission.NewSnapshotPacer(snapshotQ)
+		minRate := int64(0)
+		if admission.DiskBandwidthForSnapshotIngestMinRateEnabled.Get(&s.cfg.Settings.SV) {
+			minFractionOfTimeoutForApplyingSnapshot := 1 - snapshotReservationQueueTimeoutFraction.Get(&s.cfg.Settings.SV)
+			// Use a slowdown factor of half the permittedRangeScanSlowdown
+			// factor, which means we allow snapshots to ingest atleast as fast
+			// as would be necessary to complete within half of a snapshots
+			// timeout duration.
+			snapshotApplySlowdownFactor := (permittedRangeScanSlowdown / 2) * minFractionOfTimeoutForApplyingSnapshot
+			if snapshotApplySlowdownFactor < 1 {
+				// Avoid division by 0. A snapshotApplySlowdownFactor between 0
+				// and 1 would cause the minRate to be greater than
+				// rebalanceSnapshotRate, which is the max speed snapshots can
+				// be sent at, so we don't need to ingest snapshots at a faster
+				// rate than that.
+				snapshotApplySlowdownFactor = 1
+			}
+
+			minRate = int64(float64(rebalanceSnapshotRate.Get(&s.cfg.Settings.SV)) / snapshotApplySlowdownFactor)
+			storeBW := s.cfg.KVAdmissionController.GetProvisionedBandwidth(s.StoreID())
+			if storeBW > 0 {
+				if minRate > int64(float64(storeBW)*0.25) {
+					log.KvDistribution.Warningf(ctx,
+						"snapshot ingest minRate is greater than 25%% of the store's provisioned bandwidth, minrate: %d, storeBW: %d",
+						minRate, storeBW,
+					)
+				}
+			}
+		}
+
+		timer := &timeutil.Timer{}
+		pacer = admission.NewSnapshotPacer(snapshotQ, minRate, timer.AsTimerI())
 	}
 
 	for {
@@ -170,7 +201,10 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 
 			timingTag.start("sst")
 			verifyCheckSum := snapshotChecksumVerification.Get(&s.ClusterSettings().SV)
-			// All batch operations are guaranteed to be point key or range key puts.
+			// All batch operations are guaranteed to be point keys or range keys.
+			// When the snapshot contains shared or external SSTs, Pebble internal
+			// keys (DELS, RANGEDELs etc.), can also appear among the point and
+			// range keys.
 			for batchReader.Next() {
 				// TODO(lyang24): maybe avoid decoding engine key twice.
 				// msstw calls (i.e. putInternalPointKey) can use the decoded engine key here as input.
@@ -188,13 +222,14 @@ func (kvSS *kvBatchSnapshotStrategy) Receive(
 					return noSnap, err
 				}
 				// Verify value checksum to catch data corruption.
-				if verifyCheckSum {
+				if verifyCheckSum && batchReader.IsPointValue() {
 					if err = ek.Verify(batchReader.Value()); err != nil {
 						return noSnap, errors.Wrap(err, "verifying value checksum")
 					}
 				}
 
-				if err := msstw.ReadOne(ctx, ek, header.SharedReplicate, batchReader); err != nil {
+				if err := msstw.ReadOne(
+					ctx, ek, header.SharedReplicate || header.ExternalReplicate, batchReader); err != nil {
 					return noSnap, err
 				}
 			}
@@ -408,7 +443,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 		}
 		return err
 	}
-	if err := rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, fs.RangeSnapshotReadCategory, rditer.SelectOpts{
+	if err := rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.StateSnap, fs.RangeSnapshotReadCategory, rditer.SelectOpts{
 		Ranged: rditer.SelectRangedOptions{
 			SystemKeys: true,
 			LockTable:  true,
@@ -477,7 +512,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			}
 		}
 		kvsBefore := kvs
-		err := rditer.IterateReplicaKeySpansShared(ctx, snap.State.Desc, kvSS.st, kvSS.clusterID, snap.EngineSnap, func(key *pebble.InternalKey, value pebble.LazyValue, _ pebble.IteratorLevel) error {
+		err := rditer.IterateReplicaKeySpansShared(ctx, snap.State.Desc, kvSS.st, kvSS.clusterID, snap.StateSnap, func(key *pebble.InternalKey, value pebble.LazyValue, _ pebble.IteratorLevel) error {
 			kvs++
 			if b == nil {
 				b = kvSS.newWriteBatch()
@@ -540,7 +575,7 @@ func (kvSS *kvBatchSnapshotStrategy) Send(
 			//
 			// See: https://github.com/cockroachdb/cockroach/issues/142673
 			transitionFromSharedToRegularReplicate = true
-			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.EngineSnap, fs.RangeSnapshotReadCategory, rditer.SelectOpts{
+			err = rditer.IterateReplicaKeySpans(ctx, snap.State.Desc, snap.StateSnap, fs.RangeSnapshotReadCategory, rditer.SelectOpts{
 				Ranged: rditer.SelectRangedOptions{
 					UserKeys: true,
 				},

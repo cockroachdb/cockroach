@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -113,6 +114,10 @@ type ServerConfig struct {
 	// used during restore.
 	RestoreMonitor *mon.BytesMonitor
 
+	// BulkMonitor is the parent bulk memory monitor. It is used to monitor memory
+	// for bulk operations that don't have a dedicated child monitor.
+	BulkMonitor *mon.BytesMonitor
+
 	// ChangefeedMonitor is the parent monitor for all CDC DistSQL flows.
 	ChangefeedMonitor *mon.BytesMonitor
 
@@ -201,6 +206,8 @@ type ServerConfig struct {
 	// with elastic CPU control.
 	AdmissionPacerFactory admission.PacerFactory
 
+	SQLCPUProvider admission.SQLCPUProvider
+
 	// Allow mutation operations to trigger stats refresh.
 	StatsRefresher *stats.Refresher
 
@@ -245,6 +252,16 @@ type TestingKnobs struct {
 	// RunBeforeIndexBackfillProgressUpdate is called before updating the
 	// progress for a single index backfill.
 	RunBeforeIndexBackfillProgressUpdate func(ctx context.Context, completed []roachpb.Span)
+
+	// AfterDistributedMergeMapPhase is called after the map phase of a distributed
+	// merge index backfill completes, before any merge iterations begin. It receives
+	// the SST manifests produced by the map phase.
+	AfterDistributedMergeMapPhase func(ctx context.Context, manifests []jobspb.BulkSSTManifest)
+
+	// AfterDistributedMergeIteration is called after each iteration of a
+	// distributed merge during index backfill. It receives the iteration number
+	// and the current SST manifests.
+	AfterDistributedMergeIteration func(ctx context.Context, iteration int, manifests []jobspb.BulkSSTManifest)
 
 	// SerializeIndexBackfillCreationAndIngestion ensures that every index batch
 	// created during an index backfill is also ingested before moving on to the
@@ -323,6 +340,9 @@ type TestingKnobs struct {
 	// testing knobs.
 	IndexBackfillMergerTestingKnobs base.ModuleTestingKnobs
 
+	// BulkMergeTestingKnobs are specific to the distributed merge pipeline.
+	BulkMergeTestingKnobs base.ModuleTestingKnobs
+
 	// ProcessorNoTracingSpan is used to disable the creation of a tracing span
 	// in ProcessorBase.StartInternal if the tracing is enabled.
 	ProcessorNoTracingSpan bool
@@ -345,6 +365,10 @@ type TestingKnobs struct {
 	// TableReaderStartScanCb, when non-nil, will be called whenever the
 	// TableReader processor starts its scan.
 	TableReaderStartScanCb func()
+
+	// SampleAggregatorTestingKnobRowHook, if non-nil, is called for each row
+	// processed by the sample aggregator. Used for testing, e.g., to inject panics.
+	SampleAggregatorTestingKnobRowHook func()
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

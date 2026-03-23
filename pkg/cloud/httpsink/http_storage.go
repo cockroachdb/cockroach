@@ -31,6 +31,7 @@ import (
 func parseHTTPURL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_http
+	conf.URI = uri.String()
 	conf.HttpPath.BaseUri = uri.String()
 	return conf, nil
 }
@@ -41,6 +42,7 @@ type httpStorage struct {
 	hosts    []string
 	settings *cluster.Settings
 	ioConf   base.ExternalIODirConfig
+	uri      string // original URI used to construct this storage
 }
 
 var _ cloud.ExternalStorage = &httpStorage{}
@@ -86,6 +88,7 @@ func MakeHTTPStorage(
 		hosts:    strings.Split(uri.Host, ","),
 		settings: args.Settings,
 		ioConf:   args.IOConf,
+		uri:      dest.URI,
 	}, nil
 }
 
@@ -95,6 +98,7 @@ func (h *httpStorage) Conf() cloudpb.ExternalStorage {
 		HttpPath: cloudpb.ExternalStorage_Http{
 			BaseUri: h.base.String(),
 		},
+		URI: h.uri,
 	}
 }
 
@@ -175,7 +179,9 @@ func (h *httpStorage) Writer(ctx context.Context, basename string) (io.WriteClos
 	}), nil
 }
 
-func (h *httpStorage) List(_ context.Context, _, _ string, _ cloud.ListingFn) error {
+func (h *httpStorage) List(
+	_ context.Context, _ string, _ cloud.ListOptions, _ cloud.ListingFn,
+) error {
 	return errors.Mark(errors.New("http storage does not support listing"), cloud.ErrListingUnsupported)
 }
 

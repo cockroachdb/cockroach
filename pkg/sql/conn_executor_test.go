@@ -11,6 +11,7 @@ import (
 	gosql "database/sql"
 	"database/sql/driver"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"slices"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -34,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/colfetcher"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/mutations"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -525,12 +528,19 @@ func TestQueryProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	const rows = 1000
-	defer rowexec.TestingSetScannedRowProgressFrequency(rows / 60)()
+	skip.UnderRace(t)
 
-	// We'll do more than 6 scans because we set a low TableReaderBatchBytesLimit
+	// Use the production value of coldata.BatchSize to make calculations below
+	// consistent.
+	require.NoError(t, coldata.SetBatchSizeForTests(coldata.DefaultColdataBatchSize))
+	var rows = coldata.BatchSize() * 10
+	progressFrequency := int64(coldata.BatchSize())
+	defer colfetcher.TestingSetScanProgressFrequency(progressFrequency)()
+	defer rowexec.TestingSetScannedRowProgressFrequency(progressFrequency)()
+
+	// We'll do more than 5 scans because we set a low TableReaderBatchBytesLimit
 	// below.
-	const stallAfterScans = 6
+	const stallAfterScans = 5
 
 	var queryRunningAtomic, scannedBatchesAtomic int64
 	stalled, unblock := make(chan struct{}), make(chan struct{})
@@ -554,9 +564,9 @@ func TestQueryProgress(t *testing.T) {
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
-				// A low limit, to force many small scans such that we get progress
-				// reports.
-				TableReaderBatchBytesLimit: 1500,
+				// A low limit, to force many small scans such that we get
+				// progress reports.
+				TableReaderBatchBytesLimit: 50000,
 			},
 			Store: &kvserver.StoreTestingKnobs{
 				TestingRequestFilter: func(_ context.Context, req *kvpb.BatchRequest) *kvpb.Error {
@@ -581,17 +591,15 @@ func TestQueryProgress(t *testing.T) {
 
 	db := sqlutils.MakeSQLRunner(rawDB)
 
-	// TODO(yuzefovich): the vectorized cfetcher doesn't emit metadata about
-	// the progress nor do we have an infrastructure to emit such metadata at
-	// the runtime (we can only propagate the metadata during the draining of
-	// the flow which defeats the purpose of the progress meta), so we use the
-	// old row-by-row engine in this test. We should fix that (#55758).
-	db.Exec(t, `SET vectorize=off`)
+	if rand.Float64() < 0.5 {
+		// Randomize the execution engine.
+		db.Exec(t, `SET vectorize=off`)
+	}
 	db.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
 	db.Exec(t, `CREATE DATABASE t; CREATE TABLE t.test (x INT PRIMARY KEY);`)
 	db.Exec(t, `INSERT INTO t.test SELECT generate_series(1, $1)::INT`, rows)
 	db.Exec(t, `CREATE STATISTICS __auto__ FROM t.test`)
-	const query = `SELECT count(*) FROM t.test WHERE x > $1 and x % 2 = 0`
+	const query = `SELECT count(*) FROM t.test WHERE x > 0`
 
 	// Invalidate the stats cache so that we can be sure to get the latest stats.
 	var tableID descpb.ID
@@ -616,7 +624,7 @@ func TestQueryProgress(t *testing.T) {
 			}
 		}()
 		atomic.StoreInt64(&queryRunningAtomic, 1)
-		_, err := rawDB.ExecContext(ctx, query, rows/2)
+		_, err := rawDB.ExecContext(ctx, query)
 		return err
 	})
 
@@ -672,6 +680,14 @@ func TestPrepareInExplicitTransactionDoesNotDeadlock(t *testing.T) {
 	_, err = tx2.Exec("ALTER TABLE bar ADD COLUMN j INT NOT NULL")
 	require.NoError(t, err)
 
+	// Wait for the DDL to complete. If we don't do this, it is possible for the
+	// schema change jobs to encounter an error due to concurrent inserts on
+	// slow runs.
+	testDB.CheckQueryResultsRetry(t,
+		"SELECT count(*) FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE' AND status != 'succeeded'",
+		[][]string{{"0"}},
+	)
+
 	// Now we want tx2 to get blocked on tx1 and stay blocked, then we want to
 	// push tx1 above tx2 and have it get blocked in planning.
 	errCh := make(chan error)
@@ -698,19 +714,27 @@ func TestPrepareInExplicitTransactionDoesNotDeadlock(t *testing.T) {
 	_, err = tx1.Prepare("SELECT NULL FROM [SHOW COLUMNS FROM bar] LIMIT 1")
 	require.NoError(t, err)
 
-	// Try to commit tx1. Either it should get a RETRY_SERIALIZABLE error or
-	// tx2 should. Ensure that either one or both of them does.
+	checkSerializableError := func(err error) {
+		var pqErr *pq.Error
+		require.NotNil(t, err)
+		require.Truef(t, errors.As(err, &pqErr), "expected a pq error, got: %v", err)
+		require.Equalf(t, pgcode.SerializationFailure, pgcode.MakeCode(string(pqErr.Code)),
+			"expected serialization failure, got (with code %v): %v", pqErr.Code, err)
+	}
+
+	// Try to commit tx1. Either it should get a retriable error or tx2 should.
+	// Ensure that either one or both of them does.
 	if tx1Err := tx1.Commit(); tx1Err == nil {
 		// tx1 committed successfully, ensure tx2 failed.
 		tx2ExecErr := <-errCh
-		require.Regexp(t, "RETRY_SERIALIZABLE", tx2ExecErr)
+		checkSerializableError(tx2ExecErr)
 		_ = tx2.Rollback()
 	} else {
-		require.Regexp(t, "RETRY_SERIALIZABLE", tx1Err)
+		checkSerializableError(tx1Err)
 		tx2ExecErr := <-errCh
 		require.NoError(t, tx2ExecErr)
 		if tx2CommitErr := tx2.Commit(); tx2CommitErr != nil {
-			require.Regexp(t, "RETRY_SERIALIZABLE", tx2CommitErr)
+			checkSerializableError(tx2CommitErr)
 		}
 	}
 }
@@ -1410,9 +1434,11 @@ func TestShowLastQueryStatistics(t *testing.T) {
 	ctx := context.Background()
 	var testTenant base.DefaultTestTenantOptions
 	if syncutil.DeadlockEnabled {
-		// Under deadlock, the planning latency in the external process mode can
-		// sometimes exceed 1s allowed limit.
-		testTenant = base.TestSkipForExternalProcessMode()
+		// Under deadlock, the planning latency in the secondary test tenant can
+		// sometimes exceed 1s allowed limit. (Note ideally we'd have used a
+		// different test tenant option since it's not "storage-layer specific"
+		// test, but there isn't a more suitable one.)
+		testTenant = base.TestIsSpecificToStorageLayerAndNeedsASystemTenant
 	}
 	s, sqlConn, _ := serverutils.StartServer(t, base.TestServerArgs{
 		DefaultTestTenant: testTenant,
@@ -1742,14 +1768,27 @@ func TestInjectRetryOnCommitErrors(t *testing.T) {
 	})
 }
 
+// TestAbortedTxnLocks verifies the lock behavior when a transaction enters the
+// aborted state due to an error. The expected behavior depends on whether any
+// savepoints are active:
+//
+//   - Without savepoints (or with released savepoints): locks are released
+//     immediately when the transaction aborts, allowing other transactions to
+//     proceed without waiting for an explicit ROLLBACK.
+//
+//   - With unreleased savepoints (including after ROLLBACK TO SAVEPOINT): locks
+//     are held until the transaction is explicitly rolled back, because the
+//     client could potentially recover via ROLLBACK TO SAVEPOINT.
+//
+// This distinction exists because savepoints allow error recovery within a
+// transaction, so the database cannot safely release locks until it knows the
+// transaction will not continue.
 func TestAbortedTxnLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(156127),
-	})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
@@ -1912,6 +1951,9 @@ func TestAbortedTxnLocks(t *testing.T) {
 	})
 
 	t.Run("with cockroach_restart savepoint and advanced retry", func(t *testing.T) {
+		if !s.Codec().IsSystem() {
+			skip.IgnoreLintf(t, "test is flaky on secondary tenants")
+		}
 		_, err = conn1.ExecContext(ctx, `INSERT INTO t VALUES (5,5), (6,6)`)
 		require.NoError(t, err)
 

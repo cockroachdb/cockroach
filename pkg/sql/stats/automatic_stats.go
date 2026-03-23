@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"slices"
 	"sync"
 	"time"
 
@@ -21,10 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -197,12 +198,16 @@ const (
 	// table.
 	defaultAverageTimeBetweenRefreshes = 12 * time.Hour
 
-	// refreshChanBufferLen is the length of the buffered channel used by the
-	// automatic statistics refresher. If the channel overflows, all SQL mutations
-	// will be ignored by the refresher until it processes some existing mutations
-	// in the buffer and makes space for new ones. SQL mutations will never block
-	// waiting on the refresher.
-	refreshChanBufferLen = 256
+	// mutationsChanBufferLen is the length of the buffered channel used by the
+	// automatic statistics refresher. If the channel overflows, all SQL
+	// mutations will be ignored by the refresher until it processes some
+	// existing mutations in the buffer and makes space for new ones. SQL
+	// mutations will never block waiting on the refresher.
+	mutationsChanBufferLen = 1 << 15
+
+	// settingsChanBufferLen is the same as mutationsChanBufferLen but for the
+	// settings' overrides buffered channel.
+	settingsChanBufferLen = 1 << 8
 )
 
 // Refresher is responsible for automatically refreshing the table statistics
@@ -270,9 +275,13 @@ type Refresher struct {
 	st             *cluster.Settings
 	internalDB     descs.DB
 	cache          *TableStatisticsCache
-	randGen        autoStatsRand
 	knobs          *TableStatsTestingKnobs
 	readOnlyTenant bool
+
+	// rng doesn't need any mutex protection since it's only used from the
+	// maybeRefreshStats goroutine, and we can have at most one such goroutine
+	// at any point in time.
+	rng *rand.Rand
 
 	// mutations is the buffered channel used to pass messages containing
 	// metadata about SQL mutations to the background Refresher thread.
@@ -336,13 +345,13 @@ type TableStatsTestingKnobs struct {
 	// DisableInitialTableCollection, if set, indicates that the "initial table
 	// collection" performed by the Refresher should be skipped.
 	DisableInitialTableCollection bool
-	// DisableFullStatsRefresh, if set, indicates that the Refresher should not
-	// perform full statistics refreshes. Useful for testing the partial stats
-	// refresh logic.
-	DisableFullStatsRefresh bool
 	// StubTimeNow allows tests to override the current time, used by
 	// EstimateStaleness to get the latest stats' age.
 	StubTimeNow func() time.Time
+	// RescheduleAttempt, if non-nil, will be used to non-blockingly send the
+	// tableID on which the refresh is rescheduled due to
+	// ConcurrentCreateStatsError.
+	RescheduleAttempt chan descpb.ID
 }
 
 var _ base.ModuleTestingKnobs = &TableStatsTestingKnobs{}
@@ -359,18 +368,16 @@ func MakeRefresher(
 	knobs *TableStatsTestingKnobs,
 	readOnlyTenant bool,
 ) *Refresher {
-	randSource := rand.NewSource(rand.Int63())
-
 	return &Refresher{
 		AmbientContext:   ambientCtx,
 		st:               st,
 		internalDB:       internalDB,
 		cache:            cache,
-		randGen:          makeAutoStatsRand(randSource),
 		knobs:            knobs,
 		readOnlyTenant:   readOnlyTenant,
-		mutations:        make(chan mutation, refreshChanBufferLen),
-		settings:         make(chan settingOverride, refreshChanBufferLen),
+		rng:              rand.New(rand.NewSource(rand.Int63())),
+		mutations:        make(chan mutation, mutationsChanBufferLen),
+		settings:         make(chan settingOverride, settingsChanBufferLen),
 		asOfTime:         asOfTime,
 		extraTime:        time.Duration(rand.Int63n(int64(time.Hour))),
 		mutationCounts:   make(map[descpb.ID]int64, 16),
@@ -443,18 +450,12 @@ func (r *Refresher) autoFullStatsEnabled(desc catalog.TableDescriptor) bool {
 func (r *Refresher) autoStatsEnabledForTableID(
 	tableID descpb.ID, settingOverrides map[descpb.ID]catpb.AutoStatsSettings,
 ) bool {
-	// Check tenant-level read-only status first (applies to all tables in tenant).
-	if r.readOnlyTenant {
-		return false
-	}
-
-	var setting catpb.AutoStatsSettings
-	var ok bool
 	if settingOverrides == nil {
 		// If the setting overrides map doesn't exist, defer to the cluster setting.
 		return AutomaticStatisticsClusterMode.Get(&r.st.SV)
 	}
-	if setting, ok = settingOverrides[tableID]; !ok {
+	setting, ok := settingOverrides[tableID]
+	if !ok {
 		// If there are no setting overrides, defer to the cluster setting.
 		return AutomaticStatisticsClusterMode.Get(&r.st.SV)
 	}
@@ -512,9 +513,7 @@ func (r *Refresher) autoPartialStatsFractionStaleRows(
 func (r *Refresher) getTableDescriptor(
 	ctx context.Context, tableID descpb.ID,
 ) (desc catalog.TableDescriptor) {
-	if err := r.cache.db.DescsTxn(ctx, func(
-		ctx context.Context, txn descs.Txn,
-	) (err error) {
+	if err := r.cache.db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) (err error) {
 		if desc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, tableID); err != nil {
 			err = errors.Wrapf(err,
 				"failed to get table descriptor for automatic stats on table id: %d", tableID)
@@ -555,6 +554,13 @@ func (r *Refresher) Start(
 		return nil
 	}
 
+	// We always sleep for r.asOfTime at the beginning of each refresh, so
+	// subtract it from the refreshInterval.
+	refreshInterval -= r.asOfTime
+	if refreshInterval < 0 {
+		refreshInterval = 0
+	}
+
 	// The refresher has the same lifetime as the server, so the cancellation
 	// function can be ignored and it'll be called by the stopper.
 	stoppingCtx, _ := stopper.WithCancelOnQuiesce(context.Background()) // nolint:quiesce
@@ -562,13 +568,6 @@ func (r *Refresher) Start(
 	r.startedTasksWG.Add(1)
 	if err := stopper.RunAsyncTask(bgCtx, "refresher", func(ctx context.Context) {
 		defer r.startedTasksWG.Done()
-
-		// We always sleep for r.asOfTime at the beginning of each refresh, so
-		// subtract it from the refreshInterval.
-		refreshInterval -= r.asOfTime
-		if refreshInterval < 0 {
-			refreshInterval = 0
-		}
 
 		timer := time.NewTimer(refreshInterval)
 		defer timer.Stop()
@@ -657,8 +656,10 @@ func (r *Refresher) Start(
 								}
 							}
 							if desc == nil {
-								// Check the cluster setting and table setting before each
-								// refresh in case they were disabled recently.
+								// If we haven't already, check whether auto
+								// stats are still enabled on this table (in
+								// case they were disabled since NotifyMutation
+								// was called).
 								if !r.autoStatsEnabledForTableID(tableID, settingOverrides) {
 									continue
 								}
@@ -671,7 +672,6 @@ func (r *Refresher) Start(
 							}
 							r.maybeRefreshStats(
 								ctx,
-								stopper,
 								tableID,
 								explicitSettings,
 								rowsAffected,
@@ -684,7 +684,6 @@ func (r *Refresher) Start(
 							case <-ctx.Done():
 								return
 							case <-r.drainAutoStats:
-								// Ditto.
 								return
 							default:
 							}
@@ -716,7 +715,9 @@ func (r *Refresher) Start(
 			case <-r.drainAutoStats:
 				log.Dev.Infof(ctx, "draining auto stats refresher")
 				return
+
 			case <-ctx.Done():
+				log.Dev.Infof(ctx, "quiescing auto stats refresher")
 				return
 			}
 		}
@@ -802,7 +803,7 @@ func (r *Refresher) getApplicableTables(
 			if !isTable {
 				return nil
 			}
-			if !autostatsCollectionAllowed(tableDesc, r.st) {
+			if !r.cache.autostatsCollectionAllowed(tableDesc) {
 				return nil
 			}
 			switch tableDesc.AutoStatsCollectionEnabled() {
@@ -843,11 +844,13 @@ func (r *Refresher) ensureAllTables(
 // Refresher that a table has been mutated. It should be called after any
 // successful insert, update, upsert or delete. rowsAffected refers to the
 // number of rows written as part of the mutation operation.
-func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected int) {
+func (r *Refresher) NotifyMutation(
+	ctx context.Context, table catalog.TableDescriptor, rowsAffected int,
+) {
 	if !r.autoStatsEnabled(table) {
 		return
 	}
-	if !autostatsCollectionAllowed(table, r.st) {
+	if !r.cache.autostatsCollectionAllowed(table) {
 		// Don't collect stats for virtual tables or views. System tables may be
 		// allowed if enabled in cluster settings.
 		return
@@ -871,7 +874,7 @@ func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected i
 		default:
 			// Don't block if there is no room in the buffered channel.
 			if bufferedChanFullLogLimiter.ShouldLog() {
-				log.Dev.Warningf(context.TODO(),
+				log.Dev.Warningf(ctx,
 					"buffered channel is full. Unable to update settings for table %q (%d) during auto stats refreshing",
 					table.GetName(), table.GetID())
 			}
@@ -889,22 +892,72 @@ func (r *Refresher) NotifyMutation(table catalog.TableDescriptor, rowsAffected i
 	default:
 		// Don't block if there is no room in the buffered channel.
 		if bufferedChanFullLogLimiter.ShouldLog() {
-			log.Dev.Warningf(context.TODO(),
+			log.Dev.Warningf(ctx,
 				"buffered channel is full. Unable to refresh stats for table %q (%d) with %d rows affected",
 				table.GetName(), table.GetID(), rowsAffected)
 		}
 	}
 }
 
+// RescheduleRefresh should be called by an auto full stats job whenever it hits
+// ConcurrentCreateStatsError to attempt to reschedule the stats refresh. Note
+// that it might block (for at most DefaultRefreshInterval) but will
+// short-circuit on the node shutdown.
+func (r *Refresher) RescheduleRefresh(ctx context.Context, tableID descpb.ID) {
+	mustRefresh, _, err := r.mustDoFullRefresh(ctx, tableID)
+	if err != nil {
+		mustRefresh = true
+		log.Dev.Warningf(ctx, "failed to get table statistics for rescheduling the refresh: %v", err)
+	}
+	var newEvent mutation
+	if mustRefresh {
+		// For the cases where mustRefresh=true (stats don't yet exist or it
+		// has been 2x the average time since a refresh), we want to make sure
+		// that maybeRefreshStats is called on this table during the next
+		// cycle so that we have another chance to trigger a refresh. We pass
+		// rowsAffected=0 so that we don't force a refresh if another node has
+		// already done it.
+		newEvent = mutation{tableID: tableID, rowsAffected: 0}
+	} else {
+		// If this refresh was caused by a "dice roll", we want to make sure
+		// that the refresh is rescheduled so that we adhere to the
+		// AutomaticStatisticsFractionStaleRows statistical ideal. We
+		// ensure that the refresh is triggered during the next cycle by
+		// passing a very large number for rowsAffected.
+		newEvent = mutation{tableID: tableID, rowsAffected: math.MaxInt32}
+	}
+	if r.knobs != nil && r.knobs.RescheduleAttempt != nil {
+		select {
+		case r.knobs.RescheduleAttempt <- tableID:
+		default:
+		}
+	}
+	select {
+	case r.mutations <- newEvent:
+		return
+	case <-r.drainAutoStats:
+		// Shutting down due to a graceful drain.
+		// We don't want to force a write to the mutations here
+		// otherwise we could block the graceful shutdown.
+		err = errors.New("server is shutting down")
+	case <-r.cache.stopper.ShouldQuiesce():
+		// Shutting down due to direct stopper Stop call.
+		// This is not strictly required for correctness but
+		// helps avoiding log spam.
+		err = errors.New("server is shutting down")
+	case <-ctx.Done():
+		err = ctx.Err()
+	}
+	log.Dev.Warningf(ctx, "failed to create statistics on table %d: %v", tableID, err)
+}
+
 // EstimateStaleness returns an estimate fraction of stale rows in the given
 // table based on how long it has been since the last full statistics refresh,
 // and the average time between refreshes.
-func (r *Refresher) EstimateStaleness(ctx context.Context, tableID descpb.ID) (float64, error) {
-	desc := r.getTableDescriptor(ctx, tableID)
-	if desc == nil {
-		return 0, errors.New("could not access the table descriptor")
-	}
-	if !autostatsCollectionAllowed(desc, r.st) {
+func (r *Refresher) EstimateStaleness(
+	ctx context.Context, tableDesc catalog.TableDescriptor,
+) (float64, error) {
+	if !r.cache.autostatsCollectionAllowed(tableDesc) {
 		return 0, errors.New("automatic stats collection is not allowed for this table")
 	}
 
@@ -912,7 +965,7 @@ func (r *Refresher) EstimateStaleness(ctx context.Context, tableID descpb.ID) (f
 	// NB: we pass nil boolean as 'forecast' argument in order to not invalidate
 	// the stats cache entry since we don't care whether there is a forecast or
 	// not in the stats.
-	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID, forecast, nil /* udtCols */, nil /* typeResolver */)
+	tableStats, _, err := r.cache.getTableStatsFromCache(ctx, tableDesc.GetID(), forecast, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	if err != nil {
 		return 0, err
 	}
@@ -930,7 +983,7 @@ func (r *Refresher) EstimateStaleness(ctx context.Context, tableID descpb.ID) (f
 	}
 
 	var explicitSettings *catpb.AutoStatsSettings
-	if s, ok := r.settingOverrides[tableID]; ok {
+	if s, ok := r.settingOverrides[tableDesc.GetID()]; ok {
 		explicitSettings = &s
 	}
 	staleTargetFraction := r.autoStatsFractionStaleRows(explicitSettings)
@@ -943,39 +996,23 @@ func (r *Refresher) EstimateStaleness(ctx context.Context, tableID descpb.ID) (f
 	if r.knobs != nil && r.knobs.StubTimeNow != nil {
 		statsAge = r.knobs.StubTimeNow().Sub(stat.CreatedAt)
 	}
-	staleFraction :=
-		float64(statsAge) / float64(avgRefreshTime) * staleTargetFraction
+	staleFraction := float64(statsAge) / float64(avgRefreshTime) * staleTargetFraction
 
 	return staleFraction, nil
 }
 
-// maybeRefreshStats implements the core logic described in the comment for
-// Refresher. It is called by the background Refresher thread.
-// explicitSettings, if non-nil, holds any autostats cluster setting overrides
-// for this table.
-func (r *Refresher) maybeRefreshStats(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	tableID descpb.ID,
-	explicitSettings *catpb.AutoStatsSettings,
-	rowsAffected int64,
-	asOf time.Duration,
-	partialStatsEnabled bool,
-	fullStatsEnabled bool,
-) {
+func (r *Refresher) mustDoFullRefresh(
+	ctx context.Context, tableID descpb.ID,
+) (mustRefresh bool, rowCount float64, _ error) {
 	// NB: we pass nil boolean as 'forecast' argument in order to not invalidate
 	// the stats cache entry since we don't care whether there is a forecast or
 	// not in the stats.
 	var forecast *bool
-	tableStats, err := r.cache.getTableStatsFromCache(ctx, tableID, forecast, nil /* udtCols */, nil /* typeResolver */)
+	tableStats, _, err := r.cache.getTableStatsFromCache(ctx, tableID, forecast, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 	if err != nil {
-		log.Dev.Errorf(ctx, "failed to get table statistics: %v", err)
-		return
+		return false, 0, err
 	}
 
-	var rowCount float64
-	mustRefresh := false
-	isPartial := false
 	stat := mostRecentAutomaticFullStat(tableStats)
 	if stat != nil {
 		// Check if too much time has passed since the last refresh.
@@ -1004,25 +1041,45 @@ func (r *Refresher) maybeRefreshStats(
 		// a refresh.
 		mustRefresh = true
 	}
+	return mustRefresh, rowCount, nil
+}
 
-	// We will always do a full stats refresh if we must or if the maximum
-	// rowsAffected value was specified.
-	doFullRefresh := mustRefresh || rowsAffected >= math.MaxInt32
-	if !doFullRefresh {
-		// Perform the "dice roll".
-		statsFractionStaleRows := r.autoStatsFractionStaleRows(explicitSettings)
-		statsMinStaleRows := r.autoStatsMinStaleRows(explicitSettings)
-		targetRows := int64(rowCount*statsFractionStaleRows) + statsMinStaleRows
-		// randInt will panic if we pass it a value of 0.
-		randomTargetRows := int64(0)
-		if targetRows > 0 {
-			randomTargetRows = r.randGen.randInt(targetRows)
-		}
-		doFullRefresh = randomTargetRows < rowsAffected
+// maybeRefreshStats implements the core logic described in the comment for
+// Refresher. It is called by the background Refresher thread.
+// explicitSettings, if non-nil, holds any autostats cluster setting overrides
+// for this table.
+func (r *Refresher) maybeRefreshStats(
+	ctx context.Context,
+	tableID descpb.ID,
+	explicitSettings *catpb.AutoStatsSettings,
+	rowsAffected int64,
+	asOf time.Duration,
+	partialStatsEnabled bool,
+	fullStatsEnabled bool,
+) {
+	mustRefresh, rowCount, err := r.mustDoFullRefresh(ctx, tableID)
+	if err != nil {
+		log.Dev.Errorf(ctx, "failed to get table statistics: %v", err)
+		return
 	}
-	if (r.knobs != nil && r.knobs.DisableFullStatsRefresh) || !fullStatsEnabled {
-		// We cannot do the full stats refresh.
-		doFullRefresh = false
+
+	isPartial := false
+	var doFullRefresh bool
+	if fullStatsEnabled {
+		// We will always do a full stats refresh if we must or if the maximum
+		// rowsAffected value was specified.
+		doFullRefresh = mustRefresh || rowsAffected >= math.MaxInt32
+		if !doFullRefresh {
+			// Perform the "dice roll".
+			statsFractionStaleRows := r.autoStatsFractionStaleRows(explicitSettings)
+			statsMinStaleRows := r.autoStatsMinStaleRows(explicitSettings)
+			targetRows := int64(rowCount*statsFractionStaleRows) + statsMinStaleRows
+			randomTargetRows := int64(0)
+			if targetRows > 0 {
+				randomTargetRows = r.rng.Int63n(targetRows)
+			}
+			doFullRefresh = randomTargetRows < rowsAffected
+		}
 	}
 
 	if !doFullRefresh {
@@ -1034,13 +1091,12 @@ func (r *Refresher) maybeRefreshStats(
 		}
 
 		// Perform the "dice roll".
-		randomTargetRows := int64(0)
 		partialStatsMinStaleRows := r.autoPartialStatsMinStaleRows(explicitSettings)
 		partialStatsFractionStaleRows := r.autoPartialStatsFractionStaleRows(explicitSettings)
 		targetRows := int64(rowCount*partialStatsFractionStaleRows) + partialStatsMinStaleRows
-		// randInt will panic if we pass it a value of 0.
+		randomTargetRows := int64(0)
 		if targetRows > 0 {
-			randomTargetRows = r.randGen.randInt(targetRows)
+			randomTargetRows = r.rng.Int63n(targetRows)
 		}
 		if randomTargetRows >= rowsAffected {
 			// No refresh is happening this time, full or partial.
@@ -1051,46 +1107,13 @@ func (r *Refresher) maybeRefreshStats(
 	}
 
 	if err := r.refreshStats(ctx, tableID, asOf, isPartial); err != nil {
+		// ConcurrentCreateStatsError is expected, so simply ignore it (it's
+		// handled by RescheduleRefresh called by the stats job). Log all
+		// others.
 		if errors.Is(err, ConcurrentCreateStatsError) {
-			// Another stats job was already running. Attempt to reschedule this
-			// refresh.
-			var newEvent mutation
-			if mustRefresh {
-				// For the cases where mustRefresh=true (stats don't yet exist or it
-				// has been 2x the average time since a refresh), we want to make sure
-				// that maybeRefreshStats is called on this table during the next
-				// cycle so that we have another chance to trigger a refresh. We pass
-				// rowsAffected=0 so that we don't force a refresh if another node has
-				// already done it.
-				newEvent = mutation{tableID: tableID, rowsAffected: 0}
-			} else {
-				// If this refresh was caused by a "dice roll", we want to make sure
-				// that the refresh is rescheduled so that we adhere to the
-				// AutomaticStatisticsFractionStaleRows statistical ideal. We
-				// ensure that the refresh is triggered during the next cycle by
-				// passing a very large number for rowsAffected.
-				newEvent = mutation{tableID: tableID, rowsAffected: math.MaxInt32}
-			}
-			select {
-			case r.mutations <- newEvent:
-				return
-			case <-r.drainAutoStats:
-				// Shutting down due to a graceful drain.
-				// We don't want to force a write to the mutations here
-				// otherwise we could block the graceful shutdown.
-				err = errors.New("server is shutting down")
-			case <-stopper.ShouldQuiesce():
-				// Shutting down due to direct stopper Stop call.
-				// This is not strictly required for correctness but
-				// helps avoiding log spam.
-				err = errors.New("server is shutting down")
-			}
+			return
 		}
-
-		// Log other errors but don't automatically reschedule the refresh, since
-		// that could lead to endless retries.
 		log.Dev.Warningf(ctx, "failed to create statistics on table %d: %v", tableID, err)
-		return
 	}
 }
 
@@ -1157,7 +1180,7 @@ func avgFullRefreshTime(tableStats []*TableStatistic) time.Duration {
 			reference = stat
 			continue
 		}
-		if !areEqual(stat.ColumnIDs, reference.ColumnIDs) {
+		if !slices.Equal(stat.ColumnIDs, reference.ColumnIDs) {
 			continue
 		}
 		if stat.CreatedAt.Equal(reference.CreatedAt) {
@@ -1172,37 +1195,6 @@ func avgFullRefreshTime(tableStats []*TableStatistic) time.Duration {
 		return defaultAverageTimeBetweenRefreshes
 	}
 	return sum / time.Duration(count)
-}
-
-func areEqual(a, b []descpb.ColumnID) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-// autoStatsRand pairs a rand.Rand with a mutex.
-type autoStatsRand struct {
-	*syncutil.Mutex
-	*rand.Rand
-}
-
-func makeAutoStatsRand(source rand.Source) autoStatsRand {
-	return autoStatsRand{
-		Mutex: &syncutil.Mutex{},
-		Rand:  rand.New(source),
-	}
-}
-
-func (r autoStatsRand) randInt(n int64) int64 {
-	r.Lock()
-	defer r.Unlock()
-	return r.Int63n(n)
 }
 
 type concurrentCreateStatisticsError struct{}

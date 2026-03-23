@@ -102,4 +102,12 @@ const (
 	// issues) prevents the check from completing normally. These errors indicate
 	// potential data corruption or other serious issues that require investigation.
 	InternalError inspectErrorType = "internal_error"
+
+	// RowCountMismatch occurs when a index's row count doesn't match the
+	// expected value.
+	RowCountMismatch inspectErrorType = "row_count_mismatch"
+
+	// DuplicateUniqueValue occurs when a value is duplicated in violation of a
+	// unique index or constraint.
+	DuplicateUniqueValue inspectErrorType = "duplicate_unique_value"
 )

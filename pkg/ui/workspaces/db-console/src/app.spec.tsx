@@ -13,6 +13,7 @@ stubComponentInModule(
   "@cockroachlabs/cluster-ui",
   "DatabasesPageV2",
   "DatabaseDetailsPageV2",
+  "ScheduleDetails",
 );
 stubComponentInModule("src/views/cluster/containers/nodeGraphs", "default");
 stubComponentInModule("src/views/cluster/containers/events", "EventPage");
@@ -43,7 +44,6 @@ stubComponentInModule(
 );
 stubComponentInModule("src/views/insights/schemaInsightsPage", "default");
 stubComponentInModule("src/views/schedules/schedulesPage", "default");
-stubComponentInModule("src/views/schedules/scheduleDetails", "default");
 stubComponentInModule("src/views/tracez_v2/snapshotPage", "default");
 stubComponentInModule(
   "src/views/app/components/tenantDropdown/tenantDropdown",
@@ -264,7 +264,7 @@ describe("Routing to", () => {
   describe("'/schedules/:id' path", () => {
     test("routes to <ScheduleDetails> component", () => {
       navigateToPath("/schedules/12345");
-      screen.getByTestId("scheduleDetails");
+      screen.getByTestId("ScheduleDetails");
     });
   });
 
@@ -321,16 +321,9 @@ describe("Routing to", () => {
     });
   });
 
-  describe("'/statements/:${appAttr}/:${statementAttr}' path", () => {
+  describe("'/statement/:${statementAttr}' path", () => {
     test("routes to <StatementDetails> component", () => {
-      navigateToPath("/statements/%24+internal/true");
-      screen.getByTestId("statementDetails");
-    });
-  });
-
-  describe("'/statements/:${implicitTxnAttr}/:${statementAttr}' path", () => {
-    test("routes to <StatementDetails> component", () => {
-      navigateToPath("/statements/implicit-txn-attr/statement-attr");
+      navigateToPath("/statement/statement-fingerprint-id");
       screen.getByTestId("statementDetails");
     });
   });
@@ -341,13 +334,6 @@ describe("Routing to", () => {
       expect(history.location.pathname + history.location.search).toBe(
         "/sql-activity?tab=Statements&view=fingerprints",
       );
-    });
-  });
-
-  describe("'/statement/:${implicitTxnAttr}/:${statementAttr}' path", () => {
-    test("routes to <StatementDetails> component", () => {
-      navigateToPath("/statement/implicit-attr/statement-attr/");
-      screen.getByTestId("statementDetails");
     });
   });
 
@@ -679,10 +665,11 @@ describe("Routing to", () => {
   });
 
   describe("'/sessions' path", () => {
-    test("redirected to '/sql-activity?tab=Sessions'", () => {
+    // The default filters are set to Active and Idle.
+    test("redirected to '/sql-activity?tab=Sessions&timeNumber=0&timeUnit=seconds&fullScan=false&sessionStatus=Active%2CIdle'", () => {
       navigateToPath("/sessions");
       expect(history.location.pathname + history.location.search).toBe(
-        "/sql-activity?tab=Sessions",
+        "/sql-activity?tab=Sessions&timeNumber=0&timeUnit=seconds&fullScan=false&sessionStatus=Active%2CIdle",
       );
     });
   });

@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/datadog"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -459,15 +460,15 @@ func (r *testRunner) Run(
 		// We should also check against the spec of the cluster, but we don't
 		// currently have a way of doing that; we're relying on the fact that attaching to the cluster
 		// will fail if the cluster is incompatible.
-		spec := tests[0].Cluster
-		spec.Lifetime = 0
+		spec1 := tests[0].Cluster
+		spec1.Lifetime = 0
 		for i := 1; i < len(tests); i++ {
 			spec2 := tests[i].Cluster
 			spec2.Lifetime = 0
-			if spec != spec2 {
+			if !spec.ClustersCompatible(spec1, spec2, roachtestflags.Cloud) {
 				return errors.Errorf("cluster specified but found tests "+
 					"with incompatible specs: %s (%s) - %s (%s)",
-					tests[0].Name, spec, tests[i].Name, spec2,
+					tests[0].Name, spec1, tests[i].Name, spec2,
 				)
 			}
 		}
@@ -692,6 +693,12 @@ func (r *testRunner) allocateOrAttachToCluster(
 		lopt.l.PrintfCtx(ctx, "Creating new cluster for test %s: %s (arch=%q)", t.Name, t.Cluster, arch)
 	}
 
+	var clusterOS string
+	if clustersOpt.typ == localCluster {
+		clusterOS = runtime.GOOS
+	} else {
+		clusterOS = "linux" // Currently only test against linux clusters
+	}
 	cfg := clusterConfig{
 		nameOverride: clustersOpt.clusterName, // only set if we hit errClusterFound above
 		spec:         t.Cluster,
@@ -699,6 +706,7 @@ func (r *testRunner) allocateOrAttachToCluster(
 		username:     clustersOpt.user,
 		localCluster: clustersOpt.typ == localCluster,
 		arch:         arch,
+		os:           clusterOS,
 	}
 	return clusterFactory.newCluster(ctx, cfg, wStatus.SetStatus, lopt.tee)
 }
@@ -1425,6 +1433,19 @@ func (r *testRunner) runTest(
 			}
 		}
 
+		// Upload test logs to Datadog for failed tests on master/release branches (configurable via flags)
+		if datadog.ShouldUploadLogsToDatadog(t.Failed()) {
+			m := datadog.NewLogMetadata(
+				t.L(), t.spec, !t.Failed(), fmt.Sprintf("%.2f", timeutil.Since(t.start).Seconds()), c.cloud, c.os, c.arch,
+				c.name)
+			uploadStart := timeutil.Now()
+			if err := datadog.MaybeUploadTestLogs(ctx, t.L(), t.artifactsDir, m); err != nil {
+				// Best effort
+				t.L().Printf("error uploading logs to Datadog: %v", err)
+			}
+			t.L().Printf("Datadog log upload completed in %.2fs", timeutil.Since(uploadStart).Seconds())
+		}
+
 		if roachtestflags.TeamCity {
 			// Zip the artifacts. This improves the TeamCity UX where we can navigate
 			// through zip files just fine, but we can't download subtrees of the
@@ -1827,7 +1848,7 @@ func (r *testRunner) teardownTest(
 	// collection below).
 	r.maybeSaveClusterDueToInvariantProblems(ctx, t, c)
 
-	if timedOut || t.Failed() || roachtestflags.AlwaysCollectArtifacts {
+	if timedOut || t.Failed() || roachtestflags.AlwaysCollectArtifacts || datadog.ShouldUploadLogsToDatadog(t.Failed()) {
 		err := r.collectArtifacts(ctx, t, c, timedOut, time.Hour)
 		if err != nil {
 			t.L().Printf("error collecting artifacts: %v", err)
@@ -2593,15 +2614,20 @@ func getTestParameters(t *testImpl, c *clusterImpl, createOpts *vm.CreateOpts) m
 	clusterParams := map[string]string{
 		"cloud":                  roachtestflags.Cloud.String(),
 		"cpu":                    fmt.Sprintf("%d", spec.Cluster.CPUs),
-		"ssd":                    fmt.Sprintf("%d", spec.Cluster.SSDs),
+		"diskCount":              fmt.Sprintf("%d", spec.Cluster.DiskCount),
 		"runtimeAssertionsBuild": fmt.Sprintf("%t", roachtestutil.UsingRuntimeAssertions(t)),
 		"coverageBuild":          fmt.Sprintf("%t", t.goCoverEnabled),
+	}
+
+	// Include cluster spec metamorphic test parameters.
+	for k, v := range spec.Cluster.GetMetamorphicInfo() {
+		clusterParams[k] = v
 	}
 
 	// These params can be probabilistically set, so we pass them here to
 	// show what their actual values are in the posted issue.
 	if createOpts != nil {
-		clusterParams["fs"] = createOpts.SSDOpts.FileSystem
+		clusterParams["fs"] = string(createOpts.SSDOpts.FileSystem)
 		clusterParams["localSSD"] = fmt.Sprintf("%v", createOpts.SSDOpts.UseLocalSSD)
 	}
 

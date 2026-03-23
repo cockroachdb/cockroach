@@ -230,6 +230,7 @@ go_test(
         "parse_tuple_test.go",
         "placeholders_test.go",
         "pretty_test.go",
+        "replace_scalars_test.go",
         "schema_helpers_test.go",
         "table_name_test.go",
         "time_test.go",

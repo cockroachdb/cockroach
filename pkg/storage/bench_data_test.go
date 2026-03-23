@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -117,7 +118,12 @@ func getInitialStateEngine(
 		testutils.ReadAllFiles(filepath.Join(env.Dir, "*"))
 	}
 
-	e, err := Open(ctx, env, cluster.MakeClusterSettings(), opts...)
+	// Disable the FadviseSequentail mode which causes file reopens and
+	// allocations that can differ when the Go version changes.
+	readaheadModeInformed.Override(ctx, &settings.SV, objstorageprovider.SysReadahead)
+	readaheadModeSpeculative.Override(ctx, &settings.SV, objstorageprovider.SysReadahead)
+
+	e, err := Open(ctx, env, settings, opts...)
 	require.NoError(b, err)
 	return e
 }

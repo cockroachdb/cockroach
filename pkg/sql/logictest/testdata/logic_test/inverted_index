@@ -243,7 +243,7 @@ SELECT * FROM d WHERE b @>'[{"a": {"b": [1]}}]' ORDER BY a;
 ----
 16  [{"a": {"b": [1, [2]]}}, "d"]
 
-statement ok
+statement count 1
 DELETE FROM d WHERE a=1;
 
 query IT
@@ -259,7 +259,7 @@ EXECUTE query ('a', '"b"')
 ----
 7  {"a": "b", "c": "d"}
 
-statement ok
+statement count 1
 DELETE FROM d WHERE a=6;
 
 query IT
@@ -704,7 +704,7 @@ SELECT * FROM del_cascade_test ORDER BY delete_cascade;
 2  {"a": "b", "c": "d"}
 3  ["b", "c"]
 
-statement ok
+statement count 1
 DELETE FROM update_test WHERE j @> '["c"]'
 
 query IT

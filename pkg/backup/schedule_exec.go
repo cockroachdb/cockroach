@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -114,6 +114,16 @@ func (e *scheduledBackupExecutor) executeBackup(
 		backupStmt.Options.UpdatesClusterMonitoringMetrics = tree.DBoolTrue
 	}
 
+	// Revision history only applies to incremental backups. For existing full
+	// backup schedules that may have revision_history set, strip it before
+	// executing.
+	if args.BackupType == backuppb.ScheduledBackupExecutionArgs_FULL &&
+		backupStmt.Options.CaptureRevisionHistory != nil {
+		log.Dev.Warningf(ctx, "removing revision_history from full backup schedule %d; "+
+			"revision_history only applies to incremental backups", sj.ScheduleID())
+		backupStmt.Options.CaptureRevisionHistory = nil
+	}
+
 	// Invoke backup plan hook.
 	hook, cleanup := cfg.PlanHookMaker(ctx, "exec-backup", txn.KV(), sj.Owner())
 	defer cleanup()
@@ -154,26 +164,30 @@ func (e *scheduledBackupExecutor) executeBackup(
 func invokeBackup(
 	ctx context.Context, backupFn sql.PlanHookRowFn, registry *jobs.Registry, txn isql.Txn,
 ) (eventpb.RecoveryEvent, error) {
-	resultCh := make(chan tree.Datums) // No need to close
-	g := ctxgroup.WithContext(ctx)
+	resultCh := make(chan tree.Datums, 1) // No need to close
 
-	var backupEvent eventpb.RecoveryEvent
-	g.GoCtx(func(ctx context.Context) error {
+	err := backupFn(ctx, resultCh)
+	if err != nil {
+		return eventpb.RecoveryEvent{}, err
+	}
+
+	var event eventpb.RecoveryEvent
+	besteffort.Warning(ctx, "get-backup-telemetry", func(ctx context.Context) error {
 		select {
 		case res := <-resultCh:
-			backupEvent = getBackupFnTelemetry(ctx, registry, txn, res)
-			return nil
+			event, err = getBackupFnTelemetry(ctx, registry, txn, res)
+			if sql.ErrIsRetryable(err) {
+				log.Dev.Warningf(ctx,
+					"best effort operation 'get-backup-telemetry' failed with retryable error: %+v", err,
+				)
+				return nil
+			}
+			return err
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	})
-
-	g.GoCtx(func(ctx context.Context) error {
-		return backupFn(ctx, resultCh)
-	})
-
-	err := g.Wait()
-	return backupEvent, err
+	return event, nil
 }
 
 func planBackup(
@@ -340,8 +354,8 @@ func (e *scheduledBackupExecutor) GetCreateScheduleStatement(
 		destinations,
 		kmsURIs,
 		"",
-		nil,
-		false /* hasBeenPlanned */)
+		false, /* hasBeenPlanned */
+	)
 	if err != nil {
 		return "", err
 	}
@@ -374,14 +388,18 @@ func (e *scheduledBackupExecutor) backupSucceeded(
 	}
 
 	// If this schedule is designated as maintaining the "LastBackup" metric used
-	// for monitoring an RPO SLA, update that metric.
+	// for monitoring an RPO SLA, update that metric. We only update RpoMetric for
+	// non-tenant schedules because a host cluster backing up both itself and its
+	// tenants would have the metric clobbered by multiple schedules otherwise.
+	// See: https://github.com/cockroachdb/cockroach/issues/165125
 	if args.UpdatesLastBackupMetric {
-		e.metrics.RpoMetric.Update(details.(jobspb.BackupDetails).EndTime.GoTime().Unix())
 		if details.(jobspb.BackupDetails).SpecificTenantIds != nil {
 			for _, tenantID := range details.(jobspb.BackupDetails).SpecificTenantIds {
 				e.metrics.RpoTenantMetric.Update(map[string]string{"tenant_id": tenantID.String()},
 					details.(jobspb.BackupDetails).EndTime.GoTime().Unix())
 			}
+		} else {
+			e.metrics.RpoMetric.Update(details.(jobspb.BackupDetails).EndTime.GoTime().Unix())
 		}
 	}
 
@@ -545,44 +563,36 @@ func (e *scheduledBackupExecutor) OnDrop(
 // corresponding to backupFnResult.
 func getBackupFnTelemetry(
 	ctx context.Context, registry *jobs.Registry, txn isql.Txn, backupFnResult tree.Datums,
-) eventpb.RecoveryEvent {
+) (eventpb.RecoveryEvent, error) {
 	if registry == nil {
-		return eventpb.RecoveryEvent{}
+		return eventpb.RecoveryEvent{}, nil
 	}
 
-	getInitialDetails := func() (jobspb.BackupDetails, error) {
-		if len(backupFnResult) == 0 {
-			return jobspb.BackupDetails{}, errors.New("unexpected empty result")
-		}
-
-		jobIDDatum := backupFnResult[0]
-		if jobIDDatum == tree.DNull {
-			return jobspb.BackupDetails{}, errors.New("expected job ID as first column of result")
-		}
-
-		jobID, ok := jobIDDatum.(*tree.DInt)
-		if !ok {
-			return jobspb.BackupDetails{}, errors.New("expected job ID as first column of result")
-		}
-
-		job, err := registry.LoadJobWithTxn(ctx, jobspb.JobID(*jobID), txn)
-		if err != nil {
-			return jobspb.BackupDetails{}, errors.Wrap(err, "failed to load dry-run backup job")
-		}
-
-		backupDetails, ok := job.Details().(jobspb.BackupDetails)
-		if !ok {
-			return jobspb.BackupDetails{}, errors.Newf("unexpected job details type %T", job.Details())
-		}
-		return backupDetails, nil
+	if len(backupFnResult) == 0 {
+		return eventpb.RecoveryEvent{}, errors.New("unexpected empty result")
 	}
 
-	initialDetails, err := getInitialDetails()
+	jobIDDatum := backupFnResult[0]
+	if jobIDDatum == tree.DNull {
+		return eventpb.RecoveryEvent{}, errors.New("expected job ID as first column of result")
+	}
+
+	jobID, ok := jobIDDatum.(*tree.DInt)
+	if !ok {
+		return eventpb.RecoveryEvent{}, errors.New("expected job ID as first column of result")
+	}
+
+	job, err := registry.LoadJobWithTxn(ctx, jobspb.JobID(*jobID), txn)
 	if err != nil {
-		log.Dev.Warningf(ctx, "error collecting telemetry from dry-run backup during schedule creation: %v", err)
-		return eventpb.RecoveryEvent{}
+		return eventpb.RecoveryEvent{}, errors.Wrap(err, "failed to load dry-run backup job")
 	}
-	return createBackupRecoveryEvent(ctx, initialDetails, 0)
+
+	backupDetails, ok := job.Details().(jobspb.BackupDetails)
+	if !ok {
+		return eventpb.RecoveryEvent{}, errors.Newf("unexpected job details type %T", job.Details())
+	}
+
+	return createBackupRecoveryEvent(ctx, backupDetails, 0)
 }
 
 func init() {
@@ -604,7 +614,7 @@ func init() {
 						`),
 						Measurement: "Jobs",
 						Unit:        metric.Unit_TIMESTAMP_SEC,
-						Essential:   true,
+						Visibility:  metric.Metadata_ESSENTIAL,
 						Category:    metric.Metadata_SQL,
 						HowToUse: crstrings.UnwrapText(`
 							Monitor this metric to ensure that backups are meeting the

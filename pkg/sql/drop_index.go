@@ -432,22 +432,41 @@ func (p *planner) dropIndexByName(
 	}
 
 	var droppedViews []string
-	var depsToDrop catalog.DescriptorIDSet
+	// Drop or error on dependents (views, functions, triggers) that reference
+	// this index, honoring the CASCADE behavior.
+	var viewAndFuncDepsToDrop catalog.DescriptorIDSet
+	var triggerRefsToRemove []descpb.TableDescriptor_Reference
 	for _, tableRef := range tableDesc.DependedOnBy {
 		if tableRef.IndexID == idx.GetID() {
-			// Ensure that we have DROP privilege on all dependent relations
+			// Handle trigger dependencies directly — drop the trigger, not the table.
+			if tableRef.TriggerID != 0 {
+				if behavior != tree.DropCascade {
+					return p.triggerDependencyError(ctx, tableRef, "index", idx.GetName())
+				}
+				triggerRefsToRemove = append(triggerRefsToRemove, tableRef)
+				continue
+			}
+			// Ensure that we have DROP privilege on all dependent relations.
 			err := p.canRemoveDependent(
 				ctx, "index", idx.GetName(), tableDesc.ID, tableDesc.ParentID,
-				tableRef, behavior, true /* blockOnTriggerDependency */)
+				tableRef, behavior)
 			if err != nil {
 				return err
 			}
-			depsToDrop.Add(tableRef.ID)
+			viewAndFuncDepsToDrop.Add(tableRef.ID)
+		}
+	}
+	// Process trigger removals after the loop completes.
+	// removeTriggerDependency modifies tableDesc.DependedOnBy in-place, so it
+	// cannot be called while iterating over the same slice.
+	for _, tableRef := range triggerRefsToRemove {
+		if err := p.removeTriggerDependency(ctx, tableDesc, tableRef); err != nil {
+			return err
 		}
 	}
 
 	droppedViews, err = p.removeDependents(
-		ctx, tableDesc, depsToDrop, "index", idx.GetName(), behavior,
+		ctx, tableDesc, viewAndFuncDepsToDrop, "index", idx.GetName(), behavior,
 	)
 	if err != nil {
 		return err
@@ -532,12 +551,12 @@ func (p *planner) dropIndexByName(
 func (p *planner) removeDependents(
 	ctx context.Context,
 	tableDesc *tabledesc.Mutable,
-	depsToDrop catalog.DescriptorIDSet,
+	viewAndFuncDepsToDrop catalog.DescriptorIDSet,
 	typeName string,
 	objName string,
 	dropBehavior tree.DropBehavior,
 ) (droppedViews []string, err error) {
-	for _, descId := range depsToDrop.Ordered() {
+	for _, descId := range viewAndFuncDepsToDrop.Ordered() {
 		depDesc, err := p.getDescForCascade(
 			ctx, typeName, objName, tableDesc.ParentID, descId, tableDesc.ID, dropBehavior,
 		)

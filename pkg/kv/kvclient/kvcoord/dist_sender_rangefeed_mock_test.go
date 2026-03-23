@@ -8,6 +8,8 @@ package kvcoord
 import (
 	"context"
 	"fmt"
+	"net"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -148,4 +150,165 @@ func TestDistSenderRangeFeedRetryOnTransportErrors(t *testing.T) {
 				require.Error(t, err)
 			})
 	}
+}
+
+// TestMuxRangeFeedTransportRace tests for a data race on activeMuxRangeFeed.transport.
+//
+// The race occurs between:
+//
+//   - Goroutine A: activeMuxRangeFeed.start() retry loop accessing s.transport
+//   - Goroutine B: restartActiveRangeFeed() calling resetRouting() which nils s.transport
+//
+// The race happens because startRangeFeed stores the activeMuxRangeFeed in the
+// streams map before calling Send(). So while Send() is blocked, Recv() can
+// return a RangeFeedError for that streamID. This triggers restartActiveRangeFeed
+// which calls resetRouting(), niling transport. Then Send() unblocks and returns
+// an error, causing start() to continue its retry loop and access the now-nil
+// transport.
+//
+// This test hits a nil pointer exception in the presence of the bug.
+func TestMuxRangeFeedTransportRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	clock := hlc.NewClockForTesting(nil)
+	ctx := context.Background()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	var cancel func()
+	ctx, cancel = stopper.WithCancelOnQuiesce(ctx)
+	defer cancel()
+
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+
+	desc := roachpb.RangeDescriptor{
+		RangeID:    1,
+		Generation: 1,
+		StartKey:   roachpb.RKeyMin,
+		EndKey:     roachpb.RKeyMax,
+		InternalReplicas: []roachpb.ReplicaDescriptor{
+			{NodeID: 1, StoreID: 1, ReplicaID: 1},
+			{NodeID: 2, StoreID: 2, ReplicaID: 2},
+		},
+	}
+	for _, repl := range desc.InternalReplicas {
+		require.NoError(t, g.AddInfoProto(
+			gossip.MakeNodeIDKey(repl.NodeID),
+			newNodeDesc(repl.NodeID),
+			gossip.NodeDescriptorTTL,
+		))
+	}
+
+	ctrl := gomock.NewController(t)
+	rangeDB := rangecachemock.NewMockRangeDescriptorDB(ctrl)
+
+	// Synchronization channels.
+	var (
+		// capturedStreamID stores the streamID from Send() so Recv() can use it.
+		capturedStreamID atomic.Int64
+		streamStarted    atomic.Bool
+
+		// sendReady signals that Send() has captured the streamID and is waiting.
+		sendReady = make(chan struct{})
+		// resetDone signals that resetRouting has completed (transport is nil).
+		resetDone = make(chan struct{})
+		// proceedAfterReset allows the afterRoutingReset hook to continue.
+		proceedAfterReset = make(chan struct{})
+	)
+
+	// Create mock client and stream.
+	client := kvpbmock.NewMockRPCInternalClient(ctrl)
+	stream := kvpbmock.NewMockRPCInternal_MuxRangeFeedClient(ctrl)
+
+	client.EXPECT().MuxRangeFeed(gomock.Any()).Return(stream, nil).AnyTimes()
+
+	stream.EXPECT().Send(gomock.Any()).DoAndReturn(func(req *kvpb.RangeFeedRequest) error {
+		capturedStreamID.Store(req.StreamID)
+		close(sendReady)
+		<-resetDone
+		return net.ErrClosed
+	}).AnyTimes()
+
+	stream.EXPECT().Recv().DoAndReturn(func() (*kvpb.MuxRangeFeedEvent, error) {
+		select {
+		case <-sendReady:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+
+		if streamStarted.Swap(true) {
+			// We only need to return an error the first time. Just block on
+			// subsequent calls.
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}
+
+		streamID := capturedStreamID.Load()
+		return &kvpb.MuxRangeFeedEvent{
+			StreamID: streamID,
+			RangeID:  desc.RangeID,
+			RangeFeedEvent: kvpb.RangeFeedEvent{
+				Error: &kvpb.RangeFeedError{
+					Error: *kvpb.NewError(&kvpb.RangeNotFoundError{RangeID: desc.RangeID}),
+				},
+			},
+		}, nil
+	}).AnyTimes()
+
+	// Transport factory returns mock transports.
+	transportFactory := func() Transport {
+		transport := NewMockTransport(ctrl)
+		transport.EXPECT().IsExhausted().Return(false).AnyTimes()
+		transport.EXPECT().NextReplica().Return(desc.InternalReplicas[0]).AnyTimes()
+		transport.EXPECT().NextInternalClient(gomock.Any()).Return(client, nil).AnyTimes()
+		transport.EXPECT().Release().AnyTimes()
+		return transport
+	}
+
+	rangeDB.EXPECT().RangeLookup(gomock.Any(), roachpb.RKeyMin, kvpb.INCONSISTENT, false).
+		Return([]roachpb.RangeDescriptor{desc}, nil, nil).AnyTimes()
+
+	cachedLease := roachpb.Lease{
+		Replica:  desc.InternalReplicas[0],
+		Sequence: 1,
+	}
+	ds := NewDistSender(DistSenderConfig{
+		AmbientCtx:      log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:           clock,
+		NodeDescs:       g,
+		RPCRetryOptions: &retry.Options{MaxRetries: 10},
+		Stopper:         stopper,
+		TransportFactory: func(SendOptions, ReplicaSlice) Transport {
+			return transportFactory()
+		},
+		RangeDescriptorDB: rangeDB,
+		Settings:          cluster.MakeTestingClusterSettings(),
+	})
+	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
+		Desc:  desc,
+		Lease: cachedLease,
+	})
+
+	afterResetFn := func() {
+		close(resetDone)
+		select {
+		case <-proceedAfterReset:
+		case <-ctx.Done():
+		}
+	}
+
+	require.NoError(t, stopper.RunAsyncTask(ctx, "range-feed", func(ctx context.Context) {
+		_ = ds.RangeFeed(
+			ctx,
+			[]SpanTimePair{{Span: roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey}}},
+			nil,
+			TestingWithAfterRoutingReset(afterResetFn),
+		)
+	}))
+
+	<-resetDone
+	close(proceedAfterReset)
 }

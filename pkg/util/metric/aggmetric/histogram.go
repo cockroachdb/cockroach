@@ -6,6 +6,7 @@
 package aggmetric
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -44,7 +45,7 @@ func TestingSetNow(f func() time.Time) func() {
 type AggHistogram struct {
 	h      metric.IHistogram
 	create func() metric.IHistogram
-	childSet
+	*baseAggMetric
 	ticker struct {
 		// We use a RWMutex, because we don't want child histograms to contend when
 		// recording values, unless we're rotating histograms for the parent & children.
@@ -66,9 +67,12 @@ func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHisto
 	create := func() metric.IHistogram {
 		return metric.NewHistogram(opts)
 	}
+	h := create()
+	base := newBaseAggMetric(h)
 	a := &AggHistogram{
-		h:      create(),
-		create: create,
+		h:             h,
+		create:        create,
+		baseAggMetric: base,
 	}
 	a.ticker.Ticker = tick.NewTicker(
 		now(),
@@ -91,21 +95,6 @@ func NewHistogram(opts metric.HistogramOptions, childLabels ...string) *AggHisto
 	return a
 }
 
-// GetName is part of the metric.Iterable interface.
-func (a *AggHistogram) GetName(useStaticLabels bool) string { return a.h.GetName(useStaticLabels) }
-
-// GetHelp is part of the metric.Iterable interface.
-func (a *AggHistogram) GetHelp() string { return a.h.GetHelp() }
-
-// GetMeasurement is part of the metric.Iterable interface.
-func (a *AggHistogram) GetMeasurement() string { return a.h.GetMeasurement() }
-
-// GetUnit is part of the metric.Iterable interface.
-func (a *AggHistogram) GetUnit() metric.Unit { return a.h.GetUnit() }
-
-// GetMetadata is part of the metric.Iterable interface.
-func (a *AggHistogram) GetMetadata() metric.Metadata { return a.h.GetMetadata() }
-
 // Inspect is part of the metric.Iterable interface.
 func (a *AggHistogram) Inspect(f func(interface{})) {
 	func() {
@@ -126,21 +115,6 @@ func (a *AggHistogram) WindowedSnapshot() metric.HistogramSnapshot {
 	return a.h.WindowedSnapshot()
 }
 
-// GetType is part of the metric.PrometheusExportable interface.
-func (a *AggHistogram) GetType() *prometheusgo.MetricType {
-	return a.h.GetType()
-}
-
-// GetLabels is part of the metric.PrometheusExportable interface.
-func (a *AggHistogram) GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair {
-	return a.h.GetLabels(useStaticLabels)
-}
-
-// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
-func (a *AggHistogram) ToPrometheusMetric() *prometheusgo.Metric {
-	return a.h.ToPrometheusMetric()
-}
-
 // AddChild adds a Histogram to this AggHistogram. This method panics if a Histogram
 // already exists for this set of labelVals.
 func (a *AggHistogram) AddChild(labelVals ...string) *Histogram {
@@ -151,6 +125,18 @@ func (a *AggHistogram) AddChild(labelVals ...string) *Histogram {
 	}
 	a.add(child)
 	return child
+}
+
+// EachChild iterates over all child histograms, calling the provided function for each one.
+// This allows direct access to child histogram objects and their individual snapshots.
+// The labelNames parameter will be set to the label names configured for this histogram.
+func (a *AggHistogram) EachChild(f func(labelNames, labelVals []string, child *Histogram)) {
+	labelNames := a.labels
+	a.apply(func(item MetricItem) {
+		if h, ok := item.(*Histogram); ok {
+			f(labelNames, h.labelValues(), h)
+		}
+	})
 }
 
 // Histogram is a child of a AggHistogram. When values are recorded, so too is the
@@ -188,6 +174,24 @@ func (g *Histogram) RecordValue(v int64) {
 	g.parent.h.RecordValue(v)
 }
 
+// CumulativeSnapshot returns the cumulative snapshot for this child histogram.
+// Returns an empty snapshot if the underlying histogram doesn't implement CumulativeHistogram.
+func (g *Histogram) CumulativeSnapshot() metric.HistogramSnapshot {
+	if ch, ok := g.h.(metric.CumulativeHistogram); ok {
+		return ch.CumulativeSnapshot()
+	}
+	return metric.HistogramSnapshot{}
+}
+
+// WindowedSnapshot returns the windowed snapshot for this child histogram.
+// Returns an empty snapshot if the underlying histogram doesn't implement WindowedHistogram.
+func (g *Histogram) WindowedSnapshot() metric.HistogramSnapshot {
+	if wh, ok := g.h.(metric.WindowedHistogram); ok {
+		return wh.WindowedSnapshot()
+	}
+	return metric.HistogramSnapshot{}
+}
+
 // SQLHistogram maintains a histogram as the sum of its children. The histogram will
 // report to crdb-internal time series only the aggregate sum of all of its
 // children, while its children are additionally exported to prometheus via the
@@ -218,11 +222,12 @@ func NewSQLHistogram(opts metric.HistogramOptions) *SQLHistogram {
 	create := func() metric.IHistogram {
 		return metric.NewHistogram(opts)
 	}
+	histogram := create()
 	s := &SQLHistogram{
-		h:      create(),
+		h:      histogram,
 		create: create,
 	}
-	s.SQLMetric = NewSQLMetric(metric.LabelConfigDisabled)
+	s.SQLMetric = NewSQLMetric(metric.LabelConfigDisabled, histogram)
 	s.ticker.Ticker = tick.NewTicker(
 		now(),
 		opts.Duration/metric.WindowedHistogramWrapNum,
@@ -243,55 +248,6 @@ func NewSQLHistogram(opts metric.HistogramOptions) *SQLHistogram {
 	return s
 }
 
-// apply applies the given applyFn to every item in children
-func (sh *SQLHistogram) apply(applyFn func(childMetric ChildMetric)) {
-	sh.mu.Lock()
-	defer sh.mu.Unlock()
-	sh.mu.children.ForEach(func(metric ChildMetric) {
-		applyFn(metric.(*SQLChildHistogram))
-	})
-}
-
-// GetType is part of the metric.PrometheusExportable interface.
-func (sh *SQLHistogram) GetType() *prometheusgo.MetricType {
-	return sh.h.GetType()
-}
-
-// GetLabels is part of the metric.PrometheusExportable interface.
-func (sh *SQLHistogram) GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair {
-	return sh.h.GetLabels(useStaticLabels)
-}
-
-// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
-func (sh *SQLHistogram) ToPrometheusMetric() *prometheusgo.Metric {
-	return sh.h.ToPrometheusMetric()
-}
-
-// GetName is part of the metric.Iterable interface.
-func (sh *SQLHistogram) GetName(useStaticLabels bool) string {
-	return sh.h.GetName(useStaticLabels)
-}
-
-// GetHelp is part of the metric.Iterable interface.
-func (sh *SQLHistogram) GetHelp() string {
-	return sh.h.GetHelp()
-}
-
-// GetMeasurement is part of the metric.Iterable interface.
-func (sh *SQLHistogram) GetMeasurement() string {
-	return sh.h.GetMeasurement()
-}
-
-// GetUnit is part of the metric.Iterable interface.
-func (sh *SQLHistogram) GetUnit() metric.Unit {
-	return sh.h.GetUnit()
-}
-
-// GetMetadata is part of the metric.Iterable interface.
-func (sh *SQLHistogram) GetMetadata() metric.Metadata {
-	return sh.h.GetMetadata()
-}
-
 // Inspect is part of the metric.Iterable interface.
 func (sh *SQLHistogram) Inspect(f func(interface{})) {
 	func() {
@@ -302,12 +258,21 @@ func (sh *SQLHistogram) Inspect(f func(interface{})) {
 	f(sh)
 }
 
+// apply applies the given applyFn to every item in children
+func (sh *SQLHistogram) apply(applyFn func(childMetric ChildMetric)) {
+	sh.mu.Lock()
+	defer sh.mu.Unlock()
+	sh.mu.children.ForEach(func(metric ChildMetric) {
+		applyFn(metric.(*SQLChildHistogram))
+	})
+}
+
 // RecordValue records the Histogram value for the given label values. If a
 // Histogram with the given label values doesn't exist yet, it creates a new
 // Histogram and record against it. RecordValue records value in parent metrics
 // irrespective of labelConfig.
 func (sh *SQLHistogram) RecordValue(v int64, db, app string) {
-	childMetric, isChildMetricEnabled := sh.getChildByLabelConfig(sh.createChildHistogram, db, app)
+	childMetric, isChildMetricEnabled := sh.getOrAddChildByLabelConfig(sh.createChildHistogram, db, app)
 	sh.ticker.RLock()
 	defer sh.ticker.RUnlock()
 
@@ -364,7 +329,7 @@ func (sch *SQLChildHistogram) Value() metric.HistogramSnapshot {
 type HighCardinalityHistogram struct {
 	h      metric.IHistogram
 	create func() metric.IHistogram
-	childSet
+	*baseAggMetric
 	labelSliceCache *metric.LabelSliceCache
 	ticker          struct {
 		// We use a RWMutex, because we don't want child histograms to contend when
@@ -382,16 +347,21 @@ var _ metric.WindowedHistogram = (*HighCardinalityHistogram)(nil)
 var _ metric.CumulativeHistogram = (*HighCardinalityHistogram)(nil)
 
 // NewHighCardinalityHistogram constructs a new HighCardinalityHistogram that uses cache storage
-// with eviction for child metrics.
+// with eviction for child metrics. The HighCardinalityOpts field in opts allows configuring
+// the maximum number of label combinations (MaxLabelValues) and retention time (RetentionTimeTillEviction).
+// If HighCardinalityOpts is not provided or has zero values, defaults will be used.
 func NewHighCardinalityHistogram(
-	opts metric.HistogramOptions, childLabels ...string,
+	opts metric.HistogramOptions, childLabels []string,
 ) *HighCardinalityHistogram {
 	create := func() metric.IHistogram {
 		return metric.NewHistogram(opts)
 	}
+	hch := create()
+	base := newBaseAggMetric(hch)
 	h := &HighCardinalityHistogram{
-		h:      create(),
-		create: create,
+		h:             hch,
+		create:        create,
+		baseAggMetric: base,
 	}
 	h.ticker.Ticker = tick.NewTicker(
 		now(),
@@ -410,26 +380,9 @@ func NewHighCardinalityHistogram(
 				childHist.h.Tick()
 			})
 		})
-	h.initWithCacheStorageType(childLabels, opts.Metadata.Name)
+	h.initWithCacheStorageType(childLabels)
 	return h
 }
-
-// GetName is part of the metric.Iterable interface.
-func (h *HighCardinalityHistogram) GetName(useStaticLabels bool) string {
-	return h.h.GetName(useStaticLabels)
-}
-
-// GetHelp is part of the metric.Iterable interface.
-func (h *HighCardinalityHistogram) GetHelp() string { return h.h.GetHelp() }
-
-// GetMeasurement is part of the metric.Iterable interface.
-func (h *HighCardinalityHistogram) GetMeasurement() string { return h.h.GetMeasurement() }
-
-// GetUnit is part of the metric.Iterable interface.
-func (h *HighCardinalityHistogram) GetUnit() metric.Unit { return h.h.GetUnit() }
-
-// GetMetadata is part of the metric.Iterable interface.
-func (h *HighCardinalityHistogram) GetMetadata() metric.Metadata { return h.h.GetMetadata() }
 
 // Inspect is part of the metric.Iterable interface.
 func (h *HighCardinalityHistogram) Inspect(f func(interface{})) {
@@ -449,21 +402,6 @@ func (h *HighCardinalityHistogram) CumulativeSnapshot() metric.HistogramSnapshot
 // WindowedSnapshot is part of the metric.WindowedHistogram interface.
 func (h *HighCardinalityHistogram) WindowedSnapshot() metric.HistogramSnapshot {
 	return h.h.WindowedSnapshot()
-}
-
-// GetType is part of the metric.PrometheusExportable interface.
-func (h *HighCardinalityHistogram) GetType() *prometheusgo.MetricType {
-	return h.h.GetType()
-}
-
-// GetLabels is part of the metric.PrometheusExportable interface.
-func (h *HighCardinalityHistogram) GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair {
-	return h.h.GetLabels(useStaticLabels)
-}
-
-// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
-func (h *HighCardinalityHistogram) ToPrometheusMetric() *prometheusgo.Metric {
-	return h.h.ToPrometheusMetric()
 }
 
 // RecordValue records the histogram value for the given label values. If a
@@ -507,7 +445,7 @@ func (h *HighCardinalityHistogram) GetOrAddChild(
 	}
 
 	// Create a LabelSliceCacheKey from the labelVals.
-	key := metric.LabelSliceCacheKey(metricKey(labelVals...))
+	key := metric.LabelSliceCacheKey(metricKey(labelVals))
 
 	child := h.getOrAddWithLabelSliceCache(h.GetMetadata().Name, h.createHighCardinalityChildHistogram, h.labelSliceCache, labelVals...)
 
@@ -521,12 +459,13 @@ func (h *HighCardinalityHistogram) GetOrAddChild(
 func (h *HighCardinalityHistogram) createHighCardinalityChildHistogram(
 	key uint64, cache *metric.LabelSliceCache,
 ) LabelSliceCachedChildMetric {
-	return &HighCardinalityChildHistogram{
+	child := &HighCardinalityChildHistogram{
 		LabelSliceCacheKey: metric.LabelSliceCacheKey(key),
 		LabelSliceCache:    cache,
 		h:                  h.create(),
-		createdAt:          timeutil.Now(),
 	}
+	child.updatedAt.Store(timeutil.Now().Unix())
+	return child
 }
 
 // HighCardinalityChildHistogram is a child of a HighCardinalityHistogram. When metrics are
@@ -536,11 +475,11 @@ type HighCardinalityChildHistogram struct {
 	metric.LabelSliceCacheKey
 	h metric.IHistogram
 	*metric.LabelSliceCache
-	createdAt time.Time
+	updatedAt atomic.Int64
 }
 
-func (h *HighCardinalityChildHistogram) CreatedAt() time.Time {
-	return h.createdAt
+func (h *HighCardinalityChildHistogram) UpdatedAt() int64 {
+	return h.updatedAt.Load()
 }
 
 func (h *HighCardinalityChildHistogram) DecrementLabelSliceCacheReference() {
@@ -563,6 +502,7 @@ func (h *HighCardinalityChildHistogram) labelValues() []string {
 // RecordValue records the histogram value.
 func (h *HighCardinalityChildHistogram) RecordValue(v int64) {
 	h.h.RecordValue(v)
+	h.updatedAt.Store(timeutil.Now().Unix())
 }
 
 // CumulativeSnapshot returns the cumulative histogram snapshot.

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
 // hashGroupJoiner currently is the naive implementation of hash group-join
@@ -84,7 +85,7 @@ func (h *hashGroupJoiner) Init(ctx context.Context) {
 }
 
 // Next implements the colexecop.Operator interface.
-func (h *hashGroupJoiner) Next() coldata.Batch {
+func (h *hashGroupJoiner) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	return h.ha.Next()
 }
 
@@ -185,11 +186,14 @@ func newCopyingOperator(
 }
 
 // Next implements the colexecop.Operator interface.
-func (c *copyingOperator) Next() coldata.Batch {
-	b := c.Input.Next()
+func (c *copyingOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	b, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	c.sq.Enqueue(c.Ctx, b)
 	c.zeroBatchEnqueued = b.Length() == 0
-	return b
+	return b, nil
 }
 
 // Reset implements the colexecop.Resetter interface.

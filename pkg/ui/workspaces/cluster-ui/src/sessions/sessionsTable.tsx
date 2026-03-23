@@ -44,7 +44,7 @@ export interface SessionInfo {
   session: ISession;
 }
 
-export class SessionsSortedTable extends SortedTable<SessionInfo> {}
+export const SessionsSortedTable = SortedTable<SessionInfo>;
 
 export function byteArrayToUuid(array: Uint8Array): string {
   const hexDigits: string[] = [];

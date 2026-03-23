@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -558,8 +559,7 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 		tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
-				DefaultDRPCOption: base.TestDRPCDisabled,
-				Settings:          settings,
+				Settings: settings,
 				RaftConfig: base.RaftConfig{
 					// Reduce the RangeLeaseDuration to speeds up failure detection
 					// below.
@@ -1002,6 +1002,14 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 		h.comment(`-- (Adding non-voting replica to n5.)`)
 		tc.AddNonVotersOrFatal(t, k, tc.Target(4))
 		h.waitForConnectedStreams(ctx, desc.RangeID, 4, 0 /* serverIdx */)
+		// Wait for all send queues to drain before issuing the next write. In
+		// MsgAppPull mode (apply_to_all), entries routed through a send queue
+		// are tracked at LowPri/elastic regardless of the original write
+		// priority. If the newly added non-voter still has a send queue (from
+		// catch-up entries) when the write arrives, its entry would be
+		// classified as entering the send queue and have its priority
+		// downgraded, causing regular token metrics to be 1 MiB short.
+		h.waitForSendQueueSize(ctx, desc.RangeID, 0 /* expSize */, 0 /* serverIdx */)
 
 		h.comment(`-- (Issuing 1x1MiB, 4x replicated write (w/ one non-voter) that's not admitted.`)
 		h.put(ctx, k, 1, testFlowModeToPri(mode))
@@ -1812,10 +1820,7 @@ func TestFlowControlSendQueue(t *testing.T) {
 	}
 
 	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-		ServerArgs: base.TestServerArgs{
-			DefaultDRPCOption: base.TestDRPCDisabled,
-		},
+		ReplicationMode:   base.ReplicationManual,
 		ServerArgsPerNode: stickyArgsPerServer,
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -2921,7 +2926,7 @@ func TestFlowControlSendQueueRangeMigrate(t *testing.T) {
 		}
 
 		sl := kvstorage.MakeStateLoader(desc.RangeID)
-		persistedV, err := sl.LoadVersion(ctx, store.TODOEngine())
+		persistedV, err := sl.LoadVersion(ctx, store.StateEngine())
 		if err != nil {
 			return err
 		}
@@ -3345,10 +3350,7 @@ func TestFlowControlSendQueueRangeFeed(t *testing.T) {
 	}
 
 	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-		ServerArgs: base.TestServerArgs{
-			DefaultDRPCOption: base.TestDRPCDisabled,
-		},
+		ReplicationMode:   base.ReplicationManual,
 		ServerArgsPerNode: argsPerServer,
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -4000,10 +4002,10 @@ func (h *flowControlTestHelper) enableVerboseRaftMsgLoggingForRange(rangeID roac
 		si, err := h.tc.Server(i).GetStores().(*kvserver.Stores).GetStore(h.tc.Server(i).GetFirstStoreID())
 		require.NoError(h.t, err)
 		h.tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(si.StoreID(),
-			&unreliableRaftHandler{
-				rangeID:                    rangeID,
+			&kvtestutils.UnreliableRaftHandler{
+				RangeID:                    rangeID,
 				IncomingRaftMessageHandler: si,
-				unreliableRaftHandlerFuncs: noopRaftHandlerFuncs(),
+				UnreliableRaftHandlerFuncs: kvtestutils.NoopRaftHandlerFuncs(),
 			})
 	}
 }

@@ -57,22 +57,8 @@ func OnlyBenchmarks() TestFilterOption {
 // NewTestFilter initializes a new filter. The strings are interpreted as
 // regular expressions (which are joined with |).
 func NewTestFilter(regexps []string, options ...TestFilterOption) (*TestFilter, error) {
-	makeRE := func(strs []string) *regexp.Regexp {
-		switch len(strs) {
-		case 0:
-			return regexp.MustCompile(`.`)
-		case 1:
-			return regexp.MustCompile(strs[0])
-		default:
-			for i := range strs {
-				strs[i] = "(" + strs[i] + ")"
-			}
-			return regexp.MustCompile(strings.Join(strs, "|"))
-		}
-	}
-
 	tf := &TestFilter{
-		Name: makeRE(regexps),
+		Name: MergeRegEx(regexps),
 	}
 	for _, o := range options {
 		o(tf)
@@ -87,6 +73,21 @@ func NewTestFilter(regexps []string, options ...TestFilterOption) (*TestFilter, 
 	}
 
 	return tf, nil
+}
+
+// MergeRegEx merges the given strings into a single regexp.
+func MergeRegEx(strs []string) *regexp.Regexp {
+	switch len(strs) {
+	case 0:
+		return regexp.MustCompile(`.`)
+	case 1:
+		return regexp.MustCompile(strs[0])
+	default:
+		for i := range strs {
+			strs[i] = "(" + strs[i] + ")"
+		}
+		return regexp.MustCompile(strings.Join(strs, "|"))
+	}
 }
 
 // MatchFailReason describes the reason(s) a filter did not match the test.

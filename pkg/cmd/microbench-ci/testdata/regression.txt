@@ -110,7 +110,15 @@ chmod +x benchdiff/abcdef1/bin/1058449141/cockroachdb_cockroach_pkg_sql_tests
 ```
 **benchdiff command**:
 ```shell
-benchdiff --run=^BenchmarkSysbench/SQL/3node/oltp_read_write$ --old=abcdef1 --new=qwerty4 ./pkg/sql/tests
+# NB: for best (most stable) results, also add a suitable `--benchtime` that
+# results in ~1s to ~5s of benchmark runs. For example, if ops average ~3ms, a
+# benchtime of `1000x` is appropriate.
+#
+# Some benchmarks (in particular BenchmarkSysbench) output additional memory
+# profiles covering only the execution (excluding the setup/teardown) - those
+# should be preferred for analysis since they more closely correspond to what's
+# reported as B/op and alloc/op.
+benchdiff --run=^BenchmarkSysbench/SQL/3node/oltp_read_write$ --old=abcdef1 --new=qwerty4 --memprofile ./pkg/sql/tests
 ```
 
 </details>

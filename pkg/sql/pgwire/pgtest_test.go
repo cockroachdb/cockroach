@@ -37,9 +37,6 @@ func TestPGTest(t *testing.T) {
 		newServer := func() (addr, user string, cleanup func()) {
 			ctx := context.Background()
 			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
-					base.TestTenantProbabilistic, 112960,
-				),
 				Insecure: true,
 			})
 			cleanup = func() {
@@ -50,7 +47,15 @@ func TestPGTest(t *testing.T) {
 			// None of the tests read that much data, so we hardcode the max message
 			// size to something small. This lets us test the handling of large
 			// query inputs. See the large_input test.
+			//
+			// In shared process mode, SQL connections come through the system
+			// tenant's pgwire listener, so we need to set the cluster setting on
+			// the system tenant as well as the application tenant. The pre-serve
+			// phase uses the system tenant's settings to validate message sizes
+			// before routing to the appropriate tenant.
 			_, _ = db.ExecContext(ctx, "SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '32 KiB'")
+			sysDB := s.SystemLayer().SQLConn(t)
+			_, _ = sysDB.ExecContext(ctx, "SET CLUSTER SETTING sql.conn.max_read_buffer_message_size = '32 KiB'")
 			return addr, user, cleanup
 		}
 		pgtest.WalkWithNewServer(t, datapathutils.TestDataPath(t, "pgtest"), newServer)

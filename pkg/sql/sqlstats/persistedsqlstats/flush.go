@@ -55,6 +55,8 @@ func (s *PersistedSQLStats) MaybeFlush(ctx context.Context, stopper *stop.Stoppe
 func (s *PersistedSQLStats) MaybeFlushWithDrainer(
 	ctx context.Context, stopper *stop.Stopper, ssDrainer sqlstats.SSDrainer,
 ) bool {
+	ctx, stopCancel := stopper.WithCancelOnQuiesce(ctx)
+	defer stopCancel()
 	now := s.getTimeNow()
 	allowDiscardWhenDisabled := DiscardInMemoryStatsWhenFlushDisabled.Get(&s.cfg.Settings.SV)
 	minimumFlushInterval := MinimumInterval.Get(&s.cfg.Settings.SV)

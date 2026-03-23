@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/rolemembershipcache"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
@@ -69,92 +70,95 @@ var informationSchema = virtualSchema{
 		"sql_sizing_profiles",
 	),
 	tableDefs: map[descpb.ID]virtualSchemaDef{
-		catconstants.InformationSchemaAdministrableRoleAuthorizationsID:   informationSchemaAdministrableRoleAuthorizations,
-		catconstants.InformationSchemaApplicableRolesID:                   informationSchemaApplicableRoles,
-		catconstants.InformationSchemaAttributesTableID:                   informationSchemaAttributesTable,
-		catconstants.InformationSchemaCharacterSets:                       informationSchemaCharacterSets,
-		catconstants.InformationSchemaCheckConstraintRoutineUsageTableID:  informationSchemaCheckConstraintRoutineUsageTable,
-		catconstants.InformationSchemaCheckConstraints:                    informationSchemaCheckConstraints,
-		catconstants.InformationSchemaCollationCharacterSetApplicability:  informationSchemaCollationCharacterSetApplicability,
-		catconstants.InformationSchemaCollations:                          informationSchemaCollations,
-		catconstants.InformationSchemaColumnColumnUsageTableID:            informationSchemaColumnColumnUsageTable,
-		catconstants.InformationSchemaColumnDomainUsageTableID:            informationSchemaColumnDomainUsageTable,
-		catconstants.InformationSchemaColumnOptionsTableID:                informationSchemaColumnOptionsTable,
-		catconstants.InformationSchemaColumnPrivilegesID:                  informationSchemaColumnPrivileges,
-		catconstants.InformationSchemaColumnStatisticsTableID:             informationSchemaColumnStatisticsTable,
-		catconstants.InformationSchemaColumnUDTUsageID:                    informationSchemaColumnUDTUsage,
-		catconstants.InformationSchemaColumnsExtensionsTableID:            informationSchemaColumnsExtensionsTable,
-		catconstants.InformationSchemaColumnsTableID:                      informationSchemaColumnsTable,
-		catconstants.InformationSchemaConstraintColumnUsageTableID:        informationSchemaConstraintColumnUsageTable,
-		catconstants.InformationSchemaConstraintTableUsageTableID:         informationSchemaConstraintTableUsageTable,
-		catconstants.InformationSchemaDataTypePrivilegesTableID:           informationSchemaDataTypePrivilegesTable,
-		catconstants.InformationSchemaDomainConstraintsTableID:            informationSchemaDomainConstraintsTable,
-		catconstants.InformationSchemaDomainUdtUsageTableID:               informationSchemaDomainUdtUsageTable,
-		catconstants.InformationSchemaDomainsTableID:                      informationSchemaDomainsTable,
-		catconstants.InformationSchemaElementTypesTableID:                 informationSchemaElementTypesTable,
-		catconstants.InformationSchemaEnabledRolesID:                      informationSchemaEnabledRoles,
-		catconstants.InformationSchemaEnginesTableID:                      informationSchemaEnginesTable,
-		catconstants.InformationSchemaEventsTableID:                       informationSchemaEventsTable,
-		catconstants.InformationSchemaFilesTableID:                        informationSchemaFilesTable,
-		catconstants.InformationSchemaForeignDataWrapperOptionsTableID:    informationSchemaForeignDataWrapperOptionsTable,
-		catconstants.InformationSchemaForeignDataWrappersTableID:          informationSchemaForeignDataWrappersTable,
-		catconstants.InformationSchemaForeignServerOptionsTableID:         informationSchemaForeignServerOptionsTable,
-		catconstants.InformationSchemaForeignServersTableID:               informationSchemaForeignServersTable,
-		catconstants.InformationSchemaForeignTableOptionsTableID:          informationSchemaForeignTableOptionsTable,
-		catconstants.InformationSchemaForeignTablesTableID:                informationSchemaForeignTablesTable,
-		catconstants.InformationSchemaInformationSchemaCatalogNameTableID: informationSchemaInformationSchemaCatalogNameTable,
-		catconstants.InformationSchemaKeyColumnUsageTableID:               informationSchemaKeyColumnUsageTable,
-		catconstants.InformationSchemaKeywordsTableID:                     informationSchemaKeywordsTable,
-		catconstants.InformationSchemaOptimizerTraceTableID:               informationSchemaOptimizerTraceTable,
-		catconstants.InformationSchemaParametersTableID:                   informationSchemaParametersTable,
-		catconstants.InformationSchemaPartitionsTableID:                   informationSchemaPartitionsTable,
-		catconstants.InformationSchemaPluginsTableID:                      informationSchemaPluginsTable,
-		catconstants.InformationSchemaProcesslistTableID:                  informationSchemaProcesslistTable,
-		catconstants.InformationSchemaProfilingTableID:                    informationSchemaProfilingTable,
-		catconstants.InformationSchemaReferentialConstraintsTableID:       informationSchemaReferentialConstraintsTable,
-		catconstants.InformationSchemaResourceGroupsTableID:               informationSchemaResourceGroupsTable,
-		catconstants.InformationSchemaRoleColumnGrantsTableID:             informationSchemaRoleColumnGrantsTable,
-		catconstants.InformationSchemaRoleRoutineGrantsTableID:            informationSchemaRoleRoutineGrantsTable,
-		catconstants.InformationSchemaRoleTableGrantsID:                   informationSchemaRoleTableGrants,
-		catconstants.InformationSchemaRoleUdtGrantsTableID:                informationSchemaRoleUdtGrantsTable,
-		catconstants.InformationSchemaRoleUsageGrantsTableID:              informationSchemaRoleUsageGrantsTable,
-		catconstants.InformationSchemaRoutinePrivilegesTableID:            informationSchemaRoutinePrivilegesTable,
-		catconstants.InformationSchemaRoutineTableID:                      informationSchemaRoutineTable,
-		catconstants.InformationSchemaSQLFeaturesTableID:                  informationSchemaSQLFeaturesTable,
-		catconstants.InformationSchemaSQLImplementationInfoTableID:        informationSchemaSQLImplementationInfoTable,
-		catconstants.InformationSchemaSQLPartsTableID:                     informationSchemaSQLPartsTable,
-		catconstants.InformationSchemaSQLSizingTableID:                    informationSchemaSQLSizingTable,
-		catconstants.InformationSchemaSchemataExtensionsTableID:           informationSchemaSchemataExtensionsTable,
-		catconstants.InformationSchemaSchemataTableID:                     informationSchemaSchemataTable,
-		catconstants.InformationSchemaSchemataTablePrivilegesID:           informationSchemaSchemataTablePrivileges,
-		catconstants.InformationSchemaSequencesID:                         informationSchemaSequences,
-		catconstants.InformationSchemaSessionVariables:                    informationSchemaSessionVariables,
-		catconstants.InformationSchemaStGeometryColumnsTableID:            informationSchemaStGeometryColumnsTable,
-		catconstants.InformationSchemaStSpatialReferenceSystemsTableID:    informationSchemaStSpatialReferenceSystemsTable,
-		catconstants.InformationSchemaStUnitsOfMeasureTableID:             informationSchemaStUnitsOfMeasureTable,
-		catconstants.InformationSchemaStatisticsTableID:                   informationSchemaStatisticsTable,
-		catconstants.InformationSchemaTableConstraintTableID:              informationSchemaTableConstraintTable,
-		catconstants.InformationSchemaTableConstraintsExtensionsTableID:   informationSchemaTableConstraintsExtensionsTable,
-		catconstants.InformationSchemaTablePrivilegesID:                   informationSchemaTablePrivileges,
-		catconstants.InformationSchemaTablesExtensionsTableID:             informationSchemaTablesExtensionsTable,
-		catconstants.InformationSchemaTablesTableID:                       informationSchemaTablesTable,
-		catconstants.InformationSchemaTablespacesExtensionsTableID:        informationSchemaTablespacesExtensionsTable,
-		catconstants.InformationSchemaTablespacesTableID:                  informationSchemaTablespacesTable,
-		catconstants.InformationSchemaTransformsTableID:                   informationSchemaTransformsTable,
-		catconstants.InformationSchemaTriggeredUpdateColumnsTableID:       informationSchemaTriggeredUpdateColumnsTable,
-		catconstants.InformationSchemaTriggersTableID:                     informationSchemaTriggersTable,
-		catconstants.InformationSchemaTypePrivilegesID:                    informationSchemaTypePrivilegesTable,
-		catconstants.InformationSchemaUdtPrivilegesTableID:                informationSchemaUdtPrivilegesTable,
-		catconstants.InformationSchemaUsagePrivilegesTableID:              informationSchemaUsagePrivilegesTable,
-		catconstants.InformationSchemaUserAttributesTableID:               informationSchemaUserAttributesTable,
-		catconstants.InformationSchemaUserDefinedTypesTableID:             informationSchemaUserDefinedTypesTable,
-		catconstants.InformationSchemaUserMappingOptionsTableID:           informationSchemaUserMappingOptionsTable,
-		catconstants.InformationSchemaUserMappingsTableID:                 informationSchemaUserMappingsTable,
-		catconstants.InformationSchemaUserPrivilegesID:                    informationSchemaUserPrivileges,
-		catconstants.InformationSchemaViewColumnUsageTableID:              informationSchemaViewColumnUsageTable,
-		catconstants.InformationSchemaViewRoutineUsageTableID:             informationSchemaViewRoutineUsageTable,
-		catconstants.InformationSchemaViewTableUsageTableID:               informationSchemaViewTableUsageTable,
-		catconstants.InformationSchemaViewsTableID:                        informationSchemaViewsTable,
+		catconstants.InformationSchemaAdministrableRoleAuthorizationsID:      informationSchemaAdministrableRoleAuthorizations,
+		catconstants.InformationSchemaApplicableRolesID:                      informationSchemaApplicableRoles,
+		catconstants.InformationSchemaAttributesTableID:                      informationSchemaAttributesTable,
+		catconstants.InformationSchemaCharacterSets:                          informationSchemaCharacterSets,
+		catconstants.InformationSchemaCheckConstraintRoutineUsageTableID:     informationSchemaCheckConstraintRoutineUsageTable,
+		catconstants.InformationSchemaCheckConstraints:                       informationSchemaCheckConstraints,
+		catconstants.InformationSchemaCollationCharacterSetApplicability:     informationSchemaCollationCharacterSetApplicability,
+		catconstants.InformationSchemaCollations:                             informationSchemaCollations,
+		catconstants.InformationSchemaColumnColumnUsageTableID:               informationSchemaColumnColumnUsageTable,
+		catconstants.InformationSchemaColumnDomainUsageTableID:               informationSchemaColumnDomainUsageTable,
+		catconstants.InformationSchemaColumnOptionsTableID:                   informationSchemaColumnOptionsTable,
+		catconstants.InformationSchemaColumnPrivilegesID:                     informationSchemaColumnPrivileges,
+		catconstants.InformationSchemaColumnStatisticsTableID:                informationSchemaColumnStatisticsTable,
+		catconstants.InformationSchemaColumnUDTUsageID:                       informationSchemaColumnUDTUsage,
+		catconstants.InformationSchemaColumnsExtensionsTableID:               informationSchemaColumnsExtensionsTable,
+		catconstants.InformationSchemaColumnsTableID:                         informationSchemaColumnsTable,
+		catconstants.InformationSchemaConstraintColumnUsageTableID:           informationSchemaConstraintColumnUsageTable,
+		catconstants.InformationSchemaConstraintTableUsageTableID:            informationSchemaConstraintTableUsageTable,
+		catconstants.InformationSchemaDataTypePrivilegesTableID:              informationSchemaDataTypePrivilegesTable,
+		catconstants.InformationSchemaDomainConstraintsTableID:               informationSchemaDomainConstraintsTable,
+		catconstants.InformationSchemaDomainUdtUsageTableID:                  informationSchemaDomainUdtUsageTable,
+		catconstants.InformationSchemaDomainsTableID:                         informationSchemaDomainsTable,
+		catconstants.InformationSchemaElementTypesTableID:                    informationSchemaElementTypesTable,
+		catconstants.InformationSchemaEnabledRolesID:                         informationSchemaEnabledRoles,
+		catconstants.InformationSchemaEnginesTableID:                         informationSchemaEnginesTable,
+		catconstants.InformationSchemaEventsTableID:                          informationSchemaEventsTable,
+		catconstants.InformationSchemaFilesTableID:                           informationSchemaFilesTable,
+		catconstants.InformationSchemaForeignDataWrapperOptionsTableID:       informationSchemaForeignDataWrapperOptionsTable,
+		catconstants.InformationSchemaForeignDataWrappersTableID:             informationSchemaForeignDataWrappersTable,
+		catconstants.InformationSchemaForeignServerOptionsTableID:            informationSchemaForeignServerOptionsTable,
+		catconstants.InformationSchemaForeignServersTableID:                  informationSchemaForeignServersTable,
+		catconstants.InformationSchemaForeignTableOptionsTableID:             informationSchemaForeignTableOptionsTable,
+		catconstants.InformationSchemaForeignTablesTableID:                   informationSchemaForeignTablesTable,
+		catconstants.InformationSchemaInformationSchemaCatalogNameTableID:    informationSchemaInformationSchemaCatalogNameTable,
+		catconstants.InformationSchemaKeyColumnUsageTableID:                  informationSchemaKeyColumnUsageTable,
+		catconstants.InformationSchemaKeywordsTableID:                        informationSchemaKeywordsTable,
+		catconstants.InformationSchemaOptimizerTraceTableID:                  informationSchemaOptimizerTraceTable,
+		catconstants.InformationSchemaParametersTableID:                      informationSchemaParametersTable,
+		catconstants.InformationSchemaPartitionsTableID:                      informationSchemaPartitionsTable,
+		catconstants.InformationSchemaPluginsTableID:                         informationSchemaPluginsTable,
+		catconstants.InformationSchemaProcesslistTableID:                     informationSchemaProcesslistTable,
+		catconstants.InformationSchemaProfilingTableID:                       informationSchemaProfilingTable,
+		catconstants.InformationSchemaReferentialConstraintsTableID:          informationSchemaReferentialConstraintsTable,
+		catconstants.InformationSchemaResourceGroupsTableID:                  informationSchemaResourceGroupsTable,
+		catconstants.InformationSchemaRoleColumnGrantsTableID:                informationSchemaRoleColumnGrantsTable,
+		catconstants.InformationSchemaRoleRoutineGrantsTableID:               informationSchemaRoleRoutineGrantsTable,
+		catconstants.InformationSchemaRoleTableGrantsID:                      informationSchemaRoleTableGrants,
+		catconstants.InformationSchemaRoleUdtGrantsTableID:                   informationSchemaRoleUdtGrantsTable,
+		catconstants.InformationSchemaRoleUsageGrantsTableID:                 informationSchemaRoleUsageGrantsTable,
+		catconstants.InformationSchemaRoutinePrivilegesTableID:               informationSchemaRoutinePrivilegesTable,
+		catconstants.InformationSchemaRoutineTableID:                         informationSchemaRoutineTable,
+		catconstants.InformationSchemaSQLFeaturesTableID:                     informationSchemaSQLFeaturesTable,
+		catconstants.InformationSchemaSQLImplementationInfoTableID:           informationSchemaSQLImplementationInfoTable,
+		catconstants.InformationSchemaSQLPartsTableID:                        informationSchemaSQLPartsTable,
+		catconstants.InformationSchemaSQLSizingTableID:                       informationSchemaSQLSizingTable,
+		catconstants.InformationSchemaSchemataExtensionsTableID:              informationSchemaSchemataExtensionsTable,
+		catconstants.InformationSchemaSchemataTableID:                        informationSchemaSchemataTable,
+		catconstants.InformationSchemaSchemataTablePrivilegesID:              informationSchemaSchemataTablePrivileges,
+		catconstants.InformationSchemaSequencesID:                            informationSchemaSequences,
+		catconstants.InformationSchemaSessionVariables:                       informationSchemaSessionVariables,
+		catconstants.InformationSchemaStGeometryColumnsTableID:               informationSchemaStGeometryColumnsTable,
+		catconstants.InformationSchemaStSpatialReferenceSystemsTableID:       informationSchemaStSpatialReferenceSystemsTable,
+		catconstants.InformationSchemaStUnitsOfMeasureTableID:                informationSchemaStUnitsOfMeasureTable,
+		catconstants.InformationSchemaStatisticsTableID:                      informationSchemaStatisticsTable,
+		catconstants.InformationSchemaTableConstraintTableID:                 informationSchemaTableConstraintTable,
+		catconstants.InformationSchemaTableConstraintsExtensionsTableID:      informationSchemaTableConstraintsExtensionsTable,
+		catconstants.InformationSchemaTablePrivilegesID:                      informationSchemaTablePrivileges,
+		catconstants.InformationSchemaTablesExtensionsTableID:                informationSchemaTablesExtensionsTable,
+		catconstants.InformationSchemaTablesTableID:                          informationSchemaTablesTable,
+		catconstants.InformationSchemaTablespacesExtensionsTableID:           informationSchemaTablespacesExtensionsTable,
+		catconstants.InformationSchemaTablespacesTableID:                     informationSchemaTablespacesTable,
+		catconstants.InformationSchemaTransformsTableID:                      informationSchemaTransformsTable,
+		catconstants.InformationSchemaTriggeredUpdateColumnsTableID:          informationSchemaTriggeredUpdateColumnsTable,
+		catconstants.InformationSchemaTriggersTableID:                        informationSchemaTriggersTable,
+		catconstants.InformationSchemaTypePrivilegesID:                       informationSchemaTypePrivilegesTable,
+		catconstants.InformationSchemaUdtPrivilegesTableID:                   informationSchemaUdtPrivilegesTable,
+		catconstants.InformationSchemaUsagePrivilegesTableID:                 informationSchemaUsagePrivilegesTable,
+		catconstants.InformationSchemaUserAttributesTableID:                  informationSchemaUserAttributesTable,
+		catconstants.InformationSchemaUserDefinedTypesTableID:                informationSchemaUserDefinedTypesTable,
+		catconstants.InformationSchemaUserMappingOptionsTableID:              informationSchemaUserMappingOptionsTable,
+		catconstants.InformationSchemaUserMappingsTableID:                    informationSchemaUserMappingsTable,
+		catconstants.InformationSchemaUserPrivilegesID:                       informationSchemaUserPrivileges,
+		catconstants.InformationSchemaViewColumnUsageTableID:                 informationSchemaViewColumnUsageTable,
+		catconstants.InformationSchemaViewRoutineUsageTableID:                informationSchemaViewRoutineUsageTable,
+		catconstants.InformationSchemaViewTableUsageTableID:                  informationSchemaViewTableUsageTable,
+		catconstants.InformationSchemaViewsTableID:                           informationSchemaViewsTable,
+		catconstants.InformationSchemaCrdbIndexUsageStatsiticsTableID:        informationSchemaCrdbIndexUsageStatsTable,
+		catconstants.InformationSchemaCrdbNodeActiveSessionHistoryTableID:    informationSchemaCrdbNodeActiveSessionHistoryTable,
+		catconstants.InformationSchemaCrdbClusterActiveSessionHistoryTableID: informationSchemaCrdbClusterActiveSessionHistoryTable,
 	},
 	tableValidator:             validateInformationSchemaTable,
 	validWithNoDatabaseContext: true,
@@ -501,6 +505,16 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					}
 					colComputed = tree.NewDString(colExpr)
 				}
+				colOnUpdate := tree.DNull
+				if column.HasOnUpdate() {
+					colExpr, err := schemaexpr.FormatExprForDisplay(
+						ctx, table, column.GetOnUpdateExpr(), p.EvalContext(), &p.semaCtx, p.SessionData(), tree.FmtSimple,
+					)
+					if err != nil {
+						return err
+					}
+					colOnUpdate = tree.NewDString(colExpr)
+				}
 				colGeneratedAsIdentity := emptyString
 				if column.IsGeneratedAsIdentity() {
 					if column.IsGeneratedAlwaysAsIdentity() {
@@ -598,6 +612,7 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					), // is_updatable
 					yesOrNoDatum(column.IsHidden()),               // is_hidden
 					tree.NewDString(column.GetType().SQLString()), // crdb_sql_type
+					colOnUpdate, // column_on_update
 				)
 				if err != nil {
 					return err
@@ -997,11 +1012,11 @@ https://www.postgresql.org/docs/9.5/infoschema-referential-constraints.html`,
 				}
 				// Note: Cross DB references are deprecated, but this should be
 				// a cached look up when they don't exist.
-				refDB, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).Get().Database(ctx, refTable.GetParentID())
+				refDB, err := descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.Txn(), p.EvalContext().Settings).Get().Database(ctx, refTable.GetParentID())
 				if err != nil {
 					return err
 				}
-				refSchema, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).Get().Schema(ctx, refTable.GetParentSchemaID())
+				refSchema, err := descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.Txn(), p.EvalContext().Settings).Get().Schema(ctx, refTable.GetParentSchemaID())
 				if err != nil {
 					return err
 				}
@@ -1139,7 +1154,7 @@ https://www.postgresql.org/docs/9.5/infoschema-schemata.html`,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(ctx context.Context, db catalog.DatabaseDescriptor) error {
-				return forEachSchema(ctx, p, db, true, false /* includeMetadata */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
+				return forEachSchema(ctx, p, db, true /* requiresPrivileges */, false /* includeMetadata */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
 					return addRow(
 						tree.NewDString(db.GetName()), // catalog_name
 						tree.NewDString(sc.GetName()), // schema_name
@@ -1237,7 +1252,7 @@ var informationSchemaSchemataTablePrivileges = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(ctx context.Context, db catalog.DatabaseDescriptor) error {
-				return forEachSchema(ctx, p, db, true, false /* includeMetadata */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
+				return forEachSchema(ctx, p, db, true /* requiresPrivileges */, false /* includeMetadata */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
 					privs, err := sc.GetPrivileges().Show(privilege.Schema, true /* showImplicitOwnerPrivs */)
 					if err != nil {
 						return err
@@ -1832,7 +1847,7 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 		var dbDescs []catalog.DatabaseDescriptor
 		if db == nil {
 			var err error
-			dbDescs, err = p.Descriptors().GetAllDatabaseDescriptors(ctx, p.Txn(), descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
+			dbDescs, err = p.Descriptors().GetAllDatabaseDescriptors(ctx, p.Txn(), descs.GetCatalogGetAllOptions(ctx, p.EvalContext().Settings)...)
 			if err != nil {
 				return err
 			}
@@ -1890,7 +1905,7 @@ var informationSchemaRoleRoutineGrantsTable = virtualSchemaTable{
 			}
 
 			err := db.ForEachSchema(func(id descpb.ID, name string) error {
-				sc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.txn, &p.EvalContext().Settings.SV).Get().Schema(ctx, id)
+				sc, err := descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.txn, p.EvalContext().Settings).Get().Schema(ctx, id)
 				if err != nil {
 					return err
 				}
@@ -2450,7 +2465,7 @@ https://www.postgresql.org/docs/current/infoschema-triggers.html`,
 						}
 
 						// Build the action statement.
-						funcDesc, err := descs.GetCatalogDescriptorGetter(p.Descriptors(), p.Txn(), &p.EvalContext().Settings.SV).Get().Function(ctx, trigger.FuncID)
+						funcDesc, err := descs.GetCatalogDescriptorGetter(ctx, p.Descriptors(), p.Txn(), p.EvalContext().Settings).Get().Function(ctx, trigger.FuncID)
 						if err != nil {
 							return err
 						}
@@ -2541,6 +2556,49 @@ var informationSchemaViewTableUsageTable = virtualSchemaTable{
 	unimplemented: true,
 }
 
+var informationSchemaCrdbIndexUsageStatsTable = virtualSchemaTable{
+	comment: `cluster-wide index usage statistics (in-memory, not durable).` +
+		`Querying this table is an expensive operation since it creates a` +
+		`cluster-wide RPC fanout.`,
+	schema:    vtable.CRDBIndexUsageStatistics,
+	generator: indexUsageStatisticsGenerator,
+}
+
+var informationSchemaCrdbNodeActiveSessionHistoryTable = virtualSchemaView{
+	comment: `sampled active session history from this node (RAM). ` +
+		`Requires view_activity or view_activity_redacted role option.`,
+	schema: vtable.CRDBNodeActiveSessionHistory,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "sample_time", Typ: types.TimestampTZ},
+		{Name: "node_id", Typ: types.Int},
+		{Name: "tenant_id", Typ: types.Int},
+		{Name: "workload_id", Typ: types.String},
+		{Name: "workload_type", Typ: types.String},
+		{Name: "app_name", Typ: types.String},
+		{Name: "work_event_type", Typ: types.String},
+		{Name: "work_event", Typ: types.String},
+		{Name: "goroutine_id", Typ: types.Int},
+	},
+}
+
+var informationSchemaCrdbClusterActiveSessionHistoryTable = virtualSchemaView{
+	comment: `sampled active session history from all nodes in the cluster ` +
+		`(cluster RPC; expensive!). ` +
+		`Requires view_activity or view_activity_redacted role option.`,
+	schema: vtable.CRDBClusterActiveSessionHistory,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "sample_time", Typ: types.TimestampTZ},
+		{Name: "node_id", Typ: types.Int},
+		{Name: "tenant_id", Typ: types.Int},
+		{Name: "workload_id", Typ: types.String},
+		{Name: "workload_type", Typ: types.String},
+		{Name: "app_name", Typ: types.String},
+		{Name: "work_event_type", Typ: types.String},
+		{Name: "work_event", Typ: types.String},
+		{Name: "goroutine_id", Typ: types.Int},
+	},
+}
+
 // forEachSchema iterates over the physical and virtual schemas.
 func forEachSchema(
 	ctx context.Context,
@@ -2551,7 +2609,7 @@ func forEachSchema(
 	fn func(ctx context.Context, sc catalog.SchemaDescriptor) error,
 ) error {
 	forEachDatabase := func(db catalog.DatabaseDescriptor) error {
-		opts := descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)
+		opts := descs.GetCatalogGetAllOptions(ctx, p.EvalContext().Settings)
 		if includeMetadata {
 			opts = append(opts, descs.WithMetaData())
 		}
@@ -2591,7 +2649,7 @@ func forEachSchema(
 	if dbContext != nil {
 		return iterutil.Map(forEachDatabase(dbContext))
 	}
-	c, err := p.Descriptors().GetAllDatabases(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
+	c, err := p.Descriptors().GetAllDatabases(ctx, p.txn, descs.GetCatalogGetAllOptions(ctx, p.EvalContext().Settings)...)
 	if err != nil {
 		return err
 	}
@@ -2617,7 +2675,7 @@ func forEachDatabaseDesc(
 ) error {
 	var dbDescs []catalog.DatabaseDescriptor
 	if dbContext == nil {
-		allDbDescs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
+		allDbDescs, err := p.Descriptors().GetAllDatabaseDescriptors(ctx, p.txn, descs.GetCatalogGetAllOptions(ctx, p.EvalContext().Settings)...)
 		if err != nil {
 			return err
 		}
@@ -2662,7 +2720,7 @@ func forEachTypeDesc(
 	fn func(ctx context.Context, db catalog.DatabaseDescriptor, sc catalog.SchemaDescriptor, typ catalog.TypeDescriptor) error,
 ) (err error) {
 	var all nstree.Catalog
-	opts := descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)
+	opts := descs.GetCatalogGetAllOptions(ctx, p.EvalContext().Settings)
 	if includeMetadata {
 		opts = append(opts, descs.WithMetaData())
 	}
@@ -2675,7 +2733,7 @@ func forEachTypeDesc(
 	if err != nil {
 		return err
 	}
-	lCtx := newInternalLookupCtx(all.OrderedDescriptors(), dbContext)
+	lCtx := newInternalLookupCtx(all.OrderedDescriptors(), dbContext, p.Descriptors().GetLookupContextFallbackFn(ctx, p.Txn()))
 	for _, id := range lCtx.typIDs {
 		typ := lCtx.typDescs[id]
 		dbDesc, err := lCtx.getDatabaseByID(typ.GetParentID())
@@ -2750,9 +2808,9 @@ func forEachTableDesc(
 ) (err error) {
 	var all nstree.Catalog
 	if dbContext != nil && useIndexLookupForDescriptorsInDatabase.Get(&p.EvalContext().Settings.SV) {
-		all, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.txn, dbContext, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
+		all, err = p.Descriptors().GetAllDescriptorsForDatabase(ctx, p.txn, dbContext, descs.GetCatalogGetAllOptions(ctx, p.EvalContext().Settings)...)
 	} else {
-		all, err = p.Descriptors().GetAllDescriptors(ctx, p.txn, descs.GetCatalogGetAllOptions(&p.EvalContext().Settings.SV)...)
+		all, err = p.Descriptors().GetAllDescriptors(ctx, p.txn, descs.GetCatalogGetAllOptions(ctx, p.EvalContext().Settings)...)
 	}
 	if err != nil {
 		return err
@@ -2769,7 +2827,7 @@ func forEachTableDescFromDescriptors(
 	opts forEachTableDescOptions,
 	fn func(context.Context, tableDescContext) error,
 ) error {
-	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext)
+	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext, p.Descriptors().GetLookupContextFallbackFn(ctx, p.Txn()))
 
 	vOpts := opts.virtualOpts
 	if vOpts == virtualMany || vOpts == virtualCurrentDB {
@@ -2835,7 +2893,7 @@ func forEachTableDescFromDescriptors(
 				// missing temporary schema name. Temporary schemas have namespace
 				// entries. The below code will go and lookup schema names from the
 				// namespace table if needed to qualify the name of a temporary table.
-				if err := forEachSchema(ctx, p, dbDesc, false, false, func(ctx context.Context, schema catalog.SchemaDescriptor) error {
+				if err := forEachSchema(ctx, p, dbDesc, false /* requiresPrivileges */, false /* includeMetadata */, func(ctx context.Context, schema catalog.SchemaDescriptor) error {
 					if schema.GetID() != table.GetParentSchemaID() {
 						return nil
 					}
@@ -2873,7 +2931,7 @@ func forEachTypeDescWithTableLookupInternalFromDescriptors(
 	c nstree.Catalog,
 	fn func(context.Context, catalog.DatabaseDescriptor, catalog.SchemaDescriptor, catalog.TypeDescriptor, tableLookupFn) error,
 ) error {
-	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext)
+	lCtx := newInternalLookupCtx(c.OrderedDescriptors(), dbContext, p.Descriptors().GetLookupContextFallbackFn(ctx, p.Txn()))
 
 	for _, typID := range lCtx.typIDs {
 		typDesc := lCtx.typDescs[typID]
@@ -2986,6 +3044,8 @@ GROUP BY
 			}
 			return nil
 		},
+		rolemembershipcache.CheckRoleOptionsVersion(),
+		rolemembershipcache.CheckDatabaseRoleSettingsVersion(),
 	); err != nil {
 		return err
 	}

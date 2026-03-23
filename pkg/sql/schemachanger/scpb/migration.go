@@ -9,7 +9,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	catpb "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	idxtype "github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 )
@@ -55,24 +55,6 @@ func migrateDeprecatedFields(
 				}
 			}
 			deps.UsesRelationIDs = nil
-			migrated = true
-		}
-	}
-
-	// Migrate ComputeExpr field to separate ColumnComputeExpression target.
-	if columnType := target.GetColumnType(); columnType != nil {
-		if columnType.ComputeExpr != nil {
-			newTarget := MakeTarget(
-				AsTargetStatus(target.TargetStatus),
-				&ColumnComputeExpression{
-					TableID:    columnType.TableID,
-					ColumnID:   columnType.ColumnID,
-					Expression: *columnType.ComputeExpr,
-				},
-				&target.Metadata,
-			)
-			newTargets = append(newTargets, newTarget)
-			columnType.ComputeExpr = nil
 			migrated = true
 		}
 	}

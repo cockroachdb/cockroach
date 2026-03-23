@@ -81,9 +81,9 @@ func TestRoachprodEnv(t *testing.T) {
 
 func TestRunWithMaybeRetry(t *testing.T) {
 	var testRetryOpts = &retry.Options{
-		InitialBackoff: 10 * time.Millisecond,
+		InitialBackoff: 1 * time.Millisecond,
 		Multiplier:     2,
-		MaxBackoff:     1 * time.Second,
+		MaxBackoff:     100 * time.Millisecond,
 		// This will run a total of 3 times `runWithMaybeRetry`
 		MaxRetries: 2,
 	}

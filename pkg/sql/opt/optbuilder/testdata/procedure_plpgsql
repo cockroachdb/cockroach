@@ -201,15 +201,7 @@ call
                 │                                                                                              │    ├── variable: new_i:43
                 │                                                                                              │    ├── variable: new_s:44
                 │                                                                                              │    └── variable: c:45
-                │                                                                                              ├── params: arg_k:19 new_i:20 new_s:21 c:22
-                │                                                                                              └── body
-                │                                                                                                   └── project
-                │                                                                                                        ├── columns: "_implicit_return":23
-                │                                                                                                        ├── values
-                │                                                                                                        │    └── tuple
-                │                                                                                                        └── projections
-                │                                                                                                             └── cast: VOID [as="_implicit_return":23]
-                │                                                                                                                  └── null
+                │                                                                                              └── repetitive-call
                 └── const: 1
 
 # Case with nested blocks.
@@ -597,44 +589,7 @@ call
                 │                                                      └── udf: post_nested_block_3 [as=post_nested_block_3:11]
                 │                                                           ├── args
                 │                                                           │    └── variable: x:10
-                │                                                           ├── params: x:4
-                │                                                           └── body
-                │                                                                └── project
-                │                                                                     ├── columns: "_stmt_raise_4":8
-                │                                                                     ├── values
-                │                                                                     │    └── tuple
-                │                                                                     └── projections
-                │                                                                          └── udf: _stmt_raise_4 [as="_stmt_raise_4":8]
-                │                                                                               ├── tail-call
-                │                                                                               ├── args
-                │                                                                               │    └── variable: x:4
-                │                                                                               ├── params: x:5
-                │                                                                               └── body
-                │                                                                                    ├── project
-                │                                                                                    │    ├── columns: stmt_raise_5:6
-                │                                                                                    │    ├── values
-                │                                                                                    │    │    └── tuple
-                │                                                                                    │    └── projections
-                │                                                                                    │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_5:6]
-                │                                                                                    │              ├── const: 'NOTICE'
-                │                                                                                    │              ├── concat
-                │                                                                                    │              │    ├── concat
-                │                                                                                    │              │    │    ├── const: ''
-                │                                                                                    │              │    │    └── coalesce
-                │                                                                                    │              │    │         ├── cast: STRING
-                │                                                                                    │              │    │         │    └── variable: x:5
-                │                                                                                    │              │    │         └── const: '<NULL>'
-                │                                                                                    │              │    └── const: ''
-                │                                                                                    │              ├── const: ''
-                │                                                                                    │              ├── const: ''
-                │                                                                                    │              └── const: '00000'
-                │                                                                                    └── project
-                │                                                                                         ├── columns: "_implicit_return":7
-                │                                                                                         ├── values
-                │                                                                                         │    └── tuple
-                │                                                                                         └── projections
-                │                                                                                              └── cast: VOID [as="_implicit_return":7]
-                │                                                                                                   └── null
+                │                                                           └── repetitive-call
                 └── const: 1
 
 # Build an implicit RETURN statement for a routine with OUT params.
@@ -720,17 +675,7 @@ call
                 │                                  ├── args
                 │                                  │    ├── variable: x:5
                 │                                  │    └── variable: y:4
-                │                                  ├── params: x:6 y:7
-                │                                  └── body
-                │                                       └── project
-                │                                            ├── columns: "_implicit_return":8
-                │                                            ├── values
-                │                                            │    └── tuple
-                │                                            └── projections
-                │                                                 └── cast: RECORD [as="_implicit_return":8]
-                │                                                      └── tuple
-                │                                                           ├── variable: x:6
-                │                                                           └── variable: y:7
+                │                                  └── repetitive-call
                 └── const: 1
 
 exec-ddl
@@ -813,34 +758,34 @@ call
                 │                        │    │                             │                        ├── columns: "_stmt_exec_ret_2":17
                 │                        │    │                             │                        ├── project
                 │                        │    │                             │                        │    ├── columns: foo:16
-                │                        │    │                             │                        │    ├── right-join (cross)
+                │                        │    │                             │                        │    ├── barrier
                 │                        │    │                             │                        │    │    ├── columns: i:7
-                │                        │    │                             │                        │    │    ├── barrier
-                │                        │    │                             │                        │    │    │    ├── columns: i:7!null
-                │                        │    │                             │                        │    │    │    └── limit
-                │                        │    │                             │                        │    │    │         ├── columns: i:7!null
-                │                        │    │                             │                        │    │    │         ├── project
-                │                        │    │                             │                        │    │    │         │    ├── columns: i:7!null
-                │                        │    │                             │                        │    │    │         │    └── insert t
-                │                        │    │                             │                        │    │    │         │         ├── columns: k:6!null i:7!null s:8!null
-                │                        │    │                             │                        │    │    │         │         ├── insert-mapping:
-                │                        │    │                             │                        │    │    │         │         │    ├── column1:11 => k:6
-                │                        │    │                             │                        │    │    │         │         │    ├── column2:12 => i:7
-                │                        │    │                             │                        │    │    │         │         │    └── column3:13 => s:8
-                │                        │    │                             │                        │    │    │         │         ├── return-mapping:
-                │                        │    │                             │                        │    │    │         │         │    ├── column1:11 => k:6
-                │                        │    │                             │                        │    │    │         │         │    ├── column2:12 => i:7
-                │                        │    │                             │                        │    │    │         │         │    └── column3:13 => s:8
-                │                        │    │                             │                        │    │    │         │         └── values
-                │                        │    │                             │                        │    │    │         │              ├── columns: column1:11!null column2:12!null column3:13!null
-                │                        │    │                             │                        │    │    │         │              └── tuple
-                │                        │    │                             │                        │    │    │         │                   ├── const: 1
-                │                        │    │                             │                        │    │    │         │                   ├── const: 2
-                │                        │    │                             │                        │    │    │         │                   └── const: 'foo'
-                │                        │    │                             │                        │    │    │         └── const: 1
-                │                        │    │                             │                        │    │    ├── values
-                │                        │    │                             │                        │    │    │    └── tuple
-                │                        │    │                             │                        │    │    └── filters (true)
+                │                        │    │                             │                        │    │    └── right-join (cross)
+                │                        │    │                             │                        │    │         ├── columns: i:7
+                │                        │    │                             │                        │    │         ├── limit
+                │                        │    │                             │                        │    │         │    ├── columns: i:7!null
+                │                        │    │                             │                        │    │         │    ├── project
+                │                        │    │                             │                        │    │         │    │    ├── columns: i:7!null
+                │                        │    │                             │                        │    │         │    │    └── insert t
+                │                        │    │                             │                        │    │         │    │         ├── columns: k:6!null i:7!null s:8!null
+                │                        │    │                             │                        │    │         │    │         ├── insert-mapping:
+                │                        │    │                             │                        │    │         │    │         │    ├── column1:11 => k:6
+                │                        │    │                             │                        │    │         │    │         │    ├── column2:12 => i:7
+                │                        │    │                             │                        │    │         │    │         │    └── column3:13 => s:8
+                │                        │    │                             │                        │    │         │    │         ├── return-mapping:
+                │                        │    │                             │                        │    │         │    │         │    ├── column1:11 => k:6
+                │                        │    │                             │                        │    │         │    │         │    ├── column2:12 => i:7
+                │                        │    │                             │                        │    │         │    │         │    └── column3:13 => s:8
+                │                        │    │                             │                        │    │         │    │         └── values
+                │                        │    │                             │                        │    │         │    │              ├── columns: column1:11!null column2:12!null column3:13!null
+                │                        │    │                             │                        │    │         │    │              └── tuple
+                │                        │    │                             │                        │    │         │    │                   ├── const: 1
+                │                        │    │                             │                        │    │         │    │                   ├── const: 2
+                │                        │    │                             │                        │    │         │    │                   └── const: 'foo'
+                │                        │    │                             │                        │    │         │    └── const: 1
+                │                        │    │                             │                        │    │         ├── values
+                │                        │    │                             │                        │    │         │    └── tuple
+                │                        │    │                             │                        │    │         └── filters (true)
                 │                        │    │                             │                        │    └── projections
                 │                        │    │                             │                        │         └── variable: i:7 [as=foo:16]
                 │                        │    │                             │                        └── projections

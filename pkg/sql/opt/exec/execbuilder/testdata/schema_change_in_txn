@@ -63,7 +63,7 @@ Del (locking) /Table/106/1/102/1/1
 CPut /Table/106/1/202/0 -> /TUPLE/2:2:Decimal/1000.2/1:3:Bytes/empty
 CPut /Table/106/1/202/1/1 -> /TUPLE/4:4:Decimal/0.00/2:6:Decimal/1202.2
 
-statement ok
+statement count 1
 DELETE FROM t WHERE a=201
 
 statement ok

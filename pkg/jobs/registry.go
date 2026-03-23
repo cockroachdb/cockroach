@@ -15,12 +15,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -284,6 +284,11 @@ func (r *Registry) CurrentlyRunningJobs() []jobspb.JobID {
 // used for keying sqlliveness claims held by the registry.
 func (r *Registry) ID() base.SQLInstanceID {
 	return r.nodeID.SQLInstanceID()
+}
+
+// ClusterSettings returns the registry's cluster settings handle.
+func (r *Registry) ClusterSettings() *cluster.Settings {
+	return r.settings
 }
 
 // makeCtx returns a new context from r's ambient context and an associated
@@ -855,29 +860,38 @@ func (r *Registry) LoadJob(ctx context.Context, jobID jobspb.JobID) (*Job, error
 	return r.LoadJobWithTxn(ctx, jobID, nil)
 }
 
-// LoadClaimedJob loads an existing job with the given jobID from the
-// system.jobs table. The job must have already been claimed by this
-// Registry.
-func (r *Registry) LoadClaimedJob(ctx context.Context, jobID jobspb.JobID) (*Job, error) {
-	j, err := r.getClaimedJob(jobID)
-	if err != nil {
-		return nil, err
-	}
-	if err := j.NoTxn().load(ctx); err != nil {
-		return nil, err
-	}
-	return j, nil
-}
-
-// LoadJobWithTxn does the same as above, but using the transaction passed in
-// the txn argument. Passing a nil transaction is equivalent to calling LoadJob
-// in that a transaction will be automatically created.
+// LoadJobWithTxn is like LoadJob but uses the provided transaction to
+// load the job. Passing a nil transaction is equivalent to calling
+// LoadJob in that a transaction will be automatically created.
 func (r *Registry) LoadJobWithTxn(
 	ctx context.Context, jobID jobspb.JobID, txn isql.Txn,
 ) (*Job, error) {
 	j := &Job{
 		id:       jobID,
 		registry: r,
+	}
+	if err := j.WithTxn(txn).load(ctx); err != nil {
+		return nil, err
+	}
+	return j, nil
+}
+
+// LoadClaimedJob loads an existing job with the given jobID from the
+// system.jobs table. The job must have already been claimed by this
+// Registry.
+func (r *Registry) LoadClaimedJob(ctx context.Context, jobID jobspb.JobID) (*Job, error) {
+	return r.LoadClaimedJobWithTxn(ctx, jobID, nil)
+}
+
+// LoadClaimedJobWithTxn is like LoadClaimedJob but uses the provided
+// transaction to load the job. Passing a nil transaction is equivalent
+// to calling LoadClaimedJob.
+func (r *Registry) LoadClaimedJobWithTxn(
+	ctx context.Context, jobID jobspb.JobID, txn isql.Txn,
+) (*Job, error) {
+	j, err := r.getClaimedJob(jobID)
+	if err != nil {
+		return nil, err
 	}
 	if err := j.WithTxn(txn).load(ctx); err != nil {
 		return nil, err
@@ -1035,7 +1049,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 		defer cancel()
 
 		cancelLoopTask(ctx)
-		lc := makeLoopController(r.settings, cancelIntervalSetting, r.knobs.IntervalOverrides.Cancel)
+		lc := makeLoopController(r, cancelIntervalSetting, r.knobs.IntervalOverrides.Cancel)
 		defer lc.cleanup()
 		for {
 			select {
@@ -1066,7 +1080,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		lc := makeLoopController(r.settings, gcIntervalSetting, r.knobs.IntervalOverrides.Gc)
+		lc := makeLoopController(r, gcIntervalSetting, r.knobs.IntervalOverrides.Gc)
 		defer lc.cleanup()
 
 		// Retention duration of terminal job records.
@@ -1104,7 +1118,7 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 
 		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
 		defer cancel()
-		lc := makeLoopController(r.settings, adoptIntervalSetting, r.knobs.IntervalOverrides.Adopt)
+		lc := makeLoopController(r, adoptIntervalSetting, r.knobs.IntervalOverrides.Adopt)
 		defer lc.cleanup()
 		for {
 			select {
@@ -1119,6 +1133,12 @@ func (r *Registry) Start(ctx context.Context, stopper *stop.Stopper) error {
 			case shouldClaim := <-r.adoptionCh:
 				// Try to adopt the most recently created job.
 				if shouldClaim {
+					// A nudge to claim and adopt suggests someone is waiting for periodic
+					// registry behaviors like claiming to happen; some of those behaviors
+					// are in the cancel loop, like clearing stale claims or detecting a
+					// cancel request, so run that fn as well when nudged in case that is
+					// or is part of what the nudge was sent to hasten.
+					cancelLoopTask(ctx)
 					claimJobs(ctx)
 				}
 				processClaimedJobs(ctx)
@@ -1907,10 +1927,6 @@ func (r *Registry) maybeRecordExecutionFailure(ctx context.Context, err error, j
 		return
 	}
 	updateErr := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		v, err := txn.GetSystemSchemaVersion(ctx)
-		if err != nil || v.Less(clusterversion.V25_1.Version()) {
-			return err
-		}
 		return j.Messages().Record(ctx, txn, "retry", efe.cause.Error())
 	})
 	if ctx.Err() != nil {
@@ -2075,4 +2091,16 @@ func (r *Registry) IsIngesting(jobID catpb.JobID) bool {
 	defer r.mu.Unlock()
 	_, ok := r.mu.ingestingJobs[jobID]
 	return ok
+}
+
+// GetLoopInterval fetches the loop interval for a specific setting, applying
+// any overrides and scaling as necessary.
+func (r *Registry) GetLoopInterval(
+	s *settings.DurationSetting, overrideKnob *time.Duration,
+) time.Duration {
+	if overrideKnob != nil {
+		return *overrideKnob
+	}
+	interval := s.Get(&r.settings.SV)
+	return time.Duration(intervalBaseSetting.Get(&r.settings.SV) * float64(interval))
 }

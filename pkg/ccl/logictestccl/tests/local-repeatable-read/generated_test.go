@@ -56,13 +56,9 @@ func TestMain(m *testing.M) {
 	defer ccl.TestingEnableEnterprise()()
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithTenantOption(base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124)))
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124),
-	)()
-
 	os.Exit(m.Run())
 }
 
@@ -173,6 +169,13 @@ func TestRepeatableReadLogic_alter_default_privileges_with_grant_option(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_default_privileges_with_grant_option")
+}
+
+func TestRepeatableReadLogic_alter_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_index")
 }
 
 func TestRepeatableReadLogic_alter_primary_key(
@@ -336,11 +339,11 @@ func TestRepeatableReadLogic_bytes(
 	runLogicTest(t, "bytes")
 }
 
-func TestRepeatableReadLogic_canary_stats(
+func TestRepeatableReadLogic_canary_stats_deletion(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "canary_stats")
+	runLogicTest(t, "canary_stats_deletion")
 }
 
 func TestRepeatableReadLogic_cascade(
@@ -488,6 +491,13 @@ func TestRepeatableReadLogic_crdb_internal_catalog(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "crdb_internal_catalog")
+}
+
+func TestRepeatableReadLogic_crdb_internal_decode_key(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "crdb_internal_decode_key")
 }
 
 func TestRepeatableReadLogic_crdb_internal_default_privileges(
@@ -1799,6 +1809,13 @@ func TestRepeatableReadLogic_secondary_index_column_families(
 	runLogicTest(t, "secondary_index_column_families")
 }
 
+func TestRepeatableReadLogic_security_invoker_view(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "security_invoker_view")
+}
+
 func TestRepeatableReadLogic_select(
 	t *testing.T,
 ) {
@@ -1811,6 +1828,13 @@ func TestRepeatableReadLogic_select_for_share(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "select_for_share")
+}
+
+func TestRepeatableReadLogic_select_for_share_write_buffering(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "select_for_share_write_buffering")
 }
 
 func TestRepeatableReadLogic_select_index(
@@ -2028,6 +2052,13 @@ func TestRepeatableReadLogic_show_inspect_errors(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_inspect_errors")
+}
+
+func TestRepeatableReadLogic_show_statement_hints(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_statement_hints")
 }
 
 func TestRepeatableReadLogic_show_transfer_state(
@@ -2259,13 +2290,6 @@ func TestRepeatableReadLogic_truncate(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "truncate")
-}
-
-func TestRepeatableReadLogic_truncate_with_concurrent_mutation(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "truncate_with_concurrent_mutation")
 }
 
 func TestRepeatableReadLogic_tsvector(
@@ -2644,6 +2668,13 @@ func TestRepeatableReadLogic_views(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "views")
+}
+
+func TestRepeatableReadLogic_views_definer_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "views_definer_privileges")
 }
 
 func TestRepeatableReadLogic_virtual_columns(

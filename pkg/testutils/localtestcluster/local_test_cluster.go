@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/stretchr/testify/require"
 )
 
 // A LocalTestCluster encapsulates an in-memory instantiation of a
@@ -63,7 +64,7 @@ type LocalTestCluster struct {
 	Manual            *timeutil.ManualTime
 	Clock             *hlc.Clock
 	Gossip            *gossip.Gossip
-	Eng               storage.Engine
+	Eng               kvstorage.Engines
 	Store             *kvserver.Store
 	StoreTestingKnobs *kvserver.StoreTestingKnobs
 	dbContext         *kv.DBContext
@@ -155,8 +156,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	cfg.RPCContext.NodeID.Set(ctx, nodeID)
 	clusterID := cfg.RPCContext.StorageClusterID
 	ltc.Gossip = gossip.New(ambient, clusterID, nc, ltc.stopper, metric.NewRegistry(), roachpb.Locality{})
-	var err error
-	ltc.Eng, err = storage.Open(
+	eng, err := storage.Open(
 		ctx,
 		storage.InMemory(),
 		cfg.Settings,
@@ -166,17 +166,12 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ltc.stopper.AddCloser(ltc.Eng)
+	ltc.stopper.AddCloser(eng)
+	ltc.Eng = kvstorage.MakeEngines(eng)
 
 	ltc.Stores = kvserver.NewStores(ambient, ltc.Clock)
-	// Faster refresh intervals for testing.
-	cfg.NodeCapacityProvider = load.NewNodeCapacityProvider(ltc.stopper, ltc.Stores, load.NodeCapacityProviderConfig{
-		CPUUsageRefreshInterval:    10 * time.Millisecond,
-		CPUCapacityRefreshInterval: 10 * time.Millisecond,
-		CPUUsageMovingAverageAge:   20,
-	})
-
-	factory := initFactory(ctx, cfg.Settings, nodeDesc, ltc.stopper.Tracer(), ltc.Clock, ltc.Latency, ltc.Stores, ltc.stopper, ltc.Gossip)
+	factory := initFactory(ctx, cfg.Settings, nodeDesc, ltc.stopper.Tracer(), ltc.Clock, ltc.Latency,
+		kvserver.ToSenderForTesting(ltc.Stores), ltc.stopper, ltc.Gossip)
 
 	var nodeIDContainer base.NodeIDContainer
 	nodeIDContainer.Set(context.Background(), nodeID)
@@ -199,6 +194,12 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	}
 	cfg.DB = ltc.DB
 	cfg.Gossip = ltc.Gossip
+	// Faster refresh intervals for testing.
+	cfg.NodeCapacityProvider = load.NewNodeCapacityProvider(ltc.stopper, ltc.Stores, ltc.DB.SQLCPUProvider, load.NodeCapacityProviderConfig{
+		CPUUsageRefreshInterval:    10 * time.Millisecond,
+		CPUCapacityRefreshInterval: 10 * time.Millisecond,
+		CPUUsageMovingAverageAge:   20,
+	})
 	cfg.HistogramWindowInterval = metric.TestSampleInterval
 	active, renewal := cfg.NodeLivenessDurations()
 	cfg.NodeLiveness = liveness.NewNodeLiveness(liveness.NodeLivenessOptions{
@@ -210,7 +211,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		LivenessThreshold:       active,
 		RenewalDuration:         renewal,
 		HistogramWindowInterval: cfg.HistogramWindowInterval,
-		Engines:                 []storage.Engine{ltc.Eng},
+		Engines:                 []kvstorage.Engines{ltc.Eng},
 	})
 	liveness.TimeUntilNodeDead.Override(ctx, &cfg.Settings.SV, liveness.TestTimeUntilNodeDead)
 	{
@@ -225,7 +226,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 			t.Fatal(err)
 		}
 		knobs := cfg.TestingKnobs.StoreLivenessKnobs
-		cfg.StoreLiveness = storeliveness.NewNodeContainer(ltc.stopper, options, transport, knobs)
+		cfg.StoreLiveness = storeliveness.NewNodeContainer(ltc.stopper, nc, options, transport, knobs)
 	}
 	nodeCountFn := func() int {
 		var count int
@@ -243,7 +244,8 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		cfg.Clock,
 		nodeCountFn,
 		storepool.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
-		/* deterministic */ false,
+		storepool.MakeStoreLivenessFunc(cfg.StoreLiveness),
+		false, /* deterministic */
 	)
 	cfg.MMAllocator = mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
 		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
@@ -251,14 +253,10 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	cfg.Transport = kvserver.NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, ltc.Clock)
 	cfg.ClosedTimestampReceiver = sidetransport.NewReceiver(nc, ltc.stopper, ltc.Stores, nil /* testingKnobs */)
 
-	if err := kvstorage.WriteClusterVersion(ctx, ltc.Eng, clusterversion.TestingClusterVersion); err != nil {
-		t.Fatalf("unable to write cluster version: %s", err)
-	}
-	if err := kvstorage.InitEngine(
+	require.NoError(t, ltc.Eng.SetMinVersion(clusterversion.TestingClusterVersion))
+	require.NoError(t, kvstorage.InitEngine(
 		ctx, ltc.Eng, roachpb.StoreIdent{NodeID: nodeID, StoreID: 1},
-	); err != nil {
-		t.Fatalf("unable to start local test cluster: %s", err)
-	}
+	))
 
 	rangeFeedFactory, err := rangefeed.NewFactory(ltc.stopper, ltc.DB, cfg.Settings, nil /* knobs */)
 	if err != nil {
@@ -268,7 +266,6 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		clock,
 		rangeFeedFactory,
 		keys.SpanConfigurationsTableID,
-		1<<20, /* 1 MB */
 		cfg.DefaultSpanConfig,
 		cfg.Settings,
 		spanconfigstore.NewEmptyBoundsReader(),

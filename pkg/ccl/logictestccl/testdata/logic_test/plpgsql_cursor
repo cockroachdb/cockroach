@@ -369,7 +369,7 @@ SELECT f();
 statement ok
 ABORT;
 
-statement ok
+statement count 0
 DELETE FROM xy WHERE x <> 1 AND x <> 3;
 
 # Testing bound cursors.
@@ -652,7 +652,7 @@ CREATE OR REPLACE FUNCTION f() RETURNS INT AS $$
   END
 $$ LANGUAGE PLpgSQL;
 
-statement ok
+statement count 0
 DELETE FROM xy WHERE x <> 1 AND x <> 3;
 
 # Testing unnamed cursors.

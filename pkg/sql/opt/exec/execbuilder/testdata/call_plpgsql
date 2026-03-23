@@ -11,7 +11,6 @@ query T
 EXPLAIN CALL foo(0);
 ----
 distribution: local
-vectorized: true
 ·
 • call
   estimated row count: 0
@@ -128,7 +127,6 @@ query T
 EXPLAIN (DISTSQL) CALL foo(3);
 ----
 distribution: local
-vectorized: true
 ·
 • call
   estimated row count: 0
@@ -142,20 +140,14 @@ EXPLAIN ANALYZE CALL foo(3);
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • call
   sql nodes: <hidden>
   regions: <hidden>
-  actual row count: 0
   execution time: 0µs
+  actual row count: 0
   estimated row count: 0
   procedure: foo(3)
 
@@ -165,20 +157,14 @@ EXPLAIN ANALYZE (DISTSQL) CALL foo(3);
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • call
   sql nodes: <hidden>
   regions: <hidden>
-  actual row count: 0
   execution time: 0µs
+  actual row count: 0
   estimated row count: 0
   procedure: foo(3)
 ·

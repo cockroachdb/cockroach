@@ -68,9 +68,10 @@ func TestDataPath(t testing.TB, relative ...string) string {
 
 // RewritableDataPath returns a path to an asset relative to the top of the
 // workspace. Generally you should use TestDataPath if you're trying to access
-// a file in your test's `testdata` directory, or bazel.Runfile if a read-only
-// link to the file is OK. This function is only necessary if you need the path
-// to a file that you can --rewrite.
+// a file in your test's `testdata` directory, Runfile if the file may be in a
+// different directory, or bazel.Runfile if a read-only link to the file is OK
+// and you don't care whether the function supports `go test`. This function is
+// only necessary if you need the path to a file that you can --rewrite.
 func RewritableDataPath(t testing.TB, relative ...string) string {
 	if bazel.BuiltWithBazel() {
 		cockroachWorkspace, set := envutil.EnvString("COCKROACH_WORKSPACE", 0)

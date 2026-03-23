@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -370,7 +371,11 @@ type Processor interface {
 	// control is disabled, or for any other reason, admitted will be false
 	// and error will be nil.
 	AdmitForEval(
-		ctx context.Context, pri admissionpb.WorkPriority, ct time.Time) (admitted bool, err error)
+		ctx context.Context,
+		pri admissionpb.WorkPriority,
+		ct time.Time,
+		info ash.WorkloadInfo,
+	) (admitted bool, err error)
 
 	// ProcessSchedulerEventRaftMuLocked is called to process events scheduled
 	// by the RangeController. logSnapshot is only used if mode is MsgAppPull.
@@ -889,7 +894,7 @@ func (p *processorImpl) AdmitRaftEntriesRaftMuLocked(ctx context.Context, e rac2
 			panic(errors.Wrap(err, "unable to decode raft command admission data: %v"))
 		}
 
-		if log.V(1) {
+		if log.V(2) {
 			if isV2Encoding {
 				log.KvDistribution.Infof(ctx,
 					"decoded v2 raft admission meta below-raft: pri=%v create-time=%d "+
@@ -1096,7 +1101,7 @@ func (p *processorImpl) HoldsSendTokensLocked() bool {
 
 // AdmitForEval implements Processor.
 func (p *processorImpl) AdmitForEval(
-	ctx context.Context, pri admissionpb.WorkPriority, ct time.Time,
+	ctx context.Context, pri admissionpb.WorkPriority, ct time.Time, info ash.WorkloadInfo,
 ) (admitted bool, err error) {
 	var rc rac2.RangeController
 	func() {
@@ -1114,7 +1119,7 @@ func (p *processorImpl) AdmitForEval(
 		p.opts.EvalWaitMetrics.OnBypassed(workClass, 0 /* duration */)
 		return false, nil
 	}
-	return rc.WaitForEval(ctx, pri)
+	return rc.WaitForEval(ctx, pri, info)
 }
 
 // ProcessSchedulerEventRaftMuLocked implements Processor.

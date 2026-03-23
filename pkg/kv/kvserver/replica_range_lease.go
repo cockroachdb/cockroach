@@ -46,10 +46,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -327,6 +331,7 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	status kvserverpb.LeaseStatus,
 	startKey roachpb.Key,
 	bypassSafetyChecks bool,
+	targetHasSendQueue bool,
 	limiter *quotapool.IntPool,
 ) *leaseRequestHandle {
 	if nextLease, ok := p.RequestPending(); ok {
@@ -386,6 +391,12 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		BypassSafetyChecks:    bypassSafetyChecks,
 		DesiredLeaseType:      p.repl.desiredLeaseType(p.repl.descRLocked()),
 	}
+	// For lease transfers, use the pre-fetched send queue status. The caller
+	// must query SendStreamStats before acquiring repl.mu, because
+	// SendStreamStats acquires rcReferenceUpdateMu which is ordered before
+	// repl.mu. When stats are unavailable, the caller passes false to
+	// conservatively allow the transfer.
+	in.TargetHasSendQueue = targetHasSendQueue
 	out, err := leases.VerifyAndBuild(ctx, st, nl, in)
 	if err != nil {
 		if in.Transfer() {
@@ -654,6 +665,17 @@ func (p *pendingLeaseRequest) requestLease(
 	ba := &kvpb.BatchRequest{}
 	ba.Timestamp = p.repl.store.Clock().Now()
 	ba.RangeID = p.repl.RangeID
+	// NB: redirectOnOrAcquireLeaseForRequest already attributes the
+	// caller's goroutine via ash.SetWorkState using the originating
+	// request's WorkloadInfo (e.g. a SQL statement fingerprint). Here we
+	// hardcode the workload as LEASE_ACQUISITION rather than plumbing
+	// the originating WorkloadInfo through requestLeaseLocked,
+	// InitOrJoinRequest, and requestLeaseAsync. The lease request is a
+	// system operation regardless of what triggered it, and multiple
+	// callers with different workloads may join onto the same pending
+	// request via JoinRequest.
+	ba.Header.WorkloadID = uint64(workloadid.WORKLOAD_ID_LEASE_ACQUISITION)
+	ba.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
 	// NB:
 	// RequestLease always bypasses the circuit breaker (i.e. will prefer to
 	// get stuck on an unavailable range rather than failing fast; see
@@ -676,7 +698,9 @@ func (p *pendingLeaseRequest) requestLease(
 		CreateTime: timeutil.Now().UnixNano(),
 		Source:     kvpb.AdmissionHeader_OTHER,
 	}
-	_, pErr := p.repl.Send(ctx, ba)
+	// Pass empty AdmissionInfo since lease acquisition bypasses admission control.
+	_, writeBytes, pErr := p.repl.SendWithWriteBytes(ctx, ba, kvadmission.AdmissionInfo{})
+	writeBytes.Release()
 	return pErr.GoError()
 }
 
@@ -901,7 +925,7 @@ func (r *Replica) requestLeaseLocked(
 	}
 	return r.mu.pendingLeaseRequest.InitOrJoinRequest(
 		ctx, repDesc, status, r.shMu.state.Desc.StartKey.AsRawKey(),
-		false /* bypassSafetyChecks */, limiter)
+		false /* bypassSafetyChecks */, false /* targetHasSendQueue */, limiter)
 }
 
 // AdminTransferLease transfers the LeaderLease to another replica. Only the
@@ -939,6 +963,16 @@ func (r *Replica) AdminTransferLease(
 	// transfer (if it was successfully initiated).
 	var nextLeaseHolder roachpb.ReplicaDescriptor
 	initTransferHelper := func() (extension, transfer *leaseRequestHandle, err error) {
+		// Query send stream stats before acquiring repl.mu. SendStreamStats
+		// acquires rcReferenceUpdateMu which is ordered before repl.mu, so we
+		// must not call it while holding repl.mu. We pre-fetch the full range
+		// stats here, then look up the target's per-replica stats inside the
+		// lock after resolving the target's ReplicaID.
+		var sendStreamStats rac2.RangeSendStreamStats
+		if !bypassSafetyChecks {
+			r.SendStreamStats(&sendStreamStats)
+		}
+
 		r.mu.Lock()
 		defer r.mu.Unlock()
 
@@ -976,8 +1010,22 @@ func (r *Replica) AdminTransferLease(
 				"another transfer to a different store is in progress")
 		}
 
+		// Check whether the target has a send queue using the pre-fetched stats
+		// (see the paragraph above about why we pre-fetch before acquiring
+		// repl.mu). Reading from the RangeSendStreamStats struct is a plain data
+		// access with no lock dependencies.
+		var targetHasSendQueue bool
+		if !bypassSafetyChecks {
+			if replStats, ok := sendStreamStats.ReplicaSendStreamStats(
+				nextLeaseHolder.ReplicaID,
+			); ok {
+				targetHasSendQueue = !replStats.IsStateReplicate || replStats.HasSendQueue
+			}
+		}
+
 		transfer = r.mu.pendingLeaseRequest.InitOrJoinRequest(ctx, nextLeaseHolder, status,
-			desc.StartKey.AsRawKey(), bypassSafetyChecks, nil /* limiter */)
+			desc.StartKey.AsRawKey(), bypassSafetyChecks, targetHasSendQueue,
+			nil /* limiter */)
 		return nil, transfer, nil
 	}
 
@@ -1016,11 +1064,15 @@ func (r *Replica) AdminTransferLease(
 			select {
 			case pErr := <-transfer.C():
 				err = pErr.GoError()
-				if IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) && transferRejectedRetry.Next() {
+				if (IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) ||
+					IsLeaseTransferRejectedBecauseTargetHasSendQueueError(err)) &&
+					transferRejectedRetry.Next() {
 					// If the lease transfer was rejected because the target may need a
-					// snapshot, try again. After the backoff, we may have become the Raft
-					// leader (through maybeTransferRaftLeadershipToLeaseholderLocked) or
-					// may have learned more about the state of the lease target's log.
+					// snapshot or has a send queue, try again. After the backoff, we may
+					// have become the Raft leader (through
+					// maybeTransferRaftLeadershipToLeaseholderLocked), may have learned
+					// more about the state of the lease target's log, or the send queue
+					// may have drained.
 					log.VEventf(ctx, 2, "retrying lease transfer to store %d after rejection", target)
 					continue
 				}
@@ -1239,7 +1291,13 @@ func (r *Replica) leaseGoodToGo(
 func (r *Replica) redirectOnOrAcquireLease(
 	ctx context.Context,
 ) (kvserverpb.LeaseStatus, *kvpb.Error) {
-	return r.redirectOnOrAcquireLeaseForRequest(ctx, hlc.Timestamp{}, r.breaker.Signal())
+	return r.redirectOnOrAcquireLeaseForRequest(
+		ctx, hlc.Timestamp{}, r.breaker.Signal(), roachpb.SystemTenantID,
+		ash.WorkloadInfo{
+			WorkloadID:   uint64(workloadid.WORKLOAD_ID_LEASE_ACQUISITION),
+			WorkloadType: workloadid.WorkloadTypeSystem,
+		},
+	)
 }
 
 // TestingAcquireLease is redirectOnOrAcquireLease exposed for tests.
@@ -1260,9 +1318,21 @@ func (s *Store) rangeLeaseAcquireTimeout() time.Duration {
 // redirectOnOrAcquireLeaseForRequest is like redirectOnOrAcquireLease,
 // but it accepts a specific request timestamp instead of assuming that
 // the request is operating at the current time.
+//
+// tenantID and info are used for ASH instrumentation. When called from
+// a request path, these should be populated from the batch request.
+// When called without request context (e.g. from redirectOnOrAcquireLease),
+// the system tenant ID and a system task WorkloadInfo should be used.
 func (r *Replica) redirectOnOrAcquireLeaseForRequest(
-	ctx context.Context, reqTS hlc.Timestamp, brSig signaller,
+	ctx context.Context,
+	reqTS hlc.Timestamp,
+	brSig signaller,
+	tenantID roachpb.TenantID,
+	info ash.WorkloadInfo,
 ) (status kvserverpb.LeaseStatus, pErr *kvpb.Error) {
+	cleanup := ash.SetWorkState(tenantID, info, ash.WorkOther, "LeaseAcquisition")
+	defer cleanup()
+
 	// Does not use RunWithTimeout(), because we do not want to mask the
 	// NotLeaseHolderError on context cancellation.
 	ctx, cancel := context.WithTimeout(ctx, r.store.rangeLeaseAcquireTimeout()) // nolint:context

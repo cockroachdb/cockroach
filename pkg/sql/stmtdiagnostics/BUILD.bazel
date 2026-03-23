@@ -40,7 +40,6 @@ go_test(
     ],
     embed = [":stmtdiagnostics"],
     exec_properties = {"test.Pool": "large"},
-    tags = ["no-remote-exec"],
     deps = [
         "//pkg/base",
         "//pkg/kv",

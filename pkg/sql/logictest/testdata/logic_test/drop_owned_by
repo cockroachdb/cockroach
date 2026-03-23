@@ -247,10 +247,11 @@ subtest revoke-privileges-db
 query TTTB rowsort
 SHOW GRANTS ON DATABASE test
 ----
-test  admin     ALL      true
-test  public    CONNECT  false
-test  root      ALL      true
-test  testuser  ALL      true
+test  admin     ALL        true
+test  public    CONNECT    false
+test  public    TEMPORARY  false
+test  root      ALL        true
+test  testuser  ALL        true
 
 user root
 
@@ -260,9 +261,10 @@ DROP OWNED BY testuser
 query TTTB rowsort
 SHOW GRANTS ON DATABASE test
 ----
-test  admin   ALL      true
-test  public  CONNECT  false
-test  root    ALL      true
+test  admin   ALL        true
+test  public  CONNECT    false
+test  public  TEMPORARY  false
+test  root    ALL        true
 
 # REVOKE-PRIVILEGES-SCHEMA: Test that DROP OWNED BY revokes privileges on
 # schemas in the current database.
@@ -507,11 +509,12 @@ s1      t2  table  testuser  0  NULL
 query TTTB rowsort
 SHOW GRANTS ON DATABASE d1
 ----
-d1  admin     ALL      true
-d1  public    CONNECT  false
-d1  root      ALL      true
-d1  testuser  CREATE   true
-d1  testuser  DROP     true
+d1  admin     ALL        true
+d1  public    CONNECT    false
+d1  public    TEMPORARY  false
+d1  root      ALL        true
+d1  testuser  CREATE     true
+d1  testuser  DROP       true
 
 query TTTTB rowsort
 SHOW GRANTS ON SCHEMA d1.s1
@@ -550,9 +553,10 @@ d1  s1  root      ALL     true
 query TTTB rowsort
 SHOW GRANTS ON DATABASE d1
 ----
-d1  admin     ALL      true
-d1  public    CONNECT  false
-d1  root      ALL      true
+d1  admin   ALL        true
+d1  public  CONNECT    false
+d1  public  TEMPORARY  false
+d1  root    ALL        true
 
 statement ok
 SET DATABASE = d2
@@ -576,10 +580,11 @@ public  t1  table  testuser  0  NULL
 query TTTB rowsort
 SHOW GRANTS ON DATABASE d2
 ----
-d2  admin     ALL      true
-d2  public    CONNECT  false
-d2  root      ALL      true
-d2  testuser  ALL      true
+d2  admin     ALL        true
+d2  public    CONNECT    false
+d2  public    TEMPORARY  false
+d2  root      ALL        true
+d2  testuser  ALL        true
 
 statement ok
 DROP OWNED BY testuser
@@ -601,9 +606,10 @@ SHOW TABLES FROM d2
 query TTTB rowsort
 SHOW GRANTS ON DATABASE d2
 ----
-d2  admin     ALL      true
-d2  public    CONNECT  false
-d2  root      ALL      true
+d2  admin   ALL        true
+d2  public  CONNECT    false
+d2  public  TEMPORARY  false
+d2  root    ALL        true
 
 statement ok
 SET DATABASE = d3
@@ -611,10 +617,11 @@ SET DATABASE = d3
 query TTTB rowsort
 SHOW GRANTS ON DATABASE d3
 ----
-d3  admin     ALL      true
-d3  public    CONNECT  false
-d3  root      ALL      true
-d3  testuser  CREATE   true
+d3  admin     ALL        true
+d3  public    CONNECT    false
+d3  public    TEMPORARY  false
+d3  root      ALL        true
+d3  testuser  CREATE     true
 
 statement ok
 DROP OWNED BY testuser
@@ -622,9 +629,10 @@ DROP OWNED BY testuser
 query TTTB rowsort
 SHOW GRANTS ON DATABASE d3
 ----
-d3  admin   ALL      true
-d3  public  CONNECT  false
-d3  root    ALL      true
+d3  admin   ALL        true
+d3  public  CONNECT    false
+d3  public  TEMPORARY  false
+d3  root    ALL        true
 
 # Drop owned by should not work if the user has synthetic privileges.
 

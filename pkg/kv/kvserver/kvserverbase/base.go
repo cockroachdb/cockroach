@@ -17,9 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/redact"
 )
@@ -115,8 +112,6 @@ var MVCCGCQueueEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
-var allowMMA = envutil.EnvOrDefaultBool("COCKROACH_ALLOW_MMA", false)
-
 // LoadBasedRebalancingMode controls whether range rebalancing takes
 // additional variables such as write load and disk usage into account.
 // If disabled, rebalancing is done purely based on replica count.
@@ -126,21 +121,13 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 	"whether to rebalance based on the distribution of load across stores",
 	"leases and replicas",
 	map[LBRebalancingMode]string{
-		LBRebalancingOff:                 "off",
-		LBRebalancingLeasesOnly:          "leases",
-		LBRebalancingLeasesAndReplicas:   "leases and replicas",
-		LBRebalancingMultiMetricOnly:     "multi-metric only",
-		LBRebalancingMultiMetricAndCount: "multi-metric and count",
+		LBRebalancingOff:                 LBRebalancingOff.String(),
+		LBRebalancingLeasesOnly:          LBRebalancingLeasesOnly.String(),
+		LBRebalancingLeasesAndReplicas:   LBRebalancingLeasesAndReplicas.String(),
+		LBRebalancingMultiMetricOnly:     LBRebalancingMultiMetricOnly.String(),
+		LBRebalancingMultiMetricAndCount: LBRebalancingMultiMetricAndCount.String(),
 	},
 	settings.WithPublic,
-	settings.WithValidateEnum(func(enumStr string) error {
-		isMMA := enumStr == "multi-metric and count" || enumStr == "multi-metric only"
-		if buildutil.CrdbTestBuild || !isMMA || allowMMA {
-			return nil
-		}
-		return unimplemented.NewWithIssue(
-			103320, "multi-metric rebalancing not supported for production use")
-	}),
 )
 
 // LoadBasedRebalancingModeIsMMA returns true if the load-based rebalancing mode
@@ -176,6 +163,28 @@ const (
 	// replica counts goal may be in conflict with the store-level load goal.
 	LBRebalancingMultiMetricAndCount
 )
+
+func (m LBRebalancingMode) String() string {
+	return redact.StringWithoutMarkers(m)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (m LBRebalancingMode) SafeFormat(w redact.SafePrinter, _ rune) {
+	switch m {
+	case LBRebalancingOff:
+		w.Print("off")
+	case LBRebalancingLeasesOnly:
+		w.Print("leases")
+	case LBRebalancingLeasesAndReplicas:
+		w.Print("leases and replicas")
+	case LBRebalancingMultiMetricOnly:
+		w.Print("multi-metric only")
+	case LBRebalancingMultiMetricAndCount:
+		w.Print("multi-metric and count")
+	default:
+		w.Printf("unknown(%d)", int64(m))
+	}
+}
 
 // RangeFeedRefreshInterval is injected from kvserver to avoid import cycles
 // when accessed from kvcoord.

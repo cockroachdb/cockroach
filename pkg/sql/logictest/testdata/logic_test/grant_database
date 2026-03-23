@@ -7,6 +7,7 @@ SHOW GRANTS ON DATABASE a
 database_name  grantee  privilege_type  is_grantable
 a              admin    ALL             true
 a              public   CONNECT         false
+a              public   TEMPORARY       false
 a              root     ALL             true
 
 statement error user root must have exactly \[ALL\] privileges on database "a"
@@ -36,18 +37,20 @@ REVOKE SELECT,ALL ON DATABASE a FROM readwrite
 query TTTB rowsort
 SHOW GRANTS ON DATABASE a
 ----
-a  admin      ALL      true
-a  public     CONNECT  false
-a  readwrite  ALL      true
-a  root       ALL      true
-a  test-user  ALL      true
+a  admin      ALL        true
+a  public     CONNECT    false
+a  public     TEMPORARY  false
+a  readwrite  ALL        true
+a  root       ALL        true
+a  test-user  ALL        true
 
 query TTTB rowsort
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a  public     CONNECT  false
-a  readwrite  ALL      true
-a  test-user  ALL      true
+a  public     CONNECT    false
+a  public     TEMPORARY  false
+a  readwrite  ALL        true
+a  test-user  ALL        true
 
 statement ok
 REVOKE CONNECT ON DATABASE a FROM "test-user",readwrite
@@ -57,11 +60,13 @@ SHOW GRANTS ON DATABASE a
 ----
 a  admin      ALL         true
 a  public     CONNECT     false
+a  public     TEMPORARY   false
 a  readwrite  BACKUP      true
 a  readwrite  CHANGEFEED  true
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
 a  readwrite  RESTORE     true
+a  readwrite  TEMPORARY   true
 a  readwrite  ZONECONFIG  true
 a  root       ALL         true
 a  test-user  BACKUP      true
@@ -69,23 +74,27 @@ a  test-user  CHANGEFEED  true
 a  test-user  CREATE      true
 a  test-user  DROP        true
 a  test-user  RESTORE     true
+a  test-user  TEMPORARY   true
 a  test-user  ZONECONFIG  true
 
 query TTTB rowsort
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
 a  public     CONNECT     false
+a  public     TEMPORARY   false
 a  readwrite  BACKUP      true
 a  readwrite  CHANGEFEED  true
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
 a  readwrite  RESTORE     true
+a  readwrite  TEMPORARY   true
 a  readwrite  ZONECONFIG  true
 a  test-user  BACKUP      true
 a  test-user  CHANGEFEED  true
 a  test-user  CREATE      true
 a  test-user  DROP        true
 a  test-user  RESTORE     true
+a  test-user  TEMPORARY   true
 a  test-user  ZONECONFIG  true
 
 statement ok
@@ -96,17 +105,20 @@ SHOW GRANTS ON DATABASE a
 ----
 a  admin      ALL         true
 a  public     CONNECT     false
+a  public     TEMPORARY   false
 a  readwrite  BACKUP      true
 a  readwrite  CHANGEFEED  true
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
 a  readwrite  RESTORE     true
+a  readwrite  TEMPORARY   true
 a  readwrite  ZONECONFIG  true
 a  root       ALL         true
 a  test-user  BACKUP      true
 a  test-user  CHANGEFEED  true
 a  test-user  DROP        true
 a  test-user  RESTORE     true
+a  test-user  TEMPORARY   true
 a  test-user  ZONECONFIG  true
 
 statement ok
@@ -116,11 +128,13 @@ query TTTB rowsort
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
 a  public     CONNECT     false
+a  public     TEMPORARY   false
 a  readwrite  BACKUP      true
 a  readwrite  CHANGEFEED  true
 a  readwrite  CREATE      true
 a  readwrite  DROP        true
 a  readwrite  RESTORE     true
+a  readwrite  TEMPORARY   true
 a  readwrite  ZONECONFIG  true
 
 statement ok
@@ -129,14 +143,16 @@ REVOKE ALL ON DATABASE a FROM readwrite,"test-user"
 query TTTB rowsort
 SHOW GRANTS ON DATABASE a
 ----
-a  admin   ALL      true
-a  public  CONNECT  false
-a  root    ALL      true
+a  admin   ALL        true
+a  public  CONNECT    false
+a  public  TEMPORARY  false
+a  root    ALL        true
 
-query TTTB
+query TTTB rowsort
 SHOW GRANTS ON DATABASE a FOR readwrite, "test-user"
 ----
-a  public  CONNECT  false
+a  public  CONNECT    false
+a  public  TEMPORARY  false
 
 # Usage privilege should not be grantable on databases.
 
@@ -197,6 +213,7 @@ database_name       grantee                   privilege_type  is_grantable
 owner_grant_option  admin                     ALL             true
 owner_grant_option  owner_grant_option_child  CONNECT         true
 owner_grant_option  public                    CONNECT         false
+owner_grant_option  public                    TEMPORARY       false
 owner_grant_option  root                      ALL             true
 owner_grant_option  testuser                  ALL             true
 
@@ -218,4 +235,5 @@ owner_grant_option  admin                     ALL             true
 owner_grant_option  other_owner               ALL             true
 owner_grant_option  owner_grant_option_child  CONNECT         false
 owner_grant_option  public                    CONNECT         false
+owner_grant_option  public                    TEMPORARY       false
 owner_grant_option  root                      ALL             true

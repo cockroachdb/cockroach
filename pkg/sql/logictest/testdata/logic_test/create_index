@@ -1,4 +1,4 @@
-# LogicTest: !local-prepared
+# LogicTest: default-configs 3node-tenant !local-prepared local-dist-merge-backfill-declarative-schema-changer
 statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,
@@ -545,14 +545,64 @@ CREATE TABLE tab_w0_7 (
    PRIMARY KEY(c2, "col\u000b7ͪ%q_w0_10", "MixedCase")
 );
 
-statement error index ".*" already contains column ".*q_w0_10".*
+skipif config local-legacy-schema-changer
+skipif config weak-iso-level-configs
+query T noticetrace
 CREATE INDEX tab_w0_7_i1 on tab_w0_7 (c2) STORING ("col\u000b7ͪ%q_w0_10");
+----
+NOTICE: index "tab_w0_7_i1" already contains column "col\\u000b7ͪ%q_w0_10" which is part of the primary key and therefore implicit in all indexes
+
+skipif config local-legacy-schema-changer
+skipif config weak-iso-level-configs
+statement ok
+DROP INDEX tab_w0_7_i1;
+
+onlyif config local-legacy-schema-changer
+statement ok
+CREATE INDEX tab_w0_7_i1 on tab_w0_7 (c2) STORING ("col\u000b7ͪ%q_w0_10");
+
+onlyif config local-legacy-schema-changer
+statement ok
+DROP INDEX tab_w0_7_i1;
+
+onlyif config weak-iso-level-configs
+statement ok
+CREATE INDEX tab_w0_7_i1 on tab_w0_7 (c2) STORING ("col\u000b7ͪ%q_w0_10");
+
+onlyif config weak-iso-level-configs
+statement ok
+DROP INDEX tab_w0_7_i1;
 
 statement error index ".*" already contains column ".*q_w0_10".*
 CREATE INDEX tab_w0_7_i1 on tab_w0_7 ("col\u000b7ͪ%q_w0_10") STORING ("col\u000b7ͪ%q_w0_10");
 
-statement error index ".*" already contains column "MixedCase".*
+skipif config local-legacy-schema-changer
+skipif config weak-iso-level-configs
+query T noticetrace
 CREATE INDEX tab_w0_7_i1 on tab_w0_7 (c2) STORING ("MixedCase");
+----
+NOTICE: index "tab_w0_7_i1" already contains column "MixedCase" which is part of the primary key and therefore implicit in all indexes
+
+skipif config local-legacy-schema-changer
+skipif config weak-iso-level-configs
+statement ok
+DROP INDEX tab_w0_7_i1;
+
+onlyif config local-legacy-schema-changer
+statement ok
+CREATE INDEX tab_w0_7_i1 on tab_w0_7 (c2) STORING ("MixedCase");
+
+onlyif config local-legacy-schema-changer
+statement ok
+DROP INDEX tab_w0_7_i1;
+
+onlyif config weak-iso-level-configs
+statement ok
+CREATE INDEX tab_w0_7_i1 on tab_w0_7 (c2) STORING ("MixedCase");
+
+onlyif config weak-iso-level-configs
+statement ok
+DROP INDEX tab_w0_7_i1;
 
 statement ok
 DROP TABLE tab_w0_7;
@@ -584,8 +634,33 @@ CREATE TABLE tbl_ifne (a INT PRIMARY KEY, b INT)
 statement ok
 CREATE INDEX idx ON tbl_ifne (b)
 
-statement error index "invalid_idx" already contains column "a".*
+skipif config local-legacy-schema-changer
+skipif config weak-iso-level-configs
+query T noticetrace
 CREATE INDEX invalid_idx ON tbl_ifne (b) STORING (a)
+----
+NOTICE: index "invalid_idx" already contains column "a" which is part of the primary key and therefore implicit in all indexes
+
+skipif config local-legacy-schema-changer
+skipif config weak-iso-level-configs
+statement ok
+DROP INDEX invalid_idx
+
+onlyif config local-legacy-schema-changer
+statement ok
+CREATE INDEX invalid_idx ON tbl_ifne (b) STORING (a)
+
+onlyif config local-legacy-schema-changer
+statement ok
+DROP INDEX invalid_idx
+
+onlyif config weak-iso-level-configs
+statement ok
+CREATE INDEX invalid_idx ON tbl_ifne (b) STORING (a)
+
+onlyif config weak-iso-level-configs
+statement ok
+DROP INDEX invalid_idx
 
 # With IF NOT EXISTS, the statement never runs, so this succeeds.
 statement ok
@@ -651,6 +726,213 @@ CREATE INVERTED INDEX IF NOT EXISTS idx_b ON create_inverted_index_duplicate_sto
 
 subtest end
 
+# Storage parameter tests for CREATE INDEX.
+subtest create_index_storage_params
+
+statement ok
+CREATE TABLE t_storage_params (
+  id INT PRIMARY KEY,
+  x INT,
+  y INT,
+  geom GEOMETRY,
+  v VECTOR(3)
+)
+
+# Test that fillfactor can be set at index creation time.
+statement ok
+CREATE INDEX idx_fillfactor ON t_storage_params(x) WITH (fillfactor = 70)
+
+# Test invalid fillfactor values.
+statement error "fillfactor" must be between 0 and 100
+CREATE INDEX idx_fillfactor_invalid ON t_storage_params(x) WITH (fillfactor = -1)
+
+statement error "fillfactor" must be between 0 and 100
+CREATE INDEX idx_fillfactor_invalid ON t_storage_params(x) WITH (fillfactor = 101)
+
+# Test spatial index parameters (s2_*).
+statement ok
+CREATE INDEX idx_geom_s2 ON t_storage_params USING GIST(geom) WITH (s2_max_level = 16, s2_level_mod = 2, s2_max_cells = 10)
+
+# Test that s2_* parameters cannot be used on non-spatial indexes.
+statement error index setting "s2_max_level" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
+CREATE INDEX idx_s2_invalid ON t_storage_params(x) WITH (s2_max_level = 15)
+
+statement error index setting "s2_level_mod" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
+CREATE INDEX idx_s2_invalid ON t_storage_params(x) WITH (s2_level_mod = 2)
+
+statement error index setting "s2_max_cells" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
+CREATE INDEX idx_s2_invalid ON t_storage_params(x) WITH (s2_max_cells = 10)
+
+# Test invalid s2_* parameter values.
+statement error "s2_max_level" value must be between 0 and 30 inclusive
+CREATE INDEX idx_s2_invalid ON t_storage_params USING GIST(geom) WITH (s2_max_level = 31)
+
+statement error "s2_level_mod" value must be between 1 and 3 inclusive
+CREATE INDEX idx_s2_invalid ON t_storage_params USING GIST(geom) WITH (s2_level_mod = 0)
+
+statement error "s2_level_mod" value must be between 1 and 3 inclusive
+CREATE INDEX idx_s2_invalid ON t_storage_params USING GIST(geom) WITH (s2_level_mod = 4)
+
+statement error "s2_max_cells" value must be between 1 and 32 inclusive
+CREATE INDEX idx_s2_invalid ON t_storage_params USING GIST(geom) WITH (s2_max_cells = 0)
+
+statement error "s2_max_cells" value must be between 1 and 32 inclusive
+CREATE INDEX idx_s2_invalid ON t_storage_params USING GIST(geom) WITH (s2_max_cells = 33)
+
+# Test that s2_max_level must be divisible by s2_level_mod.
+statement error s2_max_level \(17\) must be divisible by s2_level_mod \(2\)
+CREATE INDEX idx_s2_divisible ON t_storage_params USING GIST(geom) WITH (s2_max_level = 17, s2_level_mod = 2)
+
+statement ok
+CREATE INDEX idx_s2_divisible_ok ON t_storage_params USING GIST(geom) WITH (s2_max_level = 18, s2_level_mod = 2)
+
+# Test geometry_* parameters.
+statement ok
+CREATE INDEX idx_geom_bounds ON t_storage_params USING GIST(geom) WITH (geometry_min_x = -180.0, geometry_max_x = 180.0, geometry_min_y = -90.0, geometry_max_y = 90.0)
+
+# Test that geometry_* parameters cannot be used on non-geometry indexes.
+statement error "geometry_min_x" can only be applied to GEOMETRY spatial indexes
+CREATE INDEX idx_geom_invalid ON t_storage_params(x) WITH (geometry_min_x = -180.0)
+
+# Test that geometry_max_x must be greater than geometry_min_x.
+statement error geometry_max_x \(.*\) must be greater than geometry_min_x \(.*\)
+CREATE INDEX idx_geom_invalid ON t_storage_params USING GIST(geom) WITH (geometry_min_x = 180.0, geometry_max_x = -180.0)
+
+# Test that geometry_max_y must be greater than geometry_min_y.
+statement error geometry_max_y \(.*\) must be greater than geometry_min_y \(.*\)
+CREATE INDEX idx_geom_invalid ON t_storage_params USING GIST(geom) WITH (geometry_min_y = 90.0, geometry_max_y = -90.0)
+
+# Test vector index parameters.
+statement ok
+CREATE INDEX idx_vec_params ON t_storage_params USING HNSW(v) WITH (build_beam_size = 100, min_partition_size = 50, max_partition_size = 200)
+
+# Test invalid vector index parameter values.
+statement error "build_beam_size" value must be between 1 and 512 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (build_beam_size = 0)
+
+statement error "build_beam_size" value must be between 1 and 512 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (build_beam_size = 513)
+
+statement error "min_partition_size" value must be between 1 and 1024 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (min_partition_size = 0)
+
+statement error "min_partition_size" value must be between 1 and 1024 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (min_partition_size = 1025)
+
+statement error "max_partition_size" value must be between 4 and 4096 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (max_partition_size = 3)
+
+statement error "max_partition_size" value must be between 4 and 4096 inclusive
+CREATE INDEX idx_vec_invalid ON t_storage_params USING HNSW(v) WITH (max_partition_size = 4097)
+
+# Test unimplemented parameters.
+statement error pgcode 0A000 unimplemented: storage parameter "vacuum_cleanup_index_scale_factor"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (vacuum_cleanup_index_scale_factor = 0.5)
+
+statement error pgcode 0A000 unimplemented: storage parameter "buffering"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (buffering = auto)
+
+statement error pgcode 0A000 unimplemented: storage parameter "fastupdate"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (fastupdate = on)
+
+statement error pgcode 0A000 unimplemented: storage parameter "gin_pending_list_limit"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (gin_pending_list_limit = 4096)
+
+statement error pgcode 0A000 unimplemented: storage parameter "pages_per_range"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (pages_per_range = 128)
+
+statement error pgcode 0A000 unimplemented: storage parameter "autosummarize"
+CREATE INDEX idx_unimpl ON t_storage_params(x) WITH (autosummarize = on)
+
+# Test invalid parameters.
+statement error pgcode 22023 invalid storage parameter "invalid_param"
+CREATE INDEX idx_invalid ON t_storage_params(x) WITH (invalid_param = 100)
+
+# Test skip_unique_checks parameter.
+
+# Test that skip_unique_checks cannot be set on a non-unique index at creation.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on UNIQUE indexes
+CREATE INDEX idx_nonunique_skip ON t_storage_params(y) WITH (skip_unique_checks = true)
+
+# Test that skip_unique_checks cannot be set on a unique index without implicit partitioning.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on implicitly partitioned indexes
+CREATE UNIQUE INDEX idx_unique_with_skip ON t_storage_params(y) WITH (skip_unique_checks = true)
+
+# Test multiple parameters at once.
+statement ok
+CREATE INDEX idx_multi ON t_storage_params(x) WITH (fillfactor = 80)
+
+# Test with IF NOT EXISTS.
+statement ok
+CREATE INDEX IF NOT EXISTS idx_exists ON t_storage_params(x) WITH (fillfactor = 70)
+
+subtest end
+
+subtest skip_unique_checks_create_table
+
+# Test skip_unique_checks error cases in different CREATE TABLE scenarios.
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on UNIQUE indexes
+CREATE TABLE t_nonunique_inline (
+  a INT,
+  INDEX idx_a (a) WITH (skip_unique_checks = true)
+)
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on UNIQUE indexes
+CREATE TABLE t_nonunique_later (
+  a INT,
+  b INT,
+  INDEX (a, b) WITH (skip_unique_checks = true)
+)
+
+# Cannot set skip_unique_checks on indexes without implicit partitioning.
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on implicitly partitioned indexes
+CREATE TABLE t_pk_inline (a INT PRIMARY KEY WITH (skip_unique_checks = true))
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on implicitly partitioned indexes
+CREATE TABLE t_pk_table_level (
+  a INT,
+  b INT,
+  PRIMARY KEY (a, b) WITH (skip_unique_checks = true)
+)
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 22023 skip_unique_checks can only be set on implicitly partitioned indexes
+CREATE TABLE t_unique_inline (
+  a INT PRIMARY KEY,
+  b INT,
+  UNIQUE INDEX idx_b (b) WITH (skip_unique_checks = true)
+)
+
+# Syntax errors (cannot use WITH on unnamed UNIQUE constraints or CHECK).
+statement error pgcode 42601 syntax error
+CREATE TABLE t_unique_constraint (
+  a INT PRIMARY KEY,
+  b INT,
+  UNIQUE (b) WITH (skip_unique_checks = true)
+)
+
+statement error pgcode 42601 syntax error
+CREATE TABLE t_check_constraint (
+  a INT PRIMARY KEY,
+  b INT,
+  CHECK (b > 0) WITH (skip_unique_checks = true)
+)
+
+statement error pgcode 42601 syntax error
+CREATE TABLE t_unique_column (
+  a INT PRIMARY KEY,
+  b INT UNIQUE WITH (skip_unique_checks = true)
+)
+
+subtest end
 
 subtest create_index_expression_with_default_collation
 
@@ -703,5 +985,32 @@ CREATE TABLE t_index_name_conflicts_with_primary_key (a INT PRIMARY KEY, b INT);
 
 statement error pgcode 42P07 index with name \"t_index_name_conflicts_with_primary_key_pkey\" already exists
 CREATE INDEX t_index_name_conflicts_with_primary_key_pkey ON t_index_name_conflicts_with_primary_key (a);
+
+subtest end
+
+# Regression test for an internal setting's effect on index backfills.
+subtest issue-161408
+
+statement ok
+SET CLUSTER SETTING sql.schema.preserved_split_count_multiple = 0
+
+statement ok
+CREATE TABLE t161408 (
+  a INT PRIMARY KEY,
+  b INT,
+  c STRING
+)
+
+statement ok
+INSERT INTO t161408 SELECT i, i % 100, repeat('x', 10) FROM generate_series(1, 10000) AS g(i)
+
+statement ok
+CREATE STATISTICS st FROM t161408
+
+statement ok
+CREATE INDEX idx_b ON t161408 (b)
+
+statement ok
+DROP TABLE t161408;
 
 subtest end

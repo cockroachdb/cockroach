@@ -138,7 +138,12 @@ export const TransactionInsightsTable: React.FC<
 > = props => {
   const columns = makeTransactionInsightsColumns();
   return (
-    <SortedTable columns={columns} className="statements-table" {...props} />
+    <SortedTable
+      columns={columns}
+      className="statements-table"
+      dataTestId="transaction-insights-table"
+      {...props}
+    />
   );
 };
 

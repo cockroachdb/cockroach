@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 )
 
 var running int32 // atomically updated
@@ -107,7 +107,7 @@ func GRPCTransportFactory(nodeDialer *nodedialer.Dialer) TransportFactory {
 					encoder := json.NewEncoder(io.Discard)
 					for {
 						iters++
-						start := timeutil.Now()
+						start := crtime.NowMono()
 						for _, ba := range bas {
 							if ba != nil {
 								if err := encoder.Encode(ba); err != nil {
@@ -119,7 +119,7 @@ func GRPCTransportFactory(nodeDialer *nodedialer.Dialer) TransportFactory {
 						// times skyrocket. Sleep on average for as long as we worked
 						// on the last iteration so we spend no more than half our CPU
 						// time on this task.
-						jittered := time.After(jitter(timeutil.Since(start)))
+						jittered := time.After(jitter(start.Elapsed()))
 						// Collect incoming requests until the jittered timer fires,
 						// then access everything we have.
 						for {

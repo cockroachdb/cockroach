@@ -10,20 +10,16 @@ import { timeScaleSaga } from "src/redux/timeScale";
 import { analyticsSaga } from "./analyticsSagas";
 import { customAnalyticsSaga } from "./customAnalytics";
 import { indexUsageStatsSaga } from "./indexUsageStats";
-import { jobsSaga } from "./jobs/jobsSagas";
 import { localSettingsSaga } from "./localsettings";
-import { queryMetricsSaga } from "./metrics";
 import { sessionsSaga } from "./sessions";
 import { sqlStatsSaga } from "./sqlStats";
 import { statementsSaga } from "./statements";
 
 export default function* rootSaga() {
   yield all([
-    fork(queryMetricsSaga),
     fork(localSettingsSaga),
     fork(customAnalyticsSaga),
     fork(statementsSaga),
-    fork(jobsSaga),
     fork(analyticsSaga),
     fork(sessionsSaga),
     fork(sqlStatsSaga),

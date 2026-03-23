@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "pyroscope",
+    srcs = ["pyroscope.go"],
+    embedsrcs = [
+        "templates/alloy.config",
+        "templates/docker-compose.yml",
+        "templates/pyroscope-config.yml",
+        "templates/pyroscope-datasource.yml",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/pyroscope",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachprod/install",
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/pyroscope/config",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

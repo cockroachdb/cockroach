@@ -8,22 +8,24 @@ package admission
 import (
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 )
 
 func makeElasticCPUGrantCoordinator(
-	ambientCtx log.AmbientContext, st *cluster.Settings, registry *metric.Registry,
+	ambientCtx log.AmbientContext,
+	st *cluster.Settings,
+	registry *metric.Registry,
+	knobs *TestingKnobs,
 ) *ElasticCPUGrantCoordinator {
 	schedulerLatencyListenerMetrics := makeSchedulerLatencyListenerMetrics()
 	registry.AddMetricStruct(schedulerLatencyListenerMetrics)
 	elasticCPUGranterMetrics := makeElasticCPUGranterMetrics()
 	registry.AddMetricStruct(elasticCPUGranterMetrics)
 
-	elasticWorkQueueMetrics := makeWorkQueueMetrics("elastic-cpu", registry,
-		admissionpb.BulkNormalPri, admissionpb.NormalPri)
+	elasticWorkQueueMetrics := makeWorkQueueMetrics("elastic-cpu", registry)
 
 	elasticCPUGranter := newElasticCPUGranter(ambientCtx, st, elasticCPUGranterMetrics)
 	schedulerLatencyListener := newSchedulerLatencyListener(ambientCtx, st, schedulerLatencyListenerMetrics, elasticCPUGranter)
@@ -31,7 +33,7 @@ func makeElasticCPUGrantCoordinator(
 	elasticCPUInternalWorkQueue := &WorkQueue{}
 	initWorkQueue(elasticCPUInternalWorkQueue, ambientCtx, KVWork, "kv-elastic-cpu-queue", elasticCPUGranter, st,
 		elasticWorkQueueMetrics,
-		workQueueOptions{usesTokens: true}, nil /* knobs */) // will be closed by the embedding *ElasticCPUWorkQueue
+		workQueueOptions{mode: usesTokens}, knobs.observeOnlyKnobs()) // will be closed by the embedding *ElasticCPUWorkQueue
 	elasticCPUWorkQueue := makeElasticCPUWorkQueue(st, elasticCPUInternalWorkQueue, elasticCPUGranter, elasticCPUGranterMetrics)
 	elasticCPUGrantCoordinator := newElasticCPUGrantCoordinator(elasticCPUGranter, elasticCPUWorkQueue, schedulerLatencyListener)
 	elasticCPUGranter.setRequester(elasticCPUInternalWorkQueue)
@@ -83,14 +85,23 @@ func (e *ElasticCPUGrantCoordinator) tryGrant() {
 	e.elasticCPUGranter.tryGrant()
 }
 
+// YieldForElasticCPU is exported so it can be overridden in tests.
+var YieldForElasticCPU = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"admission.elastic_cpu.yield.enabled",
+	"when true, time-based elastic CPU pacing additionally yields CPU as-needed according to the scheduler",
+	true,
+)
+
 // NewPacer implements the PacerMaker interface.
 func (e *ElasticCPUGrantCoordinator) NewPacer(unit time.Duration, wi WorkInfo) *Pacer {
 	if e == nil {
 		return nil
 	}
 	return &Pacer{
-		unit: unit,
-		wi:   wi,
-		wq:   e.ElasticCPUWorkQueue,
+		unit:  unit,
+		wi:    wi,
+		wq:    e.ElasticCPUWorkQueue,
+		yield: YieldForElasticCPU.Get(&e.ElasticCPUWorkQueue.settings.SV),
 	}
 }

@@ -223,7 +223,7 @@ func activityTablesHaveFullData(
 		return false, nil
 	}
 
-	if (limit > 0 && !isLimitOnActivityTable(limit)) || !isSortOptionOnActivityTable(order) {
+	if (limit > 0 && sql.SqlStatsActivityTopCount.Get(&settings.SV) < limit) || !isSortOptionOnActivityTable(order) {
 		return false, nil
 	}
 
@@ -488,12 +488,6 @@ FROM %s %s`, table, whereClause)
 	}
 
 	return stmtsRuntime, txnsRuntime, oldestDate, stmtSourceTable, txnSourceTable, err
-}
-
-// Return true is the limit request is within the limit
-// on the Activity tables (500)
-func isLimitOnActivityTable(limit int64) bool {
-	return limit <= 500
 }
 
 func isSortOptionOnActivityTable(sort serverpb.StatsSortOptions) bool {

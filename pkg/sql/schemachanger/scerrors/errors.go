@@ -77,7 +77,7 @@ func (el EventLogger) HandlePanicAndLogError(ctx context.Context, err *error) {
 			log.Dev.InfofDepth(ctx, depth, "done %s in %s", el.msg, redact.Safe(timeutil.Since(el.start)))
 		}
 	case HasNotImplemented(*err):
-		log.VEventfDepth(ctx, depth, 1, "declarative schema changer does not support %s: %v", el.msg, *err)
+		log.Dev.InfofDepth(ctx, depth, "declarative schema changer does not support %s: %v", el.msg, *err)
 	case errors.HasAssertionFailure(*err):
 		*err = errors.Wrapf(*err, "%s", el.msg)
 		fallthrough
@@ -192,18 +192,11 @@ func HasSchemaChangerUserError(err error) bool {
 	return errors.HasType(err, (*schemaChangerUserError)(nil))
 }
 
-// UnwrapSchemaChangerUserError returns the cause of a schemaChangerUserError,
-// or nil if the error is not a schemaChangerUserError.
-func UnwrapSchemaChangerUserError(err error) error {
-	if scUserError := (*schemaChangerUserError)(nil); errors.As(err, &scUserError) {
-		return scUserError.err
-	}
-	return nil
-}
-
 // SafeFormatError is part of the errors.SafeFormatter interface.
+// This wrapper is transparent - it doesn't add any message to the error chain.
+// It only serves as a marker to indicate the error should be surfaced directly
+// to the user without additional wrapping.
 func (e *schemaChangerUserError) SafeFormatError(p errors.Printer) (next error) {
-	p.Printf("schema change operation encountered an error")
 	return e.err
 }
 

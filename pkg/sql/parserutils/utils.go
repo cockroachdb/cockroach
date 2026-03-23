@@ -105,3 +105,39 @@ var ParseQualifiedTableName = func(sql string) (*tree.TableName, error) {
 var PLpgSQLParse = func(sql string) (statements.PLpgStatement, error) {
 	return statements.PLpgStatement{}, errors.AssertionFailedf("sql.DoParserInjection hasn't been called")
 }
+
+// FingerprintTag describes what is being fingerprinted, for use in error
+// messages.
+type FingerprintTag string
+
+const (
+	// FingerprintTagStatement is for generic statement fingerprinting.
+	FingerprintTagStatement FingerprintTag = "statement"
+	// FingerprintTagStatementFingerprint is for parsing a statement fingerprint
+	// argument.
+	FingerprintTagStatementFingerprint FingerprintTag = "statement fingerprint"
+	// FingerprintTagHintDonor is for parsing a hint donor statement argument.
+	FingerprintTagHintDonor FingerprintTag = "hint donor statement"
+)
+
+// FingerprintStatement parses a SQL string and converts it to a statement
+// fingerprint. If the input is already a fingerprint, it is returned as-is.
+// The tag describes what is being fingerprinted, for use in error messages.
+// The optional extraFlags are OR'd into the default FmtHideConstants flags used
+// for fingerprinting.
+func FingerprintStatement(
+	tag FingerprintTag, sql string, extraFlags ...tree.FmtFlags,
+) (string, error) {
+	stmts, err := Parse(sql)
+	if err != nil {
+		return "", pgerror.Wrapf(
+			err, pgcode.InvalidParameterValue, "could not parse %s", tag,
+		)
+	}
+	if len(stmts) != 1 {
+		return "", pgerror.Newf(
+			pgcode.InvalidParameterValue, "could not parse %s as a single SQL statement", tag,
+		)
+	}
+	return tree.FormatStatementHideConstants(stmts[0].AST, extraFlags...), nil
+}

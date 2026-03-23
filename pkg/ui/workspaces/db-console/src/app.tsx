@@ -10,6 +10,7 @@ import {
   DatabasesPageV2,
   DatabaseDetailsPageV2,
   TableDetailsPageV2,
+  ScheduleDetails,
 } from "@cockroachlabs/cluster-ui";
 import { ConfigProvider } from "antd";
 import { ConnectedRouter } from "connected-react-router";
@@ -29,7 +30,6 @@ import {
   aggregatedTsAttr,
   appAttr,
   dashboardNameAttr,
-  databaseAttr,
   databaseNameAttr,
   databaseIDAttr,
   executionIdAttr,
@@ -58,6 +58,7 @@ import { IndexDetailsPage } from "src/views/databases/indexDetailsPage";
 import Raft from "src/views/devtools/containers/raft";
 import RaftMessages from "src/views/devtools/containers/raftMessages";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
+import ClusterExplorerPage from "src/views/explorer/explorer";
 import HotRangesPage from "src/views/hotRanges/index";
 import JobDetails from "src/views/jobs/jobDetails";
 import JobsPage from "src/views/jobs/jobsPage";
@@ -77,14 +78,13 @@ import Range from "src/views/reports/containers/range";
 import ReduxDebug from "src/views/reports/containers/redux";
 import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
-import ScheduleDetails from "src/views/schedules/scheduleDetails";
 import SchedulesPage from "src/views/schedules/schedulesPage";
 import SessionDetails from "src/views/sessions/sessionDetails";
 import SQLActivityPage from "src/views/sqlActivity/sqlActivityPage";
 import StatementDetails from "src/views/statements/statementDetails";
 import { SnapshotRouter } from "src/views/tracez_v2/snapshotRoutes";
 import TransactionDetails from "src/views/transactions/transactionDetails";
-import "styl/app.styl";
+import "styl/app.scss";
 
 import InsightsOverviewPage from "./views/insights/insightsOverview";
 import StatementInsightDetailsPage from "./views/insights/statementInsightDetailsPage";
@@ -279,32 +279,12 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                         />
                         <Route
                           exact
-                          path={`/statement/:${implicitTxnAttr}/:${statementAttr}`}
+                          path={`/statement/:${statementAttr}`}
                           component={StatementDetails}
                         />
                         <Route
                           exact
-                          path={`/statements/:${appAttr}/:${statementAttr}`}
-                          render={RedirectToStatementDetails}
-                        />
-                        <Route
-                          exact
-                          path={`/statements/:${appAttr}/:${implicitTxnAttr}/:${statementAttr}`}
-                          render={RedirectToStatementDetails}
-                        />
-                        <Route
-                          exact
-                          path={`/statements/:${appAttr}/:${databaseAttr}/:${implicitTxnAttr}/:${statementAttr}`}
-                          render={RedirectToStatementDetails}
-                        />
-                        <Route
-                          exact
                           path={`/statement/:${implicitTxnAttr}/:${statementAttr}`}
-                          render={RedirectToStatementDetails}
-                        />
-                        <Route
-                          exact
-                          path={`/statement/:${databaseAttr}/:${implicitTxnAttr}/:${statementAttr}`}
                           render={RedirectToStatementDetails}
                         />
                         <Redirect
@@ -355,6 +335,13 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                         <Route
                           path={`/insights/statement/:${idAttr}`}
                           component={StatementInsightDetailsPage}
+                        />
+
+                        {/* cluster explorer */}
+                        <Route
+                          exact
+                          path="/cluster-explorer"
+                          component={ClusterExplorerPage}
                         />
 
                         {/* debug pages */}

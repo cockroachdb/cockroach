@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library")
+
+go_library(
+    name = "interlocktestgen_lib",
+    srcs = [
+        "main.go",
+        "template.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/upgrade/interlocktestgen",
+    visibility = ["//visibility:private"],
+    deps = [
+        "//pkg/upgrade/interlocktestutil",
+        "//pkg/util/log",
+    ],
+)
+
+go_binary(
+    name = "interlocktestgen",
+    embed = [":interlocktestgen_lib"],
+    visibility = ["//visibility:public"],
+)

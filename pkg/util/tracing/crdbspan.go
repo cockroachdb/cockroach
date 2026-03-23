@@ -560,11 +560,14 @@ func (buf *sizeLimitedBuffer[T]) Discard() {
 // finish marks the span as finished. Further operations on the span are not
 // allowed. Returns false if the span was already finished.
 //
+// If endTime is non-zero, the span's duration is calculated as the difference
+// between endTime and the span's start time. Otherwise, the current time is used.
+//
 // Calling finish() a second time is illegal, as is any use-after-finish().
 // Still, the Tracer can be configured to tolerate such uses. If the Tracer was
 // configured to not tolerate use-after-Finish, we would have crashed before
 // calling this.
-func (s *crdbSpan) finish() bool {
+func (s *crdbSpan) finish(endTime time.Time) bool {
 	// Finishing involves the following steps:
 	// 1) Take the lock and capture a reference to the parent.
 	// 2) Operate on the parent outside of the lock.
@@ -590,8 +593,13 @@ func (s *crdbSpan) finish() bool {
 		}
 		s.mu.finished = true
 		if s.recordingType() != tracingpb.RecordingOff {
-			duration := timeutil.Since(s.startTime)
-			if duration == 0 {
+			var duration time.Duration
+			if endTime.IsZero() {
+				duration = timeutil.Since(s.startTime)
+			} else {
+				duration = endTime.Sub(s.startTime)
+			}
+			if duration <= 0 {
 				duration = time.Nanosecond
 			}
 			s.mu.duration = duration
@@ -758,9 +766,10 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 		result.StructuredRecordsSizeBytes -= result.Root.StructuredRecordsSizeBytes
 		result.Root = s.getRecordingNoChildrenLocked(tracingpb.RecordingVerbose, finishing)
 		result.StructuredRecordsSizeBytes += result.Root.StructuredRecordsSizeBytes
+		maxStructuredBytes := s.tracer.MaxStructuredBytesPerTrace()
 		for i := range oldEvents {
 			size := int64(oldEvents[i].Size())
-			if result.StructuredRecordsSizeBytes+size <= maxStructuredBytesPerTrace {
+			if result.StructuredRecordsSizeBytes+size <= maxStructuredBytes {
 				result.Root.AddStructuredRecord(oldEvents[i])
 				result.StructuredRecordsSizeBytes += size
 			}
@@ -793,7 +802,7 @@ func (s *crdbSpan) getVerboseRecording(includeDetachedChildren bool, finishing b
 				rollupChildrenMetadata(childrenMetadata, openChildRecording.Root.ChildrenMetadata)
 			}
 		}
-		result.addChildren(openRecordings, maxRecordedSpansPerTrace, maxStructuredBytesPerTrace)
+		result.addChildren(openRecordings, maxRecordedSpansPerTrace, maxStructuredBytes)
 	}()
 
 	// Copy over the OperationMetadata collected from s' children into the root of
@@ -881,7 +890,7 @@ func (s *crdbSpan) recordFinishedChildrenLocked(childRec Trace) {
 		// processors run in spans that FollowFrom an RPC Span that we don't
 		// collect.
 		childRec.Root.ParentSpanID = s.spanID
-		s.mu.recording.finishedChildren.addChildren([]Trace{childRec}, maxRecordedSpansPerTrace, maxStructuredBytesPerTrace)
+		s.mu.recording.finishedChildren.addChildren([]Trace{childRec}, maxRecordedSpansPerTrace, s.tracer.MaxStructuredBytesPerTrace())
 	case tracingpb.RecordingStructured:
 		fc := &s.mu.recording.finishedChildren
 		num := len(fc.Root.StructuredRecords)
@@ -889,9 +898,10 @@ func (s *crdbSpan) recordFinishedChildrenLocked(childRec Trace) {
 		// Account for the size of the structured records that were appended,
 		// breaking out of the loop if we hit the byte limit. This incorporates
 		// the byte size accounting logic from RecordedSpan.AddStructuredRecord.
+		maxStructuredBytes := s.tracer.MaxStructuredBytesPerTrace()
 		for ; num < len(fc.Root.StructuredRecords); num++ {
 			size := int64(fc.Root.StructuredRecords[num].MemorySize())
-			if fc.StructuredRecordsSizeBytes+size > maxStructuredBytesPerTrace {
+			if fc.StructuredRecordsSizeBytes+size > maxStructuredBytes {
 				break
 			}
 			fc.Root.StructuredRecordsSizeBytes += size

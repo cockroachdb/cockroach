@@ -33,7 +33,11 @@ func TestPersistedSQLStatsReset(t *testing.T) {
 	skip.UnderStress(t, "the test is too slow to run under stress")
 
 	ctx := context.Background()
-	cluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{})
+	cluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DisableElasticCPUAdmission: true,
+		},
+	})
 	defer cluster.Stopper().Stop(ctx)
 	server := cluster.Server(0 /* idx */).ApplicationLayer()
 
@@ -168,7 +172,9 @@ func TestActivityTablesReset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableElasticCPUAdmission: true,
+	})
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	defer s.Stopper().Stop(context.Background())
 
@@ -266,7 +272,11 @@ func TestStmtStatsEnable(t *testing.T) {
 
 	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DisableElasticCPUAdmission: true,
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
 
 	serverutils.SetClusterSetting(t, tc, "sql.metrics.statement_details.enabled", "false")

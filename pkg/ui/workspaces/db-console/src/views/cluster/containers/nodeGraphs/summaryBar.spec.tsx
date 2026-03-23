@@ -3,31 +3,21 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { shallow, mount } from "enzyme";
+import { render, screen } from "@testing-library/react";
 import React from "react";
 import { MemoryRouter as Router } from "react-router-dom";
-import { createSandbox } from "sinon";
 
 import { NodeSummaryStats } from "src/redux/nodes";
 import * as nodes from "src/redux/nodes";
 import { renderWithProviders } from "src/test-utils/renderWithProviders";
-import { SummaryStatBreakdown } from "src/views/shared/components/summaryBar";
 
 import * as summaryBar from "./summaryBar";
 import { ClusterNodeTotals } from "./summaryBar";
 
-const sandbox = createSandbox();
-
 describe("<ClusterNodeTotals>", () => {
   let nodeSumsSelectorStubReturn: NodeSummaryStats;
-  let component: React.ReactElement;
 
   beforeEach(() => {
-    component = renderWithProviders(
-      <Router>
-        <ClusterNodeTotals />
-      </Router>,
-    );
     nodeSumsSelectorStubReturn = {
       capacityAvailable: 0,
       capacityTotal: 0,
@@ -49,21 +39,26 @@ describe("<ClusterNodeTotals>", () => {
       },
     };
   });
+
   afterEach(() => {
-    sandbox.restore();
-    sandbox.reset();
+    jest.restoreAllMocks();
   });
 
   it("hidden when no data", () => {
-    sandbox.stub(summaryBar, "selectNodesSummaryEmpty").returns(true);
-    const component = renderWithProviders(<ClusterNodeTotals />);
-    const wrapper = shallow(<Router>{component}</Router>);
-    expect(wrapper.html() === "").toBe(true);
+    jest.spyOn(summaryBar, "selectNodesSummaryEmpty").mockReturnValue(true);
+    const { container } = render(
+      renderWithProviders(
+        <Router>
+          <ClusterNodeTotals />
+        </Router>,
+      ),
+    );
+    expect(container.innerHTML).toBe("");
   });
 
   it("renders", () => {
-    sandbox.stub(summaryBar, "selectNodesSummaryEmpty").returns(false);
-    sandbox.stub(nodes, "nodeSumsSelector").returns({
+    jest.spyOn(summaryBar, "selectNodesSummaryEmpty").mockReturnValue(false);
+    jest.spyOn(nodes, "nodeSumsSelector").mockReturnValue({
       ...nodeSumsSelectorStubReturn,
       nodeCounts: {
         total: 1,
@@ -74,13 +69,19 @@ describe("<ClusterNodeTotals>", () => {
         draining: 0,
       },
     });
-    const wrapper = mount(component);
-    expect(wrapper.find(ClusterNodeTotals).exists()).toBe(true);
+    render(
+      renderWithProviders(
+        <Router>
+          <ClusterNodeTotals />
+        </Router>,
+      ),
+    );
+    expect(screen.getByText("Total Nodes")).toBeTruthy();
   });
 
   it("renders dead nodes", () => {
-    sandbox.stub(summaryBar, "selectNodesSummaryEmpty").returns(false);
-    sandbox.stub(nodes, "nodeSumsSelector").returns({
+    jest.spyOn(summaryBar, "selectNodesSummaryEmpty").mockReturnValue(false);
+    jest.spyOn(nodes, "nodeSumsSelector").mockReturnValue({
       ...nodeSumsSelectorStubReturn,
       nodeCounts: {
         total: 2,
@@ -91,7 +92,14 @@ describe("<ClusterNodeTotals>", () => {
         draining: 0,
       },
     });
-    const wrapper = mount(component);
-    expect(wrapper.find(SummaryStatBreakdown).exists()).toBe(true);
+    render(
+      renderWithProviders(
+        <Router>
+          <ClusterNodeTotals />
+        </Router>,
+      ),
+    );
+    expect(screen.getByText("Dead")).toBeTruthy();
+    expect(screen.getByText("Suspect")).toBeTruthy();
   });
 });

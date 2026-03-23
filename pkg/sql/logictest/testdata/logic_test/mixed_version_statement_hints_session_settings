@@ -1,0 +1,78 @@
+# LogicTest: cockroach-go-testserver-configs
+
+# Verify that session setting hints cannot be used until after the cluster
+# upgrade is fully finalized (requires V26_2_StatementHintsTypeColumnBackfilled).
+
+statement ok
+CREATE TABLE t (x INT PRIMARY KEY, y INT, INDEX (y));
+
+statement ok
+INSERT INTO t VALUES (1, 10), (2, 20), (3, 30);
+
+subtest pre_upgrade
+
+# Before any nodes are upgraded, the builtin doesn't exist on old binaries.
+statement error unknown function: information_schema.crdb_set_session_variable_hint
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM t WHERE x = _',
+  'reorder_joins_limit',
+  '4'
+);
+
+subtest end
+
+subtest mid_upgrade
+
+# Upgrade node 0 only. Nodes 1 and 2 remain on the old binary.
+upgrade 0
+
+# On the upgraded node, the builtin exists but the version gate blocks it
+# because the cluster version hasn't been finalized.
+user root nodeidx=0
+
+statement error pgcode 0A000 pq: session variable hints cannot be used until the cluster version is upgraded
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM t WHERE x = _',
+  'reorder_joins_limit',
+  '4'
+);
+
+# On an old node, the builtin still doesn't exist.
+user root nodeidx=2
+
+statement error unknown function: information_schema.crdb_set_session_variable_hint
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM t WHERE x = _',
+  'reorder_joins_limit',
+  '4'
+);
+
+subtest end
+
+subtest post_upgrade
+
+# Upgrade remaining nodes and finalize.
+upgrade 1
+
+upgrade 2
+
+user root nodeidx=0
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version()
+
+# After finalization, session setting hints should work.
+let $hint1
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM t WHERE x = 1',
+  'reorder_joins_limit',
+  '2'
+);
+
+# Verify the hint was created with the correct type.
+query TT
+SELECT fingerprint, hint_type FROM system.statement_hints WHERE row_id = $hint1;
+----
+SELECT * FROM t WHERE x = _  SET VARIABLE
+
+subtest end

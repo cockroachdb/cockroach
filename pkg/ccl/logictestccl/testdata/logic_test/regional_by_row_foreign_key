@@ -208,7 +208,7 @@ statement error pgcode 42P16 pq: cannot drop constraint foo as it is used to det
 ALTER TABLE child DROP CONSTRAINT foo
 
 # Nonexistent constraint.
-statement error pgcode 42704 pq: constraint named "bar" does not exist
+statement error pgcode 42704 pq: constraint "bar" of relation "child" does not exist
 ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'bar')
 
 # Wrong type of constraint.
@@ -1560,7 +1560,7 @@ k  v   child_region    parent_cascade_region
 5  50  ap-southeast-2  ap-southeast-2
 6  60  us-east-1       us-east-1
 
-statement ok
+statement count 2
 DELETE FROM parent_cascade WHERE k = 3 OR k = 4;
 
 query IITT colnames
@@ -1594,8 +1594,10 @@ DROP FUNCTION display_child;
 statement ok
 DROP TABLE child;
 
-statement ok
+statement count 4
 DELETE FROM parent_cascade WHERE true;
+
+statement ok
 INSERT INTO parent_cascade (k, crdb_region) (SELECT k, crdb_region FROM parent_rbr);
 
 statement ok
@@ -1634,7 +1636,7 @@ k1  k2  v   child_region    parent_rbr_region  parent_cascade_region
 5   5   50  ap-southeast-2  ap-southeast-2     ap-southeast-2
 6   6   60  us-east-1       us-east-1          us-east-1
 
-statement ok
+statement count 2
 DELETE FROM parent_cascade WHERE k = 3 OR k = 4;
 
 query IIITTT colnames
@@ -1759,7 +1761,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (fk_lookup_crdb_region, column1)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: parent_rbr@parent_rbr_pkey
             │ equality: (fk_lookup_crdb_region, column1) = (crdb_region, k)
             │ equality cols are key
@@ -1845,7 +1847,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (fk_lookup_crdb_region, k_new)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: parent_rbr@parent_rbr_pkey
             │ equality: (fk_lookup_crdb_region, k_new) = (crdb_region, k)
             │ equality cols are key
@@ -1971,7 +1973,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (fk_lookup_crdb_region, column1, column2)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: parent_unique_nullable@parent_unique_nullable_x_y_key
             │ equality: (fk_lookup_crdb_region, column1, column2) = (crdb_region, x, y)
             │ equality cols are key
@@ -2099,7 +2101,7 @@ vectorized: true
         │
         └── • lookup join (anti)
             │ columns: (fk_lookup_crdb_region, x, y_new)
-            │ estimated row count: 0 (missing stats)
+            │ estimated row count: 1 (missing stats)
             │ table: parent_unique_nullable@parent_unique_nullable_x_y_key
             │ equality: (fk_lookup_crdb_region, x, y_new) = (crdb_region, x, y)
             │ equality cols are key
@@ -2299,5 +2301,113 @@ DROP TABLE a CASCADE
 
 statement ok
 RESET create_table_with_schema_locked;
+
+subtest end
+
+# Test foreign keys with implicit column references on regional by row tables.
+# This verifies implicit FK references correctly skip the crdb_region column.
+subtest fk_implicit_rbr
+
+statement ok
+CREATE TABLE parent_rbr_implicit (
+  k INT PRIMARY KEY,
+  v INT
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO parent_rbr_implicit (k, v, crdb_region) VALUES
+  (1, 10, 'ca-central-1'),
+  (2, 20, 'ap-southeast-2'),
+  (3, 30, 'us-east-1')
+
+# FK without explicit column list should skip crdb_region implicit column
+statement ok
+CREATE TABLE child_rbr_implicit (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  FOREIGN KEY (parent_k) REFERENCES parent_rbr_implicit
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO child_rbr_implicit (k, parent_k, crdb_region) VALUES
+  (1, 1, 'ca-central-1'),
+  (2, 2, 'ap-southeast-2')
+
+# Verify FK constraint enforcement
+statement error pq: insert on table "child_rbr_implicit" violates foreign key constraint
+INSERT INTO child_rbr_implicit (k, parent_k, crdb_region) VALUES (99, 99, 'ca-central-1')
+
+# Cleanup
+statement ok
+DROP TABLE child_rbr_implicit
+
+statement ok
+DROP TABLE parent_rbr_implicit
+
+subtest end
+
+# Test implicit keys with a combination of features that result in the
+# primary key index having internal/implicit columns.
+subtest fk_implicit_rbr_hash_sharded_combined
+
+# Parent table is regional by row with a hash-sharded primary key
+statement ok
+CREATE TABLE parent_combined (
+  k INT NOT NULL,
+  v INT NOT NULL,
+  data INT,
+  PRIMARY KEY (k, v) USING HASH
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO parent_combined (k, v, data, crdb_region) VALUES
+  (1, 1, 100, 'ca-central-1'),
+  (2, 2, 200, 'ap-southeast-2'),
+  (3, 3, 300, 'us-east-1')
+
+statement ok
+CREATE TABLE child_combined (
+  k INT,
+  v INT,
+  FOREIGN KEY (k, v) REFERENCES parent_combined
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+INSERT INTO child_combined (k, v, crdb_region) VALUES
+  (1, 1, 'ca-central-1'),
+  (2, 2, 'ap-southeast-2')
+
+# Verify FK constraint enforcement
+statement error pq: insert on table "child_combined" violates foreign key constraint
+INSERT INTO child_combined (k, v, crdb_region) VALUES (99, 99, 'ca-central-1')
+
+# Verify this also works using ALTER TABLE
+statement ok
+CREATE TABLE child_combined2 (
+  k INT,
+  v INT
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER TABLE child_combined2 ADD FOREIGN KEY (k, v) REFERENCES parent_combined
+
+statement ok
+INSERT INTO child_combined2 (k, v, crdb_region) VALUES
+  (1, 1, 'ca-central-1'),
+  (2, 2, 'ap-southeast-2')
+
+# Verify FK constraint enforcement
+statement error pq: insert on table "child_combined2" violates foreign key constraint
+INSERT INTO child_combined2 (k, v, crdb_region) VALUES (99, 99, 'ca-central-1')
+
+# Cleanup
+statement ok
+DROP TABLE child_combined
+
+statement ok
+DROP TABLE child_combined2
+
+statement ok
+DROP TABLE parent_combined
 
 subtest end

@@ -1,0 +1,42 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_binary", "go_library", "go_test")
+
+go_library(
+    name = "datadoggen_lib",
+    srcs = [
+        "datadog.go",
+        "grafana.go",
+        "main.go",
+        "metrics.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/kv/datadoggen",
+    visibility = ["//visibility:private"],
+    deps = [
+        "@com_github_spf13_cobra//:cobra",
+        "@org_golang_x_text//cases",
+        "@org_golang_x_text//language",
+    ],
+)
+
+go_binary(
+    name = "datadoggen",
+    embed = [":datadoggen_lib"],
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "datadoggen_test",
+    srcs = [
+        "datadog_test.go",
+        "grafana_test.go",
+        "metrics_test.go",
+    ],
+    data = [
+        "//docs/generated/metrics",
+        "//pkg/cli:cockroachdb_datadog_metrics",
+    ],
+    embed = [":datadoggen_lib"],
+    deps = [
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/skip",
+    ],
+)

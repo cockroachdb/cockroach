@@ -7,6 +7,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/util/ctxutil",
+        "//pkg/util/grpcutil",
         "//pkg/util/tracing",
         "//pkg/util/tracing/tracingutil",
         "@io_opentelemetry_go_otel//attribute",
@@ -14,7 +15,6 @@ go_library(
         "@io_storj_drpc//:drpc",
         "@io_storj_drpc//drpcclient",
         "@io_storj_drpc//drpcerr",
-        "@io_storj_drpc//drpcmetadata",
         "@io_storj_drpc//drpcmux",
     ],
 )
@@ -37,6 +37,7 @@ go_test(
         "@io_storj_drpc//:drpc",
         "@io_storj_drpc//drpcclient",
         "@io_storj_drpc//drpcconn",
+        "@io_storj_drpc//drpcmanager",
         "@io_storj_drpc//drpcmux",
         "@io_storj_drpc//drpcserver",
     ],

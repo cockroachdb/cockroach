@@ -12,140 +12,17 @@ import (
 	"math"
 	"math/rand"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/cockroachdb/redact/interfaces"
-)
-
-type MMAMetrics struct {
-	DroppedDueToStateInconsistency  *metric.Counter
-	ExternalFailedToRegister        *metric.Counter
-	ExternaRegisterSuccess          *metric.Counter
-	ExternalReplicaRebalanceSuccess *metric.Counter
-	ExternalReplicaRebalanceFailure *metric.Counter
-	ExternalLeaseTransferSuccess    *metric.Counter
-	ExternalLeaseTransferFailure    *metric.Counter
-	MMAReplicaRebalanceSuccess      *metric.Counter
-	MMAReplicaRebalanceFailure      *metric.Counter
-	MMALeaseTransferSuccess         *metric.Counter
-	MMALeaseTransferFailure         *metric.Counter
-	MMARegisterLeaseSuccess         *metric.Counter
-	MMARegisterRebalanceSuccess     *metric.Counter
-}
-
-func makeMMAMetrics() *MMAMetrics {
-	return &MMAMetrics{
-		DroppedDueToStateInconsistency:  metric.NewCounter(metaDroppedDueToStateInconsistency),
-		ExternalFailedToRegister:        metric.NewCounter(metaExternalFailedToRegister),
-		ExternaRegisterSuccess:          metric.NewCounter(metaExternaRegisterSuccess),
-		MMARegisterLeaseSuccess:         metric.NewCounter(metaMMARegisterLeaseSuccess),
-		MMARegisterRebalanceSuccess:     metric.NewCounter(metaMMARegisterRebalanceSuccess),
-		ExternalReplicaRebalanceSuccess: metric.NewCounter(metaExternalReplicaRebalanceSuccess),
-		ExternalReplicaRebalanceFailure: metric.NewCounter(metaExternalReplicaRebalanceFailure),
-		ExternalLeaseTransferSuccess:    metric.NewCounter(metaExternalLeaseTransferSuccess),
-		ExternalLeaseTransferFailure:    metric.NewCounter(metaExternalLeaseTransferFailure),
-		MMAReplicaRebalanceSuccess:      metric.NewCounter(metaMMAReplicaRebalanceSuccess),
-		MMAReplicaRebalanceFailure:      metric.NewCounter(metaMMAReplicaRebalanceFailure),
-		MMALeaseTransferSuccess:         metric.NewCounter(metaMMALeaseTransferSuccess),
-		MMALeaseTransferFailure:         metric.NewCounter(metaMMALeaseTransferFailure),
-	}
-}
-
-var (
-	metaDroppedDueToStateInconsistency = metric.Metadata{
-		Name:        "mma.dropped",
-		Help:        "Number of operations dropped due to MMA state inconsistency",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaExternalFailedToRegister = metric.Metadata{
-		Name:        "mma.external.dropped",
-		Help:        "Number of external operations that failed to register with MMA",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaExternaRegisterSuccess = metric.Metadata{
-		Name:        "mma.external.success",
-		Help:        "Number of external operations successfully registered with MMA",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaMMARegisterLeaseSuccess = metric.Metadata{
-		Name:        "mma.lease.register.success",
-		Help:        "Number of lease transfers successfully registered with MMA",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaMMARegisterRebalanceSuccess = metric.Metadata{
-		Name:        "mma.rebalance.register.success",
-		Help:        "Number of rebalance operations successfully registered with MMA",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-	metaExternalReplicaRebalanceSuccess = metric.Metadata{
-		Name:        "mma.rebalances.external.success",
-		Help:        "Number of successful external replica rebalance operations",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaExternalLeaseTransferSuccess = metric.Metadata{
-		Name:        "mma.lease.external.success",
-		Help:        "Number of successful external lease transfer operations",
-		Measurement: "Lease Transfers",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaExternalReplicaRebalanceFailure = metric.Metadata{
-		Name:        "mma.rebalances.external.failure",
-		Help:        "Number of failed external replica rebalance operations",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaExternalLeaseTransferFailure = metric.Metadata{
-		Name:        "mma.lease.external.failure",
-		Help:        "Number of failed external lease transfer operations",
-		Measurement: "Lease Transfers",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaMMAReplicaRebalanceSuccess = metric.Metadata{
-		Name:        "mma.rebalance.success",
-		Help:        "Number of successful MMA-initiated replica rebalance operations",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaMMAReplicaRebalanceFailure = metric.Metadata{
-		Name:        "mma.rebalance.failure",
-		Help:        "Number of failed MMA-initiated replica rebalance operations",
-		Measurement: "Range Rebalances",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaMMALeaseTransferSuccess = metric.Metadata{
-		Name:        "mma.lease.success",
-		Help:        "Number of successful MMA-initiated lease transfer operations",
-		Measurement: "Lease Transfers",
-		Unit:        metric.Unit_COUNT,
-	}
-
-	metaMMALeaseTransferFailure = metric.Metadata{
-		Name:        "mma.lease.failure",
-		Help:        "Number of failed MMA-initiated lease transfer operations",
-		Measurement: "Lease Transfers",
-		Unit:        metric.Unit_COUNT,
-	}
 )
 
 type allocatorState struct {
@@ -195,8 +72,14 @@ type allocatorState struct {
 	// try-write-lock that could quickly return with failure then we could avoid
 	// this. We could of course build our own queueing mechanism instead of
 	// relying on the queueing in mutex.
-	mmaMetrics *MMAMetrics
-	mu         syncutil.Mutex
+
+	mu syncutil.Mutex
+
+	// TODO(sumeer): metricsMap is protected by mu. Nest in struct with mu, when
+	// locking story is cleaned up.
+
+	// metricsMap is keyed by local StoreID.
+	metricsMap map[roachpb.StoreID]*metricsEtc
 	cs         *clusterState
 
 	// Ranges that are under-replicated, over-replicated, don't satisfy
@@ -208,31 +91,100 @@ type allocatorState struct {
 	diversityScoringMemo *diversityScoringMemo
 
 	rand *rand.Rand
+
+	metricsUnregisteredEvery log.EveryN
 }
 
 var _ Allocator = &allocatorState{}
 
+// NewAllocatorState constructs a new implementation of Allocator.
+//
+// The metricRegistryProvider allows the allocator to lazily initialize
+// per-local-store metrics once the StoreID is known. It can be nil in tests,
+// in which case no metrics will be collected.
 func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState {
 	interner := newStringInterner()
 	cs := newClusterState(ts, interner)
 	return &allocatorState{
-		cs:                     cs,
-		rangesNeedingAttention: map[roachpb.RangeID]struct{}{},
-		diversityScoringMemo:   newDiversityScoringMemo(),
-		rand:                   rand,
-		mmaMetrics:             makeMMAMetrics(),
+		metricsMap:               map[roachpb.StoreID]*metricsEtc{},
+		cs:                       cs,
+		rangesNeedingAttention:   map[roachpb.RangeID]struct{}{},
+		diversityScoringMemo:     newDiversityScoringMemo(),
+		rand:                     rand,
+		metricsUnregisteredEvery: log.Every(time.Minute),
 	}
+}
+
+type metricsEtc struct {
+	counters             *rangeOperationMetrics
+	loadAndCapacity      *loadAndCapacityMetrics
+	passMetricsAndLogger *rebalancingPassMetricsAndLogger
+	metricsRegistered    bool
 }
 
 // These constants are semi-arbitrary.
 
-// Don't start moving ranges from a cpu overloaded remote store, to give it
-// some time to shed its leases.
-const remoteStoreLeaseSheddingGraceDuration = 2 * time.Minute
+// Grace period before remote stores intervene with replica moves on an
+// overloaded store, giving it time to shed its own leases.
+const leaseSheddingGraceDuration = 2 * time.Minute
 const overloadGracePeriod = time.Minute
 
-func (a *allocatorState) Metrics() *MMAMetrics {
-	return a.mmaMetrics
+func (a *allocatorState) InitMetricsForLocalStore(
+	ctx context.Context, localStoreID roachpb.StoreID, registry *metric.Registry,
+) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	_ = a.ensureMetricsForLocalStoreLocked(ctx, localStoreID, registry)
+}
+
+func (a *allocatorState) getCounterMetricsForLocalStoreLocked(
+	ctx context.Context, localStoreID roachpb.StoreID,
+) *rangeOperationMetrics {
+	return a.ensureMetricsForLocalStoreLocked(ctx, localStoreID, nil).counters
+}
+
+func (a *allocatorState) preparePassMetricsAndLoggerLocked(
+	ctx context.Context, localStoreID roachpb.StoreID,
+) *rebalancingPassMetricsAndLogger {
+	pm := a.ensureMetricsForLocalStoreLocked(ctx, localStoreID, nil).passMetricsAndLogger
+	pm.resetForRebalancingPass()
+	return pm
+}
+
+// ensureMetricsForLocalStoreLocked ensures that the metrics for localStoreID
+// exist, creating them if necessary. The registry parameter, when non-nil, is
+// used to register the metrics if they have not been registered previously.
+func (a *allocatorState) ensureMetricsForLocalStoreLocked(
+	ctx context.Context, localStoreID roachpb.StoreID, registry *metric.Registry,
+) *metricsEtc {
+	m, ok := a.metricsMap[localStoreID]
+	if !ok {
+		m = &metricsEtc{
+			counters:             makeRangeOperationMetrics(),
+			loadAndCapacity:      makeLoadAndCapacityMetrics(),
+			passMetricsAndLogger: makeRebalancingPassMetricsAndLogger(localStoreID),
+		}
+		a.metricsMap[localStoreID] = m
+	}
+	if !m.metricsRegistered {
+		if registry != nil {
+			registry.AddMetricStruct(*m.counters)
+			registry.AddMetricStruct(*m.loadAndCapacity)
+			registry.AddMetricStruct(m.passMetricsAndLogger.m)
+			m.metricsRegistered = true
+		} else if a.shouldLogUnregisteredMetrics() {
+			log.KvDistribution.Warningf(ctx, "metrics for store s%v are unregistered", localStoreID)
+		}
+	}
+	return m
+}
+
+// shouldLogUnregisteredMetrics returns true if a warning should be logged when
+// metrics cannot be registered due to a nil registry. This logging is skipped
+// in test builds since tests often don't provide a metrics registry. In
+// production, it rate-limits to once per minute to avoid log spam.
+func (a *allocatorState) shouldLogUnregisteredMetrics() bool {
+	return !buildutil.CrdbTestBuild && a.metricsUnregisteredEvery.ShouldLog()
 }
 
 func (a *allocatorState) LoadSummaryForAllStores(ctx context.Context) string {
@@ -250,23 +202,76 @@ func (a *allocatorState) SetStore(store StoreAttributesAndLocality) {
 func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoadMsg) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.cs.processStoreLoadMsg(ctx, msg)
+
+	// Pass the metrics struct for this store if they exist in the map.
+	m, ok := a.metricsMap[msg.StoreID]
+	if ok {
+		a.cs.processStoreLoadMsg(ctx, msg, m.loadAndCapacity)
+	} else {
+		a.cs.processStoreLoadMsg(ctx, msg, nil)
+	}
+}
+
+// SetDiskUtilThresholds implements the Allocator interface.
+func (a *allocatorState) SetDiskUtilThresholds(refuseThreshold, shedThreshold float64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cs.setDiskUtilThresholds(refuseThreshold, shedThreshold)
+}
+
+// UpdateStoresStatuses implements the Allocator interface.
+func (a *allocatorState) UpdateStoresStatuses(
+	ctx context.Context, storeStatuses map[roachpb.StoreID]Status,
+) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.cs.updateStoreStatuses(ctx, storeStatuses)
 }
 
 // AdjustPendingChangeDisposition implements the Allocator interface.
-func (a *allocatorState) AdjustPendingChangeDisposition(change ExternalRangeChange, success bool) {
+func (a *allocatorState) AdjustPendingChangeDisposition(
+	ctx context.Context, change ExternalRangeChange, success bool,
+) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	rs, ok := a.cs.ranges[change.RangeID]
+	metrics := a.getCounterMetricsForLocalStoreLocked(ctx, change.localStoreID)
+	isLeaseTransfer := change.IsPureTransferLease()
+	switch change.origin {
+	case OriginExternal:
+		if isLeaseTransfer {
+			if success {
+				metrics.ExternalLeaseChangeSuccess.Inc(1)
+			} else {
+				metrics.ExternalLeaseChangeFailure.Inc(1)
+			}
+		} else {
+			if success {
+				metrics.ExternalReplicaChangeSuccess.Inc(1)
+			} else {
+				metrics.ExternalReplicaChangeFailure.Inc(1)
+			}
+		}
+	case originMMARebalance:
+		if isLeaseTransfer {
+			if success {
+				metrics.RebalanceLeaseChangeSuccess.Inc(1)
+			} else {
+				metrics.RebalanceLeaseChangeFailure.Inc(1)
+			}
+		} else {
+			if success {
+				metrics.RebalanceReplicaChangeSuccess.Inc(1)
+			} else {
+				metrics.RebalanceReplicaChangeFailure.Inc(1)
+			}
+		}
+	}
+	_, ok := a.cs.ranges[change.RangeID]
 	if !ok {
 		// Range no longer exists. This can happen if the StoreLeaseholderMsg
 		// which included the effect of the change that transferred the lease away
 		// was already processed, causing the range to no longer be tracked by the
 		// allocator.
-		return
-	}
-	if !success && rs.pendingChangeNoRollback {
-		// Not allowed to undo.
 		return
 	}
 	// NB: It is possible that some of the changes have already been enacted via
@@ -297,27 +302,27 @@ func (a *allocatorState) AdjustPendingChangeDisposition(change ExternalRangeChan
 		if success {
 			a.cs.pendingChangeEnacted(c.changeID, a.cs.ts.Now())
 		} else {
-			a.cs.undoPendingChange(c.changeID)
+			a.cs.undoPendingChange(ctx, c.changeID)
 		}
 	}
 }
 
 // RegisterExternalChange implements the Allocator interface.
 func (a *allocatorState) RegisterExternalChange(
-	change PendingRangeChange,
+	ctx context.Context, localStoreID roachpb.StoreID, change PendingRangeChange,
 ) (_ ExternalRangeChange, ok bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	rangeOperationMetrics := a.getCounterMetricsForLocalStoreLocked(ctx, localStoreID)
 	if err := a.cs.preCheckOnApplyReplicaChanges(change); err != nil {
-		a.mmaMetrics.ExternalFailedToRegister.Inc(1)
-		log.KvDistribution.Infof(context.Background(),
-			"did not register external changes: due to %v", err)
+		rangeOperationMetrics.ExternalRegisterFailure.Inc(1)
+		log.KvDistribution.Infof(ctx, "did not register external changes: due to %v", err)
 		return ExternalRangeChange{}, false
 	} else {
-		a.mmaMetrics.ExternaRegisterSuccess.Inc(1)
+		rangeOperationMetrics.ExternalRegisterSuccess.Inc(1)
 	}
-	a.cs.addPendingRangeChange(change)
-	return MakeExternalRangeChange(change), true
+	a.cs.addPendingRangeChange(ctx, change)
+	return MakeExternalRangeChange(OriginExternal, localStoreID, change), true
 }
 
 // ComputeChanges implements the Allocator interface.
@@ -329,8 +334,16 @@ func (a *allocatorState) ComputeChanges(
 	if msg.StoreID != opts.LocalStoreID {
 		panic(fmt.Sprintf("ComputeChanges: expected StoreID %d, got %d", opts.LocalStoreID, msg.StoreID))
 	}
-	a.cs.processStoreLeaseholderMsg(ctx, msg, a.mmaMetrics)
-	re := newRebalanceEnv(a.cs, a.rand, a.diversityScoringMemo, a.cs.ts.Now())
+	if opts.DryRun {
+		panic(errors.AssertionFailedf("unsupported dry-run mode"))
+	}
+	rangeOperationMetrics := a.getCounterMetricsForLocalStoreLocked(ctx, opts.LocalStoreID)
+	a.cs.processStoreLeaseholderMsg(ctx, msg, rangeOperationMetrics)
+	var passObs *rebalancingPassMetricsAndLogger
+	if opts.PeriodicCall {
+		passObs = a.preparePassMetricsAndLoggerLocked(ctx, opts.LocalStoreID)
+	}
+	re := newRebalanceEnv(a.cs, a.rand, a.diversityScoringMemo, a.cs.ts.Now(), passObs)
 	return re.rebalanceStores(ctx, opts.LocalStoreID)
 }
 
@@ -405,22 +418,22 @@ const (
 const ignoreLoadThresholdAndHigherGraceDuration = 5 * time.Minute
 const ignoreHigherThanLoadThresholdGraceDuration = 8 * time.Minute
 
-func (i ignoreLevel) String() string {
+// SafeFormat implements the redact.SafeFormatter interface.
+func (i ignoreLevel) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch i {
 	case ignoreLoadNoChangeAndHigher:
-		return "only consider targets < LoadNoChange"
+		w.SafeString("only consider targets < LoadNoChange")
 	case ignoreLoadThresholdAndHigher:
-		return "only consider targets < load threshold"
+		w.SafeString("only consider targets < load threshold")
 	case ignoreHigherThanLoadThreshold:
-		return "only consider targets <= load threshold"
+		w.SafeString("only consider targets <= load threshold")
 	default:
-		panic(fmt.Sprintf("unknown: %d", i))
+		panic("unknown ignoreLevel")
 	}
 }
 
-// SafeFormat implements the redact.SafeFormatter interface.
-func (i ignoreLevel) SafeFormat(s interfaces.SafePrinter, verb rune) {
-	s.SafeInt(redact.SafeInt(i))
+func (i ignoreLevel) String() string {
+	return redact.StringWithoutMarkers(i)
 }
 
 // The logic in sortTargetCandidateSetAndPick related to load is a heuristic
@@ -488,6 +501,7 @@ func (i ignoreLevel) SafeFormat(s interfaces.SafePrinter, verb rune) {
 // caller should set loadThreshold to overloadSlow and ignoreLevel to
 // ignoreHigherThanLoadThreshold, to maximize the probability of finding a
 // candidate.
+
 func sortTargetCandidateSetAndPick(
 	ctx context.Context,
 	cands candidateSet,
@@ -496,16 +510,30 @@ func sortTargetCandidateSetAndPick(
 	overloadedDim LoadDimension,
 	rng *rand.Rand,
 	maxFractionPendingThreshold float64,
+	failLogger func(shedResult),
 ) roachpb.StoreID {
-	var b strings.Builder
-	for i := range cands.candidates {
-		fmt.Fprintf(&b, " s%v(%v)", cands.candidates[i].StoreID, cands.candidates[i].storeLoadSummary)
-	}
 	if loadThreshold <= loadNoChange {
 		panic("loadThreshold must be > loadNoChange")
 	}
 	slices.SortFunc(cands.candidates, func(a, b candidateInfo) int {
 		if diversityScoresAlmostEqual(a.diversityScore, b.diversityScore) {
+			// Note: Consider the case where the current leaseholder's LPI is
+			// 3 (lower is better) and we have the following candidates:
+			// - LPI=1 SLS=normal
+			// - LPI=2 SLS=low
+			// Currently we consider the low-SLS candidate first. This is in
+			// contrast to the single-metric allocator, which only considers
+			// candidates in the lowest-SLS class (i.e. wouldn't even consider
+			// the low-SLS candidate since we have a candidate at LPI=1).  If we
+			// make the corresponding change in candidateToMoveLease, we would
+			// match the single-metric allocator's behavior, but it's unclear
+			// that that would be better. A good middle ground could be sorting
+			// here by LPI first, then SLS. That should result in mma preferring
+			// improving the lease preference, but if that is not possible, it
+			// would settle for not making it worse (than the current
+			// leaseholder), which the single-metric allocator won't.
+			//
+			// TODO(tbg): consider changing this to sort by LPI first, then SLS.
 			return cmp.Or(cmp.Compare(a.sls, b.sls),
 				cmp.Compare(a.leasePreferenceIndex, b.leasePreferenceIndex),
 				cmp.Compare(a.StoreID, b.StoreID))
@@ -514,34 +542,25 @@ func sortTargetCandidateSetAndPick(
 	})
 	bestDiversity := cands.candidates[0].diversityScore
 	j := 0
-	// Iterate over candidates with the same diversity. First such set that is
-	// not disk capacity constrained is where we stop. Even if they can't accept
-	// because they have too many pending changes or can't handle the addition
-	// of the range. That is, we are not willing to reduce diversity when
-	// rebalancing ranges. When rebalancing leases, the diversityScore of all
-	// the candidates will be 0.
-	for _, cand := range cands.candidates {
+	// Iterate over candidates with the same diversity. We stop at the first set
+	// of candidates with the same diversity. Even if they can't accept because
+	// they have too many pending changes or can't handle the addition of the
+	// range. That is, we are not willing to reduce diversity when rebalancing
+	// ranges. When rebalancing leases, the diversityScore of all the candidates
+	// will be 0.
+	for i, cand := range cands.candidates {
 		if !diversityScoresAlmostEqual(bestDiversity, cand.diversityScore) {
-			if j == 0 {
-				// Don't have any candidates yet.
-				bestDiversity = cand.diversityScore
-			} else {
-				// Have a set of candidates.
-				break
+			// Have a set of candidates with the best diversity.
+			if s := formatCandidatesLog(ctx, cands.candidates[i:], overloadedDim); s != "" {
+				log.KvDistribution.VEventf(ctx, 3, "discarding candidates due to lower diversity score: %s", s)
 			}
+			break
 		}
-		// Diversity is the same. Include if not reaching disk capacity.
-		if !cand.highDiskSpaceUtilization {
-			cands.candidates[j] = cand
-			j++
-		}
+		cands.candidates[j] = cand
+		j++
 	}
-	if j == 0 {
-		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to disk space util")
-		return 0
-	}
-	// Every candidate in [0:j] has same diversity and is sorted by increasing
-	// load, and within the same load by increasing leasePreferenceIndex.
+	// Every candidate in [0:j] has the same (best) diversity and is sorted by
+	// increasing load, and within the same load by increasing leasePreferenceIndex.
 	cands.candidates = cands.candidates[:j]
 	j = 0
 	// Filter out the candidates that are overloaded or have too many pending
@@ -558,12 +577,16 @@ func sortTargetCandidateSetAndPick(
 	lowestLoadSet := cands.candidates[0].sls
 	currentLoadSet := lowestLoadSet
 	discardedCandsHadNoPendingChanges := true
-	for _, cand := range cands.candidates {
+	for i, cand := range cands.candidates {
 		if cand.sls > currentLoadSet {
 			if !discardedCandsHadNoPendingChanges {
 				// Never go to the next set if we have discarded candidates that have
 				// pending changes. We will wait for those to have no pending changes
 				// before we consider later sets.
+				if s := formatCandidatesLog(ctx, cands.candidates[i:], overloadedDim); s != "" {
+					log.KvDistribution.VEventf(ctx, 3,
+						"candidate with pending changes was discarded, discarding remaining candidates with higher load: %s", s)
+				}
 				break
 			}
 			currentLoadSet = cand.sls
@@ -574,6 +597,10 @@ func sortTargetCandidateSetAndPick(
 				lowestLoadSet = cand.sls
 			} else if ignoreLevel < ignoreHigherThanLoadThreshold || overloadedDim == NumLoadDimensions {
 				// Past the lowestLoad set. We don't care about these.
+				if s := formatCandidatesLog(ctx, cands.candidates[i:], overloadedDim); s != "" {
+					log.KvDistribution.VEventf(ctx, 3,
+						"discarding candidates with higher load than lowestLoadSet(%v): %s", lowestLoadSet, s)
+				}
 				break
 			}
 			// Else ignoreLevel >= ignoreHigherThanLoadThreshold && overloadedDim !=
@@ -581,6 +608,10 @@ func sortTargetCandidateSetAndPick(
 			// cand.sls <= loadThreshold.
 		}
 		if cand.sls > loadThreshold {
+			if s := formatCandidatesLog(ctx, cands.candidates[i:], overloadedDim); s != "" {
+				log.KvDistribution.VEventf(ctx, 3,
+					"discarding candidates with higher load than loadThreshold(%v): %s", loadThreshold, s)
+			}
 			break
 		}
 		candDiscardedByNLS := cand.nls > loadThreshold ||
@@ -593,16 +624,19 @@ func sortTargetCandidateSetAndPick(
 			if cand.maxFractionPendingIncrease > epsilon && discardedCandsHadNoPendingChanges {
 				discardedCandsHadNoPendingChanges = false
 			}
-			log.KvDistribution.VEventf(ctx, 2,
-				"candiate store %v was discarded due to (nls=%t overloadDim=%t pending_thresh=%t): sls=%v", cand.StoreID,
-				candDiscardedByNLS, candDiscardedByOverloadDim, candDiscardedByPendingThreshold, cand.storeLoadSummary)
+			if log.ExpensiveLogEnabled(ctx, 3) {
+				log.KvDistribution.VEventf(ctx, 3,
+					"candidate store %v was discarded due to (nls=%t overloadDim=%t pending_thresh=%t): sls=%v", cand.StoreID,
+					candDiscardedByNLS, candDiscardedByOverloadDim, candDiscardedByPendingThreshold, cand.storeLoadSummary)
+			}
 			continue
 		}
 		cands.candidates[j] = cand
 		j++
 	}
 	if j == 0 {
-		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to load")
+		log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to load")
+		failLogger(noCandidateDueToLoad)
 		return 0
 	}
 	lowestLoadSet = cands.candidates[0].sls
@@ -633,7 +667,8 @@ func sortTargetCandidateSetAndPick(
 	}
 	// INVARIANT: lowestLoad <= loadThreshold.
 	if lowestLoadSet == loadThreshold && ignoreLevel < ignoreHigherThanLoadThreshold {
-		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to equal to loadThreshold")
+		log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to equal to loadThreshold")
+		failLogger(noCandidateDueToLoad)
 		return 0
 	}
 	// INVARIANT: lowestLoad < loadThreshold ||
@@ -643,7 +678,8 @@ func sortTargetCandidateSetAndPick(
 	// [loadNoChange, loadThreshold), or loadThreshold && ignoreHigherThanLoadThreshold.
 	if lowestLoadSet >= loadNoChange &&
 		(!discardedCandsHadNoPendingChanges || ignoreLevel == ignoreLoadNoChangeAndHigher) {
-		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to loadNoChange")
+		log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to loadNoChange")
+		failLogger(noCandidateDueToLoad)
 		return 0
 	}
 	if lowestLoadSet != highestLoadSet {
@@ -653,8 +689,43 @@ func sortTargetCandidateSetAndPick(
 				cmp.Compare(a.StoreID, b.StoreID))
 		})
 	}
-	// Candidates are sorted by non-decreasing leasePreferenceIndex. Eliminate
-	// ones that have notMatchedLeasePreferenceIndex.
+	// Candidates are sorted by non-decreasing leasePreferenceIndex (lower is
+	// better). Eliminate ones that have notMatchedLeasePreferenceIndex (i.e.,
+	// candidates that don't match ANY lease preference). This filter only has an
+	// effect when the span config has lease preferences configured; otherwise all
+	// candidates have leasePreferenceIndex=0 (see matchedLeasePreferenceIndex).
+	//
+	// For lease transfers: This check is usually redundant because
+	// candidatesToMoveLease already filters candidates to those with
+	// leasePreferenceIndex <= the current leaseholder's index. However, if the
+	// current leaseholder matches NO preference (LPI =
+	// notMatchedLeasePreferenceIndex), then candidatesToMoveLease returns all
+	// voters (since all LPIs <= MaxInt32), and this filter becomes necessary to
+	// remove candidates that also match no preference.
+	//
+	// TODO(wenyihu6): Is this expected behavior? Another thought is that
+	// rebalancing should not need to improve lease preference satisfaction: we
+	// are here because the source is overloaded or wanting to shed leases for
+	// some reason. Doing that work without making the lease preference worse is
+	// sufficient. Improving the lease preference should be the job of the lease
+	// queue. If the current leaseholder matches no preference, perhaps we should
+	// allow transferring to any candidate (even those also matching no
+	// preference) rather than requiring candidates to match some preference.
+	//
+	// For replica transfers from the leaseholder: This is the only lease
+	// preference filtering applied. matchedLeasePreferenceIndex is called
+	// directly on candidates in rebalanceReplicas.
+	//
+	// Note: There's an asymmetry between lease transfers and replica transfers.
+	// Lease transfers enforce "don't make lease preference worse" (via
+	// candidatesToMoveLease filtering to LPI <= current). Replica transfers from
+	// the leaseholder only enforce "must match some preference" (via this
+	// filter), meaning a replica transfer could move the leaseholder's replica to
+	// a store with a worse lease preference (e.g., LPI=0 -> LPI=2). This is
+	// consistent with SMA behavior: SMA's rankedCandidateListForRebalancing (used
+	// by RebalanceTarget) doesn't consider lease preferences for replica
+	// transfers. The rationale is likely that the lease queue will fix any lease
+	// preference violations after the replica transfer completes.
 	j = 0
 	for _, cand := range cands.candidates {
 		if cand.leasePreferenceIndex == notMatchedLeasePreferenceIndex {
@@ -663,7 +734,8 @@ func sortTargetCandidateSetAndPick(
 		j++
 	}
 	if j == 0 {
-		log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to lease preference")
+		log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to lease preference")
+		failLogger(noCandidateDueToUnmatchedLeasePreference)
 		return 0
 	}
 	cands.candidates = cands.candidates[:j]
@@ -676,7 +748,8 @@ func sortTargetCandidateSetAndPick(
 		})
 		lowestOverloadedLoad := cands.candidates[0].dimSummary[overloadedDim]
 		if lowestOverloadedLoad >= loadNoChange {
-			log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to overloadedDim")
+			log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: no candidates due to overloadedDim")
+			failLogger(noCandidateDueToLoad)
 			return 0
 		}
 		j = 1
@@ -686,14 +759,15 @@ func sortTargetCandidateSetAndPick(
 			}
 			j++
 		}
+		if s := formatCandidatesLog(ctx, cands.candidates[j:], overloadedDim); s != "" {
+			log.KvDistribution.VEventf(ctx, 3, "discarding candidates due to overloadedDim: %s", s)
+		}
 		cands.candidates = cands.candidates[:j]
 	}
-	b.Reset()
-	for i := range cands.candidates {
-		fmt.Fprintf(&b, " s%v(%v)", cands.candidates[i].StoreID, cands.candidates[i].sls)
-	}
 	j = rng.Intn(j)
-	log.KvDistribution.VEventf(ctx, 2, "sortTargetCandidateSetAndPick: candidates:%s, picked s%v", b.String(), cands.candidates[j].StoreID)
+	if s := formatCandidatesLog(ctx, cands.candidates, overloadedDim); s != "" {
+		log.KvDistribution.VEventf(ctx, 3, "sortTargetCandidateSetAndPick: candidates:%s, picked s%v", s, cands.candidates[j].StoreID)
+	}
 	if ignoreLevel == ignoreLoadNoChangeAndHigher && cands.candidates[j].sls >= loadNoChange ||
 		ignoreLevel == ignoreLoadThresholdAndHigher && cands.candidates[j].sls >= loadThreshold ||
 		ignoreLevel == ignoreHigherThanLoadThreshold && cands.candidates[j].sls > loadThreshold {
@@ -703,8 +777,51 @@ func sortTargetCandidateSetAndPick(
 	return cands.candidates[j].StoreID
 }
 
-func (cs *clusterState) ensureAnalyzedConstraints(rstate *rangeState) {
+// formatCandidatesLog builds a redactable log string summarizing the given
+// candidates. Returns "" when verbose logging at level 3 is not enabled,
+// allowing callers to skip the log call entirely.
+func formatCandidatesLog(
+	ctx context.Context, candidates []candidateInfo, overloadedDim LoadDimension,
+) redact.RedactableString {
+	if !log.ExpensiveLogEnabled(ctx, 3) {
+		return ""
+	}
+	var buf redact.StringBuilder
+	for _, c := range candidates {
+		if overloadedDim != NumLoadDimensions {
+			buf.Printf(
+				" s%v(SLS:%v, overloadedDimLoadSummary:%v)",
+				c.StoreID, c.sls, c.dimSummary[overloadedDim],
+			)
+		} else {
+			buf.Printf(" s%v(SLS:%v)", c.StoreID, c.storeLoadSummary)
+		}
+	}
+	if len(candidates) > 0 {
+		buf.Printf(", overloadedDim:%v", overloadedDim)
+	}
+	return buf.RedactableString()
+}
+
+// ensureAnalyzedConstraints ensures that the constraints field of rangeState is
+// populated. It uses rangeState.{replicas,conf} as inputs to the computation.
+//
+// rstate.conf may be nil if basic span config normalization failed (e.g.,
+// invalid config). In this case, constraint analysis is skipped and
+// rstate.constraints remains nil. In addition, rstate.constraints may also
+// remain nil after the call if there is no leaseholder found. In such cases,
+// the range should be skipped from rebalancing.
+//
+// NB: Caller is responsible for calling clearAnalyzedConstraints when rstate or
+// the rstate.constraints is no longer needed.
+func (cs *clusterState) ensureAnalyzedConstraints(ctx context.Context, rstate *rangeState) {
 	if rstate.constraints != nil {
+		return
+	}
+	// Skip the range if the configuration is invalid for constraint analysis.
+	if rstate.conf == nil {
+		log.KvDistribution.Warning(
+			ctx, "no span config due to normalization error, skipping constraint analysis")
 		return
 	}
 	// Populate the constraints.
@@ -727,9 +844,16 @@ func (cs *clusterState) ensureAnalyzedConstraints(rstate *rangeState) {
 		// that there is a new leaseholder (and thus should drop this range).
 		// However, even in this case, replica.IsLeaseholder should still be there
 		// based on to the stale state, so this should still be impossible to hit.
-		panic(errors.AssertionFailedf("no leaseholders found in %v", rstate.replicas))
+		log.KvDistribution.Warningf(ctx,
+			"mma: no leaseholders found in %v, skipping constraint analysis", rstate.replicas)
+		return
 	}
-	rac.finishInit(rstate.conf, cs.constraintMatcher, leaseholder)
+	if err := rac.finishInit(rstate.conf, cs.constraintMatcher, leaseholder); err != nil {
+		releaseRangeAnalyzedConstraints(rac)
+		log.KvDistribution.Warningf(ctx,
+			"mma: error finishing constraint analysis: %v, skipping range", err)
+		return
+	}
 	rstate.constraints = rac
 }
 
@@ -764,10 +888,10 @@ func (cs *clusterState) ensureAnalyzedConstraints(rstate *rangeState) {
 // - Need diversity change for each candidate.
 //
 // The first 3 bullets are encapsulated in the helper function
-// computeCandidatesForRange. It works for both replica additions and
+// computeCandidatesForReplicaTransfer. It works for both replica additions and
 // rebalancing.
 //
-// For the last bullet (diversity), the caller of computeCandidatesForRange
+// For the last bullet (diversity), the caller of computeCandidatesForReplicaTransfer
 // needs to populate candidateInfo.diversityScore for each candidate in
 // candidateSet. It does so via diversityScoringMemo. Then the (loadSummary,
 // diversityScore) pair can be used to order candidates for attempts to add.
@@ -795,37 +919,123 @@ func (cs *clusterState) ensureAnalyzedConstraints(rstate *rangeState) {
 
 // loadSheddingStore is only specified if this candidate computation is
 // happening because of overload.
-func (cs *clusterState) computeCandidatesForRange(
+//
+// postMeansExclusions are filtered post-means: their load is included in the
+// mean (they're viable locations in principle) but they're not candidates for
+// this specific transfer (the classic case: already have a replica).
+func (cs *clusterState) computeCandidatesForReplicaTransfer(
 	ctx context.Context,
-	expr constraintsDisj,
-	storesToExclude storeSet,
+	conj constraintsConj,
+	existingReplicas storeSet,
+	postMeansExclusions storeSet,
 	loadSheddingStore roachpb.StoreID,
+	passObs *rebalancingPassMetricsAndLogger,
 ) (_ candidateSet, sheddingSLS storeLoadSummary) {
-	means := cs.meansMemo.getMeans(expr)
-	if loadSheddingStore > 0 {
-		sheddingSS := cs.stores[loadSheddingStore]
-		sheddingSLS = cs.meansMemo.getStoreLoadSummary(ctx, means, loadSheddingStore, sheddingSS.loadSeqNum)
-		if sheddingSLS.sls <= loadNoChange && sheddingSLS.nls <= loadNoChange {
-			// In this set of stores, this store no longer looks overloaded.
-			return candidateSet{}, sheddingSLS
-		}
+	// Start with computing the stores (and corresponding means) that satisfy
+	// the constraint expression. If we don't see a need to filter out any of
+	// these stores before computing the means, we can use it verbatim, otherwise
+	// we will recompute the means again below.
+	cs.scratchDisj[0] = conj
+	means := cs.meansMemo.getMeans(cs.scratchDisj[:1])
+
+	// Pre-means filtering: copy to scratch, then filter in place.
+	// Filter out stores that have a non-OK replica disposition.
+	cs.scratchStoreSet = append(cs.scratchStoreSet[:0], means.stores...)
+	filteredStores := retainReadyReplicaTargetStoresOnly(ctx, cs.scratchStoreSet, cs.stores, existingReplicas)
+
+	// Determine which means to use.
+	//
+	// TODO(tbg): unit testing.
+	var effectiveMeans *meansLoad
+	if len(filteredStores) == len(means.stores) {
+		// Common case: nothing was filtered, use cached means.
+		effectiveMeans = &means.meansLoad
+	} else if len(filteredStores) == 0 {
+		// No viable candidates at all.
+		passObs.replicaShed(noCandidate)
+		return candidateSet{}, sheddingSLS
+	} else {
+		// Some stores were filtered; recompute means over filtered set.
+		cs.scratchMeans = computeMeansForStoreSet(
+			cs, filteredStores, cs.meansMemo.scratchNodes, cs.meansMemo.scratchStores)
+		effectiveMeans = &cs.scratchMeans
+		log.KvDistribution.VEventf(ctx, 3,
+			"pre-means filtered %d stores → remaining %v, means: store=%v node=%v",
+			len(means.stores)-len(filteredStores), filteredStores,
+			effectiveMeans.storeLoad, effectiveMeans.nodeLoad)
 	}
-	// We only filter out stores that are not fdOK. The rest of the filtering
-	// happens later.
+
+	sheddingSLS = cs.computeLoadSummary(ctx, loadSheddingStore, &effectiveMeans.storeLoad, &effectiveMeans.nodeLoad)
+	if sheddingSLS.sls <= loadNoChange {
+		// In this set of stores, this store no longer looks overloaded. Note that
+		// we don't consider nls here: if nls is high but sls is low, it means other
+		// stores on the node are causing node-level overload, not this store.
+		passObs.replicaShed(notOverloaded)
+		return candidateSet{}, sheddingSLS
+	}
+
 	var cset candidateSet
-	for _, storeID := range means.stores {
-		if storesToExclude.contains(storeID) {
+	for _, storeID := range filteredStores {
+		if postMeansExclusions.contains(storeID) {
+			// This store's load is included in the mean, but it's not a viable
+			// target for this specific transfer (e.g. it already has a replica).
 			continue
 		}
-		ss := cs.stores[storeID]
-		csls := cs.meansMemo.getStoreLoadSummary(ctx, means, storeID, ss.loadSeqNum)
+		csls := cs.computeLoadSummary(ctx, storeID, &effectiveMeans.storeLoad, &effectiveMeans.nodeLoad)
 		cset.candidates = append(cset.candidates, candidateInfo{
 			StoreID:          storeID,
 			storeLoadSummary: csls,
 		})
 	}
-	cset.means = &means.meansLoad
+	cset.means = effectiveMeans
+	if len(cset.candidates) == 0 {
+		passObs.replicaShed(noCandidate)
+	}
 	return cset, sheddingSLS
+}
+
+// retainReadyReplicaTargetStoresOnly filters the input set to only those stores
+// that are ready to accept a replica. A store is not ready if it has a non-OK
+// replica disposition (which also takes disk utilization into account via
+// updateStoreStatuses).
+//
+// Stores already housing a replica (on top of being in the input storeSet)
+// bypass this disposition check since they already have the replica - its load
+// should be in the mean regardless of its disposition, as we'll pick candidates
+// based on improving clustering around the mean.
+//
+// The input storeSet is mutated (and returned as the result).
+func retainReadyReplicaTargetStoresOnly(
+	ctx context.Context,
+	in storeSet,
+	stores map[roachpb.StoreID]*storeState,
+	existingReplicas storeSet,
+) storeSet {
+	out := in[:0]
+	for _, storeID := range in {
+		if existingReplicas.contains(storeID) {
+			// Stores on existing replicas already have the load and we want to
+			// include them in the mean, even if they are not accepting new replicas
+			// or even try to shed.
+			//
+			// TODO(tbg): health might play into this, though. For example, when
+			// a store is dead, whatever load we have from it is stale and we
+			// are better off not including it. For now, we ignore this problem
+			// because the mma only handles rebalancing, whereas a replica on a
+			// dead store would be removed by the single-metric allocator after
+			// the TimeUntilStoreDead and so would disappear from our view.
+			out = append(out, storeID)
+			continue
+		}
+		ss := stores[storeID]
+		switch {
+		case ss.status.Disposition.Replica != ReplicaDispositionOK:
+			log.KvDistribution.VEventf(ctx, 3, "skipping s%d for replica transfer: replica disposition %v (health %v)", storeID, ss.status.Disposition.Replica, ss.status.Health)
+		default:
+			out = append(out, storeID)
+		}
+	}
+	return out
 }
 
 // Diversity scoring is very amenable to caching, since the set of unique

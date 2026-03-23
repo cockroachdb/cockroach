@@ -76,7 +76,7 @@ verify_docker_image(){
   build_type=$(grep "^Build Type:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
   sha=$(grep "^Build Commit ID:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
   build_tag=$(grep "^Build Tag:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
-  fips_enabled=$(grep '^FIPS enabled:\s*true' <<< "$output")
+  fips_enabled=$(grep '^FIPS enabled:\s*true' <<< "$output" || true)
 
   # Build Type should always be "release"
   if [ "$build_type" != "release" ]; then
@@ -126,6 +126,28 @@ function is_release_or_master_build(){
   #                                             ^ "v" is optional to match main release branches, e.g. release-23.2
   #                                                ^ calver prefix, e.g. 25.1
   # We don't strictly match the suffix to allow different ones, e.g. "rc" or have none.
+}
+
+# create_and_push_multi_arch_manifest creates a multi-architecture manifest
+# (image index) and pushes it to the registry. Uses `docker buildx imagetools
+# create` which handles both plain manifests and OCI image indexes as sources
+# (newer Docker versions produce the latter even for single-arch builds).
+# Falls back to `docker manifest create` for environments without buildx.
+#
+# Usage: create_and_push_multi_arch_manifest TARGET SOURCE1 SOURCE2 ...
+create_and_push_multi_arch_manifest() {
+  local target=$1
+  shift
+  local sources=("$@")
+
+  if docker buildx imagetools create -t "$target" "${sources[@]}"; then
+    return
+  fi
+
+  echo "Falling back to docker manifest create..."
+  docker manifest rm "$target" || :
+  docker manifest create "$target" "${sources[@]}"
+  docker manifest push "$target"
 }
 
 # Compare the passed version to the latest published version. Returns 0 if the

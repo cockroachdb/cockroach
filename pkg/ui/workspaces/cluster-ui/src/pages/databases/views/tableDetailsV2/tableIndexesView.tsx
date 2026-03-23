@@ -159,6 +159,7 @@ export const TableIndexesView: React.FC<Props> = ({
         loading={isLoading}
         columns={filteredCols}
         dataSource={tableIndexRows}
+        dataTest="table-indexes-table"
       />
     </div>
   );

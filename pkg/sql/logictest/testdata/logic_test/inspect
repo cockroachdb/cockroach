@@ -2,7 +2,7 @@
 # non-nil txn, which is not available in job-based flows like INSPECT. Using
 # them causes a nil pointer panic in the span resolver setup.
 #
-# LogicTest: !fakedist !fakedist-vec-off !fakedist-disk !local-mixed-25.3
+# LogicTest: !fakedist !fakedist-vec-off !fakedist-disk
 # knob-opt: allow-unsafe
 
 
@@ -20,6 +20,33 @@ WHERE job_type = 'INSPECT'
 ORDER BY id DESC
 LIMIT 1
 
+# Helper view equivalent to `SHOW INSPECT ERRORS WITH DETAILS` but omitting
+# the non-deterministic aost and job_id columns.
+statement ok
+CREATE VIEW last_inspect_errors AS
+SELECT
+  ie.error_type,
+  COALESCE(t.database_name, '<unknown>') AS database_name,
+  COALESCE(t.schema_name, '<unknown>') AS schema_name,
+  COALESCE(t.object_name, '<unknown>') AS table_name,
+  ie.primary_key,
+  jsonb_pretty(ie.details) AS details
+FROM crdb_internal.cluster_inspect_errors ie
+LEFT JOIN crdb_internal.fully_qualified_names t ON ie.id = t.object_id
+WHERE ie.job_id = (
+  SELECT id
+  FROM crdb_internal.system_jobs
+  WHERE job_type = 'INSPECT'
+  AND status IN ('failed', 'succeeded', 'canceled', 'revert-failed')
+  ORDER BY id DESC
+  LIMIT 1
+)
+ORDER BY ie.error_type, database_name, schema_name, table_name, ie.primary_key
+LIMIT 10000
+
+statement error pq: "last_inspect_job" is not a table
+INSPECT TABLE last_inspect_job;
+
 # Make job adoption faster. This is needed to speed up DETACHED jobs.
 statement ok
 SET CLUSTER SETTING jobs.registry.interval.adopt = '500ms';
@@ -29,15 +56,6 @@ CREATE TABLE foo (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
 
 let $foo_created_ts
 SELECT now()
-
-statement error pq: INSPECT is an experimental feature and is disabled by default
-INSPECT TABLE foo;
-
-statement error pq: INSPECT is an experimental feature and is disabled by default
-INSPECT DATABASE test;
-
-statement ok
-SET enable_inspect_command = true;
 
 subtest transaction_behavior
 
@@ -217,9 +235,6 @@ CREATE USER testuser2;
 
 user testuser2
 
-statement ok
-SET enable_inspect_command = true;
-
 statement error pq: user testuser2 does not have INSPECT privilege
 INSPECT TABLE foo;
 
@@ -232,9 +247,6 @@ statement ok
 GRANT SYSTEM INSPECT TO testuser2;
 
 user testuser2
-
-statement ok
-SET enable_inspect_command = true;
 
 statement ok
 INSPECT TABLE foo;
@@ -276,25 +288,32 @@ SELECT * FROM last_inspect_job;
 ----
 succeeded  2
 
-statement error pq: index "t2_pkey" on table "t2" is not supported for index consistency checking
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "t2_pkey" on table "t2" \(cannot check primary index consistency against itself; uniqueness: check only supported on REGIONAL BY ROW tables\)
 INSPECT TABLE t2 WITH OPTIONS INDEX (t2@t2_pkey);
 
-statement error pq: index "hash_idx" on table "t2" is not supported for index consistency checking
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "hash_idx" on table "t2" \(hash-sharded index; uniqueness: check only valid on primary index\)
 INSPECT TABLE t2 WITH OPTIONS INDEX (hash_idx);
 
-statement error pq: index "expr_idx" on table "t2" is not supported for index consistency checking
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "expr_idx" on table "t2" \(expression index; uniqueness: check only valid on primary index\)
 INSPECT TABLE t2 WITH OPTIONS INDEX (expr_idx);
 
-statement error pq: index "vector_idx" on table "t2" is not supported for index consistency checking
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "vector_idx" on table "t2" \(VECTOR; uniqueness: check only valid on primary index\)
 INSPECT TABLE t2 WITH OPTIONS INDEX (vector_idx);
 
-statement error pq: index "partial_idx" on table "t2" is not supported for index consistency checking
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "partial_idx" on table "t2" \(partial index; uniqueness: check only valid on primary index\)
 INSPECT TABLE t2 WITH OPTIONS INDEX (partial_idx);
 
-statement error pq: index "inverted_idx" on table "t2" is not supported for index consistency checking
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "inverted_idx" on table "t2" \(INVERTED; uniqueness: check only valid on primary index\)
 INSPECT TABLE t2 WITH OPTIONS INDEX (inverted_idx);
 
 # Confirm no jobs were run.
+skipif config local-mixed-25.4 local-mixed-26.1
 query TI
 SELECT * FROM last_inspect_job;
 ----
@@ -333,7 +352,8 @@ SELECT * FROM last_inspect_job;
 succeeded  1
 
 # Explicitly specifying the virtual column index should fail.
-statement error pq: index "idx_c2" on table "t_virtual" is not supported for index consistency checking
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "idx_c2" on table "t_virtual" \(index on virtual column; uniqueness: check only valid on primary index\)
 INSPECT TABLE t_virtual WITH OPTIONS INDEX (idx_c2);
 
 # Explicitly specifying the regular index should succeed.
@@ -369,7 +389,8 @@ SELECT * FROM last_inspect_job;
 succeeded  1
 
 # Explicitly specifying the index with virtual columns should fail.
-statement error pq: index "idx_virtual_combo" on table "t_multi_virtual" is not supported for index consistency checking
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "idx_virtual_combo" on table "t_multi_virtual" \(index on virtual column; uniqueness: check only valid on primary index\)
 INSPECT TABLE t_multi_virtual WITH OPTIONS INDEX (idx_virtual_combo);
 
 statement ok
@@ -387,9 +408,6 @@ CREATE DATABASE dbfoo;
 CREATE TABLE dbfoo.public.t2 (c1 INT, INDEX idx_c1 (c1));
 CREATE TABLE dbfoo.public.t1 (c1 INT, INDEX idx_c1 (c1));
 
-
-statement ok
-SET enable_inspect_command = true;
 
 statement ok
 INSPECT DATABASE dbfoo WITH OPTIONS INDEX (t1@idx_c1);
@@ -451,9 +469,6 @@ CREATE TABLE dbfoo.public.t1 (c1 INT, INDEX idx_c1 (c1));
 CREATE TABLE dbfoo.s1.t1 (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
 CREATE TABLE dbbar.public.t1 (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
 CREATE TABLE dbbar.public.t2 (c1 INT, c2 INT, INDEX idx_c1 (c1), INDEX idx_c2 (c2));
-
-statement ok
-SET enable_inspect_command = true;
 
 subtest all_forms
 
@@ -603,6 +618,11 @@ INSERT INTO tsvector_tbl VALUES
   (2, 20, 'foo bar'::TSVECTOR);
 
 # First verify that datums_to_bytes does not support TSVECTOR
+skipif config local-vec-off
+statement error pgcode XX000 pq: internal error: unable to encode table key: \*tree.DTSVector
+SELECT crdb_internal.datums_to_bytes(tsv) FROM tsvector_tbl LIMIT 1;
+
+onlyif config local-vec-off
 statement error pq: illegal argument 0 of type tsvector
 SELECT crdb_internal.datums_to_bytes(tsv) FROM tsvector_tbl LIMIT 1;
 
@@ -630,6 +650,11 @@ INSERT INTO tsquery_tbl VALUES
   (2, 20, 'another | query'::TSQUERY);
 
 # First verify that datums_to_bytes does not support TSQUERY
+skipif config local-vec-off
+statement error pgcode XX000 pq: internal error: unable to encode table key: \*tree.DTSQuery
+SELECT crdb_internal.datums_to_bytes(tsq) FROM tsquery_tbl LIMIT 1;
+
+onlyif config local-vec-off
 statement error pq: illegal argument 0 of type tsquery
 SELECT crdb_internal.datums_to_bytes(tsq) FROM tsquery_tbl LIMIT 1;
 
@@ -657,6 +682,11 @@ INSERT INTO pgvector_tbl VALUES
   (2, 20, '[4.0, 5.0, 6.0]'::VECTOR(3));
 
 # First verify that datums_to_bytes does not support VECTOR
+skipif config local-vec-off
+statement error pgcode XX000 pq: internal error: unable to encode table key: \*tree.DPGVector
+SELECT crdb_internal.datums_to_bytes(vec) FROM pgvector_tbl LIMIT 1;
+
+onlyif config local-vec-off
 statement error pq: illegal argument 0 of type vector
 SELECT crdb_internal.datums_to_bytes(vec) FROM pgvector_tbl LIMIT 1;
 
@@ -717,5 +747,169 @@ DROP TABLE pgvector_tbl;
 
 statement ok
 DROP TABLE multi_type_tbl;
+
+subtest end
+
+subtest uniqueness_check
+
+statement ok
+CREATE TYPE test.region_enum AS ENUM ('eu-central1', 'us-east1', 'us-west1', 'us-west4');
+CREATE TABLE uniqueness_check (
+  crdb_region test.region_enum NOT NULL,
+  id INT64 DEFAULT unordered_unique_rowid(),
+  data TEXT,
+  PRIMARY KEY (crdb_region, id)
+);
+
+statement ok
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-east1', 100, 'foo');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-west1', 100, 'biz');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-west4', 100, 'toto');
+
+statement ok
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-east1', 200, 'bar');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-west1', 200, 'baz');
+
+statement ok
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-west1', 300, 'titi');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-west4', 300, 'tata');
+
+onlyif config local
+statement error pq: INSPECT found inconsistencies
+INSPECT TABLE uniqueness_check WITH OPTIONS INDEX (uniqueness_check_pkey);
+
+onlyif config local
+query TI retry
+SELECT * FROM last_inspect_job
+----
+failed  1
+
+statement ok
+DROP TABLE uniqueness_check;
+
+subtest complex_keys
+
+# Build the table
+
+statement ok
+CREATE TABLE uniqueness_check_complex (
+  crdb_region test.region_enum NOT NULL,
+  filler TEXT,
+  id INT64 DEFAULT unordered_unique_rowid(),
+  data TEXT,
+  PRIMARY KEY (crdb_region, filler, id)
+);
+
+statement ok
+INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us-east1', 'filler1', 100, 'foo');
+INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us-west1', 'filler1', 100, 'biz');
+INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us-west4', 'filler1', 100, 'toto');
+
+statement ok
+INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us-east1', 'filler1', 200, 'bar');
+INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us-west1', 'filler1', 200, 'baz');
+
+statement ok
+INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us-west1', 'filler1', 300, 'titi');
+INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us-west4', 'filler1', 300, 'tata');
+
+# Run INSPECT which will not use the uniqueness check because it's a complex key.
+
+statement ok
+INSPECT TABLE uniqueness_check_complex;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: no supported checks for index "uniqueness_check_complex_pkey" on table "uniqueness_check_complex" \(cannot check primary index consistency against itself; uniqueness: complex key layout requires the cluster setting to opt in to \(expensive\) validation\)
+INSPECT TABLE uniqueness_check_complex WITH OPTIONS INDEX (uniqueness_check_complex_pkey);
+
+# Enable and run again to see the unique validations.
+
+statement ok
+SET CLUSTER SETTING sql.inspect.uniqueness_check.complex_keys.enabled = true;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: INSPECT found inconsistencies
+INSPECT TABLE uniqueness_check_complex;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TI retry
+SELECT * FROM last_inspect_job
+----
+failed  1
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TTTTTT nosort
+SELECT * FROM last_inspect_errors
+----
+duplicate_unique_value  test  public  uniqueness_check_complex  e'(\'us-east1\', \'filler1\', 100)'  {
+                                                                                                         "index_name": "uniqueness_check_complex_pkey",
+                                                                                                         "remote_regions": [
+                                                                                                             "us-west1",
+                                                                                                             "us-west4"
+                                                                                                         ]
+                                                                                                     }
+duplicate_unique_value  test  public  uniqueness_check_complex  e'(\'us-east1\', \'filler1\', 200)'  {
+                                                                                                         "index_name": "uniqueness_check_complex_pkey",
+                                                                                                         "remote_regions": [
+                                                                                                             "us-west1"
+                                                                                                         ]
+                                                                                                     }
+duplicate_unique_value  test  public  uniqueness_check_complex  e'(\'us-west1\', \'filler1\', 100)'  {
+                                                                                                         "index_name": "uniqueness_check_complex_pkey",
+                                                                                                         "remote_regions": [
+                                                                                                             "us-west4"
+                                                                                                         ]
+                                                                                                     }
+duplicate_unique_value  test  public  uniqueness_check_complex  e'(\'us-west1\', \'filler1\', 300)'  {
+                                                                                                         "index_name": "uniqueness_check_complex_pkey",
+                                                                                                         "remote_regions": [
+                                                                                                             "us-west4"
+                                                                                                         ]
+                                                                                                     }
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: INSPECT found inconsistencies
+INSPECT TABLE uniqueness_check_complex WITH OPTIONS INDEX (uniqueness_check_complex_pkey);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TI retry
+SELECT * FROM last_inspect_job
+----
+failed  1
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TTTTTT nosort
+SELECT * FROM last_inspect_errors
+----
+duplicate_unique_value  test  public  uniqueness_check_complex  e'(\'us-east1\', \'filler1\', 100)'  {
+                                                                                                         "index_name": "uniqueness_check_complex_pkey",
+                                                                                                         "remote_regions": [
+                                                                                                             "us-west1",
+                                                                                                             "us-west4"
+                                                                                                         ]
+                                                                                                     }
+duplicate_unique_value  test  public  uniqueness_check_complex  e'(\'us-east1\', \'filler1\', 200)'  {
+                                                                                                         "index_name": "uniqueness_check_complex_pkey",
+                                                                                                         "remote_regions": [
+                                                                                                             "us-west1"
+                                                                                                         ]
+                                                                                                     }
+duplicate_unique_value  test  public  uniqueness_check_complex  e'(\'us-west1\', \'filler1\', 100)'  {
+                                                                                                         "index_name": "uniqueness_check_complex_pkey",
+                                                                                                         "remote_regions": [
+                                                                                                             "us-west4"
+                                                                                                         ]
+                                                                                                     }
+duplicate_unique_value  test  public  uniqueness_check_complex  e'(\'us-west1\', \'filler1\', 300)'  {
+                                                                                                         "index_name": "uniqueness_check_complex_pkey",
+                                                                                                         "remote_regions": [
+                                                                                                             "us-west4"
+                                                                                                         ]
+                                                                                                     }
+
+statement ok
+DROP TABLE uniqueness_check_complex;
+
+subtest end
 
 subtest end

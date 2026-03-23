@@ -46,7 +46,7 @@ type state struct {
 	stores                  map[StoreID]*store
 	load                    map[RangeID]ReplicaLoad
 	loadsplits              map[StoreID]LoadSplitter
-	nodeLiveness            MockNodeLiveness
+	statusTracker           StatusTracker
 	capacityChangeListeners []CapacityChangeListener
 	newCapacityListeners    []NewCapacityListener
 	configChangeListeners   []ConfigChangeListener
@@ -81,9 +81,11 @@ func newState(settings *config.SimulationSettings) *state {
 		usageInfo:         newClusterUsageInfo(),
 		settings:          settings,
 	}
-	s.nodeLiveness = MockNodeLiveness{
-		clock:     hlc.NewClockForTesting(s.clock),
-		statusMap: map[NodeID]livenesspb.NodeLivenessStatus{},
+	s.statusTracker = StatusTracker{
+		clock:          hlc.NewClockForTesting(s.clock),
+		storeStatusMap: map[StoreID]StoreStatus{},
+		nodeStatusMap:  map[NodeID]NodeStatus{},
+		storeToNode:    map[StoreID]NodeID{},
 	}
 
 	s.load = map[RangeID]ReplicaLoad{FirstRangeID: NewReplicaLoadCounter(s.clock)}
@@ -257,6 +259,7 @@ func (s *state) updateStoreCapacity(storeID StoreID) {
 			capacity = mergeOverride(capacity, override)
 		}
 		store.desc.Capacity = capacity
+		store.desc.NodeCapacity = s.NodeCapacity(store.nodeID)
 		s.publishNewCapacityEvent(capacity, storeID)
 	}
 }
@@ -299,10 +302,12 @@ func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 		}
 	}
 
-	// TODO(kvoli): parameterize the logical to actual used storage bytes. At the
-	// moment we use 1.25 as a rough estimate.
-	used := int64(float64(capacity.LogicalBytes) * 1.25)
-	available := capacity.Capacity - used
+	physical := s.nodes[store.nodeID].physical
+	used := int64(float64(capacity.LogicalBytes) * physical.SpaceAmplification)
+	available := capacity.Capacity - used - physical.ReservedDiskBytes
+	if available < 0 {
+		available = 0
+	}
 	capacity.Used = used
 	capacity.Available = available
 	return capacity
@@ -430,13 +435,14 @@ func (s *state) AddNode(nodeCPUCapacity int64, locality roachpb.Locality) Node {
 	node := &node{
 		nodeID:      nodeID,
 		desc:        roachpb.NodeDescriptor{NodeID: roachpb.NodeID(nodeID)},
+		physical:    DefaultNodePhysicalCharacteristics(),
 		stores:      []StoreID{},
 		mmAllocator: mmAllocator,
 		storepool:   sp,
 		as:          mmaintegration.NewAllocatorSync(sp, mmAllocator, s.settings.ST, nil),
 	}
 	s.nodes[nodeID] = node
-	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
+	s.SetNodeStatus(nodeID, NodeStatus{Membership: livenesspb.MembershipStatus_ACTIVE})
 	s.SetNodeLocality(nodeID, locality)
 	s.SetNodeCPURateCapacity(nodeID, nodeCPUCapacity)
 	return node
@@ -462,9 +468,22 @@ func (s *state) SetNodeCPURateCapacity(nodeID NodeID, cpuRateCapacity int64) {
 	node.cpuRateCapacity = cpuRateCapacity
 }
 
-// NodeCapacity returns the capacity of the Node with ID NodeID. Note that it is
-// currently unused.
-// TODO(wenyihu6): MMA integration should later use it.
+func (s *state) SetNodePhysicalCharacteristics(nodeID NodeID, chars NodePhysicalCharacteristics) {
+	node, ok := s.nodes[nodeID]
+	if !ok {
+		panic(fmt.Sprintf("programming error: node with ID %d doesn't exist", nodeID))
+	}
+	node.physical = chars
+}
+
+// NodeCapacity returns the capacity of the Node with ID NodeID. Used by
+// updateStoreCapacity to populate StoreDescriptor.NodeCapacity, which feeds
+// into MakeStoreLoadMsg and ComputeAmplificationFactors.
+//
+// NodeCPURateUsage is inflated by cpuOverheadMultiplier to simulate the gap
+// between OS-level CPU (which includes GC, goroutine overhead, etc.) and the
+// directly-tracked per-replica CPU (StoresCPURate). In real clusters this
+// ratio is typically 1.0-3.0.
 func (s *state) NodeCapacity(nodeID NodeID) roachpb.NodeCapacity {
 	node := s.nodes[nodeID]
 	stores := node.Stores()
@@ -474,10 +493,11 @@ func (s *state) NodeCapacity(nodeID NodeID) roachpb.NodeCapacity {
 		cpuRate += int(capacity.CPUPerSecond)
 	}
 
+	nodeCPURateUsage := int64(float64(cpuRate) * node.physical.CPUOverheadMultiplier)
 	return roachpb.NodeCapacity{
 		StoresCPURate:       int64(cpuRate),
 		NumStores:           int32(len(stores)),
-		NodeCPURateUsage:    int64(cpuRate),
+		NodeCPURateUsage:    nodeCPURateUsage,
 		NodeCPURateCapacity: node.cpuRateCapacity,
 	}
 }
@@ -586,6 +606,10 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 	// Commit the new store to state.
 	node.stores = append(node.stores, storeID)
 	s.stores[storeID] = store
+
+	// Register the store with the liveness tracker, associating
+	// this store with its node.
+	s.statusTracker.registerStore(storeID, nodeID)
 
 	// Add a range load splitter for this store.
 	s.loadsplits[storeID] = NewSplitDecider(s.settings)
@@ -729,6 +753,11 @@ func (s *state) removeReplica(rangeID RangeID, storeID StoreID) bool {
 func (s *state) SetSpanConfigForRange(rangeID RangeID, spanConfig *roachpb.SpanConfig) bool {
 	if rng, ok := s.ranges.rangeMap[rangeID]; ok {
 		rng.config = spanConfig
+		// Invalidate the MMA span config status for all replicas of this range,
+		// so that the new span config will be sent to MMA on the next tick.
+		for _, repl := range rng.replicas {
+			repl.mmaSpanConfigIsUpToDate = false
+		}
 		return true
 	}
 	return false
@@ -994,7 +1023,10 @@ func (s *state) replaceLeaseHolder(rangeID RangeID, storeID, oldStoreID StoreID)
 
 func (s *state) setLeaseholder(rangeID RangeID, storeID StoreID) {
 	rng := s.ranges.rangeMap[rangeID]
-	rng.replicas[storeID].holdsLease = true
+	repl := rng.replicas[storeID]
+	repl.holdsLease = true
+	// When a replica acquires the lease, invalidate the MMA span config status.
+	repl.mmaSpanConfigIsUpToDate = false
 	replicaID := s.stores[storeID].replicas[rangeID]
 	rng.leaseholder = replicaID
 }
@@ -1177,10 +1209,45 @@ func (s *state) NextReplicasFn(storeID StoreID) func() []Replica {
 	return nextReplFn
 }
 
-// SetNodeLiveness sets the liveness status of the node with ID NodeID to be
-// the status given.
-func (s *state) SetNodeLiveness(nodeID NodeID, status livenesspb.NodeLivenessStatus) {
-	s.nodeLiveness.statusMap[nodeID] = status
+// SetStoreStatus sets the liveness for a store.
+func (s *state) SetStoreStatus(storeID StoreID, status StoreStatus) {
+	// NB: the store->node map entry was created when the store
+	// was created, so we don't need to create it here.
+	s.statusTracker.storeStatusMap[storeID] = status
+}
+
+// StoreStatus returns the liveness status for a store.
+func (s *state) StoreStatus(storeID StoreID) StoreStatus {
+	return s.statusTracker.storeStatusMap[storeID]
+}
+
+// SetNodeStatus sets the membership and draining signals for a node.
+func (s *state) SetNodeStatus(nodeID NodeID, status NodeStatus) {
+	s.statusTracker.nodeStatusMap[nodeID] = status
+}
+
+// NodeStatus returns the membership and draining signals for a node.
+func (s *state) NodeStatus(nodeID NodeID) NodeStatus {
+	return s.statusTracker.nodeStatusMap[nodeID]
+}
+
+// SetAllStoresLiveness sets the liveness for all stores on a node at once.
+func (s *state) SetAllStoresLiveness(nodeID NodeID, liveness LivenessState) {
+	node, ok := s.nodes[nodeID]
+	if !ok {
+		return
+	}
+	for _, storeID := range node.stores {
+		s.statusTracker.storeStatusMap[storeID] = StoreStatus{Liveness: liveness}
+	}
+}
+
+// NodeLiveness returns the aggregated liveness for a node, which is
+// the "worst" state. In effect, if one store is doing poorly, we
+// report this node as doing as poorly. This is needed for the single-
+// metric allocator, which thinks about liveness at the node level.
+func (s *state) NodeLiveness(nodeID NodeID) LivenessState {
+	return s.statusTracker.worstLivenessForStoresOnNode(nodeID)
 }
 
 // NodeLivenessFn returns a function, that when called will return the
@@ -1188,23 +1255,19 @@ func (s *state) SetNodeLiveness(nodeID NodeID, status livenesspb.NodeLivenessSta
 // TODO(kvoli): Find a better home for this method, required by the storepool.
 func (s *state) NodeLivenessFn() storepool.NodeLivenessFunc {
 	return func(nid roachpb.NodeID) livenesspb.NodeLivenessStatus {
-		return s.nodeLiveness.statusMap[NodeID(nid)]
+		return s.statusTracker.convertToNodeVitality(NodeID(nid), s.statusTracker.clock.Now()).LivenessStatus()
 	}
 }
 
 // NodeCountFn returns a function, that when called will return the current
 // number of nodes that exist in this state.
 // TODO(kvoli): Find a better home for this method, required by the storepool.
-// TODO(wenyihu6): introduce the concept of membership separated from the
-// liveness map.
 func (s *state) NodeCountFn() storepool.NodeCountFunc {
 	return func() int {
 		count := 0
-		for _, status := range s.nodeLiveness.statusMap {
-			// Nodes with a liveness status other than decommissioned or
-			// decommissioning are considered active members (see
-			// liveness.MembershipStatus).
-			if status != livenesspb.NodeLivenessStatus_DECOMMISSIONED && status != livenesspb.NodeLivenessStatus_DECOMMISSIONING {
+		for _, ns := range s.statusTracker.nodeStatusMap {
+			// Only nodes with ACTIVE membership are counted.
+			if ns.Membership.Active() {
 				count++
 			}
 		}
@@ -1316,19 +1379,24 @@ func (s *state) ComputeSplitKey(
 	panic("not implemented")
 }
 
+// ForEachOverlappingSpanConfig is part of the spanconfig.StoreReader interface.
+func (s *state) ForEachOverlappingSpanConfig(
+	context.Context, roachpb.Span, func(roachpb.Span, roachpb.SpanConfig) error,
+) error {
+	// We don't need to implement this method for conformance reports.
+	panic("not implemented")
+}
+
 // GetSpanConfigForKey is added for the spanconfig.StoreReader interface, required for
 // SpanConfigConformanceReport.
 func (s *state) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
+) (roachpb.SpanConfig, error) {
 	rng := s.rangeFor(ToKey(key.AsRawKey()))
 	if rng == nil {
 		panic(fmt.Sprintf("programming error: range for key %s doesn't exist", key))
 	}
-	return *rng.config, roachpb.Span{
-		Key:    rng.startKey.ToRKey().AsRawKey(),
-		EndKey: rng.endKey.ToRKey().AsRawKey(),
-	}, nil
+	return *rng.config, nil
 }
 
 // Scan is added for the rangedesc.Scanner interface, required for
@@ -1356,7 +1424,7 @@ func (s *state) Scan(
 // state of ranges.
 func (s *state) Report() roachpb.SpanConfigConformanceReport {
 	reporter := spanconfigreporter.New(
-		s.nodeLiveness, s, s, s,
+		s.statusTracker, s, s, s,
 		s.settings.ST, &spanconfig.TestingKnobs{})
 	report, err := reporter.SpanConfigConformance(context.Background(), []roachpb.Span{{}})
 	if err != nil {
@@ -1472,10 +1540,39 @@ func (s *state) NodesStringWithTag(tag string) string {
 }
 
 // node is an implementation of the Node interface.
+// NodePhysicalCharacteristics models OS-level and filesystem characteristics
+// that affect how the physical model computes load, capacity, and amplification
+// factors. All stores on a node share these characteristics.
+type NodePhysicalCharacteristics struct {
+	// CPUOverheadMultiplier inflates NodeCPURateUsage relative to StoresCPURate
+	// to simulate OS-level overhead (GC, goroutine scheduling, etc.) that isn't
+	// tracked per-replica. In real clusters this ratio is typically 1.0-3.0.
+	CPUOverheadMultiplier float64
+	// SpaceAmplification is the ratio of physical disk bytes (Used) to logical
+	// bytes (LogicalBytes). Default 1.25. Feeds into StoreCapacity.Used and
+	// therefore into computePhysicalDisk's amplification factor.
+	SpaceAmplification float64
+	// ReservedDiskBytes models filesystem reserved blocks (e.g. ext4 reserved
+	// block count). Subtracted from Available in capacity(), making
+	// Total - Available > Used.
+	ReservedDiskBytes int64
+}
+
+// DefaultNodePhysicalCharacteristics returns characteristics with sensible
+// defaults: no CPU overhead, 1.25x space amplification, no reserved blocks.
+func DefaultNodePhysicalCharacteristics() NodePhysicalCharacteristics {
+	return NodePhysicalCharacteristics{
+		CPUOverheadMultiplier: 1.0,
+		SpaceAmplification:    1.25,
+	}
+}
+
+// node is an implementation of the Node interface.
 type node struct {
 	nodeID          NodeID
 	desc            roachpb.NodeDescriptor
 	cpuRateCapacity int64
+	physical        NodePhysicalCharacteristics
 
 	stores      []StoreID
 	storepool   *storepool.StorePool
@@ -1660,6 +1757,14 @@ type replica struct {
 	rangeID    RangeID
 	desc       roachpb.ReplicaDescriptor
 	holdsLease bool
+	// mmaSpanConfigIsUpToDate tracks whether the span config for this replica
+	// has been sent to MMA. This mirrors real CockroachDB's per-replica tracking.
+	// It is set to false when:
+	//   - A new replica is created
+	//   - The span config for the range changes
+	//   - This replica acquires a lease (because MMA deletes ranges when we lose the lease)
+	// It is set to true after the span config is successfully sent to MMA.
+	mmaSpanConfigIsUpToDate bool
 }
 
 // ReplicaID returns the ID of this replica.
@@ -1697,4 +1802,16 @@ func (r *replica) String() string {
 	builder := &strings.Builder{}
 	builder.WriteString(fmt.Sprintf("r%d,s%d/%d", r.rangeID, r.storeID, r.replicaID))
 	return builder.String()
+}
+
+// MMASpanConfigIsUpToDate returns whether the span config for this replica
+// has been sent to MMA.
+func (r *replica) MMASpanConfigIsUpToDate() bool {
+	return r.mmaSpanConfigIsUpToDate
+}
+
+// SetMMASpanConfigIsUpToDate sets whether the span config for this replica
+// has been sent to MMA.
+func (r *replica) SetMMASpanConfigIsUpToDate(upToDate bool) {
+	r.mmaSpanConfigIsUpToDate = upToDate
 }

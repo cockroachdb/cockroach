@@ -180,6 +180,9 @@ func (v validationAccumulator) validate(ctx context.Context, deps Dependencies) 
 	for _, tableNotNulls := range v.notNulls {
 		for _, notNull := range tableNotNulls {
 			if err := executeValidateColumnNotNull(ctx, deps, notNull); err != nil {
+				if scerrors.HasSchemaChangerUserError(err) {
+					return err
+				}
 				return errors.Wrapf(err, "%T: %v", notNull, notNull)
 			}
 		}
@@ -187,6 +190,9 @@ func (v validationAccumulator) validate(ctx context.Context, deps Dependencies) 
 	for _, tableConstraints := range v.constraints {
 		for _, constraint := range tableConstraints {
 			if err := executeValidateConstraint(ctx, deps, constraint); err != nil {
+				if scerrors.HasSchemaChangerUserError(err) {
+					return err
+				}
 				return errors.Wrapf(err, "%T: %v", constraint, constraint)
 			}
 		}

@@ -26,6 +26,7 @@ go_test(
     deps = [
         "//pkg/build/util",
         "//pkg/cmd/bazci/githubpost/issues",
+        "//pkg/internal/codeowners",
         "//pkg/testutils/datapathutils",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

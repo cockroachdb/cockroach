@@ -6,41 +6,79 @@
 package paramparse
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// UniqueConstraintParamContext is used as a validation context for
-// ValidateUniqueConstraintParams function.
-// IsPrimaryKey: set to true if the unique constraint for primary key.
-// IsSharded: set to true if the unique constraint has a hash sharded index.
-type UniqueConstraintParamContext struct {
-	IsPrimaryKey bool
-	IsSharded    bool
+// IndexStorageParamContext provides context for ValidateIndexStorageParams.
+type IndexStorageParamContext struct {
+	IsPrimaryKey            bool
+	IsUnique                bool
+	IsSharded               bool
+	HasImplicitPartitioning bool
+	// Version is used to gate storage parameters that require a minimum cluster
+	// version (e.g. skip_unique_checks requires V26_2).
+	Version clusterversion.Handle
 }
 
-// ValidateUniqueConstraintParams checks if there is any storage parameters
-// invalid as a param for Unique Constraint.
-func ValidateUniqueConstraintParams(
-	params tree.StorageParams, ctx UniqueConstraintParamContext,
+// ValidateIndexStorageParams checks that storage parameters are valid for the
+// given index type. For unique indexes and primary keys, only specific params
+// are allowed. For all indexes, bucket_count and shard_columns require a
+// hash-sharded index, and skip_unique_checks requires a unique, implicitly
+// partitioned index.
+func ValidateIndexStorageParams(
+	ctx context.Context, params tree.StorageParams, paramCtx IndexStorageParamContext,
 ) error {
-	// Only `bucket_count` is allowed for primary key and unique index.
 	for _, param := range params {
 		switch param.Key {
 		case `bucket_count`:
-			if ctx.IsSharded {
+			if paramCtx.IsSharded {
 				continue
 			}
 			return pgerror.New(
 				pgcode.InvalidParameterValue,
 				`"bucket_count" storage param should only be set with "USING HASH" for hash sharded index`,
 			)
+		case `shard_columns`:
+			if paramCtx.IsSharded {
+				continue
+			}
+			return pgerror.New(
+				pgcode.InvalidParameterValue,
+				`"shard_columns" storage param should only be set with "USING HASH" for hash sharded index`,
+			)
+		case `skip_unique_checks`:
+			if !paramCtx.Version.IsActive(ctx, clusterversion.V26_2) {
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"skip_unique_checks is not supported until the cluster is fully upgraded to 26.2")
+			}
+			if !paramCtx.IsUnique {
+				return pgerror.New(
+					pgcode.InvalidParameterValue,
+					"skip_unique_checks can only be set on UNIQUE indexes",
+				)
+			}
+			if !paramCtx.HasImplicitPartitioning {
+				return pgerror.New(
+					pgcode.InvalidParameterValue,
+					"skip_unique_checks can only be set on implicitly partitioned indexes",
+				)
+			}
+			continue
 		default:
-			if ctx.IsPrimaryKey {
+			if paramCtx.IsPrimaryKey {
 				return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage param %q on primary key", param.Key)
 			}
-			return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage param %q on unique index", param.Key)
+			if paramCtx.IsUnique {
+				return pgerror.Newf(pgcode.InvalidParameterValue, "invalid storage param %q on unique index", param.Key)
+			}
+			// Non-unique indexes accept additional params (geo config, etc.)
+			// that are validated by storageparam.Set.
+			continue
 		}
 	}
 	return nil

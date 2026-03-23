@@ -278,14 +278,7 @@ project
                      │                                  │    ├── variable: a:1
                      │                                  │    ├── variable: b:2
                      │                                  │    └── variable: c:3
-                     │                                  ├── params: a:4 b:5 c:6
-                     │                                  └── body
-                     │                                       └── project
-                     │                                            ├── columns: stmt_return_2:7
-                     │                                            ├── values
-                     │                                            │    └── tuple
-                     │                                            └── projections
-                     │                                                 └── variable: c:6 [as=stmt_return_2:7]
+                     │                                  └── repetitive-call
                      └── const: 1
 
 exec-ddl
@@ -375,14 +368,7 @@ project
                      │                                  │    ├── variable: a:1
                      │                                  │    ├── variable: b:2
                      │                                  │    └── variable: c:10
-                     │                                  ├── params: a:4 b:5 c:6
-                     │                                  └── body
-                     │                                       └── project
-                     │                                            ├── columns: stmt_return_2:7
-                     │                                            ├── values
-                     │                                            │    └── tuple
-                     │                                            └── projections
-                     │                                                 └── variable: c:6 [as=stmt_return_2:7]
+                     │                                  └── repetitive-call
                      └── const: 1
 
 exec-ddl
@@ -1182,14 +1168,7 @@ project
                      │                                  │    ├── variable: b:2
                      │                                  │    ├── variable: sum:3
                      │                                  │    └── variable: i:4
-                     │                                  ├── params: a:5 b:6 sum:7 i:8
-                     │                                  └── body
-                     │                                       └── project
-                     │                                            ├── columns: stmt_return_2:9
-                     │                                            ├── values
-                     │                                            │    └── tuple
-                     │                                            └── projections
-                     │                                                 └── variable: sum:7 [as=stmt_return_2:9]
+                     │                                  └── repetitive-call
                      └── const: 1
 
 exec-ddl
@@ -3374,53 +3353,7 @@ project
                      │                                                                                              ├── tail-call
                      │                                                                                              ├── args
                      │                                                                                              │    └── variable: i:8
-                     │                                                                                              ├── params: i:9
-                     │                                                                                              └── body
-                     │                                                                                                   └── project
-                     │                                                                                                        ├── columns: "_stmt_raise_8":14
-                     │                                                                                                        ├── values
-                     │                                                                                                        │    └── tuple
-                     │                                                                                                        └── projections
-                     │                                                                                                             └── udf: _stmt_raise_8 [as="_stmt_raise_8":14]
-                     │                                                                                                                  ├── tail-call
-                     │                                                                                                                  ├── args
-                     │                                                                                                                  │    └── variable: i:9
-                     │                                                                                                                  ├── params: i:10
-                     │                                                                                                                  └── body
-                     │                                                                                                                       ├── project
-                     │                                                                                                                       │    ├── columns: stmt_raise_9:11
-                     │                                                                                                                       │    ├── values
-                     │                                                                                                                       │    │    └── tuple
-                     │                                                                                                                       │    └── projections
-                     │                                                                                                                       │         └── function: crdb_internal.plpgsql_raise [as=stmt_raise_9:11]
-                     │                                                                                                                       │              ├── const: 'NOTICE'
-                     │                                                                                                                       │              ├── concat
-                     │                                                                                                                       │              │    ├── concat
-                     │                                                                                                                       │              │    │    ├── const: 'i = '
-                     │                                                                                                                       │              │    │    └── coalesce
-                     │                                                                                                                       │              │    │         ├── cast: STRING
-                     │                                                                                                                       │              │    │         │    └── variable: i:10
-                     │                                                                                                                       │              │    │         └── const: '<NULL>'
-                     │                                                                                                                       │              │    └── const: ''
-                     │                                                                                                                       │              ├── const: ''
-                     │                                                                                                                       │              ├── const: ''
-                     │                                                                                                                       │              └── const: '00000'
-                     │                                                                                                                       └── project
-                     │                                                                                                                            ├── columns: stmt_loop_5:13
-                     │                                                                                                                            ├── project
-                     │                                                                                                                            │    ├── columns: i:12
-                     │                                                                                                                            │    ├── values
-                     │                                                                                                                            │    │    └── tuple
-                     │                                                                                                                            │    └── projections
-                     │                                                                                                                            │         └── plus [as=i:12]
-                     │                                                                                                                            │              ├── variable: i:10
-                     │                                                                                                                            │              └── const: 1
-                     │                                                                                                                            └── projections
-                     │                                                                                                                                 └── udf: stmt_loop_5 [as=stmt_loop_5:13]
-                     │                                                                                                                                      ├── tail-call
-                     │                                                                                                                                      ├── args
-                     │                                                                                                                                      │    └── variable: i:12
-                     │                                                                                                                                      └── recursive-call
+                     │                                                                                              └── repetitive-call
                      └── const: 1
 
 exec-ddl
@@ -3720,14 +3653,7 @@ project
                      │                                  ├── args
                      │                                  │    ├── variable: n:1
                      │                                  │    └── variable: i:2
-                     │                                  ├── params: n:3 i:4
-                     │                                  └── body
-                     │                                       └── project
-                     │                                            ├── columns: stmt_return_2:5
-                     │                                            ├── values
-                     │                                            │    └── tuple
-                     │                                            └── projections
-                     │                                                 └── variable: i:4 [as=stmt_return_2:5]
+                     │                                  └── repetitive-call
                      └── const: 1
 
 # Testing EXCEPTION blocks.
@@ -4438,14 +4364,7 @@ project
                      │              │                                                                               ├── args
                      │              │                                                                               │    ├── variable: i:23
                      │              │                                                                               │    └── variable: x:24
-                     │              │                                                                               ├── params: i:8 x:9
-                     │              │                                                                               └── body
-                     │              │                                                                                    └── project
-                     │              │                                                                                         ├── columns: stmt_return_5:10!null
-                     │              │                                                                                         ├── values
-                     │              │                                                                                         │    └── tuple
-                     │              │                                                                                         └── projections
-                     │              │                                                                                              └── const: 0 [as=stmt_return_5:10]
+                     │              │                                                                               └── repetitive-call
                      │              └── exception-handler
                      │                   └── SQLSTATE '22012'
                      │                        └── project
@@ -6507,34 +6426,34 @@ project
                      │                                                                                                        │    ├── columns: found:27
                      │                                                                                                        │    └── project
                      │                                                                                                        │         ├── columns: found:27
-                     │                                                                                                        │         ├── right-join (cross)
+                     │                                                                                                        │         ├── barrier
                      │                                                                                                        │         │    ├── columns: a:13
-                     │                                                                                                        │         │    ├── barrier
-                     │                                                                                                        │         │    │    ├── columns: a:13
-                     │                                                                                                        │         │    │    └── limit
-                     │                                                                                                        │         │    │         ├── columns: a:13
-                     │                                                                                                        │         │    │         ├── project
-                     │                                                                                                        │         │    │         │    ├── columns: a:13
-                     │                                                                                                        │         │    │         │    └── insert t114826
-                     │                                                                                                        │         │    │         │         ├── columns: a:13 rowid:14!null
-                     │                                                                                                        │         │    │         │         ├── insert-mapping:
-                     │                                                                                                        │         │    │         │         │    ├── a:17 => a:13
-                     │                                                                                                        │         │    │         │         │    └── rowid_default:21 => rowid:14
-                     │                                                                                                        │         │    │         │         ├── return-mapping:
-                     │                                                                                                        │         │    │         │         │    ├── a:17 => a:13
-                     │                                                                                                        │         │    │         │         │    └── rowid_default:21 => rowid:14
-                     │                                                                                                        │         │    │         │         └── project
-                     │                                                                                                        │         │    │         │              ├── columns: rowid_default:21 a:17
-                     │                                                                                                        │         │    │         │              ├── project
-                     │                                                                                                        │         │    │         │              │    ├── columns: a:17
-                     │                                                                                                        │         │    │         │              │    └── scan t114826
-                     │                                                                                                        │         │    │         │              │         └── columns: a:17 rowid:18!null crdb_internal_mvcc_timestamp:19 tableoid:20
-                     │                                                                                                        │         │    │         │              └── projections
-                     │                                                                                                        │         │    │         │                   └── function: unique_rowid [as=rowid_default:21]
-                     │                                                                                                        │         │    │         └── const: 1
-                     │                                                                                                        │         │    ├── values
-                     │                                                                                                        │         │    │    └── tuple
-                     │                                                                                                        │         │    └── filters (true)
+                     │                                                                                                        │         │    └── right-join (cross)
+                     │                                                                                                        │         │         ├── columns: a:13
+                     │                                                                                                        │         │         ├── limit
+                     │                                                                                                        │         │         │    ├── columns: a:13
+                     │                                                                                                        │         │         │    ├── project
+                     │                                                                                                        │         │         │    │    ├── columns: a:13
+                     │                                                                                                        │         │         │    │    └── insert t114826
+                     │                                                                                                        │         │         │    │         ├── columns: a:13 rowid:14!null
+                     │                                                                                                        │         │         │    │         ├── insert-mapping:
+                     │                                                                                                        │         │         │    │         │    ├── a:17 => a:13
+                     │                                                                                                        │         │         │    │         │    └── rowid_default:21 => rowid:14
+                     │                                                                                                        │         │         │    │         ├── return-mapping:
+                     │                                                                                                        │         │         │    │         │    ├── a:17 => a:13
+                     │                                                                                                        │         │         │    │         │    └── rowid_default:21 => rowid:14
+                     │                                                                                                        │         │         │    │         └── project
+                     │                                                                                                        │         │         │    │              ├── columns: rowid_default:21 a:17
+                     │                                                                                                        │         │         │    │              ├── project
+                     │                                                                                                        │         │         │    │              │    ├── columns: a:17
+                     │                                                                                                        │         │         │    │              │    └── scan t114826
+                     │                                                                                                        │         │         │    │              │         └── columns: a:17 rowid:18!null crdb_internal_mvcc_timestamp:19 tableoid:20
+                     │                                                                                                        │         │         │    │              └── projections
+                     │                                                                                                        │         │         │    │                   └── function: unique_rowid [as=rowid_default:21]
+                     │                                                                                                        │         │         │    └── const: 1
+                     │                                                                                                        │         │         ├── values
+                     │                                                                                                        │         │         │    └── tuple
+                     │                                                                                                        │         │         └── filters (true)
                      │                                                                                                        │         └── projections
                      │                                                                                                        │              └── variable: a:13 [as=found:27]
                      │                                                                                                        └── projections
@@ -8028,3 +7947,79 @@ project-set
                                                                                                      └── projections
                                                                                                           └── cast: VOID [as="_implicit_return":8]
                                                                                                                └── null
+
+# Regression test for #147269. Do not drop a SQL statement with an INTO clause
+# when the target variable is unused.
+exec-ddl
+CREATE OR REPLACE FUNCTION f() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    foo INT;
+  BEGIN
+    INSERT INTO xy VALUES (1, 1) ON CONFLICT DO NOTHING RETURNING x INTO foo;
+    RETURN 2;
+  END
+$$;
+----
+
+# Use "norm" to show that the barrier prevents join-elimination.
+norm format=show-scalars
+SELECT f();
+----
+values
+ ├── columns: f:21
+ └── tuple
+      └── udf: f
+           └── body
+                └── project
+                     ├── columns: "_stmt_exec_1":20
+                     ├── barrier
+                     │    ├── columns: foo:1
+                     │    └── values
+                     │         ├── columns: foo:1
+                     │         └── tuple
+                     │              └── null
+                     └── projections
+                          └── udf: _stmt_exec_1 [as="_stmt_exec_1":20]
+                               ├── tail-call
+                               ├── args
+                               │    └── variable: foo:1
+                               ├── params: foo:2
+                               └── body
+                                    └── project
+                                         ├── columns: "_stmt_exec_ret_2":19!null
+                                         ├── barrier
+                                         │    ├── columns: x:3
+                                         │    └── project
+                                         │         ├── columns: x:3
+                                         │         └── left-join (cross)
+                                         │              ├── columns: x:3 rowid:5
+                                         │              ├── values
+                                         │              │    └── tuple
+                                         │              ├── insert xy
+                                         │              │    ├── columns: x:3!null rowid:5!null
+                                         │              │    ├── arbiter indexes: xy_pkey
+                                         │              │    ├── insert-mapping:
+                                         │              │    │    ├── column1:8 => x:3
+                                         │              │    │    ├── column2:9 => y:4
+                                         │              │    │    └── rowid_default:10 => rowid:5
+                                         │              │    ├── return-mapping:
+                                         │              │    │    ├── column1:8 => x:3
+                                         │              │    │    └── rowid_default:10 => rowid:5
+                                         │              │    └── anti-join (hash)
+                                         │              │         ├── columns: column1:8!null column2:9!null rowid_default:10
+                                         │              │         ├── values
+                                         │              │         │    ├── columns: column1:8!null column2:9!null rowid_default:10
+                                         │              │         │    └── tuple
+                                         │              │         │         ├── const: 1
+                                         │              │         │         ├── const: 1
+                                         │              │         │         └── function: unique_rowid
+                                         │              │         ├── scan xy
+                                         │              │         │    ├── columns: rowid:13!null
+                                         │              │         │    └── flags: avoid-full-scan disabled not visible index feature
+                                         │              │         └── filters
+                                         │              │              └── eq
+                                         │              │                   ├── variable: rowid_default:10
+                                         │              │                   └── variable: rowid:13
+                                         │              └── filters (true)
+                                         └── projections
+                                              └── const: 2 [as="_stmt_exec_ret_2":19]

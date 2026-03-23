@@ -11,14 +11,14 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 14 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC Database:{DescID: 105 (db+)}
- │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (db+), Name: "db"}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (db+), Name: "db", IntValue: 0}
  │         │    ├── ABSENT → PUBLIC DatabaseData:{DescID: 105 (db+)}
  │         │    ├── ABSENT → PUBLIC Owner:{DescID: 105 (db+)}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (db+), Name: "admin"}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (db+), Name: "public"}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (db+), Name: "root"}
  │         │    ├── ABSENT → PUBLIC Schema:{DescID: 106 (public+)}
- │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 106 (public+), Name: "public", ReferencedDescID: 105 (db+)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 106 (public+), Name: "public", ReferencedDescID: 105 (db+), IntValue: 0}
  │         │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 106 (public+), ReferencedDescID: 105 (db+)}
  │         │    ├── ABSENT → PUBLIC Owner:{DescID: 106 (public+)}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (public+), Name: "admin"}
@@ -30,7 +30,7 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │              ├── AddDescriptorName {"Namespace":{"DescriptorID":105,"Name":"db"}}
  │              ├── UpdateOwner {"Owner":{"DescriptorID":105,"Owner":"root"}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
- │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2048,"UserName":"public"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":17592186046464,"UserName":"public"}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2,"UserName":"root","WithGrantOption":2}}
  │              ├── CreateSchemaDescriptor {"SchemaID":106}
  │              ├── SetNameInDescriptor {"DescriptorID":106,"Name":"public"}
@@ -51,14 +51,14 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (idx+)}
  │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │    │    │    ├── PUBLIC        → ABSENT Database:{DescID: 105 (db+)}
- │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 105 (db+), Name: "db"}
+ │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 105 (db+), Name: "db", IntValue: 0}
  │    │    │    ├── PUBLIC        → ABSENT DatabaseData:{DescID: 105 (db+)}
  │    │    │    ├── PUBLIC        → ABSENT Owner:{DescID: 105 (db+)}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (db+), Name: "admin"}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (db+), Name: "public"}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (db+), Name: "root"}
  │    │    │    ├── PUBLIC        → ABSENT Schema:{DescID: 106 (public+)}
- │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 106 (public+), Name: "public", ReferencedDescID: 105 (db+)}
+ │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 106 (public+), Name: "public", ReferencedDescID: 105 (db+), IntValue: 0}
  │    │    │    ├── PUBLIC        → ABSENT SchemaParent:{DescID: 106 (public+), ReferencedDescID: 105 (db+)}
  │    │    │    ├── PUBLIC        → ABSENT Owner:{DescID: 106 (public+)}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 106 (public+), Name: "admin"}
@@ -80,13 +80,13 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │         │    ├── ABSENT → PUBLIC           IndexData:{DescID: 104 (t), IndexID: 2 (idx+)}
  │         │    ├── ABSENT → BACKFILL_ONLY    SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │         │    ├── ABSENT → DESCRIPTOR_ADDED Database:{DescID: 105 (db+)}
- │         │    ├── ABSENT → PUBLIC           Namespace:{DescID: 105 (db+), Name: "db"}
+ │         │    ├── ABSENT → PUBLIC           Namespace:{DescID: 105 (db+), Name: "db", IntValue: 0}
  │         │    ├── ABSENT → PUBLIC           Owner:{DescID: 105 (db+)}
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105 (db+), Name: "admin"}
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105 (db+), Name: "public"}
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105 (db+), Name: "root"}
  │         │    ├── ABSENT → DESCRIPTOR_ADDED Schema:{DescID: 106 (public+)}
- │         │    ├── ABSENT → PUBLIC           Namespace:{DescID: 106 (public+), Name: "public", ReferencedDescID: 105 (db+)}
+ │         │    ├── ABSENT → PUBLIC           Namespace:{DescID: 106 (public+), Name: "public", ReferencedDescID: 105 (db+), IntValue: 0}
  │         │    ├── ABSENT → PUBLIC           SchemaParent:{DescID: 106 (public+), ReferencedDescID: 105 (db+)}
  │         │    ├── ABSENT → PUBLIC           Owner:{DescID: 106 (public+)}
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 106 (public+), Name: "admin"}
@@ -111,7 +111,7 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │              ├── AddDescriptorName {"Namespace":{"DescriptorID":105,"Name":"db"}}
  │              ├── UpdateOwner {"Owner":{"DescriptorID":105,"Owner":"root"}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
- │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2048,"UserName":"public"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":17592186046464,"UserName":"public"}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2,"UserName":"root","WithGrantOption":2}}
  │              ├── CreateSchemaDescriptor {"SchemaID":106}
  │              ├── SetNameInDescriptor {"DescriptorID":106,"Name":"public"}

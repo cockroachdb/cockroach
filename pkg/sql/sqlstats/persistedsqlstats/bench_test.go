@@ -38,7 +38,9 @@ func BenchmarkConcurrentSelect1(b *testing.B) {
 	for _, numOfConcurrentConn := range []int{24, 48, 64} {
 		b.Run(fmt.Sprintf("concurrentConn=%d", numOfConcurrentConn),
 			func(b *testing.B) {
-				s, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
+				s, db, _ := serverutils.StartServer(b, base.TestServerArgs{
+					DisableElasticCPUAdmission: true,
+				})
 				sqlServer := s.SQLServer().(*sql.Server)
 				defer s.Stopper().Stop(ctx)
 
@@ -134,8 +136,9 @@ func BenchmarkSqlStatsPersisted(b *testing.B) {
 					base.TestClusterArgs{
 						ReplicationMode: base.ReplicationAuto,
 						ServerArgs: base.TestServerArgs{
-							UseDatabase:       "bench",
-							SQLMemoryPoolSize: 512 << 20,
+							DisableElasticCPUAdmission: true,
+							UseDatabase:                "bench",
+							SQLMemoryPoolSize:          512 << 20,
 						},
 					})
 				sqlRunner := sqlutils.MakeRoundRobinSQLRunner(tc.Conns[0],
@@ -150,8 +153,9 @@ func BenchmarkSqlStatsPersisted(b *testing.B) {
 					base.TestClusterArgs{
 						ReplicationMode: base.ReplicationAuto,
 						ServerArgs: base.TestServerArgs{
-							UseDatabase:       "bench",
-							SQLMemoryPoolSize: 512 << 20,
+							DisableElasticCPUAdmission: true,
+							UseDatabase:                "bench",
+							SQLMemoryPoolSize:          512 << 20,
 						},
 					})
 				sqlRunner := sqlutils.MakeRoundRobinSQLRunner(tc.Conns[0],
@@ -374,6 +378,7 @@ func BenchmarkSqlStatsMaxFlushTime(b *testing.B) {
 	fakeTime := &stubTime{}
 	fakeTime.setTime(timeutil.Now())
 	s, conn, _ := serverutils.StartServer(b, base.TestServerArgs{
+		DisableElasticCPUAdmission: true,
 		Knobs: base.TestingKnobs{
 			SQLStatsKnobs: &sqlstats.TestingKnobs{
 				StubTimeNow: fakeTime.Now,

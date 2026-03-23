@@ -1,0 +1,27 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "styl/base/palette.scss";
+
+.debug-url {
+  margin-right: 200px;
+
+  div {
+    background-color: $background-color;
+    border-radius: 3px;
+    padding: 8px 20px 6px 10px;
+    min-width: 200px;
+  }
+}
+
+.debug-header {
+  position: relative;
+}
+
+.debug-header__annotations {
+  position: absolute;
+  top: 0;
+  right: 0;
+}

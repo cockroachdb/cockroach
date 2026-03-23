@@ -17,30 +17,80 @@ fi
 
 
 case $1 in
-  "setup")
-    shift
-    $0 create "$@"
-    $0 go
-    ;;
-
   "create")
     shift
     roachprod create $A \
-      --clouds gce --gce-machine-type n2-standard-16 --nodes 4 --username "$USER" --local-ssd=false --gce-pd-volume-size 1000 --lifetime 24h "$@" 
+      --clouds gce --gce-machine-type n2-standard-8 --nodes 6 --username "$USER" --local-ssd=false --gce-pd-volume-size 1000 --lifetime 24h "$@"
     roachprod create $B \
-      --clouds gce --gce-machine-type n2-standard-16 --nodes 4 --username "$USER" --local-ssd=false --gce-pd-volume-size 1000 --lifetime 24h "$@"
+      --clouds gce --gce-machine-type n2-standard-8 --nodes 5 --username "$USER" --local-ssd=false --gce-pd-volume-size 1000 --lifetime 24h "$@"
     $0 stage cockroach
-    $0 stage workload
     ;;
   
   "init")
-    $0 start
-    roachprod sql --cluster=system $B:1 -- -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS a AS $(roachprod pgurl --cluster=system $A:1)"
+    roachprod start $A:1-5
+    roachprod start $B:1-5
+
+    $0 workload define
+
     roachprod sql --cluster=system $A:1 -- -e "CREATE VIRTUAL CLUSTER main;"
-    roachprod sql --cluster=system $B:1 -- -e "CREATE VIRTUAL CLUSTER main FROM REPLICATION OF main ON 'external://a' WITH READ VIRTUAL CLUSTER;"
     roachprod sql --cluster=system $A:1 -- -e "ALTER VIRTUAL CLUSTER main START SERVICE SHARED;"
     roachprod sql --cluster=system $A:1 -- -e "SET CLUSTER SETTING server.controller.default_target_cluster = 'main';"
+
+    roachprod sql --cluster=system $B:1 -- -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS a AS $(roachprod pgurl --cluster=system $A:1)"
+
+    echo "letting both clusters stabilize for a few seconds before creating starting replication..."
+    sleep 10
+
+    echo "starting replication..."
+    # TODO(dt): this should be default and deleted; for now it is useful often
+    # so keep it here to uncomment easily as needed.
+    # roachprod sql --cluster=system $B:1 -- -e "SET CLUSTER SETTING physical_replication.consumer.ingest_split_event.enabled = true;"
+    roachprod sql --cluster=system $B:1 -- -e "CREATE VIRTUAL CLUSTER main FROM REPLICATION OF main ON 'external://a' WITH READ VIRTUAL CLUSTER;"
     roachprod sql --cluster=system $B:1 -- -e "SET CLUSTER SETTING server.controller.default_target_cluster = 'main';"
+
+    echo "letting replication stabilize for a bit before importing data..."
+    sleep 20
+    echo "importing data and starting workload...."
+    roachprod run $A:6 -- "nohup sh -c \"./cockroach workload fixtures import tpcc --warehouses=${WAREHOUSES:-30000} --checks=false {pgurl:1} 2>&1 | tee import-tpcc.log && sleep 5 && ./workload.sh\"" 
+    ;;
+  "workload")
+    shift
+    case $1 in
+    "define")
+      roachprod run $A:6 -- 'cat > workload.sh << WORKLOAD
+#!/usr/bin/env bash
+nohup ./cockroach workload run tpcc \
+  --warehouses='"${WAREHOUSES:-30000}"' --workers='"${WORKERS:-2000}"' --max-rate='"${MAX_RATE:-750}"' --wait=false --ramp=1m --tolerate-errors \
+  {pgurl:1-5} > tpcc-workload.log 2>&1 &
+echo "workload started"
+WORKLOAD
+chmod +x workload.sh'
+      ;;
+    "start")
+      roachprod run $A:6 -- "./workload.sh; tail -f tpcc-workload.log"
+      ;;
+    "stop")
+      roachprod run $A:6 -- "pkill -f 'cockroach'"
+      ;;
+    "restart")
+      roachprod run $A:6 -- "pkill -f 'cockroach'; sleep 1; ./workload.sh"
+      ;;
+    *)
+      echo "unknown workload command: $1"
+      exit 1
+      ;;
+    esac
+    ;;
+  "op")
+    shift
+    case $1 in
+    "pk")
+      roachprod sql $A:1 -- -e "ALTER TABLE tpcc.order ADD COLUMN extra$(date +%s) INT DEFAULT 1 NOT VISIBLE;"
+      ;;
+    "index")
+      roachprod sql $A:1 -- -e "CREATE INDEX ON tpcc.order (o_c_id);"
+      ;;
+    esac
     ;;
   *)
     cmd="${1}"

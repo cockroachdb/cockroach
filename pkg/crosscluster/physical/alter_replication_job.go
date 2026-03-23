@@ -11,8 +11,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -27,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -211,13 +208,6 @@ func alterReplicationJobHook(
 	}
 
 	fn := func(ctx context.Context, resultsCh chan<- tree.Datums) error {
-		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings,
-			alterReplicationJobOp,
-		); err != nil {
-			return err
-		}
-
 		if err := sql.CanManageTenant(ctx, p); err != nil {
 			return err
 		}
@@ -238,11 +228,7 @@ func alterReplicationJobHook(
 		if err := p.CheckPrivilege(
 			ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPLICATIONDEST,
 		); err != nil {
-			if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V25_2) {
-				p.BufferClientNotice(ctx, pgnotice.Newf("this command will require the REPLICATIONDEST privilege on a fully upgraded 25.2+ cluster"))
-			} else {
-				return err
-			}
+			return err
 		}
 		// If a source uri is being provided, we're enabling replication into an
 		// existing virtual cluster. It must be inactive, and we'll verify that it

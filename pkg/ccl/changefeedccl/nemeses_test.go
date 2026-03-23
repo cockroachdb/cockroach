@@ -10,7 +10,10 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -42,7 +45,6 @@ func TestChangefeedNemeses(t *testing.T) {
 				sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
 				sqlDB.Exec(t, "SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'")
 				sqlDB.Exec(t, "SET CLUSTER SETTING sql.defaults.create_table_with_schema_locked='false'")
-
 			}
 			v, err := cdctest.RunNemesis(f, s.DB, t.Name(), withLegacySchemaChanger, rng, nop)
 			if err != nil {
@@ -59,7 +61,12 @@ func TestChangefeedNemeses(t *testing.T) {
 		// nemeses_test.go:39: pq: unimplemented: operation is unsupported inside virtual clusters
 		//
 		// TODO(knz): This seems incorrect, see issue #109417.
-		cdcTest(t, testFn, feedTestNoTenants)
+		cdcTest(t, testFn, feedTestNoTenants, withKnobsFn(func(knobs *base.TestingKnobs) {
+			knobs.SQLEvalContext = &eval.TestingKnobs{
+				ForceProductionValues: true,
+			}
+			knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
+		}))
 		log.FlushFiles()
 		entries, err := log.FetchEntriesFromFiles(0, math.MaxInt64, 1,
 			regexp.MustCompile("cdc ux violation"), log.WithFlattenedSensitiveData)

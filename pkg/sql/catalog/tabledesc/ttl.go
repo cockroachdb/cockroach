@@ -112,17 +112,17 @@ func ValidateTTLExpirationColumn(desc catalog.TableDescriptor) error {
 	if col.GetDefaultExpr() != expectedStr {
 		return pgerror.Newf(
 			pgcode.InvalidTableDefinition,
-			"expected DEFAULT expression of %s to be %s",
+			"expected DEFAULT expression of %s to be ( %s ), but got: ( %s )",
 			catpb.TTLDefaultExpirationColumnName,
-			expectedStr,
+			expectedStr, col.GetDefaultExpr(),
 		)
 	}
 	if col.GetOnUpdateExpr() != expectedStr {
 		return pgerror.Newf(
 			pgcode.InvalidTableDefinition,
-			"expected ON UPDATE expression of %s to be %s",
+			"expected ON UPDATE expression of %s to be ( %s ), but got: ( %s )",
 			catpb.TTLDefaultExpirationColumnName,
-			expectedStr,
+			expectedStr, col.GetOnUpdateExpr(),
 		)
 	}
 

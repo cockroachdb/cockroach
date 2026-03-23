@@ -81,7 +81,7 @@ INSERT INTO a(x) VALUES(1)
 statement ok
 UPDATE a SET x = 42
 
-statement ok
+statement count 1
 DELETE FROM a
 
 statement ok
@@ -159,7 +159,7 @@ INSERT INTO "B"(x) VALUES(1)
 statement ok
 UPDATE "B" SET x = 42
 
-statement ok
+statement count 1
 DELETE FROM "B"
 
 statement ok

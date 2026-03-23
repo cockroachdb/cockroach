@@ -11,7 +11,7 @@ set -euxo pipefail
 dir="$(dirname $(dirname $(dirname $(dirname $(dirname "${0}")))))"
 source "$dir/release/teamcity-support.sh"
 source "$dir/teamcity-bazel-support.sh"  # for run_bazel
-
+#
 tc_start_block "Variable Setup"
 platform="${PLATFORM:?PLATFORM must be specified}"
 telemetry_disabled="${TELEMETRY_DISABLED:-false}"
@@ -21,7 +21,6 @@ if [[ $telemetry_disabled == true && $cockroach_archive_prefix == "cockroach" ]]
   exit 1
 fi
 version=$(grep -v "^#" "$dir/../pkg/build/version.txt" | head -n1)
-version_label=$(echo "${version}" | sed -e 's/^v//' | cut -d- -f 1)
 
 if ! echo "${version}" | grep -E -o '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[-.0-9A-Za-z]+)?$'; then
   #                                    ^major           ^minor           ^patch         ^preRelease
@@ -35,16 +34,12 @@ fi
 
 if [[ -z "${DRY_RUN}" ]] ; then
   gcs_bucket="cockroach-release-artifacts-staged-prod"
-  gcr_credentials="$GCS_CREDENTIALS_PROD"
   # export the variable to avoid shell escaping
   export gcs_credentials="$GCS_CREDENTIALS_PROD"
-  gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/${cockroach_archive_prefix}"
 else
   gcs_bucket="cockroach-release-artifacts-staged-dryrun"
-  gcr_credentials="$GCS_CREDENTIALS_DEV"
   # export the variable to avoid shell escaping
   export gcs_credentials="$GCS_CREDENTIALS_DEV"
-  gcr_staged_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/${cockroach_archive_prefix}"
 fi
 
 tc_end_block "Variable Setup"
@@ -78,44 +73,8 @@ done
 
 tr -d '\r' < /tmp/THIRD-PARTY-NOTICES.txt.tmp > /tmp/THIRD-PARTY-NOTICES.txt
 
-$BAZEL_BIN/pkg/cmd/publish-artifacts/publish-artifacts_/publish-artifacts release --gcs-bucket="$gcs_bucket" --output-directory=artifacts --platform=$platform --third-party-notices-file=/tmp/THIRD-PARTY-NOTICES.txt --telemetry-disabled=$telemetry_disabled --cockroach-archive-prefix=$cockroach_archive_prefix
+$BAZEL_BIN/pkg/cmd/publish-artifacts/publish-artifacts_/publish-artifacts release --gcs-bucket="$gcs_bucket" --platform=$platform --third-party-notices-file=/tmp/THIRD-PARTY-NOTICES.txt --telemetry-disabled=$telemetry_disabled --cockroach-archive-prefix=$cockroach_archive_prefix
 EOF
 tc_end_block "Make and publish release artifacts"
 
 
-if [[ $platform == "linux-amd64" || $platform == "linux-arm64" || $platform == "linux-amd64-fips" ]]; then
-  tc_start_block "Make and push docker image"
-  docker_login_gcr "$gcr_staged_repository" "$gcr_credentials"
-  arch="amd64"
-  if [[ $platform == "linux-arm64" ]]; then
-    arch="arm64"
-  fi
-  cp --recursive "build/deploy" "build/deploy-${platform}"
-  tar \
-    --directory="build/deploy-${platform}" \
-    --extract \
-    --file="artifacts/${cockroach_archive_prefix}-${version}.${platform}.tgz" \
-    --ungzip \
-    --ignore-zeros \
-    --strip-components=1
-  cp LICENSE licenses/THIRD-PARTY-NOTICES.txt "build/deploy-${platform}"
-  # Move the libs where Dockerfile expects them to be
-  mv build/deploy-${platform}/lib/* build/deploy-${platform}/
-  rmdir build/deploy-${platform}/lib
-
-  build_docker_tag="${gcr_staged_repository}:${arch}-${version}"
-  if [[ $platform == "linux-amd64-fips" ]]; then
-    build_docker_tag="${gcr_staged_repository}:${version}-fips"
-  fi
-  docker build --label version="$version_label" --no-cache --pull --platform="linux/${arch}" --tag="${build_docker_tag}" "build/deploy-${platform}"
-  docker push "$build_docker_tag"
-  tc_end_block "Make and push docker image"
-fi
-
-
-# Here we verify the FIPS image only. The multi-arch image will be verified in the job it's created.
-if [[ $platform == "linux-amd64-fips" ]]; then
-  tc_start_block "Verify FIPS docker image"
-  verify_docker_image "$build_docker_tag" "linux/amd64" "$BUILD_VCS_NUMBER" "$version" true $telemetry_disabled
-  tc_end_block "Verify FIPS docker image"
-fi

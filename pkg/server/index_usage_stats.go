@@ -248,7 +248,7 @@ func getTableIndexUsageStats(
   	JOIN pg_catalog.pg_index AS pgidx ON indrelid = us.table_id
   	JOIN pg_catalog.pg_indexes AS pgidxs ON pgidxs.crdb_oid = indexrelid
 		AND indexname = ti.index_name
- 		WHERE ti.descriptor_id = $::REGCLASS`,
+		WHERE ti.descriptor_id::OID = $::REGCLASS::OID`,
 		tableID,
 	)
 	it, err := ie.QueryIteratorEx(ctx, "index-usage-stats", nil,

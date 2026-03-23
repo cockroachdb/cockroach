@@ -187,13 +187,54 @@ func TableDescs(
 			// we update the FK to point to it?
 			table.OutboundFKs = append(table.OutboundFKs, *fk)
 		}
-		for idx := range table.Mutations {
-			if c := table.Mutations[idx].GetConstraint(); c != nil &&
+
+		// If the table has an RBRUsingConstraint, check that the referenced FK
+		// constraint still exists after dropping FKs with missing referenced tables.
+		if table.RBRUsingConstraint != 0 {
+			found := false
+			for i := range table.OutboundFKs {
+				if table.OutboundFKs[i].ConstraintID == table.RBRUsingConstraint {
+					found = true
+					break
+				}
+			}
+			if !found {
+				table.RBRUsingConstraint = 0
+			}
+		}
+
+		origMutations := table.Mutations
+		table.Mutations = table.Mutations[:0]
+		for idx := range origMutations {
+			if c := origMutations[idx].GetConstraint(); c != nil &&
 				c.ConstraintType == descpb.ConstraintToUpdate_FOREIGN_KEY {
 				fk := &c.ForeignKey
 				if rewriteOfReferencedTable, ok := descriptorRewrites[fk.ReferencedTableID]; ok {
 					fk.ReferencedTableID = rewriteOfReferencedTable.ID
 					fk.OriginTableID = tableRewrite.ID
+				} else {
+					// The referenced table is not being restored. If the user
+					// specified skip_missing_foreign_keys, drop this mutation.
+					// Error checking for the case where the user did not specify
+					// the option has already been done in allocateDescriptorRewrites.
+					continue
+				}
+			}
+			table.Mutations = append(table.Mutations, origMutations[idx])
+		}
+		// Clean up MutationJobs entries for mutation IDs that no longer
+		// have any corresponding mutations (e.g. because we dropped FK
+		// mutations above).
+		if len(table.Mutations) < len(origMutations) {
+			remainingMutIDs := make(map[descpb.MutationID]struct{})
+			for i := range table.Mutations {
+				remainingMutIDs[table.Mutations[i].MutationID] = struct{}{}
+			}
+			origMutJobs := table.MutationJobs
+			table.MutationJobs = table.MutationJobs[:0]
+			for i := range origMutJobs {
+				if _, ok := remainingMutIDs[origMutJobs[i].MutationID]; ok {
+					table.MutationJobs = append(table.MutationJobs, origMutJobs[i])
 				}
 			}
 		}
@@ -473,21 +514,49 @@ func TableDescs(
 	// references from the view, which cannot have triggers and thus are not
 	// included in relationBackrefRemovalCandidates.
 	if len(relationBackrefRemovalCandidates) > 0 {
+		// Build a lookup map from rewritten table ID to table descriptor, so we
+		// can check whether a trigger still exists on a referencing table.
+		tablesByID := make(map[descpb.ID]*tabledesc.Mutable, len(tables))
+		for _, t := range tables {
+			tablesByID[t.ID] = t
+		}
+
 		for _, table := range tables {
 			if refsToRemove, ok := relationBackrefRemovalCandidates[table.ID]; ok {
 				newDependedOnBy := table.DependedOnBy[:0]
 				for _, ref := range table.DependedOnBy {
 					if _, remove := refsToRemove[ref.ID]; !remove {
 						newDependedOnBy = append(newDependedOnBy, ref)
+					} else if ref.TriggerID != 0 {
+						// This backref is for a specific trigger. Only remove
+						// it if that trigger no longer exists on the
+						// referencing table (i.e., it was dropped due to
+						// missing dependencies).
+						if refTable, ok := tablesByID[ref.ID]; ok {
+							triggerStillExists := false
+							for i := range refTable.Triggers {
+								if refTable.Triggers[i].ID == ref.TriggerID {
+									triggerStillExists = true
+									break
+								}
+							}
+							if triggerStillExists {
+								newDependedOnBy = append(newDependedOnBy, ref)
+							}
+						}
+						// If the referencing table is not in the restore set,
+						// the backref is stale and can be safely dropped.
 					} else {
 						// Sequences are a special case: we remove only the backref created
-						// by the trigger or policy. This is represented as a minimal
-						// TableDescriptor_Reference with just ID and ByID=true. Other
+						// by the trigger or policy. This is represented as a
+						// TableDescriptor_Reference with just ID and ByID=true, and
+						// optionally a TriggerID (for trigger-based references). Other
 						// backrefs, such as those created by column usage, are preserved.
 						if table.IsSequence() {
 							seqRefUsedInTriggerOrPolicy := descpb.TableDescriptor_Reference{
-								ID:   ref.ID,
-								ByID: true,
+								ID:        ref.ID,
+								ByID:      true,
+								TriggerID: ref.TriggerID,
 							}
 							if !seqRefUsedInTriggerOrPolicy.Equal(ref) {
 								newDependedOnBy = append(newDependedOnBy, ref)
@@ -986,6 +1055,7 @@ func rewriteSchemaChangerState(
 	}()
 
 	var droppedConstraints catalog.ConstraintIDSet
+	var droppedTriggers catalog.TriggerIDSet
 	for i := 0; i < len(state.Targets); i++ {
 		t := &state.Targets[i]
 		// Since the parent database ID is never written in the descriptorRewrites
@@ -1041,6 +1111,22 @@ func rewriteSchemaChangerState(
 					removeElementAtCurrentIdx()
 					continue
 				}
+			case *scpb.ForeignKeyConstraint:
+				// If the referenced table is missing, drop this FK constraint
+				// element. This mirrors the skip_missing_foreign_keys handling
+				// for legacy schema changer mutations in TableDescs.
+				if el.ReferencedTableID == missingID {
+					removeElementAtCurrentIdx()
+					droppedConstraints.Add(el.ConstraintID)
+					continue
+				}
+			case *scpb.ForeignKeyConstraintUnvalidated:
+				// Same handling as ForeignKeyConstraint for unvalidated FKs.
+				if el.ReferencedTableID == missingID {
+					removeElementAtCurrentIdx()
+					droppedConstraints.Add(el.ConstraintID)
+					continue
+				}
 			case *scpb.CheckConstraint:
 				// IF there is any dependency missing for check constraint, we just drop
 				// the target.
@@ -1065,16 +1151,20 @@ func rewriteSchemaChangerState(
 					continue
 				}
 			case *scpb.TriggerFunctionCall:
-				// If there is a missing function, then this was in middle of creating
-				// a trigger when the back-up was taken.
+				// If there is a missing function dependency, drop this element
+				// and record the trigger ID so sibling trigger elements are also
+				// removed.
 				if el.FuncID == missingID {
+					droppedTriggers.Add(el.TriggerID)
 					removeElementAtCurrentIdx()
 					continue
 				}
 			case *scpb.TriggerDeps:
-				// If there is a missing function, then this was in middle of creating
-				// a trigger when the back-up was taken.
+				// If there is a missing function dependency, drop this element
+				// and record the trigger ID so sibling trigger elements are also
+				// removed.
 				if catalog.MakeDescriptorIDSet(el.UsesRoutineIDs...).Contains(missingID) {
+					droppedTriggers.Add(el.TriggerID)
 					removeElementAtCurrentIdx()
 					continue
 				}
@@ -1148,6 +1238,26 @@ func rewriteSchemaChangerState(
 			return err
 		}
 	}
+
+	// Drop all sibling targets of triggers with missing dependencies.
+	if !droppedTriggers.Empty() {
+		for i := 0; i < len(state.Targets); i++ {
+			t := &state.Targets[i]
+			if err := screl.WalkTriggerIDs(t.Element(), func(id *catid.TriggerID) error {
+				if !droppedTriggers.Contains(*id) {
+					return nil
+				}
+				state.Targets = append(state.Targets[:i], state.Targets[i+1:]...)
+				state.CurrentStatuses = append(state.CurrentStatuses[:i], state.CurrentStatuses[i+1:]...)
+				state.TargetRanks = append(state.TargetRanks[:i], state.TargetRanks[i+1:]...)
+				i--
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+	}
+
 	d.SetDeclarativeSchemaChangerState(state)
 	return nil
 }
@@ -1318,12 +1428,14 @@ func dropTriggerMissingDeps(
 			}
 
 			// Note: We do not track removed routine references here. This is
-			// intentional. Unlike types or relations, routines are only restored at
-			// the database level and cannot be selectively restored. If a routine is
-			// missing, any table that references it must be dropped prior to restore,
-			// which clears the backref from the function. This avoids any possibility
-			// of dangling function backrefs and eliminates the need for special
-			// cleanup logic here.
+			// intentional. When a trigger or policy is dropped during restore due
+			// to missing dependencies, any function it referenced either (a) was
+			// not found in descriptorRewrites and is not part of the restore, so
+			// there are no backrefs to clean up, or (b) maps to an existing
+			// function (ToExisting) that does not yet have a backref to the newly
+			// restored table. In case (b), backrefs are added separately in
+			// createImportingDescriptors. In both cases, no backref cleanup is
+			// needed for routines here.
 
 			continue
 		}
@@ -1394,12 +1506,14 @@ func dropPolicyMissingDeps(
 			}
 
 			// Note: We do not track removed routine references here. This is
-			// intentional. Unlike types or relations, routines are only restored at
-			// the database level and cannot be selectively restored. If a routine is
-			// missing, any table that references it must be dropped prior to restore,
-			// which clears the backref from the function. This avoids any possibility
-			// of dangling function backrefs and eliminates the need for special
-			// cleanup logic here.
+			// intentional. When a trigger or policy is dropped during restore due
+			// to missing dependencies, any function it referenced either (a) was
+			// not found in descriptorRewrites and is not part of the restore, so
+			// there are no backrefs to clean up, or (b) maps to an existing
+			// function (ToExisting) that does not yet have a backref to the newly
+			// restored table. In case (b), backrefs are added separately in
+			// createImportingDescriptors. In both cases, no backref cleanup is
+			// needed for routines here.
 		}
 	}
 	table.Policies = newPolicies

@@ -252,8 +252,6 @@ func TestReconciliationJobIsIdle(t *testing.T) {
 	var jobID jobspb.JobID
 	ctx := context.Background()
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109457),
-
 		Knobs: base.TestingKnobs{
 			SpanConfig: &spanconfig.TestingKnobs{
 				ManagerCreatedJobInterceptor: func(jobI interface{}) {

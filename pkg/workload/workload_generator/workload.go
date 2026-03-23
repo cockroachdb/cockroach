@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -120,6 +121,8 @@ var workloadGeneratorMeta = workload.Meta{
 			"Percentage of SQL workload operations executed as reads (0–100; default 50).")
 		g.flags.DurationVar(&g.txTimeout, "tx-timeout", 5*time.Minute,
 			"Per-transaction timeout (e.g. 30s, 5m; default 5m).")
+		g.flags.BoolVar(&g.listDbs, "list-dbs", false,
+			"List all databases found in the debug logs and exit without initializing tables.")
 		g.flags.Meta = map[string]workload.FlagMeta{}
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
@@ -141,6 +144,7 @@ type workloadGenerator struct {
 	inputYAML   string                    // path to “user-provided” schema YAML file
 	outputDir   string                    // directory to write generated schema & SQL
 	schemaOnly  bool                      // if true, only dump schema and exit
+	listDbs     bool                      // if true, list all databases from debug logs and exit
 	readPct     int                       // percent reads vs writes
 	txTimeout   time.Duration             // per-transaction timeout for all ExecContext calls
 	columnGens  map[string]*runtimeColumn // table.col → runtimeColumn
@@ -166,6 +170,24 @@ func (w *workloadGenerator) Hooks() workload.Hooks {
 	return workload.Hooks{
 		// Before data generation begins, we have to parse the DDLs and generate the schema required for further steps.
 		PreCreate: func(db *gosql.DB) error {
+			// If --list-dbs is set, list all databases and exit immediately
+			if w.listDbs {
+				databases, err := listDatabases(w.debugLogsLocation)
+				if err != nil {
+					return errors.Wrap(err, "failed to list databases from debug logs")
+				}
+				if len(databases) == 0 {
+					fmt.Println("No user databases found in debug logs")
+				} else {
+					fmt.Println("Databases found in debug logs:")
+					for _, db := range databases {
+						fmt.Printf("  - %s\n", db)
+					}
+				}
+				// Exit immediately to prevent PreCreate from being called multiple times
+				exit.WithCode(exit.Success())
+			}
+
 			err := w.initializeGenerator()
 			if err != nil {
 				return errors.Wrapf(err,

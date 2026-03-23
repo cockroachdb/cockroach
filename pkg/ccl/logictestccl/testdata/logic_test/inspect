@@ -1,0 +1,66 @@
+# LogicTest: multiregion-9node-3region-3azs
+# knob-opt: allow-unsafe
+
+statement ok
+CREATE DATABASE mr_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1"
+
+subtest uniqueness_check
+
+statement ok
+USE mr_db
+
+statement ok
+CREATE TABLE uniqueness_check (
+  id INT64 DEFAULT unordered_unique_rowid(),
+  data TEXT,
+  PRIMARY KEY (id)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('ap-southeast-2', 100, 'foo');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('ap-southeast-2', 200, 'titi');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('ca-central-1', 300, 'bar');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('ca-central-1', 400, 'toto');
+INSERT INTO uniqueness_check (crdb_region, id, data) VALUES ('us-east-1', 500, 'baz');
+
+statement ok
+INSPECT TABLE uniqueness_check WITH OPTIONS INDEX (uniqueness_check_pkey);
+
+statement ok
+DROP TABLE uniqueness_check;
+
+subtest complex_keys
+
+# Build the table
+
+statement ok
+CREATE TABLE uniqueness_check_complex (
+  filler TEXT,
+  id INT64 DEFAULT unordered_unique_rowid(),
+  data TEXT,
+  PRIMARY KEY (filler, id)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('us-east-1', 'filler1', 100, 'foo');
+INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('ca-central-1', 'filler1', 200, 'bar');
+INSERT INTO uniqueness_check_complex (crdb_region, filler, id, data) VALUES ('ap-southeast-2', 'filler1', 300, 'tata');
+
+statement ok
+SET CLUSTER SETTING sql.inspect.uniqueness_check.complex_keys.enabled = true;
+
+statement ok
+INSPECT TABLE uniqueness_check_complex;
+
+statement ok
+DROP TABLE uniqueness_check_complex;
+
+subtest end
+
+subtest end
+
+statement ok
+USE system
+
+statement ok
+DROP DATABASE mr_db CASCADE;

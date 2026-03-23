@@ -27,10 +27,10 @@ ALTER VIEW foo RENAME TO bar
 # The legacy schema changer was more strict about using ALTER TABLE to rename
 # a sequence. Since Postgres allows that, the declarative schema changer
 # supports it.
-onlyif config local-legacy-schema-changer local-mixed-25.3
+onlyif config local-legacy-schema-changer
 statement error pgcode 42809 "foo" is not a table
 ALTER TABLE foo RENAME TO bar
 
-skipif config local-legacy-schema-changer local-mixed-25.3
+skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE foo RENAME TO bar

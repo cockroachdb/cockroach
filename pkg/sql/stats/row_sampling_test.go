@@ -29,19 +29,16 @@ import (
 // runSampleTest feeds rows with the given ranks through a reservoir
 // of a given size and verifies the results are correct.
 func runSampleTest(
-	t *testing.T,
-	evalCtx *eval.Context,
-	numSamples, expectedNumSamples int,
-	ranks []int,
-	memAcc *mon.BoundAccount,
+	t *testing.T, numSamples, expectedNumSamples int, ranks []int, memAcc *mon.BoundAccount,
 ) {
 	ctx := context.Background()
 	var sr SampleReservoir
+	var collationEnv tree.CollationEnvironment
 	sr.Init(numSamples, 1, []*types.T{types.Int}, memAcc, intsets.MakeFast(0))
 	for _, r := range ranks {
 		d := rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(r)))
 		prevCapacity := sr.Cap()
-		if err := sr.SampleRow(ctx, evalCtx, rowenc.EncDatumRow{d}, uint64(r)); err != nil {
+		if err := sr.SampleRow(ctx, &collationEnv, rowenc.EncDatumRow{d}, uint64(r)); err != nil {
 			t.Fatal(err)
 		} else if sr.Cap() != prevCapacity {
 			t.Logf(
@@ -92,7 +89,6 @@ func runSampleTest(
 func TestSampleReservoir(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := eval.MakeTestingEvalContext(st)
 
 	for _, n := range []int{10, 100, 1000, 10000} {
 		rng, _ := randutil.NewTestRand()
@@ -102,7 +98,7 @@ func TestSampleReservoir(t *testing.T) {
 		}
 		for _, k := range []int{1, 5, 10, 100} {
 			t.Run(fmt.Sprintf("n=%d/k=%d/mem=nolimit", n, k), func(t *testing.T) {
-				runSampleTest(t, &evalCtx, k, k, ranks, nil)
+				runSampleTest(t, k, k, ranks, mon.NewStandaloneUnlimitedAccount())
 			})
 			for _, mem := range []int64{1 << 8, 1 << 10, 1 << 12} {
 				t.Run(fmt.Sprintf("n=%d/k=%d/mem=%d", n, k, mem), func(t *testing.T) {
@@ -122,7 +118,7 @@ func TestSampleReservoir(t *testing.T) {
 					} else if mem == 1<<12 && n > 10 && k > 10 {
 						expectedK = 25
 					}
-					runSampleTest(t, &evalCtx, k, expectedK, ranks, &memAcc)
+					runSampleTest(t, k, expectedK, ranks, &memAcc)
 				})
 			}
 		}
@@ -132,8 +128,9 @@ func TestSampleReservoir(t *testing.T) {
 func TestTruncateDatum(t *testing.T) {
 	ctx := context.Background()
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	var collationEnv tree.CollationEnvironment
 	runTest := func(d, expected tree.Datum) {
-		actual := truncateDatum(&evalCtx, d, 10 /* maxBytes */)
+		actual := truncateDatum(&collationEnv, d, 10 /* maxBytes */)
 		if cmp, err := actual.Compare(ctx, &evalCtx, expected); err != nil {
 			t.Fatal(err)
 		} else if cmp != 0 {
@@ -185,7 +182,7 @@ corn, the green oats, and the haystacks piled up in the meadows looked beautiful
 func TestSampleReservoirMemAccounting(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	evalCtx := eval.MakeTestingEvalContext(st)
+	var collationEnv tree.CollationEnvironment
 
 	getStringDatum := func(l int) rowenc.EncDatum {
 		d := tree.DString(strings.Repeat("a", l))
@@ -210,9 +207,9 @@ func TestSampleReservoirMemAccounting(t *testing.T) {
 	memAcc := monitor.MakeBoundAccount()
 	var sr SampleReservoir
 	sr.Init(2, 1, []*types.T{types.String, types.String}, &memAcc, intsets.MakeFast(0, 1))
-	require.NoError(t, sr.SampleRow(ctx, &evalCtx, rows[0], 3))
-	require.NoError(t, sr.SampleRow(ctx, &evalCtx, rows[1], 2))
-	err := sr.SampleRow(ctx, &evalCtx, rows[2], 1)
+	require.NoError(t, sr.SampleRow(ctx, &collationEnv, rows[0], 3))
+	require.NoError(t, sr.SampleRow(ctx, &collationEnv, rows[1], 2))
+	err := sr.SampleRow(ctx, &collationEnv, rows[2], 1)
 	require.Error(t, err)
 	require.True(t, testutils.IsError(err, "memory budget exceeded"))
 }

@@ -27,7 +27,6 @@ import (
 	"google.golang.org/grpc/status"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcclient"
-	"storj.io/drpc/drpcmetadata"
 	"storj.io/drpc/drpcmux"
 )
 
@@ -49,7 +48,7 @@ var (
 		Help:        "Gauge of current connections in a healthy state (i.e. bidirectionally connected and heartbeating)",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `See Description.`,
 	}
@@ -59,7 +58,7 @@ var (
 		Help:        "Gauge of current connections in an unhealthy state (not bidirectionally connected or heartbeating)",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `If the value of this metric is greater than 0, this could indicate a network partition.`,
 	}
@@ -83,7 +82,7 @@ the constituent parts of this metric are available on a per-peer basis and one c
 for how long a given peer has been connected`,
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `This can be useful for monitoring the stability and health of connections within your CockroachDB cluster.`,
 	}
@@ -97,7 +96,7 @@ the constituent parts of this metric are available on a per-peer basis and one c
 for how long a given peer has been unreachable`,
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `If this duration is greater than 0, this could indicate how long a network partition has been occurring.`,
 	}
@@ -107,7 +106,7 @@ for how long a given peer has been unreachable`,
 		Help:        `Counter of successful heartbeats.`,
 		Measurement: "Heartbeats",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `See Description.`,
 	}
@@ -124,7 +123,7 @@ Decommissioned peers are excluded.
 `,
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `See Description.`,
 	}
@@ -148,7 +147,7 @@ This metric does not track failed connection. A failed connection's contribution
 is reset to zero.
 `,
 		Measurement: "Latency",
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `This metric is helpful in understanding general network issues outside of CockroachDB that could be impacting the user’s workload.`,
 	}
@@ -165,7 +164,7 @@ this reflects pure network latency and is less affected by CPU overload effects.
 This metric is only available on Linux.
 `,
 		Measurement: "Latency",
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `High TCP RTT values indicate network issues outside of CockroachDB that could be impacting the user's workload.`,
 	}
@@ -182,7 +181,7 @@ connection latency.
 This metric is only available on Linux.
 `,
 		Measurement: "Latency Variance",
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_NETWORKING,
 		HowToUse:    `High TCP RTT variance values indicate network stability issues outside of CockroachDB that could be impacting the user's workload.`,
 	}
@@ -251,7 +250,7 @@ func (m *Metrics) makeLabels(k peerKey, remoteLocality roachpb.Locality) []strin
 }
 
 func newMetrics(locality roachpb.Locality) *Metrics {
-	childLabels := []string{"remote_node_id", "remote_addr", "class"}
+	childLabels := []string{"remote_node_id", "remote_addr", "class", "protocol"}
 	localityLabels := []string{}
 	for _, tier := range locality.Tiers {
 		localityLabels = append(localityLabels, "source_"+tier.Key)
@@ -391,10 +390,12 @@ type localityMetrics struct {
 	ConnectionBytesRecv *aggmetric.Counter
 }
 
-func (m *Metrics) acquire(k peerKey, l roachpb.Locality) (peerMetrics, localityMetrics) {
+func (m *Metrics) acquire(
+	k peerKey, l roachpb.Locality, rpcProtocol string,
+) (peerMetrics, localityMetrics) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	labelVals := []string{k.NodeID.String(), k.TargetAddr, k.Class.String()}
+	labelVals := []string{k.NodeID.String(), k.TargetAddr, k.Class.String(), rpcProtocol}
 	labelKey := strings.Join(labelVals, ",")
 	pm, ok := m.mu.peerMetrics[labelKey]
 	if !ok {
@@ -436,6 +437,10 @@ func (m *Metrics) acquire(k peerKey, l roachpb.Locality) (peerMetrics, localityM
 const (
 	RpcMethodLabel     = "methodName"
 	RpcStatusCodeLabel = "statusCode"
+	RpcProtocolLabel   = "protocol"
+
+	rpcProtocolGRPC = "grpc"
+	rpcProtocolDRPC = "drpc"
 )
 
 // RequestMetrics contains metrics for RPC requests.
@@ -448,7 +453,7 @@ func NewRequestMetrics() *RequestMetrics {
 		Duration: metric.NewExportedHistogramVec(
 			metaRequestDuration,
 			metric.ResponseTime30sBuckets,
-			[]string{RpcMethodLabel, RpcStatusCodeLabel}),
+			[]string{RpcMethodLabel, RpcStatusCodeLabel, RpcProtocolLabel}),
 	}
 }
 
@@ -485,6 +490,7 @@ func NewRequestMetricsInterceptor(
 		requestMetrics.Duration.Observe(map[string]string{
 			RpcMethodLabel:     info.FullMethod,
 			RpcStatusCodeLabel: code.String(),
+			RpcProtocolLabel:   rpcProtocolGRPC,
 		}, float64(duration.Nanoseconds()))
 		return resp, err
 	}
@@ -520,6 +526,7 @@ func NewDRPCRequestMetricsInterceptor(
 		requestMetrics.Duration.Observe(map[string]string{
 			RpcMethodLabel:     rpc,
 			RpcStatusCodeLabel: code.String(),
+			RpcProtocolLabel:   rpcProtocolDRPC,
 		}, float64(duration.Nanoseconds()))
 		return resp, err
 	}
@@ -558,7 +565,7 @@ func gatewayRequestRecoveryInterceptor(
 // MarkDRPCGatewayRequest annotates ctx so that downstream DRPC calls can
 // be recognized as originating from the DB Console HTTP gateway.
 func MarkDRPCGatewayRequest(ctx context.Context) context.Context {
-	return drpcmetadata.Add(ctx, gwRequestKey, "true")
+	return metadata.AppendToOutgoingContext(ctx, gwRequestKey, "true")
 }
 
 // drpcGatewayRequestRecoveryInterceptor recovers from panics in DRPC handlers
@@ -567,13 +574,18 @@ func MarkDRPCGatewayRequest(ctx context.Context) context.Context {
 func drpcGatewayRequestRecoveryInterceptor(
 	ctx context.Context, req interface{}, rpc string, handler drpcmux.UnaryHandler,
 ) (resp interface{}, err error) {
-	if val, ok := drpcmetadata.GetValue(ctx, gwRequestKey); ok && val != "" {
-		defer func() {
-			if p := recover(); p != nil {
-				logcrash.ReportPanic(ctx, nil, p, 1 /* depth */)
-				err = errors.New("an unexpected error occurred")
-			}
-		}()
+	md, ok := metadata.FromIncomingContext(ctx)
+	if ok {
+		val := md.Get(gwRequestKey)
+		if len(val) == 1 && val[0] != "" {
+			defer func() {
+				if p := recover(); p != nil {
+					logcrash.ReportPanic(ctx, nil, p, 1 /* depth */)
+					// The gRPC gateway will put this message in the HTTP response to the client.
+					err = errors.New("an unexpected error occurred")
+				}
+			}()
+		}
 	}
 	resp, err = handler(ctx, req)
 	return resp, err
@@ -591,9 +603,12 @@ func drpcGatewayRequestCounterInterceptor(
 	cc *drpcclient.ClientConn,
 	invoker drpcclient.UnaryInvoker,
 ) error {
-	// Check if this request originated from the DRPC HTTP gateway
-	if val, ok := drpcmetadata.GetValue(ctx, gwRequestKey); ok && val != "" {
-		telemetry.Inc(getDRPCGatewayEndpointCounter(rpc))
+	md, ok := metadata.FromOutgoingContext(ctx)
+	if ok {
+		val := md.Get(gwRequestKey)
+		if len(val) == 1 && val[0] != "" {
+			telemetry.Inc(getDRPCGatewayEndpointCounter(rpc))
+		}
 	}
 	return invoker(ctx, rpc, enc, in, out, cc)
 }

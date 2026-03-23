@@ -1,0 +1,9 @@
+/* setup */
+CREATE TABLE t (i int);
+CREATE SCHEMA sc;
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t SET (exclude_data_from_backup=true, autovacuum_enabled=false, sql_stats_histogram_buckets_count=64);
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› SET ('exclude_data_from_backup' = ‹true›, 'autovacuum_enabled' = ‹false›, 'sql_stats_histogram_buckets_count' = ‹64›);
+ └── execute 2 system table mutations transactions

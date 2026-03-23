@@ -15,7 +15,7 @@ ARGS="--config engflowpublic --tls_client_certificate=/home/agent/engflow.crt --
 if [[ "$GITHUB_ACTIONS_BRANCH" == staging-* ]]
 then
     ARGS="$ARGS --remote_execution_priority=8"
-elif [ "$GITHUB_ACTIONS_BRANCH" == "staging" ]
+elif [[ "$GITHUB_ACTIONS_BRANCH" == "staging" || "$GITHUB_ACTIONS_BRANCH" == trunk-merge/* ]]
 then
     ARGS="$ARGS --remote_execution_priority=6"
 fi

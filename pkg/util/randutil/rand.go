@@ -227,6 +227,26 @@ func FastInt63() int64 {
 	return i
 }
 
+// FastUint32n returns a random number in [0, n) range. It'll panic if n is
+// zero.
+func FastUint32n(n uint32) uint32 {
+	return FastUint32() % n
+}
+
+// FastShuffle pseudo-randomizes the order of elements. n is the number of
+// elements. n must be greater than zero. swap swaps the elements with indexes i
+// and j.
+//
+// Copied with adjustments from math/rand/rand.go:Shuffle.
+func FastShuffle(n uint32, swap func(i, j uint32)) {
+	// Fisher-Yates shuffle: https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
+	i := n - 1
+	for ; i > 0; i-- {
+		j := FastUint32n(i + 1)
+		swap(i, j)
+	}
+}
+
 // ReadTestdataBytes reads random bytes, but then nudges them into printable
 // ASCII, *reducing their randomness* to make them a little friendlier for
 // humans using them as testdata.

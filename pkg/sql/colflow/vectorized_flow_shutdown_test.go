@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
@@ -137,7 +138,8 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					EvalCtx: &evalCtx,
 					Mon:     evalCtx.TestingMon,
 					Cfg: &execinfra.ServerConfig{
-						Settings: st,
+						Settings:   st,
+						RPCContext: &rpc.Context{ContextOptions: rpc.ContextOptions{}},
 					},
 				}
 				rng, _ := randutil.NewTestRand()
@@ -199,7 +201,8 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					&execinfra.FlowCtx{
 						Gateway: false,
 						Cfg: &execinfra.ServerConfig{
-							Settings: st,
+							Settings:   st,
+							RPCContext: &rpc.Context{ContextOptions: rpc.ContextOptions{}},
 						},
 					},
 					0, /* processorID */
@@ -248,7 +251,8 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 						&execinfra.FlowCtx{
 							Gateway: false,
 							Cfg: &execinfra.ServerConfig{
-								Settings: st,
+								Settings:   st,
+								RPCContext: &rpc.Context{ContextOptions: rpc.ContextOptions{}},
 							},
 						},
 						0, /* processorID */

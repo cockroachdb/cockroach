@@ -8,11 +8,13 @@ admission.sql_sql_response.enabled	boolean	true	when true, work performed by the
 bulkio.backup.file_size	byte size	128 MiB	target size for individual data files produced during BACKUP	application
 bulkio.backup.read_timeout	duration	5m0s	amount of time after which a read attempt is considered timed out, which causes the backup to fail	application
 bulkio.backup.read_with_priority_after	duration	1m0s	amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads	application
+bulkio.import.row_count_validation.mode (alias: bulkio.import.row_count_validation.unsafe.mode)	enumeration	async	controls validation of imported data via INSPECT jobs. Options: 'off' (no validation), 'async' (background validation), 'sync' (blocking validation). If disabled, IMPORT will not perform a post-import row count check. [off = 0, async = 1, sync = 2]	application
+bulkio.merge.file_size	byte size	1.0 GiB	target size for individual data files produced during local only merge phases	application
 changefeed.aggregator.flush_jitter	float	0.1	jitter aggregator flushes as a fraction of min_checkpoint_frequency. This setting has no effect if min_checkpoint_frequency is set to 0.	application
 changefeed.backfill.concurrent_scan_requests	integer	0	number of concurrent scan requests per node issued during a backfill	application
 changefeed.backfill.scan_request_size	integer	524288	the maximum number of bytes returned by each scan request	application
 changefeed.batch_reduction_retry.enabled (alias: changefeed.batch_reduction_retry_enabled)	boolean	false	if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes	application
-changefeed.default_range_distribution_strategy	enumeration	default	configures how work is distributed among nodes for a given changefeed. for the most balanced distribution, use `balanced_simple`. changing this setting will not override locality restrictions. this setting can be overridden by the changefeed option `range_distribution_strategy` [default = 0, balanced_simple = 1]	application
+changefeed.default_range_distribution_strategy	enumeration	default	controls how changefeed work is distributed across nodes. 'default' defers to DistSQL for node selection and work distribution. 'balanced_simple' uses DistSQL for node selection but then attempts to evenly distribute ranges across those selected nodes for better load balancing. this setting does not override locality restrictions and can be overridden per-changefeed using the 'range_distribution_strategy' option. [default = 0, balanced_simple = 1]	application
 changefeed.event_consumer_worker_queue_size	integer	16	if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events which a worker can buffer	application
 changefeed.event_consumer_workers	integer	0	the number of workers to use when processing events: <0 disables, 0 assigns a reasonable default, >0 assigns the setting value. for experimental/core changefeeds and changefeeds using parquet format, this is disabled	application
 changefeed.fast_gzip.enabled	boolean	true	use fast gzip implementation	application
@@ -21,6 +23,7 @@ changefeed.kafka_v2_error_details.enabled	boolean	true	if enabled, Kafka v2 sink
 changefeed.memory.per_changefeed_limit	byte size	512 MiB	controls amount of data that can be buffered per changefeed	application
 changefeed.resolved_timestamp.min_update_interval (alias: changefeed.min_highwater_advance)	duration	0s	minimum amount of time that must have elapsed since the last time a changefeed's resolved timestamp was updated before it is eligible to be updated again; default of 0 means no minimum interval is enforced but updating will still be limited by the average time it takes to checkpoint progress	application
 changefeed.node_throttle_config	string		specifies node level throttling configuration for all changefeeeds	application
+changefeed.partition_alg.enabled	boolean	false	if enabled, allows specifying the partition_alg changefeed option to choose between fnv-1a (default) and murmur2 hash functions for Kafka partitioning. Only affects changefeeds using a kafka sink with changefeed.new_kafka_sink_enabled set to true.	application
 changefeed.progress.frontier_persistence.interval	duration	30s	minimum amount of time that must elapse before a changefeed will persist its entire span frontier again	application
 changefeed.protect_timestamp.max_age	duration	96h0m0s	fail the changefeed if the protected timestamp age exceeds this threshold; 0 disables expiration	application
 changefeed.protect_timestamp_interval	duration	10m0s	controls how often the changefeed forwards its protected timestamp to the resolved timestamp	application
@@ -112,6 +115,7 @@ log.channel_compatibility_mode.enabled	boolean	false	when true, logs will to log
 obs.tablemetadata.automatic_updates.enabled	boolean	false	enables automatic updates of the table metadata cache system.table_metadata	application
 obs.tablemetadata.data_valid_duration	duration	20m0s	the duration for which the data in system.table_metadata is considered valid	application
 schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protection across backups run as part of a schedule	application
+security.client_cert.san_required.enabled	boolean	false	mandates a requirement for client certs to contain SAN	system-visible
 security.client_cert.subject_required.enabled	boolean	false	mandates a requirement for subject role to be set for db user	system-visible
 security.ocsp.mode	enumeration	off	use OCSP to check whether TLS certificates are revoked. If the OCSP server is unreachable, in strict mode all certificates will be rejected and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]	application
 security.ocsp.timeout	duration	3s	timeout before considering the OCSP server unreachable	application
@@ -157,12 +161,15 @@ server.oidc_authentication.provider.custom_ca	string		sets the PEM encoded custo
 server.oidc_authentication.provider_url	string		sets OIDC provider URL ({provider_url}/.well-known/openid-configuration must resolve)	application
 server.oidc_authentication.redirect_url	string	https://localhost:8080/oidc/v1/callback	sets OIDC redirect URL via a URL string or a JSON string containing a required `redirect_urls` key with an object that maps from region keys to URL strings (URLs should point to your load balancer and must route to the path /oidc/v1/callback)	application
 server.oidc_authentication.scopes	string	openid	sets OIDC scopes to include with authentication request (space delimited list of strings, required to start with `openid`)	application
+server.oidc_authentication.tls_insecure_skip_verify.enabled	boolean	false	if true, TLS certificate verification is skipped for connections to the OIDC provider (insecure)	application
 server.redact_sensitive_settings.enabled	boolean	false	enables or disables the redaction of sensitive settings in the output of SHOW CLUSTER SETTINGS and SHOW ALL CLUSTER SETTINGS for users without the MODIFYCLUSTERSETTING privilege	application
 server.shutdown.connections.timeout (alias: server.shutdown.connection_wait)	duration	0s	the maximum amount of time a server waits for all SQL connections to be closed before proceeding with a drain. (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	application
 server.shutdown.initial_wait (alias: server.shutdown.drain_wait)	duration	0s	the amount of time a server waits in an unready state before proceeding with a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting. --drain-wait is to specify the duration of the whole draining process, while server.shutdown.initial_wait is to set the wait time for health probes to notice that the node is not ready.)	application
 server.shutdown.transactions.timeout (alias: server.shutdown.query_wait)	duration	10s	the timeout for waiting for active transactions to finish during a drain (note that the --drain-wait parameter for cockroach node drain may need adjustment after changing this setting)	application
-server.sql_tcp_keep_alive.count	integer	3	maximum number of probes that will be sent out before a connection is dropped because it's unresponsive (Linux and Darwin only)	application
-server.sql_tcp_keep_alive.interval	duration	10s	time between keep alive probes and idle time before probes are sent out	application
+server.sql_tcp_keep_alive.count	integer	3	maximum number of probes that will be sent out before a connection is dropped because it's unresponsive (Linux and Darwin only). The value 0 is the operating system default.	application
+server.sql_tcp_keep_alive.idle	duration	0s	time with no network activity before sending a TCP keepalive probe (Linux and Darwin only). If 0, the value of server.sql_tcp_keep_alive.interval is used. The value 0 is the operating system default.	application
+server.sql_tcp_keep_alive.interval	duration	10s	time between keep alive probes and idle time before probes are sent out. The value 0 is the operating system default.	application
+server.sql_tcp_user.timeout	duration	0s	specifies the maximum amount of time that transmitted data can remain unacknowledged before the underlying TCP connection is forcefully closed. (Linux and Darwin only). The value 0 is the operating system default.	application
 server.time_until_store_dead	duration	5m0s	the time after which if there is no new gossiped information about a store, it is considered dead	application
 server.user_login.cert_password_method.auto_scram_promotion.enabled	boolean	true	whether to automatically promote cert-password authentication to use SCRAM	application
 server.user_login.downgrade_scram_stored_passwords_to_bcrypt.enabled	boolean	true	if server.user_login.password_encryption=crdb-bcrypt, this controls whether to automatically re-encode stored passwords using scram-sha-256 to crdb-bcrypt	application
@@ -179,7 +186,8 @@ sql.auth.change_own_password.enabled	boolean	false	controls whether a user is al
 sql.auth.grant_option_for_owner.enabled	boolean	true	determines whether the GRANT OPTION for privileges is implicitly given to the owner of an object	application
 sql.auth.grant_option_inheritance.enabled	boolean	true	determines whether the GRANT OPTION for privileges is inherited through role membership	application
 sql.auth.public_schema_create_privilege.enabled	boolean	true	determines whether to grant all users the CREATE privileges on the public schema when it is created	application
-sql.catalog.allow_leased_descriptors.enabled	boolean	false	if true, catalog views (crdb_internal, information_schema, pg_catalog) can use leased descriptors for improved performance	application
+sql.auth.skip_underlying_view_privilege_checks.enabled	boolean	false	determines whether to skip privilege checks on tables underlying views. When enabled, users with SELECT privileges on a view can query it regardless of their privileges on the underlying tables, and row-level security policies are evaluated as the invoking user rather than the view owner. This restores pre-v26.2 behavior.	application
+sql.catalog.allow_leased_descriptors.enabled	boolean	true	if true, catalog views (crdb_internal, information_schema, pg_catalog) can use leased descriptors for improved performance	application
 sql.closed_session_cache.capacity	integer	1000	the maximum number of sessions in the cache	application
 sql.closed_session_cache.time_to_live	integer	3600	the maximum time to live, in seconds	application
 sql.contention.event_store.capacity	byte size	64 MiB	the in-memory storage capacity per-node of contention event store	application
@@ -289,9 +297,6 @@ This session variable default should now be configured using ALTER ROLE... SET: 
 sql.defaults.stub_catalog_tables.enabled	boolean	true	"default value for stub_catalog_tables session setting
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
-sql.defaults.super_regions.enabled	boolean	false	"default value for enable_super_regions; allows for the usage of super regions
-This cluster setting is being kept to preserve backwards-compatibility.
-This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.defaults.transaction_rows_read_err	integer	0	"the limit for the number of rows read by a SQL transaction which - once exceeded - will fail the transaction (or will trigger a logging event to SQL_INTERNAL_PERF for internal transactions); use 0 to disable
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
@@ -314,8 +319,8 @@ sql.defaults.zigzag_join.enabled	boolean	false	"default value for enable_zigzag_
 This cluster setting is being kept to preserve backwards-compatibility.
 This session variable default should now be configured using ALTER ROLE... SET: https://www.cockroachlabs.com/docs/stable/alter-role.html"	application
 sql.distsql.temp_storage.workmem	byte size	64 MiB	maximum amount of memory in bytes a processor can use before falling back to temp storage	application
-sql.guardrails.max_row_size_err	byte size	512 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an error is returned; use 0 to disable	application
-sql.guardrails.max_row_size_log	byte size	64 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF if the mutating statement was internal); use 0 to disable	application
+sql.guardrails.max_row_size_err	byte size	80 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an error is returned; use 0 to disable	application
+sql.guardrails.max_row_size_log	byte size	16 MiB	maximum size of row (or column family if multiple column families are in use) that SQL can write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF if the mutating statement was internal); use 0 to disable	application
 sql.hash_sharded_range_pre_split.max	integer	16	max pre-split ranges to have when adding hash sharded index to an existing table	application
 sql.index_recommendation.drop_unused_duration	duration	168h0m0s	the index unused duration at which we begin to recommend dropping the index	application
 sql.insights.anomaly_detection.enabled	boolean	true	enable per-fingerprint latency recording and anomaly detection	application
@@ -329,7 +334,7 @@ sql.log.scan_row_count_misestimate.enabled	boolean	false	when set to true, log a
 sql.log.slow_query.experimental_full_table_scans.enabled	boolean	false	when set to true, statements that perform a full table/index scan will be logged to the slow query log even if they do not meet the latency threshold. Must have the slow query log enabled for this setting to have any effect.	application
 sql.log.slow_query.internal_queries.enabled	boolean	false	when set to true, internal queries which exceed the slow query log threshold are logged to a separate log. Must have the slow query log enabled for this setting to have any effect.	application
 sql.log.slow_query.latency_threshold	duration	0s	when set to non-zero, log statements whose service latency exceeds the threshold to a secondary logger on each node	application
-sql.log.user_audit	string		user/role-based audit logging configuration. An enterprise license is required for this cluster setting to take effect.	application
+sql.log.user_audit	string		user/role-based audit logging configuration	application
 sql.log.user_audit.reduced_config.enabled	boolean	false	enables logic to compute a reduced audit configuration, computing the audit configuration only once at session start instead of at each SQL event. The tradeoff with the increase in performance (~5%), is that changes to the audit configuration (user role memberships/cluster setting) are not reflected within session. Users will need to start a new session to see these changes in their auditing behaviour.	application
 sql.metrics.application_name.enabled	boolean	false	when enabled, SQL metrics would export application name as and additional label as part of child metrics. The number of unique label combinations is limited to 5000 by default.	application
 sql.metrics.database_name.enabled	boolean	false	when enabled, SQL metrics would export database name as and additional label as part of child metrics. The number of unique label combinations is limited to 5000 by default.	application
@@ -357,11 +362,12 @@ sql.stats.activity.persisted_rows.max	integer	200000	maximum number of rows of s
 sql.stats.automatic_collection.enabled	boolean	true	automatic statistics collection mode	application
 sql.stats.automatic_collection.fraction_stale_rows	float	0.2	target fraction of stale rows per table that will trigger a statistics refresh	application
 sql.stats.automatic_collection.min_stale_rows	integer	500	target minimum number of stale rows per table that will trigger a statistics refresh	application
+sql.stats.automatic_extremes_concurrency_limit	integer	128	determines the maximum number of concurrent automatic partial USING EXTREMES table statistics collection jobs	application
 sql.stats.automatic_full_collection.enabled	boolean	true	automatic full statistics collection mode	application
+sql.stats.automatic_full_concurrency_limit	integer	See description.	determines the maximum number of concurrent automatic full table statistics collection jobs. The default value is computed as the number of vCPUs in a node divided by 2.	application
 sql.stats.automatic_partial_collection.enabled	boolean	true	automatic partial statistics collection mode	application
 sql.stats.automatic_partial_collection.fraction_stale_rows	float	0.05	target fraction of stale rows per table that will trigger a partial statistics refresh	application
 sql.stats.automatic_partial_collection.min_stale_rows	integer	100	target minimum number of stale rows per table that will trigger a partial statistics refresh	application
-sql.stats.canary_fraction	float	0	probability that table statistics will use canary mode instead of stable mode for query planning [0.0-1.0]	application
 sql.stats.cleanup.recurrence	string	@hourly	cron-tab recurrence for SQL Stats cleanup job	application
 sql.stats.detailed_latency_metrics.enabled	boolean	false	label latency metrics with the statement fingerprint. Workloads with tens of thousands of distinct query fingerprints should leave this setting false. (experimental, affects performance for workloads with high fingerprint cardinality)	application
 sql.stats.error_on_concurrent_create_stats.enabled	boolean	false	set to true to error on concurrent CREATE STATISTICS jobs, instead of skipping them	application
@@ -428,4 +434,4 @@ trace.zipkin.collector	string		the address of a Zipkin instance to receive trace
 ui.database_locality_metadata.enabled	boolean	true	if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute	application
 ui.default_timezone	string		the default timezone used to format timestamps in the ui	application
 ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui. This setting is deprecatedand will be removed in a future version. Use the 'ui.default_timezone' setting instead. 'ui.default_timezone' takes precedence over this setting. [etc/utc = 0, america/new_york = 1]	application
-version	version	1000025.4-upgrading-to-1000026.1-step-004	set the active cluster version in the format '<major>.<minor>'	application
+version	version	1000026.1-upgrading-to-1000026.2-step-034	set the active cluster version in the format '<major>.<minor>'	application

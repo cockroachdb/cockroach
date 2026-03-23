@@ -32,8 +32,6 @@ func registerMultiTenantDistSQL(r registry.Registry) {
 			b := bundle
 			to := timeout
 			r.Add(registry.TestSpec{
-				Skip:             "https://github.com/cockroachdb/cockroach/issues/128366",
-				SkipDetails:      "test is broken",
 				Name:             fmt.Sprintf("multitenant/distsql/instances=%d/bundle=%s/timeout=%d", numInstances, b, to),
 				Owner:            registry.OwnerSQLQueries,
 				Cluster:          r.MakeClusterSpec(4),
@@ -86,8 +84,6 @@ func runMultiTenantDistSQL(
 	_, err := storConn.Exec(`ALTER TENANT $1 SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true`, tenantName)
 	require.NoError(t, err)
 
-	m := c.NewDeprecatedMonitor(ctx, c.Nodes(1, 2, 3))
-
 	inst1Conn, err := c.ConnE(ctx, t.L(), 1, option.VirtualClusterName(tenantName))
 	require.NoError(t, err)
 	_, err = inst1Conn.Exec("CREATE TABLE t(n INT, i INT,s STRING, PRIMARY KEY(n,i))")
@@ -102,6 +98,7 @@ func runMultiTenantDistSQL(
 	insertCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	m := c.NewDeprecatedMonitor(insertCtx, c.Nodes(1, 2, 3))
 	for i := 0; i < numInstances; i++ {
 		li := i
 		m.Go(func(ctx context.Context) error {
@@ -111,10 +108,10 @@ func runMultiTenantDistSQL(
 			require.NoError(t, err)
 			iter := 0
 			for {
-				_, err = dbi.ExecContext(insertCtx, "INSERT INTO t SELECT $1,generate_series(1,100)+$2*100,repeat('asdfasdf',1024)", li, iter)
+				_, err = dbi.ExecContext(ctx, "INSERT INTO t SELECT $1,generate_series(1,100)+$2*100,repeat('asdfasdf',1024)", li, iter)
 				select {
-				case <-insertCtx.Done():
-					t.L().Printf("worker %d done:%v", li, insertCtx.Err())
+				case <-ctx.Done():
+					t.L().Printf("worker %d done:%v", li, ctx.Err())
 					return nil
 				default:
 					// proceed to report error

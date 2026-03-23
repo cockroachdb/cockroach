@@ -6,7 +6,6 @@
 package delegate
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -30,10 +29,7 @@ GROUP BY
 	u.username
 ORDER BY 1;
 `
-	if d.evalCtx.Settings.Version.IsActive(d.ctx, clusterversion.V25_3) {
-		d.evalCtx.ClientNoticeSender.BufferClientNotice(d.ctx, pgnotice.Newf(
-			"estimated_last_login_time is computed on a best effort basis; it is not guaranteed to capture every login event"))
-		return d.parse(selectClause + selectLastLoginTime + endingClauses)
-	}
-	return d.parse(selectClause + endingClauses)
+	d.evalCtx.ClientNoticeSender.BufferClientNotice(d.ctx, pgnotice.Newf(
+		"estimated_last_login_time is computed on a best effort basis; it is not guaranteed to capture every login event"))
+	return d.parse(selectClause + selectLastLoginTime + endingClauses)
 }

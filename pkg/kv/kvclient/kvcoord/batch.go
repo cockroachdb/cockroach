@@ -7,6 +7,7 @@ package kvcoord
 
 import (
 	"sort"
+	"sync"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -32,6 +33,7 @@ import (
 //	  ...
 //	}
 //	helper := NewBatchTruncationHelper(scanDir, requests)
+//	defer helper.Release()
 //	for ri.Valid() {
 //	  curRangeRS := rs.Intersect(ri.Token().Desc())
 //	  curRangeReqs, positions, seekKey := helper.Truncate(curRangeRS)
@@ -75,15 +77,12 @@ import (
 type BatchTruncationHelper struct {
 	scanDir ScanDirection
 	// requests are the original requests this helper needs to process (possibly
-	// in non-original order).
+	// in non-original order). This slice might be owned by the caller or by the
+	// helper.
 	requests []kvpb.RequestUnion
-	// ownRequestsSlice indicates whether a separate slice was allocated for
-	// requests. It is used for the purposes of the memory accounting.
-	//
-	// It is the same as !canReorderRequestsSlice in most cases, except for when
-	// the local keys are present. In such a scenario, even if
-	// canReorderRequestsSlice is false, ownRequestsSlice might remain false.
-	ownRequestsSlice bool
+	// requestsScratch is a scratch space owned by the helper which is reused
+	// whenever a copy of requests needs to be made.
+	requestsScratch []kvpb.RequestUnion
 	// mustPreserveOrder indicates whether the requests must be returned by
 	// Truncate() in the original order.
 	mustPreserveOrder bool
@@ -163,9 +162,30 @@ func (h descBatchTruncationHelper) Less(i, j int) bool {
 	return h.headers[i].EndKey.Compare(h.headers[j].EndKey) > 0
 }
 
+var batchTruncationHelperPool = sync.Pool{
+	New: func() interface{} {
+		return &BatchTruncationHelper{}
+	},
+}
+
+// TestingResetBatchTruncationHelperPool clears the pool of
+// BatchTruncationHelpers so that subsequent callers get fresh helpers with no
+// retained allocations. This is useful in tests that are sensitive to the
+// memory overhead of reused helpers.
+//
+// Not safe for concurrent use.
+func TestingResetBatchTruncationHelperPool() {
+	batchTruncationHelperPool = sync.Pool{
+		New: func() interface{} {
+			return &BatchTruncationHelper{}
+		},
+	}
+}
+
 // NewBatchTruncationHelper returns a new BatchTruncationHelper for the given
 // requests. The helper can be reused later for a different set of requests via
-// a separate Init() call.
+// a separate Init() call. Release() must be called after it's no longer needed,
+// even if an error is returned (it's guaranteed that the helper is non-nil).
 //
 // mustPreserveOrder, if true, indicates that the caller requires that requests
 // are returned by Truncate() in the original order (i.e. with strictly
@@ -182,12 +202,32 @@ func NewBatchTruncationHelper(
 	mustPreserveOrder bool,
 	canReorderRequestsSlice bool,
 ) (*BatchTruncationHelper, error) {
-	ret := &BatchTruncationHelper{
-		scanDir:                 scanDir,
-		mustPreserveOrder:       mustPreserveOrder,
-		canReorderRequestsSlice: canReorderRequestsSlice,
-	}
+	ret := batchTruncationHelperPool.Get().(*BatchTruncationHelper)
+	ret.scanDir = scanDir
+	ret.mustPreserveOrder = mustPreserveOrder
+	ret.canReorderRequestsSlice = canReorderRequestsSlice
 	return ret, ret.Init(requests)
+}
+
+func (h *BatchTruncationHelper) Release() {
+	for i := range h.requestsScratch {
+		h.requestsScratch[i] = kvpb.RequestUnion{}
+	}
+	for i := range h.headers {
+		h.headers[i] = kvpb.RequestHeader{}
+	}
+	for i := range h.helper.scratch {
+		h.helper.scratch[i] = kvpb.RequestUnion{}
+	}
+	h.helper.scratch = h.helper.scratch[:0]
+	*h = BatchTruncationHelper{
+		requestsScratch: h.requestsScratch[:0],
+		headers:         h.headers[:0],
+		positions:       h.positions[:0],
+		isRange:         h.isRange[:0],
+		helper:          h.helper,
+	}
+	batchTruncationHelperPool.Put(h)
 }
 
 // Init sets up the helper for the provided requests. It can be called multiple
@@ -210,31 +250,31 @@ func (h *BatchTruncationHelper) Init(requests []kvpb.RequestUnion) error {
 		h.requests = requests
 	} else {
 		// If we can't reorder the original requests slice, we must make a copy.
-		if cap(h.requests) < len(requests) {
-			h.requests = make([]kvpb.RequestUnion, len(requests))
-			h.ownRequestsSlice = true
+		if cap(h.requestsScratch) < len(requests) {
+			h.requestsScratch = make([]kvpb.RequestUnion, len(requests))
 		} else {
-			if len(requests) < len(h.requests) {
+			if len(requests) < len(h.requestsScratch) {
 				// Ensure that we lose references to the old requests that will
 				// not be overwritten by copy.
 				//
 				// Note that we only need to go up to the number of old requests
 				// and not the capacity of the slice since we assume that
 				// everything past the length is already nil-ed out.
-				oldRequests := h.requests[len(requests):len(h.requests)]
+				oldRequests := h.requestsScratch[len(requests):len(h.requestsScratch)]
 				for i := range oldRequests {
 					oldRequests[i] = kvpb.RequestUnion{}
 				}
 			}
-			h.requests = h.requests[:len(requests)]
+			h.requestsScratch = h.requestsScratch[:len(requests)]
 		}
+		h.requests = h.requestsScratch
 		copy(h.requests, requests)
 	}
 	if cap(h.headers) < len(requests) {
 		h.headers = make([]kvpb.RequestHeader, len(requests))
 	} else {
 		if len(requests) < len(h.headers) {
-			// Ensure that we lose references to the old header that will
+			// Ensure that we lose references to the old headers that will
 			// not be overwritten in the loop below.
 			//
 			// Note that we only need to go up to the number of old headers and
@@ -302,10 +342,9 @@ const (
 // MemUsage returns the memory usage of the internal state of the helper.
 func (h *BatchTruncationHelper) MemUsage() int64 {
 	var memUsage int64
-	if h.ownRequestsSlice {
-		// Only account for the requests slice if we own it.
-		memUsage += int64(cap(h.requests)) * requestUnionOverhead
-	}
+	// Note that we deliberately ignore h.requests because either we don't own
+	// it or it's aliased with h.requestsScratch.
+	memUsage += int64(cap(h.requestsScratch)) * requestUnionOverhead
 	memUsage += int64(cap(h.headers)) * requestHeaderOverhead
 	memUsage += int64(cap(h.positions)) * intOverhead
 	memUsage += int64(cap(h.isRange)) * boolOverhead
@@ -485,14 +524,12 @@ func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUni
 
 	fullyProcessed := 0
 	for i := range positions {
-		//gcassert:bce
-		pos := positions[i]
+		pos := positions[i] //gcassert:bce
 		if pos < 0 {
 			fullyProcessed++
 			continue
 		}
-		//gcassert:bce
-		header := headers[i]
+		header := headers[i] //gcassert:bce
 		ek := rs.EndKey.AsRawKey()
 		if ek.Compare(header.Key) <= 0 {
 			// All of the remaining requests start after this range, so we're
@@ -510,24 +547,23 @@ func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUni
 	if numReqs == 0 {
 		return nil, nil, nil
 	}
+	// Note that we always make fresh allocations here since we need to ensure
+	// to not mutate requests and positions returned to the caller.
 	truncReqs := make([]kvpb.RequestUnion, 0, numReqs)
 	truncPositions := make([]int, 0, numReqs)
 
 	for i := range positions {
-		//gcassert:bce
-		pos := positions[i]
+		pos := positions[i] //gcassert:bce
 		if pos < 0 {
 			// This request has already been fully processed, so there is no
 			// need to look at it.
 			continue
 		}
-		//gcassert:bce
-		header := headers[i]
+		header := headers[i] //gcassert:bce
 		// rs.EndKey can't be local because it contains range split points,
 		// which are never local.
 		ek := rs.EndKey.AsRawKey()
-		//gcassert:bce
-		req := requests[i]
+		req := requests[i] //gcassert:bce
 		//gcassert:bce
 		if !isRange[i] {
 			// This is a point request, and the key is contained within this
@@ -535,10 +571,8 @@ func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUni
 			// processed".
 			truncReqs = append(truncReqs, req)
 			truncPositions = append(truncPositions, pos)
-			//gcassert:bce
-			headers[i] = kvpb.RequestHeader{}
-			//gcassert:bce
-			positions[i] = -1
+			headers[i] = kvpb.RequestHeader{} //gcassert:bce
+			positions[i] = -1                 //gcassert:bce
 			continue
 		}
 		// We're dealing with a range-spanning request.
@@ -555,10 +589,8 @@ func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUni
 		if header.EndKey.Compare(ek) <= 0 {
 			// This is the last part of this request since it is fully contained
 			// within this range, so we mark the request as "fully processed".
-			//gcassert:bce
-			headers[i] = kvpb.RequestHeader{}
-			//gcassert:bce
-			positions[i] = -1
+			headers[i] = kvpb.RequestHeader{} //gcassert:bce
+			positions[i] = -1                 //gcassert:bce
 			if origStartKey := inner.Header().Key; origStartKey.Equal(header.Key) {
 				// This range-spanning request fits within a single range, so we
 				// can just use the original request.
@@ -570,8 +602,7 @@ func (h *BatchTruncationHelper) truncateAsc(rs roachpb.RSpan) ([]kvpb.RequestUni
 			header.EndKey = ek
 			// Adjust the start key of the header so that it contained only the
 			// unprocessed suffix of the request.
-			//gcassert:bce
-			headers[i].Key = header.EndKey
+			headers[i].Key = header.EndKey //gcassert:bce
 		}
 		shallowCopy := inner.ShallowCopy()
 		shallowCopy.SetHeader(header)
@@ -684,14 +715,12 @@ func (h *BatchTruncationHelper) truncateDesc(rs roachpb.RSpan) ([]kvpb.RequestUn
 
 	fullyProcessed := 0
 	for i := range positions {
-		//gcassert:bce
-		pos := positions[i]
+		pos := positions[i] //gcassert:bce
 		if pos < 0 {
 			fullyProcessed++
 			continue
 		}
-		//gcassert:bce
-		header := headers[i]
+		header := headers[i] //gcassert:bce
 		sk := rs.Key.AsRawKey()
 		if sk.Compare(header.EndKey) >= 0 {
 			// All of the remaining requests end before this range, so we're
@@ -709,24 +738,23 @@ func (h *BatchTruncationHelper) truncateDesc(rs roachpb.RSpan) ([]kvpb.RequestUn
 	if numReqs == 0 {
 		return nil, nil, nil
 	}
+	// Note that we always make fresh allocations here since we need to ensure
+	// to not mutate requests and positions returned to the caller.
 	truncReqs := make([]kvpb.RequestUnion, 0, numReqs)
 	truncPositions := make([]int, 0, numReqs)
 
 	for i := range positions {
-		//gcassert:bce
-		pos := positions[i]
+		pos := positions[i] //gcassert:bce
 		if pos < 0 {
 			// This request has already been fully processed, so there is no
 			// need to look at it.
 			continue
 		}
-		//gcassert:bce
-		header := headers[i]
+		header := headers[i] //gcassert:bce
 		// rs.Key can't be local because it contains range split points, which
 		// are never local.
 		sk := rs.Key.AsRawKey()
-		//gcassert:bce
-		req := requests[i]
+		req := requests[i] //gcassert:bce
 		//gcassert:bce
 		if !isRange[i] {
 			// This is a point request, and the key is contained within this
@@ -734,10 +762,8 @@ func (h *BatchTruncationHelper) truncateDesc(rs roachpb.RSpan) ([]kvpb.RequestUn
 			// processed".
 			truncReqs = append(truncReqs, req)
 			truncPositions = append(truncPositions, pos)
-			//gcassert:bce
-			headers[i] = kvpb.RequestHeader{}
-			//gcassert:bce
-			positions[i] = -1
+			headers[i] = kvpb.RequestHeader{} //gcassert:bce
+			positions[i] = -1                 //gcassert:bce
 			continue
 		}
 		// We're dealing with a range-spanning request.
@@ -754,10 +780,8 @@ func (h *BatchTruncationHelper) truncateDesc(rs roachpb.RSpan) ([]kvpb.RequestUn
 		if header.Key.Compare(sk) >= 0 {
 			// This is the last part of this request since it is fully contained
 			// within this range, so we mark the request as "fully processed".
-			//gcassert:bce
-			headers[i] = kvpb.RequestHeader{}
-			//gcassert:bce
-			positions[i] = -1
+			headers[i] = kvpb.RequestHeader{} //gcassert:bce
+			positions[i] = -1                 //gcassert:bce
 			if origEndKey := inner.Header().EndKey; len(origEndKey) == 0 || origEndKey.Equal(header.EndKey) {
 				// This range-spanning request fits within a single range, so we
 				// can just use the original request.
@@ -769,8 +793,7 @@ func (h *BatchTruncationHelper) truncateDesc(rs roachpb.RSpan) ([]kvpb.RequestUn
 			header.Key = sk
 			// Adjust the end key of the header so that it contained only the
 			// unprocessed prefix of the request.
-			//gcassert:bce
-			headers[i].EndKey = header.Key
+			headers[i].EndKey = header.Key //gcassert:bce
 		}
 		shallowCopy := inner.ShallowCopy()
 		shallowCopy.SetHeader(header)
@@ -1142,6 +1165,9 @@ func (h *orderRestorationHelper) restoreOrder(
 		// Make sure that the found map is set up for the next call.
 		h.found[pos] = -1
 	}
+	// We allocated truncReqs in truncate* methods, and it's not going to be
+	// returned to the caller, so we can keep it as the scratch space for the
+	// next time.
 	h.scratch = truncReqs
 	return toReturn, positions
 }

@@ -27,7 +27,7 @@ import (
 // settings on KV nodes across restarts.
 type settingsCacheWriter struct {
 	stopper *stop.Stopper
-	eng     storage.Engine
+	eng     storage.Engine // LogEngine
 
 	mu struct {
 		syncutil.Mutex
@@ -37,6 +37,9 @@ type settingsCacheWriter struct {
 	}
 }
 
+// newSettingsCacheWriter creates a settingsCacheWriter operating on the given
+// engine. The engine is expected to be the LogEngine, since the settings are
+// persisted in the Store-local keyspace.
 func newSettingsCacheWriter(eng storage.Engine, stopper *stop.Stopper) *settingsCacheWriter {
 	return &settingsCacheWriter{
 		eng:     eng,
@@ -120,9 +123,9 @@ func storeCachedSettingsKVs(ctx context.Context, eng storage.Engine, kvs []roach
 }
 
 // loadCachedSettingsKVs loads locally stored cached settings.
-func loadCachedSettingsKVs(ctx context.Context, eng storage.Engine) ([]roachpb.KeyValue, error) {
+func loadCachedSettingsKVs(ctx context.Context, reader storage.Reader) ([]roachpb.KeyValue, error) {
 	var settingsKVs []roachpb.KeyValue
-	if err := eng.MVCCIterate(ctx, keys.LocalStoreCachedSettingsKeyMin,
+	if err := reader.MVCCIterate(ctx, keys.LocalStoreCachedSettingsKeyMin,
 		keys.LocalStoreCachedSettingsKeyMax, storage.MVCCKeyAndIntentsIterKind,
 		storage.IterKeyTypePointsOnly, fs.UnknownReadCategory,
 		func(kv storage.MVCCKeyValue, _ storage.MVCCRangeKeyStack) error {

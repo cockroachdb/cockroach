@@ -1,0 +1,2 @@
+show_hints_options_list ::=
+	show_hints_options ( ( ',' show_hints_options ) )*

@@ -92,7 +92,7 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 	rightMJSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsRight, nTuples)
 	leftHJSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsLeft, nTuples)
 	rightHJSource := colexectestutils.NewChunkingBatchSource(testAllocator, typs, colsRight, nTuples)
-	mj := NewMergeJoinOp(
+	mj, _ := NewMergeJoinOp(
 		ctx, testAllocator, execinfra.DefaultMemoryLimit, queueCfg,
 		colexecop.NewTestingSemaphore(mjFDLimit), descpb.InnerJoin,
 		leftMJSource, rightMJSource, typs, typs,
@@ -120,12 +120,12 @@ func TestMergeJoinCrossProduct(t *testing.T) {
 	hj.Init(ctx)
 
 	var mjOutputTuples, hjOutputTuples colexectestutils.Tuples
-	for b := mj.Next(); b.Length() != 0; b = mj.Next() {
+	for b := colexecop.NextNoMeta(mj); b.Length() != 0; b = colexecop.NextNoMeta(mj) {
 		for i := 0; i < b.Length(); i++ {
 			mjOutputTuples = append(mjOutputTuples, colexectestutils.GetTupleFromBatch(b, i))
 		}
 	}
-	for b := hj.Next(); b.Length() != 0; b = hj.Next() {
+	for b := colexecop.NextNoMeta(hj); b.Length() != 0; b = colexecop.NextNoMeta(hj) {
 		for i := 0; i < b.Length(); i++ {
 			hjOutputTuples = append(hjOutputTuples, colexectestutils.GetTupleFromBatch(b, i))
 		}
@@ -264,7 +264,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 					s.Init(ctx)
 
 					b.StartTimer()
-					for b := s.Next(); b.Length() != 0; b = s.Next() {
+					for b := colexecop.NextNoMeta(s); b.Length() != 0; b = colexecop.NextNoMeta(s) {
 					}
 					b.StopTimer()
 				}

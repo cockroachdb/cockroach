@@ -70,7 +70,9 @@ const (
 	// as coming from a SQL-bodied builtin function. This allows the dependency to
 	// bypass unsafe internal checks during memo staleness checking.
 	BUILTIN_UNSAFE_ALLOWED Kind = 42
-	largestKind                 = BUILTIN_UNSAFE_ALLOWED
+	MAINTAIN               Kind = 43
+	TEMPORARY              Kind = 44
+	largestKind                 = TEMPORARY
 )
 
 var isDeprecatedKind = map[Kind]bool{
@@ -168,6 +170,10 @@ func (k Kind) InternalKey() KindInternalKey {
 		return "INSPECT"
 	case BUILTIN_UNSAFE_ALLOWED:
 		return "BUILTIN_UNSAFE_ALLOWED"
+	case MAINTAIN:
+		return "MAINTAIN"
+	case TEMPORARY:
+		return "TEMPORARY"
 	default:
 		panic(errors.AssertionFailedf("unhandled kind: %d", int(k)))
 	}
@@ -240,4 +246,7 @@ func init() {
 		// key.
 		ByDisplayName[KindDisplayName(kind.InternalKey())] = kind
 	}
+
+	// TEMP is a PostgreSQL-compatible alias for TEMPORARY.
+	ByDisplayName["TEMP"] = TEMPORARY
 }

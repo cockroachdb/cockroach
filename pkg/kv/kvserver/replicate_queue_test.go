@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -50,10 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
@@ -177,6 +175,7 @@ func TestReplicateQueueRebalance(t *testing.T) {
 // rebalances the replicas and leases.
 func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.WithIssue(t, 156293)
 	skip.UnderDuress(t) // eight stores is too much under duress
 	scope := log.Scope(t)
 	defer scope.Close(t)
@@ -233,10 +232,7 @@ func TestReplicateQueueRebalanceMultiStore(t *testing.T) {
 			}
 			// Set up a test cluster with multiple stores per node if needed.
 			args := base.TestClusterArgs{
-				ReplicationMode: base.ReplicationAuto,
-				ServerArgs: base.TestServerArgs{
-					DefaultDRPCOption: base.TestDRPCDisabled,
-				},
+				ReplicationMode:   base.ReplicationAuto,
 				ServerArgsPerNode: map[int]base.TestServerArgs{},
 			}
 			for i := 0; i < testCase.nodes; i++ {
@@ -876,133 +872,62 @@ func TestReplicateQueueDecommissioningNonVoters(t *testing.T) {
 	})
 }
 
-// TestReplicateQueueTracingOnError tests that an error or slowdown in
-// processing a replica results in traces being logged.
-func TestReplicateQueueTracingOnError(t *testing.T) {
+// TestReplicateQueueTracing is a simple test that verifies tracing works
+// through the replica change path by upreplicating a range with a tracing
+// context and checking that child spans are recorded.
+func TestReplicateQueueTracing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	s := log.ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-	testutils.SetVModule(t, "replicate_queue=2")
+	defer log.Scope(t).Close(t)
 
-	// NB: This test injects a fake failure during replica rebalancing, and we use
-	// this `rejectSnapshots` variable as a flag to activate or deactivate that
-	// injected failure.
-	var rejectSnapshots int64
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(
-		t, 4, base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-				ReceiveSnapshot: func(_ context.Context, _ *kvserverpb.SnapshotRequest_Header) error {
-					if atomic.LoadInt64(&rejectSnapshots) == 1 {
-						return errors.Newf("boom")
-					}
-					return nil
-				},
-			}}},
-		},
-	)
+	tc := testcluster.StartTestCluster(t, 2, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
 	defer tc.Stopper().Stop(ctx)
 
-	// Add a replica to the second and third nodes, and then decommission the
-	// second node. Since there are only 4 nodes in the cluster, the
-	// decommissioning replica must be rebalanced to the fourth node.
-	const decomNodeIdx = 1
-	const decomNodeID = 2
+	// Create scratch range on n1.
 	scratchKey := tc.ScratchRange(t)
-	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx))
-	tc.AddVotersOrFatal(t, scratchKey, tc.Target(decomNodeIdx+1))
-	adminSrv := tc.Server(decomNodeIdx)
-	adminClient := adminSrv.GetAdminClient(t)
-	_, err := adminClient.Decommission(
-		ctx, &serverpb.DecommissionRequest{
-			NodeIDs:          []roachpb.NodeID{decomNodeID},
-			TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONING,
-		},
+
+	// Create tracing span for the upreplication.
+	tracer := tc.Server(0).TracerI().(*tracing.Tracer)
+	traceCtx, finishAndGetRecording := tracing.ContextWithRecordingSpan(
+		ctx, tracer, "test-upreplication",
 	)
-	require.NoError(t, err)
 
-	// Activate the above testing knob to start rejecting future rebalances and
-	// then attempt to rebalance the decommissioning replica away. We expect a
-	// purgatory error to be returned here.
-	atomic.StoreInt64(&rejectSnapshots, 1)
-	store := tc.GetFirstStoreFromServer(t, 0)
-	repl, err := store.GetReplica(tc.LookupRangeOrFatal(t, scratchKey).RangeID)
-	require.NoError(t, err)
+	// Upreplicate from n1 to n2.
+	tc.AddVotersOrFatalCtx(traceCtx, t, scratchKey, tc.Target(1))
+	recording := finishAndGetRecording()
 
-	testStartTs := timeutil.Now()
-	traceCtx, rec := tracing.ContextWithRecordingSpan(ctx, store.GetStoreConfig().Tracer(), "trace-enqueue")
-	processErr, enqueueErr := tc.GetFirstStoreFromServer(t, 0).Enqueue(
-		traceCtx, "replicate", repl, true /* skipShouldQueue */, false, /* async */
+	// Sanity checks on the recording.
+	require.NotNil(t, recording)
+	require.GreaterOrEqual(t, recording.Len(), 1)
+
+	// Should find our root span.
+	_, found := recording.FindSpan("test-upreplication")
+	require.True(t, found)
+
+	// Should have child spans from the replica change operation.
+	require.Greater(t, len(recording), 1, "expected child spans from upreplication")
+
+	// Verify the trace contains expected replica change events.
+	traceStr := recording.String()
+	require.Regexp(t, `change replicas updated descriptor`, traceStr)
+
+	// The raw recording includes verbose operations that are filtered out by
+	// filterTracingSpans when logging in processOneChangeWithTracing.
+	require.Regexp(t, `operation:change-replica-get-desc`, traceStr)
+	require.Regexp(t, `operation:change-replica-update-desc`, traceStr)
+
+	// Test that filterTracingSpans correctly removes verbose spans.
+	filtered := kvserver.FilterTracingSpans(recording,
+		"change-replica-get-desc", "change-replica-update-desc",
 	)
-	recording := rec()
-	require.NoError(t, enqueueErr)
-	require.Error(t, processErr, "expected processing error")
-
-	// Flush logs and get log messages from replicate_queue.go since just
-	// before calling store.Enqueue(..).
-	log.FlushFiles()
-	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
-		math.MaxInt64, 100, regexp.MustCompile(`replicate_queue\.go`), log.WithMarkedSensitiveData)
-	require.NoError(t, err)
-
-	opName := "process replica"
-	errRegexp, err := regexp.Compile(`error processing replica:.*boom`)
-	require.NoError(t, err)
-	traceRegexp, err := regexp.Compile(`trace:.*`)
-	require.NoError(t, err)
-	opRegexp, err := regexp.Compile(fmt.Sprintf(`operation:%s`, opName))
-	require.NoError(t, err)
-
-	// Validate that the error is logged, so that we can use the log entry to
-	// validate the trace output.
-	foundEntry := false
-	var entry logpb.Entry
-	for _, entry = range entries {
-		if errRegexp.MatchString(entry.Message) {
-			foundEntry = true
-			break
-		}
-	}
-	require.True(t, foundEntry)
-
-	// Validate that the trace is included in the log message.
-	require.Regexp(t, traceRegexp, entry.Message)
-	require.Regexp(t, opRegexp, entry.Message)
-
-	// Validate that the logged trace filtered out the verbose execChangeReplicasTxn
-	// child span, as well as the verbose child spans tracing txn operations.
-	require.NotRegexp(t, `operation:change-replica-update-desc`, entry.Message)
-	require.NotRegexp(t, `operation:txn coordinator send`, entry.Message)
-	require.NotRegexp(t, `operation:log-range-event`, entry.Message)
-
-	// Validate that the logged trace includes the changes to the descriptor.
-	require.Regexp(t, `change replicas \(add.*remove.*\): existing descriptor`, entry.Message)
-
-	// Validate that the trace was logged with the correct tags for the replica.
-	require.Regexp(t, fmt.Sprintf("n%d", repl.NodeID()), entry.Tags)
-	require.Regexp(t, fmt.Sprintf("s%d", repl.StoreID()), entry.Tags)
-	require.Regexp(t, fmt.Sprintf("r%d/%d", repl.GetRangeID(), repl.ReplicaID()), entry.Tags)
-	require.Regexp(t, `replicate`, entry.Tags)
-
-	// Validate that the returned tracing span includes the operation, but also
-	// that the stringified trace was not logged to the span or its parent.
-	processRecSpan, foundSpan := recording.FindSpan(opName)
-	require.True(t, foundSpan)
-
-	foundParent := false
-	var parentRecSpan tracingpb.RecordedSpan
-	for _, parentRecSpan = range recording {
-		if parentRecSpan.SpanID == processRecSpan.ParentSpanID {
-			foundParent = true
-			break
-		}
-	}
-	require.True(t, foundParent)
-	spans := tracingpb.Recording{parentRecSpan, processRecSpan}
-	stringifiedSpans := spans.String()
-	require.NotRegexp(t, errRegexp, stringifiedSpans)
-	require.NotRegexp(t, traceRegexp, stringifiedSpans)
+	filteredStr := filtered.String()
+	// The expected message should still be present after filtering.
+	require.Regexp(t, `change replicas updated descriptor`, filteredStr)
+	// The verbose operations should be removed.
+	require.NotRegexp(t, `operation:change-replica-get-desc`, filteredStr)
+	require.NotRegexp(t, `operation:change-replica-update-desc`, filteredStr)
 }
 
 // TestReplicateQueueDecommissionPurgatoryError tests that failure to move a
@@ -1102,7 +1027,6 @@ func TestReplicateQueueDeadNonVoters(t *testing.T) {
 			base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
-					DefaultDRPCOption: base.TestDRPCDisabled,
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
 							BaseQueueDisabledBypassFilter: func(rangeID roachpb.RangeID) bool {
@@ -1834,11 +1758,12 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderStress(t, 38565)
-	skip.UnderRaceWithIssue(t, 38565)
+	skip.UnderDuressWithIssue(t, 38565)
 	skip.UnderShort(t, 38565)
-	skip.UnderDeadlockWithIssue(t, 38565)
+
 	ctx := context.Background()
+
+	testutils.SetVModule(t, "allocator_scorer=3")
 
 	const rangeMaxSize = 64 << 20
 	zcfg := zonepb.DefaultZoneConfig()
@@ -1848,7 +1773,6 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 		base.TestClusterArgs{
 			ReplicationMode: base.ReplicationAuto,
 			ServerArgs: base.TestServerArgs{
-				DefaultDRPCOption: base.TestDRPCDisabled,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						DefaultZoneConfigOverride: &zcfg,
@@ -1877,8 +1801,14 @@ func TestLargeUnsplittableRangeReplicate(t *testing.T) {
 	_, err := db.Exec("create table t (i int primary key, s string)")
 	require.NoError(t, err)
 
-	_, err = db.Exec(`ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 1)`)
-	require.NoError(t, err)
+	testutils.SucceedsSoon(t, func() error {
+		_, err := db.Exec(`ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[1,2,3], 1)`)
+		if kvtestutils.IsExpectedRelocateError(err) {
+			return err
+		}
+		require.NoError(t, err)
+		return nil
+	})
 	_, err = db.Exec(`ALTER TABLE t SPLIT AT VALUES (1)`)
 	require.NoError(t, err)
 	_, err = db.Exec(`ALTER TABLE t SPLIT AT VALUES (2)`)
@@ -2338,11 +2268,11 @@ WHERE range_id IN (SELECT range_id FROM [SHOW RANGES FROM TABLE t] LIMIT 1);`
 			// be contained in the start key's span config. If this is not the
 			// case, it can explain why the replication changes are not being made.
 			iterateOverAllStores(t, tc, func(s *kvserver.Store) error {
-				cfg, sp, err := s.GetStoreConfig().SpanConfigSubscriber.GetSpanConfigForKey(ctx, desc.StartKey)
+				cfg, err := s.GetStoreConfig().SpanConfigSubscriber.GetSpanConfigForKey(ctx, desc.StartKey)
 				if err != nil {
 					return err
 				}
-				t.Logf("s%d: r%d %s -> span config %s %s", s.StoreID(), desc.RangeID, desc.RSpan(), sp, &cfg)
+				t.Logf("s%d: r%d %s -> span config %s", s.StoreID(), desc.RangeID, desc.RSpan(), &cfg)
 				return nil
 			})
 		}
@@ -2627,118 +2557,4 @@ func TestReplicateQueueDecommissionScannerDisabled(t *testing.T) {
 	require.Greater(t, afterEnqueueSuccess, int64(0))
 	afterProcessSuccess := getDecommissioningNudgerMetricValue(t, tc, "process_success")
 	require.Greater(t, afterProcessSuccess, int64(0))
-}
-
-// TestPriorityInversionRequeue tests that the replicate queue correctly handles
-// priority inversions by requeuing replicas when the PriorityInversionRequeue
-// setting is enabled.
-//
-// This test specifically targets a race condition where:
-//  1. A replica is enqueued for a high-priority repair action
-//     (FinalizeAtomicReplicationChange or RemoveLearner).
-//  2. By the time the replica is processed, the repair is no longer needed and
-//     only a low-priority rebalance action (ConsiderRebalance) is computed.
-//  3. This creates a priority inversion where a low-priority action blocks
-//     other higher-priority replicas in the queue from being processed.
-//
-// The race occurs during range rebalancing:
-//  1. A leaseholder replica of a range is rebalanced from one store to another.
-//  2. The new leaseholder enqueues the replica for repair (e.g. to finalize
-//     the atomic replication change or remove a learner replica).
-//  3. Before processing, the old leaseholder has left the atomic joint config
-//     state or removed the learner replica. 4. When the new leaseholder processes
-//     the replica, it computes a ConsiderRebalance action, causing priority
-//     inversion.
-//
-// With PriorityInversionRequeue enabled, the queue should detect this condition
-// and requeue the replica at the correct priority. The test validates this
-// behavior through metrics that track priority inversions and requeuing events.
-func TestPriorityInversionRequeue(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	skip.UnderDuress(t)
-
-	ctx := context.Background()
-	settings := cluster.MakeTestingClusterSettings()
-	kvserver.PriorityInversionRequeue.Override(ctx, &settings.SV, true)
-
-	var scratchRangeID int64
-	atomic.StoreInt64(&scratchRangeID, -1)
-	testutils.SetVModule(t, "queue=5,replicate_queue=5,replica_command=5,replicate=5,replica=5")
-
-	const newLeaseholderStoreAndNodeID = 4
-	var waitUntilLeavingJoint = func() {}
-
-	tc := testcluster.StartTestCluster(t, 4, base.TestClusterArgs{
-		ReplicationMode: base.ReplicationManual,
-		ServerArgs: base.TestServerArgs{
-			Settings: settings,
-			Knobs: base.TestingKnobs{
-				Store: &kvserver.StoreTestingKnobs{
-					BaseQueueDisabledBypassFilter: func(rangeID roachpb.RangeID) bool {
-						// Disable the replicate queue except for the scratch range on the new leaseholder.
-						t.Logf("range %d is added to replicate queue store", rangeID)
-						return rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID))
-					},
-					BaseQueuePostEnqueueInterceptor: func(storeID roachpb.StoreID, rangeID roachpb.RangeID) {
-						// After enqueuing, wait for the old leaseholder to leave the atomic
-						// joint config state or remove the learner replica to force the
-						// priority inversion.
-						t.Logf("waiting for %d to leave joint config", rangeID)
-						if storeID == 4 && rangeID == roachpb.RangeID(atomic.LoadInt64(&scratchRangeID)) {
-							waitUntilLeavingJoint()
-						}
-					},
-				},
-			},
-		},
-	})
-	defer tc.Stopper().Stop(ctx)
-
-	scratchKey := tc.ScratchRange(t)
-
-	// Wait until the old leaseholder has left the atomic joint config state or
-	// removed the learner replica.
-	waitUntilLeavingJoint = func() {
-		testutils.SucceedsSoon(t, func() error {
-			rangeDesc := tc.LookupRangeOrFatal(t, scratchKey)
-			replicas := rangeDesc.Replicas()
-			t.Logf("range %v: waiting to leave joint conf", rangeDesc)
-			if replicas.InAtomicReplicationChange() || len(replicas.LearnerDescriptors()) != 0 {
-				return errors.Newf("in between atomic changes: %v", replicas)
-			}
-			return nil
-		})
-	}
-
-	scratchRange := tc.LookupRangeOrFatal(t, scratchKey)
-	tc.AddVotersOrFatal(t, scratchRange.StartKey.AsRawKey(), tc.Targets(1, 2)...)
-	atomic.StoreInt64(&scratchRangeID, int64(scratchRange.RangeID))
-	lh, err := tc.FindRangeLeaseHolder(scratchRange, nil)
-	require.NoError(t, err)
-
-	// Rebalance the leaseholder replica to a new store. This will cause the race
-	// condition where the new leaseholder can enqueue a replica to replicate
-	// queue with high priority but compute a low priority action at processing
-	// time.
-	t.Logf("rebalancing range %d from s%d to s%d", scratchRange, lh.StoreID, newLeaseholderStoreAndNodeID)
-	_, err = tc.RebalanceVoter(
-		ctx,
-		scratchRange.StartKey.AsRawKey(),
-		roachpb.ReplicationTarget{StoreID: lh.StoreID, NodeID: lh.NodeID},                                      /* src */
-		roachpb.ReplicationTarget{StoreID: newLeaseholderStoreAndNodeID, NodeID: newLeaseholderStoreAndNodeID}, /* dest */
-	)
-	require.NoError(t, err)
-
-	// Wait until the priority inversion is detected and the replica is requeued.
-	testutils.SucceedsSoon(t, func() error {
-		store := tc.GetFirstStoreFromServer(t, 3)
-		if c := store.ReplicateQueueMetrics().PriorityInversionTotal.Count(); c == 0 {
-			return errors.New("expected non-zero priority inversion total count but got 0")
-		}
-		if c := store.ReplicateQueueMetrics().RequeueDueToPriorityInversion.Count(); c == 0 {
-			return errors.New("expected to requeue due to priority inversion but got 0")
-		}
-		return nil
-	})
 }

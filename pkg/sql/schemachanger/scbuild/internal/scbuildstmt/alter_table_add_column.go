@@ -181,14 +181,10 @@ func alterTableAddColumn(
 			},
 		)
 		expr := b.WrapExpression(tbl.TableID, validExpr)
-		if spec.colType.ElementCreationMetadata.In_24_3OrLater {
-			spec.compute = &scpb.ColumnComputeExpression{
-				TableID:    tbl.TableID,
-				ColumnID:   spec.col.ColumnID,
-				Expression: *expr,
-			}
-		} else {
-			spec.colType.ComputeExpr = expr
+		spec.compute = &scpb.ColumnComputeExpression{
+			TableID:    tbl.TableID,
+			ColumnID:   spec.col.ColumnID,
+			Expression: *expr,
 		}
 		if desc.Virtual {
 			b.IncrementSchemaChangeAddColumnQualificationCounter("virtual")
@@ -292,7 +288,7 @@ func alterTableAddColumn(
 			seqOptions = *ptr
 		}
 		// Versions from 26.1 GeneratedAsIdentity will have a separate element for
-		// GeneratedAsIdentity. Older versios store it in the column element.
+		// GeneratedAsIdentity. Older versions store it in the column element.
 		if spec.colType.ElementCreationMetadata.In_26_1OrLater {
 			spec.generatedAsID = &scpb.ColumnGeneratedAsIdentity{
 				TableID:        tbl.TableID,
@@ -551,7 +547,7 @@ func addColumn(b BuildCtx, spec addColumnSpec, n tree.NodeFormatter) (backing *s
 		}
 
 		inflatedChain := getInflatedPrimaryIndexChain(b, spec.tbl.TableID)
-		if spec.def == nil && spec.colType.ComputeExpr == nil && spec.compute == nil && spec.transientCompute == nil {
+		if spec.def == nil && spec.compute == nil && spec.transientCompute == nil {
 			// Optimization opportunity: if we were to add a new column without default
 			// value nor computed expression, then we can just add the column to existing
 			// non-nil primary indexes without actually backfilling any data. This is
@@ -818,7 +814,7 @@ func addSecondaryIndexTargetsForAddColumn(
 	}
 	populateColumnsFromIndexDesc(tbl, index.IndexID, desc, &spec)
 	// Populate partitioning information next.
-	err := configureIndexDescForNewIndexPartitioning(b, tbl.TableID, 0 /* sourcePartitionIndexID*/, nil /*prevSpec*/, &spec, false /* isPrimary */, nil /* partitionByIndex */)
+	err := configureIndexDescForNewIndexPartitioning(b, tbl.TableID, 0 /* sourcePartitionIndexID*/, nil /*prevSpec*/, &spec, false /* isPrimary */, nil /* partitionByIndex */, nil)
 	if err != nil {
 		panic(err)
 	}

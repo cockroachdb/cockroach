@@ -438,7 +438,6 @@ func (s *schemaChange) setClusterSettings(ctx context.Context, url string) (err 
 		err = errors.WithSecondaryError(err, closeErr)
 	}()
 	for _, stmt := range []string{
-		`SET CLUSTER SETTING sql.defaults.super_regions.enabled = 'on'`,
 		`SET CLUSTER SETTING sql.log.all_statements.enabled = 'on'`,
 
 		// This workload is designed to test multiple statements in a transaction.
@@ -653,9 +652,6 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 		if _, err := conn.Exec(ctx, "SET use_declarative_schema_changer='off';"); err != nil {
 			return err
 		}
-	}
-	if _, err := conn.Exec(ctx, "SET enable_inspect_command = true;"); err != nil {
-		return err
 	}
 
 	tx, err := conn.Begin(ctx)

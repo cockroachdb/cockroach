@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -341,6 +342,7 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 							// to backfill successfully.
 							currentBackfillChunk := -(chunksPerBackfill + 1)
 							var params base.TestServerArgs
+							params.DisableElasticCPUAdmission = true
 							params.Locality.Tiers = []roachpb.Tier{
 								{Key: "region", Value: "ajstorm-1"},
 							}
@@ -673,21 +675,39 @@ CREATE TABLE regional_by_row (
 					return errors.Wrap(err, "unexepected error querying schema change GC jobs")
 				}
 
-				actualCount := len(rows)
-				if actualCount != expectedCount {
-					return errors.Newf("expected %d jobs with status %q, found %d. Jobs found: %v",
+				// Count total indexes across all GC jobs.
+				// The details JSON has an "indexes" array; count occurrences of "indexId".
+				totalIndexes := 0
+				for _, r := range rows {
+					indexCount := 0
+					detailStr := r.details
+					for i := 0; i < len(detailStr); {
+						idx := strings.Index(detailStr[i:], `"indexId"`)
+						if idx == -1 {
+							break // no more indexIDs in this job
+						}
+						indexCount++
+						i += idx + 1
+					}
+					totalIndexes += indexCount
+				}
+
+				if totalIndexes != expectedCount {
+					return errors.Newf("expected GC on %d indexes with status %q, found %d. Jobs found: %v",
 						expectedCount,
 						status,
-						actualCount,
+						totalIndexes,
 						rows)
 				}
 				return nil
 			}
 
-			expectedGCJobsForDrops := 4
-			expectedGCJobsForTempIndexes := 4
-			// Now check that we have the right number of index GC jobs pending.
-			err := queryIndexGCJobsAndValidateCount(`running`, expectedGCJobsForDrops+expectedGCJobsForTempIndexes)
+			expectedGCIndexesForDrops := 4
+			expectedGCIndexesForTempIndexes := 4
+			// Now check that we have the right number of indexes being cleaned up.
+			// Note: indexes may be batched into multiple GC jobs in the declarative
+			// schema changer, so we count the total number of indexes across all jobs.
+			err := queryIndexGCJobsAndValidateCount(`running`, expectedGCIndexesForDrops+expectedGCIndexesForTempIndexes)
 			require.NoError(t, err)
 			err = queryIndexGCJobsAndValidateCount(`succeeded`, 0)
 			require.NoError(t, err)
@@ -700,7 +720,7 @@ CREATE TABLE regional_by_row (
 			close(blockGC)
 
 			// Validate that indexes are cleaned up.
-			testutils.SucceedsSoon(t, queryAndEnsureThatIndexGCJobsSucceeded(expectedGCJobsForDrops+expectedGCJobsForTempIndexes))
+			testutils.SucceedsSoon(t, queryAndEnsureThatIndexGCJobsSucceeded(expectedGCIndexesForDrops+expectedGCIndexesForTempIndexes))
 			err = queryIndexGCJobsAndValidateCount(`running`, 0)
 			require.NoError(t, err)
 		})
@@ -715,63 +735,81 @@ func TestRegionChangeRacingRegionalByRowChange(t *testing.T) {
 	skip.UnderRace(t, "too slow under race (>10min)")
 
 	regionalByRowChanges := []struct {
+		desc                           string
 		setup                          string
 		cmd                            string
 		errorOnAddOrDropRegionSandwich string
 		errorOnTableChangeSandwich     string
 	}{
 		{
+			desc:                           "set locality rbr",
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY GLOBAL`,
 			cmd:                            `ALTER TABLE t.test SET LOCALITY REGIONAL BY ROW`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while a REGIONAL BY ROW transition is underway",
 			errorOnTableChangeSandwich:     "pq: cannot perform this locality change while a region is being added or dropped on the database",
 		},
 		{
+			desc:                           "set locality global",
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
 			cmd:                            `ALTER TABLE t.test SET LOCALITY GLOBAL`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while a REGIONAL BY ROW transition is underway",
 			errorOnTableChangeSandwich:     "pq: cannot perform this locality change while a region is being added or dropped on the database",
 		},
 		{
+			desc:                           "create index",
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
 			cmd:                            `CREATE INDEX v_idx ON t.test(v)`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while an index is being created or dropped on a REGIONAL BY ROW table",
 			errorOnTableChangeSandwich:     "pq: cannot CREATE INDEX on a REGIONAL BY ROW table while a region is being added or dropped on the database",
 		},
 		{
+			desc:                           "drop index",
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT, INDEX v_idx (v)) LOCALITY REGIONAL BY ROW`,
 			cmd:                            `DROP INDEX t.test@v_idx`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while an index is being created or dropped on a REGIONAL BY ROW table",
 			errorOnTableChangeSandwich:     "pq: cannot DROP INDEX on a REGIONAL BY ROW table while a region is being added or dropped on the database",
 		},
 		{
+			desc:                           "add unique constraint",
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
 			cmd:                            `ALTER TABLE t.test ADD CONSTRAINT v_uniq UNIQUE (v)`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while an index is being created or dropped on a REGIONAL BY ROW table",
 			errorOnTableChangeSandwich:     "pq: cannot CREATE INDEX on a REGIONAL BY ROW table while a region is being added or dropped on the database",
 		},
 		{
+			desc:                           "add unique column",
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
 			cmd:                            `ALTER TABLE t.test ADD COLUMN z INT UNIQUE`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while an index is being created or dropped on a REGIONAL BY ROW table",
 			errorOnTableChangeSandwich:     "pq: cannot add a UNIQUE COLUMN on a REGIONAL BY ROW table while a region is being added or dropped on the database",
 		},
 		{
+			desc:                           "alter primary key",
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT NOT NULL) LOCALITY REGIONAL BY ROW`,
 			cmd:                            `ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v)`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while a ALTER PRIMARY KEY is underway",
 			errorOnTableChangeSandwich:     "pq: cannot ALTER PRIMARY KEY on a REGIONAL BY ROW table while a region is being added or dropped on the database",
 		},
+		{
+			desc:                           "drop unique constraint",
+			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT, CONSTRAINT v_uniq UNIQUE (v)) LOCALITY REGIONAL BY ROW`,
+			cmd:                            `ALTER TABLE t.test DROP CONSTRAINT v_uniq`,
+			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while an index is being created or dropped on a REGIONAL BY ROW table",
+			errorOnTableChangeSandwich:     "pq: cannot ALTER TABLE DROP CONSTRAINT on a REGIONAL BY ROW table while a region is being added or dropped on the database",
+		},
 	}
 
 	regionChanges := []struct {
-		cmd string
+		desc string
+		cmd  string
 	}{
 		{
-			cmd: `ALTER DATABASE t ADD REGION "us-east3"`,
+			desc: "add region",
+			cmd:  `ALTER DATABASE t ADD REGION "us-east3"`,
 		},
 		{
-			cmd: `ALTER DATABASE t DROP REGION "us-east2"`,
+			desc: "drop region",
+			cmd:  `ALTER DATABASE t DROP REGION "us-east2"`,
 		},
 	}
 
@@ -795,7 +833,7 @@ USE t;
 	// Tests ADD/DROP REGION during a REGIONAL BY ROW index-related change.
 	for _, rbrChange := range regionalByRowChanges {
 		for _, regionChange := range regionChanges {
-			t.Run(fmt.Sprintf("setup %s executing %s with racing %s", rbrChange.setup, rbrChange.cmd, regionChange.cmd), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s racing %s", rbrChange.desc, regionChange.desc), func(t *testing.T) {
 				defer log.Scope(t).Close(t)
 				interruptStartCh := make(chan struct{})
 				interruptEndCh := make(chan struct{})
@@ -861,7 +899,7 @@ USE t;
 	// Tests REGIONAL BY ROW during a ADD/DROP REGION index-related change.
 	for _, regionChange := range regionChanges {
 		for _, rbrChange := range regionalByRowChanges {
-			t.Run(fmt.Sprintf("setup %s executing %s with racing %s", rbrChange.setup, regionChange.cmd, rbrChange.cmd), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s racing %s", regionChange.desc, rbrChange.desc), func(t *testing.T) {
 				defer log.Scope(t).Close(t)
 				interruptStartCh := make(chan struct{})
 				interruptEndCh := make(chan struct{})

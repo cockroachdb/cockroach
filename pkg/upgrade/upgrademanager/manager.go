@@ -220,7 +220,6 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 	// because upgrades run in order.
 	latest := permanentUpgrades[len(permanentUpgrades)-1]
 	lastVer := latest.Version()
-	enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings)
 	lastUpgradeCompleted, err := startup.RunIdempotentWithRetryEx(ctx,
 		m.deps.Stopper.ShouldQuiesce(),
 		"check if migration completed",
@@ -230,7 +229,6 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 				// We'll do a follower read. This is all best effort anyway, and the
 				// follower read should keep the startup time low in the common case where
 				// all upgrades have run a long time ago before this node start.
-				enterpriseEnabled,
 				migrationstable.StaleRead)
 		})
 	if err != nil {
@@ -657,7 +655,7 @@ func (m *Manager) runMigration(
 		ctx := startup.WithoutChecks(ctx)
 		v := mig.Version()
 		alreadyCompleted, err := migrationstable.CheckIfMigrationCompleted(
-			ctx, version, nil /* txn */, m.ie, false /* enterpriseEnabled */, migrationstable.ConsistentRead,
+			ctx, version, nil /* txn */, m.ie, migrationstable.ConsistentRead,
 		)
 		if alreadyCompleted || err != nil {
 			return err
@@ -742,9 +740,8 @@ func (m *Manager) getOrCreateMigrationJob(
 ) (alreadyCompleted, alreadyExisting bool, jobID jobspb.JobID, _ error) {
 	newJobID := m.jr.MakeJobID()
 	if err := m.deps.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings)
 		alreadyCompleted, err = migrationstable.CheckIfMigrationCompleted(
-			ctx, version, txn.KV(), txn, enterpriseEnabled, migrationstable.ConsistentRead,
+			ctx, version, txn.KV(), txn, migrationstable.ConsistentRead,
 		)
 		if err != nil && ctx.Err() == nil {
 			log.Dev.Warningf(ctx, "failed to check if migration already completed: %v", err)

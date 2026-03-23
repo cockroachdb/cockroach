@@ -19,6 +19,7 @@ test           pg_extension        NULL         schema       public   USAGE     
 test           public              NULL         schema       public   CREATE          false
 test           public              NULL         schema       public   USAGE           false
 test           NULL                NULL         database     public   CONNECT         false
+test           NULL                NULL         database     public   TEMPORARY       false
 
 statement error grant options cannot be granted to "public" role
 GRANT ALL PRIVILEGES ON TABLE t TO public WITH GRANT OPTION
@@ -307,6 +308,7 @@ test           public       t            table        testuser  CHANGEFEED      
 test           public       t            table        testuser  CREATE             true
 test           public       t            table        testuser  DROP               true
 test           public       t            table        testuser  INSERT             true
+test           public       t            table        testuser  MAINTAIN           true
 test           public       t            table        testuser  REPLICATIONDEST    true
 test           public       t            table        testuser  REPLICATIONSOURCE  true
 test           public       t            table        testuser  SELECT             true
@@ -436,6 +438,7 @@ SHOW GRANTS ON DATABASE d
 database_name  grantee   privilege_type  is_grantable
 d              admin     ALL             true
 d              public    CONNECT         false
+d              public    TEMPORARY       false
 d              root      ALL             true
 d              testuser  ALL             true
 
@@ -457,6 +460,7 @@ SHOW GRANTS ON DATABASE d
 database_name  grantee   privilege_type  is_grantable
 d              admin     ALL             true
 d              public    CONNECT         false
+d              public    TEMPORARY       false
 d              root      ALL             true
 d              target    CONNECT         false
 d              testuser  ALL             true
@@ -491,6 +495,7 @@ SHOW GRANTS ON DATABASE d
 database_name  grantee    privilege_type  is_grantable
 d              admin      ALL             true
 d              public     CONNECT         false
+d              public     TEMPORARY       false
 d              root       ALL             true
 d              target     CONNECT         true
 d              testuser   ALL             true
@@ -506,6 +511,7 @@ SHOW GRANTS ON DATABASE d
 database_name  grantee   privilege_type  is_grantable
 d              admin     ALL             true
 d              public    CONNECT         false
+d              public    TEMPORARY       false
 d              root      ALL             true
 d              target    CONNECT         true
 d              testuser  ALL             true

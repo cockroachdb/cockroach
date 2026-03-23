@@ -1268,11 +1268,12 @@ func (b *logicalPropsBuilder) buildLimitOrTopKProps(
 	// Cardinality
 	// -----------
 	// Limit puts a cap on the number of rows returned by input.
-	rel.Cardinality = inputProps.Cardinality
 	if constLimit <= 0 {
 		rel.Cardinality = props.ZeroCardinality
 	} else if constLimit < math.MaxUint32 {
-		rel.Cardinality = rel.Cardinality.Limit(uint32(constLimit))
+		rel.Cardinality = inputProps.Cardinality.Limit(uint32(constLimit))
+	} else {
+		rel.Cardinality = inputProps.Cardinality.AsLowAs(0)
 	}
 }
 
@@ -1303,7 +1304,7 @@ func (b *logicalPropsBuilder) buildOffsetProps(offset *OffsetExpr, rel *props.Re
 	// Cardinality
 	// -----------
 	// Offset decreases the number of rows that are passed through from input.
-	rel.Cardinality = inputProps.Cardinality
+	rel.Cardinality = inputProps.Cardinality.AsLowAs(0)
 	if cnst, ok := offset.Offset.(*ConstExpr); ok {
 		constOffset := int64(*cnst.Value.(*tree.DInt))
 		if constOffset > 0 {
@@ -1610,6 +1611,10 @@ func (b *logicalPropsBuilder) buildMutationProps(mutation RelExpr, rel *props.Re
 	// -----------
 	// Inherit cardinality from input.
 	rel.Cardinality = inputProps.Cardinality
+	if private.Swap {
+		// Swap mutations can return zero rows.
+		rel.Cardinality = rel.Cardinality.AsLowAs(0)
+	}
 
 	// Statistics
 	// ----------
@@ -2103,7 +2108,7 @@ func MakeTableFuncDep(md *opt.Metadata, tabID opt.TableID) *props.FuncDepSet {
 	for i := 0; i < tab.UniqueCount(); i++ {
 		unique := tab.Unique(i)
 
-		if md.TableMeta(tabID).IgnoreUniqueWithoutIndexKeys && !unique.UniquenessGuaranteedByAnotherIndex() {
+		if md.TableMeta(tabID).IgnoreUniqueWithoutIndexKeys && !unique.CanElideUniqueCheck() {
 			continue
 		}
 

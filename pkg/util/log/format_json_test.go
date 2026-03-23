@@ -115,7 +115,7 @@ func TestJsonDecode(t *testing.T) {
 				for {
 					var e logpb.Entry
 					if err := d.Decode(&e); err != nil {
-						if err == io.EOF || errors.Is(err, ErrMalformedLogEntry) {
+						if err == io.EOF || errors.Is(err, ErrMalformedJSON) {
 							break
 						}
 						td.Fatalf(t, "error while decoding: %v", err)

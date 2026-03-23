@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -152,10 +153,6 @@ func TestMemoIsStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// Revoke access to the underlying table. The user should retain indirect
-	// access via the view.
-	catalog.Table(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abc")).Revoked = true
 
 	// Initialize context with starting values.
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
@@ -609,6 +606,36 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerClampInequalitySelectivity = true
 	stale()
 	evalCtx.SessionData().OptimizerClampInequalitySelectivity = false
+	notStale()
+
+	// Stale prevent_update_set_column_drop.
+	evalCtx.SessionData().PreventUpdateSetColumnDrop = true
+	stale()
+	evalCtx.SessionData().PreventUpdateSetColumnDrop = false
+	notStale()
+
+	// Stale use_improved_routine_deps_triggers_and_computed_cols.
+	evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols = true
+	stale()
+	evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols = false
+	notStale()
+
+	// Stale optimizer_inline_any_unnest_subquery.
+	evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery = true
+	stale()
+	evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery = false
+	notStale()
+
+	// Stale optimizer_use_min_row_count_anti_join_fix.
+	evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix = true
+	stale()
+	evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix = false
+	notStale()
+
+	// Stale skip_underlying_view_privilege_checks.
+	sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Override(ctx, &evalCtx.Settings.SV, true)
+	stale()
+	sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Override(ctx, &evalCtx.Settings.SV, false)
 	notStale()
 
 	// User no longer has access to view.

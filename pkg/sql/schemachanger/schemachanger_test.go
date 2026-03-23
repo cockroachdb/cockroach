@@ -1054,11 +1054,7 @@ CREATE TABLE t2(n int);
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			ctx := context.Background()
-			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-				// This would work with secondary tenants as well, but the span config
-				// limited logic can hit transaction retries on the span_count table.
-				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(138733),
-			})
+			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 			defer s.Stopper().Stop(ctx)
 
 			runner := sqlutils.MakeSQLRunner(sqlDB)
@@ -1078,42 +1074,70 @@ CREATE TABLE t2(n int);
 				require.NoError(t, secondConn.Close())
 			}()
 
-			firstConnReady := make(chan struct{})
-			secondConnReady := make(chan struct{})
+			// Under multitenancy, we are likely to encounter retry errors while
+			// the schema changer updates the span_counts table, so we keep running
+			// the test until it succeeds.
+			within := 1 * time.Second
+			if s.StartedDefaultTestTenant() {
+				within = 10 * time.Second
+			}
+			testutils.SucceedsWithin(t, func() error {
+				_, err = sqlDB.ExecContext(ctx, "DROP DATABASE IF EXISTS testdb CASCADE")
+				if err != nil {
+					return err
+				}
+				_, err = sqlDB.ExecContext(ctx, "CREATE DATABASE testdb")
+				if err != nil {
+					return err
+				}
+				_, err = firstConn.ExecContext(ctx, "USE testdb")
+				if err != nil {
+					return err
+				}
+				_, err = secondConn.ExecContext(ctx, "USE testdb")
+				if err != nil {
+					return err
+				}
+				_, err = firstConn.ExecContext(ctx, test.setupStmt)
+				if err != nil {
+					return err
+				}
 
-			runner.Exec(t, test.setupStmt)
+				firstConnReady := make(chan struct{})
+				secondConnReady := make(chan struct{})
 
-			grp := ctxgroup.WithContext(ctx)
+				grp := ctxgroup.WithContext(ctx)
 
-			grp.Go(func() error {
-				defer close(firstConnReady)
-				tx, err := firstConn.BeginTx(ctx, nil)
-				if err != nil {
-					return err
-				}
-				_, err = tx.Exec(test.firstStmt)
-				if err != nil {
-					return err
-				}
-				firstConnReady <- struct{}{}
-				<-secondConnReady
-				return tx.Commit()
-			})
-			grp.Go(func() error {
-				defer close(secondConnReady)
-				tx, err := secondConn.BeginTx(ctx, nil)
-				if err != nil {
-					return err
-				}
-				_, err = tx.Exec(test.secondStmt)
-				if err != nil {
-					return err
-				}
-				<-firstConnReady
-				secondConnReady <- struct{}{}
-				return tx.Commit()
-			})
-			require.NoError(t, grp.Wait())
+				grp.Go(func() error {
+					defer close(firstConnReady)
+					tx, err := firstConn.BeginTx(ctx, nil)
+					if err != nil {
+						return err
+					}
+					_, err = tx.Exec(test.firstStmt)
+					if err != nil {
+						return err
+					}
+					firstConnReady <- struct{}{}
+					<-secondConnReady
+					return tx.Commit()
+				})
+				grp.Go(func() error {
+					defer close(secondConnReady)
+					tx, err := secondConn.BeginTx(ctx, nil)
+					if err != nil {
+						return err
+					}
+					_, err = tx.Exec(test.secondStmt)
+					if err != nil {
+						return err
+					}
+					<-firstConnReady
+					secondConnReady <- struct{}{}
+					return tx.Commit()
+				})
+				return grp.Wait()
+			}, within)
 		})
 	}
 }
@@ -1254,4 +1278,184 @@ func TestApproxMaxSchemaObjectsDeclarative(t *testing.T) {
 func TestApproxMaxSchemaObjectsLegacy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testApproxMaxSchemaObjectsImpl(t, false)
+}
+
+func TestTTLSchemaChangeFailuresRollsBackSchedule(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	const (
+		createNonTTLTable = `CREATE TABLE test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ);`
+		expectNonTTLTable = `CREATE TABLE public.test (
+	id STRING NOT NULL,
+	expire_at TIMESTAMPTZ NULL,
+	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
+);`
+
+		createTTLExpireAfterTable = `CREATE TABLE test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expire_after = '10 hours');`
+		expectTTLExpireAfterTable = `CREATE TABLE public.test (
+	id STRING NOT NULL,
+	expire_at TIMESTAMPTZ NULL,
+	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL,
+	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
+) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL);`
+
+		createTTLExpirationExpressionTable = `CREATE TABLE test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expiration_expression = 'expire_at');`
+		expectTTLExpirationExpressionTable = `CREATE TABLE public.test (
+	id STRING NOT NULL,
+	expire_at TIMESTAMPTZ NULL,
+	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
+) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at');`
+
+		createTTLExpireAfterTTLExpirationExpressionTable = `CREATE TABLE test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expire_after = '10 hours', ttl_expiration_expression = 'crdb_internal_expiration');`
+		expectTTLExpireAfterTTLExpirationExpressionTable = `CREATE TABLE public.test (
+	id STRING NOT NULL,
+	expire_at TIMESTAMPTZ NULL,
+	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL,
+	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
+) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL, ttl_expiration_expression = 'crdb_internal_expiration');`
+	)
+	verifyTableSchema := func(t *testing.T, sqlDB *gosql.DB, expectedSchema string) {
+		var actualSchema string
+		require.NoError(t, sqlDB.QueryRow(`SELECT create_statement FROM [SHOW CREATE TABLE test]`).Scan(&actualSchema))
+		require.Equal(t, expectedSchema, actualSchema)
+	}
+
+	testCases := []struct {
+		desc                    string
+		setup                   string
+		schemaChange            string
+		injectFailure           func() error
+		expectedShowCreateTable string
+		expectSchedule          bool
+	}{
+		// ttl_expire_after
+		{
+			desc:                    "error in ALTER TABLE x SET ttl_expire_after",
+			setup:                   createNonTTLTable,
+			schemaChange:            `ALTER TABLE test SET (ttl_expire_after = '10 hours')`,
+			expectedShowCreateTable: expectNonTTLTable,
+			expectSchedule:          false,
+		},
+		{
+			desc:                    "error in ALTER TABLE x RESET ttl_expire_after",
+			setup:                   createTTLExpireAfterTable,
+			schemaChange:            `ALTER TABLE test RESET (ttl)`,
+			expectedShowCreateTable: expectTTLExpireAfterTable,
+			expectSchedule:          true,
+		},
+		// ttl_expiration_expression
+		{
+			desc:                    "error in ALTER TABLE x SET ttl_expiration_expression",
+			setup:                   createNonTTLTable,
+			schemaChange:            `ALTER TABLE test SET (ttl_expiration_expression = 'expire_at')`,
+			expectedShowCreateTable: expectNonTTLTable,
+			expectSchedule:          false,
+		},
+		{
+			desc:                    "error in ALTER TABLE x RESET ttl_expiration_expression",
+			setup:                   createTTLExpirationExpressionTable,
+			schemaChange:            `ALTER TABLE test RESET (ttl)`,
+			expectedShowCreateTable: expectTTLExpirationExpressionTable,
+			expectSchedule:          true,
+		},
+		// ttl_expire_after & ttl_expiration_expression
+		{
+			desc:                    "error in ALTER TABLE x SET ttl_expire_after and ttl_expiration_expression",
+			setup:                   createNonTTLTable,
+			schemaChange:            `ALTER TABLE test SET (ttl_expire_after = '10 hours', ttl_expiration_expression = 'crdb_internal_expiration')`,
+			expectedShowCreateTable: expectNonTTLTable,
+			expectSchedule:          false,
+		},
+		{
+			desc:                    "error in ALTER TABLE x RESET ttl_expire_after and ttl_expiration_expression",
+			setup:                   createTTLExpireAfterTTLExpirationExpressionTable,
+			schemaChange:            `ALTER TABLE test RESET (ttl)`,
+			expectedShowCreateTable: expectTTLExpireAfterTTLExpirationExpressionTable,
+			expectSchedule:          true,
+		},
+	}
+
+	for _, tc := range testCases {
+		for phase := scop.EarliestPhase; phase <= scop.LatestPhase; phase++ {
+			for stageType := scop.MutationType; stageType <= scop.ValidationType; stageType++ {
+				t.Run(fmt.Sprintf("%s/phase=%s/stage=%s", tc.desc, phase, stageType), func(t *testing.T) {
+
+					injectedFailure := false
+					var shouldFail atomic.Bool
+					scKnobs := &scexec.TestingKnobs{
+						AfterStage: func(p scplan.Plan, stageIdx int) error {
+							stage := p.Stages[stageIdx]
+
+							// Handle failure hook; trigger it before phase/stage combo.
+							if stage.Phase == phase && stage.Type() == stageType {
+								if shouldFail.CompareAndSwap(true, false) {
+									injectedFailure = true
+									return errors.AssertionFailedf("fail!")
+								}
+							}
+							return nil
+						},
+					}
+
+					var params base.TestServerArgs
+					params.Knobs.SQLDeclarativeSchemaChanger = scKnobs
+					params.UseDatabase = "defaultdb"
+					s, sqlDB, kvDB := serverutils.StartServer(t, params)
+					defer s.Stopper().Stop(ctx)
+
+					_, err := sqlDB.Exec("SET create_table_with_schema_locked = false")
+					require.NoError(t, err)
+					_, err = sqlDB.Exec("SET use_declarative_schema_changer = on")
+					require.NoError(t, err)
+					_, err = sqlDB.Exec("SET sql.defaults.use_declarative_schema_changer = 'on'")
+					require.NoError(t, err)
+					_, err = sqlDB.Exec(tc.setup)
+					require.NoError(t, err)
+
+					shouldFail.Store(true)
+					_, err = sqlDB.Exec(tc.schemaChange)
+					if !injectedFailure {
+						skip.IgnoreLintf(t, "skipping test as failure was not injected for phase %s and stage %s", phase, stageType)
+					}
+					require.Error(t, err)
+
+					// Ensure CREATE TABLE is the same.
+					verifyTableSchema(t, sqlDB, tc.expectedShowCreateTable)
+
+					// Ensure the schedule is still there or not based on test expectation.
+					desc := desctestutils.TestingGetPublicTableDescriptor(
+						kvDB,
+						s.Codec(),
+						"defaultdb",
+						"test",
+					)
+
+					rowLevelTTL := desc.GetRowLevelTTL()
+					if tc.expectSchedule {
+						require.NotNil(t, rowLevelTTL)
+						require.Greater(t, rowLevelTTL.ScheduleID, int64(0))
+
+						// Ensure there is only one schedule and that it belongs to the table.
+						var hasSchedule bool
+						require.NoError(t, sqlDB.QueryRow(`SELECT count(1) = 1 FROM [SHOW SCHEDULES] WHERE id = $1`, rowLevelTTL.ScheduleID).Scan(&hasSchedule))
+						require.True(t, hasSchedule)
+
+						var numSchedules int
+						require.NoError(t, sqlDB.QueryRow(`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE SOME ('row-level-ttl%', '%' || $1 || '%', '%' || $2 || '%')`, desc.TableDesc().ID, desc.TableDesc().Name).Scan(&numSchedules))
+						require.Equal(t, 1, numSchedules)
+					} else {
+						require.Nil(t, rowLevelTTL)
+
+						// Ensure there are no schedules.
+						var numSchedules int
+						require.NoError(t, sqlDB.QueryRow(`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE ANY ('row-level-ttl%', '%' || $1 || '%', '%' || $2 || '%')`, desc.TableDesc().ID, desc.TableDesc().Name).Scan(&numSchedules))
+						require.Equal(t, 0, numSchedules)
+					}
+				})
+			}
+		}
+	}
 }

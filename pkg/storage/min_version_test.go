@@ -117,9 +117,9 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 	// Replace the NewEncryptedEnvFunc global for the duration of this
 	// test. We'll use it to initialize a test caesar cipher
 	// encryption-at-rest implementation.
-	oldNewEncryptedEnvFunc := fs.NewEncryptedEnvFunc
-	defer func() { fs.NewEncryptedEnvFunc = oldNewEncryptedEnvFunc }()
-	fs.NewEncryptedEnvFunc = fauxNewEncryptedEnvFunc
+	oldNewEncryptedEnvFunc := fs.NewEncryptedEnv
+	defer func() { fs.NewEncryptedEnv = oldNewEncryptedEnvFunc }()
+	fs.NewEncryptedEnv = fauxNewEncryptedEnvFunc
 
 	ctx := context.Background()
 	st := cluster.MakeClusterSettings()

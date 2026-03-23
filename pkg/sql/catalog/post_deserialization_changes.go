@@ -119,4 +119,8 @@ const (
 	// FixedUsesSequencesIDForIdentityColumns indicates sequence ID references
 	// are fixed for identity / serial columns.
 	FixedUsesSequencesIDForIdentityColumns
+
+	// RepairedTriggerBackrefs indicates that trigger backrefs with TriggerID=0
+	// were repaired to have the correct TriggerID set.
+	RepairedTriggerBackrefs
 )

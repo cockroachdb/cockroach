@@ -11,14 +11,15 @@ EXPLAIN (DDL) CREATE INDEX rbr_idx ON multiregion_db.public.table_regional_by_ro
 Schema change plan for CREATE INDEX ‹rbr_idx› ON ‹multiregion_db›.‹public›.‹table_regional_by_row› (‹v›) PARTITION BY ‹crdb_region›) ();
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 7 elements transitioning toward PUBLIC
+ │         ├── 8 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → BACKFILL_ONLY    SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx+), TemporaryIndexID: 3, SourceIndexID: 1 (table_regional_by_row_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │         │    ├── ABSENT → PUBLIC           IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx+)}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 3 (crdb_region), IndexID: 2 (rbr_idx+)}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 2 (v), IndexID: 2 (rbr_idx+)}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 2 (rbr_idx+)}
  │         │    ├── ABSENT → PUBLIC           IndexData:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx+)}
- │         │    └── ABSENT → PUBLIC           IndexName:{DescID: 108 (table_regional_by_row), Name: "rbr_idx", IndexID: 2 (rbr_idx+)}
+ │         │    ├── ABSENT → PUBLIC           IndexName:{DescID: 108 (table_regional_by_row), Name: "rbr_idx", IndexID: 2 (rbr_idx+)}
+ │         │    └── ABSENT → PUBLIC           TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 1}
  │         ├── 5 elements transitioning toward TRANSIENT_ABSENT
  │         │    ├── ABSENT → DELETE_ONLY      TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (table_regional_by_row_pkey)}
  │         │    ├── ABSENT → TRANSIENT_ABSENT IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 3}
@@ -27,7 +28,7 @@ Schema change plan for CREATE INDEX ‹rbr_idx› ON ‹multiregion_db›.‹pub
  │         │    └── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 3}
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT           TableSchemaLocked:{DescID: 108 (table_regional_by_row)}
- │         └── 12 Mutation operations
+ │         └── 13 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":108}
  │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
  │              ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":2,"TableID":108}}
@@ -39,17 +40,19 @@ Schema change plan for CREATE INDEX ‹rbr_idx› ON ‹multiregion_db›.‹pub
  │              ├── AddIndexPartitionInfo {"Partitioning":{"IndexID":3,"TableID":108}}
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":3,"TableID":108}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":3,"Ordinal":1,"TableID":108}
- │              └── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":108}
+ │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":108}
+ │              └── AddTableZoneConfig {"TableID":108}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 7 elements transitioning toward PUBLIC
+ │    │    ├── 8 elements transitioning toward PUBLIC
  │    │    │    ├── BACKFILL_ONLY    → ABSENT SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx+), TemporaryIndexID: 3, SourceIndexID: 1 (table_regional_by_row_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │    │    │    ├── PUBLIC           → ABSENT IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx+)}
  │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 3 (crdb_region), IndexID: 2 (rbr_idx+)}
  │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 2 (v), IndexID: 2 (rbr_idx+)}
  │    │    │    ├── PUBLIC           → ABSENT IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 2 (rbr_idx+)}
  │    │    │    ├── PUBLIC           → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx+)}
- │    │    │    └── PUBLIC           → ABSENT IndexName:{DescID: 108 (table_regional_by_row), Name: "rbr_idx", IndexID: 2 (rbr_idx+)}
+ │    │    │    ├── PUBLIC           → ABSENT IndexName:{DescID: 108 (table_regional_by_row), Name: "rbr_idx", IndexID: 2 (rbr_idx+)}
+ │    │    │    └── PUBLIC           → ABSENT TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 1}
  │    │    ├── 5 elements transitioning toward TRANSIENT_ABSENT
  │    │    │    ├── DELETE_ONLY      → ABSENT TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (table_regional_by_row_pkey)}
  │    │    │    ├── TRANSIENT_ABSENT → ABSENT IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 3}
@@ -61,14 +64,15 @@ Schema change plan for CREATE INDEX ‹rbr_idx› ON ‹multiregion_db›.‹pub
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 7 elements transitioning toward PUBLIC
+ │         ├── 8 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → BACKFILL_ONLY    SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx+), TemporaryIndexID: 3, SourceIndexID: 1 (table_regional_by_row_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │         │    ├── ABSENT → PUBLIC           IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx+)}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 3 (crdb_region), IndexID: 2 (rbr_idx+)}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 2 (v), IndexID: 2 (rbr_idx+)}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 2 (rbr_idx+)}
  │         │    ├── ABSENT → PUBLIC           IndexData:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx+)}
- │         │    └── ABSENT → PUBLIC           IndexName:{DescID: 108 (table_regional_by_row), Name: "rbr_idx", IndexID: 2 (rbr_idx+)}
+ │         │    ├── ABSENT → PUBLIC           IndexName:{DescID: 108 (table_regional_by_row), Name: "rbr_idx", IndexID: 2 (rbr_idx+)}
+ │         │    └── ABSENT → PUBLIC           TableZoneConfig:{DescID: 108 (table_regional_by_row), SeqNum: 1}
  │         ├── 5 elements transitioning toward TRANSIENT_ABSENT
  │         │    ├── ABSENT → DELETE_ONLY      TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 3, ConstraintID: 1, SourceIndexID: 1 (table_regional_by_row_pkey)}
  │         │    ├── ABSENT → TRANSIENT_ABSENT IndexPartitioning:{DescID: 108 (table_regional_by_row), IndexID: 3}
@@ -77,7 +81,7 @@ Schema change plan for CREATE INDEX ‹rbr_idx› ON ‹multiregion_db›.‹pub
  │         │    └── ABSENT → PUBLIC           IndexColumn:{DescID: 108 (table_regional_by_row), ColumnID: 1 (k), IndexID: 3}
  │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
  │         │    └── PUBLIC → ABSENT           TableSchemaLocked:{DescID: 108 (table_regional_by_row)}
- │         └── 16 Mutation operations
+ │         └── 17 Mutation operations
  │              ├── SetTableSchemaLocked {"TableID":108}
  │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
  │              ├── MaybeAddSplitForIndex {"IndexID":2,"TableID":108}
@@ -92,6 +96,7 @@ Schema change plan for CREATE INDEX ‹rbr_idx› ON ‹multiregion_db›.‹pub
  │              ├── AddColumnToIndex {"ColumnID":3,"IndexID":3,"TableID":108}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":3,"Ordinal":1,"TableID":108}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":108}
+ │              ├── AddTableZoneConfig {"TableID":108}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":108,"Initialize":true}
  │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  ├── PostCommitPhase

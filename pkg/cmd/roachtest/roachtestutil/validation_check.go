@@ -243,7 +243,6 @@ func launchInspectJobs(
 			l.Printf("Launching INSPECT DATABASE %s", dbName)
 
 			statements := []string{
-				"SET enable_inspect_command = true",
 				fmt.Sprintf("INSPECT DATABASE %s WITH OPTIONS DETACHED", lexbase.EscapeSQLIdent(dbName)),
 			}
 

@@ -39,7 +39,7 @@ func TestStorePoolUpdateLocalStore(t *testing.T) {
 	ctx := context.Background()
 	// We're going to manually mark stores dead in this test.
 	st := cluster.MakeTestingClusterSettings()
-	stopper, g, _, sp, _ := storepool.CreateTestStorePool(ctx, st,
+	stopper, g, _, sp, _, _ := storepool.CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -231,7 +231,7 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
 	cfg := TestStoreConfig(clock)
 	var stopper *stop.Stopper
-	stopper, _, _, cfg.StorePool, _ = storepool.CreateTestStorePool(ctx, cfg.Settings,
+	stopper, _, _, cfg.StorePool, _, _ = storepool.CreateTestStorePool(ctx, cfg.Settings,
 		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 10 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -239,8 +239,8 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 
 	// Create store.
 	node := roachpb.NodeDescriptor{NodeID: roachpb.NodeID(1)}
-	eng := storage.NewDefaultInMemForTesting()
-	stopper.AddCloser(eng)
+	eng := kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
+	stopper.AddCloser(&eng)
 
 	cfg.Transport = NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, cfg.Clock)
 	store := NewStore(ctx, cfg, eng, &node)
@@ -255,15 +255,15 @@ func TestStorePoolUpdateLocalStoreBeforeGossip(t *testing.T) {
 	// Create replica.
 	rg := roachpb.RangeDescriptor{
 		RangeID:       1,
-		StartKey:      roachpb.RKey([]byte("a")),
-		EndKey:        roachpb.RKey([]byte("b")),
+		StartKey:      roachpb.RKey("a"),
+		EndKey:        roachpb.RKey("b"),
 		NextReplicaID: 1,
 	}
 	rg.AddReplica(1, 1, roachpb.VOTER_FULL)
 
 	const replicaID = 1
-	require.NoError(t,
-		kvstorage.MakeStateLoader(rg.RangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
+	require.NoError(t, kvstorage.MakeStateLoader(rg.RangeID).SetRaftReplicaID(
+		ctx, store.StateEngine(), replicaID))
 	replica, err := loadInitializedReplicaForTesting(ctx, store, &rg, replicaID)
 	if err != nil {
 		t.Fatalf("make replica error : %+v", err)

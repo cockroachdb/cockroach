@@ -356,35 +356,11 @@ func runBackupProcessor(
 
 	log.Dev.Infof(ctx, "backup processor is assigned %d spans covering %d ranges", totalSpans, len(requestSpans))
 
-	destURI := spec.DefaultURI
-	var destLocalityKV string
-
-	if len(spec.URIsByLocalityKV) > 0 {
-		var localitySinkURI string
-		// When matching, more specific KVs in the node locality take precedence
-		// over less specific ones so search back to front.
-		for i := len(flowCtx.EvalCtx.Locality.Tiers) - 1; i >= 0; i-- {
-			tier := flowCtx.EvalCtx.Locality.Tiers[i].String()
-			if dest, ok := spec.URIsByLocalityKV[tier]; ok {
-				localitySinkURI = dest
-				destLocalityKV = tier
-				break
-			}
-		}
-		if localitySinkURI != "" {
-			log.Dev.Infof(ctx, "backing up %d spans to destination specified by locality %s", totalSpans, destLocalityKV)
-			destURI = localitySinkURI
-		} else {
-			nodeLocalities := make([]string, 0, len(flowCtx.EvalCtx.Locality.Tiers))
-			for _, i := range flowCtx.EvalCtx.Locality.Tiers {
-				nodeLocalities = append(nodeLocalities, i.String())
-			}
-			backupLocalities := make([]string, 0, len(spec.URIsByLocalityKV))
-			for i := range spec.URIsByLocalityKV {
-				backupLocalities = append(backupLocalities, i)
-			}
-			log.Dev.Infof(ctx, "backing up %d spans to default locality because backup localities %s have no match in node's localities %s", totalSpans, backupLocalities, nodeLocalities)
-		}
+	destURI, destLocalityKV, err := selectLocalityMatchingURI(
+		ctx, spec.DefaultURI, spec.URIsByLocalityKV, spec.StrictLocality, flowCtx.EvalCtx.Locality,
+	)
+	if err != nil {
+		return errors.Wrap(err, "selecting locality matching uri")
 	}
 	if testingDiscardBackupData {
 		destURI = "null:///discard"
@@ -521,6 +497,8 @@ func runBackupProcessor(
 							TargetBytes:                 1,
 							Timestamp:                   span.end,
 							ReturnElasticCPUResumeSpans: true,
+							WorkloadID:                  flowCtx.EvalCtx.WorkloadID,
+							WorkloadType:                flowCtx.EvalCtx.WorkloadType.ToUint32(),
 						}
 						if priority {
 							// This re-attempt is reading far enough in the past that we just want
@@ -663,21 +641,36 @@ func runBackupProcessor(
 						// Even if the ExportRequest did not export any data we want to report
 						// the span as completed for accurate progress tracking.
 						if len(resp.Files) == 0 {
-							sink.WriteWithNoData(backupsink.ExportedSpan{CompletedSpans: completedSpans})
+							var revStart hlc.Timestamp
+							if spec.MVCCFilter == kvpb.MVCCFilter_All {
+								// Even if no data is written, we need to track the revision
+								// start time.
+								revStart = spec.BackupStartTime
+							}
+							sink.WriteWithNoData(
+								backupsink.ExportedSpan{CompletedSpans: completedSpans, RevStart: revStart},
+							)
 						}
 						for i, file := range resp.Files {
 							entryCounts := countRows(file.Exported, spec.PKIDs)
+
+							fileMeta := backuppb.BackupManifest_File{
+								Span:                    file.Span,
+								EntryCounts:             entryCounts,
+								LocalityKV:              destLocalityKV,
+								ApproximatePhysicalSize: uint64(len(file.SST)),
+							}
+							if backupKnobs, ok := flowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+								if backupKnobs.BackupProcessFileOverride != nil {
+									fileMeta = backupKnobs.BackupProcessFileOverride(fileMeta)
+								}
+							}
 
 							ret := backupsink.ExportedSpan{
 								// BackupManifest_File just happens to contain the exact fields
 								// to store the metadata we need, but there's no actual File
 								// on-disk anywhere yet.
-								Metadata: backuppb.BackupManifest_File{
-									Span:                    file.Span,
-									EntryCounts:             entryCounts,
-									LocalityKV:              destLocalityKV,
-									ApproximatePhysicalSize: uint64(len(file.SST)),
-								},
+								Metadata: fileMeta,
 								DataSST:  file.SST,
 								RevStart: resp.StartTime,
 							}
@@ -715,6 +708,46 @@ func runBackupProcessor(
 			}
 		}
 	})
+}
+
+func selectLocalityMatchingURI(
+	ctx context.Context,
+	defaultURI string,
+	urisByLocalityKV map[string]string,
+	strict bool,
+	processorLocality roachpb.Locality,
+) (string, string, error) {
+	destURI := defaultURI
+	var destLocalityKV string
+
+	if len(urisByLocalityKV) > 0 {
+		var localitySinkURI string
+		// When matching, more specific KVs in the node locality take precedence
+		// over less specific ones so search back to front.
+		for i := len(processorLocality.Tiers) - 1; i >= 0; i-- {
+			tier := processorLocality.Tiers[i].String()
+			if dest, ok := urisByLocalityKV[tier]; ok {
+				localitySinkURI = dest
+				destLocalityKV = tier
+				break
+			}
+		}
+		if localitySinkURI != "" {
+			destURI = localitySinkURI
+			log.Dev.Infof(ctx,
+				"processor backing up to destination URI %s with locality %s",
+				destURI, destLocalityKV,
+			)
+		} else if strict {
+			// This shouldn't happen unless there was a bug in distsql planning.
+			return "", "", errors.Errorf(
+				"sql processor locality %s does not match any of the backup localities %v: cannot proceed with strict locality",
+				processorLocality, urisByLocalityKV,
+			)
+		}
+	}
+
+	return destURI, destLocalityKV, nil
 }
 
 // recordExportStats emits a StructuredEvent containing the stats about the
@@ -781,6 +814,7 @@ func newBackupPacer(
 		if !ok {
 			tenantID = roachpb.SystemTenantID
 		}
+		wid, wtype := kv.WorkloadInfoFromContext(ctx)
 		pacer = factory.NewPacer(
 			100*time.Millisecond,
 			admission.WorkInfo{
@@ -788,6 +822,8 @@ func newBackupPacer(
 				Priority:        admissionpb.BulkNormalPri,
 				CreateTime:      timeutil.Now().UnixNano(),
 				BypassAdmission: false,
+				WorkloadID:      wid,
+				WorkloadType:    wtype,
 			},
 		)
 	}

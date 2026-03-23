@@ -50,3 +50,169 @@ statement ok
 DEALLOCATE p;
 
 subtest end
+
+subtest ifs_161993
+
+statement ok
+SET statement_timeout = '30s';
+
+statement ok
+CREATE TABLE t161993 (
+  id INT8 NOT NULL DEFAULT 0,
+  k VARCHAR(50) NULL,
+  CONSTRAINT t1_pkey PRIMARY KEY (id ASC)
+)
+
+statement ok
+CREATE TABLE u161993 (
+  code VARCHAR(20) NOT NULL,
+  name VARCHAR NULL,
+  active BOOL NULL DEFAULT true,
+  flag BOOL NULL DEFAULT false,
+  CONSTRAINT u161993_pkey PRIMARY KEY (code ASC)
+)
+
+statement ok
+CREATE FUNCTION f161993(p_in JSONB, OUT p_out JSONB)
+  RETURNS JSONB
+  LANGUAGE plpgsql
+  AS $$
+  DECLARE
+  v1 BOOL;
+  v2 BOOL;
+  v3 TIMESTAMP;
+  v4 INT8;
+  v5 JSONB;
+  v6 JSONB;
+  v7 JSONB;
+  v8 VARCHAR;
+  v9 BOOL;
+  v10 VARCHAR;
+  v11 VARCHAR;
+  BEGIN
+  v2 := true;
+  v5 := p_in;
+  v8 := COALESCE(btrim(v5->>'code'), '1')::VARCHAR;
+  v10 := '';
+  v11 := '';
+  -- Block 1
+  IF v2 = true THEN
+    SELECT id FROM t161993 WHERE k = split_part(v10, '|', 5) INTO v4;
+    v2 := true;
+  END IF;
+  -- Block 2
+  IF v4 IN (11, 16, 89) THEN
+    v1 := COALESCE(btrim((v5->>'flag')), 'false')::BOOL;
+  END IF;
+  -- Block 3
+  IF v2 = true THEN
+    v7 := '{}'::JSONB;
+  END IF;
+  -- Block 4
+  IF v2 = true THEN
+    v8 := CASE WHEN EXISTS (SELECT 1 FROM u161993 AS x WHERE (x.code = v8) AND (x.active = true)) THEN v8 ELSE '1' END;
+  END IF;
+  -- Block 5
+  IF v2 = true THEN
+    v6 := '{}'::JSONB;
+  END IF;
+  -- Block 6
+  IF (v2 = true) AND (v9::BOOL = true) THEN
+    SELECT COALESCE(flag, false) FROM u161993 WHERE name = split_part(v11, '|', 4) INTO v9;
+  END IF;
+  -- Block 7
+  IF v2 = true THEN
+    v7 := '{}'::JSONB;
+  END IF;
+  -- Block 8
+  IF v2 = true THEN
+    v8 := CASE WHEN EXISTS (SELECT 1 FROM u161993 AS x WHERE (x.code = v8) AND (x.active = true)) THEN v8 ELSE '1' END;
+  END IF;
+  -- Block 9
+  IF v2 = true THEN
+    v6 := '{}'::JSONB;
+  END IF;
+  -- Block 10
+  IF v2 = true THEN
+    v7 := '{}'::JSONB;
+  END IF;
+  -- Block 11
+  IF v2 = true THEN
+    v8 := CASE WHEN EXISTS (SELECT 1 FROM u161993 AS x WHERE (x.code = v8) AND (x.active = true)) THEN v8 ELSE '1' END;
+  END IF;
+  -- Block 12
+  IF v2 = true THEN
+    v6 := '{}'::JSONB;
+  END IF;
+  -- Block 13
+  IF v2 = true THEN
+    v7 := '{}'::JSONB;
+  END IF;
+  -- Block 14
+  IF v2 = true THEN
+    v8 := CASE WHEN EXISTS (SELECT 1 FROM u161993 AS x WHERE (x.code = v8) AND (x.active = true)) THEN v8 ELSE '1' END;
+  END IF;
+  -- Block 15
+  IF v2 = true THEN
+    v6 := '{}'::JSONB;
+  END IF;
+  -- Block 16
+  IF v2 = true THEN
+    v7 := '{}'::JSONB;
+  END IF;
+  -- Block 17
+  IF v2 = true THEN
+    v8 := CASE WHEN EXISTS (SELECT 1 FROM u161993 AS x WHERE (x.code = v8) AND (x.active = true)) THEN v8 ELSE '1' END;
+  END IF;
+  -- Block 18
+  IF v2 = true THEN
+    v6 := '{}'::JSONB;
+  END IF;
+  -- Block 19
+  IF v2 = true THEN
+    v7 := '{}'::JSONB;
+  END IF;
+  -- Block 20
+  IF v2 = true THEN
+    v8 := CASE WHEN EXISTS (SELECT 1 FROM u161993 AS x WHERE (x.code = v8) AND (x.active = true)) THEN v8 ELSE '1' END;
+  END IF;
+  -- Block 21
+  IF v2 = true THEN
+    v6 := '{}'::JSONB;
+  END IF;
+  -- Block 22
+  IF v2 = true THEN
+    v7 := '{}'::JSONB;
+  END IF;
+  -- Block 23
+  IF v2 = true THEN
+    v8 := CASE WHEN EXISTS (SELECT 1 FROM u161993 AS x WHERE (x.code = v8) AND (x.active = true)) THEN v8 ELSE '1' END;
+  END IF;
+  -- Block 24
+  IF v2 = true THEN
+    v6 := '{}'::JSONB;
+  END IF;
+  -- Block 25
+  IF v2 = true THEN
+    v3 := clock_timestamp();
+    v7 := v7::JSONB || jsonb_build_object('key', split_part(v10, '|', 5));
+    p_out := '{}'::JSONB;
+  END IF;
+  END;
+$$
+
+statement ok
+PREPARE p161993 AS SELECT f161993($1)
+
+query T
+EXECUTE p161993 ('{}')
+----
+{}
+
+statement ok
+DEALLOCATE p161993
+
+statement ok
+RESET statement_timeout
+
+subtest end

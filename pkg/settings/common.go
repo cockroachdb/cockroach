@@ -14,13 +14,15 @@ import (
 
 // common implements basic functionality used by all setting types.
 type common struct {
-	class         Class
+	slot slotIdx
+
+	class      Class
+	visibility Visibility
+
 	key           InternalKey
 	name          SettingName
 	description   string
-	visibility    Visibility
 	unsafe        bool
-	slot          slotIdx
 	nonReportable bool
 	retired       bool
 	sensitive     bool

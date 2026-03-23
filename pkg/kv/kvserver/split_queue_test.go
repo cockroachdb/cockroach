@@ -107,7 +107,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		cpy.EndKey = test.end
 		replicaID := cpy.Replicas().VoterDescriptors()[0].ReplicaID
 		require.NoError(t,
-			kvstorage.MakeStateLoader(cpy.RangeID).SetRaftReplicaID(ctx, tc.store.TODOEngine(), replicaID))
+			kvstorage.MakeStateLoader(cpy.RangeID).SetRaftReplicaID(ctx, tc.store.StateEngine(), replicaID))
 		repl, err := loadInitializedReplicaForTesting(ctx, tc.store, &cpy, replicaID)
 		if err != nil {
 			t.Fatal(err)
@@ -118,11 +118,7 @@ func TestSplitQueueShouldQueue(t *testing.T) {
 		repl.mu.Unlock()
 		conf := roachpb.TestingDefaultSpanConfig()
 		conf.RangeMaxBytes = test.maxBytes
-		sp := roachpb.Span{
-			Key:    cpy.StartKey.AsRawKey().Clone(),
-			EndKey: cpy.EndKey.AsRawKey().Clone(),
-		}
-		repl.SetSpanConfig(conf, sp)
+		repl.SetSpanConfig(conf)
 
 		// Testing using shouldSplitRange instead of shouldQueue to avoid using the splitFinder
 		// This tests the merge queue behavior too as a result. For splitFinder tests,

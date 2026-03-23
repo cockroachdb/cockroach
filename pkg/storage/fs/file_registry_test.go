@@ -196,30 +196,24 @@ func TestFileRegistryCheckNoFile(t *testing.T) {
 	require.Error(t, checkNoRegistryFile(mem, "" /* dbDir */))
 }
 
-func TestFileRegistryElideUnencrypted(t *testing.T) {
+func TestFileRegistry_CanElideEntry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Temporarily change the global CanRegistryElideFunc to test it.
-	prevRegistryElideFunc := CanRegistryElideFunc
-	defer func() {
-		CanRegistryElideFunc = prevRegistryElideFunc
-	}()
-	CanRegistryElideFunc = func(entry *enginepb.FileEntry) bool {
-		return entry == nil || len(entry.EncryptionSettings) == 0
-	}
-
 	// Create a new pebble file registry and inject a registry with an unencrypted file.
 	mem := vfs.NewMem()
-
 	for _, name := range []string{"test1", "test2"} {
 		f, err := mem.Create(name, UnspecifiedWriteCategory)
 		require.NoError(t, err)
 		require.NoError(t, f.Close())
 	}
 
-	registry := &FileRegistry{FS: mem}
-	require.NoError(t, registry.Load(context.Background()))
+	canElideEntry := func(entry *enginepb.FileEntry) bool {
+		return entry == nil || len(entry.EncryptionSettings) == 0
+	}
+
+	registry := &FileRegistry{FS: mem, CanElideEntry: canElideEntry}
+	require.NoError(t, registry.Load(t.Context()))
 	require.NoError(t, registry.writeToRegistryFileLocked(&enginepb.RegistryUpdateBatch{
 		Updates: []*enginepb.RegistryUpdate{
 			{Filename: "test1", Entry: &enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte(nil)}},
@@ -229,8 +223,8 @@ func TestFileRegistryElideUnencrypted(t *testing.T) {
 	require.NoError(t, registry.Close())
 
 	// Create another pebble file registry to verify that the unencrypted file is elided on startup.
-	registry2 := &FileRegistry{FS: mem}
-	require.NoError(t, registry2.Load(context.Background()))
+	registry2 := &FileRegistry{FS: mem, CanElideEntry: canElideEntry}
+	require.NoError(t, registry2.Load(t.Context()))
 	require.NotContains(t, registry2.writeMu.mu.entries, "test1")
 	entry := registry2.writeMu.mu.entries["test2"]
 	require.NotNil(t, entry)

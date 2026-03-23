@@ -300,10 +300,25 @@ func startConnExecutor(
 	// is not properly released.
 	collectionFactory := descs.NewBareBonesCollectionFactory(st, codec)
 	registry := stmtdiagnostics.NewRegistry(nil, st)
+	distSQLSrv := distsql.NewServer(
+		ctx,
+		execinfra.ServerConfig{
+			AmbientContext:    ambientCtx,
+			Settings:          st,
+			Stopper:           stopper,
+			Metrics:           &distSQLMetrics,
+			NodeID:            nodeID,
+			TempFS:            tempFS,
+			ParentDiskMonitor: execinfra.NewTestDiskMonitor(ctx, st),
+			CollectionFactory: collectionFactory,
+		},
+		flowinfra.NewRemoteFlowRunner(ambientCtx, stopper, nil /* acc */),
+	)
 	cfg := &ExecutorConfig{
 		AmbientCtx: ambientCtx,
 		Settings:   st,
 		Clock:      clock,
+		DistSQLSrv: distSQLSrv,
 		DB:         db,
 		SystemConfig: config.NewConstantSystemConfigProvider(
 			config.NewSystemConfig(zonepb.DefaultZoneConfigRef()),
@@ -318,20 +333,7 @@ func startConnExecutor(
 		DistSQLPlanner: NewDistSQLPlanner(
 			ctx, st, 1, /* sqlInstanceID */
 			nil, /* rpcCtx */
-			distsql.NewServer(
-				ctx,
-				execinfra.ServerConfig{
-					AmbientContext:    ambientCtx,
-					Settings:          st,
-					Stopper:           stopper,
-					Metrics:           &distSQLMetrics,
-					NodeID:            nodeID,
-					TempFS:            tempFS,
-					ParentDiskMonitor: execinfra.NewTestDiskMonitor(ctx, st),
-					CollectionFactory: collectionFactory,
-				},
-				flowinfra.NewRemoteFlowRunner(ambientCtx, stopper, nil /* acc */),
-			),
+			distSQLSrv,
 			nil, /* distSender */
 			nil, /* nodeDescs */
 			gw,

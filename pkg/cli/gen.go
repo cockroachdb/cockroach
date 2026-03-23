@@ -20,6 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
+	"github.com/cockroachdb/cockroach/pkg/internal/metricscan"
+	"github.com/cockroachdb/cockroach/pkg/internal/reporoot"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -47,7 +50,8 @@ type MetricInfo struct {
 	Aggregation  string `yaml:"aggregation"`
 	Derivative   string `yaml:"derivative"`
 	HowToUse     string `yaml:"how_to_use,omitempty"`
-	Essential    bool   `yaml:"essential,omitempty"`
+	Visibility   string `yaml:"visibility,omitempty"`
+	Owner        string `yaml:"owner,omitempty"`
 }
 
 type Category struct {
@@ -65,6 +69,7 @@ type YAMLOutput struct {
 }
 
 var manPath string
+var metricOwnersFile string
 
 var genManCmd = &cobra.Command{
 	Use:   "man",
@@ -175,6 +180,16 @@ var showSettingClass bool
 var classHeaderLabel string
 var classLabels []string
 
+// vCPUDependentClusterSettings contains all cluster settings which have default
+// values computed based on the number of vCPUs.
+var vCPUDependentClusterSettings = map[settings.InternalKey]struct{}{
+	"kv.dist_sender.concurrency_limit":                 {},
+	"kv.streamer.concurrency_limit":                    {},
+	"sql.distsql.num_runners":                          {},
+	"sql.distsql.parallelize_checks.concurrency_limit": {},
+	"sql.stats.automatic_full_concurrency_limit":       {},
+}
+
 var genSettingsListCmd = &cobra.Command{
 	Use:   "settings-list",
 	Short: "output a list of available cluster settings",
@@ -234,6 +249,10 @@ Output the list of cluster settings known to this binary.
 				defaultVal = setting.String(&s.SV)
 				if override, ok := upgrades.SettingsDefaultOverrides[key]; ok {
 					defaultVal = override
+				} else if _, ok := vCPUDependentClusterSettings[key]; ok {
+					// These cluster settings are special, so we hard-code
+					// a custom default value.
+					defaultVal = "See description."
 				}
 			}
 
@@ -340,6 +359,7 @@ var genCmds = []*cobra.Command{
 	genSettingsListCmd,
 	genMetricListCmd,
 	genEncryptionKeyCmd,
+	genDashboardCmd,
 }
 
 func init() {
@@ -350,6 +370,8 @@ func init() {
 	genHAProxyCmd.PersistentFlags().StringVar(&haProxyPath, "out", "haproxy.cfg",
 		"path to generated haproxy configuration file")
 	cliflagcfg.VarFlag(genHAProxyCmd.Flags(), &haProxyLocality, cliflags.Locality)
+	cliflagcfg.BoolFlag(genHAProxyCmd.Flags(), &baseCfg.UseDRPC, cliflags.UseNewRPC)
+	_ = genHAProxyCmd.Flags().MarkHidden(cliflags.UseNewRPC.Name)
 
 	f := genSettingsListCmd.PersistentFlags()
 	f.BoolVar(&includeAllSettings, "all-settings", false,
@@ -365,11 +387,60 @@ func init() {
 		"label to use in the output for the various setting classes")
 
 	genMetricListCmd.Flags().Bool("essential", false, "only emit essential metrics")
+	genMetricListCmd.Flags().StringVar(&metricOwnersFile, "metric-owners", "",
+		"path to pre-computed metric owners YAML file (avoids AST scan + CODEOWNERS)")
 
 	GenCmd.AddCommand(genCmds...)
 }
 
+// loadMetricOwners fetches a mapping from metric name to owning team.
+// When --metric-owners is provided (Bazel genrule), the pre-computed
+// file is loaded directly. Otherwise, the mapping is built from an
+// AST scan of Go sources combined with CODEOWNERS.
+func loadMetricOwners() *metricscan.MetricOwners {
+	if metricOwnersFile != "" {
+		data, err := os.ReadFile(metricOwnersFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr,
+				"reading metric owners failed (owner will be omitted): %v\n", err)
+			return nil
+		}
+		mo, err := metricscan.LoadMetricOwners(data)
+		if err != nil {
+			fmt.Fprintf(os.Stderr,
+				"parsing metric owners failed (owner will be omitted): %v\n", err)
+			return nil
+		}
+		return mo
+	}
+	repoRoot := reporoot.Get()
+	if repoRoot == "" {
+		return nil
+	}
+	scanResult, scanErr := metricscan.Scan(repoRoot)
+	if scanErr != nil {
+		fmt.Fprintf(os.Stderr,
+			"metric source scan failed (owner will be omitted): %v\n", scanErr)
+		return nil
+	}
+	owners, ownersErr := codeowners.DefaultLoadCodeOwners()
+	if ownersErr != nil {
+		fmt.Fprintf(os.Stderr,
+			"CODEOWNERS load failed (owner will be omitted): %v\n", ownersErr)
+		return nil
+	}
+	return metricscan.BuildMetricOwners(scanResult, func(file string) string {
+		teams := owners.Match(file)
+		if len(teams) > 0 {
+			return string(teams[0].Name())
+		}
+		return ""
+	})
+}
+
 func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*Layer, error) {
+	metricOwners := loadMetricOwners()
+
 	sArgs := base.TestServerArgs{
 		Insecure:          true,
 		DefaultTestTenant: base.ExternalTestTenantAlwaysEnabled,
@@ -477,6 +548,17 @@ func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*La
 
 		for _, chart := range section.Charts {
 			// There are many charts, but only 1 metric per chart.
+			visibility := chart.Metrics[0].Visibility
+			// Only include visibility if it's not the default INTERNAL value
+			if visibility == "INTERNAL" {
+				visibility = ""
+			}
+			// Resolve the owning team for this metric.
+			var owner string
+			if metricOwners != nil {
+				exportedName := chart.Metrics[0].ExportedName
+				owner, _ = metricOwners.Resolve(exportedName)
+			}
 			metric := MetricInfo{
 				Name:         chart.Metrics[0].Name,
 				ExportedName: chart.Metrics[0].ExportedName,
@@ -488,7 +570,8 @@ func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*La
 				Aggregation:  chart.Aggregator.String(),
 				Derivative:   chart.Derivative.String(),
 				HowToUse:     strings.TrimSpace(chart.Metrics[0].HowToUse),
-				Essential:    chart.Metrics[0].Essential,
+				Visibility:   visibility,
+				Owner:        owner,
 			}
 			category.Metrics = append(category.Metrics, metric)
 		}

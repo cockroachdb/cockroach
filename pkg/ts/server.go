@@ -8,6 +8,7 @@ package ts
 import (
 	"context"
 	"math"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
@@ -15,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -120,13 +122,32 @@ func (t *TenantServer) Query(
 	ctx = t.AnnotateCtx(ctx)
 	// Currently, secondary tenants are only able to view their own metrics.
 	for i, q := range req.Queries {
-		// Tenant-scoped metrics get marked with the tenantID, otherwise we
-		// leave the request as-is for system-level metrics.
-		if t.tenantRegistry.Contains(q.Name) {
+		// Tenant-scoped metrics get marked with the tenantID. This includes both
+		// app-level metrics (in tenantRegistry) and store-level tenant metrics
+		// (identified by isStoreTenantMetric).
+		metricName := strings.TrimPrefix(q.Name, "cr.store.")
+		if t.tenantRegistry.Contains(q.Name) || isStoreTenantMetric(metricName) {
 			req.Queries[i].TenantID = t.tenantID
 		}
 	}
 	return t.tenantConnect.Query(ctx, req)
+}
+
+// storeTenantMetrics mirrors kvbase.TenantsStorageMetricsSet. We maintain a
+// hardcoded copy here to avoid import cycles with kvbase.
+var storeTenantMetrics = map[string]struct{}{
+	"livebytes": {}, "sysbytes": {}, "keybytes": {}, "valbytes": {},
+	"rangekeybytes": {}, "rangevalbytes": {}, "totalbytes": {},
+	"intentbytes": {}, "lockbytes": {}, "livecount": {}, "keycount": {},
+	"valcount": {}, "rangekeycount": {}, "rangevalcount": {},
+	"intentcount": {}, "lockcount": {}, "lockage": {}, "gcbytesage": {},
+	"syscount": {}, "abortspanbytes": {},
+}
+
+// isStoreTenantMetric returns true if name is in storeTenantMetrics.
+func isStoreTenantMetric(name string) bool {
+	_, ok := storeTenantMetrics[name]
+	return ok
 }
 
 // RegisterService registers the GRPC service.
@@ -481,10 +502,30 @@ func dumpImpl(
 				ResolutionFromProto(res),
 				req.StartNanos,
 				req.EndNanos,
+				false,
 				d,
 			); err != nil {
 				return err
 			}
+		}
+	}
+
+	// Dump child metrics only for allowed metrics at 1M resolution
+	for _, seriesName := range req.Names {
+		if !tsutil.IsAllowedChildMetric(seriesName) {
+			continue
+		}
+		if err := dumpTimeseriesAllSources(
+			ctx,
+			db,
+			seriesName,
+			Resolution1m,
+			req.StartNanos,
+			req.EndNanos,
+			true,
+			d,
+		); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -536,6 +577,7 @@ func dumpTimeseriesAllSources(
 	seriesName string,
 	diskResolution Resolution,
 	startNanos, endNanos int64,
+	includeChildMetrics bool,
 	dump func(*roachpb.KeyValue) error,
 ) error {
 	if endNanos == 0 {
@@ -548,12 +590,20 @@ func dumpTimeseriesAllSources(
 		endNanos += delta
 	}
 
+	var endKeyName string
+	if includeChildMetrics {
+		// Create a span that covers the metric's children.
+		endKeyName = seriesName + string(rune(0x7C)) // '|' is the next char after '{'
+	} else {
+		endKeyName = seriesName
+	}
+
 	span := &roachpb.Span{
 		Key: MakeDataKey(
 			seriesName, "" /* source */, diskResolution, startNanos,
 		),
 		EndKey: MakeDataKey(
-			seriesName, "" /* source */, diskResolution, endNanos,
+			endKeyName, "" /* source */, diskResolution, endNanos,
 		),
 	}
 

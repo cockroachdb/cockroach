@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -951,6 +952,15 @@ func (ctx *FmtCtx) alwaysFormatTablePrefix() bool {
 // formatNodeMaybeMarkRedaction marks sensitive information from statements
 // with redaction markers. Redaction markers are placed around datums,
 // constants, and simple names (i.e. Name, UnrestrictedName).
+//
+// INVARIANT: A Datum or Constant whose Format method calls ctx.FormatNode
+// on child nodes must be excluded from outer marker wrapping (added to the
+// passthrough case below). Otherwise the children will be independently
+// wrapped by the recursive FormatNode call, producing nested markers like
+// ‹(‹1›,)› that the redact library's linear left-to-right parser cannot
+// handle correctly. Any new Datum type that delegates to FormatNode
+// internally must be added to the exclusion list and have a corresponding
+// test in testdata/explain_redact.
 func (ctx *FmtCtx) formatNodeMaybeMarkRedaction(n NodeFormatter) {
 	if ctx.flags.HasFlags(FmtMarkRedactionNode) {
 		switch v := n.(type) {
@@ -965,9 +975,27 @@ func (ctx *FmtCtx) formatNodeMaybeMarkRedaction(n NodeFormatter) {
 			v.Format(ctx)
 			ctx.WriteString(string(redact.EndMarker()))
 			return
+		case *DTuple, *DArray, *DOidWrapper:
+			// These types call ctx.FormatNode on child nodes in their Format
+			// methods, so the children are individually wrapped with markers.
+			// Adding outer markers here would produce nested markers; see the
+			// invariant above.
 		case Datum, Constant:
 			ctx.WriteString(string(redact.StartMarker()))
+			before := ctx.Buffer.Len()
 			v.Format(ctx)
+			if buildutil.CrdbTestBuild {
+				formatted := ctx.Buffer.Bytes()[before:]
+				if bytes.Contains(formatted, redact.StartMarker()) ||
+					bytes.Contains(formatted, redact.EndMarker()) {
+					panic(errors.AssertionFailedf(
+						"formatNodeMaybeMarkRedaction: %T produced nested redaction markers; "+
+							"add it to the passthrough case in formatNodeMaybeMarkRedaction; "+
+							"value: %v, buffer: %s",
+						v, v, ctx.Buffer.String(),
+					))
+				}
+			}
 			ctx.WriteString(string(redact.EndMarker()))
 			return
 		}

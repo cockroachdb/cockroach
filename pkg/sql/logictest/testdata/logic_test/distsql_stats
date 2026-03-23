@@ -2,6 +2,10 @@
 
 skip under race
 
+# Speed up job adoption.
+statement ok
+SET CLUSTER SETTING jobs.registry.interval.adopt = '10ms'
+
 # Disable histogram collection.
 statement ok
 SET CLUSTER SETTING sql.stats.histogram_collection.enabled = false
@@ -35,7 +39,7 @@ query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE data WITH DETAILS]
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/76>  …/1/1         {1}       1
+<before:/Table/XX>  …/1/1         {1}       1
 …/1/1               …/1/2         {2}       2
 …/1/2               …/1/3         {3}       3
 …/1/3               …/1/4         {4}       4
@@ -385,7 +389,7 @@ NULL             {c}           256        4               0           true
 NULL             {d}           256        4               0           true
 NULL             {e}           256        2               0           true
 
-statement ok
+statement count 10
 DELETE FROM system.table_statistics
 
 # Restore the old stats.
@@ -512,7 +516,6 @@ column_names  row_count  distinct_count  null_count  has_histogram
 {c}           256        4               0           true
 {d}           256        4               0           true
 {e}           256        2               0           true
-
 
 # Re-enable multi-column stats.
 statement ok
@@ -1148,6 +1151,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE et]
         "columns": [
             "x"
         ],
+        "delay_delete": false,
         "distinct_count": 3,
         "histo_buckets": [
             {
@@ -1181,6 +1185,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE et]
         "columns": [
             "y"
         ],
+        "delay_delete": false,
         "distinct_count": 3,
         "histo_buckets": [
             {
@@ -1214,6 +1219,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE et]
         "columns": [
             "z"
         ],
+        "delay_delete": false,
         "distinct_count": 3,
         "histo_buckets": [
             {
@@ -1242,7 +1248,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE et]
 let $json_stats
 SHOW STATISTICS USING JSON FOR TABLE et
 
-statement ok
+statement count 45
 DELETE FROM system.table_statistics
 
 # Restore the old stats.
@@ -1333,7 +1339,6 @@ statistics_name  column_names    row_count  distinct_count  null_count  has_hist
 s                {last_updated}  5          1               0           true
 s                {profile_id}    5          5               0           true
 s                {user_profile}  5          4               1           true
-
 
 # Test that individual columns in primary keys always have histograms collected
 # for them, with up to 200 buckets.
@@ -1809,6 +1814,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
         "columns": [
             "k"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_buckets": [
             {
@@ -1830,6 +1836,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE all_null]
         "columns": [
             "c"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -1871,6 +1878,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE greeting_stats]
         "columns": [
             "x"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_buckets": [
             {
@@ -1900,14 +1908,14 @@ ALTER TABLE greeting_stats INJECT STATISTICS '$stats'
 query T
 SELECT feature_name FROM crdb_internal.feature_usage
 WHERE feature_name in ('job.typedesc_schema_change.successful',
-'job.schema_change.successful',
+'job.new_schema_change.successful',
 'job.create_stats.successful',
 'job.auto_create_stats.successful') AND
 usage_count > 0
 ORDER BY feature_name DESC
 ----
 job.typedesc_schema_change.successful
-job.schema_change.successful
+job.new_schema_change.successful
 job.create_stats.successful
 job.auto_create_stats.successful
 
@@ -1994,7 +2002,7 @@ ANALYZE system.locations
 
 # EXPLAIN output should indicate stats collected on system.locations.
 query T retry
-SELECT * FROM [EXPLAIN SELECT * FROM system.locations] OFFSET 2
+SELECT * FROM [EXPLAIN SELECT * FROM system.locations] OFFSET 1
 ----
 ·
 • scan
@@ -2060,6 +2068,7 @@ SELECT jsonb_pretty(
         "columns": [
             "r"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2073,6 +2082,7 @@ SELECT jsonb_pretty(
         "columns": [
             "a"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2087,6 +2097,7 @@ SELECT jsonb_pretty(
             "a",
             "sa"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "",
         "id": 0,
@@ -2099,6 +2110,7 @@ SELECT jsonb_pretty(
         "columns": [
             "sa"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2161,6 +2173,7 @@ SELECT jsonb_pretty(
         "columns": [
             "r"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_buckets": [
             {
@@ -2181,6 +2194,7 @@ SELECT jsonb_pretty(
         "columns": [
             "a"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_buckets": [
             {
@@ -2202,6 +2216,7 @@ SELECT jsonb_pretty(
             "a",
             "sa"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_col_type": "",
         "id": 0,
@@ -2213,6 +2228,7 @@ SELECT jsonb_pretty(
         "columns": [
             "sa"
         ],
+        "delay_delete": false,
         "distinct_count": 1,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2278,6 +2294,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "columns": [
             "a"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2290,6 +2307,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "columns": [
             "b"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2302,6 +2320,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
         "columns": [
             "rowid"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "INT8",
         "histo_version": 3,
@@ -2315,6 +2334,7 @@ FROM [SHOW STATISTICS USING JSON FOR TABLE t1]
             "a",
             "b"
         ],
+        "delay_delete": false,
         "distinct_count": 0,
         "histo_col_type": "",
         "id": 0,
@@ -2965,7 +2985,6 @@ query T
 EXPLAIN SELECT * FROM t68254 WHERE e IN ('{"baz": 2}', '{"baz": 3}', '{"baz": 4}')
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -2982,7 +3001,6 @@ query T
 EXPLAIN SELECT * FROM t68254 WHERE f IN ('{"baz": 2}', '{"baz": 3}', '{"baz": 4}')
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -2999,7 +3017,6 @@ query T
 EXPLAIN SELECT * FROM t68254 WHERE c->'foo'->'bar' > '{"baz": 0}'
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -3866,7 +3883,7 @@ INSERT INTO t67050 VALUES ('a'), ('b'), ('c')
 statement ok
 ANALYZE t67050
 
-statement ok
+statement count 1
 DELETE FROM t67050 WHERE x = 'a'
 
 statement ok
@@ -3951,3 +3968,41 @@ query T
 SELECT info FROM [EXPLAIN SELECT * FROM t155184 WHERE a < 8] WHERE info LIKE '%estimated row count:%'
 ----
   estimated row count: 4 (36% of the table; stats collected <hidden> ago)
+
+# Testcase for issue #125620: check that we can use histograms after a
+# metadata-only type conversion from TIMESTAMPTZ to TIMESTAMP.
+# The histogram should still provide accurate cardinality estimates because
+# TIMESTAMP and TIMESTAMPTZ have identical binary encodings.
+
+statement ok
+CREATE TABLE t125620 (ts TIMESTAMPTZ PRIMARY KEY)
+
+# Insert 100 rows with timestamps spanning a year.
+statement ok
+INSERT INTO t125620 SELECT '2020-01-01 00:00:00+00'::TIMESTAMPTZ + (i * INTERVAL '3 days') FROM generate_series(1, 100) AS g(i)
+
+statement ok
+ANALYZE t125620
+
+# Verify the histogram is being used before the ALTER.
+query T retry
+SELECT info FROM [EXPLAIN SELECT * FROM t125620 WHERE ts < '2020-04-01'::TIMESTAMPTZ] WHERE info LIKE '%estimated row count:%'
+----
+  estimated row count: 30 (30% of the table; stats collected <hidden> ago)
+
+statement ok
+ALTER TABLE t125620 ALTER COLUMN ts SET DATA TYPE TIMESTAMP
+
+# After the ALTER, the histogram (which stores TIMESTAMPTZ bucket bounds) should
+# still work correctly with TIMESTAMP comparisons because both types use
+# identical encoding. The optimizer should use the histogram for estimation.
+query T retry
+SELECT info FROM [EXPLAIN SELECT * FROM t125620 WHERE ts < '2020-04-01'::TIMESTAMP] WHERE info LIKE '%estimated row count:%'
+----
+  estimated row count: 30 (30% of the table; stats collected <hidden> ago)
+
+# Verify the query still returns correct results.
+query I
+SELECT count(*) FROM t125620 WHERE ts < '2020-04-01'::TIMESTAMP
+----
+30

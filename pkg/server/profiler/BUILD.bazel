@@ -4,6 +4,7 @@ go_library(
     name = "profiler",
     srcs = [
         "activequeryprofiler.go",
+        "ashreportprofiler.go",
         "cgoprofiler.go",
         "cluster_settings.go",
         "cpuprofiler.go",
@@ -18,6 +19,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
+        "//pkg/obs/ash",
         "//pkg/server/debug",
         "//pkg/server/dumpstore",
         "//pkg/server/status",
@@ -43,6 +45,7 @@ go_test(
     size = "small",
     srcs = [
         "activequeryprofiler_test.go",
+        "ashreportprofiler_test.go",
         "cpuprofile_test.go",
         "memory_monitoring_profiler_test.go",
         "profiler_common_test.go",
@@ -55,6 +58,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/mon",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//oserror",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",

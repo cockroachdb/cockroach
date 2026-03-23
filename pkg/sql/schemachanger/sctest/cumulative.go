@@ -95,6 +95,7 @@ func Rollback(t *testing.T, relPath string, factory TestServerFactory) {
 		}
 		ctx := context.Background()
 		runfn := func(s serverutils.TestServerInterface, db *gosql.DB) {
+			maybeSkipUnderSecondaryTenant(t, cs.CumulativeTestSpec, s)
 			tdb := sqlutils.MakeSQLRunner(db)
 			var before [][]string
 			require.NoError(t, setupSchemaChange(ctx, t, cs.CumulativeTestSpec, db))
@@ -237,6 +238,7 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, factory TestServerFac
 		}
 
 		runfn := func(s serverutils.TestServerInterface, db *gosql.DB) {
+			maybeSkipUnderSecondaryTenant(t, ts, s)
 			tdb = sqlutils.MakeSQLRunner(db)
 
 			// Now run the schema change and the `BeforeStage` knob will inject DMLs
@@ -316,6 +318,7 @@ func GenerateSchemaChangeCorpus(t *testing.T, path string, factory TestServerFac
 				return cc.GetBeforeStage("EndToEndCorpus", t)(p, stageIdx)
 			},
 		}).Run(ctx, t, func(s serverutils.TestServerInterface, db *gosql.DB) {
+			maybeSkipUnderSecondaryTenant(t, ts, s)
 			require.NoError(t, setupSchemaChange(ctx, t, ts, db))
 			knobEnabled.Swap(true)
 			require.NoError(t, executeSchemaChangeTxn(ctx, t, ts, db))
@@ -380,6 +383,7 @@ func pause(t *testing.T, factory TestServerFactory, cs CumulativeTestCaseSpec) {
 	// trivial, as we don't checkpoint during non-mutation stages, so we'd
 	// need to look back and find the last mutation phase.
 	runfn := func(s serverutils.TestServerInterface, db *gosql.DB) {
+		maybeSkipUnderSecondaryTenant(t, cs.CumulativeTestSpec, s)
 		tdb := sqlutils.MakeSQLRunner(db)
 		// Use shorter liveness heartbeat interval and longer liveness ttl to
 		// avoid errors caused by refused connections.
@@ -410,8 +414,12 @@ func pause(t *testing.T, factory TestServerFactory, cs CumulativeTestCaseSpec) {
 			// Resume the job and check that it succeeds.
 			tdb.Exec(t, "RESUME JOB $1", jobID)
 			t.Logf("job %d is resuming", jobID)
+			// Wait for the schema change to complete.
+			// Note: This has a longer timeout than normal succeeds soon.
+			waitForSchemaChangesToFinish(t, tdb)
+			// Validate the terminal status of the schema change.
 			qStatusWithError := fmt.Sprintf(`SELECT status, error FROM [SHOW JOB %d]`, jobID)
-			tdb.CheckQueryResultsRetry(t, qStatusWithError, [][]string{{"succeeded", ""}})
+			tdb.CheckQueryResults(t, qStatusWithError, [][]string{{"succeeded", ""}})
 		}
 		waitForSchemaChangesToFinish(t, tdb)
 		require.Equal(t, uint32(1), atomic.LoadUint32(&numInjectedFailures))

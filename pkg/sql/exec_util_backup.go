@@ -67,7 +67,11 @@ type BackupRestoreTestingKnobs struct {
 
 	RunAfterRestoreFlow func() error
 
-	BackupDistSQLRetryPolicy *retry.Options
+	EnableBackupRetriesUnderTest bool
+
+	BackupDistSQLInitialRetryPolicy *retry.Options
+
+	BackupDistSQLSecondaryRetryPolicy *retry.Options
 
 	RunBeforeBackupFlow func() error
 
@@ -94,6 +98,16 @@ type BackupRestoreTestingKnobs struct {
 	// AfterRevertRestoreDropDescriptors is called after a reverting restore
 	// drops its descriptors.
 	AfterRevertRestoreDropDescriptors func() error
+
+	RestoreSpanConfigConformanceRetryPolicy *retry.Options
+
+	OnCompactionFileAccess *func(processorLocality roachpb.Locality, fileLocality string) error
+
+	// BackupProcessFileOverride, if set, is called for each file entry
+	// produced during backup. It can modify and return the entry, e.g. to
+	// inflate file sizes for testing restore behavior under conditions that
+	// would normally require a very large backup fixture.
+	BackupProcessFileOverride func(backuppb.BackupManifest_File) backuppb.BackupManifest_File
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}

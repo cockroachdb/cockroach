@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -1260,7 +1261,7 @@ func TestReadOlderVersionForTimestamp(t *testing.T) {
 			resetDescriptorState(manager, tableID, tc)
 
 			// Retrieve historicalDescriptors modification times.
-			retrieved, err := manager.readOlderVersionForTimestamp(ctx, tableID, tc.ts)
+			retrieved, err := manager.readOlderVersionForTimestamp(ctx, tableID, TimestampToReadTimestamp(tc.ts))
 			require.NoError(t, err)
 
 			// Validate retrieved descriptors match expected versions.
@@ -1533,27 +1534,31 @@ func TestGetDescriptorsFromStoreForIntervalCPULimiterPagination(t *testing.T) {
 
 	ctx := context.Background()
 	var numRequests int
+	var sqlCodec atomic.Pointer[keys.SQLCodec]
 	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-			TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
-				for _, ru := range request.Requests {
-					if _, ok := ru.GetInner().(*kvpb.ExportRequest); ok {
-						numRequests++
-						h := admission.ElasticCPUWorkHandleFromContext(ctx)
-						if h == nil {
-							t.Fatalf("expected context to have CPU work handle")
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+					for _, ru := range request.Requests {
+						if export, ok := ru.GetInner().(*kvpb.ExportRequest); ok && TestIsLeasingTxnExportRequest(sqlCodec.Load(), request, export) {
+							numRequests++
+							h := admission.ElasticCPUWorkHandleFromContext(ctx)
+							if h == nil {
+								t.Fatalf("expected context to have CPU work handle")
+							}
+							h.TestingOverrideOverLimit(func() (bool, time.Duration) {
+								return true, 0
+							})
 						}
-						h.TestingOverrideOverLimit(func() (bool, time.Duration) {
-							return true, 0
-						})
 					}
-				}
-				return nil
-			},
-		}},
+					return nil
+				},
+			}},
 	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
+	codec := s.Codec()
+	sqlCodec.Store(&codec)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	beforeCreate := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
@@ -1564,10 +1569,10 @@ func TestGetDescriptorsFromStoreForIntervalCPULimiterPagination(t *testing.T) {
 	var tableID int
 	sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'baz'`).Scan(&tableID)
 	descs, err := getDescriptorsFromStoreForInterval(ctx, kvDB, s.Codec(), descpb.ID(tableID),
-		beforeCreate, afterCreate)
+		beforeCreate, afterCreate, false /*isOffline */)
 	require.NoError(t, err)
 	require.Len(t, descs, 3)
-	require.Equal(t, numRequests, 1)
+	require.Equal(t, 1, numRequests)
 }
 
 // TestLeaseCountDetailSessionBased will test out the extra debugging info that
@@ -1745,15 +1750,19 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var blockUpdates atomic.Bool
-	updateCh := make(chan struct{})
+	updateCh := make(chan hlc.Timestamp)
 
 	st := cluster.MakeTestingClusterSettings()
 	ctx := context.Background()
 	LockedLeaseTimestamp.Override(ctx, &st.SV, true)
+	// Old versions need to be retained, since we don't have code
+	// to read them from storage in this test.
+	RetainOldVersionsForLocked.Override(ctx, &st.SV, true)
 	// Intentionally disable WaitForInitialVersion support, so that we can run
 	// historical queries at timestamps before the lease manager is fully caught
 	// up.
 	WaitForInitialVersion.Override(ctx, &st.SV, false)
+	var tableID atomic.Int64
 	srv, db, _ := serverutils.StartServer(
 		t, base.TestServerArgs{
 			// Avoid using tenants since async tenant migration steps can acquire
@@ -1761,11 +1770,22 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 			DefaultTestTenant: base.TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs,
 			Knobs: base.TestingKnobs{
 				SQLLeaseManager: &ManagerTestingKnobs{
-					TestingDescriptorRefreshedEvent: func(descriptor *descpb.Descriptor) {
-						if !blockUpdates.Load() {
-							return
+					// TestingDescriptorUpdateEvent will fire before the new descriptor version
+					// is leased.
+					TestingDescriptorUpdateEvent: func(descriptor *descpb.Descriptor) error {
+						if !blockUpdates.Load() || descriptor == nil {
+							return nil
 						}
-						<-updateCh
+						id, _, _, _, _ := descpb.GetDescriptorMetadata(descriptor)
+						if id != descpb.ID(tableID.Load()) {
+							return nil
+						}
+						ts, err := descpb.GetDescriptorModificationTime(descriptor)
+						if err != nil {
+							return err
+						}
+						updateCh <- ts
+						return nil
 					},
 				},
 			},
@@ -1784,36 +1804,48 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 	r.Exec(t, "SELECT * FROM t1")
 	r.Exec(t, "INSERT INTO t1 VALUES (1)")
 
-	grp := ctxgroup.WithContext(context.Background())
+	var id int
+	r.QueryRow(t, "SELECT 't1'::REGCLASS::OID;").Scan(&id)
+	tableID.Store(int64(id))
 	blockUpdates.Store(true)
+
+	grp := ctxgroup.WithContext(context.Background())
 	grp.GoCtx(func(ctx context.Context) error {
 		_, err := db.Exec("ALTER TABLE t1 ADD COLUMN n2 int")
 		return err
 	})
-	go func() {
-	}()
-	var id int
-	r.QueryRow(t, "SELECT 't1'::REGCLASS::OID;").Scan(&id)
-	lm := s.LeaseManager().(*Manager)
 
+	lm := s.LeaseManager().(*Manager)
 	getDescriptorVersion := func(ts ReadTimestamp) descpb.DescriptorVersion {
 		state := lm.findDescriptorState(descpb.ID(id), false)
 		require.NotNilf(t, state, "the descriptor was not leased yet")
-		ld, _, err := state.findForTimestamp(ctx, ts)
-		require.NoError(t, err)
-		defer ld.Release(ctx)
-		return ld.GetVersion()
+		var version descpb.DescriptorVersion
+		testutils.SucceedsSoon(t, func() error {
+			ld, _, err := state.findForTimestamp(ctx, ts)
+			// Lease renewal error can be observed as we are processing
+			// the new descriptor version. This happens because we are
+			// aware of the new version but the lease is not yet been
+			// acquired.
+			if errors.Is(err, errRenewLease) {
+				return err
+			}
+			require.NoError(t, err)
+			defer ld.Release(ctx)
+			version = ld.GetVersion()
+			return nil
+		})
+		return version
 	}
 
 	waitForTimestampChange := func(ts ReadTimestamp) {
 		testutils.SucceedsSoon(t, func() error {
-			if lm.GetSafeReplicationTS() == ts.GetTimestamp() {
-				return errors.New("timestamp did not change")
+			if lm.GetSafeReplicationTS().Less(ts.GetTimestamp()) {
+				return errors.Newf("timestamp did not change: %s < %s", lm.GetSafeReplicationTS().String(), ts.GetTimestamp().String())
 			}
 			return nil
 		})
 	}
-	// Allow one descriptor version to be published.
+	// Acquire a read timestamp and wait for it to change.
 	ts := lm.GetReadTimestamp(ctx, srv.Clock().Now())
 	var releaseTS = func() {
 		if ts == nil {
@@ -1823,22 +1855,20 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 		ts = nil
 	}
 	defer releaseTS()
-	updateCh <- struct{}{}
-	waitForTimestampChange(ts)
-	releaseTS()
-	ts = lm.GetReadTimestamp(ctx, srv.Clock().Now())
 	initialVersion := getDescriptorVersion(ts)
 	// The old version will still be cached as long as this timestamp is in use.
 	// Even if we released the leases already.
-	updateCh <- struct{}{}
+	afterTS := <-updateCh
+	// Select a timestamp after which the new version will be visible.
 	nextVersion := getDescriptorVersion(ts)
 	require.Equalf(t, initialVersion, nextVersion, "new version should not be leased yet")
-	waitForTimestampChange(ts)
+	waitForTimestampChange(TimestampToReadTimestamp(afterTS))
 	// If we release the old timestamp, then the old version will be released.
 	releaseTS()
 	ts = lm.GetReadTimestamp(ctx, srv.Clock().Now())
 	nextVersion = getDescriptorVersion(ts)
 	require.Equalf(t, initialVersion+1, nextVersion, "new version should be visible now")
+	blockUpdates.Store(false)
 	close(updateCh)
 	releaseTS()
 	require.NoError(t, grp.Wait())
@@ -1851,7 +1881,14 @@ func TestLeaseManagerLockedTimestampCluster(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var blockUpdates atomic.Bool
-	updateCh := make(chan struct{})
+	var tableID atomic.Int64
+	// newVersionCh sends a message when a new version of a descriptor
+	// is available.
+	newVersionCh := make(chan struct{})
+	// allowNextVersion blocks the lease manager from processing the
+	// next version.
+	allowNextVersion := make(chan struct{})
+	allowNextVersionClosed := false
 
 	st := cluster.MakeTestingClusterSettings()
 	ctx := context.Background()
@@ -1871,7 +1908,16 @@ func TestLeaseManagerLockedTimestampCluster(t *testing.T) {
 							if !blockUpdates.Load() {
 								return
 							}
-							<-updateCh
+							tbl, _, _, _, _ := descpb.GetDescriptors(descriptor)
+							if tbl == nil || int64(tbl.ID) != tableID.Load() {
+								return
+							}
+							select {
+							case newVersionCh <- struct{}{}:
+							case <-allowNextVersion:
+								return
+							}
+							<-allowNextVersion
 						},
 					},
 				},
@@ -1879,44 +1925,86 @@ func TestLeaseManagerLockedTimestampCluster(t *testing.T) {
 			},
 		})
 	defer tc.Stopper().Stop(context.Background())
+	closeAllowNextVersion := func() {
+		if allowNextVersionClosed {
+			return
+		}
+		allowNextVersionClosed = true
+		close(allowNextVersion)
+	}
+	defer closeAllowNextVersion()
 
 	node1Conn := tc.ServerConn(0)
 	r := sqlutils.MakeSQLRunner(node1Conn)
 	node2Conn := tc.ServerConn(2)
 	execConn := sqlutils.MakeSQLRunner(node2Conn)
-
+	// Disable automatic stats collection, since it can interfere with this test.
+	r.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
 	r.Exec(t, "CREATE DATABASE d1")
 	r.Exec(t, "CREATE TABLE d1.public.t1(n int)")
 	var id int
 	r.QueryRow(t, "SELECT 'd1.public.t1'::REGCLASS::OID;").Scan(&id)
+	tableID.Store(int64(id))
 	execConn.Exec(t, "SELECT * FROM d1.public.t1")
 	blockUpdates.Store(true)
+
+	lm := tc.Server(2).LeaseManager().(*Manager)
+	assertDescriptorsCount := func(expectedCount int) {
+		t.Helper()
+		state := lm.findDescriptorState(descpb.ID(id), false)
+		require.NotNilf(t, state, "the descriptor was not leased yet")
+		// Lease releases from prior queries on the same connection may be
+		// slightly delayed, so old versions may linger briefly.
+		require.NoError(t, testutils.SucceedsSoonError(func() error {
+			state.mu.Lock()
+			defer state.mu.Unlock()
+			if len(state.mu.active.data) == expectedCount {
+				return nil
+			}
+			return errors.AssertionFailedf("expected %d descriptors, got %d (state: %s)",
+				expectedCount, len(state.mu.active.data), state.mu.active.String())
+		}))
+	}
+	// moveToNextDescriptorVersion waits for the next descriptor version to be
+	// fully processed (including old version purging), then keeps the lease
+	// manager loop blocked to ensure a stable state for assertions.
+	var releaseNextVersion bool
+	moveToNextDescriptorVersion := func() {
+		newest, _ := lm.findNewest(descpb.ID(id))
+		require.NotNil(t, newest)
+		lastVersion := newest.GetVersion()
+		if releaseNextVersion {
+			allowNextVersion <- struct{}{}
+		}
+		<-newVersionCh
+		newest, _ = lm.findNewest(descpb.ID(id))
+		// Ensure that the new version is acquired. To avoid any race conditions, this
+		// assertion only fires if we released a previous version.
+		if releaseNextVersion {
+			require.NotNil(t, newest)
+			require.Greaterf(t, newest.GetVersion(), lastVersion, "new version should be leased")
+		}
+		releaseNextVersion = true
+	}
+	// In the initial state we only expect a single version.
+	assertDescriptorsCount(1)
 
 	grp := ctxgroup.WithContext(context.Background())
 	grp.GoCtx(func(ctx context.Context) error {
 		_, err := node1Conn.Exec("ALTER TABLE d1.public.t1 ADD COLUMN n2 int DEFAULT 364")
 		return err
 	})
-	lm := tc.Server(2).LeaseManager().(*Manager)
-	assertDescriptorsCount := func(expectedCount int) {
-		state := lm.findDescriptorState(descpb.ID(id), false)
-		require.NotNilf(t, state, "the descriptor was not leased yet")
-		state.mu.Lock()
-		defer state.mu.Unlock()
-		require.Equal(t, expectedCount, len(state.mu.active.data),
-			"unexpected number of descriptors in active state: %s",
-			state.mu.active)
-	}
-	// Initial state we only expect a single version.
-	assertDescriptorsCount(1)
-	updateCh <- struct{}{}
+
+	moveToNextDescriptorVersion()
 	execConn.Exec(t, "SELECT * FROM d1.public.t1")
-	updateCh <- struct{}{}
+	moveToNextDescriptorVersion()
+	// Wait for old versions to be purged before starting the txn. Timestamp
+	// advances can be async.
+	assertDescriptorsCount(1)
 	txn := execConn.Begin(t)
 	_, err := txn.Exec("SELECT * FROM d1.public.t1")
 	require.NoError(t, err)
-	assertDescriptorsCount(1)
-	updateCh <- struct{}{}
+	moveToNextDescriptorVersion()
 	_, err = txn.Exec("SELECT * FROM d1.public.t1")
 	require.NoError(t, err)
 	_, err = txn.Exec("SELECT * FROM d1.public.t1")
@@ -1928,8 +2016,8 @@ func TestLeaseManagerLockedTimestampCluster(t *testing.T) {
 	require.NoError(t, err)
 	assertDescriptorsCount(2)
 	require.NoError(t, txn.Commit())
-	updateCh <- struct{}{}
-	close(updateCh)
+	moveToNextDescriptorVersion()
 	assertDescriptorsCount(1)
+	closeAllowNextVersion()
 	require.NoError(t, grp.Wait())
 }

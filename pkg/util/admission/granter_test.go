@@ -85,7 +85,7 @@ func TestCPUGranterBasic(t *testing.T) {
 				req := &testRequester{
 					workKind:               workKind,
 					granter:                granter,
-					usesTokens:             opts.usesTokens,
+					usesTokens:             opts.mode == usesTokens,
 					buf:                    &buf,
 					returnValueFromGranted: 1,
 				}
@@ -93,9 +93,10 @@ func TestCPUGranterBasic(t *testing.T) {
 				return req
 			}
 			delayForGrantChainTermination = 0
-			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, nil)
+			knobs := &TestingKnobs{DisableCPUTimeTokenSQLBypass: true}
+			coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, knobs)
 			defer coords.Close()
-			coord = coords.RegularCPU
+			coord = coords.RegularCPU.slotsCoord
 			return flushAndReset()
 
 		case "set-has-waiting-requests":
@@ -154,13 +155,13 @@ func TestCPUGranterBasic(t *testing.T) {
 			coord.CPULoad(runnable, procs, samplePeriod)
 			str := flushAndReset()
 			kvsa := coord.mu.cpuLoadListener.(*kvSlotAdjuster)
-			microsToMillis := func(micros int64) int64 {
-				return micros * int64(time.Microsecond) / int64(time.Millisecond)
+			nanosToMillis := func(nanos int64) int64 {
+				return nanos * int64(time.Nanosecond) / int64(time.Millisecond)
 			}
 			return fmt.Sprintf("%sSlotAdjuster metrics: slots: %d, duration (short, long) millis: (%d, %d), inc: %d, dec: %d\n",
 				str, kvsa.totalSlotsMetric.Value(),
-				microsToMillis(kvsa.cpuLoadShortPeriodDurationMetric.Count()),
-				microsToMillis(kvsa.cpuLoadLongPeriodDurationMetric.Count()),
+				nanosToMillis(kvsa.cpuLoadShortPeriodDurationMetric.Count()),
+				nanosToMillis(kvsa.cpuLoadLongPeriodDurationMetric.Count()),
 				kvsa.slotAdjusterIncrementsMetric.Count(), kvsa.slotAdjusterDecrementsMetric.Count(),
 			)
 
@@ -336,7 +337,7 @@ func TestStoreGranterBasic(t *testing.T) {
 				loop--
 				// We are not using a real ioLoadListener, and simply setting the
 				// tokens (the ioLoadListener has its own test).
-				coord.granter.setAvailableTokens(
+				coord.granter.addAvailableTokens(
 					int64(ioTokens),
 					int64(ioTokens),
 					int64(elasticDiskWriteTokens),
@@ -377,7 +378,7 @@ func TestStoreGranterBasic(t *testing.T) {
 
 			// We are not using a real ioLoadListener, and simply setting the
 			// tokens (the ioLoadListener has its own test).
-			coord.granter.setAvailableTokens(
+			coord.granter.addAvailableTokens(
 				int64(ioTokens),
 				int64(elasticIOTokens),
 				int64(elasticDiskWriteTokens),
@@ -403,10 +404,10 @@ func TestStoreGranterBasic(t *testing.T) {
 			var readBytes, writeBytes int
 			d.ScanArgs(t, "actual-write-bytes", &writeBytes)
 			d.ScanArgs(t, "actual-read-bytes", &readBytes)
-			m := StoreMetrics{DiskStats: DiskStats{
+			m := DiskStats{
 				BytesRead:    uint64(readBytes),
 				BytesWritten: uint64(writeBytes),
-			}}
+			}
 			coord.adjustDiskTokenError(m)
 			return flushAndReset()
 
@@ -436,7 +437,7 @@ func TestStoreCoordinators(t *testing.T) {
 		req := &testRequester{
 			workKind:   workKind,
 			granter:    granter,
-			usesTokens: opts.usesTokens,
+			usesTokens: opts.mode == usesTokens,
 			buf:        &buf,
 		}
 		if workKind == KVWork {
@@ -460,7 +461,8 @@ func TestStoreCoordinators(t *testing.T) {
 			return str
 		},
 	}
-	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, nil)
+	knobs := &TestingKnobs{DisableCPUTimeTokenSQLBypass: true}
+	coords := NewGrantCoordinators(ambientCtx, settings, opts, registry, &noopOnLogEntryAdmitted{}, knobs)
 	// There is only 1 KVWork requester at this point in initialization, for the
 	// Regular GrantCoordinator.
 	require.Equal(t, 1, len(requesters))
@@ -618,8 +620,21 @@ type testMetricsProvider struct {
 	metrics []StoreMetrics
 }
 
+var _ PebbleMetricsProvider = &testMetricsProvider{}
+
 func (m *testMetricsProvider) GetPebbleMetrics() []StoreMetrics {
 	return m.metrics
+}
+
+func (m *testMetricsProvider) GetDiskStats(buf *DiskMetricsBuf) error {
+	buf.Stats = (buf.Stats)[:0]
+	for _, sm := range m.metrics {
+		buf.Stats = append(buf.Stats, StoreIDAndStats{
+			StoreID: sm.StoreID,
+			Stats:   sm.DiskStats,
+		})
+	}
+	return nil
 }
 
 func (m *testMetricsProvider) Close() {}

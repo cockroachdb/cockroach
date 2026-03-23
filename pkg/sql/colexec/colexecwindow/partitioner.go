@@ -59,10 +59,13 @@ type windowSortingPartitioner struct {
 	partitionColIdx int
 }
 
-func (p *windowSortingPartitioner) Next() coldata.Batch {
-	b := p.Input.Next()
+func (p *windowSortingPartitioner) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	b, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if b.Length() == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	partitionVec := b.ColVec(p.partitionColIdx)
 	partitionCol := partitionVec.Bool()
@@ -74,5 +77,5 @@ func (p *windowSortingPartitioner) Next() coldata.Batch {
 	} else {
 		copy(partitionCol, p.distinctCol[:b.Length()])
 	}
-	return b
+	return b, nil
 }

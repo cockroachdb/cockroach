@@ -10,86 +10,103 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/
 import "gogoproto/gogo.proto";
 import "kv/kvserver/kvserverpb/raft.proto";
 
-// NodeType defines the type of the WAG node. It corresponds to a replica
-// lifecycle event, and specifies how the node is addressed and interpreted.
-enum NodeType {
-  // NodeEmpty is the "empty" type. Can be used as a nil/no-op indicator. We
-  // just have it so that all "real" types are specified explicitly.
-  NodeEmpty = 0;
-  // NodeCreate corresponds to a creation of an uninitialized replica. All
-  // replicas on a Store go through this transition.
-  NodeCreate = 1;
-  // NodeSnap corresponds to initializing/resetting a replica state machine with
-  // a snapshot. Happens when an uninitialized replica is initialized, or when
-  // an initialized replica is caught up on a later applied state. A NodeSnap
-  // also subsumes replicas (if any) that overlap with this replica in keyspace.
-  NodeSnap = 2;
-  // NodeApply corresponds to applying a replica's raft log up to a specific
-  // committed index.
-  NodeApply = 3;
-  // NodeSplit corresponds to applying a split command on a replica, and
-  // creating the replica of the post-split RHS range.
-  NodeSplit = 4;
-  // NodeMerge corresponds to applying a merge command on this replica and its
-  // immediate RHS neighbour in the keyspace.
-  NodeMerge = 5;
-  // NodeDestroy correspond to destroying the replica and its state machine.
-  NodeDestroy = 6;
+// EventType identifies the type of a replica lifecycle event within a WAG node.
+enum EventType {
+  option (gogoproto.goproto_enum_prefix) = false;
+
+  // EventUnknown is the zero value. It should not be used.
+  EventUnknown = 0;
+  // EventCreate corresponds to the creation of an uninitialized replica. All
+  // replicas on a Store go through this transition. The Addr index must be 0,
+  // as there is no log to speak of.
+  EventCreate = 1;
+  // EventInit corresponds to initializing a replica's state machine at a
+  // specific raft index. This happens when an uninitialized replica receives a
+  // snapshot, or when a split creates the RHS. The Addr index is the index at
+  // which the replica is initialized.
+  EventInit = 2;
+  // EventApply corresponds to applying a replica's raft log up to a specific
+  // committed index. The Addr index identifies the log prefix that has been
+  // applied.
+  EventApply = 3;
+  // EventSplit corresponds to applying a split command on a replica. The Addr
+  // index is the raft log index of the split command. Implies a dependency on
+  // the replica being caught up to index-1 before the split.
+  EventSplit = 4;
+  // EventMerge corresponds to the LHS applying a merge command. The Addr index
+  // is the raft log index of the merge command. Implies a dependency on the LHS
+  // being caught up to index-1 before the merge.
+  EventMerge = 5;
+  // EventSubsume corresponds to a replica being subsumed as part of a merge.
+  // The Addr index is the replica's last applied index before subsumption.
+  // Implies a dependency on the replica being caught up to that index. The
+  // post-subsumption state of the replica is "destroyed".
+  EventSubsume = 6;
+  // EventDestroy corresponds to a destruction of a replica. The Addr index is
+  // the replica's last applied index before destruction, and it implies a
+  // dependency on the replica being caught up to that index. The
+  // post-destruction state of the replica is "destroyed".
+  EventDestroy = 7;
 }
 
-// Addr describes the full address of a WAG node, consisting of RangeID,
+// Event describes a single replica lifecycle event within a WAG node.
+message Event {
+  option (gogoproto.goproto_stringer) = false;
+
+  // Addr identifies the range, replica and raft index this event pertains to.
+  // The interpretation of the Raft Index depends on the EventType.
+  Addr addr = 1 [(gogoproto.nullable) = false];
+  // Type identifies the kind of lifecycle event.
+  EventType type = 2;
+}
+
+// Addr describes the full address of a WAG event, consisting of RangeID,
 // ReplicaID, and index into the raft log.
 //
-// It establishes "happens before" relationships between WAG nodes of a RangeID.
-// For example, when applying a node with Addr.ReplicaID, we know that all nodes
-// with lower ReplicaIDs (including their destruction), or same ReplicaID and
-// lower Index have been applied.
+// It establishes "happens before" relationships between WAG events of a
+// RangeID. For example, when applying an event with Addr.ReplicaID, we know
+// that all events with lower ReplicaIDs (including their destruction), or same
+// ReplicaID and lower Index have been applied.
 message Addr {
   option (gogoproto.goproto_stringer) = false;
 
-  // RangeID is the ID of the range that the WAG node pertains to.
+  // RangeID is the ID of the range that the event pertains to.
   int64 range_id = 1 [
     (gogoproto.customname) = "RangeID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
-  // ReplicaID is the ID of the RangeID replica that the WAG node pertains to.
+  // ReplicaID is the ID of the RangeID replica that the event pertains to.
   int32 replica_id = 2 [
     (gogoproto.customname) = "ReplicaID",
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
-  // Index identifies the raft log entry associated with this WAG node.
-  //  - For NodeCreate, it is 0 and signifies an uninitialized replica.
-  //  - For NodeSnap, it is the index of the snapshot, and the index at which
-  //  the raft log is initialized.
-  //  - For NodeApply, it is the log index identifying a prefix of the raft log.
-  //  - For NodeSplit and NodeMerge, it identifies the raft log command
-  //  containing the corresponding split/merge trigger.
-  //  - For NodeDestroy, it is MaxUint64.
+  // Index identifies the raft log entry associated with this event. Its
+  // interpretation depends on the EventType:
+  //  - EventCreate: 0, signifying an uninitialized replica.
+  //  - EventInit: the index at which the replica is initialized.
+  //  - EventApply: the log index identifying a prefix of the raft log.
+  //  - EventSplit, EventMerge: the raft log index of the split/merge command.
+  //  - EventSubsume, EventDestroy: the replica's last applied index before
+  //    removal.
   uint64 index = 4 [
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
 }
 
-// Node describes a node of the WAG.
+// Node describes a node of the WAG. A node represents an atomic state machine
+// mutation along with one or more replica lifecycle events it encompasses. For
+// example, a split node contains an Init event for the newly created RHS and
+// a Split event that both initializes the RHS and narrows the LHS.
 message Node {
-  // Addr is the full address of the node, consisting of RangeID, ReplicaID, and
-  // index into the raft log.
-  Addr addr = 1 [(gogoproto.nullable) = false];
-  // Type identifies the type of the replica lifecycle event that this node
-  // represents, such as replica creation, destruction, split or merge.
-  NodeType type = 2;
+  // Events contains the replica lifecycle events that this node encompasses.
+  // Each event affects a single replica, identified by its Addr. A given
+  // RangeID must appear at most once in this list.
+  //
+  // Each EventType implicitly carries dependency semantics. For example, a
+  // Split event at raft index I implies the replica must be caught up to I-1
+  // before the split can be replayed.
+  repeated Event events = 1 [(gogoproto.nullable) = false];
+
   // Mutation contains the mutation that will be applied to the state machine
   // engine when applying this WAG node.
-  Mutation mutation = 3 [(gogoproto.nullable) = false];
-
-  // Create is the RangeID that this node brings into existence in the state
-  // machine, or 0 if the node does not create new ranges. It is non-zero for
-  // NodeCreate and NodeSplit.
-  int64 create = 4 [
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
-  // Destroy contains the RangeIDs that this node removes from the state
-  // machine, because they are known to have been merged.
-  // - For NodeMerge, it contains the ID of the RHS range being merged.
-  // - For NodeSnap, it contains the list of subsumed ranges.
-  repeated int64 destroy = 5 [
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  Mutation mutation = 2 [(gogoproto.nullable) = false];
 }
 
 // Mutation contains a mutation that can be applied to the state machine engine.
@@ -104,8 +121,10 @@ message Mutation {
 // Ingestion describes a Pebble ingestion.
 message Ingestion {
   repeated string SSTs = 1;
-  repeated cockroach.kv.kvserver.kvserverpb.SnapshotRequest.SharedTable shared_tables = 2;
-  repeated cockroach.kv.kvserver.kvserverpb.SnapshotRequest.ExternalTable external_tables = 3;
+  repeated cockroach.kv.kvserver.kvserverpb.SnapshotRequest.SharedTable shared_tables = 2 [
+    (gogoproto.nullable) = false];
+  repeated cockroach.kv.kvserver.kvserverpb.SnapshotRequest.ExternalTable external_tables = 3 [
+    (gogoproto.nullable) = false];
 
   // TODO(pav-kv): add the excise span, to mirror the IngestAndExciseFiles call
   // on storage.Engine.

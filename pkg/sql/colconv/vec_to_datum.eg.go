@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -250,6 +251,27 @@ func (c *VecToDatumConverter) GetDatumColumn(colIdx int) tree.Datums {
 	return c.convertedVecs[colIdx]
 }
 
+func countNulls(nulls *coldata.Nulls, length int, sel []int) int {
+	if !nulls.MaybeHasNulls() {
+		return 0
+	}
+	var count int
+	if sel != nil {
+		for _, idx := range sel[:length] {
+			if nulls.NullAt(idx) {
+				count++
+			}
+		}
+	} else {
+		for i := range length {
+			if nulls.NullAt(i) {
+				count++
+			}
+		}
+	}
+	return count
+}
+
 // ColVecToDatumAndDeselect converts a vector of coldata-represented values in
 // col into tree.Datum representation while performing a deselection step.
 // length specifies the number of values to be converted and sel is an optional
@@ -264,6 +286,10 @@ func ColVecToDatumAndDeselect(
 	if sel == nil {
 		ColVecToDatum(converted, col, length, sel, da)
 		return
+	}
+	var jsonScratch []json.JSONEncoded
+	if col.Type().Family() == types.JsonFamily {
+		jsonScratch = make([]json.JSONEncoded, length-countNulls(col.Nulls(), length, sel))
 	}
 	if col.MaybeHasNulls() {
 		nulls := col.Nulls()
@@ -291,6 +317,29 @@ func ColVecToDatumAndDeselect(
 							continue
 						}
 						v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+						//gcassert:bce
+						converted[destIdx] = v
+					}
+					goto vecToDatum_true_true_true_return_0
+				}
+				if ct.Oid() == oidext.T_aclitem {
+					for idx = 0; idx < length; idx++ {
+						{
+							destIdx = idx
+						}
+						{
+							//gcassert:bce
+							srcIdx = sel[idx]
+						}
+						if nulls.NullAt(srcIdx) {
+							//gcassert:bce
+							converted[destIdx] = tree.DNull
+							continue
+						}
+						v, err := da.NewDACLItem(tree.DString(bytes.Get(srcIdx)))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
 						//gcassert:bce
 						converted[destIdx] = v
 					}
@@ -560,14 +609,15 @@ func ColVecToDatumAndDeselect(
 						v := typedCol.Get(srcIdx)
 
 						// The following operation deliberately copies the input JSON
-						// bytes, since FromEncoding is lazy and keeps a handle on the bytes
-						// it is passed in.
+						// bytes, since FromEncodingInto is lazy and keeps a handle on the
+						// bytes it is passed in.
 						_bytes, _err := json.EncodeJSON(nil, v)
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
 						}
-						var _j json.JSON
-						_j, _err = json.FromEncoding(_bytes)
+						_j := &jsonScratch[0]
+						jsonScratch = jsonScratch[1:]
+						_err = json.FromEncodingInto(_bytes, _j)
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
 						}
@@ -760,6 +810,24 @@ func ColVecToDatumAndDeselect(
 							srcIdx = sel[idx]
 						}
 						v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+						//gcassert:bce
+						converted[destIdx] = v
+					}
+					goto vecToDatum_false_true_true_return_1
+				}
+				if ct.Oid() == oidext.T_aclitem {
+					for idx = 0; idx < length; idx++ {
+						{
+							destIdx = idx
+						}
+						{
+							//gcassert:bce
+							srcIdx = sel[idx]
+						}
+						v, err := da.NewDACLItem(tree.DString(bytes.Get(srcIdx)))
+						if err != nil {
+							colexecerror.ExpectedError(err)
+						}
 						//gcassert:bce
 						converted[destIdx] = v
 					}
@@ -974,14 +1042,15 @@ func ColVecToDatumAndDeselect(
 						v := typedCol.Get(srcIdx)
 
 						// The following operation deliberately copies the input JSON
-						// bytes, since FromEncoding is lazy and keeps a handle on the bytes
-						// it is passed in.
+						// bytes, since FromEncodingInto is lazy and keeps a handle on the
+						// bytes it is passed in.
 						_bytes, _err := json.EncodeJSON(nil, v)
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
 						}
-						var _j json.JSON
-						_j, _err = json.FromEncoding(_bytes)
+						_j := &jsonScratch[0]
+						jsonScratch = jsonScratch[1:]
+						_err = json.FromEncodingInto(_bytes, _j)
 						if _err != nil {
 							colexecerror.ExpectedError(_err)
 						}
@@ -1137,6 +1206,10 @@ func ColVecToDatum(
 	if length == 0 {
 		return
 	}
+	var jsonScratch []json.JSONEncoded
+	if col.Type().Family() == types.JsonFamily {
+		jsonScratch = make([]json.JSONEncoded, length-countNulls(col.Nulls(), length, sel))
+	}
 	if col.MaybeHasNulls() {
 		nulls := col.Nulls()
 		if sel != nil {
@@ -1163,6 +1236,28 @@ func ColVecToDatum(
 								continue
 							}
 							v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+							converted[destIdx] = v
+						}
+						goto vecToDatum_true_true_false_return_2
+					}
+					if ct.Oid() == oidext.T_aclitem {
+						for idx = 0; idx < length; idx++ {
+							{
+								//gcassert:bce
+								destIdx = sel[idx]
+							}
+							{
+								//gcassert:bce
+								srcIdx = sel[idx]
+							}
+							if nulls.NullAt(srcIdx) {
+								converted[destIdx] = tree.DNull
+								continue
+							}
+							v, err := da.NewDACLItem(tree.DString(bytes.Get(srcIdx)))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
 							converted[destIdx] = v
 						}
 						goto vecToDatum_true_true_false_return_2
@@ -1421,14 +1516,15 @@ func ColVecToDatum(
 							v := typedCol.Get(srcIdx)
 
 							// The following operation deliberately copies the input JSON
-							// bytes, since FromEncoding is lazy and keeps a handle on the bytes
-							// it is passed in.
+							// bytes, since FromEncodingInto is lazy and keeps a handle on the
+							// bytes it is passed in.
 							_bytes, _err := json.EncodeJSON(nil, v)
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
 							}
-							var _j json.JSON
-							_j, _err = json.FromEncoding(_bytes)
+							_j := &jsonScratch[0]
+							jsonScratch = jsonScratch[1:]
+							_err = json.FromEncodingInto(_bytes, _j)
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
 							}
@@ -1617,6 +1713,28 @@ func ColVecToDatum(
 								continue
 							}
 							v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+							//gcassert:bce
+							converted[destIdx] = v
+						}
+						goto vecToDatum_true_false_false_return_3
+					}
+					if ct.Oid() == oidext.T_aclitem {
+						for idx = 0; idx < length; idx++ {
+							{
+								destIdx = idx
+							}
+							{
+								srcIdx = idx
+							}
+							if nulls.NullAt(srcIdx) {
+								//gcassert:bce
+								converted[destIdx] = tree.DNull
+								continue
+							}
+							v, err := da.NewDACLItem(tree.DString(bytes.Get(srcIdx)))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
 							//gcassert:bce
 							converted[destIdx] = v
 						}
@@ -1889,14 +2007,15 @@ func ColVecToDatum(
 							v := typedCol.Get(srcIdx)
 
 							// The following operation deliberately copies the input JSON
-							// bytes, since FromEncoding is lazy and keeps a handle on the bytes
-							// it is passed in.
+							// bytes, since FromEncodingInto is lazy and keeps a handle on the
+							// bytes it is passed in.
 							_bytes, _err := json.EncodeJSON(nil, v)
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
 							}
-							var _j json.JSON
-							_j, _err = json.FromEncoding(_bytes)
+							_j := &jsonScratch[0]
+							jsonScratch = jsonScratch[1:]
+							_err = json.FromEncodingInto(_bytes, _j)
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
 							}
@@ -2091,6 +2210,24 @@ func ColVecToDatum(
 								srcIdx = sel[idx]
 							}
 							v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+							converted[destIdx] = v
+						}
+						goto vecToDatum_false_true_false_return_4
+					}
+					if ct.Oid() == oidext.T_aclitem {
+						for idx = 0; idx < length; idx++ {
+							{
+								//gcassert:bce
+								destIdx = sel[idx]
+							}
+							{
+								//gcassert:bce
+								srcIdx = sel[idx]
+							}
+							v, err := da.NewDACLItem(tree.DString(bytes.Get(srcIdx)))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
 							converted[destIdx] = v
 						}
 						goto vecToDatum_false_true_false_return_4
@@ -2305,14 +2442,15 @@ func ColVecToDatum(
 							v := typedCol.Get(srcIdx)
 
 							// The following operation deliberately copies the input JSON
-							// bytes, since FromEncoding is lazy and keeps a handle on the bytes
-							// it is passed in.
+							// bytes, since FromEncodingInto is lazy and keeps a handle on the
+							// bytes it is passed in.
 							_bytes, _err := json.EncodeJSON(nil, v)
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
 							}
-							var _j json.JSON
-							_j, _err = json.FromEncoding(_bytes)
+							_j := &jsonScratch[0]
+							jsonScratch = jsonScratch[1:]
+							_err = json.FromEncodingInto(_bytes, _j)
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
 							}
@@ -2472,6 +2610,23 @@ func ColVecToDatum(
 								srcIdx = idx
 							}
 							v := da.NewDName(tree.DString(bytes.Get(srcIdx)))
+							//gcassert:bce
+							converted[destIdx] = v
+						}
+						goto vecToDatum_false_false_false_return_5
+					}
+					if ct.Oid() == oidext.T_aclitem {
+						for idx = 0; idx < length; idx++ {
+							{
+								destIdx = idx
+							}
+							{
+								srcIdx = idx
+							}
+							v, err := da.NewDACLItem(tree.DString(bytes.Get(srcIdx)))
+							if err != nil {
+								colexecerror.ExpectedError(err)
+							}
 							//gcassert:bce
 							converted[destIdx] = v
 						}
@@ -2689,14 +2844,15 @@ func ColVecToDatum(
 							v := typedCol.Get(srcIdx)
 
 							// The following operation deliberately copies the input JSON
-							// bytes, since FromEncoding is lazy and keeps a handle on the bytes
-							// it is passed in.
+							// bytes, since FromEncodingInto is lazy and keeps a handle on the
+							// bytes it is passed in.
 							_bytes, _err := json.EncodeJSON(nil, v)
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
 							}
-							var _j json.JSON
-							_j, _err = json.FromEncoding(_bytes)
+							_j := &jsonScratch[0]
+							jsonScratch = jsonScratch[1:]
+							_err = json.FromEncodingInto(_bytes, _j)
 							if _err != nil {
 								colexecerror.ExpectedError(_err)
 							}

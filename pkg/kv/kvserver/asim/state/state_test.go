@@ -664,7 +664,11 @@ func TestSetSpanConfig(t *testing.T) {
 	}
 }
 
-func TestSetNodeLiveness(t *testing.T) {
+// TestNodeAndStoreStatus verifies the status tracking APIs: NodeLivenessFn
+// (combining store liveness with node membership), NodeCountFn (counting only
+// ACTIVE members), and store-level liveness aggregation (node takes the worst
+// liveness of its stores).
+func TestNodeAndStoreStatus(t *testing.T) {
 	t.Run("liveness func", func(t *testing.T) {
 		s := LoadClusterInfo(
 			ClusterInfoWithStoreCount(3, 1),
@@ -673,12 +677,14 @@ func TestSetNodeLiveness(t *testing.T) {
 
 		liveFn := s.NodeLivenessFn()
 
-		s.SetNodeLiveness(1, livenesspb.NodeLivenessStatus_LIVE)
-		s.SetNodeLiveness(2, livenesspb.NodeLivenessStatus_DEAD)
-		s.SetNodeLiveness(3, livenesspb.NodeLivenessStatus_DECOMMISSIONED)
+		// Set node liveness via SetAllStoresLiveness (sets all stores on the node).
+		// Node 1: live, Node 2: dead, Node 3: dead + decommissioned.
+		s.SetAllStoresLiveness(1, LivenessLive)
+		s.SetAllStoresLiveness(2, LivenessDead)
+		s.SetAllStoresLiveness(3, LivenessDead)
+		s.SetNodeStatus(3, NodeStatus{Membership: livenesspb.MembershipStatus_DECOMMISSIONED})
 
-		// Liveness status returend should ignore time till store dead or the
-		// timestamp given.
+		// Liveness status returned should combine store liveness and node membership.
 		require.Equal(t, livenesspb.NodeLivenessStatus_LIVE, liveFn(1))
 		require.Equal(t, livenesspb.NodeLivenessStatus_DEAD, liveFn(2))
 		require.Equal(t, livenesspb.NodeLivenessStatus_DECOMMISSIONED, liveFn(3))
@@ -693,14 +699,31 @@ func TestSetNodeLiveness(t *testing.T) {
 		countFn := s.NodeCountFn()
 
 		// Set node 1-5 as decommissioned and nodes 6-10 as dead. There should be a
-		// node count of 5.
+		// node count of 5 (dead nodes with ACTIVE membership are still counted).
 		for i := 1; i <= 5; i++ {
-			s.SetNodeLiveness(NodeID(i), livenesspb.NodeLivenessStatus_DECOMMISSIONED)
+			s.SetNodeStatus(NodeID(i), NodeStatus{Membership: livenesspb.MembershipStatus_DECOMMISSIONED})
 		}
-		for i := 6; i <= 10; i++ {
-			s.SetNodeLiveness(NodeID(i), livenesspb.NodeLivenessStatus_DEAD)
-		}
+		// Nodes 6-10 are already dead by default if not set, but we can set them
+		// explicitly. Their membership remains ACTIVE by default.
 		require.Equal(t, 5, countFn())
+	})
+
+	t.Run("store-level liveness", func(t *testing.T) {
+		s := LoadClusterInfo(
+			ClusterInfoWithStoreCount(1, 3), // 1 node with 3 stores
+			config.DefaultSimulationSettings(),
+		).(*state)
+
+		// All stores start live.
+		require.Equal(t, LivenessLive, s.NodeLiveness(1))
+
+		// Set one store to unavailable - node becomes unavailable.
+		s.SetStoreStatus(2, StoreStatus{Liveness: LivenessUnavailable})
+		require.Equal(t, LivenessUnavailable, s.NodeLiveness(1))
+
+		// Set another store to dead - node becomes dead.
+		s.SetStoreStatus(3, StoreStatus{Liveness: LivenessDead})
+		require.Equal(t, LivenessDead, s.NodeLiveness(1))
 	})
 }
 

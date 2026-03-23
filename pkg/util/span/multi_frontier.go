@@ -214,6 +214,20 @@ func (f *MultiFrontier[P]) SpanEntries(span roachpb.Span) iter.Seq2[roachpb.Span
 	}
 }
 
+// Copy implements Frontier.
+func (f *MultiFrontier[P]) Copy() Frontier {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	copy := newFrontier()
+	for _, frontier := range f.mu.frontiers.all() {
+		for sp, ts := range frontier.Entries() {
+			_ = copy.AddSpansAt(ts, sp)
+		}
+	}
+	return copy
+}
+
 // Len implements Frontier.
 func (f *MultiFrontier[P]) Len() int {
 	f.mu.Lock()

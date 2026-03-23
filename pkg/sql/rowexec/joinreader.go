@@ -595,6 +595,7 @@ func newJoinReader(
 			&jr.streamerInfo.txnKVStreamerMemAcc,
 			spec.FetchSpec.External,
 			row.FetchSpecRequiresRawMVCCValues(spec.FetchSpec),
+			flowCtx.EvalCtx.WorkloadID,
 		)
 	} else {
 		// When not using the Streamer API, we want to limit the batch size hint
@@ -624,6 +625,7 @@ func newJoinReader(
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 			SpansCanOverlap:            jr.spansCanOverlap,
+			WorkloadID:                 flowCtx.EvalCtx.WorkloadID,
 		},
 	); err != nil {
 		return nil, err
@@ -1350,6 +1352,7 @@ func (jr *joinReader) generateMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.RowsRead = jr.rowsRead
 	meta.Metrics.BytesRead = jr.fetcher.GetBytesRead()
+	meta.Metrics.KVCPUTime = jr.fetcher.GetKVCPUTime()
 	if tfs := execinfra.GetLeafTxnFinalState(jr.Ctx(), jr.txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}

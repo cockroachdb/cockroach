@@ -60,7 +60,9 @@ message ChangeAggregatorSpec {
   // SpanLevelCheckpoint is a map from timestamps to lists of spans. These spans
   // have been resolved to the given timestamp, so it is safe to forward these
   // spans to its corresponding timestamps upon resuming.
-  optional cockroach.sql.jobs.jobspb.TimestampSpansMap span_level_checkpoint = 9;
+  //
+  // TODO(#163256): Remove (and reserve) this field once MinSupported = 26.2.
+  optional cockroach.sql.jobs.jobspb.TimestampSpansMap span_level_checkpoint = 9 [deprecated = true];
 
   // ProgressConfig is the configuration for the changefeed's progress tracking.
   optional ChangefeedProgressConfig progress_config = 10;
@@ -72,6 +74,10 @@ message ChangeAggregatorSpec {
   // SchemaTS is, during changefeed startup or resumption, the time at which the
   // aggregator's targets' schemas should be used from.
   optional util.hlc.Timestamp schema_ts = 12 [(gogoproto.customname) = "SchemaTS"];
+
+  // AggregatorID is a unique identifier for this aggregator processor. It
+  // is used only for aggregating range stats.
+  optional int32 aggregator_id = 13 [(gogoproto.nullable) = false, (gogoproto.customname) = "AggregatorID"];
 }
 
 // ChangeFrontierSpec is the specification for a processor that receives
@@ -102,7 +108,9 @@ message ChangeFrontierSpec {
 
   // SpanLevelCheckpoint is a map from timestamps to lists of spans that captures
   // the changefeed progress and is used to initialize the frontier on resume.
-  optional cockroach.sql.jobs.jobspb.TimestampSpansMap span_level_checkpoint = 6;
+  //
+  // TODO(#163256): Remove (and reserve) this field once MinSupported = 26.2.
+  optional cockroach.sql.jobs.jobspb.TimestampSpansMap span_level_checkpoint = 6 [deprecated = true];
 
   // ProgressConfig is the configuration for the changefeed's progress tracking.
   optional ChangefeedProgressConfig progress_config = 7;
@@ -114,6 +122,9 @@ message ChangeFrontierSpec {
   // SchemaTS is, during changefeed startup or resumption, the time at which the
   // change frontier's targets' schemas should be used from.
   optional util.hlc.Timestamp schema_ts = 9 [(gogoproto.customname) = "SchemaTS"];
+
+  // NumAggregators is the number of aggregator processors in the job.
+  optional int32 num_aggregators = 10 [(gogoproto.nullable) = false];
 }
 
 // ChangefeedProgressConfig is the configuration for the changefeed's progress tracking.

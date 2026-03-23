@@ -24,11 +24,13 @@ ALTER TABLE t SET SCHEMA does_not_exist
 statement ok
 CREATE TABLE s2.t();
 
-statement error pq: relation "t" already exists
+# use regex to accept both the legacy and the declarative schema changer format
+statement error pq: relation "(test.s2.)?t" already exists
 ALTER TABLE t SET SCHEMA s2
 
 # Ensure we cannot set schema to a virtual schema.
-statement error pq: cannot move objects into or out of virtual schemas
+# use regex to accept both the legacy and the declarative schema changer format
+statement error pq: (cannot move objects into or out of virtual schemas)?(user root does not have CREATE privilege on schema information_schema)?
 ALTER TABLE t SET SCHEMA information_schema
 
 # Ensure we cannot set schema for a table in a virtual schema.
@@ -180,7 +182,8 @@ statement error pq: "seq_not_view" is not a view
 ALTER VIEW seq_not_view SET SCHEMA s1
 
 # Set schema should not work for a table that is depended on by a view.
-statement error pq: cannot set schema on relation "for_view" because view "vx" depends on it
+# use regex to accept both the legacy and the declarative schema changer format
+statement error pq: cannot set schema on relation "(test.public.)?for_view" because view "vx" depends on it
 ALTER TABLE for_view SET SCHEMA s2
 
 statement ok

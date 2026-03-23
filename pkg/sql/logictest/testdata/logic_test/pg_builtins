@@ -1,15 +1,363 @@
-# LogicTest: !local-prepared
-query T
-SELECT aclexplode(NULL)
-----
+subtest aclexplode
 
-query T
+query empty
+SELECT aclexplode(NULL::text[])
+
+query empty
 SELECT aclexplode(ARRAY[]::text[])
+
+# aclexplode with an invalid ACL string produces no rows (graceful skip).
+query empty
+SELECT aclexplode(ARRAY['foo']::text[])
+
+# aclexplode with a valid ACL string using role names.
+# Use COALESCE with pg_roles to convert OIDs back to names for stable output.
+query TTTB colnames,rowsort
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  COALESCE(e.rolname, 'PUBLIC') AS grantee,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(ARRAY['root=r/admin']::text[]) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+LEFT JOIN pg_roles e ON e.oid = a.grantee
 ----
+grantor  grantee  privilege_type  is_grantable
+admin    root     SELECT          false
+
+# aclexplode with grant option indicated by '*'.
+query TTB colnames,rowsort
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(ARRAY['root=r*/admin']::text[]) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+----
+grantor  privilege_type  is_grantable
+admin    SELECT          true
+
+# aclexplode with multiple privileges.
+query TTTB colnames,rowsort
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  COALESCE(e.rolname, 'PUBLIC') AS grantee,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(ARRAY['root=arw/admin']::text[]) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+LEFT JOIN pg_roles e ON e.oid = a.grantee
+----
+grantor  grantee  privilege_type  is_grantable
+admin    root     INSERT          false
+admin    root     SELECT          false
+admin    root     UPDATE          false
+
+# aclexplode with PUBLIC grantee (empty before '=').
+query TTTB colnames,rowsort
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  COALESCE(e.rolname, 'PUBLIC') AS grantee,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(ARRAY['=rw/root']::text[]) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+LEFT JOIN pg_roles e ON e.oid = a.grantee
+----
+grantor  grantee  privilege_type  is_grantable
+root     PUBLIC   SELECT          false
+root     PUBLIC   UPDATE          false
+
+# aclexplode with multiple ACL items.
+query TTTB colnames,rowsort
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  COALESCE(e.rolname, 'PUBLIC') AS grantee,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(ARRAY['root=r/admin', '=X/admin']::text[]) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+LEFT JOIN pg_roles e ON e.oid = a.grantee
+----
+grantor  grantee  privilege_type  is_grantable
+admin    PUBLIC   EXECUTE         false
+admin    root     SELECT          false
+
+# aclexplode also works with aclitem[] type via acldefault round-trip.
+query TTTB colnames,rowsort
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  COALESCE(e.rolname, 'PUBLIC') AS grantee,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(acldefault('r'::"char", 'root'::regrole)) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+LEFT JOIN pg_roles e ON e.oid = a.grantee
+----
+grantor  grantee  privilege_type  is_grantable
+root     root     DELETE          false
+root     root     INSERT          false
+root     root     MAINTAIN        false
+root     root     REFERENCES      false
+root     root     SELECT          false
+root     root     TRIGGER         false
+root     root     TRUNCATE        false
+root     root     UPDATE          false
+
+subtest end
+
+subtest makeaclitem
+
+# Single privilege.
+query T
+SELECT makeaclitem('root'::regrole, 'admin'::regrole, 'SELECT', false)
+----
+root=r/admin
+
+# Multiple privileges (comma-separated).
+query T
+SELECT makeaclitem('root'::regrole, 'admin'::regrole, 'SELECT,INSERT,UPDATE', false)
+----
+root=raw/admin
+
+# With grant option.
+query T
+SELECT makeaclitem('root'::regrole, 'admin'::regrole, 'SELECT,INSERT', true)
+----
+root=r*a*/admin
+
+# PUBLIC grantee (OID 0).
+query T
+SELECT makeaclitem(0::oid, 'root'::regrole, 'EXECUTE', false)
+----
+=X/root
+
+# SET privilege produces 's' character.
+query T
+SELECT makeaclitem(0::oid, 'root'::regrole, 'SET', false)
+----
+=s/root
+
+# ALTER SYSTEM privilege produces 'A' character.
+query T
+SELECT makeaclitem(0::oid, 'root'::regrole, 'ALTER SYSTEM', false)
+----
+=A/root
+
+# Error on invalid privilege.
+statement error unrecognized privilege type: "BOGUS"
+SELECT makeaclitem('root'::regrole, 'admin'::regrole, 'BOGUS', false)
+
+subtest end
+
+subtest acldefault
+
+# Table defaults: owner gets arwdDxtm, PUBLIC gets nothing.
+query T
+SELECT acldefault('r'::"char", 'root'::regrole)
+----
+{root=arwdDxtm/root}
+
+# Database defaults: owner gets CTc, PUBLIC gets Tc.
+query T
+SELECT acldefault('d'::"char", 'root'::regrole)
+----
+{=Tc/root,root=CTc/root}
+
+# Function defaults: owner gets X, PUBLIC gets X.
+query T
+SELECT acldefault('f'::"char", 'root'::regrole)
+----
+{=X/root,root=X/root}
+
+# Type defaults: owner gets U, PUBLIC gets U.
+query T
+SELECT acldefault('T'::"char", 'root'::regrole)
+----
+{=U/root,root=U/root}
+
+# Schema defaults: owner gets UC, no PUBLIC.
+query T
+SELECT acldefault('n'::"char", 'root'::regrole)
+----
+{root=UC/root}
+
+# Language defaults: no owner, PUBLIC gets U.
+query T
+SELECT acldefault('l'::"char", 'root'::regrole)
+----
+{=U/root}
+
+# Column defaults: nobody gets anything.
+query T
+SELECT acldefault('c'::"char", 'root'::regrole)
+----
+{}
+
+# Parameter defaults: owner gets sA (SET + ALTER SYSTEM).
+# Matches PostgreSQL behavior.
+query T
+SELECT acldefault('p'::"char", 'root'::regrole)
+----
+{root=sA/root}
+
+# Error on invalid type char.
+statement error unrecognized object type abbreviation: "Z"
+SELECT acldefault('Z'::"char", 'root'::regrole)
+
+subtest end
+
+subtest aclitem_roundtrip
+
+# Round-trip: aclexplode(acldefault(...)) should produce correct rows.
+query TTTB colnames,rowsort
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  COALESCE(e.rolname, 'PUBLIC') AS grantee,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(acldefault('d'::"char", 'root'::regrole)) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+LEFT JOIN pg_roles e ON e.oid = a.grantee
+----
+grantor  grantee  privilege_type  is_grantable
+root     PUBLIC   CONNECT         false
+root     PUBLIC   TEMPORARY       false
+root     root     CONNECT         false
+root     root     CREATE          false
+root     root     TEMPORARY       false
+
+# Round-trip for PARAMETER type: aclexplode(acldefault('p', ...)) should return
+# SET and ALTER SYSTEM privileges. This verifies no silent data loss occurs
+# (previously aclexplode returned 0 rows because 's' and 'A' were missing from
+# ACLCharToPrivName).
+query TTTB colnames
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  COALESCE(e.rolname, 'PUBLIC') AS grantee,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(acldefault('p'::"char", 'root'::regrole)) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+LEFT JOIN pg_roles e ON e.oid = a.grantee
+ORDER BY a.privilege_type
+----
+grantor  grantee  privilege_type  is_grantable
+root     root     ALTER SYSTEM    false
+root     root     SET             false
+
+subtest end
+
+subtest aclitem_type
+
+# aclitem can be used as a column type.
+statement ok
+CREATE TABLE aclitem_test (a aclitem)
+
+statement ok
+INSERT INTO aclitem_test VALUES ('root=r/admin')
 
 query T
-SELECT aclexplode(ARRAY['foo'])
+SELECT * FROM aclitem_test
 ----
+root=r/admin
+
+statement ok
+DROP TABLE aclitem_test
+
+# Cast string to aclitem.
+query T
+SELECT 'root=rw*/admin'::aclitem
+----
+root=rw*/admin
+
+# Array containment works for aclitem arrays.
+query B
+SELECT ARRAY['root=r/admin']::aclitem[] @> ARRAY['root=r/admin']::aclitem[]
+----
+true
+
+query B
+SELECT ARRAY['root=rw/admin', '=X/admin']::aclitem[] @> ARRAY['root=rw/admin']::aclitem[]
+----
+true
+
+query B
+SELECT ARRAY['root=r/admin']::aclitem[] @> ARRAY['root=rw/admin']::aclitem[]
+----
+false
+
+subtest end
+
+subtest aclitem_validation
+
+# Valid: empty grantee (PUBLIC).
+query T
+SELECT '=r/'::aclitem
+----
+=r/
+
+# Valid: grant option markers.
+query T
+SELECT 'user1=r*w/'::aclitem
+----
+user1=r*w/
+
+# Valid: all privilege characters.
+query T
+SELECT 'user1=arwdDxtXUCTcsAm/'::aclitem
+----
+user1=arwdDxtXUCTcsAm/
+
+# Valid: empty privileges.
+query T
+SELECT 'user1=/'::aclitem
+----
+user1=/
+
+# Valid: missing slash (grantor defaults to empty).
+query T
+SELECT 'user1=r'::aclitem
+----
+user1=r
+
+# Valid: quoted identifiers.
+query T
+SELECT '"user with spaces"=r/'::aclitem
+----
+"user with spaces"=r/
+
+# Valid: grantor present.
+query T
+SELECT 'user1=r/grantor1'::aclitem
+----
+user1=r/grantor1
+
+# Invalid: bad privilege character.
+statement error pgcode 22P02 invalid mode character: "z"
+SELECT 'user1=z/'::aclitem
+
+# Invalid: missing equals sign.
+statement error pgcode 22P02 missing "=" sign
+SELECT 'user1rw/'::aclitem
+
+# Invalid: star without preceding privilege.
+statement error pgcode 22P02 "\*" must follow a privilege character
+SELECT 'user1=*r/'::aclitem
+
+# Invalid: extra characters after aclitem.
+statement error pgcode 22P02 extra characters after aclitem specification
+SELECT 'user1=r/grantor extra'::aclitem
+
+# Invalid: unterminated quoted identifier in grantee.
+statement error pgcode 22P02 unterminated quoted identifier
+SELECT '"unterminated=r/'::aclitem
+
+# Invalid: unterminated quoted identifier in grantor.
+statement error pgcode 22P02 unterminated quoted identifier
+SELECT 'user1=r/"unterminated'::aclitem
+
+subtest end
 
 # Regression test for #43166.
 statement ok
@@ -194,61 +542,60 @@ statement ok
 CREATE TABLE is_updatable(a INT PRIMARY KEY, b INT, c INT AS (b * 10) STORED);
 CREATE VIEW is_updatable_view AS SELECT a, b FROM is_updatable
 
-query TTOIIB colnames
+query TTIIB colnames
 SELECT
   c.relname,
   a.attname,
-  c.oid,
   a.attnum,
   pg_relation_is_updatable(c.oid, false),
   pg_column_is_updatable(c.oid, a.attnum, false)
 FROM pg_class c
 JOIN pg_attribute a ON a.attrelid = c.oid
 WHERE c.relname IN ('is_updatable', 'is_updatable_view', 'pg_class')
-ORDER BY c.oid, a.attnum
+ORDER BY c.relname, a.attnum
 ----
-relname            attname              oid         attnum  pg_relation_is_updatable  pg_column_is_updatable
-is_updatable       a                    123         1       28                        true
-is_updatable       b                    123         2       28                        true
-is_updatable       c                    123         3       28                        false
-is_updatable_view  a                    124         1       0                         false
-is_updatable_view  b                    124         2       0                         false
-pg_class           oid                  4294967081  1       0                         false
-pg_class           relname              4294967081  2       0                         false
-pg_class           relnamespace         4294967081  3       0                         false
-pg_class           reltype              4294967081  4       0                         false
-pg_class           reloftype            4294967081  5       0                         false
-pg_class           relowner             4294967081  6       0                         false
-pg_class           relam                4294967081  7       0                         false
-pg_class           relfilenode          4294967081  8       0                         false
-pg_class           reltablespace        4294967081  9       0                         false
-pg_class           relpages             4294967081  10      0                         false
-pg_class           reltuples            4294967081  11      0                         false
-pg_class           relallvisible        4294967081  12      0                         false
-pg_class           reltoastrelid        4294967081  13      0                         false
-pg_class           relhasindex          4294967081  14      0                         false
-pg_class           relisshared          4294967081  15      0                         false
-pg_class           relpersistence       4294967081  16      0                         false
-pg_class           relistemp            4294967081  17      0                         false
-pg_class           relkind              4294967081  18      0                         false
-pg_class           relnatts             4294967081  19      0                         false
-pg_class           relchecks            4294967081  20      0                         false
-pg_class           relhasoids           4294967081  21      0                         false
-pg_class           relhaspkey           4294967081  22      0                         false
-pg_class           relhasrules          4294967081  23      0                         false
-pg_class           relhastriggers       4294967081  24      0                         false
-pg_class           relhassubclass       4294967081  25      0                         false
-pg_class           relfrozenxid         4294967081  26      0                         false
-pg_class           relacl               4294967081  27      0                         false
-pg_class           reloptions           4294967081  28      0                         false
-pg_class           relforcerowsecurity  4294967081  29      0                         false
-pg_class           relispartition       4294967081  30      0                         false
-pg_class           relispopulated       4294967081  31      0                         false
-pg_class           relreplident         4294967081  32      0                         false
-pg_class           relrewrite           4294967081  33      0                         false
-pg_class           relrowsecurity       4294967081  34      0                         false
-pg_class           relpartbound         4294967081  35      0                         false
-pg_class           relminmxid           4294967081  36      0                         false
+relname            attname              attnum  pg_relation_is_updatable  pg_column_is_updatable
+is_updatable       a                    1       28                        true
+is_updatable       b                    2       28                        true
+is_updatable       c                    3       28                        false
+is_updatable_view  a                    1       0                         false
+is_updatable_view  b                    2       0                         false
+pg_class           oid                  1       0                         false
+pg_class           relname              2       0                         false
+pg_class           relnamespace         3       0                         false
+pg_class           reltype              4       0                         false
+pg_class           reloftype            5       0                         false
+pg_class           relowner             6       0                         false
+pg_class           relam                7       0                         false
+pg_class           relfilenode          8       0                         false
+pg_class           reltablespace        9       0                         false
+pg_class           relpages             10      0                         false
+pg_class           reltuples            11      0                         false
+pg_class           relallvisible        12      0                         false
+pg_class           reltoastrelid        13      0                         false
+pg_class           relhasindex          14      0                         false
+pg_class           relisshared          15      0                         false
+pg_class           relpersistence       16      0                         false
+pg_class           relistemp            17      0                         false
+pg_class           relkind              18      0                         false
+pg_class           relnatts             19      0                         false
+pg_class           relchecks            20      0                         false
+pg_class           relhasoids           21      0                         false
+pg_class           relhaspkey           22      0                         false
+pg_class           relhasrules          23      0                         false
+pg_class           relhastriggers       24      0                         false
+pg_class           relhassubclass       25      0                         false
+pg_class           relfrozenxid         26      0                         false
+pg_class           relacl               27      0                         false
+pg_class           reloptions           28      0                         false
+pg_class           relforcerowsecurity  29      0                         false
+pg_class           relispartition       30      0                         false
+pg_class           relispopulated       31      0                         false
+pg_class           relreplident         32      0                         false
+pg_class           relrewrite           33      0                         false
+pg_class           relrowsecurity       34      0                         false
+pg_class           relpartbound         35      0                         false
+pg_class           relminmxid           36      0                         false
 
 
 # Check that the oid does not exist. If this test fail, change the oid here and in
@@ -1082,3 +1429,49 @@ query T
 SELECT to_regclass(c) FROM t144384;
 ----
 i144384
+
+subtest pg_get_triggerdef
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TABLE trig_test (id INT PRIMARY KEY, val TEXT)
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE FUNCTION trig_fn() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END; $$
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TRIGGER test_trig BEFORE INSERT ON trig_test FOR EACH ROW EXECUTE FUNCTION trig_fn()
+
+skipif config local-legacy-schema-changer
+query T
+SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgname = 'test_trig'
+----
+CREATE TRIGGER test_trig BEFORE INSERT ON test.public.trig_test FOR EACH ROW EXECUTE FUNCTION test.public.trig_fn()
+
+skipif config local-legacy-schema-changer
+query T
+SELECT pg_get_triggerdef(oid, true) FROM pg_trigger WHERE tgname = 'test_trig'
+----
+CREATE TRIGGER test_trig BEFORE INSERT ON test.public.trig_test FOR EACH ROW EXECUTE FUNCTION test.public.trig_fn()
+
+# Invalid OID returns NULL.
+query T nosort
+SELECT pg_get_triggerdef(0)
+----
+NULL
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP TRIGGER test_trig ON trig_test
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP FUNCTION trig_fn
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP TABLE trig_test
+
+subtest end

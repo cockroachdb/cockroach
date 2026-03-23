@@ -33,12 +33,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/golang/snappy"
 )
+
+const laggingSpanThreshold = 2 * time.Minute
 
 type eventStream struct {
 	streamID streampb.StreamID
@@ -55,7 +58,7 @@ type eventStream struct {
 	rf    *rangefeed.RangeFeed
 	mon   *mon.BytesMonitor
 	acc   mon.BoundAccount
-	stats *rangeStatsPoller
+	stats *rangescanstats.RangeStatsPoller
 
 	// The remaining fields are used to process rangefeed messages.
 	seb                streamEventBatcher
@@ -187,7 +190,7 @@ func (s *eventStream) Start(ctx context.Context, txn *kv.Txn) (retErr error) {
 		log.Dev.Infof(ctx, "resuming event stream (no initial scan) from %s", initialTimestamp)
 	}
 
-	s.stats = startStatsPoller(ctx, time.Minute, s.spec.Spans, s.frontier, s.execCfg.RangeDescIteratorFactory)
+	s.stats = rangescanstats.StartStatsPoller(ctx, time.Minute, s.spec.Spans, s.frontier, s.execCfg.RangeDescIteratorFactory, laggingSpanThreshold)
 
 	// Reserve batch kvsSize bytes from monitor.  We might have to do something more fancy
 	// in the future, but for now, grabbing chunk of memory from the monitor would do the trick.
@@ -272,9 +275,12 @@ func (s *eventStream) onInitialScanDone(ctx context.Context) {
 	log.Dev.VInfof(ctx, 2, "initial scan completed")
 }
 
-func (s *eventStream) onValues(ctx context.Context, values []kv.KeyValue) {
+func (s *eventStream) onValues(ctx context.Context, values []kvpb.RangeFeedValue) {
 	for _, i := range values {
-		s.seb.addKV(streampb.StreamEvent_KV{KeyValue: roachpb.KeyValue{Key: i.Key, Value: *i.Value}})
+		s.seb.addKV(streampb.StreamEvent_KV{
+			KeyValue:  roachpb.KeyValue{Key: i.Key, Value: i.Value},
+			PrevValue: i.PrevValue,
+		})
 	}
 	s.setErr(s.maybeFlushBatch(ctx))
 }
@@ -508,7 +514,7 @@ func streamPartition(
 		streamID: streamID,
 		spec:     spec,
 		execCfg:  execCfg,
-		mon:      evalCtx.Planner.Mon(),
+		mon:      evalCtx.Planner.TxnMon(),
 		seb:      streamEventBatcher{wrappedKVs: spec.WrappedEvents},
 	}, nil
 }

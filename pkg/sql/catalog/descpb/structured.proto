@@ -512,7 +512,15 @@ message IndexDescriptor {
   // new primary index becomes public.
   optional bool hide_for_primary_key_recreate = 31  [(gogoproto.nullable) = false];
 
-  // Next ID: 32
+  // SkipUniqueChecks, if set to true, disables unique constraint checks for
+  // this index in the optimizer. This is an unsafe optimization that should
+  // only be used when the application guarantees uniqueness externally (e.g.,
+  // through application-level logic or regional isolation). When enabled, the
+  // optimizer will not plan unique checks for mutations that could violate
+  // this index's uniqueness constraint.
+  optional bool skip_unique_checks = 32 [(gogoproto.nullable) = false];
+
+  // Next ID: 33
 }
 
 // TriggerDescriptor describes a trigger on a table.
@@ -1103,6 +1111,12 @@ message TableDescriptor {
   // RefreshViewRequired indicates if the materialized view needs to be refreshed
   // prior to access.
   optional bool refresh_view_required = 53 [(gogoproto.nullable) = false];
+  // SecurityInvoker indicates whether the view uses SECURITY INVOKER semantics.
+  // When true, the view executes with the privileges and the RLS of the user
+  // invoking it rather than the view definer. The field is optional to match
+  // PostgreSQL behavior. `SHOW CREATE VIEW` and `pg_catalog` only show this
+  // option when it's explicitly set by the user.
+  optional bool security_invoker = 72 [(gogoproto.nullable) = true];
   // The IDs of all relations that this depends on.
   // Only ever populated if this descriptor is for a view.
   repeated uint32 dependsOn = 25 [(gogoproto.customname) = "DependsOn",
@@ -1137,6 +1151,10 @@ message TableDescriptor {
     // Sequences referenced only by its ID have the ability to be renamed.
     optional bool by_id = 4 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ByID"];
+    // TriggerID is set when this dependency originates from a trigger on the
+    // dependent relation. A value of 0 indicates no trigger.
+    optional uint32 trigger_id = 5 [(gogoproto.nullable) = false,
+      (gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "TriggerID"];
   }
 
   // All references to this table/view from other views and sequences in the system,
@@ -1386,7 +1404,7 @@ message TableDescriptor {
   // before new statistics are fully deployed to all queries throughout the
   // cluster.
   optional int64 stats_canary_window = 71 [(gogoproto.nullable) = false, (gogoproto.casttype)="time.Duration"];
-  // Next ID: 72
+  // Next ID: 73
 }
 
 // ExternalRowData indicates that the row data for this object is stored outside

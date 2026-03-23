@@ -342,6 +342,33 @@ func (r *rangeAsserter) apply(
 	r.seedAppliedAs[seedID] = cmdID
 }
 
+// ApplySplitRHS tracks and asserts command applications which split out a new
+// range. Accepts the state of the RHS.
+func (a *Asserter) ApplySplitRHS(
+	rangeID roachpb.RangeID,
+	replicaID roachpb.ReplicaID,
+	raftAppliedIndex kvpb.RaftIndex,
+	raftAppliedIndexTerm kvpb.RaftTerm,
+	leaseAppliedIndex kvpb.LeaseAppliedIndex,
+	closedTS hlc.Timestamp,
+) {
+	// Use a special command ID that signifies a pseudo-proposal that splits this
+	// range out. This ID does not match any "real" IDs (they are of a different
+	// size, and sufficiently random even if were of the same size).
+	const cmdID = kvserverbase.CmdIDKey("__split__")
+	r := a.forRange(rangeID)
+	// Circumvent the check in r.apply that the command ID must be proposed.
+	func() {
+		r.Lock()
+		defer r.Unlock()
+		r.proposedCmds[cmdID] = 0
+	}()
+	// Pretend that we are applying this pseudo-command.
+	r.apply(replicaID, cmdID, raftpb.Entry{
+		Index: uint64(raftAppliedIndex), Term: uint64(raftAppliedIndexTerm),
+	}, leaseAppliedIndex, closedTS)
+}
+
 // ApplySnapshot tracks and asserts snapshot application.
 func (a *Asserter) ApplySnapshot(
 	rangeID roachpb.RangeID,
@@ -385,13 +412,22 @@ func (r *rangeAsserter) applySnapshot(
 	}
 	r.replicaAppliedIndex[replicaID] = index
 
-	// We can't have a snapshot without any applied log entries, except when this
-	// is an initial snapshot. It's possible that the initial snapshot follows an
-	// empty entry appended by the raft leader at the start of this term. Since we
-	// don't register this entry as applied, r.log can be empty here.
+	// Typically, we can't have a snapshot without any applied entries. For most
+	// ranges, there is at least a pseudo-command (see ApplySplitRHS) that created
+	// this range as part of a split.
 	//
-	// See the comment in r.apply() method, around the empty cmdID check, and the
-	// comment for r.log saying that there can be gaps in the observed applies.
+	// For ranges that were not a result of a split (those created during the
+	// cluster bootstrap), the only way to see an empty r.log here is that this
+	// snapshot follows only empty entries appended by the raft leader at the
+	// start of its term or other no-op entries (see comment in r.apply explaining
+	// that we do not register such commands).
+	//
+	// The latter situation appears impossible, because the bootstrapped ranges
+	// can't send a snapshot to anyone without applying a config change adding
+	// another replica - so r.log can't be empty.
+	//
+	// TODO(pav-kv): consider dropping this condition, or reporting the initial
+	// state during the cluster bootstrap for completeness.
 	if len(r.log) == 0 {
 		return
 	}

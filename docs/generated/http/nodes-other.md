@@ -21,7 +21,8 @@ Support status: [alpha](#support-status)
 | latencies | [NodeStatus.LatenciesEntry](#cockroach.server.status.statuspb.NodeStatus.LatenciesEntry) | repeated | latencies is a map of nodeIDs to nanoseconds which is the latency between this node and the other node.<br><br>NOTE: this is deprecated and is only set if the min supported       cluster version is >= VersionRPCNetworkStats. | [reserved](#support-status) |
 | activity | [NodeStatus.ActivityEntry](#cockroach.server.status.statuspb.NodeStatus.ActivityEntry) | repeated | activity is a map of nodeIDs to network statistics from this node to other nodes. | [reserved](#support-status) |
 | total_system_memory | [int64](#int64) |  | total_system_memory is the total RAM available to the system (or, if detected, the memory available to the cgroup this process is in) in bytes. | [alpha](#support-status) |
-| num_cpus | [int32](#int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. Note that this does not report the number of CPUs actually used by `cockroach`; this parameter is controlled separately. | [alpha](#support-status) |
+| num_cpus | [int32](#int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. This reflects the physical CPU count and does not account for container/cgroup limits. See num_vcpus for container-aware CPU allocation. | [alpha](#support-status) |
+| num_vcpus | [double](#double) |  | num_vcpus is the number of vCPUs allocated to the process by the container orchestrator (e.g., Kubernetes, Docker) based on cgroup CPU quota/period. This represents the platform CPU allocation and is independent of GOMAXPROCS runtime tuning. Falls back to num_cpus if no container limits are configured. Supports fractional values (e.g., 1.5 for Kubernetes CPU limits like "1500m"). | [alpha](#support-status) |
 
 
 

@@ -326,3 +326,17 @@ BEGIN
   SELECT _float8, _int8, crdb_internal_mvcc_timestamp FROM seed@seed__int8__float8_idx;
 END;
 $$;
+
+# Regression test for hitting an internal error due to unset metadataForwarder
+# when a routine is evaluated during the physical planning (#161486).
+statement ok
+DO $$
+DECLARE
+BEGIN
+  SELECT sum(_float8) OVER (
+    PARTITION BY _int8 ROWS BETWEEN
+      UNBOUNDED PRECEDING AND
+      (SELECT _int8 FROM seed LIMIT 1) FOLLOWING
+  ) FROM seed;
+END;
+$$;

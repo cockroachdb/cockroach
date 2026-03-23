@@ -533,8 +533,10 @@ select ascii('禅')
 ----
 31109
 
-query error the input string must not be empty
+query I
 select ascii('')
+----
+0
 
 query T
 select chr(122)
@@ -4248,7 +4250,7 @@ SELECT crdb_internal.redact('‹0›')
 query T
 SELECT crdb_internal.redact('‹‹0››')
 ----
-‹‹×››
+‹×››
 
 query T
 SELECT crdb_internal.redact('‹0› ‹0›')
@@ -4258,7 +4260,7 @@ SELECT crdb_internal.redact('‹0› ‹0›')
 query T
 SELECT crdb_internal.redact('‹‹0›')
 ----
-‹‹×›
+‹×›
 
 query T
 SELECT crdb_internal.redact(ARRAY[]::string[])

@@ -11,6 +11,7 @@ import (
 	"io"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"unsafe"
 
@@ -309,8 +310,15 @@ func TestServerQueryTenant(t *testing.T) {
 	tenantMetricName := "sql.insert.count"
 	// This metric exists only in the host/system registry since it's process-level.
 	hostMetricName := "sys.rss"
+	// This is a store-level metric identified by isStoreTenantMetric.
+	storeMetricName := "cr.store.livebytes"
 
-	// Populate data directly.
+	// Populate data directly. Aggregate sources ("1", "10") contain the sum
+	// of all tenants' data. Per-tenant sources ("1-2", "10-2") track tenant 2's
+	// individual contribution. The aggregate values are set to be the obvious
+	// sum so that the test clearly demonstrates no double-counting occurs:
+	//   node 1 aggregate (101) = tenant 2 (1) + other tenants (100)
+	//   node 10 aggregate (204) = tenant 2 (4) + other tenants (200)
 	tsdb := s.TsDB().(*ts.DB)
 	if err := tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
 		{
@@ -319,11 +327,11 @@ func TestServerQueryTenant(t *testing.T) {
 			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
-					Value:          100.0,
+					Value:          101.0,
 				},
 				{
 					TimestampNanos: 500 * 1e9,
-					Value:          200.0,
+					Value:          202.0,
 				},
 			},
 		},
@@ -347,11 +355,11 @@ func TestServerQueryTenant(t *testing.T) {
 			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
-					Value:          200.0,
+					Value:          204.0,
 				},
 				{
 					TimestampNanos: 500 * 1e9,
-					Value:          400.0,
+					Value:          405.0,
 				},
 			},
 		},
@@ -397,11 +405,44 @@ func TestServerQueryTenant(t *testing.T) {
 				},
 			},
 		},
+		// Store-level tenant metric data follows the same aggregate/per-tenant
+		// pattern. Aggregate "1" = 50 (includes tenant 2's 10), "1-2" = 10.
+		{
+			Name:   storeMetricName,
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          50.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          70.0,
+				},
+			},
+		},
+		{
+			Name:   storeMetricName,
+			Source: "1-2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          10.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          20.0,
+				},
+			},
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Undefined tenant ID should aggregate across all tenants.
+	// Undefined tenant ID should return aggregate values only (no double-counting).
+	// The aggregate source "1" has values 101.0 and 202.0, and source "10" has 204.0 and 405.0.
+	// Note these are the aggregate values, NOT aggregate + per-tenant (which would be
+	// 102.0 and 204.0 for source "1" if double-counting occurred).
 	expectedAggregatedResult := &tspb.TimeSeriesQueryResponse{
 		Results: []tspb.TimeSeriesQueryResponse_Result{
 			{
@@ -463,7 +504,7 @@ func TestServerQueryTenant(t *testing.T) {
 	}
 	require.Equal(t, expectedAggregatedResult, aggregatedResponse)
 
-	// System tenant ID should provide system tenant ts data.
+	// System tenant ID should provide system tenant ts data (same as aggregate).
 	systemID := roachpb.MustMakeTenantID(1)
 	expectedSystemResult := &tspb.TimeSeriesQueryResponse{
 		Results: []tspb.TimeSeriesQueryResponse_Result{
@@ -476,11 +517,11 @@ func TestServerQueryTenant(t *testing.T) {
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 400 * 1e9,
-						Value:          100.0,
+						Value:          101.0,
 					},
 					{
 						TimestampNanos: 500 * 1e9,
-						Value:          200.0,
+						Value:          202.0,
 					},
 				},
 			},
@@ -493,11 +534,11 @@ func TestServerQueryTenant(t *testing.T) {
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 400 * 1e9,
-						Value:          300.0,
+						Value:          305.0,
 					},
 					{
 						TimestampNanos: 500 * 1e9,
-						Value:          600.0,
+						Value:          607.0,
 					},
 				},
 			},
@@ -596,6 +637,77 @@ func TestServerQueryTenant(t *testing.T) {
 		sort.Strings(r.Sources)
 	}
 	require.Equal(t, expectedTenantResponse, tenantResponse)
+
+	// Store-level tenant metrics (e.g. cr.store.livebytes) should be scoped
+	// to the tenant via isStoreTenantMetric, even though they're not in the
+	// tenant registry. Tenant 2 should see only its per-tenant data.
+	expectedTenantStoreResponse := &tspb.TimeSeriesQueryResponse{
+		Results: []tspb.TimeSeriesQueryResponse_Result{
+			{
+				Query: tspb.Query{
+					Name:     storeMetricName,
+					Sources:  []string{"1"},
+					TenantID: tenantID,
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          10.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          20.0,
+					},
+				},
+			},
+		},
+	}
+	tenantStoreResponse, err := tenantClient.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{
+				Name:    storeMetricName,
+				Sources: []string{"1"},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, expectedTenantStoreResponse, tenantStoreResponse)
+
+	// The system tenant should see the aggregate store metric values.
+	expectedSystemStoreResponse := &tspb.TimeSeriesQueryResponse{
+		Results: []tspb.TimeSeriesQueryResponse_Result{
+			{
+				Query: tspb.Query{
+					Name:    storeMetricName,
+					Sources: []string{"1"},
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          50.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          70.0,
+					},
+				},
+			},
+		},
+	}
+	systemStoreResponse, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{
+				Name:    storeMetricName,
+				Sources: []string{"1"},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, expectedSystemStoreResponse, systemStoreResponse)
 
 	// Test that host metrics are inaccessible to tenant without capability.
 	hostMetricsRequest := &tspb.TimeSeriesQueryRequest{
@@ -875,6 +987,137 @@ func TestServerDump(t *testing.T) {
 		_, resultsMap := readDataFromDump(t, dumpClient)
 		require.Equal(t, expectedMap, resultsMap)
 	}
+}
+
+func TestServerDumpChildMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		// For now, direct access to the tsdb is reserved to the storage layer.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	tsdb := s.TsDB().(*ts.DB)
+
+	// Store parent metric (without labels)
+	parentMetric := "cr.node.changefeed.emitted_messages"
+	if err := tsdb.StoreData(ctx, ts.Resolution10s, []tspb.TimeSeriesData{
+		{
+			Name:   parentMetric,
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 100 * 1e9, Value: 1000.0},
+				{TimestampNanos: 200 * 1e9, Value: 2000.0},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Store child metrics (with labels encoded in name)
+	childMetric1 := fmt.Sprintf(`%s{feed_id="123",scope="default"}`, parentMetric)
+	childMetric2 := fmt.Sprintf(`%s{feed_id="456",scope="system"}`, parentMetric)
+	if err := tsdb.StoreData(ctx, ts.Resolution1m, []tspb.TimeSeriesData{
+		{
+			Name:   childMetric1,
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 100 * 1e9, Value: 500.0},
+				{TimestampNanos: 200 * 1e9, Value: 1500.0},
+			},
+		},
+		{
+			Name:   childMetric2,
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 100 * 1e9, Value: 300.0},
+				{TimestampNanos: 200 * 1e9, Value: 800.0},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	t.Run("includes child metrics", func(t *testing.T) {
+		dumpClient, err := client.Dump(ctx, &tspb.DumpRequest{
+			Names:      []string{parentMetric},
+			StartNanos: 100 * 1e9,
+			EndNanos:   300 * 1e9,
+		})
+		require.NoError(t, err)
+
+		resultMap := make(map[string][]tspb.TimeSeriesDatapoint)
+		for {
+			msg, err := dumpClient.Recv()
+			if err == io.EOF {
+				break
+			}
+			require.NoError(t, err)
+			resultMap[msg.Name] = append(resultMap[msg.Name], msg.Datapoints...)
+		}
+
+		// Should have parent metric AND both child metrics
+		require.Contains(t, resultMap, parentMetric, "parent metric should be included")
+		require.Contains(t, resultMap, childMetric1, "child metric 1 should be included")
+		require.Contains(t, resultMap, childMetric2, "child metric 2 should be included")
+		require.Equal(t, 3, len(resultMap), "should have parent and both child metrics")
+
+		// Verify data correctness for parent metric
+		require.Len(t, resultMap[parentMetric], 2, "parent metric should have 2 datapoints")
+		require.Equal(t, 1000.0, resultMap[parentMetric][0].Value)
+		require.Equal(t, 2000.0, resultMap[parentMetric][1].Value)
+
+		// Verify data correctness for child metrics
+		require.Len(t, resultMap[childMetric1], 2, "child metric 1 should have 2 datapoints")
+		require.Equal(t, 500.0, resultMap[childMetric1][0].Value)
+		require.Equal(t, 1500.0, resultMap[childMetric1][1].Value)
+
+		require.Len(t, resultMap[childMetric2], 2, "child metric 2 should have 2 datapoints")
+		require.Equal(t, 300.0, resultMap[childMetric2][0].Value)
+		require.Equal(t, 800.0, resultMap[childMetric2][1].Value)
+	})
+
+	t.Run("DumpRaw sees child metrics", func(t *testing.T) {
+		dumpRawClient, err := client.DumpRaw(ctx, &tspb.DumpRequest{
+			Names:      []string{parentMetric},
+			StartNanos: 100 * 1e9,
+			EndNanos:   300 * 1e9,
+		})
+		require.NoError(t, err)
+
+		var kvCount int
+		seenMetrics := make(map[string]bool)
+		for {
+			kv, err := dumpRawClient.Recv()
+			if err == io.EOF {
+				break
+			}
+			require.NoError(t, err)
+			kvCount++
+			// Decode the key to verify it contains child metrics
+			// The key contains the encoded metric name
+			keyStr := string(kv.Key)
+			if strings.Contains(keyStr, "{") {
+				seenMetrics["child"] = true
+			}
+		}
+
+		require.Greater(t, kvCount, 0, "should have raw KVs")
+		require.True(t, seenMetrics["child"], "should have seen child metrics in raw dump")
+	})
 }
 
 func BenchmarkServerQuery(b *testing.B) {

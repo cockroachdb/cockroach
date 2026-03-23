@@ -19,7 +19,7 @@ import { nodeStatusesSelector } from "src/redux/nodes";
 import { AdminUIState, AppDispatch } from "src/redux/state";
 import * as docsURL from "src/util/docs";
 import { allNodesHaveLocality } from "src/util/localities";
-import "./instructionsBox.styl";
+import "./instructionsBox.scss";
 
 interface InstructionsBoxProps {
   allNodesHaveLocality: boolean;

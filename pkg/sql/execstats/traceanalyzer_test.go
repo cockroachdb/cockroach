@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -41,6 +42,7 @@ import (
 func TestTraceAnalyzer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "slow test; times out under race with external process tenant")
 
 	const (
 		testStmt = "SELECT * FROM test.foo ORDER BY v"
@@ -248,7 +250,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		ContentionEvents:                   []kvpb.ContentionEvent{aEvent},
 		MaxDiskUsage:                       8,
 		RUEstimate:                         9,
-		CPUTime:                            10 * time.Second,
+		SQLCPUTime:                         10 * time.Second,
 		MvccSteps:                          11,
 		MvccStepsInternal:                  12,
 		MvccSeeks:                          13,
@@ -285,7 +287,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		ContentionEvents:                   []kvpb.ContentionEvent{bEvent},
 		MaxDiskUsage:                       15,
 		RUEstimate:                         16,
-		CPUTime:                            17 * time.Second,
+		SQLCPUTime:                         17 * time.Second,
 		MvccSteps:                          18,
 		MvccStepsInternal:                  19,
 		MvccSeeks:                          20,
@@ -321,7 +323,7 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		ContentionEvents:                   []kvpb.ContentionEvent{aEvent, bEvent},
 		MaxDiskUsage:                       15,
 		RUEstimate:                         25,
-		CPUTime:                            27 * time.Second,
+		SQLCPUTime:                         27 * time.Second,
 		MvccSteps:                          29,
 		MvccStepsInternal:                  31,
 		MvccSeeks:                          33,

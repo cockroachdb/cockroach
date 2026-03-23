@@ -1,0 +1,48 @@
+/* setup */
+CREATE TABLE t (i int);
+CREATE SCHEMA sc;
+
+/* test */
+EXPLAIN (DDL) ALTER TABLE t SET (exclude_data_from_backup=true, autovacuum_enabled=false, sql_stats_histogram_buckets_count=64);
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› SET ('exclude_data_from_backup' = ‹true›, 'autovacuum_enabled' = ‹false›, 'sql_stats_histogram_buckets_count' = ‹64›);
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 2 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → PUBLIC TableStorageParam:{DescID: 104 (t), Name: "exclude_data_from_backup", Value: "true"}
+ │         │    └── ABSENT → PUBLIC TableStorageParam:{DescID: 104 (t), Name: "sql_stats_histogram_buckets_count", Value: "64"}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
+ │         └── 3 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
+ │              ├── SetTableStorageParam {"Param":{"Name":"exclude_data_fro...","TableID":104,"Value":"true"}}
+ │              └── SetTableStorageParam {"Param":{"Name":"sql_stats_histog...","TableID":104,"Value":"64"}}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 2 elements transitioning toward PUBLIC
+ │    │    │    ├── PUBLIC → ABSENT TableStorageParam:{DescID: 104 (t), Name: "exclude_data_from_backup", Value: "true"}
+ │    │    │    └── PUBLIC → ABSENT TableStorageParam:{DescID: 104 (t), Name: "sql_stats_histogram_buckets_count", Value: "64"}
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 2 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → PUBLIC TableStorageParam:{DescID: 104 (t), Name: "exclude_data_from_backup", Value: "true"}
+ │         │    └── ABSENT → PUBLIC TableStorageParam:{DescID: 104 (t), Name: "sql_stats_histogram_buckets_count", Value: "64"}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
+ │         └── 5 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
+ │              ├── SetTableStorageParam {"Param":{"Name":"exclude_data_fro...","TableID":104,"Value":"true"}}
+ │              ├── SetTableStorageParam {"Param":{"Name":"sql_stats_histog...","TableID":104,"Value":"64"}}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
+ └── PostCommitPhase
+      └── Stage 1 of 1 in PostCommitPhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

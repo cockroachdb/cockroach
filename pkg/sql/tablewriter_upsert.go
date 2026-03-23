@@ -97,7 +97,7 @@ func (tu *tableUpserter) init(ctx context.Context, txn *kv.Txn, evalCtx *eval.Co
 	if tu.rowsNeeded {
 		tu.resultRow = make(tree.Datums, len(tu.returnCols))
 		tu.rows = rowcontainer.NewRowContainer(
-			evalCtx.Planner.Mon().MakeBoundAccount(),
+			evalCtx.Planner.ExecMon().MakeBoundAccount(),
 			colinfo.ColTypeInfoFromColumns(tu.returnCols),
 		)
 

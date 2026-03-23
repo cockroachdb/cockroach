@@ -276,8 +276,15 @@ func (s *mockCluster) ComputeSplitKey(
 // GetSpanConfigForKey implements spanconfig.StoreReader.
 func (s *mockCluster) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
+) (roachpb.SpanConfig, error) {
 	return s.store.GetSpanConfigForKey(ctx, key)
+}
+
+// ForEachOverlappingSpanConfig implements spanconfig.StoreReader.
+func (s *mockCluster) ForEachOverlappingSpanConfig(
+	ctx context.Context, span roachpb.Span, f func(roachpb.Span, roachpb.SpanConfig) error,
+) error {
+	return s.store.ForEachOverlappingSpanConfig(ctx, span, f)
 }
 
 func (s *mockCluster) addNode(desc roachpb.NodeDescriptor) {

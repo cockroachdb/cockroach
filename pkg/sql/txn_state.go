@@ -124,9 +124,10 @@ type txnState struct {
 	// flag.
 	injectedTxnRetryCounter int
 
-	// mon tracks txn-bound objects like the running state of
-	// planNode in the midst of performing a computation.
-	mon *mon.BytesMonitor
+	// txnMon tracks txn-bound objects like the cursor state that outlives a
+	// single query execution step. Its children will also track query planning
+	// and execution state.
+	txnMon *mon.BytesMonitor
 
 	// adv is overwritten after every transition. It represents instructions for
 	// for moving the cursor over the stream of input statements to the next
@@ -250,7 +251,7 @@ func (ts *txnState) resetForNewSQLTxn(
 		ts.recordingStart = timeutil.Now()
 	}
 
-	ts.mon.StartNoReserved(ts.Ctx, tranCtx.connMon)
+	ts.txnMon.StartNoReserved(ts.Ctx, tranCtx.connMon)
 	txnID = func() (txnID uuid.UUID) {
 		ts.mu.Lock()
 		defer ts.mu.Unlock()
@@ -304,10 +305,11 @@ func (ts *txnState) resetForNewSQLTxn(
 func (ts *txnState) shouldCollectTxnDiagnostics(
 	ctx context.Context, stmtFingerprintId uint64, stmt *Statement, tracer *tracing.Tracer,
 ) (newCtx context.Context, collectingDiagnostics bool) {
+	txnID := ts.mu.txn.ID()
 	if ts.txnInstrumentationHelper.diagnosticsCollector.NotStarted() {
-		newCtx, collectingDiagnostics = ts.txnInstrumentationHelper.MaybeStartDiagnostics(ctx, stmt.AST, stmtFingerprintId, tracer)
+		newCtx, collectingDiagnostics = ts.txnInstrumentationHelper.MaybeStartDiagnostics(ctx, stmt.AST, stmtFingerprintId, tracer, txnID)
 	} else {
-		newCtx, collectingDiagnostics = ts.txnInstrumentationHelper.MaybeContinueDiagnostics(ctx, stmt.AST, stmtFingerprintId)
+		newCtx, collectingDiagnostics = ts.txnInstrumentationHelper.MaybeContinueDiagnostics(ctx, stmt.AST, stmtFingerprintId, txnID)
 	}
 	return
 }
@@ -317,7 +319,7 @@ func (ts *txnState) shouldCollectTxnDiagnostics(
 // called for starting another SQL txn. The ID of the finalized transaction is
 // returned.
 func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timestamp) {
-	ts.mon.Stop(ts.Ctx)
+	ts.txnMon.Stop(ts.Ctx)
 	sp := tracing.SpanFromContext(ts.Ctx)
 
 	elapsed := timeutil.Since(ts.recordingStart)
@@ -333,8 +335,7 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 			)
 		}
 	}
-
-	ts.txnInstrumentationHelper.Finalize(ts.Ctx, elapsed)
+	ts.txnInstrumentationHelper.Finalize(ts.Ctx, elapsed, ts.mu.txn.ID())
 	sp.Finish()
 	if ts.txnCancelFn != nil {
 		ts.txnCancelFn()
@@ -365,9 +366,9 @@ func (ts *txnState) finishSQLTxn() (txnID uuid.UUID, commitTimestamp hlc.Timesta
 // but still want to clean up other stuff.
 func (ts *txnState) finishExternalTxn() {
 	if ts.Ctx == nil {
-		ts.mon.Stop(ts.connCtx)
+		ts.txnMon.Stop(ts.connCtx)
 	} else {
-		ts.mon.Stop(ts.Ctx)
+		ts.txnMon.Stop(ts.Ctx)
 	}
 
 	if ts.Ctx != nil {

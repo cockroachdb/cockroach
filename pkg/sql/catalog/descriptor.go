@@ -372,6 +372,9 @@ type TableDescriptor interface {
 	IsPhysicalTable() bool
 	// MaterializedView returns whether this TableDescriptor is a MaterializedView.
 	MaterializedView() bool
+	// IsSecurityInvoker returns true if security_invoker option is set to true.
+	// The function should only be called on a view descriptor.
+	IsSecurityInvoker() bool
 	// IsReadOnly returns if this table descriptor has external data, and cannot
 	// be written to.
 	IsReadOnly() bool
@@ -596,6 +599,10 @@ type TableDescriptor interface {
 	// one k/v pair per family in the table, just like a primary index.
 	IndexKeysPerRow(idx Index) int
 
+	// MaxFamilyIDForIndex returns the maximum column family ID used to encode a
+	// row for the given index.
+	MaxFamilyIDForIndex(idx Index) (descpb.FamilyID, error)
+
 	// IndexFetchSpecKeyAndSuffixColumns returns information about the key and
 	// suffix columns, suitable for populating a fetchpb.IndexFetchSpec.
 	IndexFetchSpecKeyAndSuffixColumns(idx Index) []fetchpb.IndexFetchSpec_KeyColumn
@@ -651,9 +658,16 @@ type TableDescriptor interface {
 	GetReplacementOf() descpb.TableDescriptor_Replacement
 
 	// GetAllReferencedRelationIDsExceptFKs returns the IDs of all relations
-	// this table depends on, excluding foreign key dependencies. Dependencies can
-	// originate from triggers, policies, or direct references in views.
-	GetAllReferencedRelationIDsExceptFKs() descpb.IDs
+	// this table depends on, excluding foreign key dependencies. Dependencies are
+	// returned separately by source:
+	//   - byTriggerID: maps each trigger ID to the set of relation IDs it references
+	//   - byPolicyID: maps each policy ID to the set of relation IDs it references
+	//   - fromView: relation IDs referenced directly by the view's DependsOn
+	GetAllReferencedRelationIDsExceptFKs() (
+		byTriggerID map[descpb.TriggerID]DescriptorIDSet,
+		byPolicyID map[descpb.PolicyID]DescriptorIDSet,
+		fromView DescriptorIDSet,
+	)
 
 	// GetAllReferencedTypeIDs returns all user defined type descriptor IDs that
 	// this table references. It takes in a function that returns the TypeDescriptor
@@ -807,6 +821,8 @@ type TableDescriptor interface {
 	GetExcludeDataFromBackup() bool
 	// GetStorageParams returns a list of storage parameters for the table.
 	GetStorageParams(spaceBetweenEqual bool) ([]string, error)
+	// GetViewOptions returns a list of options for the view.
+	GetViewOptions(spaceBetweenEqual bool) ([]string, error)
 	// NoAutoStatsSettingsOverrides is true if no auto stats related settings are
 	// set at the table level for the given table.
 	NoAutoStatsSettingsOverrides() bool

@@ -1,0 +1,20 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import 'src/components/core/index';
+
+.logs-table {
+  tbody {
+    font-family: $font-family--monospace;
+  }
+
+  &__message {
+    white-space: pre;
+  }
+
+  td.sort-table__cell {
+    padding: 4px;
+  }
+}

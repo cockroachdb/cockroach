@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -54,6 +55,9 @@ import (
 func TestTenantBackupWithCanceledImport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// TODO(at): enable once LinkExternalSSTable is permitted for secondary tenants.
+	backuptestutils.DisableFastRestoreForTest(t)
 
 	ctx := context.Background()
 	tempDir, tempDirCleanupFn := testutils.TempDir(t)
@@ -120,6 +124,9 @@ func TestTenantBackupNemesis(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderRace(t, "slow test") // take >1mn under race
+
+	// TODO(at): enable once LinkExternalSSTable is permitted for secondary tenants.
+	backuptestutils.DisableFastRestoreForTest(t)
 
 	ctx := context.Background()
 	tempDir, tempDirCleanupFn := testutils.TempDir(t)

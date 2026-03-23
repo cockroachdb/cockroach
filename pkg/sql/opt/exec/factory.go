@@ -90,6 +90,15 @@ const (
 	// PlanFlagContainsUpsert is set if at least one UPSERT stmt is found in the
 	// whole plan.
 	PlanFlagContainsUpsert
+
+	// PlanFlagUsesRLS is set if the plan applies row-level security policies.
+	PlanFlagUsesRLS
+
+	// PlanFlagCanaryAndStableStatsDiffer is set if at least one table
+	// referenced by the query has genuinely different canary (newest) vs.
+	// stable (second-newest) statistics within its canary window. This
+	// gates canary/stable experiment metric recording.
+	PlanFlagCanaryAndStableStatsDiffer
 )
 
 // IsSet returns true if the receiver has all of the given flags set.
@@ -444,6 +453,12 @@ type EstimatedStats struct {
 	// ForecastAt is set only for scans with forecasted stats; it is the time the
 	// forecast was for (which could be in the past, present, or future).
 	ForecastAt time.Time
+	// CanaryStatsActive is set only for scans; it is true if the table has
+	// divergent canary vs. stable statistics within its canary window.
+	CanaryStatsActive bool
+	// CanaryWindowSize is set only for scans with CanaryStatsActive; it is
+	// the configured canary window duration for the table.
+	CanaryWindowSize time.Duration
 }
 
 // ExecutionStats contain statistics about a given operator gathered from the

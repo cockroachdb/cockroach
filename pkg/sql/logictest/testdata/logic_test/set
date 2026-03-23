@@ -959,3 +959,176 @@ SET distsql_workmem = 1
 
 statement ok
 RESET distsql_workmem
+
+subtest tcp_keepalive_settings
+
+# tcp_keepalives_idle: stored in seconds, accepts integers (seconds) and
+# duration strings (truncated to whole seconds).
+
+statement ok
+SET tcp_keepalives_idle = 30
+
+query T
+SHOW tcp_keepalives_idle
+----
+30
+
+# Duration string: 1m30s = 90 seconds.
+statement ok
+SET tcp_keepalives_idle = '1m30s'
+
+query T
+SHOW tcp_keepalives_idle
+----
+90
+
+# Duration string: 75ms truncates to 0 seconds (cluster setting default).
+statement ok
+SET tcp_keepalives_idle = '75ms'
+
+query T
+SHOW tcp_keepalives_idle
+----
+0
+
+# Duration string: 2500ms truncates to 2 seconds.
+statement ok
+SET tcp_keepalives_idle = '2500ms'
+
+query T
+SHOW tcp_keepalives_idle
+----
+2
+
+# Reset to default (0).
+statement ok
+SET tcp_keepalives_idle = 0
+
+query T
+SHOW tcp_keepalives_idle
+----
+0
+
+# Negative values are rejected.
+statement error tcp_keepalives_idle cannot be negative
+SET tcp_keepalives_idle = -1
+
+statement error tcp_keepalives_idle cannot be negative
+SET tcp_keepalives_idle = '-5s'
+
+# tcp_keepalives_interval: same behavior as tcp_keepalives_idle.
+
+statement ok
+SET tcp_keepalives_interval = 10
+
+query T
+SHOW tcp_keepalives_interval
+----
+10
+
+statement ok
+SET tcp_keepalives_interval = '45s'
+
+query T
+SHOW tcp_keepalives_interval
+----
+45
+
+statement ok
+SET tcp_keepalives_interval = '500ms'
+
+query T
+SHOW tcp_keepalives_interval
+----
+0
+
+statement error tcp_keepalives_interval cannot be negative
+SET tcp_keepalives_interval = -1
+
+# tcp_keepalives_count: integer only, no duration parsing.
+
+statement ok
+SET tcp_keepalives_count = 5
+
+query T
+SHOW tcp_keepalives_count
+----
+5
+
+statement ok
+SET tcp_keepalives_count = 0
+
+query T
+SHOW tcp_keepalives_count
+----
+0
+
+statement error invalid value for parameter "tcp_keepalives_count"
+SET tcp_keepalives_count = -1
+
+# tcp_user_timeout: stored in milliseconds, accepts integers (ms) and
+# duration strings (truncated to whole milliseconds).
+
+statement ok
+SET tcp_user_timeout = 15000
+
+query T
+SHOW tcp_user_timeout
+----
+15000
+
+# Duration string: 30s = 30000 ms.
+statement ok
+SET tcp_user_timeout = '30s'
+
+query T
+SHOW tcp_user_timeout
+----
+30000
+
+# Duration string: 1m = 60000 ms.
+statement ok
+SET tcp_user_timeout = '1m'
+
+query T
+SHOW tcp_user_timeout
+----
+60000
+
+# Duration string with sub-millisecond precision truncates.
+statement ok
+SET tcp_user_timeout = '100us'
+
+query T
+SHOW tcp_user_timeout
+----
+0
+
+statement ok
+SET tcp_user_timeout = 0
+
+query T
+SHOW tcp_user_timeout
+----
+0
+
+statement error tcp_user_timeout cannot be negative
+SET tcp_user_timeout = -1
+
+statement error tcp_user_timeout cannot be negative
+SET tcp_user_timeout = '-5s'
+
+# Reset all to default.
+statement ok
+RESET tcp_keepalives_idle
+
+statement ok
+RESET tcp_keepalives_interval
+
+statement ok
+RESET tcp_keepalives_count
+
+statement ok
+RESET tcp_user_timeout
+
+subtest end

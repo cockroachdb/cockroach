@@ -248,7 +248,7 @@ func maybePanic(err error) {
 // Remove removes the container from docker. It is an error to remove a running
 // container.
 func (c *Container) Remove(ctx context.Context) error {
-	return c.cluster.client.ContainerRemove(ctx, c.id, types.ContainerRemoveOptions{
+	return c.cluster.client.ContainerRemove(ctx, c.id, types.ContainerRemoveOptions{ //lint:ignore SA1019 grandfathered
 		RemoveVolumes: true,
 		Force:         true,
 	})
@@ -267,7 +267,7 @@ func (c *Container) Kill(ctx context.Context) error {
 //
 // TODO(pmattis): Generalize the setting of parameters here.
 func (c *Container) Start(ctx context.Context) error {
-	return c.cluster.client.ContainerStart(ctx, c.id, types.ContainerStartOptions{})
+	return c.cluster.client.ContainerStart(ctx, c.id, types.ContainerStartOptions{}) //lint:ignore SA1019 grandfathered
 }
 
 // Restart restarts a running container.
@@ -330,7 +330,7 @@ func (c *Container) WaitUntilNotRunning(ctx context.Context) error {
 
 // Logs outputs the containers logs to the given io.Writer.
 func (c *Container) Logs(ctx context.Context, w io.Writer) error {
-	rc, err := c.cluster.client.ContainerLogs(ctx, c.id, types.ContainerLogsOptions{
+	rc, err := c.cluster.client.ContainerLogs(ctx, c.id, types.ContainerLogsOptions{ //lint:ignore SA1019 grandfathered
 		ShowStdout: true,
 		ShowStderr: true,
 	})
@@ -395,7 +395,9 @@ type resilientDockerClient struct {
 }
 
 func (cli resilientDockerClient) ContainerStart(
-	clientCtx context.Context, id string, opts types.ContainerStartOptions,
+	clientCtx context.Context,
+	id string,
+	opts types.ContainerStartOptions, //lint:ignore SA1019 grandfathered
 ) error {
 	for {
 		err := timeutil.RunWithTimeout(clientCtx, "start container", 20*time.Second, func(ctx context.Context) error {
@@ -425,7 +427,7 @@ func (cli resilientDockerClient) ContainerCreate(
 	)
 	if err != nil && strings.Contains(err.Error(), "already in use") {
 		log.Dev.Infof(ctx, "unable to create container %s: %v", containerName, err)
-		containers, cerr := cli.ContainerList(ctx, types.ContainerListOptions{
+		containers, cerr := cli.ContainerList(ctx, types.ContainerListOptions{ //lint:ignore SA1019 grandfathered
 			All:   true,
 			Limit: -1, // no limit, see docker/docker/client/container_list.go
 		})
@@ -441,7 +443,7 @@ func (cli resilientDockerClient) ContainerCreate(
 					continue
 				}
 				log.Dev.Infof(ctx, "trying to remove %s", c.ID)
-				options := types.ContainerRemoveOptions{
+				options := types.ContainerRemoveOptions{ //lint:ignore SA1019 grandfathered
 					RemoveVolumes: true,
 					Force:         true,
 				}

@@ -104,11 +104,20 @@ func newLeaseQueue(store *Store, allocator allocatorimpl.Allocator) *leaseQueue 
 func (lq *leaseQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, confReader spanconfig.StoreReader,
 ) (shouldQueue bool, priority float64) {
-	conf, _, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
+	conf, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
 	if err != nil {
 		return false, 0
 	}
 	desc := repl.Desc()
+	// Only replicas that can hold a lease (IsVoterNewConfig) should be
+	// processed. Without this check, non-voters can reach
+	// canTransferLeaseFrom (and ShouldPlanChange) when their lease status
+	// evaluates as ERROR — which happens routinely for leader leases
+	// evaluated by a follower once MinExpiration has passed. See #107691.
+	replDesc, ok := desc.GetReplicaDescriptorByID(repl.ReplicaID())
+	if !ok || !replDesc.IsVoterNewConfig() {
+		return false, 0
+	}
 	return lq.planner.ShouldPlanChange(ctx, now, repl, desc, &conf, plan.PlannerOptions{
 		CanTransferLease: lq.canTransferLeaseFrom(ctx, repl, &conf),
 	})
@@ -122,7 +131,7 @@ func (lq *leaseQueue) process(
 	}
 	defer repl.allocatorToken.Release(ctx)
 
-	conf, _, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
+	conf, err := confReader.GetSpanConfigForKey(ctx, repl.startKey)
 	if err != nil {
 		return false, err
 	}
@@ -141,15 +150,17 @@ func (lq *leaseQueue) process(
 		lq.lastLeaseTransfer.Store(timeutil.Now())
 		changeID := lq.as.NonMMAPreTransferLease(
 			ctx,
+			lq.store.StoreID(),
 			desc,
 			transferOp.Usage,
+			(*mmaStore)(lq.store).amplificationFactors(),
 			transferOp.Source,
 			transferOp.Target,
 		)
 		err = repl.AdminTransferLease(ctx, transferOp.Target.StoreID, false /* bypassSafetyChecks */)
 		// Inform allocator sync that the change has been applied which applies
 		// changes to store pool and inform mma.
-		lq.as.PostApply(changeID, err == nil /*success*/)
+		lq.as.PostApply(ctx, changeID, err == nil /*success*/)
 		if err != nil {
 			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, transferOp.Target)
 		}

@@ -10,10 +10,14 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -22,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -48,44 +54,47 @@ func NewJobRunDependencies(
 	statements []string,
 	sessionData *sessiondata.SessionData,
 	kvTrace bool,
+	externalStorageFactory cloud.ExternalStorageFromURIFactory,
 ) scrun.JobRunDependencies {
 	return &jobExecutionDeps{
-		collectionFactory:     collectionFactory,
-		db:                    db,
-		backfiller:            backfiller,
-		spanSplitter:          spanSplitter,
-		merger:                merger,
-		rangeCounter:          rangeCounter,
-		eventLoggerFactory:    eventLoggerFactory,
-		jobRegistry:           jobRegistry,
-		job:                   job,
-		codec:                 codec,
-		settings:              settings,
-		testingKnobs:          testingKnobs,
-		statements:            statements,
-		indexValidator:        indexValidator,
-		commentUpdaterFactory: metadataUpdaterFactory,
-		sessionData:           sessionData,
-		kvTrace:               kvTrace,
-		statsRefresher:        statsRefresher,
-		tableStatsCache:       tableStatsCache,
+		collectionFactory:      collectionFactory,
+		db:                     db,
+		backfiller:             backfiller,
+		spanSplitter:           spanSplitter,
+		merger:                 merger,
+		rangeCounter:           rangeCounter,
+		eventLoggerFactory:     eventLoggerFactory,
+		jobRegistry:            jobRegistry,
+		job:                    job,
+		codec:                  codec,
+		settings:               settings,
+		testingKnobs:           testingKnobs,
+		statements:             statements,
+		indexValidator:         indexValidator,
+		commentUpdaterFactory:  metadataUpdaterFactory,
+		sessionData:            sessionData,
+		kvTrace:                kvTrace,
+		statsRefresher:         statsRefresher,
+		tableStatsCache:        tableStatsCache,
+		externalStorageFactory: externalStorageFactory,
 	}
 }
 
 type jobExecutionDeps struct {
-	collectionFactory     *descs.CollectionFactory
-	db                    descs.DB
-	statsRefresher        scexec.StatsRefresher
-	tableStatsCache       *stats.TableStatisticsCache
-	backfiller            scexec.Backfiller
-	spanSplitter          scexec.IndexSpanSplitter
-	merger                scexec.Merger
-	commentUpdaterFactory MetadataUpdaterFactory
-	rangeCounter          backfiller.RangeCounter
-	eventLoggerFactory    func(isql.Txn) scrun.EventLogger
-	jobRegistry           *jobs.Registry
-	job                   *jobs.Job
-	kvTrace               bool
+	collectionFactory      *descs.CollectionFactory
+	db                     descs.DB
+	statsRefresher         scexec.StatsRefresher
+	tableStatsCache        *stats.TableStatisticsCache
+	backfiller             scexec.Backfiller
+	spanSplitter           scexec.IndexSpanSplitter
+	merger                 scexec.Merger
+	commentUpdaterFactory  MetadataUpdaterFactory
+	rangeCounter           backfiller.RangeCounter
+	eventLoggerFactory     func(isql.Txn) scrun.EventLogger
+	jobRegistry            *jobs.Registry
+	job                    *jobs.Job
+	kvTrace                bool
+	externalStorageFactory cloud.ExternalStorageFromURIFactory
 
 	indexValidator scexec.Validator
 
@@ -112,10 +121,53 @@ func (d *jobExecutionDeps) ClusterSettings() *cluster.Settings {
 func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc) error {
 	var createdJobs []jobspb.JobID
 	var tableStatsToRefresh []descpb.ID
+	// Create cleaner if external storage factory is available.
+	var cleaner *bulkutil.BulkJobCleaner
+	if d.externalStorageFactory != nil {
+		cleaner = bulkutil.NewBulkJobCleaner(d.externalStorageFactory, username.NodeUserName())
+		defer func() {
+			if err := cleaner.Close(); err != nil {
+				log.Dev.Warningf(ctx, "error closing bulk job cleaner: %v", err)
+			}
+		}()
+	}
+
 	err := d.db.DescsTxn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
 		pl := d.job.Payload()
+
+		// Read SST manifests from job info keys. Each backfill progress
+		// entry may have manifests stored separately to avoid bloating
+		// the job payload proto.
+		sc := pl.GetNewSchemaChange()
+		var manifestsMap map[backfiller.BackfillManifestKey][]jobspb.BulkSSTManifest
+		for _, bp := range sc.BackfillProgress {
+			infoKey := backfiller.BackfillSSTManifestsInfoKey(bp.TableID, bp.SourceIndexID)
+			data, err := jobs.ReadChunkedFileToJobInfo(
+				ctx, infoKey, txn, d.job.ID(),
+			)
+			if err != nil {
+				return err
+			}
+			if len(data) > 0 {
+				var stored jobspb.BulkSSTManifests
+				if err := protoutil.Unmarshal(data, &stored); err != nil {
+					return err
+				}
+				if manifestsMap == nil {
+					manifestsMap = make(map[backfiller.BackfillManifestKey][]jobspb.BulkSSTManifest)
+				}
+				key := backfiller.BackfillManifestKey{
+					TableID:       bp.TableID,
+					SourceIndexID: bp.SourceIndexID,
+				}
+				manifestsMap[key] = backfill.AddTenantPrefixToSSTManifests(
+					d.codec, stored.Manifests,
+				)
+			}
+		}
+
 		ed := &execDeps{
 			txnDeps: txnDeps{
 				txn:                txn,
@@ -137,8 +189,11 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				d.codec,
 				d.rangeCounter,
 				d.job,
-				pl.GetNewSchemaChange().BackfillProgress,
-				pl.GetNewSchemaChange().MergeProgress,
+				d.db,
+				sc.BackfillProgress,
+				sc.MergeProgress,
+				cleaner,
+				manifestsMap,
 			),
 			periodicProgressFlusher: backfiller.NewPeriodicProgressFlusherForIndexBackfill(d.settings),
 			statements:              d.statements,
@@ -170,7 +225,7 @@ func (d *jobExecutionDeps) WithTxnInJob(ctx context.Context, fn scrun.JobTxnFunc
 				if err != nil {
 					return err
 				}
-				d.statsRefresher.NotifyMutation(tbl, math.MaxInt32)
+				d.statsRefresher.NotifyMutation(ctx, tbl, math.MaxInt32)
 			}
 			return nil
 		})

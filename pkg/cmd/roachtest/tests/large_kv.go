@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -23,9 +24,13 @@ import (
 
 func registerLargeKV(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:             "storage/large_kv",
-		Owner:            registry.OwnerStorage,
-		Cluster:          r.MakeClusterSpec(1),
+		Name:  "storage/large_kv",
+		Owner: registry.OwnerStorage,
+		Cluster: r.MakeClusterSpec(
+			1,
+			spec.RandomizeVolumeType(),
+			spec.RandomlyUseXfs(),
+		),
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Roachtest),
 		Timeout:          60 * time.Minute,

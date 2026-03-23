@@ -70,6 +70,13 @@ const TimeScaleDropdownWithSearchParams = (
         if (!presetTimescale) {
           return;
         }
+        // Don't dispatch if scale is already set to this preset.
+        if (
+          props.currentScale?.key === presetTimescale &&
+          !props.currentScale?.fixedWindowEnd
+        ) {
+          return;
+        }
         const presetOption = defaultTimeScaleOptions[presetTimescale];
 
         props.setTimeScale({
@@ -137,7 +144,7 @@ const TimeScaleDropdownWithSearchParams = (
     } else {
       // Set query params from the redux store if there aren't any
       // present in the URL.
-      onTimeScaleChange(props.currentScale);
+      updateUrlParams(props.currentScale);
     }
 
     setQueryParamsRead(true);
@@ -146,15 +153,9 @@ const TimeScaleDropdownWithSearchParams = (
     /* eslint react-hooks/exhaustive-deps: "off" */
   }, []);
 
-  // This will get triggered if the redux store updates the
-  // currentScale, we sync the query params to match.
-  useEffect(() => {
-    if (queryParamsRead) {
-      onTimeScaleChange(props.currentScale);
-    }
-  }, [props.currentScale]);
-
-  const onTimeScaleChange = (timeScale: TimeScale) => {
+  // Updates URL params to reflect the current time scale.
+  // Split from onTimeScaleChange to avoid double-dispatch issues.
+  const updateUrlParams = (timeScale: TimeScale) => {
     if (!timeScale.fixedWindowEnd) {
       const preset = findClosestTimeScale(
         defaultTimeScaleOptions,
@@ -185,7 +186,20 @@ const TimeScaleDropdownWithSearchParams = (
         search: urlParams.toString(),
       });
     }
+  };
 
+  // This will get triggered if the redux store updates the
+  // currentScale from an external source (e.g., MetricsTimeManager).
+  // We only sync the query params to match, without calling setTimeScale
+  // again to avoid a double-dispatch issue.
+  useEffect(() => {
+    if (queryParamsRead) {
+      updateUrlParams(props.currentScale);
+    }
+  }, [props.currentScale]);
+
+  const onTimeScaleChange = (timeScale: TimeScale) => {
+    updateUrlParams(timeScale);
     // Pushes changes to the session storage.
     props.setTimeScale(timeScale);
   };

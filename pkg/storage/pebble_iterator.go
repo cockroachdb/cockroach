@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/cockroachkvs"
-	"github.com/cockroachdb/pebble/sstable"
+	"github.com/cockroachdb/pebble/objstorage"
 )
 
 // pebbleIterator is a wrapper around a pebble.Iterator that implements the
@@ -127,7 +127,7 @@ func newPebbleIteratorByCloning(
 
 // newPebbleSSTIterator creates a new Pebble iterator for the given SSTs.
 func newPebbleSSTIterator(
-	files [][]sstable.ReadableFile, opts IterOptions,
+	files [][]objstorage.ReadableFile, opts IterOptions,
 ) (*pebbleIterator, error) {
 	p := pebbleIterPool.Get().(*pebbleIterator)
 	p.reusable = false // defensive

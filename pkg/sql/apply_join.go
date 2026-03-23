@@ -12,11 +12,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsql"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -255,6 +258,7 @@ func (a *applyJoinNode) runNextRightSideIteration(params runParams, leftRow tree
 	rowResultWriter := NewRowResultWriter(&a.run.rightRows)
 	queryStats, err := runPlanInsidePlan(
 		ctx, params, plan, rowResultWriter, nil /* deferredRoutineSender */, "", /* stmtForDistSQLDiagram */
+		nil, /* sqlStatsBuilder */
 	)
 	if err != nil {
 		return err
@@ -273,7 +277,8 @@ func runPlanInsidePlan(
 	resultWriter rowResultWriter,
 	deferredRoutineSender eval.DeferredRoutineSender,
 	stmtForDistSQLDiagram string,
-) (topLevelQueryStats, error) {
+	sqlStatsBuilder *sqlstats.RecordedStatementStatsBuilder,
+) (stats topLevelQueryStats, retErr error) {
 	defer plan.close(ctx)
 	execCfg := params.ExecCfg()
 	recv := MakeDistSQLReceiver(
@@ -310,7 +315,7 @@ func runPlanInsidePlan(
 		// Create a separate memory account for the results of the subqueries.
 		// Note that we intentionally defer the closure of the account until we
 		// return from this method (after the main query is executed).
-		subqueryResultMemAcc := params.p.Mon().MakeBoundAccount()
+		subqueryResultMemAcc := params.p.ExecMon().MakeBoundAccount()
 		defer subqueryResultMemAcc.Close(ctx)
 		// Note that planAndRunSubquery updates recv.stats with top-level
 		// subquery stats.
@@ -328,15 +333,44 @@ func runPlanInsidePlan(
 		}
 	}
 
-	distributePlan, distSQLProhibitedErr := plannerCopy.getPlanDistribution(ctx, plan.main)
+	distributePlan, blockers := plannerCopy.getPlanDistribution(ctx, plan.main, notPostquery)
 	distributeType := DistributionType(LocalDistribution)
 	if distributePlan.WillDistribute() {
 		distributeType = FullDistribution
 	}
 	evalCtx := evalCtxFactory()
 	planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(ctx, evalCtx, &plannerCopy, plannerCopy.txn, distributeType)
-	planCtx.distSQLProhibitedErr = distSQLProhibitedErr
+	planCtx.distSQLBlockers = blockers
 	planCtx.stmtType = recv.stmtType
+	if sqlStatsBuilder != nil && plannerCopy.instrumentation.ShouldSaveFlows() {
+		planCtx.collectExecStats = true
+		planCtx.saveFlows = getDefaultSaveFlowsFunc(ctx, &plannerCopy, planComponentTypeInner)
+		defer func() {
+			if ctx.Err() != nil {
+				// Skip populating ExecStats if we've been canceled.
+				return
+			}
+			sp := tracing.SpanFromContext(ctx)
+			recording := sp.GetRecording(tracingpb.RecordingStructured)
+			if recording.Len() == 0 {
+				return
+			}
+
+			var flowsMetadata []*execstats.FlowsMetadata
+			for _, flowInfo := range plannerCopy.curPlan.distSQLFlowInfos {
+				flowsMetadata = append(flowsMetadata, flowInfo.flowsMetadata)
+			}
+			// TODO(yuzefovich): we might want to update
+			// queryLevelStats.MaxMemUsage with the exec mon's MaxMemUsage, but
+			// that would require having a separate exec monitor for the inner
+			// plan (currently plannerCopy.execMon is the same as used by the
+			// outer plan).
+			queryLevelStats, err := execstats.GetQueryLevelStats(recording, false /* deterministicExplainAnalyze */, flowsMetadata)
+			if err == nil {
+				sqlStatsBuilder.ExecStats(&queryLevelStats)
+			}
+		}()
+	}
 	if params.p.innerPlansMustUseLeafTxn() {
 		planCtx.flowConcurrency = distsql.ConcurrencyWithOuterPlan
 	}

@@ -33,3 +33,22 @@ SELECT * FROM a
 
 statement ok
 COMMIT
+
+# Regression test for https://github.com/cockroachdb/cockroach/issues/135118.
+# Rolling back a savepoint before rolling back the transaction caused the
+# transaction rollback to fail.
+
+statement ok
+BEGIN
+
+statement ok
+SAVEPOINT sp1
+
+statement ok
+INSERT INTO a(id) VALUES (1);
+
+statement ok
+ROLLBACK TO SAVEPOINT sp1
+
+statement ok
+ROLLBACK

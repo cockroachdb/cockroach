@@ -285,9 +285,7 @@ ElementState:
     - 105
     columnFamilyOrderFollowsColumnId: 0
     columnId: 2
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -307,7 +305,6 @@ ElementState:
       tupleLabels: []
       udtMetadata:
         arrayTypeOid: 100105
-      visibleType: 0
       width: 0
     typeName: public.greeting
   Status: PUBLIC
@@ -317,9 +314,7 @@ ElementState:
     - 105
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -340,7 +335,6 @@ ElementState:
         tupleLabels: []
         udtMetadata:
           arrayTypeOid: 100105
-        visibleType: 0
         width: 0
       arrayDimensions: []
       arrayElemType: null
@@ -354,7 +348,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: public.greeting[]
   Status: PUBLIC
@@ -364,9 +357,7 @@ ElementState:
     - 107
     columnFamilyOrderFollowsColumnId: 0
     columnId: 3
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: true
@@ -386,7 +377,6 @@ ElementState:
       tupleLabels: []
       udtMetadata:
         arrayTypeOid: 100107
-      visibleType: 0
       width: 0
     typeName: public.salutation
   Status: PUBLIC
@@ -394,9 +384,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 1
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -415,7 +403,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 64
     typeName: INT8
   Status: PUBLIC
@@ -423,9 +410,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967292e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -444,7 +429,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: DECIMAL
   Status: PUBLIC
@@ -452,9 +436,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967293e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -473,7 +455,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 32
     typeName: INT4
   Status: PUBLIC
@@ -481,9 +462,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967294e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -502,7 +481,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: OID
   Status: PUBLIC
@@ -510,9 +488,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967295e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -531,7 +507,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: DECIMAL
   Status: PUBLIC
@@ -539,9 +514,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 5
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -560,7 +533,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: STRING
   Status: PUBLIC
@@ -673,6 +645,7 @@ ElementState:
     isNotVisible: false
     isUnique: true
     sharding: null
+    skipUniqueChecks: false
     sourceIndexId: 0
     tableId: 108
     temporaryIndexId: 0
@@ -700,6 +673,7 @@ ElementState:
     referencedColumnIds:
     - 2
     sharding: null
+    skipUniqueChecks: false
     sourceIndexId: 0
     tableId: 108
     temporaryIndexId: 0
@@ -797,7 +771,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 64
     typeName: INT8
   Status: PUBLIC
@@ -818,7 +791,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: STRING
   Status: PUBLIC
@@ -1107,9 +1079,7 @@ ElementState:
     - 110
     columnFamilyOrderFollowsColumnId: 0
     columnId: 3
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1140,7 +1110,6 @@ ElementState:
           tupleContents: []
           tupleLabels: []
           udtMetadata: null
-          visibleType: 0
           width: 64
         - arrayContents: null
           arrayDimensions: []
@@ -1155,14 +1124,12 @@ ElementState:
           tupleContents: []
           tupleLabels: []
           udtMetadata: null
-          visibleType: 0
           width: 0
         tupleLabels:
         - a
         - b
         udtMetadata:
           arrayTypeOid: 100110
-        visibleType: 0
         width: 0
       arrayDimensions: []
       arrayElemType: null
@@ -1176,7 +1143,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: public.comp[]
   Status: PUBLIC
@@ -1185,9 +1151,7 @@ ElementState:
     - 109
     columnFamilyOrderFollowsColumnId: 0
     columnId: 2
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1217,7 +1181,6 @@ ElementState:
         tupleContents: []
         tupleLabels: []
         udtMetadata: null
-        visibleType: 0
         width: 64
       - arrayContents: null
         arrayDimensions: []
@@ -1232,14 +1195,12 @@ ElementState:
         tupleContents: []
         tupleLabels: []
         udtMetadata: null
-        visibleType: 0
         width: 0
       tupleLabels:
       - a
       - b
       udtMetadata:
         arrayTypeOid: 100110
-      visibleType: 0
       width: 0
     typeName: public.comp
   Status: PUBLIC
@@ -1248,9 +1209,7 @@ ElementState:
     - 109
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1280,7 +1239,6 @@ ElementState:
         tupleContents: []
         tupleLabels: []
         udtMetadata: null
-        visibleType: 0
         width: 64
       - arrayContents: null
         arrayDimensions: []
@@ -1295,14 +1253,12 @@ ElementState:
         tupleContents: []
         tupleLabels: []
         udtMetadata: null
-        visibleType: 0
         width: 0
       tupleLabels:
       - a
       - b
       udtMetadata:
         arrayTypeOid: 100110
-      visibleType: 0
       width: 0
     typeName: public.comp
   Status: PUBLIC
@@ -1311,9 +1267,7 @@ ElementState:
     - 109
     columnFamilyOrderFollowsColumnId: 0
     columnId: 5
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: true
@@ -1343,7 +1297,6 @@ ElementState:
         tupleContents: []
         tupleLabels: []
         udtMetadata: null
-        visibleType: 0
         width: 64
       - arrayContents: null
         arrayDimensions: []
@@ -1358,14 +1311,12 @@ ElementState:
         tupleContents: []
         tupleLabels: []
         udtMetadata: null
-        visibleType: 0
         width: 0
       tupleLabels:
       - a
       - b
       udtMetadata:
         arrayTypeOid: 100110
-      visibleType: 0
       width: 0
     typeName: public.comp
   Status: PUBLIC
@@ -1373,9 +1324,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 1
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1394,7 +1343,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 64
     typeName: INT8
   Status: PUBLIC
@@ -1402,9 +1350,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967292e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1423,7 +1369,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: DECIMAL
   Status: PUBLIC
@@ -1431,9 +1376,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967293e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1452,7 +1395,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 32
     typeName: INT4
   Status: PUBLIC
@@ -1460,9 +1402,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967294e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1481,7 +1421,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: OID
   Status: PUBLIC
@@ -1489,9 +1428,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967295e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1510,7 +1447,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: DECIMAL
   Status: PUBLIC
@@ -1518,9 +1454,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 6
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1539,7 +1473,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: STRING
   Status: PUBLIC
@@ -1547,9 +1480,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 7
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: true
@@ -1568,7 +1499,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 64
     typeName: INT8
   Status: PUBLIC
@@ -1686,6 +1616,7 @@ ElementState:
     isNotVisible: false
     isUnique: true
     sharding: null
+    skipUniqueChecks: false
     sourceIndexId: 0
     tableId: 111
     temporaryIndexId: 0
@@ -1713,6 +1644,7 @@ ElementState:
     referencedColumnIds:
     - 2
     sharding: null
+    skipUniqueChecks: false
     sourceIndexId: 0
     tableId: 111
     temporaryIndexId: 0

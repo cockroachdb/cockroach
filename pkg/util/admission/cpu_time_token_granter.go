@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2025 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -9,8 +9,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/redact"
 	"github.com/olekukonko/tablewriter"
 )
 
@@ -21,14 +25,44 @@ import (
 //
 // The tier determination for a request happens at a layer outside the admission package.
 //
-// TODO(josh): Add docs re: tentative usage after a discussion with Sumeer.
-//
 // NB: Inter-tenant fair sharing only works within a tier.
 //
-// TODO(josh): Move ths definition to admission.go. Export publicly.
+// TODO(josh): Move this definition to admission.go. Export publicly.
 type resourceTier uint8
 
-const numResourceTiers resourceTier = 2
+const (
+	// systemTenant is the tier associated with all system tenant work.
+	//
+	// Note that currently resourceTier is only used in CPU time token AC, which is
+	// only used in Serverless. So there is always both a system tenant and at least
+	// one app tenant, and customer SQL is run via one of the app tenants.
+	systemTenant resourceTier = iota
+	// appTenant is the tier associated with all app tenant work.
+	//
+	// Note that currently resourceTier is only used in CPU time token AC, which is
+	// only used in Serverless. So there is always both a system tenant and at least
+	// one app tenant, and customer SQL is run via one of the app tenants. All app
+	// tenant work, regardless of which app tenant is used, uses appTenant (that is, all
+	// Serverless customer SQL uses appTenant).
+	appTenant
+	numResourceTiers
+)
+
+func (rt resourceTier) String() string {
+	return redact.StringWithoutMarkers(rt)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rt resourceTier) SafeFormat(s redact.SafePrinter, _ rune) {
+	switch rt {
+	case systemTenant:
+		s.SafeString("system_tenant")
+	case appTenant:
+		s.SafeString("app_tenant")
+	default:
+		s.Printf("resourceTier(%d)", redact.Safe(rt))
+	}
+}
 
 // cpuTimeTokenChildGranter implements granter. It stores resourceTier and proxies
 // proxies to cpuTimeTokenGranter. See the declaration comment for cpuTimeTokenGranter
@@ -94,40 +128,89 @@ func (cg *cpuTimeTokenChildGranter) continueGrantChain(grantChainID grantChainID
 // 6.4 seconds of CPU time per second. In limiting CPU usage to some max, goroutine
 // scheduling latency can be kept low.
 //
-// TODO(josh): Add docs about resourceTier after a discussion with Sumeer.
-//
 // Note that cpuTimeTokenGranter does not handle replenishing the buckets.
 //
 // For more, see the initial design sketch:
 // https://docs.google.com/document/d/1-Kr2gRFTk0QV8kBs7AXRXUwFpK2ZxR1cqIwWCuOx22Q/edit?tab=t.0
-// TODO(josh): Turn into a proper design documnet.
 type cpuTimeTokenGranter struct {
-	requester [numResourceTiers]requester
-	mu        struct {
-		// TODO(josh): I suspect putting the mutex here is better than in
-		// CPUTimeTokenGrantCoordinator, but for now the decision is tentative.
-		// Think better to decice when I put up a PR that introduces
-		// CPUTimeTokenGrantCoordinator & cpuTimeTokenAdjusterNew.
+	requester  [numResourceTiers]requester
+	metrics    *cpuTimeTokenMetrics
+	timeSource timeutil.TimeSource
+	mu         struct {
 		syncutil.Mutex
 		// Invariant #1: For any two buckets A & B, if A has a lower ordinal resourceTier,
 		// then A must have more tokens than B.
 		// Invariant #2: For any two buckets A & B, if A & B have the same resourceTier,
 		// and if A has a lower ordinal burstQualification, then A must have more tokens than B.
 		//
-		// Since admission deducts from all buckets, these invariants are true, so long as token bucket
-		// replenishing respects it also. Token bucket replenishing is not yet implemented. See
-		// tryGrantLocked for a situation where invariant #1 is relied on.
-		buckets [numResourceTiers][numBurstQualifications]tokenBucket
+		// Since admission deducts from all buckets, these invariants are true, so long as token
+		// bucket replenishing respects it also. See tryGrantLocked for a situation where
+		// invariant #1 is relied on.
+		buckets    [numResourceTiers][numBurstQualifications]tokenBucket
+		tokensUsed int64
 	}
 }
 
-// TODO(josh): Make this observable. See here for one approach:
-// https://github.com/cockroachdb/cockroach/commit/06967f5fa72115348d57fc66fe895aec514261d5#diff-6212d039fab53dd464bd989bdbd537947b11d37a9c8fe77ca497870b49e28a9cR367
+func newCPUTimeTokenGranter(
+	metrics *cpuTimeTokenMetrics, timeSource timeutil.TimeSource,
+) *cpuTimeTokenGranter {
+	g := &cpuTimeTokenGranter{metrics: metrics, timeSource: timeSource}
+	// Buckets start at 0 tokens (exhausted) before the first refill, so
+	// initialize exhaustedStart and wire the per-bucket counters.
+	now := timeSource.Now()
+	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
+		for qual := burstQualification(0); qual < numBurstQualifications; qual++ {
+			g.mu.buckets[tier][qual].exhaustedStart = now
+			g.mu.buckets[tier][qual].exhaustedDuration =
+				metrics.ExhaustedDurationNanos[perBucketIdx(tier, qual)]
+		}
+	}
+	return g
+}
+
 type tokenBucket struct {
 	tokens int64
+	// exhaustedStart is the time at which the bucket entered the exhausted
+	// state (tokens <= 0). Zero when the bucket is not exhausted.
+	exhaustedStart time.Time
+	// exhaustedDuration is a cumulative counter of nanoseconds spent exhausted.
+	exhaustedDuration *metric.Counter
+}
+
+// updateTokenCount sets the bucket's token count and updates the
+// exhausted-duration counter based on the transition into or out of the
+// exhausted state (tokens <= 0).
+//
+// Three transitions are handled:
+//  1. wasExhausted && !isExhausted — recovery: flush elapsed time to counter.
+//  2. !wasExhausted && isExhausted — entering exhaustion: record start time.
+//  3. isExhausted && flushToMetricNow — still exhausted but in this case,
+//     updateTokenCount flushes accumulated duration to the counter. This
+//     way, sustained exhaustion is visible in metrics even over shorter
+//     periods such as 1m. flushToMetricNow is set to true on a call to
+//     updateTokenCount once every second.
+func (tb *tokenBucket) updateTokenCount(newTokens int64, now time.Time, flushToMetricNow bool) {
+	wasExhausted := tb.tokens <= 0
+	tb.tokens = newTokens
+	isExhausted := tb.tokens <= 0
+	switch {
+	case wasExhausted && !isExhausted:
+		tb.exhaustedDuration.Inc(now.Sub(tb.exhaustedStart).Nanoseconds())
+		tb.exhaustedStart = time.Time{}
+	case !wasExhausted && isExhausted:
+		tb.exhaustedStart = now
+	case isExhausted && flushToMetricNow:
+		tb.exhaustedDuration.Inc(now.Sub(tb.exhaustedStart).Nanoseconds())
+		tb.exhaustedStart = now
+	}
 }
 
 func (stg *cpuTimeTokenGranter) String() string {
+	return redact.StringWithoutMarkers(stg)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (stg *cpuTimeTokenGranter) SafeFormat(s redact.SafePrinter, _ rune) {
 	stg.mu.Lock()
 	defer stg.mu.Unlock()
 	var buf strings.Builder
@@ -156,7 +239,7 @@ func (stg *cpuTimeTokenGranter) String() string {
 		tw.Append(row[:])
 	}
 	tw.Render()
-	return buf.String()
+	s.SafeString(redact.SafeString(buf.String()))
 }
 
 // tryGet is the helper for implementing granter.tryGet.
@@ -190,9 +273,22 @@ func (stg *cpuTimeTokenGranter) tookWithoutPermission(count int64) {
 }
 
 func (stg *cpuTimeTokenGranter) tookWithoutPermissionLocked(count int64) {
+	stg.mu.tokensUsed += count
+	// Token usage is split into two cumulative counters (consumed and
+	// returned) rather than a single net gauge, so that DD/Prometheus can
+	// compute rate(consumed) - rate(returned) over arbitrary windows
+	// (1m, 30m, etc.).
+	if count > 0 {
+		stg.metrics.TokensConsumed.Inc(count)
+	} else {
+		stg.metrics.TokensReturned.Inc(-count)
+	}
+	now := stg.timeSource.Now()
 	for tier := range stg.mu.buckets {
 		for qual := range stg.mu.buckets[tier] {
-			stg.mu.buckets[tier][qual].tokens -= count
+			newTokenCount := stg.mu.buckets[tier][qual].tokens - count
+			stg.mu.buckets[tier][qual].updateTokenCount(
+				newTokenCount, now, false /* flushToMetricNow */)
 		}
 	}
 }
@@ -245,28 +341,48 @@ func (stg *cpuTimeTokenGranter) tryGrantLocked() bool {
 	return false
 }
 
-// refill adds delta tokens to the corresponding buckets, while respecting
-// the capacity info stored in bucketCapacity. That is, if a bucket is already
-// at capacity, no more tokens will be added. delta is always positive,
-// thus refill will always attempt to grant admission to waiting requests.
+// resetTokensUsedInInterval resets the tracked used tokens to zero. The previous
+// value is returned.
+func (stg *cpuTimeTokenGranter) resetTokensUsedInInterval() int64 {
+	stg.mu.Lock()
+	defer stg.mu.Unlock()
+	tokensUsed := stg.mu.tokensUsed
+	stg.mu.tokensUsed = 0
+	return tokensUsed
+}
+
+// refill adds toAdd tokens to the corresponding buckets, while respecting
+// the capacity info stored in bucketCapacities and enforcing per-bucket
+// minimums from bucketMinimums. Tokens that would bring the bucket above
+// capacity will be discarded, and if the token count is below the minimum,
+// it will be raised to the minimum. The minimums bound recovery time after
+// periods of overuse, preventing a bucket from accumulating unbounded token
+// debt. refill attempts to grant admission to waiting requests in case
+// where tokens are added to some bucket. updateMetrics controls whether
+// gauge and exhausted-duration metrics are updated.
 func (stg *cpuTimeTokenGranter) refill(
-	delta [numResourceTiers][numBurstQualifications]int64,
-	bucketCapacity [numResourceTiers][numBurstQualifications]int64,
+	toAdd tokenCounts, bucketCapacities capacities, bucketMinimums minimums, updateMetrics bool,
 ) {
 	stg.mu.Lock()
 	defer stg.mu.Unlock()
 
-	for wc := range stg.mu.buckets {
-		for kind := range stg.mu.buckets[wc] {
-			tokens := stg.mu.buckets[wc][kind].tokens + delta[wc][kind]
-			if tokens > bucketCapacity[wc][kind] {
-				tokens = bucketCapacity[wc][kind]
+	now := stg.timeSource.Now()
+	var shouldGrant bool
+	for tier := range stg.mu.buckets {
+		for qual := range stg.mu.buckets[tier] {
+			if toAdd[tier][qual] > 0 {
+				shouldGrant = true
 			}
-			stg.mu.buckets[wc][kind].tokens = tokens
+			newTokenCount := stg.mu.buckets[tier][qual].tokens + toAdd[tier][qual]
+			newTokenCount = min(newTokenCount, bucketCapacities[tier][qual])
+			newTokenCount = max(newTokenCount, bucketMinimums[tier][qual])
+			stg.mu.buckets[tier][qual].updateTokenCount(
+				newTokenCount, now, updateMetrics /* flushToMetricNow */)
 		}
 	}
 
-	// delta is always positive, thus refill should always attempt to grant
-	// admission to waiting requests.
-	stg.grantUntilNoWaitingRequestsLocked()
+	// Grant if tokens are added to any of the buckets.
+	if shouldGrant {
+		stg.grantUntilNoWaitingRequestsLocked()
+	}
 }

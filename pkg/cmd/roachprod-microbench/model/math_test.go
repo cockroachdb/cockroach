@@ -117,7 +117,7 @@ func TestCalculateConfidenceInterval(t *testing.T) {
 				}
 			}
 
-			// Calculate confidence interval using the internal method.
+			// Calculate the confidence interval using the internal method.
 			newCI := calculateConfidenceInterval(tc.newValues, tc.oldValues)
 
 			// Assert that the two methods give the same result, within a small tolerance.

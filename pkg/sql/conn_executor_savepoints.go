@@ -410,7 +410,7 @@ func (ex *connExecutor) runShowSavepointState(
 	res.SetColumns(ctx, colinfo.ResultColumns{
 		{Name: "savepoint_name", Typ: types.String},
 		{Name: "is_initial_savepoint", Typ: types.Bool},
-	})
+	}, false /* skipRowDescription */)
 
 	for _, entry := range ex.extraTxnState.savepoints {
 		if err := res.AddRow(ctx, tree.Datums{

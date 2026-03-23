@@ -1,0 +1,92 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+.__actions {
+  button, a {
+    width: auto;
+    color: #f6f6f6;
+    font-size: 12px;
+    font-family: Lato-Bold;
+    line-height: 2;
+    letter-spacing: 0.1px;
+    &:hover {
+      color: #5f6c87;
+    }
+  }
+}
+
+.drawer--preset-black {
+  display: flex;
+  align-items: center;
+  /* width */
+  ::-webkit-scrollbar  {
+    width: 7px;
+  }
+
+
+  /* Track */
+  ::-webkit-scrollbar-track  {
+    background: transparent;
+    border-radius: 10px;
+  }
+
+
+  /* Handle */
+  ::-webkit-scrollbar-thumb  {
+    background: #5f6c87;
+    border-radius: 10px;
+  }
+
+
+  /* Handle on hover */
+  ::-webkit-scrollbar-thumb:hover  {
+    background: #5f6c87ad;
+  }
+  :global(.crdb-ant-divider) {
+    width: 1px;
+    background: #5f6c87;
+    margin: 0 15px;
+    height: 14px;
+  }
+  .__actions {
+    button, a {
+      width: auto;
+      color: #f6f6f6;
+      font-size: 12px;
+      font-family: Lato-Bold;
+      line-height: 2;
+      letter-spacing: 0.1px;
+      &:hover {
+        color: #5f6c87;
+      }
+    }
+  }
+  :global(.crdb-ant-drawer-content) {
+    overflow: auto;
+  }
+  :global(.crdb-ant-drawer-mask) {
+    background-color: transparent;
+  }
+  :global(.crdb-ant-drawer-content-wrapper) {
+    padding-left: 80px;
+    box-shadow: none !important;
+  }
+  :global(.crdb-ant-drawer-content) {
+    background: #242a35;
+  }
+  :global(.crdb-ant-drawer-header) {
+    padding: 15px 0;
+    margin: 0 24px;
+    background: transparent;
+    border-bottom: 1px solid #5f6c87;
+  }
+  :global(.crdb-ant-drawer-body) {
+    padding: 15px 20px;
+    margin: 0 4px;
+    height: 190px;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+}

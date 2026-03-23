@@ -86,13 +86,16 @@ func (c *sortChunksOp) Init(ctx context.Context) {
 	c.sorter.Init(c.Ctx)
 }
 
-func (c *sortChunksOp) Next() coldata.Batch {
+func (c *sortChunksOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := c.sorter.Next()
+		batch, meta := c.sorter.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
 			if c.input.done() {
 				// We're done, so return a zero-length batch.
-				return batch
+				return batch, nil
 			}
 			// We're not yet done - need to process another chunk, so we empty the
 			// chunker's buffer and reset the sorter. Note that we do not want to do
@@ -101,7 +104,7 @@ func (c *sortChunksOp) Next() coldata.Batch {
 			c.input.emptyBuffer()
 			c.sorter.Reset(c.Ctx)
 		} else {
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -316,11 +319,15 @@ func (s *chunker) done() bool {
 // Note: it does not return the batches directly; instead, the chunker
 // remembers where the next chunks to be emitted are actually stored. In order
 // to access the chunks, getValues() must be used.
-func (s *chunker) prepareNextChunks() chunkerReadingState {
+func (s *chunker) prepareNextChunks() (chunkerReadingState, *execinfrapb.ProducerMetadata) {
 	for {
 		switch s.state {
 		case chunkerReading:
-			s.batch = s.Input.Next()
+			var meta *execinfrapb.ProducerMetadata
+			s.batch, meta = s.Input.Next()
+			if meta != nil {
+				return 0, meta
+			}
 			s.exportState.numProcessedTuplesFromBatch = 0
 			if s.batch.Length() == 0 {
 				s.inputDone = true
@@ -403,7 +410,7 @@ func (s *chunker) prepareNextChunks() chunkerReadingState {
 			}
 		case chunkerEmittingFromBuffer:
 			s.state = chunkerEmittingFromBatch
-			return chunkerReadFromBuffer
+			return chunkerReadFromBuffer, nil
 		case chunkerEmittingFromBatch:
 			if s.chunksProcessedIdx < len(s.chunks)-1 {
 				// There is at least one chunk that is fully contained within s.batch.
@@ -414,7 +421,7 @@ func (s *chunker) prepareNextChunks() chunkerReadingState {
 				// with the buffered tuples and emitted.
 				s.chunksStartIdx = s.chunksProcessedIdx
 				s.chunksProcessedIdx = len(s.chunks) - 1
-				return chunkerReadFromBatch
+				return chunkerReadFromBatch, nil
 			} else if s.chunksProcessedIdx == len(s.chunks)-1 {
 				// Other tuples might belong to this chunk, so we buffer it.
 				s.buffer(s.chunks[s.chunksProcessedIdx], s.batch.Length())
@@ -426,7 +433,7 @@ func (s *chunker) prepareNextChunks() chunkerReadingState {
 			} else {
 				// All tuples in s.batch have been emitted.
 				if s.inputDone {
-					return chunkerDone
+					return chunkerDone, nil
 				}
 				colexecerror.InternalError(errors.AssertionFailedf("unexpected: chunkerEmittingFromBatch state" +
 					"when s.chunks is fully processed and input is not done"))
@@ -447,8 +454,10 @@ func (s *chunker) buffer(start int, end int) {
 	s.bufferedTuples.AppendTuples(s.batch, start, end)
 }
 
-func (s *chunker) spool() {
-	s.readFrom = s.prepareNextChunks()
+func (s *chunker) spool() *execinfrapb.ProducerMetadata {
+	var meta *execinfrapb.ProducerMetadata
+	s.readFrom, meta = s.prepareNextChunks()
+	return meta
 }
 
 func (s *chunker) getValues(i int) *coldata.Vec {

@@ -8,6 +8,7 @@ statement ok
 ALTER INDEX t@v SPLIT AT SELECT (i * 10)::int FROM generate_series(1, 4) AS g(i)
 
 # Relocate the five parts to the five nodes.
+retry
 statement ok
 ALTER INDEX t@v EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i+1], (i * 10)::int FROM generate_series(0, 4) AS g(i)
@@ -17,7 +18,7 @@ SELECT start_key, end_key, replicas, lease_holder from [SHOW RANGES FROM INDEX t
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/76>  …/10          {1}       1
+<before:/Table/XX>  …/10          {1}       1
 …/10                …/20          {2}       2
 …/20                …/30          {3}       3
 …/30                …/40          {4}       4
@@ -27,7 +28,6 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: (v > 10) AND (v < 50)
@@ -43,7 +43,6 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM t WHERE v > 10 AND v < 50 ORDER BY v
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +v
@@ -63,7 +62,6 @@ query T
 EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 10 AND v < 50 ORDER BY v
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +v
@@ -83,7 +81,6 @@ query T
 EXPLAIN (DISTSQL) SELECT w FROM t WHERE v > 40 AND v < 50 ORDER BY v
 ----
 distribution: full
-vectorized: true
 ·
 • index join
 │ table: t@t_pkey
@@ -107,7 +104,6 @@ query T
 EXPLAIN SELECT * FROM abc WHERE b between 1 AND 3 ORDER BY c, b LIMIT 2;
 ----
 distribution: full
-vectorized: true
 ·
 • top-k
 │ order: +c,+b
@@ -129,7 +125,6 @@ query T
 EXPLAIN SELECT * FROM abc WHERE b between 1 AND 3 ORDER BY c, b LIMIT 2;
 ----
 distribution: full
-vectorized: true
 ·
 • limit
 │ count: 2

@@ -138,7 +138,7 @@ func (f *fakeFileAllocator) AddFile(ctx context.Context) (objstorage.Writable, s
 }
 
 func (f *fakeFileAllocator) CommitFile(
-	uri string, span roachpb.Span, rowSample roachpb.Key, fileSize uint64,
+	uri string, span roachpb.Span, rowSample roachpb.Key, fileSize uint64, keyCount uint64,
 ) {
 	f.spans = append(f.spans, span)
 }
@@ -433,7 +433,7 @@ func readKeyValuesFromSST(t *testing.T, filename string) []storage.MVCCKeyValue 
 	t.Helper()
 	file, err := vfs.Default.Open(filename, vfs.SequentialReadsOption)
 	require.NoError(t, err)
-	readable, err := sstable.NewSimpleReadable(file)
+	readable, err := objstorage.NewSimpleReadable(file)
 	require.NoError(t, err)
 
 	reader, err := sstable.NewReader(

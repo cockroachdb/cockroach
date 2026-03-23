@@ -19,7 +19,7 @@ write *eventpb.CreateFunction to event log:
     statement: "CREATE FUNCTION ‹defaultdb›.‹public›.‹t›()\n\tRETURNS INT8\n\tLANGUAGE SQL\n\tAS $$SELECT ‹1›;$$"
     tag: CREATE FUNCTION
     user: root
-## StatementPhase stage 1 of 1 with 11 MutationType ops
+## StatementPhase stage 1 of 1 with 12 MutationType ops
 upsert descriptor #105
   -
   +function:
@@ -159,7 +159,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 23 MutationType ops
+## PreCommitPhase stage 2 of 2 with 24 MutationType ops
 upsert descriptor #105
   -
   +function:

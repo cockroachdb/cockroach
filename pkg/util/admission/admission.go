@@ -121,13 +121,13 @@
 package admission
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/redact"
 )
 
 // burstQualification is an optional behavior of certain WorkQueues (which
@@ -139,21 +139,38 @@ import (
 type burstQualification uint8
 
 const (
+	// Order matters here. A higher priority burstQualification must use a
+	// lower ordinal than a lower priority burstQualification (see
+	// tenantHeap.Less for a place where this invariant is relied on).
 	canBurst burstQualification = iota
 	noBurst
 	numBurstQualifications
 )
 
 func (bq burstQualification) String() string {
+	return redact.StringWithoutMarkers(bq)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (bq burstQualification) SafeFormat(s redact.SafePrinter, _ rune) {
 	switch bq {
 	case canBurst:
-		return "canBurst"
+		s.SafeString("can_burst")
 	case noBurst:
-		return "noBurst"
+		s.SafeString("no_burst")
 	default:
-		return fmt.Sprintf("burstQualification(%d)", bq)
+		s.Printf("burstQualification(%d)", bq)
 	}
 }
+
+// Mutex ordering between requester and granter:
+//
+// The requester and granter call into each other. To prevent deadlock due to
+// mutex cycles, any mutex in granter is ordered before any mutex in
+// requester. Therefore, a requester must not hold its own mutex when calling
+// into granter. Of course, a granter could choose to release its own mutex
+// before calling into requester, but it is not necessary for deadlock
+// prevention.
 
 // requester is an interface implemented by an object that orders admission
 // work for a particular WorkKind. See WorkQueue for the implementation of
@@ -244,6 +261,14 @@ type granter interface {
 	continueGrantChain(grantChainID grantChainID)
 }
 
+type granterAndYieldDelayRecorder interface {
+	granter
+
+	// RecordYieldDelay records a delay caused by runtime.Yield(). This is only
+	// relevant for elastic CPU work; other granters can implement this as a no-op.
+	RecordYieldDelay(d time.Duration)
+}
+
 // granterWithLockedCalls is an encapsulation of typically one
 // granter-requester pair. It is used as an internal
 // implementation detail of the GrantCoordinator. An implementer of
@@ -283,28 +308,36 @@ type granterWithLockedCalls interface {
 // The interface is used by the entity that periodically looks at load and
 // computes the tokens to grant (ioLoadListener).
 type granterWithIOTokens interface {
-	// setAvailableTokens bounds the available {io,elastic disk bandwidth} tokens
-	// that can be granted to the value provided in the
-	// {io,elasticDiskBandwidth}Tokens parameter. elasticDiskBandwidthTokens bounds
-	// what can be granted to elastic work, and is based on disk bandwidth being a
-	// bottleneck resource. These are not tight bounds when the callee has negative
-	// available tokens, due to the use of granter.tookWithoutPermission, since in
-	// that the case the callee increments that negative value with the value
-	// provided by tokens. This method needs to be called periodically.
-	// {io, elasticDiskBandwidth}TokensCapacity is the ceiling up to which we allow
-	// elastic or disk bandwidth tokens to accumulate. The return value is the
-	// number of used tokens in the interval since the prior call to this method
-	// (and the tokens used by elastic work). Note that tokensUsed* can be
-	// negative, though that will be rare, since it is possible for tokens to be
-	// returned.
-	setAvailableTokens(
-		ioTokens int64, elasticIOTokens int64, elasticDiskWriteTokens int64, elasticDiskReadTokens int64,
-		ioTokensCapacity int64, elasticIOTokenCapacity int64, elasticDiskWriteTokensCapacity int64,
+	// addAvailableTokens adds the values provided in {io, elasticIO, diskWrite,
+	// diskRead}Tokens parameters to the corresponding token buckets. This
+	// method needs to be called periodically at a high frequency, to
+	// incrementally replenish the token buckets. The {io, elasticIO,
+	// diskWrite}TokensCapacity is the ceiling up to which we allow tokens to
+	// accumulate.
+	//
+	// NB: The "IO" tokens represent flush/compaction capacity into/out of L0
+	// (see kvStoreTokenGranter which is the only non-test implementation of
+	// this interface). It is a made-up term to distinguish it from real disk
+	// write bytes (the latter are after incurring write-amplification).
+	//
+	// The return value is the number of used IO tokens in the interval since
+	// the prior call to this method (and the tokens used by elastic work). Note
+	// that ioTokensUsed* can be negative, though that will be rare, since it is
+	// possible for tokens to be returned.
+	addAvailableTokens(
+		ioTokens int64, elasticIOTokens int64, diskWriteTokens int64, diskReadTokens int64,
+		ioTokensCapacity int64, elasticIOTokenCapacity int64, diskWriteTokensCapacity int64,
 		lastTick bool,
-	) (tokensUsed int64, tokensUsedByElasticWork int64)
+	) (ioTokensUsed int64, ioTokensUsedByElasticWork int64)
 	// getDiskTokensUsedAndReset returns the disk bandwidth tokens used since the
-	// last such call.
-	getDiskTokensUsedAndReset() [admissionpb.NumStoreWorkTypes]diskTokens
+	// last such call, along with the remaining disk write tokens at the end of
+	// the previous interval. A negative value for remainingDiskWriteTokens
+	// indicates overadmission.
+	getDiskTokensUsedAndReset() (
+		usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
+		errStats diskErrorStats,
+		remainingDiskWriteTokens int64,
+	)
 	// setLinearModels supplies the models to use when storeWriteDone or
 	// storeReplicatedWorkAdmittedLocked is called, to adjust token consumption.
 	// Note that these models are not used for token adjustment at admission
@@ -313,6 +346,9 @@ type granterWithIOTokens interface {
 	// of WorkQueue at admission time. See the long explanatory comment at the
 	// beginning of store_token_estimation.go, regarding token estimation.
 	setLinearModels(l0WriteLM, l0IngestLM, ingestLM, writeAmpLM tokensLinearModel)
+	// hadExhaustedIOTokens returns whether the granter has exhausted disk
+	// tokens anytime in the past.
+	hasExhaustedDiskTokens() bool
 }
 
 // granterWithStoreReplicatedWorkAdmitted is used to abstract

@@ -151,6 +151,7 @@ func newTableReader(
 			Spec:                       &spec.FetchSpec,
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+			WorkloadID:                 flowCtx.EvalCtx.WorkloadID,
 		},
 	); err != nil {
 		return nil, err
@@ -347,6 +348,7 @@ func (tr *tableReader) generateMeta() []execinfrapb.ProducerMetadata {
 	meta := execinfrapb.GetProducerMeta()
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = tr.fetcher.GetBytesRead()
+	meta.Metrics.KVCPUTime = tr.fetcher.GetKVCPUTime()
 	meta.Metrics.RowsRead = tr.rowsRead
 	meta.Metrics.StageID = tr.stageID
 	return append(trailingMeta, *meta)

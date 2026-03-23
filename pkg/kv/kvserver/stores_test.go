@@ -129,8 +129,8 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 		rangeID := roachpb.RangeID(i)
 		replicaID := roachpb.ReplicaID(1)
 
-		memEngine := storage.NewDefaultInMemForTesting()
-		stopper.AddCloser(memEngine)
+		memEngine := kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
+		stopper.AddCloser(&memEngine)
 
 		cfg := TestStoreConfig(clock)
 		cfg.Transport = NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, cfg.Clock)
@@ -154,15 +154,11 @@ func TestStoresGetReplicaForRangeID(t *testing.T) {
 			},
 		}
 
-		require.NoError(t, kvstorage.MakeStateLoader(desc.RangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
+		require.NoError(t, kvstorage.MakeStateLoader(desc.RangeID).SetRaftReplicaID(
+			ctx, store.StateEngine(), replicaID))
 		replica, err := loadInitializedReplicaForTesting(ctx, store, desc, replicaID)
-		if err != nil {
-			t.Fatalf("unexpected error when creating replica: %+v", err)
-		}
-		err2 := store.AddReplica(replica)
-		if err2 != nil {
-			t.Fatalf("unexpected error when adding replica: %v", err2)
-		}
+		require.NoError(t, err)
+		require.NoError(t, store.AddReplica(replica))
 	}
 
 	// Test the case where the replica we're looking for exists.
@@ -226,8 +222,8 @@ func createStores(count int) (*timeutil.ManualTime, []*Store, *Stores, *stop.Sto
 	stores := []*Store{}
 	for i := 0; i < count; i++ {
 		cfg.Transport = NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, cfg.Clock)
-		eng := storage.NewDefaultInMemForTesting()
-		stopper.AddCloser(eng)
+		eng := kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
+		stopper.AddCloser(&eng)
 		s := NewStore(context.Background(), cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 		storeIDAlloc++
 		s.Ident = &roachpb.StoreIdent{StoreID: storeIDAlloc}

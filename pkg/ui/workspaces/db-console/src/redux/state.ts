@@ -27,10 +27,10 @@ import { DataFromServer } from "src/util/dataFromServer";
 
 import { initializeAnalytics } from "./analytics";
 import { apiReducersReducer, APIReducersState } from "./apiReducers";
+import { healthReducer, HealthState } from "./health";
 import { hoverReducer, HoverState } from "./hover";
 import { localSettingsReducer, LocalSettingsState } from "./localsettings";
 import { loginReducer, LoginAPIState } from "./login";
-import { metricsReducer, MetricsState } from "./metrics";
 import { queryManagerReducer, QueryManagerState } from "./queryManager/reducer";
 import rootSaga from "./sagas";
 import { timeScaleReducer, TimeScaleState } from "./timeScale";
@@ -40,10 +40,9 @@ import FeatureFlags = cockroach.server.serverpb.FeatureFlags;
 
 export interface AdminUIState {
   cachedData: APIReducersState;
+  health: HealthState;
   hover: HoverState;
   localSettings: LocalSettingsState;
-  metrics: MetricsState;
-
   queryManager: QueryManagerState;
   router: RouterState;
   timeScale: TimeScaleState;
@@ -89,10 +88,9 @@ export function createAdminUIStore(
   const s: Store<AdminUIState> = createStore(
     combineReducers<AdminUIState>({
       cachedData: apiReducersReducer,
+      health: healthReducer,
       hover: hoverReducer,
       localSettings: localSettingsReducer,
-      metrics: metricsReducer,
-
       queryManager: queryManagerReducer,
       router: routerReducer,
       timeScale: timeScaleReducer,

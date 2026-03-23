@@ -64,6 +64,7 @@ show grants on database test;
 ----
 test admin ALL true
 test public CONNECT false
+test public TEMPORARY false
 test root ALL true
 test testuser ZONECONFIG false
 

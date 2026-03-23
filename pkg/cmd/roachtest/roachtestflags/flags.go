@@ -342,6 +342,18 @@ var (
 		Usage: `flag to pass custom labels to pass to openmetrics for performance metrics,`,
 	})
 
+	DatadogSendLogsAnyBranch bool = false
+	_                             = registerRunFlag(&DatadogSendLogsAnyBranch, FlagInfo{
+		Name:  "datadog-send-logs-any-branch",
+		Usage: `Upload roachtest logs to Datadog from any branch. By default, only logs from master and release branches are uploaded.`,
+	})
+
+	DatadogSendLogsAnyResult bool = false
+	_                             = registerRunFlag(&DatadogSendLogsAnyResult, FlagInfo{
+		Name:  "datadog-send-logs-any-result",
+		Usage: `Upload roachtest logs to Datadog regardless of test result. By default, only failed test logs are uploaded.`,
+	})
+
 	DatadogSite string = "us5.datadoghq.com"
 	_                  = registerRunOpsFlag(&DatadogSite, FlagInfo{
 		Name:  "datadog-site",
@@ -390,6 +402,12 @@ var (
 	_                                     = registerRunOpsFlag(&WaitBeforeNextExecution, FlagInfo{
 		Name:  "wait-before-next-execution",
 		Usage: "Interval to wait before the operation next execution after the previous run.",
+	})
+
+	SkipOperations string = ""
+	_                     = registerRunOpsFlag(&SkipOperations, FlagInfo{
+		Name:  "skip",
+		Usage: "A regex pattern for operations to exclude from running.",
 	})
 
 	RunForever bool = false
@@ -458,6 +476,12 @@ var (
 			The http port on which to expose prom metrics from the roachtest
 			process`,
 	})
+	_ = registerRunOpsFlag(&PromPort, FlagInfo{
+		Name: "prom-port",
+		Usage: `
+			The http port on which to expose prom metrics from the roachtest
+			operations runner process`,
+	})
 
 	SelectProbability float64 = 1.0
 	_                         = registerRunFlag(&SelectProbability, FlagInfo{
@@ -505,6 +529,25 @@ var (
 						On Darwin, prevent the system from sleeping while roachtest is running
 						by invoking caffeinate -i -w <pid>. Default is true.`,
 	})
+
+	StartEnv []string
+	_        = registerRunFlag(&StartEnv, FlagInfo{
+		Name: "start-env",
+		Usage: `
+			Environment variable to inject at cluster Start() time. Can be specified
+			multiple times. These are applied before test-specific settings, so tests
+			may override them. Example: --start-env=GODEBUG=gctrace=1`,
+	})
+
+	StartSettings map[string]string
+	_             = registerRunFlag(&StartSettings, FlagInfo{
+		Name: "start-setting",
+		Usage: `
+			Cluster setting to apply at cluster Start() time (key=value format). Can
+			be specified multiple times. These are applied via SQL after cluster
+			startup but before the test body runs, so tests may override them.
+			Example: --start-setting=kv.range_split.by_load_enabled=false`,
+	})
 )
 
 // The flags below override the final cluster configuration. They have no
@@ -523,10 +566,10 @@ var (
 		Usage: `Override use of local SSD`,
 	})
 
-	OverrideFilesystem string
+	OverrideFilesystem vm.Filesystem
 	_                  = registerRunFlag(&OverrideFilesystem, FlagInfo{
 		Name:  "filesystem",
-		Usage: `Override the underlying file system(ext4/zfs)`,
+		Usage: `Override the underlying file system(ext4/zfs/xfs/f2fs/btrfs)`,
 	})
 
 	OverrideNoExt4Barrier bool

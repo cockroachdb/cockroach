@@ -7,7 +7,6 @@ package spanlatch
 
 import (
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -175,12 +174,5 @@ func BenchmarkMultiSelectClosedChan(b *testing.B) {
 		case <-c:
 		case <-c2:
 		}
-	}
-}
-
-func BenchmarkAtomicLoad(b *testing.B) {
-	a := int32(1)
-	for i := 0; i < b.N; i++ {
-		_ = atomic.LoadInt32(&a)
 	}
 }

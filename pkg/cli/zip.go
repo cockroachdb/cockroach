@@ -24,12 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
@@ -216,6 +218,16 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 		return err
 	}
 
+	// Validate excluded log severities.
+	for _, name := range zipCtx.excludeLogSeverities {
+		if _, ok := logpb.SeverityByName(name); !ok {
+			return errors.Newf(
+				"unknown log severity %q; valid values are INFO, WARNING, ERROR, FATAL",
+				name,
+			)
+		}
+	}
+
 	timeout := 60 * time.Second
 	if cliCtx.cmdTimeout != 0 {
 		timeout = cliCtx.cmdTimeout
@@ -229,6 +241,11 @@ func runDebugZip(cmd *cobra.Command, args []string) (retErr error) {
 	// We later print a deprecation warning at the end of the zip operation for visibility.
 	if zipCtx.redactLogs {
 		zipCtx.redact = true
+	}
+
+	if cliCtx.clientOpts.User != username.RootUser {
+		// Error is ignored because PurposeValidation does not return errors.
+		serverCfg.User, _ = username.MakeSQLUsernameFromUserInput(cliCtx.clientOpts.User, username.PurposeValidation)
 	}
 
 	var tenants []*serverpb.Tenant
@@ -553,8 +570,7 @@ func (zc *debugZipContext) dumpTableDataForZip(
 	ctx := context.Background()
 	fileName := sanitizeFilename(table)
 	baseName := path.Join(base, fileName)
-	fileNameWithExtension := fileName + "." + zc.clusterPrinter.sqlOutputFilenameExtension
-	if !zipCtx.files.shouldIncludeFile(fileNameWithExtension) {
+	if !zipCtx.files.shouldIncludeFile(baseName + "." + zc.clusterPrinter.sqlOutputFilenameExtension) {
 		zr.info("skipping table data for %s due to file filters", table)
 		return nil
 	}

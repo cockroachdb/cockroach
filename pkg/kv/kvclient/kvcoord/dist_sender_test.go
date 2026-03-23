@@ -374,12 +374,9 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	// We want to test logic that relies on behavior of CanSendToFollower.
-	// Given we don't want to link that code here, we inject behavior that
-	// says that we can send to a follower if the closed timestamp policy
-	// is LEAD_FOR_GLOBAL_READS.
-	old := CanSendToFollower
-	defer func() { CanSendToFollower = old }()
-	CanSendToFollower = func(
+	// We inject behavior that says that we can send to a follower if the
+	// closed timestamp policy is LEAD_FOR_GLOBAL_READS.
+	canSendToFollower := func(
 		_ context.Context,
 		_ *cluster.Settings,
 		_ *hlc.Clock,
@@ -447,6 +444,7 @@ func TestSendRPCOrder(t *testing.T) {
 		TransportFactory:  transportFactory,
 		RangeDescriptorDB: mockRangeDescriptorDBForDescs(descriptor),
 		Settings:          cluster.MakeTestingClusterSettings(),
+		CanSendToFollower: canSendToFollower,
 		// This test is checking how the different locality settings impact the
 		// choice of routing and number of requests. It needs to route to the
 		// leaseholder first to prevent extra calls.
@@ -966,18 +964,6 @@ func TestNoBackoffOnNotLeaseHolderErrorFromFollowerRead(t *testing.T) {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
-	old := CanSendToFollower
-	defer func() { CanSendToFollower = old }()
-	CanSendToFollower = func(
-		_ context.Context,
-		_ *cluster.Settings,
-		_ *hlc.Clock,
-		_ roachpb.RangeClosedTimestampPolicy,
-		ba *kvpb.BatchRequest,
-	) bool {
-		return true
-	}
-
 	var sentTo []roachpb.NodeID
 	lease := roachpb.Lease{
 		Replica:  testUserRangeDescriptor3Replicas.InternalReplicas[1],
@@ -1016,6 +1002,15 @@ func TestNoBackoffOnNotLeaseHolderErrorFromFollowerRead(t *testing.T) {
 		TransportFactory:  adaptSimpleTransport(testFn),
 		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
+		CanSendToFollower: func(
+			_ context.Context,
+			_ *cluster.Settings,
+			_ *hlc.Clock,
+			_ roachpb.RangeClosedTimestampPolicy,
+			ba *kvpb.BatchRequest,
+		) bool {
+			return true
+		},
 	}
 	ds := NewDistSender(cfg)
 	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
@@ -4252,18 +4247,7 @@ func TestCanSendToFollower(t *testing.T) {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
-	old := CanSendToFollower
-	defer func() { CanSendToFollower = old }()
 	canSend := true
-	CanSendToFollower = func(
-		_ context.Context,
-		_ *cluster.Settings,
-		_ *hlc.Clock,
-		_ roachpb.RangeClosedTimestampPolicy,
-		ba *kvpb.BatchRequest,
-	) bool {
-		return !ba.IsLocking() && canSend
-	}
 
 	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
@@ -4295,6 +4279,15 @@ func TestCanSendToFollower(t *testing.T) {
 			MaxBackoff:     time.Microsecond,
 		},
 		Settings: cluster.MakeTestingClusterSettings(),
+		CanSendToFollower: func(
+			_ context.Context,
+			_ *cluster.Settings,
+			_ *hlc.Clock,
+			_ roachpb.RangeClosedTimestampPolicy,
+			ba *kvpb.BatchRequest,
+		) bool {
+			return !ba.IsLocking() && canSend
+		},
 		// This test is looking at the exact nodes the requests are sent to. If
 		// we send to a follower first, the sentTo node is incorrect.
 		TestingKnobs: ClientTestingKnobs{RouteToLeaseholderFirst: true},

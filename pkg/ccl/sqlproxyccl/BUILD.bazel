@@ -31,7 +31,7 @@ go_library(
         "//pkg/ccl/sqlproxyccl/throttler",
         "//pkg/roachpb",
         "//pkg/security",
-        "//pkg/security/certmgr",
+        "//pkg/security/dyncert",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgwirebase",
         "//pkg/util/cache",

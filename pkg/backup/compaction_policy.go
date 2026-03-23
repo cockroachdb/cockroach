@@ -42,12 +42,14 @@ func minSizeDeltaHeuristic(
 	if windowSize >= len(backupChain) {
 		return 0, 0, errors.New("window size must be less than backup chain length")
 	}
-	dataSizes := make([]int64, len(backupChain))
-	for i := range len(backupChain) {
-		dataSizes[i] = backupChain[i].EntryCounts.DataSize
+	// We do not compact the full backup, so exclude it from the data sizes.
+	dataSizes := make([]int64, len(backupChain)-1)
+	for i := 1; i < len(backupChain); i++ {
+		dataSizes[i-1] = backupChain[i].EntryCounts.DataSize
 	}
 	start, end := minDeltaWindow(dataSizes, windowSize)
-	return start, end, nil
+	// We excluded the full backup, so adjust the indices by 1.
+	return start + 1, end + 1, nil
 }
 
 // minDeltaWindow finds the start and end index of a window that has the minimum

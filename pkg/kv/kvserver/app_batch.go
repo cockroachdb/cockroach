@@ -44,7 +44,7 @@ func (s *appBatchStats) merge(ss appBatchStats) {
 	s.numMutations += ss.numMutations
 	s.numEntriesProcessed += ss.numEntriesProcessed
 	s.numEntriesProcessedBytes += ss.numEntriesProcessedBytes
-	ss.numEmptyEntries += ss.numEmptyEntries
+	s.numEmptyEntries += ss.numEmptyEntries
 	s.numWriteAndIngestedBytes += ss.numWriteAndIngestedBytes
 }
 
@@ -150,7 +150,7 @@ func (b *appBatch) addWriteBatch(
 
 type postAddEnv struct {
 	st          *cluster.Settings
-	eng         storage.Engine
+	eng         storage.Engine // StateEngine
 	sideloaded  logstore.SideloadStorage
 	bulkLimiter *rate.Limiter
 }

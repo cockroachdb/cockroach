@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/repstream"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -38,6 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/idxusage"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -55,6 +58,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -201,9 +205,12 @@ type planner struct {
 		innerPlansMustUseLeafTxn int32
 	}
 
-	// monitor tracks the memory usage of txn-bound objects - for example,
-	// execution operators.
-	monitor *mon.BytesMonitor
+	// txnMon tracks the memory usage of txn-bound objects.
+	txnMon *mon.BytesMonitor
+
+	// execMon tracks the memory usage of a single query planning and execution
+	// step.
+	execMon *mon.BytesMonitor
 
 	// sessionMonitor tracks the memory of session-bound objects. It is currently
 	// only used internally for tracking SQL cursors declared using WITH HOLD.
@@ -223,6 +230,8 @@ type planner struct {
 	pausablePortal *PreparedPortal
 
 	instrumentation instrumentationHelper
+
+	statsCollector *sslocal.StatsCollector
 
 	// Contexts for different stages of planning and execution.
 	semaCtx         tree.SemaContext
@@ -321,6 +330,10 @@ type planner struct {
 	// skipUnsafeInternalsCheck is used to skip the check that the
 	// planner is not used for unsafe internal statements.
 	skipUnsafeInternalsCheck bool
+
+	// usingHintInjection is true if we're passing the rewritten AST with injected
+	// hints into optbuild. It is only set during planning.
+	usingHintInjection bool
 }
 
 // hasFlowForPausablePortal returns true if the planner is for re-executing a
@@ -349,6 +362,11 @@ func (p *planner) resumeFlowForPausablePortal(recv *DistSQLReceiver) error {
 // are set in newInternalPlanner.
 type internalPlannerParams struct {
 	collection *descs.Collection
+	// workloadID and workloadType, when set, are propagated to the
+	// planner's eval context so that DistSQL flows carry workload
+	// attribution for ASH sampling.
+	workloadID   uint64
+	workloadType workloadid.WorkloadType
 }
 
 // InternalPlannerParamsOption is an option that can be passed to
@@ -360,6 +378,20 @@ type InternalPlannerParamsOption func(*internalPlannerParams)
 func WithDescCollection(collection *descs.Collection) InternalPlannerParamsOption {
 	return func(params *internalPlannerParams) {
 		params.collection = collection
+	}
+}
+
+// WithWorkloadInfo propagates workload attribution to the planner's
+// EvalContext so that DistSQL flows carry the workload ID for ASH
+// sampling. Callers that create an internal planner outside of
+// MakeJobExecContext (e.g. job resumers that need a txn-bound planner,
+// or system tasks) should use this option to preserve attribution.
+func WithWorkloadInfo(
+	workloadID uint64, workloadType workloadid.WorkloadType,
+) InternalPlannerParamsOption {
+	return func(params *internalPlannerParams) {
+		params.workloadID = workloadID
+		params.workloadType = workloadType
 	}
 }
 
@@ -436,16 +468,21 @@ func newInternalPlanner(
 		ts = readTimestamp.GoTime()
 	}
 
-	plannerMon := mon.NewMonitor(mon.Options{
+	txnMon := mon.NewMonitor(mon.Options{
 		Name:     mon.MakeName("internal-planner." + opName),
 		CurCount: memMetrics.CurBytesCount,
 		MaxHist:  memMetrics.MaxBytesHist,
 		Settings: execCfg.Settings,
 	})
-	plannerMon.StartNoReserved(ctx, execCfg.RootMemoryMonitor)
+	txnMon.StartNoReserved(ctx, execCfg.RootMemoryMonitor)
+	execMon := mon.NewMonitor(mon.Options{
+		Name:     mon.MakeName("internal-planner.exec." + opName),
+		Settings: execCfg.Settings,
+	})
+	execMon.StartNoReserved(ctx, txnMon)
 
 	p := &planner{execCfg: execCfg, datumAlloc: &tree.DatumAlloc{}}
-	p.resetPlanner(ctx, txn, sd, plannerMon, nil /* sessionMon */)
+	p.resetPlanner(ctx, txn, sd, txnMon, execMon, nil /* sessionMon */)
 
 	smi := sessionmutator.MakeSessionDataMutatorIterator(
 		sds,
@@ -493,8 +530,14 @@ func newInternalPlanner(
 	p.schemaResolver.sessionDataStack = sds
 	p.schemaResolver.txn = p.txn
 	p.schemaResolver.authAccessor = p
-	p.evalCatalogBuiltins.Init(execCfg.Codec, p.txn, p.Descriptors())
+	p.evalCatalogBuiltins.Init(execCfg.Codec, p.txn, p.Descriptors(), p)
 	p.extendedEvalCtx.CatalogBuiltins = &p.evalCatalogBuiltins
+	p.statsCollector = &sslocal.StatsCollector{}
+
+	if params.workloadID != 0 {
+		p.extendedEvalCtx.WorkloadID = params.workloadID
+		p.extendedEvalCtx.WorkloadType = params.workloadType
+	}
 
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create
@@ -510,8 +553,9 @@ func newInternalPlanner(
 			p.Descriptors().ReleaseAll(ctx)
 		}
 
-		// Stop the memory monitor.
-		plannerMon.Stop(ctx)
+		// Stop the memory monitors.
+		execMon.Stop(ctx)
+		txnMon.Stop(ctx)
 	}
 }
 
@@ -607,9 +651,14 @@ func (p *planner) Descriptors() *descs.Collection {
 	return p.extendedEvalCtx.Descs
 }
 
-// Mon is part of the eval.Planner interface.
-func (p *planner) Mon() *mon.BytesMonitor {
-	return p.monitor
+// TxnMon is part of the eval.Planner interface.
+func (p *planner) TxnMon() *mon.BytesMonitor {
+	return p.txnMon
+}
+
+// ExecMon is part of the eval.Planner interface.
+func (p *planner) ExecMon() *mon.BytesMonitor {
+	return p.execMon
 }
 
 // ExecCfg implements the PlanHookState interface.
@@ -966,14 +1015,16 @@ func (p *planner) resetPlanner(
 	ctx context.Context,
 	txn *kv.Txn,
 	sd *sessiondata.SessionData,
-	plannerMon *mon.BytesMonitor,
+	txnMon *mon.BytesMonitor,
+	execMon *mon.BytesMonitor,
 	sessionMon *mon.BytesMonitor,
 ) {
 	p.txn = txn
 	p.stmt = Statement{}
 	p.instrumentation = instrumentationHelper{}
 	p.curPlan = planTop{}
-	p.monitor = plannerMon
+	p.txnMon = txnMon
+	p.execMon = execMon
 	p.sessionMonitor = sessionMon
 
 	p.cancelChecker.Reset(ctx)
@@ -993,7 +1044,7 @@ func (p *planner) resetPlanner(
 
 	p.schemaResolver.txn = txn
 	p.schemaResolver.sessionDataStack = p.EvalContext().SessionDataStack
-	p.evalCatalogBuiltins.Init(p.execCfg.Codec, txn, p.Descriptors())
+	p.evalCatalogBuiltins.Init(p.execCfg.Codec, txn, p.Descriptors(), p)
 	p.skipDescriptorCache = false
 	p.typeResolutionDbID = descpb.InvalidID
 	p.pausablePortal = nil
@@ -1001,6 +1052,8 @@ func (p *planner) resetPlanner(
 	p.autoRetryCounter = 0
 	p.autoRetryStmtReason = nil
 	p.autoRetryStmtCounter = 0
+
+	p.usingHintInjection = false
 }
 
 // GetReplicationStreamManager returns a ReplicationStreamManager.
@@ -1138,7 +1191,82 @@ func (p *planner) ProcessVectorIndexFixups(
 
 // InsertStatementHint is part of the eval.Planner interface.
 func (p *planner) InsertStatementHint(
-	ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion,
+	ctx context.Context,
+	statementFingerprint string,
+	hint hintpb.StatementHintUnion,
+	optDatabase string,
 ) (int64, error) {
-	return hints.InsertHintIntoDB(ctx, p.InternalSQLTxn(), statementFingerprint, hint)
+	return hints.InsertHintIntoDB(
+		ctx, p.execCfg.Settings, p.InternalSQLTxn(), statementFingerprint, hint, optDatabase,
+	)
+}
+
+// DeleteStatementHint is part of the eval.Planner interface.
+func (p *planner) DeleteStatementHint(
+	ctx context.Context, rowID int64, statementFingerprint string,
+) ([]int64, []string, [][]byte, error) {
+	return hints.DeleteHintFromDB(ctx, p.InternalSQLTxn(), rowID, statementFingerprint)
+}
+
+// SetStatementHintEnabled is part of the eval.Planner interface.
+func (p *planner) SetStatementHintEnabled(
+	ctx context.Context, rowID int64, statementFingerprint string, enabled bool,
+) (int64, error) {
+	return hints.SetHintEnabledInDB(
+		ctx, p.execCfg.Settings, p.InternalSQLTxn(), rowID, statementFingerprint, enabled,
+	)
+}
+
+// ValidateSessionVariableHint is part of the eval.Planner interface.
+func (p *planner) ValidateSessionVariableHint(
+	ctx context.Context, varName, varValue string, safeUpdates bool,
+) error {
+	v, ok := varGen[varName]
+	if !ok {
+		return pgerror.Newf(pgcode.UndefinedObject, "unrecognized session variable: %q", varName)
+	}
+	if v.Set == nil && v.SetWithPlanner == nil {
+		return pgerror.Newf(pgcode.InvalidParameterValue,
+			"session variable %q is read-only and cannot be set in a statement hint", varName)
+	}
+	// Validate the value by attempting a dry-run set on a temporary copy of
+	// the session data. This catches invalid values (e.g. non-numeric strings
+	// for integer variables) at hint creation time rather than at execution
+	// time, where errors are silently skipped.
+	if v.Set != nil {
+		sdCopy := *p.SessionData()
+		tempMutator := sessionmutator.SessionDataMutator{
+			Data:                   &sdCopy,
+			SessionDataMutatorBase: p.sessionDataMutatorIterator.SessionDataMutatorBase,
+		}
+		if err := v.Set(ctx, tempMutator, varValue); err != nil {
+			return pgerror.Wrapf(err, pgcode.InvalidParameterValue,
+				"invalid value for session variable %q", varName)
+		}
+	}
+	// For SetWithPlanner-only variables, we skip dry-run validation because
+	// SetWithPlanner requires a fully initialized planner and may have side
+	// effects (e.g. sending client notices). The value will be validated at
+	// hint application time.
+	return nil
+}
+
+// UsingHintInjection is part of the eval.Planner interface.
+func (p *planner) UsingHintInjection() bool {
+	return p.usingHintInjection
+}
+
+// LogEvent is part of the eval.Planner interface.
+func (p *planner) LogEvent(ctx context.Context, event interface{}) error {
+	return p.logEvent(ctx, 0 /* descID */, event.(logpb.EventPayload))
+}
+
+// GetHintIDs is part of the eval.Planner interface.
+func (p *planner) GetHintIDs() []int64 {
+	return p.stmt.HintIDs
+}
+
+// ResetLeaseTimestamp is part of Planner interface.
+func (p *planner) ResetLeaseTimestamp(ctx context.Context) {
+	p.Descriptors().ResetLeaseTimestamp(ctx)
 }

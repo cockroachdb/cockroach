@@ -13,9 +13,8 @@ import (
 
 	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
-	rpcpb "github.com/cockroachdb/cockroach/pkg/rpc/rpcpb"
+	rpcbase "github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	gomock "github.com/golang/mock/gomock"
-	"google.golang.org/grpc"
 )
 
 // MockBatchStreamClient is a mock of BatchStreamClient interface.
@@ -70,103 +69,93 @@ func (mr *MockBatchStreamClientMockRecorder) Send(arg0 interface{}) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Send", reflect.TypeOf((*MockBatchStreamClient)(nil).Send), arg0)
 }
 
-// MockDialbacker is a mock of Dialbacker interface.
-type MockDialbacker struct {
+// MockDialbacker is a mock of the generic Dialbacker[Conn] interface.
+type MockDialbacker[Conn rpcConn] struct {
 	ctrl     *gomock.Controller
-	recorder *MockDialbackerMockRecorder
+	recorder *MockDialbackerMockRecorder[Conn]
 }
 
 // MockDialbackerMockRecorder is the mock recorder for MockDialbacker.
-type MockDialbackerMockRecorder struct {
-	mock *MockDialbacker
+type MockDialbackerMockRecorder[Conn rpcConn] struct {
+	mock *MockDialbacker[Conn]
 }
 
 // NewMockDialbacker creates a new mock instance.
-func NewMockDialbacker(ctrl *gomock.Controller) *MockDialbacker {
-	mock := &MockDialbacker{ctrl: ctrl}
-	mock.recorder = &MockDialbackerMockRecorder{mock}
+func NewMockDialbacker[Conn rpcConn](ctrl *gomock.Controller) *MockDialbacker[Conn] {
+	mock := &MockDialbacker[Conn]{ctrl: ctrl}
+	mock.recorder = &MockDialbackerMockRecorder[Conn]{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockDialbacker) EXPECT() *MockDialbackerMockRecorder {
+func (m *MockDialbacker[Conn]) EXPECT() *MockDialbackerMockRecorder[Conn] {
 	return m.recorder
 }
 
-// GRPCDialNode mocks base method.
-func (m *MockDialbacker) GRPCDialNode(
-	arg0 string, arg1 roachpb.NodeID, arg2 roachpb.Locality, arg3 rpcpb.ConnectionClass,
-) *Connection[*grpc.ClientConn] {
+// UnvalidatedDial mocks base method.
+func (m *MockDialbacker[Conn]) UnvalidatedDial(
+	arg0 string, arg1 roachpb.Locality,
+) *Connection[Conn] {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GRPCDialNode", arg0, arg1, arg2, arg3)
-	ret0, _ := ret[0].(*Connection[*grpc.ClientConn])
+	ret := m.ctrl.Call(m, "UnvalidatedDial", arg0, arg1)
+	ret0, _ := ret[0].(*Connection[Conn])
 	return ret0
 }
 
-// GRPCDialNode indicates an expected call of GRPCDialNode.
-func (mr *MockDialbackerMockRecorder) GRPCDialNode(
+// UnvalidatedDial indicates an expected call of UnvalidatedDial.
+func (mr *MockDialbackerMockRecorder[Conn]) UnvalidatedDial(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCall(mr.mock, "UnvalidatedDial", arg0, arg1)
+}
+
+// DialNode mocks base method.
+func (m *MockDialbacker[Conn]) DialNode(
+	arg0 string, arg1 roachpb.NodeID, arg2 roachpb.Locality, arg3 rpcbase.ConnectionClass,
+) *Connection[Conn] {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DialNode", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(*Connection[Conn])
+	return ret0
+}
+
+// DialNode indicates an expected call of DialNode.
+func (mr *MockDialbackerMockRecorder[Conn]) DialNode(
 	arg0, arg1, arg2, arg3 interface{},
 ) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GRPCDialNode", reflect.TypeOf((*MockDialbacker)(nil).GRPCDialNode), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCall(mr.mock, "DialNode", arg0, arg1, arg2, arg3)
 }
 
-// GRPCUnvalidatedDial mocks base method.
-func (m *MockDialbacker) GRPCUnvalidatedDial(
-	arg0 string, arg1 roachpb.Locality,
-) *Connection[*grpc.ClientConn] {
+// DialRaw mocks base method.
+func (m *MockDialbacker[Conn]) DialRaw(
+	arg0 context.Context, arg1 string, arg2 rpcbase.ConnectionClass,
+) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GRPCUnvalidatedDial", arg0, arg1)
-	ret0, _ := ret[0].(*Connection[*grpc.ClientConn])
+	ret := m.ctrl.Call(m, "DialRaw", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// GRPCUnvalidatedDial indicates an expected call of GRPCUnvalidatedDial.
-func (mr *MockDialbackerMockRecorder) GRPCUnvalidatedDial(arg0, arg1 interface{}) *gomock.Call {
+// DialRaw indicates an expected call of DialRaw.
+func (mr *MockDialbackerMockRecorder[Conn]) DialRaw(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GRPCUnvalidatedDial", reflect.TypeOf((*MockDialbacker)(nil).GRPCUnvalidatedDial), arg0, arg1)
+	return mr.mock.ctrl.RecordCall(mr.mock, "DialRaw", arg0, arg1, arg2)
 }
 
-// grpcDialRaw mocks base method.
-func (m *MockDialbacker) grpcDialRaw(
-	arg0 context.Context,
-	arg1 string,
-	arg2 rpcpb.ConnectionClass,
-	arg3 onDialFunc,
-	arg4 ...grpc.DialOption,
-) (*grpc.ClientConn, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{arg0, arg1, arg2, arg3}
-	for _, a := range arg4 {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "grpcDialRaw", varargs...)
-	ret0, _ := ret[0].(*grpc.ClientConn)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// grpcDialRaw indicates an expected call of grpcDialRaw.
-func (mr *MockDialbackerMockRecorder) grpcDialRaw(
-	arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{},
-) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "grpcDialRaw", reflect.TypeOf((*MockDialbacker)(nil).grpcDialRaw), varargs...)
-}
-
-// wrapCtx mocks base method.
-func (m *MockDialbacker) wrapCtx(
-	arg0 context.Context, arg1 string, arg2 roachpb.NodeID, arg3 rpcpb.ConnectionClass,
+// WrapCtx mocks base method.
+func (m *MockDialbacker[Conn]) WrapCtx(
+	arg0 context.Context, arg1 string, arg2 roachpb.NodeID, arg3 rpcbase.ConnectionClass,
 ) context.Context {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "wrapCtx", arg0, arg1, arg2, arg3)
+	ret := m.ctrl.Call(m, "WrapCtx", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(context.Context)
 	return ret0
 }
 
-// wrapCtx indicates an expected call of wrapCtx.
-func (mr *MockDialbackerMockRecorder) wrapCtx(arg0, arg1, arg2, arg3 interface{}) *gomock.Call {
+// WrapCtx indicates an expected call of WrapCtx.
+func (mr *MockDialbackerMockRecorder[Conn]) WrapCtx(
+	arg0, arg1, arg2, arg3 interface{},
+) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "wrapCtx", reflect.TypeOf((*MockDialbacker)(nil).wrapCtx), arg0, arg1, arg2, arg3)
+	return mr.mock.ctrl.RecordCall(mr.mock, "WrapCtx", arg0, arg1, arg2, arg3)
 }

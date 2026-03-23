@@ -57,9 +57,11 @@ func (b *Builder) buildUDF(
 	}
 
 	// Check for execution privileges for user-defined overloads. Built-in
-	// overloads do not need to be checked.
+	// overloads do not need to be checked. Use checkExecutePrivilegeUser rather
+	// than checkPrivilegeUser so that views (which override checkPrivilegeUser
+	// to the view owner) still check EXECUTE against the invoker.
 	if o.Type == tree.UDFRoutine {
-		if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.checkPrivilegeUser); err != nil {
+		if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.checkExecutePrivilegeUser()); err != nil {
 			panic(err)
 		}
 	}
@@ -194,8 +196,10 @@ func (b *Builder) resolveProcedureDefinition(
 		}
 	}
 
-	// Check for execution privileges.
-	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.checkPrivilegeUser); err != nil {
+	// Check for execution privileges. Use checkExecutePrivilegeUser rather
+	// than checkPrivilegeUser so that views (which override checkPrivilegeUser
+	// to the view owner) still check EXECUTE against the invoker.
+	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.checkExecutePrivilegeUser()); err != nil {
 		panic(err)
 	}
 	return f, def
@@ -356,28 +360,41 @@ func (b *Builder) buildRoutine(
 		insideUDF,
 		insideDataSource,
 		insideSQLRoutine bool,
-		checkPrivilegeUser username.SQLUsername,
+		dataSourcePrivilegeUserOverride,
+		executePrivilegeUserOverride username.SQLUsername,
 	) {
 		b.trackSchemaDeps = trackSchemaDeps
 		b.insideUDF = insideUDF
 		b.insideDataSource = insideDataSource
 		b.insideSQLRoutine = insideSQLRoutine
-		b.checkPrivilegeUser = checkPrivilegeUser
-	}(b.trackSchemaDeps, b.insideUDF, b.insideDataSource, b.insideSQLRoutine, b.checkPrivilegeUser)
+		b.dataSourcePrivilegeUserOverride = dataSourcePrivilegeUserOverride
+		b.executePrivilegeUserOverride = executePrivilegeUserOverride
+	}(b.trackSchemaDeps, b.insideUDF, b.insideDataSource, b.insideSQLRoutine, b.dataSourcePrivilegeUserOverride, b.executePrivilegeUserOverride)
 	oldInsideDataSource := b.insideDataSource
 	b.insideDataSource = false
 	b.trackSchemaDeps = false
 	b.insideUDF = true
 	b.insideSQLRoutine = o.Language == tree.RoutineLangSQL
 	isSetReturning := o.Class == tree.GeneratorClass
-	// If this is a user-defined routine that has a security mode of DEFINER, we
-	// need to override our checkPrivilegeUser to be the owner of the routine.
-	if o.Type != tree.BuiltinRoutine && o.SecurityMode == tree.RoutineDefiner {
-		checkPrivUser, err := b.catalog.GetRoutineOwner(b.ctx, o.Oid)
-		if err != nil {
-			panic(err)
+	if o.Type != tree.BuiltinRoutine {
+		if o.SecurityMode == tree.RoutineDefiner {
+			// SECURITY DEFINER: override both privilege users to the routine
+			// owner, so all privilege checks inside the routine body use the
+			// definer's privileges.
+			checkPrivUser, err := b.catalog.GetRoutineOwner(b.ctx, o.Oid)
+			if err != nil {
+				panic(err)
+			}
+			b.dataSourcePrivilegeUserOverride = checkPrivUser
+			b.executePrivilegeUserOverride = checkPrivUser
+		} else {
+			// SECURITY INVOKER (default): set dataSourcePrivilegeUserOverride to
+			// the invoker. This is necessary because a view may have overridden
+			// dataSourcePrivilegeUserOverride to the view owner, but a
+			// SECURITY INVOKER function called by the view should run with the
+			// invoker's privileges, matching PostgreSQL behavior.
+			b.dataSourcePrivilegeUserOverride = b.executePrivilegeUserOverride
 		}
-		b.checkPrivilegeUser = checkPrivUser
 	}
 
 	// Special handling for set-returning PL/pgSQL functions.
@@ -420,6 +437,7 @@ func (b *Builder) buildRoutine(
 	var bodyProps []*physical.Required
 	var bodyStmts []string
 	var bodyTags []string
+	var bodyASTs []tree.Statement
 	switch o.Language {
 	case tree.RoutineLangSQL:
 		// Parse the function body.
@@ -448,7 +466,7 @@ func (b *Builder) buildRoutine(
 		body = make([]memo.RelExpr, len(stmts))
 		bodyProps = make([]*physical.Required, len(stmts))
 		bodyTags = make([]string, len(stmts))
-
+		bodyASTs = make([]tree.Statement, len(stmts))
 		for i := range stmts {
 			// TODO(michae2): We should be checking the statement hints cache here to
 			// find any external statement hints that could apply to this statement.
@@ -461,6 +479,7 @@ func (b *Builder) buildRoutine(
 			}
 			body[i] = stmtScope.expr
 			bodyProps[i] = stmtScope.makePhysicalProps()
+			bodyASTs[i] = stmts[i].AST
 			// We don't need a statement tag for the artificial appended `SELECT NULL`
 			// statement.
 			if appendedNullForVoidReturn && i == len(stmts)-1 {
@@ -515,6 +534,8 @@ func (b *Builder) buildRoutine(
 		body = []memo.RelExpr{stmtScope.expr}
 		bodyProps = []*physical.Required{stmtScope.makePhysicalProps()}
 		bodyTags = []string{stmt.AST.Label}
+		// The root block is not an explicit statement, so we set the AST to nil.
+		bodyASTs = []tree.Statement{nil}
 		if b.verboseTracing {
 			bodyStmts = []string{stmt.String()}
 		}
@@ -539,6 +560,7 @@ func (b *Builder) buildRoutine(
 				BodyProps:          bodyProps,
 				BodyStmts:          bodyStmts,
 				BodyTags:           bodyTags,
+				BodyASTs:           bodyASTs,
 				Params:             params,
 				ResultBufferID:     resultBufferID,
 			},
@@ -653,6 +675,7 @@ func (b *Builder) finalizeRoutineReturnType(
 // into a single tuple column.
 func (b *Builder) combineRoutineColsIntoTuple(stmtScope *scope) *scope {
 	outScope := stmtScope.push()
+	outScope.copyOrdering(stmtScope)
 	elems := make(memo.ScalarListExpr, len(stmtScope.cols))
 	typContents := make([]*types.T, len(stmtScope.cols))
 	for i := range stmtScope.cols {
@@ -677,6 +700,7 @@ func (b *Builder) expandRoutineTupleIntoCols(stmtScope *scope) *scope {
 	}
 	tupleColID := stmtScope.cols[0].id
 	outScope := stmtScope.push()
+	outScope.copyOrdering(stmtScope)
 	colTyp := b.factory.Metadata().ColumnMeta(tupleColID).Type
 	for i := range colTyp.TupleContents() {
 		varExpr := b.factory.ConstructVariable(tupleColID)
@@ -721,6 +745,7 @@ func (b *Builder) maybeAddRoutineAssignmentCasts(
 		return stmtScope
 	}
 	outScope := stmtScope.push()
+	outScope.copyOrdering(stmtScope)
 	for i, col := range stmtScope.cols {
 		scalar := b.factory.ConstructVariable(col.id)
 		if !col.typ.Identical(desiredTypes[i]) {
@@ -899,6 +924,7 @@ func (b *Builder) buildDo(do *tree.DoBlock, inScope *scope) *scope {
 				Body:        []memo.RelExpr{bodyScope.expr},
 				BodyProps:   []*physical.Required{bodyScope.makePhysicalProps()},
 				BodyStmts:   bodyStmts,
+				BodyASTs:    []tree.Statement{nil},
 			},
 		},
 	)

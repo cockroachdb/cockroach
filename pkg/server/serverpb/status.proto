@@ -298,6 +298,10 @@ message NodeResponse {
   // this parameter is controlled separately.
   // API: PUBLIC ALPHA
   int32 num_cpus = 12;
+
+  // num_vcpus is the number of provisioned vCPUs as reported by
+  // cgroups or the operating system.
+  double num_vcpus = 13;
 }
 
 // RegionsRequest requests all available regions.
@@ -575,6 +579,9 @@ message RangesRequest {
   // redact, if true, requests redaction of sensitive data away
   // from the API response.
   bool redact = 5;
+  // If `problems_only is true, will return response with only
+  // `problems` field populated.
+  bool problems_only = 6;
 }
 
 message RangesResponse {
@@ -769,6 +776,9 @@ message LogFileRequest {
   // Only admin users can send a request with redact = false.
   bool redact = 3;
   reserved 4;
+  // exclude_severities, if non-empty, causes log entries with the
+  // given severities to be filtered out of the response.
+  repeated cockroach.util.log.Severity exclude_severities = 5;
 }
 
 enum StacksType {
@@ -776,6 +786,7 @@ enum StacksType {
   GOROUTINE_STACKS = 0;
   reserved 1;
   GOROUTINE_STACKS_DEBUG_1 = 2;
+  GOROUTINE_STACKS_DEBUG_3 = 3;
 }
 
 message StacksRequest {
@@ -1147,6 +1158,96 @@ message ListSessionsResponse {
   // If set and non-empty, indicates the prefix to application_name
   // used for statements/queries issued internally by CockroachDB.
   string internal_app_name_prefix = 3;
+}
+
+// Request object for ListActiveSessionHistory and
+// ListLocalActiveSessionHistory.
+message ListActiveSessionHistoryRequest {
+  // Maximum number of ASH samples to return per node during fan-out.
+  // ListActiveSessionHistory defaults this to the cluster setting
+  // obs.ash.response_limit when zero; ListLocalActiveSessionHistory
+  // applies it as-is (zero means unlimited).
+  int32 per_node_limit = 1;
+}
+
+// WorkEventType categorizes the type of work event observed during
+// ASH sampling.
+enum WorkEventType {
+  WORK_EVENT_TYPE_UNKNOWN   = 0;
+  WORK_EVENT_TYPE_CPU       = 1;
+  WORK_EVENT_TYPE_ADMISSION = 2;
+  WORK_EVENT_TYPE_IO        = 3;
+  WORK_EVENT_TYPE_NETWORK   = 4;
+  WORK_EVENT_TYPE_LOCK      = 5;
+  WORK_EVENT_TYPE_OTHER     = 6;
+}
+
+// ASHSample represents a single active session history sample.
+message ASHSample {
+  // SampleTime is when this sample was taken.
+  google.protobuf.Timestamp sample_time = 1
+      [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+  // NodeID is the node where this sample was captured.
+  int32 node_id = 2 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  // WorkloadID identifies the workload (e.g., statement fingerprint).
+  string workload_id = 3 [(gogoproto.customname) = "WorkloadID"];
+  // WorkEventType categorizes the work by resource type (e.g., CPU,
+  // NETWORK, LOCK).
+  WorkEventType work_event_type = 4;
+  // WorkEvent is a more specific identifier for the work (e.g.,
+  // "DistSenderLocal").
+  string work_event = 5;
+  // GoroutineID is the ID of the goroutine that was sampled.
+  int64 goroutine_id = 6 [(gogoproto.customname) = "GoroutineID"];
+  // TenantID identifies which tenant this sample belongs to.
+  roachpb.TenantID tenant_id = 7
+      [(gogoproto.nullable) = false, (gogoproto.customname) = "TenantID"];
+  // AppName is the application name string. Set when the sample corresponds
+  // to SQL execution.
+  string app_name = 8;
+  // WorkloadType distinguishes the kind of workload (e.g., "STATEMENT",
+  // "JOB", "SYSTEM", "UNKNOWN").
+  string workload_type = 9;
+}
+
+// An error wrapper for ListActiveSessionHistory fan-out.
+message ListActiveSessionHistoryError {
+  // ID of node that was being contacted when this error occurred.
+  int32 node_id = 1 [
+    (gogoproto.customname) = "NodeID",
+    (gogoproto.casttype) =
+        "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"
+  ];
+  // Error message.
+  string message = 2;
+}
+
+// Response object for ListActiveSessionHistory and
+// ListLocalActiveSessionHistory.
+message ListActiveSessionHistoryResponse {
+  // ASH samples collected from nodes.
+  repeated ASHSample samples = 1 [ (gogoproto.nullable) = false ];
+  // Any errors that occurred during fan-out calls to other nodes.
+  repeated ListActiveSessionHistoryError errors = 2
+      [ (gogoproto.nullable) = false ];
+}
+
+// Request object for retrieving app name ID to string mappings from
+// a node's local cache.
+message AppNameMappingsRequest {
+  // ids is the set of app name IDs to resolve. Only mappings for
+  // these IDs are returned in the response.
+  repeated uint64 ids = 1;
+}
+
+// Response object for AppNameMappings.
+message AppNameMappingsResponse {
+  // mappings is a map from app name ID to the original app name string.
+  map<uint64, string> mappings = 1;
 }
 
 // Request object for issuing a query cancel request.
@@ -1780,6 +1881,22 @@ message StatementDetailsResponse {
     repeated string index_recommendations = 6;
   }
 
+  message StatementPlanDistribution {
+    int64 execution_count = 1;
+    google.protobuf.Timestamp aggregated_ts = 2 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+    uint64 plan_hash = 3;
+    string plan_gist = 4;
+    // canary_execution_count is the number of executions that used canary
+    // (newest) table statistics during the canary experiment.
+    int64 canary_execution_count = 5;
+    // stable_execution_count is the number of executions that used stable
+    // (second-newest) table statistics while the canary experiment was
+    // active. This is tracked explicitly rather than derived from
+    // execution_count - canary_execution_count, because executions where
+    // the canary experiment is off should not count as stable.
+    int64 stable_execution_count = 6;
+  }
+
   // statement returns the total statistics for the statement.
   CollectedStatementSummary statement = 1 [(gogoproto.nullable) = false];
   // statement_statistics_per_aggregated_ts returns the same statement from above, but with its statistics
@@ -1791,6 +1908,9 @@ message StatementDetailsResponse {
   // If set and non-empty, indicates the prefix to application_name
   // used for statements/queries issued internally by CockroachDB.
   string internal_app_name_prefix = 4;
+  // statement_statistics_per_aggregated_ts_and_plan_hash returns execution counts grouped by both
+  // aggregated timestamp and plan hash for visualizing plan distribution over time.
+  repeated StatementPlanDistribution statement_statistics_per_aggregated_ts_and_plan_hash = 5 [(gogoproto.nullable) = false];
 }
 
 message StatementDiagnosticsReport {
@@ -2385,6 +2505,19 @@ service Status {
       get : "/_status/local_sessions"
     };
   }
+
+  // ListActiveSessionHistory retrieves ASH samples across the cluster.
+  rpc ListActiveSessionHistory(ListActiveSessionHistoryRequest)
+      returns (ListActiveSessionHistoryResponse) {}
+
+  // ListLocalActiveSessionHistory retrieves ASH samples on this node.
+  rpc ListLocalActiveSessionHistory(ListActiveSessionHistoryRequest)
+      returns (ListActiveSessionHistoryResponse) {}
+
+  // AppNameMappings retrieves app name ID to string mappings from
+  // this node's local cache for the requested IDs.
+  rpc AppNameMappings(AppNameMappingsRequest)
+      returns (AppNameMappingsResponse) {}
 
   // CancelQuery cancels a SQL query given its ID.
   rpc CancelQuery(CancelQueryRequest) returns (CancelQueryResponse) {

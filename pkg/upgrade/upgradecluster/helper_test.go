@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -53,7 +52,9 @@ func TestHelperEveryNode(t *testing.T) {
 		h := New(ClusterConfig{
 			NodeLiveness: tc,
 			Dialer:       NoopDialer{},
-			Settings:     cluster.MakeClusterSettings(),
+			// UseDRPC is irrelevant here since NoopDialer returns nil for both
+			// Dial and DRPCDial; the dialer is never actually used in these tests.
+			UseDRPC: false,
 		})
 		opCount := 0
 		err := h.UntilClusterStable(ctx, retry.Options{
@@ -93,7 +94,9 @@ func TestHelperEveryNode(t *testing.T) {
 		h := New(ClusterConfig{
 			NodeLiveness: tc,
 			Dialer:       NoopDialer{},
-			Settings:     cluster.MakeClusterSettings(),
+			// UseDRPC is irrelevant here since NoopDialer returns nil for both
+			// Dial and DRPCDial; the dialer is never actually used in these tests.
+			UseDRPC: false,
 		})
 		opCount := 0
 		err := h.UntilClusterStable(ctx, retry.Options{
@@ -134,7 +137,9 @@ func TestHelperEveryNode(t *testing.T) {
 		h := New(ClusterConfig{
 			NodeLiveness: tc,
 			Dialer:       NoopDialer{},
-			Settings:     cluster.MakeClusterSettings(),
+			// UseDRPC is irrelevant here since NoopDialer returns nil for both
+			// Dial and DRPCDial; the dialer is never actually used in these tests.
+			UseDRPC: false,
 		})
 		expRe := "cluster not stable, nodes: n\\{1,2,3\\}, unavailable: n\\{2\\}"
 		opCount := 0

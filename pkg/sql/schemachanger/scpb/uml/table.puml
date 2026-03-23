@@ -93,7 +93,6 @@ ColumnType :  TableID
 ColumnType :  FamilyID
 ColumnType :  ColumnID
 ColumnType :  TypeT
-ColumnType :  ComputeExpr
 ColumnType :  IsVirtual
 ColumnType :  ElementCreationMetadata
 ColumnType :  ColumnFamilyOrderFollowsColumnID
@@ -222,6 +221,12 @@ object FunctionNullInputBehavior
 
 FunctionNullInputBehavior :  FunctionID
 FunctionNullInputBehavior :  NullInputBehavior
+
+object FunctionParams
+
+FunctionParams :  FunctionID
+FunctionParams : []Params
+FunctionParams :  ReturnType
 
 object FunctionSecurity
 
@@ -366,6 +371,7 @@ object RowLevelTTL
 RowLevelTTL :  TableID
 RowLevelTTL :  RowLevelTTL
 RowLevelTTL :  TTLExpr
+RowLevelTTL :  SeqNum
 
 object Schema
 
@@ -416,6 +422,18 @@ SequenceOwner :  SequenceID
 SequenceOwner :  TableID
 SequenceOwner :  ColumnID
 
+object SequenceValue
+
+SequenceValue :  SequenceID
+SequenceValue :  PrevIncrement
+SequenceValue :  UpdatedIncrement
+SequenceValue :  PrevMinValue
+SequenceValue :  UpdatedMinValue
+SequenceValue :  PrevMaxValue
+SequenceValue :  UpdatedMaxValue
+SequenceValue :  PrevStart
+SequenceValue :  UpdatedStart
+
 object Table
 
 Table :  TableID
@@ -463,6 +481,12 @@ object TableSchemaLocked
 
 TableSchemaLocked :  TableID
 
+object TableStorageParam
+
+TableStorageParam :  TableID
+TableStorageParam :  Name
+TableStorageParam :  Value
+
 object TableZoneConfig
 
 TableZoneConfig :  TableID
@@ -493,7 +517,6 @@ object TriggerEnabled
 
 TriggerEnabled :  TableID
 TriggerEnabled :  TriggerID
-TriggerEnabled :  Enabled
 
 object TriggerEvents
 
@@ -608,6 +631,7 @@ Function <|-- FunctionBody
 Function <|-- FunctionLeakProof
 Function <|-- FunctionName
 Function <|-- FunctionNullInputBehavior
+Function <|-- FunctionParams
 Function <|-- FunctionSecurity
 Function <|-- FunctionVolatility
 PrimaryIndex <|-- IndexColumn
@@ -662,6 +686,7 @@ Table <|-- SecondaryIndex
 View <|-- SecondaryIndex
 Sequence <|-- SequenceOption
 Column <|-- SequenceOwner
+Sequence <|-- SequenceValue
 Table <|-- TableComment
 View <|-- TableComment
 Sequence <|-- TableComment
@@ -675,6 +700,7 @@ Table <|-- TableLocalityRegionalByRowUsingConstraint
 Table <|-- TableLocalitySecondaryRegion
 Table <|-- TablePartitioning
 Table <|-- TableSchemaLocked
+Table <|-- TableStorageParam
 Table <|-- TableZoneConfig
 View <|-- TableZoneConfig
 Table <|-- TemporaryIndex

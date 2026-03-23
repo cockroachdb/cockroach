@@ -15,6 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -113,6 +115,21 @@ type IntentResolver interface {
 func (w *lockTableWaiterImpl) WaitOn(
 	ctx context.Context, req Request, guard lockTableGuard,
 ) *Error {
+	tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+	var info ash.WorkloadInfo
+	if req.Batch != nil {
+		info = ash.WorkloadInfo{
+			WorkloadID:    req.Batch.WorkloadID,
+			AppNameID:     req.Batch.AppNameID,
+			GatewayNodeID: req.Batch.GatewayNodeID,
+			WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
+		}
+	}
+	cleanup := ash.SetWorkState(
+		tenantID, info,
+		ash.WorkLock, "LockWait")
+	defer cleanup()
+
 	newStateC := guard.NewStateChan()
 	ctxDoneC := ctx.Done()
 	shouldQuiesceC := w.stopper.ShouldQuiesce()
@@ -256,11 +273,11 @@ func (w *lockTableWaiterImpl) WaitOn(
 				if req.LockTimeout != 0 {
 					return doWithTimeoutAndFallback(
 						ctx, req.LockTimeout,
-						func(ctx context.Context) *Error { return w.pushLockTxn(ctx, req, state) },
-						func(ctx context.Context) *Error { return w.pushLockTxnAfterTimeout(ctx, req, state) },
+						func(ctx context.Context) *Error { return w.pushLockTxn(ctx, req, state, guard) },
+						func(ctx context.Context) *Error { return w.pushLockTxnAfterTimeout(ctx, req, state, guard) },
 					)
 				}
-				return w.pushLockTxn(ctx, req, state)
+				return w.pushLockTxn(ctx, req, state, guard)
 
 			case waitSelf:
 				// Another request from the same transaction has claimed the lock (but
@@ -357,7 +374,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 					// edges in the local portion of its dependency graph for deadlock
 					// detection, as doing so is cheaper that finding out the same
 					// information using (QueryTxnRequest) RPCs.
-					err = w.pushLockTxn(pushCtx, req, timerWaitingState)
+					err = w.pushLockTxn(pushCtx, req, timerWaitingState, guard)
 				} else {
 					// The request conflicts with another request that's claimed an unheld
 					// lock. The conflicting request may exit the lock table without
@@ -383,7 +400,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 			pushNoWait := func(ctx context.Context) *Error {
 				// Resolve the conflict without waiting by pushing the lock holder's
 				// transaction.
-				return w.pushLockTxnAfterTimeout(ctx, req, timerWaitingState)
+				return w.pushLockTxnAfterTimeout(ctx, req, timerWaitingState, guard)
 			}
 
 			// We push with or without the option to wait on the conflict,
@@ -391,7 +408,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 			// and depending on the wait policy.
 			var err *Error
 			if req.WaitPolicy == lock.WaitPolicy_Error {
-				err = w.pushLockTxn(ctx, req, timerWaitingState)
+				err = w.pushLockTxn(ctx, req, timerWaitingState, guard)
 			} else if !lockDeadline.IsZero() {
 				untilDeadline := w.timeUntilDeadline(lockDeadline)
 				if untilDeadline == 0 {
@@ -434,7 +451,7 @@ func (w *lockTableWaiterImpl) WaitOn(
 // expect to have an updated waitingState. Otherwise, the method returns with a
 // WriteIntentError and without blocking on the lock holder transaction.
 func (w *lockTableWaiterImpl) pushLockTxn(
-	ctx context.Context, req Request, ws waitingState,
+	ctx context.Context, req Request, ws waitingState, guard lockTableGuard,
 ) *Error {
 	if w.disableTxnPushing {
 		return newWriteIntentErr(req, ws, reasonWaitPolicy)
@@ -442,14 +459,14 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 
 	// Construct the request header and determine which form of push to use.
 	h := w.pushHeader(req)
+	beforePushObs := roachpb.ObservedTimestamp{
+		NodeID:    w.nodeDesc.NodeID,
+		Timestamp: w.clock.NowAsClockTimestamp(),
+	}
+
 	var pushType kvpb.PushTxnType
-	var beforePushObs roachpb.ObservedTimestamp
 	if ws.guardStrength == lock.None {
 		pushType = kvpb.PUSH_TIMESTAMP
-		beforePushObs = roachpb.ObservedTimestamp{
-			NodeID:    w.nodeDesc.NodeID,
-			Timestamp: w.clock.NowAsClockTimestamp(),
-		}
 		// TODO(nvanbenschoten): because information about the local_timestamp
 		// leading the MVCC timestamp of an intent is lost, we also need to push
 		// the intent up to the top of the transaction's local uncertainty limit
@@ -482,7 +499,7 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 	// If the transaction was pushed, add it to the txnStatusCache. This avoids
 	// needing to push it again if we find another one of its locks and allows for
 	// batching of intent resolution.
-	w.lt.PushedTransactionUpdated(pusheeTxn)
+	w.lt.PushedTransactionUpdated(pusheeTxn, beforePushObs)
 
 	// If the push succeeded then the lock holder transaction must have
 	// experienced a state transition such that it no longer conflicts with
@@ -602,6 +619,13 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 		// after the reader's read timestamp surpasses its global uncertainty limit.
 		resolve.ClockWhilePending = beforePushObs
 	}
+	// If the guard resolves intents virtually, add the lock update to the
+	// guard's toResolve list and signal it to rescan. The guard will skip the
+	// lock on rescan and carry the resolution through to evaluation.
+	if guard.VirtuallyResolvesIntents() {
+		guard.AddReplicatedToResolveAndSignal(resolve)
+		return nil
+	}
 	logResolveIntent(ctx, resolve)
 	opts := intentresolver.ResolveOptions{Poison: true, AdmissionHeader: req.AdmissionHeader}
 	return w.ir.ResolveIntent(ctx, resolve, opts)
@@ -613,10 +637,10 @@ func (w *lockTableWaiterImpl) pushLockTxn(
 // elapsed, and returns a WriteIntentErrors with a LOCK_TIMEOUT reason if the
 // lock holder is not abandoned.
 func (w *lockTableWaiterImpl) pushLockTxnAfterTimeout(
-	ctx context.Context, req Request, ws waitingState,
+	ctx context.Context, req Request, ws waitingState, guard lockTableGuard,
 ) *Error {
 	req.WaitPolicy = lock.WaitPolicy_Error
-	err := w.pushLockTxn(ctx, req, ws)
+	err := w.pushLockTxn(ctx, req, ws, guard)
 	if _, ok := err.GetDetail().(*kvpb.WriteIntentError); ok {
 		err = newWriteIntentErr(req, ws, reasonLockTimeout)
 	}
@@ -849,21 +873,21 @@ type txnStatusCache struct {
 	// pushed and found to be finalized (COMMITTED or ABORTED). It is used as an
 	// optimization to avoid repeatedly pushing the transaction record when
 	// cleaning up the intents of an abandoned transaction.
-	finalizedTxns txnCache
+	finalizedTxns finalizedTxnCache
 
 	// pendingTxns is a small LRU cache that tracks transactions whose minimum
 	// commit timestamp was pushed but whose final status is not yet known. It is
-	// used an an optimization to avoid repeatedly pushing the transaction record
+	// used as an optimization to avoid repeatedly pushing the transaction record
 	// when transaction priorities allow a pusher to move many intents of a
 	// lower-priority transaction.
-	pendingTxns txnCache
+	pendingTxns pendingTxnCache
 }
 
-func (c *txnStatusCache) add(txn *roachpb.Transaction) {
+func (c *txnStatusCache) add(txn *roachpb.Transaction, pendingAt roachpb.ObservedTimestamp) {
 	if txn.Status.IsFinalized() {
 		c.finalizedTxns.add(txn)
 	} else {
-		c.pendingTxns.add(txn)
+		c.pendingTxns.add(txn, pendingAt)
 	}
 }
 
@@ -872,15 +896,17 @@ func (c *txnStatusCache) clear() {
 	c.pendingTxns.clear()
 }
 
-// txnCache is a small LRU cache that holds Transaction objects.
+// finalizedTxnCache is a small LRU cache that holds finalized Transaction
+// objects (COMMITTED or ABORTED). Since finalized transactions don't need
+// clock observations for uncertainty checks, we only store the Transaction.
 //
 // The zero value of this struct is ready for use.
-type txnCache struct {
+type finalizedTxnCache struct {
 	mu   syncutil.Mutex
 	txns [8]*roachpb.Transaction // [MRU, ..., LRU]
 }
 
-func (c *txnCache) get(id uuid.UUID) (*roachpb.Transaction, bool) {
+func (c *finalizedTxnCache) get(id uuid.UUID) (*roachpb.Transaction, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if idx := c.getIdxLocked(id); idx >= 0 {
@@ -891,22 +917,21 @@ func (c *txnCache) get(id uuid.UUID) (*roachpb.Transaction, bool) {
 	return nil, false
 }
 
-func (c *txnCache) add(txn *roachpb.Transaction) {
+func (c *finalizedTxnCache) add(txn *roachpb.Transaction) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if idx := c.getIdxLocked(txn.ID); idx >= 0 {
-		if curTxn := c.txns[idx]; txn.WriteTimestamp.Less(curTxn.WriteTimestamp) {
-			// If the new txn has a lower write timestamp than the cached txn,
-			// just move the cached txn to the front of the LRU cache.
-			txn = curTxn
+		curTxn := c.txns[idx]
+		if !txn.WriteTimestamp.Less(curTxn.WriteTimestamp) {
+			curTxn = txn
 		}
-		c.moveFrontLocked(txn, idx)
+		c.moveFrontLocked(curTxn, idx)
 	} else {
 		c.insertFrontLocked(txn)
 	}
 }
 
-func (c *txnCache) clear() {
+func (c *finalizedTxnCache) clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for i := range c.txns {
@@ -914,7 +939,7 @@ func (c *txnCache) clear() {
 	}
 }
 
-func (c *txnCache) getIdxLocked(id uuid.UUID) int {
+func (c *finalizedTxnCache) getIdxLocked(id uuid.UUID) int {
 	for i, txn := range c.txns {
 		if txn != nil && txn.ID == id {
 			return i
@@ -923,14 +948,110 @@ func (c *txnCache) getIdxLocked(id uuid.UUID) int {
 	return -1
 }
 
-func (c *txnCache) moveFrontLocked(txn *roachpb.Transaction, cur int) {
+func (c *finalizedTxnCache) moveFrontLocked(txn *roachpb.Transaction, cur int) {
 	copy(c.txns[1:cur+1], c.txns[:cur])
 	c.txns[0] = txn
 }
 
-func (c *txnCache) insertFrontLocked(txn *roachpb.Transaction) {
+func (c *finalizedTxnCache) insertFrontLocked(txn *roachpb.Transaction) {
 	copy(c.txns[1:], c.txns[:])
 	c.txns[0] = txn
+}
+
+// pendingTxnCache is a small LRU cache that holds pending Transaction objects
+// along with clock observations captured when the transaction was pushed. The
+// clock observation is used by readers with uncertainty intervals to determine
+// if cached push results can be reused.
+//
+// The zero value of this struct is ready for use.
+type pendingTxnCache struct {
+	mu     syncutil.Mutex
+	nodeID roachpb.NodeID           // set on first add, asserted thereafter
+	txns   [8]*pendingTxnCacheEntry // [MRU, ..., LRU]
+}
+
+// pendingTxnCacheEntry holds a pending transaction and the clock observation
+// captured when the transaction was pushed. The clock observation allows
+// readers with uncertainty intervals to reuse cached push results if their
+// observed timestamp on this node is <= ClockWhilePending.
+type pendingTxnCacheEntry struct {
+	Txn               *roachpb.Transaction
+	ClockWhilePending roachpb.ObservedTimestamp
+}
+
+func (c *pendingTxnCache) get(id uuid.UUID) (*pendingTxnCacheEntry, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if idx := c.getIdxLocked(id); idx >= 0 {
+		entry := c.txns[idx]
+		c.moveFrontLocked(entry, idx)
+		return entry, true
+	}
+	return nil, false
+}
+
+func (c *pendingTxnCache) add(
+	txn *roachpb.Transaction, clockObservation roachpb.ObservedTimestamp,
+) {
+	assert(!clockObservation.Timestamp.IsEmpty(), "pendingTxnCache: clock observation must be non-empty")
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// All observations must come from the same node.
+	if c.nodeID == 0 {
+		c.nodeID = clockObservation.NodeID
+	}
+	assert(clockObservation.NodeID == c.nodeID, "pendingTxnCache: unexpected NodeID")
+
+	if idx := c.getIdxLocked(txn.ID); idx >= 0 {
+		currentEntry := c.txns[idx]
+		newEntry := *currentEntry
+		assert(!currentEntry.ClockWhilePending.Timestamp.IsEmpty(), "pendingTxnCache: cache entry without clock observation")
+		assert(clockObservation.NodeID == currentEntry.ClockWhilePending.NodeID, "pendingTxnCache: NodeID mismatch on update")
+
+		// Only update the cached transaction if the inbound copy has a newer
+		// WriteTimestamp.
+		if currentEntry.Txn.WriteTimestamp.Less(txn.WriteTimestamp) {
+			newEntry.Txn = txn
+		}
+
+		// Always keep the latest ClockWhilePending available.
+		if currentEntry.ClockWhilePending.Timestamp.Less(clockObservation.Timestamp) {
+			newEntry.ClockWhilePending = clockObservation
+		}
+		c.moveFrontLocked(&newEntry, idx)
+	} else {
+		c.insertFrontLocked(&pendingTxnCacheEntry{Txn: txn, ClockWhilePending: clockObservation})
+	}
+}
+
+func (c *pendingTxnCache) clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.nodeID = 0
+	for i := range c.txns {
+		c.txns[i] = nil
+	}
+}
+
+func (c *pendingTxnCache) getIdxLocked(id uuid.UUID) int {
+	for i, entry := range c.txns {
+		if entry != nil && entry.Txn.ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+func (c *pendingTxnCache) moveFrontLocked(entry *pendingTxnCacheEntry, cur int) {
+	copy(c.txns[1:cur+1], c.txns[:cur])
+	c.txns[0] = entry
+}
+
+func (c *pendingTxnCache) insertFrontLocked(entry *pendingTxnCacheEntry) {
+	copy(c.txns[1:], c.txns[:])
+	c.txns[0] = entry
 }
 
 // tagContentionTracer is the tracing span tag that the *contentionEventTracer

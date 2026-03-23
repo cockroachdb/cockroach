@@ -37,6 +37,9 @@ const (
 	WindowedHistogramWrapNum = 2
 	// CardinalityLimit is the max number of distinct label values combinations for any given MetricVec.
 	CardinalityLimit = 2000
+	// HighCardinalityMetricsLimit is the max number of distinct label values combinations for any given
+	//HighCardinality metrics.
+	HighCardinalityMetricsLimit = 5000
 )
 
 // Maintaining a list of static label names here to avoid duplication and
@@ -49,6 +52,8 @@ const (
 	LabelName            = "name"
 	LabelType            = "type"
 	LabelLevel           = "level"
+	LabelOrigin          = "origin"
+	LabelResult          = "result"
 )
 
 type LabelConfig uint64
@@ -104,6 +109,7 @@ type PrometheusExportable interface {
 type PrometheusVector interface {
 	PrometheusCompatible
 	ToPrometheusMetrics() []*prometheusgo.Metric
+	Delete(labels map[string]string) bool
 }
 
 // PrometheusIterable is an extension of PrometheusExportable to indicate that
@@ -230,25 +236,39 @@ func (m *Metadata) GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair {
 	return lps
 }
 
+// Returns the value for TsdbRecordLabeled,
+// defaults to True when it is not supplied.
+func (m *Metadata) GetTsdbRecordLabeled() bool {
+	if m.TsdbRecordLabeled == nil {
+		return true
+	}
+	return *m.TsdbRecordLabeled
+}
+
 // AddLabel adds a label/value pair for this metric.
 func (m *Metadata) AddLabel(name, value string) {
 	m.Labels = append(m.Labels,
 		&LabelPair{
-			Name:  proto.String(exportedLabel(name)),
+			Name:  proto.String(ExportedLabel(name)),
 			Value: proto.String(value),
 		})
 }
 
 var _ Iterable = &Gauge{}
+var _ Iterable = &DerivedGauge{}
+var _ Iterable = &FunctionalGauge{}
 var _ Iterable = &GaugeFloat64{}
 var _ Iterable = &Counter{}
 var _ Iterable = &UniqueCounter{}
 var _ Iterable = &CounterFloat64{}
 var _ Iterable = &GaugeVec{}
+var _ Iterable = &DerivedGaugeVec{}
 var _ Iterable = &CounterVec{}
 var _ Iterable = &HistogramVec{}
 
 var _ json.Marshaler = &Gauge{}
+var _ json.Marshaler = &DerivedGauge{}
+var _ json.Marshaler = &FunctionalGauge{}
 var _ json.Marshaler = &GaugeFloat64{}
 var _ json.Marshaler = &Counter{}
 var _ json.Marshaler = &UniqueCounter{}
@@ -256,12 +276,15 @@ var _ json.Marshaler = &CounterFloat64{}
 var _ json.Marshaler = &Registry{}
 
 var _ PrometheusExportable = &Gauge{}
+var _ PrometheusExportable = &DerivedGauge{}
+var _ PrometheusExportable = &FunctionalGauge{}
 var _ PrometheusExportable = &GaugeFloat64{}
 var _ PrometheusExportable = &Counter{}
 var _ PrometheusExportable = &UniqueCounter{}
 var _ PrometheusExportable = &CounterFloat64{}
 
 var _ PrometheusVector = &GaugeVec{}
+var _ PrometheusVector = &DerivedGaugeVec{}
 var _ PrometheusVector = &CounterVec{}
 var _ PrometheusVector = &HistogramVec{}
 
@@ -320,6 +343,14 @@ const nativeHistogramsBucketCountMultiplierEnvVar = "COCKROACH_PROMETHEUS_NATIVE
 
 var nativeHistogramsBucketCountMultiplier = envutil.EnvOrDefaultFloat64(nativeHistogramsBucketCountMultiplierEnvVar, 1)
 
+// maxLabelValuesEnvVar can be used to configure the maximum number of distinct
+// label value combinations for high cardinality metrics before eviction starts.
+const maxLabelValuesEnvVar = "COCKROACH_HIGH_CARDINALITY_METRICS_MAX_LABEL_VALUES"
+
+// MaxLabelValues is the configured maximum number of distinct label value combinations
+// for high cardinality metrics before eviction starts, read from the environment variable.
+var MaxLabelValues = envutil.EnvOrDefaultInt(maxLabelValuesEnvVar, 10000)
+
 type HistogramMode byte
 
 const (
@@ -341,6 +372,17 @@ const (
 	// HdrHistogram model, since suitable defaults are used for both.
 	HistogramModePreferHdrLatency
 )
+
+// HighCardinalityMetricOptions defines the configuration options for high cardinality metrics
+// (Counter, Gauge, Histogram) that use cache storage. This allows fine-grained control over
+// eviction policies to manage memory usage for metrics with many distinct label combinations.
+type HighCardinalityMetricOptions struct {
+	// MaxLabelValues sets the maximum number of distinct label value combinations
+	// that can be stored in the cache before eviction starts. When this limit is reached,
+	// the cache will evict entries based on the configured eviction policy.
+	// If set to 0, the default 5000 value is used.
+	MaxLabelValues int
+}
 
 type HistogramOptions struct {
 	// Metadata is the metric Metadata associated with the histogram.
@@ -366,6 +408,9 @@ type HistogramOptions struct {
 	// Mode defines the type of histogram to be used. See individual
 	// comments on each HistogramMode value for details.
 	Mode HistogramMode
+	// HighCardinalityOpts configures cache eviction for high cardinality histograms.
+	// Only applies when using NewHighCardinalityHistogram.
+	HighCardinalityOpts HighCardinalityMetricOptions
 }
 
 func NewHistogram(opt HistogramOptions) IHistogram {
@@ -1019,7 +1064,7 @@ func NewCounterFloat64(metadata Metadata) *CounterFloat64 {
 type Gauge struct {
 	Metadata
 	value atomic.Int64
-	fn    func() int64
+	fn    func(val int64) int64
 }
 
 // NewGauge creates a Gauge.
@@ -1027,12 +1072,13 @@ func NewGauge(metadata Metadata) *Gauge {
 	return &Gauge{Metadata: metadata}
 }
 
-// NewFunctionalGauge creates a Gauge metric whose value is determined when
-// asked for by calling the provided function.
-// Note that Update, Inc, and Dec should NOT be called on a Gauge returned
-// from NewFunctionalGauge.
-func NewFunctionalGauge(metadata Metadata, f func() int64) *Gauge {
-	return &Gauge{Metadata: metadata, fn: f}
+// DerivedGauge is a Gauge whose value is derived from the callback function it
+// was constructed with. The callback is called every time the value of the
+// gauge is requested and is passed the current value of the gauge as an argument.
+type DerivedGauge = Gauge
+
+func NewDerivedGauge(metadata Metadata, f func(val int64) int64) *DerivedGauge {
+	return &DerivedGauge{Metadata: metadata, fn: f}
 }
 
 // Update updates the gauge's value.
@@ -1043,7 +1089,7 @@ func (g *Gauge) Update(v int64) {
 // Value returns the gauge's current value.
 func (g *Gauge) Value() int64 {
 	if g.fn != nil {
-		return g.fn()
+		return g.fn(g.value.Load())
 	}
 	return g.value.Load()
 }
@@ -1127,7 +1173,11 @@ func (g *GaugeFloat64) Inspect(f func(interface{})) { f(g) }
 
 // MarshalJSON marshals to JSON.
 func (g *GaugeFloat64) MarshalJSON() ([]byte, error) {
-	return json.Marshal(g.Value())
+	v := g.Value()
+	if math.IsInf(v, 0) || math.IsNaN(v) {
+		v = 0
+	}
+	return json.Marshal(v)
 }
 
 // ToPrometheusMetric returns a filled-in prometheus metric of the right type.
@@ -1143,6 +1193,53 @@ func (g *GaugeFloat64) GetMetadata() Metadata {
 	baseMetadata := g.Metadata
 	baseMetadata.MetricType = prometheusgo.MetricType_GAUGE
 	return baseMetadata
+}
+
+// FunctionalGauge is a Gauge whose value is the result of the callback
+// function it was constructed with. The callback is called every time the
+// value of the gauge is requested.
+type FunctionalGauge struct {
+	Metadata
+	fn func() int64
+}
+
+func NewFunctionalGauge(metadata Metadata, f func() int64) *FunctionalGauge {
+	return &FunctionalGauge{Metadata: metadata, fn: f}
+}
+
+// GetType implements PrometheusExportable.
+func (fg *FunctionalGauge) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_GAUGE.Enum()
+}
+
+// ToPrometheusMetric implements PrometheusExportable.
+func (fg *FunctionalGauge) ToPrometheusMetric() *prometheusgo.Metric {
+	return &prometheusgo.Metric{
+		Gauge: &prometheusgo.Gauge{Value: proto.Float64(float64(fg.Value()))},
+	}
+}
+
+// GetMetadata implements Iterable.
+func (fg *FunctionalGauge) GetMetadata() Metadata {
+	baseMetadata := fg.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_GAUGE
+	return baseMetadata
+}
+
+// Inspect implements Iterable.
+func (fg *FunctionalGauge) Inspect(f func(interface{})) {
+	f(fg)
+}
+
+// MarshalJSON implements json.Marshaler.
+func (fg *FunctionalGauge) MarshalJSON() ([]byte, error) {
+	return json.Marshal(fg.Value())
+}
+
+// Value returns the functional value of the gauge, which is computed by
+// by calling its callback function.
+func (fg *FunctionalGauge) Value() int64 {
+	return fg.fn()
 }
 
 // MergeWindowedHistogram adds the bucket counts, sample count, and sample sum
@@ -1311,6 +1408,29 @@ func (v *vector) recordLabels(labelValues []string) error {
 	return nil
 }
 
+// deleteLabels removes a specific label combination from the vector's
+// tracking. This must be called alongside the prometheus vec's Delete to
+// keep encounteredLabelValues in sync with the underlying metric store.
+func (v *vector) deleteLabels(labels map[string]string) {
+	labelValues := v.getOrderedValues(labels)
+	lookupKey := strings.Join(labelValues, "_")
+
+	v.Lock()
+	defer v.Unlock()
+	if _, ok := v.encounteredLabelsLookup[lookupKey]; !ok {
+		return
+	}
+	delete(v.encounteredLabelsLookup, lookupKey)
+	for i, lv := range v.encounteredLabelValues {
+		if strings.Join(lv, "_") == lookupKey {
+			v.encounteredLabelValues = append(
+				v.encounteredLabelValues[:i],
+				v.encounteredLabelValues[i+1:]...)
+			break
+		}
+	}
+}
+
 // clear flushes the labels from the vector.
 func (v *vector) clear() {
 	v.Lock()
@@ -1328,12 +1448,32 @@ type GaugeVec struct {
 	Metadata
 	vector
 	promVec *prometheus.GaugeVec
+	fn      func(int64) int64
 }
+
+// DerivedGaugeVec is a GaugeVec whose value is derived from the callback
+// function it was constructed with. The callback is called every time the
+// value of the gauge is requested and is passed the current value of the gauge
+// as an argument.
+type DerivedGaugeVec = GaugeVec
 
 // NewExportedGaugeVec creates a new GaugeVec containing labeled gauges to be
 // exported to an external collector, but is not persisted by the internal TSDB,
 // nor are the metrics in the vector aggregated in any way.
 func NewExportedGaugeVec(metadata Metadata, labelSchema []string) *GaugeVec {
+	return newExportedGaugeVec(metadata, labelSchema, nil)
+}
+
+// NewDerivedExportedGaugeVec creates a new DerivedGaugeVec containing labeled
+// gauges to be exported to an external collector, but is not persisted by the
+// internal TSDB, nor are the metrics in the vector aggregated in any way.
+func NewDerivedExportedGaugeVec(
+	metadata Metadata, labelSchema []string, fn func(int64) int64,
+) *DerivedGaugeVec {
+	return newExportedGaugeVec(metadata, labelSchema, fn)
+}
+
+func newExportedGaugeVec(metadata Metadata, labelSchema []string, fn func(int64) int64) *GaugeVec {
 	vec := newVector(labelSchema)
 
 	promVec := prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -1345,7 +1485,15 @@ func NewExportedGaugeVec(metadata Metadata, labelSchema []string) *GaugeVec {
 		Metadata: metadata,
 		vector:   vec,
 		promVec:  promVec,
+		fn:       fn,
 	}
+}
+
+// Delete removes the metric with the given label set from the vector.
+// Returns true if a metric was deleted.
+func (gv *GaugeVec) Delete(labels map[string]string) bool {
+	gv.deleteLabels(labels)
+	return gv.promVec.Delete(labels)
 }
 
 // Update updates the gauge value for the given combination of labels.
@@ -1404,10 +1552,21 @@ func (gv *GaugeVec) ToPrometheusMetrics() []*prometheusgo.Metric {
 			panic(err)
 		}
 
+		if gv.fn != nil {
+			*m.Gauge.Value = float64(gv.fn(int64(*m.Gauge.Value)))
+		}
+
 		metrics = append(metrics, m)
 	}
 
 	return metrics
+}
+
+// Clear removes all child gauges and resets the label tracking,
+// preserving the metadata and configuration.
+func (gv *GaugeVec) Clear() {
+	gv.vector.clear()
+	gv.promVec.Reset()
 }
 
 // CounterVec wraps a prometheus.CounterVec; it is not aggregated or persisted.
@@ -1434,6 +1593,13 @@ func NewExportedCounterVec(metadata Metadata, labelNames []string) *CounterVec {
 		vector:   vec,
 		promVec:  promVec,
 	}
+}
+
+// Delete removes the metric with the given label set from the vector.
+// Returns true if a metric was deleted.
+func (cv *CounterVec) Delete(labels map[string]string) bool {
+	cv.deleteLabels(labels)
+	return cv.promVec.Delete(labels)
 }
 
 // Update updates the counter value for the given combination of labels.
@@ -1510,6 +1676,13 @@ func (cv *CounterVec) ToPrometheusMetrics() []*prometheusgo.Metric {
 	return metrics
 }
 
+// Clear removes all child counters and resets the label tracking,
+// preserving the metadata and configuration.
+func (cv *CounterVec) Clear() {
+	cv.vector.clear()
+	cv.promVec.Reset()
+}
+
 // HistogramVec wraps a prometheus.HistogramVec; it is not aggregated or persisted.
 type HistogramVec struct {
 	Metadata
@@ -1567,6 +1740,13 @@ func (hv *HistogramVec) Inspect(f func(interface{})) { f(hv) }
 // GetType implements PrometheusExportable.
 func (hv *HistogramVec) GetType() *prometheusgo.MetricType {
 	return prometheusgo.MetricType_HISTOGRAM.Enum()
+}
+
+// Delete removes the metric with the given label set from the vector.
+// Returns true if a metric was deleted.
+func (hv *HistogramVec) Delete(labels map[string]string) bool {
+	hv.deleteLabels(labels)
+	return hv.promVec.Delete(labels)
 }
 
 // ToPrometheusMetrics implements PrometheusExportable.

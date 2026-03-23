@@ -87,6 +87,19 @@ message EvalContext {
   reserved 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14;
   optional sessiondatapb.SessionData session_data = 15 [(gogoproto.nullable) = false];
   optional bool testing_knobs_force_production_values = 16  [(gogoproto.nullable) = false];
+  // WorkloadID for ASH sampling.
+  optional uint64 workload_id = 17 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "WorkloadID"];
+  // AppNameID is the hash of the application name, for ASH sampling.
+  // Note(alyshan): This will eventually be replaced by a general
+  // enrichment_id field which will enable the ASH sampler to
+  // enrich samples with more workload context.
+  optional uint64 app_name_id = 18 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "AppNameID"];
+  // WorkloadType distinguishes the kind of workload that workload_id
+  // represents. Used by the ASH sampler to choose the right encoding.
+  optional uint32 workload_type = 19 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "WorkloadType"];
 }
 
 message SimpleResponse {

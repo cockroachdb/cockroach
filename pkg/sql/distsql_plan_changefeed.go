@@ -86,6 +86,7 @@ func PlanCDCExpression(
 		}, clusterunique.ID{}, /* queryID */
 		tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV)),
 		nil, /* statementHintsCache */
+		"",  /* currentDB */
 	)
 
 	p.curPlan.init(&p.stmt, &p.instrumentation)
@@ -479,7 +480,7 @@ func (c *cdcOptCatalog) newCDCDataSource(
 	if err != nil {
 		return nil, err
 	}
-	return newOptTable(ctx, d, c.codec(), nil /* stats */, emptyZoneConfig)
+	return newOptTable(ctx, d, c.codec(), nil /* stats */, emptyZoneConfig, false /* canaryAndStableStatsDiffer */)
 }
 
 // familyTableDescriptor wraps underlying catalog.TableDescriptor,

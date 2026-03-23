@@ -110,6 +110,13 @@ const (
 	alterTableRenameColumn            // ALTER TABLE <table> RENAME [COLUMN] <column> TO <column>
 	alterTableSetColumnDefault        // ALTER TABLE <table> ALTER [COLUMN] <column> SET DEFAULT <expr>
 	alterTableSetColumnNotNull        // ALTER TABLE <table> ALTER [COLUMN] <column> SET NOT NULL
+	alterTableSetStorageParams        // ALTER TABLE <table> SET (<storage_param>=<val>)
+	alterTableResetStorageParams      // ALTER TABLE <table> RESET <storage_param>
+
+	// ALTER VIEW ...
+
+	alterViewSetViewOption   // ALTER VIEW <view> SET (security_invoker = <bool>)
+	alterViewResetViewOption // ALTER VIEW <view> RESET (security_invoker)
 
 	// ALTER TYPE ...
 
@@ -169,11 +176,9 @@ const (
 	// alterTableOwner
 	// alterTablePartitionByTable
 	// alterTableRenameConstraint        // ALTER TABLE <table> RENAME CONSTRAINT <constraint> TO <constraint>
-	// alterTableResetStorageParams
 	// alterTableSetAudit
 	// alterTableSetOnUpdate
 	// alterTableSetSchema
-	// alterTableSetStorageParams
 	// alterTableSetVisible
 	// alterTableValidateConstraint
 	// alterType
@@ -244,6 +249,10 @@ var opFuncs = []func(*operationGenerator, context.Context, pgx.Tx) (*opStmt, err
 	alterTableRenameColumn:            (*operationGenerator).renameColumn,
 	alterTableSetColumnDefault:        (*operationGenerator).setColumnDefault,
 	alterTableSetColumnNotNull:        (*operationGenerator).setColumnNotNull,
+	alterTableSetStorageParams:        (*operationGenerator).setTableStorageParam,
+	alterTableResetStorageParams:      (*operationGenerator).resetTableStorageParam,
+	alterViewSetViewOption:            (*operationGenerator).alterViewSetViewOption,
+	alterViewResetViewOption:          (*operationGenerator).alterViewResetViewOption,
 	alterTypeDropValue:                (*operationGenerator).alterTypeDropValue,
 	commentOn:                         (*operationGenerator).commentOn,
 	createFunction:                    (*operationGenerator).createFunction,
@@ -303,6 +312,10 @@ var opWeights = []int{
 	alterTableRenameColumn:            1,
 	alterTableSetColumnDefault:        1,
 	alterTableSetColumnNotNull:        1,
+	alterTableSetStorageParams:        1,
+	alterTableResetStorageParams:      1,
+	alterViewSetViewOption:            1,
+	alterViewResetViewOption:          1,
 	alterTypeDropValue:                1,
 	commentOn:                         1,
 	createFunction:                    1,
@@ -341,7 +354,7 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	validate:   clusterversion.MinSupported,
 	inspect:    clusterversion.V25_4,
 
-	alterPolicy:                       clusterversion.V25_2,
+	alterPolicy:                       clusterversion.MinSupported,
 	alterTableAddColumn:               clusterversion.MinSupported,
 	alterTableAddConstraintForeignKey: clusterversion.MinSupported,
 	alterTableAddConstraintUnique:     clusterversion.MinSupported,
@@ -349,23 +362,25 @@ var opDeclarativeVersion = map[opType]clusterversion.Key{
 	alterTableDropColumn:              clusterversion.MinSupported,
 	alterTableDropConstraint:          clusterversion.MinSupported,
 	alterTableSetColumnNotNull:        clusterversion.MinSupported,
-	alterTableDropNotNull:             clusterversion.V25_3,
-	alterTableRLS:                     clusterversion.V25_2,
+	alterTableSetStorageParams:        clusterversion.V26_1,
+	alterTableResetStorageParams:      clusterversion.V26_1,
+	alterTableDropNotNull:             clusterversion.MinSupported,
+	alterTableRLS:                     clusterversion.MinSupported,
 	alterTypeDropValue:                clusterversion.MinSupported,
 	commentOn:                         clusterversion.MinSupported,
 	createFunction:                    clusterversion.MinSupported,
 	createIndex:                       clusterversion.MinSupported,
-	createPolicy:                      clusterversion.V25_2,
+	createPolicy:                      clusterversion.MinSupported,
 	createSchema:                      clusterversion.MinSupported,
 	createSequence:                    clusterversion.MinSupported,
-	createTrigger:                     clusterversion.MinSupported,
+	createTrigger:                     clusterversion.V26_2_Start,
 	dropFunction:                      clusterversion.MinSupported,
 	dropIndex:                         clusterversion.MinSupported,
-	dropPolicy:                        clusterversion.V25_2,
+	dropPolicy:                        clusterversion.MinSupported,
 	dropSchema:                        clusterversion.MinSupported,
 	dropSequence:                      clusterversion.MinSupported,
 	dropTable:                         clusterversion.MinSupported,
-	dropTrigger:                       clusterversion.MinSupported,
+	dropTrigger:                       clusterversion.V26_2_Start,
 	dropView:                          clusterversion.MinSupported,
 	truncateTable:                     clusterversion.V25_4,
 }

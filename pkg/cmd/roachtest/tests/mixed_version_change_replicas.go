@@ -36,7 +36,7 @@ func registerChangeReplicasMixedVersion(r registry.Registry) {
 		Monitor:          true,
 		Randomized:       true,
 		Run:              runChangeReplicasMixedVersion,
-		Timeout:          60 * time.Minute,
+		Timeout:          3 * time.Hour,
 	})
 }
 

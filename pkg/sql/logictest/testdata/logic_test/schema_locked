@@ -174,6 +174,71 @@ ALTER TABLE ref CONFIGURE ZONE USING num_replicas = 11;
 
 subtest end
 
+# Test SET/RESET schema_locked with varying session settings.
+subtest set_reset_schema_locked_session_settings
+
+statement ok
+CREATE TABLE t_sl (i INT PRIMARY KEY) WITH (schema_locked = false)
+
+# Test SET schema_locked=true
+statement ok
+ALTER TABLE t_sl SET (schema_locked=true)
+
+query TT
+SHOW CREATE TABLE t_sl
+----
+t_sl  CREATE TABLE public.t_sl (
+        i INT8 NOT NULL,
+        CONSTRAINT t_sl_pkey PRIMARY KEY (i ASC)
+      ) WITH (schema_locked = true);
+
+# Test SET schema_locked=false
+statement ok
+ALTER TABLE t_sl SET (schema_locked=false)
+
+query TT
+SHOW CREATE TABLE t_sl
+----
+t_sl  CREATE TABLE public.t_sl (
+        i INT8 NOT NULL,
+        CONSTRAINT t_sl_pkey PRIMARY KEY (i ASC)
+      );
+
+statement ok
+SET create_table_with_schema_locked = 'true'
+
+# Test RESET schema_locked - should reset to session setting (true).
+statement ok
+ALTER TABLE t_sl RESET (schema_locked)
+
+query TT
+SHOW CREATE TABLE t_sl
+----
+t_sl  CREATE TABLE public.t_sl (
+        i INT8 NOT NULL,
+        CONSTRAINT t_sl_pkey PRIMARY KEY (i ASC)
+      ) WITH (schema_locked = true);
+
+statement ok
+SET create_table_with_schema_locked = 'false'
+
+# Test RESET schema_locked - should reset to session setting (false).
+statement ok
+ALTER TABLE t_sl RESET (schema_locked)
+
+query TT
+SHOW CREATE TABLE t_sl
+----
+t_sl  CREATE TABLE public.t_sl (
+        i INT8 NOT NULL,
+        CONSTRAINT t_sl_pkey PRIMARY KEY (i ASC)
+      );
+
+statement ok
+DROP TABLE t_sl
+
+subtest end
+
 
 # Validate schema_locked can be unset properly in add column txns.
 subtest regression_147993
@@ -216,5 +281,79 @@ t_147993  CREATE TABLE public.t_147993 (
             CONSTRAINT t_147993_pkey PRIMARY KEY (k ASC),
             FAMILY fam (k, geom1, geom2, geom3, geom6, geom4, geom5, geom8, geom7)
           ) WITH (schema_locked = true);
+
+subtest end
+
+# Regression test for #150484: schema_locked cannot be unset with the comma
+# syntax combined with other schema-changing operations. This prevents bypassing
+# the schema_locked protection by unsetting the lock and performing a schema
+# change in the same ALTER TABLE statement.
+subtest regression_150484
+
+statement ok
+CREATE TABLE t_150484 (n INT, m INT, FAMILY (n, m)) WITH (schema_locked=true);
+
+# Combining SET (schema_locked=false) with DROP COLUMN should fail in the legacy schema changer.
+onlyif config local-legacy-schema-changer
+statement error pgcode 57000 pq: this schema change is disallowed because table "t_150484" is locked
+ALTER TABLE t_150484 SET (schema_locked=false), DROP COLUMN n;
+
+# Combining RESET (schema_locked) with ADD COLUMN should fail in the legacy schema changer.
+onlyif config local-legacy-schema-changer
+statement error pgcode 57000 pq: this schema change is disallowed because table "t_150484" is locked
+ALTER TABLE t_150484 RESET (schema_locked), ADD COLUMN k INT;
+
+# Verify the table is still locked and unchanged in the legacy schema changer.
+onlyif config local-legacy-schema-changer
+query TT
+SHOW CREATE TABLE t_150484
+----
+t_150484  CREATE TABLE public.t_150484 (
+            n INT8 NULL,
+            m INT8 NULL,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT t_150484_pkey PRIMARY KEY (rowid ASC),
+            FAMILY fam_0_n_m_rowid (n, m, rowid)
+          ) WITH (schema_locked = true);
+
+# In the declarative schema changer, the above statements are allowed, as we
+# take care to always unlock the table first.
+skipif config local-legacy-schema-changer local-mixed-25.4
+statement ok
+ALTER TABLE t_150484 SET (schema_locked=false), DROP COLUMN n;
+
+skipif config local-legacy-schema-changer local-mixed-25.4
+query TT
+SHOW CREATE TABLE t_150484
+----
+t_150484  CREATE TABLE public.t_150484 (
+            m INT8 NULL,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            CONSTRAINT t_150484_pkey PRIMARY KEY (rowid ASC),
+            FAMILY fam_0_n_m_rowid (m, rowid)
+          );
+
+skipif config local-legacy-schema-changer local-mixed-25.4
+statement ok
+ALTER TABLE t_150484 SET (schema_locked=true)
+
+skipif config local-legacy-schema-changer local-mixed-25.4
+statement ok
+ALTER TABLE t_150484 RESET (schema_locked), ADD COLUMN k INT;
+
+skipif config local-legacy-schema-changer local-mixed-25.4
+query TT
+SHOW CREATE TABLE t_150484
+----
+t_150484  CREATE TABLE public.t_150484 (
+            m INT8 NULL,
+            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+            k INT8 NULL,
+            CONSTRAINT t_150484_pkey PRIMARY KEY (rowid ASC),
+            FAMILY fam_0_n_m_rowid (m, rowid, k)
+          );
+
+statement ok
+DROP TABLE t_150484;
 
 subtest end

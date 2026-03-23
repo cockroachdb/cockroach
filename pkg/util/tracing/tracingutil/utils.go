@@ -11,7 +11,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"google.golang.org/grpc/metadata"
-	"storj.io/drpc/drpcmetadata"
 )
 
 // BatchMethodName is the method name of Internal.Batch RPC.
@@ -72,22 +71,4 @@ func InjectSpanMeta(
 	}
 	tracer.InjectMetaInto(clientSpan.Meta(), tracing.MetadataCarrier{MD: md})
 	return metadata.NewOutgoingContext(ctx, md)
-}
-
-// InjectDRPCSpanMeta injects the span metadata into a DRPC context.
-func InjectDRPCSpanMeta(
-	ctx context.Context, tracer *tracing.Tracer, clientSpan *tracing.Span,
-) context.Context {
-	md, ok := drpcmetadata.Get(ctx)
-	if ok {
-		copied := make(map[string]string, len(md))
-		for k, v := range md {
-			copied[k] = v
-		}
-		md = copied
-	} else {
-		md = make(map[string]string)
-	}
-	tracer.InjectMetaInto(clientSpan.Meta(), tracing.MapCarrier{Map: md})
-	return drpcmetadata.AddPairs(ctx, md)
 }

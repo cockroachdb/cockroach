@@ -72,6 +72,14 @@ func TestDataKeys(t *testing.T) {
 			12,
 			"/System/tsd//1m/1924-09-18T08:00:00Z/",
 		},
+		{
+			"metric.with:special/chars{label=\"@@ αβ_ !星\",}",
+			"source:with/special-chars",
+			0,
+			Resolution10s,
+			83,
+			"/System/tsd/metric.with:special/chars{label=\"@@ αβ_ !星\",}/10s/1970-01-01T00:00:00Z/source:with/special-chars",
+		},
 	}
 
 	for i, tc := range testCases {

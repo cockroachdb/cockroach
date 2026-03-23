@@ -1,4 +1,4 @@
-# LogicTest: local local-mixed-25.3 local-mixed-25.4 3node-tenant
+# LogicTest: local local-mixed-25.4 3node-tenant
 
 statement error a role/user named admin already exists
 CREATE ROLE admin
@@ -768,6 +768,7 @@ database_name  grantee   privilege_type  is_grantable
 db2            admin     ALL             true
 db2            newgroup  ALL             false
 db2            public    CONNECT         false
+db2            public    TEMPORARY       false
 db2            root      ALL             true
 
 statement ok
@@ -1082,7 +1083,7 @@ CREATE ROLE rolej
 # Testing LOGIN and VALID UNTIL role privilege
 user root
 
-statement ok
+statement count 15
 DELETE FROM system.role_options WHERE NOT username in ('root', 'admin')
 
 statement ok
@@ -1214,6 +1215,7 @@ SHOW DATABASES
 db2        root  NULL  NULL  {}  NULL
 defaultdb  root  NULL  NULL  {}  NULL
 postgres   root  NULL  NULL  {}  NULL
+privatedb  root  NULL  NULL  {}  NULL
 publicdb   root  NULL  NULL  {}  NULL
 test       root  NULL  NULL  {}  NULL
 
@@ -1226,6 +1228,7 @@ public  publictable   table  root  0  NULL
 query TTTTIT
 SHOW TABLES FROM privatedb
 ----
+public  publictable  table  root  0  NULL
 
 statement ok
 SELECT * FROM publicdb.publictable
@@ -1926,18 +1929,6 @@ REVOKE SYSTEM CREATEDB FROM creator_of_databases
 
 statement ok
 DROP ROLE creator_of_databases
-
-subtest end
-
-subtest subject
-
-skipif config 3node-tenant
-statement error OSS binaries do not include enterprise features
-CREATE ROLE role_with_subject SUBJECT 'foo'
-
-skipif config 3node-tenant
-statement error OSS binaries do not include enterprise features
-ALTER ROLE testuser SUBJECT 'foo'
 
 subtest end
 

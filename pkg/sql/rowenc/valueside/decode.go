@@ -65,8 +65,15 @@ func DecodeUntaggedDatum(
 		if err != nil {
 			return nil, b, err
 		}
-		if t.Oid() == oid.T_name {
+		switch t.Oid() {
+		case oid.T_name:
 			return a.NewDName(tree.DString(data)), b, nil
+		case oidext.T_aclitem:
+			d, err := a.NewDACLItem(tree.DString(data))
+			if err != nil {
+				return nil, b, err
+			}
+			return d, b, nil
 		}
 		return a.NewDString(tree.DString(data)), b, nil
 	case types.CollatedStringFamily:

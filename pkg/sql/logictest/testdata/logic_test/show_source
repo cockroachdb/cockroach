@@ -20,7 +20,7 @@ UTF8                1
 
 # We filter here because optimizer will be different depending on which
 # configuration this logic test is running in, and session ID will vary.
-query TT colnames
+query TTT colnames
 SELECT *
 FROM [SHOW ALL]
 WHERE
@@ -32,239 +32,247 @@ WHERE
     'copy_fast_path_enabled',
     'direct_columnar_scans_enabled',
     'multiple_active_portals_enabled',
-    'kv_transaction_buffered_writes_enabled'
+    'kv_transaction_buffered_writes_enabled',
+    'buffered_writes_implicit_txns_enabled'
   )
 ORDER BY variable
 ----
-variable                                                         value
-allow_create_trigger_function_with_argv_references               off
-allow_ordinal_column_references                                  off
-allow_role_memberships_to_change_during_transaction              off
-allow_unsafe_internals                                           on
-alter_primary_region_super_region_override                       off
-always_distribute_full_scans                                     off
-application_name                                                 ·
-authentication_method                                            cert-password
-autocommit_before_ddl                                            on
-avoid_buffering                                                  off
-avoid_full_table_scans_in_mutations                              on
-backslash_quote                                                  safe_encoding
-buffered_writes_use_locking_on_non_unique_indexes                off
-bypass_pcr_reader_catalog_aost                                   off
-bytea_output                                                     hex
-canary_stats_mode                                                auto
-check_function_bodies                                            on
-client_encoding                                                  UTF8
-client_min_messages                                              notice
-close_cursors_at_commit                                          on
-copy_from_atomic_enabled                                         on
-copy_from_retries_enabled                                        on
-copy_num_retries_per_batch                                       5
-copy_transaction_quality_of_service                              background
-copy_write_pipelining_enabled                                    off
-cost_scans_with_default_col_size                                 off
-create_table_with_schema_locked                                  on
-database                                                         test
-datestyle                                                        ISO, MDY
-deadlock_timeout                                                 0
-declare_cursor_statement_timeout_enabled                         on
-default_int_size                                                 8
-default_table_access_method                                      heap
-default_tablespace                                               ·
-default_text_search_config                                       pg_catalog.english
-default_transaction_isolation                                    serializable
-default_transaction_priority                                     normal
-default_transaction_quality_of_service                           regular
-default_transaction_read_only                                    off
-default_transaction_use_follower_reads                           off
-default_with_oids                                                off
-descriptor_validation                                            on
-disable_changefeed_replication                                   off
-disable_hoist_projection_in_join_limitation                      off
-disable_optimizer_rules                                          ·
-disable_partially_distributed_plans                              off
-disable_plan_gists                                               off
-disable_vec_union_eager_cancellation                             off
-disable_wait_for_jobs_notice                                     off
-disallow_full_table_scans                                        off
-distribute_group_by_row_count_threshold                          1000
-distribute_join_row_count_threshold                              1000
-distribute_scan_row_count_threshold                              10000
-distribute_sort_row_count_threshold                              1000
-distsql                                                          off
-distsql_plan_gateway_bias                                        2
-distsql_use_reduced_leaf_write_sets                              on
-enable_auto_rehoming                                             off
-enable_create_stats_using_extremes                               on
-enable_create_stats_using_extremes_bool_enum                     off
-enable_durable_locking_for_serializable                          off
-enable_experimental_alter_column_type_general                    off
-enable_implicit_fk_locking_for_serializable                      off
-enable_implicit_select_for_update                                on
-enable_implicit_transaction_for_batch_statements                 on
-enable_insert_fast_path                                          on
-enable_inspect_command                                           off
-enable_multiple_modifications_of_table                           off
-enable_multiregion_placement_policy                              off
-enable_seqscan                                                   on
-enable_shared_locking_for_serializable                           off
-enable_super_regions                                             off
-enable_zigzag_join                                               off
-enforce_home_region                                              off
-escape_string_warning                                            on
-expect_and_ignore_not_visible_columns_in_copy                    off
-experimental_enable_implicit_column_partitioning                 off
-experimental_enable_temp_tables                                  off
-experimental_enable_unique_without_index_constraints             off
-experimental_hash_group_join_enabled                             off
-extra_float_digits                                               1
-force_savepoint_restart                                          off
-foreign_key_cascades_limit                                       10000
-idle_in_transaction_session_timeout                              0
-idle_session_timeout                                             0
-index_join_streamer_batch_size                                   8.0 MiB
-index_recommendations_enabled                                    off
-initial_retry_backoff_for_read_committed                         2
-inject_retry_errors_enabled                                      off
-inject_retry_errors_on_commit_enabled                            off
-integer_datetimes                                                on
-intervalstyle                                                    postgres
-is_superuser                                                     on
-join_reader_index_join_strategy_batch_size                       4.0 MiB
-join_reader_no_ordering_strategy_batch_size                      2.0 MiB
-join_reader_ordering_strategy_batch_size                         100 KiB
-large_full_scan_rows                                             0
-lc_collate                                                       C.UTF-8
-lc_ctype                                                         C.UTF-8
-lc_messages                                                      C.UTF-8
-lc_monetary                                                      C.UTF-8
-lc_numeric                                                       C.UTF-8
-lc_time                                                          C.UTF-8
-legacy_varchar_typing                                            off
-locality                                                         region=test,dc=dc1
-locality_optimized_partitioned_index_scan                        on
-lock_timeout                                                     0
-log_timezone                                                     UTC
-max_connections                                                  -1
-max_identifier_length                                            128
-max_index_keys                                                   32
-max_prepared_transactions                                        2147483647
-max_retries_for_read_committed                                   100
-node_id                                                          1
-null_ordered_last                                                off
-on_update_rehome_row_enabled                                     on
-opt_split_scan_limit                                             2048
-optimizer_always_use_histograms                                  on
-optimizer_check_input_min_row_count                              1
-optimizer_clamp_inequality_selectivity                           on
-optimizer_clamp_low_histogram_selectivity                        on
-optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  on
-optimizer_enable_lock_elision                                    on
-optimizer_hoist_uncorrelated_equality_subqueries                 on
-optimizer_merge_joins_enabled                                    on
-optimizer_min_row_count                                          1
-optimizer_plan_lookup_joins_with_reverse_scans                   on
-optimizer_prefer_bounded_cardinality                             on
-optimizer_prove_implication_with_virtual_computed_columns        on
-optimizer_push_limit_into_project_filtered_scan                  on
-optimizer_push_offset_into_index_join                            on
-optimizer_use_conditional_hoist_fix                              on
-optimizer_use_delete_range_fast_path                             on
-optimizer_use_exists_filter_hoist_rule                           on
-optimizer_use_forecasts                                          on
-optimizer_use_histograms                                         on
-optimizer_use_improved_computed_column_filters_derivation        on
-optimizer_use_improved_disjunction_stats                         on
-optimizer_use_improved_distinct_on_limit_hint_costing            on
-optimizer_use_improved_hoist_join_project                        on
-optimizer_use_improved_join_elimination                          on
-optimizer_use_improved_multi_column_selectivity_estimate         on
-optimizer_use_improved_split_disjunction_for_joins               on
-optimizer_use_improved_trigram_similarity_selectivity            on
-optimizer_use_improved_zigzag_join_costing                       on
-optimizer_use_limit_ordering_for_streaming_group_by              on
-optimizer_use_lock_elision_multiple_families                     off
-optimizer_use_lock_op_for_serializable                           off
-optimizer_use_max_frequency_selectivity                          on
-optimizer_use_merged_partial_statistics                          on
-optimizer_use_multicol_stats                                     on
-optimizer_use_not_visible_indexes                                off
-optimizer_use_polymorphic_parameter_fix                          on
-optimizer_use_provided_ordering_fix                              on
-optimizer_use_trigram_similarity_optimization                    on
-optimizer_use_virtual_computed_column_stats                      on
-override_multi_region_zone_config                                off
-parallelize_multi_key_lookup_joins_avg_lookup_ratio              10
-parallelize_multi_key_lookup_joins_avg_lookup_row_size           100 KiB
-parallelize_multi_key_lookup_joins_enabled                       off
-parallelize_multi_key_lookup_joins_max_lookup_ratio              10000
-parallelize_multi_key_lookup_joins_only_on_mr_mutations          on
-password_encryption                                              scram-sha-256
-pg_trgm.similarity_threshold                                     0.3
-plan_cache_mode                                                  auto
-plpgsql_use_strict_into                                          off
-prefer_lookup_joins_for_fks                                      off
-prepared_statements_cache_size                                   0 B
-propagate_admission_header_to_leaf_transactions                  on
-propagate_input_ordering                                         off
-recursion_depth_limit                                            1000
-register_latch_wait_contention_events                            off
-reorder_joins_limit                                              8
-require_explicit_primary_keys                                    off
-results_buffer_size                                              524288
-role                                                             none
-row_security                                                     on
-search_path                                                      "$user", public
-serial_normalization                                             rowid
-server_encoding                                                  UTF8
-server_version                                                   13.0.0
-server_version_num                                               130000
-show_primary_key_constraint_on_not_visible_columns               on
-sql_safe_updates                                                 off
-ssl                                                              on
-standard_conforming_strings                                      on
-statement_timeout                                                0
-streamer_always_maintain_ordering                                off
-streamer_enabled                                                 on
-streamer_head_of_line_only_fraction                              0.8
-streamer_in_order_eager_memory_usage_fraction                    0.5
-streamer_out_of_order_eager_memory_usage_fraction                0.8
-strict_ddl_atomicity                                             off
-stub_catalog_tables                                              on
-synchronize_seqscans                                             on
-synchronous_commit                                               on
-system_identity                                                  root
-testing_optimizer_cost_perturbation                              0
-testing_optimizer_disable_rule_probability                       0
-testing_optimizer_inject_panics                                  off
-testing_optimizer_random_seed                                    0
-testing_vectorize_inject_panics                                  off
-timezone                                                         UTC
-tracing                                                          off
-transaction_isolation                                            serializable
-transaction_priority                                             normal
-transaction_read_only                                            off
-transaction_rows_read_err                                        0
-transaction_rows_read_log                                        0
-transaction_rows_written_err                                     0
-transaction_rows_written_log                                     0
-transaction_status                                               NoTxn
-transaction_timeout                                              0
-troubleshooting_mode                                             off
-unbounded_parallel_scans                                         off
-unconstrained_non_covering_index_scan_enabled                    off
-unsafe_allow_triggers_modifying_cascades                         off
-use_cputs_on_non_unique_indexes                                  off
-use_declarative_schema_changer                                   on
-use_improved_routine_dependency_tracking                         on
-use_pre_25_2_variadic_builtins                                   off
-use_proc_txn_control_extended_protocol_fix                       on
-use_soft_limit_for_distribute_scan                               on
-variable_inequality_lookup_join_enabled                          on
-vector_search_beam_size                                          32
-vector_search_rerank_multiplier                                  50
-vectorize                                                        on
-xmloption                                                        content
+variable                                                         value               description
+allow_ordinal_column_references                                  off                 Controls whether the deprecated ordinal column reference syntax (e.g., SELECT @1 FROM t) is allowed.
+allow_role_memberships_to_change_during_transaction              off                 Controls whether operations consulting role membership cache retain their lease throughout the transaction.
+allow_unsafe_internals                                           off                 Controls access to unsafe internals in the system database and the crdb_internal schema. When off, queries to those namespaces will fail. Usage of unsafe internals is audited via the SENSITIVE_ACCESS logging channel.
+alter_primary_region_super_region_override                       off                 Controls whether the user can modify a primary region that is part of a super region.
+always_distribute_full_scans                                     off                 Controls whether full table scans always force the plan to be distributed, regardless of the estimated row count.
+application_name                                                 ·                   Sets the name of the application running the current session. Used for logging and per-application statistics.
+authentication_method                                            cert-password       The authentication method used for the session.
+autocommit_before_ddl                                            on                  Causes any DDL statement received during an explicit transaction to auto-commit before executing the schema change. This is useful because CockroachDB does not fully support multiple schema changes in a single transaction.
+avoid_buffering                                                  off                 Indicates that the returned data should not be buffered by conn executor. This is currently used by replication primitives to ensure the data is flushed to the consumer immediately.
+avoid_full_table_scans_in_mutations                              on                  Controls whether mutation queries that plan full table scans should be avoided.
+backslash_quote                                                  safe_encoding       Controls whether backslash can be used as a quote escape character (compatibility setting).
+buffered_writes_use_locking_on_non_unique_indexes                off                 Controls whether buffered writes use locking on non-unique indexes.
+bypass_pcr_reader_catalog_aost                                   off                 Disables the AOST used by all user queries on the PCR reader catalog.
+bytea_output                                                     hex                 Controls how to encode byte arrays when converting to string.
+check_function_bodies                                            on                  Controls whether functions are validated during function creation.
+client_encoding                                                  UTF8                Controls the client-side character encoding. Only UTF8 is supported.
+client_min_messages                                              notice              Controls which message levels are sent to the client.
+close_cursors_at_commit                                          on                  Determines whether cursors remain open after their parent transaction closes.
+copy_from_atomic_enabled                                         on                  When enabled, implicit transaction COPY FROM operations are committed atomically, matching PostgreSQL behavior. When disabled, rows are segmented into batches unless issued within an explicit transaction.
+copy_from_retries_enabled                                        on                  Controls whether retries should be internally attempted for retriable errors in COPY FROM operations.
+copy_num_retries_per_batch                                       5                   Determines the number of times a single batch of rows can be retried for non-atomic COPY operations.
+copy_transaction_quality_of_service                              background          Sets the admission control priority of the transactions used to evaluate COPY commands.
+copy_write_pipelining_enabled                                    off                 Controls whether write pipelining is enabled for implicit transactions used by COPY.
+cost_scans_with_default_col_size                                 off                 Controls whether the optimizer should cost scans and joins using a default number of bytes per column instead of column sizes from statistics.
+create_table_with_schema_locked                                  on                  Controls whether CREATE TABLE acquires a schema lock on the parent schema.
+database                                                         test                Sets the current database for resolving names in queries.
+datestyle                                                        ISO, MDY            Controls the display format for date and time values as well as the rules for interpreting ambiguous date inputs.
+deadlock_timeout                                                 0                   Sets the amount of time to wait on a lock before checking for deadlock. If set to 0, there is no timeout.
+declare_cursor_statement_timeout_enabled                         on                  Controls whether statement timeouts apply during DECLARE CURSOR operations.
+default_int_size                                                 8                   Specifies the size in bits or bytes (preferred) of how the INT type should be parsed.
+default_table_access_method                                      heap                Sets the default table access method (compatibility setting).
+default_tablespace                                               ·                   Supported only for pg compatibility - CockroachDB has no notion of tablespaces.
+default_text_search_config                                       pg_catalog.english  Sets the default text search configuration used for builtins like `to_tsvector` and `to_tsquery`.
+default_transaction_isolation                                    serializable        Sets the transaction isolation level of new transactions.
+default_transaction_priority                                     normal              Sets the default priority of newly created transactions.
+default_transaction_quality_of_service                           regular             Sets the default admission control priority of newly created transactions.
+default_transaction_read_only                                    off                 Sets whether new transactions are read-only by default.
+default_transaction_use_follower_reads                           off                 When enabled, all read-only transactions use `AS OF SYSTEM TIME follower_read_timestamp()` to allow follower reads. When disabled, read-only transactions only use follower reads if an explicit `AS OF SYSTEM TIME` clause is specified.
+default_with_oids                                                off                 Controls whether new tables are created with OIDs by default (compatibility setting).
+descriptor_validation                                            on                  Controls whether schema object descriptors are validated at read and write time, read time only, or never.
+disable_changefeed_replication                                   off                 Disables changefeed events from being emitted for data changes made in a session, applying to new transactions only.
+disable_hoist_projection_in_join_limitation                      off                 Disables the restrictions placed on projection hoisting during query planning in the optimizer.
+disable_optimizer_rules                                          ·                   Allows disabling specific optimizer transformation rules by name, specified as a comma-separated list.
+disable_partially_distributed_plans                              off                 Controls whether partially distributed plans are disabled.
+disable_plan_gists                                               off                 Controls whether plan gists are disabled.
+disable_vec_union_eager_cancellation                             off                 Disables the eager cancellation that is performed by the vectorized engine when transitioning into the draining state in some cases.
+disable_wait_for_jobs_notice                                     off                 Controls whether the notice about waiting for jobs to complete is suppressed.
+disallow_full_table_scans                                        off                 When enabled, queries on tables with a row count greater than large_full_scan_rows will not use full table or index scans. If no other query plan is possible, queries will return an error. This setting does not apply to internal queries.
+distribute_group_by_row_count_threshold                          1000                Sets the minimum number of rows estimated to be processed by the GroupBy operator to distribute the plan.
+distribute_join_row_count_threshold                              1000                Sets the minimum number of rows estimated to be processed from both inputs by the hash or merge join to distribute the plan.
+distribute_scan_row_count_threshold                              10000               Sets the minimum number of rows estimated to be read by the Scan operator to distribute the plan.
+distribute_sort_row_count_threshold                              1000                Sets the minimum number of rows estimated to be processed by the Sort operator to distribute the plan.
+distsql                                                          off                 Controls the query distribution mode for the session. By default, CockroachDB determines which queries benefit from distributed execution. Distribution thresholds for specific operations are controlled by `distribute_group_by_row_count_threshold`, `distribute_scan_row_count_threshold`, and `distribute_sort_row_count_threshold`.
+distsql_plan_gateway_bias                                        2                   Controls how many more partition spans the gateway node can be assigned compared to other nodes when distributing SQL execution.
+distsql_prevent_partitioning_soft_limited_scans                  on                  Controls whether the DistSQL planner prevents partitioning of soft-limited scans across multiple nodes.
+distsql_use_reduced_leaf_write_sets                              on                  Controls whether distributed SQL uses reduced write sets for leaf transactions.
+enable_auto_rehoming                                             off                 Controls whether auto-rehoming is enabled for REGIONAL BY ROW tables.
+enable_create_stats_using_extremes                               on                  Controls whether CREATE STATISTICS using the EXTREMES method is enabled.
+enable_create_stats_using_extremes_bool_enum                     off                 Controls whether CREATE STATISTICS using the EXTREMES method is enabled for boolean and enum types.
+enable_durable_locking_for_serializable                          off                 Controls whether FOR UPDATE and FOR SHARE locks are replicated via Raft under serializable isolation, allowing locks to be preserved across lease transfers. Enabling this adds latency to locking statements. This matches the default READ COMMITTED behavior.
+enable_experimental_alter_column_type_general                    off                 Controls whether ALTER TABLE ... ALTER COLUMN ... TYPE can be used for general conversions requiring online schema changes.
+enable_implicit_fk_locking_for_serializable                      off                 Controls whether shared locks are used to perform foreign key checks under serializable isolation. Requires enable_shared_locking_for_serializable to also be enabled.
+enable_implicit_select_for_update                                on                  Controls whether `FOR UPDATE` locking may be used during the row-fetch phase of mutation statements.
+enable_implicit_transaction_for_batch_statements                 on                  Controls whether a batch of statements sent in one query is executed as an implicit transaction.
+enable_insert_fast_path                                          on                  Controls whether the fast path for INSERT operations with VALUES input may be used.
+enable_multiple_modifications_of_table                           off                 Allows statements with multiple modification subqueries for the same table, risking data corruption if rows are modified multiple times.
+enable_multiregion_placement_policy                              off                 Controls whether placement can be used in multi-region contexts.
+enable_seqscan                                                   on                  enable_seqscan is included for compatibility with Postgres; changing it has no effect.
+enable_shared_locking_for_serializable                           off                 Controls whether SELECT FOR SHARE statements acquire shared locks under serializable isolation. When off, FOR SHARE statements are still permitted but silently do not lock.
+enable_zigzag_join                                               off                 Controls whether the optimizer should try to plan a zigzag join.
+enforce_home_region                                              off                 When enabled, queries return an error if they cannot run entirely in the gateway's home region, such as when reading from multiple home regions in a REGIONAL BY ROW table. Only tables with ZONE survivability can be scanned without error when this is enabled.
+escape_string_warning                                            on                  Controls whether warnings are issued for escape string syntax.
+expect_and_ignore_not_visible_columns_in_copy                    off                 Changes behavior for COPY FROM to expect and ignore not visible column fields.
+experimental_enable_implicit_column_partitioning                 off                 Controls whether implicit column partitioning can be created.
+experimental_enable_temp_tables                                  off                 Controls whether temporary tables can be created.
+experimental_enable_unique_without_index_constraints             off                 Controls whether creating unique constraints without an index is allowed.
+experimental_hash_group_join_enabled                             off                 Controls whether the physical planner will convert a hash join followed by hash aggregator into a single hash group-join.
+extra_float_digits                                               1                   Sets the number of digits beyond the standard number to use for float conversions.
+force_savepoint_restart                                          off                 Overrides the default SAVEPOINT behavior for compatibility with certain ORMs.
+foreign_key_cascades_limit                                       10000               Sets the maximum number of cascading operations for foreign key actions.
+idle_in_transaction_session_timeout                              0                   Sets the maximum allowed duration for an idle transaction session. The session is terminated if it exceeds this limit.
+idle_session_timeout                                             0                   Sets the maximum allowed duration for an idle session. The session is terminated if it exceeds this limit.
+index_join_streamer_batch_size                                   8.0 MiB             Sets the size limit on input rows to the ColIndexJoin operator when using the Streamer API for a single lookup KV batch.
+index_recommendations_enabled                                    off                 Controls whether index recommendations are enabled.
+initial_retry_backoff_for_read_committed                         2                   Sets the initial backoff duration for automatic retries of statements in explicit READ COMMITTED transactions that encounter retry errors.
+inject_retry_errors_enabled                                      off                 Causes statements (except SET) inside explicit transactions to return a transaction retry error for testing application retry logic. If the client retries using the cockroach_restart savepoint, the transaction proceeds normally after the 3rd retry error.
+inject_retry_errors_on_commit_enabled                            off                 Causes statements inside explicit transactions to return a retry error just before transaction commit for testing retry logic.
+integer_datetimes                                                on                  Reports whether integer datetime representation is used (always on).
+intervalstyle                                                    postgres            Controls the display format for `INTERVAL` values.
+is_superuser                                                     on                  Indicates whether the current user has superuser privileges.
+join_reader_index_join_strategy_batch_size                       4.0 MiB             Sets the size limit on input rows to the joinReader processor when performing index joins for a single lookup KV batch.
+join_reader_no_ordering_strategy_batch_size                      2.0 MiB             Sets the size limit on input rows to the joinReader processor (when ordering is not maintained) for a single lookup KV batch.
+join_reader_ordering_strategy_batch_size                         100 KiB             Sets the size limit on input rows to the joinReader processor (when ordering must be maintained) for a single lookup KV batch.
+large_full_scan_rows                                             0                   Sets the estimated row count at which a full scan is considered large and worthy of logging or disabling.
+lc_collate                                                       C.UTF-8             Reports the database collation locale.
+lc_ctype                                                         C.UTF-8             Reports the database character classification locale.
+lc_messages                                                      C.UTF-8             Sets the language in which messages are displayed (compatibility setting).
+lc_monetary                                                      C.UTF-8             Sets the locale for formatting monetary amounts (compatibility setting).
+lc_numeric                                                       C.UTF-8             Sets the locale for formatting numbers (compatibility setting).
+lc_time                                                          C.UTF-8             Sets the locale for formatting dates and times (compatibility setting).
+legacy_varchar_typing                                            off                 Controls the legacy behavior of allowing some invalid mix-typed comparisons with VARCHAR types.
+locality                                                         region=test,dc=dc1  The locality of the current node, as set by `cockroach start --locality`.
+locality_optimized_partitioned_index_scan                        on                  Controls whether locality-optimized partitioned index scans are enabled.
+lock_timeout                                                     0                   Sets the maximum amount of time a query can spend acquiring or waiting for a single row-level lock. Unlike in PostgreSQL, non-locking reads in CockroachDB also wait for conflicting locks, so this timeout applies to writes as well as locking and non-locking reads. If set to 0, queries do not time out due to lock acquisitions.
+log_timezone                                                     UTC                 The timezone used for logging (always UTC).
+max_connections                                                  -1                  Reports the maximum number of concurrent connections.
+max_identifier_length                                            128                 The maximum length allowed for identifiers.
+max_index_keys                                                   32                  Reports the maximum number of index keys (always 32).
+max_prepared_transactions                                        2147483647          Reports the maximum number of prepared transactions (always maximum int32).
+max_retries_for_read_committed                                   100                 Sets the maximum number of automatic retries for statements in explicit READ COMMITTED transactions that encounter retry errors.
+node_id                                                          1                   The ID of the current node.
+null_ordered_last                                                off                 Controls whether NULL values are ordered last. When true, NULL values appear after non-NULL values in ordered results.
+on_update_rehome_row_enabled                                     on                  Controls whether the ON UPDATE rehome_row() will actually trigger on row updates.
+opt_split_scan_limit                                             2048                Sets the maximum number of UNION ALL statements a Scan may be split into during query optimization to avoid a sort.
+optimizer_always_use_histograms                                  on                  Ensures that the optimizer always uses histograms to calculate statistics if available.
+optimizer_check_input_min_row_count                              1                   Sets a lower bound on row count estimates for the buffer scan of foreign key and uniqueness checks.
+optimizer_clamp_inequality_selectivity                           on                  Controls whether the optimizer clamps selectivity estimates for inequality predicates to improve cardinality estimation accuracy.
+optimizer_clamp_low_histogram_selectivity                        on                  Controls whether the optimizer clamps low selectivity estimates from histogram statistics to prevent overly optimistic cardinality estimates.
+optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  on                  Controls whether the optimizer disables the cross-region cascade fast path optimization for REGIONAL BY ROW tables.
+optimizer_enable_lock_elision                                    on                  Controls whether the optimizer can eliminate unnecessary locking operations.
+optimizer_hoist_uncorrelated_equality_subqueries                 on                  Controls whether the optimizer hoists uncorrelated subqueries in equality expressions with columns, potentially producing more efficient plans.
+optimizer_inline_any_unnest_subquery                             on                  Controls whether the optimizer inlines subqueries containing ANY expressions combined with UNNEST.
+optimizer_merge_joins_enabled                                    on                  Controls whether the optimizer should explore query plans with merge joins.
+optimizer_min_row_count                                          1                   Sets a lower bound on row count estimates during query planning, except for expressions with zero cardinality.
+optimizer_plan_lookup_joins_with_reverse_scans                   on                  Controls whether the optimizer can plan lookup joins using reverse index scans.
+optimizer_prefer_bounded_cardinality                             on                  Instructs the optimizer to prefer query plans where every expression has a bounded cardinality over plans with unbounded cardinality expressions.
+optimizer_prove_implication_with_virtual_computed_columns        on                  Controls whether the optimizer should use virtual computed columns to prove partial index implication.
+optimizer_push_limit_into_project_filtered_scan                  on                  Controls whether the optimizer should push limit expressions into projects of filtered scans.
+optimizer_push_offset_into_index_join                            on                  Controls whether the optimizer should push offset expressions into index joins.
+optimizer_use_conditional_hoist_fix                              on                  Prevents the optimizer from hoisting volatile expressions that are conditionally executed by CASE, COALESCE, or IFERR expressions.
+optimizer_use_delete_range_fast_path                             on                  Controls whether the optimizer uses the fast path for DELETE operations using range deletions.
+optimizer_use_exists_filter_hoist_rule                           on                  Controls whether the optimizer hoists filters out of EXISTS subqueries.
+optimizer_use_forecasts                                          on                  Controls whether the optimizer should use statistics forecasts for cardinality estimation.
+optimizer_use_histograms                                         on                  Controls whether the optimizer should use histogram statistics for cardinality estimation.
+optimizer_use_improved_computed_column_filters_derivation        on                  Enables the optimizer to derive filters on computed columns in more cases beyond simple single-column equations.
+optimizer_use_improved_disjunction_stats                         on                  Controls whether the optimizer should use improved statistics calculations for disjunctive filters.
+optimizer_use_improved_distinct_on_limit_hint_costing            on                  Controls whether the optimizer should use an improved costing estimate for DistinctOn operators with limit hints.
+optimizer_use_improved_hoist_join_project                        on                  Controls whether the optimizer uses an improved rule for hoisting projections out of joins.
+optimizer_use_improved_join_elimination                          on                  Allows the optimizer to eliminate joins in more cases by remapping columns from eliminated joins to equivalent columns.
+optimizer_use_improved_multi_column_selectivity_estimate         on                  Controls whether the optimizer should use an improved selectivity estimate for multi-column predicates.
+optimizer_use_improved_split_disjunction_for_joins               on                  Enables the optimizer to split more disjunctions (OR expressions) in join conditions by building a UNION of join expressions.
+optimizer_use_improved_trigram_similarity_selectivity            on                  Controls whether the optimizer should use an improved selectivity estimate for trigram similarity filters.
+optimizer_use_improved_zigzag_join_costing                       on                  Controls whether the optimizer should use improved logic in the cost model for zigzag joins.
+optimizer_use_limit_ordering_for_streaming_group_by              on                  Enables optimization for 'SELECT ... GROUP BY ... ORDER BY ... LIMIT n' queries by using the limit ordering to inform group-by requirements.
+optimizer_use_lock_elision_multiple_families                     off                 Controls whether the optimizer enables lock elision for operations involving multiple column families.
+optimizer_use_lock_op_for_serializable                           off                 Controls whether the optimizer implements SELECT FOR UPDATE and FOR SHARE using the Lock operator under serializable isolation.
+optimizer_use_max_frequency_selectivity                          on                  Controls whether the optimizer uses the maximum frequency value for selectivity estimation.
+optimizer_use_merged_partial_statistics                          on                  Controls whether the optimizer should use statistics merged from partial and full statistics for cardinality estimation.
+optimizer_use_min_row_count_anti_join_fix                        on                  Controls whether the optimizer uses a fix for minimum row count estimation in anti-join operations.
+optimizer_use_multicol_stats                                     on                  Controls whether the optimizer should use multi-column statistics for cardinality estimation.
+optimizer_use_not_visible_indexes                                off                 Controls whether the optimizer can still choose to use not visible indexes for query plans.
+optimizer_use_polymorphic_parameter_fix                          on                  Controls whether the optimizer validates routine polymorphic parameters during overload resolution and type-checking.
+optimizer_use_provided_ordering_fix                              on                  Controls whether the optimizer reconciles provided orderings with required ordering choices to prevent internal errors.
+optimizer_use_trigram_similarity_optimization                    on                  Controls whether the optimizer should generate improved plans for queries with trigram similarity filters.
+optimizer_use_virtual_computed_column_stats                      on                  Controls whether the optimizer should use statistics on virtual computed columns for cardinality estimation.
+override_multi_region_zone_config                                off                 Controls whether zone configurations can be modified for multi-region databases and their objects.
+parallelize_multi_key_lookup_joins_avg_lookup_ratio              10                  Sets the average lookup ratio threshold for parallelizing multi-key lookup joins.
+parallelize_multi_key_lookup_joins_avg_lookup_row_size           100 KiB             Sets the average lookup row size threshold for parallelizing multi-key lookup joins.
+parallelize_multi_key_lookup_joins_enabled                       off                 Controls whether the join reader should parallelize lookup batches. When enabled, this increases the speed of lookup joins with multiple looked up rows at the cost of increased memory usage.
+parallelize_multi_key_lookup_joins_max_lookup_ratio              10000               Sets the maximum lookup ratio threshold for parallelizing multi-key lookup joins.
+parallelize_multi_key_lookup_joins_only_on_mr_mutations          on                  Controls whether parallelization of multi-key lookup joins is restricted to multi-row mutations only.
+password_encryption                                              scram-sha-256       The encryption method used for passwords.
+pg_trgm.similarity_threshold                                     0.3                 Sets the value used to compare trigram similarities for the string % string overload.
+plan_cache_mode                                                  auto                Controls the method that the optimizer should use to choose between a custom and generic query plan.
+plpgsql_use_strict_into                                          off                 Causes PL/pgSQL "SELECT ... INTO" and "RETURNING INTO" syntax to always behave as if specified with STRICT option.
+prefer_lookup_joins_for_fks                                      off                 Causes foreign key operations to prefer lookup joins.
+prepared_statements_cache_size                                   0 B                 Causes the LRU prepared statements in a session to be automatically deallocated when total prepared statement memory usage exceeds this value.
+prevent_update_set_column_drop                                   on                  Controls whether columns referenced in an UPDATE SET clause are prevented from being dropped.
+propagate_admission_header_to_leaf_transactions                  on                  Controls whether admission control headers are propagated to leaf transactions in distributed queries.
+propagate_input_ordering                                         off                 Controls whether to propagate inner ordering to the outer scope when planning subqueries or CTEs if the outer scope is unordered.
+recursion_depth_limit                                            1000                Sets the maximum depth that nested trigger function calls can reach.
+register_latch_wait_contention_events                            off                 Controls whether contention events are registered for latch wait operations.
+reorder_joins_limit                                              8                   Sets the number of joins at which the optimizer should stop attempting to reorder.
+require_explicit_primary_keys                                    off                 Controls whether CREATE TABLE statements should error out if no primary key is provided.
+results_buffer_size                                              524288              Specifies the size at which the pgwire results buffer will self-flush.
+role                                                             none                The current role for the session.
+row_security                                                     on                  Controls whether row level security is enabled.
+search_path                                                      "$user", public     Sets the list of namespaces to search when resolving unqualified names.
+serial_normalization                                             rowid               Controls how `SERIAL` columns are normalized.
+server_encoding                                                  UTF8                Reports the database encoding (always UTF8). This cannot be changed.
+server_version                                                   13.0.0              Reports the server version string.
+server_version_num                                               130000              Reports the server version as an integer.
+show_primary_key_constraint_on_not_visible_columns               on                  Controls whether SHOW CONSTRAINTS and pg_catalog.pg_constraint include primary key constraints with only hidden columns.
+sql_safe_updates                                                 off                 When enabled, disallows potentially unsafe SQL statements: `DROP DATABASE` of a non-empty database, `DELETE` and `UPDATE` without a `WHERE` clause (unless a `LIMIT` clause is included), `SELECT ... FOR UPDATE`/`FOR SHARE` without a `WHERE` or `LIMIT` clause, `ALTER TABLE ... DROP COLUMN`, and converting an existing table to `REGIONAL BY ROW` unless a region column has already been added.
+ssl                                                              on                  Controls whether SSL is enabled.
+standard_conforming_strings                                      on                  Controls whether strings conform to SQL standard.
+statement_timeout                                                0                   Sets the maximum allowed duration for a statement. The query is cancelled if it exceeds this limit.
+streamer_always_maintain_ordering                                off                 Controls whether the SQL users of the DistSQL Streamer should always maintain ordering, even when not strictly necessary.
+streamer_enabled                                                 on                  Controls whether the DistSQL Streamer API can be used.
+streamer_head_of_line_only_fraction                              0.8                 Controls the fraction of the DistSQL streamer's memory budget used for the head-of-the-line request when the eager memory usage limit has been exceeded.
+streamer_in_order_eager_memory_usage_fraction                    0.5                 Controls the fraction of the DistSQL streamer's memory budget that might be used for issuing requests eagerly in the InOrder mode.
+streamer_out_of_order_eager_memory_usage_fraction                0.8                 Controls the fraction of the DistSQL streamer's memory budget that might be used for issuing requests eagerly in the OutOfOrder mode.
+strict_ddl_atomicity                                             off                 When enabled, causes errors when DDL operations inside an explicit transaction cannot be guaranteed to be performed atomically, preventing partial transaction commits.
+stub_catalog_tables                                              on                  Controls whether catalog tables are stubbed out.
+synchronize_seqscans                                             on                  Controls whether synchronized sequential scans are enabled (compatibility setting).
+synchronous_commit                                               on                  synchronous_commit is included for compatibility with Postgres; changing it has no effect.
+system_identity                                                  root                Indicates the original name of the client presented to pgwire before it was mapped to a SQL identifier.
+tcp_keepalives_count                                             0                   Sets the number of TCP keepalive probes to send before giving up on the connection.
+tcp_keepalives_idle                                              0                   Sets the time interval in seconds before TCP keepalive probes are sent on idle connections.
+tcp_keepalives_interval                                          0                   Sets the time interval in seconds between TCP keepalive probes.
+tcp_user_timeout                                                 0                   Sets the time in milliseconds before a connection is forcibly closed if data is not acknowledged.
+testing_optimizer_cost_perturbation                              0                   Controls the random cost perturbation factor for producing non-optimal query plans during testing.
+testing_optimizer_disable_rule_probability                       0                   Sets the probability of randomly disabling non-essential optimizer transformation rules for testing.
+testing_optimizer_inject_panics                                  off                 Controls whether random panics are injected during optimization to test error-propagation.
+testing_optimizer_random_seed                                    0                   Sets a random seed for the optimizer for testing by initializing an RNG with the given integer.
+testing_vectorize_inject_panics                                  off                 Controls whether random panics are injected into vectorized execution to test error propagation.
+timezone                                                         UTC                 Sets the timezone used for parsing timestamps.
+tracing                                                          off                 Controls whether tracing is enabled for the session.
+transaction_isolation                                            serializable        The isolation level of the current transaction. Possible values are `SERIALIZABLE` and `READ COMMITTED`. Also allows the isolation level to change as long as queries have not been executed yet.
+transaction_priority                                             normal              The priority level of the current transaction. Possible values are `LOW`, `NORMAL`, and `HIGH`.
+transaction_read_only                                            off                 Controls whether the current transaction is read-only.
+transaction_rows_read_err                                        0                   Sets the limit for the number of rows read by a SQL transaction which - once exceeded - will fail the transaction (0 means disabled).
+transaction_rows_read_log                                        0                   Sets the threshold for the number of rows read by a SQL transaction which - once exceeded - will trigger a logging event.
+transaction_rows_written_err                                     0                   The limit for the number of rows written by a SQL transaction which - once exceeded - will fail the transaction (0 means disabled).
+transaction_rows_written_log                                     0                   Sets the threshold for the number of rows written by a SQL transaction which - once exceeded - will trigger a logging event.
+transaction_status                                               NoTxn               Reports the current transaction status.
+transaction_timeout                                              0                   Sets the maximum duration a transaction is permitted to run before cancellation.
+troubleshooting_mode                                             off                 When enabled, avoids performing additional work on queries such as collecting and emitting telemetry data. This is particularly useful when the cluster is experiencing issues, unavailability, or failure.
+unbounded_parallel_scans                                         off                 Controls whether the TableReader DistSQL processors should parallelize scans across ranges.
+unconstrained_non_covering_index_scan_enabled                    off                 Controls whether unconstrained non-covering index scan access paths are explored by the optimizer.
+unsafe_allow_triggers_modifying_cascades                         off                 When enabled, allows row-level BEFORE triggers to modify or filter rows that are being updated or deleted as part of a cascading foreign key action. This is unsafe because it can lead to constraint violations.
+use_backups_with_ids                                             off                 Controls whether backup operations use backup IDs.
+use_cputs_on_non_unique_indexes                                  off                 Controls whether conditional puts (CPuts) at the KV layer are used on non-unique indexes.
+use_declarative_schema_changer                                   on                  Controls whether the declarative schema changer is used.
+use_improved_routine_dependency_tracking                         on                  Controls whether improved dependency tracking is used for stored procedures and routines.
+use_improved_routine_deps_triggers_and_computed_cols             on                  Controls whether improved dependency tracking is used for routines involving triggers and computed columns.
+use_pre_25_2_variadic_builtins                                   off                 Controls whether pre-25.2 variadic built-in function behavior is used.
+use_proc_txn_control_extended_protocol_fix                       on                  Controls whether a fix for procedure transaction control with the extended protocol is enabled.
+use_soft_limit_for_distribute_scan                               on                  Controls whether soft limits are used for distributing scans across nodes.
+use_swap_mutations                                               off                 Controls whether swap mutations are used as an alternative mutation strategy.
+variable_inequality_lookup_join_enabled                          on                  Controls whether the optimizer should consider lookup joins with inequality conditions.
+vector_search_beam_size                                          32                  Sets the beam width for vector search operations.
+vector_search_rerank_multiplier                                  50                  Sets the multiplier for re-ranking candidates in vector search results.
+vectorize                                                        on                  Controls if and when the Executor executes queries using the columnar execution engine. Can be 'off', 'on', or 'experimental_always'.
+xmloption                                                        content             Sets how XML data is to be implicitly parsed (compatibility setting).
 
 query T colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]
@@ -447,13 +455,11 @@ CREATE TABLE foo(x INT); SELECT * FROM [SHOW TABLES]
 schema_name  table_name  type   owner  estimated_row_count  locality
 public       foo         table  root   0                    NULL
 
-
 query T colnames
 SELECT * FROM [SHOW TIMEZONE]
 ----
 timezone
 UTC
-
 
 query T colnames
 SELECT * FROM [SHOW TIME ZONE]
@@ -461,13 +467,11 @@ SELECT * FROM [SHOW TIME ZONE]
 timezone
 UTC
 
-
 query T colnames
 SELECT * FROM [SHOW TRANSACTION ISOLATION LEVEL]
 ----
 transaction_isolation
 serializable
-
 
 query T colnames
 SELECT * FROM [SHOW TRANSACTION PRIORITY]
@@ -480,7 +484,6 @@ SELECT * FROM [SHOW TRANSACTION STATUS]
 ----
 transaction_status
 NoTxn
-
 
 query TT colnames
 SELECT * FROM [SHOW CREATE TABLE system.descriptor]
@@ -502,7 +505,6 @@ v           CREATE VIEW public.v (
               id
             ) AS SELECT id FROM system.public.descriptor;
 
-
 query TTT colnames
 SELECT username,options,member_of FROM [SHOW USERS] ORDER BY 1
 ----
@@ -511,12 +513,11 @@ admin     {}       {}
 root      {}       {admin}
 testuser  {}       {}
 
-
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM CURRENT_CATALOG WITH DETAILS]
 ----
 start_key  end_key  replicas  lease_holder
-/Table/76  /Max     {1}       1
+/Table/79  /Max     {1}       1
 
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE system.descriptor WITH DETAILS]

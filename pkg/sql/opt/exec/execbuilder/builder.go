@@ -300,6 +300,32 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 		return nil, err
 	}
 
+	// Check if RLS policies were applied during query planning. This includes
+	// the case where no policies matched and all rows are filtered out.
+	rlsMeta := b.mem.Metadata().GetRLSMeta()
+	if rlsMeta.IsInitialized {
+		if rlsMeta.NoPoliciesApplied {
+			b.flags.Set(exec.PlanFlagUsesRLS)
+		} else {
+			for _, pa := range rlsMeta.PoliciesApplied {
+				if pa.Filter.Len() > 0 || pa.Check.Len() > 0 {
+					b.flags.Set(exec.PlanFlagUsesRLS)
+					break
+				}
+			}
+		}
+	}
+
+	// If any table in the plan has divergent canary vs. stable statistics,
+	// mark the execution so that it is counted in canary/stable experiment
+	// metrics.
+	for _, tabMeta := range b.mem.Metadata().AllTables() {
+		if tabMeta.Table.CanaryAndStableStatsDiffer() {
+			b.flags.Set(exec.PlanFlagCanaryAndStableStatsDiffer)
+			break
+		}
+	}
+
 	rootRowCount := int64(b.e.(memo.RelExpr).Relational().Statistics().RowCountIfAvailable())
 	return b.factory.ConstructPlan(
 		plan.root, b.subqueries, b.cascades, b.triggers, b.checks, rootRowCount, b.flags,
@@ -346,20 +372,12 @@ func (b *Builder) wrapFunction(fnName string) (tree.ResolvableFunctionReference,
 	return b.wrapFunctionImpl(fnName, lookup)
 }
 
-func (b *Builder) build(e opt.Expr) (_ execPlan, outputCols colOrdMap, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate errors without adding lots of checks
-			// for `if err != nil` throughout the construction code. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				panic(r)
-			}
-		}
-	}()
+func (b *Builder) build(e opt.Expr) (_ execPlan, outputCols colOrdMap, retErr error) {
+	// This allows us to propagate errors without adding lots of checks for
+	// `if err != nil` throughout the construction code. This is only possible
+	// because the code does not update shared state and does not manipulate
+	// locks.
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
 	rel, ok := e.(memo.RelExpr)
 	if !ok {

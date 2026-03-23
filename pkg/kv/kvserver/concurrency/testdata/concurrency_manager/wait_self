@@ -35,7 +35,7 @@ sequence req=reqOld
 
 on-lock-acquired req=reqOld key=k
 ----
-[-] acquire lock: txn 00000002 @ ‹k›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 finish req=reqOld
 ----

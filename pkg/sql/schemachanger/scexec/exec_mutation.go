@@ -8,6 +8,8 @@ package scexec
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/errors"
@@ -25,6 +27,10 @@ func executeMutationOps(
 	for _, op := range ops {
 		if iop, ok := op.(scop.ImmediateMutationOp); ok {
 			if err := iop.Visit(ctx, uv); err != nil {
+				// If the error already has a PG code, then treat it as a user error.
+				if pgerror.HasCandidateCode(err) {
+					return scerrors.SchemaChangerUserError(err)
+				}
 				return errors.Wrapf(err, "%T: %v", op, op)
 			}
 		}
@@ -42,6 +48,10 @@ func executeMutationOps(
 	for _, op := range ops {
 		if dop, ok := op.(scop.DeferredMutationOp); ok {
 			if err := dop.Visit(ctx, nv); err != nil {
+				// If the error already has a PG code, then treat it as a user error.
+				if pgerror.HasCandidateCode(err) {
+					return scerrors.SchemaChangerUserError(err)
+				}
 				return errors.Wrapf(err, "%T: %v", op, op)
 			}
 		}

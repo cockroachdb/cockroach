@@ -8,6 +8,7 @@ package xform_test
 import (
 	"context"
 	"flag"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -230,6 +231,28 @@ func TestPlaceholderFastPath(t *testing.T) {
 	)
 }
 
+// vtableOIDRegexp matches virtual table OIDs (in the 4294966xxx-4294967xxx range).
+// These OIDs shift when new virtual tables are added, so we normalize them to
+// avoid brittle tests.
+var vtableOIDRegexp = regexp.MustCompile(`\b(429496[6-7]\d{3})\b`)
+
+// oidContextRegexp matches lines that contain OID-related identifiers, indicating
+// the line is likely referring to catalog OIDs rather than user data.
+var oidContextRegexp = regexp.MustCompile(`(?i)(oid|relid|classoid|attrelid)`)
+
+// normalizeVTableOIDs replaces virtual table OIDs with a placeholder to avoid
+// brittle tests that break when new virtual tables are added. Only normalizes
+// on lines that appear to be referring to OIDs (contain oid-related identifiers).
+func normalizeVTableOIDs(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		if oidContextRegexp.MatchString(line) {
+			lines[i] = vtableOIDRegexp.ReplaceAllString(line, "<vtable-oid>")
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
 // runDataDrivenTest runs data-driven testcases of the form
 //
 //	<command>
@@ -244,7 +267,10 @@ func runDataDrivenTest(t *testing.T, path string, fmtFlags memo.ExprFmtFlags) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			tester := opttester.New(catalog, d.Input)
 			tester.Flags.ExprFormat = fmtFlags
-			return tester.RunCommand(t, d)
+			result := tester.RunCommand(t, d)
+			// Normalize virtual table OIDs to avoid tests breaking when new
+			// virtual tables are added.
+			return normalizeVTableOIDs(result)
 		})
 	})
 }

@@ -386,3 +386,60 @@ statement error pgcode 2BP01 pq: cannot drop column "a" because function "f_upda
 ALTER TABLE table_drop DROP COLUMN a;
 
 subtest end
+
+# Prevent drop of column used in SET clause within a routine.
+subtest regression_158898
+
+statement ok
+CREATE TABLE t158898 (col1 INT8 NOT NULL);
+
+statement ok
+CREATE OR REPLACE PROCEDURE p158898() LANGUAGE PLpgSQL AS $proc$
+  BEGIN UPDATE t158898 SET col1 = 1; END;
+$proc$;
+
+statement error pgcode 2BP01 pq: cannot drop column "col1" because function "p158898" depends on it
+ALTER TABLE t158898 DROP COLUMN col1;
+
+statement ok
+DROP PROCEDURE p158898;
+DROP TABLE t158898;
+
+subtest end
+
+# Allow drop of columns referenced only in computed column expressions.
+subtest regression_158154
+
+statement ok
+CREATE TABLE t158154 (col1 INT8 NOT NULL, col2 TIMESTAMP NOT NULL, computed TIMESTAMP NOT NULL AS (col2) STORED);
+INSERT INTO t158154 (col1, col2) VALUES (1, '2024-01-01');
+
+statement ok
+CREATE OR REPLACE PROCEDURE p158154() LANGUAGE PLpgSQL AS $proc$
+  BEGIN UPDATE t158154 SET col1 = col1 + 1; END;
+$proc$;
+
+statement ok
+CALL p158154()
+
+query ITT
+SELECT * FROM t158154
+----
+2  2024-01-01 00:00:00 +0000 +0000  2024-01-01 00:00:00 +0000 +0000
+
+statement ok
+ALTER TABLE t158154 DROP COLUMN computed, DROP COLUMN col2;
+
+statement ok
+CALL p158154()
+
+query I
+SELECT * FROM t158154
+----
+3
+
+statement ok
+DROP PROCEDURE p158154;
+DROP TABLE t158154;
+
+subtest end

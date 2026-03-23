@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -81,6 +82,27 @@ type Txn struct {
 	// of Txns created on remote nodes by DistSQL this will be the gateway.
 	// It will be attached to all requests sent through this transaction.
 	gatewayNodeID roachpb.NodeID
+
+	// appNameID, if != 0, is the hash of the application name for
+	// ASH sampling. Propagated alongside workloadID to all BatchRequests.
+	// Set when the workload is from SQL execution.
+	// Note(alyshan): This will eventually be replaced by a general
+	// enrichment_id field which will enable the ASH sampler to
+	// enrich samples with more workload context.
+	appNameID uint64
+
+	// workloadID, if != 0, is the identifier for the workload that is using
+	// this transaction (e.g., statement fingerprint ID, job ID). It will be
+	// attached to all requests sent through this transaction.
+	// Note(alyshan): This field can change during the lifetime of the Txn, this
+	// is safe to do since the only use case of doing so involves no concurrent
+	// access of this field. This is when the connExecutor is serving a multi-statement
+	// transaction. In that case, statements are executed sequentially, and the
+	// workloadID is updated after each statement.
+	workloadID uint64
+	// workloadType identifies the kind of workload that workloadID
+	// represents (statement fingerprint, job, system task).
+	workloadType workloadid.WorkloadType
 
 	// The following fields are not safe for concurrent modification.
 	// They should be set before operating on the transaction.
@@ -439,6 +461,17 @@ func (txn *Txn) DebugName() string {
 
 func (txn *Txn) debugNameLocked() string {
 	return fmt.Sprintf("%s (id: %s)", txn.mu.debugName, txn.mu.ID)
+}
+
+// SetWorkloadInfo sets the workload ID, app name ID, and workload
+// type for ASH sampling. All three are automatically propagated to
+// all BatchRequests sent through this transaction.
+func (txn *Txn) SetWorkloadInfo(
+	workloadID, appNameID uint64, workloadType workloadid.WorkloadType,
+) {
+	txn.workloadID = workloadID
+	txn.appNameID = appNameID
+	txn.workloadType = workloadType
 }
 
 // SetBufferedWritesEnabled toggles whether the writes are buffered on the
@@ -1353,6 +1386,18 @@ func (txn *Txn) Send(
 		ba.Header.GatewayNodeID = txn.gatewayNodeID
 	}
 
+	if txn.workloadID != 0 && ba.Header.WorkloadID == 0 {
+		ba.Header.WorkloadID = txn.workloadID
+	}
+
+	if txn.appNameID != 0 && ba.Header.AppNameID == 0 {
+		ba.Header.AppNameID = txn.appNameID
+	}
+
+	if txn.workloadType != workloadid.WorkloadTypeUnknown && ba.Header.WorkloadType == 0 {
+		ba.Header.WorkloadType = txn.workloadType.ToUint32()
+	}
+
 	// Requests with a bounded staleness header should use NegotiateAndSend.
 	if ba.BoundedStaleness != nil {
 		return nil, kvpb.NewError(errors.AssertionFailedf(
@@ -1818,6 +1863,9 @@ func (txn *Txn) CreateSavepoint(ctx context.Context) (SavepointToken, error) {
 // and can be reused later (e.g. to release or roll back again).
 //
 // This method is only valid when called on RootTxns.
+//
+// NB: after calling RollbackToSavepoint, the transaction's read sequence number
+// must be stepped by calling Step() before any further requests are performed.
 func (txn *Txn) RollbackToSavepoint(ctx context.Context, s SavepointToken) error {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()

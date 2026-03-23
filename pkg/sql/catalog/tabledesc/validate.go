@@ -230,11 +230,14 @@ func (desc *wrapper) ValidateForwardReferences(
 	// Check partitioning is correctly set.
 	// We only check these for active indexes, as inactive indexes may be in the
 	// process of being backfilled without PartitionAllBy.
+	// No need to check index partitioning if locality is changing to/from RBR.
+	// Recreated secondary indexes might have a different partitioning from the
+	// primary key during the schema change.
 	// This check cannot be performed in ValidateSelf due to a conflict with
 	// AllocateIDs.
 	if desc.PartitionAllBy {
 		for _, indexI := range desc.ActiveIndexes() {
-			if !desc.matchingPartitionbyAll(indexI) {
+			if !indexI.Adding() && !desc.matchingPartitionbyAll(indexI) {
 				vea.Report(errors.AssertionFailedf(
 					"table has PARTITION ALL BY defined, but index %s does not have matching PARTITION BY",
 					indexI.GetName(),
@@ -1769,6 +1772,43 @@ func (desc *wrapper) validateTableIndexes(
 			if catalog.FindColumnByName(desc, idx.GetSharded().Name) == nil {
 				return errors.Newf("index %q refers to non-existent shard column %q",
 					idx.GetName(), idx.GetSharded().Name)
+			}
+
+			// Validate that shard columns are a valid subset of index key columns.
+			shardedDesc := idx.GetSharded()
+			if len(shardedDesc.ColumnNames) == 0 {
+				return errors.Newf("index %q has empty shard column names",
+					idx.GetName())
+			}
+
+			// Get the index key column names, excluding implicit columns like the
+			// shard column itself or the crdb_region column used for partitioning.
+			var indexColNames []string
+			for i := idx.ExplicitColumnStartIdx(); i < idx.NumKeyColumns(); i++ {
+				colName := idx.GetKeyColumnName(i)
+				indexColNames = append(indexColNames, colName)
+			}
+
+			// We avoid running this validation if the number of shard columns is
+			// the same as the number of index column names. This is because this
+			// validation is only intended for indexes that have opted into the
+			// behavior of explicitly defining shard columns instead of using the
+			// implicit behavior of sharding based on all the index columns.
+			if len(shardedDesc.ColumnNames) < len(indexColNames) {
+				// Validate that each shard column appears in the index columns.
+				// Build a set of index column names for efficient lookup.
+				indexColSet := make(map[string]struct{}, len(indexColNames))
+				for _, colName := range indexColNames {
+					indexColSet[colName] = struct{}{}
+				}
+
+				// Check that each shard column exists in the index.
+				for _, shardColName := range shardedDesc.ColumnNames {
+					if _, ok := indexColSet[shardColName]; !ok {
+						return errors.Newf("index %q shard column %q is not in the index columns",
+							idx.GetName(), shardColName)
+					}
+				}
 			}
 		}
 		if idx.IsPartial() {

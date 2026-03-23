@@ -29,8 +29,47 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
+	"github.com/klauspost/compress/zstd"
 	yaml "gopkg.in/yaml.v2"
 )
+
+// fileEncoding represents the encoding of a tsdump file.
+type fileEncoding int
+
+const (
+	encodingNone fileEncoding = iota
+	encodingZstd
+)
+
+// encodingSignatures maps file encodings to their magic bytes.
+var encodingSignatures = map[fileEncoding][]byte{
+	encodingZstd: {0x28, 0xB5, 0x2F, 0xFD},
+}
+
+// detectEncoding returns the encoding based on the file header.
+func detectEncoding(header []byte) fileEncoding {
+	for enc, sig := range encodingSignatures {
+		if bytes.HasPrefix(header, sig) {
+			return enc
+		}
+	}
+	return encodingNone
+}
+
+// newDecodingReader wraps r with the appropriate decoder based on encoding.
+// Returns the reader and a cleanup function that must be called when done.
+func newDecodingReader(r io.Reader, enc fileEncoding) (io.Reader, func(), error) {
+	switch enc {
+	case encodingZstd:
+		zr, err := zstd.NewReader(r)
+		if err != nil {
+			return nil, nil, errors.Wrap(err, "creating zstd reader")
+		}
+		return zr, func() { zr.Close() }, nil
+	default:
+		return r, func() {}, nil
+	}
+}
 
 // maxBatchSize governs the maximum size of the kv batch comprising of ts data
 // to be written to the DB.
@@ -109,12 +148,28 @@ func maybeImportTS(ctx context.Context, s *topLevelServer) (returnErr error) {
 	}
 	defer f.Close()
 
+	// Detect file encoding by reading header.
+	header := make([]byte, 4)
+	if _, err := f.Read(header); err != nil && err != io.EOF {
+		return errors.Wrap(err, "reading file header")
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return errors.Wrap(err, "seeking to file start")
+	}
+
+	enc := detectEncoding(header)
+	reader, cleanup, err := newDecodingReader(f, enc)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
 	// Build store-to-node mapping either from an explicit YAML file or, if
 	// not provided, from embedded metadata inside the tsdump (when present).
 	storeToNode := map[roachpb.StoreID]roachpb.NodeID{}
 
 	// Try to read embedded metadata from the tsdump file itself.
-	dec := gob.NewDecoder(f)
+	dec := gob.NewDecoder(reader)
 	if md, err := tsdumpmeta.Read(dec); err == nil && md != nil && len(md.StoreToNodeMap) > 0 {
 		for sID, nID := range md.StoreToNodeMap {
 			si, err1 := strconv.Atoi(strings.TrimSpace(sID))
@@ -135,7 +190,13 @@ func maybeImportTS(ctx context.Context, s *topLevelServer) (returnErr error) {
 		if _, err := f.Seek(0, io.SeekStart); err != nil {
 			return err
 		}
-		dec = gob.NewDecoder(f)
+		// Re-create reader (decoder state is not seekable).
+		reader, cleanup, err = newDecodingReader(f, enc)
+		if err != nil {
+			return err
+		}
+		defer cleanup()
+		dec = gob.NewDecoder(reader)
 		log.Dev.Infof(ctx, "Embedded metadata not found in the tsdump file. "+
 			"Reading from the store-to-node mapping file.")
 

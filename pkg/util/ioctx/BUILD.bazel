@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "ioctx",
-    srcs = ["reader.go"],
+    srcs = [
+        "random_access_reader.go",
+        "reader.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/ioctx",
     visibility = ["//visibility:public"],
     deps = ["@com_github_cockroachdb_errors//:errors"],
@@ -11,7 +14,10 @@ go_library(
 go_test(
     name = "ioctx_test",
     size = "small",
-    srcs = ["reader_test.go"],
+    srcs = [
+        "random_access_reader_test.go",
+        "reader_test.go",
+    ],
     embed = [":ioctx"],
     deps = [
         "@com_github_cockroachdb_errors//:errors",

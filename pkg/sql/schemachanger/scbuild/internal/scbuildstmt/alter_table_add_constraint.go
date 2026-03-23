@@ -80,11 +80,13 @@ func alterTableAddPrimaryKey(
 	}
 
 	d := t.ConstraintDef.(*tree.UniqueConstraintTableDef)
-	// Ensure that there is a default rowid column.
+	// Ensure that there is a default rowid column, OR there's a DROP CONSTRAINT
+	// for the existing PK in the same statement (meaning this is a PK swap).
 	oldPrimaryIndex := mustRetrieveCurrentPrimaryIndexElement(b, tbl.TableID)
-	if getPrimaryIndexDefaultRowIDColumn(
+	implicitRowIDPKCol := getPrimaryIndexDefaultRowIDColumn(
 		b, tbl.TableID, oldPrimaryIndex.IndexID,
-	) == nil {
+	)
+	if implicitRowIDPKCol == nil && !oldPrimaryIndexNameIsBeingDropped(b, tbl.TableID, oldPrimaryIndex.IndexID) {
 		// If the constraint already exists then nothing to do here.
 		if oldPrimaryIndex != nil && d.IfNotExists {
 			return
@@ -99,6 +101,21 @@ func alterTableAddPrimaryKey(
 		Name:          d.Name,
 		StorageParams: d.StorageParams,
 	})
+}
+
+// oldPrimaryIndexNameIsBeingDropped checks if the old primary index's
+// IndexName element has been marked as ToAbsent by a DROP CONSTRAINT command
+// earlier in the same statement. This indicates a PK swap is in progress.
+func oldPrimaryIndexNameIsBeingDropped(
+	b BuildCtx, tableID catid.DescID, oldPrimaryIndexID catid.IndexID,
+) bool {
+	// Check if the old primary index's IndexName has a ToAbsent target.
+	tableElts := b.QueryByID(tableID)
+	droppedIndexNames := tableElts.FilterIndexName().Filter(
+		func(_ scpb.Status, target scpb.TargetStatus, name *scpb.IndexName) bool {
+			return name.IndexID == oldPrimaryIndexID && target == scpb.ToAbsent
+		})
+	return !droppedIndexNames.IsEmpty()
 }
 
 // alterTableAddCheck contains logic for building
@@ -313,13 +330,24 @@ func alterTableAddForeignKey(
 	// implicit columns.
 	if len(fkDef.ToCols) == 0 {
 		primaryIndexIDInReferencedTable := getCurrentPrimaryIndexID(b, referencedTableID)
-		numImplicitCols := 0
+
+		// Explicit columns in the primary index come after all internal columns.
+		explicitColStartIdx := 0
+
+		// Account for partitioning implicit columns.
 		primaryIndexPartitioningElemInReferencedTable := maybeRetrieveIndexPartitioningElem(b, referencedTableID, primaryIndexIDInReferencedTable)
 		if primaryIndexPartitioningElemInReferencedTable != nil {
-			numImplicitCols = int(primaryIndexPartitioningElemInReferencedTable.NumImplicitColumns)
+			explicitColStartIdx = int(primaryIndexPartitioningElemInReferencedTable.NumImplicitColumns)
 		}
+
+		// Account for hash shard column.
+		primaryIndexElem := mustRetrieveCurrentPrimaryIndexElement(b, referencedTableID)
+		if primaryIndexElem.Sharding != nil {
+			explicitColStartIdx++
+		}
+
 		keyColIDsOfPrimaryIndexInReferencedTable, _, _ := getSortedColumnIDsInIndexByKind(b, referencedTableID, primaryIndexIDInReferencedTable)
-		for i := numImplicitCols; i < len(keyColIDsOfPrimaryIndexInReferencedTable); i++ {
+		for i := explicitColStartIdx; i < len(keyColIDsOfPrimaryIndexInReferencedTable); i++ {
 			fkDef.ToCols = append(
 				fkDef.ToCols,
 				tree.Name(mustRetrieveColumnNameElem(b, referencedTableID, keyColIDsOfPrimaryIndexInReferencedTable[i]).Name),

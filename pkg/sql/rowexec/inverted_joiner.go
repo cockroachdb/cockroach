@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -38,10 +39,11 @@ import (
 // higher scan throughput of larger batches and the cost of spilling the
 // scanned rows to disk. The spilling cost will probably be dominated by
 // the de-duping cost, since it incurs a read.
-var invertedJoinerBatchSize = metamorphic.ConstantWithTestValue(
+var invertedJoinerBatchSize = metamorphic.ConstantWithTestRange(
 	"inverted-joiner-batch-size",
 	100, /* defaultValue */
-	1,   /* metamorphicValue */
+	1,   /* min */
+	10,  /* max */
 )
 
 // invertedJoinerState represents the state of the processor.
@@ -66,6 +68,8 @@ type invertedJoiner struct {
 	runningState        invertedJoinerState
 	unlimitedMemMonitor *mon.BytesMonitor
 	diskMonitor         *mon.BytesMonitor
+
+	cancelChecker cancelchecker.CancelChecker
 
 	// prefixEqualityCols are the ordinals of the columns from the join input
 	// that represent join values for the non-inverted prefix columns of
@@ -303,6 +307,7 @@ func newInvertedJoiner(
 			Spec:                       &spec.FetchSpec,
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+			WorkloadID:                 flowCtx.EvalCtx.WorkloadID,
 		},
 	); err != nil {
 		return nil, err
@@ -414,6 +419,11 @@ func (ij *invertedJoiner) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetad
 func (ij *invertedJoiner) readInput() (invertedJoinerState, *execinfrapb.ProducerMetadata) {
 	// Read the next batch of input rows.
 	for len(ij.inputRows) < ij.batchSize {
+		if err := ij.cancelChecker.Check(); err != nil {
+			ij.MoveToDraining(err)
+			return ijStateUnknown, nil
+		}
+
 		row, meta := ij.input.Next()
 		if meta != nil {
 			if meta.Err != nil {
@@ -742,6 +752,7 @@ func (ij *invertedJoiner) Start(ctx context.Context) {
 		&ij.scanStatsListener, &ij.tenantConsumptionListener,
 	)
 	ij.input.Start(ctx)
+	ij.cancelChecker.Reset(ctx, 16 /* checkInterval */)
 	ij.runningState = ijReadingInput
 }
 
@@ -810,6 +821,7 @@ func (ij *invertedJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = ij.fetcher.GetBytesRead()
 	meta.Metrics.RowsRead = ij.rowsRead
+	meta.Metrics.KVCPUTime = ij.fetcher.GetKVCPUTime()
 	if tfs := execinfra.GetLeafTxnFinalState(ij.Ctx(), ij.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}

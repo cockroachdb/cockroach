@@ -255,3 +255,283 @@ testmap      /^(.*)@cockroachlabs.com$     \1
 		a.Equal("carl", elts[0].Normalized())
 	}
 }
+
+func TestMapMultiple(t *testing.T) {
+	t.Run("AllIdentitiesMatch", func(t *testing.T) {
+		data := `
+testmap      /^(.*)@example.com$           \1
+testmap      /^(.*)@cockroachlabs.com$     crdb_\1
+`
+		m, err := From(strings.NewReader(data))
+		assert.NoError(t, err)
+
+		mappings, mapFound, err := m.MapMultiple("testmap", []string{
+			"user1@example.com",
+			"user2@cockroachlabs.com",
+		})
+		assert.NoError(t, err)
+		assert.True(t, mapFound)
+
+		assert.Len(t, mappings, 2)
+		assert.Equal(t, "user1@example.com", mappings[0].SystemIdentity)
+		assert.Equal(t, "user1", mappings[0].MappedUser.Normalized())
+		assert.Equal(t, "user2@cockroachlabs.com", mappings[1].SystemIdentity)
+		assert.Equal(t, "crdb_user2", mappings[1].MappedUser.Normalized())
+	})
+
+	t.Run("SomeIdentitiesMatch", func(t *testing.T) {
+		data := `
+testmap      /^(.*)@example.com$           \1
+`
+		m, err := From(strings.NewReader(data))
+		assert.NoError(t, err)
+
+		mappings, mapFound, err := m.MapMultiple("testmap", []string{
+			"match@example.com",
+			"nomatch@other.com",
+			"another@example.com",
+		})
+		assert.NoError(t, err)
+		assert.True(t, mapFound)
+
+		assert.Len(t, mappings, 2)
+		assert.Equal(t, "match@example.com", mappings[0].SystemIdentity)
+		assert.Equal(t, "match", mappings[0].MappedUser.Normalized())
+		assert.Equal(t, "another@example.com", mappings[1].SystemIdentity)
+		assert.Equal(t, "another", mappings[1].MappedUser.Normalized())
+	})
+
+	t.Run("NoIdentitiesMatch", func(t *testing.T) {
+		data := `
+testmap      /^(.*)@example.com$           \1
+`
+		m, err := From(strings.NewReader(data))
+		assert.NoError(t, err)
+
+		mappings, mapFound, err := m.MapMultiple("testmap", []string{
+			"nomatch1",
+			"nomatch2@other.com",
+			"nomatch3",
+		})
+
+		assert.NoError(t, err)
+		assert.True(t, mapFound)
+		assert.Len(t, mappings, 0)
+	})
+
+	t.Run("DeduplicationSameUser", func(t *testing.T) {
+		data := `
+testmap      carl@example.com              carl
+testmap      carl@cockroachlabs.com        carl
+`
+		m, err := From(strings.NewReader(data))
+		assert.NoError(t, err)
+
+		mappings, mapFound, err := m.MapMultiple("testmap", []string{
+			"carl@cockroachlabs.com",
+			"carl@example.com",
+		})
+		assert.NoError(t, err)
+		assert.True(t, mapFound)
+
+		// Only the first occurrence in map should be returned.
+		// TODO: discuss this if map should be first or system identity order.
+		assert.Len(t, mappings, 1)
+		assert.Equal(t, "carl@cockroachlabs.com", mappings[0].SystemIdentity)
+		assert.Equal(t, "carl", mappings[0].MappedUser.Normalized())
+	})
+
+	t.Run("DeduplicationCaseInsensitive", func(t *testing.T) {
+		data := `
+testmap      /^(.*)@example.com$           \1
+testmap      /^(.*)@other.com$             \1
+`
+		m, err := From(strings.NewReader(data))
+		assert.NoError(t, err)
+
+		mappings, mapFound, err := m.MapMultiple("testmap", []string{
+			"Carl@example.com",
+			"CARL@other.com",
+		})
+		assert.NoError(t, err)
+		assert.True(t, mapFound)
+
+		// Both produce "Carl" and "CARL" which normalize to "carl", so only first should be returned.
+		assert.Len(t, mappings, 1)
+		assert.Equal(t, "Carl@example.com", mappings[0].SystemIdentity)
+		assert.Equal(t, "carl", mappings[0].MappedUser.Normalized())
+	})
+
+	t.Run("DeduplicationAcrossRules", func(t *testing.T) {
+		data := `
+testmap      carl@example.com              carl
+testmap      /^(.*)@example.com$           \1
+`
+		m, err := From(strings.NewReader(data))
+		assert.NoError(t, err)
+
+		// This identity matches both rules, both producing "carl".
+		mappings, mapFound, err := m.MapMultiple("testmap", []string{"carl@example.com"})
+		assert.NoError(t, err)
+		assert.True(t, mapFound)
+
+		// Only the first match should be returned.
+		assert.Len(t, mappings, 1)
+		assert.Equal(t, "carl@example.com", mappings[0].SystemIdentity)
+		assert.Equal(t, "carl", mappings[0].MappedUser.Normalized())
+	})
+
+	t.Run("OrderFollowsElementPriority", func(t *testing.T) {
+		data := `
+testmap      user2@example.com             user2
+testmap      user3@example.com             user3
+testmap      user1@example.com             user1
+`
+		m, err := From(strings.NewReader(data))
+		assert.NoError(t, err)
+
+		// Provide identities in a different order than rules are defined.
+		mappings, mapFound, err := m.MapMultiple("testmap", []string{
+			"user3@example.com",
+			"user1@example.com",
+			"user2@example.com",
+		})
+		assert.NoError(t, err)
+		assert.True(t, mapFound)
+
+		assert.Len(t, mappings, 3)
+		// Results should follow system identity order (user3 is first).
+		assert.Equal(t, "user3@example.com", mappings[0].SystemIdentity)
+		assert.Equal(t, "user3", mappings[0].MappedUser.Normalized())
+		assert.Equal(t, "user1@example.com", mappings[1].SystemIdentity)
+		assert.Equal(t, "user1", mappings[1].MappedUser.Normalized())
+		assert.Equal(t, "user2@example.com", mappings[2].SystemIdentity)
+		assert.Equal(t, "user2", mappings[2].MappedUser.Normalized())
+	})
+
+	t.Run("FirstMatchWins", func(t *testing.T) {
+		data := `
+testmap      identity1                     target_user
+testmap      identity2                     target_user
+testmap      identity3                     target_user
+`
+		m, err := From(strings.NewReader(data))
+		assert.NoError(t, err)
+
+		mappings, mapFound, err := m.MapMultiple("testmap", []string{
+			"identity2",
+			"identity1",
+			"identity3",
+		})
+		assert.NoError(t, err)
+		assert.True(t, mapFound)
+		// All map to same user, but first match (based on system identity order) wins.
+		// System identities are ordered: identity2, identity1, identity3
+		// For each identity, we check all mapped rules.
+		// So rule1 (identity2) checks all identities -> matches "identity2"
+		assert.Len(t, mappings, 1)
+		assert.Equal(t, "identity2", mappings[0].SystemIdentity)
+		assert.Equal(t, "target_user", mappings[0].MappedUser.Normalized())
+	})
+
+	t.Run("NonExistentMap", func(t *testing.T) {
+		data := `
+testmap      /^(.*)@example.com$           \1
+`
+		m, err := From(strings.NewReader(data))
+		assert.NoError(t, err)
+
+		mappings, mapFound, err := m.MapMultiple("nonexistent", []string{
+			"user@example.com",
+		})
+		assert.NoError(t, err)
+		assert.False(t, mapFound)
+		assert.Len(t, mappings, 0)
+	})
+
+	t.Run("EmptyConfiguration", func(t *testing.T) {
+		m := Empty()
+
+		mappings, mapFound, err := m.MapMultiple("testmap", []string{
+			"user@example.com",
+		})
+		assert.NoError(t, err)
+		assert.False(t, mapFound)
+		assert.Len(t, mappings, 0)
+	})
+
+	t.Run("CertificateSANs", func(t *testing.T) {
+		data := `
+sanmap       /^SAN:DNS:(.*)\.example\.com$     domain_\1
+sanmap       /^SAN:URI:https://(.*)$            uri_\1
+sanmap       /^SAN:IP:(.*)$                     ip_\1
+`
+		m, err := From(strings.NewReader(data))
+		assert.NoError(t, err)
+
+		mappings, mapFound, err := m.MapMultiple("sanmap", []string{
+			"SAN:DNS:www.example.com",
+			"SAN:DNS:api.example.com",
+			"SAN:URI:https://service.internal",
+			"SAN:IP:192.168.1.1",
+			"SAN:EMAIL:user@example.com", // This won't match any rule.
+		})
+		assert.NoError(t, err)
+		assert.True(t, mapFound)
+
+		assert.Len(t, mappings, 4)
+		assert.Equal(t, "SAN:DNS:www.example.com", mappings[0].SystemIdentity)
+		assert.Equal(t, "domain_www", mappings[0].MappedUser.Normalized())
+		assert.Equal(t, "SAN:DNS:api.example.com", mappings[1].SystemIdentity)
+		assert.Equal(t, "domain_api", mappings[1].MappedUser.Normalized())
+		assert.Equal(t, "SAN:URI:https://service.internal", mappings[2].SystemIdentity)
+		assert.Equal(t, "uri_service.internal", mappings[2].MappedUser.Normalized())
+		assert.Equal(t, "SAN:IP:192.168.1.1", mappings[3].SystemIdentity)
+		assert.Equal(t, "ip_192.168.1.1", mappings[3].MappedUser.Normalized())
+	})
+
+	t.Run("ComplexRuleSet", func(t *testing.T) {
+		data := `
+complexmap   admin@cockroachlabs.com       admin
+complexmap   /^(.*)@cockroachlabs.com$     crdb_\1
+complexmap   /^(.*)@example.com$           ext_\1
+complexmap   /^service-account-.*$         service
+complexmap   /^test-(.*)$                  test_\1
+`
+		m, err := From(strings.NewReader(data))
+		assert.NoError(t, err)
+
+		mappings, mapFound, err := m.MapMultiple("complexmap", []string{
+			"admin@cockroachlabs.com",
+			"alice@cockroachlabs.com",
+			"bob@example.com",
+			"service-account-123",
+			"test-user",
+			"unknown",
+		})
+		assert.NoError(t, err)
+		assert.True(t, mapFound)
+
+		// admin@cockroachlabs.com matches both rule 1 (→admin) and rule 2 (→crdb_admin),
+		// producing two different users, so we get 6 mappings total.
+		assert.Len(t, mappings, 6)
+		// Results follow rule order.
+		// Rule 1: admin@cockroachlabs.com → admin
+		assert.Equal(t, "admin@cockroachlabs.com", mappings[0].SystemIdentity)
+		assert.Equal(t, "admin", mappings[0].MappedUser.Normalized())
+		// Rule 2: /^(.*)@cockroachlabs.com$/ → crdb_\1 (matches admin→crdb_admin and alice→crdb_alice)
+		assert.Equal(t, "admin@cockroachlabs.com", mappings[1].SystemIdentity)
+		assert.Equal(t, "crdb_admin", mappings[1].MappedUser.Normalized())
+		assert.Equal(t, "alice@cockroachlabs.com", mappings[2].SystemIdentity)
+		assert.Equal(t, "crdb_alice", mappings[2].MappedUser.Normalized())
+		// Rule 3: /^(.*)@example.com$/ → ext_\1 (matches bob@example.com)
+		assert.Equal(t, "bob@example.com", mappings[3].SystemIdentity)
+		assert.Equal(t, "ext_bob", mappings[3].MappedUser.Normalized())
+		// Rule 4: /^service-account-.*$/ → service (matches service-account-123)
+		assert.Equal(t, "service-account-123", mappings[4].SystemIdentity)
+		assert.Equal(t, "service", mappings[4].MappedUser.Normalized())
+		// Rule 5: /^test-(.*)$/ → test_\1 (matches test-user)
+		assert.Equal(t, "test-user", mappings[5].SystemIdentity)
+		assert.Equal(t, "test_user", mappings[5].MappedUser.Normalized())
+	})
+}

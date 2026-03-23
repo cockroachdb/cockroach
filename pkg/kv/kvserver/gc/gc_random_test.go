@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -481,7 +482,7 @@ func getExpectationsGenerator(
 						// so we will add them to history of current key for analysis.
 						// Bare range tombstones are ignored.
 						if r {
-							for _, r := range it.RangeKeys().AsRangeKeys() {
+							for r := range it.RangeKeys().All() {
 								history = append(history, historyItem{
 									MVCCKeyValue: storage.MVCCKeyValue{
 										Key: storage.MVCCKey{
@@ -621,7 +622,7 @@ func getKeyHistory(t *testing.T, r storage.Reader, key roachpb.Key) string {
 			break
 		}
 		if r && len(result) == 0 {
-			for _, rk := range it.RangeKeys().AsRangeKeyValues() {
+			for rk := range it.RangeKeys().AsRangeKeyValues() {
 				result = append(result, fmt.Sprintf("R:%s", rk.RangeKey.String()))
 			}
 		}
@@ -643,7 +644,7 @@ func rangeFragmentsFromIt(t *testing.T, it storage.MVCCIterator) [][]storage.MVC
 			break
 		}
 		if _, hasRange := it.HasPointAndRange(); hasRange {
-			result = append(result, it.RangeKeys().Clone().AsRangeKeyValues())
+			result = append(result, slices.Collect(it.RangeKeys().Clone().AsRangeKeyValues()))
 		}
 		it.NextKey()
 	}

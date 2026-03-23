@@ -6,10 +6,6 @@ new-cluster name=s1
 ----
 
 exec-sql
-SET CLUSTER SETTING bulkio.import.write_import_epoch.enabled=true;
-----
-
-exec-sql
 CREATE DATABASE d;
 USE d;
 CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
@@ -84,23 +80,6 @@ job cancel=a
 ----
 
 # Ensure that the import type is cleared.
-query-sql
-SELECT * FROM import_epoch
-----
-3 <nil>
-
-
-exec-sql
-SET CLUSTER SETTING bulkio.import.write_import_epoch.enabled=false;
-----
-
-# Ensure that the correct ImportType is set when the cluster setting is disabled
-import expect-pausepoint tag=b
-IMPORT INTO foo (i,s) CSV DATA ('nodelocal://1/export3/export*-n*.0.csv')
-----
-job paused at pausepoint
-
-# We expect the zero-valued version here.
 query-sql
 SELECT * FROM import_epoch
 ----

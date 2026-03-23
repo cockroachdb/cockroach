@@ -163,7 +163,7 @@ statement error pgcode 0A000 pq: cannot accept a value of type trigger
 CREATE TYPE udt AS (x INT, y TRIGGER, z TEXT);
 
 # Trigger array UDT field.
-statement error pgcode 42601 pq: at or near "\[": syntax error
+statement error pgcode 42704 pq: at or near ",": syntax error: type trigger\[\] does not exist
 CREATE TYPE udt AS (x INT, y TRIGGER[], z TEXT);
 
 # ==============================================================================
@@ -749,6 +749,20 @@ DROP TRIGGER foo ON xy;
 statement ok
 DROP TRIGGER IF EXISTS foo ON xy;
 
+# CASCADE and RESTRICT are accepted for PostgreSQL compatibility. Since triggers
+# don't have dependents, they behave identically to a drop without these options.
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement ok
+DROP TRIGGER foo ON xy CASCADE;
+
+statement ok
+CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement ok
+DROP TRIGGER foo ON xy RESTRICT;
+
 # ==============================================================================
 # Test dependency tracking for a relation reference.
 # ==============================================================================
@@ -788,6 +802,459 @@ CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g();
 
 statement ok
 DROP FUNCTION g;
+
+subtest pg_trigger_depth
+
+# Test pg_trigger_depth() - based on PostgreSQL regress test.
+
+statement ok
+CREATE TABLE depth_a (id INT NOT NULL PRIMARY KEY);
+
+statement ok
+CREATE TABLE depth_b (id INT NOT NULL PRIMARY KEY);
+
+statement ok
+CREATE TABLE depth_c (id INT NOT NULL PRIMARY KEY);
+
+statement ok
+CREATE FUNCTION depth_a_tf() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+BEGIN
+  RAISE NOTICE '%: depth = %', TG_NAME, pg_trigger_depth();
+  INSERT INTO depth_b VALUES ((NEW).id);
+  RAISE NOTICE '%: depth = %', TG_NAME, pg_trigger_depth();
+  RETURN NEW;
+END;
+$$;
+
+statement ok
+CREATE TRIGGER depth_a_tr BEFORE INSERT ON depth_a
+  FOR EACH ROW EXECUTE FUNCTION depth_a_tf();
+
+statement ok
+CREATE FUNCTION depth_b_tf() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+BEGIN
+  RAISE NOTICE '%: depth = %', TG_NAME, pg_trigger_depth();
+  INSERT INTO depth_c VALUES ((NEW).id);
+  RAISE NOTICE '%: depth = %', TG_NAME, pg_trigger_depth();
+  RETURN NEW;
+END;
+$$;
+
+statement ok
+CREATE TRIGGER depth_b_tr BEFORE INSERT ON depth_b
+  FOR EACH ROW EXECUTE FUNCTION depth_b_tf();
+
+statement ok
+CREATE FUNCTION depth_c_tf() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+BEGIN
+  RAISE NOTICE '%: depth = %', TG_NAME, pg_trigger_depth();
+  RETURN NEW;
+END;
+$$;
+
+statement ok
+CREATE TRIGGER depth_c_tr BEFORE INSERT ON depth_c
+  FOR EACH ROW EXECUTE FUNCTION depth_c_tf();
+
+# pg_trigger_depth() returns 0 outside of triggers.
+query I
+SELECT pg_trigger_depth();
+----
+0
+
+# Insert into depth_a triggers a cascade: depth_a -> depth_b -> depth_c.
+# depth_a_tr fires at depth 1, depth_b_tr at depth 2, depth_c_tr at depth 3.
+query T noticetrace
+INSERT INTO depth_a VALUES (1);
+----
+NOTICE: depth_a_tr: depth = 1
+NOTICE: depth_b_tr: depth = 2
+NOTICE: depth_c_tr: depth = 3
+NOTICE: depth_b_tr: depth = 2
+NOTICE: depth_a_tr: depth = 1
+
+query I
+SELECT pg_trigger_depth();
+----
+0
+
+# Test with AFTER triggers as well.
+statement ok
+CREATE TABLE depth_after (id INT NOT NULL PRIMARY KEY);
+
+statement ok
+CREATE FUNCTION depth_after_tf() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+BEGIN
+  RAISE NOTICE '%: depth = %', TG_NAME, pg_trigger_depth();
+  RETURN NULL;
+END;
+$$;
+
+statement ok
+CREATE TRIGGER depth_after_tr AFTER INSERT ON depth_after
+  FOR EACH ROW EXECUTE FUNCTION depth_after_tf();
+
+query T noticetrace
+INSERT INTO depth_after VALUES (1);
+----
+NOTICE: depth_after_tr: depth = 1
+
+statement ok
+DROP TABLE depth_after CASCADE;
+
+statement ok
+DROP FUNCTION depth_after_tf;
+
+statement ok
+DROP TABLE depth_a, depth_b, depth_c CASCADE;
+
+statement ok
+DROP FUNCTION depth_a_tf, depth_b_tf, depth_c_tf;
+
+subtest end
+
+# ==============================================================================
+# Test replacing a trigger function with active triggers (issue #134555).
+# The new function body should take effect for all dependent triggers.
+# ==============================================================================
+
+subtest replace_trigger_function_with_active_triggers
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE t_replace (a INT PRIMARY KEY, b TEXT);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE audit_log (op TEXT, val TEXT);
+
+# Create a trigger function that logs 'v1' to identify the original version.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE FUNCTION tf_replace() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit_log VALUES (tg_op, 'v1');
+    RETURN NEW;
+  END
+$$;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TRIGGER tr_replace BEFORE INSERT ON t_replace FOR EACH ROW EXECUTE FUNCTION tf_replace();
+
+# Verify the trigger fires with the original function body.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO t_replace VALUES (1, 'hello');
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT
+SELECT * FROM audit_log ORDER BY op;
+----
+INSERT  v1
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement count 1
+DELETE FROM audit_log;
+
+# Replace the trigger function with a new body that logs 'v2'.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE OR REPLACE FUNCTION tf_replace() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit_log VALUES (tg_op, 'v2');
+    RETURN NEW;
+  END
+$$;
+
+# Verify the trigger fires with the new function body.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO t_replace VALUES (2, 'world');
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT
+SELECT * FROM audit_log ORDER BY op;
+----
+INSERT  v2
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TRIGGER tr_replace ON t_replace;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE t_replace, audit_log;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP FUNCTION tf_replace;
+
+subtest end
+
+subtest replace_trigger_function_multiple_triggers
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE t_m1 (a INT PRIMARY KEY);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE t_m2 (a INT PRIMARY KEY);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE audit_log (src TEXT, val TEXT);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE FUNCTION tf_multi() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit_log VALUES (tg_table_name, 'v1');
+    RETURN NEW;
+  END
+$$;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TRIGGER tr1 BEFORE INSERT ON t_m1 FOR EACH ROW EXECUTE FUNCTION tf_multi();
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TRIGGER tr2 BEFORE INSERT ON t_m2 FOR EACH ROW EXECUTE FUNCTION tf_multi();
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO t_m1 VALUES (1);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO t_m2 VALUES (1);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT * FROM audit_log;
+----
+t_m1  v1
+t_m2  v1
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement count 2
+DELETE FROM audit_log;
+
+# Replace the function — both triggers should pick up the new body.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE OR REPLACE FUNCTION tf_multi() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO audit_log VALUES (tg_table_name, 'v2');
+    RETURN NEW;
+  END
+$$;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO t_m1 VALUES (2);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO t_m2 VALUES (2);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT * FROM audit_log;
+----
+t_m1  v2
+t_m2  v2
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TRIGGER tr1 ON t_m1;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TRIGGER tr2 ON t_m2;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE t_m1, t_m2, audit_log;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP FUNCTION tf_multi;
+
+subtest end
+
+# ==============================================================================
+# Test that replacing a trigger function correctly updates dependency tracking.
+# After replacement, new deps should be tracked and old deps should be released.
+# ==============================================================================
+
+subtest replace_trigger_function_deps
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TYPE my_enum AS ENUM ('a', 'b');
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE t_deps (a INT PRIMARY KEY);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE log_deps (val TEXT);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE other_log (val TEXT);
+
+# Start with a simple trigger function that does not reference the type or other_log.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE FUNCTION tf_deps() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO log_deps VALUES ('fired');
+    RETURN NEW;
+  END
+$$;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TRIGGER tr_deps BEFORE INSERT ON t_deps FOR EACH ROW EXECUTE FUNCTION tf_deps();
+
+# The type and other_log are not yet referenced, so they can be dropped.
+# (Don't actually drop them — just verify no dependency error.)
+
+# Replace the function to reference the enum type and other_log table.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE OR REPLACE FUNCTION tf_deps() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO other_log VALUES ('a'::my_enum::TEXT);
+    RETURN NEW;
+  END
+$$;
+
+# Verify the trigger fires with the new body.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO t_deps VALUES (1);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query T
+SELECT * FROM other_log;
+----
+a
+
+# Now the type and other_log are referenced — dropping them should be blocked.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pq: cannot drop type "my_enum" because other objects \(\[test.public.t_deps\]\) still depend on it
+DROP TYPE my_enum;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 2BP01 pq: cannot drop table other_log because other objects depend on it
+DROP TABLE other_log;
+
+# log_deps is no longer referenced after the replace, so it can be dropped.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE log_deps;
+
+# Clean up.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TRIGGER tr_deps ON t_deps;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE t_deps, other_log;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP FUNCTION tf_deps;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TYPE my_enum;
+
+subtest end
+
+# Regression test: replacing a trigger function that only changes relation
+# references (no type or routine changes) must update the trigger's forward
+# references correctly.
+subtest replace_trigger_function_relation_deps_only
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE t_rel (a INT PRIMARY KEY);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE log1 (val TEXT);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE log2 (val TEXT);
+
+# Simple trigger function referencing log1.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE FUNCTION tf_rel() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO log1 VALUES ('fired');
+    RETURN NEW;
+  END
+$$;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TRIGGER tr_rel BEFORE INSERT ON t_rel FOR EACH ROW EXECUTE FUNCTION tf_rel();
+
+# Replace function to reference log2 instead (no type changes — only relation change).
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE OR REPLACE FUNCTION tf_rel() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO log2 VALUES ('replaced');
+    RETURN NEW;
+  END
+$$;
+
+# Verify the trigger fires with the new body.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO t_rel VALUES (1);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query T
+SELECT * FROM log2;
+----
+replaced
+
+# log1 is no longer referenced, so it should be droppable.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE log1;
+
+# log2 is now referenced — dropping should be blocked.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 2BP01 pq: cannot drop table log2 because other objects depend on it
+DROP TABLE log2;
+
+# Clean up.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TRIGGER tr_rel ON t_rel;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE t_rel, log2;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP FUNCTION tf_rel;
+
+subtest end
 
 subtest regression_134630
 
@@ -930,11 +1397,11 @@ statement ok
 CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION trigger_func();
 
 # Relations are referenced by name, so renaming the table is not allowed.
-onlyif config local-legacy-schema-changer local-mixed-25.3
+onlyif config local-legacy-schema-changer
 statement error pgcode 2BP01 cannot rename relation "t" because trigger "foo" on table "xy" depends on it
 ALTER TABLE t RENAME TO t2;
 
-skipif config local-legacy-schema-changer local-mixed-25.3
+skipif config local-legacy-schema-changer
 statement error pgcode 2BP01 cannot rename relation "test.public.t" because trigger "foo" on table "xy" depends on it
 ALTER TABLE t RENAME TO t2;
 
@@ -1421,7 +1888,7 @@ CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   END
 $$;
 
-statement ok
+statement count 0
 DELETE FROM xy WHERE True;
 
 # Test a basic INSERT trigger.
@@ -1539,7 +2006,7 @@ SELECT * FROM xy;
 5  -6
 7  -8
 
-statement ok
+statement count 4
 DELETE FROM xy WHERE True;
 
 statement ok
@@ -1609,7 +2076,7 @@ SELECT * FROM xy;
 3  14
 5  230
 
-statement ok
+statement count 2
 DELETE FROM xy WHERE True;
 INSERT INTO xy VALUES (1, 2), (3, 4);
 
@@ -1654,7 +2121,7 @@ SELECT * FROM xy;
 3  150
 5  16
 
-statement ok
+statement count 1
 DELETE FROM xy WHERE x = 5;
 
 # UPSERT with ON CONFLICT syntax. Note that the effect of the INSERT trigger
@@ -1694,7 +2161,7 @@ SELECT * FROM xy;
 3  23
 5  25
 
-statement ok
+statement count 1
 DELETE FROM xy WHERE x = 5;
 
 # UPSERT with explicit syntax.
@@ -1714,7 +2181,7 @@ SELECT * FROM xy;
 3  24
 5  16
 
-statement ok
+statement count 1
 DELETE FROM xy WHERE x = 5;
 
 # The old version of conflicting rows can be accessed via the relation's name.
@@ -1797,7 +2264,7 @@ DROP TRIGGER foo ON xy;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 2
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
@@ -1944,7 +2411,7 @@ DROP TABLE nullable;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 2
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
@@ -2020,7 +2487,7 @@ DROP TRIGGER foo2 ON xy;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 0
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
@@ -2149,7 +2616,7 @@ DROP TRIGGER foo ON xy;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 4
 DELETE FROM xy WHERE True;
 
 # The return value of an AFTER trigger is ignored.
@@ -2180,7 +2647,7 @@ DROP TRIGGER foo ON xy;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 1
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
@@ -2253,7 +2720,7 @@ DROP TRIGGER foo2 ON xy;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 0
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
@@ -2306,7 +2773,7 @@ DROP TRIGGER bar ON xy;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 2
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
@@ -2395,8 +2862,10 @@ SELECT * FROM t2;
 2  1
 4  1
 
-statement ok
+statement count 3
 DELETE FROM t1 WHERE True;
+
+statement count 2
 DELETE FROM t2 WHERE True;
 
 statement ok
@@ -2458,8 +2927,10 @@ SELECT * FROM t2;
 2  1
 4  1
 
-statement ok
+statement count 3
 DELETE FROM t1 WHERE True;
+
+statement count 2
 DELETE FROM t2 WHERE True;
 
 # Test mutually cyclical BEFORE and AFTER triggers.
@@ -2515,8 +2986,10 @@ SELECT * FROM t2;
 2  1
 4  1
 
-statement ok
+statement count 3
 DELETE FROM t1 WHERE True;
+
+statement count 2
 DELETE FROM t2 WHERE True;
 
 statement ok
@@ -2571,7 +3044,7 @@ SELECT * FROM t1;
 4  1
 5  1
 
-statement ok
+statement count 5
 DELETE FROM t1 WHERE True;
 
 statement ok
@@ -2620,7 +3093,7 @@ SELECT * FROM t1;
 4  1
 5  1
 
-statement ok
+statement count 5
 DELETE FROM t1 WHERE True;
 
 statement ok
@@ -2697,8 +3170,10 @@ NOTICE: AFTER DELETE ON child: (2,20) -> <NULL>
 NOTICE: AFTER DELETE ON child: (3,20) -> <NULL>
 NOTICE: AFTER DELETE ON child: (4,30) -> <NULL>
 
-statement ok
+statement count 1
 DELETE FROM child WHERE True;
+
+statement count 1
 DELETE FROM parent WHERE True;
 
 statement ok
@@ -2764,8 +3239,10 @@ NOTICE: AFTER DELETE ON child: (4,30) -> <NULL>
 statement ok
 DROP TRIGGER foo ON ab;
 
-statement ok
+statement count 1
 DELETE FROM child WHERE True;
+
+statement count 1
 DELETE FROM parent WHERE True;
 
 statement ok
@@ -2815,9 +3292,13 @@ DROP TRIGGER foo ON ab;
 statement ok
 DROP FUNCTION h;
 
-statement ok
+statement count 8
 DELETE FROM ab WHERE True;
+
+statement count 1
 DELETE FROM child WHERE True;
+
+statement count 1
 DELETE FROM parent WHERE True;
 
 # FK checks happen before AFTER triggers that were fired by the main query.
@@ -2911,9 +3392,13 @@ CREATE FUNCTION filter() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   END
 $$;
 
-statement ok
+statement count 4
 DELETE FROM child WHERE True;
+
+statement count 3
 DELETE FROM parent WHERE True;
+
+statement ok
 INSERT INTO parent VALUES (1), (2), (3);
 INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
 
@@ -2932,7 +3417,7 @@ SET unsafe_allow_triggers_modifying_cascades = true;
 statement ok
 UPDATE parent SET k = k + 10 WHERE k < 3;
 
-statement ok
+statement count 0
 DELETE FROM parent WHERE k < 3;
 
 statement ok
@@ -2941,9 +3426,13 @@ RESET unsafe_allow_triggers_modifying_cascades;
 statement ok
 DROP TRIGGER mod ON child;
 
-statement ok
+statement count 4
 DELETE FROM child WHERE True;
+
+statement count 3
 DELETE FROM parent WHERE True;
+
+statement ok
 INSERT INTO parent VALUES (1), (2), (3);
 INSERT INTO child VALUES (1, 1), (2, 2), (3, 2), (4, 3);
 
@@ -2962,7 +3451,7 @@ SET unsafe_allow_triggers_modifying_cascades = true;
 statement ok
 UPDATE parent SET k = k + 10 WHERE k < 3;
 
-statement ok
+statement count 0
 DELETE FROM parent WHERE k < 3;
 
 statement ok
@@ -2971,7 +3460,7 @@ RESET unsafe_allow_triggers_modifying_cascades;
 statement ok
 DROP TRIGGER filter ON child;
 
-statement ok
+statement count 4
 DELETE FROM child WHERE True;
 DELETE FROM parent WHERE True;
 INSERT INTO parent VALUES (1), (2), (3);
@@ -3222,7 +3711,7 @@ DROP TRIGGER c_trig ON xy;
 statement ok
 DROP TRIGGER d_trig ON xy;
 
-statement ok
+statement count 1
 DELETE FROM xy WHERE True;
 
 subtest after_row_order
@@ -3265,7 +3754,7 @@ DROP FUNCTION g;
 statement ok
 DROP FUNCTION h;
 
-statement ok
+statement count 1
 DELETE FROM xy WHERE True;
 
 subtest before_after_row_order
@@ -3317,7 +3806,7 @@ DROP TRIGGER bar ON xy;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 3
 DELETE FROM xy WHERE True;
 
 # ==============================================================================
@@ -4065,11 +4554,30 @@ DROP FUNCTION g;
 
 subtest unsupported
 
-statement error pgcode 0A000 pq: unimplemented: CREATE OR REPLACE TRIGGER is not supported
-CREATE OR REPLACE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+# CREATE OR REPLACE TRIGGER when the trigger does not exist yet creates it.
+statement ok
+CREATE OR REPLACE TRIGGER replace_test BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
 
-statement error pgcode 0A000 pq: unimplemented: cascade dropping triggers
-DROP TRIGGER foo ON xy CASCADE;
+query TT
+SHOW CREATE TRIGGER replace_test ON xy;
+----
+replace_test  CREATE TRIGGER replace_test BEFORE INSERT ON test.public.xy FOR EACH ROW EXECUTE FUNCTION test.public.f()
+
+# CREATE OR REPLACE TRIGGER when the trigger already exists replaces it.
+statement ok
+CREATE OR REPLACE TRIGGER replace_test AFTER UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+query TT
+SHOW CREATE TRIGGER replace_test ON xy;
+----
+replace_test  CREATE TRIGGER replace_test AFTER UPDATE ON test.public.xy FOR EACH ROW EXECUTE FUNCTION test.public.f()
+
+# CREATE TRIGGER (without REPLACE) still errors on duplicate.
+statement error pgcode 42710 pq: trigger "replace_test" for relation "xy" already exists
+CREATE TRIGGER replace_test AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f();
+
+statement ok
+DROP TRIGGER replace_test ON xy;
 
 statement error pgcode 0A000 pq: unimplemented: statement-level triggers are not yet supported
 CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH STATEMENT EXECUTE FUNCTION f();
@@ -4096,7 +4604,13 @@ select "eventType" from system.eventlog WHERE "eventType" <> 'finish_schema_chan
 ----
 create_trigger
 
+# Replacing a trigger function with active triggers is now supported (#134555).
+onlyif config local-mixed-25.4 local-mixed-26.1
 statement error pgcode 0A000 pq: unimplemented: cannot replace a trigger function with an active trigger
+CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
 CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
 
 statement ok
@@ -4107,10 +4621,6 @@ query T retry
 select "eventType" from system.eventlog order by timestamp desc limit 1;
 ----
 drop_trigger
-
-# CREATE OR REPLACE still works if there are no referencing triggers.
-statement ok
-CREATE OR REPLACE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$ BEGIN RETURN NEW; END $$;
 
 # ==============================================================================
 # Test that descriptor backreferences are cleaned up.
@@ -4180,8 +4690,7 @@ CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
     RAISE NOTICE 'TG_TABLE_NAME: %', TG_TABLE_NAME;
     RAISE NOTICE 'TG_TABLE_SCHEMA: %', TG_TABLE_SCHEMA;
     RAISE NOTICE 'TG_NARGS: %', TG_NARGS;
-    -- TODO(#135311): uncomment this when we support TG_ARGV.
-    --RAISE NOTICE 'TG_ARGV: %s', TG_ARGV;
+    RAISE NOTICE 'TG_ARGV: %', TG_ARGV;
     RETURN NEW;
   END
 $$;
@@ -4206,6 +4715,7 @@ NOTICE: TG_RELNAME: xy
 NOTICE: TG_TABLE_NAME: xy
 NOTICE: TG_TABLE_SCHEMA: public
 NOTICE: TG_NARGS: 0
+NOTICE: TG_ARGV: {}
 NOTICE: NEW: (1,2)
 NOTICE: OLD: <NULL>
 NOTICE: TG_NAME: bar
@@ -4217,6 +4727,7 @@ NOTICE: TG_RELNAME: xy
 NOTICE: TG_TABLE_NAME: xy
 NOTICE: TG_TABLE_SCHEMA: public
 NOTICE: TG_NARGS: 0
+NOTICE: TG_ARGV: {}
 
 query T noticetrace
 UPDATE xy SET y = 3 WHERE x = 1;
@@ -4232,6 +4743,7 @@ NOTICE: TG_RELNAME: xy
 NOTICE: TG_TABLE_NAME: xy
 NOTICE: TG_TABLE_SCHEMA: public
 NOTICE: TG_NARGS: 0
+NOTICE: TG_ARGV: {}
 NOTICE: NEW: (1,3)
 NOTICE: OLD: (1,2)
 NOTICE: TG_NAME: bar
@@ -4243,6 +4755,7 @@ NOTICE: TG_RELNAME: xy
 NOTICE: TG_TABLE_NAME: xy
 NOTICE: TG_TABLE_SCHEMA: public
 NOTICE: TG_NARGS: 0
+NOTICE: TG_ARGV: {}
 
 statement ok
 DROP TRIGGER foo ON xy;
@@ -4253,8 +4766,730 @@ DROP TRIGGER bar ON xy;
 statement ok
 DROP FUNCTION g;
 
-statement ok
+statement count 1
 DELETE FROM xy WHERE true;
+
+# ==============================================================================
+# Test information_schema.triggers and pg_catalog.pg_trigger
+# ==============================================================================
+
+subtest trigger_introspection
+
+# Create test tables and trigger functions.
+statement ok
+CREATE TABLE test_triggers (
+    id INT PRIMARY KEY,
+    name TEXT,
+    value INT
+);
+
+statement ok
+CREATE TABLE audit_log (
+    id SERIAL PRIMARY KEY,
+    table_name TEXT,
+    operation TEXT,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+statement ok
+CREATE FUNCTION trigger_func1() RETURNS TRIGGER AS $$
+  BEGIN
+    INSERT INTO audit_log (table_name, operation)
+    VALUES (TG_TABLE_NAME, TG_OP);
+    RETURN NEW;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE FUNCTION trigger_func2() RETURNS TRIGGER AS $$
+  BEGIN
+    RAISE NOTICE 'Trigger fired';
+    RETURN NEW;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER after_insert_row
+AFTER INSERT ON test_triggers
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func1();
+
+statement ok
+CREATE TRIGGER before_update_row
+BEFORE UPDATE ON test_triggers
+FOR EACH ROW
+WHEN ((NEW).value > 100)
+EXECUTE FUNCTION trigger_func2();
+
+statement ok
+CREATE TRIGGER after_delete_row
+AFTER DELETE ON test_triggers
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func1();
+
+query TTTTTTITTTTT colnames
+SELECT
+    trigger_catalog,
+    trigger_schema,
+    trigger_name,
+    event_manipulation,
+    event_object_schema,
+    event_object_table,
+    action_order,
+    action_orientation,
+    action_timing,
+    action_reference_old_table,
+    action_reference_new_table,
+    created
+FROM information_schema.triggers
+WHERE event_object_table = 'test_triggers'
+ORDER BY trigger_name;
+----
+trigger_catalog  trigger_schema  trigger_name       event_manipulation  event_object_schema  event_object_table  action_order  action_orientation  action_timing  action_reference_old_table  action_reference_new_table  created
+test             public          after_delete_row   DELETE              public               test_triggers       NULL          ROW                 AFTER          NULL                        NULL                        NULL
+test             public          after_insert_row   INSERT              public               test_triggers       NULL          ROW                 AFTER          NULL                        NULL                        NULL
+test             public          before_update_row  UPDATE              public               test_triggers       NULL          ROW                 BEFORE         NULL                        NULL                        NULL
+
+# Test trigger with WHEN condition.
+query TTT colnames
+SELECT
+    trigger_name,
+    action_condition,
+    action_statement
+FROM information_schema.triggers
+WHERE trigger_name = 'before_update_row';
+----
+trigger_name       action_condition     action_statement
+before_update_row  ((new).value > 100)  EXECUTE FUNCTION trigger_func2()
+
+# Create trigger with transition tables.
+statement ok
+CREATE FUNCTION trigger_func3() RETURNS TRIGGER AS $$
+  BEGIN
+    RETURN NULL;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+# TODO(#126362, #135655): Enable tests for statement-level triggers when supported.
+statement error statement-level triggers are not yet supported
+CREATE TRIGGER after_update_transition
+AFTER UPDATE ON test_triggers
+REFERENCING OLD TABLE AS old_data NEW TABLE AS new_data
+FOR EACH STATEMENT
+EXECUTE FUNCTION trigger_func3();
+
+# TODO(#126362, #135655): Enable tests for statement-level triggers when supported.
+# The expected results are:
+# trigger_name             action_orientation  action_reference_old_table  action_reference_new_table  action_reference_old_row
+# after_update_transition  STATEMENT           old_data                    new_data                    NULL
+query TTTTT colnames
+SELECT
+    trigger_name,
+    action_orientation,
+    action_reference_old_table,
+    action_reference_new_table,
+    action_reference_old_row
+FROM information_schema.triggers
+WHERE trigger_name = 'after_update_transition';
+----
+trigger_name  action_orientation  action_reference_old_table  action_reference_new_table  action_reference_old_row
+
+# TODO(#126362, #135655): Populate tgoldtable and tgnewtable.
+# The expected results are:
+# tgname                   tgoldtable  tgnewtable
+# after_update_transition  old_data    new_data
+query TTT colnames
+SELECT tgname, tgoldtable, tgnewtable
+FROM pg_catalog.pg_trigger
+WHERE tgname = 'after_update_transition';
+----
+tgname  tgoldtable  tgnewtable
+
+# Test multiple event types (create a trigger for multiple events).
+statement ok
+CREATE TRIGGER multi_event_trigger
+BEFORE INSERT OR UPDATE OR DELETE ON test_triggers
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func1();
+
+# Each event should appear as a separate row.
+query TTT colnames
+SELECT
+    trigger_name,
+    event_manipulation,
+    action_timing
+FROM information_schema.triggers
+WHERE trigger_name = 'multi_event_trigger'
+ORDER BY event_manipulation;
+----
+trigger_name         event_manipulation  action_timing
+multi_event_trigger  DELETE              BEFORE
+multi_event_trigger  INSERT              BEFORE
+multi_event_trigger  UPDATE              BEFORE
+
+# Create a schema and add a trigger there.
+statement ok
+CREATE SCHEMA other_schema;
+
+statement ok
+CREATE TABLE other_schema.test_table (id INT PRIMARY KEY, data TEXT);
+
+statement ok
+CREATE TRIGGER other_schema_trigger
+AFTER INSERT ON other_schema.test_table
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func1();
+
+query TI colnames
+SELECT
+    trigger_schema,
+    count(*) AS trigger_count
+FROM information_schema.triggers
+WHERE trigger_catalog = 'test'
+GROUP BY trigger_schema
+ORDER BY trigger_schema;
+----
+trigger_schema  trigger_count
+other_schema    1
+public          6
+
+# Create a trigger with arguments to test tgnargs and tgargs.
+statement ok
+CREATE TRIGGER trigger_with_args
+AFTER INSERT ON test_triggers
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func1('arg1', 'arg2', 'test value with spaces');
+
+# Test pg_catalog.pg_trigger.
+query TIBITTT colnames
+SELECT
+    tgname,
+    tgtype,
+    tgfoid > 0 AS has_func_oid,
+    tgnargs,
+    tgenabled,
+    tgoldtable,
+    tgnewtable
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'test_triggers'::regclass
+ORDER BY tgname;
+----
+tgname              tgtype  has_func_oid  tgnargs  tgenabled  tgoldtable  tgnewtable
+after_delete_row    9       true          0        A          NULL        NULL
+after_insert_row    5       true          0        A          NULL        NULL
+before_update_row   19      true          0        A          NULL        NULL
+multi_event_trigger 31      true          0        A          NULL        NULL
+trigger_with_args   5       true          3        A          NULL        NULL
+
+# Test INSTEAD OF triggers (not yet implemented)
+statement error pgcode 42809 "test_triggers" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
+CREATE TRIGGER instead_of_trigger INSTEAD OF INSERT ON test_triggers
+FOR EACH ROW EXECUTE FUNCTION trigger_func1();
+
+statement error pgcode 42809 "test_triggers" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
+CREATE TRIGGER instead_of_update_trigger INSTEAD OF UPDATE ON test_triggers
+FOR EACH ROW EXECUTE FUNCTION trigger_func1();
+
+statement error pgcode 42809 "test_triggers" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
+CREATE TRIGGER instead_of_delete_trigger INSTEAD OF DELETE ON test_triggers
+FOR EACH ROW EXECUTE FUNCTION trigger_func1();
+
+# Test TRUNCATE triggers (not yet implemented)
+statement error statement-level triggers are not yet supported
+CREATE TRIGGER truncate_trigger AFTER TRUNCATE ON test_triggers
+FOR EACH STATEMENT EXECUTE FUNCTION trigger_func1();
+
+statement error statement-level triggers are not yet supported
+CREATE TRIGGER before_truncate_trigger BEFORE TRUNCATE ON test_triggers
+FOR EACH STATEMENT EXECUTE FUNCTION trigger_func1();
+
+# Test tgtype bitmap calculation
+# Bit 0: FOR EACH ROW (1) or FOR EACH STATEMENT (0)
+# Bit 1: BEFORE (2) or AFTER (0)
+# Bits 2-4: INSERT (4), DELETE (8), UPDATE (16)
+# TODO(#126363, #135657): Add tests for INSTEAD OF and TRUNCATE triggers here when supported.
+query TBBBBBBB colnames
+SELECT
+    tgname,
+    (tgtype::INT & 1) > 0 AS is_row_level,
+    (tgtype::INT & 2) > 0 AS is_before,
+    (tgtype::INT & 4) > 0 AS has_insert,
+    (tgtype::INT & 8) > 0 AS has_delete,
+    (tgtype::INT & 16) > 0 AS has_update,
+    (tgtype::INT & 32) > 0 AS has_instead,
+    (tgtype::INT & 64) > 0 AS has_truncate
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'test_triggers'::regclass
+ORDER BY tgname;
+----
+tgname               is_row_level  is_before  has_insert  has_delete  has_update  has_instead  has_truncate
+after_delete_row     true          false      false       true        false       false        false
+after_insert_row     true          false      true        false       false       false        false
+before_update_row    true          true       false       false       true        false        false
+multi_event_trigger  true          true       true        true        true        false        false
+trigger_with_args    true          false      true        false       false       false        false
+
+# Check trigger arguments and column attributes.
+# TODO(#135656): Populate the tgattr column.
+query TITT colnames
+SELECT
+    tgname,
+    tgnargs,
+    encode(tgargs, 'escape') AS tgargs,
+    tgattr
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'test_triggers'::regclass
+ORDER BY tgname;
+----
+tgname               tgnargs  tgargs                                      tgattr
+after_delete_row     0        ·                                           ·
+after_insert_row     0        ·                                           ·
+before_update_row    0        ·                                           ·
+multi_event_trigger  0        ·                                           ·
+trigger_with_args    3        arg1\000arg2\000test value with spaces\000  ·
+
+# Test trigger with WHEN condition.
+query TTT colnames
+SELECT
+    tgname,
+    tgqual,
+    tgattr
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'test_triggers'::regclass AND tgqual IS NOT NULL;
+----
+tgname             tgqual               tgattr
+before_update_row  ((new).value > 100)  ·
+
+# Test cross-schema trigger.
+query TTT colnames
+SELECT
+    tgname,
+    tgrelid::regclass::text AS table_name,
+    tgfoid::regproc::text AS trigger_func_name
+FROM pg_catalog.pg_trigger
+WHERE tgrelid = 'other_schema.test_table'::regclass;
+----
+tgname                table_name  trigger_func_name
+other_schema_trigger  test_table  trigger_func1
+
+# Clean up
+statement ok
+DROP TABLE test_triggers CASCADE;
+
+statement ok
+DROP TABLE other_schema.test_table CASCADE;
+
+statement ok
+DROP SCHEMA other_schema;
+
+statement ok
+DROP TABLE audit_log CASCADE;
+
+statement ok
+DROP FUNCTION trigger_func1, trigger_func2, trigger_func3;
+
+subtest end
+
+# ==============================================================================
+# Test ALTER TABLE ENABLE/DISABLE TRIGGER syntax.
+# ==============================================================================
+
+subtest enable_disable_trigger
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE enable_disable_t (a INT PRIMARY KEY, b INT);
+
+# Create an audit table to track trigger executions.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE trigger_audit (
+  id SERIAL PRIMARY KEY,
+  trigger_name TEXT,
+  op TEXT,
+  old_a INT,
+  new_a INT
+);
+
+# Create a trigger function that records its execution in the audit table.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE FUNCTION audit_trigger_func()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO trigger_audit (trigger_name, op, new_a) VALUES (TG_NAME, TG_OP, (NEW).a);
+    RETURN NEW;
+  ELSIF TG_OP = 'UPDATE' THEN
+    INSERT INTO trigger_audit (trigger_name, op, old_a, new_a) VALUES (TG_NAME, TG_OP, (OLD).a, (NEW).a);
+    RETURN NEW;
+  ELSIF TG_OP = 'DELETE' THEN
+    INSERT INTO trigger_audit (trigger_name, op, old_a) VALUES (TG_NAME, TG_OP, (OLD).a);
+    RETURN OLD;
+  END IF;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TRIGGER insert_trigger
+  AFTER INSERT ON enable_disable_t
+  FOR EACH ROW
+  EXECUTE FUNCTION audit_trigger_func();
+
+# Verify trigger is enabled by default (tgenabled = 'A' for always).
+skipif config local-mixed-25.4 local-mixed-26.1
+query T
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
+----
+A
+
+# SHOW TRIGGERS should also report enabled = true.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TB
+SHOW TRIGGERS FROM enable_disable_t;
+----
+insert_trigger  true
+
+# Insert a row - trigger should fire and record in audit table.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO enable_disable_t VALUES (1, 100);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TTI
+SELECT trigger_name, op, new_a FROM trigger_audit ORDER BY id;
+----
+insert_trigger  INSERT  1
+
+# Disable the trigger.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t DISABLE TRIGGER insert_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query T
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
+----
+D
+
+# SHOW TRIGGERS should report enabled = false.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TB
+SHOW TRIGGERS FROM enable_disable_t;
+----
+insert_trigger  false
+
+# Insert another row - trigger should NOT fire since it's disabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO enable_disable_t VALUES (2, 200);
+
+# Audit table should still have only the first entry.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TTI
+SELECT trigger_name, op, new_a FROM trigger_audit ORDER BY id;
+----
+insert_trigger  INSERT  1
+
+# Re-enable the trigger.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t ENABLE TRIGGER insert_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query T
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
+----
+A
+
+# Insert another row - trigger should fire again.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO enable_disable_t VALUES (3, 300);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TTI
+SELECT trigger_name, op, new_a FROM trigger_audit ORDER BY id;
+----
+insert_trigger  INSERT  1
+insert_trigger  INSERT  3
+
+# Test that disabling an already disabled trigger is a no-op.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t DISABLE TRIGGER insert_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t DISABLE TRIGGER insert_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query T
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
+----
+D
+
+# Test that enabling an already enabled trigger is a no-op.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t ENABLE TRIGGER insert_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t ENABLE TRIGGER insert_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query T
+SELECT tgenabled FROM pg_trigger WHERE tgname = 'insert_trigger';
+----
+A
+
+# Test error when trigger doesn't exist.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error trigger "nonexistent" for table "enable_disable_t" does not exist
+ALTER TABLE enable_disable_t DISABLE TRIGGER nonexistent;
+
+# Create a second trigger to test ALL/USER keywords.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TRIGGER update_trigger
+  AFTER UPDATE ON enable_disable_t
+  FOR EACH ROW
+  EXECUTE FUNCTION audit_trigger_func();
+
+# Clear the audit table to start fresh for ALL/USER tests.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement count 2
+DELETE FROM trigger_audit;
+
+# Both triggers should be enabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
+----
+insert_trigger  A
+update_trigger  A
+
+# Insert and update - both triggers should fire.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO enable_disable_t VALUES (10, 1000);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+UPDATE enable_disable_t SET b = 1001 WHERE a = 10;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TTI rowsort
+SELECT trigger_name, op, coalesce(new_a, old_a) as a_val FROM trigger_audit ORDER BY id;
+----
+insert_trigger  INSERT  10
+update_trigger  UPDATE  10
+
+# Clear audit and test DISABLE TRIGGER ALL.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement count 2
+DELETE FROM trigger_audit;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t DISABLE TRIGGER ALL;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
+----
+insert_trigger  D
+update_trigger  D
+
+# SHOW TRIGGERS should report both as disabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TB rowsort
+SHOW TRIGGERS FROM enable_disable_t;
+----
+insert_trigger  false
+update_trigger  false
+
+# Neither trigger should fire when disabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO enable_disable_t VALUES (11, 1100);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+UPDATE enable_disable_t SET b = 1101 WHERE a = 11;
+
+# Audit table should be empty.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT count(*) FROM trigger_audit;
+----
+0
+
+# Test ENABLE TRIGGER ALL.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t ENABLE TRIGGER ALL;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
+----
+insert_trigger  A
+update_trigger  A
+
+# Both triggers should fire again.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO enable_disable_t VALUES (12, 1200);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+UPDATE enable_disable_t SET b = 1201 WHERE a = 12;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TTI rowsort
+SELECT trigger_name, op, coalesce(new_a, old_a) as a_val FROM trigger_audit ORDER BY id;
+----
+insert_trigger  INSERT  12
+update_trigger  UPDATE  12
+
+# Clear audit and test selective disable.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement count 2
+DELETE FROM trigger_audit;
+
+# Disable only one trigger.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t DISABLE TRIGGER insert_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
+----
+insert_trigger  D
+update_trigger  A
+
+# Insert and update - only update trigger should fire.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO enable_disable_t VALUES (13, 1300);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+UPDATE enable_disable_t SET b = 1301 WHERE a = 13;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT
+SELECT trigger_name, op FROM trigger_audit ORDER BY id;
+----
+update_trigger  UPDATE
+
+# Clear audit and test DISABLE TRIGGER USER (same as ALL in CockroachDB).
+skipif config local-mixed-25.4 local-mixed-26.1
+statement count 1
+DELETE FROM trigger_audit;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t ENABLE TRIGGER insert_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t DISABLE TRIGGER USER;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
+----
+insert_trigger  D
+update_trigger  D
+
+# Neither trigger should fire.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+INSERT INTO enable_disable_t VALUES (14, 1400);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT count(*) FROM trigger_audit;
+----
+0
+
+# Test ENABLE TRIGGER USER (same as ALL in CockroachDB).
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t ENABLE TRIGGER USER;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
+----
+insert_trigger  A
+update_trigger  A
+
+# Test that ALL/USER on a table with no triggers is a no-op.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+CREATE TABLE enable_disable_t_empty (a INT PRIMARY KEY);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t_empty DISABLE TRIGGER ALL;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t_empty ENABLE TRIGGER USER;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE enable_disable_t_empty;
+
+# Test combining with other ALTER TABLE commands.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t DISABLE TRIGGER insert_trigger, DISABLE TRIGGER update_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
+----
+insert_trigger  D
+update_trigger  D
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE enable_disable_t ENABLE TRIGGER insert_trigger, ENABLE TRIGGER update_trigger;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT rowsort
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgrelid = 'enable_disable_t'::regclass ORDER BY tgname;
+----
+insert_trigger  A
+update_trigger  A
+
+# Test with IF EXISTS on table.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE IF EXISTS nonexistent_table DISABLE TRIGGER some_trigger;
+
+# Clean up.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE enable_disable_t;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP TABLE trigger_audit;
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP FUNCTION audit_trigger_func;
+
+subtest end
 
 # ==============================================================================
 # Regression tests.
@@ -4323,10 +5558,7 @@ SELECT id, a, b FROM tab_141810 ORDER BY id
 3  1     2
 4  NULL  NULL
 
-# ==============================================================================
-# Test case sensitivity of column names in triggers
-# ==============================================================================
-
+# Test case sensitivity of column names in triggers.
 subtest case_sensitivity
 
 # Setup: clean up any existing tables and functions
@@ -4444,8 +5676,7 @@ DROP FUNCTION f4();
 
 subtest end
 
-# Until #135311 can be fixed, disallow TG_ARGV references by default. There is
-# a setting to allow them if necessary.
+# Regression test for #135311: TG_ARGV should be 0-indexed like PostgreSQL.
 subtest regression_135311
 
 statement ok
@@ -4455,42 +5686,94 @@ statement ok
 CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
   BEGIN
     RAISE NOTICE 'g()';
+    RAISE NOTICE 'TG_ARGV[0]: %', TG_ARGV[0];
     RAISE NOTICE 'TG_ARGV[1]: %', TG_ARGV[1];
     RETURN NEW;
   END
 $$;
 
-statement error pgcode 0A000 pq: unimplemented: referencing the TG_ARGV trigger function parameter is not yet supported
-CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g('foo', 'bar');
-
 statement ok
-SET allow_create_trigger_function_with_argv_references = true;
-
-statement ok
-CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g('foo', 'bar');
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g('first', 'second');
 
 query T noticetrace
 INSERT INTO xy VALUES (1, 2);
 ----
 NOTICE: g()
-NOTICE: TG_ARGV[1]: foo
-
-statement ok
-RESET allow_create_trigger_function_with_argv_references;
-
-# The setting only disallows creating the trigger - not executing it if it was
-# already created.
-query T noticetrace
-INSERT INTO xy VALUES (3, 4);
-----
-NOTICE: g()
-NOTICE: TG_ARGV[1]: foo
+NOTICE: TG_ARGV[0]: first
+NOTICE: TG_ARGV[1]: second
 
 statement ok
 DROP TRIGGER foo ON xy;
 
 statement ok
 DROP FUNCTION g;
+
+# Test assigning TG_ARGV to a TEXT[] variable, then doing a zero-indexed read.
+# Note: This matches Postgres behavior, and keeps the array as zero-indexed.
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  DECLARE
+    args TEXT[];
+  BEGIN
+    args := TG_ARGV;
+    RAISE NOTICE 'args[0]: %', args[0];
+    RAISE NOTICE 'args[1]: %', args[1];
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g('arg_one', 'arg_two');
+
+query T noticetrace
+INSERT INTO xy VALUES (100, 200);
+----
+NOTICE: args[0]: arg_one
+NOTICE: args[1]: arg_two
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+# Test a helper function that takes a TEXT[] argument and does a zero-indexed
+# read on it.
+# Note: In PostgreSQL, when TG_ARGV is passed to a function, it retains its
+# zero-indexed behavior.
+statement ok
+CREATE FUNCTION read_args(arr TEXT[]) RETURNS TEXT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN 'arr[0]=' || COALESCE(arr[0], 'NULL') || ', arr[1]=' || COALESCE(arr[1], 'NULL');
+  END
+$$;
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE 'direct TG_ARGV[0]: %', TG_ARGV[0];
+    RAISE NOTICE 'via helper: %', read_args(TG_ARGV);
+    RETURN NEW;
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy FOR EACH ROW EXECUTE FUNCTION g('helper_one', 'helper_two');
+
+query T noticetrace
+INSERT INTO xy VALUES (102, 202);
+----
+NOTICE: direct TG_ARGV[0]: helper_one
+NOTICE: via helper: arr[0]=helper_one, arr[1]=helper_two
+
+statement ok
+DROP TRIGGER foo ON xy;
+
+statement ok
+DROP FUNCTION g;
+
+statement ok
+DROP FUNCTION read_args;
 
 subtest end
 
@@ -4574,14 +5857,8 @@ CREATE TRIGGER audit_trigger AFTER INSERT OR UPDATE OR DELETE ON t1 FOR EACH ROW
 statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table t1 drop column j;
 
-statement error pq: unimplemented: ALTER TABLE DROP COLUMN cascade not supported with triggers
-alter table other drop column j cascade;
-
 statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table other drop column j;
-
-statement error pq: unimplemented: ALTER TABLE DROP COLUMN cascade not supported with triggers
-alter table other drop column j cascade;
 
 statement error pq: cannot alter type of column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table t1 alter column j set data type text;
@@ -4594,9 +5871,6 @@ drop index t1@i1;
 
 statement error pq: cannot drop index "i1" because trigger "audit_trigger" on table "t1" depends on it
 drop index other@i1;
-
-statement error pq: unimplemented: DROP INDEX cascade is not supported with triggers
-drop index other@i1 cascade;
 
 statement error pq: cannot drop function "f1" because other objects \(\[test.public.t1\]\) still depend on it
 DROP FUNCTION f1;
@@ -4649,26 +5923,14 @@ alter table other rename column j to j2;
 statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table t1 drop column j;
 
-statement error pq: unimplemented: drop column cascade is not supported with triggers
-alter table t1 drop column j cascade;
-
 statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
 alter table other drop column j;
-
-statement error pq: unimplemented: drop column cascade is not supported with triggers
-alter table other drop column j cascade;
 
 statement error pq: cannot drop index "i1" because trigger "audit_trigger" on table "t1" depends on it
 drop index t1@i1;
 
-statement error pq: unimplemented: drop index cascade is not supported with triggers
-drop index t1@i1 CASCADE;
-
 statement error pq: cannot drop index "i1" because trigger "audit_trigger" on table "t1" depends on it
 drop index other@i1;
-
-statement error pq: unimplemented: drop index cascade is not supported with triggers
-drop index other@i1 CASCADE;
 
 statement error pq: cannot drop function "f1" because other objects \(\[test.public.t1\]\) still depend on it
 DROP FUNCTION f1;
@@ -4688,21 +5950,297 @@ DROP TABLE other;
 statement ok
 set use_declarative_schema_changer = $use_decl_sc;
 
-# Verify the trigger still works
+# Verify the trigger still works after all the failed operations above.
 statement ok
 INSERT INTO t1(n,k) VALUES (1,1);
 
+# DROP TABLE CASCADE on a referenced table should drop the dependent trigger.
 statement ok
 DROP TABLE other CASCADE;
 
-statement error pq: relation "t1" does not exist
+# Table t1 still exists but the trigger was dropped.
+statement error pq: trigger "audit_trigger" for table "t1" does not exist
+DROP TRIGGER audit_trigger ON t1;
+
+# Verify t1 still works.
+statement ok
+SELECT * FROM t1;
+
+statement ok
+DROP TABLE t1;
+DROP TYPE e;
+DROP FUNCTION f1;
+DROP FUNCTION audit_changes;
+
+# Test DROP COLUMN CASCADE on a referenced table with trigger dependencies.
+statement ok
+CREATE TABLE t_col(n INT PRIMARY KEY, j INT, k INT);
+
+statement ok
+CREATE TABLE t_col_other(n INT PRIMARY KEY, j INT);
+
+statement ok
+CREATE FUNCTION trigger_col() RETURNS TRIGGER AS $$
+BEGIN
+  SELECT * FROM t_col_other WHERE j=1;
+  RETURN NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER trg_col AFTER INSERT ON t_col FOR EACH ROW EXECUTE FUNCTION trigger_col();
+
+# Without CASCADE, dropping the column should be blocked.
+statement error pq: cannot drop column "j" because trigger "trg_col" on table "t_col" depends on it
+ALTER TABLE t_col_other DROP COLUMN j;
+
+# With CASCADE, the column and trigger should be dropped.
+statement ok
+ALTER TABLE t_col_other DROP COLUMN j CASCADE;
+
+# The trigger was dropped.
+query TB colnames
+SHOW TRIGGERS FROM t_col;
+----
+trigger_name  enabled
+
+statement error pq: trigger "trg_col" for table "t_col" does not exist
+DROP TRIGGER trg_col ON t_col;
+
+# DML still works.
+statement ok
+INSERT INTO t_col VALUES (1, 1, 1);
+
+statement ok
+DROP TABLE t_col;
+DROP TABLE t_col_other;
+DROP FUNCTION trigger_col;
+
+# Test DROP INDEX CASCADE with trigger dependencies.
+statement ok
+CREATE TABLE t_idx(n INT PRIMARY KEY, k INT);
+
+statement ok
+CREATE INDEX idx1 ON t_idx(k ASC);
+
+statement ok
+CREATE FUNCTION trigger_idx() RETURNS TRIGGER AS $$
+BEGIN
+  SELECT * FROM t_idx@idx1 WHERE k=1;
+  RETURN NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER trg_idx AFTER INSERT ON t_idx FOR EACH ROW EXECUTE FUNCTION trigger_idx();
+
+# Without CASCADE, dropping the index should be blocked.
+statement error pq: cannot drop index "idx1" because trigger "trg_idx" on table "t_idx" depends on it
+DROP INDEX t_idx@idx1;
+
+# With CASCADE, the index and trigger should be dropped.
+statement ok
+DROP INDEX t_idx@idx1 CASCADE;
+
+# The trigger was dropped.
+query TB colnames
+SHOW TRIGGERS FROM t_idx;
+----
+trigger_name  enabled
+
+statement error pq: trigger "trg_idx" for table "t_idx" does not exist
+DROP TRIGGER trg_idx ON t_idx;
+
+# DML still works.
+statement ok
+INSERT INTO t_idx VALUES (1, 1);
+
+statement ok
+DROP TABLE t_idx;
+DROP FUNCTION trigger_idx;
+
+# Test DROP COLUMN CASCADE on the trigger's own table (the exact scenario
+# from issue #142370).
+statement ok
+CREATE TABLE t1(n INT PRIMARY KEY, j INT);
+
+statement ok
+CREATE OR REPLACE FUNCTION audit_changes()
+RETURNS TRIGGER AS $$
+BEGIN
+  SELECT * FROM t1 WHERE j=32;
+  RETURN NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER audit_trigger AFTER INSERT OR UPDATE OR DELETE ON t1 FOR EACH ROW EXECUTE FUNCTION audit_changes();
+
+# Without CASCADE, dropping the column should be blocked.
+statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
+ALTER TABLE t1 DROP COLUMN j;
+
+# With CASCADE, the column and trigger should be dropped.
+statement ok
+ALTER TABLE t1 DROP COLUMN j CASCADE;
+
+# The trigger was dropped.
+query TB colnames
+SHOW TRIGGERS FROM t1;
+----
+trigger_name  enabled
+
+statement error pq: trigger "audit_trigger" for table "t1" does not exist
+DROP TRIGGER audit_trigger ON t1;
+
+# Inserts work after the column and trigger are dropped.
+statement ok
+INSERT INTO t1 VALUES (32);
+
+statement ok
+DROP TABLE t1;
+DROP FUNCTION audit_changes;
+
+# Test CASCADE with the legacy schema changer. Triggers are created with the
+# declarative schema changer, then DDL CASCADE is run with legacy.
+
+# Test DROP COLUMN CASCADE on a referenced table (legacy).
+statement ok
+CREATE TABLE t_lcol(n INT PRIMARY KEY, j INT, k INT);
+CREATE TABLE t_lcol_other(n INT PRIMARY KEY, j INT);
+
+statement ok
+CREATE FUNCTION trigger_lcol() RETURNS TRIGGER AS $$
+BEGIN
+  SELECT * FROM t_lcol_other WHERE j=1;
+  RETURN NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER trg_lcol AFTER INSERT ON t_lcol FOR EACH ROW EXECUTE FUNCTION trigger_lcol();
+
+statement ok
+SET use_declarative_schema_changer = 'off';
+
+statement ok
+ALTER TABLE t_lcol_other SET (schema_locked = false);
+
+statement ok
+ALTER TABLE t_lcol_other DROP COLUMN j CASCADE;
+
+statement ok
+SET use_declarative_schema_changer = 'on';
+
+# The trigger was dropped.
+query TB colnames
+SHOW TRIGGERS FROM t_lcol;
+----
+trigger_name  enabled
+
+statement error pq: trigger "trg_lcol" for table "t_lcol" does not exist
+DROP TRIGGER trg_lcol ON t_lcol;
+
+statement ok
+INSERT INTO t_lcol VALUES (1, 1, 1);
+
+statement ok
+DROP TABLE t_lcol;
+DROP TABLE t_lcol_other;
+DROP FUNCTION trigger_lcol;
+
+# Test DROP INDEX CASCADE (legacy).
+statement ok
+CREATE TABLE t_lidx(n INT PRIMARY KEY, k INT);
+CREATE INDEX lidx1 ON t_lidx(k ASC);
+
+statement ok
+CREATE FUNCTION trigger_lidx() RETURNS TRIGGER AS $$
+BEGIN
+  SELECT * FROM t_lidx@lidx1 WHERE k=1;
+  RETURN NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER trg_lidx AFTER INSERT ON t_lidx FOR EACH ROW EXECUTE FUNCTION trigger_lidx();
+
+statement ok
+SET use_declarative_schema_changer = 'off';
+
+statement ok
+ALTER TABLE t_lidx SET (schema_locked = false);
+
+statement ok
+DROP INDEX t_lidx@lidx1 CASCADE;
+
+statement ok
+SET use_declarative_schema_changer = 'on';
+
+# The trigger was dropped.
+query TB colnames
+SHOW TRIGGERS FROM t_lidx;
+----
+trigger_name  enabled
+
+statement error pq: trigger "trg_lidx" for table "t_lidx" does not exist
+DROP TRIGGER trg_lidx ON t_lidx;
+
+statement ok
+INSERT INTO t_lidx VALUES (1, 1);
+
+statement ok
+DROP TABLE t_lidx;
+DROP FUNCTION trigger_lidx;
+
+# Test DROP COLUMN CASCADE on the trigger's own table (legacy, #142370).
+statement ok
+CREATE TABLE t1(n INT PRIMARY KEY, j INT);
+
+statement ok
+CREATE OR REPLACE FUNCTION audit_changes()
+RETURNS TRIGGER AS $$
+BEGIN
+  SELECT * FROM t1 WHERE j=32;
+  RETURN NULL;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER audit_trigger AFTER INSERT OR UPDATE OR DELETE ON t1 FOR EACH ROW EXECUTE FUNCTION audit_changes();
+
+statement ok
+SET use_declarative_schema_changer = 'off';
+
+statement ok
+ALTER TABLE t1 SET (schema_locked = false);
+
+# Without CASCADE, dropping the column should be blocked.
+statement error pq: cannot drop column "j" because trigger "audit_trigger" on table "t1" depends on it
+ALTER TABLE t1 DROP COLUMN j;
+
+# With CASCADE, the column and trigger should be dropped.
+statement ok
+ALTER TABLE t1 DROP COLUMN j CASCADE;
+
+statement ok
+SET use_declarative_schema_changer = 'on';
+
+# The trigger was dropped.
+query TB colnames
+SHOW TRIGGERS FROM t1;
+----
+trigger_name  enabled
+
+statement error pq: trigger "audit_trigger" for table "t1" does not exist
 DROP TRIGGER audit_trigger ON t1;
 
 statement ok
-DROP TYPE e;
+INSERT INTO t1 VALUES (32);
 
 statement ok
-DROP FUNCTION f1;
+DROP TABLE t1;
+DROP FUNCTION audit_changes;
 
 subtest end
 
@@ -4767,328 +6305,6 @@ DROP SCHEMA sc1 CASCADE;
 
 subtest end
 
-# ==============================================================================
-# Test information_schema.triggers and pg_catalog.pg_trigger
-# ==============================================================================
-
-subtest trigger_introspection
-
-# Create test tables and trigger functions.
-statement ok
-CREATE TABLE test_triggers (
-    id INT PRIMARY KEY,
-    name TEXT,
-    value INT
-);
-
-statement ok
-CREATE TABLE audit_log (
-    id SERIAL PRIMARY KEY,
-    table_name TEXT,
-    operation TEXT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-statement ok
-CREATE FUNCTION trigger_func1() RETURNS TRIGGER AS $$
-  BEGIN
-    INSERT INTO audit_log (table_name, operation)
-    VALUES (TG_TABLE_NAME, TG_OP);
-    RETURN NEW;
-  END;
-$$ LANGUAGE PLpgSQL;
-
-statement ok
-CREATE FUNCTION trigger_func2() RETURNS TRIGGER AS $$
-  BEGIN
-    RAISE NOTICE 'Trigger fired';
-    RETURN NEW;
-  END;
-$$ LANGUAGE PLpgSQL;
-
-statement ok
-CREATE TRIGGER after_insert_row
-AFTER INSERT ON test_triggers
-FOR EACH ROW
-EXECUTE FUNCTION trigger_func1();
-
-statement ok
-CREATE TRIGGER before_update_row
-BEFORE UPDATE ON test_triggers
-FOR EACH ROW
-WHEN ((NEW).value > 100)
-EXECUTE FUNCTION trigger_func2();
-
-statement ok
-CREATE TRIGGER after_delete_row
-AFTER DELETE ON test_triggers
-FOR EACH ROW
-EXECUTE FUNCTION trigger_func1();
-
-query TTTTTTITTTTT colnames
-SELECT 
-    trigger_catalog,
-    trigger_schema,
-    trigger_name,
-    event_manipulation,
-    event_object_schema,
-    event_object_table,
-    action_order,
-    action_orientation,
-    action_timing,
-    action_reference_old_table,
-    action_reference_new_table,
-    created
-FROM information_schema.triggers
-WHERE event_object_table = 'test_triggers'
-ORDER BY trigger_name;
-----
-trigger_catalog  trigger_schema  trigger_name       event_manipulation  event_object_schema  event_object_table  action_order  action_orientation  action_timing  action_reference_old_table  action_reference_new_table  created
-test             public          after_delete_row   DELETE              public               test_triggers       NULL          ROW                 AFTER          NULL                        NULL                        NULL
-test             public          after_insert_row   INSERT              public               test_triggers       NULL          ROW                 AFTER          NULL                        NULL                        NULL
-test             public          before_update_row  UPDATE              public               test_triggers       NULL          ROW                 BEFORE         NULL                        NULL                        NULL
-
-# Test trigger with WHEN condition.
-query TTT colnames
-SELECT 
-    trigger_name,
-    action_condition,
-    action_statement
-FROM information_schema.triggers
-WHERE trigger_name = 'before_update_row';
-----
-trigger_name       action_condition     action_statement
-before_update_row  ((new).value > 100)  EXECUTE FUNCTION trigger_func2()
-
-# Create trigger with transition tables.
-statement ok
-CREATE FUNCTION trigger_func3() RETURNS TRIGGER AS $$
-  BEGIN
-    RETURN NULL;
-  END;
-$$ LANGUAGE PLpgSQL;
-
-# TODO(#126362, #135655): Enable tests for statement-level triggers when supported.
-statement error statement-level triggers are not yet supported
-CREATE TRIGGER after_update_transition
-AFTER UPDATE ON test_triggers
-REFERENCING OLD TABLE AS old_data NEW TABLE AS new_data
-FOR EACH STATEMENT
-EXECUTE FUNCTION trigger_func3();
-
-# TODO(#126362, #135655): Enable tests for statement-level triggers when supported.
-# The expected results are:
-# trigger_name             action_orientation  action_reference_old_table  action_reference_new_table  action_reference_old_row
-# after_update_transition  STATEMENT           old_data                    new_data                    NULL
-query TTTTT colnames
-SELECT
-    trigger_name,
-    action_orientation,
-    action_reference_old_table,
-    action_reference_new_table,
-    action_reference_old_row
-FROM information_schema.triggers
-WHERE trigger_name = 'after_update_transition';
-----
-trigger_name  action_orientation  action_reference_old_table  action_reference_new_table  action_reference_old_row
-
-# TODO(#126362, #135655): Populate tgoldtable and tgnewtable.
-# The expected results are:
-# tgname                   tgoldtable  tgnewtable
-# after_update_transition  old_data    new_data
-query TTT colnames
-SELECT tgname, tgoldtable, tgnewtable
-FROM pg_catalog.pg_trigger
-WHERE tgname = 'after_update_transition';
-----
-tgname  tgoldtable  tgnewtable
-
-# Test multiple event types (create a trigger for multiple events).
-statement ok
-CREATE TRIGGER multi_event_trigger
-BEFORE INSERT OR UPDATE OR DELETE ON test_triggers
-FOR EACH ROW
-EXECUTE FUNCTION trigger_func1();
-
-# Each event should appear as a separate row.
-query TTT colnames
-SELECT 
-    trigger_name,
-    event_manipulation,
-    action_timing
-FROM information_schema.triggers
-WHERE trigger_name = 'multi_event_trigger'
-ORDER BY event_manipulation;
-----
-trigger_name         event_manipulation  action_timing
-multi_event_trigger  DELETE              BEFORE
-multi_event_trigger  INSERT              BEFORE
-multi_event_trigger  UPDATE              BEFORE
-
-# Create a schema and add a trigger there.
-statement ok
-CREATE SCHEMA other_schema;
-
-statement ok
-CREATE TABLE other_schema.test_table (id INT PRIMARY KEY, data TEXT);
-
-statement ok
-CREATE TRIGGER other_schema_trigger
-AFTER INSERT ON other_schema.test_table
-FOR EACH ROW
-EXECUTE FUNCTION trigger_func1();
-
-query TI colnames
-SELECT 
-    trigger_schema,
-    count(*) AS trigger_count
-FROM information_schema.triggers
-WHERE trigger_catalog = 'test'
-GROUP BY trigger_schema
-ORDER BY trigger_schema;
-----
-trigger_schema  trigger_count
-other_schema    1
-public          7
-
-# Create a trigger with arguments to test tgnargs and tgargs.
-statement ok
-CREATE TRIGGER trigger_with_args
-AFTER INSERT ON test_triggers
-FOR EACH ROW
-EXECUTE FUNCTION trigger_func1('arg1', 'arg2', 'test value with spaces');
-
-# Test pg_catalog.pg_trigger.
-query TIBITTT colnames
-SELECT 
-    tgname,
-    tgtype,
-    tgfoid > 0 AS has_func_oid,
-    tgnargs,
-    tgenabled,
-    tgoldtable,
-    tgnewtable
-FROM pg_catalog.pg_trigger
-WHERE tgrelid = 'test_triggers'::regclass
-ORDER BY tgname;
-----
-tgname              tgtype  has_func_oid  tgnargs  tgenabled  tgoldtable  tgnewtable
-after_delete_row    9       true          0        A          NULL        NULL
-after_insert_row    5       true          0        A          NULL        NULL
-before_update_row   19      true          0        A          NULL        NULL
-multi_event_trigger 31      true          0        A          NULL        NULL
-trigger_with_args   5       true          3        A          NULL        NULL
-
-# Test INSTEAD OF triggers (not yet implemented)
-statement error pgcode 42809 "test_triggers" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
-CREATE TRIGGER instead_of_trigger INSTEAD OF INSERT ON test_triggers
-FOR EACH ROW EXECUTE FUNCTION trigger_func1();
-
-statement error pgcode 42809 "test_triggers" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
-CREATE TRIGGER instead_of_update_trigger INSTEAD OF UPDATE ON test_triggers
-FOR EACH ROW EXECUTE FUNCTION trigger_func1();
-
-statement error pgcode 42809 "test_triggers" is a table\nDETAIL: Tables cannot have INSTEAD OF triggers.
-CREATE TRIGGER instead_of_delete_trigger INSTEAD OF DELETE ON test_triggers
-FOR EACH ROW EXECUTE FUNCTION trigger_func1();
-
-# Test TRUNCATE triggers (not yet implemented)
-statement error statement-level triggers are not yet supported
-CREATE TRIGGER truncate_trigger AFTER TRUNCATE ON test_triggers
-FOR EACH STATEMENT EXECUTE FUNCTION trigger_func1();
-
-statement error statement-level triggers are not yet supported
-CREATE TRIGGER before_truncate_trigger BEFORE TRUNCATE ON test_triggers
-FOR EACH STATEMENT EXECUTE FUNCTION trigger_func1();
-
-# Test tgtype bitmap calculation
-# Bit 0: FOR EACH ROW (1) or FOR EACH STATEMENT (0)
-# Bit 1: BEFORE (2) or AFTER (0)
-# Bits 2-4: INSERT (4), DELETE (8), UPDATE (16)
-# TODO(#126363, #135657): Add tests for INSTEAD OF and TRUNCATE triggers here when supported.
-query TBBBBBBB colnames
-SELECT 
-    tgname,
-    (tgtype::INT & 1) > 0 AS is_row_level,
-    (tgtype::INT & 2) > 0 AS is_before,
-    (tgtype::INT & 4) > 0 AS has_insert,
-    (tgtype::INT & 8) > 0 AS has_delete,
-    (tgtype::INT & 16) > 0 AS has_update,
-    (tgtype::INT & 32) > 0 AS has_instead,
-    (tgtype::INT & 64) > 0 AS has_truncate
-FROM pg_catalog.pg_trigger
-WHERE tgrelid = 'test_triggers'::regclass
-ORDER BY tgname;
-----
-tgname               is_row_level  is_before  has_insert  has_delete  has_update  has_instead  has_truncate
-after_delete_row     true          false      false       true        false       false        false
-after_insert_row     true          false      true        false       false       false        false
-before_update_row    true          true       false       false       true        false        false
-multi_event_trigger  true          true       true        true        true        false        false
-trigger_with_args    true          false      true        false       false       false        false
-
-# Check trigger arguments and column attributes.
-# TODO(#135656): Populate the tgattr column.
-query TITT colnames
-SELECT 
-    tgname,
-    tgnargs,
-    encode(tgargs, 'escape') AS tgargs,
-    tgattr
-FROM pg_catalog.pg_trigger
-WHERE tgrelid = 'test_triggers'::regclass
-ORDER BY tgname;
-----
-tgname               tgnargs  tgargs                                      tgattr
-after_delete_row     0        ·                                           ·
-after_insert_row     0        ·                                           ·
-before_update_row    0        ·                                           ·
-multi_event_trigger  0        ·                                           ·
-trigger_with_args    3        arg1\000arg2\000test value with spaces\000  ·
-
-# Test trigger with WHEN condition.
-query TTT colnames
-SELECT 
-    tgname,
-    tgqual,
-    tgattr
-FROM pg_catalog.pg_trigger
-WHERE tgrelid = 'test_triggers'::regclass AND tgqual IS NOT NULL;
-----
-tgname             tgqual               tgattr
-before_update_row  ((new).value > 100)  ·
-
-# Test cross-schema trigger.
-query TTT colnames
-SELECT 
-    tgname,
-    tgrelid::regclass::text AS table_name,
-    tgfoid::regproc::text AS trigger_func_name
-FROM pg_catalog.pg_trigger
-WHERE tgrelid = 'other_schema.test_table'::regclass;
-----
-tgname                table_name  trigger_func_name
-other_schema_trigger  test_table  trigger_func1
-
-# Clean up
-statement ok
-DROP TABLE test_triggers CASCADE;
-
-statement ok
-DROP TABLE other_schema.test_table CASCADE;
-
-statement ok
-DROP SCHEMA other_schema;
-
-statement ok
-DROP TABLE audit_log CASCADE;
-
-statement ok
-DROP FUNCTION trigger_func1, trigger_func2, trigger_func3;
-
-subtest end
-
-
 # Previously, we had a bug where we did not properly look at references
 # in a trigger when cleaning up back references on sequences. See
 # issue #148103
@@ -5124,3 +6340,136 @@ statement ok
 DROP TRIGGER tr1 ON sc_tr_tbl;
 
 subtest end
+
+# Regression test for unnecessary column dependencies added to a routine with a
+# mutation that involves a trigger.
+subtest regression_158154
+
+statement ok
+CREATE TABLE xy_158154 (x INT, y INT);
+
+statement ok
+CREATE FUNCTION g() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    SELECT x, y FROM xy_158154;
+    RAISE NOTICE '%: old: %, new: %', TG_OP, OLD, NEW;
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+
+statement ok
+CREATE TRIGGER foo BEFORE INSERT ON xy_158154 FOR EACH ROW EXECUTE FUNCTION g();
+
+statement ok
+CREATE PROCEDURE p(blah INT) LANGUAGE SQL AS $$
+  INSERT INTO xy_158154 (x) VALUES (blah);
+$$;
+
+statement ok
+CALL p(100)
+
+statement error pgcode 2BP01 pq: cannot drop column "y" because trigger "foo" on table "xy_158154" depends on it
+ALTER TABLE xy_158154 DROP COLUMN y;
+
+statement ok
+DROP TRIGGER foo ON xy_158154;
+DROP FUNCTION g();
+
+# The procedure should not prevent the column drop.
+statement ok
+ALTER TABLE xy_158154 DROP COLUMN y;
+
+statement ok
+CALL p(200)
+
+query I rowsort
+SELECT * FROM xy_158154;
+----
+100
+200
+
+statement ok
+DROP PROCEDURE p
+
+statement ok
+DROP TABLE xy_158154
+
+subtest end
+
+# Regression test for dropping a trigger when a policy on the same table
+# references the same sequence. Previously, the trigger's backref would
+# incorrectly remain because the policy's reference was considered sufficient.
+subtest regression_trigger_policy_shared_sequence_backref
+
+statement ok
+CREATE SEQUENCE seq_tr_policy;
+
+statement ok
+CREATE TABLE t_tr_policy (id INT PRIMARY KEY, data INT);
+
+statement ok
+CREATE FUNCTION trigger_fn_policy() RETURNS TRIGGER AS $$
+BEGIN
+  SELECT nextval('seq_tr_policy');
+  RETURN NEW;
+END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER my_trigger AFTER INSERT ON t_tr_policy
+FOR EACH ROW EXECUTE FUNCTION trigger_fn_policy();
+
+statement ok
+ALTER TABLE t_tr_policy ENABLE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY my_policy ON t_tr_policy USING (nextval('seq_tr_policy') < 1000);
+
+# Before dropping the trigger, the sequence should have two backrefs:
+# one from the trigger (with trigger_id != 0) and one from the policy (trigger_id = 0).
+query TI colnames
+SELECT
+  n.name,
+  (d->>'triggerId')::INT as trigger_id
+FROM (
+  SELECT jsonb_array_elements(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'dependedOnBy') as d
+  FROM system.descriptor
+  WHERE id = 'seq_tr_policy'::REGCLASS::INT
+)
+JOIN system.namespace n ON (d->>'id')::INT = n.id
+ORDER BY 1, 2;
+----
+name         trigger_id
+t_tr_policy  NULL
+t_tr_policy  1
+
+statement ok
+DROP TRIGGER my_trigger ON t_tr_policy;
+
+# After dropping the trigger, only the policy's backref should remain.
+query TI colnames
+SELECT
+  n.name,
+  (d->>'triggerId')::INT as trigger_id
+FROM (
+  SELECT jsonb_array_elements(crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'dependedOnBy') as d
+  FROM system.descriptor
+  WHERE id = 'seq_tr_policy'::REGCLASS::INT
+)
+JOIN system.namespace n ON (d->>'id')::INT = n.id
+ORDER BY 1, 2;
+----
+name         trigger_id
+t_tr_policy  NULL
+
+statement ok
+DROP POLICY my_policy ON t_tr_policy;
+DROP TABLE t_tr_policy;
+DROP FUNCTION trigger_fn_policy;
+DROP SEQUENCE seq_tr_policy;
+
+subtest end
+
+# ==============================================================================
+# End of regression tests. Add new features above the regression test section.
+# ==============================================================================

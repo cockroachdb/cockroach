@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -412,7 +413,7 @@ func (d *txnDeps) Run(ctx context.Context) error {
 	return nil
 }
 
-// InitializeSequence implements the scexec.Caatalog interface.
+// InitializeSequence implements the scexec.Catalog interface.
 func (d *txnDeps) InitializeSequence(ctx context.Context, id descpb.ID, startVal int64) error {
 	batch, err := d.getOrCreateBatch(ctx)
 	if err != nil {
@@ -420,6 +421,88 @@ func (d *txnDeps) InitializeSequence(ctx context.Context, id descpb.ID, startVal
 	}
 	sequenceKey := d.codec.SequenceKey(uint32(id))
 	batch.Inc(sequenceKey, startVal)
+	return nil
+}
+
+// SetSequence implements the scexec.Catalog interface.
+func (d *txnDeps) SetSequence(ctx context.Context, seq *scexec.SequenceToSet) error {
+	batch, err := d.getOrCreateBatch(ctx)
+	if err != nil {
+		return err
+	}
+	sequenceKey := d.codec.SequenceKey(uint32(seq.ID))
+	batch.PutMustAcquireExclusiveLock(sequenceKey, seq.Value)
+	return nil
+}
+
+// MaybeUpdateSequenceValue implements the scexec.Catalog interface.
+func (d *txnDeps) MaybeUpdateSequenceValue(
+	ctx context.Context, seq *scexec.SequenceToMaybeUpdate,
+) error {
+	sequenceKey := d.codec.SequenceKey(uint32(seq.ID))
+
+	// Read the sequence value directly using txn.GetForUpdate. This acquires a
+	// lock on the sequence key and returns the current value. Importantly, this
+	// uses its own internal batch (not d.batch), so it won't prematurely flush
+	// any pending descriptor writes that are buffered in d.batch.
+	kv, err := d.txn.KV().GetForUpdate(ctx, sequenceKey, kvpb.GuaranteedDurability)
+	if err != nil {
+		return err
+	}
+
+	if !kv.Exists() {
+		// Sequence has never been initialized so no need to update its value.
+		return nil
+	}
+
+	currValue := kv.ValueInt()
+
+	// setSequenceValue writes the sequence value directly using txn.Put. This
+	// bypasses d.batch to avoid flushing pending descriptor writes.
+	setSequenceValue := func(value int64) error {
+		return d.txn.KV().Put(ctx, sequenceKey, value)
+	}
+
+	// Due to the semantics of sequence initialization (see #21564) and sequence
+	// caching (see sql.planner.incrementSequenceUsingCache()), it is possible
+	// for a sequence to have a value that exceeds its MinValue or MaxValue.
+	// Users do not see values beyond the sequence's bounds, and instead see
+	// "bounds exceeded" errors. To make a sequence usable again after exceeding
+	// its bounds, there are two options:
+	//
+	// 1. The user changes the sequence's value by calling setval(...)
+	//
+	// 2. The user performs a schema change to alter the sequence's MinValue,
+	// MaxValue, or Increment. In this case, the value of the sequence must be
+	// (transactionally) restored to a value within MinValue and MaxValue.
+	//
+	// The code below handles the second case.
+
+	if currValue == seq.Opts.PrevStart-seq.Opts.PrevIncrement {
+		// If the sequence were never advanced, its current value is offset by the increment.
+		if err := setSequenceValue(seq.Opts.UpdatedStart - seq.Opts.UpdatedIncrement); err != nil {
+			return err
+		}
+	} else if seq.Opts.PrevIncrement < 0 && seq.Opts.UpdatedMinValue < seq.Opts.PrevMinValue {
+		// If the sequence were exhausted, it would be beyond its previous bounds.
+		if currValue < seq.Opts.PrevMinValue {
+			// Every call to nextval increments the sequence even if the
+			// sequence is exhausted. Find the final valid value of the sequence
+			// by calculating the number of valid calls to it.
+			calls := (seq.Opts.PrevMinValue - seq.Opts.PrevStart) / seq.Opts.PrevIncrement
+			if err := setSequenceValue(seq.Opts.PrevStart + calls*seq.Opts.PrevIncrement); err != nil {
+				return err
+			}
+		}
+	} else if seq.Opts.PrevIncrement > 0 && seq.Opts.UpdatedMaxValue > seq.Opts.PrevMaxValue {
+		if currValue > seq.Opts.PrevMaxValue {
+			calls := (seq.Opts.PrevMaxValue - seq.Opts.PrevStart) / seq.Opts.PrevIncrement
+			if err := setSequenceValue(seq.Opts.PrevStart + calls*seq.Opts.PrevIncrement); err != nil {
+				return err
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -445,11 +528,20 @@ func (d *txnDeps) Reset(ctx context.Context) error {
 // maybeFlushBatch flushes the current batch if it exceeds the maximum size.
 func (d *txnDeps) maybeFlushBatch(ctx context.Context) error {
 	if int64(d.batch.ApproximateMutationBytes()) > batchFlushThresholdSize.Get(&d.settings.SV) {
-		if err := d.Run(ctx); err != nil {
+		err := d.flushBatch(ctx)
+		if err != nil {
 			return err
 		}
-		d.batch = d.txn.KV().NewBatch()
 	}
+	return nil
+}
+
+// flushBatch flushes the current batch.
+func (d *txnDeps) flushBatch(ctx context.Context) error {
+	if err := d.Run(ctx); err != nil {
+		return err
+	}
+	d.batch = d.txn.KV().NewBatch()
 	return nil
 }
 

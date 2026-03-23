@@ -1,0 +1,92 @@
+file alloy_test.config
+----
+----
+pyroscope.write "local" {
+	endpoint {
+		url = "http://pyroscope:4040"
+	}
+}
+
+pyroscope.scrape "secure_cluster_test" {
+	targets = [{
+		__address__  = "10.0.0.1:26258",
+		node         = "1",
+		service_name = "secure-cluster-test",
+	}, {
+		__address__  = "10.0.0.2:26258",
+		node         = "2",
+		service_name = "secure-cluster-test",
+	}]
+	scheme       = "https"
+	http_headers = {
+		Cookie = ["session=SESSION_KEY; Path=/; HttpOnly"],
+	}
+
+	tls_config {
+		insecure_skip_verify = true
+	}
+	scrape_interval          = "30s"
+	delta_profiling_duration = "10s"
+
+	profiling_config {
+		profile.process_cpu {
+			enabled = true
+		}
+
+		profile.memory {
+			enabled = true
+		}
+
+		profile.goroutine {
+			enabled = true
+		}
+
+		profile.mutex {
+			enabled = true
+		}
+
+		profile.block {
+			enabled = true
+		}
+	}
+	forward_to = [pyroscope.write.local.receiver]
+}
+
+pyroscope.scrape "insecure_cluster_test" {
+	targets = [{
+		__address__  = "20.0.0.1:26258",
+		node         = "1",
+		service_name = "insecure-cluster-test",
+	}, {
+		__address__  = "20.0.0.2:26258",
+		node         = "2",
+		service_name = "insecure-cluster-test",
+	}]
+	scheme          = "http"
+	scrape_interval = "30s"
+
+	profiling_config {
+		profile.process_cpu {
+			enabled = true
+		}
+
+		profile.memory {
+			enabled = true
+		}
+
+		profile.goroutine {
+			enabled = true
+		}
+
+		profile.mutex {
+			enabled = true
+		}
+
+		profile.block {
+			enabled = true
+		}
+	}
+	forward_to = [pyroscope.write.local.receiver]
+}
+----
+----

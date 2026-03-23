@@ -98,7 +98,7 @@ tc_start_block "Copy binaries"
 export google_credentials="$gcs_credentials"
 log_into_gcloud
 for product in cockroach cockroach-sql; do
-  for platform in linux-amd64 linux-amd64-fips linux-arm64 darwin-10.9-amd64 darwin-11.0-arm64 windows-6.2-amd64; do
+  for platform in linux-amd64 linux-amd64-fips linux-arm64 linux-s390x darwin-10.9-amd64 darwin-11.0-arm64 windows-6.2-amd64; do
       archive_suffix=tgz
       if [[ $platform == *"windows"* ]]; then 
           archive_suffix=zip
@@ -112,48 +112,36 @@ tc_end_block "Copy binaries"
 
 
 tc_start_block "Make and push multiarch docker images"
-declare -a gcr_arch_tags
-declare -a dockerhub_arch_tags
 dockerhub_tag="${dockerhub_repository}:${version}"
 gcr_tag="${gcr_repository}:${version}"
 
-for platform_name in amd64 arm64; do
-  dockerhub_arch_tag="${dockerhub_repository}:${platform_name}-${version}"
-  gcr_arch_tag="${gcr_repository}:${platform_name}-${version}"
-  gcr_staged_arch_tag="${gcr_staged_repository}:${platform_name}-${version}"
-  # Update the packages before pushing to the final destination.
-  tmpdir=$(mktemp -d)
-  echo "FROM $gcr_staged_arch_tag" > "$tmpdir/Dockerfile"
-  echo "RUN microdnf -y --best --refresh upgrade && microdnf clean all && rm -rf /var/cache/yum" >> "$tmpdir/Dockerfile"
-  docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
-  docker build --pull --no-cache --platform "linux/$platform_name" \
-    --tag "$dockerhub_arch_tag" --tag "$gcr_arch_tag" "$tmpdir"
-  docker_login_gcr "$gcr_repository" "$gcr_credentials"
-  docker push "$gcr_arch_tag"
-  docker push "$dockerhub_arch_tag"
-  gcr_arch_tags+=("$gcr_arch_tag")
-  dockerhub_arch_tags+=("$dockerhub_arch_tag")
-done
+# Create a buildx builder for multi-platform builds.
+docker buildx rm "release-builder-$$" 2>/dev/null || true
+docker buildx create --name "release-builder-$$" --use
+cleanup_buildx() { docker buildx rm "release-builder-$$" || true; }
+tmpdir=$(mktemp -d)
+trap 'cleanup_buildx; rm -rf "$tmpdir"; remove_files_on_exit' EXIT
 
+# The staged image is already multi-arch; buildx pulls the right platform
+# automatically.
+cat > "$tmpdir/Dockerfile" <<DOCKERFILE
+FROM ${gcr_staged_repository}:${version}
+RUN microdnf -y --best --refresh upgrade && microdnf clean all && rm -rf /var/cache/yum
+DOCKERFILE
+
+# Build and push the multi-arch image to DockerHub. The staged repo (source)
+# is on us-docker.pkg.dev and DockerHub (destination) is on docker.io, so both
+# logins can coexist.
+docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
+docker buildx build --pull --push --no-cache \
+  --platform linux/amd64,linux/arm64,linux/s390x \
+  --tag "$dockerhub_tag" "$tmpdir"
+
+# Copy the multi-arch manifest from DockerHub to GCR. These are on different
+# hostnames so both logins can coexist.
 docker_login_gcr "$gcr_repository" "$gcr_credentials"
+docker buildx imagetools create -t "$gcr_tag" "$dockerhub_tag"
 
-docker manifest rm "${gcr_tag}" || :
-docker manifest create "${gcr_tag}" "${gcr_arch_tags[@]}"
-docker manifest push "${gcr_tag}"
-
-docker manifest rm "${dockerhub_tag}" || :
-docker manifest create "${dockerhub_tag}" "${dockerhub_arch_tags[@]}"
-docker manifest push "${dockerhub_tag}"
-
-docker manifest rm "${gcr_repository}:latest" || :
-docker manifest create "${gcr_repository}:latest" "${gcr_arch_tags[@]}"
-docker manifest rm "${gcr_repository}:latest-${release_branch}" || :
-docker manifest create "${gcr_repository}:latest-${release_branch}" "${gcr_arch_tags[@]}"
-
-docker manifest rm "${dockerhub_repository}:latest" || :
-docker manifest create "${dockerhub_repository}:latest" "${dockerhub_arch_tags[@]}"
-docker manifest rm "${dockerhub_repository}:latest-${release_branch}" || :
-docker manifest create "${dockerhub_repository}:latest-${release_branch}" "${dockerhub_arch_tags[@]}"
 tc_end_block "Make and push multiarch docker images"
 
 
@@ -161,16 +149,19 @@ tc_start_block "Make and push FIPS docker image"
 gcr_staged_tag_fips="${gcr_staged_repository}:${version}-fips"
 gcr_tag_fips="${gcr_repository}:${version}-fips"
 dockerhub_tag_fips="${dockerhub_repository}:${version}-fips"
-# Update the packages before pushing to the final destination.
-tmpdir=$(mktemp -d)
-echo "FROM $gcr_staged_tag_fips" > "$tmpdir/Dockerfile"
-echo "RUN microdnf -y --best --refresh upgrade && microdnf clean all && rm -rf /var/cache/yum" >> "$tmpdir/Dockerfile"
+
+cat > "$tmpdir/Dockerfile" <<DOCKERFILE
+FROM $gcr_staged_tag_fips
+RUN microdnf -y --best --refresh upgrade && microdnf clean all && rm -rf /var/cache/yum
+DOCKERFILE
+
 docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
-docker build --pull --no-cache --platform "linux/amd64" \
-  --tag "$dockerhub_tag_fips" --tag "$gcr_tag_fips" "$tmpdir"
+docker buildx build --pull --push --no-cache \
+  --platform linux/amd64 \
+  --tag "$dockerhub_tag_fips" "$tmpdir"
+
 docker_login_gcr "$gcr_repository" "$gcr_credentials"
-docker push "$gcr_tag_fips"
-docker push "$dockerhub_tag_fips"
+docker buildx imagetools create -t "$gcr_tag_fips" "$dockerhub_tag_fips"
 tc_end_block "Make and push FIPS docker image"
 
 
@@ -189,7 +180,7 @@ tc_start_block "Publish binaries and archive as latest"
 # https://github.com/cockroachdb/cockroach/issues/41067
 if [[ -n "${PUBLISH_LATEST}" && $prerelease == false ]]; then
   for product in cockroach cockroach-sql; do
-    for platform in linux-amd64 linux-amd64-fips linux-arm64 darwin-10.9-amd64 darwin-11.0-arm64 windows-6.2-amd64; do
+    for platform in linux-amd64 linux-amd64-fips linux-arm64 linux-s390x darwin-10.9-amd64 darwin-11.0-arm64 windows-6.2-amd64; do
         archive_suffix=tgz
         if [[ $platform == *"windows"* ]]; then 
             archive_suffix=zip
@@ -208,7 +199,8 @@ tc_end_block "Publish binaries and archive as latest"
 
 tc_start_block "Tag docker image as latest-RELEASE_BRANCH"
 if [[ $prerelease == false ]]; then
-  docker manifest push "${dockerhub_repository}:latest-${release_branch}"
+  docker buildx imagetools create \
+    -t "${dockerhub_repository}:latest-${release_branch}" "$dockerhub_tag"
 else
   echo "The ${dockerhub_repository}:latest-${release_branch} docker image tags were _not_ pushed."
 fi
@@ -221,7 +213,8 @@ tc_start_block "Tag docker images as latest"
 # https://github.com/cockroachdb/cockroach/issues/41067
 # https://github.com/cockroachdb/cockroach/issues/48309
 if [[ -n "${PUBLISH_LATEST}" || $prerelease == true ]]; then
-  docker manifest push "${dockerhub_repository}:latest"
+  docker buildx imagetools create \
+    -t "${dockerhub_repository}:latest" "$dockerhub_tag"
 else
   echo "The ${dockerhub_repository}:latest docker image tags were _not_ pushed."
 fi
@@ -240,7 +233,7 @@ if [[ -n "${PUBLISH_LATEST}" || $prerelease == true ]]; then
 fi
 
 for img in "${images[@]}"; do
-  for platform_name in amd64 arm64; do
+  for platform_name in amd64 arm64 s390x; do
     tc_start_block "Verify $img on $platform_name"
     if ! verify_docker_image "$img" "linux/$platform_name" "$BUILD_VCS_NUMBER" "$version" false false; then
       error=1

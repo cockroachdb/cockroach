@@ -47,6 +47,7 @@ go_test(
     ],
     embed = [":clisqlexec"],
     deps = [
+        "//pkg/base",
         "//pkg/build",
         "//pkg/cli",
         "//pkg/cli/clisqlclient",

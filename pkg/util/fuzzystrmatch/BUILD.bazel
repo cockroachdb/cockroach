@@ -3,6 +3,8 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "fuzzystrmatch",
     srcs = [
+        "daitch_mokotoff.go",
+        "dmetaphone.go",
         "leven.go",
         "metaphone.go",
         "soundex.go",
@@ -15,9 +17,12 @@ go_test(
     name = "fuzzystrmatch_test",
     size = "small",
     srcs = [
+        "daitch_mokotoff_test.go",
+        "dmetaphone_test.go",
         "leven_test.go",
         "metaphone_test.go",
         "soundex_test.go",
     ],
     embed = [":fuzzystrmatch"],
+    deps = ["//pkg/util/randutil"],
 )

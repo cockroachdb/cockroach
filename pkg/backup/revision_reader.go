@@ -12,7 +12,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // VersionedValues is similar to roachpb.KeyValue except instead of just the
@@ -42,7 +44,12 @@ func GetAllRevisions(
 			StartTime:     startTime,
 			MVCCFilter:    kvpb.MVCCFilter_All,
 		}
-		resp, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
+		resp, pErr := kv.SendWrappedWithAdmission(ctx, db.NonTransactionalSender(), header, kvpb.AdmissionHeader{
+			Priority:                 int32(admissionpb.BulkNormalPri),
+			CreateTime:               timeutil.Now().UnixNano(),
+			Source:                   kvpb.AdmissionHeader_FROM_SQL,
+			NoMemoryReservedAtSource: true,
+		}, req)
 		if pErr != nil {
 			return pErr.GoError()
 		}

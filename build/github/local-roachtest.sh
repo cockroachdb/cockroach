@@ -10,16 +10,6 @@ set -euxo pipefail
 
 CROSSCONFIG=$1
 
-if [ $CROSSCONFIG == "crosslinuxfips" ]
-then
-    fips_enabled=$(cat /proc/sys/crypto/fips_enabled)
-
-    if [[ $fips_enabled != "1" ]]; then
-        echo "FIPS mode is not enabled. Exiting."
-        exit 1
-    fi
-fi
-
 BAZEL_BIN=$(bazel info bazel-bin --config=$CROSSCONFIG)
 EXECROOT=$(bazel info execution_root --config=$CROSSCONFIG)
 

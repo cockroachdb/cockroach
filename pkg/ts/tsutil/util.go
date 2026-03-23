@@ -14,6 +14,38 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 )
 
+// AllowedChildMetrics is the list of metrics that should have child metrics
+// collected and recorded to TSDB. This is a curated list to prevent unbounded
+// cardinality while still capturing the most important per-changefeed metrics.
+var AllowedChildMetrics = map[string]struct{}{
+	"changefeed.max_behind_nanos":                     {},
+	"changefeed.error_retries":                        {},
+	"changefeed.internal_retry_message_count":         {},
+	"changefeed.stage.downstream_client_send.latency": {},
+	"changefeed.emitted_messages":                     {},
+	"changefeed.sink_backpressure_nanos":              {},
+	"changefeed.backfill_pending_ranges":              {},
+	"changefeed.sink_io_inflight":                     {},
+	"changefeed.lagging_ranges":                       {},
+	"changefeed.aggregator_progress":                  {},
+	"changefeed.checkpoint_progress":                  {},
+	"changefeed.emitted_batch_sizes":                  {},
+	"changefeed.total_ranges":                         {},
+}
+
+// IsAllowedChildMetric checks if a metric name matches one of the allowed child metrics.
+func IsAllowedChildMetric(name string) bool {
+	metricName := name
+	for _, prefix := range []string{"cr.node.", "cr.store."} {
+		if strings.HasPrefix(metricName, prefix) {
+			metricName = strings.TrimPrefix(metricName, prefix)
+			break
+		}
+	}
+	_, ok := AllowedChildMetrics[metricName]
+	return ok
+}
+
 // DumpRawTo is a helper that gob-encodes all messages received from the
 // source stream to the given WriteCloser.
 func DumpRawTo(src tspb.RPCTimeSeries_DumpRawClient, out io.Writer) error {

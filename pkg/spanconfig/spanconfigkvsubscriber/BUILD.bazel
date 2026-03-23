@@ -26,6 +26,7 @@ go_library(
         "//pkg/sql/rowenc/valueside",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
+        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/log",
         "//pkg/util/metric",

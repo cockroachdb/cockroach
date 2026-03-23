@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -1413,7 +1414,7 @@ func (c *clusterImpl) FetchDebugZip(
 			//
 			// Ignore the files in the log directory; we pull the logs separately anyway
 			// so this would only cause duplication.
-			excludeFiles := "*.log,*.pprof"
+			excludeFiles := "*.log"
 
 			cmd := roachtestutil.NewCommand("%s debug zip", test.DefaultCockroachPath).
 				Option("include-range-info").
@@ -1735,8 +1736,8 @@ func (c *clusterImpl) FetchPebbleCheckpoints(ctx context.Context, l *logger.Logg
 	// Checkpoints can be large. Bail out after 3 minutes.
 	return timeutil.RunWithTimeout(ctx, "checkpoints", 3*time.Minute, func(ctx context.Context) error {
 		numStores := 1
-		if ssds := c.spec.SSDs; ssds > 1 {
-			numStores = ssds
+		if !c.spec.RAID0 && c.spec.DiskCount > 1 {
+			numStores = c.spec.DiskCount
 		}
 		for storeIdx := 1; storeIdx <= numStores; storeIdx++ {
 			// Find any checkpoints.
@@ -1909,7 +1910,7 @@ func (c *clusterImpl) CreateSnapshot(
 func (c *clusterImpl) ApplySnapshots(ctx context.Context, snapshots []vm.VolumeSnapshot) error {
 	opts := vm.VolumeCreateOpts{
 		Size: c.spec.VolumeSize,
-		Type: c.spec.GCE.VolumeType, // TODO(irfansharif): This is only applicable to GCE. Change that.
+		Type: c.spec.VolumeType,
 		Labels: map[string]string{
 			vm.TagUsage: "roachtest",
 		},
@@ -2160,8 +2161,10 @@ func (c *clusterImpl) StartE(
 	defer c.clearStatusForClusterOpt(startOpts.RoachtestOpts.Worker)
 
 	startOpts.RoachprodOpts.EncryptedStores = c.encAtRest
-	if c.t.Spec().(*registry.TestSpec).Benchmark {
-		startOpts.RoachprodOpts.ScheduleBackups = false
+	if c.t != nil {
+		if ts, ok := c.t.Spec().(*registry.TestSpec); ok && ts.Benchmark {
+			startOpts.RoachprodOpts.ScheduleBackups = false
+		}
 	}
 
 	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
@@ -2188,6 +2191,16 @@ func (c *clusterImpl) StartE(
 		// CPU usage % to be greater than 1% either way.
 		settings.ClusterSettings["server.cpu_profile.cpu_usage_combined_threshold"] = "1"
 		settings.ClusterSettings["server.cpu_profile.total_dump_size_limit"] = "256 MiB"
+	}
+
+	// Inject CLI-specified environment variables and cluster settings. These are
+	// applied before test-specific settings in the options array, so tests can
+	// override them if needed.
+	if len(roachtestflags.StartEnv) > 0 {
+		settings.Env = append(settings.Env, roachtestflags.StartEnv...)
+	}
+	for name, value := range roachtestflags.StartSettings {
+		settings.ClusterSettings[name] = value
 	}
 
 	clusterSettingsOpts := c.configureClusterSettingOptions(c.clusterSettings, settings)
@@ -2243,7 +2256,9 @@ func (c *clusterImpl) StartE(
 	// If starting the cluster was successful, mark the nodes as healthy. N.B. we must wait
 	// until cluster startup succeeds as we may have tests that purposely inject failures into
 	// cluster startup.
-	c.t.Monitor().ExpectProcessAlive(nodes)
+	if c.t != nil {
+		c.t.Monitor().ExpectProcessAlive(nodes)
+	}
 	return nil
 }
 
@@ -2352,6 +2367,12 @@ func (c *clusterImpl) RefetchCertsFromNode(ctx context.Context, node int) error 
 	// that might cause fallout) by using a non-existing dir here.
 	c.localCertsDir = filepath.Join(c.localCertsDir, install.CockroachNodeCertsDir)
 	return roachprod.FetchCertsDir(ctx, c.l, c.MakeNodes(c.Node(node)), fmt.Sprintf("./%s", install.CockroachNodeCertsDir), c.localCertsDir)
+}
+
+// LocalCertsDir returns the local directory where the cluster's
+// certificates are stored, i.e. the roachtest runner's certs.
+func (c *clusterImpl) LocalCertsDir() string {
+	return c.localCertsDir
 }
 
 func (c *clusterImpl) SetDefaultVirtualCluster(name string) {
@@ -3209,7 +3230,7 @@ func archForTest(ctx context.Context, l *logger.Logger, testSpec registry.TestSp
 			l.PrintfCtx(ctx, "%q specified one or more GCE regions unsupported by T2A, falling back to AMD64; see #122035", testSpec.Name)
 			return vm.ArchAMD64
 		}
-		if roachtestflags.PreferLocalSSD && testSpec.Cluster.VolumeSize == 0 && testSpec.Cluster.SSDs > 1 {
+		if roachtestflags.PreferLocalSSD && testSpec.Cluster.VolumeSize == 0 && testSpec.Cluster.DiskCount > 1 {
 			l.PrintfCtx(ctx, "%q specified multiple _local_ SSDs unsupported by T2A, falling back to AMD64; see #122035", testSpec.Name)
 			return vm.ArchAMD64
 		}
@@ -3275,7 +3296,7 @@ func randomArch(
 }
 
 // bucketVMsByProvider buckets cachedCluster.VMs by provider.
-func bucketVMsByProvider(cachedCluster *cloud.Cluster) map[string][]vm.VM {
+func bucketVMsByProvider(cachedCluster *cloudcluster.Cluster) map[string][]vm.VM {
 	providerToVMs := make(map[string][]vm.VM)
 	for _, vm := range cachedCluster.VMs {
 		providerToVMs[vm.Provider] = append(providerToVMs[vm.Provider], vm)
@@ -3285,7 +3306,7 @@ func bucketVMsByProvider(cachedCluster *cloud.Cluster) map[string][]vm.VM {
 
 // getCachedCluster checks if the passed cluster name is present in cached clusters
 // and returns an error if not found.
-func getCachedCluster(clusterName string) (*cloud.Cluster, error) {
+func getCachedCluster(clusterName string) (*cloudcluster.Cluster, error) {
 	cachedCluster, ok := roachprod.CachedCluster(clusterName)
 	if !ok {
 		var availableClusters []string

@@ -1616,11 +1616,19 @@ func TestTxnWriteBufferFlushesWhenOverBudget(t *testing.T) {
 	delB := delArgs(keyB, txn.Sequence)
 	ba.Add(delB)
 
+	var batchCount int
 	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		require.Len(t, ba.Requests, 2)
-
-		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
-		require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
+		batchCount++
+		switch batchCount {
+		case 1:
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+		case 2:
+			require.Len(t, ba.Requests, 1)
+			require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[0].GetInner())
+		default:
+			t.Fatalf("too many requests: %d", batchCount)
+		}
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -1829,11 +1837,20 @@ func TestTxnWriteBufferFlushesIfBatchRequiresFlushing(t *testing.T) {
 				b.Add(delRangeArgs(keyA, keyB, b.Txn.Sequence))
 			},
 			baSender: func(t *testing.T) batchSendMock {
+				var batchCount int
 				return func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-					require.Len(t, ba.Requests, 3)
-					require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
-					require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
-					require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[2].GetInner())
+					batchCount++
+					switch batchCount {
+					case 1:
+						require.Len(t, ba.Requests, 2)
+						require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+						require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
+					case 2:
+						require.Len(t, ba.Requests, 1)
+						require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[0].GetInner())
+					default:
+						t.Fatalf("too many requests: %d", batchCount)
+					}
 
 					br := ba.CreateReply()
 					br.Txn = ba.Txn
@@ -1856,11 +1873,20 @@ func TestTxnWriteBufferFlushesIfBatchRequiresFlushing(t *testing.T) {
 				})
 			},
 			baSender: func(t *testing.T) batchSendMock {
+				var batchCount int
 				return func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-					require.Len(t, ba.Requests, 3)
-					require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
-					require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
-					require.IsType(t, &kvpb.IncrementRequest{}, ba.Requests[2].GetInner())
+					batchCount++
+					switch batchCount {
+					case 1:
+						require.Len(t, ba.Requests, 2)
+						require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+						require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
+					case 2:
+						require.Len(t, ba.Requests, 1)
+						require.IsType(t, &kvpb.IncrementRequest{}, ba.Requests[0].GetInner())
+					default:
+						t.Fatalf("too many requests: %d", batchCount)
+					}
 
 					br := ba.CreateReply()
 					br.Txn = ba.Txn
@@ -2265,8 +2291,8 @@ func TestTxnWriteBufferFlushesAfterDisabling(t *testing.T) {
 	require.False(t, twb.flushOnNextBatch)
 	require.Equal(t, int64(1), twb.txnMetrics.TxnWriteBufferDisabledAfterBuffering.Count())
 
-	// Both Put and Del should make it to the server in a single bath.
-	require.Equal(t, numCalledBefore+1, mockSender.NumCalled())
+	// Put and Del should make it to the server in different batches.
+	require.Equal(t, numCalledBefore+2, mockSender.NumCalled())
 
 	// Even though we flushed the Put, it shouldn't make it back to the response.
 	require.Len(t, br.Responses, 1)
@@ -2719,6 +2745,9 @@ func TestTxnWriteBufferHasBufferedAllPrecedingWritesSplitFlush(t *testing.T) {
 // SendLocked and flushBufferAndSendBatch. The test varies the state of the
 // buffer, the size of the keys and values, the fraction of reads in the batch,
 // as well as the fraction of  reads served from the buffer.
+// Use a fixed iteration count instead of the default time-based target,
+// as the benchmark may time out with the time-based approach.
+// benchmark-ci: benchtime=10000x
 // TODO(mira): Should we test more cases?
 //   - Batches with requests other than Get and Put. Notably, CPut.
 //   - Batches that exercise error paths.
@@ -2766,24 +2795,19 @@ func BenchmarkTxnWriteBuffer(b *testing.B) {
 	makeBuffer := func(kvSize int, txn *roachpb.Transaction, numWrites int) txnWriteBuffer {
 		twb, mockSender, _ := makeMockTxnWriteBuffer(ctx, metrics)
 		sendFunc := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+			// Use CreateReply() which creates properly-typed responses for all
+			// request types. This is important because requireAllFlushedRequestsProcessed
+			// calls GetInner() on each response, which would panic on zero-valued
+			// ResponseUnion entries.
 			br := ba.CreateReply()
 			br.Txn = ba.Txn
-			var resps []kvpb.ResponseUnion
-			resp := kvpb.ResponseUnion{}
-			// All requests get responses. Gets also have a return value.
-			for _, req := range ba.Requests {
-				switch req.GetInner().(type) {
-				case *kvpb.GetRequest:
+			// Populate Get responses with values.
+			for i, req := range ba.Requests {
+				if _, ok := req.GetInner().(*kvpb.GetRequest); ok {
 					v := makeValue(kvSize)
-					resp.Value = &kvpb.ResponseUnion_Get{
-						Get: &kvpb.GetResponse{
-							Value: &v,
-						},
-					}
+					br.Responses[i].GetGet().Value = &v
 				}
-				resps = append(resps, resp)
 			}
-			br.Responses = resps
 			return br, nil
 		}
 		mockSender.MockSend(sendFunc)
@@ -3769,16 +3793,30 @@ func TestTxnWriteBufferLockingGetFlushing(t *testing.T) {
 	type testCase struct {
 		ops                []string
 		midTxn             bool
-		validateFinalBatch func(t *testing.T, ba *kvpb.BatchRequest)
+		validateFinalBatch func(t *testing.T, ba *kvpb.BatchRequest, midTxn bool)
 	}
 
-	expectEndTxnOnly := func(t *testing.T, ba *kvpb.BatchRequest) {
+	expectEndTxnOnly := func(t *testing.T, ba *kvpb.BatchRequest, _ bool) {
 		require.Len(t, ba.Requests, 1)
 		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
 	}
-	expectRequests := func(strs ...lock.Strength) func(t *testing.T, ba *kvpb.BatchRequest) {
-		return func(t *testing.T, ba *kvpb.BatchRequest) {
-			require.Len(t, ba.Requests, len(strs)+1) // The +1 is whatever flushed us.
+	expectRequests := func(strs ...lock.Strength) func(t *testing.T, ba *kvpb.BatchRequest, midTxn bool) {
+		var batchCount int
+		return func(t *testing.T, ba *kvpb.BatchRequest, midTxn bool) {
+			batchCount++
+			if midTxn {
+				switch batchCount {
+				case 1:
+					require.Len(t, ba.Requests, len(strs))
+				case 2:
+					require.Len(t, ba.Requests, 1)
+					return
+				default:
+					t.Fatalf("too many requests: %d", batchCount)
+				}
+			} else {
+				require.Len(t, ba.Requests, len(strs)+1) // The +1 is whatever flushed us.
+			}
 			for i, str := range strs {
 				if str == lock.Intent {
 					require.IsType(t, &kvpb.PutRequest{}, ba.Requests[i].GetInner())
@@ -4002,7 +4040,7 @@ func TestTxnWriteBufferLockingGetFlushing(t *testing.T) {
 				ba.Add(&kvpb.EndTxnRequest{Commit: true})
 			}
 			mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-				tc.validateFinalBatch(t, ba)
+				tc.validateFinalBatch(t, ba, tc.midTxn)
 				resp := ba.CreateReply()
 				resp.Txn = ba.Txn
 				return resp, nil
@@ -4096,6 +4134,12 @@ func TestBatchHeaderFieldsAreAccountedForInBufferedWrites(t *testing.T) {
 		"HasBufferedAllPrecedingWrites": iSwearFieldDoesNotNeedHandling,
 		// Our flush should never need isReverse.
 		"IsReverse": fieldIsHandledByBatchSplitting,
+		// Observability label, doesn't affect batch processing.
+		"WorkloadID": iSwearFieldDoesNotNeedHandling,
+		// Observability label, doesn't affect batch processing.
+		"AppNameID": iSwearFieldDoesNotNeedHandling,
+		// Observability label, doesn't affect batch processing.
+		"WorkloadType": iSwearFieldDoesNotNeedHandling,
 	}
 
 	header := kvpb.Header{}

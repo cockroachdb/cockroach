@@ -126,7 +126,7 @@ func TestExportImportBank(t *testing.T) {
 				FROM SELECT * FROM bank AS OF SYSTEM TIME %s`, nullAs, asOf), exportDir, chunkSize,
 			)
 
-			schema := bank.FromRows(1).Tables()[0].Schema
+			schema := bank.FromRows(2).Tables()[0].Schema
 			exportedFiles := filepath.Join(exportDir, "*")
 			db.Exec(t, fmt.Sprintf("CREATE TABLE bank2 %s", schema))
 			defer db.Exec(t, "DROP TABLE bank2")

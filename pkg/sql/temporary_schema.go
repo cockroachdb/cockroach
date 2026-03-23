@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -447,6 +448,18 @@ func makeTemporaryObjectCleanerMetrics() *temporaryObjectCleanerMetrics {
 	}
 }
 
+// shouldStopTempObjectCleanupRetry returns true if the error indicates that we
+// should not retry the operation.
+func shouldStopTempObjectCleanupRetry(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check if transaction is already poisoned. Once this happens, the
+	// transaction cannot be reused regardless of retry attempts.
+	return errors.HasType(err, (*kvpb.TxnAlreadyEncounteredErrorError)(nil))
+}
+
 // doTemporaryObjectCleanup performs the actual cleanup.
 func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	ctx context.Context, closerCh <-chan struct{},
@@ -454,23 +467,24 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	defer log.Dev.Infof(ctx, "completed temporary object cleanup job")
 	// Wrap the retry functionality with the default arguments.
 	retryFunc := func(ctx context.Context, do func() error) error {
-		return retry.WithMaxAttempts(
-			ctx,
-			retry.Options{
-				InitialBackoff: 1 * time.Second,
-				MaxBackoff:     1 * time.Minute,
-				Multiplier:     2,
-				Closer:         closerCh,
-			},
-			5, // maxAttempts
-			func() error {
-				err := do()
-				if err != nil {
-					log.Dev.Warningf(ctx, "error during schema cleanup, retrying: %v", err)
+		return retry.Options{
+			InitialBackoff: 1 * time.Second,
+			MaxBackoff:     1 * time.Minute,
+			Multiplier:     2,
+			MaxRetries:     4, // 5 total attempts (4 retries + 1 initial)
+			Closer:         closerCh,
+		}.DoWithRetryable(ctx, func(ctx context.Context) (bool, error) {
+			err := do()
+			if err != nil {
+				if shouldStopTempObjectCleanupRetry(err) {
+					log.Dev.Warningf(ctx, "error during schema cleanup, not retryable: %v", err)
+					return false, err // Don't retry
 				}
-				return err
-			},
-		)
+				log.Dev.Warningf(ctx, "error during schema cleanup, retrying: %v", err)
+				return true, err // Retry
+			}
+			return false, nil // Success
+		})
 	}
 
 	// For tenants, we will completely skip this logic since listing
@@ -507,6 +521,15 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 	log.Dev.Infof(ctx, "running temporary object cleanup background job")
 	var sessionIDs map[clusterunique.ID]struct{}
 	if err := c.db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		// Testing knob to inject errors during cleanup.
+		if c.testingKnobs.TempObjectCleanupErrorInjection != nil {
+			if err := retryFunc(ctx, func() (err error) {
+				return c.testingKnobs.TempObjectCleanupErrorInjection()
+			}); err != nil {
+				return err
+			}
+		}
+
 		sessionIDs = make(map[clusterunique.ID]struct{})
 		// Only see temporary schemas after some delay as safety
 		// mechanism.

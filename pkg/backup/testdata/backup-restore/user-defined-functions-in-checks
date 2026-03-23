@@ -249,6 +249,7 @@ SELECT database_name, parent_schema_name, object_name, object_type, is_full_clus
 ----
 <nil> <nil> db1 database false
 db1 <nil> sc1 schema false
+db1 sc1 f1 function false
 db1 sc1 t1 table false
 
 exec-sql expect-error-regex=(cannot restore table "t1" without referenced function [0-9]+ \(or "skip_missing_udfs" option\))

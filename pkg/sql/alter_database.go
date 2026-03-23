@@ -1033,6 +1033,28 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		}
 	}
 
+	// Enforce invariant: if a secondary region is set, the primary and
+	// secondary must be in the same super region (or both outside all
+	// super regions).
+	if updatedRegionConfig.HasSecondaryRegion() {
+		secondaryRegion := updatedRegionConfig.SecondaryRegion()
+		_, secondarySR := multiregion.IsMemberOfSuperRegion(
+			secondaryRegion, updatedRegionConfig)
+
+		if superRegionOfNewPrimaryRegion != secondarySR {
+			return errors.WithHintf(
+				pgerror.Newf(pgcode.InvalidDatabaseDefinition,
+					"cannot change primary region to %s: the primary and "+
+						"secondary regions must be in the same super region",
+					n.n.PrimaryRegion,
+				),
+				"drop the secondary region first using "+
+					"ALTER DATABASE %s DROP SECONDARY REGION",
+				n.n.Name.String(),
+			)
+		}
+	}
+
 	if isNewPrimaryRegionMemberOfASuperRegion {
 		params.p.BufferClientNotice(params.ctx, pgnotice.Newf("all REGIONAL BY TABLE tables without a region explicitly set are now part of the super region %s", superRegionOfNewPrimaryRegion))
 	}
@@ -1166,11 +1188,14 @@ func (n *alterDatabasePrimaryRegionNode) setInitialPrimaryRegion(params runParam
 		return err
 	}
 
-	// Check we are writing valid zone configurations.
+	// Check we are writing valid zone configurations. Pass an empty
+	// RegionConfig because no super regions or secondary region exist yet
+	// during initial primary region setup.
 	if err := params.p.validateAllMultiRegionZoneConfigsInDatabase(
 		params.ctx,
 		n.desc,
 		&zoneConfigForMultiRegionValidatorSetInitialRegion{},
+		multiregion.RegionConfig{},
 	); err != nil {
 		return err
 	}
@@ -1573,10 +1598,6 @@ type alterDatabaseAddSuperRegion struct {
 func (p *planner) AlterDatabaseAddSuperRegion(
 	ctx context.Context, n *tree.AlterDatabaseAddSuperRegion,
 ) (planNode, error) {
-	if err := p.isSuperRegionEnabled(); err != nil {
-		return nil, err
-	}
-
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),
@@ -1678,10 +1699,6 @@ type alterDatabaseDropSuperRegion struct {
 func (p *planner) AlterDatabaseDropSuperRegion(
 	ctx context.Context, n *tree.AlterDatabaseDropSuperRegion,
 ) (planNode, error) {
-	if err := p.isSuperRegionEnabled(); err != nil {
-		return nil, err
-	}
-
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),
@@ -1763,20 +1780,6 @@ func (n *alterDatabaseDropSuperRegion) Next(runParams) (bool, error) { return fa
 func (n *alterDatabaseDropSuperRegion) Values() tree.Datums          { return tree.Datums{} }
 func (n *alterDatabaseDropSuperRegion) Close(context.Context)        {}
 
-func (p *planner) isSuperRegionEnabled() error {
-	if !p.SessionData().EnableSuperRegions {
-		return errors.WithTelemetry(
-			pgerror.WithCandidateCode(
-				errors.WithHint(errors.New("super regions are only supported experimentally"),
-					"You can enable super regions by running `SET enable_super_regions = 'on'`."),
-				pgcode.ExperimentalFeature),
-			"sql.schema.super_regions_disabled",
-		)
-	}
-
-	return nil
-}
-
 func (p *planner) getSuperRegionsForDatabase(
 	ctx context.Context, desc catalog.DatabaseDescriptor,
 ) ([]descpb.SuperRegion, error) {
@@ -1805,10 +1808,6 @@ func (n *alterDatabaseAlterSuperRegion) Close(context.Context)        {}
 func (p *planner) AlterDatabaseAlterSuperRegion(
 	ctx context.Context, n *tree.AlterDatabaseAlterSuperRegion,
 ) (planNode, error) {
-	if err := p.isSuperRegionEnabled(); err != nil {
-		return nil, err
-	}
-
 	if err := checkSchemaChangeEnabled(
 		ctx,
 		p.ExecCfg(),

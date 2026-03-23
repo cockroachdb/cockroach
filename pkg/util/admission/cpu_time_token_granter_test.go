@@ -1,4 +1,4 @@
-// Copyright 2021 The Cockroach Authors.
+// Copyright 2025 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
@@ -9,11 +9,15 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -26,7 +30,7 @@ func TestCPUTimeTokenGranter(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var requesters [numResourceTiers]*testRequester
-	granter := &cpuTimeTokenGranter{}
+	granter := newCPUTimeTokenGranter(makeCPUTimeTokenMetrics(), timeutil.DefaultTimeSource{})
 	tier0Granter := &cpuTimeTokenChildGranter{
 		tier:   testTier0,
 		parent: granter,
@@ -150,21 +154,39 @@ func TestCPUTimeTokenGranter(t *testing.T) {
 			return flushAndReset(false /* init */)
 
 		case "refill":
-			// The delta & the bucket capacity are hard-coded. It is unwiedly
-			// to make them data-driven arguments, and the payoff would be
-			// low anyway.
+			// The delta, bucket capacity, & bucket minimums are hard-coded.
+			// It is unwieldy to make them data-driven arguments, and the
+			// payoff would be low anyway.
 			var delta [numResourceTiers][numBurstQualifications]int64
 			delta[testTier0][canBurst] = 5
 			delta[testTier0][noBurst] = 4
 			delta[testTier1][canBurst] = 3
 			delta[testTier1][noBurst] = 1
 			var bucketCapacity [numResourceTiers][numBurstQualifications]int64
-			bucketCapacity[testTier0][canBurst] = 4
-			bucketCapacity[testTier0][noBurst] = 3
-			bucketCapacity[testTier1][canBurst] = 10
-			bucketCapacity[testTier1][noBurst] = 1
-			granter.refill(delta, bucketCapacity)
-			fmt.Fprintf(&buf, "refill(%v %v)\n", delta, bucketCapacity)
+			bucketCapacity[testTier0][canBurst] = 20
+			bucketCapacity[testTier0][noBurst] = 16
+			bucketCapacity[testTier1][canBurst] = 12
+			bucketCapacity[testTier1][noBurst] = 8
+			var bucketMins [numResourceTiers][numBurstQualifications]int64
+			bucketMins[testTier0][canBurst] = 0
+			bucketMins[testTier0][noBurst] = -4
+			bucketMins[testTier1][canBurst] = -8
+			bucketMins[testTier1][noBurst] = -12
+			granter.refill(delta, bucketCapacity, bucketMins, true /* updateMetrics */)
+			fmt.Fprint(&buf, "refill(\n")
+			for tier := 0; tier < int(numResourceTiers); tier++ {
+				for qual := 0; qual < int(numBurstQualifications); qual++ {
+					fmt.Fprintf(&buf, "\ttier%d %s -> delta: %v, cap: %v, min: %v\n",
+						tier, burstQualification(qual).String(), delta[tier][qual],
+						bucketCapacity[tier][qual], bucketMins[tier][qual])
+				}
+			}
+			fmt.Fprint(&buf, ")\n")
+			return flushAndReset(false /* init */)
+
+		case "reset-tokens-used":
+			used := granter.resetTokensUsedInInterval()
+			fmt.Fprintf(&buf, "reset-tokens-used-in-interval() returned %d\n", used)
 			return flushAndReset(false /* init */)
 
 		// For cpuTimeTokenChildGranter, this is a NOP. Still, it will be
@@ -189,4 +211,41 @@ func scanResourceTier(t *testing.T, d *datadriven.TestData) resourceTier {
 		return testTier1
 	}
 	panic("unknown resourceTier")
+}
+
+func TestExhaustedDuration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t0 := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	c := metric.NewCounter(metric.Metadata{Name: "test_exhausted_nanos"})
+	tb := tokenBucket{
+		tokens:            0,
+		exhaustedStart:    t0,
+		exhaustedDuration: c,
+	}
+
+	// Bucket starts at 0 (exhausted). Recover after 1s.
+	tb.updateTokenCount(100, t0.Add(1*time.Second), true /* flushToMetricNow */)
+	require.Equal(t, int64(time.Second), c.Count())
+
+	// Exhaust again after 500ms.
+	tb.updateTokenCount(-100, t0.Add(1500*time.Millisecond), false /* flushToMetricNow */)
+	require.Equal(t, int64(time.Second), c.Count())
+
+	// Recover after another 2s. Total = 1s + 2s = 3s.
+	tb.updateTokenCount(200, t0.Add(3500*time.Millisecond), true /* flushToMetricNow */)
+	require.Equal(t, int64(3*time.Second), c.Count())
+
+	// Enter exhaustion again.
+	tb.updateTokenCount(-50, t0.Add(4*time.Second), false /* flushToMetricNow */)
+	require.Equal(t, int64(3*time.Second), c.Count())
+
+	// Still exhausted, no flush tick — counter unchanged.
+	tb.updateTokenCount(-100, t0.Add(5*time.Second), false /* flushToMetricNow */)
+	require.Equal(t, int64(3*time.Second), c.Count())
+
+	// Still exhausted, flush tick — flushes 2s since exhaustion started. Total = 5s.
+	tb.updateTokenCount(-100, t0.Add(6*time.Second), true /* flushToMetricNow */)
+	require.Equal(t, int64(5*time.Second), c.Count())
 }

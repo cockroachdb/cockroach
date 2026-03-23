@@ -397,6 +397,16 @@ using workload during your test is to execute a workload command on a binary tha
 this option tells the framework to handle staging all the binaries you need for your test on the workload node(s)
 during test setup.
 
+``` go
+mixedversion.WithSameSeriesUpgradeProbability(0.5)
+```
+
+This option controls the probability of inserting same-series upgrades (patch-level upgrades within the same major.minor release series) into the upgrade path. For example, if the upgrade path is `[24.1.5, 24.2.3, 24.3.10, current]`, the framework might insert an older patch before some versions, resulting in `[24.1.2, 24.1.5, 24.2.3, 24.3.7, 24.3.10, current]` where `24.1.2 -> 24.1.5` and `24.3.7 -> 24.3.10` are same-series upgrades.
+
+Same-series upgrades test that patch-level upgrades work correctly, which is important since most customer upgrades are patch upgrades within the same release series. The probability value (0.0 to 1.0) determines how likely it is that same-series upgrades are enabled for a given test run. When enabled, the framework picks a random number of same-series upgrades to insert (bounded by `MaxUpgrades`). A value of 0 disables same-series upgrades entirely.
+
+The framework respects `MinimumBootstrapVersion` and `MinimumSupportedVersion` when inserting same-series upgrades, and the total number of upgrades is bounded by `MaxUpgrades`. See also: `mixedversion.DisableSameSeriesUpgrades()`.
+
 ### Deployment Modes
 
 By default, each run of a `mixedversion` test happens in one of 3 possible _deployment modes_: `system-only`, `shared-process`, and `separate-process`. In the latter two options, the framework will create a test tenant, and tests should exercise the feature they are testing by invoking it on the tenant.

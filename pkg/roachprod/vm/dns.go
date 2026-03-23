@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -62,6 +63,14 @@ type DNSProvider interface {
 	DeletePublicRecordsByName(ctx context.Context, names ...string) error
 	// Domain returns the domain name (zone) of the DNS provider.
 	Domain() string
+	// PublicDomain returns the public domain name (zone) of the DNS provider.
+	PublicDomain() string
+	// ProviderName returns the name of the DNS provider.
+	ProviderName() string
+	// SyncDNS synchronizes the DNS records for the given VMs.
+	SyncDNS(l *logger.Logger, vms List) error
+	// SyncDNSWithContext synchronizes the DNS records for the given VMs.
+	SyncDNSWithContext(ctx context.Context, l *logger.Logger, vms List) error
 }
 
 // FanOutDNS collates a collection of VMs by their DNS providers and invoke the
@@ -80,13 +89,9 @@ func FanOutDNS(list List, action func(DNSProvider, List) error) error {
 	var g errgroup.Group
 	for name, vms := range m {
 		g.Go(func() error {
-			p, ok := Providers[name]
+			dnsProvider, ok := DNSProviders[name]
 			if !ok {
-				return errors.Errorf("unknown provider name: %s", name)
-			}
-			dnsProvider, ok := p.(DNSProvider)
-			if !ok {
-				return errors.Errorf("provider %s is not a DNS provider", name)
+				return errors.Errorf("unknown DNS provider name: %s", name)
 			}
 			return action(dnsProvider, vms)
 		})
@@ -101,13 +106,9 @@ func ForDNSProvider(named string, action func(DNSProvider) error) error {
 	if named == "" {
 		return errors.New("no DNS provider specified")
 	}
-	p, ok := Providers[named]
+	dnsProvider, ok := DNSProviders[named]
 	if !ok {
-		return errors.Errorf("unknown vm provider: %s", named)
-	}
-	dnsProvider, ok := p.(DNSProvider)
-	if !ok {
-		return errors.Errorf("provider %s is not a DNS provider", named)
+		return errors.Errorf("unknown DNS provider: %s", named)
 	}
 	if err := action(dnsProvider); err != nil {
 		return errors.Wrapf(err, "in provider: %s", named)

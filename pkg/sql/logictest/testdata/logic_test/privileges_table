@@ -33,10 +33,10 @@ INSERT INTO t VALUES (1, 1), (2, 2)
 statement ok
 SELECT * from t
 
-statement ok
+statement count 2
 DELETE FROM t
 
-statement ok
+statement count 0
 DELETE FROM t where k = 1
 
 statement ok
@@ -247,10 +247,10 @@ SELECT * FROM t
 statement ok
 SELECT 1
 
-statement ok
+statement count 2
 DELETE FROM t
 
-statement ok
+statement count 0
 DELETE FROM t where k = 1
 
 statement ok

@@ -10,10 +10,14 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
 )
 
 // Misc helper classes for working with range, store and node load.
@@ -23,6 +27,11 @@ import (
 // important to rebalance based on these. The code in this package should be
 // structured that adding additional resource dimensions is easy.
 type LoadDimension uint8
+
+// NumLoadDimensions must be exactly 3. Update SafeFormat methods for
+// LoadVector and AmpVector if a dimension is added or removed.
+var _ [NumLoadDimensions - 3]struct{}
+var _ [3 - NumLoadDimensions]struct{}
 
 const (
 	// CPURate is in nanos per second.
@@ -37,11 +46,11 @@ const (
 func (dim LoadDimension) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch dim {
 	case CPURate:
-		w.Printf("CPURate")
+		w.SafeString("CPURate")
 	case WriteBandwidth:
-		w.Print("WriteBandwidth")
+		w.SafeString("WriteBandwidth")
 	case ByteSize:
-		w.Printf("ByteSize")
+		w.SafeString("ByteSize")
 	default:
 		panic("unknown LoadDimension")
 	}
@@ -54,6 +63,8 @@ func (dim LoadDimension) String() string {
 // LoadValue is the load on a resource.
 type LoadValue int64
 
+func (LoadValue) SafeValue() {}
+
 // LoadVector represents a vector of loads, with one element for each resource
 // dimension.
 type LoadVector [NumLoadDimensions]LoadValue
@@ -64,7 +75,40 @@ func (lv LoadVector) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (lv LoadVector) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("[cpu:%d, write-bandwidth:%d, byte-size:%d]", lv[CPURate], lv[WriteBandwidth], lv[ByteSize])
+	formatVal := func(dim LoadDimension) redact.SafeString {
+		val := lv[dim]
+		if val == UnknownCapacity {
+			return "unknown"
+		}
+		switch dim {
+		case CPURate:
+			cpuDuration := time.Duration(val)
+			if cpuDuration < time.Microsecond {
+				// humanizeutil.Duration doesn't handle sub-microsecond durations
+				return redact.SafeString(cpuDuration.String())
+			}
+			return humanizeutil.Duration(cpuDuration)
+		case WriteBandwidth, ByteSize:
+			isNegative := false
+			if val < 0 {
+				val = -val
+				isNegative = true
+			}
+			bytesStr := humanize.Bytes(uint64(val))
+			if isNegative {
+				return redact.SafeString("-" + bytesStr)
+			}
+			return redact.SafeString(bytesStr)
+		default:
+			panic(fmt.Sprintf("unknown LoadDimension: %d", dim))
+		}
+	}
+	w.Printf(
+		"[cpu:%s/s, write-bandwidth:%s/s, byte-size:%s]",
+		formatVal(CPURate),
+		formatVal(WriteBandwidth),
+		formatVal(ByteSize),
+	)
 }
 
 func (lv *LoadVector) add(other LoadVector) {
@@ -77,6 +121,45 @@ func (lv *LoadVector) subtract(other LoadVector) {
 	for i := range other {
 		(*lv)[i] -= other[i]
 	}
+}
+
+// Amp is a per-dimension amplification factor that converts logical per-range
+// loads into physical units.
+type Amp float64
+
+func (af Amp) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%.2f", redact.SafeFloat(float64(af)))
+}
+
+func (af Amp) String() string {
+	return redact.StringWithoutMarkers(af)
+}
+
+// AmpVector holds per-dimension amplification factors, one for each
+// LoadDimension.
+type AmpVector [NumLoadDimensions]Amp
+
+// IdentityAmpVector returns an AmpVector where all dimensions have an
+// amplification factor of 1.0 (no conversion).
+func IdentityAmpVector() AmpVector {
+	var av AmpVector
+	for i := range av {
+		av[i] = 1.0
+	}
+	return av
+}
+
+func (av AmpVector) String() string {
+	return redact.StringWithoutMarkers(av)
+}
+
+func (av AmpVector) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf(
+		"[cpu:%v, write-bandwidth:%v, byte-size:%v]",
+		av[CPURate],
+		av[WriteBandwidth],
+		av[ByteSize],
+	)
 }
 
 // A resource can have a capacity, which is also expressed using LoadValue.
@@ -177,20 +260,48 @@ type storeLoad struct {
 // NodeLoad is the load information for a node.
 type NodeLoad struct {
 	NodeID roachpb.NodeID
-	// ReportedCPU and CapacityCPU are simply the sum of what we get for all
-	// stores on this node.
-	ReportedCPU LoadValue
-	CapacityCPU LoadValue
+	// NodeCPULoad and NodeCPUCapacity are the physical node-level CPU values
+	// (NodeCPURateUsage and NodeCPURateCapacity), set directly from
+	// StoreLoadMsg rather than derived from store sums. These are used for
+	// node-level overload detection because the capped multiplier model
+	// breaks the invariant sum(store loads)/sum(store capacities) = cpuUtil
+	// when background CPU exceeds the cap. See computeCPUCapacityWithCap.
+	NodeCPULoad     LoadValue
+	NodeCPUCapacity LoadValue
 }
 
 // The mean store load for a set of stores.
 type meanStoreLoad struct {
 	load     LoadVector
 	capacity LoadVector
-	// Util is 0 for CPURate, WriteBandwidth. Non-zero for ByteSize.
+	// util is the capacity-weighted mean utilization, computed as
+	// sum(load)/sum(capacity), NOT the average of individual store utilizations.
+	//
+	// We use capacity-weighted mean because it answers: "Is this store carrying
+	// its fair share of load?" rather than "Is this store more utilized than
+	// typical stores?". This is the desired behavior for heterogeneous clusters
+	// where ideally all stores run at the same utilization regardless of size.
+	//
+	// Example: 3 stores with (load, capacity) = (10, 10), (10, 10), (10, 100)
+	//   - Average of individual utils: (100% + 100% + 10%) / 3 = 70%
+	//   - Capacity-weighted (sum/sum): 30 / 120 = 25%
+	// The capacity-weighted 25% is the true picture of resource availability,
+	// and comparing a store's utilization against this tells us if it's
+	// carrying more than its proportional share.
+	//
+	// Util is 0 for WriteBandwidth (since its Capacity is UnknownCapacity).
+	// Non-zero for CPURate, ByteSize.
 	util [NumLoadDimensions]float64
 
 	secondaryLoad SecondaryLoadVector
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (m meanStoreLoad) SafeFormat(w redact.SafePrinter, _ rune) {
+	// Only printing CPU and byte size utilization explicitly since
+	// write bandwidth util is necessarily 0, might need to update in the future.
+	w.Printf("{%v %v [cpu-util:%.2f byte-util:%.2f] %v", m.load, m.capacity,
+		redact.SafeFloat(m.util[CPURate]), redact.SafeFloat(m.util[ByteSize]), m.secondaryLoad)
 }
 
 // The mean node load for a set of NodeLoad.
@@ -198,6 +309,11 @@ type meanNodeLoad struct {
 	loadCPU     LoadValue
 	capacityCPU LoadValue
 	utilCPU     float64
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (m meanNodeLoad) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("{%v %v %v}", m.loadCPU, m.capacityCPU, redact.SafeFloat(m.utilCPU))
 }
 
 // The allocator often needs mean load information for a set of stores. This
@@ -398,6 +514,10 @@ func computeMeansForStoreSet(
 	}
 	for i := range means.storeLoad.load {
 		if means.storeLoad.capacity[i] != UnknownCapacity {
+			// NB: capacity can be 0 for CPURate when nodeCPURateUsage >>
+			// nodeCPURateCapacity. Stores with capacity 0 will be classified as
+			// overloadUrgent via fractionUsed = +Inf in
+			// loadSummaryForDimension.
 			means.storeLoad.util[i] =
 				float64(means.storeLoad.load[i]) / float64(means.storeLoad.capacity[i])
 			means.storeLoad.capacity[i] /= LoadValue(n)
@@ -412,9 +532,10 @@ func computeMeansForStoreSet(
 
 	n = len(scratchNodes)
 	for _, nl := range scratchNodes {
-		means.nodeLoad.loadCPU += nl.ReportedCPU
-		means.nodeLoad.capacityCPU += nl.CapacityCPU
+		means.nodeLoad.loadCPU += nl.NodeCPULoad
+		means.nodeLoad.capacityCPU += nl.NodeCPUCapacity
 	}
+	// NB: capacityCPU can be 0 if all nodes report 0 store CPU capacity.
 	means.nodeLoad.utilCPU =
 		float64(means.nodeLoad.loadCPU) / float64(means.nodeLoad.capacityCPU)
 	means.nodeLoad.loadCPU /= LoadValue(n)
@@ -456,18 +577,66 @@ func (ls loadSummary) String() string {
 func (ls loadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
 	switch ls {
 	case loadLow:
-		w.Print("loadLow")
+		w.SafeString("loadLow")
 	case loadNormal:
-		w.Print("loadNormal")
+		w.SafeString("loadNormal")
 	case loadNoChange:
-		w.Print("loadNoChange")
+		w.SafeString("loadNoChange")
 	case overloadSlow:
-		w.Print("overloadSlow")
+		w.SafeString("overloadSlow")
 	case overloadUrgent:
-		w.Print("overloadUrgent")
+		w.SafeString("overloadUrgent")
 	default:
 		panic("unknown loadSummary")
 	}
+}
+
+// Significance floor constants. These are the fallback denominators used when
+// capacity is unknown, preventing small mean loads from amplifying small
+// absolute differences into large fractions. When capacity is known, the
+// floor is capacityFractionForSignificanceFloor * capacity instead.
+const (
+	// writeBandwidthSignificanceFloor is the fallback floor for
+	// WriteBandwidth when capacity is unknown (2 MiB/s).
+	writeBandwidthSignificanceFloor LoadValue = 2 << 20
+
+	// cpuRateSignificanceFloor is the defensive fallback floor for CPURate
+	// when capacity is unknown (100ms/s, i.e. 5% of 2 vCPU).
+	cpuRateSignificanceFloor LoadValue = 100_000_000
+
+	// byteSizeSignificanceFloor is the defensive fallback floor for ByteSize
+	// when capacity is unknown (100 MiB).
+	byteSizeSignificanceFloor LoadValue = 100 << 20
+
+	// capacityFractionForSignificanceFloor is the fraction of capacity used
+	// as the significance floor when capacity is known.
+	capacityFractionForSignificanceFloor = 0.05
+)
+
+// significanceFloor returns the minimum meaningful denominator for computing
+// fractionAbove in loadSummaryForDimension, preventing small mean loads from
+// amplifying small absolute differences into large fractions. When capacity is
+// known, it is derived as capacityFractionForSignificanceFloor of capacity.
+// For dimensions with unknown capacity, a per-dimension fallback constant is
+// used.
+func significanceFloor(dim LoadDimension, capacity LoadValue) LoadValue {
+	if capacity != UnknownCapacity {
+		return LoadValue(float64(capacity) * capacityFractionForSignificanceFloor)
+	}
+	// NB: We never expect to reach these fallbacks for CPURate or ByteSize
+	// since they should always have a known capacity. These are purely defensive.
+	if buildutil.CrdbTestBuild && (dim == CPURate || dim == ByteSize) {
+		panic(fmt.Sprintf("unexpected UnknownCapacity for dimension %v", dim))
+	}
+	switch dim {
+	case WriteBandwidth:
+		return writeBandwidthSignificanceFloor
+	case CPURate:
+		return cpuRateSignificanceFloor
+	case ByteSize:
+		return byteSizeSignificanceFloor
+	}
+	panic(fmt.Sprintf("unknown dimension: %v", dim))
 }
 
 // Computes the loadSummary for a particular load dimension.
@@ -484,15 +653,8 @@ func loadSummaryForDimension(
 	meanUtil float64,
 ) (summary loadSummary) {
 	summ := loadLow
-	if dim == WriteBandwidth && capacity == UnknownCapacity {
-		// Ignore smaller than 1MiB differences in write bandwidth. This 1MiB
-		// value is somewhat arbitrary, but is based on EBS gp3 having a default
-		// provisioned bandwidth of 125 MiB/s, and assuming that a write amp of
-		// ~20, will inflate 1MiB to ~20 MiB/s.
-		const minWriteBandwidthGranularity = 128 << 10 // 128 KiB
-		load /= minWriteBandwidthGranularity
-		meanLoad /= minWriteBandwidthGranularity
-	}
+	reason := ""
+
 	// Heuristics (and very much subject to revision): There are two uses for
 	// this loadSummary: to find source stores to shed load and to decide
 	// whether the added load on a target store is acceptable (without driving
@@ -511,9 +673,19 @@ func loadSummaryForDimension(
 	// currently consider how far we are from the mean. But the mean isn't very
 	// useful when there are heterogeneous nodes/stores, so this computation
 	// will need to be revisited.
-	fractionAbove := float64(load)/float64(meanLoad) - 1.0
+	//
+	// Clamp the denominator to a significance floor so that when mean load
+	// is small, small absolute differences don't look like large percentages.
+	// For example, 50 KiB/s above the mean is 25% at a 200 KiB/s mean,
+	// enough to trigger overloadSlow and cause unnecessary replica moves.
+	// Clamping the denominator to 2 MiB/s for WriteBandwidth makes that same
+	// 50 KiB/s only ~2.4%. At high loads (mean > floor), the clamp has no
+	// effect.
+	denominator := max(meanLoad, significanceFloor(dim, capacity))
+	fractionAbove := float64(load-meanLoad) / float64(denominator)
 	var fractionUsed float64
 	if capacity != UnknownCapacity {
+		// NB: capacity can be 0 if nodeCPURateUsage >> nodeCPURateCapacity.
 		fractionUsed = float64(load) / float64(capacity)
 	}
 
@@ -529,8 +701,6 @@ func loadSummaryForDimension(
 	if dim == CPURate && capacity != UnknownCapacity && fractionUsed < 0.05 {
 		summaryUpperBound = loadNormal
 	}
-	// TODO(sumeer): consider adding a summaryUpperBound for small
-	// WriteBandwidth values too.
 	const (
 		meanFractionSlow     = 0.1
 		meanFractionLow      = -0.1
@@ -538,13 +708,43 @@ func loadSummaryForDimension(
 	)
 	if fractionAbove > meanFractionSlow {
 		summ = overloadSlow
+		reason = "load is >10% above mean"
 	} else if fractionAbove < meanFractionLow {
 		summ = loadLow
+		reason = "load is >10% below mean"
 	} else if fractionAbove >= meanFractionNoChange {
 		summ = loadNoChange
+		reason = "load is within 5-10% of mean"
 	} else {
 		summ = loadNormal
+		reason = "load is within 5% of mean"
 	}
+
+	defer func() {
+		if !log.ExpensiveLogEnabled(ctx, 3) {
+			return
+		}
+
+		var buf redact.StringBuilder
+		buf.Printf("load summary for dim=%v (", dim)
+		if nodeID > nodeIDForLogging {
+			buf.Printf("n%v", nodeID)
+		}
+		if storeID > storeIDForLogging {
+			buf.Printf("s%v", storeID)
+		}
+		buf.Printf("): %v, reason: %v [load=%v meanLoad=%v", summary, redact.SafeString(reason), load, meanLoad)
+		if denominator != meanLoad {
+			buf.Printf(" denom=%v", denominator)
+		}
+		if capacity != UnknownCapacity {
+			buf.Printf(" fractionUsed=%.2f%% meanUtil=%.2f%% capacity=%v",
+				redact.SafeFloat(fractionUsed*100), redact.SafeFloat(meanUtil*100), capacity)
+		}
+		buf.SafeRune(']')
+		log.KvDistribution.VEventf(ctx, 3, "%s", buf.RedactableString())
+	}()
+
 	if capacity != UnknownCapacity && meanUtil*1.1 < fractionUsed {
 		// Further tune the summary based on utilization.
 		//
@@ -553,31 +753,73 @@ func loadSummaryForDimension(
 		// overload due to heterogeneity, while we primarily still want to focus
 		// on balancing towards the mean usage.
 		if fractionUsed > 0.9 {
+			reason = "fractionUsed > 90%"
 			return min(summaryUpperBound, overloadUrgent)
 		}
 		// INVARIANT: fractionUsed <= 0.9
 		if fractionUsed > 0.75 {
 			if meanUtil*1.5 < fractionUsed {
+				reason = "fractionUsed > 75% and >1.5x meanUtil"
 				return min(summaryUpperBound, overloadUrgent)
 			}
+			reason = "fractionUsed > 75%"
 			return min(summaryUpperBound, overloadSlow)
 		}
 		// INVARIANT: fractionUsed <= 0.75
 		if meanUtil*1.75 < fractionUsed {
+			reason = "fractionUsed < 75% and >1.75x meanUtil"
 			return min(summaryUpperBound, overloadSlow)
 		}
+		reason = "fractionUsed < 75%"
 		return min(summaryUpperBound, max(summ, loadNoChange))
 	}
 	return min(summaryUpperBound, summ)
 }
 
-func highDiskSpaceUtilization(load LoadValue, capacity LoadValue) bool {
-	if capacity == UnknownCapacity {
-		log.KvDistribution.Errorf(context.Background(), "disk capacity is unknown")
+// highDiskSpaceUtilization checks if disk utilization >= the given threshold.
+// This is called in three places:
+//
+//  1. updateStoreStatuses (both thresholds):
+//     Sets store dispositions based on disk utilization:
+//     - >= diskUtilShedThreshold (0.95): ReplicaDispositionShedding
+//     - >= diskUtilRefuseThreshold (0.925): ReplicaDispositionRefusing
+//
+//  2. canShedAndAddLoad (threshold: diskUtilRefuseThreshold, 0.925):
+//     Validates post-transfer state by checking if the target would exceed
+//     the refuse threshold after receiving the replica. Uses post-transfer
+//     load (adjusted + delta) to ensure we don't send replicas to stores
+//     that would become too full.
+//
+//  3. topK dimension selection (threshold: diskUtilShedThreshold, 0.95):
+//     Forces ByteSize dimension when selecting ranges to shed, regardless of
+//     the load summary. Note that ByteSize can also be selected at lower
+//     utilization via the normal load summary logic, if ByteSize is the worst
+//     dimension relative to the cluster mean.
+//
+// Note: Dispositions don't indicate *why* they're set (refusing could be due
+// to disk or other reasons), so callers needing explicit disk checks (like
+// canShedAndAddLoad and topK) call this function directly.
+func highDiskSpaceUtilization(load LoadValue, capacity LoadValue, threshold float64) bool {
+	if capacity == UnknownCapacity || capacity == 0 {
+		log.KvDistribution.Errorf(context.Background(), "disk capacity is unknown or zero")
 		return false
 	}
+	// load and capacity are both in terms of logical bytes.
+	//
+	//   load     = LogicalBytes
+	//   diskUtil = FractionUsed()  (i.e. Used/(Available+Used), or
+	//                               (Capacity-Available)/Capacity as fallback)
+	//   capacity = LogicalBytes / diskUtil
+	//
+	// Therefore:
+	//   fractionUsed = load / capacity
+	//                = LogicalBytes / (LogicalBytes / diskUtil)
+	//                = diskUtil
+	//
+	// This recovers the actual disk utilization as reported by the store
+	// descriptor, expressed in terms of the logical byte load and capacity.
 	fractionUsed := float64(load) / float64(capacity)
-	return fractionUsed > 0.9
+	return fractionUsed >= threshold
 }
 
 const loadMultiplierForAddition = 1.1
@@ -606,8 +848,8 @@ var _ = storeLoad{}.reportedLoad
 var _ = storeLoad{}.capacity
 var _ = storeLoad{}.reportedSecondaryLoad
 var _ = NodeLoad{}.NodeID
-var _ = NodeLoad{}.ReportedCPU
-var _ = NodeLoad{}.CapacityCPU
+var _ = NodeLoad{}.NodeCPULoad
+var _ = NodeLoad{}.NodeCPUCapacity
 var _ = CPURate
 var _ = WriteBandwidth
 var _ = ByteSize

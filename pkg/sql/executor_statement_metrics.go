@@ -99,6 +99,13 @@ type EngineMetrics struct {
 	// StatementIndexBytesWritten counts the number of primary and secondary index
 	// bytes modified by SQL statements.
 	StatementIndexBytesWritten *metric.Counter
+
+	// QueryWithStatementHintsCount counts queries executed with external statement hints.
+	QueryWithStatementHintsCount *metric.Counter
+
+	// RLSPoliciesAppliedCount counts the number of SQL statements where
+	// row-level security policies were applied during query planning.
+	RLSPoliciesAppliedCount *metric.Counter
 }
 
 // EngineMetrics implements the metric.Struct interface.
@@ -187,7 +194,6 @@ func (ex *connExecutor) recordStatementSummary(
 	ex.metrics.EngineMetrics.StatementBytesRead.Inc(stats.bytesRead)
 	ex.metrics.EngineMetrics.StatementIndexRowsWritten.Inc(stats.indexRowsWritten)
 	ex.metrics.EngineMetrics.StatementIndexBytesWritten.Inc(stats.indexBytesWritten)
-
 	if ex.statsCollector.EnabledForTransaction() {
 		b := sqlstats.NewRecordedStatementStatsBuilder(
 			stmtFingerprintID,
@@ -208,7 +214,7 @@ func (ex *connExecutor) recordStatementSummary(
 			).
 			PlanGist(planner.instrumentation.planGist.String(), planner.instrumentation.planGist.Hash()).
 			LatencyRecorder(ex.statsCollector).
-			QueryLevelStats(stats.bytesRead, stats.rowsRead, stats.rowsWritten).
+			QueryLevelStats(stats.bytesRead, stats.rowsRead, stats.rowsWritten, stats.kvCPUTimeNanos.Nanoseconds()).
 			ExecStats(queryLevelStats).
 			// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of
 			// converting to strings.
@@ -225,6 +231,10 @@ func (ex *connExecutor) recordStatementSummary(
 
 		if len(stmt.Hints) > 0 {
 			b.AppliedStatementHints()
+		}
+
+		if flags.IsSet(planFlagCanaryAndStableStatsDiffer) {
+			b.CanaryStatsRollout(planner.EvalContext().StatsRollout)
 		}
 
 		ex.statsCollector.RecordStatement(ctx, b.Build())

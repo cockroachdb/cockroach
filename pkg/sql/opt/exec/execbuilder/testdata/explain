@@ -4,7 +4,6 @@ query T
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE FALSE
 ----
 distribution: local
-vectorized: true
 ·
 • norows
 
@@ -12,7 +11,6 @@ query T
 EXPLAIN (PLAN) SELECT 1 FROM system.jobs WHERE NULL
 ----
 distribution: local
-vectorized: true
 ·
 • norows
 
@@ -77,7 +75,6 @@ query T
 EXPLAIN CREATE DATABASE foo
 ----
 distribution: local
-vectorized: true
 ·
 • create database
 
@@ -85,7 +82,6 @@ query T
 EXPLAIN CREATE TABLE foo (x INT)
 ----
 distribution: local
-vectorized: true
 ·
 • create table
 
@@ -96,7 +92,6 @@ query T
 EXPLAIN CREATE INDEX a ON foo(x)
 ----
 distribution: local
-vectorized: true
 ·
 • create index
 
@@ -107,7 +102,6 @@ query T
 EXPLAIN DROP DATABASE foo
 ----
 distribution: local
-vectorized: true
 ·
 • drop database
 
@@ -118,7 +112,6 @@ query T
 SELECT * FROM [EXPLAIN SHOW JOBS] WHERE info NOT LIKE '%size%' AND info NOT LIKE '%filter%'
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: -column71,-created
@@ -168,7 +161,6 @@ query T
 EXPLAIN DROP INDEX foo@a
 ----
 distribution: local
-vectorized: true
 ·
 • drop index
 
@@ -176,7 +168,6 @@ query T
 EXPLAIN ALTER TABLE foo ADD COLUMN y INT
 ----
 distribution: local
-vectorized: true
 ·
 • alter table
 
@@ -218,7 +209,6 @@ query T
 EXPLAIN ALTER TABLE foo RELOCATE VALUES (ARRAY[1], 1)
 ----
 distribution: local
-vectorized: true
 ·
 • relocate table
 │ index: foo@foo_pkey
@@ -247,7 +237,6 @@ query T
 EXPLAIN ALTER INDEX foo@a RELOCATE VALUES (ARRAY[1], 1)
 ----
 distribution: local
-vectorized: true
 ·
 • relocate table
 │ index: foo@a
@@ -276,7 +265,6 @@ query T
 EXPLAIN DROP TABLE foo
 ----
 distribution: local
-vectorized: true
 ·
 • drop table
 
@@ -284,7 +272,6 @@ query T
 EXPLAIN ALTER RANGE 20+2 RELOCATE FROM 30+3 TO 40+4
 ----
 distribution: local
-vectorized: true
 ·
 • relocate range
 │ replicas: VOTERS
@@ -333,7 +320,6 @@ query T
 EXPLAIN ALTER RANGE RELOCATE FROM 30+3 TO 40+4 FOR SELECT 20+2
 ----
 distribution: local
-vectorized: true
 ·
 • relocate range
 │ replicas: VOTERS
@@ -365,7 +351,6 @@ query T
 EXPLAIN SHOW DATABASES
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +name
@@ -377,7 +362,6 @@ query T
 SELECT * FROM [EXPLAIN SHOW TABLES] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +nspname,+relname
@@ -385,12 +369,12 @@ vectorized: true
 └── • render
     │
     └── • hash join (left outer)
-        │ equality: (column80) = (table_id)
+        │ equality: (column85) = (table_id)
         │
         ├── • render
         │   │
         │   └── • hash join (left outer)
-        │       │ equality: (column62) = (table_id)
+        │       │ equality: (column66) = (table_id)
         │       │ right cols are key
         │       │
         │       ├── • render
@@ -428,10 +412,10 @@ vectorized: true
 
 
 query T
-SELECT * FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE info NOT LIKE '%size%'
+SELECT regexp_replace(info, 'classoid = [0-9]+', 'classoid = <oid>') AS info
+FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +nspname,+relname
@@ -439,12 +423,12 @@ vectorized: true
 └── • render
     │
     └── • hash join (left outer)
-        │ equality: (column95) = (table_id)
+        │ equality: (column102) = (table_id)
         │
         ├── • render
         │   │
         │   └── • hash join (left outer)
-        │       │ equality: (column77) = (table_id)
+        │       │ equality: (column83) = (table_id)
         │       │ right cols are key
         │       │
         │       ├── • render
@@ -482,7 +466,7 @@ vectorized: true
         │       │                       └── • render
         │       │                           │
         │       │                           └── • filter
-        │       │                               │ filter: classoid = 4294967081
+        │       │                               │ filter: classoid = <oid>
         │       │                               │
         │       │                               └── • virtual table
         │       │                                     table: kv_catalog_comments@primary
@@ -501,7 +485,6 @@ query T
 SELECT * FROM [EXPLAIN SHOW DATABASE] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: variable = 'database'
@@ -513,7 +496,6 @@ query T
 SELECT * FROM [EXPLAIN SHOW SCHEMAS] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +nspname
@@ -540,7 +522,6 @@ query T
 SELECT * FROM [EXPLAIN SHOW TIME ZONE] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: true
 ·
 • show
 
@@ -548,7 +529,6 @@ query T
 SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: true
 ·
 • show
 
@@ -556,7 +536,6 @@ query T
 SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_PRIORITY] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: true
 ·
 • show
 
@@ -564,7 +543,6 @@ query T
 SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_USE_FOLLOWER_READS] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: true
 ·
 • show
 
@@ -572,7 +550,6 @@ query T
 SELECT * FROM [EXPLAIN SHOW TRANSACTION ISOLATION LEVEL] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: true
 ·
 • show
 
@@ -580,7 +557,6 @@ query T
 SELECT * FROM [EXPLAIN SHOW TRANSACTION PRIORITY] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: true
 ·
 • show
 
@@ -588,7 +564,6 @@ query T
 EXPLAIN SHOW COLUMNS FROM foo
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +ordinal_position,+column_name,+crdb_sql_type,+is_nullable,+column_default,+generation_expression,+indices,+is_hidden
@@ -620,7 +595,6 @@ query T
 SELECT * FROM [EXPLAIN SHOW GRANTS ON foo] WHERE info NOT LIKE '%size%'
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -675,7 +649,6 @@ query T
 EXPLAIN SHOW INDEX FROM foo
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +index_name,+seq_in_index
@@ -683,42 +656,164 @@ vectorized: true
 └── • render
     │
     └── • virtual table lookup join
-        │ table: pg_namespace@pg_namespace_oid_idx
-        │ equality: (relnamespace) = (oid)
-        │ pred: nspname = index_schema
+        │ table: pg_index@pg_index_indrelid_idx
+        │ equality: (oid) = (indrelid)
+        │ pred: indexrelid = oid
         │
         └── • hash join
-            │ equality: (indexrelid, indrelid) = (oid, oid)
+            │ equality: (relname, relnamespace) = (index_name, relnamespace)
             │
             ├── • virtual table
-            │     table: pg_index@primary
+            │     table: pg_class@primary
             │
             └── • hash join
-                │ equality: (relname, relnamespace) = (index_name, relnamespace)
+                │ equality: (relname, nspname) = (table_name, index_schema)
                 │
-                ├── • virtual table
-                │     table: pg_class@primary
+                ├── • merge join
+                │   │ equality: (oid) = (relnamespace)
+                │   │
+                │   ├── • virtual table
+                │   │     table: pg_namespace@pg_namespace_oid_idx
+                │   │
+                │   └── • sort
+                │       │ order: +relnamespace
+                │       │
+                │       └── • filter
+                │           │ filter: relname = 'foo'
+                │           │
+                │           └── • virtual table
+                │                 table: pg_class@primary
                 │
-                └── • merge join
-                    │ equality: (relname) = (table_name)
+                └── • filter
+                    │ filter: ((table_name = 'foo') AND (table_catalog = 'test')) AND (table_schema = 'public')
                     │
-                    ├── • filter
-                    │   │ filter: relname = 'foo'
-                    │   │
-                    │   └── • virtual table
-                    │         table: pg_class@primary
+                    └── • virtual table
+                          table: statistics@primary
+
+# Verify that SHOW INDEX FROM DATABASE also avoids virtual table lookup join
+# on pg_class for the index-OID alias (c), using a hash join instead.
+query T
+EXPLAIN SHOW INDEX FROM DATABASE test
+----
+distribution: local
+·
+• sort
+│ order: +table_name,+index_name,+non_unique
+│
+└── • render
+    │
+    └── • hash join
+        │ equality: (oid, nspname) = (relnamespace, index_schema)
+        │
+        ├── • virtual table
+        │     table: pg_namespace@primary
+        │
+        └── • hash join
+            │ equality: (index_name, table_name) = (relname, relname)
+            │
+            ├── • virtual table
+            │     table: statistics@primary
+            │
+            └── • hash join
+                │ equality: (relnamespace, indexrelid) = (relnamespace, oid)
+                │
+                ├── • merge join
+                │   │ equality: (oid) = (indrelid)
+                │   │
+                │   ├── • virtual table
+                │   │     table: pg_class@pg_class_oid_idx
+                │   │
+                │   └── • virtual table
+                │         table: pg_index@pg_index_indrelid_idx
+                │
+                └── • virtual table
+                      table: pg_class@primary
+
+# Verify that pg_get_indexdef (3-arg) avoids virtual table lookup join on
+# pg_attribute for the index-OID join (a.attrelid = i.indexrelid).
+query T
+EXPLAIN SELECT pg_get_indexdef(oid, 1, true) FROM pg_class WHERE relkind = 'i' LIMIT 1
+----
+distribution: local
+·
+• render
+│
+└── • limit
+    │ count: 1
+    │
+    └── • filter
+        │ filter: relkind = 'i'
+        │
+        └── • virtual table
+              table: pg_class@primary
+
+# Verify that the Smither's extractIndexes query avoids a virtual table lookup
+# join on pg_class for the index-OID alias (c). This query previously caused
+# timeouts when the database had many objects.
+statement ok
+CREATE TABLE table_2 (a INT PRIMARY KEY, b INT, INDEX idx_b(b))
+
+query T
+EXPLAIN SELECT si.index_name, column_name, storing, direction = 'ASC', is_inverted
+FROM [SHOW INDEXES FROM test.public.table_2] AS si
+JOIN "".crdb_internal.table_indexes AS ti
+  ON (si.table_name = ti.descriptor_name) AND (si.index_name = ti.index_name)
+WHERE column_name != 'rowid'
+----
+distribution: local
+·
+• render
+│
+└── • hash join
+    │ equality: (descriptor_name, index_name) = (table_name, index_name)
+    │
+    ├── • virtual table
+    │     table: table_indexes@primary
+    │
+    └── • filter
+        │ filter: column_name != 'rowid'
+        │
+        └── • render
+            │
+            └── • virtual table lookup join
+                │ table: pg_index@pg_index_indrelid_idx
+                │ equality: (oid) = (indrelid)
+                │ pred: indexrelid = oid
+                │
+                └── • hash join
+                    │ equality: (relname, relnamespace) = (index_name, relnamespace)
                     │
-                    └── • filter
-                        │ filter: ((table_name = 'foo') AND (table_catalog = 'test')) AND (table_schema = 'public')
+                    ├── • virtual table
+                    │     table: pg_class@primary
+                    │
+                    └── • hash join
+                        │ equality: (nspname, oid) = (index_schema, relnamespace)
                         │
-                        └── • virtual table
-                              table: statistics@primary
+                        ├── • virtual table
+                        │     table: pg_namespace@primary
+                        │
+                        └── • merge join
+                            │ equality: (relname) = (table_name)
+                            │
+                            ├── • filter
+                            │   │ filter: relname = 'table_2'
+                            │   │
+                            │   └── • virtual table
+                            │         table: pg_class@primary
+                            │
+                            └── • filter
+                                │ filter: ((table_name = 'table_2') AND (table_catalog = 'test')) AND (table_schema = 'public')
+                                │
+                                └── • virtual table
+                                      table: statistics@primary
+
+statement ok
+DROP TABLE table_2
 
 query T
 EXPLAIN SHOW CONSTRAINTS FROM foo
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +conname,+constraint_type,+condef,+convalidated
@@ -757,7 +852,6 @@ query T retry
 EXPLAIN SHOW USERS
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 3
@@ -848,7 +942,6 @@ query T
 EXPLAIN INSERT INTO t VALUES (1, 2)
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: t(k, v)
@@ -862,7 +955,6 @@ query T
 EXPLAIN SELECT * FROM t
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -885,7 +977,6 @@ query T
 EXPLAIN SELECT * FROM t WHERE k = 1 OR k = 3
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -899,7 +990,6 @@ query T
 EXPLAIN (PLAN) SELECT * FROM t INNER LOOKUP JOIN t2 ON t.k = t2.x
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: t2@t2_pkey
@@ -932,7 +1022,6 @@ query T
 EXPLAIN VALUES (1, 2, 3), (4, 5, 6)
 ----
 distribution: local
-vectorized: true
 ·
 • values
   size: 3 columns, 2 rows
@@ -941,7 +1030,6 @@ query T
 EXPLAIN VALUES (1)
 ----
 distribution: local
-vectorized: true
 ·
 • values
   size: 1 column, 1 row
@@ -971,7 +1059,6 @@ query T
 EXPLAIN SELECT DISTINCT v FROM t
 ----
 distribution: local
-vectorized: true
 ·
 • distinct
 │ distinct on: v
@@ -1072,7 +1159,6 @@ query T
 EXPLAIN SELECT * FROM system.table_statistics WHERE name = 'foo'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: name = 'foo'
@@ -1175,13 +1261,8 @@ EXPLAIN (TYPES) SELECT 2*count(k) as z, v FROM t WHERE v>123 GROUP BY v HAVING v
 distribution: local
 vectorized: true
 ·
-• render
-│ columns: (z int, v int)
-│ render z: ((count)[int] * (2)[int])[int]
-│ render v: (v)[int]
-│
-└── • norows
-      columns: (v int, count int)
+• norows
+  columns: (z int, v int)
 
 query T
 EXPLAIN (TYPES) DELETE FROM t WHERE v > 1
@@ -1352,7 +1433,6 @@ query T
 EXPLAIN SELECT * FROM another_db.sc.t WHERE a = 1
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: a = 1
@@ -1410,7 +1490,7 @@ query T
 EXPLAIN (OPT,REDACT) SELECT 1 AS r
 ----
 values
- └── ‹(‹×›,)›
+ └── (‹×›,)
 
 query T
 EXPLAIN (OPT,VERBOSE) SELECT 1 AS r
@@ -1438,7 +1518,7 @@ values
  ├── fd: ()-->(1)
  ├── distribution: test
  ├── prune: (1)
- └── ‹(‹×›,)›
+ └── (‹×›,)
 
 query T
 EXPLAIN (OPT,TYPES) SELECT 1 AS r
@@ -2052,7 +2132,6 @@ query T
 EXPLAIN SELECT string_agg(x, y) FROM (VALUES ('foo', 'foo'), ('bar', 'bar')) t(x, y)
 ----
 distribution: local
-vectorized: true
 ·
 • group (scalar)
 │ estimated row count: 1
@@ -2064,7 +2143,6 @@ query T
 EXPLAIN SELECT corr(a, b) FROM tc;
 ----
 distribution: local
-vectorized: true
 ·
 • group (scalar)
 │
@@ -2082,7 +2160,6 @@ WITH
 SELECT * FROM a, b
 ----
 NULL  distribution: local
-NULL  vectorized: true
 NULL  ·
 NULL  • scan
 NULL    missing stats
@@ -2094,7 +2171,6 @@ query T
 EXPLAIN EXPLAIN SELECT 1
 ----
 distribution: local
-vectorized: true
 ·
 • explain
 
@@ -2106,7 +2182,6 @@ query T
 EXPLAIN SELECT * FROM t WHERE k IN (10, 20, 30, 40, 50, 60, 70, 80)
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -2128,7 +2203,6 @@ query T
 EXPLAIN UPSERT INTO u VALUES (1, 1)
 ----
 distribution: local
-vectorized: true
 ·
 • upsert
 │ into: u(k, v)
@@ -2150,7 +2224,6 @@ query T
 EXPLAIN INSERT INTO u VALUES (1, 1) ON CONFLICT DO NOTHING
 ----
 distribution: local
-vectorized: true
 ·
 • insert
 │ into: u(k, v)
@@ -2217,7 +2290,6 @@ query T
 EXPLAIN SELECT * FROM percent
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1,000,000 (100% of the table; stats collected <hidden> ago)
@@ -2228,7 +2300,6 @@ query T
 EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 AND 150000
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 150,000 (15% of the table; stats collected <hidden> ago)
@@ -2239,7 +2310,6 @@ query T
 EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 AND 20000
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 20,000 (2.0% of the table; stats collected <hidden> ago)
@@ -2250,7 +2320,6 @@ query T
 EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 AND 1234
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1,234 (0.12% of the table; stats collected <hidden> ago)
@@ -2261,7 +2330,6 @@ query T
 EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 AND 980
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 980 (0.10% of the table; stats collected <hidden> ago)
@@ -2272,7 +2340,6 @@ query T
 EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 and 100
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 100 (0.01% of the table; stats collected <hidden> ago)
@@ -2283,7 +2350,6 @@ query T
 EXPLAIN SELECT * FROM percent WHERE a BETWEEN 1 and 99
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 99 (<0.01% of the table; stats collected <hidden> ago)
@@ -2294,7 +2360,6 @@ query T
 EXPLAIN SELECT * FROM percent WHERE a = 1
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
@@ -2306,7 +2371,6 @@ query T
 EXPLAIN INSERT INTO t2 SELECT x FROM t2 WHERE false
 ----
 distribution: local
-vectorized: true
 ·
 • insert fast path
   into: t2(x)
@@ -2327,20 +2391,14 @@ EXPLAIN ANALYZE EXECUTE prep(1)
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • values
   sql nodes: <hidden>
   regions: <hidden>
-  actual row count: 1
   execution time: 0µs
+  actual row count: 1
   size: 1 column, 1 row
 
 # Tests for EXPLAIN (OPT, MEMO).
@@ -2528,7 +2586,6 @@ query T
 EXPLAIN SELECT t1.k FROM very_large_table AS t1, very_large_table AS t2;
 ----
 distribution: local
-vectorized: true
 ·
 • cross join
 │ estimated row count: 9,223,372,036,854,775,807
@@ -2579,7 +2636,7 @@ statement ok
 CREATE TABLE t_hints (k INT PRIMARY KEY, v INT, INDEX (v))
 
 statement ok
-SELECT crdb_internal.inject_hint(
+SELECT information_schema.crdb_rewrite_inline_hints(
   'SELECT k FROM t_hints WHERE k >= _',
   'SELECT k FROM t_hints@t_hints_v_idx WHERE k >= _'
 )
@@ -2591,13 +2648,15 @@ query T
 EXPLAIN SELECT k FROM t_hints WHERE k >= 100
 ----
 distribution: local
-vectorized: true
 statement hints count: 1
 ·
-• scan
-  missing stats
-  table: t_hints@t_hints_pkey
-  spans: [/100 - ]
+• filter
+│ filter: k >= 100
+│
+└── • scan
+      missing stats
+      table: t_hints@t_hints_v_idx
+      spans: FULL SCAN
 
 query T
 EXPLAIN (VERBOSE) SELECT k FROM t_hints WHERE k >= 100
@@ -2606,8 +2665,13 @@ distribution: local
 vectorized: true
 statement hints count: 1
 ·
-• scan
-  columns: (k)
-  estimated row count: 333 (missing stats)
-  table: t_hints@t_hints_pkey
-  spans: /100-
+• filter
+│ columns: (k)
+│ estimated row count: 333 (missing stats)
+│ filter: k >= 100
+│
+└── • scan
+      columns: (k)
+      estimated row count: 1,000 (missing stats)
+      table: t_hints@t_hints_v_idx
+      spans: FULL SCAN

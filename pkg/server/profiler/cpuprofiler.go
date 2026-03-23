@@ -98,13 +98,14 @@ func NewCPUProfiler(ctx context.Context, dir string, st *cluster.Settings) (*CPU
 }
 
 // MaybeTakeProfile takes a cpu profile if cpu usage is high enough.
-func (cp *CPUProfiler) MaybeTakeProfile(ctx context.Context, currentCpuUsage int64) {
+// Returns true if a profile was successfully taken.
+func (cp *CPUProfiler) MaybeTakeProfile(ctx context.Context, currentCpuUsage int64) bool {
 	defer func() {
 		if p := recover(); p != nil {
 			logcrash.ReportPanic(ctx, &cp.st.SV, p, 1)
 		}
 	}()
-	cp.profiler.maybeTakeProfile(ctx, currentCpuUsage, cp.takeCPUProfile)
+	return cp.profiler.maybeTakeProfile(ctx, currentCpuUsage, cp.takeCPUProfile)
 }
 
 func (cp *CPUProfiler) takeCPUProfile(

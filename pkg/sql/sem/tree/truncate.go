@@ -18,6 +18,10 @@ package tree
 type Truncate struct {
 	Tables       TableNames
 	DropBehavior DropBehavior
+
+	// ImportRollback indicates whether this TRUNCATE is part of an IMPORT
+	// ROLLBACK operation. This can't be set via SQL syntax.
+	ImportRollback bool
 }
 
 // Format implements the NodeFormatter interface.

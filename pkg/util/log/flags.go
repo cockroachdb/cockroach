@@ -67,6 +67,20 @@ const testLogConfigEnvVar = "COCKROACH_TEST_LOG_CONFIG"
 
 var envTestLogConfig = envutil.EnvOrDefaultString(testLogConfigEnvVar, "")
 
+func applyRedactionHashingConfig(cfg logconfig.HashingConfig) {
+	if cfg.Enabled {
+		if cfg.Salt == "" {
+			fmt.Printf("# WARNING: hash-based redaction enabled without a salt; " +
+				"hashes are more susceptible to brute-force reversal\n")
+			redact.EnableHashing(nil)
+		} else {
+			redact.EnableHashing([]byte(cfg.Salt))
+		}
+	} else {
+		redact.DisableHashing()
+	}
+}
+
 func init() {
 	logflags.InitFlags(
 		&logging.showLogs,
@@ -109,10 +123,45 @@ func ApplyConfig(
 	fileSinkMetricsForDir map[string]FileSinkMetrics,
 	fatalOnLogStall func() bool,
 ) (logShutdownFn func(), err error) {
-	// Sanity check.
-	if active, firstUse := IsActive(); active {
-		reportOrPanic(context.Background(), nil /* sv */, "logging already active; first use:\n%s", firstUse)
-	}
+	return applyConfigInternal(config, fileSinkMetricsForDir, fatalOnLogStall, false /* allowReconfig */)
+}
+
+// ApplyConfigForReconfig is like ApplyConfig but allows reconfiguration even
+// when logging is already active. This is used by TestLogScope to safely
+// reconfigure logging without racing with background goroutines that may be
+// logging concurrently.
+//
+// The key difference from calling TestingResetActive() followed by ApplyConfig()
+// is that this function atomically resets the active flag and proceeds with
+// configuration, eliminating the race window where a background goroutine could
+// set the active flag between the reset and the config application.
+func ApplyConfigForReconfig(
+	config logconfig.Config,
+	fileSinkMetricsForDir map[string]FileSinkMetrics,
+	fatalOnLogStall func() bool,
+) (logShutdownFn func(), err error) {
+	return applyConfigInternal(config, fileSinkMetricsForDir, fatalOnLogStall, true /* allowReconfig */)
+}
+
+func applyConfigInternal(
+	config logconfig.Config,
+	fileSinkMetricsForDir map[string]FileSinkMetrics,
+	fatalOnLogStall func() bool,
+	allowReconfig bool,
+) (logShutdownFn func(), err error) {
+	// Sanity check: either we allow reconfiguration (and reset the active flag),
+	// or we check that logging is not yet active. This is done atomically under
+	// a single lock acquisition to prevent races with concurrent logging.
+	func() {
+		logging.mu.Lock()
+		defer logging.mu.Unlock()
+		if allowReconfig {
+			logging.mu.active = false
+			logging.mu.firstUseStack = nil
+		} else if logging.mu.active {
+			reportOrPanic(context.Background(), nil /* sv */, "logging already active; first use:\n%s", logging.mu.firstUseStack)
+		}
+	}()
 
 	// Our own cancellable context to stop the secondary loggers below.
 	//
@@ -161,6 +210,8 @@ func ApplyConfig(
 		for _, l := range sinkInfos {
 			logging.allSinkInfos.del(l)
 		}
+
+		redact.DisableHashing() // Reset hash redaction state.
 	}
 
 	// Call the final value of logShutdownFn immediately if returning with error.
@@ -412,6 +463,7 @@ func ApplyConfig(
 		l.sinkInfos = append([]*sinkInfo{interceptorSinkInfo}, l.sinkInfos...)
 	}
 
+	applyRedactionHashingConfig(config.Redaction.Hashing)
 	logging.setChannelLoggers(chans, &stderrSinkInfo)
 	setActive()
 

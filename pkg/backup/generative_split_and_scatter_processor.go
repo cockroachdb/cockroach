@@ -7,7 +7,6 @@ package backup
 
 import (
 	"context"
-	"fmt"
 	"hash/fnv"
 	"math/rand"
 	"strings"
@@ -22,9 +21,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -36,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -160,6 +160,7 @@ func (s dbSplitAndScatterer) split(
 		newSplitKey = splitAt
 	}
 	log.VEventf(ctx, 1, "presplitting new key %+v", newSplitKey)
+	splitStart := timeutil.Now()
 	retryOpts := retry.Options{
 		InitialBackoff: 100 * time.Millisecond,
 		MaxBackoff:     5 * time.Second,
@@ -172,6 +173,9 @@ func (s dbSplitAndScatterer) split(
 				ctx, 1, "attempt %d failed to split at key %s: %v", r.CurrentAttempt(), newSplitKey, err,
 			)
 			continue
+		}
+		if elapsed := timeutil.Since(splitStart); elapsed > 5*time.Second {
+			log.Dev.Infof(ctx, "slow split at key %s took %s (%d attempts)", newSplitKey, elapsed, r.CurrentAttempt())
 		}
 		return nil
 	}
@@ -247,15 +251,6 @@ func (s dbSplitAndScatterer) findDestination(res *kvpb.AdminScatterResponse) roa
 	}
 
 	return roachpb.NodeID(0)
-}
-
-func routingDatumsForSQLInstance(
-	sqlInstanceID base.SQLInstanceID,
-) (rowenc.EncDatum, rowenc.EncDatum) {
-	routingBytes := roachpb.Key(fmt.Sprintf("node%d", sqlInstanceID))
-	startDatum := rowenc.DatumToEncDatumUnsafe(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes)))
-	endDatum := rowenc.DatumToEncDatumUnsafe(types.Bytes, tree.NewDBytes(tree.DBytes(routingBytes.Next())))
-	return startDatum, endDatum
 }
 
 type entryNode struct {
@@ -393,7 +388,7 @@ func (gssp *generativeSplitAndScatterProcessor) Next() (
 		// The routing datums informs the router which output stream should be used.
 		routingDatum, ok := gssp.routingDatumCache.getRoutingDatum(scatteredEntry.node)
 		if !ok {
-			routingDatum, _ = routingDatumsForSQLInstance(base.SQLInstanceID(scatteredEntry.node))
+			routingDatum, _ = physicalplan.RoutingDatumsForSQLInstance(base.SQLInstanceID(scatteredEntry.node))
 			gssp.routingDatumCache.putRoutingDatum(scatteredEntry.node, routingDatum)
 		}
 
@@ -434,7 +429,7 @@ func makeBackupMetadata(
 ) ([]backuppb.BackupManifest, backupinfo.LayerToBackupManifestFileIterFactory, error) {
 
 	execCfg := flowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
-	memAcc := flowCtx.EvalCtx.Planner.Mon().MakeBoundAccount()
+	memAcc := flowCtx.Mon.MakeBoundAccount()
 	defer memAcc.Close(ctx)
 
 	kmsEnv := backupencryption.MakeBackupKMSEnv(execCfg.Settings, &execCfg.ExternalIODirConfig,
@@ -471,6 +466,7 @@ func runGenerativeSplitAndScatter(
 ) error {
 	log.Dev.Infof(ctx, "Running generative split and scatter with %d total spans, %d chunk size, %d nodes",
 		spec.NumEntries, spec.ChunkSize, spec.NumNodes)
+
 	g := ctxgroup.WithContext(ctx)
 
 	chunkSplitAndScatterWorkers := len(chunkSplitAndScatterers)
@@ -478,8 +474,12 @@ func runGenerativeSplitAndScatter(
 
 	// This goroutine generates import spans one at a time and sends them to
 	// restoreSpanEntriesCh.
+	genStart := timeutil.Now()
 	g.GoCtx(func(ctx context.Context) error {
-		defer close(restoreSpanEntriesCh)
+		defer func() {
+			log.Dev.Infof(ctx, "span generation complete in %s", timeutil.Since(genStart))
+			close(restoreSpanEntriesCh)
+		}()
 
 		backups, layerToFileIterFactory, err := makeBackupMetadata(ctx,
 			flowCtx, spec)
@@ -522,6 +522,7 @@ func runGenerativeSplitAndScatter(
 			filter,
 			fsc,
 			restoreSpanEntriesCh,
+			spec.UseLink,
 		), "generating and sending import spans")
 	})
 
@@ -557,6 +558,7 @@ func runGenerativeSplitAndScatter(
 			chunk.entries = append(chunk.entries, entry)
 		}
 
+		log.Dev.Infof(ctx, "chunked %d import span entries into chunks of size %d", idx, spec.ChunkSize)
 		if len(chunk.entries) > 0 {
 			select {
 			case <-ctx.Done():
@@ -743,24 +745,6 @@ func newRoutingDatumCache() routingDatumCache {
 var splitAndScatterOutputTypes = []*types.T{
 	types.Bytes, // Span key for the range router
 	types.Bytes, // RestoreDataEntry bytes
-}
-
-// routingSpanForSQLInstance provides the mapping to be used during distsql planning
-// when setting up the output router.
-func routingSpanForSQLInstance(sqlInstanceID base.SQLInstanceID) ([]byte, []byte, error) {
-	var alloc tree.DatumAlloc
-	startDatum, endDatum := routingDatumsForSQLInstance(sqlInstanceID)
-
-	startBytes, endBytes := make([]byte, 0), make([]byte, 0)
-	startBytes, err := startDatum.Encode(splitAndScatterOutputTypes[0], &alloc, catenumpb.DatumEncoding_ASCENDING_KEY, startBytes)
-	if err != nil {
-		return nil, nil, err
-	}
-	endBytes, err = endDatum.Encode(splitAndScatterOutputTypes[0], &alloc, catenumpb.DatumEncoding_ASCENDING_KEY, endBytes)
-	if err != nil {
-		return nil, nil, err
-	}
-	return startBytes, endBytes, nil
 }
 
 func init() {

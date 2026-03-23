@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
@@ -214,13 +215,16 @@ func (b *bufferedWindowOp) Init(ctx context.Context) {
 
 var _ colexecop.ClosableOperator = &bufferedWindowOp{}
 
-func (b *bufferedWindowOp) Next() coldata.Batch {
+func (b *bufferedWindowOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	var err error
 	for {
 		b.cancelChecker.CheckEveryCall()
 		switch b.state {
 		case windowLoading:
-			batch := b.Input.Next()
+			batch, meta := b.Input.Next()
+			if meta != nil {
+				return nil, meta
+			}
 			if batch.Length() == 0 {
 				// We have reached the end of the input.
 				if !b.bufferQueue.Empty() || (b.currentBatch != nil && b.currentBatch.Length() > 0) {
@@ -309,14 +313,14 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 					// first of the tuples yet to be processed was somewhere in the batch.
 					b.processingIdx = 0
 				}
-				return output
+				return output, nil
 			}
 			if b.currentBatch.Length() > 0 {
 				b.windower.processBatch(b.currentBatch, b.processingIdx, b.nextPartitionIdx)
 				if b.nextPartitionIdx >= b.currentBatch.Length() {
 					// This was the last batch and it has been entirely filled.
 					b.state = windowFinished
-					return b.currentBatch
+					return b.currentBatch, nil
 				}
 				// The next partition begins within this batch. Set processingIdx to the
 				// beginning of the next partition and seek to the end of the next
@@ -332,11 +336,11 @@ func (b *bufferedWindowOp) Next() coldata.Batch {
 			if err = b.Close(b.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("window operator in unhandled state"))
 			// This code is unreachable, but the compiler cannot infer that.
-			return nil
+			return nil, nil
 		}
 	}
 }

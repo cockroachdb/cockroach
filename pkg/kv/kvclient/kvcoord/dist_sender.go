@@ -154,7 +154,7 @@ var (
 		Help:        "Number of replica-addressed RPCs sent due to per-replica errors",
 		Measurement: "RPCs",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_DISTRIBUTED,
 		HowToUse: crstrings.UnwrapText(`
 			RPC errors do not necessarily indicate a problem. This metric tracks
@@ -170,7 +170,7 @@ var (
 		Help:        "Number of NotLeaseHolderErrors encountered from replica-addressed RPCs",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_DISTRIBUTED,
 		HowToUse: crstrings.UnwrapText(`
 			Errors of this type are normal during elastic cluster topology changes
@@ -369,20 +369,6 @@ var metamorphicRouteToLeaseholderFirst = metamorphic.ConstantWithTestBool(
 	true,
 )
 
-// CanSendToFollower is used by the DistSender to determine if it needs to look
-// up the current lease holder for a request. It is used by the
-// followerreadsccl code to inject logic to check if follower reads are enabled.
-// By default, without CCL code, this function returns false.
-var CanSendToFollower = func(
-	_ context.Context,
-	_ *cluster.Settings,
-	_ *hlc.Clock,
-	_ roachpb.RangeClosedTimestampPolicy,
-	_ *kvpb.BatchRequest,
-) bool {
-	return false
-}
-
 const (
 	// The default scaling factor for the number of async ops per vCPU.
 	DefaultSenderStreamsPerVCPU = 384
@@ -413,7 +399,8 @@ var rangeDescriptorCacheSize = settings.RegisterIntSetting(
 var senderConcurrencyLimit = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"kv.dist_sender.concurrency_limit",
-	"maximum number of asynchronous send requests",
+	"maximum number of asynchronous send requests. "+
+		"The default value is computed as the number of vCPUs in a node times 384.",
 	DefaultSenderStreamsPerVCPU*max(MinViableProcs, int64(runtime.GOMAXPROCS(0))),
 	settings.NonNegativeInt,
 )
@@ -764,6 +751,16 @@ type DistSender struct {
 	// HealthFunc returns true if the node is alive and not draining.
 	healthFunc HealthFunc
 
+	// canSendToFollower, if set, determines whether a batch can be routed to a
+	// follower replica. When nil, all requests are routed to the leaseholder.
+	canSendToFollower func(
+		ctx context.Context,
+		st *cluster.Settings,
+		clock *hlc.Clock,
+		ctPolicy roachpb.RangeClosedTimestampPolicy,
+		ba *kvpb.BatchRequest,
+	) bool
+
 	onRangeSpanningNonTxnalBatch func(ba *kvpb.BatchRequest) *kvpb.Error
 
 	// locality is the description of the topography of the server on which the
@@ -837,6 +834,17 @@ type DistSenderConfig struct {
 	HealthFunc HealthFunc
 
 	LatencyFunc LatencyFunc
+
+	// CanSendToFollower, if set, is called to determine whether a batch request
+	// may be routed to a follower replica rather than the leaseholder. If nil,
+	// follower reads are disabled and all requests are routed to the leaseholder.
+	CanSendToFollower func(
+		ctx context.Context,
+		st *cluster.Settings,
+		clock *hlc.Clock,
+		ctPolicy roachpb.RangeClosedTimestampPolicy,
+		ba *kvpb.BatchRequest,
+	) bool
 }
 
 // NewDistSender returns a batch.Sender instance which connects to the
@@ -948,6 +956,8 @@ func NewDistSender(cfg DistSenderConfig) *DistSender {
 	if cfg.TestingKnobs.OnRangeSpanningNonTxnalBatch != nil {
 		ds.onRangeSpanningNonTxnalBatch = cfg.TestingKnobs.OnRangeSpanningNonTxnalBatch
 	}
+
+	ds.canSendToFollower = cfg.CanSendToFollower
 
 	// Some tests don't set the healthFunc.
 	if ds.healthFunc == nil {
@@ -1759,12 +1769,12 @@ func maybeSwapErrorIndex(pErr *kvpb.Error, a, b int) {
 	}
 }
 
-// mergeErrors merges the two errors, combining their transaction state and
-// returning the error with the highest priority. If errors have the same
-// priority, the error with the lowest request index is preferred. This allows
-// a caller issuing multiple cputs to control which ConditionFailedError is
-// returned. Specifically, it allows returning a primary key cput failure
-// instead of a unique index conflict.
+// mergeErrors merges two errors, combining their transaction states and
+// returning the one with the higher priority. If priorities are equal, the
+// error with the lower request index is preferred. This lets callers control
+// which ConditionFailedError is returned when issuing multiple CPUTs. For
+// example, SQL can guarantee a primary key CPUT failure instead of a unique
+// index conflict by placing the primary key CPUT first in the batch.
 func mergeErrors(pErr1, pErr2 *kvpb.Error) *kvpb.Error {
 	ret, drop := pErr1, pErr2
 
@@ -1967,6 +1977,7 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 	truncationHelper, err := NewBatchTruncationHelper(
 		scanDir, ba.Requests, mustPreserveOrder, canReorderRequestsSlice,
 	)
+	defer truncationHelper.Release()
 	if err != nil {
 		return nil, kvpb.NewError(err)
 	}
@@ -2214,7 +2225,8 @@ func (ds *DistSender) sendPartialBatch(
 	// Start a retry loop for sending the batch to the range. Each iteration of
 	// this loop uses a new descriptor. Attempts to send to multiple replicas in
 	// this descriptor are done at a lower level.
-	tBegin := crtime.NowMono() // for slow log message
+	tBegin := crtime.NowMono()     // for slow log message
+	var lastSlowRPCLog crtime.Mono // for periodic re-logging
 	var attempts int64
 	// prevTok maintains the EvictionToken used on the previous iteration.
 	var prevTok rangecache.EvictionToken
@@ -2272,7 +2284,14 @@ func (ds *DistSender) sendPartialBatch(
 		prevTok = routingTok
 		reply, err = ds.sendToReplicas(ctx, ba, routingTok, withCommit)
 
-		if dur := tBegin.Elapsed(); dur > slowDistSenderRangeThreshold && tBegin != 0 {
+		var shouldLog bool
+		dur := tBegin.Elapsed()
+		if lastSlowRPCLog == 0 {
+			shouldLog = dur > slowDistSenderRangeThreshold
+		} else {
+			shouldLog = lastSlowRPCLog.Elapsed() > slowDistSenderRangeRelogInterval
+		}
+		if shouldLog {
 			{
 				var s redact.StringBuilder
 				slowRangeRPCWarningStr(&s, ba, dur, attempts, routingTok.Desc(), err, reply)
@@ -2280,7 +2299,7 @@ func (ds *DistSender) sendPartialBatch(
 			}
 			// If the RPC wasn't successful, defer the logging of a message once the
 			// RPC is not retried any more.
-			if err != nil || reply.Error != nil {
+			if lastSlowRPCLog == 0 && (err != nil || reply.Error != nil) {
 				ds.metrics.SlowRPCs.Inc(1)
 				// This defer is intended to run after the loop; this code runs at most once per loop.
 				//nolint:deferloop
@@ -2291,7 +2310,7 @@ func (ds *DistSender) sendPartialBatch(
 					log.KvExec.Warningf(ctx, "slow RPC response: %v", &s)
 				}(tBegin, attempts)
 			}
-			tBegin = 0 // prevent reentering branch for this RPC
+			lastSlowRPCLog = crtime.NowMono()
 		}
 
 		if err != nil {
@@ -2554,6 +2573,10 @@ func selectBestError(ambiguousErr, replicaUnavailableErr, lastAttemptErr error) 
 // of the range.
 const slowDistSenderRangeThreshold = time.Minute
 
+// slowDistSenderRangeRelogInterval is the interval at which a still-stuck
+// "slow range RPC" warning is re-logged.
+const slowDistSenderRangeRelogInterval = 10 * time.Minute
+
 // slowDistSenderReplicaThreshold is a latency threshold for logging a slow RPC
 // to a single replica.
 const slowDistSenderReplicaThreshold = 10 * time.Second
@@ -2600,7 +2623,8 @@ func (ds *DistSender) sendToReplicas(
 	// assume that it's LEAD_FOR_GLOBAL_READS, because if it is, and we assumed
 	// otherwise, we may send a request to a remote region unnecessarily.
 	if ba.RoutingPolicy == kvpb.RoutingPolicy_LEASEHOLDER &&
-		CanSendToFollower(
+		ds.canSendToFollower != nil &&
+		ds.canSendToFollower(
 			ctx, ds.st, ds.clock,
 			routing.ClosedTimestampPolicy(rangecache.DefaultSendClosedTimestampPolicy), ba,
 		) {

@@ -300,7 +300,7 @@ func RegisterTests(r registry.Registry) {
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
-	opts := append(v.specOptions, spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(v.mem), spec.TerminateOnMigration())
+	opts := append(v.specOptions, spec.CPU(v.vcpu), spec.Disks(v.disks), spec.Mem(v.mem), spec.TerminateOnMigration())
 	// Disable cluster reuse to avoid potential cgroup side effects.
 	if v.perturbationName() == "slowDisk" {
 		opts = append(opts, spec.ReuseNone())

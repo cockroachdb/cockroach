@@ -249,7 +249,7 @@ func (c *cloudNemesis) listObjects(ctx context.Context) (err error) {
 	before := c.snapshotObjects()
 
 	listedFiles := map[string]bool{}
-	err = c.storage.List(ctx, "", "", func(filename string) error {
+	err = c.storage.List(ctx, "", cloud.ListOptions{}, func(filename string) error {
 		listedFiles[strings.TrimPrefix(filename, "/")] = true
 		return nil
 	})

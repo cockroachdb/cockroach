@@ -6,7 +6,7 @@
 import classnames from "classnames/bind";
 import React from "react";
 
-import styles from "./anchor.module.styl";
+import styles from "./anchor.module.scss";
 
 type AnchorProps = React.DetailedHTMLProps<
   React.AnchorHTMLAttributes<HTMLAnchorElement>,

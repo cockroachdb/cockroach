@@ -13,6 +13,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
@@ -63,8 +66,9 @@ type Outbox struct {
 	draining uint32
 
 	scratch struct {
-		buf *bytes.Buffer
-		msg *execinfrapb.ProducerMessage
+		buf  *bytes.Buffer
+		msg  *execinfrapb.ProducerMessage
+		meta [1]execinfrapb.RemoteProducerMetadata
 	}
 
 	span *tracing.Span
@@ -129,6 +133,54 @@ func (o *Outbox) close(ctx context.Context) {
 	o.unlimitedAllocator.ReleaseAll()
 }
 
+// tenantID returns the TenantID from the flow context's codec, or the
+// system tenant ID if the flow context or EvalCtx is nil (which happens
+// in tests).
+func (o *Outbox) tenantID() roachpb.TenantID {
+	if o.flowCtx != nil && o.flowCtx.EvalCtx != nil {
+		return o.flowCtx.Codec().TenantID
+	}
+	return roachpb.SystemTenantID
+}
+
+// workloadID returns the WorkloadID from the flow context's EvalCtx,
+// or 0 if EvalCtx is nil (which happens in tests).
+func (o *Outbox) workloadID() uint64 {
+	if o.flowCtx != nil && o.flowCtx.EvalCtx != nil {
+		return o.flowCtx.EvalCtx.WorkloadID
+	}
+	return 0
+}
+
+// appNameID returns the AppNameID from the flow context's EvalCtx, or
+// 0 if EvalCtx is nil (which happens in tests).
+func (o *Outbox) appNameID() uint64 {
+	if o.flowCtx != nil && o.flowCtx.EvalCtx != nil {
+		return o.flowCtx.EvalCtx.AppNameID
+	}
+	return 0
+}
+
+// gatewayNodeID returns the GatewayNodeID derived from the flow
+// context's NodeID, or 0 if the flow context or NodeID is nil (which
+// happens in tests).
+func (o *Outbox) gatewayNodeID() roachpb.NodeID {
+	if o.flowCtx != nil && o.flowCtx.NodeID != nil {
+		return roachpb.NodeID(o.flowCtx.NodeID.SQLInstanceID())
+	}
+	return 0
+}
+
+// workloadType returns the WorkloadType from the flow context's
+// EvalCtx, or WorkloadTypeUnknown if EvalCtx is nil (which happens in
+// tests).
+func (o *Outbox) workloadType() workloadid.WorkloadType {
+	if o.flowCtx != nil && o.flowCtx.EvalCtx != nil {
+		return o.flowCtx.EvalCtx.WorkloadType
+	}
+	return workloadid.WorkloadTypeUnknown
+}
+
 // Run starts an outbox by connecting to the provided node and pushing
 // coldata.Batches over the stream after sending a header with the provided flow
 // and stream ID. Note that an extra goroutine is spawned so that Recv may be
@@ -180,7 +232,7 @@ func (o *Outbox) Run(
 
 	var stream execinfrapb.RPCDistSQL_FlowStreamClient
 	if err := func() error {
-		client, err := execinfra.GetDistSQLClientForOutbox(ctx, dialer, o.flowCtx.Cfg.Settings, sqlInstanceID, connectionTimeout)
+		client, err := execinfra.GetDistSQLClientForOutbox(ctx, dialer, sqlInstanceID, connectionTimeout, o.flowCtx.Cfg.RPCContext.UseDRPC)
 		if err != nil {
 			log.Dev.VWarningf(ctx, 1, "Outbox Dial connection error, distributed query will fail: %+v", err)
 			return err
@@ -265,7 +317,34 @@ func (o *Outbox) sendBatches(
 				return
 			}
 
-			batch := o.Input.Next()
+			batch, meta := o.Input.Next()
+			if meta != nil {
+				o.scratch.msg.Data.RawBytes = nil
+				o.scratch.msg.Data.Metadata = o.scratch.meta[:]
+				o.scratch.msg.Data.Metadata[0] = execinfrapb.LocalMetaToRemoteProducerMeta(ctx, *meta)
+				// o.scratch.msg can be reused as soon as Send returns.
+				log.VEvent(ctx, 2, "Outbox sending streaming metadata")
+				// TODO(yuzefovich): we could consider piggy-backing on the
+				// message that we'll send with the next batch, if we ever need
+				// to reduce the number of DistSQL messages. We'll need to teach
+				// the Inbox about that too.
+				sendCleanup := ash.SetWorkState(
+					o.tenantID(),
+					ash.WorkloadInfo{
+						WorkloadID:    o.workloadID(),
+						AppNameID:     o.appNameID(),
+						GatewayNodeID: o.gatewayNodeID(),
+						WorkloadType:  o.workloadType(),
+					},
+					ash.WorkNetwork, "OutboxSend")
+				err := stream.Send(o.scratch.msg)
+				sendCleanup()
+				if err != nil {
+					flowinfra.HandleStreamErr(ctx, "Send (streaming metadata)", err, flowCtxCancel, outboxCtxCancel)
+					return
+				}
+				continue
+			}
 			n := batch.Length()
 			if n == 0 {
 				terminatedGracefully = true
@@ -293,12 +372,24 @@ func (o *Outbox) sendBatches(
 			// increases (if it didn't increase, this call becomes a noop).
 			o.unlimitedAllocator.AdjustMemoryUsageAfterAllocation(int64(o.scratch.buf.Cap() - oldBufCap))
 			o.scratch.msg.Data.RawBytes = o.scratch.buf.Bytes()
+			o.scratch.msg.Data.Metadata = nil
 
 			// o.scratch.msg can be reused as soon as Send returns since it returns as
 			// soon as the message is written to the control buffer. The message is
 			// marshaled (bytes are copied) before writing.
 			log.VEvent(ctx, 2, "Outbox sending batch")
-			if err := stream.Send(o.scratch.msg); err != nil {
+			sendCleanup := ash.SetWorkState(
+				o.tenantID(),
+				ash.WorkloadInfo{
+					WorkloadID:    o.workloadID(),
+					AppNameID:     o.appNameID(),
+					GatewayNodeID: o.gatewayNodeID(),
+					WorkloadType:  o.workloadType(),
+				},
+				ash.WorkNetwork, "OutboxSend")
+			err = stream.Send(o.scratch.msg)
+			sendCleanup()
+			if err != nil {
 				flowinfra.HandleStreamErr(ctx, "Send (batches)", err, flowCtxCancel, outboxCtxCancel)
 				return
 			}
@@ -307,10 +398,12 @@ func (o *Outbox) sendBatches(
 	return terminatedGracefully, errToSend
 }
 
-// sendMetadata drains the Outbox.metadataSources and sends the metadata over
-// the given stream, returning the Send error, if any. sendMetadata also sends
-// errToSend as metadata if non-nil.
-func (o *Outbox) sendMetadata(ctx context.Context, stream flowStreamClient, errToSend error) error {
+// sendDrainedMetadata drains the Outbox.metadataSources and sends the metadata
+// over the given stream, returning the Send error, if any. sendDrainedMetadata
+// also sends errToSend as metadata if non-nil.
+func (o *Outbox) sendDrainedMetadata(
+	ctx context.Context, stream flowStreamClient, errToSend error,
+) error {
 	msg := &execinfrapb.ProducerMessage{}
 	if errToSend != nil {
 		log.VEventf(ctx, 1, "Outbox sending an error as metadata: %v", errToSend)
@@ -403,8 +496,8 @@ func (o *Outbox) runWithStream(
 			reason = redact.Sprint(redact.SafeString("terminated gracefully"))
 		}
 		o.moveToDraining(ctx, reason)
-		if err := o.sendMetadata(ctx, stream, errToSend); err != nil {
-			flowinfra.HandleStreamErr(ctx, "Send (metadata)", err, flowCtxCancel, outboxCtxCancel)
+		if err := o.sendDrainedMetadata(ctx, stream, errToSend); err != nil {
+			flowinfra.HandleStreamErr(ctx, "Send (draining metadata)", err, flowCtxCancel, outboxCtxCancel)
 		} else {
 			// Close the stream. Note that if this block isn't reached, the stream
 			// is unusable.

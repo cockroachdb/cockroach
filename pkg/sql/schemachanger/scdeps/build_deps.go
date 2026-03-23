@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
@@ -27,11 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -191,11 +188,12 @@ func (d *buildDeps) MayResolvePrefix(
 
 // MayResolveTable implements the scbuild.CatalogReader interface.
 func (d *buildDeps) MayResolveTable(
-	ctx context.Context, name tree.UnresolvedObjectName,
+	ctx context.Context, name tree.UnresolvedObjectName, allowOffline bool,
 ) (catalog.ResolvedObjectPrefix, catalog.TableDescriptor) {
 	desc, prefix, err := resolver.ResolveExistingObject(ctx, d.schemaResolver, &name, tree.ObjectLookupFlags{
 		AssertNotLeased:   true,
 		DesiredObjectKind: tree.TableObject,
+		IncludeOffline:    allowOffline,
 	})
 	if err != nil {
 		panic(err)
@@ -331,10 +329,6 @@ func (d *buildDeps) IsTableEmpty(
 	return len(kvs) == 0
 }
 
-// CreatePartitioningCCL is the public hook point for the CCL-licensed
-// partitioning creation code.
-var CreatePartitioningCCL scbuild.CreatePartitioningCCLCallback
-
 var _ scbuild.Dependencies = (*buildDeps)(nil)
 
 // AuthorizationAccessor implements the scbuild.Dependencies interface.
@@ -397,27 +391,6 @@ func (d *buildDeps) FeatureChecker() scbuild.FeatureChecker {
 	return d.featureChecker
 }
 
-// IndexPartitioningCCLCallback implements the scbuild.Dependencies interface.
-func (d *buildDeps) IndexPartitioningCCLCallback() scbuild.CreatePartitioningCCLCallback {
-	if CreatePartitioningCCL == nil {
-		return func(
-			_ context.Context,
-			_ *cluster.Settings,
-			_ *eval.Context,
-			_ func(tree.Name) (catalog.Column, error),
-			_ int,
-			_ []string,
-			_ *tree.PartitionBy,
-			_ []tree.Name,
-			_ bool,
-		) ([]catalog.Column, catpb.PartitioningDescriptor, error) {
-			return nil, catpb.PartitioningDescriptor{}, sqlerrors.NewCCLRequiredError(errors.New(
-				"creating or manipulating partitions requires a CCL binary"))
-		}
-	}
-	return CreatePartitioningCCL
-}
-
 // IncrementSchemaChangeAlterCounter implements the scbuild.Dependencies
 // interface.
 func (d *buildDeps) IncrementSchemaChangeAlterCounter(counterType string, extra ...string) {
@@ -471,6 +444,11 @@ func (d *buildDeps) IncrementDropOwnedByCounter() {
 // IncrementSchemaChangeIndexCounter implements the scbuild.Dependencies interface.
 func (d *buildDeps) IncrementSchemaChangeIndexCounter(counterType string) {
 	telemetry.Inc(sqltelemetry.SchemaChangeIndexCounter(counterType))
+}
+
+// IncrementAlterTableLocalityCounter implements the scbuild.Dependencies interface.
+func (d *buildDeps) IncrementAlterTableLocalityCounter(counterTypeFrom, counterTypeTo string) {
+	telemetry.Inc(sqltelemetry.AlterTableLocalityCounter(counterTypeFrom, counterTypeTo))
 }
 
 func (d *buildDeps) DescriptorCommentGetter() scbuild.CommentGetter {

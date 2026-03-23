@@ -573,7 +573,9 @@ type SetTriggerName struct {
 // whether it will be executed in response to a triggering event.
 type SetTriggerEnabled struct {
 	immediateMutationOp
-	Enabled scpb.TriggerEnabled
+	TableID   catid.DescID
+	TriggerID catid.TriggerID
+	Enabled   bool
 }
 
 // SetTriggerTiming sets the timing of a trigger, which indicates when it
@@ -1042,6 +1044,11 @@ type SetFunctionBody struct {
 	Body scpb.FunctionBody
 }
 
+type SetFunctionParams struct {
+	immediateMutationOp
+	Params scpb.FunctionParams
+}
+
 type SetFunctionSecurity struct {
 	immediateMutationOp
 	FunctionID descpb.ID
@@ -1063,13 +1070,15 @@ type UpdateFunctionRelationReferences struct {
 	FunctionReferences []descpb.ID
 }
 
-// UpdateTableBackReferencesInRelations updates the DependedOnBy metadata in
-// relation descriptors (e.g., tableDesc) for triggers. It handles both adding
-// and removing dependencies. The function relies on forward references being
-// set beforehand to determine whether a back-reference should be added or removed.
-type UpdateTableBackReferencesInRelations struct {
+// UpdateTriggerBackReferencesInRelations updates the DependedOnBy metadata in
+// relation descriptors for triggers. It handles both adding and removing
+// trigger-specific dependencies. The function relies on forward references
+// being set beforehand to determine whether a back-reference should be added
+// or removed.
+type UpdateTriggerBackReferencesInRelations struct {
 	immediateMutationOp
 	TableID            descpb.ID
+	TriggerID          descpb.TriggerID
 	RelationReferences []scpb.TriggerDeps_RelationReference
 }
 
@@ -1104,6 +1113,25 @@ type SetSequenceOption struct {
 	SequenceID descpb.ID
 	Key        string
 	Value      string
+}
+
+type UnsetSequenceOption struct {
+	immediateMutationOp
+	SequenceID descpb.ID
+	Key        string
+}
+
+type MaybeUpdateSequenceValue struct {
+	immediateMutationOp
+	SequenceID       descpb.ID
+	PrevIncrement    int64
+	UpdatedIncrement int64
+	PrevMinValue     int64
+	UpdatedMinValue  int64
+	PrevMaxValue     int64
+	UpdatedMaxValue  int64
+	PrevStart        int64
+	UpdatedStart     int64
 }
 
 type InitSequence struct {
@@ -1204,6 +1232,39 @@ type ForcedRowLevelSecurityMode struct {
 	Forced  bool
 }
 
+// SetTableLocalityGlobal sets the table's locality to GLOBAL.
+type SetTableLocalityGlobal struct {
+	immediateMutationOp
+	TableID descpb.ID
+}
+
+// SetTableLocalityPrimaryRegion sets the table's locality to REGIONAL BY TABLE in the primary region.
+type SetTableLocalityPrimaryRegion struct {
+	immediateMutationOp
+	TableID descpb.ID
+}
+
+// SetTableLocalitySecondaryRegion sets the table's locality to REGIONAL BY TABLE in a specific region.
+type SetTableLocalitySecondaryRegion struct {
+	immediateMutationOp
+	TableID          descpb.ID
+	RegionEnumTypeID descpb.ID
+	RegionName       catpb.RegionName
+}
+
+// SetTableLocalityRegionalByRow sets the table's locality to REGIONAL BY ROW.
+type SetTableLocalityRegionalByRow struct {
+	immediateMutationOp
+	TableID descpb.ID
+	As      string
+}
+
+// UnsetTableLocality removes the table's locality configuration.
+type UnsetTableLocality struct {
+	immediateMutationOp
+	TableID descpb.ID
+}
+
 // MarkRecreatedIndexAsInvisible is used to mark secondary indexes recreated
 // after a primary key swap as invisible. This is to prevent their use before
 // primary key swap is complete.
@@ -1239,4 +1300,32 @@ type SetTableSchemaLocked struct {
 	immediateMutationOp
 	TableID descpb.ID
 	Locked  bool
+}
+
+// SetTableRBRUsingConstraint sets or clears the RBRUsingConstraint field on the
+// table descriptor. A ConstraintID of 0 clears the field.
+type SetTableRBRUsingConstraint struct {
+	immediateMutationOp
+	TableID      descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// SetTableStorageParam sets a storage parameter on a table.
+type SetTableStorageParam struct {
+	immediateMutationOp
+	Param scpb.TableStorageParam
+}
+
+// ResetTableStorageParam resets a storage parameter on a table to its default.
+type ResetTableStorageParam struct {
+	immediateMutationOp
+	Param scpb.TableStorageParam
+}
+
+// UpsertRowLevelTTL sets the RowLevelTTL on a table descriptor.
+type UpsertRowLevelTTL struct {
+	immediateMutationOp
+	TableID     descpb.ID
+	RowLevelTTL catpb.RowLevelTTL
+	TTLExpr     *scpb.Expression
 }

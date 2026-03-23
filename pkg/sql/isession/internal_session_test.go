@@ -213,6 +213,11 @@ func TestInternalSession(t *testing.T) {
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
+	hostRunner := sqlutils.MakeSQLRunner(s.SystemLayer().SQLConn(t))
+	// If we have buffered writes enabled, we must have the split lock
+	// reliability enabled (which can be tweaked metamorphically, #161614).
+	hostRunner.Exec(t, "SET CLUSTER SETTING kv.lock_table.unreplicated_lock_reliability.split.enabled = true")
+
 	// This is a collection of tests that should all leave the internal session
 	// in a valid state. The order is randomized to ensure there is no accidental
 	// dependency on the order of operations. If the test fails, it is likely that
@@ -395,7 +400,8 @@ func tcRetrySerializableError(
 	require.NoError(t, err)
 
 	// Channel to coordinate the conflicting transaction
-	readyToConflict := make(chan struct{})
+	readyToRead := make(chan struct{})
+	readyToUpdate := make(chan struct{})
 	conflictComplete := make(chan struct{})
 
 	// Start a conflicting transaction using a regular SQL connection
@@ -413,10 +419,10 @@ func tcRetrySerializableError(
 		require.Equal(t, 100, balance1)
 
 		// Signal that we're ready to create the conflict
-		close(readyToConflict)
+		close(readyToRead)
 
 		// Wait a bit to ensure the session transaction has also read the data
-		time.Sleep(50 * time.Millisecond)
+		<-readyToUpdate
 
 		// Update account 1's balance (this will conflict with the session transaction)
 		_, err = txn.Exec("UPDATE defaultdb.accounts SET balance = balance - 10 WHERE id = 1")
@@ -430,7 +436,7 @@ func tcRetrySerializableError(
 	}()
 
 	// Wait for the conflicting transaction to be ready
-	<-readyToConflict
+	<-readyToRead
 
 	// Execute a transaction in the session that will encounter a serializable error
 	executions := 0
@@ -443,6 +449,11 @@ func tcRetrySerializableError(
 		}
 		require.Equal(t, 1, len(rows))
 		balance := int(tree.MustBeDInt(rows[0][0]))
+
+		// Wait for the read to be invalidated
+		if executions == 1 {
+			close(readyToUpdate)
+		}
 
 		// Wait for the conflicting transaction to complete its update
 		<-conflictComplete

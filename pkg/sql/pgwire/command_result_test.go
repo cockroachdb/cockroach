@@ -63,7 +63,7 @@ func TestTruncateCommandResult(t *testing.T) {
 		sql.PortalPausabilityDisabled,
 	)
 	r := cr.(*commandResult)
-	r.SetColumns(ctx, []colinfo.ResultColumn{{Name: "a", Typ: types.Int}})
+	r.SetColumns(ctx, []colinfo.ResultColumn{{Name: "a", Typ: types.Int}}, false /* skipRowDescription */)
 
 	// Each row has a 4 byte header and 8 byte value.
 	const expectedBytesPerRow = 12

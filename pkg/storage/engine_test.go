@@ -203,8 +203,8 @@ func TestEngineBatchStaleCachedIterator(t *testing.T) {
 		if valRes, err := MVCCGet(context.Background(), batch, key,
 			hlc.Timestamp{}, MVCCGetOptions{}); err != nil {
 			t.Fatal(err)
-		} else if valRes.Value != nil {
-			t.Fatalf("expected no value, got %+v", valRes.Value)
+		} else if valRes.Value.Exists() {
+			t.Fatalf("expected no value, got %+v", valRes.Value.Value)
 		}
 	}
 }
@@ -2272,8 +2272,9 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 				tc.start,
 				tc.end,
 				&intents,
-				0, /* maxLockConflicts */
-				0, /* targetLockConflictBytes */
+				0,     /* maxLockConflicts */
+				0,     /* targetLockConflictBytes */
+				false, /* preferDistinctTxns */
 			)
 			if tc.expErr != "" {
 				require.Error(t, err)
@@ -2286,6 +2287,91 @@ func TestScanConflictingIntentsForDroppingLatchesEarly(t *testing.T) {
 			require.Equal(t, tc.expNumFoundIntents, len(intents))
 		})
 	}
+}
+
+// TestScanConflictingIntentsPreferDistinctTxns verifies the preferDistinctTxns
+// parameter of ScanConflictingIntentsForDroppingLatchesEarly, which collects at
+// most one intent per conflicting transaction.
+func TestScanConflictingIntentsPreferDistinctTxns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	ts := func(nanos int) hlc.Timestamp {
+		return hlc.Timestamp{WallTime: int64(nanos)}
+	}
+	newTxn := func(ts hlc.Timestamp) *roachpb.Transaction {
+		return &roachpb.Transaction{
+			TxnMeta: enginepb.TxnMeta{
+				ID:             uuid.MakeV4(),
+				Epoch:          1,
+				WriteTimestamp: ts,
+				MinTimestamp:   ts,
+			},
+			ReadTimestamp: ts,
+		}
+	}
+
+	eng := NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	val := roachpb.MakeValueFromString("v")
+	belowReaderTS := ts(1)
+
+	// Write 3 intents from txnA (at a, c, e) and 2 from txnB (at b, d).
+	txnA := newTxn(belowReaderTS)
+	txnB := newTxn(belowReaderTS)
+	for _, key := range []roachpb.Key{
+		roachpb.Key("a"), roachpb.Key("c"), roachpb.Key("e"),
+	} {
+		txnA.Sequence++
+		_, err := MVCCPut(ctx, eng, key, txnA.WriteTimestamp, val, MVCCWriteOptions{Txn: txnA})
+		require.NoError(t, err)
+	}
+	for _, key := range []roachpb.Key{
+		roachpb.Key("b"), roachpb.Key("d"),
+	} {
+		txnB.Sequence++
+		_, err := MVCCPut(ctx, eng, key, txnB.WriteTimestamp, val, MVCCWriteOptions{Txn: txnB})
+		require.NoError(t, err)
+	}
+
+	readerTxn := newTxn(ts(2))
+	start := roachpb.Key("a")
+	end := roachpb.Key("f")
+
+	scan := func(maxLockConflicts int64, preferDistinct bool) []roachpb.Intent {
+		var intents []roachpb.Intent
+		_, err := ScanConflictingIntentsForDroppingLatchesEarly(
+			ctx, eng, readerTxn.ID, readerTxn.ReadTimestamp,
+			start, end, &intents,
+			maxLockConflicts, 0 /* targetLockConflictBytes */, preferDistinct,
+		)
+		require.NoError(t, err)
+		return intents
+	}
+
+	t.Run("disabled", func(t *testing.T) {
+		intents := scan(0 /* maxLockConflicts */, false /* preferDistinctTxns */)
+		require.Len(t, intents, 5, "all intents collected without dedup")
+	})
+
+	t.Run("enabled", func(t *testing.T) {
+		intents := scan(0 /* maxLockConflicts */, true /* preferDistinctTxns */)
+		require.Len(t, intents, 2, "one intent per txn")
+		seenTxns := make(map[uuid.UUID]bool)
+		for _, intent := range intents {
+			seenTxns[intent.Txn.ID] = true
+		}
+		require.True(t, seenTxns[txnA.TxnMeta.ID])
+		require.True(t, seenTxns[txnB.TxnMeta.ID])
+	})
+
+	t.Run("enabled/with-limit", func(t *testing.T) {
+		intents := scan(1 /* maxLockConflicts */, true /* preferDistinctTxns */)
+		require.Len(t, intents, 1, "limited to 1 by maxLockConflicts")
+	})
 }
 
 // TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites constructs
@@ -2495,8 +2581,9 @@ func TestScanConflictingIntentsForDroppingLatchesEarlyReadYourOwnWrites(t *testi
 				keyA,
 				nil,
 				&intents,
-				0, /* maxLockConflicts */
-				0, /* targetLockConflictBytes */
+				0,     /* maxLockConflicts */
+				0,     /* targetLockConflictBytes */
+				false, /* preferDistinctTxns */
 			)
 			require.NoError(t, err)
 			if alwaysFallbackToIntentInterleavingIteratorForReadYourOwnWrites {
@@ -2668,7 +2755,7 @@ func scanRangeKeys(t *testing.T, r Reader) []MVCCRangeKeyValue {
 		if !ok {
 			break
 		}
-		for _, rkv := range iter.RangeKeys().AsRangeKeyValues() {
+		for rkv := range iter.RangeKeys().AsRangeKeyValues() {
 			rangeKeys = append(rangeKeys, rkv.Clone())
 		}
 	}
@@ -2730,7 +2817,7 @@ func scanIter(t *testing.T, iter SimpleMVCCIterator) []interface{} {
 		hasPoint, hasRange := iter.HasPointAndRange()
 		if hasRange {
 			if bounds := iter.RangeBounds(); !bounds.Key.Equal(prevRangeStart) {
-				for _, rkv := range iter.RangeKeys().AsRangeKeyValues() {
+				for rkv := range iter.RangeKeys().AsRangeKeyValues() {
 					keys = append(keys, rkv.Clone())
 				}
 				prevRangeStart = bounds.Key.Clone()

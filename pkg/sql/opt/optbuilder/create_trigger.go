@@ -61,7 +61,7 @@ func (b *Builder) buildCreateTrigger(ct *tree.CreateTrigger, inScope *scope) (ou
 		panic(errors.AssertionFailedf("%s is not a function", funcExpr.Func.String()))
 	}
 	o := f.ResolvedOverload()
-	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.checkPrivilegeUser); err != nil {
+	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.checkExecutePrivilegeUser()); err != nil {
 		panic(err)
 	}
 
@@ -70,13 +70,15 @@ func (b *Builder) buildCreateTrigger(ct *tree.CreateTrigger, inScope *scope) (ou
 		allEventTypes.Add(ct.Events[i].EventType)
 	}
 
-	// Validate the CREATE TRIGGER statement.
-	if err := cat.ValidateCreateTrigger(ct, ds, allEventTypes); err != nil {
-		panic(err)
+	// Validate the CREATE TRIGGER statement. Skip validation when
+	// FuncBodyOverride is set, since we're analyzing an existing trigger's new
+	// function body, not creating a new trigger.
+	if ct.FuncBodyOverride == "" {
+		if err := cat.ValidateCreateTrigger(ct, ds, allEventTypes); err != nil {
+			panic(err)
+		}
+		checkUnsupportedCreateTrigger(ct, ds)
 	}
-
-	// Check for unsupported CREATE TRIGGER statements.
-	checkUnsupportedCreateTrigger(ct, ds)
 
 	// Lookup the implicit table type. This must happen after the above checks,
 	// since virtual/system tables do not have an implicit type.
@@ -225,12 +227,6 @@ func (b *Builder) buildFunctionForTrigger(
 		paramColName := funcParamColName(param.name, i)
 		col := b.synthesizeColumn(funcScope, paramColName, param.typ, nil /* expr */, nil /* scalar */)
 		col.setParamOrd(i)
-		if i == triggerArgvColIdx {
-			// Due to #135311, we disallow references to the TG_ARGV param for now.
-			if !b.evalCtx.SessionData().AllowCreateTriggerFunctionWithArgvReferences {
-				col.resolveErr = unimplementedArgvErr
-			}
-		}
 	}
 
 	// Now that the transition relations and table type are known, fully build and
@@ -239,7 +235,13 @@ func (b *Builder) buildFunctionForTrigger(
 	// We need to disable stable function folding because we want to catch the
 	// volatility of stable functions. If folded, we only get a scalar and lose
 	// the volatility.
-	stmt, err := parser.Parse(o.Body)
+	// Use FuncBodyOverride if set; this is provided during CREATE OR REPLACE
+	// FUNCTION to analyze the new function body in the trigger's table context.
+	body := o.Body
+	if ct.FuncBodyOverride != "" {
+		body = ct.FuncBodyOverride
+	}
+	stmt, err := parser.Parse(body)
 	if err != nil {
 		panic(err)
 	}
@@ -336,10 +338,6 @@ var triggerFuncStaticParams = []routineParam{
 	{name: "tg_argv", typ: types.StringArray, class: tree.RoutineParamIn},
 }
 
-// The trigger function parameters consist of OLD and NEW, followed by the
-// static parameters. The TG_ARGV parameter is last.
-var triggerArgvColIdx = len(triggerFuncStaticParams) + 1
-
 const triggerColNew = "new"
 const triggerColOld = "old"
 
@@ -379,6 +377,4 @@ var (
 		"column lists are not yet supported for triggers")
 	unimplementedViewTriggerErr = unimplemented.NewWithIssue(135658,
 		"triggers on views are not yet supported")
-	unimplementedArgvErr = unimplemented.NewWithIssue(135311,
-		"referencing the TG_ARGV trigger function parameter is not yet supported")
 )

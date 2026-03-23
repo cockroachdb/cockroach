@@ -11,6 +11,7 @@ package slinstance
 
 import (
 	"context"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -256,15 +257,17 @@ func (l *Instance) createSession(ctx context.Context) (*session, error) {
 // extendSession keeps retrying on error until ctx is canceled. Thus, an error
 // is only ever returned when the ctx is canceled.
 func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) {
-	exp := l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
-
-	// If extensions are disallowed we are only going to heartbeat the same
-	// timestamp, so that we can detect if the sqlliveness row was removed.
-	l.mu.Lock()
-	extensionsBlocked := l.mu.blockedExtensions
-	l.mu.Unlock()
-	if extensionsBlocked > 0 {
-		exp = s.Expiration()
+	// calculateExp computes the new expiration timestamp for the session. If
+	// extensions are disallowed, we heartbeat the same timestamp so we can
+	// detect if the sqlliveness row was removed by someone else.
+	calculateExp := func() hlc.Timestamp {
+		l.mu.Lock()
+		extensionsBlocked := l.mu.blockedExtensions
+		l.mu.Unlock()
+		if extensionsBlocked > 0 {
+			return s.Expiration()
+		}
+		return l.clock.Now().Add(l.ttl().Nanoseconds(), 0)
 	}
 
 	opts := retry.Options{
@@ -274,8 +277,11 @@ func (l *Instance) extendSession(ctx context.Context, s *session) (bool, error) 
 	}
 	var err error
 	var found bool
+	var exp hlc.Timestamp
 	// Retry until success or until the context is canceled.
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
+		exp = calculateExp() // recalculate expiration on each iteration
+
 		if found, exp, err = l.storage.Update(ctx, s.ID(), exp); err != nil {
 			if ctx.Err() != nil {
 				break
@@ -414,8 +420,15 @@ func NewSQLInstance(
 			}
 			return ttl
 		},
+		// hb returns the heartbeat interval with jitter applied.
+		// This spreads heartbeats across a wider time window, reducing peak
+		// concurrency on the system.sqlliveness table.
 		hb: func() time.Duration {
-			return slbase.DefaultHeartBeat.Get(&settings.SV)
+			defaultHB := slbase.DefaultHeartBeat.Get(&settings.SV)
+			hbJitter := slbase.HeartbeatJitter.Get(&settings.SV)
+			// Have the jitter interval [1-hbJitter, 1+hbJitter).
+			frac := 1 + (2*rand.Float64()-1)*hbJitter
+			return time.Duration(frac * float64(defaultHB.Nanoseconds()))
 		},
 		drain: make(chan struct{}),
 	}

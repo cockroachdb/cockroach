@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -72,8 +73,9 @@ const (
 
 	optMaxRowSize = "max_row_size"
 
-	// Turn on strict validation when importing avro records.
-	avroStrict = "strict_validation"
+	// Turn on strict validation when importing avro or parquet records.
+	optStrictValidation = "strict_validation"
+
 	// Default input format is assumed to be OCF (object container file).
 	// This default can be changed by specified either of these options.
 	avroBinRecords  = "data_as_binary_records"
@@ -108,7 +110,7 @@ var importOptionExpectValues = map[string]exprutil.KVStringOptValidate{
 
 	optMaxRowSize: exprutil.KVStringOptRequireValue,
 
-	avroStrict:             exprutil.KVStringOptRequireNoValue,
+	optStrictValidation:    exprutil.KVStringOptRequireNoValue,
 	avroSchema:             exprutil.KVStringOptRequireValue,
 	avroSchemaURI:          exprutil.KVStringOptRequireValue,
 	avroRecordsSeparatedBy: exprutil.KVStringOptRequireValue,
@@ -131,7 +133,7 @@ var allowedCommonOptions = makeStringSet(
 
 // Format specific allowed options.
 var avroAllowedOptions = makeStringSet(
-	avroStrict, avroBinRecords, avroJSONRecords,
+	optStrictValidation, avroBinRecords, avroJSONRecords,
 	avroRecordsSeparatedBy, avroSchema, avroSchemaURI, optMaxRowSize, csvRowLimit,
 )
 
@@ -146,6 +148,8 @@ var mysqlOutAllowedOptions = makeStringSet(
 
 var pgCopyAllowedOptions = makeStringSet(pgCopyDelimiter, pgCopyNull, optMaxRowSize)
 
+var parquetAllowedOptions = makeStringSet(optStrictValidation)
+
 // DROP is required because the target table needs to be take offline during
 // IMPORT INTO.
 var importIntoRequiredPrivileges = []privilege.Kind{privilege.INSERT, privilege.DROP}
@@ -156,6 +160,7 @@ var allowedIntoFormats = map[string]struct{}{
 	"AVRO":      {},
 	"DELIMITED": {},
 	"PGCOPY":    {},
+	"PARQUET":   {},
 }
 
 // featureImportEnabled is used to enable and disable the IMPORT feature.
@@ -302,7 +307,7 @@ func importTypeCheck(
 	); err != nil {
 		return false, nil, err
 	}
-	header = jobs.BulkJobExecutionResultHeader
+	header = jobs.ImportJobExecutionResultHeader
 	if importStmt.Options.HasKey(importOptionDetached) {
 		header = jobs.DetachedJobExecutionResultHeader
 	}
@@ -395,7 +400,7 @@ func importPlanHook(
 						return err
 					}
 					var expandedFiles []string
-					if err := s.List(ctx, "", "", func(s string) error {
+					if err := s.List(ctx, "", cloud.ListOptions{}, func(s string) error {
 						ok, err := path.Match(pattern, s)
 						if ok {
 							uri.Path = prefix + s
@@ -608,6 +613,12 @@ func importPlanHook(
 			if err != nil {
 				return err
 			}
+		case "PARQUET":
+			if err = validateFormatOptions(importStmt.FileFormat, opts, parquetAllowedOptions); err != nil {
+				return err
+			}
+			format.Format = roachpb.IOFileFormat_Parquet
+			_, format.Parquet.StrictMode = opts[optStrictValidation]
 		default:
 			return unimplemented.Newf("import.format", "unsupported import format: %q", importStmt.FileFormat)
 		}
@@ -764,6 +775,12 @@ func importPlanHook(
 		// transaction here and then in a post-commit hook we should kick of the
 		// StartableJob which we attached to the connExecutor somehow.
 
+		useDistributedMerge := UseDistributedMergeForImport.Get(&p.ExecCfg().Settings.SV)
+		if useDistributedMerge && !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V26_2) {
+			return pgerror.New(pgcode.FeatureNotSupported,
+				"distributed merge for IMPORT requires all nodes to be running version 26.2 or later")
+		}
+
 		importDetails := jobspb.ImportDetails{
 			URIs:                  files,
 			Format:                format,
@@ -772,6 +789,7 @@ func importPlanHook(
 			Tables:                []jobspb.ImportDetails_Table{tableDetails},
 			Types:                 typeDetails,
 			DatabasePrimaryRegion: databasePrimaryRegion,
+			UseDistributedMerge:   useDistributedMerge,
 		}
 
 		jr := jobs.Record{
@@ -851,7 +869,7 @@ func importPlanHook(
 	if isDetached {
 		return fn, jobs.DetachedJobExecutionResultHeader, false, nil
 	}
-	return fn, jobs.BulkJobExecutionResultHeader, false, nil
+	return fn, jobs.ImportJobExecutionResultHeader, false, nil
 }
 
 func parseAvroOptions(
@@ -860,7 +878,7 @@ func parseAvroOptions(
 	format.Format = roachpb.IOFileFormat_Avro
 	// Default input format is OCF.
 	format.Avro.Format = roachpb.AvroOptions_OCF
-	_, format.Avro.StrictMode = opts[avroStrict]
+	_, format.Avro.StrictMode = opts[optStrictValidation]
 
 	_, haveBinRecs := opts[avroBinRecords]
 	_, haveJSONRecs := opts[avroJSONRecords]

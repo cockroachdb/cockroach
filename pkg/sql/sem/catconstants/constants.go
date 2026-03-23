@@ -66,6 +66,7 @@ const (
 	TableStatisticsTableName                SystemTableName = "table_statistics"
 	LocationsTableName                      SystemTableName = "locations"
 	RoleMembersTableName                    SystemTableName = "role_members"
+	ClusterMetricsTableName                 SystemTableName = "cluster_metrics"
 	CommentsTableName                       SystemTableName = "comments"
 	ReportsMetaTableName                    SystemTableName = "reports_meta"
 	ReplicationConstraintStatsTableName     SystemTableName = "replication_constraint_stats"
@@ -111,6 +112,8 @@ const (
 	PreparedTransactionsTableName           SystemTableName = "prepared_transactions"
 	InspectErrorsTableName                  SystemTableName = "inspect_errors"
 	StatementHintsTableName                 SystemTableName = "statement_hints"
+	StatementsTableName                     SystemTableName = "statements"
+	TableStatisticsLocksTableName           SystemTableName = "table_statistics_locks"
 )
 
 // Oid for virtual database and table.
@@ -225,10 +228,13 @@ const (
 	CrdbInternalPCRStreamSpansTableID
 	CrdbInternalPCRStreamCheckpointsTableID
 	CrdbInternalLDRProcessorTableID
+	CrdbInternalPCRProcessorTableID
 	CrdbInternalFullyQualifiedNamesViewID
 	CrdbInternalStoreLivenessSupportFrom
 	CrdbInternalStoreLivenessSupportFor
 	CrdbInternalClusterInspectErrorsViewID
+	CrdbInternalNodeActiveSessionHistoryTableID
+	CrdbInternalClusterActiveSessionHistoryTableID
 	// CrdbInternalTestID is reserved for tests that need to inject virtual tables
 	// into crdb_internal.
 	CrdbInternalTestID
@@ -319,6 +325,7 @@ const (
 	InformationSchemaViewRoutineUsageTableID
 	InformationSchemaViewTableUsageTableID
 	InformationSchemaViewsTableID
+	InformationSchemaCrdbIndexUsageStatsiticsTableID
 	PgCatalogID
 	PgCatalogAggregateTableID
 	PgCatalogAmTableID
@@ -453,7 +460,9 @@ const (
 	PgExtensionGeographyColumnsTableID
 	PgExtensionGeometryColumnsTableID
 	PgExtensionSpatialRefSysTableID
-	MinVirtualID = PgExtensionSpatialRefSysTableID
+	InformationSchemaCrdbNodeActiveSessionHistoryTableID
+	InformationSchemaCrdbClusterActiveSessionHistoryTableID
+	MinVirtualID = InformationSchemaCrdbClusterActiveSessionHistoryTableID
 )
 
 // ConstraintType is used to identify the type of a constraint.

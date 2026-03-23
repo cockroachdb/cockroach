@@ -30,7 +30,7 @@ func registerInvariantCheckDetection(r registry.Registry) {
 			Name:             fmt.Sprintf("invariant-check-detection/failed=%t", failed),
 			Owner:            registry.OwnerTestEng,
 			Suites:           registry.ManualOnly,
-			Cluster:          r.MakeClusterSpec(1, spec.CPU(4), spec.ReuseNone(), spec.VolumeSize(100), spec.GCEVolumeType("pd-ssd")),
+			Cluster:          r.MakeClusterSpec(1, spec.CPU(4), spec.ReuseNone(), spec.VolumeSize(100), spec.VolumeType("pd-ssd")),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runInvariantCheckDetection(ctx, t, c, failed)
 			},

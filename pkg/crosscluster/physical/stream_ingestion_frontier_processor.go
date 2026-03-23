@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -198,6 +199,7 @@ func (sf *streamIngestionFrontier) Next() (
 		}
 		if row == nil {
 			sf.MoveToDrainingAndLogError(nil /* err */)
+
 			break
 		}
 
@@ -239,6 +241,11 @@ func (sf *streamIngestionFrontier) Next() (
 			}
 			sf.MoveToDrainingAndLogError(err)
 			return nil, sf.DrainHelper()
+		default:
+			// If the heartbeat sender is not ready to receive a frontier
+			// update (e.g. it's blocked on a network call to a partitioned
+			// source cluster), skip this update to avoid blocking the
+			// frontier processor. The next iteration will try again.
 		}
 	}
 	return nil, sf.DrainHelper()
@@ -429,7 +436,7 @@ func (sf *streamIngestionFrontier) maybeCollectRangeStats(
 		return nil
 	}
 
-	var stats streampb.StreamEvent_RangeStats
+	var stats rangescanstatspb.RangeStats
 	if err := pbtypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &stats); err != nil {
 		return errors.Wrap(err, "unable to unmarshal progress details")
 	}

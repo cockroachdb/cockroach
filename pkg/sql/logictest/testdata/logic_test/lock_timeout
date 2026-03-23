@@ -124,7 +124,7 @@ DELETE FROM t
 statement error pgcode 55P03 canceling statement due to lock timeout on row \(k\)=\(1\) in t@t_pkey
 DELETE FROM t WHERE k = 1
 
-statement ok
+statement count 1
 DELETE FROM t WHERE k = 2
 
 skipif config weak-iso-level-configs
@@ -132,5 +132,5 @@ statement error pgcode 55P03 canceling statement due to lock timeout on row \(k\
 DELETE FROM t WHERE v = 9
 
 onlyif config weak-iso-level-configs
-statement ok
+statement count 0
 DELETE FROM t WHERE v = 9

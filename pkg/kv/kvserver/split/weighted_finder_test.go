@@ -236,6 +236,11 @@ func TestSplitWeightedFinderRecorder(t *testing.T) {
 	const fullWeight = 1
 	expectedFullReservoir := fullReservoir
 	for i := 0; i < splitKeySampleSize; i++ {
+		// The span [/Table/1000, /Table/1001) contributes to each sample's left
+		// and right counters. For samples at index >= 1 (keys >= /Table/1001):
+		// - Start key /Table/1000 (inclusive): less than sample key → left += 0.5
+		// - End key /Table/1001 (exclusive): at most equal to sample key → left += 0.5
+		// Total: left=1, right=0.
 		tempSample := weightedSample{
 			key:    keys.SystemSQLCodec.TablePrefix(uint32(ReservoirKeyOffset + i)),
 			weight: 1,
@@ -245,10 +250,13 @@ func TestSplitWeightedFinderRecorder(t *testing.T) {
 		}
 		expectedFullReservoir[i] = tempSample
 	}
+	// Sample 0 (/Table/1000) is a special case because it matches the span's
+	// start key, which is inclusive:
+	// - Start key /Table/1000 (inclusive): >= sample key → right += 0.5
+	// - End key /Table/1001 (exclusive): > sample key → right += 0.5
+	// Total: left=0, right=1.
 	expectedFullReservoir[0].left = 0
 	expectedFullReservoir[0].right = 1
-	expectedFullReservoir[1].left = 0.5
-	expectedFullReservoir[1].right = 0.5
 
 	// Test recording a spanning query.
 	spanningReservoir := replacementReservoir

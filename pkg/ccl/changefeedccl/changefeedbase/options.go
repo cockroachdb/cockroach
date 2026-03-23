@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -109,6 +110,7 @@ const (
 	OptEnvelope                           = `envelope`
 	OptFormat                             = `format`
 	OptFullTableName                      = `full_table_name`
+	OptHibernationPollingFrequency        = `hibernation_polling_frequency`
 	OptKeyInValue                         = `key_in_value`
 	OptTopicInValue                       = `topic_in_value`
 	OptResolvedTimestamps                 = `resolved`
@@ -136,6 +138,7 @@ const (
 	// sinks as well (eg cloudstorage, webhook, ..). Currently it's kafka-only.
 	OptHeadersJSONColumnName = `headers_json_column_name`
 	OptExtraHeaders          = `extra_headers`
+	OptPartitionAlg          = `partition_alg`
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
 	OptVirtualColumnsNull    VirtualColumnVisibility = `null`
@@ -400,6 +403,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptEnvelope:                           enum("row", "key_only", "wrapped", "deprecated_row", "bare", "enriched"),
 	OptFormat:                             enum("json", "avro", "csv", "experimental_avro", "parquet", "protobuf"),
 	OptFullTableName:                      flagOption,
+	OptHibernationPollingFrequency:        durationOption,
 	OptKeyInValue:                         flagOption,
 	OptTopicInValue:                       flagOption,
 	OptResolvedTimestamps:                 durationOption.thatCanBeZero().orEmptyMeans("0"),
@@ -434,6 +438,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptRangeDistributionStrategy:          enum(string(ChangefeedRangeDistributionStrategyDefault), string(ChangefeedRangeDistributionStrategyBalancedSimple)),
 	OptHeadersJSONColumnName:              stringOption,
 	OptExtraHeaders:                       jsonOption,
+	OptPartitionAlg:                       enum("fnv-1a", "murmur2"),
 }
 
 // CommonOptions is options common to all sinks
@@ -448,14 +453,14 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 	OptMinCheckpointFrequency, OptMetricsScope, OptVirtualColumns, Topics, OptExpirePTSAfter,
 	OptExecutionLocality, OptLaggingRangesThreshold, OptLaggingRangesPollingInterval,
 	OptIgnoreDisableChangefeedReplication, OptEncodeJSONValueNullAsObject, OptEnrichedProperties,
-	OptRangeDistributionStrategy,
+	OptRangeDistributionStrategy, OptHibernationPollingFrequency,
 )
 
 // SQLValidOptions is options exclusive to SQL sink
 var SQLValidOptions map[string]struct{} = nil
 
 // KafkaValidOptions is options exclusive to Kafka sink
-var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders, OptCompression)
+var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders, OptCompression, OptPartitionAlg)
 
 // CloudStorageValidOptions is options exclusive to cloud storage sink
 var CloudStorageValidOptions = makeStringSet(OptCompression)
@@ -486,6 +491,22 @@ type redactionFunc func(string) (string, error)
 
 var redactSimple = func(string) (string, error) {
 	return "redacted", nil
+}
+
+// Regex from https://avro.apache.org/docs/1.8.1/spec.html.
+var avroNameRegexp = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func validateAvroSchemaPrefix(prefix string) error {
+	if prefix == "" {
+		return nil
+	}
+	if !avroNameRegexp.MatchString(prefix) {
+		return errors.Errorf(
+			`%s must start with [A-Za-z_] and subsequently contain only [A-Za-z0-9_]`,
+			OptAvroSchemaPrefix,
+		)
+	}
+	return nil
 }
 
 // RedactUserFromURI takes a URI string and removes the user from it.
@@ -1064,10 +1085,14 @@ func (s StatementOptions) GetFilters() Filters {
 	}
 }
 
+// DefaultWebhookClientTimeout is the default timeout used for webhook HTTP
+// client connections when no explicit webhook_client_timeout is specified.
+// This matches the documented default of 3 seconds.
+const DefaultWebhookClientTimeout = 3 * time.Second
+
 // WebhookSinkOptions are passed in WITH args but
 // are specific to the webhook sink.
-// ClientTimeout is nil if not set as the default
-// is different from 0.
+// ClientTimeout defaults to DefaultWebhookClientTimeout when not explicitly set.
 type WebhookSinkOptions struct {
 	JSONConfig    SinkSpecificJSONConfig
 	AuthHeader    string
@@ -1087,6 +1112,10 @@ func (s StatementOptions) GetWebhookSinkOptions() (WebhookSinkOptions, error) {
 	timeout, err := s.getDurationValue(OptWebhookClientTimeout)
 	if err != nil {
 		return o, err
+	}
+	if timeout == nil {
+		defaultTimeout := DefaultWebhookClientTimeout
+		timeout = &defaultTimeout
 	}
 	o.ClientTimeout = timeout
 
@@ -1139,6 +1168,9 @@ type KafkaSinkOptions struct {
 
 	// Compression is the top level compression setting
 	Compression string
+	// PartitionAlg is the hash function to use for Kafka partitioning.
+	// Valid values are "fnv-1a" (default) and "murmur2".
+	PartitionAlg string
 }
 
 func (s StatementOptions) GetKafkaSinkOptions() (KafkaSinkOptions, error) {
@@ -1151,12 +1183,23 @@ func (s StatementOptions) GetKafkaSinkOptions() (KafkaSinkOptions, error) {
 		return KafkaSinkOptions{}, err
 	}
 
+	partitionAlg, err := s.GetPartitionAlg()
+	if err != nil {
+		return KafkaSinkOptions{}, err
+	}
+
 	o := KafkaSinkOptions{
-		JSONConfig:  s.getJSONValue(OptKafkaSinkConfig),
-		Headers:     headersMap,
-		Compression: compressionVal,
+		JSONConfig:   s.getJSONValue(OptKafkaSinkConfig),
+		Headers:      headersMap,
+		Compression:  compressionVal,
+		PartitionAlg: partitionAlg,
 	}
 	return o, nil
+}
+
+// GetPartitionAlg returns the hash method to use for Kafka partitioning.
+func (s StatementOptions) GetPartitionAlg() (string, error) {
+	return s.getEnumValue(OptPartitionAlg)
 }
 
 // GetPubsubConfigJSON returns arbitrary json to be interpreted
@@ -1224,6 +1267,20 @@ func (s StatementOptions) KeyOnly() bool {
 // recorded. Returns nil if not set, and an error if invalid.
 func (s StatementOptions) GetMinCheckpointFrequency() (*time.Duration, error) {
 	return s.getDurationValue(OptMinCheckpointFrequency)
+}
+
+// GetHibernationPollingFrequency returns the frequency with which polling
+// should be performed while the changefeed is waiting for the tableset to be
+// non-empty.
+func (s StatementOptions) GetHibernationPollingFrequency() (*time.Duration, error) {
+	freq, err := s.getDurationValue(OptHibernationPollingFrequency)
+	if err != nil {
+		return nil, err
+	}
+	if freq != nil {
+		return freq, nil
+	}
+	return &DefaultHibernationPollingFrequency, nil
 }
 
 func (s StatementOptions) GetConfluentSchemaRegistry() string {
@@ -1385,6 +1442,11 @@ func (s StatementOptions) ValidateForCreateChangefeed(isPredicateChangefeed bool
 			}
 		}
 	}
+
+	if err := validateAvroSchemaPrefix(s.m[OptAvroSchemaPrefix]); err != nil {
+		return err
+	}
+
 	return nil
 }
 

@@ -12,7 +12,7 @@ Schema change plan for rolling back CREATE UNIQUE INDEX idx ON defaultdb.public.
 	AS $$SELECT ‹1›;$$;
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
-      │    ├── 15 elements transitioning toward ABSENT
+      │    ├── 16 elements transitioning toward ABSENT
       │    │    ├── PUBLIC                → ABSENT      Owner:{DescID: 105 (t-)}
       │    │    ├── PUBLIC                → ABSENT      UserPrivileges:{DescID: 105 (t-), Name: "admin"}
       │    │    ├── PUBLIC                → ABSENT      UserPrivileges:{DescID: 105 (t-), Name: "public"}
@@ -20,6 +20,7 @@ Schema change plan for rolling back CREATE UNIQUE INDEX idx ON defaultdb.public.
       │    │    ├── DESCRIPTOR_ADDED      → DROPPED     Function:{DescID: 105 (t-)}
       │    │    ├── PUBLIC                → ABSENT      SchemaChild:{DescID: 105 (t-), ReferencedDescID: 101 (#101)}
       │    │    ├── PUBLIC                → ABSENT      FunctionName:{DescID: 105 (t-)}
+      │    │    ├── PUBLIC                → ABSENT      FunctionParams:{DescID: 105 (t-)}
       │    │    ├── PUBLIC                → ABSENT      FunctionBody:{DescID: 105 (t-)}
       │    │    ├── WRITE_ONLY            → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx-), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 2 (idx-)}
@@ -28,7 +29,7 @@ Schema change plan for rolling back CREATE UNIQUE INDEX idx ON defaultdb.public.
       │    │    ├── TRANSIENT_DELETE_ONLY → ABSENT      TemporaryIndex:{DescID: 104 (t), IndexID: 3, ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
       │    │    ├── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (b), IndexID: 3}
       │    │    └── PUBLIC                → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (a), IndexID: 3}
-      │    └── 18 Mutation operations
+      │    └── 19 Mutation operations
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":104}
@@ -38,6 +39,7 @@ Schema change plan for rolling back CREATE UNIQUE INDEX idx ON defaultdb.public.
       │         ├── MarkDescriptorAsDropped {"DescriptorID":105}
       │         ├── RemoveObjectParent {"ObjectID":105,"ParentSchemaID":101}
       │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.FunctionNam..."}
+      │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.FunctionPar..."}
       │         ├── RemoveBackReferenceInFunctions {"BackReferencedDescriptorID":105}
       │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
       │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}

@@ -170,6 +170,10 @@ func (p *planner) UnsafeUpsertDescriptor(
 	if force {
 		p.Descriptors().SkipValidationOnWrite()
 	}
+	// Indicate that for locked leasing we should wait for the
+	// locked lease timestamp to bump as well, in case the prior
+	// version of the descriptor was invalid.
+	p.Descriptors().MaybeSetLockedLeaseBump(ctx)
 
 	// If we are pushing out a brand new descriptor confirm that no leases
 	// exist before we publish it. This could happen if we did an unsafe delete,

@@ -36,6 +36,9 @@ const (
 	unknownReplicaID roachpb.ReplicaID = -1
 	// noReplicaID is used with a change that is removing a replica.
 	noReplicaID roachpb.ReplicaID = -2
+
+	nodeIDForLogging  = 0
+	storeIDForLogging = 0
 )
 
 type ReplicaType struct {
@@ -55,18 +58,18 @@ type ReplicaIDAndType struct {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (rit ReplicaIDAndType) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Print("replica-id=")
+	w.SafeString("replica-id=")
 	switch rit.ReplicaID {
 	case unknownReplicaID:
-		w.Print("unknown")
+		w.SafeString("unknown")
 	case noReplicaID:
-		w.Print("none")
+		w.SafeString("none")
 	default:
 		w.Print(rit.ReplicaID)
 	}
 	w.Printf(" type=%v", rit.ReplicaType.ReplicaType)
 	if rit.IsLeaseholder {
-		w.Print(" leaseholder=true")
+		w.SafeString(" leaseholder=true")
 	}
 }
 
@@ -120,10 +123,20 @@ type ReplicaState struct {
 	LeaseDisposition LeaseDisposition
 }
 
+// SafeFormat implements the redact.SafeFormatter interface.
+func (rs ReplicaState) SafeFormat(w redact.SafePrinter, c rune) {
+	rs.ReplicaIDAndType.SafeFormat(w, c)
+	if rs.LeaseDisposition != LeaseDispositionOK {
+		w.Printf(" lease-disposition=%v", rs.LeaseDisposition)
+	}
+}
+
 // changeID is a unique ID, in the context of this data-structure and when
 // receiving updates about enactment having happened or having been rejected
 // (by the component responsible for change enactment).
 type changeID uint64
+
+func (changeID) SafeValue() {}
 
 type ReplicaChangeType int
 
@@ -140,20 +153,25 @@ const (
 	ChangeReplica
 )
 
-func (s ReplicaChangeType) String() string {
-	switch s {
+func (rct ReplicaChangeType) String() string {
+	return redact.StringWithoutMarkers(rct)
+}
+
+// SafeFormat implements the redact.SafeFromatter interface.
+func (rct ReplicaChangeType) SafeFormat(w redact.SafePrinter, _ rune) {
+	switch rct {
 	case Unknown:
-		return "Unknown"
+		w.SafeString("Unknown")
 	case AddLease:
-		return "AddLease"
+		w.SafeString("AddLease")
 	case RemoveLease:
-		return "RemoveLease"
+		w.SafeString("RemoveLease")
 	case AddReplica:
-		return "AddReplica"
+		w.SafeString("AddReplica")
 	case RemoveReplica:
-		return "RemoveReplica"
+		w.SafeString("RemoveReplica")
 	case ChangeReplica:
-		return "ChangeReplica"
+		w.SafeString("ChangeReplica")
 	default:
 		panic("unknown ReplicaChangeType")
 	}
@@ -207,12 +225,12 @@ type ReplicaChange struct {
 	//     replica being demoted cannot retain the lease).
 	//
 	// NB: The prev value is always the state before the change. This is the
-	// source of truth provided by the leaseholder in the RangeMsg, so will
-	// have real ReplicaIDs (if already a replica) and real ReplicaTypes
+	// latest source of truth provided by the leaseholder in the RangeMsg, so
+	// will have real ReplicaIDs (if already a replica) and real ReplicaTypes
 	// (including types beyond VOTER_FULL and NON_VOTER). This source-of-truth
 	// claim is guaranteed by REQUIREMENT(change-computation) documented
-	// elsewhere, and the fact that new changes are computed only when there
-	// are no pending changes for a range.
+	// elsewhere, and the fact that new changes are computed only when there are
+	// no pending changes for a range.
 	//
 	// The ReplicaType in next is either the zero value (for removals), or
 	// {VOTER_FULL, NON_VOTER} for additions/change, i.e., it represents the
@@ -221,6 +239,9 @@ type ReplicaChange struct {
 	// TODO(tbg): in MakeLeaseTransferChanges, next.ReplicaType.ReplicaType is
 	// simply the current value, and not necessarily {VOTER_FULL, NON_VOTER}.
 	// So the above comment is incorrect. We should clean this up.
+	//
+	// The prev field is mutable after creation, to ensure that an undo restores
+	// the state to the latest source of truth from the leaseholder.
 	prev ReplicaState
 	next ReplicaIDAndType
 }
@@ -251,6 +272,9 @@ func (rc ReplicaChange) isUpdate() bool {
 	return changeType == AddLease || changeType == RemoveLease || changeType == ChangeReplica
 }
 
+// replicaChangeType returns the type of change currently represented by prev
+// and next. Since prev is mutable, the result of this method can change over
+// time.
 func (rc ReplicaChange) replicaChangeType() ReplicaChangeType {
 	prevExists := replicaExists(rc.prev.ReplicaID)
 	nextExists := replicaExists(rc.next.ReplicaID)
@@ -434,6 +458,7 @@ func MakeReplicaTypeChange(
 // removing another. If the replica being rebalanced is the current
 // leaseholder, the impact of the rebalance also includes the lease load.
 func makeRebalanceReplicaChanges(
+	ctx context.Context,
 	rangeID roachpb.RangeID,
 	existingReplicas []StoreIDAndReplicaState,
 	rLoad RangeLoad,
@@ -446,7 +471,7 @@ func makeRebalanceReplicaChanges(
 		}
 	}
 	if remove == (StoreIDAndReplicaState{}) {
-		log.KvDistribution.Fatalf(context.Background(), "remove target %s not in existing replicas", removeTarget)
+		log.KvDistribution.Fatalf(ctx, "remove target %s not in existing replicas", removeTarget)
 	}
 
 	addIDAndType := ReplicaIDAndType{
@@ -529,7 +554,7 @@ func (prc PendingRangeChange) String() string {
 // previous state and next state.
 func (prc PendingRangeChange) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("r%v=[", prc.RangeID)
-	nextAddOrChangeReplicaStr := func(next ReplicaType) string {
+	nextAddOrChangeReplicaStr := func(next ReplicaType) redact.SafeString {
 		if next.ReplicaType == roachpb.NON_VOTER {
 			return "non-voter"
 		}
@@ -540,7 +565,7 @@ func (prc PendingRangeChange) SafeFormat(w redact.SafePrinter, _ rune) {
 	}
 	for i, c := range prc.pendingReplicaChanges {
 		if i > 0 {
-			w.Print(" ")
+			w.SafeRune(' ')
 		}
 		w.Printf("id:%d", c.changeID)
 		switch c.replicaChangeType() {
@@ -559,7 +584,7 @@ func (prc PendingRangeChange) SafeFormat(w redact.SafePrinter, _ rune) {
 				c.target.StoreID)
 		}
 	}
-	w.Print("]")
+	w.SafeRune(']')
 }
 
 // StringForTesting prints the untransformed internal state for testing.
@@ -630,21 +655,17 @@ type pendingReplicaChange struct {
 	// expiry. All replica changes in a PendingRangeChange have the same
 	// startTime.
 	startTime time.Time
-	// gcTime represents a time when the unenacted change should be GC'd, either
-	// using the normal GC undo path, or if rangeState.pendingChangeNoRollback
-	// is true, when processing a RangeMsg from the leaseholder.
+	// gcTime represents a time when the unenacted change should be GC'd.
+	//
+	// Mutable after creation.
 	gcTime time.Time
-
-	// TODO(kvoli,sumeerbhola): Consider adopting an explicit expiration time,
-	// after which the change is considered to have been rejected. This would
-	// allow a different expiration time for different types of changes, e.g.,
-	// lease transfers would have a smaller expiration time than replica
-	// additions.
 
 	// When the change is known to be enacted based on the authoritative
 	// information received from the leaseholder, this value is set, so that even
 	// if the store with a replica affected by this pending change does not tell
 	// us about the enactment, we can garbage collect this change.
+	//
+	// Mutable after creation.
 	enactedAtTime time.Time
 }
 
@@ -882,7 +903,20 @@ func newStoreState() *storeState {
 type nodeState struct {
 	stores []roachpb.StoreID
 	NodeLoad
-	// NB: adjustedCPU can be negative.
+	// adjustedCPU starts at NodeCPULoad (physical node CPU) and is
+	// adjusted by pending change deltas, mirroring how storeState.adjusted.load
+	// tracks pending changes on top of reportedLoad. The deltas are in
+	// store-level modeled CPU units while NodeCPULoad is physical — a known
+	// imprecision accepted because the delta is small and transient.
+	// TODO(wenyihu6): fix this by introducing physical load modeling.
+	//
+	// Only CPU is tracked at the node level because CPU is a shared physical
+	// resource across all stores on a node: if any store saturates the CPU,
+	// the whole node is affected. Other dimensions (WriteBandwidth, ByteSize)
+	// are per-store (each store has its own disk) and only need store-level
+	// overload detection.
+	//
+	// NB: can be negative.
 	adjustedCPU LoadValue
 }
 
@@ -955,7 +989,7 @@ type rangeState struct {
 	// that are still at the initial state, or an intermediate state, it can
 	// continue anticipating that these pending changes will happen. Tracking
 	// what is pending also allows for undo in the case of explicit failure,
-	// notified by AdjustPendingChangesDisposition.
+	// notified by AdjustPendingChangesDisposition, or GC.
 	//
 	// 2. Lifecycle
 	// pendingChanges track proposed modifications to a range's replicas or
@@ -981,17 +1015,9 @@ type rangeState struct {
 	// has been enacted in this case.
 	//
 	// 2. Undone as failed: corresponding replica and load change is rolled back.
-	// Note that for replica changes that originate from one action, all changes
-	// would be undone together.
-	// NB: pending changes of a range state originate from one decision.
-	// Therefore, when one pending change is enacted successfully, we mark this
-	// range state's pending changes as no rollback (read more about this in 3).
-	// If we are here trying to undo a pending change but the range state has
-	// already been marked as no rollback, we do not undo the remaining pending
-	// changes. Instead, we wait for a StoreLeaseholderMsg to discard the pending
-	// changes and revert the load adjustments after the
-	// partiallyEnactedGCDuration has elapsed since the first enacted change. The
-	// modeling here is imperfect (read more about this in 3).
+	// Note that for replica changes that originate from one action, some changes
+	// can be considered done because of the leaseholder msg, and others can be
+	// rolled back (say due to GC).
 	//
 	// This happens when:
 	// - The pending change failed to apply via
@@ -1052,14 +1078,10 @@ type rangeState struct {
 	// the replica and leaseholder to s4. An intermediate state that can be
 	// observed is {s1, s2, s3, s4} with the lease still at s3. But the pending
 	// change for adding s4 includes both that it has a replica, and it has the
-	// lease, so we will not mark it done, and keep pretending that the whole
-	// change is pending. Since lease transfers are fast, we accept this
-	// imperfect modeling fidelity. One consequence of this imperfect modeling
-	// is that if in this example there are no further changes observed until
-	// GC, the allocator will undo both changes and go back to the state {s1,
-	// s2, s3} with s3 as the leaseholder. That is, it has forgotten that s4 was
-	// added. This is unavoidable and will be fixed by the first
-	// StoreLeaseholderMsg post-GC.
+	// lease, so we will not mark it done, and keep pretending that the change
+	// is pending. However, we will change the prev state to indicate that s4
+	// has a replica, so that undo (say due to GC) rolls back to the latest
+	// source-of-truth from the leaseholder.
 	//
 	// 4. Non Atomicity Hazard
 	//
@@ -1068,20 +1090,19 @@ type rangeState struct {
 	// to contend with the hazard of having two leaseholders or no leaseholders.
 	// In the earlier example, say s3 and s4 were both local stores (a
 	// multi-store node), it may be possible to observe an intermediate state
-	// {s1, s2, s3, s4} where s4 is the leaseholder. If we subsequently get a
-	// spurious AdjustPendingChangesDisposition(success=false) call, or
-	// time-based GC causes the s3 removal to be undone, there will be two
-	// replicas marked as the leaseholder. The other extreme is believing that
-	// the s3 transfer is done and the s4 incoming replica (and lease) failed
-	// (this may not actually be possible because of the surrounding code).
+	// {s1, s2, s3, s4} where s4 is the leaseholder. We need to ensure that if
+	// we subsequently get a spurious
+	// AdjustPendingChangesDisposition(success=false) call, or time-based GC
+	// causes the s3 removal to be undone, there will not be two replicas marked
+	// as the leaseholder. The other extreme is believing that the s3 transfer
+	// is done and the s4 incoming replica (and lease) failed (this may not
+	// actually be possible because of the surrounding code).
 	//
-	// We deal with this hazard by observing that we've constructed multiple
-	// pending changes in order to observe intermediate changes in the common
-	// case of success. Once one change in the set of changes is considered
-	// enacted, we mark the whole remaining group as no-rollback. In the above
-	// case, if we see s4 has become the leaseholder, the s1 removal can't undo
-	// itself -- it can be dropped if it is considered subsumed when processing
-	// a RangeMsg, or it can be GC'd.
+	// This hazard is dealt with in the same way outlined in the earlier
+	// example: when the leaseholder msg from s4 arrives that lists {s1, s2, s3,
+	// s4} as replicas, the prev state for the s3 change is updated to indicate
+	// that it is not the leaseholder. This means that if the change is undone,
+	// it will return to a prev state where it has a replica but not the lease.
 	//
 	// Additionally, when processing a RangeMsg, if any of the pending changes
 	// is considered inconsistent, all the pending changes are discarded. This
@@ -1089,7 +1110,18 @@ type rangeState struct {
 	// addition of s4 to be thrown away while keeping the removal of s1. This is
 	// mostly being defensive to avoid any chance of internal inconsistency.
 	replicas []StoreIDAndReplicaState
-	conf     *normalizedSpanConfig
+	// conf is nil iff developer error or basic span config normalization failed
+	// (invalid config), in which case the range analysis is skipped,
+	// rangeAnalyzedConstraints is always nil, and the range is excluded from
+	// rebalancing. Note that if only doStructuralNormalization failed, conf will
+	// be non-nil.
+	conf *normalizedSpanConfig
+
+	// hasNormalizationError indicates whether span config normalization
+	// encountered any error (hard or soft). This is tracked separately from conf
+	// since conf may still be non-nil when only soft errors occur. Used solely
+	// for recording metrics on ranges with normalization errors.
+	hasNormalizationError bool
 
 	load RangeLoad
 
@@ -1101,15 +1133,11 @@ type rangeState struct {
 	// rangeState.pendingChanges across all ranges in clusterState.ranges will
 	// be identical to clusterState.pendingChanges.
 	pendingChanges []*pendingReplicaChange
-	// When set, the pendingChanges can not be rolled back anymore. They have
-	// to be enacted, or discarded wholesale in favor of the latest RangeMsg
-	// from the leaseholder. It is reset to false when pendingChanges
-	// transitions from empty to non-empty.
-	pendingChangeNoRollback bool
 
-	// If non-nil, it is up-to-date. Typically, non-nil for a range that has no
-	// pendingChanges and is not satisfying some constraint, since we don't want
-	// to repeat the analysis work every time we consider it.
+	// Nil if conf is nil (since conf is required input), or if constraint
+	// analysis fails (e.g., no leaseholder found). When nil, the range is
+	// excluded from rebalancing. When non-nil, it is up-to-date and cached to
+	// avoid repeating analysis work.
 	//
 	// REMINDER: rangeAnalyzedConstraints ignores LEARNER and
 	// VOTER_DEMOTING_LEARNER replicas. So if a voter/non-voter is being added
@@ -1275,6 +1303,9 @@ type clusterState struct {
 	ranges map[roachpb.RangeID]*rangeState
 
 	scratchRangeMap map[roachpb.RangeID]struct{}
+	scratchStoreSet storeSet           // scratch space for pre-means filtering
+	scratchMeans    meansLoad          // scratch space for recomputed means
+	scratchDisj     [1]constraintsConj // scratch space for getMeans call
 
 	// Added to when a change is proposed. Will also add to corresponding
 	// rangeState.pendingChanges and to the affected storeStates.
@@ -1290,6 +1321,28 @@ type clusterState struct {
 	meansMemo *meansMemo
 
 	mmaid int // a counter for rebalanceStores calls, for logging
+
+	// Disk utilization thresholds from cluster settings. These are set via
+	// SetDiskUtilThresholds.
+	//
+	// SMA uses these thresholds:
+	// - 0.925 (rebalance_to_max_disk_utilization_threshold): for rebalancing
+	// targets
+	// - 0.95 (max_disk_utilization_threshold): for allocation targets (e.g.
+	// under-replicated ranges) AND for shedding decisions
+	//
+	// TODO(mma): When MMA handles allocation of necessary replicas, we'd need
+	// to add max_disk_utilization_threshold for allocation targets.
+	//
+	// Stores >= this threshold will refuse new replicas.
+	diskUtilRefuseThreshold float64
+	// Stores >= this threshold will force ByteSize to be prioritized over other
+	// dimensions (CPURate, WriteBandwidth) when selecting ranges for the top-k,
+	// regardless of the load summary. Note that MMA will rebalance based on
+	// ByteSize even without this threshold, when ByteSize is the worst dimension
+	// relative to the cluster mean. See highDiskSpaceUtilization usage in
+	// processStoreLoadMsg.
+	diskUtilShedThreshold float64
 }
 
 func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterState {
@@ -1302,14 +1355,20 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 		pendingChanges:       map[changeID]*pendingReplicaChange{},
 		constraintMatcher:    newConstraintMatcher(interner),
 		localityTierInterner: newLocalityTierInterner(interner),
+		// Disk utilization thresholds default to 0. We don't plumb cluster
+		// settings here to avoid coupling MMA to settings at construction.
+		// Callers (e.g., newMMAStoreRebalancer) call SetDiskUtilThresholds
+		// after construction to set proper values from cluster settings.
 	}
 	cs.meansMemo = newMeansMemo(cs, cs.constraintMatcher)
 	return cs
 }
 
-func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *StoreLoadMsg) {
+func (cs *clusterState) processStoreLoadMsg(
+	ctx context.Context, storeMsg *StoreLoadMsg, metrics *loadAndCapacityMetrics,
+) {
 	now := cs.ts.Now()
-	cs.gcPendingChanges(now)
+	cs.gcPendingChanges(ctx, now)
 
 	ns := cs.nodes[storeMsg.NodeID]
 	ss := cs.stores[storeMsg.StoreID]
@@ -1322,11 +1381,21 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 	if ss == nil {
 		panic(fmt.Sprintf("store %d not found", storeMsg.StoreID))
 	}
-	ns.ReportedCPU += storeMsg.Load[CPURate] - ss.reportedLoad[CPURate]
-	ns.CapacityCPU += storeMsg.Capacity[CPURate] - ss.capacity[CPURate]
-	// Undo the adjustment for the store. We will apply the adjustment again
-	// below.
-	ns.adjustedCPU += storeMsg.Load[CPURate] - ss.adjusted.load[CPURate]
+	// Update adjustedCPU (= NodeCPULoad + sum of pending deltas across all
+	// stores on this node). NodeCPULoad is a node-level physical value carried
+	// in every store's message; each store generates its descriptor
+	// independently, so the values may differ slightly across stores on the
+	// same node. For simplicity, we overwrite with the latest one received.
+	//
+	// For a single-store node we could simply set adjustedCPU =
+	// storeMsg.NodeCPULoad and let the loop below re-apply pending deltas.
+	// With multiple stores we must preserve other stores' pending deltas,
+	// so we incrementally adjust for the baseline shift and strip only this
+	// store's pending delta.
+	storePendingDelta := ss.adjusted.load[CPURate] - ss.reportedLoad[CPURate]
+	ns.adjustedCPU += (storeMsg.NodeCPULoad - ns.NodeCPULoad) - storePendingDelta
+	ns.NodeCPULoad = storeMsg.NodeCPULoad
+	ns.NodeCPUCapacity = storeMsg.NodeCPUCapacity
 
 	// The store's load sequence number is incremented on each load change. The
 	// store's load is updated below.
@@ -1340,6 +1409,26 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 	ss.adjusted.load = storeMsg.Load
 	ss.adjusted.secondaryLoad = storeMsg.SecondaryLoad
 	ss.maxFractionPendingIncrease, ss.maxFractionPendingDecrease = 0, 0
+
+	// Report the load and capacity that was just applied if we have a valid
+	// metrics handle.
+	if metrics != nil {
+		cpuLoad := int64(storeMsg.Load[CPURate])
+		cpuCapacity := int64(storeMsg.Capacity[CPURate])
+		cpuUtil := float64(cpuLoad) / float64(cpuCapacity)
+		writeBandwidth := int64(storeMsg.Load[WriteBandwidth])
+		diskLoad := int64(storeMsg.Load[ByteSize])
+		diskCapacity := int64(storeMsg.Capacity[ByteSize])
+		diskUtil := float64(diskLoad) / float64(diskCapacity)
+
+		metrics.CPULoad.Update(cpuLoad)
+		metrics.CPUCapacity.Update(cpuCapacity)
+		metrics.CPUUtilization.Update(cpuUtil)
+		metrics.WriteBandwidth.Update(writeBandwidth)
+		metrics.DiskLoad.Update(diskLoad)
+		metrics.DiskCapacity.Update(diskCapacity)
+		metrics.DiskUtilization.Update(diskUtil)
+	}
 
 	// Find any load pending changes for ranges which involve this store, that
 	// can now be removed from the loadPendingChanges. We don't need to undo the
@@ -1356,238 +1445,251 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 		// replicas.
 		cs.applyChangeLoadDelta(change.ReplicaChange)
 	}
-	log.KvDistribution.VEventf(ctx, 2, "processStoreLoadMsg for store s%v: %v",
-		storeMsg.StoreID, ss.adjusted.load)
+	log.KvDistribution.VEventf(ctx, 2, "processStoreLoadMsg for store s%v: %v, capacity: %v",
+		storeMsg.StoreID, ss.adjusted.load, ss.storeLoad.capacity)
 }
 
 func (cs *clusterState) processStoreLeaseholderMsg(
-	ctx context.Context, msg *StoreLeaseholderMsg, metrics *MMAMetrics,
+	ctx context.Context, msg *StoreLeaseholderMsg, metrics *rangeOperationMetrics,
 ) {
 	cs.processStoreLeaseholderMsgInternal(ctx, msg, numTopKReplicas, metrics)
 }
 
+// processRangeMsg processes a RangeMsg from a leaseholder store. It updates the
+// clusterState with the new range state.
+func (cs *clusterState) processRangeMsg(
+	ctx context.Context,
+	rangeMsg *RangeMsg,
+	metrics *rangeOperationMetrics,
+	localStoreID roachpb.StoreID,
+	now time.Time,
+) (hasError bool, hasSoftError bool) {
+	cs.scratchRangeMap[rangeMsg.RangeID] = struct{}{}
+	rs, ok := cs.ranges[rangeMsg.RangeID]
+
+	defer func() {
+		if rs.hasNormalizationError {
+			hasError = true
+			if rs.conf != nil {
+				hasSoftError = true
+			}
+		}
+	}()
+
+	if !ok {
+		// This is the first time we've seen this range.
+		if !rangeMsg.MaybeSpanConfIsPopulated {
+			panic(errors.AssertionFailedf("rangeMsg for new range r%v is not populated", rangeMsg.RangeID))
+		}
+		rs = newRangeState(localStoreID)
+		cs.ranges[rangeMsg.RangeID] = rs
+	} else if rs.localRangeOwner != localStoreID {
+		rs.localRangeOwner = localStoreID
+	}
+	rs.load = rangeMsg.RangeLoad
+	if !rangeMsg.MaybeSpanConfIsPopulated && len(rs.pendingChanges) == 0 {
+		// Common case: no pending changes, and span config not provided.
+		//
+		// Confirm that the membership state is consistent. If not, fall through
+		// and make it consistent. We have seen an example where
+		// AdjustPendingChangesDisposition lied about being successful, and have
+		// not been able to find the root cause. So we'd rather force eventual
+		// consistency here.
+		mayHaveDiverged := false
+		if len(rs.replicas) == len(rangeMsg.Replicas) {
+			for i := range rs.replicas {
+				// Since we stuff rangeMsg.Replicas directly into the
+				// rangeState.replicas slice, in the common case we expect both of
+				// them to have the same replica at the same position. If they
+				// don't, they have either diverged, or there have been adjustments
+				// made n rangeState.replicas that have changed the ordering. The
+				// latter may be a false positive, but we don't mind the small
+				// amount of additional work below.
+				if rs.replicas[i] != rangeMsg.Replicas[i] {
+					mayHaveDiverged = true
+					break
+				}
+			}
+		} else {
+			mayHaveDiverged = true
+		}
+		if !mayHaveDiverged {
+			// This is the common case where there were no pending changes, and no
+			// span config provided and no replicas changes. We don't need to do
+			// any more processing of this RangeMsg.
+			return
+		}
+		// Else fall through and do the expensive work.
+	}
+	// Slow path, which reconstructs everything about the range.
+
+	// Set the range state and store state to match the range message state
+	// initially. The pending changes which are not enacted in the range
+	// message are handled and added back below.
+	for _, replica := range rs.replicas {
+		ss := cs.stores[replica.StoreID]
+		if ss == nil {
+			panic(fmt.Sprintf("store %d not found stores=%v", replica.StoreID, cs.stores))
+		}
+		delete(cs.stores[replica.StoreID].adjusted.replicas, rangeMsg.RangeID)
+	}
+	rs.replicas = append(rs.replicas[:0], rangeMsg.Replicas...)
+	for _, replica := range rangeMsg.Replicas {
+		cs.stores[replica.StoreID].adjusted.replicas[rangeMsg.RangeID] = replica.ReplicaState
+	}
+
+	// Find any pending changes which are now enacted, according to the
+	// leaseholder. Note that this is the only code path where a subset of
+	// pending changes for a replica can be considered enacted.
+	var remainingChanges, enactedChanges []*pendingReplicaChange
+	for _, change := range rs.pendingChanges {
+		ss := cs.stores[change.target.StoreID]
+		adjustedReplica, ok := ss.adjusted.replicas[rangeMsg.RangeID]
+		if !ok {
+			adjustedReplica.ReplicaID = noReplicaID
+		}
+		if adjustedReplica.subsumesChange(change.next) {
+			// The change has been enacted according to the leaseholder.
+			enactedChanges = append(enactedChanges, change)
+		} else {
+			// Not subsumed. Replace the prev with the latest source of truth from
+			// the leaseholder. Note, this can be the noReplicaID case from above.
+			change.prev = adjustedReplica
+			remainingChanges = append(remainingChanges, change)
+		}
+	}
+	if len(enactedChanges) > 0 && len(remainingChanges) > 0 {
+		// There are remaining changes, so potentially update their gcTime.
+		//
+		// All remaining changes have the same gcTime.
+		curGCTime := remainingChanges[0].gcTime
+		revisedGCTime := now.Add(partiallyEnactedGCDuration)
+		if revisedGCTime.Before(curGCTime) {
+			// Shorten when the GC happens.
+			for _, change := range remainingChanges {
+				change.gcTime = revisedGCTime
+			}
+		}
+	}
+	// rs.pendingChanges is the union of remainingChanges and enactedChanges.
+	// These changes are also in cs.pendingChanges.
+	if len(enactedChanges) > 0 {
+		log.KvDistribution.VEventf(ctx, 2, "enactedChanges %v", enactedChanges)
+	}
+	for _, change := range enactedChanges {
+		// Mark the change as enacted. Enacting a change does not remove the
+		// corresponding load adjustments. The store load message will do that,
+		// indicating that the change has been reflected in the store load.
+		//
+		// There was a previous bug where these changes were not being
+		// removed now, and were being removed later when the load adjustment
+		// incorporated them. Fixing this has introduced improved
+		// example_skewed_cpu_even_ranges_mma in that it converges faster, but
+		// introduced more thrashing in
+		// example_skewed_cpu_even_ranges_mma_and_queues. I suspect the latter
+		// is because MMA is acting faster to undo the effects of the changes
+		// made by the replicate and lease queues.
+		cs.pendingChangeEnacted(change.changeID, now)
+	}
+	// INVARIANT: remainingChanges and rs.pendingChanges contain the same set
+	// of changes, though possibly in different order.
+
+	// rs.pendingChanges only contains remainingChanges, and these are also in
+	// cs.pendingChanges and storeState's loadPendingChanges. Their load
+	// effect is also incorporated into the storeStates, but not in the range
+	// membership (since we undid that above).
+	if len(remainingChanges) > 0 {
+		log.KvDistribution.VEventf(ctx, 2, "remainingChanges %v", remainingChanges)
+		// Temporarily set the rs.pendingChanges to nil, since
+		// preCheckOnApplyReplicaChanges returns false if there are any pending
+		// changes, and these are the changes that are pending. This is hacky
+		// and should be cleaned up.
+		//
+		// NB: rs.pendingChanges contains the same changes as
+		// remainingChanges, but they are not the same slice.
+		rc := rs.pendingChanges
+		rs.pendingChanges = nil
+		err := cs.preCheckOnApplyReplicaChanges(PendingRangeChange{
+			RangeID:               rangeMsg.RangeID,
+			pendingReplicaChanges: remainingChanges,
+		})
+		// Restore it.
+		rs.pendingChanges = rc
+
+		if err == nil {
+			// Re-apply the remaining changes. Note that the load change was not
+			// undone above, so we pass !applyLoadChange, to avoid applying it
+			// again. Also note that applyReplicaChange does not add to the various
+			// pendingChanges data-structures, which is what we want here since
+			// these changes are already in those data-structures.
+			for _, change := range remainingChanges {
+				cs.applyReplicaChange(ctx, change.ReplicaChange, false)
+			}
+		} else {
+			reason := redact.Sprint(err)
+			// The current state provided by the leaseholder does not permit these
+			// changes, so we need to drop them. This should be rare, but can happen
+			// if the leaseholder executed a change that MMA was completely unaware
+			// of.
+			log.KvDistribution.VEventf(ctx, 2, "remainingChanges %v are no longer valid due to %v",
+				remainingChanges, reason)
+			if metrics != nil {
+				metrics.DroppedDueToStateInconsistency.Inc(1)
+			}
+			// We did not undo the load change above, or remove it from the various
+			// pendingChanges data-structures. We do those things now.
+			for _, change := range remainingChanges {
+				rs.removePendingChangeTracking(change.changeID)
+				delete(cs.stores[change.target.StoreID].adjusted.loadPendingChanges, change.changeID)
+				delete(cs.pendingChanges, change.changeID)
+				cs.undoChangeLoadDelta(change.ReplicaChange)
+			}
+			if n := len(rs.pendingChanges); n > 0 {
+				panic(errors.AssertionFailedf("expected no pending changes but found %d", n))
+			}
+		}
+	}
+	if rangeMsg.MaybeSpanConfIsPopulated {
+		normSpanConfig, err := makeNormalizedSpanConfig(&rangeMsg.MaybeSpanConf, cs.constraintMatcher.interner)
+		if err != nil {
+			log.KvDistribution.Warningf(
+				ctx, "range r%v span config had errors in normalization: %v, normalized result: %v", rangeMsg.RangeID, err, normSpanConfig)
+		}
+		rs.conf = normSpanConfig
+		rs.hasNormalizationError = err != nil
+	}
+	// Ensure (later) recomputation of the analyzed range constraints for the
+	// range, by clearing the existing analyzed constraints. This is done
+	// since in this slow path the span config or the replicas may have
+	// changed.
+	rs.clearAnalyzedConstraints()
+	return
+}
+
 func (cs *clusterState) processStoreLeaseholderMsgInternal(
-	ctx context.Context, msg *StoreLeaseholderMsg, numTopKReplicas int, metrics *MMAMetrics,
+	ctx context.Context,
+	msg *StoreLeaseholderMsg,
+	numTopKReplicas int,
+	metrics *rangeOperationMetrics,
 ) {
 	now := cs.ts.Now()
-	cs.gcPendingChanges(now)
+	cs.gcPendingChanges(ctx, now)
 
 	clear(cs.scratchRangeMap)
+	totalErrorCount := 0
+	totalSoftErrorCount := 0
 	for _, rangeMsg := range msg.Ranges {
-		cs.scratchRangeMap[rangeMsg.RangeID] = struct{}{}
-		rs, ok := cs.ranges[rangeMsg.RangeID]
-		if !ok {
-			// This is the first time we've seen this range.
-			if !rangeMsg.MaybeSpanConfIsPopulated {
-				panic(errors.AssertionFailedf("rangeMsg for new range r%v is not populated", rangeMsg.RangeID))
-			}
-			rs = newRangeState(msg.StoreID)
-			cs.ranges[rangeMsg.RangeID] = rs
-		} else if rs.localRangeOwner != msg.StoreID {
-			rs.localRangeOwner = msg.StoreID
+		hasError, hasSoftError := cs.processRangeMsg(ctx, &rangeMsg, metrics, msg.StoreID, now)
+		if hasError {
+			totalErrorCount++
 		}
-		if !rangeMsg.MaybeSpanConfIsPopulated && len(rs.pendingChanges) == 0 {
-			// Common case: no pending changes, and span config not provided.
-			//
-			// Confirm that the membership state is consistent. If not, fall through
-			// and make it consistent. We have seen an example where
-			// AdjustPendingChangesDisposition lied about being successful, and have
-			// not been able to find the root cause. So we'd rather force eventual
-			// consistency here.
-			mayHaveDiverged := false
-			if len(rs.replicas) == len(rangeMsg.Replicas) {
-				for i := range rs.replicas {
-					// Since we stuff rangeMsg.Replicas directly into the
-					// rangeState.replicas slice, in the common case we expect both of
-					// them to have the same replica at the same position. If they
-					// don't, they have either diverged, or there have been adjustments
-					// made n rangeState.replicas that have changed the ordering. The
-					// latter may be a false positive, but we don't mind the small
-					// amount of additional work below.
-					if rs.replicas[i] != rangeMsg.Replicas[i] {
-						mayHaveDiverged = true
-						break
-					}
-				}
-			} else {
-				mayHaveDiverged = true
-			}
-			if !mayHaveDiverged {
-				continue
-			}
-			// Else fall through and do the expensive work.
+		if hasSoftError {
+			totalSoftErrorCount++
 		}
-		// Set the range state and store state to match the range message state
-		// initially. The pending changes which are not enacted in the range
-		// message are handled and added back below.
-		if rangeMsg.MaybeSpanConfIsPopulated {
-			rs.load = rangeMsg.RangeLoad
-		}
-		for _, replica := range rs.replicas {
-			ss := cs.stores[replica.StoreID]
-			if ss == nil {
-				panic(fmt.Sprintf("store %d not found stores=%v", replica.StoreID, cs.stores))
-			}
-			delete(cs.stores[replica.StoreID].adjusted.replicas, rangeMsg.RangeID)
-		}
-		rs.replicas = append(rs.replicas[:0], rangeMsg.Replicas...)
-		for _, replica := range rangeMsg.Replicas {
-			cs.stores[replica.StoreID].adjusted.replicas[rangeMsg.RangeID] = replica.ReplicaState
-		}
-
-		// Find any pending changes which are now enacted, according to the
-		// leaseholder. Note that this is the only code path where a subset of
-		// pending changes for a replica can be considered enacted.
-		var remainingChanges, enactedChanges []*pendingReplicaChange
-		for _, change := range rs.pendingChanges {
-			ss := cs.stores[change.target.StoreID]
-			adjustedReplica, ok := ss.adjusted.replicas[rangeMsg.RangeID]
-			if !ok {
-				adjustedReplica.ReplicaID = noReplicaID
-			}
-			if adjustedReplica.subsumesChange(change.next) {
-				// The change has been enacted according to the leaseholder.
-				enactedChanges = append(enactedChanges, change)
-			} else {
-				remainingChanges = append(remainingChanges, change)
-			}
-		}
-		gcRemainingChanges := false
-		if rs.pendingChangeNoRollback {
-			// A previous StoreLeaseholderMsg has enacted some changes, so the
-			// remainingChanges may be GC'able. All of them share the same GC time.
-			// Note that normal GC will not GC these, since normal GC needs to undo,
-			// and we are not allowed to undo these.
-			if len(remainingChanges) > 0 {
-				gcTime := remainingChanges[0].gcTime
-				if gcTime.Before(now) {
-					gcRemainingChanges = true
-				}
-			}
-		} else if len(enactedChanges) > 0 && len(remainingChanges) > 0 {
-			// First time this set of changes is seeing something enacted, and there
-			// are remaining changes.
-			//
-			// No longer permitted to rollback.
-			rs.pendingChangeNoRollback = true
-			// All remaining changes have the same gcTime.
-			curGCTime := remainingChanges[0].gcTime
-			revisedGCTime := now.Add(partiallyEnactedGCDuration)
-			if revisedGCTime.Before(curGCTime) {
-				// Shorten when the GC happens.
-				for _, change := range remainingChanges {
-					change.gcTime = revisedGCTime
-				}
-			}
-		}
-		// rs.pendingChanges is the union of remainingChanges and enactedChanges.
-		// These changes are also in cs.pendingChanges.
-		if len(enactedChanges) > 0 {
-			log.KvDistribution.Infof(ctx, "enactedChanges %v", enactedChanges)
-		}
-		for _, change := range enactedChanges {
-			// Mark the change as enacted. Enacting a change does not remove the
-			// corresponding load adjustments. The store load message will do that,
-			// indicating that the change has been reflected in the store load.
-			//
-			// There was a previous bug where these changes were not being
-			// removed now, and were being removed later when the load adjustment
-			// incorporated them. Fixing this has introduced improved
-			// example_skewed_cpu_even_ranges_mma in that it converges faster, but
-			// introduced more thrashing in
-			// example_skewed_cpu_even_ranges_mma_and_queues. I suspect the latter
-			// is because MMA is acting faster to undo the effects of the changes
-			// made by the replicate and lease queues.
-			cs.pendingChangeEnacted(change.changeID, now)
-		}
-		// INVARIANT: remainingChanges and rs.pendingChanges contain the same set
-		// of changes, though possibly in different order.
-
-		// rs.pendingChanges only contains remainingChanges, and these are also in
-		// cs.pendingChanges and storeState's loadPendingChanges. Their load
-		// effect is also incorporated into the storeStates, but not in the range
-		// membership (since we undid that above).
-		if len(remainingChanges) > 0 {
-			log.KvDistribution.Infof(ctx, "remainingChanges %v", remainingChanges)
-			// Temporarily set the rs.pendingChanges to nil, since
-			// preCheckOnApplyReplicaChanges returns false if there are any pending
-			// changes, and these are the changes that are pending. This is hacky
-			// and should be cleaned up.
-			var valid bool
-			var reason redact.RedactableString
-			if gcRemainingChanges {
-				reason = "GCing remaining changes after partial enactment"
-			} else {
-				// NB: rs.pendingChanges contains the same changes as
-				// remainingChanges, but they are not the same slice.
-				rc := rs.pendingChanges
-				rs.pendingChanges = nil
-				err := cs.preCheckOnApplyReplicaChanges(PendingRangeChange{
-					RangeID:               rangeMsg.RangeID,
-					pendingReplicaChanges: remainingChanges,
-				})
-				valid = err == nil
-				if err != nil {
-					reason = redact.Sprint(err)
-				}
-				// Restore it.
-				rs.pendingChanges = rc
-			}
-			if valid {
-				// Re-apply the remaining changes. Note that the load change was not
-				// undone above, so we pass !applyLoadChange, to avoid applying it
-				// again. Also note that applyReplicaChange does not add to the various
-				// pendingChanges data-structures, which is what we want here since
-				// these changes are already in those data-structures.
-				for _, change := range remainingChanges {
-					cs.applyReplicaChange(change.ReplicaChange, false)
-				}
-			} else {
-				// The current state provided by the leaseholder does not permit these
-				// changes, so we need to drop them. This should be rare, but can happen
-				// if the leaseholder executed a change that MMA was completely unaware
-				// of.
-				log.KvDistribution.Infof(ctx, "remainingChanges %v are no longer valid due to %v",
-					remainingChanges, reason)
-				if metrics != nil {
-					metrics.DroppedDueToStateInconsistency.Inc(1)
-				}
-				// We did not undo the load change above, or remove it from the various
-				// pendingChanges data-structures. We do those things now.
-				for _, change := range remainingChanges {
-					rs.removePendingChangeTracking(change.changeID)
-					delete(cs.stores[change.target.StoreID].adjusted.loadPendingChanges, change.changeID)
-					delete(cs.pendingChanges, change.changeID)
-					cs.undoChangeLoadDelta(change.ReplicaChange)
-				}
-				if n := len(rs.pendingChanges); n > 0 {
-					panic(errors.AssertionFailedf("expected no pending changes but found %d", n))
-				}
-			}
-		}
-		if rangeMsg.MaybeSpanConfIsPopulated {
-			normSpanConfig, err := makeNormalizedSpanConfig(&rangeMsg.MaybeSpanConf, cs.constraintMatcher.interner)
-			if err != nil {
-				if normSpanConfig == nil {
-					// TODO: the roachpb.SpanConfig violated the basic requirements
-					// documented in the proto. We need to ensure that the checks that
-					// happened here are also done when the user set the ZoneConfig, so
-					// that we can reject such violations up front. At this point in the
-					// code we have no way of continuing, so we panic, but we must ensure
-					// we never get here in production for user specified input.
-					panic(err)
-				} else {
-					log.KvDistribution.Warningf(
-						ctx, "range r%v span config had errors in normalization: %v", rangeMsg.RangeID, err)
-				}
-			}
-			rs.conf = normSpanConfig
-		}
-		// NB: Always recompute the analyzed range constraints for any range,
-		// assuming the leaseholder wouldn't have sent the message if there was no
-		// change, or we noticed a divergence in membership above and fell through
-		// here.
-		rs.clearAnalyzedConstraints()
+	}
+	if metrics != nil {
+		metrics.SpanConfigNormalizationError.Update(int64(totalErrorCount))
+		metrics.SpanConfigNormalizationSoftError.Update(int64(totalSoftErrorCount))
 	}
 	// Remove ranges for which this is the localRangeOwner, but for which it is
 	// no longer the leaseholder.
@@ -1634,7 +1736,14 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 	localss := cs.stores[msg.StoreID]
 	cs.meansMemo.clear()
 	clusterMeans := cs.meansMemo.getMeans(nil)
-	for _, ss := range cs.stores {
+	// Sort by store ID for deterministic log output in tests.
+	storeIDs := make([]roachpb.StoreID, 0, len(cs.stores))
+	for storeID := range cs.stores {
+		storeIDs = append(storeIDs, storeID)
+	}
+	slices.Sort(storeIDs)
+	for _, storeID := range storeIDs {
+		ss := cs.stores[storeID]
 		topk := ss.adjusted.topKRanges[msg.StoreID]
 		if topk == nil {
 			topk = &topKReplicas{k: numTopKReplicas}
@@ -1647,7 +1756,8 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		} else {
 			topk.dim = WriteBandwidth
 		}
-		if sls.highDiskSpaceUtilization {
+		if highDiskSpaceUtilization(ss.adjusted.load[ByteSize], ss.capacity[ByteSize], cs.diskUtilShedThreshold) {
+			// If disk space is running out, shedding bytes becomes the top priority.
 			topk.dim = ByteSize
 		} else if sls.sls > loadNoChange {
 			// If multiple dimensions are contributing the same loadSummary, we will pick
@@ -1787,7 +1897,6 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		topk := ss.adjusted.topKRanges[msg.StoreID]
 		topk.doneInit()
 	}
-
 }
 
 // If the pending replica change does not happen within this GC duration, we
@@ -1808,7 +1917,7 @@ const pendingLeaseTransferGCDuration = 1 * time.Minute
 const partiallyEnactedGCDuration = 30 * time.Second
 
 // Called periodically by allocator.
-func (cs *clusterState) gcPendingChanges(now time.Time) {
+func (cs *clusterState) gcPendingChanges(ctx context.Context, now time.Time) {
 	var rangesWithChanges map[roachpb.RangeID]struct{}
 	for _, pendingChange := range cs.pendingChanges {
 		if rangesWithChanges == nil {
@@ -1820,15 +1929,6 @@ func (cs *clusterState) gcPendingChanges(now time.Time) {
 		rs, ok := cs.ranges[rangeID]
 		if !ok {
 			panic(errors.AssertionFailedf("range %v not found in cluster state", rangeID))
-		}
-
-		// Unlike normal GC that reverts changes, we want to discard these pending
-		// changes. Do nothing here; processStoreLeaseholderMsgInternal will later
-		// detect and discard these pending changes. Note that
-		// processStoreLeaseholderMsgInternal will not revert the pending load
-		// change.
-		if rs.pendingChangeNoRollback {
-			continue
 		}
 		if len(rs.pendingChanges) == 0 {
 			panic(errors.AssertionFailedf("no pending changes in range %v", rangeID))
@@ -1850,7 +1950,7 @@ func (cs *clusterState) gcPendingChanges(now time.Time) {
 			changeIDs = append(changeIDs, pendingChange.changeID)
 		}
 		for _, changeID := range changeIDs {
-			cs.undoPendingChange(changeID)
+			cs.undoPendingChange(ctx, changeID)
 		}
 	}
 }
@@ -1871,9 +1971,7 @@ func (cs *clusterState) pendingChangeEnacted(cid changeID, enactedAt time.Time) 
 }
 
 // undoPendingChange reverses the change with ID cid.
-//
-// REQUIRES: the change is not marked as no-rollback.
-func (cs *clusterState) undoPendingChange(cid changeID) {
+func (cs *clusterState) undoPendingChange(ctx context.Context, cid changeID) {
 	change, ok := cs.pendingChanges[cid]
 	if !ok {
 		panic(errors.AssertionFailedf("change %v not found %v", cid, printMapPendingChanges(cs.pendingChanges)))
@@ -1882,16 +1980,12 @@ func (cs *clusterState) undoPendingChange(cid changeID) {
 	if !ok {
 		panic(errors.AssertionFailedf("range %v not found in cluster state", change.rangeID))
 	}
-	if rs.pendingChangeNoRollback {
-		// One cannot undo changes once no-rollback is true.
-		panic(errors.AssertionFailedf("pending change is marked as no-rollback"))
-	}
 	// Wipe the analyzed constraints, as the range has changed.
 	rs.clearAnalyzedConstraints()
 	rs.lastFailedChange = cs.ts.Now()
 	// Undo the change delta as well as the replica change and remove the pending
 	// change from all tracking (range, store, cluster).
-	cs.undoReplicaChange(change.ReplicaChange)
+	cs.undoReplicaChange(ctx, change.ReplicaChange)
 	rs.removePendingChangeTracking(cid)
 	delete(cs.stores[change.target.StoreID].adjusted.loadPendingChanges, change.changeID)
 	delete(cs.pendingChanges, change.changeID)
@@ -1920,7 +2014,7 @@ func printMapPendingChanges(changes map[changeID]*pendingReplicaChange) string {
 //
 // REQUIRES: all the replica changes are to the same range, and that the range
 // has no pending changes.
-func (cs *clusterState) addPendingRangeChange(change PendingRangeChange) {
+func (cs *clusterState) addPendingRangeChange(ctx context.Context, change PendingRangeChange) {
 	if len(change.pendingReplicaChanges) == 0 {
 		return
 	}
@@ -1944,10 +2038,9 @@ func (cs *clusterState) addPendingRangeChange(change PendingRangeChange) {
 		// Only the lease is being transferred.
 		gcDuration = pendingLeaseTransferGCDuration
 	}
-	pendingChanges := change.pendingReplicaChanges
 	now := cs.ts.Now()
-	for _, pendingChange := range pendingChanges {
-		cs.applyReplicaChange(pendingChange.ReplicaChange, true)
+	for _, pendingChange := range change.pendingReplicaChanges {
+		cs.applyReplicaChange(ctx, pendingChange.ReplicaChange, true)
 		cs.changeSeqGen++
 		cid := cs.changeSeqGen
 		pendingChange.changeID = cid
@@ -1959,11 +2052,9 @@ func (cs *clusterState) addPendingRangeChange(change PendingRangeChange) {
 		cs.pendingChanges[cid] = pendingChange
 		storeState.adjusted.loadPendingChanges[cid] = pendingChange
 		rangeState.pendingChanges = append(rangeState.pendingChanges, pendingChange)
-		rangeState.pendingChangeNoRollback = false
-		log.KvDistribution.VEventf(context.Background(), 3,
+		log.KvDistribution.VEventf(ctx, 3,
 			"addPendingRangeChange: change_id=%v, range_id=%v, change=%v",
 			cid, rangeID, pendingChange.ReplicaChange)
-		pendingChanges = append(pendingChanges, pendingChange)
 	}
 }
 
@@ -2031,8 +2122,6 @@ func (cs *clusterState) preCheckOnApplyReplicaChanges(rangeChange PendingRangeCh
 // preCheckOnUndoReplicaChanges does some validation of the changes being
 // proposed for undo.
 //
-// REQUIRES: the rangeState.pendingChangeNoRollback is false.
-//
 // This method is defensive since if we always check against the current state
 // before allowing a change to be added (including re-addition after a
 // StoreLeaseholderMsg), we should never have invalidity during an undo, if
@@ -2078,7 +2167,9 @@ func (cs *clusterState) preCheckOnUndoReplicaChanges(rangeChange PendingRangeCha
 }
 
 // REQUIRES: the range and store are known to the allocator.
-func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange bool) {
+func (cs *clusterState) applyReplicaChange(
+	ctx context.Context, change ReplicaChange, applyLoadChange bool,
+) {
 	storeState, ok := cs.stores[change.target.StoreID]
 	if !ok {
 		panic(fmt.Sprintf("store %v not found in cluster state", change.target.StoreID))
@@ -2088,7 +2179,7 @@ func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange
 		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
 	}
 
-	log.KvDistribution.VEventf(context.Background(), 2, "applying replica change %v to range %d on store %d",
+	log.KvDistribution.VEventf(ctx, 2, "applying replica change %v to range %d on store %d",
 		change, change.rangeID, change.target.StoreID)
 	if change.isRemoval() {
 		delete(storeState.adjusted.replicas, change.rangeID)
@@ -2120,8 +2211,8 @@ func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange
 	}
 }
 
-func (cs *clusterState) undoReplicaChange(change ReplicaChange) {
-	log.KvDistribution.Infof(context.Background(), "undoing replica change %v to range %d on store %d",
+func (cs *clusterState) undoReplicaChange(ctx context.Context, change ReplicaChange) {
+	log.KvDistribution.VEventf(ctx, 2, "undoing replica change %v to range %d on store %d",
 		change, change.rangeID, change.target.StoreID)
 	rangeState := cs.ranges[change.rangeID]
 	storeState := cs.stores[change.target.StoreID]
@@ -2178,10 +2269,9 @@ func (cs *clusterState) setStore(sal storeAttributesAndLocalityWithNodeTier) {
 	if !ok {
 		// This is the first time seeing this store.
 		ss := newStoreState()
-		// At this point, the store's health is unknown. It will need to be marked
-		// as healthy separately. Until we know more, we won't place leases or
-		// replicas on it (nor will we try to shed any that are already reported to
-		// have replicas on it).
+		// At this point, the store's health is unknown. It will be updated by cs.updateStoreStatuses. Until we know more, we
+		// won't place leases or replicas on it (nor will we try to shed any that
+		// are already reported to have replicas on it).
 		ss.status = MakeStatus(HealthUnknown, LeaseDispositionRefusing, ReplicaDispositionRefusing)
 		ss.overloadStartTime = cs.ts.Now()
 		ss.overloadEndTime = cs.ts.Now()
@@ -2209,6 +2299,45 @@ func (cs *clusterState) setStore(sal storeAttributesAndLocalityWithNodeTier) {
 	}
 }
 
+// setDiskUtilThresholds configures the disk utilization thresholds used
+// to augment store dispositions.
+func (cs *clusterState) setDiskUtilThresholds(refuseThreshold, shedThreshold float64) {
+	cs.diskUtilRefuseThreshold = refuseThreshold
+	cs.diskUtilShedThreshold = shedThreshold
+}
+
+// updateStoreStatuses updates each known store's health and disposition from storeStatuses.
+// Stores unknown in mma yet but are known to store pool are ignored with logging.
+// The replica disposition is augmented based on disk utilization using thresholds
+// set via setDiskUtilThresholds.
+func (cs *clusterState) updateStoreStatuses(
+	ctx context.Context, storeStatuses map[roachpb.StoreID]Status,
+) {
+	for storeID, storeStatus := range storeStatuses {
+		ss, ok := cs.stores[storeID]
+		if !ok {
+			// Store not known to mma yet but is known to store pool - ignore the update. The store will be added via
+			// setStore when gossip arrives, and then subsequent status updates will
+			// take effect.
+			log.KvDistribution.Infof(ctx, "store %d not found in cluster state, skipping update", storeID)
+			continue
+		}
+		// Augment the replica disposition based on disk utilization.
+		// We use adjusted load (which includes pending changes) to account for
+		// in-flight replica additions that haven't completed yet.
+		if highDiskSpaceUtilization(ss.adjusted.load[ByteSize], ss.capacity[ByteSize], cs.diskUtilShedThreshold) {
+			storeStatus.Disposition.Replica = max(storeStatus.Disposition.Replica, ReplicaDispositionShedding)
+			log.KvDistribution.VEventf(ctx, 2, "store %d: upgrading replica disposition to Shedding due to high disk utilization (>= %.1f%%)",
+				storeID, cs.diskUtilShedThreshold*100)
+		} else if highDiskSpaceUtilization(ss.adjusted.load[ByteSize], ss.capacity[ByteSize], cs.diskUtilRefuseThreshold) {
+			storeStatus.Disposition.Replica = max(storeStatus.Disposition.Replica, ReplicaDispositionRefusing)
+			log.KvDistribution.VEventf(ctx, 2, "store %d: upgrading replica disposition to Refusing due to high disk utilization (>= %.1f%%)",
+				storeID, cs.diskUtilRefuseThreshold*100)
+		}
+		cs.stores[storeID].status = storeStatus
+	}
+}
+
 //======================================================================
 // clusterState accessors:
 //
@@ -2232,19 +2361,47 @@ func (cs *clusterState) getNodeReportedLoad(nodeID roachpb.NodeID) *NodeLoad {
 	return nil
 }
 
-// canShedAndAddLoad returns true if the delta can be added to the target
-// store and removed from the src store, such that the relative load summaries
-// will not get worse.
+// canShedAndAddLoad returns true if the delta can be added to the target store
+// and removed from the src store. It does not change any state between the call
+// and return.
 //
-// It does not change any state between the call and return.
+// overloadDim represents the dimension that is overloaded in the source and the
+// function requires that along that dimension, the target is < loadNoChange and
+// the source is > loadNoChange.
 //
-// overloadDim represents the dimension that is overloaded in the source and
-// the function requires that the target must be currently < loadNoChange
-// along that dimension.
+// Broadly speaking, the method tries to ascertain that the target wouldn't be
+// worse off than the source following the transfer. To do this, the method
+// looks at a load summary for the target that would result from the load
+// transfer (targetLoadSummary).
+//
+// When onlyConsiderTargetCPUSummary is true, the targetLoadSummary derives from
+// the target's post-transfer CPU dimension only. This is appropriate when a lease is
+// transferred, as this should only affect the CPU dimension, and we don't want
+// lease transfers to be subject to stricter checks related to other dimensions.
+// When onlyConsiderTargetCPUSummary is false, targetLoadSummary is the target's
+// worst post-transfer load summary. In both cases, the node load summary is also
+// considered.
+//
+// TODO(tbg): understand and explain why the node load summary is in the mix here.
+//
+// In either case, if the targetLoadSummary is < loadNoChange, the change is
+// permitted right away. Otherwise, stricter checks apply: After the transfer,
+// - the target must not be overloadUrgent,
+// - the target has no pending changes (to delay making a potentially non-ideal
+//   choice of the target),
+// - the target's overloaded dimension's summary must not be worse than the
+//   source's ("overloadedDimPermitsChange"),
+// - along each of the other (!=overloadeDim) dimensions, the percentage
+//   increase in load is at most a third of that of the overloaded dimension.
+//   (e.g. if CPU goes up by 30%, WriteBandwidth can go up by at most 10%).
+// - the target's node load summary must not be worse than the target's store
+//   load summary. See inline comment for more details.
+
 func (cs *clusterState) canShedAndAddLoad(
 	ctx context.Context,
 	srcSS *storeState,
 	targetSS *storeState,
+	rangeID roachpb.RangeID,
 	delta LoadVector,
 	means *meansLoad,
 	onlyConsiderTargetCPUSummary bool,
@@ -2257,17 +2414,20 @@ func (cs *clusterState) canShedAndAddLoad(
 	// the load delta addition flips the loadSummary for either the target or the
 	// source, which suggests it might be useful to add this to verbose logging.
 
+	// Compute srcSLS and targetSLS, which are the load summaries of the source
+	// and target that would result from moving the lease.
+	//
+	// TODO(tbg): extract this into a helper and set it up so that it doesn't
+	// temporarily modify the cluster state.
 	targetNS := cs.nodes[targetSS.NodeID]
 	// Add the delta.
 	deltaToAdd := loadVectorToAdd(delta)
 	targetSS.adjusted.load.add(deltaToAdd)
-	// TODO(tbg): why does NodeLoad have an adjustedCPU field but not fields for
-	// the other load dimensions? We just added deltaToAdd to targetSS.adjusted,
-	// shouldn't this be wholly reflected in targetNS as well, not just for CPU?
-	// Or maybe CPU is the only dimension that matters at the node level. It feels
-	// sloppy/confusing though.
 	targetNS.adjustedCPU += deltaToAdd[CPURate]
 	targetSLS := computeLoadSummary(ctx, targetSS, targetNS, &means.storeLoad, &means.nodeLoad)
+	postTransferHighDiskSpaceUtil := highDiskSpaceUtilization(targetSS.adjusted.load[ByteSize],
+		targetSS.capacity[ByteSize], cs.diskUtilRefuseThreshold)
+
 	// Undo the addition.
 	targetSS.adjusted.load.subtract(deltaToAdd)
 	targetNS.adjustedCPU -= deltaToAdd[CPURate]
@@ -2281,50 +2441,48 @@ func (cs *clusterState) canShedAndAddLoad(
 	srcSS.adjusted.load.add(delta)
 	srcNS.adjustedCPU += delta[CPURate]
 
-	var reason strings.Builder
+	var failureReason redact.StringBuilder
+	populateFailureReason := log.ExpensiveLogEnabled(ctx, 3)
 	defer func() {
 		if canAddLoad {
 			log.KvDistribution.VEventf(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 				targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
-		} else {
-			log.KvDistribution.VEventf(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, reason.String())
-			log.KvDistribution.VEventf(ctx, 2, "[target_sls:%v,src_sls:%v]", targetSLS, srcSLS)
+		} else if populateFailureReason {
+			log.KvDistribution.VEventf(ctx, 3,
+				"cannot add load from n%vs%v to n%vs%v for r%v due to %v: delta(%v) targetSLS[%v] srcSLS[%v]",
+				srcNS.NodeID, srcSS.StoreID, targetNS.NodeID, targetSS.StoreID, rangeID,
+				&failureReason, delta, targetSLS, srcSLS)
 		}
 	}()
-	if targetSLS.highDiskSpaceUtilization {
-		reason.WriteString("targetSLS.highDiskSpaceUtilization")
+	// Check if the target would have high disk utilization after the transfer.
+	// We compute this using the post-transfer load (current + delta).
+	if postTransferHighDiskSpaceUtil {
+		if populateFailureReason {
+			failureReason.SafeString("(post-transfer) targetSLS.highDiskSpaceUtilization")
+		}
 		return false
 	}
-	// We define targetSummary as a summarization across all dimensions of the
-	// target. A targetSummary < loadNoChange always accepts the change. When
-	// the targetSummary >= loadNoChange, we are stricter and require both that
-	// there are no pending changes in the target, and the target is "not worse"
-	// in a way that will cause thrashing, where the details are defined below.
-	// The no pending changes requirement is to delay making a potentially
-	// non-ideal choice of the target.
-	//
-	// NB: The target's overload dimension summary must have been <
-	// loadNoChange, and the source must have been > loadNoChange.
+
+	// We define targetSummary as a "worst" of the considered load dimesions
+	// (only CPU, or all).
 	var targetSummary loadSummary
 	if onlyConsiderTargetCPUSummary {
 		targetSummary = targetSLS.dimSummary[CPURate]
-		if targetSummary < targetSLS.nls {
-			targetSummary = targetSLS.nls
-		}
 	} else {
 		targetSummary = targetSLS.sls
-		if targetSummary < targetSLS.nls {
-			targetSummary = targetSLS.nls
-		}
 	}
+	targetSummary = max(targetSummary, targetSLS.nls)
 
 	if targetSummary < loadNoChange {
 		return true
 	}
 	if targetSummary >= overloadUrgent {
-		reason.WriteString("overloadUrgent")
+		if populateFailureReason {
+			failureReason.SafeString("overloadUrgent")
+		}
 		return false
 	}
+
 	// Need to consider additional factors.
 	//
 	// It is possible that both are overloadSlow in aggregate. We want to make
@@ -2353,7 +2511,7 @@ func (cs *clusterState) canShedAndAddLoad(
 	// That boolean predicate can also be too strict, in that we should permit
 	// transitions to overloadSlow along one dimension, to allow for an
 	// exchange.
-	overloadedDimFractionIncrease := math.MaxFloat64
+	var overloadedDimFractionIncrease float64
 	if targetSS.adjusted.load[overloadedDim] > 0 {
 		overloadedDimFractionIncrease = float64(deltaToAdd[overloadedDim]) /
 			float64(targetSS.adjusted.load[overloadedDim])
@@ -2378,7 +2536,7 @@ func (cs *clusterState) canShedAndAddLoad(
 			dimFractionIncrease := float64(deltaToAdd[dim]) / float64(targetSS.adjusted.load[dim])
 			// The use of 33% is arbitrary.
 			if dimFractionIncrease > overloadedDimFractionIncrease/3 {
-				log.KvDistribution.Infof(ctx, "%v: %f > %f/3", dim, dimFractionIncrease, overloadedDimFractionIncrease)
+				log.KvDistribution.VEventf(ctx, 3, "%v: %f > %f/3", dim, dimFractionIncrease, overloadedDimFractionIncrease)
 				otherDimensionsBecameWorseInTarget = true
 				break
 			}
@@ -2394,55 +2552,73 @@ func (cs *clusterState) canShedAndAddLoad(
 		targetSLS.maxFractionPendingIncrease < epsilon &&
 		targetSLS.maxFractionPendingDecrease < epsilon &&
 		// NB: targetSLS.nls <= targetSLS.sls is not a typo, in that we are
-		// comparing targetSLS with itself. The nls only captures node-level
-		// CPU, so if a store that is overloaded wrt WriteBandwidth wants to
-		// shed to a store that is overloaded wrt CPURate, we need to permit
-		// that. However, the nls of the former will be less than the that of
-		// the latter. By looking at the nls of the target here, we are making
-		// sure that it is no worse than the sls of the target, since if it
-		// is, the node is overloaded wrt CPU due to some other store on that
-		// node, and we should be shedding that load first.
+		// comparing targetSLS with itself.
+		//
+		// Consider a node that has two stores:
+		// - s1 is low on CPU
+		// - s2 is very high on CPU, resulting in a node load summary of
+		// overloadSlow or overloadUrgent)
+		//
+		// In this code path, targetSLS is >= loadNoChange, so there must be
+		// some overload dimension in targetSLS. If it comes from write bandwidth
+		// (or any other non-CPU dimension), without this check,s1 might be
+		// considered an acceptable target for adding CPU load. But it is clearly
+		// not a good target, since the node housing s1 is CPU overloaded - s2
+		// should be shedding CPU load first.
+		// This example motivates the condition below. If we reach this code,
+		// we know that targetSLS >= loadNoChange, and we decide:
+		// - at sls=loadNoChange, we require nls <= loadNoChange
+		// - at sls=overloadSlow, we require nls <= overloadSlow
+		// - at sls=overloadUrgent, we require nls <= overloadUrgent.
+		// In other words, whenever a node level summary was "bumped up" beyond
+		// the target's by some other local store, we reject the change.
+		//
+		// TODO(tbg,wenyihu6): There's a conceptual mismatch in this comparison: nls
+		// is CPU-specific while sls is max over all dimensions. A more consistent
+		// approach would compare nls with dimSummary[CPURate]. However, using sls
+		// is more permissive (since dimSummary[CPURate] <= sls). If sls is elevated
+		// due to a non-CPU dimension (e.g., write bandwidth), the check passes more
+		// easily, allowing more transfers. This helps avoid situations where the
+		// source is overloaded and needs to shed load, but all potential targets
+		// are rejected by overly strict checks despite having capacity. For now,
+		// we lean toward permissiveness, but it's unclear if this is optimal.
 		targetSLS.nls <= targetSLS.sls
 	if canAddLoad {
 		return true
 	}
-	if !overloadedDimPermitsChange {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+	if populateFailureReason {
+		appendSep := func() {
+			if failureReason.Len() != 0 {
+				failureReason.SafeRune(',')
+			}
 		}
-		reason.WriteString("!overloadedDimPermitsChange")
-	}
-	if otherDimensionsBecameWorseInTarget {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+		if !overloadedDimPermitsChange {
+			appendSep()
+			failureReason.SafeString("!overloadedDimPermitsChange")
 		}
-		reason.WriteString("otherDimensionsBecameWorseInTarget")
-	}
-	if targetSummary >= loadNoChange {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+		if otherDimensionsBecameWorseInTarget {
+			appendSep()
+			failureReason.SafeString("otherDimensionsBecameWorseInTarget")
 		}
-		reason.WriteString(fmt.Sprintf("target_summary(%s)>=loadNoChange", targetSummary))
-	}
-	if targetSLS.maxFractionPendingIncrease >= epsilon || targetSLS.maxFractionPendingDecrease >= epsilon {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+		if targetSummary >= loadNoChange {
+			appendSep()
+			failureReason.Printf("target_summary(%v)>=loadNoChange", targetSummary)
 		}
-		reason.WriteString(fmt.Sprintf("targetSLS.frac_pending(%.2for%.2f>=epsilon)",
-			targetSLS.maxFractionPendingIncrease, targetSLS.maxFractionPendingDecrease))
-	}
-	if targetSLS.sls > srcSLS.sls {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+		if targetSLS.maxFractionPendingIncrease >= epsilon || targetSLS.maxFractionPendingDecrease >= epsilon {
+			appendSep()
+			failureReason.Printf("targetSLS.frac_pending(%.2for%.2f>=epsilon)",
+				redact.SafeFloat(targetSLS.maxFractionPendingIncrease),
+				redact.SafeFloat(targetSLS.maxFractionPendingDecrease))
 		}
-		reason.WriteString(fmt.Sprintf("target-store(%s)>src-store(%s)", targetSLS.sls, srcSLS.sls))
-	}
-	if targetSLS.nls > targetSLS.sls {
-		if reason.Len() != 0 {
-			reason.WriteRune(',')
+		if targetSLS.sls > srcSLS.sls {
+			appendSep()
+			failureReason.Printf("target-store(%v)>src-store(%v)", targetSLS.sls, srcSLS.sls)
 		}
-		reason.WriteString(fmt.Sprintf("target-node(%s)>target-store(%s)",
-			targetSLS.nls, targetSLS.sls))
+		if targetSLS.nls > targetSLS.sls {
+			appendSep()
+			failureReason.Printf("target-node(%v)>target-store(%v)",
+				targetSLS.nls, targetSLS.sls)
+		}
 	}
 	return false
 }
@@ -2457,28 +2633,32 @@ func (cs *clusterState) computeLoadSummary(
 
 // TODO(wenyihu6): check to make sure obs here is correct
 func (cs *clusterState) loadSummaryForAllStores(ctx context.Context) string {
-	var b strings.Builder
+	var buf redact.StringBuilder
 	clusterMeans := cs.meansMemo.getMeans(nil)
-	b.WriteString(fmt.Sprintf("cluster means: (stores-load %s) (stores-capacity %s)\n",
-		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity))
-	b.WriteString(fmt.Sprintf("(nodes-cpu-load %d) (nodes-cpu-capacity %d)\n",
-		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU))
-	for storeID, ss := range cs.stores {
-		sls := cs.meansMemo.getStoreLoadSummary(ctx, clusterMeans, storeID, ss.loadSeqNum)
-		b.WriteString(fmt.Sprintf("evaluating store s%d for shedding: load summary %v", storeID, sls))
+	buf.Printf("cluster means: (stores-load %v) (stores-capacity %v)\n",
+		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity)
+	buf.Printf("(nodes-cpu-load %v) (nodes-cpu-capacity %v)\n",
+		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU)
+	storeIDs := make([]roachpb.StoreID, 0, len(cs.stores))
+	for storeID := range cs.stores {
+		storeIDs = append(storeIDs, storeID)
 	}
-	return b.String()
+	slices.Sort(storeIDs)
+	for _, storeID := range storeIDs {
+		ss := cs.stores[storeID]
+		sls := cs.meansMemo.getStoreLoadSummary(ctx, clusterMeans, storeID, ss.loadSeqNum)
+		buf.Printf("evaluating store s%v for shedding: load summary %v", storeID, sls)
+	}
+	return string(buf.RedactableString())
 }
 
 func computeLoadSummary(
 	ctx context.Context, ss *storeState, ns *nodeState, msl *meanStoreLoad, mnl *meanNodeLoad,
 ) storeLoadSummary {
 	sls := loadLow
-	var highDiskSpaceUtil bool
 	var dimSummary [NumLoadDimensions]loadSummary
 	var worstDim LoadDimension
 	for i := range msl.load {
-		const nodeIDForLogging = 0
 		ls := loadSummaryForDimension(ctx, ss.StoreID, nodeIDForLogging, LoadDimension(i), ss.adjusted.load[i], ss.capacity[i],
 			msl.load[i], msl.util[i])
 		if ls > sls {
@@ -2486,19 +2666,21 @@ func computeLoadSummary(
 			worstDim = LoadDimension(i)
 		}
 		dimSummary[i] = ls
-		switch LoadDimension(i) {
-		case ByteSize:
-			highDiskSpaceUtil = highDiskSpaceUtilization(ss.adjusted.load[i], ss.capacity[i])
-		}
 	}
-	const storeIDForLogging = 0
-	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, CPURate, ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
+	// Use adjustedCPU for node-level overload detection. It starts at
+	// NodeCPULoad (physical) and is adjusted by pending change deltas (in
+	// store-level modeled CPU units — a known imprecision accepted because the
+	// delta is small and transient).
+	//
+	// TODO(wenyihu6): the unit mismatch between physical NodeCPULoad and
+	// store-level pending deltas will be resolved with the introduction of
+	// physical load modeling.
+	nls := loadSummaryForDimension(ctx, storeIDForLogging, ns.NodeID, CPURate, ns.adjustedCPU, ns.NodeCPUCapacity, mnl.loadCPU, mnl.utilCPU)
 	return storeLoadSummary{
 		worstDim:                   worstDim,
 		sls:                        sls,
 		nls:                        nls,
 		dimSummary:                 dimSummary,
-		highDiskSpaceUtilization:   highDiskSpaceUtil,
 		maxFractionPendingIncrease: ss.maxFractionPendingIncrease,
 		maxFractionPendingDecrease: ss.maxFractionPendingDecrease,
 		loadSeqNum:                 ss.loadSeqNum,

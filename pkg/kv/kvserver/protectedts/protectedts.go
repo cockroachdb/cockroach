@@ -33,7 +33,6 @@ var ErrExists = errors.New("protected timestamp record already exists")
 // It exists to abstract interaction with subsystem.
 type Provider interface {
 	Manager
-	Cache
 	Reconciler
 
 	Start(context.Context, *stop.Stopper) error

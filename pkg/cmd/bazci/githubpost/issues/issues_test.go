@@ -207,7 +207,7 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 						issueNum = *base.Number
 					}
 					return github.Issue{
-						Title:  github.String(fmt.Sprintf("%s: %s%s failed [failure reason]", packageName, testName, suffix)),
+						Title:  github.String(fmt.Sprintf("release-0.1: %s: %s%s failed [failure reason]", packageName, testName, suffix)),
 						Number: &issueNum,
 						Labels: base.Labels,
 					}
@@ -279,11 +279,15 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 	re := regexp.MustCompile(`^(.+?)-(` + strings.Join(sKeys, "|") + `)\.txt$`)
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "post"), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
-			var engflowTestCase bool
+			var engflowTestCase, masterBranchTestCase bool
 			basename := filepath.Base(path)
 			if strings.Contains(basename, "-engflow") {
 				engflowTestCase = true
 				basename = strings.ReplaceAll(basename, "-engflow", "")
+			}
+			if strings.Contains(basename, "-master") {
+				masterBranchTestCase = true
+				basename = strings.ReplaceAll(basename, "-master", "")
 			}
 			sl := re.FindStringSubmatch(basename)
 			require.Len(t, sl, 3, "%s couldn't be interpreted as a test case", basename)
@@ -298,6 +302,9 @@ test logs left over in: /go/src/github.com/cockroachdb/cockroach/artifacts/logTe
 				opts = *engflowOpts
 			} else {
 				opts = *tcOpts
+			}
+			if masterBranchTestCase {
+				opts.Branch = "master"
 			}
 			opts.GetBinaryVersion = func() string {
 				const v = "v3.3.0"
@@ -505,6 +512,23 @@ func ghURL(t *testing.T, title, body string) string {
 	q.Add("template", "none")
 	u.RawQuery = q.Encode()
 	return u.String()
+}
+
+func TestBranchTitlePrefix(t *testing.T) {
+	for _, tc := range []struct {
+		branch string
+		expect string
+	}{
+		{"master", ""},
+		{"", ""},
+		{"release-0.1", "release-0.1: "},
+		{"release-24.3", "release-24.3: "},
+	} {
+		t.Run(tc.branch, func(t *testing.T) {
+			result := branchTitlePrefix(tc.branch)
+			require.Equal(t, tc.expect, result)
+		})
+	}
 }
 
 func TestDataDriven(t *testing.T) {

@@ -53,8 +53,11 @@ func runRapidRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 			time.Sleep(waitTime)
 
 			sig := [2]int{2, 9}[rand.Intn(2)]
+			t.L().Printf("stopping node with signal %d after %s\n", sig, waitTime)
 			stopOpts := option.DefaultStopOpts()
 			stopOpts.RoachprodOpts.Sig = sig
+			stopOpts.RoachprodOpts.Wait = true
+			stopOpts.RoachprodOpts.GracePeriod = 1
 			if err := c.StopE(ctx, t.L(), stopOpts, node); err != nil {
 				t.Fatalf("error during stop: %v", err)
 			}

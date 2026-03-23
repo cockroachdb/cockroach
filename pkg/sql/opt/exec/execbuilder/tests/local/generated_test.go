@@ -45,13 +45,9 @@ func init() {
 func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithTenantOption(base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124)))
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124),
-	)()
-
 	os.Exit(m.Run())
 }
 
@@ -118,6 +114,13 @@ func TestExecBuild_call_plpgsql(
 ) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "call_plpgsql")
+}
+
+func TestExecBuild_canary_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "canary_stats")
 }
 
 func TestExecBuild_cascade(
@@ -498,6 +501,13 @@ func TestExecBuild_prepare(
 	runExecBuildLogicTest(t, "prepare")
 }
 
+func TestExecBuild_prepare_cache(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "prepare_cache")
+}
+
 func TestExecBuild_range_stats(
 	t *testing.T,
 ) {
@@ -610,6 +620,13 @@ func TestExecBuild_srfs(
 	runExecBuildLogicTest(t, "srfs")
 }
 
+func TestExecBuild_statement_hint_builtins(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "statement_hint_builtins")
+}
+
 func TestExecBuild_stats(
 	t *testing.T,
 ) {
@@ -636,6 +653,13 @@ func TestExecBuild_subquery_correlated(
 ) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "subquery_correlated")
+}
+
+func TestExecBuild_swap_mutation(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "swap_mutation")
 }
 
 func TestExecBuild_system(

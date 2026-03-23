@@ -15,10 +15,23 @@ BRANCHES=$(git branch -r --format='%(refname)' \
     | sed 's/^refs\/remotes\/origin\///' \
     | sort -V)
 
+# Retired branches that are frozen and should be skipped.
+RETIRED_BRANCHES=(
+  release-24.2
+  release-25.1
+  release-25.3
+)
+
 EXIT_CODE=0
 for BRANCH in $BRANCHES; do
-  if [ "$BRANCH" = "release-24.2" ] || [ "$BRANCH" = "release-25.1" ]; then
-    # Skip the release-{24.2,25.1} branches, which are frozen.
+  skip=false
+  for RETIRED in "${RETIRED_BRANCHES[@]}"; do
+    if [ "$BRANCH" = "$RETIRED" ]; then
+      skip=true
+      break
+    fi
+  done
+  if $skip; then
     continue
   fi
   PEBBLE_BRANCH="crl-$BRANCH"

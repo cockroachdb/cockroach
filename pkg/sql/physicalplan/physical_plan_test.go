@@ -155,7 +155,8 @@ func TestProjectionAndRendering(t *testing.T) {
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
 					[]*types.T{strToType("A"), strToType("B"), strToType("C"), strToType("D")},
 					execinfrapb.Ordering{},
-					nil, /* finalizeLastStageCb */
+					nil,   /* finalizeLastStageCb */
+					false, /* collectExecStats */
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -182,7 +183,8 @@ func TestProjectionAndRendering(t *testing.T) {
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
 					[]*types.T{strToType("B"), strToType("D"), strToType("C")},
 					execinfrapb.Ordering{},
-					nil, /* finalizeLastStageCb */
+					nil,   /* finalizeLastStageCb */
+					false, /* collectExecStats */
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -215,7 +217,8 @@ func TestProjectionAndRendering(t *testing.T) {
 					[]int{2, 0, 3, 1},
 					[]*types.T{strToType("C"), strToType("A"), strToType("D")},
 					execinfrapb.Ordering{},
-					nil, /* finalizeLastStageCb */
+					nil,   /* finalizeLastStageCb */
+					false, /* collectExecStats */
 				); err != nil {
 					t.Fatal(err)
 				}

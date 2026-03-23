@@ -9,13 +9,15 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupsink"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -63,6 +65,18 @@ var onlineRestoreLayerLimit = settings.RegisterIntSetting(
 	"maximum number of layers to restore in an online restore operation",
 	10,
 	settings.PositiveInt,
+	settings.WithVisibility(settings.Reserved),
+)
+
+// onlineRestoreUseDistFlow controls whether online restore uses the distributed
+// restore flow (distRestore with RestoreDataProcessor) instead of the simpler
+// sendAddRemoteSSTs loop. When enabled, the RestoreDataProcessor will link
+// files via LinkExternalSSTable instead of downloading and ingesting them.
+var onlineRestoreUseDistFlow = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"backup.restore.online_use_dist_flow.enabled",
+	"if enabled, online restore uses the distributed restore flow with file linking",
+	true,
 	settings.WithVisibility(settings.Reserved),
 )
 
@@ -182,12 +196,6 @@ func sendAddRemoteSSTs(
 	tracingAggCh chan *execinfrapb.TracingAggregatorEvents,
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
 ) (approxRows int64, approxDataSize int64, err error) {
-	defer close(tracingAggCh)
-
-	if encryption != nil {
-		return 0, 0, errors.AssertionFailedf("encryption not supported with online restore")
-	}
-
 	const targetRangeSize = 440 << 20
 
 	kr, err := MakeKeyRewriterFromRekeys(execCtx.ExecCfg().Codec, dataToRestore.getRekeys(), dataToRestore.getTenantRekeys(),
@@ -306,6 +314,7 @@ func sendAddRemoteSSTWorker(
 ) func(context.Context) error {
 	return func(ctx context.Context) error {
 		testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
+
 		for entry := range restoreSpanEntriesCh {
 			log.Dev.VInfof(ctx, 1, "starting restore of backed up span %s containing %d files", entry.Span, len(entry.Files))
 
@@ -319,6 +328,7 @@ func sendAddRemoteSSTWorker(
 					return errors.AssertionFailedf("files not sorted by layer")
 				}
 				currentLayer = file.Layer
+
 				if file.HasRangeKeys {
 					return errors.Wrapf(permanentRestoreError, "online restore of range keys not supported")
 				}
@@ -342,6 +352,7 @@ func sendAddRemoteSSTWorker(
 
 				log.Dev.VInfof(ctx, 1, "restoring span %s of file %s (file span: %s)", restoringSubspan, file.Path, file.BackupFileEntrySpan)
 				file.BackupFileEntrySpan = restoringSubspan
+
 				if err := sendRemoteAddSSTable(ctx, execCtx, file, entry.ElidedPrefix, fromSystemTenant); err != nil {
 					return err
 				}
@@ -480,10 +491,6 @@ func checkManifestsForOnlineCompat(
 		return errors.AssertionFailedf("expected at least 1 backup manifest")
 	}
 
-	if len(manifests) > 1 && !clusterversion.V24_1.Version().Less(manifests[0].ClusterVersion) {
-		return errors.Newf("the backup must be on a cluster version greater than %s to run online restore with an incremental backup", clusterversion.V24_1.String())
-	}
-
 	// TODO(online-restore): Remove once we support layer ordering and have tested some reasonable number of layers.
 	layerLimit := int(onlineRestoreLayerLimit.Get(&settings.SV))
 	if len(manifests) > layerLimit {
@@ -492,9 +499,17 @@ func checkManifestsForOnlineCompat(
 
 	for _, manifest := range manifests {
 		if !manifest.RevisionStartTime.IsEmpty() || manifest.MVCCFilter == backuppb.MVCCFilter_All {
-			return pgerror.Newf(pgcode.FeatureNotSupported, "experimental online restore: restoring from a revision history backup not supported")
+			// Revision history backups are supported when using the distributed
+			// flow, which can handle mixed link/ingest entries. The coordinator
+			// loop (sendAddRemoteSSTs) cannot handle them.
+			if !onlineRestoreUseDistFlow.Get(&settings.SV) {
+				return pgerror.Newf(pgcode.FeatureNotSupported,
+					"experimental online restore: restoring from a revision history backup not supported")
+			}
+			break
 		}
 	}
+
 	return nil
 }
 
@@ -759,7 +774,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		r.downloadJobProg = fractionComplete
 
 		if remaining == 0 {
-			r.notifyStatsRefresherOfNewTables()
+			r.notifyStatsRefresherOfNewTables(ctx)
 			return nil
 		}
 
@@ -845,6 +860,9 @@ func (r *restoreResumer) doDownloadFilesWithRetry(
 		if err == nil {
 			return nil
 		}
+		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
+			return jobs.MarkPauseRequestError(errors.UnwrapAll(err))
+		}
 		log.Dev.Warningf(ctx, "failed attempt to download files: %v", err)
 		if lastProgress != r.downloadJobProg {
 			lastProgress = r.downloadJobProg
@@ -871,9 +889,6 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 	})
 
 	if err := grp.Wait(); err != nil {
-		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
-			return jobs.MarkPauseRequestError(errors.UnwrapAll(err))
-		}
 		return errors.Wrap(err, "failed to generate and send download spans")
 	}
 
@@ -961,52 +976,39 @@ func setDescriptorsOffline(
 		return nil
 	}
 
-	mutableTables, err := getUndroppedTablesFromRestore(ctx, txn.KV(), details, descCol)
-	if err != nil {
-		return errors.Wrapf(err, "set descriptors offline: getting undropped tables from restore")
+	var descIDs []descpb.ID
+	for _, desc := range details.TableDescs {
+		descIDs = append(descIDs, desc.ID)
 	}
-	for _, mutableTable := range mutableTables {
-		if err := writeDesc(mutableTable); err != nil {
-			return err
-		}
-	}
-
 	for i := range details.FunctionDescs {
-		mutableFunc, err := descCol.MutableByID(txn.KV()).Function(ctx, details.FunctionDescs[i].ID)
-		if err != nil {
-			return err
-		}
-		if err := writeDesc(mutableFunc); err != nil {
-			return err
-		}
+		descIDs = append(descIDs, details.FunctionDescs[i].ID)
 	}
-
 	for i := range details.DatabaseDescs {
-		mutableDB, err := descCol.MutableByID(txn.KV()).Database(ctx, details.DatabaseDescs[i].ID)
-		if err != nil {
-			return err
-		}
-		if err := writeDesc(mutableDB); err != nil {
-			return err
-		}
+		descIDs = append(descIDs, details.DatabaseDescs[i].ID)
 	}
-
 	for i := range details.TypeDescs {
-		mutableType, err := descCol.MutableByID(txn.KV()).Type(ctx, details.TypeDescs[i].ID)
-		if err != nil {
-			return err
-		}
-		if err := writeDesc(mutableType); err != nil {
-			return err
-		}
+		descIDs = append(descIDs, details.TypeDescs[i].ID)
+	}
+	for i := range details.SchemaDescs {
+		descIDs = append(descIDs, details.SchemaDescs[i].ID)
 	}
 
-	for i := range details.SchemaDescs {
-		mutableSchema, err := descCol.MutableByID(txn.KV()).Schema(ctx, details.SchemaDescs[i].ID)
+	for _, id := range descIDs {
+		// We use Desc over the type-specific lookups because the latter replaces
+		// the shared catalog.ErrDescriptorNotFound with a more specific pgcode.
+		// Uinsg the former allows us to match on one error type for all
+		// descriptors.
+		desc, err := descCol.MutableByID(txn.KV()).Desc(ctx, id)
 		if err != nil {
+			if errors.Is(err, catalog.ErrDescriptorNotFound) {
+				continue
+			}
 			return err
 		}
-		if err := writeDesc(mutableSchema); err != nil {
+		if desc.Dropped() {
+			continue
+		}
+		if err := writeDesc(desc); err != nil {
 			return err
 		}
 	}
@@ -1079,4 +1081,148 @@ func getNumOnlineRestoreLinkWorkers(ctx context.Context, execCtx sql.JobExecCont
 	}
 	numNodes := max(len(sqlInstanceIDs), 1)
 	return defaultLinkWorkersPerNode * numNodes, nil
+}
+
+// uriCompatibleWithOnlineRestore validates that a uri scheme is supported for early boot.
+// additionally, if an external connection uri is passed, the underlying uri the
+// external connection points to will be loaded from the system table and validated
+func uriCompatibleWithOnlineRestore(ctx context.Context, txn isql.Txn, path string) error {
+	uri, err := url.Parse(path)
+	if err != nil {
+		return errors.Wrap(err, "failed to parse URI for online restore")
+	}
+	scheme := uri.Scheme
+	if scheme == externalconn.Scheme {
+		// online restore materializes external connections late and does not support certain schemes,
+		// so we need to validate that the underlying uri has a supported scheme
+		ec, err := externalconn.LoadExternalConnection(ctx, uri.Host, txn)
+		if err != nil {
+			return errors.Wrap(err, "failed to load external connection")
+		}
+		materialized, err := externalconn.Materialize(ec, uri)
+		if err != nil {
+			return err
+		}
+		scheme = materialized.Scheme
+	}
+	if err := cloud.SchemeSupportsEarlyBoot(scheme); err != nil {
+		return errors.Wrap(err, "backup URI not supported for online restore")
+	}
+	return nil
+}
+
+// resolveExternalStorageURIs resolves any external:// URIs in the provided
+// URI slice, locality info, and backup manifests to their underlying URIs.
+// This is needed for online restore because the external:// scheme is not
+// available at early boot time when SSTs are ingested.
+func resolveExternalStorageURIs(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	urisIn []string,
+	localityInfoIn []jobspb.RestoreDetails_BackupLocalityInfo,
+	backupManifests []backuppb.BackupManifest,
+) ([]string, []jobspb.RestoreDetails_BackupLocalityInfo, error) {
+	extConnCache := make(map[string]externalconn.ExternalConnection)
+
+	// resolveURI resolves a single URI if it uses the external:// scheme.
+	resolveURI := func(uriStr string) (string, bool, error) {
+		uri, err := url.Parse(uriStr)
+		if err != nil {
+			return "", false, errors.Wrap(err, "invalid URI")
+		}
+		if uri.Scheme != externalconn.Scheme {
+			return uriStr, false, nil
+		}
+
+		var ec externalconn.ExternalConnection
+		var ok bool
+		if ec, ok = extConnCache[uri.Host]; !ok {
+			if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, t isql.Txn) error {
+				ec, err = externalconn.LoadExternalConnection(ctx, uri.Host, t)
+				if err != nil {
+					return err
+				}
+				extConnCache[uri.Host] = ec
+				return nil
+			}); err != nil {
+				return "", false, errors.Wrap(err, "failed to load external connection")
+			}
+		}
+
+		materialized, err := externalconn.Materialize(ec, uri)
+		if err != nil {
+			return "", false, errors.Wrap(err, "failed to materialize external connection URI")
+		}
+		// Revalidate in case the user changed the underlying uri in the external
+		// connection to a non early boot uri since the job was created.
+		if err := cloud.SchemeSupportsEarlyBoot(materialized.Scheme); err != nil {
+			return "", false, errors.Wrap(err, "backup URI not supported for online restore")
+		}
+
+		return materialized.String(), true, nil
+	}
+
+	// Resolve main URIs.
+	var urisOut []string
+	for i, uriStr := range urisIn {
+		resolved, changed, err := resolveURI(uriStr)
+		if err != nil {
+			return nil, nil, err
+		}
+		if changed {
+			if urisOut == nil {
+				urisOut = append(urisOut, urisIn...)
+			}
+			urisOut[i] = resolved
+		}
+	}
+	if urisOut == nil {
+		urisOut = urisIn
+	}
+
+	// Resolve locality info URIs.
+	var localityInfoOut []jobspb.RestoreDetails_BackupLocalityInfo
+	for i, localityInfo := range localityInfoIn {
+		if localityInfo.URIsByOriginalLocalityKV == nil {
+			continue
+		}
+		for kv, uriStr := range localityInfo.URIsByOriginalLocalityKV {
+			resolved, changed, err := resolveURI(uriStr)
+			if err != nil {
+				return nil, nil, err
+			}
+			if changed {
+				// Lazily initialize the output slice.
+				if localityInfoOut == nil {
+					localityInfoOut = make([]jobspb.RestoreDetails_BackupLocalityInfo, len(localityInfoIn))
+					for j := range localityInfoIn {
+						if localityInfoIn[j].URIsByOriginalLocalityKV != nil {
+							localityInfoOut[j].URIsByOriginalLocalityKV = make(map[string]string)
+							for k, v := range localityInfoIn[j].URIsByOriginalLocalityKV {
+								localityInfoOut[j].URIsByOriginalLocalityKV[k] = v
+							}
+						}
+					}
+				}
+				localityInfoOut[i].URIsByOriginalLocalityKV[kv] = resolved
+			}
+		}
+	}
+	if localityInfoOut == nil {
+		localityInfoOut = localityInfoIn
+	}
+
+	// Resolve backup manifest Dir URIs. The Dir field in each manifest is used
+	// to construct file paths for LinkExternalSSTable requests.
+	for i := range backupManifests {
+		resolved, changed, err := resolveURI(backupManifests[i].Dir.URI)
+		if err != nil {
+			return nil, nil, err
+		}
+		if changed {
+			backupManifests[i].Dir.URI = resolved
+		}
+	}
+
+	return urisOut, localityInfoOut, nil
 }

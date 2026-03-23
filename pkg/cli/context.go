@@ -9,6 +9,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	isatty "github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -359,10 +361,9 @@ type zipContext struct {
 	includeRangeInfo bool
 
 	// includeStacks fetches all goroutines running on each targeted node in
-	// nodes/*/stacks.txt and nodes/*/stacks_with_labels.txt files. Note that
-	// fetching stack traces for all goroutines is a temporary "stop the world"
-	// operation, which can momentarily have negative impacts on SQL service
-	// latency.
+	// nodes/*/stacks.txt. Note that fetching debug=2 stack traces for all
+	// goroutines incurs a temporary "stop the world" operation, which can
+	// momentarily have negative impacts on SQL service latency.
 	includeStacks bool
 
 	// includeRunningJobTraces includes the active traces of each running
@@ -371,6 +372,10 @@ type zipContext struct {
 
 	// The log/heap/etc files to include.
 	files fileSelection
+
+	// excludeLogSeverities lists log severity names (e.g. "INFO") to
+	// exclude from log file collection.
+	excludeLogSeverities []string
 
 	// validateZipFile indicates whether the generated zip file should be validated
 	// post debug zip file generation.
@@ -488,6 +493,10 @@ var startCtx struct {
 	serverRootCertDN       string
 	serverNodeCertDN       string
 	serverTLSCipherSuites  []string
+	disallowRootLogin      bool
+	allowDebugUser         bool
+	serverRootCertSAN      string
+	serverNodeCertSAN      string
 
 	// The TLS auto-handshake parameters.
 	initToken             string
@@ -543,6 +552,10 @@ func setStartContextDefaults() {
 	startCtx.serverCertPrincipalMap = nil
 	startCtx.serverRootCertDN = ""
 	startCtx.serverNodeCertDN = ""
+	startCtx.disallowRootLogin = false
+	startCtx.allowDebugUser = false
+	startCtx.serverRootCertSAN = ""
+	startCtx.serverNodeCertSAN = ""
 	startCtx.serverListenAddr = ""
 	startCtx.unencryptedLocalhostHTTP = false
 	startCtx.tempDir = ""
@@ -633,8 +646,55 @@ func setSqlfmtContextDefaults() {
 	sqlfmtCtx.execStmts = nil
 }
 
+// convertURLFormat enumerates the supported output formats for the `convert-url`
+// command.
+type convertURLFormat string
+
+const (
+	convertURLFormatAll  convertURLFormat = ""
+	convertURLFormatPQ   convertURLFormat = "pq"
+	convertURLFormatDSN  convertURLFormat = "dsn"
+	convertURLFormatJDBC convertURLFormat = "jdbc"
+	convertURLFormatCRDB convertURLFormat = "crdb"
+)
+
+var convertURLFormats = []convertURLFormat{
+	convertURLFormatPQ,
+	convertURLFormatDSN,
+	convertURLFormatJDBC,
+	convertURLFormatCRDB,
+}
+
+func (f *convertURLFormat) String() string {
+	return string(*f)
+}
+
+func (f *convertURLFormat) Set(s string) error {
+	if slices.Contains(convertURLFormats, convertURLFormat(s)) {
+		*f = convertURLFormat(s)
+		return nil
+	}
+	return errors.Newf("must be one of %s", convertURLFormats)
+}
+
+func (f *convertURLFormat) Type() string {
+	return "string"
+}
+
+// convertCtx captures the command-line parameters of the `convert-url` command.
+// See below for defaults.
 var convertCtx struct {
-	url string
+	url        string
+	sslInline  bool
+	database   string
+	username   string
+	password   string
+	cluster    string
+	certsDir   string
+	caCertPath string
+	certPath   string
+	keyPath    string
+	format     convertURLFormat
 }
 
 // setConvContextDefaults set the default values in convertCtx.  This
@@ -642,6 +702,16 @@ var convertCtx struct {
 // test that exercises command-line parsing.
 func setConvContextDefaults() {
 	convertCtx.url = ""
+	convertCtx.sslInline = false
+	convertCtx.database = ""
+	convertCtx.username = ""
+	convertCtx.password = ""
+	convertCtx.cluster = ""
+	convertCtx.certsDir = ""
+	convertCtx.caCertPath = ""
+	convertCtx.certPath = ""
+	convertCtx.keyPath = ""
+	convertCtx.format = ""
 }
 
 // demoCtx captures the command-line parameters of the `demo` command.

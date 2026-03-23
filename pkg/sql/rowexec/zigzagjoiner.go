@@ -255,10 +255,11 @@ type zigzagJoiner struct {
 // be fetched at a time. Increasing this will improve performance for when
 // matched rows are grouped together, but increasing this too much will result
 // in fetching too many rows and therefore skipping less rows.
-var zigzagJoinerBatchSize = rowinfra.RowLimit(metamorphic.ConstantWithTestValue(
+var zigzagJoinerBatchSize = rowinfra.RowLimit(metamorphic.ConstantWithTestRange(
 	"zig-zag-joiner-batch-size",
 	5, /* defaultValue */
-	1, /* metamorphicValue */
+	1, /* min */
+	5, /* max */
 ))
 
 var _ execinfra.Processor = &zigzagJoiner{}
@@ -476,6 +477,7 @@ func (z *zigzagJoiner) setupInfo(
 			Spec:                       &spec.FetchSpec,
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+			WorkloadID:                 flowCtx.EvalCtx.WorkloadID,
 		},
 	); err != nil {
 		return err
@@ -892,6 +894,14 @@ func (z *zigzagJoiner) getKVPairsRead() int64 {
 	return kvPairsRead
 }
 
+func (z *zigzagJoiner) getKVCPUTime() int64 {
+	var kvCPUTime int64
+	for i := range z.infos {
+		kvCPUTime += z.infos[i].fetcher.GetKVCPUTime()
+	}
+	return kvCPUTime
+}
+
 func (z *zigzagJoiner) getRowsRead() int64 {
 	var rowsRead int64
 	for i := range z.infos {
@@ -914,6 +924,7 @@ func (z *zigzagJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = z.getBytesRead()
 	meta.Metrics.RowsRead = z.getRowsRead()
+	meta.Metrics.KVCPUTime = z.getKVCPUTime()
 	if tfs := execinfra.GetLeafTxnFinalState(z.Ctx(), z.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}

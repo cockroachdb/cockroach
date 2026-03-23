@@ -25,7 +25,7 @@ import {
   Panel,
 } from "src/views/shared/components/panelSection";
 
-import "./debug.styl";
+import "./debug.scss";
 
 const COMMUNITY_URL = "https://www.cockroachlabs.com/community/";
 
@@ -332,6 +332,11 @@ export default function Debug() {
             name="Decommissioned node history"
             url="#/reports/nodes/history"
             note="#/reports/nodes/history"
+          />
+          <DebugTableLink
+            name="Node activity honeycomb visualizer"
+            url="#/cluster-explorer"
+            note="#/cluster-explorer"
           />
         </DebugTableRow>
         <DebugTableRow

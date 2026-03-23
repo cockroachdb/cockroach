@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -54,18 +55,31 @@ func TestReadCommittedStmtRetry(t *testing.T) {
 			return nil
 		}
 		for _, arg := range ba.Requests {
-			if req := arg.GetInner(); req.Method() == kvpb.Put {
-				put := req.(*kvpb.PutRequest)
-				// Only count writes to the kv table.
-				_, tableID, err := codec.DecodeTablePrefix(put.Key)
-				if err != nil || tableID != kvTableId {
-					return nil
+			req := arg.GetInner()
+			var key roachpb.Key
+			switch t := req.(type) {
+			case *kvpb.PutRequest:
+				key = t.Key
+			case *kvpb.GetRequest:
+				// With write buffering, writes are decomposed into locking
+				// Get requests (to acquire locks) and buffered writes. Intercept
+				// locking Gets in addition to Puts.
+				if t.KeyLockingStrength != lock.Exclusive {
+					continue
 				}
-				trappedReadCommittedWritesOnce.Do(func() {
-					close(finishedReadCommittedScans)
-					<-finishedExternalTxn
-				})
+				key = t.Key
+			default:
+				continue
 			}
+			// Only count writes to the kv table.
+			_, tableID, err := codec.DecodeTablePrefix(key)
+			if err != nil || tableID != kvTableId {
+				return nil
+			}
+			trappedReadCommittedWritesOnce.Do(func() {
+				close(finishedReadCommittedScans)
+				<-finishedExternalTxn
+			})
 		}
 
 		return nil

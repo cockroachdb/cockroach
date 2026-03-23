@@ -127,14 +127,9 @@ func checkDemoConfiguration(
 		return nil, errors.Newf("--%s cannot be used with --%s", cliflags.Global.Name, cliflags.DemoNodeLocality.Name)
 	}
 
-	// Whether or not we enable enterprise feature is a combination of:
-	//
-	// - whether the user wants them (they can disable enterprise
-	//   features explicitly with --no-license, e.g. for testing what
-	//   errors come up if no license is available)
-	// - whether enterprise features are enabled in this build, depending
-	//   on whether CCL code is included (and sets democluster.EnableEnterprise).
-	demoCtx.disableEnterpriseFeatures = democluster.EnableEnterprise == nil || demoCtx.disableEnterpriseFeatures
+	// The user can disable enterprise features explicitly with --no-license,
+	// e.g. for testing what errors come up if no license is available.
+	// demoCtx.disableEnterpriseFeatures is already set from flags.
 
 	if demoCtx.GeoPartitionedReplicas {
 		geoFlag := "--" + cliflags.DemoGeoPartitionedReplicas.Name
@@ -211,6 +206,8 @@ func runDemoInternal(
 	ctx := context.Background()
 
 	demoCtx.WorkloadGenerator = gen
+	// Copy the DRPC flag from baseCfg to demoCtx so it's available to the demo cluster.
+	demoCtx.UseDRPC = baseCfg.UseDRPC
 
 	c, err := democluster.NewDemoCluster(ctx, &demoCtx.Context,
 		log.Dev.Infof,
@@ -288,11 +285,9 @@ func runDemoInternal(
 	}
 
 	if !demoCtx.disableEnterpriseFeatures {
-		fn, err := c.EnableEnterprise(ctx)
-		if err != nil {
+		if err := c.EnableEnterprise(ctx); err != nil {
 			return clierrorplus.CheckAndMaybeShout(err)
 		}
-		defer fn()
 	}
 
 	// Initialize the workload, if requested.

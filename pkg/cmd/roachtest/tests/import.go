@@ -191,6 +191,17 @@ func anyDataset(rng *rand.Rand) []string {
 	return nDatasets(rng, 1)
 }
 
+func anySmallDataset(rng *rand.Rand) []string {
+	all := allDatasets(rng)
+	small := slices.DeleteFunc(all, func(name string) bool {
+		return name == "tpch/lineitem"
+	})
+	rng.Shuffle(len(small), func(i, j int) {
+		small[i], small[j] = small[j], small[i]
+	})
+	return small[:1]
+}
+
 // importTestSpec represents a subtest within the import test.
 type importTestSpec struct {
 	// subtestName is the name to register for this test.
@@ -257,11 +268,12 @@ var tests = []importTestSpec{
 		nodes:        []int{4},
 		datasetNames: FromFunc(anyThreeDatasets),
 	},
-	// Test with a decommissioned node.
+	// Test with a decommissioned node. Exclude lineitem (the largest dataset)
+	// to avoid timeouts when running with only 3 active nodes.
 	{
 		subtestName:  "decommissioned",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anySmallDataset),
 		preTestHook: func(ctx context.Context, t test.Test, c cluster.Cluster, _ *rand.Rand) {
 			nodeToDecommission := 2
 			t.Status(fmt.Sprintf("decommissioning node %d", nodeToDecommission))
@@ -273,11 +285,12 @@ var tests = []importTestSpec{
 			time.Sleep(10 * time.Second)
 		},
 	},
-	// Test job survival if a worker node is shutdown.
+	// Test job survival if a worker node is shutdown. Exclude lineitem (the
+	// largest dataset) to avoid timeouts when running with only 3 active nodes.
 	{
 		subtestName:  "nodeShutdown/worker",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anySmallDataset),
 		importRunner: func(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, _ *rand.Rand, ds dataset) error {
 			importConn := c.Conn(ctx, l, 2 /* gateway node */)
 			defer importConn.Close()
@@ -287,11 +300,13 @@ var tests = []importTestSpec{
 				})
 		},
 	},
-	// Test job survival if the coordinator node is shutdown.
+	// Test job survival if the coordinator node is shutdown. Exclude lineitem
+	// (the largest dataset) to avoid timeouts when running with only 3 active
+	// nodes.
 	{
 		subtestName:  "nodeShutdown/coordinator",
 		nodes:        []int{4},
-		datasetNames: FromFunc(anyDataset),
+		datasetNames: FromFunc(anySmallDataset),
 		importRunner: func(ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, _ *rand.Rand, ds dataset) error {
 			importConn := c.Conn(ctx, l, 2 /* gateway node */)
 			defer importConn.Close()
@@ -315,38 +330,51 @@ var tests = []importTestSpec{
 		datasetNames: FromFunc(anyDataset),
 		preTestHook:  makeColumnFamilies,
 	},
+	// Test pause and resume of import jobs.
+	{
+		subtestName:  "pause",
+		nodes:        []int{4},
+		datasetNames: FromFunc(anyDataset),
+		importRunner: importPauseRunner,
+	},
 }
 
+// importTestTimeout is the timeout for import roachtests. This is
+// conservatively large because lineitem SF-100 can take about four hours to
+// import, with about another hour and a half to fingerprint. See #68117.
+const importTestTimeout = 10 * time.Hour
+
 func registerImport(r registry.Registry) {
-	// This may be excessively conservative. During a calibration run, lineitem
-	// IMPORT took about four hours, with about another hour and a half to
-	// fingerprint the imported table. See #68117.
-	timeout := 10 * time.Hour
 	for _, testSpec := range tests {
 		suites := registry.Suites(registry.Nightly)
 		if testSpec.manualOnly {
 			suites = registry.ManualOnly
 		}
 
-		for _, numNodes := range testSpec.nodes {
-			ts := testSpec
-			numNodes := numNodes
+		for _, distMerge := range []bool{false, true} {
+			for _, numNodes := range testSpec.nodes {
+				ts := testSpec
+				numNodes := numNodes
 
-			name := fmt.Sprintf("import/%s/nodes=%d", ts.subtestName, numNodes)
-			r.Add(registry.TestSpec{
-				Name:              name,
-				Owner:             registry.OwnerSQLQueries,
-				Benchmark:         testSpec.benchmark,
-				Timeout:           timeout,
-				Cluster:           r.MakeClusterSpec(numNodes),
-				CompatibleClouds:  registry.Clouds(spec.GCE, spec.Local),
-				Suites:            suites,
-				EncryptionSupport: registry.EncryptionMetamorphic,
-				Leases:            registry.MetamorphicLeases,
-				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runImportTest(ctx, t, c, ts, numNodes, timeout)
-				},
-			})
+				name := fmt.Sprintf("import/%s/distmerge=%v/nodes=%d", ts.subtestName, distMerge, numNodes)
+				r.Add(registry.TestSpec{
+					Name:              name,
+					Owner:             registry.OwnerSQLQueries,
+					Benchmark:         testSpec.benchmark,
+					Timeout:           importTestTimeout,
+					Cluster:           r.MakeClusterSpec(numNodes),
+					CompatibleClouds:  registry.Clouds(spec.GCE, spec.Local),
+					Suites:            suites,
+					EncryptionSupport: registry.EncryptionMetamorphic,
+					Leases:            registry.MetamorphicLeases,
+					// Never run with runtime assertions as this makes this test
+					// take too long to complete.
+					CockroachBinary: registry.StandardCockroach,
+					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						runImportTest(ctx, t, c, ts, numNodes, importTestTimeout, distMerge)
+					},
+				})
+			}
 		}
 	}
 }
@@ -358,6 +386,7 @@ func runImportTest(
 	testSpec importTestSpec,
 	numNodes int,
 	timeout time.Duration,
+	useDistributedMerge bool,
 ) {
 	rng, seed := randutil.NewTestRand()
 
@@ -375,6 +404,9 @@ func runImportTest(
 	_, err := conn.ExecContext(ctx, `CREATE DATABASE import_test`)
 	require.NoError(t, err)
 	_, err = conn.ExecContext(ctx, `USE import_test`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx,
+		fmt.Sprintf(`SET CLUSTER SETTING bulkio.import.distributed_merge.enabled = %v`, useDistributedMerge))
 	require.NoError(t, err)
 
 	// Initialize datasets and create tables.
@@ -694,12 +726,12 @@ func importCancellationRunner(
 		// Block until the job is complete. Afterwards, it either completed
 		// succesfully before we cancelled it, or the cancellation has finished
 		// reverting the keys it wrote prior to cancellation.
-		var status string
+		var status, errorMsg string
 		err = conn.QueryRowContext(
 			ctx,
-			`WITH x AS (SHOW JOBS WHEN COMPLETE (SELECT $1)) SELECT status FROM x`,
+			`WITH x AS (SHOW JOBS WHEN COMPLETE (SELECT $1)) SELECT status, error FROM x`,
 			jobID,
-		).Scan(&status)
+		).Scan(&status, &errorMsg)
 		if err != nil {
 			return err
 		}
@@ -716,7 +748,7 @@ func importCancellationRunner(
 				return slices.Contains(urls, url)
 			})
 		} else if status == "failed" {
-			return errors.Newf("Job %s failed.\n", jobID)
+			return errors.Newf("Job %s failed with error: %s\n", jobID, errorMsg)
 		}
 	}
 	if len(urlsToImport) != 0 {
@@ -727,6 +759,105 @@ func importCancellationRunner(
 	// Restore GC TTLs so we don't interfere with post-import table validation.
 	_, err = conn.ExecContext(ctx, ttl_stmt, 60*60*4 /* 4 hours */)
 	return err
+}
+
+// importPauseRunner() is the test runner for the import pause test.
+// This test starts an import job, pauses it multiple times during execution,
+// resumes it, and verifies successful completion.
+func importPauseRunner(
+	ctx context.Context, t test.Test, c cluster.Cluster, l *logger.Logger, rng *rand.Rand, ds dataset,
+) error {
+	conn := c.Conn(ctx, l, 1)
+	defer conn.Close()
+
+	// Start async import job
+	jobID, err := runAsyncImportJob(ctx, conn, ds)
+	if err != nil {
+		return err
+	}
+
+	// Wait for job to start running
+	if err := WaitForRunning(ctx, conn, jobID, time.Minute); err != nil {
+		return errors.Wrapf(err, "waiting for job %d to start running", jobID)
+	}
+
+	// Determine number of pause cycles (2-4 times)
+	numPauses := randutil.RandIntInRange(rng, 2, 5)
+	t.WorkerStatus(fmt.Sprintf("will pause/resume job %d %d times", jobID, numPauses))
+
+	// Perform multiple pause/resume cycles
+	for i := 0; i < numPauses; i++ {
+		// Wait before pausing (random duration)
+		var waitBeforePause time.Duration
+		if c.IsLocal() {
+			// Local tests run faster, shorter wait
+			waitBeforePause = time.Duration(randutil.RandIntInRange(rng, 5, 15)) * time.Second
+		} else {
+			// Longer wait for roachprod clusters
+			waitBeforePause = time.Duration(randutil.RandIntInRange(rng, 10, 45)) * time.Second
+		}
+
+		select {
+		case <-time.After(waitBeforePause):
+			// Continue to pause
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
+		// Check if job already completed (might finish before all pauses)
+		var status string
+		err = conn.QueryRowContext(ctx, `SELECT status FROM [SHOW JOB $1]`, jobID).Scan(&status)
+		if err != nil {
+			return errors.Wrapf(err, "checking job status before pause %d", i+1)
+		}
+		if status == "succeeded" {
+			t.WorkerStatus(fmt.Sprintf("job %d completed before pause %d/%d", jobID, i+1, numPauses))
+			return nil
+		}
+
+		// Pause the job
+		t.WorkerStatus(fmt.Sprintf("pausing job %d (pause %d/%d)", jobID, i+1, numPauses))
+		_, err = conn.ExecContext(ctx, `PAUSE JOB $1`, jobID)
+		if err != nil {
+			return errors.Wrapf(err, "pausing job %d", jobID)
+		}
+
+		// Wait for paused state
+		if err := WaitForPaused(ctx, conn, jobID, 2*time.Minute); err != nil {
+			return errors.Wrapf(err, "waiting for job %d to pause", jobID)
+		}
+
+		// Keep paused for a bit
+		var pauseDuration time.Duration
+		if c.IsLocal() {
+			pauseDuration = time.Duration(randutil.RandIntInRange(rng, 3, 10)) * time.Second
+		} else {
+			pauseDuration = time.Duration(randutil.RandIntInRange(rng, 5, 20)) * time.Second
+		}
+		t.WorkerStatus(fmt.Sprintf("job %d paused, keeping paused for %v", jobID, pauseDuration))
+		time.Sleep(pauseDuration)
+
+		// Resume the job
+		t.WorkerStatus(fmt.Sprintf("resuming job %d (pause %d/%d)", jobID, i+1, numPauses))
+		_, err = conn.ExecContext(ctx, `RESUME JOB $1`, jobID)
+		if err != nil {
+			return errors.Wrapf(err, "resuming job %d", jobID)
+		}
+
+		// Wait for job to be running again
+		if err := WaitForResume(ctx, conn, jobID, 2*time.Minute); err != nil {
+			return errors.Wrapf(err, "waiting for job %d to resume", jobID)
+		}
+		t.WorkerStatus(fmt.Sprintf("job %d resumed successfully", jobID))
+	}
+
+	t.WorkerStatus(fmt.Sprintf("waiting for job %d to complete after %d pause cycles", jobID, numPauses))
+	if err := WaitForSucceeded(ctx, conn, jobID, importTestTimeout); err != nil {
+		return errors.Wrapf(err, "waiting for job %d to succeed", jobID)
+	}
+
+	t.WorkerStatus(fmt.Sprintf("job %d completed successfully after %d pause/resume cycles", jobID, numPauses))
+	return nil
 }
 
 // makeColumnFamilies() is a pre-test hook that changes the tables

@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 statement ok
 CREATE TABLE f (x FLOAT)
 
@@ -80,7 +79,10 @@ INSERT INTO i VALUES (COALESCE(1, 'foo'))
 query error incompatible COALESCE expressions: could not parse "foo" as type int
 SELECT COALESCE(1, 'foo')
 
-query error incompatible COALESCE expressions: could not parse "foo" as type int
+# The error regex is relaxed because local-prepared produces a different
+# prefix: "error in argument for $2:" instead of "incompatible COALESCE
+# expressions:".
+query error could not parse "foo" as type int
 SELECT COALESCE(1::INT, 'foo')
 
 query error expected 2.3 to be of type int, found type decimal

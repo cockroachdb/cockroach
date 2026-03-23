@@ -3,32 +3,28 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Loading } from "@cockroachlabs/cluster-ui";
-import isNil from "lodash/isNil";
-import React from "react";
-import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
-import { RouteComponentProps, withRouter } from "react-router-dom";
-
-import { refreshLocations, refreshNodes } from "src/redux/apiReducers";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import {
+  Loading,
+  buildLocalityTree,
+  useLocations,
+  useNodesSummary,
   LocalityTier,
   LocalityTree,
-  selectLocalityTree,
-} from "src/redux/localities";
-import {
   LocationTree,
-  selectLocationsRequestStatus,
-  selectLocationTree,
-} from "src/redux/locations";
-import { selectNodeRequestStatus } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+} from "@cockroachlabs/cluster-ui";
+import isNil from "lodash/isNil";
+import React, { useMemo } from "react";
+import { Helmet } from "react-helmet";
+import { RouteComponentProps, withRouter } from "react-router-dom";
+
+import { cockroach } from "src/js/protos";
 import { getNodeLocalityTiers } from "src/util/localities";
 import { findMostSpecificLocation, hasLocation } from "src/util/locations";
-import "./localities.styl";
+import "./localities.scss";
 
 import { BackToAdvanceDebug } from "../util";
+
+import LivenessStatus = cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus;
 
 function formatCoord(coordinate: number) {
   return coordinate.toFixed(4);
@@ -97,84 +93,73 @@ function renderLocalityTree(locations: LocationTree, tree: LocalityTree) {
   return rows;
 }
 
-interface LocalitiesProps {
-  localityTree: LocalityTree;
-  localityStatus: CachedDataReducerState<any>;
-  locationTree: LocationTree;
-  locationStatus: CachedDataReducerState<any>;
-  refreshLocations: typeof refreshLocations;
-  refreshNodes: typeof refreshNodes;
-}
-
-export class Localities extends React.Component<
-  LocalitiesProps & RouteComponentProps,
-  {}
-> {
-  componentDidMount() {
-    this.props.refreshLocations();
-    this.props.refreshNodes();
-  }
-
-  componentDidUpdate() {
-    this.props.refreshLocations();
-    this.props.refreshNodes();
-  }
-
-  render() {
+function getCommissionedNodes(
+  nodeStatuses: cockroach.server.status.statuspb.INodeStatus[],
+  livenessStatusByNodeID: Record<string, number>,
+): cockroach.server.status.statuspb.INodeStatus[] {
+  return nodeStatuses.filter(node => {
+    const status = livenessStatusByNodeID[`${node.desc.node_id}`];
     return (
-      <div>
-        <Helmet title="Localities | Debug" />
-        <BackToAdvanceDebug history={this.props.history} />
-        <section className="section">
-          <h1 className="base-heading">Localities</h1>
-        </section>
-        <Loading
-          loading={
-            !this.props.localityStatus.data || !this.props.locationStatus.data
-          }
-          page={"localities"}
-          error={[
-            this.props.localityStatus.lastError,
-            this.props.locationStatus.lastError,
-          ]}
-          render={() => (
-            <section className="section">
-              <table className="locality-table">
-                <thead>
-                  <tr>
-                    <th>Localities</th>
-                    <th>Nodes</th>
-                    <th>Location</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {renderLocalityTree(
-                    this.props.locationTree,
-                    this.props.localityTree,
-                  )}
-                </tbody>
-              </table>
-            </section>
-          )}
-        />
-      </div>
+      isNil(status) || status !== LivenessStatus.NODE_STATUS_DECOMMISSIONED
     );
-  }
+  });
 }
 
-const mapStateToProps = (state: AdminUIState, _: RouteComponentProps) => ({
-  // RootState contains declaration for whole state
-  localityTree: selectLocalityTree(state),
-  localityStatus: selectNodeRequestStatus(state),
-  locationTree: selectLocationTree(state),
-  locationStatus: selectLocationsRequestStatus(state),
-});
+export function Localities({
+  history,
+}: RouteComponentProps): React.ReactElement {
+  const {
+    nodeStatuses,
+    livenessStatusByNodeID,
+    isLoading: nodesLoading,
+    error: nodesError,
+  } = useNodesSummary();
 
-const mapDispatchToProps = {
-  refreshLocations,
-  refreshNodes,
-};
+  const {
+    locationTree,
+    isLoading: locationsLoading,
+    error: locationsError,
+  } = useLocations();
 
-export default withRouter(
-  connect(mapStateToProps, mapDispatchToProps)(Localities),
-);
+  const isLoading = nodesLoading || locationsLoading;
+  const errors = [nodesError, locationsError].filter(Boolean);
+
+  const localityTree = useMemo(
+    () =>
+      buildLocalityTree(
+        getCommissionedNodes(nodeStatuses, livenessStatusByNodeID),
+      ),
+    [nodeStatuses, livenessStatusByNodeID],
+  );
+
+  return (
+    <div>
+      <Helmet title="Localities | Debug" />
+      <BackToAdvanceDebug history={history} />
+      <section className="section">
+        <h1 className="base-heading">Localities</h1>
+      </section>
+      <Loading
+        loading={isLoading}
+        page={"localities"}
+        error={errors}
+        render={() => (
+          <section className="section">
+            <table className="locality-table">
+              <thead>
+                <tr>
+                  <th>Localities</th>
+                  <th>Nodes</th>
+                  <th>Location</th>
+                </tr>
+              </thead>
+              <tbody>{renderLocalityTree(locationTree, localityTree)}</tbody>
+            </table>
+          </section>
+        )}
+      />
+    </div>
+  );
+}
+
+export default withRouter(Localities);

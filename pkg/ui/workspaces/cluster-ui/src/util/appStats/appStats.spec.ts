@@ -3,8 +3,6 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { assert } from "chai";
-
 import {
   aggregateNumericStats,
   NumericStat,
@@ -63,19 +61,19 @@ describe("addNumericStats", () => {
       record(ab, countAB, v);
     });
 
-    assert.approximately(a.mean, 2.2, 0.0000001);
-    assert.approximately(a.mean, sumA / countA, 0.0000001);
-    assert.approximately(b.mean, sumB / countB, 0.0000001);
-    assert.approximately(ab.mean, sumAB / countAB, 0.0000001);
+    expect(a.mean).toBeCloseTo(2.2, 6);
+    expect(a.mean).toBeCloseTo(sumA / countA, 6);
+    expect(b.mean).toBeCloseTo(sumB / countB, 6);
+    expect(ab.mean).toBeCloseTo(sumAB / countAB, 6);
 
     const combined = aggregateNumericStats(a, b, countA, countB);
 
-    assert.approximately(combined.mean, ab.mean, 0.0000001);
-    assert.approximately(combined.squared_diffs, ab.squared_diffs, 0.0000001);
+    expect(combined.mean).toBeCloseTo(ab.mean, 6);
+    expect(combined.squared_diffs).toBeCloseTo(ab.squared_diffs, 6);
 
     const reversed = aggregateNumericStats(b, a, countB, countA);
 
-    assert.deepEqual(reversed, combined);
+    expect(reversed).toEqual(combined);
   });
 });
 
@@ -172,21 +170,20 @@ describe("flattenStatementStats", () => {
 
     const flattened = flattenStatementStats(stats);
 
-    assert.equal(flattened.length, stats.length);
+    expect(flattened).toHaveLength(stats.length);
 
     for (let i = 0; i < flattened.length; i++) {
-      assert.equal(flattened[i].statement, stats[i].key.key_data.query);
-      assert.equal(
-        flattened[i].statement_summary,
+      expect(flattened[i].statement).toBe(stats[i].key.key_data.query);
+      expect(flattened[i].statement_summary).toBe(
         stats[i].key.key_data.query_summary,
       );
-      assert.equal(flattened[i].app, stats[i].key.key_data.app);
-      assert.equal(flattened[i].distSQL, stats[i].key.key_data.distSQL);
-      assert.equal(flattened[i].vec, stats[i].key.key_data.vec);
-      assert.equal(flattened[i].full_scan, stats[i].key.key_data.full_scan);
-      assert.equal(flattened[i].node_id, stats[i].key.node_id);
+      expect(flattened[i].app).toBe(stats[i].key.key_data.app);
+      expect(flattened[i].distSQL).toBe(stats[i].key.key_data.distSQL);
+      expect(flattened[i].vec).toBe(stats[i].key.key_data.vec);
+      expect(flattened[i].full_scan).toBe(stats[i].key.key_data.full_scan);
+      expect(flattened[i].node_id).toBe(stats[i].key.node_id);
 
-      assert.equal(flattened[i].stats, stats[i].stats);
+      expect(flattened[i].stats).toBe(stats[i].stats);
     }
   });
 });

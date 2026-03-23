@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -72,9 +73,9 @@ func TestFindUpdateDescriptor(t *testing.T) {
 
 					return srk
 				},
-				func(t *testing.T, ctx context.Context, reader storage.Reader) {
+				func(t *testing.T, ctx context.Context, raftRO kvstorage.RaftRO) {
 					seq, err := loqrecovery.GetDescriptorChangesFromRaftLog(
-						ctx, testRangeID, 0, math.MaxInt64, reader)
+						ctx, testRangeID, 0, math.MaxInt64, raftRO)
 					require.NoError(t, err, "failed to read raft log data")
 
 					requireContainsDescriptor(t, loqrecoverypb.DescriptorChangeInfo{
@@ -125,9 +126,9 @@ func TestFindUpdateRaft(t *testing.T) {
 
 					return srk
 				},
-				func(t *testing.T, ctx context.Context, reader storage.Reader) {
+				func(t *testing.T, ctx context.Context, raftRO kvstorage.RaftRO) {
 					seq, err := loqrecovery.GetDescriptorChangesFromRaftLog(
-						ctx, sRD.RangeID, 0, math.MaxInt64, reader)
+						ctx, sRD.RangeID, 0, math.MaxInt64, raftRO)
 					require.NoError(t, err, "failed to read raft log data")
 					requireContainsDescriptor(t, loqrecoverypb.DescriptorChangeInfo{
 						ChangeType: loqrecoverypb.DescriptorChangeType_ReplicaChange,
@@ -142,13 +143,13 @@ func checkRaftLog(
 	ctx context.Context,
 	nodeToMonitor int,
 	action func(ctx context.Context, tc *testcluster.TestCluster) roachpb.RKey,
-	assertRaftLog func(*testing.T, context.Context, storage.Reader),
+	assertRaftLog func(*testing.T, context.Context, kvstorage.RaftRO),
 	leaseType roachpb.LeaseType,
 ) {
 	t.Helper()
 
 	makeSnapshot := make(chan storage.Engine, 2)
-	snapshots := make(chan storage.Reader, 2)
+	snapshots := make(chan kvstorage.RaftRO, 2)
 
 	raftFilter := func(args kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
 		t.Helper()
@@ -178,7 +179,8 @@ func checkRaftLog(
 			Settings: st,
 			Knobs: base.TestingKnobs{
 				Store: &kvserver.StoreTestingKnobs{
-					DisableGCQueue: true,
+					DisableGCQueue:      true,
+					DisableRaftLogQueue: true,
 				},
 			},
 			StoreSpecs: []base.StoreSpec{{InMemory: true}},
@@ -192,6 +194,7 @@ func checkRaftLog(
 					Store: &kvserver.StoreTestingKnobs{
 						TestingPostApplyFilter: raftFilter,
 						DisableGCQueue:         true,
+						DisableRaftLogQueue:    true,
 					},
 				},
 				StoreSpecs: []base.StoreSpec{{InMemory: true}},
@@ -209,7 +212,7 @@ func checkRaftLog(
 
 	// TODO(sep-raft-log): the receiver doesn't use the engine, so remove this
 	// altogether and use a `chan struct{}{}`.
-	eng := tc.GetFirstStoreFromServer(t, nodeToMonitor).TODOEngine()
+	eng := tc.GetFirstStoreFromServer(t, nodeToMonitor).LogEngine()
 	makeSnapshot <- eng
 	// After the test action is complete raft might be completely caught up with
 	// its messages, so we will write a value into the range to ensure filter
@@ -218,8 +221,8 @@ func checkRaftLog(
 		tc.Server(0).DB().Put(ctx, testutils.MakeKey(skey, []byte("second")), "some data"),
 		"failed to put test value")
 	reader := <-snapshots
-	assertRaftLog(t, ctx, reader)
 	defer reader.Close()
+	assertRaftLog(t, ctx, reader)
 }
 
 func requireContainsDescriptor(

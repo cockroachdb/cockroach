@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -1589,6 +1590,136 @@ func BenchmarkFuncExprTypeCheck(b *testing.B) {
 			for i := 0; i < b.N; i++ {
 				_, err := tree.TypeCheck(ctx, expr, semaCtx, types.AnyElement)
 				require.NoError(b, err)
+			}
+		})
+	}
+}
+
+// BenchmarkShowIndexes measures SHOW INDEXES performance as the number of
+// tables in the database increases. Before the fix for #164443, pg_class had
+// an incomplete virtual index that caused each index OID lookup to fall back
+// to a full table scan, making SHOW INDEXES scale quadratically with the
+// number of objects.
+func BenchmarkShowIndexes(b *testing.B) {
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+	benchmarkCockroach(b, func(b *testing.B, db *sqlutils.SQLRunner) {
+		numCreated := 0
+		for _, numTables := range []int{10, 50, 100} {
+			b.Run(fmt.Sprintf("tables=%d", numTables), func(b *testing.B) {
+				for i := numCreated; i < numTables; i++ {
+					db.Exec(b, fmt.Sprintf(
+						"CREATE TABLE t%d (a INT PRIMARY KEY, b INT, INDEX idx_%d(b))", i, i,
+					))
+				}
+				numCreated = numTables
+				b.ResetTimer()
+				for i := 0; i < b.N; i++ {
+					rows := db.Query(b, "SHOW INDEXES FROM t0")
+					rows.Close()
+				}
+				b.StopTimer()
+			})
+		}
+	})
+}
+
+// BenchmarkASH measures the overhead of Active Session History (ASH) sampling.
+// It tests with ASH disabled vs enabled, and when enabled, varies the sampling
+// interval to measure its impact on performance.
+func BenchmarkASH(b *testing.B) {
+	skip.UnderShort(b)
+	defer log.Scope(b).Close(b)
+
+	type clusterCreationFn func(tr *tracing.Tracer) (*sqlutils.SQLRunner, *stop.Stopper)
+	type clusterSpec struct {
+		name   string
+		create clusterCreationFn
+	}
+	for _, cluster := range []clusterSpec{
+		{
+			name: "1node",
+			create: func(tr *tracing.Tracer) (*sqlutils.SQLRunner, *stop.Stopper) {
+				s, db, _ := serverutils.StartServer(b, base.TestServerArgs{
+					UseDatabase: "bench",
+					Tracer:      tr,
+				})
+				sqlRunner := sqlutils.MakeSQLRunner(db)
+				return sqlRunner, s.Stopper()
+			},
+		},
+		{
+			name: "3node",
+			create: func(tr *tracing.Tracer) (*sqlutils.SQLRunner, *stop.Stopper) {
+				tc := testcluster.StartTestCluster(b, 3,
+					base.TestClusterArgs{
+						ReplicationMode: base.ReplicationAuto,
+						ServerArgs: base.TestServerArgs{
+							UseDatabase: "bench",
+							Tracer:      tr,
+						},
+					})
+				sqlRunner := sqlutils.MakeRoundRobinSQLRunner(tc.Conns[0], tc.Conns[1], tc.Conns[2])
+				return sqlRunner, tc.Stopper()
+			},
+		},
+	} {
+		b.Run(cluster.name, func(b *testing.B) {
+			ctx := context.Background()
+
+			type benchmark struct {
+				name string
+				fn   func(b *testing.B, db *sqlutils.SQLRunner)
+			}
+			for _, bench := range []benchmark{
+				{
+					name: "scan",
+					fn: func(b *testing.B, db *sqlutils.SQLRunner) {
+						runBenchmarkScan(b, db, 1, 1)
+					},
+				},
+				{
+					name: "insert",
+					fn: func(b *testing.B, db *sqlutils.SQLRunner) {
+						runBenchmarkInsert(b, db, 1)
+					},
+				},
+			} {
+				b.Run(bench.name, func(b *testing.B) {
+					type testSpec struct {
+						ashEnabled     bool
+						sampleInterval time.Duration
+					}
+					for _, test := range []testSpec{
+						{ashEnabled: false},
+						{ashEnabled: true, sampleInterval: 100 * time.Millisecond},
+						{ashEnabled: true, sampleInterval: 500 * time.Millisecond},
+						{ashEnabled: true, sampleInterval: 1 * time.Second},
+					} {
+						var name string
+						if !test.ashEnabled {
+							name = "ash=off"
+						} else {
+							name = fmt.Sprintf("ash=on/interval=%s", test.sampleInterval)
+						}
+						b.Run(name, func(b *testing.B) {
+							tr := tracing.NewTracerWithOpt(ctx,
+								tracing.WithTracingMode(tracing.TracingModeOnDemand))
+							sqlRunner, stop := cluster.create(tr)
+							defer stop.Stop(ctx)
+
+							sqlRunner.Exec(b, `CREATE DATABASE bench`)
+							sqlRunner.Exec(b, `SET CLUSTER SETTING obs.ash.enabled = $1`, test.ashEnabled)
+							if test.ashEnabled {
+								sqlRunner.Exec(b, `SET CLUSTER SETTING obs.ash.sample_interval = $1`,
+									test.sampleInterval.String())
+							}
+
+							b.ReportAllocs()
+							bench.fn(b, sqlRunner)
+						})
+					}
+				})
 			}
 		})
 	}

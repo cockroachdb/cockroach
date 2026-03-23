@@ -10,8 +10,6 @@ import DebugAnnotation from "src/views/shared/components/debugAnnotation";
 /**
  * LicenseType is an indicator showing the current build license.
  */
-export default class LicenseType extends React.Component<{}, {}> {
-  render() {
-    return <DebugAnnotation label="License type" value="OSS" />;
-  }
+export default function LicenseType(): React.ReactElement {
+  return <DebugAnnotation label="License type" value="OSS" />;
 }

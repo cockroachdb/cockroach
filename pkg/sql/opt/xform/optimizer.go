@@ -247,25 +247,12 @@ func (o *Optimizer) Memo() *memo.Memo {
 // properties at the lowest possible execution cost, but is still logically
 // equivalent to the given expression. If there is a cost "tie", then any one
 // of the qualifying lowest cost expressions may be selected by the optimizer.
-func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
+func (o *Optimizer) Optimize() (_ opt.Expr, retErr error) {
 	log.VEventf(o.ctx, 1, "optimize start")
 	defer log.VEventf(o.ctx, 1, "optimize finish")
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate internal errors without having to add
-			// error checks everywhere throughout the code. This is only possible
-			// because the code does not update shared state and does not manipulate
-			// locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-				log.VEventf(o.ctx, 1, "%v", err)
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
+	defer errorutil.MaybeCatchPanic(&retErr, func(caughtErr error) {
+		log.VEventf(o.ctx, 1, "%v", caughtErr)
+	})
 
 	if o.mem.IsOptimized() {
 		return nil, errors.AssertionFailedf("cannot optimize a memo multiple times")

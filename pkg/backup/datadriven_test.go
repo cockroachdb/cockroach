@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
@@ -194,6 +195,11 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 	closedts.SideTransportCloseInterval.Override(context.Background(), &settings.SV, 10*time.Millisecond)
 	kvserver.RangeFeedRefreshInterval.Override(context.Background(), &settings.SV, 10*time.Millisecond)
 	sql.TempObjectWaitInterval.Override(context.Background(), &settings.SV, time.Millisecond)
+	// Disable AC yielding as these tests can run many in-process clusters at once
+	// and overload the host. Generally overload would mean bulk work, which only
+	// uses strictly spare capacitym gets starved, but these tests expect it to
+	// still run (just slowly, along with everything else).
+	admission.YieldForElasticCPU.Override(context.Background(), &settings.SV, false)
 	params.ServerArgs.Settings = settings
 
 	clusterSize := cfg.nodes
@@ -226,7 +232,11 @@ func (d *datadrivenTestState) addCluster(t *testing.T, cfg clusterCfg) error {
 		backuptestutils.WithSkipInvalidDescriptorCheck(),
 	}
 	if cfg.iodir == "" {
-		opts = append(opts, backuptestutils.WithBank(cfg.splits))
+		rows := cfg.splits
+		if rows < 2 {
+			rows = 2
+		}
+		opts = append(opts, backuptestutils.WithBank(rows))
 	}
 
 	var tc serverutils.TestClusterInterface
@@ -478,6 +488,10 @@ func (d *datadrivenTestState) getSQLDBForVC(
 //
 //lint:ignore U1000 unused
 func runTestDataDriven(t *testing.T, testFilePathFromWorkspace string) {
+	// TODO(at): data driven tests will need some tweaks to work with OR metamorphic, which will
+	// likely be simplified after fixing some of the other test infra issues.
+	backuptestutils.DisableFastRestoreForTest(t)
+
 	// This test uses this mock HTTP server to pass the backup files between tenants.
 	httpAddr, httpServerCleanup := makeInsecureHTTPServer(t)
 	defer httpServerCleanup()

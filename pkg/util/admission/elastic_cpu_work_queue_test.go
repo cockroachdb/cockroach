@@ -60,7 +60,8 @@ func TestElasticCPUWorkQueue(t *testing.T) {
 					d.ScanArgs(t, "disabled", &elasticCPUInternalWorkQueue.disabled)
 				}
 
-				handle, err := elasticWorkQ.Admit(ctx, duration, WorkInfo{TenantID: roachpb.SystemTenantID})
+				handle, err := elasticWorkQ.Admit(
+					ctx, duration, WorkInfo{TenantID: roachpb.SystemTenantID}, false)
 				require.NoError(t, err)
 
 				var buf strings.Builder
@@ -124,7 +125,7 @@ type testElasticCPUGranter struct {
 	buf strings.Builder
 }
 
-var _ granter = &testElasticCPUGranter{}
+var _ granterAndYieldDelayRecorder = &testElasticCPUGranter{}
 
 func (t *testElasticCPUGranter) tryGet(_ burstQualification, count int64) (granted bool) {
 	panic("unimplemented")
@@ -142,6 +143,10 @@ func (t *testElasticCPUGranter) continueGrantChain(grantChainID grantChainID) {
 	panic("unimplemented")
 }
 
+func (t *testElasticCPUGranter) RecordYieldDelay(d time.Duration) {
+	// No-op for tests.
+}
+
 type testElasticCPUInternalWorkQueue struct {
 	buf      strings.Builder
 	disabled bool
@@ -151,11 +156,11 @@ var _ elasticCPUInternalWorkQueue = &testElasticCPUInternalWorkQueue{}
 
 func (t *testElasticCPUInternalWorkQueue) Admit(
 	_ context.Context, info WorkInfo,
-) (enabled bool, err error) {
+) (AdmitResponse, error) {
 	if !t.disabled {
 		t.buf.WriteString(fmt.Sprintf("admitted=%s ", time.Duration(info.RequestedCount)))
 	}
-	return !t.disabled, nil
+	return AdmitResponse{Enabled: !t.disabled}, nil
 }
 
 func (t *testElasticCPUInternalWorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {

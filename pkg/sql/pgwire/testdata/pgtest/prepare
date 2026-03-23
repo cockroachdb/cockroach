@@ -151,3 +151,45 @@ ReadyForQuery
 {"Type":"BindComplete"}
 {"Type":"CommandComplete","CommandTag":"EXPLAIN"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Regression test for #161382: EXPLAIN ANALYZE EXECUTE of a SQL-level PREPARE
+# with binary format codes. The prepared query returns multiple columns, but
+# EXPLAIN ANALYZE returns only one column. This previously caused an assertion
+# failure when trying to get format codes for the inner query's columns.
+send
+Query {"String": "CREATE TABLE t0 (c0 FLOAT);"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "PREPARE prepare_query (float8, float8, float8) AS SELECT ALL sum($1), stddev($2), avg($3) FROM t0 GROUP BY t0.c0;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"PREPARE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execute the prepared statement via EXPLAIN ANALYZE EXECUTE with binary format.
+# This reproduces the bug: EXPLAIN ANALYZE has 1 output column, but the inner
+# query has 3 columns, causing a format code mismatch.
+send
+Parse {"Name": "exec_stmt", "Query": "EXPLAIN ANALYZE EXECUTE prepare_query(1.95573964E8::float8, 0.03965984596601002::float8, 0.4293795941585613::float8)"}
+Bind {"DestinationPortal": "exec_portal", "PreparedStatement": "exec_stmt", "ResultFormatCodes": [1]}
+Execute {"Portal": "exec_portal"}
+Sync
+----
+
+until ignore=DataRow
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"EXPLAIN"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

@@ -458,7 +458,7 @@ func (histogramData *HistogramData) TypeCheck(
 	if histogramData.ColumnType.Family() == types.BytesFamily {
 		return nil
 	}
-	if !histogramData.ColumnType.Equivalent(colType) {
+	if !hasIdenticalHistogramEncoding(histogramData.ColumnType, colType) {
 		return errors.Newf(
 			"histogram for table %v column %v created_at %s does not match column type %v: %v",
 			table, column, createdAt, colType.SQLStringForError(),
@@ -1037,4 +1037,28 @@ func expectedDistinctCount(k, n float64) float64 {
 		}
 	}
 	return count
+}
+
+// hasIdenticalHistogramEncoding returns true if values of the two types have
+// identical binary encodings for histogram bucket upper bounds. This allows
+// reusing histograms after metadata-only ALTER COLUMN TYPE conversions where
+// the underlying encoding doesn't change.
+//
+// This is specifically needed because ALTER COLUMN TYPE from TIMESTAMP to
+// TIMESTAMPTZ (or vice versa) is a metadata-only change that doesn't rewrite
+// data, but the histogram's ColumnType still references the old type. Since
+// both types use identical encoding (both store time.Time), the histogram
+// remains valid.
+func hasIdenticalHistogramEncoding(t, other *types.T) bool {
+	if t.Equivalent(other) {
+		return true
+	}
+	// TIMESTAMP and TIMESTAMPTZ have identical encoding (both store time.Time).
+	// This is the only cross-family trivial conversion defined in the schema
+	// changer where both types share the same encoding.
+	if (t.Family() == types.TimestampFamily || t.Family() == types.TimestampTZFamily) &&
+		(other.Family() == types.TimestampFamily || other.Family() == types.TimestampTZFamily) {
+		return true
+	}
+	return false
 }

@@ -15,7 +15,13 @@ package tests
 var nodePostgresBlockList = blocklist{}
 
 var nodePostgresIgnoreList = blocklist{
-	"events => emits acquire every time a client is acquired":             "flaky",
-	"pool => with callbacks => removes client if it errors in background": "152728",
-	"pool size of 1 => can only send 1 query at a time":                   "152728",
+	"connection timeout => releases newly connected clients if the queued already timed out":                       "flaky",
+	"events => emits acquire every time a client is acquired":                                                      "flaky",
+	"lifetime timeout => can remove expired clients and recreate them":                                             "flaky",
+	"lifetime timeout => connection lifetime should expire and remove the client after the client is done working": "flaky",
+	"pool ending => ends with clients":                                                                             "flaky",
+	"pool error handling => pool with lots of errors => continues to work and provide new clients":                 "flaky",
+	"pool => with callbacks => removes client if it errors in background":                                          "152728",
+	"pool => with callbacks => works totally unconfigured":                                                         "flaky",
+	"pool size of 1 => can only send 1 query at a time":                                                            "152728",
 }

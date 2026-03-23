@@ -16,9 +16,13 @@ const resampleCount = 1000
 const confidence = 0.95
 
 // calculateConfidenceInterval calculates the confidence interval for the ratio
-// of two sets of values. The confidence interval is calculated using a
-// bootstrap method.
+// of two sets of values using a bootstrap method. UndefinedConfidenceInterval
+// is returned when the interval cannot be computed (e.g. empty inputs or all
+// baseline medians are zero).
 func calculateConfidenceInterval(newValues, oldValues []float64) ConfidenceInterval {
+	if len(newValues) == 0 || len(oldValues) == 0 {
+		return UndefinedConfidenceInterval
+	}
 	rng := rand.New(rand.NewSource(hash(newValues) + hash(oldValues)))
 	ratios := make([]float64, 0, resampleCount)
 	resNew := make([]float64, len(newValues))
@@ -36,7 +40,7 @@ func calculateConfidenceInterval(newValues, oldValues []float64) ConfidenceInter
 		}
 	}
 	if len(ratios) == 0 {
-		return ConfidenceInterval{}
+		return UndefinedConfidenceInterval
 	}
 	sort.Float64s(ratios)
 	alpha := (1.0 - confidence) / 2.0
@@ -52,6 +56,9 @@ func calculateConfidenceInterval(newValues, oldValues []float64) ConfidenceInter
 // resample samples a slice of values with replacement.
 func resample(r *rand.Rand, src, dest []float64) {
 	length := len(src)
+	if length == 0 {
+		return
+	}
 	for i := range dest {
 		dest[i] = src[r.Intn(length)]
 	}
@@ -68,6 +75,9 @@ func hash(data []float64) int64 {
 
 // median returns the median of a sorted slice of values.
 func median(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
 	length := len(values)
 	if length%2 == 0 {
 		return (values[length/2] + values[length/2-1]) / 2

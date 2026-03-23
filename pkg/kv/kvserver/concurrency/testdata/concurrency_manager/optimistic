@@ -17,7 +17,7 @@ sequence req=req1
 
 on-lock-acquired req=req1 key=d
 ----
-[-] acquire lock: txn 00000001 @ ‹d›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"d"›
 
 debug-lock-table
 ----

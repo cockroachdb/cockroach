@@ -1217,6 +1217,13 @@ func (up *upgradePlan) Add(steps []testStep) {
 	up.sequentialStep.steps = append(up.sequentialStep.steps, steps...)
 }
 
+// walkSteps recursively walks through all steps in the given slice,
+// calling the function `f` for every `singleStep` encountered. The
+// function returns the transformed list of steps.
+//
+// This is a pure function that does not mutate the RNG state. When new
+// steps are inserted into concurrent groups, they must be wrapped in
+// delayedStep by the caller (see applyMutations).
 func (plan *TestPlan) walkSteps(steps []testStep, f func(*singleStep, bool) []testStep) []testStep {
 	var mapStep func(testStep, bool) []testStep
 	mapStep = func(step testStep, isConcurrent bool) []testStep {
@@ -1233,14 +1240,15 @@ func (plan *TestPlan) walkSteps(steps []testStep, f func(*singleStep, bool) []te
 			for _, concurrentStep := range s.delayedSteps {
 				ds := concurrentStep.(delayedStep)
 				for _, ss := range mapStep(ds.step, true) {
-					// If the function returned the original step, don't
-					// generate a new delay for it.
+					// If the function returned the original step, preserve its delay.
 					if ss == ds.step {
 						newSteps = append(newSteps, delayedStep{delay: ds.delay, step: ss})
+					} else if delayedSs, ok := ss.(delayedStep); ok {
+						// If the caller already wrapped it in a delayedStep, use that.
+						newSteps = append(newSteps, delayedSs)
 					} else {
-						newSteps = append(newSteps, delayedStep{
-							delay: randomConcurrencyDelay(s.rng, plan.isLocal), step: ss},
-						)
+						// New step without delay wrapper - preserve original delay.
+						newSteps = append(newSteps, delayedStep{delay: ds.delay, step: ss})
 					}
 				}
 			}
@@ -1311,11 +1319,13 @@ func (plan *TestPlan) mapUpgrades(
 	return newUpgrades
 }
 
-func (plan *TestPlan) iterateSingleSteps(f func(*singleStep, bool) []testStep) {
-	plan.mapServiceSetup(plan.setup.systemSetup, f)
-	plan.mapServiceSetup(plan.setup.tenantSetup, f)
-	plan.walkSteps(plan.initSteps, f)
-	plan.mapUpgrades(plan.upgrades, f)
+// iterateSingleSteps is a pure (side-effect free) function that calls
+// `f` for every `singleStep` in the test plan.
+func (plan *TestPlan) iterateSingleSteps(f func(*singleStep, bool)) {
+	plan.walkSteps(plan.Steps(), func(ss *singleStep, isConcurrent bool) []testStep {
+		f(ss, isConcurrent)
+		return []testStep{ss}
+	})
 }
 
 func newStepIndex(plan *TestPlan) stepIndex {
@@ -1581,24 +1591,38 @@ func (plan *TestPlan) applyMutations(rng *rand.Rand, mutations []mutation) {
 
 			switch mut.op {
 			case mutationInsertBefore:
+				if isConcurrent {
+					return []testStep{
+						delayedStep{delay: randomConcurrencyDelay(rng, plan.isLocal), step: newSingleStep},
+						ss,
+					}
+				}
 				return []testStep{newSingleStep, ss}
 			case mutationInsertAfter:
+				if isConcurrent {
+					return []testStep{
+						ss,
+						delayedStep{delay: randomConcurrencyDelay(rng, plan.isLocal), step: newSingleStep},
+					}
+				}
 				return []testStep{ss, newSingleStep}
 			case mutationInsertConcurrent:
-				steps := []testStep{ss, newSingleStep}
-
 				// If the reference step is already part of a
 				// `concurrentRunStep`, return the existing and new steps in
 				// sequence; they will already be running concurrently in this
 				// case, and nothing else is needed.
 				if index.IsConcurrent(ss) {
-					return steps
+					// Wrap the new step in a delayedStep with a generated delay.
+					return []testStep{
+						ss,
+						delayedStep{delay: randomConcurrencyDelay(rng, plan.isLocal), step: newSingleStep},
+					}
 				}
 
 				// Otherwise, create a new `concurrentRunStep` for the two
 				// steps.
 				return []testStep{
-					newConcurrentRunStep(genericLabel, steps, rng, plan.isLocal),
+					newConcurrentRunStep(genericLabel, []testStep{ss, newSingleStep}, rng, plan.isLocal),
 				}
 			case mutationRemove:
 				return nil
@@ -1773,11 +1797,10 @@ func (plan *TestPlan) prettyPrintInternal(debug bool) string {
 	}
 	// Extract user hooks from the plan.
 	userHooks := make(map[string]string)
-	plan.iterateSingleSteps(func(ss *singleStep, _ bool) []testStep {
+	plan.iterateSingleSteps(func(ss *singleStep, _ bool) {
 		if hook, ok := ss.impl.(runHookStep); ok {
 			userHooks[hook.hook.id] = hook.hook.name
 		}
-		return nil
 	})
 	if len(userHooks) > 0 {
 		names := slices.Collect(maps.Values(userHooks))

@@ -137,6 +137,15 @@ func TestAlterTenantAddReader(t *testing.T) {
 	c.DestSysSQL.CheckQueryResults(t, "SELECT name, data_state FROM [SHOW TENANTS] ORDER BY name",
 		[][]string{{"destination", "replicating"}, {"destination-readonly", "ready"}, {"system", "ready"}},
 	)
+
+	testutils.SucceedsSoon(t, func() error {
+		readonlyConn, err := c.DestSysServer.SQLConnE(serverutils.DBName("cluster:destination-readonly"))
+		if err != nil {
+			return err
+		}
+		defer readonlyConn.Close()
+		return readonlyConn.PingContext(ctx)
+	})
 }
 
 func TestAlterTenantPauseResume(t *testing.T) {

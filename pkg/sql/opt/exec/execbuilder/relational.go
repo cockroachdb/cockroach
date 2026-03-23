@@ -432,6 +432,10 @@ func (b *Builder) maybeAnnotateWithEstimates(node exec.Node, e memo.RelExpr) {
 					}
 				}
 			}
+			if tab.CanaryAndStableStatsDiffer() {
+				val.CanaryStatsActive = true
+				val.CanaryWindowSize = tab.StatsCanaryWindow()
+			}
 		}
 		ef.AnnotateNode(node, exec.EstimatedStatsID, &val)
 	}
@@ -944,7 +948,7 @@ func (b *Builder) buildScan(scan *memo.ScanExpr) (_ execPlan, outputCols colOrdM
 	}
 	root, err := b.factory.ConstructScan(
 		tab,
-		tab.Index(scan.Index),
+		idx,
 		params,
 		reqOrdering,
 	)
@@ -972,9 +976,37 @@ func (b *Builder) buildPlaceholderScan(
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf("PlaceholderScan cannot have constraints")
 	}
 
+	// Evaluate the scalar expressions.
+	values := make([]tree.Datum, len(scan.Span))
+	for i, expr := range scan.Span {
+		// The expression is either a placeholder or a constant.
+		var val tree.Datum
+		if p, ok := expr.(*memo.PlaceholderExpr); ok {
+			val, err = eval.Expr(b.ctx, b.evalCtx, p.Value)
+			if err != nil {
+				return execPlan{}, colOrdMap{}, err
+			}
+		} else {
+			val = memo.ExtractConstDatum(expr)
+		}
+		if val == tree.DNull {
+			// If any value is NULL, then build an empty values operator instead
+			// of a scan. No row can satisfy the equality filter that was used
+			// to build this placeholder scan, because of SQL NULL-equality
+			// semantics.
+			return b.buildValues(&memo.ValuesExpr{
+				ValuesPrivate: memo.ValuesPrivate{
+					Cols: scan.Cols.ToList(),
+				},
+			})
+		}
+		values[i] = val
+	}
+
 	md := b.mem.Metadata()
 	tab := md.Table(scan.Table)
 	idx := tab.Index(scan.Index)
+	b.IndexesUsed.add(tab.ID(), idx.ID())
 
 	// Build the index constraint.
 	spanColumns := make([]opt.OrderingColumn, len(scan.Span))
@@ -987,20 +1019,6 @@ func (b *Builder) buildPlaceholderScan(
 	var columns constraint.Columns
 	columns.Init(spanColumns)
 	keyCtx := constraint.MakeKeyContext(b.ctx, &columns, b.evalCtx)
-
-	values := make([]tree.Datum, len(scan.Span))
-	for i, expr := range scan.Span {
-		// The expression is either a placeholder or a constant.
-		if p, ok := expr.(*memo.PlaceholderExpr); ok {
-			val, err := eval.Expr(b.ctx, b.evalCtx, p.Value)
-			if err != nil {
-				return execPlan{}, colOrdMap{}, err
-			}
-			values[i] = val
-		} else {
-			values[i] = memo.ExtractConstDatum(expr)
-		}
-	}
 
 	key := constraint.MakeCompositeKey(values...)
 	var span constraint.Span
@@ -1026,7 +1044,7 @@ func (b *Builder) buildPlaceholderScan(
 	}
 	root, err := b.factory.ConstructScan(
 		tab,
-		tab.Index(scan.Index),
+		idx,
 		params,
 		reqOrdering,
 	)
@@ -1257,28 +1275,13 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 	// Note: we put o outside of the function so we allocate it only once.
 	var o xform.Optimizer
 	fromMemo := b.mem
-	planRightSideFn := func(ctx context.Context, ef exec.Factory, leftRow tree.Datums) (_ exec.Plan, err error) {
-		defer func() {
-			if r := recover(); r != nil {
-				// This code allows us to propagate internal errors without having to add
-				// error checks everywhere throughout the code. This is only possible
-				// because the code does not update shared state and does not manipulate
-				// locks.
-				//
-				// This is the same panic-catching logic that exists in
-				// o.Optimize() below. It's required here because it's possible
-				// for factory functions to panic below, like
-				// CopyAndReplaceDefault.
-				if ok, e := errorutil.ShouldCatch(r); ok {
-					err = e
-					log.VEventf(ctx, 1, "%v", err)
-				} else {
-					// Other panic objects can't be considered "safe" and thus are
-					// propagated as crashes that terminate the session.
-					panic(r)
-				}
-			}
-		}()
+	planRightSideFn := func(ctx context.Context, ef exec.Factory, leftRow tree.Datums) (_ exec.Plan, retErr error) {
+		// This is the same panic-catching logic that exists in o.Optimize()
+		// below. It's required here because it's possible for factory functions
+		// to panic below, like CopyAndReplaceDefault.
+		defer errorutil.MaybeCatchPanic(&retErr, func(caughtErr error) {
+			log.VEventf(ctx, 1, "%v", caughtErr)
+		})
 
 		o.Init(ctx, b.evalCtx, b.catalog)
 		f := o.Factory()
@@ -3454,7 +3457,7 @@ func (b *Builder) buildLocking(toLock opt.TableID, locking opt.Locking) (opt.Loc
 		}
 		if locking.Form == tree.LockPredicate {
 			return opt.Locking{}, unimplemented.NewWithIssuef(
-				110873, "explicit unique checks are not yet supported under read committed isolation",
+				126592, "explicit unique checks are not yet supported under read committed isolation",
 			)
 		}
 		// Check if we can actually use shared locks here, or we need to use
@@ -3719,6 +3722,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		udf.Def.BodyProps,
 		udf.Def.BodyStmts,
 		udf.Def.BodyTags,
+		udf.Def.BodyASTs,
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 		0,     /* resultBufferID */
@@ -4116,6 +4120,7 @@ func (b *Builder) buildVectorSearch(
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
 			"vector search is only supported on vector indexes")
 	}
+	b.IndexesUsed.add(table.ID(), index.ID())
 	primaryKeyCols := md.TableMeta(search.Table).IndexKeyColumns(cat.PrimaryIndex)
 	for col, ok := search.Cols.Next(0); ok; col, ok = search.Cols.Next(col + 1) {
 		if !primaryKeyCols.Contains(col) {
@@ -4162,6 +4167,7 @@ func (b *Builder) buildVectorMutationSearch(
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf(
 			"vector mutation search is only supported on vector indexes")
 	}
+	b.IndexesUsed.add(table.ID(), index.ID())
 
 	input, inputCols, err := b.buildRelational(search.Input)
 	if err != nil {

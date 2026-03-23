@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // TestColBatchScanMeta makes sure that the ColBatchScan propagates the leaf
@@ -193,7 +194,13 @@ func BenchmarkColBatchScan(b *testing.B) {
 				b.StartTimer()
 				tr.Init(ctx)
 				for {
-					bat := tr.Next()
+					bat, meta := tr.Next()
+					if meta != nil {
+						if meta.Metrics != nil {
+							continue
+						}
+						b.Fatal(errors.AssertionFailedf("unexpected meta: %+v", meta))
+					}
 					if bat.Length() == 0 {
 						break
 					}

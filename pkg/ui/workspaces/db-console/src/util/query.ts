@@ -14,10 +14,6 @@ interface ParamsObj {
   [key: string]: string;
 }
 
-interface URLSearchParamsWithKeys extends URLSearchParams {
-  keys: () => string;
-}
-
 // propsToQueryString is a helper function that converts a set of object
 // properties to a query string
 // - keys with null or undefined values will be skipped
@@ -33,9 +29,7 @@ export function propsToQueryString(props: { [k: string]: any }): string {
 }
 
 export function queryToObj(location: Location, key: string, value: string) {
-  const params = new URLSearchParams(
-    location.search,
-  ) as URLSearchParamsWithKeys;
+  const params = new URLSearchParams(location.search);
   const paramObj: ParamsObj = {};
   for (const data of params.keys()) {
     paramObj[data] = params.get(data);

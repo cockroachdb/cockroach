@@ -28,6 +28,8 @@ module.exports = (env, argv) => {
       filename: "main.js",
       library: "adminUI",
       libraryTarget: "umd",
+      // Disable automatic publicPath detection which fails in Jest's JSDOM environment
+      publicPath: "",
     },
 
     // Enable sourcemaps for debugging webpack's output.
@@ -42,18 +44,17 @@ module.exports = (env, argv) => {
       alias: {
         src: path.resolve(__dirname, "src"),
       },
+      // Webpack 5 no longer auto-polyfills Node.js built-ins
+      fallback: {
+        "path": require.resolve("path-browserify"),
+      },
     },
 
     module: {
       rules: [
         {
           test: /\.(png|jpg|gif|svg|eot|ttf|woff|woff2)$/,
-          use: {
-            loader: "url-loader",
-            options: {
-              limit: true,
-            }
-          },
+          type: "asset",
           exclude: /node_modules/,
         },
         // Styles in current project use SCSS preprocessing language with CSS modules.

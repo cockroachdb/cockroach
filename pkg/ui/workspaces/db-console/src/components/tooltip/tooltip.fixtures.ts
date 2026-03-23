@@ -16,6 +16,7 @@ export const nodeLocalityFixture: NodeStatusRow = {
   usedMemory: 151085056,
   availableMemory: 8589934592,
   numCpus: 4,
+  numVcpus: 4,
   version: "v20.2.0-alpha.1-1355-ga0123f1bc0",
   status: 3,
   tiers: [

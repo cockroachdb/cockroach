@@ -142,6 +142,8 @@ func TestDistSenderCircuitBreakerModes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderDuress(t, "too slow: request gets stuck at gRPC layer before circuit breaker trips.")
+
 	testutils.RunTrueAndFalse(t, "scratchRange", func(t *testing.T, scratchRange bool) {
 		testutils.RunValues(
 			t,

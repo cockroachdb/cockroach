@@ -18,7 +18,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -35,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/taskpacer"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -215,9 +215,16 @@ const (
 // NewSender creates a Sender. Run must be called on it afterwards to get it to
 // start publishing closed timestamps.
 func NewSender(
-	stopper *stop.Stopper, st *cluster.Settings, clock *hlc.Clock, dialer *nodedialer.Dialer,
+	stopper *stop.Stopper,
+	st *cluster.Settings,
+	clock *hlc.Clock,
+	dialer *nodedialer.Dialer,
+	useDRPC bool,
 ) *Sender {
-	return newSenderWithConnFactory(stopper, st, clock, newRPCConnFactory(dialer, connTestingKnobs{}))
+	return newSenderWithConnFactory(stopper, st, clock,
+		newRPCConnFactory(func(ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (ctpb.RPCSideTransportClient, error) {
+			return ctpb.DialSideTransportClient(dialer, ctx, nodeID, class, useDRPC)
+		}, connTestingKnobs{}))
 }
 
 func newSenderWithConnFactory(
@@ -327,17 +334,6 @@ func (s *Sender) UnregisterLeaseholder(
 	}
 }
 
-// maxClosedTimestampPolicy returns the distinct number of closed timestamp
-// policies for which the side transport should send updates.
-func (s *Sender) maxClosedTimestampPolicy() int {
-	if s.st.Version.IsActive(context.TODO(), clusterversion.V25_2) {
-		return int(ctpb.MAX_CLOSED_TIMESTAMP_POLICY)
-	}
-	// If the cluster is not fully upgraded, only look at closed timestamps
-	// policies without considering locality info.
-	return int(roachpb.MAX_CLOSED_TIMESTAMP_POLICY)
-}
-
 func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	s.trackedMu.Lock()
 	defer s.trackedMu.Unlock()
@@ -346,7 +342,7 @@ func (s *Sender) publish(ctx context.Context) hlc.ClockTimestamp {
 	// TODO(wenyihu6): a cluster version check is needed here once we add new
 	// policies to ctpb.RangeClosedTimestampPolicies that do not have a
 	// corresponding roachpb.RangeClosedTimestampPolicy.
-	numPolicies := s.maxClosedTimestampPolicy()
+	numPolicies := int(ctpb.MAX_CLOSED_TIMESTAMP_POLICY)
 	s.trackedMu.lastClosed = make(map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp, numPolicies)
 	msg := &ctpb.Update{
 		NodeID:           s.nodeID,
@@ -684,11 +680,11 @@ func (b *updatesBuf) PaceBroadcastUpdate(ctx context.Context, condVar *sync.Cond
 	pacer := b.mu.pacer
 	b.mu.Unlock()
 
-	pacer.StartTask(timeutil.Now())
+	pacer.StartTask(crtime.NowMono())
 
 	workLeft := originalNumWaiters
 	for workLeft > 0 {
-		todo, by := pacer.Pace(timeutil.Now(), workLeft)
+		todo, by := pacer.Pace(crtime.NowMono(), workLeft)
 
 		b.mu.Lock()
 		for i := 0; i < todo && workLeft > 0; i++ {
@@ -698,7 +694,7 @@ func (b *updatesBuf) PaceBroadcastUpdate(ctx context.Context, condVar *sync.Cond
 		b.mu.Unlock()
 
 		if workLeft > 0 {
-			if wait := timeutil.Until(by); wait > 0 {
+			if wait := by.Sub(crtime.NowMono()); wait > 0 {
 				time.Sleep(wait)
 			}
 		}
@@ -821,23 +817,31 @@ type conn interface {
 	getState() connState
 }
 
+// sideTransportClientFactory abstracts the creation of side transport clients,
+// allowing the rest of the code to remain agnostic to the RPC used.
+type sideTransportClientFactory func(
+	context.Context,
+	roachpb.NodeID,
+	rpcbase.ConnectionClass,
+) (ctpb.RPCSideTransportClient, error)
+
 // rpcConnFactory is an implementation of connFactory that establishes
 // connections to other nodes using gRPC.
 type rpcConnFactory struct {
-	dialer       rpcbase.NodeDialer
+	stcf         sideTransportClientFactory
 	testingKnobs connTestingKnobs
 }
 
-func newRPCConnFactory(dialer rpcbase.NodeDialer, testingKnobs connTestingKnobs) connFactory {
+func newRPCConnFactory(stcf sideTransportClientFactory, testingKnobs connTestingKnobs) connFactory {
 	return &rpcConnFactory{
-		dialer:       dialer,
+		stcf:         stcf,
 		testingKnobs: testingKnobs,
 	}
 }
 
 // new implements the connFactory interface.
 func (f *rpcConnFactory) new(s *Sender, nodeID roachpb.NodeID) conn {
-	return newRPCConn(f.dialer, s, nodeID, f.testingKnobs)
+	return newRPCConn(f.stcf, s, nodeID, f.testingKnobs)
 }
 
 // On sending errors, we sleep a bit as to not spin on a tripped
@@ -851,7 +855,7 @@ const sleepOnErr = time.Second
 // snapshot before we can resume sending regular messages.
 type rpcConn struct {
 	log.AmbientContext
-	dialer       rpcbase.NodeDialer
+	stcf         sideTransportClientFactory
 	producer     *Sender
 	nodeID       roachpb.NodeID
 	testingKnobs connTestingKnobs
@@ -870,10 +874,13 @@ type rpcConn struct {
 }
 
 func newRPCConn(
-	dialer rpcbase.NodeDialer, producer *Sender, nodeID roachpb.NodeID, testingKnobs connTestingKnobs,
+	stcf sideTransportClientFactory,
+	producer *Sender,
+	nodeID roachpb.NodeID,
+	testingKnobs connTestingKnobs,
 ) conn {
 	r := &rpcConn{
-		dialer:       dialer,
+		stcf:         stcf,
 		producer:     producer,
 		nodeID:       nodeID,
 		testingKnobs: testingKnobs,
@@ -922,7 +929,7 @@ func (r *rpcConn) maybeConnect(ctx context.Context, _ *stop.Stopper) error {
 		return nil
 	}
 
-	client, err := ctpb.DialSideTransportClient(r.dialer, ctx, r.nodeID, rpcbase.SystemClass, r.producer.st)
+	client, err := r.stcf(ctx, r.nodeID, rpcbase.SystemClass)
 	if err != nil {
 		return err
 	}

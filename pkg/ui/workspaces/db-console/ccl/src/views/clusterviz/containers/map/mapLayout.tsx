@@ -22,7 +22,7 @@ import { LocalityView } from "./localityView";
 import { WorldMap } from "./worldmap";
 import { Box, ZoomTransformer } from "./zoom";
 
-import "./mapLayout.styl";
+import "./mapLayout.scss";
 
 interface MapLayoutProps {
   localityTree: LocalityTree;

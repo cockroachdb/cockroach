@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
 // Column is an interface that represents a raw array of a Go native type.
@@ -160,11 +161,14 @@ func (cf *defaultColumnFactory) MakeColumns(columns []Column, t *types.T, length
 		}
 	case types.JsonFamily:
 		alloc := make([]element, allocLength)
+		jsonScratchAlloc := make([]json.JSONEncoded, allocLength)
 		wrapperAlloc := make([]JSONs, len(columns))
 		for i := range columns {
 			wrapperAlloc[i].elements = alloc[:length:length]
+			wrapperAlloc[i].jsonScratch = jsonScratchAlloc[:length:length]
 			columns[i] = &wrapperAlloc[i]
 			alloc = alloc[length:]
+			jsonScratchAlloc = jsonScratchAlloc[length:]
 		}
 	default:
 		panic(fmt.Sprintf("StandardColumnFactory doesn't support %s", t))

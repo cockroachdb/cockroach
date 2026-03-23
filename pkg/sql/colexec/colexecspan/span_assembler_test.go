@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/colconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
@@ -134,7 +135,7 @@ func TestSpanAssembler(t *testing.T) {
 									}()
 
 									var testSpans roachpb.Spans
-									for batch := source.Next(); ; batch = source.Next() {
+									for batch := colexecop.NextNoMeta(source); ; batch = colexecop.NextNoMeta(source) {
 										if batch.Length() == 0 {
 											// Reached the end of the input.
 											testSpans = append(testSpans, colBuilder.GetSpans()...)
@@ -149,7 +150,7 @@ func TestSpanAssembler(t *testing.T) {
 									}
 
 									var oracleSpans roachpb.Spans
-									for batch := oracleSource.Next(); batch.Length() > 0; batch = oracleSource.Next() {
+									for batch := colexecop.NextNoMeta(oracleSource); batch.Length() > 0; batch = colexecop.NextNoMeta(oracleSource) {
 										batch.SetSelection(true)
 										copy(batch.Selection(), sel)
 										batch.SetLength(len(sel))

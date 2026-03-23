@@ -96,6 +96,8 @@ func TestDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderDeadlock(t, "slows down test by 10 to 100x")
+
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
 		// Skip the test if it is a .txt file. This is to allow us to have non-test

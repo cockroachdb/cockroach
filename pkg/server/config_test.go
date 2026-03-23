@@ -426,14 +426,13 @@ func TestCreateEngines(t *testing.T) {
 			d.MaybeScanArgs(t, "CacheSize", &cfg.CacheSize)
 
 			engines, err := cfg.CreateEngines(context.Background())
-			if err != nil {
-				return fmt.Sprintf("failed to create engines: %v", err)
-			}
+			require.NoError(t, err, "failed to create engines")
 			defer engines.Close()
 
 			var buf bytes.Buffer
 			for _, e := range engines {
-				buf.WriteString(strings.TrimSpace(e.GetPebbleOptions().String()))
+				require.False(t, e.Separated(), "not supported by this test")
+				buf.WriteString(strings.TrimSpace(e.Engine().GetPebbleOptions().String()))
 				buf.WriteString("\n")
 			}
 			return grepStr(&buf, pattern)

@@ -1849,6 +1849,19 @@ func TestShowJobs(t *testing.T) {
 				out.fractionCompleted = *maybeFractionCompleted
 			}
 
+			// Confirm SHOW JOBS matches.
+			var shownTyp string
+			var shownTS *apd.Decimal
+			sqlDB.QueryRow(t, `SELECT job_type, resolved_timestamp FROM [SHOW JOBS SELECT $1 WITH RESOLVED TIMESTAMP]`, in.id).Scan(&shownTyp, &shownTS)
+			if shownTyp != out.typ {
+				t.Fatalf("expected SHOW JOBS to return type %s but found %s", in.typ, shownTyp)
+			}
+			if !out.highWater.IsEmpty() {
+				shownHLC, err := hlc.DecimalToHLC(shownTS)
+				require.NoError(t, err)
+				require.True(t, out.highWater.Equal(shownHLC))
+			}
+
 			// details field is not explicitly checked for equality; its value is
 			// confirmed via the job_type field, which is dependent on the details
 			// field.
@@ -3200,7 +3213,7 @@ func TestJobTypeMetrics(t *testing.T) {
 	writePTSRecord := func(jobID jobspb.JobID) (uuid.UUID, error) {
 		id := uuid.MakeV4()
 		record := jobsprotectedts.MakeRecord(
-			id, int64(jobID), s.Clock().Now(), nil,
+			id, int64(jobID), s.Clock().Now(),
 			jobsprotectedts.Jobs, ptpb.MakeClusterTarget(),
 		)
 		return id,
@@ -3316,4 +3329,67 @@ func TestLoadJobProgress(t *testing.T) {
 	p, err := jobs.LoadJobProgress(ctx, s.InternalDB().(isql.DB), 7)
 	require.NoError(t, err)
 	require.Equal(t, []float32{7.1}, p.GetDetails().(*jobspb.Progress_Import).Import.ReadProgress)
+}
+
+func TestAdoptionDelayAfterJobFailure(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	defer jobs.ResetConstructors()()
+
+	ctx := context.Background()
+	adoptionCompleted := make(chan struct{})
+	// We disable the adoption loop to prevent adoption attempts from laying a
+	// claim on a failed job before we can verify the behavior.
+	knobs := jobs.NewTestingKnobsWithIntervals(time.Hour, time.Hour, time.Hour, time.Hour)
+
+	var testJobID jobspb.JobID
+	knobs.AfterJobStateMachine = func(id jobspb.JobID) {
+		if id != testJobID {
+			return
+		}
+		close(adoptionCompleted)
+	}
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			JobsTestingKnobs: knobs,
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	cleanup := jobs.TestingRegisterConstructor(
+		jobspb.TypeRestore,
+		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+			return jobstest.FakeResumer{
+				OnResume: func(ctx context.Context) error {
+					return errors.New("job failed")
+				},
+				FailOrCancel: func(ctx context.Context) error {
+					return errors.New("job fast-failed reverting")
+				},
+			}
+		},
+		jobs.UsesTenantCostControl,
+	)
+	defer cleanup()
+
+	registry := s.JobRegistry().(*jobs.Registry)
+	rec := jobs.Record{
+		Details:  jobspb.RestoreDetails{},
+		Progress: jobspb.RestoreProgress{},
+		Username: username.TestUserName(),
+	}
+
+	testJobID = registry.MakeJobID()
+	_, err := registry.CreateAdoptableJobWithTxn(ctx, rec, testJobID, nil /* txn */)
+	require.NoError(t, err)
+	registry.TestingNudgeAdoptionQueue()
+
+	<-adoptionCompleted
+	var claimID gosql.NullInt64
+	err = db.QueryRow(
+		"SELECT claim_instance_id FROM system.jobs WHERE id = $1", testJobID,
+	).Scan(&claimID)
+	require.NoError(t, err)
+	require.True(t, claimID.Valid, "expected job to still have a claim_instance_id after failure")
 }

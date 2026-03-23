@@ -25,6 +25,11 @@ var TableDescriptorPollInterval = settings.RegisterDurationSetting(
 	1*time.Second,
 )
 
+// DefaultHibernationPollingFrequency is the default frequency with which polling
+// should be performed while the changefeed is waiting for the tableset to be
+// non-empty.
+var DefaultHibernationPollingFrequency = 10 * time.Second
+
 // DefaultMinCheckpointFrequency is the default frequency to flush sink.
 // See comment in newChangeAggregatorProcessor for explanation on the value.
 var DefaultMinCheckpointFrequency = 30 * time.Second
@@ -215,15 +220,6 @@ var ProtectTimestampLag = settings.RegisterDurationSetting(
 	10*time.Minute,
 	settings.PositiveDuration)
 
-// PerTableProtectedTimestamps enables per-table protected timestamp records
-// instead of a single record for all tables in a changefeed.
-var PerTableProtectedTimestamps = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"changefeed.protect_timestamp.per_table.enabled",
-	"if true, creates separate protected timestamp records for each table in a changefeed; "+
-		"if false, uses a single protected timestamp record for all tables",
-	metamorphic.ConstantWithTestBool("changefeed.protect_timestamp.per_table.enabled", false))
-
 // BulkDelivery enables bulk delivery of rangefeed events, which can improve performance during catchup scans.
 var BulkDelivery = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
@@ -373,8 +369,18 @@ var MaxRetryBackoff = settings.RegisterDurationSettingWithExplicitUnit(
 	settings.ApplicationLevel,
 	"changefeed.max_retry_backoff",
 	"the maximum time a changefeed will backoff when retrying after a restart and how long between retries before backoff resets",
-	10*time.Minute, /* defaultValue */
+	30*time.Second, /* defaultValue */
 	settings.DurationInRange(1*time.Second, 1*time.Hour),
+)
+
+// ResetBackoffOnHighwaterAdvance controls whether the changefeed retry
+// backoff resets when the highwater mark advances between retries.
+var ResetBackoffOnHighwaterAdvance = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.reset_backoff_on_highwater_advance.enabled",
+	"if true, the changefeed retry backoff resets when the resolved "+
+		"timestamp advances between retries",
+	true,
 )
 
 // RetryBackoffReset is the time between changefeed retries before the
@@ -395,6 +401,20 @@ var KafkaV2ErrorDetailsEnabled = settings.RegisterBoolSetting(
 	"changefeed.kafka_v2_error_details.enabled",
 	"if enabled, Kafka v2 sinks will include the message key, size, and MVCC timestamp in message too large errors",
 	true,
+	settings.WithPublic,
+)
+
+// PartitionAlgEnabled enables the partition_alg changefeed option.
+// TODO(#126991): delete reference to changefeed.new_kafka_sink_enabled
+// when enabled everywhere.
+var PartitionAlgEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.partition_alg.enabled",
+	"if enabled, allows specifying the partition_alg changefeed option to "+
+		"choose between fnv-1a (default) and murmur2 hash functions for "+
+		"Kafka partitioning. Only affects changefeeds using a kafka sink "+
+		"with changefeed.new_kafka_sink_enabled set to true.",
+	false,
 	settings.WithPublic,
 )
 

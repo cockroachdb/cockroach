@@ -1,0 +1,86 @@
+name: PR Comment Addresser (Trigger)
+
+# This is the first half of a two-workflow pattern to work around GitHub's
+# restriction that secrets are not available to workflows triggered by fork PR
+# events. This lightweight workflow captures the event context and saves it as
+# an artifact. The handler workflow (pr-autosolve-comments.yml) is triggered by
+# workflow_run, runs in the base repo context with full secret access, and does
+# the actual work.
+
+on:
+  # Native GitHub review comments (inline code comments)
+  pull_request_review_comment:
+    types: [created]
+  # PR reviews (used by Reviewable.io - comments are embedded in review body)
+  pull_request_review:
+    types: [submitted]
+  # Regular PR conversation comments (not tied to a specific line of code)
+  issue_comment:
+    types: [created]
+
+jobs:
+  save-context:
+    runs-on: ubuntu-latest
+    # Only trigger for:
+    # - PRs from the autosolver bot's fork (security: prevents force-push to other branches)
+    #   Note: for issue_comment events, head repo is not in the payload so we check it in a step
+    # - PRs with 'o-autosolver' label
+    # - Comments/reviews NOT from the bot itself
+    # - For review_comment/issue_comment events: comments NOT containing our response marker
+    # - For review events: only COMMENTED or CHANGES_REQUESTED (not APPROVED/DISMISSED)
+    if: |
+      github.actor != 'github-actions[bot]' &&
+      github.actor != 'cockroach-teamcity' &&
+      (
+        (
+          github.event_name == 'pull_request_review_comment' &&
+          github.event.pull_request.head.repo.full_name == 'cockroach-teamcity/cockroach' &&
+          contains(github.event.pull_request.labels.*.name, 'o-autosolver') &&
+          !contains(github.event.comment.body, '[autosolve-response]')
+        ) ||
+        (
+          github.event_name == 'pull_request_review' &&
+          github.event.pull_request.head.repo.full_name == 'cockroach-teamcity/cockroach' &&
+          contains(github.event.pull_request.labels.*.name, 'o-autosolver') &&
+          (github.event.review.state == 'commented' || github.event.review.state == 'changes_requested')
+        ) ||
+        (
+          github.event_name == 'issue_comment' &&
+          github.event.issue.pull_request &&
+          contains(github.event.issue.labels.*.name, 'o-autosolver') &&
+          !contains(github.event.comment.body, '[autosolve-response]')
+        )
+      )
+
+    steps:
+      - name: Save event context
+        run: |
+          mkdir -p /tmp/event-context
+          cp "$GITHUB_EVENT_PATH" /tmp/event-context/event.json
+          echo "${{ github.event_name }}" > /tmp/event-context/event_name.txt
+          echo "${{ github.actor }}" > /tmp/event-context/actor.txt
+
+      # For issue_comment events, the PR head repo/ref aren't in the payload.
+      # Fetch them via API and verify the head repo matches the expected fork.
+      - name: Fetch PR details for issue comments
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          PR_JSON=$(gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}")
+          HEAD_REPO=$(echo "$PR_JSON" | jq -r '.head.repo.full_name')
+          if [ "$HEAD_REPO" != "cockroach-teamcity/cockroach" ]; then
+            echo "::error::PR head repo ($HEAD_REPO) is not the autosolver fork - skipping"
+            exit 1
+          fi
+          HEAD_REF=$(echo "$PR_JSON" | jq -r '.head.ref')
+          echo "$HEAD_REPO" > /tmp/event-context/head_repo.txt
+          echo "$HEAD_REF" > /tmp/event-context/head_ref.txt
+
+      - name: Upload context
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-comment-context
+          path: /tmp/event-context/
+          retention-days: 1

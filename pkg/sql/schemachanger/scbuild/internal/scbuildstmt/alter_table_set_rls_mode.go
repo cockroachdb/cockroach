@@ -6,8 +6,10 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 func alterTableSetRLSMode(
@@ -26,18 +28,22 @@ func alterTableSetRLSMode(
 
 	switch n.Mode {
 	case tree.TableRLSEnable:
+		telemetry.Inc(sqltelemetry.EnableRLSCounter)
 		b.Add(&scpb.RowLevelSecurityEnabled{
 			TableID: tbl.TableID,
 		})
 	case tree.TableRLSDisable:
+		telemetry.Inc(sqltelemetry.DisableRLSCounter)
 		b.Drop(&scpb.RowLevelSecurityEnabled{
 			TableID: tbl.TableID,
 		})
 	case tree.TableRLSForce:
+		telemetry.Inc(sqltelemetry.ForceRLSCounter)
 		b.Add(&scpb.RowLevelSecurityForced{
 			TableID: tbl.TableID,
 		})
 	case tree.TableRLSNoForce:
+		telemetry.Inc(sqltelemetry.NoForceRLSCounter)
 		b.Drop(&scpb.RowLevelSecurityForced{
 			TableID: tbl.TableID,
 		})

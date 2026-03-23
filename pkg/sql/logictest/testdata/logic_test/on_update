@@ -410,7 +410,7 @@ pk3  z
 statement ok
 ALTER TABLE test_table_enum ALTER COLUMN k DROP ON UPDATE
 
-statement ok
+statement count 1
 DELETE FROM test_table_enum WHERE p = 'pk2'
 
 statement ok

@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -22,23 +23,23 @@ type mmaReplica Replica
 // The returned RangeLoad contains stats across multiple dimensions that MMA uses
 // to determine top-k replicas and evaluate the load impact of rebalancing them.
 func mmaRangeLoad(
-	loadStats load.ReplicaLoadStats, mvccStats enginepb.MVCCStats,
+	loadStats load.ReplicaLoadStats, mvccStats enginepb.MVCCStats, amp mmaprototype.AmpVector,
 ) mmaprototype.RangeLoad {
-	var rl mmaprototype.RangeLoad
-	rl.Load[mmaprototype.CPURate] = mmaprototype.LoadValue(
-		loadStats.RequestCPUNanosPerSecond + loadStats.RaftCPUNanosPerSecond)
-	rl.RaftCPU = mmaprototype.LoadValue(loadStats.RaftCPUNanosPerSecond)
-	rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(loadStats.WriteBytesPerSecond)
-	rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(mvccStats.Total())
-	return rl
+	return mmaintegration.MakePhysicalRangeLoad(
+		loadStats.RequestCPUNanosPerSecond,
+		loadStats.RaftCPUNanosPerSecond,
+		loadStats.WriteBytesPerSecond,
+		mvccStats.Total(),
+		amp,
+	)
 }
 
 // mmaRangeLoad constructs a mmaprototype.RangeLoad from the replica's LoadStats.
 // The returned RangeLoad contains stats across multiple dimensions that MMA uses
 // to determine top-k replicas and evaluate the load impact of rebalancing them.
-func (mr *mmaReplica) mmaRangeLoad() mmaprototype.RangeLoad {
+func (mr *mmaReplica) mmaRangeLoad(amp mmaprototype.AmpVector) mmaprototype.RangeLoad {
 	r := (*Replica)(mr)
-	return mmaRangeLoad(r.LoadStats(), r.GetMVCCStats())
+	return mmaRangeLoad(r.LoadStats(), r.GetMVCCStats(), amp)
 }
 
 // maybePromiseSpanConfigUpdate determines whether an up-to-date span config
@@ -178,7 +179,7 @@ func constructRangeMsgReplicas(
 // know how to initialize a range it knows nothing about. More thinking is needed
 // to claim this method is not racy.
 func (mr *mmaReplica) tryConstructMMARangeMsg(
-	ctx context.Context, knownStores map[roachpb.StoreID]struct{},
+	ctx context.Context, knownStores map[roachpb.StoreID]struct{}, amp mmaprototype.AmpVector,
 ) (isLeaseholder bool, shouldBeSkipped bool, msg mmaprototype.RangeMsg) {
 	r := (*Replica)(mr)
 	if !r.IsInitialized() {
@@ -212,7 +213,7 @@ func (mr *mmaReplica) tryConstructMMARangeMsg(
 	}
 	// At this point, we know r is the leaseholder replica.
 	replicas := constructRangeMsgReplicas(desc, raftStatus, r.StoreID() /*leaseholderReplicaStoreID*/)
-	rLoad := mr.mmaRangeLoad()
+	rLoad := mr.mmaRangeLoad(amp)
 	if mr.maybePromiseSpanConfigUpdate() {
 		return true, false, mmaprototype.RangeMsg{
 			RangeID:                  r.RangeID,
@@ -263,11 +264,12 @@ func (ms *mmaStore) MakeStoreLeaseholderMsg(
 ) (msg mmaprototype.StoreLeaseholderMsg, numIgnoredRanges int) {
 	var msgs []mmaprototype.RangeMsg
 	s := (*Store)(ms)
+	amp := ms.amplificationFactors()
 	// TODO(wenyihu6): this is called on every leaseholder replica every minute.
 	// We should pass scratch memory to avoid unnecessary allocation.
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		mr := (*mmaReplica)(r)
-		isLeaseholder, shouldBeSkipped, msg := mr.tryConstructMMARangeMsg(ctx, knownStores)
+		isLeaseholder, shouldBeSkipped, msg := mr.tryConstructMMARangeMsg(ctx, knownStores, amp)
 		if isLeaseholder {
 			if shouldBeSkipped {
 				numIgnoredRanges++
@@ -281,4 +283,29 @@ func (ms *mmaStore) MakeStoreLeaseholderMsg(
 		StoreID: s.StoreID(),
 		Ranges:  msgs,
 	}, numIgnoredRanges
+}
+
+// amplificationFactors returns the current per-dimension amplification factors
+// for this store. These factors convert logical per-range loads to physical
+// units at the integration boundary.
+//
+// The factors are computed from the cached store capacity and node capacity,
+// avoiding construction of a full StoreDescriptor. The two mutex reads
+// (CachedCapacity + GetNodeCapacity) are cheap and uncontended at the call
+// rates involved (once/min for leaseholder msgs, once per rebalance for queue
+// operations). See ComputeAmplificationFactors for discussion of consistency
+// with the store-level load in StoreLoadMsg.
+func (ms *mmaStore) amplificationFactors() mmaprototype.AmpVector {
+	s := (*Store)(ms)
+	sc := s.storeGossip.CachedCapacity()
+	if sc == (roachpb.StoreCapacity{}) {
+		return mmaprototype.IdentityAmpVector()
+	}
+	desc := roachpb.StoreDescriptor{
+		Capacity: sc,
+	}
+	if nc, err := s.nodeCapacityProvider.GetNodeCapacity(true /* useCached */); err == nil {
+		desc.NodeCapacity = nc
+	}
+	return mmaintegration.ComputeAmplificationFactors(desc)
 }

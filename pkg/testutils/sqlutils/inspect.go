@@ -9,7 +9,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/errors"
 )
@@ -22,7 +21,7 @@ type InspectResult struct {
 	Table      string
 	PrimaryKey string
 	JobID      int64
-	Aost       time.Time
+	Aost       string
 	Details    string
 }
 
@@ -62,10 +61,6 @@ func RunInspect(sqlDB *gosql.DB, database string, table string) error {
 
 // runInspectWithOptions will run an inspect check for a table with the specified options string.
 func runInspectWithOptions(sqlDB *gosql.DB, database string, table string, options string) error {
-	if _, err := sqlDB.Exec(`SET enable_inspect_command = true;`); err != nil {
-		return err
-	}
-
 	if _, err := sqlDB.Exec(fmt.Sprintf(`INSPECT TABLE %s.%s %s`, database, table, options)); err == nil {
 		return nil
 	} else if !(strings.Contains(err.Error(), "INSPECT found inconsistencies") || strings.Contains(err.Error(), "INSPECT encountered internal errors")) {

@@ -26,6 +26,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/hintpb",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/lexbase",
+        "//pkg/sql/protoreflect",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/errorutil",
+        "//pkg/util/json",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
@@ -35,5 +40,8 @@ go_test(
     name = "hintpb_test",
     srcs = ["statement_hint_test.go"],
     embed = [":hintpb"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//pkg/sql/sem/tree",
+        "@com_github_stretchr_testify//require",
+    ],
 )

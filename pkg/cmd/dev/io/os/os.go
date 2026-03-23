@@ -557,9 +557,11 @@ func (o *OS) UserCacheDir() (dir string, err error) {
 		o.logger.Print(command)
 	}
 
-	return o.Next(command, func() (dir string, err error) {
+	dir, err = o.Next(command, func() (dir string, err error) {
 		return os.UserCacheDir()
 	})
+
+	return strings.TrimSpace(dir), err
 
 }
 

@@ -92,7 +92,6 @@ func TestGetProtectionTimestamps(t *testing.T) {
 		hlc.NewClockForTesting(mt),
 		nil, /* rangeFeedFactory */
 		keys.SpanConfigurationsTableID,
-		1<<20, /* 1 MB */
 		roachpb.SpanConfig{},
 		cluster.MakeTestingClusterSettings(),
 		spanconfigstore.NewEmptyBoundsReader(),
@@ -214,7 +213,7 @@ func (m *manualStore) ComputeSplitKey(
 // GetSpanConfigForKey implements the spanconfig.Store interface.
 func (m *manualStore) GetSpanConfigForKey(
 	context.Context, roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
+) (roachpb.SpanConfig, error) {
 	panic("unimplemented")
 }
 

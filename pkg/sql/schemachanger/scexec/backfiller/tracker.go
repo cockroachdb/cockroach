@@ -13,11 +13,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -43,7 +46,8 @@ type RangeCounter interface {
 // records the remaining spans of the source index to scan.
 type Tracker struct {
 	trackerConfig
-	codec keys.SQLCodec
+	codec   keys.SQLCodec
+	cleaner *phaseTransitionCleaner // Optional: nil if no cleanup needed
 
 	mu struct {
 		syncutil.Mutex
@@ -55,20 +59,58 @@ type Tracker struct {
 
 var _ scexec.BackfillerTracker = (*Tracker)(nil)
 
+// BackfillManifestKey uniquely identifies a backfill for manifest lookup.
+type BackfillManifestKey struct {
+	TableID       descpb.ID
+	SourceIndexID descpb.IndexID
+}
+
 // NewTracker constructs a new Tracker.
+//
+// If cleaner is non-nil, the tracker will perform SST cleanup when phase
+// transitions are detected. The caller is responsible for closing the cleaner.
+// If nil, cleanup is disabled.
+//
+// backfillManifests maps each backfill to its SST manifests, which are read
+// from job info keys by the caller. These manifests should already have tenant
+// prefixes applied. If nil, no manifests are populated.
 func NewTracker(
 	codec keys.SQLCodec,
 	counter RangeCounter,
 	job *jobs.Job,
+	db isql.DB,
 	jobBackfillProgress []jobspb.BackfillProgress,
 	jobMergeProgress []jobspb.MergeProgress,
+	cleaner *bulkutil.BulkJobCleaner,
+	backfillManifests map[BackfillManifestKey][]jobspb.BulkSSTManifest,
 ) *Tracker {
-	return newTracker(
+	bps := convertFromJobBackfillProgress(codec, jobBackfillProgress)
+	// Populate SST manifests from the map provided by the caller.
+	for i := range bps {
+		key := BackfillManifestKey{
+			TableID:       bps[i].TableID,
+			SourceIndexID: bps[i].SourceIndexID,
+		}
+		if manifests, ok := backfillManifests[key]; ok {
+			bps[i].SSTManifests = manifests
+		}
+	}
+	tr := newTracker(
 		codec,
-		newTrackerConfig(codec, counter, job),
-		convertFromJobBackfillProgress(codec, jobBackfillProgress),
+		newTrackerConfig(codec, counter, job, db),
+		bps,
 		convertFromJobMergeProgress(codec, jobMergeProgress),
 	)
+
+	// Configure cleanup if cleaner provided.
+	if cleaner != nil {
+		tr.cleaner = &phaseTransitionCleaner{
+			jobID:   job.ID(),
+			cleaner: cleaner,
+		}
+	}
+
+	return tr
 }
 
 func newTracker(
@@ -93,13 +135,15 @@ func newTracker(
 	return bt
 }
 
-func newTrackerConfig(codec keys.SQLCodec, rc RangeCounter, job *jobs.Job) trackerConfig {
+func newTrackerConfig(
+	codec keys.SQLCodec, rc RangeCounter, job *jobs.Job, db isql.DB,
+) trackerConfig {
 	return trackerConfig{
 		numRangesInSpanContainedBy: rc.NumRangesInSpanContainedBy,
 		writeProgressFraction: func(ctx context.Context, fractionProgressed float32) error {
-			if err := job.NoTxn().FractionProgressed(
-				ctx, jobs.FractionUpdater(fractionProgressed),
-			); err != nil {
+			if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				return jobs.ProgressStorage(job.ID()).SetFraction(ctx, txn, float64(fractionProgressed))
+			}); err != nil {
 				return jobs.SimplifyInvalidStateError(err)
 			}
 			return nil
@@ -121,6 +165,37 @@ func newTrackerConfig(codec keys.SQLCodec, rc RangeCounter, job *jobs.Job) track
 				sc.BackfillProgress = backfillJobProgress
 				sc.MergeProgress = mergeJobProgress
 				ju.UpdatePayload(pl)
+
+				// Write SST manifests to job info keys, keeping them out of
+				// the (potentially large) job payload. When manifests are
+				// empty (e.g. after merge completes), delete any stale info
+				// key to prevent reading outdated manifests on job restart.
+				for _, bp := range bps {
+					infoKey := BackfillSSTManifestsInfoKey(bp.TableID, bp.SourceIndexID)
+					if len(bp.SSTManifests) == 0 {
+						// Clean up stale manifest data from previous phases.
+						jobInfo := jobs.InfoStorageForJob(txn, job.ID())
+						if err := jobInfo.DeleteRange(
+							ctx, infoKey, infoKey+"~", 0,
+						); err != nil {
+							return err
+						}
+						continue
+					}
+					stripped, err := backfill.StripTenantPrefixFromSSTManifests(codec, bp.SSTManifests)
+					if err != nil {
+						return err
+					}
+					data, err := protoutil.Marshal(&jobspb.BulkSSTManifests{Manifests: stripped})
+					if err != nil {
+						return err
+					}
+					if err := jobs.WriteChunkedFileToJobInfo(
+						ctx, infoKey, data, txn, job.ID(),
+					); err != nil {
+						return err
+					}
+				}
 				return nil
 			})
 		},
@@ -256,7 +331,58 @@ func (b *Tracker) FlushCheckpoint(ctx context.Context) error {
 		return false
 	})
 	log.Dev.Infof(ctx, "writing %d backfill checkpoints and %d merge checkpoints", len(bps), len(mps))
-	return b.writeCheckpoint(ctx, bps, mps)
+	if err := b.writeCheckpoint(ctx, bps, mps); err != nil {
+		return err
+	}
+
+	// After successful write, detect phase transitions and handle cleanup.
+	if b.cleaner != nil {
+		transitions := b.detectPhaseTransitions(ctx, bps)
+		for _, transition := range transitions {
+			if err := b.cleaner.cleanupTransition(ctx, transition); err != nil {
+				log.Ops.Warningf(ctx, "phase transition cleanup failed: %v", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// detectPhaseTransitions detects and records phase transitions that occurred
+// after checkpoint persistence. It returns the list of detected transitions.
+func (b *Tracker) detectPhaseTransitions(
+	ctx context.Context, bps []scexec.BackfillProgress,
+) []phaseTransition {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	var transitions []phaseTransition
+	for _, bp := range bps {
+		key := toBackfillKey(bp.Backfill)
+		p, exists := b.mu.backfillProgress[key]
+		if !exists {
+			continue
+		}
+
+		oldPhase := p.lastPersistedDistributedMergePhase
+		newPhase := bp.DistributedMergePhase
+
+		if oldPhase != newPhase {
+			log.Dev.Infof(ctx, "detected persisted distributed merge phase transition for table %d: phase %d → %d",
+				bp.Backfill.TableID, oldPhase, newPhase)
+
+			transitions = append(transitions, phaseTransition{
+				TableID:            bp.Backfill.TableID,
+				OldPhase:           oldPhase,
+				NewPhase:           newPhase,
+				SSTStoragePrefixes: bp.SSTStoragePrefixes,
+			})
+			// Update last persisted phase.
+			p.lastPersistedDistributedMergePhase = newPhase
+		}
+	}
+
+	return transitions
 }
 
 func (b *Tracker) getTableIndexBackfillProgress(bf scexec.Backfill) (backfillProgress, bool) {
@@ -353,12 +479,89 @@ func (b *Tracker) getFractionRangesFinished(
 	if totalRanges == 0 {
 		return true, 0, nil
 	}
+
+	// Check if any backfill is using distributed merge and calculate phase-aware
+	// progress.
+	for _, p := range progresses {
+		if p.useDistributedMerge {
+			progress := calculatePhasedProgress(
+				p.distributedMergePhase,
+				completedRanges, totalRanges,
+				p.mergeIterationTasksCompleted, p.mergeIterationTasksTotal,
+			)
+			return true, progress, nil
+		}
+	}
+
 	return true, float32(completedRanges) / float32(totalRanges), nil
+}
+
+// calculatePhasedProgress computes the overall fraction complete for a
+// distributed merge backfill using a 3-phase model:
+//   - Phase 0 (map): 0-33%
+//   - Phase 1 (merge iteration 1): 33-66%
+//   - Phase 2 (merge iteration 2): 66-100%
+//
+// The completedPhase parameter represents the last COMPLETED iteration:
+//   - 0: Map phase complete, merge iterations not started or in progress
+//   - 1: Merge iteration 1 complete, iteration 2 not started or in progress
+//   - 2: Merge iteration 2 complete (distributed merge finished)
+//
+// To determine if we're actively processing the next iteration, we check if
+// tasksTotal > 0. If so, progress is calculated for iteration completedPhase+1.
+func calculatePhasedProgress(
+	completedPhase int32, completedRanges, totalRanges int, tasksCompleted, tasksTotal int64,
+) float32 {
+	const phaseWidth = float32(1.0) / 3.0
+
+	// Handle final complete state.
+	if completedPhase == 2 {
+		return 1.0
+	}
+
+	// completedPhase == 1: Iteration 1 complete.
+	if completedPhase == 1 {
+		// Base progress: 2 phases complete = 66%.
+		base := 2.0 * phaseWidth
+		if tasksTotal > 0 {
+			// Actively processing iteration 2.
+			return base + (float32(tasksCompleted)/float32(tasksTotal))*phaseWidth
+		}
+		// Iteration 1 just finished, iteration 2 not yet started.
+		return base
+	}
+
+	// completedPhase == 0: Map complete, iteration 1 may be in progress.
+	if tasksTotal > 0 {
+		// Actively processing iteration 1.
+		base := phaseWidth // Map phase complete = 33%
+		return base + (float32(tasksCompleted)/float32(tasksTotal))*phaseWidth
+	}
+
+	// Map phase in progress (span-based progress).
+	if totalRanges > 0 {
+		return (float32(completedRanges) / float32(totalRanges)) * phaseWidth
+	}
+	return 0
 }
 
 type fractionProgressSpans struct {
 	total     roachpb.Span
 	completed []roachpb.Span
+
+	// useDistributedMerge indicates whether the distributed merge pipeline is
+	// active for this backfill.
+	useDistributedMerge bool
+
+	// distributedMergePhase tracks which phase of distributed merge we're in.
+	// 0 = map phase, 1 = merge iteration 1, 2 = merge iteration 2.
+	distributedMergePhase int32
+
+	// mergeIterationTasksTotal is the total number of tasks in current iteration.
+	mergeIterationTasksTotal int64
+
+	// mergeIterationTasksCompleted is len(MergeIterationCompletedTasks).
+	mergeIterationTasksCompleted int64
 }
 
 func (b *Tracker) collectFractionProgressSpansForFlush() (
@@ -380,8 +583,12 @@ func (b *Tracker) collectFractionProgressSpansForFlush() (
 	for _, p := range b.mu.backfillProgress {
 		p.needsFractionFlush = false
 		progress = append(progress, fractionProgressSpans{
-			total:     p.totalSpan,
-			completed: p.CompletedSpans,
+			total:                        p.totalSpan,
+			completed:                    p.CompletedSpans,
+			useDistributedMerge:          len(p.SSTStoragePrefixes) > 0,
+			distributedMergePhase:        p.DistributedMergePhase,
+			mergeIterationTasksTotal:     p.MergeIterationTasksTotal,
+			mergeIterationTasksCompleted: int64(len(p.MergeIterationCompletedTasks)),
 		})
 	}
 	for _, p := range b.mu.mergeProgress {

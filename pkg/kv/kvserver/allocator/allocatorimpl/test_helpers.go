@@ -43,11 +43,12 @@ func CreateTestAllocatorWithKnobs(
 	allocSyncKnobs *mmaintegration.TestingKnobs,
 ) (*stop.Stopper, *gossip.Gossip, *storepool.StorePool, Allocator, *timeutil.ManualTime) {
 	st := cluster.MakeTestingClusterSettings()
-	stopper, g, manual, storePool, _ := storepool.CreateTestStorePool(ctx, st,
+	stopper, g, manual, storePool, _, _ := storepool.CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDeadOff, deterministic,
 		func() int { return numNodes },
 		livenesspb.NodeLivenessStatus_LIVE)
-	mmAllocator := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{}, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+	mmAllocator := mmaprototype.NewAllocatorState(
+		timeutil.DefaultTimeSource{}, rand.New(rand.NewSource(timeutil.Now().UnixNano())))
 	as := mmaintegration.NewAllocatorSync(storePool, mmAllocator, st, allocSyncKnobs)
 	a := MakeAllocator(st, as, deterministic, func(id roachpb.NodeID) (time.Duration, bool) {
 		return 0, true

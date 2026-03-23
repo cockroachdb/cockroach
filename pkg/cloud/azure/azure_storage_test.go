@@ -176,9 +176,12 @@ func TestAzureFaultInjection(t *testing.T) {
 	conf, err := cloud.ExternalStorageConfFromURI(uri, username.RootUserName())
 	require.NoError(t, err)
 
+	settings := cluster.MakeTestingClusterSettings()
+	tryTimeout.Override(context.Background(), &settings.SV, time.Minute)
+
 	args := cloud.EarlyBootExternalStorageContext{
 		IOConf:          base.ExternalIODirConfig{},
-		Settings:        cluster.MakeTestingClusterSettings(),
+		Settings:        settings,
 		Options:         nil,
 		Limiters:        nil,
 		MetricsRecorder: cloud.NilMetrics,
@@ -224,6 +227,7 @@ func TestAntagonisticAzureRead(t *testing.T) {
 }
 
 func TestParseAzureURL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	t.Run("Defaults to Public Cloud when AZURE_ENVIRONEMNT unset", func(t *testing.T) {
 		u, err := url.Parse("azure://container/path?AZURE_ACCOUNT_NAME=account&AZURE_ACCOUNT_KEY=key")
 		require.NoError(t, err)
@@ -271,6 +275,7 @@ func TestParseAzureURL(t *testing.T) {
 }
 
 func TestMakeAzureStorageURLFromEnvironment(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	for _, tt := range []struct {
 		environment string
 		expected    string

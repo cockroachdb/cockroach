@@ -17,7 +17,6 @@ go_library(
         "//pkg/rpc",
         "//pkg/rpc/rpcbase",
         "//pkg/server/serverpb",
-        "//pkg/settings/cluster",
         "//pkg/sql/sqlinstance",
         "//pkg/sql/sqlinstance/instancestorage",
         "//pkg/util/ctxgroup",
@@ -41,6 +40,7 @@ go_test(
     ],
     embed = [":upgradecluster"],
     deps = [
+        "//pkg/base",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/roachpb",
         "//pkg/rpc/rpcbase",
@@ -48,7 +48,6 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/server/serverpb",
-        "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/testcluster",

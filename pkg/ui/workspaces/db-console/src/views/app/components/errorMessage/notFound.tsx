@@ -6,7 +6,7 @@
 import React from "react";
 import Helmet from "react-helmet";
 
-import "./errorMessage.styl";
+import "./errorMessage.scss";
 import NotFoundImg from "assets/not-found.svg";
 
 function NotFound() {

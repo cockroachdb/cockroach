@@ -3,158 +3,153 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { useNodesSummary, useConnectivity } from "@cockroachlabs/cluster-ui";
 import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { render, screen } from "@testing-library/react";
-import { Location } from "history";
 import Long from "long";
 import React from "react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route } from "react-router-dom";
 
-import { Network } from "./index";
+import Network from "./index";
+
+jest.mock("@cockroachlabs/cluster-ui", () => {
+  const actual = jest.requireActual("@cockroachlabs/cluster-ui");
+  return {
+    ...actual,
+    useNodesSummary: jest.fn(),
+    useConnectivity: jest.fn(),
+  };
+});
+
+const mockUseNodesSummary = useNodesSummary as jest.Mock;
+const mockUseConnectivity = useConnectivity as jest.Mock;
 
 describe("Network", () => {
-  const defaultProps = {
-    nodesSummary: {
-      nodeStatuses: [
-        {
-          desc: {
-            node_id: 1,
-            address: { address_field: "localhost:26257" },
-            locality: {
-              tiers: [
-                { key: "region", value: "us-east-1" },
-                { key: "zone", value: "a" },
-              ],
-            },
+  const defaultNodesSummary = {
+    nodeStatuses: [
+      {
+        desc: {
+          node_id: 1,
+          address: { address_field: "localhost:26257" },
+          locality: {
+            tiers: [
+              { key: "region", value: "us-east-1" },
+              { key: "zone", value: "a" },
+            ],
           },
-          updated_at: Long.fromNumber(1000),
         },
-        {
-          desc: {
-            node_id: 2,
-            address: { address_field: "localhost:26258" },
-            locality: {
-              tiers: [
-                { key: "region", value: "us-east-1" },
-                { key: "zone", value: "b" },
-              ],
-            },
+        updated_at: Long.fromNumber(1000),
+      },
+      {
+        desc: {
+          node_id: 2,
+          address: { address_field: "localhost:26258" },
+          locality: {
+            tiers: [
+              { key: "region", value: "us-east-1" },
+              { key: "zone", value: "b" },
+            ],
           },
-          updated_at: Long.fromNumber(1000),
         },
-      ] as any[],
-      nodeStatusByID: {
-        "1": {
-          desc: {
-            node_id: 1,
-            address: { address_field: "localhost:26257" },
-            locality: {
-              tiers: [
-                { key: "region", value: "us-east-1" },
-                { key: "zone", value: "a" },
-              ],
-            },
+        updated_at: Long.fromNumber(1000),
+      },
+    ] as any[],
+    nodeStatusByID: {
+      "1": {
+        desc: {
+          node_id: 1,
+          address: { address_field: "localhost:26257" },
+          locality: {
+            tiers: [
+              { key: "region", value: "us-east-1" },
+              { key: "zone", value: "a" },
+            ],
           },
-          updated_at: Long.fromNumber(1000),
         },
-        "2": {
-          desc: {
-            node_id: 2,
-            address: { address_field: "localhost:26258" },
-            locality: {
-              tiers: [
-                { key: "region", value: "us-east-1" },
-                { key: "zone", value: "b" },
-              ],
-            },
+        updated_at: Long.fromNumber(1000),
+      },
+      "2": {
+        desc: {
+          node_id: 2,
+          address: { address_field: "localhost:26258" },
+          locality: {
+            tiers: [
+              { key: "region", value: "us-east-1" },
+              { key: "zone", value: "b" },
+            ],
           },
-          updated_at: Long.fromNumber(1000),
         },
-      },
-      nodeIDs: ["1", "2"],
-      nodeDisplayNameByID: {
-        "1": "node-1",
-        "2": "node-2",
-      },
-      storeIDsByNodeID: {
-        "1": ["1"],
-        "2": ["2"],
-      },
-      nodeLastError: null as Error | null,
-      livenessByNodeID: {
-        "1": {
-          nodeId: 1,
-          epoch: Long.fromNumber(1),
-          expiration: Long.fromNumber(1000),
-          draining: false,
-          membership:
-            protos.cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus
-              .ACTIVE,
-        } as protos.cockroach.kv.kvserver.liveness.livenesspb.ILiveness,
-        "2": {
-          nodeId: 2,
-          epoch: Long.fromNumber(1),
-          expiration: Long.fromNumber(1000),
-          draining: false,
-          membership:
-            protos.cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus
-              .ACTIVE,
-        } as protos.cockroach.kv.kvserver.liveness.livenesspb.ILiveness,
-      },
-      livenessStatusByNodeID: {
-        "1": protos.cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
-          .NODE_STATUS_LIVE,
-        "2": protos.cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
-          .NODE_STATUS_LIVE,
+        updated_at: Long.fromNumber(1000),
       },
     },
-    nodeSummaryErrors: [] as Error[],
-    connectivity: {
-      data: {
-        connections: {
-          "1": {
-            peers: {
-              "2": { latency: { nanos: 1000000 } }, // 1ms
-            },
-          },
-          "2": {
-            peers: {
-              "1": { latency: { nanos: 1000000 } }, // 1ms
-            },
-          },
-        },
-        errors_by_node_id: {},
+    nodeIDs: ["1", "2"],
+    nodeDisplayNameByID: {
+      "1": "node-1",
+      "2": "node-2",
+    },
+    storeIDsByNodeID: {
+      "1": ["1"],
+      "2": ["2"],
+    },
+    livenessByNodeID: {
+      "1": {
+        nodeId: 1,
+        epoch: Long.fromNumber(1),
+        expiration: Long.fromNumber(1000),
+        draining: false,
+        membership:
+          protos.cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus
+            .ACTIVE,
+      } as protos.cockroach.kv.kvserver.liveness.livenesspb.ILiveness,
+      "2": {
+        nodeId: 2,
+        epoch: Long.fromNumber(1),
+        expiration: Long.fromNumber(1000),
+        draining: false,
+        membership:
+          protos.cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus
+            .ACTIVE,
+      } as protos.cockroach.kv.kvserver.liveness.livenesspb.ILiveness,
+    },
+    livenessStatusByNodeID: {
+      "1": protos.cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+        .NODE_STATUS_LIVE,
+      "2": protos.cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+        .NODE_STATUS_LIVE,
+    },
+    isLoading: false,
+    error: undefined as Error | undefined,
+  };
+
+  const defaultConnections = {
+    "1": {
+      peers: {
+        "2": { latency: { nanos: 1000000 } }, // 1ms
       },
-      inFlight: false,
-      valid: true,
-      unauthorized: false,
     },
-    refreshNodes: jest.fn(),
-    refreshLiveness: jest.fn(),
-    refreshConnectivity: jest.fn(),
-    match: {
-      params: {},
-      isExact: true,
-      path: "/network",
-      url: "/network",
+    "2": {
+      peers: {
+        "1": { latency: { nanos: 1000000 } }, // 1ms
+      },
     },
-    location: {
-      pathname: "/network",
-      search: "",
-      state: null,
-      hash: "",
-    } as Location,
-    history: {} as any,
   };
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseNodesSummary.mockReturnValue(defaultNodesSummary);
+    mockUseConnectivity.mockReturnValue({
+      connections: defaultConnections,
+      isLoading: false,
+      error: undefined,
+    });
   });
 
   it("renders network page with latency table", () => {
     render(
-      <MemoryRouter>
-        <Network {...defaultProps} />
+      <MemoryRouter initialEntries={["/network"]}>
+        <Route path="/network">
+          <Network />
+        </Route>
       </MemoryRouter>,
     );
 
@@ -162,64 +157,40 @@ describe("Network", () => {
     expect(screen.getByRole("table")).toBeTruthy();
   });
 
-  it("calls refresh functions on mount", () => {
-    render(
-      <MemoryRouter>
-        <Network {...defaultProps} />
-      </MemoryRouter>,
-    );
-
-    expect(defaultProps.refreshNodes).toHaveBeenCalled();
-    expect(defaultProps.refreshLiveness).toHaveBeenCalled();
-    expect(defaultProps.refreshConnectivity).toHaveBeenCalled();
-  });
-
   it("displays message for single node cluster", () => {
-    const propsWithSingleNode = {
-      ...defaultProps,
-      nodesSummary: {
-        nodeStatuses: [defaultProps.nodesSummary.nodeStatuses[0]],
-        nodeStatusByID: {
-          "1": defaultProps.nodesSummary.nodeStatusByID["1"],
-        },
-        nodeIDs: ["1"],
-        nodeDisplayNameByID: {
-          "1": "node-1",
-        },
-        storeIDsByNodeID: {
-          "1": ["1"],
-        },
-        nodeLastError: null as Error | null,
-        livenessByNodeID: {
-          "1": {
-            nodeId: 1,
-            epoch: Long.fromNumber(1),
-            expiration: Long.fromNumber(1000),
-            draining: false,
-            membership:
-              protos.cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus
-                .ACTIVE,
-          } as protos.cockroach.kv.kvserver.liveness.livenesspb.ILiveness,
-        },
-        livenessStatusByNodeID: {
-          "1": protos.cockroach.kv.kvserver.liveness.livenesspb
-            .NodeLivenessStatus.NODE_STATUS_LIVE,
-        },
+    mockUseNodesSummary.mockReturnValue({
+      nodeStatuses: [defaultNodesSummary.nodeStatuses[0]],
+      nodeStatusByID: {
+        "1": defaultNodesSummary.nodeStatusByID["1"],
       },
-      connectivity: {
-        data: {
-          connections: {},
-          errors_by_node_id: {},
-        },
-        inFlight: false,
-        valid: true,
-        unauthorized: false,
+      nodeIDs: ["1"],
+      nodeDisplayNameByID: {
+        "1": "node-1",
       },
-    };
+      storeIDsByNodeID: {
+        "1": ["1"],
+      },
+      livenessByNodeID: {
+        "1": defaultNodesSummary.livenessByNodeID["1"],
+      },
+      livenessStatusByNodeID: {
+        "1": protos.cockroach.kv.kvserver.liveness.livenesspb.NodeLivenessStatus
+          .NODE_STATUS_LIVE,
+      },
+      isLoading: false,
+      error: undefined,
+    });
+    mockUseConnectivity.mockReturnValue({
+      connections: {},
+      isLoading: false,
+      error: undefined,
+    });
 
     render(
-      <MemoryRouter>
-        <Network {...propsWithSingleNode} />
+      <MemoryRouter initialEntries={["/network"]}>
+        <Route path="/network">
+          <Network />
+        </Route>
       </MemoryRouter>,
     );
 
@@ -231,62 +202,48 @@ describe("Network", () => {
   });
 
   it("handles peers with null latency", () => {
-    const propsWithNullLatency = {
-      ...defaultProps,
-      connectivity: {
-        ...defaultProps.connectivity,
-        data: {
-          connections: {
-            "1": {
-              peers: {
-                "2": {
-                  latency: {
-                    nanos: 1000000,
-                  } as protos.cockroach.server.serverpb.NetworkConnectivityResponse.IPeer["latency"],
-                }, // 1ms
-                "3": {
-                  latency:
-                    null as protos.cockroach.server.serverpb.NetworkConnectivityResponse.IPeer["latency"],
-                }, // null latency
-              },
-            },
+    mockUseConnectivity.mockReturnValue({
+      connections: {
+        "1": {
+          peers: {
             "2": {
-              peers: {
-                "1": {
-                  latency: {
-                    nanos: 1000000,
-                  } as protos.cockroach.server.serverpb.NetworkConnectivityResponse.IPeer["latency"],
-                }, // 1ms
-                "3": {
-                  latency:
-                    null as protos.cockroach.server.serverpb.NetworkConnectivityResponse.IPeer["latency"],
-                }, // null latency
-              },
+              latency: { nanos: 1000000 },
             },
             "3": {
-              peers: {
-                "1": {
-                  latency:
-                    null as protos.cockroach.server.serverpb.NetworkConnectivityResponse.IPeer["latency"],
-                }, // null latency
-                "2": {
-                  latency:
-                    null as protos.cockroach.server.serverpb.NetworkConnectivityResponse.IPeer["latency"],
-                }, // null latency
-              },
+              latency: null,
             },
           },
-          errors_by_node_id: {},
         },
-        inFlight: false,
-        valid: true,
-        unauthorized: false,
+        "2": {
+          peers: {
+            "1": {
+              latency: { nanos: 1000000 },
+            },
+            "3": {
+              latency: null,
+            },
+          },
+        },
+        "3": {
+          peers: {
+            "1": {
+              latency: null,
+            },
+            "2": {
+              latency: null,
+            },
+          },
+        },
       },
-    };
+      isLoading: false,
+      error: undefined,
+    });
 
     render(
-      <MemoryRouter>
-        <Network {...propsWithNullLatency} />
+      <MemoryRouter initialEntries={["/network"]}>
+        <Route path="/network">
+          <Network />
+        </Route>
       </MemoryRouter>,
     );
 

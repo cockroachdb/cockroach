@@ -10,7 +10,7 @@ import ErrorIcon from "assets/error-circle.svg";
 import InfoIcon from "assets/info-filled-circle.svg";
 import WarningIcon from "assets/warning.svg";
 
-import styles from "./inlineAlert.module.styl";
+import styles from "./inlineAlert.module.scss";
 
 export type InlineAlertIntent = "info" | "error" | "warning";
 

@@ -17,10 +17,13 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/config"
+	s3svc "github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/smithy-go"
+	smithymiddleware "github.com/aws/smithy-go/middleware"
+	smithyhttp "github.com/aws/smithy-go/transport/http"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -616,6 +619,7 @@ func (a awserror) ErrorFault() smithy.ErrorFault {
 }
 
 func TestInterpretAWSCode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	{
 		// with code
 		err := types.BucketAlreadyOwnedByYou{}
@@ -848,6 +852,7 @@ func TestReadFileAtReturnsSize(t *testing.T) {
 }
 
 func TestCanceledError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	ctx, cancelFunc := context.WithCancel(context.Background())
 	cancelFunc()
 	err := ctx.Err()
@@ -881,12 +886,22 @@ func TestAWSS3ImplicitAuthRequiresNoSharedConfigFiles(t *testing.T) {
 	// so in order to circumvent this and test the case where the shared config
 	// files are not present, we need to set the AWS_CONFIG_FILE and
 	// AWS_SHARED_CREDENTIALS_FILE.
+	origConfigFile, hasConfigFile := os.LookupEnv("AWS_CONFIG_FILE")
+	origCredsFile, hasCredsFile := os.LookupEnv("AWS_SHARED_CREDENTIALS_FILE")
 	require.NoError(t, os.Setenv("AWS_CONFIG_FILE", "/tmp/config"))
 	require.NoError(t, os.Setenv("AWS_SHARED_CREDENTIALS_FILE",
 		"/tmp/credentials"))
 	defer func() {
-		require.NoError(t, os.Unsetenv("AWS_CONFIG_FILE"))
-		require.NoError(t, os.Unsetenv("AWS_SHARED_CREDENTIALS_FILE"))
+		if hasConfigFile {
+			require.NoError(t, os.Setenv("AWS_CONFIG_FILE", origConfigFile))
+		} else {
+			require.NoError(t, os.Unsetenv("AWS_CONFIG_FILE"))
+		}
+		if hasCredsFile {
+			require.NoError(t, os.Setenv("AWS_SHARED_CREDENTIALS_FILE", origCredsFile))
+		} else {
+			require.NoError(t, os.Unsetenv("AWS_SHARED_CREDENTIALS_FILE"))
+		}
 	}()
 
 	s3 := s3Storage{
@@ -900,4 +915,55 @@ func TestAWSS3ImplicitAuthRequiresNoSharedConfigFiles(t *testing.T) {
 	}
 	_, _, err := s3.newClient(context.Background())
 	require.NoError(t, err)
+}
+
+func TestAddClearChecksumMiddleware(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	for _, tc := range []struct {
+		name  string
+		input interface{}
+	}{
+		{"PutObjectInput", &s3svc.PutObjectInput{ChecksumAlgorithm: types.ChecksumAlgorithmCrc32}},
+		{"UploadPartInput", &s3svc.UploadPartInput{ChecksumAlgorithm: types.ChecksumAlgorithmCrc32}},
+		{"CreateMultipartUploadInput", &s3svc.CreateMultipartUploadInput{ChecksumAlgorithm: types.ChecksumAlgorithmCrc32}},
+		{"CompleteMultipartUploadInput", &s3svc.CompleteMultipartUploadInput{ChecksumType: types.ChecksumTypeFullObject}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stack := smithymiddleware.NewStack(tc.name, smithyhttp.NewStackRequest)
+			require.NoError(t, stack.Initialize.Add(smithymiddleware.InitializeMiddlewareFunc(
+				"testHandler",
+				func(
+					ctx context.Context,
+					in smithymiddleware.InitializeInput,
+					next smithymiddleware.InitializeHandler,
+				) (smithymiddleware.InitializeOutput, smithymiddleware.Metadata, error) {
+					switch v := in.Parameters.(type) {
+					case *s3svc.PutObjectInput:
+						require.Equal(t, types.ChecksumAlgorithm(""), v.ChecksumAlgorithm)
+					case *s3svc.UploadPartInput:
+						require.Equal(t, types.ChecksumAlgorithm(""), v.ChecksumAlgorithm)
+					case *s3svc.CreateMultipartUploadInput:
+						require.Equal(t, types.ChecksumAlgorithm(""), v.ChecksumAlgorithm)
+					case *s3svc.CompleteMultipartUploadInput:
+						require.Equal(t, types.ChecksumType(""), v.ChecksumType)
+					default:
+						t.Fatalf("unexpected input type: %T", v)
+					}
+					return smithymiddleware.InitializeOutput{}, smithymiddleware.Metadata{}, nil
+				},
+			), smithymiddleware.After))
+			require.NoError(t, addClearChecksumMiddleware(stack))
+
+			handler := smithymiddleware.DecorateHandler(
+				smithymiddleware.HandlerFunc(
+					func(ctx context.Context, input interface{}) (interface{}, smithymiddleware.Metadata, error) {
+						return nil, smithymiddleware.Metadata{}, nil
+					}),
+				stack,
+			)
+			_, _, err := handler.Handle(context.Background(), tc.input)
+			require.NoError(t, err)
+		})
+	}
 }

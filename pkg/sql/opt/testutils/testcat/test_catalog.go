@@ -878,6 +878,16 @@ func (tv *View) Trigger(i int) cat.Trigger {
 	return &tv.Triggers[i]
 }
 
+// IsSecurityInvoker is part of the cat.View interface.
+func (tv *View) IsSecurityInvoker() bool {
+	return false
+}
+
+// Owner is part of the cat.View interface.
+func (tv *View) Owner() username.SQLUsername {
+	return username.MakeSQLUsernameFromPreNormalizedString("root")
+}
+
 // Table implements the cat.Table interface for testing purposes.
 type Table struct {
 	TabID      cat.StableID
@@ -1236,6 +1246,12 @@ func (tt *Table) IsRowLevelSecurityForced() bool { return tt.rlsForced }
 func (tt *Table) Policies() *cat.Policies {
 	return &tt.policies
 }
+
+// CanaryAndStableStatsDiffer is part of the cat.Table interface.
+func (tt *Table) CanaryAndStableStatsDiffer() bool { return false }
+
+// StatsCanaryWindow is part of the cat.Table interface.
+func (tt *Table) StatsCanaryWindow() time.Duration { return 0 }
 
 // findPolicyByName will lookup the policy by its name. It returns it's policy
 // type and index within that policy type slice so that callers can do removal
@@ -1873,9 +1889,8 @@ func (u *UniqueConstraint) Validated() bool {
 	return u.validated
 }
 
-// UniquenessGuaranteedByAnotherIndex is part of the cat.UniqueConstraint
-// interface.
-func (u *UniqueConstraint) UniquenessGuaranteedByAnotherIndex() bool {
+// CanElideUniqueCheck is part of the cat.UniqueConstraint interface.
+func (u *UniqueConstraint) CanElideUniqueCheck() bool {
 	return false
 }
 

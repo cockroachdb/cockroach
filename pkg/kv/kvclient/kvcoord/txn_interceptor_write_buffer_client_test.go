@@ -148,12 +148,14 @@ func TestTxnCoordSenderWriteBufferingReEnablesPipelining(t *testing.T) {
 		return nil
 	}))
 
-	require.Equal(t, 4, batchCount)
+	require.Equal(t, 5, batchCount)
 	require.Equal(t, []kvpb.Method{
 		// The initial setup
 		kvpb.Put,
-		// The first (buffered) Put and the DeleteRange that flushes the buffer.
-		kvpb.Put, kvpb.DeleteRange,
+		// The first (buffered) Put and the DeleteRange that flushes the buffer,
+		// sent as separate batches.
+		kvpb.Put,
+		kvpb.DeleteRange,
 		// The second (pipelined) Put
 		kvpb.Put,
 		// EndTxn with the QueryIntent because pipelining was turned back on.

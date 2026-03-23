@@ -399,6 +399,7 @@ func transferLeaseResultIsIgnorable(res Result) bool {
 	}
 	return kvserver.IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) ||
 		kvserver.IsLeaseTransferRejectedBecauseTargetCannotReceiveLease(err) ||
+		kvserver.IsLeaseTransferRejectedBecauseTargetHasSendQueueError(err) ||
 		// A lease transfer is not permitted while a range merge is in its
 		// critical phase.
 		resultIsErrorStr(res, `cannot transfer lease while merge in progress`) ||
@@ -903,7 +904,9 @@ func (v *validator) processOp(op Operation) {
 		//
 		// So we ignore the results of failIfError, calling it only for its side
 		// effect of perhaps registering a failure with the validator.
-		v.failIfError(op, t.Result, exceptRollback, exceptAmbiguous)
+		//
+		// Refer to the note in checkError about exceptBatchTimestampBeforeGC.
+		v.failIfError(op, t.Result, exceptRollback, exceptAmbiguous, exceptBatchTimestampBeforeGC)
 
 		ops := t.Ops
 		if t.CommitInBatch != nil {
@@ -1024,6 +1027,22 @@ func (v *validator) processOp(op Operation) {
 	case *RestartNodeOperation:
 		execTimestampStrictlyOptional = true
 		v.checkError(op, t.Result)
+	case *CrashNodeOperation:
+		execTimestampStrictlyOptional = true
+		v.checkError(op, t.Result)
+	case *MvccGCOperation:
+		execTimestampStrictlyOptional = true
+		if resultHasErrorType(t.Result, (*kvpb.NotLeaseHolderError)(nil)) ||
+			resultHasErrorType(t.Result, (*kvpb.RangeNotFoundError)(nil)) ||
+			resultIsErrorStr(t.Result, `no valid lease`) {
+			// Ignore any transient errors due to not being able to find a leaseholder.
+		} else if resultIsErrorStr(
+			t.Result, `mismatched range suggestion not different from original desc`) {
+			// Ignore this error that occurred due to a GC/split race.
+			// TODO: revisit after https://github.com/cockroachdb/cockroach/issues/165995 is resolved.
+		} else {
+			v.failIfError(op, t.Result)
+		}
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, t, t))
 	}
@@ -1512,7 +1531,17 @@ func (v *validator) checkError(
 	op Operation, r Result, extraExceptions ...func(err error) bool,
 ) (ambiguous, hadError bool) {
 	sl := []func(error) bool{
-		exceptAmbiguous, exceptOmitted, exceptRetry, exceptDelRangeUsingTombstoneStraddlesRangeBoundary,
+		exceptAmbiguous,
+		exceptOmitted,
+		exceptRetry,
+		exceptDelRangeUsingTombstoneStraddlesRangeBoundary,
+		// NB: we need to exclude this error because with MVCC GC operations
+		// enabled with a low TTL, GC might advance past a transaction's
+		// timestamp, which is a violation of our assumption that GC is far
+		// enough behind us to not touch any ongoing transactions. So this error
+		// is expected and correct, and should be ignored in the context of
+		// KVNemesis.
+		exceptBatchTimestampBeforeGC,
 	}
 	sl = append(sl, extraExceptions...)
 	return v.failIfError(op, r, sl...)

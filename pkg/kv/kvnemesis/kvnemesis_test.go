@@ -25,14 +25,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -51,6 +57,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -77,6 +84,21 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 		RangefeedValueHeaderFilter: func(key, endKey roachpb.Key, ts hlc.Timestamp, vh enginepb.MVCCValueHeader) {
 			if seq := vh.KVNemesisSeq.Get(); seq > 0 {
 				tr.Add(key, endKey, ts, seq)
+			}
+		},
+		// Enable SysBytes verification on every Raft command application.
+		SysBytesVerificationOnRaftApply: func(mismatchErr error) {
+			if mismatchErr != nil {
+				// Fail the test if there was ever a SysBytes mismatch detected. This
+				// will likely be caught by the consistency checker at the end of the
+				// test as well, but it may not be if there is a stats recomputation for
+				// some reason.
+				//
+				// TODO(#160144): Until we get some of these failures under control, we
+				// have reverted this to a log line so that the nightlies can discover
+				// other issues. Now, we'll only report failures if they persist until
+				// the consistency check at the end fo the test.
+				t.Logf("SysBytes mismatch detected during Raft command application: %v", mismatchErr)
 			}
 		},
 	}
@@ -170,6 +192,13 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 			}
 			return 0, nil
 		}
+		storeKnobs.AfterSplitApplication = func(desc roachpb.ReplicaDescriptor, state kvserverpb.ReplicaState) {
+			asserter.ApplySplitRHS(
+				state.Desc.RangeID, desc.ReplicaID,
+				state.RaftAppliedIndex, state.RaftAppliedIndexTerm,
+				state.LeaseAppliedIndex, state.RaftClosedTimestamp,
+			)
+		}
 		storeKnobs.AfterSnapshotApplication = func(
 			desc roachpb.ReplicaDescriptor, state kvserverpb.ReplicaState, snap kvserver.IncomingSnapshot,
 		) {
@@ -253,7 +282,25 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 		}
 	}
 
-	reg := fs.NewStickyRegistry()
+	// We need to install the GC TTL in the span config. However, there might be
+	// a preexisting OverrideFallbackConf in the span config testing knob, so we
+	// have to be careful to not overwrite it.
+	if cfg.gcTTLSeconds > 0 {
+		if commonServerArgs.Knobs.SpanConfig == nil {
+			commonServerArgs.Knobs.SpanConfig = &spanconfig.TestingKnobs{}
+		}
+		config := commonServerArgs.Knobs.SpanConfig.(*spanconfig.TestingKnobs)
+		currentFn := config.OverrideFallbackConf
+		config.OverrideFallbackConf = func(config roachpb.SpanConfig) roachpb.SpanConfig {
+			if currentFn != nil {
+				config = currentFn(config)
+			}
+			config.GCPolicy.TTLSeconds = cfg.gcTTLSeconds
+			return config
+		}
+	}
+
+	reg := fs.NewStickyRegistry(fs.UseStrictMemFS)
 	lisReg := listenerutil.NewListenerRegistry()
 	args := base.TestClusterArgs{
 		ReusableListenerReg: lisReg,
@@ -410,6 +457,10 @@ type kvnemesisTestCfg struct {
 	testGeneratorConfig func(*GeneratorConfig)
 
 	mode TestMode
+
+	// If > 0, change the MVCC GC TTL seconds from the default to the given
+	// value in the span config.
+	gcTTLSeconds int32
 }
 
 func defaultTestConfiguration(numNodes int) kvnemesisTestCfg {
@@ -497,6 +548,11 @@ func TestKVNemesisMultiNode_Partition_Safety(t *testing.T) {
 		testGeneratorConfig: func(cfg *GeneratorConfig) {
 			cfg.Ops.Fault.AddNetworkPartition = 1
 			cfg.Ops.Fault.RemoveNetworkPartition = 1
+			// This is the only operation that executes via SQL. As such, we suspect
+			// context cancellations are not always respected, resulting in the test
+			// hanging. The current suspect is lib/pq. See #160293.
+			// TODO(mira): Consider toggling global reads by editing the span config.
+			cfg.Ops.ChangeZone.ToggleGlobalReads = 0
 		},
 	})
 }
@@ -524,7 +580,15 @@ func TestKVNemesisMultiNode_Partition_Liveness(t *testing.T) {
 			// Epoch leases can experience indefinite unavailability in the case of a
 			// leader-leaseholder split and a network partition. This test starts off
 			// with leader leases, and lease type changes are disallowed.
-			cfg.Ops.ChangeSetting = ChangeSettingConfig{}
+			cfg.Ops.ChangeSetting.SetLeaseType = 0
+			// Disallow lease transfers because they can lead to unavailability during
+			// the temporary period of using an expiration lease while transferring a
+			// leader lease. These manifest as poisoned latches held by the
+			// partitioned expiration-lease holder that can't upgrade the lease.
+			// See #157966 for a detailed example.
+			// TODO(mira): We can mitigate this in other ways too: client timeouts,
+			// lease transfers only among protected nodes (n1 and n2).
+			cfg.Ops.ChangeLease.TransferLease = 0
 		},
 	})
 }
@@ -556,6 +620,47 @@ func TestKVNemesisMultiNode_Restart_Liveness(t *testing.T) {
 			cfg.Ops.ChangeReplicas = ChangeReplicasConfig{}
 		},
 	})
+}
+
+func TestKVNemesisMultiNode_Crash(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testKVNemesisImpl(t, kvnemesisTestCfg{
+		numNodes:                     4,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+		// assertRaftApply is disabled because the asserter assumes no node
+		// restarts (see asserter.go:29).
+		//
+		// Crashing nodes violates this assumption since node crashes differ
+		// from graceful restarts (abrupt stop vs a graceful shutdown).
+		//
+		// There's a race condition in crash simulation where
+		// CrashNode/CrashClone() can run while the server is still active, so
+		// WAL syncs and Raft applies can complete between the snapshot and
+		// stopServerLocked(). When assertRaftApply is true, the Asserter may
+		// record applies that aren't in the crash snapshot; after restart, the
+		// replica recovers from an earlier snapshot and re-applies, causing the
+		// Asserter to flag a false regression. This is a bug in the crash
+		// simulation code, not a bug in the database logic.
+		// TODO(dodeca12): resolve crash simulation bug for kvnemesis crashes for
+		// when assertRaftApply is true.
+		assertRaftApply: false,
+		mode:            Liveness,
+		testGeneratorConfig: func(cfg *GeneratorConfig) {
+			cfg.Ops.Fault.CrashNode = 1
+			cfg.Ops.Fault.RestartNode = 1
+
+			// Disallow replica changes because they interfere with the zone config
+			// constraints (at least one replica on nodes 1 and 2).
+			cfg.Ops.ChangeReplicas = ChangeReplicasConfig{}
+		},
+	},
+	)
 }
 
 func TestKVNemesisMultiNode(t *testing.T) {
@@ -606,6 +711,26 @@ func FuzzKVNemesisSingleNode(f *testing.F) {
 		cfg.randSource = randutil.NewFuzzRandSource(t, data)
 		testKVNemesisImpl(t, cfg)
 	})
+}
+
+func TestKVNemesisMVCCGC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cfg := defaultTestConfiguration(5)
+	cfg.seedOverride = 0
+	cfg.gcTTLSeconds = 5
+	cfg.testGeneratorConfig = func(cfg *GeneratorConfig) {
+		cfg.Ops.MvccGC.MvccGC = 5
+	}
+
+	// Lower the ClearRangeMinKeys so that a ClearRange is issued on every
+	// GC call.
+	cfg.testSettings = func(ctx context.Context, settings *cluster.Settings) {
+		gc.ClearRangeMinKeys.Override(ctx, &settings.SV, 1)
+	}
+
+	testKVNemesisImpl(t, cfg)
 }
 
 func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
@@ -672,7 +797,15 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 
 	logger := newTBridge(t)
 	defer dumpRaftLogsOnFailure(t, logger.ll.dir, tc.Servers)
-	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger, Partitioner: &partitioner, Restarter: tc}
+	env := &Env{
+		SQLDBs:           sqlDBs,
+		Tracker:          tr,
+		L:                logger,
+		Partitioner:      &partitioner,
+		ServerController: tc,
+		MvccGCController: testClusterGCController{tc},
+		PtsController:    makePtsController(t, tc),
+	}
 	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, cfg.mode, dbs...)
 
 	logMetricsReport(t, tc)
@@ -690,6 +823,7 @@ func logMetricsReport(t testing.TB, tc *testcluster.TestCluster) {
 		"raft.commands.reproposed.unchanged",
 		// Transaction metrics
 		"txn.aborts",
+		"txn.commits",
 		"txn.durations",
 		"txn.restarts.writetooold",
 		"txn.restarts.serializable",
@@ -843,7 +977,9 @@ func setAndVerifyZoneConfigs(
 							Key:    desc.StartKey.AsRawKey(),
 							EndKey: desc.EndKey.AsRawKey(),
 						}
-						if replicaSpan.Overlaps(dataSpan) || desc.RangeID <= 3 {
+						// Ranges 1-4 are the ranges we constrained above
+						// (1: meta1, 2: meta2, 3: liveness, 4: system).
+						if replicaSpan.Overlaps(dataSpan) || desc.RangeID <= 4 {
 							overlappingReplicas = append(overlappingReplicas, replica)
 						}
 						return true // continue
@@ -855,7 +991,7 @@ func setAndVerifyZoneConfigs(
 					desc := replica.Desc()
 					confReader, err := store.GetConfReader(ctx)
 					require.NoError(t, err)
-					spanConfig, _, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
+					spanConfig, err := confReader.GetSpanConfigForKey(ctx, desc.StartKey)
 					require.NoError(t, err)
 					if len(spanConfig.Constraints) == 0 {
 						return errors.Errorf("range %d has no constraints in span config yet", desc.RangeID)
@@ -877,4 +1013,112 @@ func setAndVerifyZoneConfigs(
 
 	// Wait for allocator work to complete
 	require.NoError(t, tc.WaitForFullReplication())
+}
+
+type testClusterGCController struct {
+	tc *testcluster.TestCluster
+}
+
+// MvccGCRangeForKey implements the MvccGCController interface.
+func (c testClusterGCController) MvccGCRangeForKey(key []byte) error {
+	rng, err := c.tc.LookupRange(key)
+	if err != nil {
+		return err
+	}
+
+	// Find the leaseholder for the range and enqueue the corresponding replica
+	// to the MVCC GC queue directly.
+	lease, err := c.tc.FindRangeLeaseHolder(rng, nil /* hint */)
+	if err != nil {
+		return err
+	}
+	srv, err := c.tc.FindMemberServer(lease.StoreID)
+	if err != nil {
+		return err
+	}
+	store, err := srv.StorageLayer().GetStores().(*kvserver.Stores).GetStore(lease.StoreID)
+	if err != nil {
+		return err
+	}
+	repl, err := store.GetReplica(rng.RangeID)
+	if err != nil {
+		return err
+	}
+
+	// Enqueue the replica to the store's queue, and return any queueing errors
+	// first, and then return the processing error.
+	//
+	// NB: we use a fresh context here and not the context that might be
+	// supplied by the applier because the store.Enqueue call requires a context
+	// associated with the store on which it is called. Otherwise, it panics
+	// with an assertion failure in (*Tracer).startSpanGeneric in
+	// `pkg/util/tracing/tracer.go`.
+	ctx := store.AnnotateCtx(context.Background())
+	pErr, qErr := store.Enqueue(ctx, "mvccGC", repl, true /* skipShouldQueue */, false /* async */)
+	if qErr != nil {
+		return qErr
+	}
+	return pErr
+}
+
+type testClusterPtsController struct {
+	t       testutils.TestFataler
+	tc      *testcluster.TestCluster
+	storage protectedts.Storage
+	id      uuid.UUID
+}
+
+func makePtsController(t testutils.TestFataler, tc *testcluster.TestCluster) PtsController {
+	cfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	storage := ptstorage.WithDatabase(cfg.ProtectedTimestampProvider, cfg.InternalDB)
+	return &testClusterPtsController{
+		t:       t,
+		tc:      tc,
+		storage: storage,
+		id:      uuid.MakeV4(),
+	}
+}
+
+// Start implements the PtsController interface.
+func (t *testClusterPtsController) Start(ctx context.Context, timestamp hlc.Timestamp) error {
+	rec := &ptpb.Record{
+		ID:        t.id.GetBytesMut(),
+		Timestamp: timestamp,
+		Mode:      ptpb.PROTECT_AFTER,
+		MetaType:  "kvnemesis",
+		Target:    ptpb.MakeClusterTarget(),
+	}
+	if err := t.storage.Protect(ctx, rec); err != nil {
+		return err
+	}
+
+	// Wait for the protected timestamp to become visible on all the stores.
+	for i := 0; i < t.tc.NumServers(); i++ {
+		srv := t.tc.Server(i)
+		store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
+		if err != nil {
+			return err
+		}
+		reader := store.GetStoreConfig().ProtectedTimestampReader
+		ptutil.TestingWaitForProtectedTimestampToExistOnSpans(
+			ctx,
+			t.t,
+			srv,
+			reader,
+			timestamp,
+			roachpb.Spans{GeneratorDataSpan()},
+		)
+	}
+
+	return nil
+}
+
+// Advance implements the PtsController interface.
+func (t *testClusterPtsController) Advance(ctx context.Context, timestamp hlc.Timestamp) error {
+	return t.storage.UpdateTimestamp(ctx, t.id, timestamp)
+}
+
+// Finish implements the PtsController interface.
+func (t *testClusterPtsController) Finish(ctx context.Context) error {
+	return t.storage.Release(ctx, t.id)
 }

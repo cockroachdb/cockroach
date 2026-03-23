@@ -441,7 +441,7 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 			err:     "supplied backups do not cover requested time",
 		},
 		{
-			name: "revision history restore should fail on non-revision history backups",
+			name: "rev history restore should fail on non-rev history backups",
 			manifests: []backuppb.BackupManifest{
 				mNorm(0, 2), mNorm(2, 4),
 			},
@@ -449,12 +449,67 @@ func TestValidateEndTimeAndTruncate(t *testing.T) {
 			err:     "restoring to arbitrary time",
 		},
 		{
-			name: "revision history restore should succeed on revision history backups",
+			name: "rev history restore should succeed on rev history backups",
 			manifests: []backuppb.BackupManifest{
 				mRev(0, 2), mRev(2, 4),
 			},
 			endTime:  3,
 			expected: [][]int{{0, 2}, {2, 4}},
+		},
+		{
+			name: "rev history restore to aost after compacted backup should succeed",
+			manifests: []backuppb.BackupManifest{
+				mRev(0, 2), mRev(2, 4), mRev(4, 6), mComp(2, 8), mRev(6, 8), mRev(8, 10),
+			},
+			endTime:          9,
+			includeCompacted: true,
+			expected: [][]int{
+				{0, 2}, {2, 8}, {8, 10},
+			},
+		},
+		{
+			name: "rev history restore to aost of compacted backup should include compacted backup",
+			manifests: []backuppb.BackupManifest{
+				mRev(0, 2), mRev(2, 4), mRev(4, 6), mComp(2, 8), mRev(6, 8), mRev(8, 10),
+			},
+			endTime:          8,
+			includeCompacted: true,
+			expected: [][]int{
+				{0, 2}, {2, 8},
+			},
+		},
+		{
+			name: "rev history restore to aost in middle of compacted backup should succeed",
+			manifests: []backuppb.BackupManifest{
+				mRev(0, 2), mRev(2, 4), mRev(4, 6), mComp(2, 8), mRev(6, 8), mRev(8, 10),
+			},
+			endTime:          7,
+			includeCompacted: true,
+			expected: [][]int{
+				{0, 2}, {2, 4}, {4, 6}, {6, 8},
+			},
+		},
+		{
+			name: "rev history restore to aost in middle of compacted backup with two compactions",
+			manifests: []backuppb.BackupManifest{
+				mRev(0, 2), mRev(2, 4), mRev(4, 6), mComp(2, 8), mComp(4, 8), mRev(6, 8), mRev(8, 10),
+			},
+			endTime:          7,
+			includeCompacted: true,
+			expected: [][]int{
+				{0, 2}, {2, 4}, {4, 6}, {6, 8},
+			},
+		},
+		{
+			name: "rev history restore should still use preceding compacted backups",
+			manifests: []backuppb.BackupManifest{
+				mRev(0, 2), mRev(2, 4), mComp(2, 6), mRev(4, 6), mRev(6, 8), mComp(6, 10), mRev(8, 10),
+			},
+			endTime:          9,
+			includeCompacted: true,
+			expected: [][]int{
+				{0, 2}, {2, 6}, {6, 8}, {8, 10},
+			},
 		},
 		{
 			name: "end time in middle of chain should truncate",

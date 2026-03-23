@@ -122,6 +122,34 @@ func (desc *wrapper) IndexKeysPerRow(idx catalog.Index) int {
 	return numUsedFamilies
 }
 
+// MaxFamilyIDForIndex implements the TableDescriptor interface.
+func (desc *wrapper) MaxFamilyIDForIndex(idx catalog.Index) (descpb.FamilyID, error) {
+	if desc.PrimaryIndex.ID == idx.GetID() || idx.GetEncodingType() == catenumpb.PrimaryIndexEncoding {
+		// The list of families is sorted by ID.
+		return desc.Families[len(desc.Families)-1].ID, nil
+	}
+	if idx.NumSecondaryStoredColumns() == 0 || len(desc.Families) == 1 {
+		// Secondary indexes always include the 0th family. If there are no stored
+		// columns or no additional families, then the max family ID is that of the
+		// 0th family.
+		return desc.Families[0].ID, nil
+	}
+	// Calculate the max column family used by the secondary index. We
+	// only need to look at the stored columns because column families are only
+	// applicable to the value part of the KV. Iterate in reverse order, since
+	// the list of families is sorted by ID, and we want the max family ID.
+	storedColumnIDs := idx.CollectSecondaryStoredColumnIDs()
+	for i := len(desc.Families) - 1; i >= 0; i-- {
+		family := desc.Families[i]
+		for _, columnID := range family.ColumnIDs {
+			if storedColumnIDs.Contains(columnID) {
+				return family.ID, nil
+			}
+		}
+	}
+	return 0, errors.AssertionFailedf("could not find max column family for index %d", idx.GetID())
+}
+
 // BuildIndexName returns an index name that is not equal to any
 // of tableDesc's indexes, roughly following Postgres's conventions for naming
 // anonymous indexes. For example:
@@ -376,21 +404,23 @@ func ForEachExprStringInTableDesc(
 }
 
 // GetAllReferencedRelationIDsExceptFKs implements the TableDescriptor interface.
-func (desc *wrapper) GetAllReferencedRelationIDsExceptFKs() descpb.IDs {
-	var ids catalog.DescriptorIDSet
-
-	// Add trigger dependencies.
+func (desc *wrapper) GetAllReferencedRelationIDsExceptFKs() (
+	byTriggerID map[descpb.TriggerID]catalog.DescriptorIDSet,
+	byPolicyID map[descpb.PolicyID]catalog.DescriptorIDSet,
+	fromView catalog.DescriptorIDSet,
+) {
+	byTriggerID = make(map[descpb.TriggerID]catalog.DescriptorIDSet, len(desc.Triggers))
 	for i := range desc.Triggers {
-		ids = ids.Union(catalog.MakeDescriptorIDSet(desc.Triggers[i].DependsOn...))
+		byTriggerID[desc.Triggers[i].ID] = catalog.MakeDescriptorIDSet(desc.Triggers[i].DependsOn...)
 	}
-	// Add policy dependencies.
-	for i := range desc.Policies {
-		ids = ids.Union(catalog.MakeDescriptorIDSet(desc.Policies[i].DependsOnRelations...))
-	}
-	// Add view dependencies.
-	ids = ids.Union(catalog.MakeDescriptorIDSet(desc.DependsOn...))
 
-	return ids.Ordered()
+	byPolicyID = make(map[descpb.PolicyID]catalog.DescriptorIDSet, len(desc.Policies))
+	for i := range desc.Policies {
+		byPolicyID[desc.Policies[i].ID] = catalog.MakeDescriptorIDSet(desc.Policies[i].DependsOnRelations...)
+	}
+
+	fromView = catalog.MakeDescriptorIDSet(desc.DependsOn...)
+	return byTriggerID, byPolicyID, fromView
 }
 
 // GetAllReferencedTypeIDs implements the TableDescriptor interface.
@@ -817,6 +847,9 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 				idx.IndexDesc().KeyColumnIDs[j] = columnNames[colName]
 			}
 		}
+		if idx.Primary() {
+			primaryColIDs = idx.CollectKeyColumnIDs()
+		}
 
 		// Rebuild KeySuffixColumnIDs, StoreColumnIDs and CompositeColumnIDs.
 		indexHasOldStoredColumns := idx.HasOldStoredColumns()
@@ -881,20 +914,24 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 		//
 		// TODO(postamar): AllocateIDs should not do user input validation.
 		// The only errors it should return should be assertion failures.
+		var filteredStoreColumnNames []string
 		for _, colName := range idx.IndexDesc().StoreColumnNames {
 			col, err := catalog.MustFindColumnByName(desc, colName)
 			if err != nil {
 				return err
 			}
-			if primaryColIDs.Contains(col.GetID()) && idx.GetEncodingType() == catenumpb.SecondaryIndexEncoding {
-				// If the primary index contains a stored column, we don't need to
-				// store it - it's already part of the index.
-				err = errors.WithDetailf(
-					sqlerrors.NewColumnAlreadyExistsInIndexError(idx.GetName(), col.GetName()),
-					"column %q is part of the primary index and therefore implicit in all indexes", col.GetName())
-				return err
-			}
 			if colIDs.Contains(col.GetID()) {
+				// PK columns are already in colIDs because the key suffix column
+				// loop above (which builds KeySuffixColumnIDs) adds all PK column
+				// IDs that aren't already index key columns. So when we encounter
+				// a PK column listed in StoreColumnNames, colIDs.Contains is true
+				// even though it wasn't explicitly added as a stored column. In
+				// that case we silently skip it rather than returning an error.
+				if primaryColIDs.Contains(col.GetID()) &&
+					!idx.CollectKeyColumnIDs().Contains(col.GetID()) &&
+					idx.GetEncodingType() == catenumpb.SecondaryIndexEncoding {
+					continue
+				}
 				return sqlerrors.NewColumnAlreadyExistsInIndexError(idx.GetName(), col.GetName())
 			}
 			if indexHasOldStoredColumns {
@@ -903,7 +940,9 @@ func (desc *Mutable) allocateIndexIDs(columnNames map[string]descpb.ColumnID) er
 				idx.IndexDesc().StoreColumnIDs = append(idx.IndexDesc().StoreColumnIDs, col.GetID())
 			}
 			colIDs.Add(col.GetID())
+			filteredStoreColumnNames = append(filteredStoreColumnNames, colName)
 		}
+		idx.IndexDesc().StoreColumnNames = filteredStoreColumnNames
 
 		// CompositeColumnIDs is defined as the subset of columns in the index key
 		// or in the primary key whose type has a composite encoding, like DECIMAL
@@ -1344,7 +1383,15 @@ func (desc *Mutable) DropConstraint(
 			desc.SetPrimaryIndex(primaryIndex)
 			return nil
 		}
-		return unimplemented.NewWithIssueDetailf(42840, "drop-constraint-unique",
+		// The declarative schema changer supports this already. Supporting it in
+		// the legacy schema changer is more complex because dropping an index
+		// requires managing the mutation lifecycle, handling FK back-references,
+		// cleaning up dependent views/functions/triggers, and managing sharded or
+		// expression index cleanup. This logic exists in dropIndexByName but is
+		// tightly coupled to DROP INDEX statement processing. Given the legacy
+		// schema changer is being deprecated, we direct users to DROP INDEX CASCADE
+		// rather than handling unique constraints here.
+		return unimplemented.Newf("drop-constraint-unique",
 			"cannot drop UNIQUE constraint %q using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead",
 			tree.ErrNameString(u.GetName()))
 	}
@@ -2620,6 +2667,27 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) ([]string, error) 
 	return storageParams, nil
 }
 
+// GetViewOptions implements the TableDescriptor interface.
+func (desc *wrapper) GetViewOptions(spaceBetweenEqual bool) ([]string, error) {
+	var viewOptions []string
+	var spacing string
+	if spaceBetweenEqual {
+		spacing = ` `
+	}
+	appendViewOptions := func(key, value string) {
+		viewOptions = append(viewOptions, key+spacing+`=`+spacing+value)
+	}
+
+	if desc.SecurityInvoker != nil {
+		if *desc.SecurityInvoker {
+			appendViewOptions(`security_invoker`, `true`)
+		} else {
+			appendViewOptions(`security_invoker`, `false`)
+		}
+	}
+	return viewOptions, nil
+}
+
 // GetMultiRegionEnumDependency returns true if the given table has an "implicit"
 // dependency on the multi-region enum. An implicit dependency exists for
 // REGIONAL BY TABLE table's which are homed in an explicit region
@@ -2797,7 +2865,8 @@ func PrimaryKeyIndexName(tableName string) string {
 }
 
 // UpdateColumnsDependedOnBy creates, updates or deletes a depended-on-by column
-// reference by ID.
+// reference by ID. This only operates on generic backrefs (TriggerID=0), not
+// trigger-specific backrefs which are managed separately.
 func (desc *Mutable) UpdateColumnsDependedOnBy(id descpb.ID, colIDs catalog.TableColSet) {
 	ref := descpb.TableDescriptor_Reference{
 		ID:        id,
@@ -2806,7 +2875,9 @@ func (desc *Mutable) UpdateColumnsDependedOnBy(id descpb.ID, colIDs catalog.Tabl
 	}
 	for i := range desc.DependedOnBy {
 		by := &desc.DependedOnBy[i]
-		if by.ID == id {
+		// Only match generic backrefs (TriggerID=0). Trigger-specific backrefs
+		// are managed by UpdateTriggerBackReferencesInRelations.
+		if by.ID == id && by.TriggerID == 0 {
 			if colIDs.Empty() {
 				desc.DependedOnBy = append(desc.DependedOnBy[:i], desc.DependedOnBy[i+1:]...)
 				return

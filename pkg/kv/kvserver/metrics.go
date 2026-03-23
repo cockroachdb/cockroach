@@ -51,7 +51,7 @@ var (
 		Help:        "Number of replicas",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric provides an essential characterization of the data distribution across cluster nodes.`,
 	}
@@ -90,7 +90,7 @@ var (
 		Help:        "Number of lease holders",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric provides an essential characterization of the data processing points across cluster nodes.`,
 	}
@@ -138,7 +138,7 @@ var (
 		Help:        "Number of ranges",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric provides a measure of the scale of the data size.`,
 	}
@@ -147,7 +147,7 @@ var (
 		Help:        "Number of ranges with fewer live replicas than needed for quorum",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse: crstrings.UnwrapText(`
 			This metric is an indicator of replication issues. It shows whether the
@@ -160,7 +160,7 @@ var (
 		Help:        "Number of ranges with fewer live replicas than the replication target",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric is an indicator of replication issues. It shows whether the cluster has data that is not conforming to resilience goals. The next step is to determine the corresponding database object, such as the table or index, of these under-replicated ranges and whether the under-replication is temporarily expected. Use the statement SELECT table_name, index_name FROM [SHOW RANGES WITH INDEXES] WHERE range_id = {id of under-replicated range};`,
 	}
@@ -175,6 +175,7 @@ var (
 		Help:        "Number of ranges with at lease one replica on a decommissioning node",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 
 	// Decommisioning nudger metrics.
@@ -260,7 +261,7 @@ var (
 		Help:        "Number of successful lease transfers",
 		Measurement: "Lease Transfers",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `A high number of lease transfers is not a negative or positive signal, rather it is a reflection of the elastic cluster activities. For example, this metric is high during cluster topology changes. A high value is often the reason for NotLeaseHolderErrors which are normal and expected during rebalancing. Observing this metric may provide a confirmation of the cause of such errors.`,
 	}
@@ -269,6 +270,7 @@ var (
 		Help:        "Number of failed lease transfers",
 		Measurement: "Lease Transfers",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaLeaseTransferLocksWrittenCount = metric.Metadata{
 		Name:        "leases.transfers.locks_written",
@@ -276,29 +278,39 @@ var (
 		Measurement: "Locks Written",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaReadSummaryLocalCompressionCount = metric.Metadata{
+		Name:        "leases.read_summary.local_compression",
+		Help:        "Number of times the local segment of a read summary lost precision due to compression",
+		Measurement: "Compressions",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaLeaseExpirationCount = metric.Metadata{
 		Name:        "leases.expiration",
 		Help:        "Number of replica leaseholders using expiration-based leases",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaLeaseEpochCount = metric.Metadata{
 		Name:        "leases.epoch",
 		Help:        "Number of replica leaseholders using epoch-based leases",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaLeaseLeaderCount = metric.Metadata{
 		Name:        "leases.leader",
 		Help:        "Number of replica leaseholders using leader leases",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaLeaseLivenessCount = metric.Metadata{
 		Name:        "leases.liveness",
 		Help:        "Number of replica leaseholders for the liveness range(s)",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaLeaseViolatingPreferencesCount = metric.Metadata{
 		Name:        "leases.preferences.violating",
@@ -336,6 +348,7 @@ var (
 		Help:        "Number of bytes of live data (keys plus values)",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaKeyBytes = metric.Metadata{
 		Name:        "keybytes",
@@ -414,6 +427,7 @@ var (
 		Help:        "Count of intent keys",
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaLockCount = metric.Metadata{
 		Name:        "lockcount",
@@ -469,7 +483,7 @@ var (
 		Help:        "Total storage capacity",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			This metric gives total storage capacity. Measurements should comply with
@@ -482,7 +496,7 @@ var (
 		Help:        "Available storage capacity",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			This metric gives available storage capacity. Measurements should comply
@@ -495,7 +509,7 @@ var (
 		Help:        "Used storage capacity",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			This metric gives used storage capacity. Measurements should comply with
@@ -535,7 +549,7 @@ var (
 		Help:        "Number of kv-level requests received per second by the store, considering the last 30 minutes, as used in rebalancing decisions.",
 		Measurement: "Queries/Sec",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric shows hotspots along the queries per second (QPS) dimension. It provides insights into the ongoing rebalancing activities.`,
 	}
@@ -574,7 +588,7 @@ var (
 		Help:        "Average CPU nanoseconds spent on processing replica operations in the last 30 minutes.",
 		Measurement: "Nanoseconds/Sec",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `A high value of this metric could indicate that one of the store's replicas is part of a hot range.`,
 	}
@@ -586,7 +600,7 @@ var (
 		`),
 		Measurement: "Nanoseconds/Sec",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse: crstrings.UnwrapText(`
 			A high value of this metric could indicate that one of the store's
@@ -602,7 +616,7 @@ var (
 		`),
 		Measurement: "Queries/Sec",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `A high value of this metric could indicate that one of the store's replicas is part of a hot range. See also: rebalancing_replicas_cpunanospersecond.`,
 	}
@@ -694,7 +708,7 @@ var (
 		Help:        "Count of block cache hits",
 		Measurement: "Cache Ops",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			This metric gives hits to block cache which is reserved memory. It is
@@ -708,7 +722,7 @@ var (
 		Help:        "Count of block cache misses",
 		Measurement: "Cache Ops",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			This metric gives misses to block cache which is reserved memory. It is
@@ -758,7 +772,7 @@ var (
 		Help:        "Number of table compactions",
 		Measurement: "Compactions",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			This metric reports the number of a node's LSM compactions. If the number
@@ -797,6 +811,7 @@ var (
 		Help:        "Number of disk reads per query",
 		Measurement: "Disk Reads per Query",
 		Unit:        metric.Unit_CONST,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaRdbNumSSTables = metric.Metadata{
 		Name:        "rocksdb.num-sstables",
@@ -827,6 +842,7 @@ var (
 		Help:        "Approximate count of DEL, SINGLEDEL and RANGEDEL internal keys across the storage engine.",
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	// NB: bytes only ever get flushed into L0, so this metric does not
 	// exist for any other level.
@@ -835,6 +851,7 @@ var (
 		"Number of bytes flushed (from memtables) into Level %d",
 		"Bytes",
 		metric.Unit_BYTES,
+		nil, // No visibility overrides
 	)[0]
 
 	// NB: sublevels is trivial (zero or one) except on L0.
@@ -843,6 +860,7 @@ var (
 		"Number of Level %d sublevels",
 		"Sublevels",
 		metric.Unit_COUNT,
+		nil, // No visibility overrides
 	)[0]
 
 	// NB: we only expose the file count in L0 because it matters for
@@ -852,6 +870,7 @@ var (
 		"Number of SSTables in Level %d",
 		"SSTables",
 		metric.Unit_COUNT,
+		nil, // No visibility overrides
 	)[0]
 
 	metaRdbBytesIngested = storageLevelMetricMetadata(
@@ -859,6 +878,7 @@ var (
 		"Number of bytes ingested directly into Level %d",
 		"Bytes",
 		metric.Unit_BYTES,
+		nil, // No visibility overrides
 	)
 
 	metaRdbLevelSize = storageLevelMetricMetadata(
@@ -866,6 +886,9 @@ var (
 		"Size of the SSTables in level %d",
 		"Bytes",
 		metric.Unit_BYTES,
+		map[int]metric.Metadata_MetricVisibility{
+			0: metric.Metadata_SUPPORT, // L0 has SUPPORT visibility
+		},
 	)
 
 	metaRdbLevelScores = storageLevelMetricMetadata(
@@ -873,6 +896,7 @@ var (
 		"Compaction score of level %d",
 		"Score",
 		metric.Unit_CONST,
+		nil, // No visibility overrides
 	)
 
 	metaRdbWriteStalls = metric.Metadata{
@@ -880,7 +904,7 @@ var (
 		Help:        "Number of instances of intentional write stalls to backpressure incoming writes",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			This metric reports actual disk stall events. Ideally, investigate all
@@ -897,6 +921,7 @@ var (
 		Help:        "Total write stall duration in nanos",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 
 	metaRdbCheckpoints = metric.Metadata{
@@ -1425,6 +1450,7 @@ var (
 		Help:        "Number of instances of disk operations taking longer than 10s",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	// TODO(jackson): Consider removing the `storage.disk-stalled` metric.
 	// Stalls fatal the node. It's unlikely this metric will ever be reported
@@ -1434,6 +1460,7 @@ var (
 		Help:        "Number of instances of disk operations taking longer than 20s",
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaDiskUnhealthyDuration = metric.Metadata{
 		Name:        "storage.disk-unhealthy.duration",
@@ -1447,7 +1474,7 @@ var (
 		Help:        "Number of range splits",
 		Measurement: "Range Ops",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric indicates how fast a workload is scaling up. Spikes can indicate resource hotspots since the split heuristic is based on QPS. To understand whether hotspots are an issue and with which tables and indexes they are occurring, correlate this metric with other metrics such as CPU usage, such as sys.cpu.combined.percent-normalized, or use the Hot Ranges page.`,
 	}
@@ -1456,7 +1483,7 @@ var (
 		Help:        "Number of range merges",
 		Measurement: "Range Ops",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    `This metric indicates how fast a workload is scaling down. Merges are Cockroach's optimization for performance. This metric indicates that there have been deletes in the workload.`,
 	}
@@ -1465,6 +1492,7 @@ var (
 		Help:        "Number of range additions",
 		Measurement: "Range Ops",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaRangeRemoves = metric.Metadata{
 		Name:        "range.removes",
@@ -1615,6 +1643,7 @@ var (
 		Help:        "Number of snapshots queued to send",
 		Measurement: "Snapshots",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaRangeSnapshotRecvQueueLength = metric.Metadata{
 		Name:        "range.snapshots.recv-queue",
@@ -1970,6 +1999,7 @@ var (
 		`),
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaRaftTimeoutCampaign = metric.Metadata{
 		Name:        "raft.timeoutcampaign",
@@ -2229,6 +2259,7 @@ var (
 		`),
 		Measurement: "Log Entries",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaRaftLogTruncated = metric.Metadata{
 		Name:        "raftlog.truncated",
@@ -2287,7 +2318,7 @@ var (
 		`),
 		Measurement: "Threshold",
 		Unit:        metric.Unit_PERCENT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			If the value of this metric exceeds 1, then it indicates overload. You can
@@ -2310,12 +2341,14 @@ var (
 		Help:        "Number of replicas which failed processing in the MVCC GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaMVCCGCQueuePending = metric.Metadata{
 		Name:        "queue.gc.pending",
 		Help:        "Number of pending replicas in the MVCC GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaMVCCGCQueueProcessingNanos = metric.Metadata{
 		Name:        "queue.gc.processingnanos",
@@ -2328,24 +2361,28 @@ var (
 		Help:        "Number of replicas successfully processed by the merge queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaMergeQueueFailures = metric.Metadata{
 		Name:        "queue.merge.process.failure",
 		Help:        "Number of replicas which failed processing in the merge queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaMergeQueuePending = metric.Metadata{
 		Name:        "queue.merge.pending",
 		Help:        "Number of pending replicas in the merge queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaMergeQueueProcessingNanos = metric.Metadata{
 		Name:        "queue.merge.processingnanos",
 		Help:        "Nanoseconds spent processing replicas in the merge queue",
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaMergeQueuePurgatory = metric.Metadata{
 		Name:        "queue.merge.purgatory",
@@ -2358,24 +2395,28 @@ var (
 		Help:        "Number of replicas successfully processed by the Raft log queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaRaftLogQueueFailures = metric.Metadata{
 		Name:        "queue.raftlog.process.failure",
 		Help:        "Number of replicas which failed processing in the Raft log queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaRaftLogQueuePending = metric.Metadata{
 		Name:        "queue.raftlog.pending",
 		Help:        "Number of pending replicas in the Raft log queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaRaftLogQueueProcessingNanos = metric.Metadata{
 		Name:        "queue.raftlog.processingnanos",
 		Help:        "Nanoseconds spent processing replicas in the Raft log queue",
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaRaftSnapshotQueueSuccesses = metric.Metadata{
 		Name:        "queue.raftsnapshot.process.success",
@@ -2430,18 +2471,28 @@ var (
 		Help:        "Number of replicas successfully processed by the replica GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaReplicaGCQueueFailures = metric.Metadata{
 		Name:        "queue.replicagc.process.failure",
 		Help:        "Number of replicas which failed processing in the replica GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaReplicaGCQueuePending = metric.Metadata{
 		Name:        "queue.replicagc.pending",
 		Help:        "Number of pending replicas in the replica GC queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
+	}
+	metaReplicaGCQueuePurgatory = metric.Metadata{
+		Name:        "queue.replicagc.purgatory",
+		Help:        "Number of replicas in the replica GC queue's purgatory, waiting for a prerequisite (e.g. left neighbor GC) before they can be GC'd",
+		Measurement: "Replicas",
+		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaReplicaGCQueueProcessingNanos = metric.Metadata{
 		Name:        "queue.replicagc.processingnanos",
@@ -2500,6 +2551,7 @@ var (
 		Help:        "Number of pending replicas in the replica lease queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaLeaseQueueProcessingNanos = metric.Metadata{
 		Name:        "queue.lease.processingnanos",
@@ -2512,12 +2564,14 @@ var (
 		Help:        "Number of replicas successfully processed by the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaReplicateQueueFailures = metric.Metadata{
 		Name:        "queue.replicate.process.failure",
 		Help:        "Number of replicas which failed processing in the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaLeaseQueuePurgatory = metric.Metadata{
 		Name:        "queue.lease.purgatory",
@@ -2530,6 +2584,7 @@ var (
 		Help:        "Number of pending replicas in the replicate queue",
 		Measurement: "Replicas",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaReplicateQueueFull = metric.Metadata{
 		Name:        "queue.replicate.queue_full",
@@ -2751,6 +2806,7 @@ var (
 		`),
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaSlowLeaseRequests = metric.Metadata{
 		Name: "requests.slow.lease",
@@ -2766,6 +2822,7 @@ var (
 		`),
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaSlowRaftRequests = metric.Metadata{
 		Name: "requests.slow.raft",
@@ -2783,6 +2840,7 @@ var (
 		`),
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 
 	// Backpressure metrics.
@@ -2806,6 +2864,7 @@ var (
 		Help:        "Number of SSTable ingestions proposed (i.e. sent to Raft by lease holders)",
 		Measurement: "Ingestions",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaAddSSTableApplications = metric.Metadata{
 		Name:        "addsstable.applications",
@@ -2838,6 +2897,7 @@ var (
 		Help:        "Amount by which evaluation of AddSSTable requests was delayed",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 
 	// Export request counter.
@@ -2863,6 +2923,7 @@ var (
 		Help:        "Number of active locks held in lock tables. Does not include replicated locks (intents) that are not held in memory",
 		Measurement: "Locks",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaConcurrencyAverageLockHoldDurationNanos = metric.Metadata{
 		Name: "kv.concurrency.avg_lock_hold_duration_nanos",
@@ -3077,12 +3138,15 @@ var (
 		Measurement: "Events",
 		Unit:        metric.Unit_COUNT,
 	}
+	// metaStorageFsyncLatency tracks the primary WAL device latency.
+	// For secondary WAL device latency (when WAL failover is configured),
+	// see metaStorageWALSecondaryFileOpLatency.
 	metaStorageFsyncLatency = metric.Metadata{
 		Name:        "storage.wal.fsync.latency",
 		Help:        "The fsync latency to the Write-Ahead Log device.",
 		Measurement: "Fsync Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_STORAGE,
 		HowToUse: crstrings.UnwrapText(`
 			If this value is greater than 100ms, it is an indication of a disk stall.
@@ -3093,6 +3157,14 @@ var (
 			device.
 		`),
 	}
+	metaStorageWALSecondaryFileOpLatency = metric.Metadata{
+		Name:        "storage.wal.secondary.file_op.latency",
+		Help:        "The latency of file operations on the secondary Write-Ahead Log device.",
+		Measurement: "File Op Latency",
+		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_STORAGE,
+		HowToUse:    "Only populated when WAL failover is configured. This metric tracks file operation latency specifically on the secondary WAL device.",
+	}
 	metaStorageWALFailoverSwitchCount = metric.Metadata{
 		Name: "storage.wal.failover.switch.count",
 		Help: crstrings.UnwrapText(`
@@ -3100,6 +3172,7 @@ var (
 			secondary and vice versa.
 		`),
 		Measurement: "Events",
+		Visibility:  metric.Metadata_SUPPORT,
 		Unit:        metric.Unit_COUNT,
 		HowToUse: crstrings.UnwrapText(`
 			Only populated when WAL failover is configured. A high switch count
@@ -3125,12 +3198,30 @@ var (
 		Help:        "The observed latency for writing and syncing to the logical Write-Ahead Log.",
 		Measurement: "Nanoseconds",
 		Category:    metric.Metadata_STORAGE,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Unit:        metric.Unit_NANOSECONDS,
 		HowToUse: crstrings.UnwrapText(`
 			Only populated when WAL failover is configured. Without WAL failover, the
 			relevant metric is storage.wal.fsync.latency.
 		`),
+	}
+	metaStorageWALFailoverSecondaryDiskCapacity = metric.Metadata{
+		Name:        "storage.wal.failover.secondary.disk.capacity",
+		Help:        "Total disk capacity of the secondary WAL failover volume.",
+		Measurement: "Storage",
+		Unit:        metric.Unit_BYTES,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_STORAGE,
+		HowToUse:    "Only populated when WAL failover is configured.",
+	}
+	metaStorageWALFailoverSecondaryDiskAvailable = metric.Metadata{
+		Name:        "storage.wal.failover.secondary.disk.available",
+		Help:        "Available disk space on the secondary WAL failover volume.",
+		Measurement: "Storage",
+		Unit:        metric.Unit_BYTES,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_STORAGE,
+		HowToUse:    "Only populated when WAL failover is configured.",
 	}
 	metaReplicaReadBatchDroppedLatchesBeforeEval = metric.Metadata{
 		Name:        "kv.replica_read_batch_evaluate.dropped_latches_before_eval",
@@ -3149,12 +3240,14 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
 		Help:        "Disk read operations on the store's disk since this process started (as reported by the OS)",
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaDiskReadBytes = metric.Metadata{
 		Name:        "storage.disk.read.bytes",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
 		Help:        "Bytes read from the store's disk since this process started (as reported by the OS)",
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaDiskReadTime = metric.Metadata{
 		Name:        "storage.disk.read.time",
@@ -3167,12 +3260,14 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
 		Help:        "Disk write operations on the store's disk since this process started (as reported by the OS)",
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaDiskWriteBytes = metric.Metadata{
 		Name:        "storage.disk.write.bytes",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
 		Help:        "Bytes written to the store's disk since this process started (as reported by the OS)",
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaDiskWriteTime = metric.Metadata{
 		Name:        "storage.disk.write.time",
@@ -3197,6 +3292,7 @@ var (
 		Unit:        metric.Unit_COUNT,
 		Measurement: "Operations",
 		Help:        "IO operations currently in progress on the store's disk (as reported by the OS)",
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	// The max disk rate metrics are computed using data sampled at
 	// DefaultDiskStatsPollingInterval, which defaults to 100ms, and scaled up
@@ -3216,12 +3312,14 @@ var (
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
 		Help:        "Maximum rate at which bytes were read from disk (as reported by the OS)",
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaDiskWriteMaxBytesPerSecond = metric.Metadata{
 		Name:        "storage.disk.write-max.bytespersecond",
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
 		Help:        "Maximum rate at which bytes were written to disk (as reported by the OS)",
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaDiskReadMaxIOPS = metric.Metadata{
 		Name:        "storage.disk.read-max.iops",
@@ -3283,18 +3381,19 @@ type StoreMetrics struct {
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many replicas apply the
 	// lease).
-	LeaseRequestSuccessCount       *metric.Counter
-	LeaseRequestErrorCount         *metric.Counter
-	LeaseRequestLatency            metric.IHistogram
-	LeaseTransferSuccessCount      *metric.Counter
-	LeaseTransferErrorCount        *metric.Counter
-	LeaseTransferLocksWritten      *metric.Counter
-	LeaseExpirationCount           *metric.Gauge
-	LeaseEpochCount                *metric.Gauge
-	LeaseLeaderCount               *metric.Gauge
-	LeaseLivenessCount             *metric.Gauge
-	LeaseViolatingPreferencesCount *metric.Gauge
-	LeaseLessPreferredCount        *metric.Gauge
+	LeaseRequestSuccessCount         *metric.Counter
+	LeaseRequestErrorCount           *metric.Counter
+	LeaseRequestLatency              metric.IHistogram
+	LeaseTransferSuccessCount        *metric.Counter
+	LeaseTransferErrorCount          *metric.Counter
+	LeaseTransferLocksWritten        *metric.Counter
+	ReadSummaryLocalCompressionCount *metric.Counter
+	LeaseExpirationCount             *metric.Gauge
+	LeaseEpochCount                  *metric.Gauge
+	LeaseLeaderCount                 *metric.Gauge
+	LeaseLivenessCount               *metric.Gauge
+	LeaseViolatingPreferencesCount   *metric.Gauge
+	LeaseLessPreferredCount          *metric.Gauge
 
 	// Storage metrics.
 	ResolveCommitCount *metric.Counter
@@ -3445,6 +3544,8 @@ type StoreMetrics struct {
 	WALFailoverPrimaryDuration         *metric.Counter
 	WALFailoverSecondaryDuration       *metric.Counter
 	WALFailoverWriteAndSyncLatency     *metric.ManualWindowHistogram
+	WALFailoverSecondaryDiskCapacity   *metric.Gauge
+	WALFailoverSecondaryDiskAvailable  *metric.Gauge
 
 	RdbCheckpoints *metric.Gauge
 
@@ -3585,6 +3686,7 @@ type StoreMetrics struct {
 	ReplicaGCQueueSuccesses                   *metric.Counter
 	ReplicaGCQueueFailures                    *metric.Counter
 	ReplicaGCQueuePending                     *metric.Gauge
+	ReplicaGCQueuePurgatory                   *metric.Gauge
 	ReplicaGCQueueProcessingNanos             *metric.Counter
 	ReplicateQueueEnqueueAdd                  *metric.Counter
 	ReplicateQueueEnqueueFailedPrecondition   *metric.Counter
@@ -3668,6 +3770,12 @@ type StoreMetrics struct {
 	MaxLockWaitQueueWaitersForLock    *metric.Gauge
 	LocksShedDueToMemoryLimit         *metric.Counter
 	NumLockShedDueToMemoryLimitEvents *metric.Counter
+	VirtualResolveCondenseCount       *metric.Counter
+	VirtualResolveDisabledCount       *metric.Counter
+	VirtualResolveIntentCount         *metric.Counter
+	VirtualResolveIntentRangeCount    *metric.Counter
+	VirtualResolveBatches             *metric.Counter
+	VirtualResolveBatchErrors         *metric.Counter
 	LatchWaitDurations                metric.IHistogram
 
 	// Ingestion metrics
@@ -3697,7 +3805,12 @@ type StoreMetrics struct {
 	SubsumeLocksWritten *metric.Counter
 
 	FlushUtilization *metric.GaugeFloat64
-	FsyncLatency     *metric.ManualWindowHistogram
+	// FsyncLatency tracks file operation latency for the primary WAL device.
+	// When WAL failover is configured, see also WALSecondaryFileOpLatency.
+	FsyncLatency *metric.ManualWindowHistogram
+	// WALSecondaryFileOpLatency tracks file operation latency for the secondary
+	// WAL device. Only populated when WAL failover is configured.
+	WALSecondaryFileOpLatency *metric.ManualWindowHistogram
 
 	// Disk metrics
 	DiskReadBytes              *metric.Counter
@@ -4036,15 +4149,16 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			Duration:     histogramWindow,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
-		LeaseTransferSuccessCount:      metric.NewCounter(metaLeaseTransferSuccessCount),
-		LeaseTransferErrorCount:        metric.NewCounter(metaLeaseTransferErrorCount),
-		LeaseTransferLocksWritten:      metric.NewCounter(metaLeaseTransferLocksWrittenCount),
-		LeaseExpirationCount:           metric.NewGauge(metaLeaseExpirationCount),
-		LeaseEpochCount:                metric.NewGauge(metaLeaseEpochCount),
-		LeaseLeaderCount:               metric.NewGauge(metaLeaseLeaderCount),
-		LeaseLivenessCount:             metric.NewGauge(metaLeaseLivenessCount),
-		LeaseViolatingPreferencesCount: metric.NewGauge(metaLeaseViolatingPreferencesCount),
-		LeaseLessPreferredCount:        metric.NewGauge(metaLeaseLessPreferredCount),
+		LeaseTransferSuccessCount:        metric.NewCounter(metaLeaseTransferSuccessCount),
+		LeaseTransferErrorCount:          metric.NewCounter(metaLeaseTransferErrorCount),
+		LeaseTransferLocksWritten:        metric.NewCounter(metaLeaseTransferLocksWrittenCount),
+		ReadSummaryLocalCompressionCount: metric.NewCounter(metaReadSummaryLocalCompressionCount),
+		LeaseExpirationCount:             metric.NewGauge(metaLeaseExpirationCount),
+		LeaseEpochCount:                  metric.NewGauge(metaLeaseEpochCount),
+		LeaseLeaderCount:                 metric.NewGauge(metaLeaseLeaderCount),
+		LeaseLivenessCount:               metric.NewGauge(metaLeaseLivenessCount),
+		LeaseViolatingPreferencesCount:   metric.NewGauge(metaLeaseViolatingPreferencesCount),
+		LeaseLessPreferredCount:          metric.NewGauge(metaLeaseLessPreferredCount),
 
 		// Intent resolution metrics.
 		ResolveCommitCount: metric.NewCounter(metaResolveCommit),
@@ -4215,6 +4329,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			pebble.FsyncLatencyBuckets,
 			false, /* withRotate */
 		),
+		WALFailoverSecondaryDiskCapacity:  metric.NewGauge(metaStorageWALFailoverSecondaryDiskCapacity),
+		WALFailoverSecondaryDiskAvailable: metric.NewGauge(metaStorageWALFailoverSecondaryDiskAvailable),
 
 		// Ingestion metrics
 		IngestCount: metric.NewGauge(metaIngestCount),
@@ -4399,6 +4515,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ReplicaGCQueueSuccesses:                   metric.NewCounter(metaReplicaGCQueueSuccesses),
 		ReplicaGCQueueFailures:                    metric.NewCounter(metaReplicaGCQueueFailures),
 		ReplicaGCQueuePending:                     metric.NewGauge(metaReplicaGCQueuePending),
+		ReplicaGCQueuePurgatory:                   metric.NewGauge(metaReplicaGCQueuePurgatory),
 		ReplicaGCQueueProcessingNanos:             metric.NewCounter(metaReplicaGCQueueProcessingNanos),
 		ReplicateQueueEnqueueAdd:                  metric.NewCounter(metaReplicateQueueEnqueueAdd),
 		ReplicateQueueEnqueueFailedPrecondition:   metric.NewCounter(metaReplicateQueueEnqueueFailedPrecondition),
@@ -4478,6 +4595,12 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		MaxLockWaitQueueWaitersForLock:    metric.NewGauge(metaConcurrencyMaxLockWaitQueueWaitersForLock),
 		LocksShedDueToMemoryLimit:         metric.NewCounter(concurrency.MetaConcurrencyLocksShedDueToMemoryLimit),
 		NumLockShedDueToMemoryLimitEvents: metric.NewCounter(concurrency.MetaConcurrencyNumLockShedDueToMemoryLimitEvents),
+		VirtualResolveCondenseCount:       metric.NewCounter(concurrency.MetaVirtualResolveCondense),
+		VirtualResolveDisabledCount:       metric.NewCounter(concurrency.MetaVirtualResolveDisabled),
+		VirtualResolveIntentCount:         metric.NewCounter(concurrency.MetaVirtualResolveIntent),
+		VirtualResolveIntentRangeCount:    metric.NewCounter(concurrency.MetaVirtualResolveIntentRange),
+		VirtualResolveBatches:             metric.NewCounter(concurrency.MetaVirtualResolveBatches),
+		VirtualResolveBatchErrors:         metric.NewCounter(concurrency.MetaVirtualResolveBatchErrors),
 		LatchWaitDurations: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePreferHdrLatency,
 			Metadata:     metaLatchConflictWaitDurations,
@@ -4511,6 +4634,11 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 			pebble.FsyncLatencyBuckets,
 			false, /* withRotate */
 		),
+		WALSecondaryFileOpLatency: metric.NewManualWindowHistogram(
+			metaStorageWALSecondaryFileOpLatency,
+			pebble.FsyncLatencyBuckets,
+			false, /* withRotate */
+		),
 
 		ReplicaReadBatchDroppedLatchesBeforeEval: metric.NewCounter(metaReplicaReadBatchDroppedLatchesBeforeEval),
 		ReplicaReadBatchWithoutInterleavingIter:  metric.NewCounter(metaReplicaReadBatchWithoutInterleavingIter),
@@ -4538,6 +4666,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 	}
 
 	sm.categoryIterMetrics.init(storeRegistry)
+	sm.categoryDiskWriteMetrics.init(storeRegistry)
 
 	storeRegistry.AddMetricStruct(sm)
 	storeRegistry.AddMetricStruct(sm.LoadSplitterMetrics)
@@ -4812,6 +4941,20 @@ func (sm *StoreMetrics) updateEnvStats(stats fs.EnvStats) {
 	sm.EncryptionAlgorithm.Update(int64(stats.EncryptionType))
 }
 
+// updateDiskCounter updates a disk stat counter with a cumulative value from
+// the OS. On s390x, /proc/diskstats counters are 32-bit unsigned and wrap
+// after ~2^32. If the new value is lower than the current counter value
+// (indicating a wrap), the counter is cleared before updating to avoid a
+// panic in test builds.
+func updateDiskCounter(ctx context.Context, counter *metric.Counter, val int64) {
+	if counter.Count() > val {
+		log.Ops.Infof(ctx,
+			"disk stats counter wrap detected for %s, resetting", counter.GetMetadata().Name)
+		counter.Clear()
+	}
+	counter.Update(val)
+}
+
 func (sm *StoreMetrics) updateDiskStats(
 	ctx context.Context,
 	rollingStats disk.StatsWindow,
@@ -4819,14 +4962,14 @@ func (sm *StoreMetrics) updateDiskStats(
 	cumulativeStatsErr error,
 ) {
 	if cumulativeStatsErr == nil {
-		sm.DiskReadCount.Update(int64(cumulativeStats.ReadsCount))
-		sm.DiskReadBytes.Update(int64(cumulativeStats.BytesRead()))
-		sm.DiskReadTime.Update(int64(cumulativeStats.ReadsDuration))
-		sm.DiskWriteCount.Update(int64(cumulativeStats.WritesCount))
-		sm.DiskWriteBytes.Update(int64(cumulativeStats.BytesWritten()))
-		sm.DiskWriteTime.Update(int64(cumulativeStats.WritesDuration))
-		sm.DiskIOTime.Update(int64(cumulativeStats.CumulativeDuration))
-		sm.DiskWeightedIOTime.Update(int64(cumulativeStats.WeightedIODuration))
+		updateDiskCounter(ctx, sm.DiskReadCount, int64(cumulativeStats.ReadsCount))
+		updateDiskCounter(ctx, sm.DiskReadBytes, int64(cumulativeStats.BytesRead()))
+		updateDiskCounter(ctx, sm.DiskReadTime, int64(cumulativeStats.ReadsDuration))
+		updateDiskCounter(ctx, sm.DiskWriteCount, int64(cumulativeStats.WritesCount))
+		updateDiskCounter(ctx, sm.DiskWriteBytes, int64(cumulativeStats.BytesWritten()))
+		updateDiskCounter(ctx, sm.DiskWriteTime, int64(cumulativeStats.WritesDuration))
+		updateDiskCounter(ctx, sm.DiskIOTime, int64(cumulativeStats.CumulativeDuration))
+		updateDiskCounter(ctx, sm.DiskWeightedIOTime, int64(cumulativeStats.WeightedIODuration))
 		sm.DiskIopsInProgress.Update(int64(cumulativeStats.InProgressCount))
 	} else {
 		// Don't update cumulative stats to the useless zero value.
@@ -4904,7 +5047,9 @@ func makePolicyRefresherMetrics() [ctpb.MAX_CLOSED_TIMESTAMP_POLICY]*metric.Gaug
 }
 
 func storageLevelMetricMetadata(
-	name, helpTpl, measurement string, unit metric.Unit,
+	name, helpTpl, measurement string,
+	unit metric.Unit,
+	visibilityOverrides map[int]metric.Metadata_MetricVisibility,
 ) [7]metric.Metadata {
 	var sl [7]metric.Metadata
 	for i := range sl {
@@ -4913,6 +5058,10 @@ func storageLevelMetricMetadata(
 			Help:        fmt.Sprintf(helpTpl, i),
 			Measurement: measurement,
 			Unit:        unit,
+		}
+		// Apply visibility override if specified for this level
+		if visibility, ok := visibilityOverrides[i]; ok {
+			sl[i].Visibility = visibility
 		}
 	}
 	return sl
@@ -5050,6 +5199,36 @@ func (m *pebbleCategoryDiskWriteMetrics) update(stats vfs.DiskWriteStatsAggregat
 type pebbleCategoryDiskWriteMetricsContainer struct {
 	registry   *metric.Registry
 	metricsMap syncutil.Map[vfs.DiskWriteCategory, pebbleCategoryDiskWriteMetrics]
+}
+
+// knownDiskWriteCategories contains all known disk write categories that should
+// be eagerly initialized. This includes both Pebble internal categories and
+// CockroachDB-defined categories.
+var knownDiskWriteCategories = []vfs.DiskWriteCategory{
+	// Pebble internal categories
+	"pebble-wal",
+	"pebble-memtable-flush",
+	"pebble-compaction",
+	"pebble-manifest",
+	// CockroachDB categories (from pkg/storage/fs/category.go)
+	vfs.WriteCategoryUnspecified,
+	fs.RaftSnapshotWriteCategory,
+	fs.SQLColumnSpillWriteCategory,
+	fs.PebbleIngestionWriteCategory,
+	fs.CRDBLogWriteCategory,
+	fs.EncryptionRegistryWriteCategory,
+}
+
+func (m *pebbleCategoryDiskWriteMetricsContainer) init(registry *metric.Registry) {
+	m.registry = registry
+	// Eagerly initialize metrics for all known disk write categories to ensure
+	// consistent metric visibility across all stores from startup.
+	for _, category := range knownDiskWriteCategories {
+		cm, ok := m.metricsMap.LoadOrStore(category, makePebbleCategorizedWriteMetrics(category))
+		if !ok {
+			m.registry.AddMetricStruct(cm)
+		}
+	}
 }
 
 func (m *pebbleCategoryDiskWriteMetricsContainer) update(stats []vfs.DiskWriteStatsAggregate) {

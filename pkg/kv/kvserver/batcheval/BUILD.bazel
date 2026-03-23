@@ -187,6 +187,7 @@ go_test(
         "//pkg/testutils/testfixtures",
         "//pkg/util",
         "//pkg/util/admission",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",

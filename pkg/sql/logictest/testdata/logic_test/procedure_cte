@@ -76,7 +76,7 @@ CREATE PROCEDURE p(OUT ret INT) LANGUAGE SQL AS $$
 $$;
 
 # Avoid causing an error due to too many rows returned.
-statement ok
+statement count 3
 DELETE FROM ab WHERE a > 1;
 
 query I

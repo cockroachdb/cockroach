@@ -9,7 +9,7 @@ import React from "react";
 import { SortedTable } from "./";
 
 storiesOf("Sorted table", module)
-  .add("Empty state", () => <SortedTable empty />)
+  .add("Empty state", () => <SortedTable empty data={[]} columns={[]} />)
   .add("With data", () => {
     const columns = [
       {

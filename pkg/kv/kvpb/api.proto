@@ -1853,12 +1853,13 @@ message ExportRequest {
       (gogoproto.customname) = "ResumeKeyTS"
   ];
 
-  // MVCCFilter determines if request exports all data or latest data as of
-  // Timestamp specified in request header. If all data is requested StartTime
-  // is used as a lower bound and header Timestamp as higher bound or exported
-  // entries.
+  // MVCCFilter determines if the request exports all revisions of a key or
+  // only the latest value as of the Timestamp specified in request header.
   MVCCFilter mvcc_filter = 4 [(gogoproto.customname) = "MVCCFilter"];
-  // StartTime is only used when MVCCFilter is set to All.
+  // StartTime specifies the start of the time range (StartTime, Timestamp]
+  // from which keys are exported. NB: When non-empty with MVCCFilter_Latest,
+  // point key tombstones are included in the export so that deletions
+  // that occurred in the interval are preserved.
   util.hlc.Timestamp start_time = 3 [(gogoproto.nullable) = false];
 
   // Split large rows in the middle of key sequence. This option will allow
@@ -3022,9 +3023,25 @@ message Header {
   // evaluated in descending range order.
   bool is_reverse = 38;
 
+  // workload_id identifies the workload that triggered this batch (statement
+  // fingerprint ID, job ID, etc.). Used for ASH sampling.
+  uint64 workload_id = 39 [(gogoproto.customname) = "WorkloadID"];
+
+  // app_name_id is the hash of the application name. Used for ASH sampling.
+  // Set when the workload is from SQL execution.
+  // Note(alyshan): This will eventually be replaced by a general
+  // enrichment_id field which will enable the ASH sampler to
+  // enrich samples with more workload context.
+  uint64 app_name_id = 40 [(gogoproto.customname) = "AppNameID"];
+
+  // workload_type distinguishes the kind of workload that workload_id
+  // represents (statement fingerprint, job ID, system task, etc.).
+  // Used by the ASH sampler to choose the right encoding.
+  uint32 workload_type = 41 [(gogoproto.customname) = "WorkloadType"];
+
   reserved 7, 10, 12, 14, 20, 24;
 
-  // Next ID: 39
+  // Next ID: 42
 }
 
 message WriteOptions {
@@ -3207,6 +3224,10 @@ message BatchResponse {
     // The field is cleared by the DistSender because it refers routing
     // information not exposed by the KV API.
     repeated RangeInfo range_infos = 7 [(gogoproto.nullable) = false];
+    // CPUTime is tracked in Replica.Send, meaning it only tracks the CPU time
+    // for the request evaluation goroutine, and not the other replication related
+    // work. The value is either zero (unset) or positive.
+    int64 cpu_time = 8 [(gogoproto.customname) = "CPUTime"];
     // NB: if you add a field here, don't forget to update combine().
   }
   Header header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
@@ -3870,6 +3891,17 @@ message ContentionEvent {
   // IsLatch, if true, indicates that the contention event was due to waiting to
   // acquire a latch.
   bool is_latch = 4;
+}
+
+// QuorumReplicationFlowAdmissionEvent is a message that is recorded on traces by a
+// range controller when waiting for quorum flow control.
+message QuorumReplicationFlowAdmissionEvent {
+  option (gogoproto.goproto_stringer) = false;
+  // WaitDurationNanos is the time spent waiting.
+  int64 wait_duration_nanos = 1 [(gogoproto.casttype) = "time.Duration"];
+
+  // When adding a new field, please also update
+  // QuorumReplicationFlowAdmissionEvent.SafeFormat().
 }
 
 // ScanStats is a message that tracks miscellaneous statistics of all Gets,

@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type jsonEncoded struct {
+type JSONEncoded struct {
 	// containerLength is only set if this is an object or an array.
 	containerLen int
 	typ          Type
@@ -36,12 +36,12 @@ type jsonEncoded struct {
 	}
 }
 
-const jsonEncodedSize = unsafe.Sizeof(jsonEncoded{})
+const jsonEncodedSize = unsafe.Sizeof(JSONEncoded{})
 
-// alreadyDecoded returns a decoded JSON value if this jsonEncoded has already
+// alreadyDecoded returns a decoded JSON value if this JSONEncoded has already
 // been decoded, otherwise it returns nil. This allows us to fast-path certain
 // operations if we've already done the work of decoding an object.
-func (j *jsonEncoded) alreadyDecoded() JSON {
+func (j *JSONEncoded) alreadyDecoded() JSON {
 	j.mu.RLock()
 	defer j.mu.RUnlock()
 	if j.mu.cachedDecoded != nil {
@@ -50,27 +50,32 @@ func (j *jsonEncoded) alreadyDecoded() JSON {
 	return nil
 }
 
-func (j *jsonEncoded) Type() Type {
+func (j *JSONEncoded) Type() Type {
 	return j.typ
 }
 
-// newEncodedFromRoot returns a jsonEncoded from a fully-encoded JSON document.
-func newEncodedFromRoot(v []byte) (*jsonEncoded, error) {
+// newEncodedFromRoot returns a JSONEncoded from a fully-encoded JSON document.
+func newEncodedFromRoot(v []byte) (*JSONEncoded, error) {
+	var jsonEncoded JSONEncoded
+	return &jsonEncoded, jsonEncoded.fromRoot(v)
+}
+
+func (j *JSONEncoded) fromRoot(v []byte) error {
 	v, typ, err := jsonTypeFromRootBuffer(v)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	containerLen := -1
 	if typ == ArrayJSONType || typ == ObjectJSONType {
 		containerHeader, err := getUint32At(v, 0)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		containerLen = int(containerHeader & containerHeaderLenMask)
 	}
 
-	return &jsonEncoded{
+	*j = JSONEncoded{
 		typ:          typ,
 		containerLen: containerLen,
 		// Manually set the capacity of the new slice to its length, so we properly
@@ -78,7 +83,8 @@ func newEncodedFromRoot(v []byte) (*jsonEncoded, error) {
 		// capacity is very large, since it probably points to the backing byte
 		// slice of a kv batch.
 		value: v[:len(v):len(v)],
-	}, nil
+	}
+	return nil
 }
 
 func jsonTypeFromRootBuffer(v []byte) ([]byte, Type, error) {
@@ -122,7 +128,7 @@ func newEncoded(e jEntry, v []byte) (JSON, error) {
 		typ = StringJSONType
 	case numberTag:
 		typ = NumberJSONType
-	case nullTag: // Don't bother with returning a jsonEncoded for the singleton types.
+	case nullTag: // Don't bother with returning a JSONEncoded for the singleton types.
 		return NullJSONValue, nil
 	case falseTag:
 		return FalseJSONValue, nil
@@ -143,7 +149,7 @@ func newEncoded(e jEntry, v []byte) (JSON, error) {
 		containerLen = int(containerHeader & containerHeaderLenMask)
 	}
 
-	return &jsonEncoded{
+	return &JSONEncoded{
 		typ:          typ,
 		containerLen: containerLen,
 		value:        v,
@@ -190,7 +196,7 @@ func (e *encodedArrayIterator) nextEncoded() (nextJEntry jEntry, next []byte, ok
 
 // iterArrayValues iterates through all the values of an encoded array without
 // requiring decoding of all of them.
-func (j *jsonEncoded) iterArrayValues() encodedArrayIterator {
+func (j *JSONEncoded) iterArrayValues() encodedArrayIterator {
 	if j.typ != ArrayJSONType {
 		panic("can only iterate through the array values of an array")
 	}
@@ -249,7 +255,7 @@ func (e *encodedObjectIterator) nextEncoded() (
 
 // iterObject iterates through all the keys and values of an encoded object
 // without requiring decoding of all of them.
-func (j *jsonEncoded) iterObject() (encodedObjectIterator, error) {
+func (j *JSONEncoded) iterObject() (encodedObjectIterator, error) {
 	if j.typ != ObjectJSONType {
 		panic("can only iterate through the object values of an object")
 	}
@@ -277,7 +283,7 @@ func (j *jsonEncoded) iterObject() (encodedObjectIterator, error) {
 	}, nil
 }
 
-func (j *jsonEncoded) StripNulls() (JSON, bool, error) {
+func (j *JSONEncoded) StripNulls() (JSON, bool, error) {
 	dec, err := j.shallowDecode()
 	if err != nil {
 		return nil, false, err
@@ -285,7 +291,7 @@ func (j *jsonEncoded) StripNulls() (JSON, bool, error) {
 	return dec.StripNulls()
 }
 
-func (j *jsonEncoded) ObjectIter() (*ObjectIterator, error) {
+func (j *JSONEncoded) ObjectIter() (*ObjectIterator, error) {
 	dec, err := j.shallowDecode()
 	if err != nil {
 		return nil, err
@@ -293,12 +299,12 @@ func (j *jsonEncoded) ObjectIter() (*ObjectIterator, error) {
 	return dec.ObjectIter()
 }
 
-func (j *jsonEncoded) nthJEntry(n int, off int) (jEntry, error) {
+func (j *JSONEncoded) nthJEntry(n int, off int) (jEntry, error) {
 	return getJEntryAt(j.value, containerHeaderLen+n*jEntryLen, off)
 }
 
 // objectGetDataRange returns the [begin, end) subslice of the object's data.
-func (j *jsonEncoded) objectGetDataRange(begin, end int) []byte {
+func (j *JSONEncoded) objectGetDataRange(begin, end int) []byte {
 	dataStart := containerHeaderLen + j.containerLen*jEntryLen*2
 	return j.value[dataStart+begin : dataStart+end]
 }
@@ -306,7 +312,7 @@ func (j *jsonEncoded) objectGetDataRange(begin, end int) []byte {
 // getNthEntryBounds returns the beginning, ending, and JEntry of the nth entry
 // in the container. If the container is an object, the i-th entry is the i-th
 // key, and the (i+length)-th entry is the i-th value.
-func (j *jsonEncoded) getNthEntryBounds(n int) (begin, end int, entry jEntry, err error) {
+func (j *JSONEncoded) getNthEntryBounds(n int) (begin, end int, entry jEntry, err error) {
 	// First, we seek for the beginning of the current entry by stepping
 	// backwards via beginningOfIdx.
 	begin, err = j.beginningOfIdx(n)
@@ -326,7 +332,7 @@ func (j *jsonEncoded) getNthEntryBounds(n int) (begin, end int, entry jEntry, er
 // objectGetNthDataRange returns the byte subslice and jEntry of the given nth entry.
 // If the container is an object, the i-th entry is the i-th key, and the
 // (i+length)-th entry is the i-th value.
-func (j *jsonEncoded) objectGetNthDataRange(n int) ([]byte, jEntry, error) {
+func (j *JSONEncoded) objectGetNthDataRange(n int) ([]byte, jEntry, error) {
 	begin, end, entry, err := j.getNthEntryBounds(n)
 	if err != nil {
 		return nil, jEntry{}, err
@@ -336,7 +342,7 @@ func (j *jsonEncoded) objectGetNthDataRange(n int) ([]byte, jEntry, error) {
 
 // objectNthValue returns the nth value in the sorted-by-key representation of
 // the object.
-func (j *jsonEncoded) objectNthValue(n int) (JSON, error) {
+func (j *JSONEncoded) objectNthValue(n int) (JSON, error) {
 	data, entry, err := j.objectGetNthDataRange(j.containerLen + n)
 	if err != nil {
 		return nil, err
@@ -349,7 +355,7 @@ func parseJEntry(jEntry uint32) (isOff bool, offlen int) {
 }
 
 // beginningOfIdx finds the offset to the beginning of the given entry.
-func (j *jsonEncoded) beginningOfIdx(idx int) (int, error) {
+func (j *JSONEncoded) beginningOfIdx(idx int) (int, error) {
 	if idx == 0 {
 		return 0, nil
 	}
@@ -373,12 +379,12 @@ func (j *jsonEncoded) beginningOfIdx(idx int) (int, error) {
 	return offset, nil
 }
 
-func (j *jsonEncoded) arrayGetDataRange(begin, end int) []byte {
+func (j *JSONEncoded) arrayGetDataRange(begin, end int) []byte {
 	dataStart := containerHeaderLen + j.containerLen*jEntryLen
 	return j.value[dataStart+begin : dataStart+end]
 }
 
-func (j *jsonEncoded) FetchValIdx(idx int) (JSON, error) {
+func (j *JSONEncoded) FetchValIdx(idx int) (JSON, error) {
 	if dec := j.alreadyDecoded(); dec != nil {
 		return dec.FetchValIdx(idx)
 	}
@@ -410,7 +416,7 @@ func (j *jsonEncoded) FetchValIdx(idx int) (JSON, error) {
 	}
 }
 
-func (j *jsonEncoded) FetchValKey(key string) (JSON, error) {
+func (j *JSONEncoded) FetchValKey(key string) (JSON, error) {
 	if dec := j.alreadyDecoded(); dec != nil {
 		return dec.FetchValKey(key)
 	}
@@ -456,7 +462,7 @@ func (j *jsonEncoded) FetchValKey(key string) (JSON, error) {
 // shallowDecode decodes only the keys of an object, and doesn't decode any
 // elements of an array. It can be used to save a decode-encode cycle for
 // certain operations (say, key deletion).
-func (j *jsonEncoded) shallowDecode() (JSON, error) {
+func (j *JSONEncoded) shallowDecode() (JSON, error) {
 	if dec := j.alreadyDecoded(); dec != nil {
 		return dec, nil
 	}
@@ -509,7 +515,7 @@ func (j *jsonEncoded) shallowDecode() (JSON, error) {
 	}
 }
 
-func (j *jsonEncoded) mustDecode() JSON {
+func (j *JSONEncoded) mustDecode() JSON {
 	decoded, err := j.shallowDecode()
 	if err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "invalid JSON data: %v", j.value))
@@ -519,7 +525,7 @@ func (j *jsonEncoded) mustDecode() JSON {
 
 // decode should be used in cases where you will definitely have to use the
 // entire decoded JSON structure, like printing it out to a string.
-func (j *jsonEncoded) decode() (JSON, error) {
+func (j *JSONEncoded) decode() (JSON, error) {
 	switch j.typ {
 	case NumberJSONType:
 		_, j, err := decodeJSONNumber(j.value)
@@ -542,7 +548,7 @@ func (j *jsonEncoded) decode() (JSON, error) {
 	return decoded, err
 }
 
-func (j *jsonEncoded) AsText() (*string, error) {
+func (j *JSONEncoded) AsText() (*string, error) {
 	if dec := j.alreadyDecoded(); dec != nil {
 		return dec.AsText()
 	}
@@ -554,7 +560,7 @@ func (j *jsonEncoded) AsText() (*string, error) {
 	return decoded.AsText()
 }
 
-func (j *jsonEncoded) AsDecimal() (*apd.Decimal, bool) {
+func (j *JSONEncoded) AsDecimal() (*apd.Decimal, bool) {
 	if dec := j.alreadyDecoded(); dec != nil {
 		return dec.AsDecimal()
 	}
@@ -566,7 +572,7 @@ func (j *jsonEncoded) AsDecimal() (*apd.Decimal, bool) {
 	return decoded.AsDecimal()
 }
 
-func (j *jsonEncoded) AsBool() (bool, bool) {
+func (j *JSONEncoded) AsBool() (bool, bool) {
 	if dec := j.alreadyDecoded(); dec != nil {
 		return dec.AsBool()
 	}
@@ -578,7 +584,7 @@ func (j *jsonEncoded) AsBool() (bool, bool) {
 	return decoded.AsBool()
 }
 
-func (j *jsonEncoded) AsArray() ([]JSON, bool) {
+func (j *JSONEncoded) AsArray() ([]JSON, bool) {
 	if dec := j.alreadyDecoded(); dec != nil {
 		return dec.AsArray()
 	}
@@ -589,7 +595,7 @@ func (j *jsonEncoded) AsArray() ([]JSON, bool) {
 	return decoded.AsArray()
 }
 
-func (j *jsonEncoded) Compare(other JSON) (_ int, err error) {
+func (j *JSONEncoded) Compare(other JSON) (_ int, err error) {
 	if other == nil {
 		return -1, nil
 	}
@@ -615,7 +621,7 @@ func (j *jsonEncoded) Compare(other JSON) (_ int, err error) {
 	return dec.Compare(other)
 }
 
-func (j *jsonEncoded) Exists(key string) (bool, error) {
+func (j *JSONEncoded) Exists(key string) (bool, error) {
 	if dec := j.alreadyDecoded(); dec != nil {
 		return dec.Exists(key)
 	}
@@ -642,15 +648,15 @@ func (j *jsonEncoded) Exists(key string) (bool, error) {
 				return false, err
 			}
 			// This is a minor optimization - we know that newEncoded always returns a
-			// jsonEncoded if it's decoding a string, and we can save actually
+			// JSONEncoded if it's decoding a string, and we can save actually
 			// allocating that string for this check by not forcing a decode into a
 			// jsonString.  This operates on two major assumptions:
-			// 1. newEncoded returns a jsonEncoded (and not a jsonString) for string
+			// 1. newEncoded returns a JSONEncoded (and not a jsonString) for string
 			// types and
-			// 2. the `value` field on such a jsonEncoded directly corresponds to the string.
+			// 2. the `value` field on such a JSONEncoded directly corresponds to the string.
 			// This is tested sufficiently that if either of those assumptions is
 			// broken it will be caught.
-			if next.Type() == StringJSONType && string(next.(*jsonEncoded).value) == key {
+			if next.Type() == StringJSONType && string(next.(*JSONEncoded).value) == key {
 				return true, nil
 			}
 		}
@@ -663,7 +669,7 @@ func (j *jsonEncoded) Exists(key string) (bool, error) {
 	}
 }
 
-func (j *jsonEncoded) FetchValKeyOrIdx(key string) (JSON, error) {
+func (j *JSONEncoded) FetchValKeyOrIdx(key string) (JSON, error) {
 	switch j.typ {
 	case ObjectJSONType:
 		return j.FetchValKey(key)
@@ -681,7 +687,7 @@ func (j *jsonEncoded) FetchValKeyOrIdx(key string) (JSON, error) {
 }
 
 // RemoveIndex implements the JSON interface.
-func (j *jsonEncoded) RemoveIndex(idx int) (JSON, bool, error) {
+func (j *JSONEncoded) RemoveIndex(idx int) (JSON, bool, error) {
 	decoded, err := j.shallowDecode()
 	if err != nil {
 		return nil, false, err
@@ -690,7 +696,7 @@ func (j *jsonEncoded) RemoveIndex(idx int) (JSON, bool, error) {
 }
 
 // Concat implements the JSON interface.
-func (j *jsonEncoded) Concat(other JSON) (JSON, error) {
+func (j *JSONEncoded) Concat(other JSON) (JSON, error) {
 	decoded, err := j.shallowDecode()
 	if err != nil {
 		return nil, err
@@ -699,7 +705,7 @@ func (j *jsonEncoded) Concat(other JSON) (JSON, error) {
 }
 
 // RemoveString implements the JSON interface.
-func (j *jsonEncoded) RemoveString(s string) (JSON, bool, error) {
+func (j *JSONEncoded) RemoveString(s string) (JSON, bool, error) {
 	decoded, err := j.shallowDecode()
 	if err != nil {
 		return nil, false, err
@@ -707,7 +713,7 @@ func (j *jsonEncoded) RemoveString(s string) (JSON, bool, error) {
 	return decoded.RemoveString(s)
 }
 
-func (j *jsonEncoded) RemovePath(path []string) (JSON, bool, error) {
+func (j *JSONEncoded) RemovePath(path []string) (JSON, bool, error) {
 	decoded, err := j.shallowDecode()
 	if err != nil {
 		return nil, false, err
@@ -715,7 +721,7 @@ func (j *jsonEncoded) RemovePath(path []string) (JSON, bool, error) {
 	return decoded.RemovePath(path)
 }
 
-func (j *jsonEncoded) doRemovePath(path []string) (JSON, bool, error) {
+func (j *JSONEncoded) doRemovePath(path []string) (JSON, bool, error) {
 	decoded, err := j.shallowDecode()
 	if err != nil {
 		return nil, false, err
@@ -724,22 +730,22 @@ func (j *jsonEncoded) doRemovePath(path []string) (JSON, bool, error) {
 }
 
 // Size implements the JSON interface.
-func (j *jsonEncoded) Size() uintptr {
+func (j *JSONEncoded) Size() uintptr {
 	return jsonEncodedSize + uintptr(cap(j.value))
 }
 
-func (j *jsonEncoded) String() string {
+func (j *JSONEncoded) String() string {
 	var buf bytes.Buffer
 	j.Format(&buf)
 	return buf.String()
 }
 
 // isScalar implements the JSON interface.
-func (j *jsonEncoded) isScalar() bool {
+func (j *JSONEncoded) isScalar() bool {
 	return j.typ != ArrayJSONType && j.typ != ObjectJSONType
 }
 
-func (j *jsonEncoded) Len() int {
+func (j *JSONEncoded) Len() int {
 	if j.typ != ArrayJSONType && j.typ != ObjectJSONType {
 		return 0
 	}
@@ -747,7 +753,7 @@ func (j *jsonEncoded) Len() int {
 }
 
 // EncodeForwardIndex implements the JSON interface.
-func (j *jsonEncoded) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte, error) {
+func (j *JSONEncoded) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]byte, error) {
 	decoded, err := j.decode()
 	if err != nil {
 		return nil, err
@@ -756,7 +762,7 @@ func (j *jsonEncoded) EncodeForwardIndex(buf []byte, dir encoding.Direction) ([]
 }
 
 // EncodeInvertedIndexKeys implements the JSON interface.
-func (j *jsonEncoded) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
+func (j *JSONEncoded) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	// TODO(justin): this could possibly be optimized.
 	decoded, err := j.decode()
 	if err != nil {
@@ -765,7 +771,7 @@ func (j *jsonEncoded) EncodeInvertedIndexKeys(b []byte) ([][]byte, error) {
 	return decoded.EncodeInvertedIndexKeys(b)
 }
 
-func (j *jsonEncoded) encodeContainingInvertedIndexSpans(
+func (j *JSONEncoded) encodeContainingInvertedIndexSpans(
 	b []byte, isRoot, isObjectValue bool,
 ) (inverted.Expression, error) {
 	decoded, err := j.decode()
@@ -775,7 +781,7 @@ func (j *jsonEncoded) encodeContainingInvertedIndexSpans(
 	return decoded.encodeContainingInvertedIndexSpans(b, isRoot, isObjectValue)
 }
 
-func (j *jsonEncoded) encodeContainedInvertedIndexSpans(
+func (j *JSONEncoded) encodeContainedInvertedIndexSpans(
 	b []byte, isRoot, isObjectValue bool,
 ) (inverted.Expression, error) {
 	decoded, err := j.decode()
@@ -786,7 +792,7 @@ func (j *jsonEncoded) encodeContainedInvertedIndexSpans(
 }
 
 // numInvertedIndexEntries implements the JSON interface.
-func (j *jsonEncoded) numInvertedIndexEntries() (int, error) {
+func (j *JSONEncoded) numInvertedIndexEntries() (int, error) {
 	if j.isScalar() || j.containerLen == 0 {
 		return 1, nil
 	}
@@ -797,7 +803,7 @@ func (j *jsonEncoded) numInvertedIndexEntries() (int, error) {
 	return decoded.numInvertedIndexEntries()
 }
 
-func (j *jsonEncoded) allPaths() ([]JSON, error) {
+func (j *JSONEncoded) allPaths() ([]JSON, error) {
 	decoded, err := j.decode()
 	if err != nil {
 		return nil, err
@@ -806,7 +812,7 @@ func (j *jsonEncoded) allPaths() ([]JSON, error) {
 }
 
 // HasContainerLeaf implements the JSON interface.
-func (j *jsonEncoded) HasContainerLeaf() (bool, error) {
+func (j *JSONEncoded) HasContainerLeaf() (bool, error) {
 	decoded, err := j.decode()
 	if err != nil {
 		return false, err
@@ -815,7 +821,7 @@ func (j *jsonEncoded) HasContainerLeaf() (bool, error) {
 }
 
 // preprocessForContains implements the JSON interface.
-func (j *jsonEncoded) preprocessForContains() (containsable, error) {
+func (j *JSONEncoded) preprocessForContains() (containsable, error) {
 	if dec := j.alreadyDecoded(); dec != nil {
 		return dec.preprocessForContains()
 	}
@@ -828,7 +834,7 @@ func (j *jsonEncoded) preprocessForContains() (containsable, error) {
 }
 
 // jEntry implements the JSON interface.
-func (j *jsonEncoded) jEntry() jEntry {
+func (j *JSONEncoded) jEntry() jEntry {
 	var typeTag uint32
 	switch j.typ {
 	case NullJSONType:
@@ -849,17 +855,17 @@ func (j *jsonEncoded) jEntry() jEntry {
 }
 
 // encode implements the JSON interface.
-func (j *jsonEncoded) encode(appendTo []byte) (jEntry jEntry, b []byte, err error) {
+func (j *JSONEncoded) encode(appendTo []byte) (jEntry jEntry, b []byte, err error) {
 	return j.jEntry(), append(appendTo, j.value...), nil
 }
 
 // MaybeDecode implements the JSON interface.
-func (j *jsonEncoded) MaybeDecode() JSON {
+func (j *JSONEncoded) MaybeDecode() JSON {
 	return j.mustDecode()
 }
 
 // toGoRepr implements the JSON interface.
-func (j *jsonEncoded) toGoRepr() (interface{}, error) {
+func (j *JSONEncoded) toGoRepr() (interface{}, error) {
 	decoded, err := j.shallowDecode()
 	if err != nil {
 		return nil, err
@@ -868,6 +874,6 @@ func (j *jsonEncoded) toGoRepr() (interface{}, error) {
 }
 
 // tryDecode implements the JSON interface.
-func (j *jsonEncoded) tryDecode() (JSON, error) {
+func (j *JSONEncoded) tryDecode() (JSON, error) {
 	return j.shallowDecode()
 }

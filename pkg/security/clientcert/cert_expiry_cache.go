@@ -8,6 +8,7 @@ package clientcert
 import (
 	"context"
 	math_rand "math/rand"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -48,7 +49,8 @@ type Cache struct {
 	cache             map[string]map[string]certInfo
 	account           MemAccount
 	expirationMetrics *aggmetric.AggGauge
-	ttlMetrics        *aggmetric.AggGauge
+	ttlMetrics        *aggmetric.AggFunctionalGauge
+	ttlExpirations    map[string]*atomic.Int64
 	timeSrc           timeutil.TimeSource
 }
 
@@ -61,13 +63,14 @@ func NewCache(
 	timeSrc timeutil.TimeSource,
 	account MemAccount,
 	expirationMetrics *aggmetric.AggGauge,
-	ttlMetrics *aggmetric.AggGauge,
+	ttlMetrics *aggmetric.AggFunctionalGauge,
 ) *Cache {
 	return &Cache{
 		cache:             make(map[string]map[string]certInfo),
 		account:           account,
 		expirationMetrics: expirationMetrics,
 		ttlMetrics:        ttlMetrics,
+		ttlExpirations:    make(map[string]*atomic.Int64),
 		timeSrc:           timeSrc,
 	}
 }
@@ -197,30 +200,43 @@ func (c *Cache) evictLocked(ctx context.Context, user, serial string) {
 	}
 }
 
-// ttlFunc returns a function which computes the ttl for a given expiration.
-func ttlFunc(now func() time.Time, exp int64) func() int64 {
+// ttlFunc returns a function which computes the TTL from a shared atomic
+// expiration value. The returned closure never needs to be replaced — callers
+// update the expiration by storing a new value in exp.
+func ttlFunc(now func() time.Time, exp *atomic.Int64) func() int64 {
 	return func() int64 {
-		ttl := exp - now().Unix()
+		ttl := exp.Load() - now().Unix()
 		if ttl > 0 {
 			return ttl
-		} else {
-			return 0
 		}
+		return 0
 	}
 }
 
 // upsertMetricsLocked updates the expiration and ttl for a given user in the cache.
 func (c *Cache) upsertMetricsLocked(user string) {
 	expiration := c.getExpirationLocked(user)
-	// the update functions on the metrics objects act as upserts.
 	c.expirationMetrics.Update(expiration, user)
-	c.ttlMetrics.UpdateFn(ttlFunc(c.timeSrc.Now, expiration), user)
+
+	exp, ok := c.ttlExpirations[user]
+	if !ok {
+		// First time seeing this user: create a shared atomic for the expiration
+		// and a TTL child gauge whose closure reads from it.
+		exp = new(atomic.Int64)
+		c.ttlExpirations[user] = exp
+		exp.Store(expiration)
+		c.ttlMetrics.AddChild(ttlFunc(c.timeSrc.Now, exp), user)
+	} else {
+		// User already has a TTL gauge — just update the shared expiration.
+		exp.Store(expiration)
+	}
 }
 
 // removeMetricsLocked removes the expiration and ttl for a given user from the cache.
 func (c *Cache) removeMetricsLocked(user string) {
 	c.expirationMetrics.RemoveChild(user)
 	c.ttlMetrics.RemoveChild(user)
+	delete(c.ttlExpirations, user)
 }
 
 // jitteredInterval returns a randomly jittered (+/-25%) duration

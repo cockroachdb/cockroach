@@ -80,7 +80,9 @@ var L0SubLevelCountOverloadThreshold = settings.RegisterIntSetting(
 	"when the L0 sub-level count exceeds this threshold, the store is considered overloaded",
 	l0SubLevelCountOverloadThreshold, settings.PositiveInt)
 
-// ElasticBandwidthMaxUtil sets the max utilization for disk bandwidth for elastic traffic.
+// ElasticBandwidthMaxUtil sets the max utilization for disk bandwidth, which
+// is used to shape elastic traffic. It can be exceeded if regular
+// (non-elastic) traffic by itself causes this utilization to be exceeded.
 var ElasticBandwidthMaxUtil = settings.RegisterFloatSetting(
 	settings.SystemOnly, "kvadmission.store.elastic_disk_bandwidth_max_util",
 	"sets the max utilization for disk bandwidth for elastic traffic",
@@ -432,12 +434,6 @@ func (t tickDuration) ticksInAdjustmentInterval() int64 {
 const unloadedDuration = tickDuration(250 * time.Millisecond)
 const loadedDuration = tickDuration(1 * time.Millisecond)
 
-// TODO(aaditya): Consider lowering this threshold. It was picked arbitrarily
-// and seems to work well enough. Would it be better to do error accounting at
-// an even higher frequency?
-const errorAdjustmentInterval = 1
-const errorTicksInAdjustmentInterval = int64(adjustmentInterval / errorAdjustmentInterval)
-
 // tokenAllocationTicker wraps a time.Ticker, and also computes the remaining
 // ticks in the adjustment interval, given an expected tick rate. If every tick
 // from the ticker was always equal to the expected tick rate, then we could
@@ -446,7 +442,6 @@ const errorTicksInAdjustmentInterval = int64(adjustmentInterval / errorAdjustmen
 type tokenAllocationTicker struct {
 	expectedTickDuration        time.Duration
 	adjustmentIntervalStartTime time.Time
-	lastErrorAdjustmentTick     uint64
 	ticker                      *time.Ticker
 }
 
@@ -485,35 +480,6 @@ func (t *tokenAllocationTicker) remainingTicks() uint64 {
 	return uint64((remainingTime + t.expectedTickDuration - 1) / t.expectedTickDuration)
 }
 
-// shouldAdjustForError returns true if we should additionally adjust for read
-// and write error based on the number of remainingTicks and
-// errorAdjustmentInterval.
-func (t *tokenAllocationTicker) shouldAdjustForError(remainingTicks uint64, loaded bool) bool {
-	tickDur := unloadedDuration
-	if loaded {
-		tickDur = loadedDuration
-	}
-	if t.lastErrorAdjustmentTick == 0 {
-		// If this is the first tick of a new adjustment period, reset the 0 value
-		// to the total number of ticks (equivalent values for the purpose of error
-		// accounting).
-		t.lastErrorAdjustmentTick = uint64(tickDur.ticksInAdjustmentInterval())
-	}
-	// We calculate the number of ticks in the errorAdjustmentDuration.
-	errorTickThreshold := uint64(tickDur.ticksInAdjustmentInterval() / errorTicksInAdjustmentInterval)
-	// We adjust for error when either we have passed the errorAdjustmentInterval
-	// threshold or it is the last tick before the new adjustment interval.
-	shouldAdjust := t.lastErrorAdjustmentTick-remainingTicks >= errorTickThreshold || remainingTicks == 0
-	if !shouldAdjust {
-		return false
-	}
-	// Since lastErrorAdjustmentTick uses the remainingTicks in the previous
-	// iteration, it is expected to be a decreasing value over time. The expected
-	// range is [ticksInAdjustmentInterval, 0].
-	t.lastErrorAdjustmentTick = remainingTicks
-	return true
-}
-
 func (t *tokenAllocationTicker) stop() {
 	t.ticker.Stop()
 	*t = tokenAllocationTicker{}
@@ -532,7 +498,10 @@ func replaceFlushThroughputBytesBySSTableWriteThroughput(m *pebble.Metrics) {
 
 // pebbleMetricsTicks is called every adjustmentInterval seconds, and decides
 // the token allocations until the next call. Returns true iff the system is
-// loaded.
+// loaded or has been loaded sometime in the past (the callee is free to
+// choose whichever, since the caller incorporates this bool into a running
+// bool representing historical overload, to do a one way switch to ticking
+// more frequently).
 func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMetrics) bool {
 	ctx = logtags.AddTag(ctx, "s", io.storeID)
 	m := metrics.Metrics
@@ -581,9 +550,11 @@ func (io *ioLoadListener) pebbleMetricsTick(ctx context.Context, metrics StoreMe
 	}
 	io.adjustTokens(ctx, metrics)
 	io.cumFlushWriteThroughput = metrics.Flush.WriteThroughput
-	// We assume that the system is loaded if there is less than unlimited tokens
-	// available.
-	return io.totalNumByteTokens < unlimitedTokens || io.totalNumElasticByteTokens < unlimitedTokens
+	// We assume that the system is loaded if there is less than unlimited
+	// tokens available, or has suffered from disk bandwidth overload in the
+	// past.
+	return io.totalNumByteTokens < unlimitedTokens || io.totalNumElasticByteTokens < unlimitedTokens ||
+		io.kvGranter.hasExhaustedDiskTokens()
 }
 
 // For both byte and disk bandwidth tokens, allocateTokensTick gives out
@@ -675,7 +646,7 @@ func (io *ioLoadListener) allocateTokensTick(remainingTicks int64) {
 		io.diskWriteTokens, 0, unloadedDuration.ticksInAdjustmentInterval(),
 	)
 
-	tokensUsed, tokensUsedByElasticWork := io.kvGranter.setAvailableTokens(
+	tokensUsed, tokensUsedByElasticWork := io.kvGranter.addAvailableTokens(
 		toAllocateByteTokens,
 		toAllocateElasticByteTokens,
 		toAllocateDiskWriteTokens,
@@ -740,10 +711,10 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	elasticBWMaxUtil := ElasticBandwidthMaxUtil.Get(&io.settings.SV)
 	intDiskLoadInfo := computeIntervalDiskLoadInfo(
 		cumDiskBW.bytesRead, cumDiskBW.bytesWritten, metrics.DiskStats, elasticBWMaxUtil)
-	diskTokensUsed := io.kvGranter.getDiskTokensUsedAndReset()
+	diskTokensUsed, diskErrStats, remainingDiskWriteTokens := io.kvGranter.getDiskTokensUsedAndReset()
 	if metrics.DiskStats.ProvisionedBandwidth > 0 {
 		tokens := io.diskBandwidthLimiter.computeElasticTokens(
-			intDiskLoadInfo, diskTokensUsed)
+			intDiskLoadInfo, diskTokensUsed, diskErrStats, remainingDiskWriteTokens)
 		io.diskWriteTokens = tokens.writeByteTokens
 		io.diskWriteTokensAllocated = 0
 		io.diskReadTokens = tokens.readByteTokens
@@ -775,7 +746,7 @@ func (io *ioLoadListener) adjustTokens(ctx context.Context, metrics StoreMetrics
 	// NB: we also log if prevDoLogFlush is true, since we often see a single
 	// interval of no overload sandwiched between intervals of overload and we
 	// want to know what happened in that interval.
-	if prevDoLogFlush || io.aux.doLogFlush || io.diskBandwidthLimiter.state.diskBWUtil > 0.8 ||
+	if prevDoLogFlush || io.aux.doLogFlush || io.diskBandwidthLimiter.state.prevWriteTokenUtil > 0.8 ||
 		log.V(1) {
 		log.Dev.Infof(ctx, "IO overload: %s; %s", io.adjustTokensResult, io.diskBandwidthLimiter)
 	}

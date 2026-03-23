@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlinit"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -64,10 +65,12 @@ func validateCheckExpr(
 	}
 	log.Dev.Infof(ctx, "validating check constraint %q with query %q", formattedCkExpr, queryStr)
 
-	// Validation queries use full table scans which we always want to distribute.
+	// Validation queries use full table scans which we always want to distribute
+	// and partition across nodes.
 	// See https://github.com/cockroachdb/cockroach/issues/152859.
 	execOverride := sessiondata.NodeUserSessionDataOverride
 	execOverride.AlwaysDistributeFullScans = true
+	execOverride.PreventPartitioningSoftLimitedScans = &sessiondata.False
 
 	violatingRow, err = txn.QueryRowEx(
 		ctx,
@@ -736,7 +739,7 @@ func (p *planner) validateTTLScheduledJobInTable(
 	ttl := tableDesc.GetRowLevelTTL()
 
 	execCfg := p.ExecCfg()
-	env := JobSchedulerEnv(execCfg.JobsKnobs())
+	env := jobs.JobSchedulerEnv(execCfg.JobsKnobs())
 
 	wrapError := func(origErr error) error {
 		return errors.WithHintf(
@@ -802,7 +805,7 @@ func (p *planner) RepairTTLScheduledJobForTable(ctx context.Context, tableID int
 	if !errors.HasType(validateErr, invalidTableTTLScheduledJobError) {
 		return errors.Wrap(validateErr, "error validating TTL on table")
 	}
-	sj, err := CreateRowLevelTTLScheduledJob(
+	sj, err := ttlinit.CreateRowLevelTTLScheduledJob(
 		ctx,
 		p.ExecCfg().JobsKnobs(),
 		jobs.ScheduledJobTxn(p.InternalSQLTxn()),

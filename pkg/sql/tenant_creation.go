@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -113,7 +114,7 @@ func (p *planner) createTenantInternal(
 	info.DataState = mtinfopb.DataStateReady
 	info.ServiceMode = serviceMode
 
-	initialTenantZoneConfig, err := GetHydratedZoneConfigForTenantsRange(ctx, p.Txn(), p.Descriptors())
+	initialTenantZoneConfig, err := zoneconfig.GetHydratedForTenantsRange(ctx, p.Txn(), p.Descriptors())
 	if err != nil {
 		return tid, err
 	}

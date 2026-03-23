@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -40,7 +39,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	if isTemp {
 		panic(unimplemented.NewWithIssue(104687, "cannot create user-defined functions under a temporary schema"))
 	}
-	sch, resName := b.resolveSchemaForCreateFunction(&cf.Name)
+	sch, resName := b.resolveSchemaForCreateFunction(&cf.Name, isTemp)
 	schID := b.factory.Metadata().AddSchema(sch)
 	cf.Name.ObjectNamePrefix = resName
 
@@ -367,7 +366,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 
 	isSetReturning := cf.ReturnType != nil && cf.ReturnType.SetOf
 	targetVolatility := tree.GetRoutineVolatility(cf.Options)
-	fmtCtx := tree.NewFmtCtx(tree.FmtSerializable)
+	fmtCtx := tree.NewFmtCtx(tree.FmtParsable | tree.FmtAlwaysQualifyUserDefinedTypeNames)
 
 	defer func(origValue bool) {
 		b.insideSQLRoutine = origValue
@@ -407,13 +406,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			afterBuildStmt()
 		}
 	case tree.RoutineLangPLpgSQL:
-		if isSetReturning {
-			if !b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V25_2) {
-				panic(unimplemented.Newf("PL/pgSQL set-returning functions",
-					"PL/pgSQL set-returning functions are only supported in v25.2 and later"))
-			}
-		}
-
 		// Parse the function body.
 		stmt, err := plpgsqlparser.Parse(funcBodyStr)
 		if err != nil {

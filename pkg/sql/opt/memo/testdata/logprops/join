@@ -3212,7 +3212,7 @@ inner-join (hash)
 # Regression tests for #116943.
 
 # Semi-joins with right side cardinality of 0 have cardinality of 0.
-norm disable=(EliminateExistsZeroRows,SimplifyZeroCardinalitySemiJoin)
+norm disable=(EliminateExistsZeroRows,SimplifyZeroCardinalitySemiJoin,EliminateZeroCardSelect,EliminateZeroCardProject)
 SELECT * FROM mn WHERE m = 5 AND n::FLOAT IN (SELECT x::FLOAT FROM xysd WHERE false)
 ----
 project
@@ -3277,7 +3277,7 @@ project
                 └── variable: x:11 [type=float]
 
 # Anti-joins with right side cardinality of 0 have cardinality equal to left side cardinality.
-norm disable=(EliminateExistsZeroRows,EliminateAntiJoin)
+norm disable=(EliminateExistsZeroRows,EliminateAntiJoin,EliminateZeroCardSelect,EliminateZeroCardProject)
 SELECT * FROM mn WHERE m = 5 AND n::FLOAT NOT IN (SELECT x::FLOAT FROM xysd WHERE false)
 ----
 anti-join (cross)

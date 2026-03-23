@@ -18,42 +18,49 @@ var (
 		Help:        "Total entries entering the buffer between raft and changefeed sinks",
 		Measurement: "Entries",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedBufferEntriesOut = metric.Metadata{
 		Name:        "changefeed.buffer_entries.out",
 		Help:        "Total entries leaving the buffer between raft and changefeed sinks",
 		Measurement: "Entries",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedBufferEntriesReleased = metric.Metadata{
 		Name:        "changefeed.buffer_entries.released",
 		Help:        "Total entries processed, emitted and acknowledged by the sinks",
 		Measurement: "Entries",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedBufferMemAcquired = metric.Metadata{
 		Name:        "changefeed.buffer_entries_mem.acquired",
 		Help:        "Total amount of memory acquired for entries as they enter the system",
 		Measurement: "Entries",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedBufferMemReleased = metric.Metadata{
 		Name:        "changefeed.buffer_entries_mem.released",
 		Help:        "Total amount of memory released by the entries after they have been emitted",
 		Measurement: "Entries",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedBufferPushbackNanos = metric.Metadata{
 		Name:        "changefeed.buffer_pushback_nanos",
 		Help:        "Total time spent waiting while the buffer was full",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedAllocatedMemory = metric.Metadata{
 		Name:        "changefeed.buffer_entries.allocated_mem",
 		Help:        "Current quota pool memory allocation",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 )
 
@@ -138,6 +145,7 @@ func MakeMetrics(histogramWindow time.Duration) Metrics {
 			Help:        fmt.Sprintf("Number of %s elements added to the buffer", eventTypeName),
 			Measurement: "Events",
 			Unit:        metric.Unit_COUNT,
+			Category:    metric.Metadata_CHANGEFEEDS,
 		}
 	}
 	commonBufferMetrics := CommonBufferMetrics{

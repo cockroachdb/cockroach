@@ -27,7 +27,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE d
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/76>  …/1/1         {1}       1
+<before:/Table/XX>  …/1/1         {1}       1
 …/1/1               …/1/2         {2}       2
 …/1/2               …/1/3         {3}       3
 …/1/3               …/1/4         {4}       4
@@ -329,10 +329,10 @@ INSERT INTO two VALUES (1,1), (2,2), (3,3), (4,4), (5,5), (6,6), (7,7), (8,8), (
 query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE one WITH DETAILS]
 ----
-start_key                end_key                 replicas  lease_holder
-<before:/Table/106/1/9>  …/1/0                   {5}       5
-…/1/0                    …/1/99                  {1}       1
-…/1/99                   <after:/Table/108/1/0>  {5}       5
+start_key                end_key                replicas  lease_holder
+<before:/Table/106/1/9>  …/1/0                  {5}       5
+…/1/0                    …/1/99                 {1}       1
+…/1/99                   <after:/Table/XX/1/0>  {5}       5
 
 query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE two WITH DETAILS]
@@ -546,6 +546,10 @@ SELECT c, min(b), a FROM sorted_data GROUP BY a, c ORDER BY a
 23    -2   9
 -3.1  100  10
 
+# Require some reasonable minimum workmem (necessary for the streamer).
+statement ok
+SET distsql_workmem = '100KiB';
+
 # If the underlying ordering isn't from the primary index, it needs to be hinted
 # for now.
 query IR rowsort
@@ -676,7 +680,12 @@ INSERT INTO t55837 (i, y, x) VALUES
   (3, 2.0,   3),
   (4, 3.0,   3);
 ALTER TABLE t55837 SPLIT AT VALUES (3);
+
+retry
+statement ok
 ALTER TABLE t55837 EXPERIMENTAL_RELOCATE VALUES (ARRAY[3], 2);
+
+statement ok
 SELECT * FROM t55837 -- make sure that the range cache is populated
 
 # Regression test for incorrectly planning a local distinct stage (#55837).
@@ -691,9 +700,19 @@ statement ok
 CREATE TABLE table58683_1 (col1 INT8 PRIMARY KEY);
 INSERT INTO table58683_1 SELECT i FROM generate_series(1, 5) AS g(i);
 ALTER TABLE table58683_1 SPLIT AT SELECT i FROM generate_series(1, 5) AS g(i);
+
+retry
+statement ok
 ALTER TABLE table58683_1 EXPERIMENTAL_RELOCATE SELECT ARRAY[i], i FROM generate_series(1, 5) AS g(i);
+
+statement ok
 CREATE TABLE table58683_2 (col2 BOOL);
+
+retry
+statement ok
 ALTER TABLE table58683_2 EXPERIMENTAL_RELOCATE SELECT ARRAY[2], 2;
+
+statement ok
 SELECT every(col2) FROM table58683_1 JOIN table58683_2 ON col1 = (table58683_2.tableoid)::INT8 GROUP BY col2 HAVING bool_and(col2);
 
 # Regression test for #74736 - missing Get results when:
@@ -703,7 +722,12 @@ SELECT every(col2) FROM table58683_1 JOIN table58683_2 ON col1 = (table58683_2.t
 statement ok
 CREATE TABLE table74736 (k INT PRIMARY KEY, blob STRING);
 ALTER TABLE table74736 SPLIT AT VALUES (1000000);
+
+retry
+statement ok
 ALTER TABLE table74736 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 0), (ARRAY[2], 1000000);
+
+statement ok
 INSERT INTO table74736 SELECT x * 10000, repeat('a', 200000) FROM generate_series(1, 130) AS g(x);
 
 query TTTI colnames,rowsort
@@ -729,7 +753,12 @@ SET DISTSQL = ON
 statement ok
 CREATE TABLE t108901 AS SELECT g::FLOAT8 AS _float8 FROM generate_series(1, 5) AS g;
 ALTER TABLE t108901 SPLIT AT VALUES (1), (2), (3);
+
+retry
+statement ok
 ALTER TABLE t108901 RELOCATE VOTERS VALUES (ARRAY[1], 1), (ARRAY[2], 2), (ARRAY[3], 3);
+
+statement ok
 SET disable_optimizer_rules = PruneWindowOutputCols;
 
 statement error integer out of range

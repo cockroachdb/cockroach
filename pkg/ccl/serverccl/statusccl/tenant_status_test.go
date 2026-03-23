@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/serverccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -36,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -394,6 +394,22 @@ func testTenantLogs(ctx context.Context, t *testing.T, helper serverccl.TenantTe
 			require.NotEqual(t, entry.TenantID, systemTenantIDStr)
 		}
 	}
+
+	// Verify ExcludeSeverities filtering: excluding INFO should return
+	// only non-INFO entries from the log file.
+	nodeID := helper.TestCluster().Tenant(0).GetTenant().SQLInstanceID().String()
+	filteredResp, err := tenantA.LogFile(ctx, &serverpb.LogFileRequest{
+		NodeId:            nodeID,
+		File:              logsFilesListResp.Files[0].Name,
+		ExcludeSeverities: []logpb.Severity{logpb.Severity_INFO},
+	})
+	require.NoError(t, err)
+	for _, entry := range filteredResp.Entries {
+		require.NotEqual(t, logpb.Severity_INFO, entry.Severity,
+			"INFO entry should have been filtered out: %s", entry.Message)
+	}
+	// The filtered response should be a subset of the unfiltered one.
+	require.LessOrEqual(t, len(filteredResp.Entries), len(logsFileResp.Entries))
 }
 
 func TestTenantCannotSeeNonTenantStats(t *testing.T) {

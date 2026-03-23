@@ -21,6 +21,7 @@ import (
 	"encoding/xml"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"sort"
@@ -78,7 +79,10 @@ func process() error {
 		summaryF, err := os.OpenFile(summaryFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err == nil {
 			defer func() { _ = summaryF.Close() }()
-			logError("dump summary", dumpSummary(summaryF, invocation))
+			fmt.Fprintln(os.Stdout, "=== BEGIN SUMMARY MARKDOWN ===")
+			w := io.MultiWriter(summaryF, os.Stdout)
+			logError("dump summary", dumpSummary(w, invocation))
+			fmt.Fprintln(os.Stdout, "=== END SUMMARY MARKDOWN ===")
 		} else {
 			logError("open summary file", err)
 		}
@@ -130,7 +134,7 @@ func process() error {
 	return nil
 }
 
-func dumpSummary(f *os.File, invocation *engflow.InvocationInfo) error {
+func dumpSummary(f io.Writer, invocation *engflow.InvocationInfo) error {
 	var title string
 	if !invocation.Finished {
 		title = "# Build did not succeed"
@@ -139,11 +143,11 @@ func dumpSummary(f *os.File, invocation *engflow.InvocationInfo) error {
 	} else {
 		title = fmt.Sprintf("# Build Failed (code: %s)", invocation.ExitCodeName)
 	}
-	_, err := f.WriteString(fmt.Sprintf("%s\n", title))
+	_, err := fmt.Fprintf(f, "%s\n", title)
 	if err != nil {
 		return err
 	}
-	_, err = f.WriteString(fmt.Sprintf("### [EngFlow link](https://%s.cluster.engflow.com/invocations/default/%s)\n", *serverName, invocation.InvocationId))
+	_, err = fmt.Fprintf(f, "### [EngFlow link](https://%s.cluster.engflow.com/invocations/default/%s)\n", *serverName, invocation.InvocationId)
 	if err != nil {
 		return err
 	}
@@ -195,7 +199,7 @@ func dumpSummary(f *os.File, invocation *engflow.InvocationInfo) error {
 	})
 
 	if len(failedTests) != 0 {
-		_, err := f.WriteString(`| Label | TestName | Status | Link |
+		_, err := io.WriteString(f, `| Label | TestName | Status | Link |
 | --- | --- | --- | --- |
 `)
 		if err != nil {
@@ -203,7 +207,7 @@ func dumpSummary(f *os.File, invocation *engflow.InvocationInfo) error {
 		}
 		for _, failedTest := range failedTests {
 			base64Target := base64.StdEncoding.EncodeToString([]byte(failedTest.label))
-			_, err := f.WriteString(fmt.Sprintf("| `%s` | `%s` | `%s` | [Link](https://%s.cluster.engflow.com/invocations/default/%s?testReportRun=%d&testReportShard=%d&testReportAttempt=%d#targets-%s) |\n", failedTest.label, failedTest.name, failedTest.status, *serverName, invocation.InvocationId, failedTest.run, failedTest.shard, failedTest.attempt, base64Target))
+			_, err := fmt.Fprintf(f, "| `%s` | `%s` | `%s` | [Link](https://%s.cluster.engflow.com/invocations/default/%s?testReportRun=%d&testReportShard=%d&testReportAttempt=%d#targets-%s) |\n", failedTest.label, failedTest.name, failedTest.status, *serverName, invocation.InvocationId, failedTest.run, failedTest.shard, failedTest.attempt, base64Target)
 			if err != nil {
 				return err
 			}
@@ -213,12 +217,12 @@ func dumpSummary(f *os.File, invocation *engflow.InvocationInfo) error {
 	if len(invocation.FailedBuildActions) > 0 {
 		for _, actions := range invocation.FailedBuildActions {
 			for _, action := range actions {
-				_, err := f.WriteString(fmt.Sprintf("### Build of `%s` failed (exit code %d)\n", action.Label, action.ExitCode))
+				_, err := fmt.Fprintf(f, "### Build of `%s` failed (exit code %d)\n", action.Label, action.ExitCode)
 				if err != nil {
 					return err
 				}
 				if action.FailureDetail != "" {
-					_, err := f.WriteString(fmt.Sprintf("```\n%s\n```\n", action.FailureDetail))
+					_, err := fmt.Fprintf(f, "```\n%s\n```\n", action.FailureDetail)
 					if err != nil {
 						return err
 					}
@@ -227,13 +231,13 @@ func dumpSummary(f *os.File, invocation *engflow.InvocationInfo) error {
 					fmt.Fprintf(os.Stderr, "could not download action log: got error %+v\n", err)
 				}
 				if action.Stdout != "" {
-					_, err := f.WriteString(fmt.Sprintf("Stdout:\n```\n%s\n```\n", action.Stdout))
+					_, err := fmt.Fprintf(f, "Stdout:\n```\n%s\n```\n", action.Stdout)
 					if err != nil {
 						return err
 					}
 				}
 				if action.Stderr != "" {
-					_, err := f.WriteString(fmt.Sprintf("Stdout:\n```\n%s\n```\n", action.Stderr))
+					_, err := fmt.Fprintf(f, "Stdout:\n```\n%s\n```\n", action.Stderr)
 					if err != nil {
 						return err
 					}

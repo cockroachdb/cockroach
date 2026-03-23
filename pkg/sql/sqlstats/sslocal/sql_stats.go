@@ -82,6 +82,12 @@ func newSQLStats(
 	s.mu.apps = make(map[string]*ssmemstorage.Container)
 	s.mu.mon = monitor
 	s.mu.mon.StartNoReserved(context.Background(), parentMon)
+	// Initialize lastReset to the current time. This ensures that if an instance
+	// is never explicitly reset, its lastReset will be a reasonable timestamp
+	// rather than the zero value. This is important for multi-node clusters where
+	// the Statements() API returns the minimum lastReset across all nodes - if any
+	// node has a zero lastReset, it would incorrectly pull down the overall value.
+	s.mu.lastReset = timeutil.Now()
 	return s
 }
 

@@ -13,11 +13,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
+	"github.com/cockroachdb/cockroach/pkg/sql/evalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -30,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
@@ -78,12 +82,9 @@ func NewServer(
 		flowRegistry:      flowinfra.NewFlowRegistry(),
 		remoteFlowRunner:  remoteFlowRunner,
 		memMonitor: mon.NewMonitor(mon.Options{
-			Name: mon.MakeName("distsql"),
-			// Note that we don't use 'sql.mem.distsql.*' metrics here since
-			// that would double count them with the 'flow' monitor in
-			// setupFlow.
-			CurCount:   nil,
-			MaxHist:    nil,
+			Name:       mon.MakeName("distsql"),
+			CurCount:   cfg.Metrics.CurBytesCount,
+			MaxHist:    cfg.Metrics.MaxBytesHist,
 			Settings:   cfg.Settings,
 			LongLiving: true,
 		}),
@@ -260,8 +261,6 @@ func (ds *ServerImpl) setupFlow(
 
 	monitor = mon.NewMonitor(mon.Options{
 		Name:     mon.MakeName("flow").WithUUID(req.Flow.FlowID.Short()),
-		CurCount: ds.Metrics.CurBytesCount,
-		MaxHist:  ds.Metrics.MaxBytesHist,
 		Settings: ds.Settings,
 	})
 	monitor.Start(ctx, parentMonitor, reserved)
@@ -284,7 +283,13 @@ func (ds *ServerImpl) setupFlow(
 		// The flow will run in a LeafTxn because we do not want each distributed
 		// Txn to heartbeat the transaction.
 		nodeID := roachpb.NodeID(req.Flow.Gateway)
-		return kv.NewLeafTxn(ctx, ds.DB.KV(), nodeID, tis, &req.LeafTxnAdmissionHeader), nil
+		leafTxn := kv.NewLeafTxn(ctx, ds.DB.KV(), nodeID, tis, &req.LeafTxnAdmissionHeader)
+		leafTxn.SetWorkloadInfo(
+			req.EvalContext.WorkloadID,
+			req.EvalContext.AppNameID,
+			workloadid.WorkloadType(req.EvalContext.WorkloadType),
+		)
+		return leafTxn, nil
 	}
 
 	var evalCtx *eval.Context
@@ -322,6 +327,13 @@ func (ds *ServerImpl) setupFlow(
 			// Update the Txn field early (before f.SetTxn() below) since some
 			// processors capture the field in their constructor (see #41992).
 			localEvalCtx.Txn = leafTxn
+			if localState.goroutineOwnsPlanner() && localEvalCtx.CatalogBuiltins != nil {
+				// We only update the txn of the CatalogBuiltins on the main
+				// goroutine - for other concurrent goroutines we'll allocate a
+				// new CatalogBuiltins (in newFlowContext) which will be
+				// initialized with the right txn right away.
+				localEvalCtx.CatalogBuiltins.SetTxn(leafTxn)
+			}
 		} else {
 			onFlowCleanupEnd = func(ctx context.Context) {
 				reserved.Close(ctx)
@@ -329,6 +341,7 @@ func (ds *ServerImpl) setupFlow(
 			}
 		}
 	} else {
+		// Not running on the gateway.
 		onFlowCleanupEnd = func(ctx context.Context) {
 			reserved.Close(ctx)
 			onFlowCleanup.Do()
@@ -380,11 +393,60 @@ func (ds *ServerImpl) setupFlow(
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))
 		evalCtx.SetTxnTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.TxnTimestampNanos))
 		evalCtx.TestingKnobs.ForceProductionValues = req.EvalContext.TestingKnobsForceProductionValues
+		evalCtx.WorkloadID = req.EvalContext.WorkloadID
+		evalCtx.AppNameID = req.EvalContext.AppNameID
+		evalCtx.WorkloadType = workloadid.WorkloadType(req.EvalContext.WorkloadType)
+
+		// In DistSQL flows, we eagerly store the app name on remote nodes to reduce
+		// cache misses when the local ASH sampler resolves the app name ID.
+		if req.EvalContext.AppNameID != 0 {
+			ash.StoreAppNameMapping(
+				req.EvalContext.AppNameID,
+				req.EvalContext.SessionData.ApplicationName,
+			)
+		}
+
+		if ds.SQLCPUProvider != nil {
+			var cpuHandle *admission.SQLCPUHandle
+			var mainGoroutineCPUHandle *admission.GoroutineCPUHandle
+			var err error
+			// Remote flow (for flows at the gateway, the initialization happens in connExecutor).
+			ctx, cpuHandle, mainGoroutineCPUHandle, err = flowinfra.MakeCPUHandle(
+				ctx, ds.SQLCPUProvider, evalCtx.Codec.TenantID, evalCtx.Txn, false /* atGateway */)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			// Wrap onFlowCleanupEnd to close the CPU handles at the flow boundary.
+			// This is called at the end of Flow.Cleanup(), after all goroutines have
+			// exited (Wait() has returned).
+			origOnFlowCleanupEnd := onFlowCleanupEnd
+			onFlowCleanupEnd = func(ctx context.Context) {
+				// Close the main goroutine's CPU handle first. At this point, all other
+				// goroutines have already closed their handles (via their defers).
+				mainGoroutineCPUHandle.Close(ctx)
+				// Close the SQLCPUHandle, which will pool all closed GoroutineCPUHandles.
+				cpuHandle.Close()
+				if origOnFlowCleanupEnd != nil {
+					origOnFlowCleanupEnd(ctx)
+				}
+			}
+		}
 	}
 
 	// Create the FlowCtx for the flow.
+	//
+	// We only set MakeLeafTxn on the flow context if we have LeafTxnInputState.
+	// This is important for inner plans (e.g., apply-join iterations, routines)
+	// that might be passed a LeafTxn from an outer plan but don't have
+	// LeafTxnInputState themselves. Without this check, UseStreamer() might try
+	// to call MakeLeafTxn and hit an assertion failure because we can't create
+	// new leaf txns without LeafTxnInputState.
+	var makeLeafTxn func(context.Context) (*kv.Txn, error)
+	if req.LeafTxnInputState != nil {
+		makeLeafTxn = makeLeaf
+	}
 	flowCtx := ds.newFlowContext(
-		ctx, req.Flow.FlowID, evalCtx, monitor, diskMonitor, makeLeaf, req.TraceKV,
+		ctx, req.Flow.FlowID, evalCtx, monitor, diskMonitor, makeLeafTxn, req.TraceKV,
 		req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
 	)
 
@@ -489,7 +551,6 @@ func (ds *ServerImpl) newFlowContext(
 	localState LocalState,
 	isGatewayNode bool,
 ) execinfra.FlowCtx {
-	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := execinfra.FlowCtx{
 		AmbientContext: ds.AmbientContext,
 		Cfg:            &ds.ServerConfig,
@@ -506,7 +567,12 @@ func (ds *ServerImpl) newFlowContext(
 		DiskMonitor:    diskMonitor,
 	}
 
-	if localState.IsLocal && localState.Collection != nil {
+	// Don't reuse the collection when we're running a parallel check off the
+	// main goroutine - in this case we might have multiple goroutines using the
+	// collection concurrently, so we choose to create a fresh one. The parallel
+	// check running on the main goroutine can keep on using the planner's one.
+	reuseCollection := localState.goroutineOwnsPlanner()
+	if localState.IsLocal && localState.Collection != nil && reuseCollection {
 		// If we were passed a descs.Collection to use, then take it. In this
 		// case, the caller will handle releasing the used descriptors, so we
 		// don't need to clean up the descriptors when cleaning up the flow.
@@ -516,12 +582,18 @@ func (ds *ServerImpl) newFlowContext(
 		// responsible for cleaning it up and releasing any accessed descriptors
 		// on flow cleanup.
 		dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(evalCtx.SessionDataStack)
-		flowCtx.Descriptors = ds.CollectionFactory.NewCollection(
-			ctx, descs.WithDescriptorSessionDataProvider(dsdp),
-		)
+		opts := []descs.Option{descs.WithDescriptorSessionDataProvider(dsdp)}
+		if localState.Collection != nil {
+			opts = append(opts, descs.WithForceStorageLookupIDs(
+				localState.Collection.GetUncommittedDescriptorIDs(),
+			))
+		}
+		flowCtx.Descriptors = ds.CollectionFactory.NewCollection(ctx, opts...)
 		flowCtx.IsDescriptorsCleanupRequired = true
-		flowCtx.EvalCatalogBuiltins.Init(evalCtx.Codec, evalCtx.Txn, flowCtx.Descriptors)
-		evalCtx.CatalogBuiltins = &flowCtx.EvalCatalogBuiltins
+		var evalCatalogBuiltins evalcatalog.Builtins
+		// In distributed execution, authorization was already checked on the gateway node.
+		evalCatalogBuiltins.Init(evalCtx.Codec, evalCtx.Txn, flowCtx.Descriptors, nil /* authzChecker */)
+		evalCtx.CatalogBuiltins = &evalCatalogBuiltins
 	}
 	return flowCtx
 }
@@ -585,6 +657,11 @@ type LocalState struct {
 	// Txn.
 	concurrency ConcurrencyKind
 
+	// ParallelCheckMainGoroutine, if set, indicates that this plan is part of
+	// parallel checks and is run on the main goroutine (i.e. the one that
+	// executed the main plan of the query).
+	ParallelCheckMainGoroutine bool
+
 	// Txn is filled in on the gateway only. It is the RootTxn that the query is running in.
 	// This will be used directly by the flow if the flow has no concurrency and IsLocal is set.
 	// If there is concurrency, a LeafTxn will be created.
@@ -616,6 +693,13 @@ func (l LocalState) GetConcurrency() ConcurrencyKind {
 // this method only after IsLocal and all concurrency kinds have been set.
 func (l LocalState) MustUseLeafTxn() bool {
 	return !l.IsLocal || l.concurrency != 0
+}
+
+// goroutineOwnsPlanner returns true when called from the main connExecutor
+// goroutine that owns the planner (and, thus, can modify it at will).
+func (l LocalState) goroutineOwnsPlanner() bool {
+	return l.ParallelCheckMainGoroutine || // on main goroutine
+		l.GetConcurrency()&ConcurrencyParallelChecks == 0 // not a parallel check
 }
 
 // SetupLocalSyncFlow sets up a synchronous flow on the current (planning) node,
@@ -694,6 +778,14 @@ func (ds *ServerImpl) SetupFlow(
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow since it outlives the RPC.
 	ctx = ds.AnnotateCtx(context.Background())
+	// Jobs that set up flows rely on the context to carry the workload identity
+	// for ASH sampling.
+	if req.EvalContext.WorkloadID != 0 {
+		ctx = kv.ContextWithWorkloadInfo(
+			ctx, req.EvalContext.WorkloadID,
+			workloadid.WorkloadType(req.EvalContext.WorkloadType),
+		)
+	}
 	if err := func() error {
 		// Reserve some memory for this remote flow which is a poor man's
 		// admission control based on the RAM usage.

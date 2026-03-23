@@ -183,7 +183,7 @@ func TestTxnCoordSenderHeartbeat(t *testing.T) {
 		kvcoord.NewDistSenderForLocalTestCluster(
 			ctx,
 			s.Cfg.Settings, &roachpb.NodeDescriptor{NodeID: 1},
-			ambient.Tracer, s.Clock, s.Latency, s.Stores, s.Stopper(), s.Gossip,
+			ambient.Tracer, s.Clock, s.Latency, kvserver.ToSenderForTesting(s.Stores), s.Stopper(), s.Gossip,
 		),
 	)
 	quickHeartbeatDB := kv.NewDB(ambient, tsf, s.Clock, s.Stopper())
@@ -287,7 +287,7 @@ func TestDB_PrepareForRetryAfterHeartbeatFailure(t *testing.T) {
 		kvcoord.NewDistSenderForLocalTestCluster(
 			ctx,
 			s.Cfg.Settings, &roachpb.NodeDescriptor{NodeID: 1},
-			ambient.Tracer, s.Clock, s.Latency, s.Stores, s.Stopper(), s.Gossip,
+			ambient.Tracer, s.Clock, s.Latency, kvserver.ToSenderForTesting(s.Stores), s.Stopper(), s.Gossip,
 		),
 	)
 	db := kv.NewDB(ambient, tsf, s.Clock, s.Stopper())
@@ -465,7 +465,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 				}
 			}
 		}
-		verifyCleanup(key, s.Eng, t, txn.Sender().(*kvcoord.TxnCoordSender))
+		verifyCleanup(key, s.Eng.StateEngine(), t, txn.Sender().(*kvcoord.TxnCoordSender))
 	}
 }
 
@@ -635,7 +635,7 @@ func TestTxnCoordSenderCleanupOnAborted(t *testing.T) {
 	err := txn1.Commit(ctx)
 	assertTransactionAbortedError(t, err)
 	require.NoError(t, txn2.Commit(ctx))
-	verifyCleanup(key, s.Eng, t, txn1.Sender().(*kvcoord.TxnCoordSender), txn2.Sender().(*kvcoord.TxnCoordSender))
+	verifyCleanup(key, s.Eng.StateEngine(), t, txn1.Sender().(*kvcoord.TxnCoordSender), txn2.Sender().(*kvcoord.TxnCoordSender))
 }
 
 // TestTxnCoordSenderCleanupOnCommitAfterRestart verifies that if a txn restarts
@@ -663,7 +663,7 @@ func TestTxnCoordSenderCleanupOnCommitAfterRestart(t *testing.T) {
 
 	// Now immediately commit.
 	require.NoError(t, txn.Commit(ctx))
-	verifyCleanup(key, s.Eng, t, txn.Sender().(*kvcoord.TxnCoordSender))
+	verifyCleanup(key, s.Eng.StateEngine(), t, txn.Sender().(*kvcoord.TxnCoordSender))
 }
 
 // TestTxnCoordSenderGCWithAmbiguousResultErr verifies that the coordinator
@@ -715,7 +715,7 @@ func TestTxnCoordSenderGCWithAmbiguousResultErr(t *testing.T) {
 			return nil
 		})
 
-		verifyCleanup(key, s.Eng, t, tc)
+		verifyCleanup(key, s.Eng.StateEngine(), t, tc)
 	})
 }
 

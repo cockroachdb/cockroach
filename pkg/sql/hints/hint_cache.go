@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
-	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -87,7 +86,8 @@ type StatementHintsCache struct {
 	datumAlloc tree.DatumAlloc
 
 	// Used to read hints from the database when they are not in the cache.
-	db descs.DB
+	db       descs.DB
+	settings *cluster.Settings
 
 	// generation is incremented any time the hint cache is updated by the
 	// rangefeed.
@@ -132,7 +132,7 @@ func NewStatementHintsCache(
 	db descs.DB,
 	st *cluster.Settings,
 ) *StatementHintsCache {
-	hintsCache := &StatementHintsCache{clock: clock, f: f, stopper: stopper, codec: codec, db: db}
+	hintsCache := &StatementHintsCache{clock: clock, f: f, stopper: stopper, codec: codec, db: db, settings: st}
 	hintsCache.mu.hintCache = cache.NewUnorderedCache(cache.Config{
 		Policy: cache.CacheLRU,
 		ShouldEvict: func(s int, key, value interface{}) bool {
@@ -402,12 +402,18 @@ func (c *StatementHintsCache) GetGeneration() int64 {
 }
 
 // MaybeGetStatementHints attempts to retrieve the hints for the given statement
-// fingerprint, along with the unique ID of each hint (for invalidating cached
-// plans). It returns nil if the statement has no hints, or there was an error
-// retrieving them.
+// fingerprint and database, along with the unique ID of each hint (for
+// invalidating cached plans). It returns nil if there are no hints for the
+// statement and database, or if there was an error retrieving them.
+//
+// Hints are returned in order of creation time (descending) with the most
+// recent hints first.
 func (c *StatementHintsCache) MaybeGetStatementHints(
-	ctx context.Context, statementFingerprint string,
-) (hints []hintpb.StatementHintUnion, ids []int64) {
+	ctx context.Context,
+	statementFingerprint string,
+	fingerprintFlags tree.FmtFlags,
+	currentDB string,
+) (hints []Hint, ids []int64) {
 	hash := fnv.New64()
 	_, err := hash.Write([]byte(statementFingerprint))
 	if err != nil {
@@ -430,11 +436,11 @@ func (c *StatementHintsCache) MaybeGetStatementHints(
 	if !ok {
 		// The plan hints were evicted from the cache. Retrieve them from the
 		// database and add them to the cache.
-		return c.addCacheEntryLocked(ctx, statementHash, statementFingerprint)
+		return c.addCacheEntryLocked(ctx, statementHash, statementFingerprint, fingerprintFlags, currentDB)
 	}
 	entry := e.(*cacheEntry)
 	c.maybeWaitForRefreshLocked(ctx, entry, statementHash)
-	return entry.getMatchingHints(statementFingerprint)
+	return entry.getMatchingHints(statementFingerprint, currentDB)
 }
 
 // maybeWaitForRefreshLocked checks if the given cache entry is being refreshed
@@ -464,8 +470,12 @@ func (c *StatementHintsCache) maybeWaitForRefreshLocked(
 // other queries to wait for the result via sync.Cond. Note that the lock is
 // released while reading from the db, and then reacquired.
 func (c *StatementHintsCache) addCacheEntryLocked(
-	ctx context.Context, statementHash int64, statementFingerprint string,
-) (hints []hintpb.StatementHintUnion, ids []int64) {
+	ctx context.Context,
+	statementHash int64,
+	statementFingerprint string,
+	fingerprintFlags tree.FmtFlags,
+	currentDB string,
+) (hints []Hint, ids []int64) {
 	c.mu.AssertHeld()
 
 	// Add a cache entry that other queries can find and wait on until we have the
@@ -483,7 +493,7 @@ func (c *StatementHintsCache) addCacheEntryLocked(
 		defer c.mu.Lock()
 		log.VEventf(ctx, 1, "reading hints for query %s", statementFingerprint)
 		entry.ids, entry.fingerprints, entry.hints, err =
-			GetStatementHintsFromDB(ctx, c.db.Executor(), statementHash)
+			GetStatementHintsFromDB(ctx, c.settings, c.db.Executor(), statementHash, fingerprintFlags)
 		log.VEventf(ctx, 1, "finished reading hints for query %s", statementFingerprint)
 	}()
 
@@ -497,7 +507,7 @@ func (c *StatementHintsCache) addCacheEntryLocked(
 		log.VEventf(ctx, 1, "encountered error while reading hints for query %s", statementFingerprint)
 		return nil, nil
 	}
-	return entry.getMatchingHints(statementFingerprint)
+	return entry.getMatchingHints(statementFingerprint, currentDB)
 }
 
 type cacheEntry struct {
@@ -509,7 +519,8 @@ type cacheEntry struct {
 
 	// hints, fingerprints, and ids have the same length. fingerprints[i] is the
 	// statement fingerprint to which hints[i] applies, while ids[i] uniquely
-	// identifies a hint in the system table. They are kept in order of id.
+	// identifies a hint in the system table. They are kept in order of creation
+	// time (descending), meaning the most recent hints are first.
 	//
 	// We track the hint ID for invalidating cached query plans after a hint is
 	// added or removed. We track the fingerprint to resolve hash collisions. Note
@@ -517,21 +528,25 @@ type cacheEntry struct {
 	// be duplicate entries in the fingerprints slice.
 	// TODO(drewk): consider de-duplicating the fingerprint strings to reduce
 	// memory usage.
-	hints        []hintpb.StatementHintUnion
+	hints        []Hint
 	fingerprints []string
 	ids          []int64
 }
 
-// getMatchingHints returns the plan hints and row IDs for the given
-// fingerprint, or nil if they don't exist. The results are in order of row ID.
+// getMatchingHints returns the plan hints and row IDs for the given fingerprint
+// and database or nil if they don't exist. The results are in order of row ID.
 func (entry *cacheEntry) getMatchingHints(
-	statementFingerprint string,
-) (hints []hintpb.StatementHintUnion, ids []int64) {
+	statementFingerprint string, currentDB string,
+) (hints []Hint, ids []int64) {
 	for i := range entry.hints {
-		if entry.fingerprints[i] == statementFingerprint {
-			hints = append(hints, entry.hints[i])
-			ids = append(ids, entry.ids[i])
+		if entry.fingerprints[i] != statementFingerprint {
+			continue
 		}
+		if entry.hints[i].Database != "" && currentDB != "" && entry.hints[i].Database != currentDB {
+			continue
+		}
+		hints = append(hints, entry.hints[i])
+		ids = append(ids, entry.ids[i])
 	}
 	return hints, ids
 }

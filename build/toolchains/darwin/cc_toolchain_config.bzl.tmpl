@@ -196,12 +196,12 @@ def _impl(ctx):
         target_cpu = "%{target}-apple-darwin21.2",
         target_libc = "glibc-2.14",
         compiler = "clang",
-        abi_version = "clang-10.0.0",
+        abi_version = "clang-20.0.0",
         abi_libc_version = "%{target}-apple-darwin21.2",
         tool_paths = tool_paths,
         cxx_builtin_include_directories = [
             "%sysroot%/usr/include",
-            "/usr/lib/llvm-10/lib/clang/10.0.0/include",
+            "/usr/lib/llvm-20/lib/clang/20/include",
         ],
         builtin_sysroot = "external/%{repo_name}/SDK/MacOSX12.1.sdk",
     )

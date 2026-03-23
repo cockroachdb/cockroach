@@ -216,6 +216,7 @@ var (
 		Help:        "Number of restarted KV transactions",
 		Measurement: "KV Transactions",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	// There are two ways we can get "write too old" restarts. In both cases, a
 	// WriteTooOldError is generated in the MVCC layer. This is intercepted on
@@ -229,7 +230,7 @@ var (
 		Help:        "Number of restarts due to a concurrent writer committing first",
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse: crstrings.UnwrapText(`
 			This metric is one measure of the impact of contention conflicts on
@@ -244,7 +245,7 @@ var (
 		Help:        "Number of restarts due to a forwarded commit timestamp and isolation=SERIALIZABLE",
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse: crstrings.UnwrapText(`
 			This metric is one measure of the impact of contention conflicts on
@@ -283,7 +284,7 @@ var (
 		Help:        "Number of restarts due to an abort by a concurrent transaction (usually due to deadlock)",
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse: crstrings.UnwrapText(`
 			The errors tracked by this metric are generally due to deadlocks.
@@ -303,7 +304,7 @@ var (
 		Help:        "Number of restarts due to a transaction push failure",
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse: crstrings.UnwrapText(`
 			This metric is one measure of the impact of contention conflicts on
@@ -318,7 +319,7 @@ var (
 		Help:        "Number of restarts due to a unknown reasons",
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_SQL,
 		HowToUse: crstrings.UnwrapText(`
 			This metric is one measure of the impact of contention conflicts on

@@ -98,7 +98,8 @@ func DeleteRange(
 			"GCRangeHint must only be used together with UseRangeTombstone")
 	}
 
-	if args.UseRangeTombstone {
+	hasPredicate := args.Predicates != (kvpb.DeleteRangePredicates{})
+	if args.UseRangeTombstone || hasPredicate {
 		if cArgs.Header.Txn != nil {
 			return result.Result{}, ErrTransactionUnsupported
 		}
@@ -111,7 +112,6 @@ func DeleteRange(
 		}
 	}
 
-	hasPredicate := args.Predicates != (kvpb.DeleteRangePredicates{})
 	if hasPredicate && args.IdempotentTombstone {
 		return result.Result{}, errors.AssertionFailedf("IdempotentTombstone not compatible with Predicates")
 	}
@@ -196,13 +196,6 @@ func deleteRangeWithPredicate(
 	h := cArgs.Header
 	reply := resp.(*kvpb.DeleteRangeResponse)
 
-	if args.Predicates != (kvpb.DeleteRangePredicates{}) && !args.UseRangeTombstone {
-		// This ensures predicate based DeleteRange piggybacks on the version gate,
-		// roachpb api flags, and latch declarations used by the UseRangeTombstone.
-		return result.Result{}, errors.AssertionFailedf(
-			"UseRangeTombstones must be passed with predicate based Delete Range")
-	}
-
 	if h.MaxSpanRequestKeys == 0 {
 		// In production, MaxSpanRequestKeys must be greater than zero to ensure
 		// the DistSender serializes predicate based DeleteRange requests across
@@ -220,22 +213,34 @@ func deleteRangeWithPredicate(
 			"DeleteRangePredicate should not have both non-zero ImportEpoch and non-empty StartTime")
 	}
 
-	desc := cArgs.EvalCtx.Desc()
-
-	leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
-		args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
 	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 	targetLockConflictBytes := storage.TargetBytesPerLockConflictError.Get(&cArgs.EvalCtx.ClusterSettings().SV)
 
-	// TODO (msbutler): Tune the threshold once DeleteRange and DeleteRangeUsingTombstone have
-	// been further optimized.
-	defaultRangeTombstoneThreshold := int64(64)
-	resumeSpan, err := storage.MVCCPredicateDeleteRange(ctx, readWriter, cArgs.Stats,
-		args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,
-		args.Predicates, h.MaxSpanRequestKeys, maxDeleteRangeBatchBytes,
-		defaultRangeTombstoneThreshold, maxLockConflicts, targetLockConflictBytes)
-	if err != nil {
-		return result.Result{}, err
+	var err error
+	var resumeSpan *roachpb.Span
+	if !args.UseRangeTombstone {
+		resumeSpan, err = storage.MVCCPredicateDeleteRangePointTombstones(ctx, readWriter,
+			cArgs.Stats, args.Key, args.EndKey, h.Timestamp, cArgs.Now,
+			args.Predicates, h.MaxSpanRequestKeys, maxDeleteRangeBatchBytes,
+			maxLockConflicts, targetLockConflictBytes)
+		if err != nil {
+			return result.Result{}, err
+		}
+	} else {
+		// TODO(jeffswenson): Delete this code path when V26_1 is older than the
+		// minimum supported binary version.
+		desc := cArgs.EvalCtx.Desc()
+		leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
+			args.Key, args.EndKey, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
+		defaultRangeTombstoneThreshold := int64(64)
+
+		resumeSpan, err = storage.MVCCPredicateDeleteRange(ctx, readWriter, cArgs.Stats,
+			args.Key, args.EndKey, h.Timestamp, cArgs.Now, leftPeekBound, rightPeekBound,
+			args.Predicates, h.MaxSpanRequestKeys, maxDeleteRangeBatchBytes,
+			defaultRangeTombstoneThreshold, maxLockConflicts, targetLockConflictBytes)
+		if err != nil {
+			return result.Result{}, err
+		}
 	}
 
 	if resumeSpan != nil {

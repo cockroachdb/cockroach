@@ -16,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl" // To start tenants.
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
@@ -173,6 +172,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	var receivedRevertRequest chan struct{}
 	var allowResponse chan struct{}
 	var revertRangeTargetTime hlc.Timestamp
+	var sqlCodec atomic.Pointer[keys.SQLCodec]
 	params := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestControlsTenantsExplicitly,
@@ -195,7 +195,7 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 			}
 			return nil
 		},
-		TestingResponseFilter: jobutils.BulkOpResponseFilter(&allowResponse),
+		TestingResponseFilter: jobutils.BulkOpResponseFilter(&sqlCodec, &allowResponse),
 	}
 	params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	params.ServerArgs.Knobs.Streaming = &sql.StreamingTestingKnobs{
@@ -205,6 +205,8 @@ func TestStreamIngestionJobWithRandomClient(t *testing.T) {
 	numNodes := 3
 	tc := testcluster.StartTestCluster(t, numNodes, params)
 	defer tc.Stopper().Stop(ctx)
+	codec := tc.Server(0).Codec()
+	sqlCodec.Store(&codec)
 	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
 	conn := tc.Conns[0]
 
@@ -322,7 +324,7 @@ func assertExactlyEqualKVs(
 ) hlc.Timestamp {
 	// Iterate over the store.
 	store := tc.GetFirstStoreFromServer(t, 0)
-	it, err := store.TODOEngine().NewMVCCIterator(context.Background(), storage.MVCCKeyIterKind, storage.IterOptions{
+	it, err := store.StateEngine().NewMVCCIterator(context.Background(), storage.MVCCKeyIterKind, storage.IterOptions{
 		LowerBound: tenantSpan.Key,
 		UpperBound: tenantSpan.EndKey,
 	})

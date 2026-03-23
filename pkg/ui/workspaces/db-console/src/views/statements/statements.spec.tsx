@@ -249,6 +249,7 @@ function makeDetails(
       },
       statement_statistics_per_aggregated_ts: [],
       statement_statistics_per_plan_hash: [],
+      statement_statistics_per_aggregated_ts_and_plan_hash: [],
       internal_app_name_prefix: "$ internal",
     },
   };
@@ -297,6 +298,9 @@ function makeStats(): Required<StatementStatistics> {
     failure_count: Long.fromNumber(0),
     generic_count: Long.fromNumber(0),
     stmt_hints_count: Long.fromNumber(0),
+    kv_cpu_time_nanos: makeStat(),
+    canary_stats: null,
+    stable_stats: null,
   };
 }
 

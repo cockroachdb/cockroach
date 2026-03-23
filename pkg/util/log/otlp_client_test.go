@@ -209,8 +209,7 @@ func TestOTLPSink(t *testing.T) {
 		require.NoError(t, cfg.Validate(&sc.logDir))
 
 		// Apply the configuration.
-		TestingResetActive()
-		cleanup, err := ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+		cleanup, err := ApplyConfigForReconfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 		require.NoError(t, err)
 
 		for name, test := range tests {
@@ -283,8 +282,7 @@ func TestOTLPSinkHeaders(t *testing.T) {
 		require.NoError(t, cfg.Validate(&sc.logDir))
 
 		// Apply the configuration.
-		TestingResetActive()
-		cleanup, err := ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+		cleanup, err := ApplyConfigForReconfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 		require.NoError(t, err)
 
 		go func() {

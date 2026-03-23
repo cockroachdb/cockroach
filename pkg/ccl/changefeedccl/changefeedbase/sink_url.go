@@ -36,6 +36,17 @@ func (u *SinkURL) ConsumeParam(p string) string {
 	return v
 }
 
+// ValidateSinkURIParams checks for invalid query parameter values in a
+// parsed sink URI. This is called at CREATE/ALTER CHANGEFEED statement
+// time to reject invalid URIs before they are persisted.
+func ValidateSinkURIParams(u *url.URL) error {
+	q := u.Query()
+	if q.Has(SinkParamTopicName) && q.Get(SinkParamTopicName) == "" {
+		return errors.Newf(`param %s must not be empty`, SinkParamTopicName)
+	}
+	return nil
+}
+
 func (u *SinkURL) ConsumeParams(p string) []string {
 	if u.q == nil {
 		u.q = u.Query()

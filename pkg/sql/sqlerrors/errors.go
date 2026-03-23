@@ -345,7 +345,7 @@ func NewAlterColTypeInTxnNotSupportedErr() error {
 			"not supported inside a transaction")
 }
 
-const PrimaryIndexSwapDetail = `CRDB's implementation for "ADD COLUMN", "DROP COLUMN", and "ALTER PRIMARY KEY" will drop the old/current primary index and create a new one.`
+const PrimaryIndexSwapDetail = `"ADD COLUMN", "DROP COLUMN", and "ALTER PRIMARY KEY" will drop the old/current primary index and create a new one.`
 
 // NewColumnReferencedByPrimaryKeyError is returned when attempting to drop a
 // column which is a part of the table's primary key.
@@ -583,6 +583,34 @@ var QueryTimeoutError = pgerror.New(
 // TxnTimeoutError is an error representing a transasction timeout.
 var TxnTimeoutError = pgerror.New(
 	pgcode.QueryCanceled, "query execution canceled due to transaction timeout")
+
+// HashIndexIncludesImplicitPartitionColFromRBR shows that hash sharded index cannot include
+// implicit cols from an RBR table.
+var HashIndexIncludesImplicitPartitionColFromRBR = pgerror.New(
+	pgcode.FeatureNotSupported,
+	`hash sharded indexes cannot include implicit partitioning columns from "LOCALITY REGIONAL BY ROW"`,
+)
+
+// HashIndexIncludesImplicitPartitionColFromPartitionAllBy shows that hash sharded index cannot include
+// implicit cols from a PARTITION ALL BY table.
+var HashIndexIncludesImplicitPartitionColFromPartitionAllBy = pgerror.New(
+	pgcode.FeatureNotSupported,
+	`hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY"`,
+)
+
+// NewIndexIncludesImplicitPartitionColFromRBR shows that the newly created index cannot include
+// implicit cols from an RBR table.
+var NewIndexIncludesImplicitPartitionColFromRBR = pgerror.New(
+	pgcode.FeatureNotSupported,
+	`cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition`,
+)
+
+// NewIndexIncludeImplicitPartitionColFromPartitionAllBy shows that the newly created index cannot include
+// implicit cols from a PARTITION ALL BY table.
+var NewIndexIncludeImplicitPartitionColFromPartitionAllBy = pgerror.New(
+	pgcode.FeatureNotSupported,
+	`cannot explicitly include implicit partitioning columns from "PARTITION ALL BY" in index definition`,
+)
 
 // IsOutOfMemoryError checks whether this is an out of memory error.
 func IsOutOfMemoryError(err error) bool {

@@ -169,12 +169,18 @@ func declareKeysEndTxn(
 					EndKey: rightRangeIDUnreplicatedPrefix.PrefixEnd(),
 				})
 
-				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
-					Key: keys.RangeLastReplicaGCTimestampKey(st.LeftDesc.RangeID),
-				})
-				latchSpans.AddNonMVCC(spanset.SpanReadWrite, roachpb.Span{
-					Key: keys.RangeLastReplicaGCTimestampKey(st.RightDesc.RangeID),
-				})
+				// TODO(sep-raft-log): drop this branch when the version gate is
+				// removed. We could be checking the version gate here, but the plumbing
+				// wasn't worth it. Instead, just keep conservatively taking a latch for
+				// a bit longer, it's not contended or important.
+				if _ = clusterversion.V26_2_NoLastReplicaGCTimestampKeyOnEval; true {
+					// NB: the RHS LastReplicaGCTimestampKey, to which the LHS timestamp
+					// is copied, is covered above by the SpanReadWrite for the entire RHS
+					// unreplicated RangeID-local span.
+					latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
+						Key: keys.RangeLastReplicaGCTimestampKey(st.LeftDesc.RangeID),
+					})
+				}
 
 				latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 					Key:    abortspan.MinKey(rs.GetRangeID()),
@@ -1255,6 +1261,19 @@ func splitTrigger(
 	return splitTriggerHelper(ctx, rec, batch, in, h, split, ts)
 }
 
+// TestingMergeTrigger is a wrapper around mergeTrigger that is exported for
+// testing purposes.
+func TestingMergeTrigger(
+	ctx context.Context,
+	rec EvalContext,
+	batch storage.Batch,
+	ms *enginepb.MVCCStats,
+	merge *roachpb.MergeTrigger,
+	ts hlc.Timestamp,
+) (result.Result, error) {
+	return mergeTrigger(ctx, rec, batch, ms, merge, ts)
+}
+
 // TestingSplitTrigger is a wrapper around splitTrigger that is exported for
 // testing purposes.
 func TestingSplitTrigger(
@@ -1276,6 +1295,22 @@ func TestingSplitTrigger(
 // LHS ranges. However, to improve test coverage, we use a metamorphic value.
 var splitScansRightForStatsFirst = metamorphic.ConstantWithTestBool(
 	"split-scans-right-for-stats-first", false)
+
+// DisableMetamorphicSplitScansRightForStatsFirst disables the
+// splitScansRightForStatsFirst metamorphic bool for the duration of a test,
+// resetting it at the end.
+func DisableMetamorphicSplitScansRightForStatsFirst(t interface {
+	Helper()
+	Cleanup(func())
+}) {
+	t.Helper()
+	if splitScansRightForStatsFirst {
+		splitScansRightForStatsFirst = false
+		t.Cleanup(func() {
+			splitScansRightForStatsFirst = true
+		})
+	}
+}
 
 // makeScanStatsFn constructs a splitStatsScanFn for the provided post-split
 // range descriptor which computes the range's statistics.
@@ -1333,19 +1368,26 @@ func splitTriggerHelper(
 	// NB: the replicated post-split left hand keyspace is frozen at this point.
 	// Only the RHS can be mutated (and we do so to seed its state).
 
-	// Copy the last replica GC timestamp. This value is unreplicated,
-	// which is why the MVCC stats are set to nil on calls to
-	// MVCCPutProto.
-	replicaGCTS, err := rec.GetLastReplicaGCTimestamp(ctx)
-	if err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
-	}
-
-	if err := storage.MVCCPutProto(
-		ctx, spanset.DisableForbiddenSpanAssertions(batch),
-		keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{},
-		&replicaGCTS, storage.MVCCWriteOptions{Category: fs.BatchEvalReadCategory}); err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
+	// Copy the last replica GC timestamp. This value is unreplicated, which is
+	// why the MVCC stats are set to nil on calls to MVCCBlindPutProto.
+	//
+	// TODO(sep-raft-log): remove when the version gate is removed. This key is
+	// unreplicated and should not be in the evaluated batch. It is now written
+	// locally at apply time.
+	if !rec.ClusterSettings().Version.IsActive(
+		ctx, clusterversion.V26_2_NoLastReplicaGCTimestampKeyOnEval,
+	) {
+		replicaGCTS, err := rec.GetLastReplicaGCTimestamp(ctx)
+		if err != nil {
+			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to fetch last replica GC timestamp")
+		}
+		if err := storage.MVCCBlindPutProto(
+			ctx, spanset.DisableForbiddenSpanAssertions(batch),
+			keys.RangeLastReplicaGCTimestampKey(split.RightDesc.RangeID), hlc.Timestamp{},
+			&replicaGCTS, storage.MVCCWriteOptions{Category: fs.BatchEvalReadCategory},
+		); err != nil {
+			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to copy last replica GC timestamp")
+		}
 	}
 
 	// Compute the absolute stats for the (post-split) ranges. No more
@@ -1388,6 +1430,7 @@ func splitTriggerHelper(
 
 	computeAccurateStats := (noPreComputedStats || manualSplit || emptyLeftOrRight || preComputedStatsDiff)
 	computeAccurateStats = computeAccurateStats && !shouldUseCrudeEstimates
+	var err error
 	if computeAccurateStats {
 		var reason redact.RedactableString
 		if noPreComputedStats {
@@ -1536,17 +1579,6 @@ func splitTriggerHelper(
 			*in.GCThreshold, *in.GCHint, in.ReplicaVersion,
 		); err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
-		}
-		// TODO(arulajmani): This can be removed once all nodes are past the
-		// V25_4_WriteInitialTruncStateBeforeSplitApplication cluster version.
-		// At that point, we'll no longer need to replicate the truncated state
-		// as all replicas will be responsible for writing it locally before
-		// applying the split.
-		if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V25_4_WriteInitialTruncStateBeforeSplitApplication) {
-			if err := kvstorage.WriteInitialTruncState(ctx,
-				spanset.DisableForbiddenSpanAssertions(batch), split.RightDesc.RangeID); err != nil {
-				return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
-			}
 		}
 	}
 

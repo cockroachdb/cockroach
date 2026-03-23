@@ -9,9 +9,9 @@ import (
 	"context"
 	"net/url"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/errors"
 )
 
@@ -46,30 +46,76 @@ func (c *ExternalStorageMux) Close() error {
 	return err
 }
 
-// StoreFile splits a URI into its storage prefix and file path, caching the
-// storage instance for reuse. For example, "nodelocal://1/import/123/file.sst"
-// is split into storage "nodelocal://1" and path "/import/123/file.sst".
-func (c *ExternalStorageMux) StoreFile(
+// getStore resolves (and caches) the cloud storage instance for the provided
+// URI and returns it along with the file path relative to that storage.
+func (c *ExternalStorageMux) getStore(
 	ctx context.Context, uri string,
-) (storageccl.StoreFile, error) {
+) (cloud.ExternalStorage, string, error) {
 	prefix, filepath, err := c.splitURI(uri)
 	if err != nil {
-		return storageccl.StoreFile{}, err
+		return nil, "", err
 	}
 	prefixKey := prefix.String()
 	store, ok := c.storeInstances[prefixKey]
 	if !ok {
 		storage, err := c.factory(ctx, prefix.String(), c.user)
 		if err != nil {
-			return storageccl.StoreFile{}, err
+			return nil, "", err
 		}
 		c.storeInstances[prefixKey] = storage
 		store = storage
 	}
-	return storageccl.StoreFile{
+	return store, filepath, nil
+}
+
+// StoreFile splits a URI into its storage prefix and file path, caching the
+// storage instance for reuse. For example, "nodelocal://1/import/123/file.sst"
+// is split into storage "nodelocal://1" and path "/import/123/file.sst".
+func (c *ExternalStorageMux) StoreFile(ctx context.Context, uri string) (storage.StoreFile, error) {
+	store, filepath, err := c.getStore(ctx, uri)
+	if err != nil {
+		return storage.StoreFile{}, err
+	}
+	return storage.StoreFile{
 		Store:    store,
 		FilePath: filepath,
 	}, nil
+}
+
+// DeleteFile removes the file at the provided URI using a cached storage
+// handle when possible.
+func (c *ExternalStorageMux) DeleteFile(ctx context.Context, uri string) error {
+	store, filepath, err := c.getStore(ctx, uri)
+	if err != nil {
+		return err
+	}
+	return store.Delete(ctx, filepath)
+}
+
+// ListFiles lists all files under the provided URI prefix. The callback receives
+// paths relative to the prefix.
+func (c *ExternalStorageMux) ListFiles(
+	ctx context.Context, uriPrefix string, fn cloud.ListingFn,
+) error {
+	store, prefix, err := c.getStore(ctx, uriPrefix)
+	if err != nil {
+		return err
+	}
+	return store.List(ctx, prefix, cloud.ListOptions{}, fn)
+}
+
+// ListDirectories lists immediate subdirectories under the provided URI prefix.
+// The callback receives directory names relative to the prefix (e.g., "subdir/"
+// for a subdirectory named "subdir"). This uses the "/" delimiter to group
+// results at the directory level rather than listing individual files.
+func (c *ExternalStorageMux) ListDirectories(
+	ctx context.Context, uriPrefix string, fn cloud.ListingFn,
+) error {
+	store, prefix, err := c.getStore(ctx, uriPrefix)
+	if err != nil {
+		return err
+	}
+	return store.List(ctx, prefix, cloud.ListOptions{Delimiter: "/"}, fn)
 }
 
 // splitURI splits a URI into its prefix (scheme + host) and path components.

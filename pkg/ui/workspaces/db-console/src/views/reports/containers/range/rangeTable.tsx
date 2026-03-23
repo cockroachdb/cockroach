@@ -317,685 +317,669 @@ function convertLeaseState(
   ].toLowerCase();
 }
 
-export default class RangeTable extends React.Component<RangeTableProps, {}> {
-  cleanRaftState(state: string) {
-    switch (toLower(state)) {
-      case "statedormant":
-        return "dormant";
-      case "stateleader":
-        return "leader";
-      case "statefollower":
-        return "follower";
-      case "statecandidate":
-        return "candidate";
-      case "stateprecandidate":
-        return "precandidate";
-      default:
-        return "unknown";
-    }
+function cleanRaftState(state: string) {
+  switch (toLower(state)) {
+    case "statedormant":
+      return "dormant";
+    case "stateleader":
+      return "leader";
+    case "statefollower":
+      return "follower";
+    case "statecandidate":
+      return "candidate";
+    case "stateprecandidate":
+      return "precandidate";
+    default:
+      return "unknown";
   }
+}
 
-  contentRaftState(state: string): RangeTableCellContent {
-    const cleanedState = this.cleanRaftState(state);
-    return {
-      value: [cleanedState],
-      className: [`range-table__cell--raftstate-${cleanedState}`],
-    };
-  }
+function contentRaftState(state: string): RangeTableCellContent {
+  const cleanedState = cleanRaftState(state);
+  return {
+    value: [cleanedState],
+    className: [`range-table__cell--raftstate-${cleanedState}`],
+  };
+}
 
-  contentNanos(nanos: Long): RangeTableCellContent {
-    const humanized = Print.Time(util.LongToMoment(nanos));
+function contentNanos(nanos: Long): RangeTableCellContent {
+  const humanized = Print.Time(util.LongToMoment(nanos));
+  return {
+    value: [humanized],
+    title: [humanized, nanos.toString()],
+  };
+}
+
+function contentDuration(nanos: Long): RangeTableCellContent {
+  const humanized = Print.Duration(
+    moment.duration(util.NanoToMilli(nanos.toNumber())),
+  );
+  return {
+    value: [humanized],
+    title: [humanized, nanos.toString()],
+  };
+}
+
+function contentMVCC(bytes: Long, count: Long): RangeTableCellContent {
+  const humanizedBytes = util.Bytes(bytes.toNumber());
+  return {
+    value: [`${humanizedBytes} / ${count.toString()} count`],
+    title: [
+      `${humanizedBytes} / ${count.toString()} count`,
+      `${bytes.toString()} bytes / ${count.toString()} count`,
+    ],
+  };
+}
+
+function contentBytes(
+  bytes: Long,
+  className: string = null,
+  toolTip: string = null,
+): RangeTableCellContent {
+  const humanized = util.Bytes(bytes.toNumber());
+  if (isNull(className)) {
     return {
       value: [humanized],
-      title: [humanized, nanos.toString()],
+      title: [humanized, bytes.toString()],
     };
   }
+  return {
+    value: [humanized],
+    title: [humanized, bytes.toString(), toolTip],
+    className: [className],
+  };
+}
 
-  contentDuration(nanos: Long): RangeTableCellContent {
-    const humanized = Print.Duration(
-      moment.duration(util.NanoToMilli(nanos.toNumber())),
+function contentGCAvgAge(
+  mvcc: cockroach.storage.enginepb.IMVCCStats,
+): RangeTableCellContent {
+  if (mvcc === null) {
+    return contentDuration(Long.fromNumber(0));
+  }
+  const deadBytes = mvcc.key_bytes.add(mvcc.val_bytes).sub(mvcc.live_bytes);
+  if (!deadBytes.eq(0)) {
+    const avgDeadByteAgeSec = mvcc.gc_bytes_age.div(deadBytes);
+    return contentDuration(
+      Long.fromNumber(util.SecondsToNano(avgDeadByteAgeSec.toNumber())),
     );
-    return {
-      value: [humanized],
-      title: [humanized, nanos.toString()],
-    };
+  } else {
+    return contentDuration(Long.fromNumber(0));
   }
+}
 
-  contentMVCC(bytes: Long, count: Long): RangeTableCellContent {
-    const humanizedBytes = util.Bytes(bytes.toNumber());
-    return {
-      value: [`${humanizedBytes} / ${count.toString()} count`],
-      title: [
-        `${humanizedBytes} / ${count.toString()} count`,
-        `${bytes.toString()} bytes / ${count.toString()} count`,
-      ],
-    };
+function createContentIntentAvgAge(
+  mvcc: cockroach.storage.enginepb.IMVCCStats,
+): RangeTableCellContent {
+  if (mvcc === null) {
+    return contentDuration(Long.fromNumber(0));
   }
-
-  contentBytes(
-    bytes: Long,
-    className: string = null,
-    toolTip: string = null,
-  ): RangeTableCellContent {
-    const humanized = util.Bytes(bytes.toNumber());
-    if (isNull(className)) {
-      return {
-        value: [humanized],
-        title: [humanized, bytes.toString()],
-      };
-    }
-    return {
-      value: [humanized],
-      title: [humanized, bytes.toString(), toolTip],
-      className: [className],
-    };
+  if (!mvcc.intent_count.eq(0)) {
+    const avgIntentAgeSec = mvcc.lock_age.div(mvcc.intent_count);
+    return contentDuration(
+      Long.fromNumber(util.SecondsToNano(avgIntentAgeSec.toNumber())),
+    );
+  } else {
+    return contentDuration(Long.fromNumber(0));
   }
+}
 
-  contentGCAvgAge(
-    mvcc: cockroach.storage.enginepb.IMVCCStats,
-  ): RangeTableCellContent {
-    if (mvcc === null) {
-      return this.contentDuration(Long.fromNumber(0));
-    }
-    const deadBytes = mvcc.key_bytes.add(mvcc.val_bytes).sub(mvcc.live_bytes);
-    if (!deadBytes.eq(0)) {
-      const avgDeadByteAgeSec = mvcc.gc_bytes_age.div(deadBytes);
-      return this.contentDuration(
-        Long.fromNumber(util.SecondsToNano(avgDeadByteAgeSec.toNumber())),
-      );
-    } else {
-      return this.contentDuration(Long.fromNumber(0));
-    }
-  }
-
-  createContentIntentAvgAge(
-    mvcc: cockroach.storage.enginepb.IMVCCStats,
-  ): RangeTableCellContent {
-    if (mvcc === null) {
-      return this.contentDuration(Long.fromNumber(0));
-    }
-    if (!mvcc.intent_count.eq(0)) {
-      const avgIntentAgeSec = mvcc.lock_age.div(mvcc.intent_count);
-      return this.contentDuration(
-        Long.fromNumber(util.SecondsToNano(avgIntentAgeSec.toNumber())),
-      );
-    } else {
-      return this.contentDuration(Long.fromNumber(0));
-    }
-  }
-
-  createContent(
-    value: string | Long | number,
-    className: string = null,
-  ): RangeTableCellContent {
-    if (isNull(className)) {
-      return {
-        value: [value.toString()],
-      };
-    }
+function createContent(
+  value: string | Long | number,
+  className: string = null,
+): RangeTableCellContent {
+  if (isNull(className)) {
     return {
       value: [value.toString()],
-      className: [className],
     };
   }
+  return {
+    value: [value.toString()],
+    className: [className],
+  };
+}
 
-  contentTimestamp(
-    timestamp: protos.cockroach.util.hlc.ITimestamp,
-    now: moment.Moment,
-  ): RangeTableCellContent {
-    if (isNil(timestamp) || isNil(timestamp.wall_time)) {
-      return {
-        value: ["no timestamp"],
-        className: ["range-table__cell--warning"],
-      };
-    }
-    if (FixLong(timestamp.wall_time).isZero()) {
-      return {
-        value: [""],
-        title: ["0"],
-      };
-    }
-    const humanized = Print.Timestamp(timestamp);
-    const delta = Print.TimestampDeltaFromNow(timestamp, now);
+function contentTimestamp(
+  timestamp: protos.cockroach.util.hlc.ITimestamp,
+  now: moment.Moment,
+): RangeTableCellContent {
+  if (isNil(timestamp) || isNil(timestamp.wall_time)) {
     return {
-      value: [humanized, delta],
-      title: [humanized, FixLong(timestamp.wall_time).toString()],
+      value: ["no timestamp"],
+      className: ["range-table__cell--warning"],
     };
   }
-
-  contentProblems(
-    problems: protos.cockroach.server.serverpb.IRangeProblems,
-    awaitingGC: boolean,
-  ): RangeTableCellContent {
-    let results: string[] = [];
-    if (problems.no_lease) {
-      results = concat(results, "Invalid Lease");
-    }
-    if (problems.leader_not_lease_holder) {
-      results = concat(results, "Leader is Not Lease holder");
-    }
-    if (problems.underreplicated) {
-      results = concat(results, "Underreplicated (or slow)");
-    }
-    if (problems.overreplicated) {
-      results = concat(results, "Overreplicated");
-    }
-    if (problems.no_raft_leader) {
-      results = concat(results, "No Raft Leader");
-    }
-    if (problems.unavailable) {
-      results = concat(results, "Unavailable");
-    }
-    if (problems.quiescent_equals_ticking) {
-      results = concat(results, "Quiescent equals ticking");
-    }
-    if (problems.raft_log_too_large) {
-      results = concat(results, "Raft log too large");
-    }
-    if (problems.range_too_large) {
-      results = concat(results, "Range too large");
-    }
-    if (awaitingGC) {
-      results = concat(results, "Awaiting GC");
-    }
+  if (FixLong(timestamp.wall_time).isZero()) {
     return {
-      value: results,
-      title: results,
-      className: results.length > 0 ? ["range-table__cell--warning"] : [],
+      value: [""],
+      title: ["0"],
     };
   }
+  const humanized = Print.Timestamp(timestamp);
+  const delta = Print.TimestampDeltaFromNow(timestamp, now);
+  return {
+    value: [humanized, delta],
+    title: [humanized, FixLong(timestamp.wall_time).toString()],
+  };
+}
 
-  // contentIf returns an empty value if the condition is false, and if true,
-  // executes and returns the content function.
-  contentIf(
-    showContent: boolean,
-    content: () => RangeTableCellContent,
-  ): RangeTableCellContent {
-    if (!showContent) {
-      return rangeTableEmptyContent;
-    }
-    return content();
+function contentProblems(
+  problems: protos.cockroach.server.serverpb.IRangeProblems,
+  awaitingGC: boolean,
+): RangeTableCellContent {
+  let results: string[] = [];
+  if (problems.no_lease) {
+    results = concat(results, "Invalid Lease");
   }
-
-  renderRangeCell(
-    row: RangeTableRow,
-    cell: RangeTableCellContent,
-    key: number,
-    dormant: boolean,
-    leaderCell?: RangeTableCellContent,
-  ) {
-    const title = join(isNil(cell.title) ? cell.value : cell.title, "\n");
-    const differentFromLeader =
-      !dormant &&
-      !isNil(leaderCell) &&
-      row.compareToLeader &&
-      (!isEqual(cell.value, leaderCell.value) ||
-        !isEqual(cell.title, leaderCell.title));
-    const className = classNames(
-      "range-table__cell",
-      {
-        "range-table__cell--dormant": dormant,
-        "range-table__cell--different-from-leader-warning": differentFromLeader,
-      },
-      !dormant && !isNil(cell.className) ? cell.className : [],
-    );
-    return (
-      <td key={key} className={className} title={title}>
-        <ul className="range-entries-list">
-          {map(cell.value, (value, k) => (
-            <li key={k}>{value}</li>
-          ))}
-        </ul>
-      </td>
-    );
+  if (problems.leader_not_lease_holder) {
+    results = concat(results, "Leader is Not Lease holder");
   }
-
-  renderRangeRow(
-    row: RangeTableRow,
-    detailsByStoreID: Map<number, RangeTableDetail>,
-    dormantStoreIDs: Set<number>,
-    leaderStoreID: number,
-    sortedStoreIDs: number[],
-    key: number,
-  ) {
-    const leaderDetail = detailsByStoreID.get(leaderStoreID);
-    const values: Set<string> = new Set();
-    if (row.compareToLeader) {
-      detailsByStoreID.forEach((detail, storeID) => {
-        if (!dormantStoreIDs.has(storeID)) {
-          values.add(join(detail[row.variable].value, " "));
-        }
-      });
-    }
-    const headerClassName = classNames(
-      "range-table__cell",
-      "range-table__cell--header",
-      { "range-table__cell--header-warning": values.size > 1 },
-    );
-    return (
-      <tr key={key} className="range-table__row">
-        <th className={headerClassName}>{row.display}</th>
-        {map(sortedStoreIDs, storeID => {
-          const cell = detailsByStoreID.get(storeID)[row.variable];
-          const leaderCell =
-            storeID === leaderStoreID ? null : leaderDetail[row.variable];
-          return this.renderRangeCell(
-            row,
-            cell,
-            storeID,
-            dormantStoreIDs.has(storeID),
-            leaderCell,
-          );
-        })}
-      </tr>
-    );
+  if (problems.underreplicated) {
+    results = concat(results, "Underreplicated (or slow)");
   }
+  if (problems.overreplicated) {
+    results = concat(results, "Overreplicated");
+  }
+  if (problems.no_raft_leader) {
+    results = concat(results, "No Raft Leader");
+  }
+  if (problems.unavailable) {
+    results = concat(results, "Unavailable");
+  }
+  if (problems.quiescent_equals_ticking) {
+    results = concat(results, "Quiescent equals ticking");
+  }
+  if (problems.raft_log_too_large) {
+    results = concat(results, "Raft log too large");
+  }
+  if (problems.range_too_large) {
+    results = concat(results, "Range too large");
+  }
+  if (awaitingGC) {
+    results = concat(results, "Awaiting GC");
+  }
+  return {
+    value: results,
+    title: results,
+    className: results.length > 0 ? ["range-table__cell--warning"] : [],
+  };
+}
 
-  renderRangeReplicaCell(
-    leaderReplicaIDs: Set<number>,
-    replicaID: number,
-    replica: protos.cockroach.roachpb.IReplicaDescriptor,
-    rangeID: Long,
-    localStoreID: number,
-    dormant: boolean,
-  ) {
-    const differentFromLeader =
-      !dormant &&
-      (isNil(replica)
-        ? leaderReplicaIDs.has(replicaID)
-        : !leaderReplicaIDs.has(replica.replica_id));
-    const localReplica =
-      !dormant &&
-      !differentFromLeader &&
-      replica &&
-      replica.store_id === localStoreID;
-    const className = classNames({
-      "range-table__cell": true,
+// contentIf returns an empty value if the condition is false, and if true,
+// executes and returns the content function.
+function contentIf(
+  showContent: boolean,
+  content: () => RangeTableCellContent,
+): RangeTableCellContent {
+  if (!showContent) {
+    return rangeTableEmptyContent;
+  }
+  return content();
+}
+
+function renderRangeCell(
+  row: RangeTableRow,
+  cell: RangeTableCellContent,
+  key: number,
+  dormant: boolean,
+  leaderCell?: RangeTableCellContent,
+) {
+  const title = join(isNil(cell.title) ? cell.value : cell.title, "\n");
+  const differentFromLeader =
+    !dormant &&
+    !isNil(leaderCell) &&
+    row.compareToLeader &&
+    (!isEqual(cell.value, leaderCell.value) ||
+      !isEqual(cell.title, leaderCell.title));
+  const className = classNames(
+    "range-table__cell",
+    {
       "range-table__cell--dormant": dormant,
       "range-table__cell--different-from-leader-warning": differentFromLeader,
-      "range-table__cell--local-replica": localReplica,
+    },
+    !dormant && !isNil(cell.className) ? cell.className : [],
+  );
+  return (
+    <td key={key} className={className} title={title}>
+      <ul className="range-entries-list">
+        {map(cell.value, (value, k) => (
+          <li key={k}>{value}</li>
+        ))}
+      </ul>
+    </td>
+  );
+}
+
+function renderRangeRow(
+  row: RangeTableRow,
+  detailsByStoreID: Map<number, RangeTableDetail>,
+  dormantStoreIDs: Set<number>,
+  leaderStoreID: number,
+  sortedStoreIDs: number[],
+  key: number,
+) {
+  const leaderDetail = detailsByStoreID.get(leaderStoreID);
+  const values: Set<string> = new Set();
+  if (row.compareToLeader) {
+    detailsByStoreID.forEach((detail, storeID) => {
+      if (!dormantStoreIDs.has(storeID)) {
+        values.add(join(detail[row.variable].value, " "));
+      }
     });
-    if (isNil(replica)) {
-      return (
-        <td key={localStoreID} className={className}>
-          -
-        </td>
-      );
-    }
-    const value = Print.ReplicaID(rangeID, replica);
+  }
+  const headerClassName = classNames(
+    "range-table__cell",
+    "range-table__cell--header",
+    { "range-table__cell--header-warning": values.size > 1 },
+  );
+  return (
+    <tr key={key} className="range-table__row">
+      <th className={headerClassName}>{row.display}</th>
+      {map(sortedStoreIDs, storeID => {
+        const cell = detailsByStoreID.get(storeID)[row.variable];
+        const leaderCell =
+          storeID === leaderStoreID ? null : leaderDetail[row.variable];
+        return renderRangeCell(
+          row,
+          cell,
+          storeID,
+          dormantStoreIDs.has(storeID),
+          leaderCell,
+        );
+      })}
+    </tr>
+  );
+}
+
+function renderRangeReplicaCell(
+  leaderReplicaIDs: Set<number>,
+  replicaID: number,
+  replica: protos.cockroach.roachpb.IReplicaDescriptor,
+  rangeID: Long,
+  localStoreID: number,
+  dormant: boolean,
+) {
+  const differentFromLeader =
+    !dormant &&
+    (isNil(replica)
+      ? leaderReplicaIDs.has(replicaID)
+      : !leaderReplicaIDs.has(replica.replica_id));
+  const localReplica =
+    !dormant &&
+    !differentFromLeader &&
+    replica &&
+    replica.store_id === localStoreID;
+  const className = classNames({
+    "range-table__cell": true,
+    "range-table__cell--dormant": dormant,
+    "range-table__cell--different-from-leader-warning": differentFromLeader,
+    "range-table__cell--local-replica": localReplica,
+  });
+  if (isNil(replica)) {
     return (
-      <td key={localStoreID} className={className} title={value}>
-        {value}
+      <td key={localStoreID} className={className}>
+        -
       </td>
     );
   }
+  const value = Print.ReplicaID(rangeID, replica);
+  return (
+    <td key={localStoreID} className={className} title={value}>
+      {value}
+    </td>
+  );
+}
 
-  renderRangeReplicaRow(
-    replicasByReplicaIDByStoreID: Map<
-      number,
-      Map<number, protos.cockroach.roachpb.IReplicaDescriptor>
-    >,
-    referenceReplica: protos.cockroach.roachpb.IReplicaDescriptor,
-    leaderReplicaIDs: Set<number>,
-    dormantStoreIDs: Set<number>,
-    sortedStoreIDs: number[],
-    rangeID: Long,
-    key: string,
-  ) {
-    const headerClassName = "range-table__cell range-table__cell--header";
-    return (
-      <tr key={key} className="range-table__row">
-        <th className={headerClassName}>
-          Replica {referenceReplica.replica_id} - (
-          {Print.ReplicaID(rangeID, referenceReplica)})
-        </th>
-        {map(sortedStoreIDs, storeID => {
-          let replica: protos.cockroach.roachpb.IReplicaDescriptor = null;
-          if (
-            replicasByReplicaIDByStoreID.has(storeID) &&
-            replicasByReplicaIDByStoreID
-              .get(storeID)
-              .has(referenceReplica.replica_id)
-          ) {
-            replica = replicasByReplicaIDByStoreID
-              .get(storeID)
-              .get(referenceReplica.replica_id);
-          }
-          return this.renderRangeReplicaCell(
-            leaderReplicaIDs,
-            referenceReplica.replica_id,
-            replica,
-            rangeID,
-            storeID,
-            dormantStoreIDs.has(storeID),
-          );
-        })}
-      </tr>
-    );
-  }
-
-  render() {
-    const { infos, replicas } = this.props;
-    const leader = head(infos);
-    const rangeID = leader.state.state.desc.range_id;
-
-    // We want to display ordered by store ID.
-    const sortedStoreIDs = flow(
-      (infos: IRangeInfo[]) => map(infos, info => info.source_store_id),
-      storeIds => sortBy(storeIds, id => id),
-    )(infos);
-
-    const dormantStoreIDs: Set<number> = new Set();
-
-    const now = moment();
-
-    // Convert the infos to a simpler object for display purposes. This helps when trying to
-    // determine if any warnings should be displayed.
-    const detailsByStoreID: Map<number, RangeTableDetail> = new Map();
-    forEach(infos, info => {
-      const localReplica = RangeInfo.GetLocalReplica(info);
-      const awaitingGC = isNil(localReplica);
-      const lease = info.state.state.lease;
-      const leaseEpoch = Lease.IsEpoch(lease);
-      const leaseLeader = Lease.IsLeader(lease);
-      const leaseExpiration = !leaseEpoch && !leaseLeader;
-      const raftLeader =
-        !awaitingGC &&
-        FixLong(info.raft_state.lead).eq(localReplica.replica_id);
-      const leaseHolder =
-        !awaitingGC && localReplica.replica_id === lease.replica.replica_id;
-      const mvcc = info.state.state.stats;
-      const raftState = this.contentRaftState(info.raft_state.state);
-      const vote = FixLong(info.raft_state.hard_state.vote);
-      let leaseState: RangeTableCellContent;
-      if (isNil(info.lease_status)) {
-        leaseState = rangeTableEmptyContentWithWarning;
-      } else {
-        leaseState = this.createContent(
-          convertLeaseState(info.lease_status.state),
-          info.lease_status.state ===
-            protos.cockroach.kv.kvserver.storagepb.LeaseState.VALID
-            ? ""
-            : "range-table__cell--warning",
+function renderRangeReplicaRow(
+  replicasByReplicaIDByStoreID: Map<
+    number,
+    Map<number, protos.cockroach.roachpb.IReplicaDescriptor>
+  >,
+  referenceReplica: protos.cockroach.roachpb.IReplicaDescriptor,
+  leaderReplicaIDs: Set<number>,
+  dormantStoreIDs: Set<number>,
+  sortedStoreIDs: number[],
+  rangeID: Long,
+  key: string,
+) {
+  const headerClassName = "range-table__cell range-table__cell--header";
+  return (
+    <tr key={key} className="range-table__row">
+      <th className={headerClassName}>
+        Replica {referenceReplica.replica_id} - (
+        {Print.ReplicaID(rangeID, referenceReplica)})
+      </th>
+      {map(sortedStoreIDs, storeID => {
+        let replica: protos.cockroach.roachpb.IReplicaDescriptor = null;
+        if (
+          replicasByReplicaIDByStoreID.has(storeID) &&
+          replicasByReplicaIDByStoreID
+            .get(storeID)
+            .has(referenceReplica.replica_id)
+        ) {
+          replica = replicasByReplicaIDByStoreID
+            .get(storeID)
+            .get(referenceReplica.replica_id);
+        }
+        return renderRangeReplicaCell(
+          leaderReplicaIDs,
+          referenceReplica.replica_id,
+          replica,
+          rangeID,
+          storeID,
+          dormantStoreIDs.has(storeID),
         );
-      }
-      const dormant = raftState.value[0] === "dormant";
-      if (dormant) {
-        dormantStoreIDs.add(info.source_store_id);
-      }
-      detailsByStoreID.set(info.source_store_id, {
-        id: this.createContent(
-          Print.ReplicaID(
-            rangeID,
-            localReplica,
-            info.source_node_id,
-            info.source_store_id,
-          ),
-        ),
-        keyRange: this.createContent(
-          `${info.span.start_key} to ${info.span.end_key}`,
-        ),
-        problems: this.contentProblems(info.problems, awaitingGC),
-        replicaType: awaitingGC
-          ? this.createContent("") // `problems` above will report "Awaiting GC" in this case
-          : this.createContent(contentReplicaType(localReplica.type)),
-        raftState: raftState,
-        leadSupportUntil: this.contentTimestamp(
-          info.raft_state.lead_support_until,
-          now,
-        ),
-        quiescent: info.quiescent
-          ? rangeTableQuiescent
-          : rangeTableEmptyContent,
-        ticking: this.createContent(info.ticking.toString()),
-        leaseState: leaseState,
-        leaseHolder: this.createContent(
-          Print.ReplicaID(rangeID, lease.replica),
-          leaseHolder
-            ? "range-table__cell--lease-holder"
-            : "range-table__cell--lease-follower",
-        ),
-        leaseType: this.createContent(
-          leaseEpoch ? "epoch" : leaseLeader ? "leader" : "expiration",
-        ),
-        leaseEpoch: leaseEpoch
-          ? this.createContent(lease.epoch)
-          : rangeTableEmptyContent,
-        leaseTerm: leaseLeader
-          ? this.createContent(lease.term)
-          : rangeTableEmptyContent,
-        isLeaseholder: this.createContent(String(info.is_leaseholder)),
-        leaseValid: this.createContent(String(info.lease_valid)),
-        leaseStart: this.contentTimestamp(lease.start, now),
-        leaseExpiration: leaseExpiration
-          ? this.contentTimestamp(lease.expiration, now)
-          : rangeTableEmptyContent,
-        leaseMinExpiration: !leaseExpiration
-          ? this.contentTimestamp(lease.min_expiration, now)
-          : rangeTableEmptyContent,
-        leaseAppliedIndex: this.createContent(
-          FixLong(info.state.state.lease_applied_index),
-        ),
-        raftLeader: this.contentIf(!dormant, () =>
-          this.createContent(
-            FixLong(info.raft_state.lead),
-            raftLeader
-              ? "range-table__cell--raftstate-leader"
-              : "range-table__cell--raftstate-follower",
-          ),
-        ),
-        vote: this.contentIf(!dormant, () =>
-          this.createContent(vote.greaterThan(0) ? vote : "-"),
-        ),
-        term: this.contentIf(!dormant, () =>
-          this.createContent(FixLong(info.raft_state.hard_state.term)),
-        ),
-        leadTransferee: this.contentIf(!dormant, () => {
-          const leadTransferee = FixLong(info.raft_state.lead_transferee);
-          return this.createContent(
-            leadTransferee.greaterThan(0) ? leadTransferee : "-",
-          );
-        }),
-        applied: this.contentIf(!dormant, () =>
-          this.createContent(FixLong(info.raft_state.applied)),
-        ),
-        commit: this.contentIf(!dormant, () =>
-          this.createContent(FixLong(info.raft_state.hard_state.commit)),
-        ),
-        lastIndex: this.createContent(FixLong(info.state.last_index)),
-        logSize: this.contentBytes(
-          FixLong(info.state.raft_log_size),
-          info.state.raft_log_size_trusted ? "" : "range-table__cell--dormant",
-          "Log size is known to not be correct. This isn't an error condition. " +
-            "The log size will became exact the next time it is recomputed. " +
-            "This replica does not perform log truncation (because the log might already " +
-            "be truncated sufficiently).",
-        ),
-        leaseHolderQPS: leaseHolder
-          ? this.createContent(info.stats.queries_per_second.toFixed(4))
-          : rangeTableEmptyContent,
-        keysWrittenPS: this.createContent(
-          info.stats.writes_per_second.toFixed(4),
-        ),
-        approxProposalQuota: raftLeader
-          ? this.createContent(FixLong(info.state.approximate_proposal_quota))
-          : rangeTableEmptyContent,
-        pendingCommands: this.createContent(FixLong(info.state.num_pending)),
-        droppedCommands: this.createContent(
-          FixLong(info.state.num_dropped),
-          FixLong(info.state.num_dropped).greaterThan(0)
-            ? "range-table__cell--warning"
-            : "",
-        ),
-        truncatedIndex: this.createContent(
-          FixLong(info.state.state.truncated_state.index),
-        ),
-        truncatedTerm: this.createContent(
-          FixLong(info.state.state.truncated_state.term),
-        ),
-        mvccLastUpdate: this.contentNanos(FixLong(mvcc.last_update_nanos)),
-        mvccLiveBytesCount: this.contentMVCC(
-          FixLong(mvcc.live_bytes),
-          FixLong(mvcc.live_count),
-        ),
-        mvccKeyBytesCount: this.contentMVCC(
-          FixLong(mvcc.key_bytes),
-          FixLong(mvcc.key_count),
-        ),
-        mvccValueBytesCount: this.contentMVCC(
-          FixLong(mvcc.val_bytes),
-          FixLong(mvcc.val_count),
-        ),
-        mvccRangeKeyBytesCount: this.contentMVCC(
-          FixLong(mvcc.range_key_bytes || 0),
-          FixLong(mvcc.range_key_count || 0),
-        ),
-        mvccRangeValueBytesCount: this.contentMVCC(
-          FixLong(mvcc.range_val_bytes || 0),
-          FixLong(mvcc.range_val_count || 0),
-        ),
-        mvccIntentBytesCount: this.contentMVCC(
-          FixLong(mvcc.intent_bytes),
-          FixLong(mvcc.intent_count),
-        ),
-        mvccSystemBytesCount: this.contentMVCC(
-          FixLong(mvcc.sys_bytes),
-          FixLong(mvcc.sys_count),
-        ),
-        rangeMaxBytes: this.contentBytes(FixLong(info.state.range_max_bytes)),
-        mvccIntentAge: this.contentDuration(FixLong(mvcc.lock_age)),
+      })}
+    </tr>
+  );
+}
 
-        gcAvgAge: this.contentGCAvgAge(mvcc),
-        gcBytesAge: this.createContent(FixLong(mvcc.gc_bytes_age)),
+export default function RangeTable({
+  infos,
+  replicas,
+}: RangeTableProps): React.ReactElement {
+  const leader = head(infos);
+  const rangeID = leader.state.state.desc.range_id;
 
-        numIntents: this.createContent(FixLong(mvcc.intent_count)),
-        intentAvgAge: this.createContentIntentAvgAge(mvcc),
-        intentAge: this.createContent(FixLong(mvcc.lock_age)),
+  // We want to display ordered by store ID.
+  const sortedStoreIDs = flow(
+    (infos: IRangeInfo[]) => map(infos, info => info.source_store_id),
+    storeIds => sortBy(storeIds, id => id),
+  )(infos);
 
-        readLatches: this.createContent(FixLong(info.read_latches)),
-        writeLatches: this.createContent(FixLong(info.write_latches)),
-        locks: this.createContent(FixLong(info.locks)),
-        locksWithWaitQueues: this.createContent(
-          FixLong(info.locks_with_wait_queues),
-        ),
-        lockWaitQueueWaiters: this.createContent(
-          FixLong(info.lock_wait_queue_waiters),
-        ),
-        top_k_locks_by_wait_queue_waiters: this.contentIf(
-          size(info.top_k_locks_by_wait_queue_waiters) > 0,
-          () => ({
-            value: map(
-              info.top_k_locks_by_wait_queue_waiters,
-              lock => `${lock.pretty_key} (${lock.waiters} waiters)`,
-            ),
-          }),
-        ),
+  const dormantStoreIDs: Set<number> = new Set();
 
-        closedTimestampPolicy: this.createContent(
-          // We index into the enum in order to get the label string, instead of
-          // the numeric value.
-          cockroach.roachpb.RangeClosedTimestampPolicy[
-            info.state.closed_timestamp_policy
-          ],
-          info.state.closed_timestamp_policy ===
-            cockroach.roachpb.RangeClosedTimestampPolicy.LEAD_FOR_GLOBAL_READS
-            ? "range-table__cell--global-range"
-            : "",
-        ),
-        closedTimestampRaft: this.contentTimestamp(
-          info.state.state.raft_closed_timestamp,
-          now,
-        ),
-        closedTimestampSideTransportReplica: this.contentTimestamp(
-          info.state.closed_timestamp_sidetransport_info.replica_closed,
-          now,
-        ),
-        closedTimestampSideTransportReplicaLAI: this.createContent(
-          FixLong(info.state.closed_timestamp_sidetransport_info.replica_lai),
-          // Warn if the LAI hasn't applied yet.
-          FixLong(info.state.state.lease_applied_index) <
-            FixLong(info.state.closed_timestamp_sidetransport_info.replica_lai)
-            ? "range-table__cell--warning"
-            : "",
-        ),
-        closedTimestampSideTransportCentral: this.contentTimestamp(
-          info.state.closed_timestamp_sidetransport_info.central_closed,
-          now,
-        ),
-        closedTimestampSideTransportCentralLAI: this.createContent(
-          FixLong(info.state.closed_timestamp_sidetransport_info.central_lai),
-          // Warn if the LAI hasn't applied yet.
-          FixLong(info.state.state.lease_applied_index) <
-            FixLong(info.state.closed_timestamp_sidetransport_info.central_lai)
-            ? "range-table__cell--warning"
-            : "",
-        ),
-        circuitBreakerError: this.createContent(
-          info.state.circuit_breaker_error,
-        ),
-        locality: this.contentIf(size(info.locality.tiers) > 0, () => ({
-          value: map(info.locality.tiers, tier => `${tier.key}: ${tier.value}`),
-        })),
-        pausedFollowers: this.createContent(
-          info.state.paused_replicas?.join(", "),
-        ),
-      });
-    });
+  const now = moment();
 
-    const leaderReplicaIDs = new Set(
-      map(leader.state.state.desc.internal_replicas, rep => rep.replica_id),
-    );
-
-    // Go through all the replicas and add them to map for easy printing.
-    const replicasByReplicaIDByStoreID: Map<
-      number,
-      Map<number, protos.cockroach.roachpb.IReplicaDescriptor>
-    > = new Map();
-    forEach(infos, info => {
-      const replicasByReplicaID: Map<
-        number,
-        protos.cockroach.roachpb.IReplicaDescriptor
-      > = new Map();
-      forEach(info.state.state.desc.internal_replicas, rep => {
-        replicasByReplicaID.set(rep.replica_id, rep);
-      });
-      replicasByReplicaIDByStoreID.set(
-        info.source_store_id,
-        replicasByReplicaID,
+  // Convert the infos to a simpler object for display purposes. This helps when trying to
+  // determine if any warnings should be displayed.
+  const detailsByStoreID: Map<number, RangeTableDetail> = new Map();
+  forEach(infos, info => {
+    const localReplica = RangeInfo.GetLocalReplica(info);
+    const awaitingGC = isNil(localReplica);
+    const lease = info.state.state.lease;
+    const leaseEpoch = Lease.IsEpoch(lease);
+    const leaseLeader = Lease.IsLeader(lease);
+    const leaseExpiration = !leaseEpoch && !leaseLeader;
+    const raftLeader =
+      !awaitingGC && FixLong(info.raft_state.lead).eq(localReplica.replica_id);
+    const leaseHolder =
+      !awaitingGC && localReplica.replica_id === lease.replica.replica_id;
+    const mvcc = info.state.state.stats;
+    const raftState = contentRaftState(info.raft_state.state);
+    const vote = FixLong(info.raft_state.hard_state.vote);
+    let leaseState: RangeTableCellContent;
+    if (isNil(info.lease_status)) {
+      leaseState = rangeTableEmptyContentWithWarning;
+    } else {
+      leaseState = createContent(
+        convertLeaseState(info.lease_status.state),
+        info.lease_status.state ===
+          protos.cockroach.kv.kvserver.storagepb.LeaseState.VALID
+          ? ""
+          : "range-table__cell--warning",
       );
-    });
+    }
+    const dormant = raftState.value[0] === "dormant";
+    if (dormant) {
+      dormantStoreIDs.add(info.source_store_id);
+    }
+    detailsByStoreID.set(info.source_store_id, {
+      id: createContent(
+        Print.ReplicaID(
+          rangeID,
+          localReplica,
+          info.source_node_id,
+          info.source_store_id,
+        ),
+      ),
+      keyRange: createContent(`${info.span.start_key} to ${info.span.end_key}`),
+      problems: contentProblems(info.problems, awaitingGC),
+      replicaType: awaitingGC
+        ? createContent("") // `problems` above will report "Awaiting GC" in this case
+        : createContent(contentReplicaType(localReplica.type)),
+      raftState: raftState,
+      leadSupportUntil: contentTimestamp(
+        info.raft_state.lead_support_until,
+        now,
+      ),
+      quiescent: info.quiescent ? rangeTableQuiescent : rangeTableEmptyContent,
+      ticking: createContent(info.ticking.toString()),
+      leaseState: leaseState,
+      leaseHolder: createContent(
+        Print.ReplicaID(rangeID, lease.replica),
+        leaseHolder
+          ? "range-table__cell--lease-holder"
+          : "range-table__cell--lease-follower",
+      ),
+      leaseType: createContent(
+        leaseEpoch ? "epoch" : leaseLeader ? "leader" : "expiration",
+      ),
+      leaseEpoch: leaseEpoch
+        ? createContent(lease.epoch)
+        : rangeTableEmptyContent,
+      leaseTerm: leaseLeader
+        ? createContent(lease.term)
+        : rangeTableEmptyContent,
+      isLeaseholder: createContent(String(info.is_leaseholder)),
+      leaseValid: createContent(String(info.lease_valid)),
+      leaseStart: contentTimestamp(lease.start, now),
+      leaseExpiration: leaseExpiration
+        ? contentTimestamp(lease.expiration, now)
+        : rangeTableEmptyContent,
+      leaseMinExpiration: !leaseExpiration
+        ? contentTimestamp(lease.min_expiration, now)
+        : rangeTableEmptyContent,
+      leaseAppliedIndex: createContent(
+        FixLong(info.state.state.lease_applied_index),
+      ),
+      raftLeader: contentIf(!dormant, () =>
+        createContent(
+          FixLong(info.raft_state.lead),
+          raftLeader
+            ? "range-table__cell--raftstate-leader"
+            : "range-table__cell--raftstate-follower",
+        ),
+      ),
+      vote: contentIf(!dormant, () =>
+        createContent(vote.greaterThan(0) ? vote : "-"),
+      ),
+      term: contentIf(!dormant, () =>
+        createContent(FixLong(info.raft_state.hard_state.term)),
+      ),
+      leadTransferee: contentIf(!dormant, () => {
+        const leadTransferee = FixLong(info.raft_state.lead_transferee);
+        return createContent(
+          leadTransferee.greaterThan(0) ? leadTransferee : "-",
+        );
+      }),
+      applied: contentIf(!dormant, () =>
+        createContent(FixLong(info.raft_state.applied)),
+      ),
+      commit: contentIf(!dormant, () =>
+        createContent(FixLong(info.raft_state.hard_state.commit)),
+      ),
+      lastIndex: createContent(FixLong(info.state.last_index)),
+      logSize: contentBytes(
+        FixLong(info.state.raft_log_size),
+        info.state.raft_log_size_trusted ? "" : "range-table__cell--dormant",
+        "Log size is known to not be correct. This isn't an error condition. " +
+          "The log size will became exact the next time it is recomputed. " +
+          "This replica does not perform log truncation (because the log might already " +
+          "be truncated sufficiently).",
+      ),
+      leaseHolderQPS: leaseHolder
+        ? createContent(info.stats.queries_per_second.toFixed(4))
+        : rangeTableEmptyContent,
+      keysWrittenPS: createContent(info.stats.writes_per_second.toFixed(4)),
+      approxProposalQuota: raftLeader
+        ? createContent(FixLong(info.state.approximate_proposal_quota))
+        : rangeTableEmptyContent,
+      pendingCommands: createContent(FixLong(info.state.num_pending)),
+      droppedCommands: createContent(
+        FixLong(info.state.num_dropped),
+        FixLong(info.state.num_dropped).greaterThan(0)
+          ? "range-table__cell--warning"
+          : "",
+      ),
+      truncatedIndex: createContent(
+        FixLong(info.state.state.truncated_state.index),
+      ),
+      truncatedTerm: createContent(
+        FixLong(info.state.state.truncated_state.term),
+      ),
+      mvccLastUpdate: contentNanos(FixLong(mvcc.last_update_nanos)),
+      mvccLiveBytesCount: contentMVCC(
+        FixLong(mvcc.live_bytes),
+        FixLong(mvcc.live_count),
+      ),
+      mvccKeyBytesCount: contentMVCC(
+        FixLong(mvcc.key_bytes),
+        FixLong(mvcc.key_count),
+      ),
+      mvccValueBytesCount: contentMVCC(
+        FixLong(mvcc.val_bytes),
+        FixLong(mvcc.val_count),
+      ),
+      mvccRangeKeyBytesCount: contentMVCC(
+        FixLong(mvcc.range_key_bytes || 0),
+        FixLong(mvcc.range_key_count || 0),
+      ),
+      mvccRangeValueBytesCount: contentMVCC(
+        FixLong(mvcc.range_val_bytes || 0),
+        FixLong(mvcc.range_val_count || 0),
+      ),
+      mvccIntentBytesCount: contentMVCC(
+        FixLong(mvcc.intent_bytes),
+        FixLong(mvcc.intent_count),
+      ),
+      mvccSystemBytesCount: contentMVCC(
+        FixLong(mvcc.sys_bytes),
+        FixLong(mvcc.sys_count),
+      ),
+      rangeMaxBytes: contentBytes(FixLong(info.state.range_max_bytes)),
+      mvccIntentAge: contentDuration(FixLong(mvcc.lock_age)),
 
-    return (
-      <div>
-        <h2 className="base-heading">
-          Range r{rangeID.toString()} at {Print.Time(moment().utc())} UTC
-        </h2>
-        <table className="range-table">
-          <tbody>
-            {map(rangeTableDisplayList, (title, key) =>
-              this.renderRangeRow(
-                title,
-                detailsByStoreID,
-                dormantStoreIDs,
-                leader.source_store_id,
-                sortedStoreIDs,
-                key,
-              ),
-            )}
-            {map(replicas, (replica, key) =>
-              this.renderRangeReplicaRow(
-                replicasByReplicaIDByStoreID,
-                replica,
-                leaderReplicaIDs,
-                dormantStoreIDs,
-                sortedStoreIDs,
-                rangeID,
-                "replica" + key,
-              ),
-            )}
-          </tbody>
-        </table>
-      </div>
-    );
-  }
+      gcAvgAge: contentGCAvgAge(mvcc),
+      gcBytesAge: createContent(FixLong(mvcc.gc_bytes_age)),
+
+      numIntents: createContent(FixLong(mvcc.intent_count)),
+      intentAvgAge: createContentIntentAvgAge(mvcc),
+      intentAge: createContent(FixLong(mvcc.lock_age)),
+
+      readLatches: createContent(FixLong(info.read_latches)),
+      writeLatches: createContent(FixLong(info.write_latches)),
+      locks: createContent(FixLong(info.locks)),
+      locksWithWaitQueues: createContent(FixLong(info.locks_with_wait_queues)),
+      lockWaitQueueWaiters: createContent(
+        FixLong(info.lock_wait_queue_waiters),
+      ),
+      top_k_locks_by_wait_queue_waiters: contentIf(
+        size(info.top_k_locks_by_wait_queue_waiters) > 0,
+        () => ({
+          value: map(
+            info.top_k_locks_by_wait_queue_waiters,
+            lock => `${lock.pretty_key} (${lock.waiters} waiters)`,
+          ),
+        }),
+      ),
+
+      closedTimestampPolicy: createContent(
+        // We index into the enum in order to get the label string, instead of
+        // the numeric value.
+        cockroach.roachpb.RangeClosedTimestampPolicy[
+          info.state.closed_timestamp_policy
+        ],
+        info.state.closed_timestamp_policy ===
+          cockroach.roachpb.RangeClosedTimestampPolicy.LEAD_FOR_GLOBAL_READS
+          ? "range-table__cell--global-range"
+          : "",
+      ),
+      closedTimestampRaft: contentTimestamp(
+        info.state.state.raft_closed_timestamp,
+        now,
+      ),
+      closedTimestampSideTransportReplica: contentTimestamp(
+        info.state.closed_timestamp_sidetransport_info.replica_closed,
+        now,
+      ),
+      closedTimestampSideTransportReplicaLAI: createContent(
+        FixLong(info.state.closed_timestamp_sidetransport_info.replica_lai),
+        // Warn if the LAI hasn't applied yet.
+        FixLong(info.state.state.lease_applied_index) <
+          FixLong(info.state.closed_timestamp_sidetransport_info.replica_lai)
+          ? "range-table__cell--warning"
+          : "",
+      ),
+      closedTimestampSideTransportCentral: contentTimestamp(
+        info.state.closed_timestamp_sidetransport_info.central_closed,
+        now,
+      ),
+      closedTimestampSideTransportCentralLAI: createContent(
+        FixLong(info.state.closed_timestamp_sidetransport_info.central_lai),
+        // Warn if the LAI hasn't applied yet.
+        FixLong(info.state.state.lease_applied_index) <
+          FixLong(info.state.closed_timestamp_sidetransport_info.central_lai)
+          ? "range-table__cell--warning"
+          : "",
+      ),
+      circuitBreakerError: createContent(info.state.circuit_breaker_error),
+      locality: contentIf(size(info.locality.tiers) > 0, () => ({
+        value: map(info.locality.tiers, tier => `${tier.key}: ${tier.value}`),
+      })),
+      pausedFollowers: createContent(info.state.paused_replicas?.join(", ")),
+    });
+  });
+
+  const leaderReplicaIDs = new Set(
+    map(leader.state.state.desc.internal_replicas, rep => rep.replica_id),
+  );
+
+  // Go through all the replicas and add them to map for easy printing.
+  const replicasByReplicaIDByStoreID: Map<
+    number,
+    Map<number, protos.cockroach.roachpb.IReplicaDescriptor>
+  > = new Map();
+  forEach(infos, info => {
+    const replicasByReplicaID: Map<
+      number,
+      protos.cockroach.roachpb.IReplicaDescriptor
+    > = new Map();
+    forEach(info.state.state.desc.internal_replicas, rep => {
+      replicasByReplicaID.set(rep.replica_id, rep);
+    });
+    replicasByReplicaIDByStoreID.set(info.source_store_id, replicasByReplicaID);
+  });
+
+  return (
+    <div>
+      <h2 className="base-heading">
+        Range r{rangeID.toString()} at {Print.Time(moment().utc())} UTC
+      </h2>
+      <table className="range-table">
+        <tbody>
+          {map(rangeTableDisplayList, (title, key) =>
+            renderRangeRow(
+              title,
+              detailsByStoreID,
+              dormantStoreIDs,
+              leader.source_store_id,
+              sortedStoreIDs,
+              key,
+            ),
+          )}
+          {map(replicas, (replica, key) =>
+            renderRangeReplicaRow(
+              replicasByReplicaIDByStoreID,
+              replica,
+              leaderReplicaIDs,
+              dormantStoreIDs,
+              sortedStoreIDs,
+              rangeID,
+              "replica" + key,
+            ),
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
 }

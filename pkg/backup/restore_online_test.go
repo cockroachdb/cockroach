@@ -17,8 +17,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -40,13 +40,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var orParams = base.TestClusterArgs{
-	// Online restore is not supported in a secondary tenant yet.
-	ServerArgs: base.TestServerArgs{
-		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-	},
-}
-
 var latestDownloadJobIDQuery = `SELECT id FROM system.jobs WHERE description LIKE '%Background Data Download%' ORDER BY created DESC LIMIT 1`
 
 func onlineImpl(rng *rand.Rand) string {
@@ -61,19 +54,19 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	ctx := context.Background()
 
 	const numAccounts = 1000
 
-	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
 
-	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, orParams)
+	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFnRestored()
 
-	externalStorage := "nodelocal://1/backup"
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB, rSQLDB)
 
 	createStmt := `SELECT create_statement FROM [SHOW CREATE TABLE data.bank]`
 	createStmtRes := sqlDB.QueryStr(t, createStmt)
@@ -118,16 +111,15 @@ func TestOnlineRestoreRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tmpDir := t.TempDir()
-
-	defer nodelocal.ReplaceNodeLocalForTesting(tmpDir)()
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	const numAccounts = 1000
 
-	externalStorage := "nodelocal://1/backup"
-
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	_, sqlDB, tmpDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
+
+	trueExternalStorage := "nodelocal://1/backup"
+	externalStorage := backuptestutils.GetExternalStorageURI(t, trueExternalStorage, "backup", sqlDB)
 
 	restoreToPausedDownloadJob := func(t *testing.T, newDBName string) int {
 		defer func() {
@@ -169,7 +161,7 @@ func TestOnlineRestoreRecovery(t *testing.T) {
 	t.Run("delete file", func(t *testing.T) {
 		dbName := "data_delete"
 		downloadJobID := restoreToPausedDownloadJob(t, dbName)
-		corruptBackup(t, sqlDB, tmpDir, externalStorage)
+		corruptBackup(t, sqlDB, tmpDir, trueExternalStorage)
 		sqlDB.ExpectErr(t, "no such file or directory", "SELECT count(*) FROM data_delete.bank")
 		sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", downloadJobID))
 		jobutils.WaitForJobToFail(t, sqlDB, jobspb.JobID(downloadJobID))
@@ -200,7 +192,7 @@ func TestOnlineRestoreRecovery(t *testing.T) {
 		var blockingJobID int
 		sqlDB.QueryRow(t, fmt.Sprintf("RESTORE DATABASE data FROM LATEST IN '%s' WITH EXPERIMENTAL COPY, new_db_name=%s, detached", externalStorage, dbName)).Scan(&blockingJobID)
 		jobutils.WaitForJobToPause(t, sqlDB, jobspb.JobID(blockingJobID))
-		corruptBackup(t, sqlDB, tmpDir, externalStorage)
+		corruptBackup(t, sqlDB, tmpDir, trueExternalStorage)
 		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
 		sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", blockingJobID))
 		jobutils.WaitForJobToFail(t, sqlDB, jobspb.JobID(blockingJobID))
@@ -214,16 +206,15 @@ func TestFullClusterOnlineRestoreRecovery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	tmpDir := t.TempDir()
-
-	defer nodelocal.ReplaceNodeLocalForTesting(tmpDir)()
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	const numAccounts = 1000
 
-	externalStorage := "nodelocal://1/backup"
-
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, orParams)
+	_, sqlDB, tmpDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
+
+	trueExternalStorage := "nodelocal://1/backup"
+	externalStorage := backuptestutils.GetExternalStorageURI(t, trueExternalStorage, "backup", sqlDB)
 
 	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'")
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
@@ -248,7 +239,7 @@ func TestFullClusterOnlineRestoreRecovery(t *testing.T) {
 	var downloadJobID jobspb.JobID
 	sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
 	jobutils.WaitForJobToPause(t, sqlDB, downloadJobID)
-	corruptBackup(t, sqlDB, tmpDir, externalStorage)
+	corruptBackup(t, sqlDB, tmpDir, trueExternalStorage)
 	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
 	sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", downloadJobID))
 	jobutils.WaitForJobToFail(t, sqlDB, downloadJobID)
@@ -282,23 +273,23 @@ func corruptBackup(t *testing.T, sqlDB *sqlutils.SQLRunner, ioDir string, uri st
 func TestOnlineRestorePartitioned(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
-	srv, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, 3, 100,
-		InitManualReplication,
-		base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant},
-		},
-	)
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	srv, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, 3, 100, InitManualReplication)
 	defer cleanupFn()
 
-	sqlDB.Exec(t, `BACKUP DATABASE data INTO ('nodelocal://1/a?COCKROACH_LOCALITY=default',
-		'nodelocal://1/b?COCKROACH_LOCALITY=dc%3Ddc2',
-		'nodelocal://1/c?COCKROACH_LOCALITY=dc%3Ddc3')`)
+	a := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/a", "conn-a", sqlDB) + "?COCKROACH_LOCALITY=default"
+	b := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/b", "conn-b", sqlDB) + "?COCKROACH_LOCALITY=dc%3Ddc2"
+	c := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/c", "conn-c", sqlDB) + "?COCKROACH_LOCALITY=dc%3Ddc3"
 
-	j := sqlDB.QueryStr(t, `RESTORE DATABASE data FROM LATEST IN ('nodelocal://1/a?COCKROACH_LOCALITY=default',
-		'nodelocal://1/b?COCKROACH_LOCALITY=dc%3Ddc2',
-		'nodelocal://1/c?COCKROACH_LOCALITY=dc%3Ddc3') WITH new_db_name='d2', EXPERIMENTAL DEFERRED COPY`)
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO ('%s', '%s', '%s')", a, b, c))
+
+	j := sqlDB.QueryStr(t, fmt.Sprintf(
+		`RESTORE DATABASE data FROM LATEST IN ('%s', '%s', '%s')
+		WITH new_db_name='d2', EXPERIMENTAL DEFERRED COPY`,
+		a, b, c,
+	))
 
 	srv.Servers[0].JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 
@@ -308,24 +299,22 @@ func TestOnlineRestorePartitioned(t *testing.T) {
 func TestOnlineRestoreLinkCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	rng, _ := randutil.NewTestRand()
 
 	const numAccounts = 10
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
-		t,
-		singleNode,
-		numAccounts,
-		InitManualReplication,
-		orParams,
-	)
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	sqlDB.Exec(t, "BACKUP DATABASE data INTO $1", localFoo)
+
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
+
+	sqlDB.Exec(t, "BACKUP DATABASE data INTO $1", externalStorage)
 	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints  = 'restore.before_publishing_descriptors'")
 	var jobID jobspb.JobID
 	stmt := fmt.Sprintf("RESTORE DATABASE data FROM LATEST IN $1 WITH OPTIONS (new_db_name='data2', %s, detached)", onlineImpl(rng))
-	sqlDB.QueryRow(t, stmt, localFoo).Scan(&jobID)
+	sqlDB.QueryRow(t, stmt, externalStorage).Scan(&jobID)
 	jobutils.WaitForJobToPause(t, sqlDB, jobID)
 
 	// Set a pauspoint during the link phase which should not get hit because of
@@ -338,21 +327,14 @@ func TestOnlineRestoreLinkCheckpoint(t *testing.T) {
 func TestOnlineRestoreStatementResult(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
 
-	const numAccounts = 1
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
-		t,
-		singleNode,
-		numAccounts,
-		InitManualReplication,
-		base.TestClusterArgs{
-			ServerArgs: base.TestServerArgs{
-				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-			},
-		},
-	)
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	const numAccounts = 2
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
+
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
 
 	sqlDB.ExecMultiple(
 		t,
@@ -360,12 +342,12 @@ func TestOnlineRestoreStatementResult(t *testing.T) {
 		"CREATE TABLE foo (x INT PRIMARY KEY, y INT)",
 		"INSERT INTO foo VALUES (1, 2)",
 	)
-	sqlDB.Exec(t, "BACKUP DATABASE data INTO $1", localFoo)
+	sqlDB.Exec(t, "BACKUP DATABASE data INTO $1", externalStorage)
 
 	rows := sqlDB.Query(
 		t,
 		"RESTORE DATABASE data FROM LATEST IN $1 WITH OPTIONS (new_db_name='data2', experimental deferred copy)",
-		localFoo,
+		externalStorage,
 	)
 	columns, err := rows.Columns()
 	if err != nil {
@@ -409,17 +391,13 @@ func TestOnlineRestoreStatementResult(t *testing.T) {
 func TestOnlineRestoreWaitForDownload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	const numAccounts = 1000
-	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
-		// Online restore is not supported in a secondary tenant yet.
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-		},
-	})
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
-	externalStorage := "nodelocal://1/backup"
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
 
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
 
@@ -443,9 +421,7 @@ func TestOnlineRestoreTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
-
-	externalStorage := "nodelocal://1/backup"
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -458,7 +434,7 @@ func TestOnlineRestoreTenant(t *testing.T) {
 
 		DefaultTestTenant: base.TestControlsTenantsExplicitly},
 	}
-	const numAccounts = 1
+	const numAccounts = 2
 
 	tc, systemDB, dir, cleanupFn := backupRestoreTestSetupWithParams(
 		t, singleNode, numAccounts, InitManualReplication, params,
@@ -466,6 +442,8 @@ func TestOnlineRestoreTenant(t *testing.T) {
 	_, _ = tc, systemDB
 	defer cleanupFn()
 	srv := tc.Server(0)
+
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", systemDB)
 
 	_ = securitytest.EmbeddedTenantIDs()
 
@@ -478,6 +456,9 @@ func TestOnlineRestoreTenant(t *testing.T) {
 
 		restoreTC, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
 		defer cleanupFnRestored()
+
+		// just using this to run CREATE EXTERNAL CONNECTION on the recovery db if we're using one
+		_ = backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", rSQLDB)
 
 		systemDB.Exec(t, fmt.Sprintf(`BACKUP TENANT 10 INTO '%s'`, externalStorage))
 
@@ -541,34 +522,38 @@ func TestOnlineRestoreErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+	backuptestutils.EnableFastRestoreForTest(t)
 
-	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 1, InitManualReplication)
+	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 2, InitManualReplication)
 	defer cleanupFn()
-	params := base.TestClusterArgs{
-		// Online restore is not supported in a secondary tenant yet.
-		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-		},
-	}
-	_, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, params)
+	_, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFnRestored()
 	rSQLDB.Exec(t, "CREATE DATABASE data")
 	var (
-		fullBackup                = "nodelocal://1/full-backup"
-		fullBackupWithRevs        = "nodelocal://1/full-backup-with-revs"
-		incrementalBackupWithRevs = "nodelocal://1/incremental-backup-with-revs"
+		fullBackup = backuptestutils.GetExternalStorageURI(
+			t, "nodelocal://1/full-backup", "full-backup", sqlDB, rSQLDB,
+		)
+		fullBackupWithRevs = backuptestutils.GetExternalStorageURI(
+			t, "nodelocal://1/full-backup-with-revs", "full-backup-with-revs", sqlDB, rSQLDB,
+		)
+		incrementalBackupWithRevs = backuptestutils.GetExternalStorageURI(
+			t, "nodelocal://1/incremental-backup-with-revs", "incremental-backup-with-revs", sqlDB, rSQLDB,
+		)
 	)
-	t.Run("full backups with revision history are unsupported", func(t *testing.T) {
+	t.Run("full backups with revision history are unsupported without dist flow", func(t *testing.T) {
 		var systemTime string
 		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()").Scan(&systemTime)
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s' AS OF SYSTEM TIME '%s' WITH revision_history", fullBackupWithRevs, systemTime))
+		rSQLDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = false")
+		defer rSQLDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = true")
 		rSQLDB.ExpectErr(t, "revision history backup not supported",
 			fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", fullBackupWithRevs))
 	})
-	t.Run("incremental backups with revision history are unsupported", func(t *testing.T) {
+	t.Run("incremental backups with revision history are unsupported without dist flow", func(t *testing.T) {
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s' WITH revision_history", incrementalBackupWithRevs))
 		sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO LATEST IN '%s' WITH revision_history", incrementalBackupWithRevs))
+		rSQLDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = false")
+		defer rSQLDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = true")
 		rSQLDB.ExpectErr(t, "revision history backup not supported",
 			fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", incrementalBackupWithRevs))
 	})
@@ -589,7 +574,7 @@ func TestOnlineRestoreRetryingDownloadRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	rng, seed := randutil.NewPseudoRand()
 	t.Logf("random seed: %d", seed)
@@ -601,7 +586,6 @@ func TestOnlineRestoreRetryingDownloadRequests(t *testing.T) {
 
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			Knobs: base.TestingKnobs{
 				BackupRestore: &sql.BackupRestoreTestingKnobs{
 					RunBeforeSendingDownloadSpan: func() error {
@@ -619,13 +603,13 @@ func TestOnlineRestoreRetryingDownloadRequests(t *testing.T) {
 		},
 	}
 
-	const numAccounts = 1
+	const numAccounts = 2
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
 		t, singleNode, numAccounts, InitManualReplication, clusterArgs,
 	)
 	defer cleanupFn()
 
-	externalStorage := "nodelocal://1/backup"
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
 	sqlDB.Exec(
 		t,
@@ -648,12 +632,11 @@ func TestOnlineRestoreDownloadRetryReset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	var attemptCount int
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			Knobs: base.TestingKnobs{
 				BackupRestore: &sql.BackupRestoreTestingKnobs{
 					// We want the retry loop to fail until its final attempt, and then
@@ -678,13 +661,13 @@ func TestOnlineRestoreDownloadRetryReset(t *testing.T) {
 			},
 		},
 	}
-	const numAccounts = 1
+	const numAccounts = 2
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
 		t, singleNode, numAccounts, InitManualReplication, clusterArgs,
 	)
 	defer cleanupFn()
 
-	externalStorage := "nodelocal://1/backup"
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
 	sqlDB.Exec(
 		t,
@@ -703,7 +686,8 @@ func TestOnlineRestoreDownloadRetryReset(t *testing.T) {
 func TestOnlineRestoreFailScatterNonEmptyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	backuptestutils.EnableFastRestoreForTest(t)
 
 	// This test first runs online restore and waits for an external SST to be
 	// added to ensure at least one range has ingested an external SST. It then
@@ -723,8 +707,7 @@ func TestOnlineRestoreFailScatterNonEmptyRanges(t *testing.T) {
 	var postPauseScatterRequests atomic.Int32
 	var postPauseSuccessfulScatters atomic.Int32
 
-	params := orParams
-	params.ServerArgs.Knobs = base.TestingKnobs{
+	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{Knobs: base.TestingKnobs{
 		BackupRestore: &sql.BackupRestoreTestingKnobs{
 			AfterAddRemoteSST: func() error {
 				if resumed.Load() {
@@ -761,7 +744,7 @@ func TestOnlineRestoreFailScatterNonEmptyRanges(t *testing.T) {
 				return nil
 			},
 		},
-	}
+	}}}
 
 	const numAccounts = 100
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
@@ -769,7 +752,11 @@ func TestOnlineRestoreFailScatterNonEmptyRanges(t *testing.T) {
 	)
 	defer cleanupFn()
 
-	externalStorage := "nodelocal://1/backup"
+	// This test relies on the non-dist-flow online restore path's pause/resume
+	// behavior with the AfterAddRemoteSST knob.
+	sqlDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = false")
+
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup", "backup", sqlDB)
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
 
 	var linkJobID jobspb.JobID
@@ -846,4 +833,565 @@ func assertOnlineRestoreWithRekeying(
 	sqlDB.QueryRow(t, bankTableIDQuery).Scan(&originalID)
 	rSQLDB.QueryRow(t, bankTableIDQuery).Scan(&restoreID)
 	require.NotEqual(t, originalID, restoreID)
+}
+
+// TestOnlineRestoreRevisionHistoryLayers tests online restore with backup chains
+// that include revision history layers. When a backup chain contains layers with
+// revision history, those layers must be ingested (not linked) by the distributed
+// restore flow. This test exercises various combinations of:
+//   - Layers without revision history (linkable)
+//   - Layers with revision history (must be ingested)
+//   - Restores to specific timestamps covered by revision history
+//   - DELETE operations that create tombstones which must shadow linked data
+//
+// The test creates a table split into multiple ranges and makes mutations across
+// different ranges in different backup layers to exercise the hybrid link/ingest
+// path thoroughly.
+func TestOnlineRestoreRevisionHistoryLayers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	ctx := context.Background()
+
+	// Use enough accounts to create multiple ranges.
+	const numAccounts = 500
+
+	srcTC, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	dstTC, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, base.TestClusterArgs{})
+	defer cleanupFnRestored()
+
+	externalStorage := backuptestutils.GetExternalStorageURI(t, "nodelocal://1/backup-rev-history", "backup-rev-history", sqlDB, rSQLDB)
+
+	// Split the bank table into multiple ranges so we have mutations affecting
+	// different ranges in different layers.
+	sqlDB.Exec(t, "ALTER TABLE data.bank SPLIT AT VALUES (100), (200), (300), (400)")
+
+	// Layer 0: Full backup (no revision history).
+	// Initial balance is the account id (set by backupRestoreTestSetup).
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+
+	// Layer 1: First incremental without revision history.
+	// Update balance for range 0-100 only.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 1000 WHERE id < 100")
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", externalStorage))
+
+	// Layer 2: Second incremental without revision history.
+	// Update balance for range 100-200 only.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 2000 WHERE id >= 100 AND id < 200")
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", externalStorage))
+
+	// Now we start revision history layers.
+	// Layer 3: First incremental WITH revision history.
+	// Update balance for range 200-300.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 3000 WHERE id >= 200 AND id < 300")
+	var ts3 string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts3)
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s' WITH revision_history", externalStorage))
+
+	// Capture a timestamp in the middle of the revision history for AOST testing.
+	// Make another mutation WITHIN the revision history period.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 3500 WHERE id >= 200 AND id < 250")
+	var tsMidRevision string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsMidRevision)
+
+	// Layer 4: Second incremental WITH revision history.
+	// Update balance for range 300-400 and DELETE some rows.
+	// The deletions test that tombstones in revision history layers correctly
+	// shadow keys in the linked layers below.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 4000 WHERE id >= 300 AND id < 400")
+	// Delete rows 350-359 (10 rows) - these existed in linked layers and must be
+	// shadowed by tombstones from the ingested revision history layer.
+	sqlDB.Exec(t, "DELETE FROM data.bank WHERE id >= 350 AND id < 360")
+	var tsAfterDelete string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsAfterDelete)
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s' WITH revision_history", externalStorage))
+
+	// Layer 5: Third incremental WITH revision history.
+	// Update balance for range 400-500 and delete more rows.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 5000 WHERE id >= 400")
+	// Delete rows 450-454 (5 rows).
+	sqlDB.Exec(t, "DELETE FROM data.bank WHERE id >= 450 AND id < 455")
+	var ts5 string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&ts5)
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s' WITH revision_history", externalStorage))
+
+	// Layer 6: Incremental WITH revision history that writes over tombstones.
+	// Re-insert some of the deleted rows with new values. This tests that
+	// writes over tombstones are correctly handled.
+	// Re-insert rows 350-354 (5 of the 10 deleted rows from layer 4).
+	for id := 350; id < 355; id++ {
+		sqlDB.Exec(t, "INSERT INTO data.bank (id, balance, payload) VALUES ($1, 7000, 'reinserted')", id)
+	}
+	var tsReinsert string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsReinsert)
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s' WITH revision_history", externalStorage))
+
+	// Layer 7: Final incremental WITHOUT revision history (after the revision history layers).
+	// Update all balances to a final value.
+	sqlDB.Exec(t, "UPDATE data.bank SET balance = 6000 WHERE true")
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", externalStorage))
+
+	// Deleted rows: 10 (ids 350-359) + 5 (ids 450-454) = 15, but 5 were re-inserted (350-354)
+	const deletedInLayer4 = 10   // ids 350-359
+	const deletedInLayer5 = 5    // ids 450-454
+	const reinsertedInLayer6 = 5 // ids 350-354 re-inserted
+	const totalDeleted = deletedInLayer4 + deletedInLayer5 - reinsertedInLayer6
+
+	// verifyData is a helper to verify the restored data matches expectations.
+	// This is called twice: once while the download job is paused (data is linked)
+	// and again after the download completes (data is local).
+	type testCase struct {
+		name             string
+		restoreTime      string  // AS OF SYSTEM TIME, empty for latest
+		expectedBalances [][]int // expected [minID, maxID, balance] ranges
+		expectedRows     int     // expected row count
+		deletedIDs       []int   // IDs that should NOT exist after restore
+		reinsertedIDs    []int   // IDs that were re-inserted over tombstones
+		expectError      string  // expected error, empty if success expected
+		desc             string  // description for debugging
+	}
+
+	verifyData := func(t *testing.T, tc testCase, phase string) {
+		// Verify row count.
+		var restoreRowCount int
+		rSQLDB.QueryRow(t, "SELECT count(*) FROM data.bank").Scan(&restoreRowCount)
+		require.Equal(t, tc.expectedRows, restoreRowCount, "%s: row count mismatch for %s", phase, tc.desc)
+
+		// Verify expected balances for each range.
+		for i, expected := range tc.expectedBalances {
+			minID, maxID, expectedBalance := expected[0], expected[1], expected[2]
+			var actualBalance int
+			rSQLDB.QueryRow(t,
+				"SELECT balance FROM data.bank WHERE id = $1", minID,
+			).Scan(&actualBalance)
+			require.Equal(t, expectedBalance, actualBalance,
+				"%s: balance mismatch at id=%d (range %d) for %s", phase, minID, i, tc.desc)
+
+			// Check a few more points in the range.
+			if maxID > minID {
+				midID := (minID + maxID) / 2
+				rSQLDB.QueryRow(t,
+					"SELECT balance FROM data.bank WHERE id = $1", midID,
+				).Scan(&actualBalance)
+				require.Equal(t, expectedBalance, actualBalance,
+					"%s: balance mismatch at id=%d (range %d) for %s", phase, midID, i, tc.desc)
+			}
+		}
+
+		// Verify deleted rows are not present.
+		for i, deletedID := range tc.deletedIDs {
+			var count int
+			rSQLDB.QueryRow(t,
+				"SELECT count(*) FROM data.bank WHERE id = $1", deletedID,
+			).Scan(&count)
+			require.Equal(t, 0, count,
+				"%s: deleted id=%d (index %d) should not exist for %s", phase, deletedID, i, tc.desc)
+		}
+
+		// Verify re-inserted rows exist and have correct balance.
+		for i, reinsertedID := range tc.reinsertedIDs {
+			var count int
+			rSQLDB.QueryRow(t,
+				"SELECT count(*) FROM data.bank WHERE id = $1", reinsertedID,
+			).Scan(&count)
+			require.Equal(t, 1, count,
+				"%s: re-inserted id=%d (index %d) should exist for %s", phase, reinsertedID, i, tc.desc)
+		}
+	}
+
+	// Test cases for different restore scenarios.
+	testCases := []testCase{
+		{
+			name:        "restore-to-latest",
+			restoreTime: "",
+			expectedBalances: [][]int{
+				{0, 349, 6000},               // accounts before first deletion
+				{350, 354, 6000},             // re-inserted rows (updated in layer 7)
+				{360, 449, 6000},             // accounts between deletions
+				{455, numAccounts - 1, 6000}, // accounts after second deletion
+			},
+			expectedRows:  numAccounts - totalDeleted,
+			deletedIDs:    []int{355, 356, 357, 358, 359, 450, 454}, // sample of still-deleted IDs
+			reinsertedIDs: []int{350, 351, 352, 353, 354},           // re-inserted over tombstones
+			desc:          "restore to latest backup (with re-inserts over tombstones)",
+		},
+		{
+			name:        "restore-to-layer-3-end",
+			restoreTime: ts3,
+			expectedBalances: [][]int{
+				{0, 99, 1000},
+				{100, 199, 2000},
+				{200, 299, 3000}, // layer 3 update (first rev history layer)
+			},
+			expectedRows: numAccounts, // no deletions yet at this timestamp
+			deletedIDs:   nil,
+			desc:         "restore to end of first revision history layer",
+		},
+		{
+			name:        "restore-to-mid-revision",
+			restoreTime: tsMidRevision,
+			expectedBalances: [][]int{
+				{0, 99, 1000},
+				{100, 199, 2000},
+				{200, 249, 3500}, // mid-revision update
+				{250, 299, 3000}, // still at layer 3 value
+			},
+			expectedRows: numAccounts, // no deletions yet at this timestamp
+			deletedIDs:   nil,
+			desc:         "restore to a point in time within revision history",
+		},
+		{
+			name:        "restore-after-delete",
+			restoreTime: tsAfterDelete,
+			expectedBalances: [][]int{
+				{0, 99, 1000},
+				{100, 199, 2000},
+				{200, 249, 3500},
+				{250, 299, 3000},
+				{300, 349, 4000},
+				{360, 399, 4000}, // 350-359 deleted
+			},
+			expectedRows: numAccounts - deletedInLayer4,
+			deletedIDs:   []int{350, 355, 359}, // sample of deleted IDs from layer 4
+			desc:         "restore to timestamp after first deletion",
+		},
+		{
+			name:        "restore-to-layer-5-end",
+			restoreTime: ts5,
+			expectedBalances: [][]int{
+				{0, 99, 1000},
+				{100, 199, 2000},
+				{200, 249, 3500},
+				{250, 299, 3000},
+				{300, 349, 4000},
+				{360, 399, 4000},
+				{400, 449, 5000},
+				{455, numAccounts - 1, 5000}, // 450-454 deleted
+			},
+			expectedRows: numAccounts - deletedInLayer4 - deletedInLayer5, // all deletions, no re-insertions yet
+			deletedIDs:   []int{350, 355, 359, 450, 454},                  // sample of deleted IDs
+			desc:         "restore to end of last revision history layer before re-inserts",
+		},
+		{
+			name:        "restore-after-reinsert",
+			restoreTime: tsReinsert,
+			expectedBalances: [][]int{
+				{0, 99, 1000},
+				{100, 199, 2000},
+				{200, 249, 3500},
+				{250, 299, 3000},
+				{300, 349, 4000},
+				{350, 354, 7000}, // re-inserted rows
+				{360, 399, 4000},
+				{400, 449, 5000},
+				{455, numAccounts - 1, 5000},
+			},
+			expectedRows:  numAccounts - totalDeleted,               // 5 still deleted (355-359) + 5 (450-454)
+			deletedIDs:    []int{355, 356, 357, 358, 359, 450, 454}, // sample of still-deleted IDs
+			reinsertedIDs: []int{350, 351, 352, 353, 354},           // re-inserted over tombstones
+			desc:          "restore after re-inserting rows over tombstones",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Clean up before each test case.
+			rSQLDB.Exec(t, "DROP DATABASE IF EXISTS data CASCADE")
+
+			// Enable the distributed flow for online restore (required for revision history).
+			rSQLDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = true")
+
+			// Set a pause point at the start of the download job so we can verify
+			// data correctness before download (while data is still linked) and
+			// after download (when data is local).
+			rSQLDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'")
+			defer rSQLDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+
+			// Create database and perform online restore.
+			rSQLDB.Exec(t, "CREATE DATABASE data")
+
+			restoreStmt := fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, detached", externalStorage)
+			if tc.restoreTime != "" {
+				restoreStmt = fmt.Sprintf("RESTORE TABLE data.bank FROM LATEST IN '%s' AS OF SYSTEM TIME '%s' WITH EXPERIMENTAL DEFERRED COPY, detached",
+					externalStorage, tc.restoreTime)
+			}
+
+			if tc.expectError != "" {
+				rSQLDB.ExpectErr(t, tc.expectError, restoreStmt)
+				return
+			}
+
+			var linkJobID jobspb.JobID
+			rSQLDB.QueryRow(t, restoreStmt).Scan(&linkJobID)
+			jobutils.WaitForJobToSucceed(t, rSQLDB, linkJobID)
+
+			// Wait for download job to pause at the pause point.
+			var downloadJobID jobspb.JobID
+			rSQLDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
+			jobutils.WaitForJobToPause(t, rSQLDB, downloadJobID)
+
+			// Verify data while download job is paused (data is linked, not yet downloaded).
+			verifyData(t, tc, "before-download")
+
+			// For latest restore, also verify via fingerprint comparison.
+			if tc.restoreTime == "" {
+				fpSrc, err := fingerprintutils.FingerprintDatabase(ctx, srcTC.Conns[0], "data", fingerprintutils.Stripped())
+				require.NoError(t, err)
+				fpDst, err := fingerprintutils.FingerprintDatabase(ctx, dstTC.Conns[0], "data", fingerprintutils.Stripped())
+				require.NoError(t, err)
+				require.NoError(t, fingerprintutils.CompareDatabaseFingerprints(fpSrc, fpDst))
+			}
+
+			// Clear the pause point and resume the download job.
+			rSQLDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+			rSQLDB.Exec(t, fmt.Sprintf("RESUME JOB %d", downloadJobID))
+			jobutils.WaitForJobToSucceed(t, rSQLDB, downloadJobID)
+
+			// Verify data after download job completes (data is now local).
+			verifyData(t, tc, "after-download")
+
+			// For latest restore, verify fingerprints again after download.
+			if tc.restoreTime == "" {
+				fpSrc, err := fingerprintutils.FingerprintDatabase(ctx, srcTC.Conns[0], "data", fingerprintutils.Stripped())
+				require.NoError(t, err)
+				fpDst, err := fingerprintutils.FingerprintDatabase(ctx, dstTC.Conns[0], "data", fingerprintutils.Stripped())
+				require.NoError(t, err)
+				require.NoError(t, fingerprintutils.CompareDatabaseFingerprints(fpSrc, fpDst))
+			}
+		})
+	}
+}
+
+// TestOnlineRestoreLinkingNonexistentFiles verifies that the link phase of
+// online restore is a metadata-only operation that does not interact with the
+// data file contents. It proves this by deleting the data SST files after
+// creating the backup, then running the link phase — which should succeed
+// because linking only records file references in the LSM without reading the
+// actual data files.
+//
+// The test creates incremental backups with data-tight SST bounds (by
+// disabling backup presplitting), so that incremental SSTs have bounds
+// strictly enclosed by the base SST. This geometry is required to exercise
+// Pebble's overlap checker.
+func TestOnlineRestoreLinkingNonexistentFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	const numAccounts = 1000
+
+	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	// Force each backup layer into a single wide SST by setting a large file
+	// size target. This ensures the base SST's bounds span the entire table,
+	// so incremental SSTs have bounds strictly enclosed by the base.
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.file_size = '128MB'")
+	// Disable presplit exports so that backup SSTs have data-tight bounds
+	// rather than range-aligned bounds. With range-aligned bounds, the base
+	// and incremental SSTs end up with the same boundaries and the enclosing
+	// case never triggers. With data-tight bounds, the base SST covers the
+	// full table while incremental SSTs cover narrow subsets, creating the
+	// enclosing geometry.
+	sqlDB.Exec(t, "SET CLUSTER SETTING bulkio.backup.presplit_request_spans.enabled = false")
+
+	backupURI := "nodelocal://1/backup"
+
+	// Full backup producing one SST covering the entire table key range.
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", backupURI))
+
+	// Each incremental updates a narrow band in the middle of the table,
+	// producing SSTs whose bounds are strictly enclosed by the base SST's
+	// wide bounds. When linked, Pebble's overlap checker sees the base file
+	// enclosing the incremental and opens it to probe for data overlap.
+	sqlDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_layer_limit = 25")
+	for i := 0; i < 20; i++ {
+		lo := 300 + i*20
+		hi := lo + 10
+		sqlDB.Exec(t, fmt.Sprintf("UPDATE data.bank SET balance = balance + 1 WHERE id >= %d AND id < %d", lo, hi))
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", backupURI))
+	}
+
+	// Delete the data SST files from the backup. The metadata SSTs
+	// (filelist.sst, descriptorslist.sst) are preserved so restore can read
+	// the manifest. When Pebble's overlap checker tries to open a previously-
+	// linked backing file during the link phase, the I/O will fail.
+	backupDir := filepath.Join(dir, "backup")
+	var deleted int
+	require.NoError(t, filepath.WalkDir(backupDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && filepath.Ext(path) == ".sst" && filepath.Base(filepath.Dir(path)) == "data" {
+			deleted++
+			return os.Remove(path)
+		}
+		return nil
+	}))
+	require.Greater(t, deleted, 0, "expected data SST files in backup")
+	sqlDB.Exec(t, "DROP DATABASE data CASCADE")
+	sqlDB.Exec(t, fmt.Sprintf(
+		"RESTORE DATABASE data FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", backupURI))
+}
+
+// TestOnlineRestoreWithDistFlow tests that online restore works correctly when
+// using the distributed restore flow (distRestore with RestoreDataProcessor)
+// instead of the simpler sendAddRemoteSSTs loop. This is enabled via the
+// backup.restore.online_use_dist_flow.enabled cluster setting.
+//
+// The test runs restores both with and without the dist flow enabled and
+// compares the results to ensure they are consistent, including the approx_rows
+// and approx_bytes reported in the restore result.
+func TestOnlineRestoreWithDistFlow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	ctx := context.Background()
+
+	const numAccounts = 100
+
+	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	rtc, rSQLDB, cleanupFnRestored := backupRestoreTestSetupEmpty(t, 1, dir, InitManualReplication, base.TestClusterArgs{})
+	defer cleanupFnRestored()
+
+	testutils.RunTrueAndFalse(t, "incremental", func(t *testing.T, incremental bool) {
+		// Defer cleanup so we clean up even if the test fails.
+		defer rSQLDB.Exec(t, "DROP DATABASE IF EXISTS data CASCADE")
+
+		// Create the backup once per incremental setting. Use a subdir to
+		// separate full from incremental test runs.
+		backupSubdir := "full"
+		if incremental {
+			backupSubdir = "incr"
+		}
+		backupURI := fmt.Sprintf("nodelocal://1/backup-dist-flow/%s", backupSubdir)
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", backupURI))
+		if incremental {
+			sqlDB.Exec(t, "UPDATE data.bank SET balance = balance + 100 WHERE true")
+			sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO LATEST IN '%s'", backupURI))
+		}
+
+		// restoreResult holds the results of a restore operation.
+		type restoreResult struct {
+			approxRows  int64
+			approxBytes int64
+		}
+
+		// runRestore performs an online restore with the given dist flow setting
+		// and returns the result.
+		runRestore := func(t *testing.T, useDistFlow bool) restoreResult {
+			// Clean up before restore.
+			rSQLDB.Exec(t, "DROP DATABASE IF EXISTS data CASCADE")
+
+			// Set the dist flow setting.
+			rSQLDB.Exec(t, fmt.Sprintf(
+				"SET CLUSTER SETTING backup.restore.online_use_dist_flow.enabled = %t", useDistFlow))
+
+			// Create database and perform online restore.
+			rSQLDB.Exec(t, "CREATE DATABASE data")
+			rows := rSQLDB.Query(t, fmt.Sprintf(
+				"RESTORE TABLE data.bank FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY", backupURI))
+			defer rows.Close()
+
+			// Parse the restore result.
+			require.True(t, rows.Next(), "expected restore to return a row")
+			var jobID, tables, approxRows, approxBytes, downloadJobID int64
+			require.NoError(t, rows.Scan(&jobID, &tables, &approxRows, &approxBytes, &downloadJobID))
+			require.False(t, rows.Next(), "expected only one row from restore")
+
+			// Verify data is accessible.
+			var restoreRowCount int
+			rSQLDB.QueryRow(t, "SELECT count(*) FROM data.bank").Scan(&restoreRowCount)
+			require.Equal(t, numAccounts, restoreRowCount)
+
+			// Verify data integrity by comparing fingerprints.
+			fpSrc, err := fingerprintutils.FingerprintDatabase(ctx, tc.Conns[0], "data", fingerprintutils.Stripped())
+			require.NoError(t, err)
+			fpDst, err := fingerprintutils.FingerprintDatabase(ctx, rtc.Conns[0], "data", fingerprintutils.Stripped())
+			require.NoError(t, err)
+			require.NoError(t, fingerprintutils.CompareDatabaseFingerprints(fpSrc, fpDst))
+
+			// Wait for the download job to complete.
+			waitForLatestDownloadJobToSucceed(t, rSQLDB)
+
+			return restoreResult{approxRows: approxRows, approxBytes: approxBytes}
+		}
+
+		// Run restore with dist flow disabled (coordinator path).
+		coordResult := runRestore(t, false /* useDistFlow */)
+
+		// Run restore with dist flow enabled (distributed path).
+		distResult := runRestore(t, true /* useDistFlow */)
+
+		// Compare the results. Both paths should report the same approximate
+		// rows and bytes since they're restoring the same data.
+		require.Equal(t, coordResult.approxRows, distResult.approxRows,
+			"approx_rows mismatch between coordinator (%d) and dist flow (%d)",
+			coordResult.approxRows, distResult.approxRows)
+		require.Equal(t, coordResult.approxBytes, distResult.approxBytes,
+			"approx_bytes mismatch between coordinator (%d) and dist flow (%d)",
+			coordResult.approxBytes, distResult.approxBytes)
+
+		// Sanity check that we actually got non-zero values.
+		require.Greater(t, coordResult.approxRows, int64(0),
+			"expected non-zero approx_rows from coordinator path")
+		require.Greater(t, coordResult.approxBytes, int64(0),
+			"expected non-zero approx_bytes from coordinator path")
+	})
+}
+
+// TestOnlineRestoreCleanupDroppedDescs verifies that reverting an online
+// restore's download job succeeds even if the restored descriptors (table,
+// function, schema, type) have been dropped.
+func TestOnlineRestoreCleanupDroppedDescs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
+	defer cleanupFn()
+
+	trueExternalStorage := "nodelocal://1/backup"
+	externalStorage := backuptestutils.GetExternalStorageURI(t, trueExternalStorage, "backup", sqlDB)
+
+	sqlDB.Exec(t, "CREATE SCHEMA data.myschema")
+	sqlDB.Exec(t, "CREATE TYPE data.mytype AS ENUM ('a', 'b', 'c')")
+	sqlDB.Exec(t, "CREATE TABLE data.mytable (id INT PRIMARY KEY, val data.mytype)")
+	sqlDB.Exec(t, "INSERT INTO data.mytable VALUES (1, 'a'), (2, 'b')")
+	sqlDB.Exec(t, "CREATE FUNCTION data.myfunc() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$")
+
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", externalStorage))
+
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'")
+	var linkJobID int
+	sqlDB.QueryRow(t, fmt.Sprintf(
+		"RESTORE DATABASE data FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, new_db_name=restored, detached",
+		externalStorage,
+	)).Scan(&linkJobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, jobspb.JobID(linkJobID))
+
+	var downloadJobID int
+	sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
+	jobutils.WaitForJobToPause(t, sqlDB, jobspb.JobID(downloadJobID))
+	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+
+	sqlDB.Exec(t, "USE restored")
+	sqlDB.Exec(t, "DROP FUNCTION myfunc")
+	sqlDB.Exec(t, "DROP TABLE mytable")
+	sqlDB.Exec(t, "DROP TYPE mytype")
+	sqlDB.Exec(t, "DROP SCHEMA myschema")
+	sqlDB.Exec(t, "USE data")
+
+	sqlDB.Exec(t, fmt.Sprintf("CANCEL JOB %d", downloadJobID))
+	jobutils.WaitForJobToCancel(t, sqlDB, jobspb.JobID(downloadJobID))
 }

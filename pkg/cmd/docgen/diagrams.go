@@ -1130,7 +1130,7 @@ var specs = []stmtSpec{
 		name:   "explain_stmt",
 		inline: []string{"explain_option_list"},
 		replace: map[string]string{
-			"explain_option_name": "( 'VERBOSE' | 'TYPES' | 'OPT' | 'ENV' | 'MEMO' | 'REDACT' | 'DISTSQL' | 'VEC' )",
+			"explain_option_name": "( 'VERBOSE' | 'TYPES' | 'OPT' | 'ENV' | 'MEMO' | 'REDACT' | 'DISTSQL' | 'VEC' | 'FINGERPRINT' )",
 		},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'ANALYZE'"),
@@ -1595,6 +1595,11 @@ var specs = []stmtSpec{
 	{
 		name: "show_regions",
 		stmt: "show_regions_stmt",
+	},
+	{
+		name:   "show_statement_hints",
+		stmt:   "show_statement_hints_stmt",
+		inline: []string{"opt_with_show_hints_options", "show_hints_options_list", "show_hints_options"},
 	},
 	{
 		name:   "show_statements",

@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
 // fnOp is an operator that executes an arbitrary function for its side-effects,
@@ -23,10 +24,13 @@ type fnOp struct {
 
 var _ colexecop.ResettableOperator = &fnOp{}
 
-func (f *fnOp) Next() coldata.Batch {
-	batch := f.Input.Next()
+func (f *fnOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := f.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	f.fn()
-	return batch
+	return batch, nil
 }
 
 func (f *fnOp) Reset(ctx context.Context) {

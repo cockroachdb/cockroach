@@ -21,6 +21,39 @@ provided the `redactable` functionality is enabled on the logging sink.
 
 Events not documented on this page will have an unstructured format in log messages.
 
+## ASH events
+
+Events in this category pertain to Active Session History (ASH)
+sampling diagnostics.
+
+Events in this category are logged to the `OPS` channel.
+
+
+### `ash_workload_summary`
+
+An event of type `ash_workload_summary` is emitted periodically with a top-N summary of
+the most frequently sampled workloads in the Active Session History
+(ASH) buffer. One event is emitted per top-N entry.
+
+Reserved and subject to change without notice.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `WindowDurationMillis` | The duration of the reporting window in milliseconds. | no |
+| `WorkEventType` | The work event type (e.g. CPU, IO, LOCK). | no |
+| `WorkEvent` | The specific event name within the event type. | no |
+| `WorkloadID` | The workload identifier (ex/ statement fingerprint). | no |
+| `SampleCount` | The number of samples for this workload entry in the reporting window. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
 ## Changefeed telemetry events
 
 Events in this category pertain to changefeed usage and metrics.
@@ -454,6 +487,15 @@ are resolved.
 | `BlockingTxnFingerprintId` |  | no |
 | `ContendedKey` |  | partially |
 | `Duration` |  | no |
+| `TableId` | Decoded key information (populated when key decoding is available). | no |
+| `IndexId` |  | no |
+| `DatabaseName` |  | no |
+| `SchemaName` |  | no |
+| `TableName` |  | no |
+| `IndexName` |  | no |
+| `KeyColumnNames` | Decoded key column information. Arrays are parallel (same index = same column). Column names (schema metadata, safe). | no |
+| `KeyColumnTypes` | Column types (schema metadata, safe). | no |
+| `KeyColumnValues` | Column values (potentially sensitive user data). | yes |
 
 
 #### Common fields
@@ -681,6 +723,89 @@ preserved in each tenant's own system.eventlog table.
 Events in this category are logged to the `OPS` channel.
 
 
+### `delete_rewrite_inline_hints`
+
+An event of type `delete_rewrite_inline_hints` is recorded when a rewrite inline hint is
+deleted via information_schema.crdb_delete_statement_hints.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `StatementFingerprint` | The target statement fingerprint for which inline hints are being deleted. | no |
+| `HintID` | The hint ID of the to-delete statement hint. | no |
+| `DonorSql` | The donor sql of the deleted inline hint. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
+
+### `delete_session_variable_hint`
+
+An event of type `delete_session_variable_hint` is recorded when a session variable hint is
+deleted via information_schema.crdb_delete_statement_hints.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `StatementFingerprint` | The target statement fingerprint for which the session variable hint is being deleted. | no |
+| `HintID` | The hint ID of the deleted statement hint. | no |
+| `VariableName` | The name of the session variable that was overridden. | no |
+| `VariableValue` | The value of the session variable override. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
+
+### `rewrite_inline_hints`
+
+An event of type `rewrite_inline_hints` is recorded when a new inline-hints rewrite rule is added
+via information_schema.crdb_rewrite_inline_hints or crdb_internal.inject_hint.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `StatementFingerprint` | The target statement fingerprint for which inline hints are being rewritten. | no |
+| `DonorSQL` | The donor statement providing the inline hints. | no |
+| `HintID` | The hint ID of the newly created statement hint. | no |
+| `Database` | The database to which the hint is scoped, if any. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
+
 ### `set_cluster_setting`
 
 An event of type `set_cluster_setting` is recorded when a cluster setting is changed.
@@ -691,6 +816,35 @@ An event of type `set_cluster_setting` is recorded when a cluster setting is cha
 | `SettingName` | The name of the affected cluster setting. | no |
 | `Value` | The new value of the cluster setting. | yes |
 | `DefaultValue` | The current default value of the cluster setting. | yes |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+| `Statement` | A normalized copy of the SQL statement that triggered the event. The statement string contains a mix of sensitive and non-sensitive details (it is redactable). | partially |
+| `Tag` | The statement tag. This is separate from the statement string, since the statement string can contain sensitive information. The tag is guaranteed not to. | no |
+| `User` | The user account that triggered the event. The special usernames `root` and `node` are not considered sensitive. | depends |
+| `DescriptorID` | The primary object descriptor affected by the operation. Set to zero for operations that don't affect descriptors. | no |
+| `ApplicationName` | The application name for the session where the event was emitted. This is included in the event to ease filtering of logging output by application. | no |
+| `PlaceholderValues` | The mapping of SQL placeholders to their values, for prepared statements. | yes |
+| `TxnReadTimestamp` | The current read timestamp of the transaction that triggered the event, if in a transaction. | no |
+
+### `set_session_variable_hint`
+
+An event of type `set_session_variable_hint` is recorded when a new session variable hint is
+added via information_schema.crdb_set_session_variable_hint.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `StatementFingerprint` | The target statement fingerprint for which the session variable is being overridden. | no |
+| `VariableName` | The name of the session variable being overridden. | no |
+| `VariableValue` | The value of the session variable override. | yes |
+| `HintID` | The hint ID of the newly created statement hint. | no |
+| `Database` | The database to which the hint is scoped, if any. | no |
 
 
 #### Common fields
@@ -2728,11 +2882,11 @@ Events of this type are only emitted when the cluster setting
 | `EventType` | The type of the event. | no |
 | `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
 | `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
-| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | partially |
 | `SessionID` | The connection's hex encoded session id. | no |
 | `Transport` | The connection type after transport negotiation. | no |
-| `User` | The database username the session is for. This username will have undergone case-folding and Unicode normalization. | yes |
-| `SystemIdentity` | The original system identity provided by the client, if an identity mapping was used per Host-Based Authentication rules. This may be a GSSAPI or X.509 principal or any other external value, so no specific assumptions should be made about the contents of this field. | yes |
+| `User` | The database username the session is for. This username will have undergone case-folding and Unicode normalization. | partially |
+| `SystemIdentity` | The original system identity provided by the client, if an identity mapping was used per Host-Based Authentication rules. This may be a GSSAPI or X.509 principal or any other external value, so no specific assumptions should be made about the contents of this field. | partially |
 
 ### `client_authentication_info`
 
@@ -2757,11 +2911,11 @@ Events of this type are only emitted when the cluster setting
 | `EventType` | The type of the event. | no |
 | `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
 | `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
-| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | partially |
 | `SessionID` | The connection's hex encoded session id. | no |
 | `Transport` | The connection type after transport negotiation. | no |
-| `User` | The database username the session is for. This username will have undergone case-folding and Unicode normalization. | yes |
-| `SystemIdentity` | The original system identity provided by the client, if an identity mapping was used per Host-Based Authentication rules. This may be a GSSAPI or X.509 principal or any other external value, so no specific assumptions should be made about the contents of this field. | yes |
+| `User` | The database username the session is for. This username will have undergone case-folding and Unicode normalization. | partially |
+| `SystemIdentity` | The original system identity provided by the client, if an identity mapping was used per Host-Based Authentication rules. This may be a GSSAPI or X.509 principal or any other external value, so no specific assumptions should be made about the contents of this field. | partially |
 
 ### `client_authentication_ok`
 
@@ -2785,11 +2939,11 @@ Events of this type are only emitted when the cluster setting
 | `EventType` | The type of the event. | no |
 | `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
 | `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
-| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | partially |
 | `SessionID` | The connection's hex encoded session id. | no |
 | `Transport` | The connection type after transport negotiation. | no |
-| `User` | The database username the session is for. This username will have undergone case-folding and Unicode normalization. | yes |
-| `SystemIdentity` | The original system identity provided by the client, if an identity mapping was used per Host-Based Authentication rules. This may be a GSSAPI or X.509 principal or any other external value, so no specific assumptions should be made about the contents of this field. | yes |
+| `User` | The database username the session is for. This username will have undergone case-folding and Unicode normalization. | partially |
+| `SystemIdentity` | The original system identity provided by the client, if an identity mapping was used per Host-Based Authentication rules. This may be a GSSAPI or X.509 principal or any other external value, so no specific assumptions should be made about the contents of this field. | partially |
 
 ### `client_connection_end`
 
@@ -2814,7 +2968,7 @@ Events of this type are only emitted when the cluster setting
 | `EventType` | The type of the event. | no |
 | `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
 | `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
-| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | partially |
 | `SessionID` | The connection's hex encoded session id. | no |
 
 ### `client_connection_start`
@@ -2837,7 +2991,7 @@ Events of this type are only emitted when the cluster setting
 | `EventType` | The type of the event. | no |
 | `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
 | `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
-| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | partially |
 | `SessionID` | The connection's hex encoded session id. | no |
 
 ### `client_session_end`
@@ -2862,11 +3016,11 @@ Events of this type are only emitted when the cluster setting
 | `EventType` | The type of the event. | no |
 | `InstanceID` | The instance ID (not tenant ID) of the SQL server where the event was originated. | no |
 | `Network` | The network protocol for this connection: tcp4, tcp6, unix, etc. | no |
-| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | yes |
+| `RemoteAddress` | The remote address of the SQL client. Note that when using a proxy or other intermediate server, this field will contain the address of the intermediate server. | partially |
 | `SessionID` | The connection's hex encoded session id. | no |
 | `Transport` | The connection type after transport negotiation. | no |
-| `User` | The database username the session is for. This username will have undergone case-folding and Unicode normalization. | yes |
-| `SystemIdentity` | The original system identity provided by the client, if an identity mapping was used per Host-Based Authentication rules. This may be a GSSAPI or X.509 principal or any other external value, so no specific assumptions should be made about the contents of this field. | yes |
+| `User` | The database username the session is for. This username will have undergone case-folding and Unicode normalization. | partially |
+| `SystemIdentity` | The original system identity provided by the client, if an identity mapping was used per Host-Based Authentication rules. This may be a GSSAPI or X.509 principal or any other external value, so no specific assumptions should be made about the contents of this field. | partially |
 
 ## SQL Slow Query Log
 
@@ -3342,6 +3496,7 @@ Fields in this struct should be updated in sync with apps_stats.proto.
 | `MaxDiskUsage` | MaxDiskUsage collects the maximum temporary disk usage that occurred. This is set in cases where a query had to spill to disk, e.g. when performing a large sort where not all of the tuples fit in memory. | no |
 | `CPUSQLNanos` | CPUSQLNanos collects the CPU time spent executing SQL operations in nanoseconds. Currently, it is only collected for statements without mutations that have a vectorized plan. | no |
 | `MVCCIteratorStats` | Internal storage iteration statistics. | yes |
+| `AdmissionWaitTime` | AdmissionWaitTime is the cumulative time spent in admission control queues. | no |
 
 
 
@@ -3583,6 +3738,37 @@ Note that because stats are scoped to the lifetime of the process, counters
 | `TableZombieCount` | table_zombie_count is the number of tables no longer referenced by the current DB state, but are still in use by an open iterator (gauge). | no |
 | `TableZombieSize` | table_zombie_size is the size, in bytes, of zombie tables (gauge). | no |
 | `RangeKeySetsCount` | range_key_sets_count is the approximate count of internal range key sets in the store. | no |
+
+
+#### Common fields
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `Timestamp` | The timestamp of the event. Expressed as nanoseconds since the Unix epoch. | no |
+| `EventType` | The type of the event. | no |
+
+## TELEMETRY
+
+Events in this file are related to bulk ingest operations performance metrics.
+
+Events in this category are logged to the `TELEMETRY` channel.
+
+
+### `bulk_ingest_completed`
+
+An event of type `bulk_ingest_completed` is an event that is logged when a bulk ingest job
+(restore, import, etc.) completes successfully.
+It captures key performance metrics for the operation.
+
+
+| Field | Description | Sensitive |
+|--|--|--|
+| `JobID` | JobID is the ID of the bulk ingest job. | no |
+| `JobType` | JobType identifies the type of bulk ingest job (e.g., "restore", "import"). | no |
+| `NumRows` | NumRows is the number of rows successfully ingested. | no |
+| `DurationSeconds` | Duration of the ingest operation in seconds. | no |
+| `DataSizeMb` | Total logical size of data ingested in megabytes. | no |
+| `NodeCount` | Number of nodes that participated in the ingest operation. | no |
 
 
 #### Common fields

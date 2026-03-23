@@ -144,13 +144,13 @@ func MakeExecutorMetrics(name string) ExecutorMetrics {
 	}
 
 	if name == tree.ScheduledBackupExecutor.UserName() {
-		m.NumFailed.Essential = true
+		m.NumFailed.Visibility = metric.Metadata_ESSENTIAL
 		m.NumFailed.Category = metric.Metadata_SQL
 		m.NumFailed.HowToUse = `Monitor this metric and investigate backup job failures.`
 	}
 
 	if name == tree.ScheduledRowLevelTTLExecutor.InternalName() {
-		m.NumFailed.Essential = true
+		m.NumFailed.Visibility = metric.Metadata_ESSENTIAL
 		m.NumFailed.Category = metric.Metadata_TTL
 		m.NumFailed.HowToUse = `Monitor this metric to ensure the Row Level TTL job is running. If it is non-zero, it means the job could not be created.`
 	}

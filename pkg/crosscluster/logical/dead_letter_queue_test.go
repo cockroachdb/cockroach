@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -397,17 +398,17 @@ func TestDLQAllowList(t *testing.T) {
 	}
 
 	require.ErrorContains(t,
-		canDlqError(errors.New("some unknown error")),
+		sqlwriter.CanDLQError(errors.New("some unknown error")),
 		"can only DLQ errors with pg codes")
 
 	require.ErrorContains(t,
-		canDlqError(pgErr(pgcode.StatementCompletionUnknown)),
+		sqlwriter.CanDLQError(pgErr(pgcode.StatementCompletionUnknown)),
 		"unable to DLQ pgcode that indicates an internal or retryable error")
 	require.ErrorContains(t,
-		canDlqError(pgErr(pgcode.SerializationFailure)),
+		sqlwriter.CanDLQError(pgErr(pgcode.SerializationFailure)),
 		"unable to DLQ pgcode that indicates an internal or retryable error")
 
-	require.NoError(t, canDlqError(pgErr(pgcode.CheckViolation)))
+	require.NoError(t, sqlwriter.CanDLQError(pgErr(pgcode.CheckViolation)))
 }
 
 func TestDLQJSONQuery(t *testing.T) {
@@ -442,7 +443,7 @@ func TestDLQJSONQuery(t *testing.T) {
 		FamilyName: "primary",
 	})
 
-	decoder, err := cdcevent.NewEventDecoder(ctx, &execCfg, targets, false, false)
+	decoder, err := cdcevent.NewEventDecoder(ctx, &execCfg, targets, false, false, cdcevent.DecoderOptions{})
 	require.NoError(t, err)
 
 	popRow, cleanup := cdctest.MakeRangeFeedValueReader(t, srv.ExecutorConfig(), tableDesc)
@@ -464,10 +465,11 @@ func TestDLQJSONQuery(t *testing.T) {
 	row := popRow(t)
 
 	kv := roachpb.KeyValue{Key: row.Key, Value: row.Value}
-	updatedRow, err := decoder.DecodeKV(
+	updatedRow, status, err := decoder.DecodeKV(
 		ctx, kv, cdcevent.CurrentRow, row.Timestamp(), false)
 
 	require.NoError(t, err)
+	require.Equal(t, cdcevent.DecodeOK, status)
 	require.NoError(t, dlqClient.Log(ctx, 1, streampb.StreamEvent_KV{KeyValue: kv}, updatedRow, errInjected, noSpace))
 
 	dlqtableName := tableName.toDLQTableName()

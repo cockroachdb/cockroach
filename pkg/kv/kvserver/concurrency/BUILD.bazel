@@ -28,6 +28,8 @@ go_library(
         "//pkg/kv/kvserver/spanlatch",
         "//pkg/kv/kvserver/spanset",
         "//pkg/kv/kvserver/txnwait",
+        "//pkg/obs/ash",
+        "//pkg/obs/workloadid",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -60,6 +62,7 @@ go_test(
         "datadriven_util_test.go",
         "lock_table_test.go",
         "lock_table_waiter_test.go",
+        "request_test.go",
         ":keylocks_interval_btree_test.go",  # keep
     ],
     data = glob(["testdata/**"]),

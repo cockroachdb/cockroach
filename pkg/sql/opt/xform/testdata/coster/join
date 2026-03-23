@@ -929,7 +929,7 @@ insert c
                 ├── key columns: [7] = [8]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 2]
-                ├── stats: [rows=1e-10]
+                ├── stats: [rows=1]
                 ├── cost: 16.08
                 ├── with-scan &1
                 │    ├── columns: p:7!null
@@ -969,7 +969,7 @@ insert c
                 ├── key columns: [7] = [8]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 2]
-                ├── stats: [rows=1e-10]
+                ├── stats: [rows=1]
                 ├── cost: 4.02001206
                 ├── with-scan &1
                 │    ├── columns: p:7!null
@@ -1021,7 +1021,7 @@ insert c
                 ├── key columns: [7] = [8]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 1]
-                ├── stats: [rows=1e-10]
+                ├── stats: [rows=1]
                 ├── cost: 10.05
                 ├── key: ()
                 ├── fd: ()-->(7)

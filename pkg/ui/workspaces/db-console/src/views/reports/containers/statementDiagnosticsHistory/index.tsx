@@ -37,7 +37,7 @@ import { statementDiagnostics } from "src/util/docs";
 import { summarize } from "src/util/sql/summarize";
 import { trustIcon } from "src/util/trust";
 
-import "./statementDiagnosticsHistoryView.styl";
+import "./statementDiagnosticsHistoryView.scss";
 
 import DownloadIcon from "!!raw-loader!assets/download.svg";
 import EmptyTableIcon from "!!url-loader!assets/emptyState/empty-table-results.svg";
@@ -84,7 +84,8 @@ interface StatementDiagnosticsHistoryViewProps {
   ) => Promise<void>;
 }
 
-class StatementDiagnosticsHistoryTable extends SortedTable<clusterUiApi.StatementDiagnosticsReport> {}
+const StatementDiagnosticsHistoryTable =
+  SortedTable<clusterUiApi.StatementDiagnosticsReport>;
 
 const StatementColumn: React.FC<{ fingerprint: string }> = ({
   fingerprint,
@@ -144,16 +145,14 @@ export const StatementDiagnosticsHistoryView: React.FC<
       cell: record => {
         const fingerprint = record.statement_fingerprint;
         const statement = getStatementByFingerprint(fingerprint);
-        const { implicit_txn: implicitTxn = "true", query } =
-          statement?.key?.key_data || {};
+        const { query } = statement?.key?.key_data || {};
 
         if (isUndefined(query)) {
           return <StatementColumn fingerprint={fingerprint} />;
         }
 
-        const base = `/statement/${implicitTxn}`;
         const statementFingerprintID = statement.id.toString();
-        const path = `${base}/${encodeURIComponent(statementFingerprintID)}`;
+        const path = `/statement/${encodeURIComponent(statementFingerprintID)}`;
 
         return (
           <Link

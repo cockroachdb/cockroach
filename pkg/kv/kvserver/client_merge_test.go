@@ -156,6 +156,12 @@ func TestStoreRangeMergeTwoEmptyRanges(t *testing.T) {
 	}
 }
 
+func getEnginesKeySet(t *testing.T, e kvstorage.Engines) map[string]struct{} {
+	t.Helper()
+	require.False(t, e.Separated(), "not supported in this test")
+	return getEngineKeySet(t, e.Engine())
+}
+
 func getEngineKeySet(t *testing.T, e storage.Engine) map[string]struct{} {
 	t.Helper()
 	// Have to scan local and global keys separately as mentioned in the comment
@@ -183,10 +189,9 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-		})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
 	defer tc.Stopper().Stop(context.Background())
 	tc.ScratchRange(t)
 	store := tc.GetFirstStoreFromServer(t, 0)
@@ -194,36 +199,30 @@ func TestStoreRangeMergeMetadataCleanup(t *testing.T) {
 	content := scratchKey("testing!")
 
 	// Write some values left of the proposed split key.
-	pArgs := putArgs(scratchKey("aaa"), content)
-	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), pArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
+	_, pErr := kv.SendWrapped(ctx, store.TestSender(),
+		putArgs(scratchKey("aaa"), content))
+	require.NoError(t, pErr.GoError())
 
 	// Collect all the keys.
-	preKeys := getEngineKeySet(t, store.TODOEngine())
+	preKeys := getEnginesKeySet(t, store.Engines())
 
 	// Split the range.
 	lhsDesc, rhsDesc, err := createSplitRanges(ctx, scratchKey(""), store)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Write some values right of the split key.
-	pArgs = putArgs(scratchKey("ccc"), content)
-	if _, pErr := kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{
+	_, pErr = kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{
 		RangeID: rhsDesc.RangeID,
-	}, pArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
+	}, putArgs(scratchKey("ccc"), content))
+	require.NoError(t, pErr.GoError())
 
 	// Merge the b range back into the a range.
-	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	if _, pErr := kv.SendWrapped(ctx, store.TestSender(), args); pErr != nil {
-		t.Fatal(pErr)
-	}
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(),
+		adminMergeArgs(lhsDesc.StartKey.AsRawKey()))
+	require.NoError(t, pErr.GoError())
 
 	// Collect all the keys again.
-	postKeys := getEngineKeySet(t, store.TODOEngine())
+	postKeys := getEnginesKeySet(t, store.Engines())
 
 	// Compute the new keys.
 	for k := range preKeys {
@@ -360,7 +359,7 @@ func mergeWithData(t *testing.T, retries int64) {
 	// Verify no intents remains on range descriptor keys.
 	for _, key := range []roachpb.Key{keys.RangeDescriptorKey(lhsDesc.StartKey), keys.RangeDescriptorKey(rhsDesc.StartKey)} {
 		if _, err := storage.MVCCGet(
-			ctx, store.TODOEngine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
+			ctx, store.StateEngine(), key, store.Clock().Now(), storage.MVCCGetOptions{},
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -393,7 +392,7 @@ func mergeWithData(t *testing.T, retries int64) {
 	verify(rhsDesc.StartKey.Next().AsRawKey(), rhsRepl.RangeID, newContent)
 
 	gArgs := getArgs(lhsDesc.StartKey.Next().AsRawKey())
-	if _, pErr := kv.SendWrappedWith(ctx, store, kvpb.Header{
+	if _, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store), kvpb.Header{
 		RangeID: rhsDesc.RangeID,
 	}, gArgs); !testutils.IsPError(
 		pErr, `was not found on s`,
@@ -561,7 +560,7 @@ func mergeCheckingTimestampCaches(
 
 	// Write a key to the RHS.
 	rhsKey := scratchKey("c")
-	if _, pErr := kv.SendWrappedWith(ctx, rhsStore, kvpb.Header{
+	if _, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(rhsStore), kvpb.Header{
 		RangeID: rhsDesc.RangeID,
 	}, incrementArgs(rhsKey, 1)); pErr != nil {
 		t.Fatal(pErr)
@@ -577,7 +576,7 @@ func mergeCheckingTimestampCaches(
 	ba.Timestamp = readTS
 	ba.RangeID = rhsDesc.RangeID
 	ba.Add(getArgs(rhsKey))
-	if br, pErr := rhsStore.Send(ctx, ba); pErr != nil {
+	if br, pErr := kvserver.ToSenderForTesting(rhsStore).Send(ctx, ba); pErr != nil {
 		t.Fatal(pErr)
 	} else if v, err := br.Responses[0].GetGet().Value.GetInt(); err != nil {
 		t.Fatal(err)
@@ -596,7 +595,7 @@ func mergeCheckingTimestampCaches(
 	ba.Timestamp = readTS.Next()
 	ba.RangeID = rhsDesc.RangeID
 	ba.Add(pushTxnArgs(&pusher, &pushee, kvpb.PUSH_ABORT))
-	if br, pErr := rhsStore.Send(ctx, ba); pErr != nil {
+	if br, pErr := kvserver.ToSenderForTesting(rhsStore).Send(ctx, ba); pErr != nil {
 		t.Fatal(pErr)
 	} else if txn := br.Responses[0].GetPushTxn().PusheeTxn; txn.Status != roachpb.ABORTED {
 		t.Fatalf("expected aborted pushee, but got %v", txn)
@@ -647,29 +646,29 @@ func mergeCheckingTimestampCaches(
 		}
 
 		// Applied to the leaseholder's raft transport during the partition.
-		partitionedLeaseholderFuncs := noopRaftHandlerFuncs()
-		partitionedLeaseholderFuncs.dropReq = func(*kvserverpb.RaftMessageRequest) bool {
+		partitionedLeaseholderFuncs := kvtestutils.NoopRaftHandlerFuncs()
+		partitionedLeaseholderFuncs.DropReq = func(*kvserverpb.RaftMessageRequest) bool {
 			// Ignore everything from new leader.
 			return true
 		}
 
 		// Applied to the leader and other follower's raft transport during the
 		// partition.
-		partitionedLeaderFuncs := noopRaftHandlerFuncs()
-		partitionedLeaderFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
+		partitionedLeaderFuncs := kvtestutils.NoopRaftHandlerFuncs()
+		partitionedLeaderFuncs.DropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 			// Ignore everything from leaseholder, except forwarded proposals.
 			return req.FromReplica.StoreID == lhsStore.StoreID() &&
 				req.Message.Type != raftpb.MsgProp
 		}
-		partitionedLeaderFuncs.dropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
+		partitionedLeaderFuncs.DropHB = func(hb *kvserverpb.RaftHeartbeat) bool {
 			// Ignore heartbeats from leaseholder, results in campaign.
 			return hb.FromReplicaID == roachpb.ReplicaID(lhsRepls[0].RaftStatus().ID)
 		}
 
 		// Applied to leaseholder after the partition heals.
 		var truncIndex kvpb.RaftIndex
-		restoredLeaseholderFuncs := noopRaftHandlerFuncs()
-		restoredLeaseholderFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
+		restoredLeaseholderFuncs := kvtestutils.NoopRaftHandlerFuncs()
+		restoredLeaseholderFuncs.DropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 			// Make sure that even going forward no MsgApp for what we just
 			// truncated can make it through. The Raft transport is asynchronous
 			// so this is necessary to make the test pass reliably - otherwise
@@ -695,16 +694,16 @@ func mergeCheckingTimestampCaches(
 		filterMu.mergeCommitFilter = func() {
 			// Install leader-leaseholder partition.
 			for i, s := range lhsStores {
-				var funcs unreliableRaftHandlerFuncs
+				var funcs kvtestutils.UnreliableRaftHandlerFuncs
 				if i == 0 {
 					funcs = partitionedLeaseholderFuncs
 				} else {
 					funcs = partitionedLeaderFuncs
 				}
-				tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(s.StoreID(), &unreliableRaftHandler{
-					rangeID:                    lhsDesc.GetRangeID(),
+				tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(s.StoreID(), &kvtestutils.UnreliableRaftHandler{
+					RangeID:                    lhsDesc.GetRangeID(),
 					IncomingRaftMessageHandler: s,
-					unreliableRaftHandlerFuncs: funcs,
+					UnreliableRaftHandlerFuncs: funcs,
 				})
 			}
 
@@ -719,7 +718,7 @@ func mergeCheckingTimestampCaches(
 			// be the only replica that does not apply the proposal.
 			go func() {
 				incArgs := incrementArgs(lhsKey, 4)
-				_, pErr := kv.SendWrappedWith(ctx, lhsStore, kvpb.Header{RangeID: lhsDesc.RangeID}, incArgs)
+				_, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(lhsStore), kvpb.Header{RangeID: lhsDesc.RangeID}, incArgs)
 				incChan <- pErr
 			}()
 			// NB: the operation won't complete, so peek below Raft and wait for
@@ -749,16 +748,16 @@ func mergeCheckingTimestampCaches(
 			go func() {
 				truncArgs := truncateLogArgs(truncIndex, lhsDesc.RangeID)
 				truncArgs.Key = lhsKey
-				_, pErr := kv.SendWrappedWith(ctx, lhsStore, kvpb.Header{RangeID: lhsDesc.RangeID}, truncArgs)
+				_, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(lhsStore), kvpb.Header{RangeID: lhsDesc.RangeID}, truncArgs)
 				truncChan <- pErr
 			}()
 			// NB: the operation won't complete, so peek below Raft and wait for
 			// the result to apply on the majority quorum.
 			testutils.SucceedsSoon(t, func() error {
 				for _, r := range lhsRepls[1:] {
-					// Loosely-coupled truncation requires an engine flush to advance
-					// guaranteed durability.
-					require.NoError(t, r.Store().TODOEngine().Flush())
+					// Loosely-coupled truncation requires the state engine flush to
+					// advance guaranteed durability.
+					require.NoError(t, r.Store().StateEngine().Flush())
 					if firstIndex := r.GetCompactedIndex() + 1; firstIndex < truncIndex {
 						return errors.Errorf("truncate not applied, %d < %d", firstIndex, truncIndex)
 					}
@@ -804,10 +803,10 @@ func mergeCheckingTimestampCaches(
 		for i, s := range lhsStores {
 			var h kvserver.IncomingRaftMessageHandler
 			if i == 0 {
-				h = &unreliableRaftHandler{
-					rangeID:                    lhsDesc.GetRangeID(),
+				h = &kvtestutils.UnreliableRaftHandler{
+					RangeID:                    lhsDesc.GetRangeID(),
 					IncomingRaftMessageHandler: s,
-					unreliableRaftHandlerFuncs: restoredLeaseholderFuncs,
+					UnreliableRaftHandlerFuncs: restoredLeaseholderFuncs,
 				}
 			} else {
 				h = s
@@ -858,7 +857,7 @@ func mergeCheckingTimestampCaches(
 	ba.Timestamp = readTS
 	ba.RangeID = lhsDesc.RangeID
 	ba.Add(incrementArgs(rhsKey, 1))
-	if br, pErr := lhsStore.Send(ctx, ba); pErr != nil {
+	if br, pErr := kvserver.ToSenderForTesting(lhsStore).Send(ctx, ba); pErr != nil {
 		t.Fatal(pErr)
 	} else if br.Timestamp.LessEq(readTS) {
 		t.Fatalf("expected write to execute after %v, but executed at %v", readTS, br.Timestamp)
@@ -883,7 +882,7 @@ func mergeCheckingTimestampCaches(
 	} else {
 		expReason = kvpb.ABORT_REASON_ABORTED_RECORD_FOUND
 	}
-	if _, pErr := lhsStore.Send(ctx, ba); pErr == nil {
+	if _, pErr := kvserver.ToSenderForTesting(lhsStore).Send(ctx, ba); pErr == nil {
 		t.Fatalf("expected TransactionAbortedError(%s) but got %v", expReason, pErr)
 	} else if abortErr, ok := pErr.GetDetail().(*kvpb.TransactionAbortedError); !ok {
 		t.Fatalf("expected TransactionAbortedError(%s) but got %v", expReason, pErr)
@@ -945,7 +944,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 				gba.Timestamp = ba.Timestamp.Add(42 /* wallTime */, 0 /* logical */)
 				gba.Add(getArgs(rhsKey))
 				store := tc.GetFirstStoreFromServer(t, int(ba.Header.Replica.NodeID-1))
-				gbr, pErr := store.Send(ctx, gba)
+				gbr, pErr := kvserver.ToSenderForTesting(store).Send(ctx, gba)
 				if pErr != nil {
 					t.Error(pErr) // different goroutine, so can't use t.Fatal
 					return pErr
@@ -1011,7 +1010,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 		// Merge [a, b) and [b, Max). Our request filter above will intercept the
 		// merge and execute a read with a large timestamp immediately before the
 		// Subsume request executes.
-		if _, pErr := kv.SendWrappedWith(ctx, tc.GetFirstStoreFromServer(t, 2), kvpb.Header{
+		if _, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(tc.GetFirstStoreFromServer(t, 2)), kvpb.Header{
 			RangeID: lhsRangeDesc.RangeID,
 		}, adminMergeArgs(scratchKey("a"))); pErr != nil {
 			t.Fatal(pErr)
@@ -1044,7 +1043,7 @@ func TestStoreRangeMergeTimestampCacheCausality(t *testing.T) {
 		ba.Timestamp = readTS
 		ba.RangeID = lhsRangeDesc.RangeID
 		ba.Add(incrementArgs(rhsKey, 1))
-		if br, pErr := tc.GetFirstStoreFromServer(t, 1).Send(ctx, ba); pErr != nil {
+		if br, pErr := kvserver.ToSenderForTesting(tc.GetFirstStoreFromServer(t, 1)).Send(ctx, ba); pErr != nil {
 			t.Fatal(pErr)
 		} else if br.Timestamp.LessEq(readTS) {
 			t.Fatalf("expected write to execute after %v, but executed at %v", readTS, br.Timestamp)
@@ -1365,7 +1364,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// merge below.
 
 	// Get the range stats for both ranges now that we have data.
-	snap := store.TODOEngine().NewSnapshot()
+	snap := store.StateEngine().NewSnapshot()
 	defer snap.Close()
 	msA, err := kvstorage.MakeStateLoader(lhsDesc.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
@@ -1373,8 +1372,8 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	require.NoError(t, err)
 
 	// Stats should agree with recomputation.
-	assertRecomputedStats(t, "range A before split", snap, lhsDesc, msA, store.Clock().PhysicalNow())
-	assertRecomputedStats(t, "range B before split", snap, rhsDesc, msB, store.Clock().PhysicalNow())
+	assertRecomputedStatsExceptSys(t, "range A before split", snap, lhsDesc, msA, store.Clock().PhysicalNow())
+	assertRecomputedStatsExceptSys(t, "range B before split", snap, rhsDesc, msB, store.Clock().PhysicalNow())
 
 	// Merge the b range back into the a range.
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
@@ -1383,7 +1382,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	replMerged := store.LookupReplica(lhsDesc.StartKey)
 
 	// Get the range stats for the merged range and verify.
-	snap = store.TODOEngine().NewSnapshot()
+	snap = store.StateEngine().NewSnapshot()
 	defer snap.Close()
 	msMerged, err := kvstorage.MakeStateLoader(replMerged.RangeID).LoadMVCCStats(ctx, snap)
 	require.NoError(t, err)
@@ -1391,7 +1390,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 	// Merged stats should agree with recomputation.
 	nowNanos := tc.Servers[0].Clock().Now().WallTime
 	msMerged.AgeTo(nowNanos)
-	assertRecomputedStats(t, "merged range", snap, replMerged.Desc(), msMerged, nowNanos)
+	assertRecomputedStatsExceptSys(t, "merged range", snap, replMerged.Desc(), msMerged, nowNanos)
 }
 
 func TestStoreRangeMergeInFlightTxns(t *testing.T) {
@@ -2692,9 +2691,10 @@ func TestStoreRangeMergeSlowUnabandonedFollower_NoSplit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store2.ManualReplicaGC(rhsRepl2); err != nil {
-		t.Fatal(err)
-	}
+	// The left neighbor hasn't caught up with meta yet, so the replica GC
+	// correctly refuses to remove the RHS.
+	err = store2.ManualReplicaGC(rhsRepl2)
+	require.True(t, kvserver.IsReplicaGCDelayedDueToLeftNeighborError(err), "expected replicaGCDelayedDueToLeftNeighborError, got: %+v", err)
 	if _, err := store2.GetReplica(rhsDesc.RangeID); err != nil {
 		t.Fatalf("non-abandoned rhs replica unexpectedly GC'd before merge")
 	}
@@ -2734,11 +2734,11 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 
 	// Start dropping all Raft traffic to the LHS on store2 so that it won't be
 	// aware that there is a merge in progress.
-	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:                    lhsDesc.RangeID,
+	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
+		RangeID:                    lhsDesc.RangeID,
 		IncomingRaftMessageHandler: store2,
-		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-			dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+		UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+			DropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 				return true
 			},
 		},
@@ -2765,8 +2765,11 @@ func TestStoreRangeMergeSlowUnabandonedFollower_WithSplit(t *testing.T) {
 	// Transfer the lease on the new RHS to store2 and wait for it to apply. This
 	// will force its replica of the new RHS to become up to date, which
 	// indirectly tests that the replica GC queue cleans up both the LHS replica
-	// and the old RHS replica.
-	tc.TransferRangeLeaseOrFatal(t, *newRHSDesc, tc.Target(2))
+	// and the old RHS replica. The replica may still be in StateSnapshot, so we
+	// retry the lease transfer until it succeeds.
+	testutils.SucceedsSoon(t, func() error {
+		return tc.TransferRangeLease(*newRHSDesc, tc.Target(2))
+	})
 	testutils.SucceedsSoon(t, func() error {
 		rhsRepl, err := store2.GetReplica(newRHSDesc.RangeID)
 		if err != nil {
@@ -2838,8 +2841,12 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 	// the merge. This is a particularly tricky case for the replica GC queue, as
 	// meta2 will indicate that the range has been merged away AND that store2 is
 	// not a member of the new range.
-	if err := store2.ManualReplicaGC(rhsRepl2); err != nil {
-		t.Fatal(err)
+	//
+	// The left neighbor hasn't caught up with meta yet, so the replica GC
+	// correctly refuses to remove the RHS.
+	{
+		err := store2.ManualReplicaGC(rhsRepl2)
+		require.True(t, kvserver.IsReplicaGCDelayedDueToLeftNeighborError(err), "expected replicaGCDelayedDueToLeftNeighborError, got: %+v", err)
 	}
 	if _, err := store2.GetReplica(rhsDesc.RangeID); err != nil {
 		t.Fatal("rhs replica on store2 destroyed before lhs applied merge")
@@ -2856,12 +2863,18 @@ func TestStoreRangeMergeSlowAbandonedFollower(t *testing.T) {
 		// Make the LHS gets destroyed.
 		if lhsRepl, err := store2.GetReplica(lhsDesc.RangeID); err == nil {
 			if err := store2.ManualReplicaGC(lhsRepl); err != nil {
-				t.Fatal(err)
+				if !kvserver.IsReplicaGCDelayedDueToLeftNeighborError(err) {
+					t.Fatal(err)
+				}
+				return err // retry
 			}
 		}
 		if rhsRepl, err := store2.GetReplica(rhsDesc.RangeID); err == nil {
 			if err := store2.ManualReplicaGC(rhsRepl); err != nil {
-				t.Fatal(err)
+				if !kvserver.IsReplicaGCDelayedDueToLeftNeighborError(err) {
+					t.Fatal(err)
+				}
+				return err // retry
 			}
 			return errors.New("rhs not yet destroyed")
 		}
@@ -2929,42 +2942,38 @@ func TestStoreRangeMergeAbandonedFollowers(t *testing.T) {
 	}
 
 	// Verify that the abandoned ranges on store2 can only be GC'd from left to
-	// right.
-	if err := store2.ManualReplicaGC(repls[2]); err != nil {
-		t.Fatal(err)
-	}
+	// right. replicaGCDelayedDueToLeftNeighborError is expected for replicas whose left
+	// neighbor hasn't been GC'd yet.
+	require.True(t, kvserver.IsReplicaGCDelayedDueToLeftNeighborError(store2.ManualReplicaGC(repls[2])),
+		"expected c to return replicaGCDelayedDueToLeftNeighborError (b is left neighbor)")
 	if _, err := store2.GetReplica(repls[2].RangeID); err != nil {
 		t.Fatal("c replica on store2 destroyed before b")
 	}
-	if err := store2.ManualReplicaGC(repls[1]); err != nil {
-		t.Fatal(err)
-	}
+	require.True(t, kvserver.IsReplicaGCDelayedDueToLeftNeighborError(store2.ManualReplicaGC(repls[1])),
+		"expected b to return replicaGCDelayedDueToLeftNeighborError (a is left neighbor)")
 	if _, err := store2.GetReplica(repls[1].RangeID); err != nil {
 		t.Fatal("b replica on store2 destroyed before a")
 	}
-	if err := store2.ManualReplicaGC(repls[0]); err != nil {
-		t.Fatal(err)
-	}
+	// a is the leftmost — no stale left neighbor, so GC succeeds.
+	require.NoError(t, store2.ManualReplicaGC(repls[0]))
 	if _, err := store2.GetReplica(repls[0].RangeID); err == nil {
 		t.Fatal("a replica not destroyed")
 	}
 
-	if err := store2.ManualReplicaGC(repls[2]); err != nil {
-		t.Fatal(err)
-	}
+	// b still blocks c.
+	require.True(t, kvserver.IsReplicaGCDelayedDueToLeftNeighborError(store2.ManualReplicaGC(repls[2])),
+		"expected c to return replicaGCDelayedDueToLeftNeighborError (b is left neighbor)")
 	if _, err := store2.GetReplica(repls[2].RangeID); err != nil {
 		t.Fatal("c replica on store2 destroyed before b")
 	}
-	if err := store2.ManualReplicaGC(repls[1]); err != nil {
-		t.Fatal(err)
-	}
+	// b's left neighbor (a) is now gone, so GC succeeds.
+	require.NoError(t, store2.ManualReplicaGC(repls[1]))
 	if _, err := store2.GetReplica(repls[1].RangeID); err == nil {
 		t.Fatal("b replica not destroyed")
 	}
 
-	if err := store2.ManualReplicaGC(repls[2]); err != nil {
-		t.Fatal(err)
-	}
+	// c's left neighbor (b) is now gone, so GC succeeds.
+	require.NoError(t, store2.ManualReplicaGC(repls[2]))
 	if _, err := store2.GetReplica(repls[2].RangeID); err == nil {
 		t.Fatal("c replica not destroyed")
 	}
@@ -2983,81 +2992,94 @@ func TestStoreRangeMergeAbandonedFollowersAutomaticallyGarbageCollected(t *testi
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-		})
-	defer tc.Stopper().Stop(ctx)
-	scratch := tc.ScratchRange(t)
-	store0, store2 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
+	// When disableRaftGCTrigger is true, the RaftGroupDeletedError GC path is
+	// disabled. This exercises the merge watcher's direct AddAsync path combined
+	// with the replica GC queue's purgatory mechanism to handle the case where
+	// the RHS Raft group quiesces before heartbeat responses trigger GC.
+	testutils.RunTrueAndFalse(t, "disableRaftGCTrigger", func(t *testing.T, disableRaftGCTrigger bool) {
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 3,
+			base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						Store: &kvserver.StoreTestingKnobs{
+							DisableReplicaGCQueueAddOnRaftGroupDeleted: disableRaftGCTrigger,
+						},
+					},
+				},
+			})
+		defer tc.Stopper().Stop(ctx)
+		scratch := tc.ScratchRange(t)
+		store0, store2 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
 
-	repl0 := store0.LookupReplica(scratchRKey("a"))
-	tc.AddVotersOrFatal(t, repl0.Desc().StartKey.AsRawKey(), tc.Targets(1, 2)...)
-	lhsDesc, rhsDesc, err := createSplitRanges(ctx, scratch, store0)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Make store2 the leaseholder for the RHS and wait for the lease transfer to
-	// apply.
-	tc.TransferRangeLeaseOrFatal(t, *rhsDesc, tc.Target(2))
-	testutils.SucceedsSoon(t, func() error {
-		rhsRepl, err := store2.GetReplica(rhsDesc.RangeID)
+		repl0 := store0.LookupReplica(scratchRKey("a"))
+		tc.AddVotersOrFatal(t, repl0.Desc().StartKey.AsRawKey(), tc.Targets(1, 2)...)
+		lhsDesc, rhsDesc, err := createSplitRanges(ctx, scratch, store0)
 		if err != nil {
-			return err
-		}
-		if !rhsRepl.OwnsValidLease(ctx, tc.Servers[2].Clock().NowAsClockTimestamp()) {
-			return errors.New("store2 does not own valid lease for rhs range")
+			t.Fatal(err)
 		}
 
-		// This is important for leader leases to avoid a race between us stopping
-		// Raft traffic below, and Raft attempting to transfer the lease leadership
-		// to the leaseholder.
-		if rhsRepl.RaftStatus().ID != rhsRepl.RaftStatus().Lead {
-			return errors.New("store2 isn't the leader for rhs range")
-		}
-		return nil
-	})
+		// Make store2 the leaseholder for the RHS and wait for the lease transfer to
+		// apply.
+		tc.TransferRangeLeaseOrFatal(t, *rhsDesc, tc.Target(2))
+		testutils.SucceedsSoon(t, func() error {
+			rhsRepl, err := store2.GetReplica(rhsDesc.RangeID)
+			if err != nil {
+				return err
+			}
+			if !rhsRepl.OwnsValidLease(ctx, tc.Servers[2].Clock().NowAsClockTimestamp()) {
+				return errors.New("store2 does not own valid lease for rhs range")
+			}
 
-	// Start dropping all Raft traffic to the LHS replica on store2 so that it
-	// won't be aware that there is a merge in progress.
-	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:                    lhsDesc.RangeID,
-		IncomingRaftMessageHandler: store2,
-		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-			dropReq: func(*kvserverpb.RaftMessageRequest) bool {
-				return true
+			// This is important for leader leases to avoid a race between us stopping
+			// Raft traffic below, and Raft attempting to transfer the lease leadership
+			// to the leaseholder.
+			if rhsRepl.RaftStatus().ID != rhsRepl.RaftStatus().Lead {
+				return errors.New("store2 isn't the leader for rhs range")
+			}
+			return nil
+		})
+
+		// Start dropping all Raft traffic to the LHS replica on store2 so that it
+		// won't be aware that there is a merge in progress.
+		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
+			RangeID:                    lhsDesc.RangeID,
+			IncomingRaftMessageHandler: store2,
+			UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+				DropReq: func(*kvserverpb.RaftMessageRequest) bool {
+					return true
+				},
 			},
-		},
-	})
+		})
 
-	// Perform the merge. The LHS replica on store2 whon't hear about this merge
-	// and thus won't subsume its RHS replica. The RHS replica's merge watcher
-	// goroutine will, however, notice the merge and mark the RHS replica as
-	// destroyed with reason destroyReasonMergePending.
-	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
-	_, pErr := kv.SendWrapped(ctx, store0.TestSender(), args)
-	if pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	// Remove the merged range from store2. Its replicas of both the LHS and RHS
-	// are now eligible for GC.
-	tc.RemoveVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(2))
-
-	// Note that we purposely do not call store.ManualReplicaGC here, as that
-	// calls replicaGCQueue.process directly, bypassing the logic in
-	// baseQueue.MaybeAdd and baseQueue.Add. We specifically want to test that
-	// queuing logic, which has been broken in the past.
-	testutils.SucceedsSoon(t, func() error {
-		if _, err := store2.GetReplica(lhsDesc.RangeID); err == nil {
-			return errors.New("lhs not destroyed")
+		// Perform the merge. The LHS replica on store2 won't hear about this merge
+		// and thus won't subsume its RHS replica. The RHS replica's merge watcher
+		// goroutine will, however, notice the merge and mark the RHS replica as
+		// destroyed with reason destroyReasonMergePending.
+		args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
+		_, pErr := kv.SendWrapped(ctx, store0.TestSender(), args)
+		if pErr != nil {
+			t.Fatal(pErr)
 		}
-		if _, err := store2.GetReplica(rhsDesc.RangeID); err == nil {
-			return errors.New("rhs not destroyed")
-		}
-		return nil
+
+		// Remove the merged range from store2. Its replicas of both the LHS and RHS
+		// are now eligible for GC.
+		tc.RemoveVotersOrFatal(t, lhsDesc.StartKey.AsRawKey(), tc.Target(2))
+
+		// Note that we purposely do not call store.ManualReplicaGC here, as that
+		// calls replicaGCQueue.process directly, bypassing the logic in
+		// baseQueue.MaybeAdd and baseQueue.Add. We specifically want to test that
+		// queuing logic, which has been broken in the past.
+		testutils.SucceedsSoon(t, func() error {
+			if _, err := store2.GetReplica(lhsDesc.RangeID); err == nil {
+				return errors.New("lhs not destroyed")
+			}
+			if _, err := store2.GetReplica(rhsDesc.RangeID); err == nil {
+				return errors.New("rhs not destroyed")
+			}
+			return nil
+		})
 	})
 }
 
@@ -3420,11 +3442,11 @@ func TestStoreRangeMergeUninitializedLHSFollower(t *testing.T) {
 	// from range 1, which will be the LHS of the split, so that store2's replica
 	// of range 1 never processes the split trigger, which would create an
 	// initialized replica of A.
-	unreliableHandler := &unreliableRaftHandler{
-		rangeID:                    desc.RangeID,
+	unreliableHandler := &kvtestutils.UnreliableRaftHandler{
+		RangeID:                    desc.RangeID,
 		IncomingRaftMessageHandler: store2,
-		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-			dropReq: func(request *kvserverpb.RaftMessageRequest) bool {
+		UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+			DropReq: func(request *kvserverpb.RaftMessageRequest) bool {
 				return true
 			},
 		},
@@ -3811,6 +3833,28 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 	}
 }
 
+// TestStoreRangeMergeRaftSnapshot exercises Raft snapshot application across
+// range merges and splits. It sets up a 5-node cluster (stores s1–s5) with
+// manual replication, then:
+//
+//  1. Creates a scratch range [Start, End) replicated to s1, s2, s3.
+//  2. Splits it into four ranges:
+//     r1=[Start, a)  r2=[a, b)  r3=[b, c)  r4=[c, End)
+//  3. Writes values at keys a, b, c and 10 keys past d in [d, End).
+//  4. Blocks all Raft traffic for r2 on s3 so that s3 falls behind.
+//  5. Merges r2+r3+r4 into r2=[a, End), then splits at d:
+//     r2=[a, d)  r5=[d, End)
+//  6. Truncates the Raft log on r2 so that s3 cannot catch up via log entries.
+//  7. (rebalanceRHSAway=true only) Rebalances r5 away from s1 and s3 onto
+//     s4 and s5.
+//  8. Restores Raft traffic to s3 (still filtering stale MsgApp), forcing s3
+//     to catch up via a Raft snapshot for r2.
+//  9. Verifies that the Raft snapshot was applied and that the engine key sets
+//     on s1 and s3 match for the key span both stores hold.
+//
+// The beforeSnapshotSSTIngestion hook additionally verifies the byte-level
+// contents of the SSTs that make up the snapshot, including the SSTs that
+// clear range-ID local keys and user data of the subsumed replicas (r3, r4).
 func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -3820,7 +3864,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	defer kvstorage.TestingForceClearRange()()
 
 	testutils.RunTrueAndFalse(t, "rebalanceRHSAway", func(t *testing.T, rebalanceRHSAway bool) {
-		// We will be testing the SSTs written on store2's engine.
+		// We will be testing the SSTs written on store3's engine.
 		var receivingEng, sendingEng storage.Engine
 		// All of these variables will be populated later, after starting the
 		// cluster.
@@ -4029,11 +4073,18 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			// Don't return errors here because that crashes the process.
 			return nil
 		}
+
 		ctx := context.Background()
+		st := cluster.MakeTestingClusterSettings()
+		// Force snapshots to be applied using Pebble ingests. The test verifies the
+		// content of the corresponding SST files.
+		kvserver.SnapshotIngestAsWriteThreshold.Override(ctx, &st.SV, 0)
+
 		tc := testcluster.StartTestCluster(t, 5,
 			base.TestClusterArgs{
 				ReplicationMode: base.ReplicationManual,
 				ServerArgs: base.TestServerArgs{
+					Settings: st,
 					Knobs: base.TestingKnobs{
 						Store: &kvserver.StoreTestingKnobs{
 							BeforeSnapshotSSTIngestion: beforeSnapshotSSTIngestion,
@@ -4042,9 +4093,9 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				},
 			})
 		defer tc.Stopper().Stop(ctx)
-		store0, store2 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
-		sendingEng = store0.TODOEngine()
-		receivingEng = store2.TODOEngine()
+		store1, store3 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
+		sendingEng = store1.StateEngine()
+		receivingEng = store3.StateEngine()
 		distSender := tc.Servers[0].DistSenderI().(kv.Sender)
 
 		// This test works across 5 ranges in total. We start with a scratch
@@ -4054,7 +4105,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 		// range(3) = [b, c)
 		// range(4) = [c, End).
 		keyStart = tc.ScratchRange(t)
-		repl := store0.LookupReplica(roachpb.RKey(keyStart))
+		repl := store1.LookupReplica(roachpb.RKey(keyStart))
 		keyEnd = repl.Desc().EndKey.AsRawKey()
 		keyA = keyStart.Next().Next()
 		keyB = keyA.Next().Next()
@@ -4086,14 +4137,14 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			tc.WaitForValues(t, key, []int64{1, 1, 1, 0, 0})
 		}
 
-		aRepl0 := store0.LookupReplica(roachpb.RKey(keyA))
+		aRepl1 := store1.LookupReplica(roachpb.RKey(keyA))
 
-		// Start dropping all Raft traffic to the first range on store2.
-		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
-			rangeID:                    aRepl0.RangeID,
-			IncomingRaftMessageHandler: store2,
-			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropReq: func(request *kvserverpb.RaftMessageRequest) bool {
+		// Start dropping all Raft traffic to the first range on store3.
+		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store3.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
+			RangeID:                    aRepl1.RangeID,
+			IncomingRaftMessageHandler: store3,
+			UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+				DropReq: func(request *kvserverpb.RaftMessageRequest) bool {
 					return true
 				},
 			},
@@ -4114,7 +4165,7 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 
 		// Truncate the logs of the LHS.
 		index := func() kvpb.RaftIndex {
-			repl := store0.LookupReplica(roachpb.RKey(keyA))
+			repl := store1.LookupReplica(roachpb.RKey(keyA))
 			index := repl.GetLastIndex()
 			truncArgs := &kvpb.TruncateLogRequest{
 				RequestHeader: kvpb.RequestHeader{Key: keyA},
@@ -4128,31 +4179,31 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 			return index
 		}()
 
-		beforeRaftSnaps := store2.Metrics().RangeSnapshotsAppliedByVoters.Count()
+		beforeRaftSnaps := store3.Metrics().RangeSnapshotsAppliedByVoters.Count()
 
-		// Rebalance the RHS away from both store0 and store2 if the version of
+		// Rebalance the RHS away from both store1 and store3 if the version of
 		// the test calls for it.
 		if rebalanceRHSAway {
 			tc.AddVotersOrFatal(t, keyD, tc.Target(4))
 			tc.RemoveVotersOrFatal(t, keyD, tc.Target(2))
 			tc.TransferRangeLeaseOrFatal(
-				t, *store0.LookupReplica(roachpb.RKey(keyD)).Desc(), tc.Target(4),
+				t, *store1.LookupReplica(roachpb.RKey(keyD)).Desc(), tc.Target(4),
 			)
 			tc.AddVotersOrFatal(t, keyD, tc.Target(3))
 			tc.RemoveVotersOrFatal(t, keyD, tc.Target(0))
 		}
 
-		// Restore Raft traffic to the LHS on store2.
-		log.KvDistribution.Infof(ctx, "restored traffic to store 2")
-		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
-			rangeID:                    aRepl0.RangeID,
-			IncomingRaftMessageHandler: store2,
-			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+		// Restore Raft traffic to the LHS on store3.
+		log.KvDistribution.Infof(ctx, "restored traffic to store 3")
+		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store3.Ident.StoreID, &kvtestutils.UnreliableRaftHandler{
+			RangeID:                    aRepl1.RangeID,
+			IncomingRaftMessageHandler: store3,
+			UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+				DropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 					// Make sure that even going forward no MsgApp for what we
 					// just truncated can make it through. The Raft transport is
 					// asynchronous so this is necessary to make the test pass
-					// reliably - otherwise the follower on store2 may catch up
+					// reliably - otherwise the follower on store3 may catch up
 					// without needing a snapshot, tripping up the test.
 					//
 					// NB: the Index on the message is the log index that
@@ -4161,22 +4212,33 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 					return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
 				},
 				// Don't drop heartbeats or responses.
-				dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
-				dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
+				DropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
+				DropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
 			},
 		})
 
 		// Wait for all replicas to catch up to the same point. Because we
-		// truncated the log while store2 was unavailable, this will require a
+		// truncated the log while store3 was unavailable, this will require a
 		// Raft snapshot.
+		//
+		// When the RHS was rebalanced away, limit the key comparison to
+		// [keyStart, keyD) — the LHS that both stores are guaranteed to hold.
+		// store1 may retain stale data from its old RHS replica (r85) while
+		// the conf change removing it propagates and replica GC runs; store3
+		// had the corresponding key span cleared during snapshot subsumption.
+		// Comparing the full [keyStart, keyEnd) would race against the
+		// asynchronous replica GC of store1's stale RHS replica.
+		scanEnd := keyEnd
+		if rebalanceRHSAway {
+			scanEnd = keyD
+		}
 		testutils.SucceedsSoon(t, func() error {
-			afterRaftSnaps := store2.Metrics().RangeSnapshotsAppliedByVoters.Count()
+			afterRaftSnaps := store3.Metrics().RangeSnapshotsAppliedByVoters.Count()
 			if afterRaftSnaps <= beforeRaftSnaps {
-				return errors.New("expected store2 to apply at least 1 additional raft snapshot")
+				return errors.New("expected store3 to apply at least 1 additional raft snapshot")
 			}
-			// We only look at the range of keys the test has been manipulating.
 			getKeySet := func(engine storage.Engine) map[string]struct{} {
-				kvs, err := storage.Scan(context.Background(), engine, keyStart, keyEnd, 0)
+				kvs, err := storage.Scan(context.Background(), engine, keyStart, scanEnd, 0)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -4187,17 +4249,17 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 				return out
 			}
 
-			// Verify that the sets of keys in store0 and store2 are identical.
-			storeKeys0 := getKeySet(store0.TODOEngine())
-			storeKeys2 := getKeySet(store2.TODOEngine())
-			for k := range storeKeys0 {
-				if _, ok := storeKeys2[k]; !ok {
-					return fmt.Errorf("store2 missing key %s", roachpb.Key(k))
+			// Verify that the sets of keys in store1 and store3 are identical.
+			storeKeys1 := getKeySet(store1.StateEngine())
+			storeKeys3 := getKeySet(store3.StateEngine())
+			for k := range storeKeys1 {
+				if _, ok := storeKeys3[k]; !ok {
+					return fmt.Errorf("store3 missing key %s", roachpb.Key(k))
 				}
 			}
-			for k := range storeKeys2 {
-				if _, ok := storeKeys0[k]; !ok {
-					return fmt.Errorf("store2 has extra key %s", roachpb.Key(k))
+			for k := range storeKeys3 {
+				if _, ok := storeKeys1[k]; !ok {
+					return fmt.Errorf("store3 has extra key %s", roachpb.Key(k))
 				}
 			}
 			return nil
@@ -4387,14 +4449,6 @@ func TestMergeQueue(t *testing.T) {
 	lhsStartKey := roachpb.RKey(tc.ScratchRange(t))
 	rhsStartKey := lhsStartKey.Next().Next()
 	rhsEndKey := rhsStartKey.Next().Next()
-	lhsSp := roachpb.Span{
-		Key:    lhsStartKey.AsRawKey(),
-		EndKey: rhsStartKey.AsRawKey(),
-	}
-	rhsSp := roachpb.Span{
-		Key:    rhsStartKey.AsRawKey(),
-		EndKey: rhsEndKey.AsRawKey(),
-	}
 
 	for _, k := range []roachpb.RKey{lhsStartKey, rhsStartKey, rhsEndKey} {
 		split(t, k.AsRawKey(), hlc.Timestamp{} /* expirationTime */)
@@ -4409,12 +4463,12 @@ func TestMergeQueue(t *testing.T) {
 		if l := lhs(); l == nil {
 			t.Fatal("left-hand side range not found")
 		} else {
-			l.SetSpanConfig(conf, lhsSp)
+			l.SetSpanConfig(conf)
 		}
 		if r := rhs(); r == nil {
 			t.Fatal("right-hand side range not found")
 		} else {
-			r.SetSpanConfig(conf, rhsSp)
+			r.SetSpanConfig(conf)
 		}
 	}
 
@@ -4457,7 +4511,7 @@ func TestMergeQueue(t *testing.T) {
 		reset(t)
 		conf := conf
 		conf.RangeMinBytes *= 2
-		lhs().SetSpanConfig(conf, lhsSp)
+		lhs().SetSpanConfig(conf)
 		verifyMergedSoon(t, store, lhsStartKey, rhsStartKey)
 	})
 
@@ -5499,7 +5553,7 @@ func TestStoreMergeGCHint(t *testing.T) {
 				require.Greater(t, gcHint.LatestRangeDeleteTimestamp.WallTime, beforeSecondDel,
 					"highest timestamp wasn't picked up")
 			}
-			repl.AssertState(ctx, store.TODOEngine())
+			repl.AssertState(ctx, store.StateEngine(), store.LogEngine())
 		})
 	}
 }

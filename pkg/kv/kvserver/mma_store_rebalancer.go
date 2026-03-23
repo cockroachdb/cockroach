@@ -11,8 +11,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,22 +46,25 @@ type replicaToApplyChanges interface {
 // TODO(wenyihu6): add allocator sync which coordinates with replicate queue
 // and store rebalancer and store pool.
 type mmaStoreRebalancer struct {
-	store *mmaStore
-	mma   mmaprototype.Allocator
-	st    *cluster.Settings
-	sp    *storepool.StorePool
-	as    *mmaintegration.AllocatorSync
+	store              *mmaStore
+	mma                mmaprototype.Allocator
+	st                 *cluster.Settings
+	as                 *mmaintegration.AllocatorSync
+	processTimeoutFunc queueProcessTimeoutFunc
 }
 
 func newMMAStoreRebalancer(
-	s *Store, mma mmaprototype.Allocator, st *cluster.Settings, sp *storepool.StorePool,
+	s *Store, mma mmaprototype.Allocator, st *cluster.Settings,
 ) *mmaStoreRebalancer {
+	// Initialize disk utilization thresholds from cluster settings.
+	opts := allocatorimpl.MakeDiskCapacityOptions(&st.SV)
+	mma.SetDiskUtilThresholds(opts.RebalanceToThreshold, opts.ShedAndBlockAllThreshold)
 	return &mmaStoreRebalancer{
-		store: (*mmaStore)(s),
-		mma:   mma,
-		st:    st,
-		sp:    sp,
-		as:    s.cfg.AllocatorSync,
+		store:              (*mmaStore)(s),
+		mma:                mma,
+		st:                 st,
+		as:                 s.cfg.AllocatorSync,
+		processTimeoutFunc: makeRateLimitedTimeoutFunc(rebalanceSnapshotRate),
 	}
 }
 
@@ -87,11 +91,13 @@ func (m *mmaStoreRebalancer) run(ctx context.Context, stopper *stop.Stopper) {
 
 			// Keeps rebalancing until no changes are computed. Then exit and await
 			// for the next interval.
+			periodicCall := true
 			for {
-				attemptedChanges := m.rebalance(ctx)
+				attemptedChanges := m.rebalance(ctx, periodicCall)
 				if !attemptedChanges {
 					break
 				}
+				periodicCall = false
 			}
 		}
 	}
@@ -125,7 +131,10 @@ func (m *mmaStoreRebalancer) start(ctx context.Context, stopper *stop.Stopper) {
 // signal to the caller that it should continue calling rebalance. Note that
 // rebalance may return true if errors happen in the process and fail to apply
 // the changes successfully.
-func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
+func (m *mmaStoreRebalancer) rebalance(ctx context.Context, periodicCall bool) bool {
+	opts := allocatorimpl.MakeDiskCapacityOptions(&m.st.SV)
+	m.mma.SetDiskUtilThresholds(opts.RebalanceToThreshold, opts.ShedAndBlockAllThreshold)
+	m.mma.UpdateStoresStatuses(ctx, m.as.GetMMAStoreStatuses())
 	knownStoresByMMA := m.mma.KnownStores()
 	storeLeaseholderMsg, numIgnoredRanges := m.store.MakeStoreLeaseholderMsg(ctx, knownStoresByMMA)
 	if numIgnoredRanges > 0 {
@@ -135,6 +144,7 @@ func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
 
 	changes := m.mma.ComputeChanges(ctx, &storeLeaseholderMsg, mmaprototype.ChangeOptions{
 		LocalStoreID: m.store.StoreID(),
+		PeriodicCall: periodicCall,
 	})
 
 	// TODO(wenyihu6): add allocator sync and post apply here
@@ -154,7 +164,7 @@ func (m *mmaStoreRebalancer) applyChange(
 ) error {
 	repl := m.store.GetReplicaIfExists(change.RangeID)
 	if repl == nil {
-		m.as.MarkChangeAsFailed(change)
+		m.as.MarkChangeAsFailed(ctx, change)
 		return errors.Errorf("replica not found for range %d", change.RangeID)
 	}
 	changeID := m.as.MMAPreApply(ctx, repl.RangeUsageInfo(), change)
@@ -169,37 +179,49 @@ func (m *mmaStoreRebalancer) applyChange(
 	}
 	// Inform allocator sync that the change has been applied which applies
 	// changes to store pool and inform mma.
-	m.as.PostApply(changeID, err == nil /*success*/)
+	m.as.PostApply(ctx, changeID, err == nil /*success*/)
 	return err
+}
+
+// processTimeout computes the timeout for applying a change to a replica,
+// using the same rate-limited timeout function as the replicate queue and the
+// old store rebalancer.
+func (m *mmaStoreRebalancer) processTimeout(repl replicaToApplyChanges) time.Duration {
+	return m.processTimeoutFunc(m.st, repl.(*Replica))
 }
 
 // applyLeaseTransfer applies a lease transfer change.
 func (m *mmaStoreRebalancer) applyLeaseTransfer(
 	ctx context.Context, repl replicaToApplyChanges, change mmaprototype.ExternalRangeChange,
 ) error {
-	return repl.AdminTransferLease(
-		ctx,
-		change.LeaseTransferTarget(),
-		false, /* bypassSafetyChecks */
-	)
+	timeout := m.processTimeout(repl)
+	return timeutil.RunWithTimeout(ctx, "mma transfer lease", timeout,
+		func(ctx context.Context) error {
+			return repl.AdminTransferLease(
+				ctx,
+				change.LeaseTransferTarget(),
+				false, /* bypassSafetyChecks */
+			)
+		})
 }
 
 // applyReplicaChanges applies replica membership changes.
 func (m *mmaStoreRebalancer) applyReplicaChanges(
 	ctx context.Context, repl replicaToApplyChanges, change mmaprototype.ExternalRangeChange,
 ) error {
-	// TODO(mma): We should be setting a timeout on the ctx here, in the case
-	// where rebalancing takes a long time (stuck behind other snapshots).
-	// See replicateQueue.processTimeoutFunc.
 	// TODO(wenyihu6): store rebalancer uses RelocateRange
-	_, err := repl.changeReplicasImpl(
-		ctx,
-		repl.Desc(),
-		kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
-		0,
-		kvserverpb.ReasonRebalance,
-		"todo: this is the rebalance detail for the range log",
-		change.ReplicationChanges(),
-	)
-	return err
+	timeout := m.processTimeout(repl)
+	return timeutil.RunWithTimeout(ctx, "mma change replicas", timeout,
+		func(ctx context.Context) error {
+			_, err := repl.changeReplicasImpl(
+				ctx,
+				repl.Desc(),
+				kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
+				0,
+				kvserverpb.ReasonRebalance,
+				"todo: this is the rebalance detail for the range log",
+				change.ReplicationChanges(),
+			)
+			return err
+		})
 }

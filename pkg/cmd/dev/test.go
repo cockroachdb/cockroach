@@ -249,29 +249,15 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			continue
 		}
 
-		pkg = strings.TrimPrefix(pkg, "//")
-		pkg = strings.TrimPrefix(pkg, "./")
-		pkg = strings.TrimRight(pkg, "/")
-
-		if !strings.HasPrefix(pkg, "pkg/") && !strings.HasPrefix(pkg, "pkg:") {
-			return fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
-		}
-
-		if !strings.Contains(pkg, ":") && !strings.HasSuffix(pkg, "/...") {
-			pkg = fmt.Sprintf("%s:all", pkg)
-		}
-		// Filter out only test targets.
-		queryArgs := []string{"query", fmt.Sprintf("kind(.*_test, %s)", pkg)}
-		labelsBytes, err := d.exec.CommandContextSilent(ctx, "bazel", queryArgs...)
+		labels, err := d.getTestTargets(ctx, pkg)
 		if err != nil {
-			return fmt.Errorf("could not query for tests within %s: got error %w", pkg, err)
+			return err
 		}
-		labels := strings.TrimSpace(string(labelsBytes))
-		if labels == "" {
+		if len(labels) == 0 {
 			log.Printf("WARNING: no test targets were found matching %s", pkg)
 			continue
 		}
-		testTargets = append(testTargets, strings.Split(labels, "\n")...)
+		testTargets = append(testTargets, labels...)
 	}
 
 	for _, target := range testTargets {
@@ -534,4 +520,33 @@ func (d *dev) determineAffectedTargets(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return strings.Split(strings.TrimSpace(string(tests)), "\n"), nil
+}
+
+// Given a named test target like pkg/cmd/dev, pkg/..., pkg/cmd/dev:dev_test,
+// etc., return the Bazel labels corresponding to the test target
+// (like //pkg/cmd/dev:dev_test).
+func (d *dev) getTestTargets(ctx context.Context, pkg string) ([]string, error) {
+	pkg = strings.TrimPrefix(pkg, "//")
+	pkg = strings.TrimPrefix(pkg, "./")
+	pkg = strings.TrimRight(pkg, "/")
+
+	if !strings.HasPrefix(pkg, "pkg/") && !strings.HasPrefix(pkg, "pkg:") {
+		return nil, fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
+	}
+
+	if !strings.Contains(pkg, ":") && !strings.HasSuffix(pkg, "/...") {
+		pkg = fmt.Sprintf("%s:all", pkg)
+	}
+	// Filter out only test targets.
+	queryArgs := []string{"query", fmt.Sprintf("kind(.*_test, %s)", pkg)}
+	labelsBytes, err := d.exec.CommandContextSilent(ctx, "bazel", queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("could not query for tests within %s: got error %w", pkg, err)
+	}
+	labels := strings.TrimSpace(string(labelsBytes))
+	if labels == "" {
+		return nil, nil
+	}
+
+	return strings.Split(labels, "\n"), nil
 }

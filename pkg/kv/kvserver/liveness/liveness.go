@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -37,8 +38,9 @@ import (
 )
 
 const (
-	timeUntilNodeDeadSettingName    = "server.time_until_store_dead"
-	timeAfterNodeSuspectSettingName = "server.time_after_store_suspect"
+	timeUntilNodeDeadSettingName                    = "server.time_until_store_dead"
+	timeAfterNodeSuspectSettingName                 = "server.time_after_store_suspect"
+	timeAfterStoreSuspectInStoreLivenessSettingName = "server.time_after_store_suspect_in_store_liveness"
 )
 
 // Setting this to less than the interval for gossiping stores is a big
@@ -74,6 +76,17 @@ var TimeAfterNodeSuspect = settings.RegisterDurationSetting(
 	timeAfterNodeSuspectSettingName,
 	"the amount of time we consider a node suspect for after it becomes unavailable."+
 		" A suspect node is typically treated the same as an unavailable node.",
+	30*time.Second,
+	settings.DurationInRange(minTimeUntilNodeSuspect, maxTimeAfterNodeSuspect),
+)
+
+// TimeAfterStoreSuspectInStoreLiveness measures how long we consider a store
+// suspect after its support is withdrawn in the StoreLiveness fabric.
+var TimeAfterStoreSuspectInStoreLiveness = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	timeAfterStoreSuspectInStoreLivenessSettingName,
+	"the amount of time we consider a store suspect for after its support is withdrawn in StoreLiveness."+
+		" A suspect store is typically treated the same as an unavailable store.",
 	30*time.Second,
 	settings.DurationInRange(minTimeUntilNodeSuspect, maxTimeAfterNodeSuspect),
 )
@@ -158,7 +171,7 @@ var (
 		Help:        "Number of live nodes in the cluster (will be 0 if this node is not itself live)",
 		Measurement: "Nodes",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    "This is a critical metric that tracks the live nodes in the cluster.",
 	}
@@ -179,6 +192,7 @@ var (
 		Help:        "Number of failed node liveness heartbeats from this node",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaEpochIncrements = metric.Metadata{
 		Name:        "liveness.epochincrements",
@@ -191,7 +205,7 @@ var (
 		Help:        "Node liveness heartbeat latency",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
-		Essential:   true,
+		Visibility:  metric.Metadata_ESSENTIAL,
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    "If this metric exceeds 1 second, it is a sign of cluster instability.",
 	}
@@ -199,7 +213,7 @@ var (
 
 // Metrics holds metrics for use with node liveness activity.
 type Metrics struct {
-	LiveNodes          *metric.Gauge
+	LiveNodes          *metric.FunctionalGauge
 	HeartbeatsInFlight *metric.Gauge
 	HeartbeatSuccesses *metric.Counter
 	HeartbeatFailures  telemetry.CounterWithMetric
@@ -277,7 +291,7 @@ type NodeLiveness struct {
 
 	// engines is written to before heartbeating to avoid maintaining liveness
 	// when a local disks is stalled.
-	engines []diskStorage.Engine
+	engines []kvstorage.Engines
 
 	// Set to true once Start is called. RegisterCallback can not be called after
 	// Start is called.
@@ -315,7 +329,7 @@ type NodeLivenessOptions struct {
 	// OnNodeDecommissioning is invoked when a node is detected to be
 	// decommissioning.
 	OnNodeDecommissioning func(id roachpb.NodeID)
-	Engines               []diskStorage.Engine
+	Engines               []kvstorage.Engines
 	OnSelfHeartbeat       HeartbeatCallback
 	Cache                 *Cache
 }
@@ -1086,6 +1100,7 @@ func (nl *NodeLiveness) updateLiveness(
 // verifyDiskHealth does a sync write to all disks before updating liveness, so
 // that a faulty or stalled disk will cause us to fail liveness and lose our
 // leases. All disks are written concurrently.
+//
 // We do this asynchronously in order to respect the caller's context, and
 // coalesce concurrent writes onto an in-flight one. This is particularly
 // relevant for a stalled disk during a lease acquisition heartbeat, where we
@@ -1102,7 +1117,10 @@ func (nl *NodeLiveness) verifyDiskHealth(ctx context.Context) error {
 				InheritCancelation: false,
 			},
 			func(ctx context.Context) (interface{}, error) {
-				return nil, diskStorage.WriteSyncNoop(eng)
+				// NB: sync only the LogEngine. It is the engine through which all
+				// writes pass first. Also, the StateEngine does not support timely /
+				// incremental syncs, and forcing its Flush here would be too expensive.
+				return nil, diskStorage.WriteSyncNoop(eng.LogEngine())
 			})
 	}
 	for _, resultC := range resultCs {

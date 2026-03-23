@@ -404,8 +404,7 @@ func TestGetLogReader(t *testing.T) {
 
 	// Validate and apply the config.
 	require.NoError(t, config.Validate(&sc.logDir))
-	TestingResetActive()
-	cleanupFn, err := ApplyConfig(config, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+	cleanupFn, err := ApplyConfigForReconfig(config, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 	require.NoError(t, err)
 	defer cleanupFn()
 
@@ -616,8 +615,7 @@ func TestFd2Capture(t *testing.T) {
 	if err := cfg.Validate(&s.logDir); err != nil {
 		t.Fatal(err)
 	}
-	TestingResetActive()
-	cleanupFn, err := ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+	cleanupFn, err := ApplyConfigForReconfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 	if err != nil {
 		t.Fatal(err)
 	}

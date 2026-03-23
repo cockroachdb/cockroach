@@ -114,6 +114,18 @@ func RequireSystemTenantOrClusterSetting(
 		"Feature flag: %s", setting.Name())
 }
 
+// InferRegionUsingConstraintEnabled is used to enable and disable setting a
+// foreign key constraint for looking up the region column in a REGIONAL BY ROW
+// table.
+var InferRegionUsingConstraintEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"feature.infer_rbr_region_col_using_constraint.enabled",
+	"set to true to enable looking up the region column via a foreign key constraint in a "+
+		"REGIONAL BY ROW table, false to disable; default is false",
+	false,
+	settings.WithPublic,
+)
+
 // CachedSequencesCacheSizeSetting is the default cache size used when
 // SessionNormalizationMode is SerialUsesCachedSQLSequences or
 // SerialUsesCachedNodeSQLSequences.
@@ -152,3 +164,32 @@ var LDRImmediateModeWriter = settings.RegisterStringSetting(
 		return nil
 	}),
 )
+
+// UseInstanceInfoForSQLInstances controls whether to use sqlinstance.InstanceInfo
+// instead of roachpb.NodeDescriptor when retrieving SQL instance information.
+// This is necessary for proper handling of SQL instances in multi-tenant
+// environments where SQL instances may not have corresponding KV nodes.
+var UseInstanceInfoForSQLInstances = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.instance_info.use_instance_resolver.enabled",
+	"use sqlinstance.InstanceInfo instead of NodeDescriptor for SQL instance lookups; "+
+		"enables proper handling of SQL instances in serverless environments",
+	metamorphic.ConstantWithTestBool("sql.instance_info.use_instance_resolver.enabled", true))
+
+// SkipUnderlyingViewPrivilegeChecks controls whether privilege checks on underlying
+// tables are skipped when selecting from a view. By default (false), the view
+// owner's privileges are checked on the underlying tables, and the owner's
+// row-level security (RLS) policies are enforced. When enabled, all privilege
+// checks on the underlying tables are skipped and the invoker RLS is enforced.
+// This means that any user with SELECT privileges on the view can query it
+// regardless of the underlying table privileges. This restores the pre-v26.2 behavior.
+var SkipUnderlyingViewPrivilegeChecks = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.auth.skip_underlying_view_privilege_checks.enabled",
+	"determines whether to skip privilege checks on tables underlying views. "+
+		"When enabled, users with SELECT privileges on a view can query it regardless of "+
+		"their privileges on the underlying tables, and row-level security "+
+		"policies are evaluated as the invoking user rather than the view owner. "+
+		"This restores pre-v26.2 behavior.",
+	false,
+	settings.WithPublic)

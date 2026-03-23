@@ -24,7 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/google/pprof/profile"
@@ -322,21 +324,11 @@ func getProfileWithTimeout(
 	logger.Printf("getting profile using URL: %s", url)
 
 	// Set up a timer to limit the time spent trying to get the profile.
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
-
+	r := retry.StartWithCtx(ctx, retry.Options{
+		MaxDuration: timeout,
+	})
 	var latestError error
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, errors.Wrapf(errors.CombineErrors(latestError, ctx.Err()),
-				"failed to get profile from %s after %s", url, timeout)
-		case <-timer.C:
-			return nil, errors.Wrapf(errors.CombineErrors(latestError, errors.New("timed out")),
-				"failed to get profile from %s after %s", url, timeout)
-		default:
-		}
-
+	for r.Next() {
 		// Request the profile.
 		resp, err := client.Get(ctx, url)
 		if err != nil {
@@ -379,10 +371,13 @@ func getProfileWithTimeout(
 
 		return prof, nil
 	}
+	return nil, errors.Wrapf(errors.CombineErrors(latestError, errors.New("timed out")),
+		"failed to get profile from %s after %s", url, timeout)
 }
 
-// getProfileSingleNode returns the specified profile for a single node. If
-// taking the profile fails, we will keep retrying for 15 seconds.
+// getProfileSingleNode returns the specified profile for a single node. The
+// profile collection takes `duration` to complete. If the request fails, we
+// retry for an additional 30 seconds beyond the profile duration.
 // Supported profile types are: {"cpu", "allocs", "mutex", "heap"}.
 func getProfileSingleNode(
 	ctx context.Context,
@@ -414,7 +409,7 @@ func getProfileSingleNode(
 	client := DefaultHTTPClient(cluster, logger, HTTPTimeout(2*duration))
 	url := fmt.Sprintf("https://%s/debug/pprof/%s?seconds=%d", adminUIAddrs[0],
 		actualProfileType, int(duration.Seconds()))
-	return getProfileWithTimeout(ctx, logger, client, url, 15*time.Second /* timeout */)
+	return getProfileWithTimeout(ctx, logger, client, url, duration+30*time.Second /* timeout */)
 }
 
 // GetProfile collect profiles for all the nodes received in the function
@@ -443,7 +438,7 @@ func GetProfile(
 
 			if err != nil {
 				l.Printf("error getting profile for node %d: %s", nodeId, err)
-				return errors.Wrapf(err, "getting profile for n%d", nodeId)
+				return rperrors.TransientFailure(errors.Wrapf(err, "getting profile for n%d", nodeId), "pprof_collection")
 			}
 			return nil
 		})

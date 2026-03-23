@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/partitioning"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
@@ -219,6 +220,63 @@ func (b *builderState) ensureDescriptors(e scpb.Element) {
 		b.ensureDescriptor(*id)
 		return nil
 	})
+}
+
+// replaceElement replaces an existing PUBLIC element's content with new
+// content while preserving its key. It sets initial=ABSENT, current=ABSENT,
+// target=ToPublic so the planner emits "add" operations that update the
+// already-existing descriptor. This is used for CREATE OR REPLACE FUNCTION.
+//
+// This method uses key-attribute matching rather than ElementString lookup
+// because the replacement element may have different non-key schema attributes
+// (e.g., ReferencedTypeIDs on TriggerDeps) that change the ElementString.
+func (b *builderState) replaceElement(e scpb.Element, meta scpb.TargetMetadata) {
+	b.ensureDescriptors(e)
+	id := screl.GetDescID(e)
+	c := b.descCache[id]
+
+	// Find the existing element by key attributes (DescID, TriggerID, etc.).
+	var existing *elementState
+	for _, idx := range c.outputIndexes {
+		es := &b.output[idx]
+		if screl.EqualElementKeys(es.element, e) {
+			existing = es
+			break
+		}
+	}
+	if existing == nil {
+		panic(errors.AssertionFailedf(
+			"Replace called on non-existent element %s", screl.ElementString(e),
+		))
+	}
+
+	// Update elementIndexMap if the ElementString changed (due to non-key
+	// schema attributes like ReferencedTypeIDs).
+	oldKey := screl.ElementString(existing.element)
+	newKey := screl.ElementString(e)
+	if oldKey != newKey {
+		idx := c.elementIndexMap[oldKey]
+		delete(c.elementIndexMap, oldKey)
+		c.elementIndexMap[newKey] = idx
+	}
+
+	c.cachedCollection = nil
+	newState := elementState{
+		element:  e,
+		initial:  scpb.Status_ABSENT,
+		current:  scpb.Status_ABSENT,
+		target:   scpb.ToPublic,
+		metadata: meta,
+	}
+	if err := b.localMemAcc.Grow(b.ctx, newState.byteSize()-existing.byteSize()); err != nil {
+		panic(err)
+	}
+	// Overwrite the element in place via the pointer into b.output. We do this
+	// directly rather than calling upsertElementState because upsertElementState
+	// uses getExistingElementState internally, which would fail if the
+	// ElementString changed. The pointer is safe because we are modifying an
+	// existing slice element, not appending (same pattern as upsertElementState).
+	*existing = newState
 }
 
 func (b *builderState) upsertElementState(es elementState) {
@@ -605,6 +663,42 @@ func (b *builderState) IsTableEmpty(table *scpb.Table) bool {
 	return b.tr.IsTableEmpty(b.ctx, table.TableID, index.IndexID)
 }
 
+// TTLExpirationExpression returns a validated TTL expiration expression for
+// a table's row-level TTL configuration. It verifies that the expression:
+// - type-checks as a TIMESTAMPTZ
+// - is not volatile
+// - references valid columns in the table
+func (b *builderState) TTLExpirationExpression(
+	tableID catid.DescID,
+	ttl *catpb.RowLevelTTL,
+	getAllNonDropColumnsFn func() colinfo.ResultColumns,
+	columnLookupByNameFn schemaexpr.ColumnLookupFn,
+) tree.Expr {
+	if ttl == nil || !ttl.HasExpirationExpr() {
+		return nil
+	}
+	b.ensureDescriptor(tableID)
+	ns := b.QueryByID(tableID).FilterNamespace().MustGetOneElement()
+	tableName := tree.MakeTableNameFromPrefix(b.NamePrefix(ns), tree.Name(ns.Name))
+	serializedExpr, err := schemaexpr.ValidateTTLExpirationExpression(
+		b.ctx,
+		b.semaCtx,
+		&tableName,
+		ttl,
+		b.clusterSettings.Version.ActiveVersion(b.ctx),
+		getAllNonDropColumnsFn,
+		columnLookupByNameFn,
+	)
+	if err != nil {
+		panic(err)
+	}
+	parsedExpr, err := parser.ParseExpr(serializedExpr)
+	if err != nil {
+		panic(err)
+	}
+	return parsedExpr
+}
+
 func (b *builderState) nextIndexID(id catid.DescID) (ret catid.IndexID) {
 	{
 		b.ensureDescriptor(id)
@@ -687,7 +781,7 @@ func (b *builderState) IndexPartitioningDescriptor(
 	)
 	allowImplicitPartitioning := b.evalCtx.SessionData().ImplicitColumnPartitioningEnabled ||
 		tbl.IsLocalityRegionalByRow()
-	_, ret, err := b.createPartCCL(
+	_, ret, err := partitioning.CreatePartitioning(
 		b.ctx,
 		b.clusterSettings,
 		b.evalCtx,
@@ -906,8 +1000,8 @@ func (b *builderState) ComputedColumnExpression(
 func (b *builderState) PartialIndexPredicateExpression(
 	tableID catid.DescID, expr tree.Expr,
 ) tree.Expr {
-	// Ensure that an namespace entry exists for the table.
-	_, _, ns := scpb.FindNamespace(b.QueryByID(tableID))
+	// Ensure that a namespace entry exists for the table.
+	ns := b.QueryByID(tableID).FilterNamespace().MustGetOneElement()
 	if ns == nil {
 		panic(errors.AssertionFailedf("unable to find namespace for %d.", tableID))
 	}
@@ -1096,6 +1190,7 @@ func (b *builderState) checkOwnershipOrPrivilegesOnSchemaDesc(
 }
 
 // ResolveUserDefinedTypeType implements the scbuildstmt.NameResolver interface.
+// The type must be owned to be resolved.
 func (b *builderState) ResolveUserDefinedTypeType(
 	name *tree.UnresolvedObjectName, p scbuildstmt.ResolveParams,
 ) scbuildstmt.ElementResultSet {
@@ -1120,10 +1215,8 @@ func (b *builderState) ResolveUserDefinedTypeType(
 			"try ALTER DATABASE %s DROP REGION %s", prefix.Database.GetName(), typ.GetName()))
 	case descpb.TypeDescriptor_ENUM:
 		b.ensureDescriptor(typ.GetID())
-		b.mustOwn(typ.GetID())
 	case descpb.TypeDescriptor_COMPOSITE:
 		b.ensureDescriptor(typ.GetID())
-		b.mustOwn(typ.GetID())
 	case descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE:
 		// Implicit record types are not directly modifiable.
 		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,
@@ -1131,9 +1224,7 @@ func (b *builderState) ResolveUserDefinedTypeType(
 	default:
 		panic(errors.AssertionFailedf("unknown type kind %s", typ.GetKind()))
 	}
-	if p.RequireOwnership {
-		b.mustOwn(typ.GetID())
-	}
+	b.mustOwn(typ.GetID())
 	return b.QueryByID(typ.GetID())
 }
 
@@ -1156,7 +1247,7 @@ func (b *builderState) resolveRelation(
 ) *cachedDesc {
 	var prefix catalog.ResolvedObjectPrefix
 	var rel catalog.Descriptor
-	prefix, rel = b.cr.MayResolveTable(b.ctx, *name)
+	prefix, rel = b.cr.MayResolveTable(b.ctx, *name, p.WithOffline)
 	if rel == nil {
 		if p.ResolveTypes {
 			prefix, rel = b.cr.MayResolveType(b.ctx, *name)

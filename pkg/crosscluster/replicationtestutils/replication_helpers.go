@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -156,7 +157,7 @@ func (rf *ReplicationFeed) ObserveResolved(ctx context.Context, lo hlc.Timestamp
 
 // ObserveRangeStats consumes the feed until we recieve a checkpoint that
 // contains range stats. Returns the stats from the checkpoint.
-func (rf *ReplicationFeed) ObserveRangeStats(ctx context.Context) streampb.StreamEvent_RangeStats {
+func (rf *ReplicationFeed) ObserveRangeStats(ctx context.Context) rangescanstatspb.RangeStats {
 	if !ContainsRangeStats()(rf.msg) {
 		rf.consumeUntil(ctx, ContainsRangeStats(), func(err error) bool {
 			return false
@@ -176,6 +177,17 @@ func (rf *ReplicationFeed) ObserveError(ctx context.Context, errPred FeedErrorPr
 // Close cleans up any resources.
 func (rf *ReplicationFeed) Close(ctx context.Context) {
 	rf.f.Close(ctx)
+}
+
+// ObserveGeneric consumes the feed until the predicate is satisfied.
+// Returns the matching event.
+func (rf *ReplicationFeed) ObserveGeneric(
+	ctx context.Context, pred FeedEventPredicate,
+) crosscluster.Event {
+	rf.consumeUntil(ctx, pred, func(err error) bool {
+		return false
+	})
+	return rf.msg
 }
 
 func (rf *ReplicationFeed) consumeUntil(

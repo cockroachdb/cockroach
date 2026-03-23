@@ -9,6 +9,7 @@ go_library(
     srcs = [
         "column.go",
         "descriptor.go",
+        "extract.go",
         "index.go",
         "join_type.go",
         "locking.go",
@@ -40,8 +41,15 @@ go_library(
 go_test(
     name = "descpb_test",
     size = "small",
-    srcs = ["structured_test.go"],
+    srcs = [
+        "extract_test.go",
+        "structured_test.go",
+    ],
     embed = [":descpb"],
+    deps = [
+        "//pkg/util/protoutil",
+        "@com_github_stretchr_testify//require",
+    ],
 )
 
 proto_library(

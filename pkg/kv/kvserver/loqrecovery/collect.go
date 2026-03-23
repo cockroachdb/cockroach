@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -124,7 +123,7 @@ func CollectRemoteReplicaInfo(
 
 // CollectStoresReplicaInfo captures states of all replicas in all stores for the sake of quorum recovery.
 func CollectStoresReplicaInfo(
-	ctx context.Context, stores []storage.Engine,
+	ctx context.Context, stores []kvstorage.Engines,
 ) (loqrecoverypb.ClusterReplicaInfo, CollectionStats, error) {
 	if len(stores) == 0 {
 		return loqrecoverypb.ClusterReplicaInfo{}, CollectionStats{}, errors.New("no stores were provided for info collection")
@@ -145,8 +144,8 @@ func CollectStoresReplicaInfo(
 	var clusterUUID uuid.UUID
 	nodes := make(map[roachpb.NodeID]struct{})
 	var replicas []loqrecoverypb.ReplicaInfo
-	for i, reader := range stores {
-		ident, err := kvstorage.ReadStoreIdent(ctx, reader)
+	for i, store := range stores {
+		ident, err := kvstorage.ReadStoreIdent(ctx, store.LogEngine())
 		if err != nil {
 			return loqrecoverypb.ClusterReplicaInfo{}, CollectionStats{}, err
 		}
@@ -157,10 +156,10 @@ func CollectStoresReplicaInfo(
 			return loqrecoverypb.ClusterReplicaInfo{}, CollectionStats{}, errors.New("can't collect info from stored that belong to different clusters")
 		}
 		nodes[ident.NodeID] = struct{}{}
-		// TODO(sep-raft-log): use different readers when the raft and state machine
-		// engines are separate. Since the engines are immutable in this path, there
-		// is no question whether to and in which order to grab engine snapshots.
-		if err := visitStoreReplicas(ctx, reader, reader, ident.StoreID, ident.NodeID,
+		// NB: since the engines are immutable in this path, there is no question
+		// whether to and in which order to grab state/raft engine snapshots.
+		if err := visitStoreReplicas(
+			ctx, store.StateEngine(), store.LogEngine(), ident.StoreID, ident.NodeID,
 			func(info loqrecoverypb.ReplicaInfo) error {
 				replicas = append(replicas, info)
 				return nil
@@ -180,21 +179,22 @@ func CollectStoresReplicaInfo(
 
 func visitStoreReplicas(
 	ctx context.Context,
-	state, raft storage.Reader,
+	stateRO kvstorage.StateRO,
+	raftRO kvstorage.RaftRO,
 	storeID roachpb.StoreID,
 	nodeID roachpb.NodeID,
 	send func(info loqrecoverypb.ReplicaInfo) error,
 ) error {
-	if err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, state, func(desc roachpb.RangeDescriptor) error {
+	if err := kvstorage.IterateRangeDescriptorsFromDisk(ctx, stateRO, func(desc roachpb.RangeDescriptor) error {
 		rsl := kvstorage.MakeStateLoader(desc.RangeID)
-		rstate, err := rsl.Load(ctx, state, &desc)
+		rstate, err := rsl.Load(ctx, stateRO, &desc)
 		if err != nil {
 			return err
 		}
 		// TODO(pav-kv): the LoQ recovery flow uses only the applied index, and the
 		// HardState.Commit loaded here is unused. Consider removing. Make sure this
 		// doesn't break compatibility for ReplicaInfo unmarshalling.
-		hstate, err := rsl.LoadHardState(ctx, raft)
+		hstate, err := rsl.LoadHardState(ctx, raftRO)
 		if err != nil {
 			return err
 		}
@@ -208,7 +208,7 @@ func visitStoreReplicas(
 		// For the heuristics here, it would probably make sense to read from all
 		// LogIDs with unapplied entries.
 		rangeUpdates, err := GetDescriptorChangesFromRaftLog(
-			ctx, desc.RangeID, rstate.RaftAppliedIndex+1, math.MaxInt64, raft)
+			ctx, desc.RangeID, rstate.RaftAppliedIndex+1, math.MaxInt64, raftRO)
 		if err != nil {
 			return err
 		}
@@ -234,10 +234,10 @@ func visitStoreReplicas(
 // lo (inclusive) and hi (exclusive) and searches for changes to range
 // descriptors, as identified by presence of a commit trigger.
 func GetDescriptorChangesFromRaftLog(
-	ctx context.Context, rangeID roachpb.RangeID, lo, hi kvpb.RaftIndex, reader storage.Reader,
+	ctx context.Context, rangeID roachpb.RangeID, lo, hi kvpb.RaftIndex, raftRO kvstorage.RaftRO,
 ) ([]loqrecoverypb.DescriptorChangeInfo, error) {
 	var changes []loqrecoverypb.DescriptorChangeInfo
-	if err := raftlog.Visit(ctx, reader, rangeID, lo, hi, func(ent raftpb.Entry) error {
+	if err := raftlog.Visit(ctx, raftRO, rangeID, lo, hi, func(ent raftpb.Entry) error {
 		e, err := raftlog.NewEntry(ent)
 		if err != nil {
 			return err

@@ -70,6 +70,10 @@ type DiskStallArgs struct {
 	Cycle                bool
 	CycleStallDuration   time.Duration
 	CycleUnstallDuration time.Duration
+	// If true, WaitForFailureToPropagate becomes a no-op. This is useful for:
+	// - Multi-store clusters with WAL failover enabled, where the cluster continues
+	//   operating normally during a disk stall on a single store.
+	SkipFailurePropagation bool
 }
 
 func (s *CGroupDiskStaller) Description() string {
@@ -294,6 +298,9 @@ func (s *CGroupDiskStaller) WaitForFailureToPropagate(
 	if args.(DiskStallArgs).Cycle {
 		l.Printf("Stall cycle is enabled, skipping WaitForFailureToPropagate")
 		return nil
+	} else if args.(DiskStallArgs).SkipFailurePropagation {
+		l.Printf("SkipFailurePropagation set true, skipping WaitForFailureToPropagate")
+		return nil
 	}
 
 	diskStallArgs := args.(DiskStallArgs)
@@ -408,6 +415,9 @@ const (
 	DmsetupDiskStallName = "dmsetup-disk-stall"
 	dmsetupStallCmd      = "sudo dmsetup suspend --noflush --nolockfs data1"
 	dmsetupUnstallCmd    = "sudo dmsetup resume data1"
+	// dmsetupStateFile stores the original disk device name so cleanup can find it
+	// even when running as a separate stage after setup has modified the mount.
+	dmsetupStateFile = "/tmp/dmsetup-disk-stall-device"
 )
 
 type DmsetupDiskStaller struct {
@@ -436,6 +446,38 @@ func (s *DmsetupDiskStaller) Description() string {
 	return "dmsetup disk staller"
 }
 
+// getStoredDeviceName reads the device name from the state file saved during setup.
+// This allows cleanup to find the original device even when running as a separate stage.
+func (s *DmsetupDiskStaller) getStoredDeviceName(
+	ctx context.Context, l *logger.Logger,
+) (string, error) {
+	res, err := s.RunWithDetails(ctx, l, s.c.Nodes[:1], fmt.Sprintf("cat %s 2>/dev/null", dmsetupStateFile))
+	if err != nil {
+		return "", errors.Wrap(err, "failed to read stored device name")
+	}
+	dev := strings.TrimSpace(res.Stdout)
+	if dev == "" {
+		return "", errors.New("no stored device name found; run setup stage first")
+	}
+	return dev, nil
+}
+
+// getOrStoreDeviceName gets the disk device name, storing it to the state file if not already stored.
+// This is used during setup to persist the device name for later stages.
+func (s *DmsetupDiskStaller) getOrStoreDeviceName(
+	ctx context.Context, l *logger.Logger,
+) (string, error) {
+	dev, err := s.DiskDeviceName(ctx, l)
+	if err != nil {
+		return "", err
+	}
+	// Save the device name for later use by cleanup when running stages independently.
+	if err = s.Run(ctx, l, s.c.Nodes, fmt.Sprintf("echo '%s' > %s", dev, dmsetupStateFile)); err != nil {
+		return "", errors.Wrap(err, "failed to save device name to state file")
+	}
+	return dev, nil
+}
+
 func (s *DmsetupDiskStaller) Setup(ctx context.Context, l *logger.Logger, args FailureArgs) error {
 	diskStallArgs := args.(DiskStallArgs)
 	var err error
@@ -450,7 +492,8 @@ func (s *DmsetupDiskStaller) Setup(ctx context.Context, l *logger.Logger, args F
 		}
 	}
 
-	dev, err := s.DiskDeviceName(ctx, l)
+	// Get the device name and store it for later stages (cleanup).
+	dev, err := s.getOrStoreDeviceName(ctx, l)
 	if err != nil {
 		return err
 	}
@@ -562,9 +605,15 @@ func (s *DmsetupDiskStaller) Cleanup(
 		}
 	}
 
-	dev, err := s.DiskDeviceName(ctx, l)
+	// Try to get the device name from the state file first (for independent stage runs),
+	// fall back to live lookup (for full lifecycle runs where mount is still intact).
+	dev, err := s.getStoredDeviceName(ctx, l)
 	if err != nil {
-		return err
+		l.Printf("Could not read stored device name, trying live lookup: %v", err)
+		dev, err = s.DiskDeviceName(ctx, l)
+		if err != nil {
+			return errors.Wrap(err, "failed to determine disk device")
+		}
 	}
 
 	if err := s.Run(ctx, l, s.c.Nodes, `sudo dmsetup resume data1`); err != nil {
@@ -579,7 +628,8 @@ func (s *DmsetupDiskStaller) Cleanup(
 	if err := s.Run(ctx, l, s.c.Nodes, `sudo tune2fs -O has_journal `+dev); err != nil {
 		return err
 	}
-	if err := s.Run(ctx, l, s.c.Nodes, `sudo mount /mnt/data1`); err != nil {
+	// Mount the original device back to /mnt/data1.
+	if err := s.Run(ctx, l, s.c.Nodes, fmt.Sprintf("sudo mount %s /mnt/data1", dev)); err != nil {
 		return err
 	}
 	// Reenable snapd autoimport udev rules.
@@ -598,6 +648,9 @@ sudo udevadm control --reload`); err != nil {
 		return err
 	}
 
+	// Clean up the state file.
+	_ = s.Run(ctx, l, s.c.Nodes, fmt.Sprintf("rm -f %s", dmsetupStateFile))
+
 	if diskStallArgs.RestartNodes {
 		if err := s.StartCluster(ctx, l); err != nil {
 			return err
@@ -611,6 +664,9 @@ func (s *DmsetupDiskStaller) WaitForFailureToPropagate(
 ) error {
 	if args.(DiskStallArgs).Cycle {
 		l.Printf("Stall cycle is enabled, skipping WaitForFailureToPropagate")
+		return nil
+	} else if args.(DiskStallArgs).SkipFailurePropagation {
+		l.Printf("SkipFailurePropagation set true, skipping WaitForFailureToPropagate")
 		return nil
 	}
 	nodes := args.(DiskStallArgs).Nodes

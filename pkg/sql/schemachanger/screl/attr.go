@@ -6,6 +6,7 @@
 package screl
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
@@ -61,6 +62,8 @@ const (
 	// use includes:
 	//   1. comment metadata on descriptors.
 	//   2. string representation of column generated as identity sequence options
+	//   3. region name for TableLocalitySecondaryRegion.
+	//   4. regional by row AS
 	Value
 	// TemporaryIndexID is the index ID of the temporary index being populated
 	// during this index's backfill.
@@ -119,13 +122,17 @@ const (
 	// PolicyID is an attribute for row-level security policies to uniquely
 	// identify a policy within a table.
 	PolicyID
-
 	// GeneratedAsIdentityType is the type for a generated as identity column.
 	// It's value must be in catpb.GeneratedAsIdentityType.
 	GeneratedAsIdentityType
 
+	// IntValue A int64 used only for element uniqueness, and this can map out
+	// to any int64 attribute. It is currently used for:
+	// 1) SchemaID in the namespace element.
+	IntValue
+
 	// AttrMax is the largest possible Attr value.
-	// Note: add any new enum values before TargetStatus, leave these at the end.
+	// Note: add any new enum values before IntValue, leave these at the end.
 	AttrMax = iota - 1
 )
 
@@ -258,6 +265,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	),
 	rel.EntityMapping(t((*scpb.RowLevelTTL)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(SeqNum, "SeqNum"),
 	),
 	rel.EntityMapping(t((*scpb.Trigger)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
@@ -273,9 +281,11 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.TableLocalitySecondaryRegion)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ReferencedDescID, "RegionEnumTypeID"),
+		rel.EntityAttr(Value, "RegionName"),
 	),
 	rel.EntityMapping(t((*scpb.TableLocalityRegionalByRow)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(Value, "As"),
 	),
 	rel.EntityMapping(t((*scpb.TableLocalityRegionalByRowUsingConstraint)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
@@ -297,6 +307,10 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.SequenceOption)(nil)),
 		rel.EntityAttr(DescID, "SequenceID"),
 		rel.EntityAttr(Name, "Key"),
+		rel.EntityAttr(Value, "Value"),
+	),
+	rel.EntityMapping(t((*scpb.SequenceValue)(nil)),
+		rel.EntityAttr(DescID, "SequenceID"),
 	),
 	rel.EntityMapping(t((*scpb.SequenceOwner)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
@@ -430,6 +444,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.Namespace)(nil)),
 		rel.EntityAttr(DescID, "DescriptorID"),
 		rel.EntityAttr(ReferencedDescID, "DatabaseID"),
+		rel.EntityAttr(IntValue, "SchemaID"),
 		rel.EntityAttr(Name, "Name"),
 	),
 	rel.EntityMapping(t((*scpb.Owner)(nil)),
@@ -534,6 +549,11 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.TableSchemaLocked)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 	),
+	rel.EntityMapping(t((*scpb.TableStorageParam)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(Name, "Name"),
+		rel.EntityAttr(Value, "Value"),
+	),
 	rel.EntityMapping(t((*scpb.RowLevelSecurityEnabled)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 	),
@@ -562,6 +582,9 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(DescID, "FunctionID"),
 	),
 	rel.EntityMapping(t((*scpb.FunctionSecurity)(nil)),
+		rel.EntityAttr(DescID, "FunctionID"),
+	),
+	rel.EntityMapping(t((*scpb.FunctionParams)(nil)),
 		rel.EntityAttr(DescID, "FunctionID"),
 	),
 }
@@ -606,3 +629,14 @@ var (
 			}
 		})
 )
+
+func init() {
+	// Ensure that the element schema options are updated when new element
+	// protos are added.
+	// The options are one longer because of the `Element` attribute at the
+	// start.
+	if len(elementSchemaOptions)-1 != len(scpb.GetElementOneOfProtos()) {
+		panic(fmt.Sprintf("mismatched element schema options length %d and element protos length %d",
+			len(elementSchemaOptions), len(scpb.GetElementOneOfProtos())))
+	}
+}

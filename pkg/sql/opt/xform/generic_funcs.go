@@ -23,10 +23,23 @@ func (c *CustomFuncs) GenericRulesEnabled() bool {
 	return c.e.evalCtx.SessionData().PlanCacheMode != sessiondatapb.PlanCacheModeForceCustom
 }
 
-// HasPlaceholdersOrStableExprs returns true if the given relational expression's subtree has
+// HasPlaceholders returns true if the given relational expression's subtree has
 // at least one placeholder.
+func (c *CustomFuncs) HasPlaceholders(e memo.RelExpr) bool {
+	return e.Relational().HasPlaceholder
+}
+
+// HasPlaceholdersOrStableExprs returns true if the given relational
+// expression's subtree has at least one placeholder or stable expression.
 func (c *CustomFuncs) HasPlaceholdersOrStableExprs(e memo.RelExpr) bool {
 	return e.Relational().HasPlaceholder || e.Relational().VolatilitySet.HasStable()
+}
+
+// IsConstantsAndPlaceholders returns true if all scalar expressions in the list
+// are constants, placeholders or tuples containing constants or placeholders.
+// If a tuple nested within a tuple is found, false is returned.
+func (c *CustomFuncs) IsConstantsAndPlaceholders(scalars memo.ScalarListExpr) bool {
+	return scalars.IsConstantsAndPlaceholders()
 }
 
 // GenerateParameterizedJoinValuesAndFilters returns a single-row Values

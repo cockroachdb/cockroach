@@ -7,6 +7,7 @@ package tree
 
 import (
 	"reflect"
+	"unsafe"
 
 	"github.com/cockroachdb/errors"
 )
@@ -30,9 +31,10 @@ type HintInjectionDonor struct {
 	walk []any
 }
 
-// NewHintInjectionDonor creates a HintInjectionDonor from a parsed AST. The
-// parsed donor statement could be a regular SQL statement or a statement
-// fingerprint.
+// NewHintInjectionDonor creates a HintInjectionDonor from a parsed AST. This
+// code does not make any assumptions about whether the parsed AST is a regular
+// SQL statement or a statement fingerprint. Either way, it should successfully
+// validate and match against a target statement.
 //
 // After NewHintInjectionDonor returns a HintInjectionDonor, the donor becomes
 // read-only to allow concurrent use from multiple goroutines.
@@ -324,8 +326,8 @@ func (v *hintInjectionVisitor) VisitStatementPost(expr Statement) Statement {
 	return expr
 }
 
-// Validate checks that the target statement exactly matches the donor (except
-// for hints).
+// Validate checks that the target statement exactly matches the donor statement
+// when both are converted to statement fingerprints (except for hints).
 //
 // It is safe to call Validate concurrently from multiple goroutines.
 func (hd *HintInjectionDonor) Validate(stmt Statement, fingerprintFlags FmtFlags) error {
@@ -364,4 +366,22 @@ func (hd *HintInjectionDonor) InjectHints(stmt Statement) (Statement, bool, erro
 		return stmt, false, nil
 	}
 	return newStmt, true, nil
+}
+
+// Size returns an estimate of the memory usage of the HintInjectionDonor in
+// bytes.
+func (hd *HintInjectionDonor) Size() int64 {
+	res := int64(unsafe.Sizeof(*hd))
+
+	res += int64(len(hd.validationSQL))
+
+	// We don't have a good way of estimating the size of the AST. Just assume
+	// it's a small multiple of the string length.
+	res += 2 * int64(len(hd.validationSQL))
+
+	// The walk should be pointing to AST nodes already accounted for, so just add
+	// the slice elements.
+	res += int64(len(hd.walk)) * int64(unsafe.Sizeof(any(nil)))
+
+	return res
 }

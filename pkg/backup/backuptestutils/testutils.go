@@ -8,12 +8,14 @@ package backuptestutils
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
 
 	_ "github.com/cockroachdb/cockroach/pkg/backup/backupbase" // imported for cluster settings.
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
@@ -48,6 +50,50 @@ const (
 // bugs in time-bound iterators. We disable this in race builds, which can
 // be too slow.
 var smallEngineBlocks = !util.RaceEnabled && metamorphic.ConstantWithTestBool("small-engine-blocks", false)
+
+var FastRestore = metamorphic.ConstantWithTestBool("fast-restore", false)
+
+func DisableFastRestoreForTest(t testing.TB) {
+	t.Helper()
+	prev := FastRestore
+	FastRestore = false
+	t.Cleanup(func() { FastRestore = prev })
+}
+
+// EnableFastRestoreForTest marks the test as exercising Online Restore,
+// causing StartBackupRestoreTestCluster to set up the necessary nodelocal
+// storage and system-tenant configuration on the caller's behalf.
+//
+// Note that if we want to use this in a test that uses t.Parallel, we should restructure
+// how we turn on and off this metamorphic.
+func EnableFastRestoreForTest(t testing.TB) {
+	t.Helper()
+	prev := FastRestore
+	FastRestore = true
+	t.Cleanup(func() { FastRestore = prev })
+}
+
+var externalConnection = metamorphic.ConstantWithTestBool("external-connection", false)
+
+// GetExternalStorageURI metamorphically chooses between baseURI,
+// and an external connection pointing to baseURI.
+// if external connection is chosen, it will apply `CREATE EXTERNAL CONNECTION` commands to dbs
+func GetExternalStorageURI(
+	t *testing.T, baseURI string, extConnName string, dbs ...*sqlutils.SQLRunner,
+) string {
+	uri := baseURI
+	if externalConnection {
+		for _, db := range dbs {
+			db.Exec(t, fmt.Sprintf(
+				"CREATE EXTERNAL CONNECTION '%s' AS '%s';",
+				extConnName,
+				baseURI,
+			))
+		}
+		uri = "external://" + extConnName
+	}
+	return uri
+}
 
 // InitManualReplication calls tc.ToggleReplicateQueues(false).
 //
@@ -118,6 +164,11 @@ func StartBackupRestoreTestCluster(
 		opts.dataDir, dirCleanupFunc = testutils.TempDir(t)
 	}
 
+	nodelocalCleanupFunc := func() {}
+	if FastRestore {
+		nodelocalCleanupFunc = nodelocal.ReplaceNodeLocalForTesting(opts.dataDir)
+	}
+
 	if opts.initFunc == nil {
 		// TODO(ssd): Is anything actually using a custom init
 		// func?
@@ -150,9 +201,6 @@ func StartBackupRestoreTestCluster(
 		const payloadSize = 100
 		splits := 10
 		numAccounts := opts.bankArgs.numAccounts
-		if numAccounts == 0 {
-			splits = 0
-		}
 		bankData := bank.FromConfig(numAccounts, numAccounts, payloadSize, splits)
 
 		// Lower the initial buffering adder ingest size to allow
@@ -177,6 +225,7 @@ func StartBackupRestoreTestCluster(
 			CheckForInvalidDescriptors(t, tc.Conns[0])
 		}
 		tc.Stopper().Stop(ctx) // cleans up in memory storage's auxiliary dirs
+		nodelocalCleanupFunc()
 		dirCleanupFunc()
 	}
 }
@@ -205,6 +254,14 @@ func setTestClusterDefaults(params *base.TestClusterArgs, dataDir string, useDat
 		params.ServerArgs.Knobs.Store.(*kvserver.StoreTestingKnobs).SmallEngineBlocks = true
 	}
 
+	// TODO(at): remove once LinkExternalSSTable is enabled for secondary tenants.
+	if FastRestore {
+		var tenantzero base.DefaultTestTenantOptions
+		if params.ServerArgs.DefaultTestTenant == tenantzero {
+			params.ServerArgs.DefaultTestTenant = base.TestIsSpecificToStorageLayerAndNeedsASystemTenant
+		}
+	}
+
 	if params.ServerArgs.Knobs.JobsTestingKnobs == nil {
 		params.ServerArgs.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	}
@@ -224,11 +281,15 @@ func setTestClusterDefaults(params *base.TestClusterArgs, dataDir string, useDat
 }
 
 // VerifyBackupRestoreStatementResult conducts a Backup or Restore and verifies
-// it was properly written to the jobs table. Note, does not verify online restores
+// it was properly written to the jobs table. Note, does not verify online restores.
 func VerifyBackupRestoreStatementResult(
 	t *testing.T, sqlDB *sqlutils.SQLRunner, query string, args ...interface{},
 ) error {
 	t.Helper()
+	if FastRestore {
+		sqlDB.Exec(t, query, args...)
+		return nil
+	}
 	rows := sqlDB.Query(t, query, args...)
 
 	columns, err := rows.Columns()

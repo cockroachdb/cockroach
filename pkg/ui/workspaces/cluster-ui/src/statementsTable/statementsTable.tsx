@@ -13,6 +13,8 @@ import {
   latencyBarChart,
   contentionBarChart,
   cpuBarChart,
+  admissionWaitTimeBarChart,
+  kvCPUTimeBarChart,
   maxMemUsageBarChart,
   networkBytesBarChart,
   retryBarChart,
@@ -74,7 +76,7 @@ export interface AggregateStatistics {
   regionNodes?: string[];
 }
 
-export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
+export const StatementsSortedTable = SortedTable<AggregateStatistics>;
 
 export function shortStatement(
   summary: StatementSummary,
@@ -152,6 +154,14 @@ export function makeStatementsColumns(
     sampledExecStatsBarChartOptions,
   );
   const cpuBar = cpuBarChart(statements, sampledExecStatsBarChartOptions);
+  const admissionWaitTimeBar = admissionWaitTimeBarChart(
+    statements,
+    sampledExecStatsBarChartOptions,
+  );
+  const kvCPUTimeBar = kvCPUTimeBarChart(
+    statements,
+    defaultBarChartOptions, // kvCPUTime is always collected, it is not part of the sampled exec stats.
+  );
   const maxMemUsageBar = maxMemUsageBarChart(
     statements,
     sampledExecStatsBarChartOptions,
@@ -230,6 +240,21 @@ export function makeStatementsColumns(
       cell: cpuBar,
       sort: (stmt: AggregateStatistics) =>
         FixLong(Number(stmt.stats.exec_stats.cpu_sql_nanos?.mean)),
+    },
+    {
+      name: "kvCPUTime",
+      title: statisticsTableTitles.kvCPUTime(statType),
+      cell: kvCPUTimeBar,
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.kv_cpu_time_nanos?.mean)),
+    },
+    {
+      name: "admissionWaitTime",
+      title: statisticsTableTitles.admissionWaitTime(statType),
+      cell: admissionWaitTimeBar,
+      className: cx("statements-table__col-admission-wait-time"),
+      sort: (stmt: AggregateStatistics) =>
+        FixLong(Number(stmt.stats.exec_stats.admission_wait_time?.mean)),
     },
     {
       name: "latencyMin",

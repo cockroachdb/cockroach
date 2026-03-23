@@ -58,6 +58,7 @@ func TestFixtureRegistry(t *testing.T) {
 		kind           string
 		createdAt      time.Time
 		readyAt        time.Time
+		lastFailureAt  time.Time
 		isLatestOfKind bool
 		survivesGC     bool
 	}
@@ -127,6 +128,35 @@ func TestFixtureRegistry(t *testing.T) {
 			survivesGC:     true,
 			isLatestOfKind: false,
 		},
+		{
+			// This fixture was marked with a failure long ago, so it will be deleted
+			// despite the flag.
+			kind:           "kind-marked-failure",
+			createdAt:      makeTime(-10),
+			readyAt:        makeTime(-9),
+			lastFailureAt:  makeTime(-8),
+			survivesGC:     false,
+			isLatestOfKind: false,
+		},
+		{
+			// This fixture was marked with a failure recently, so despite the fact
+			// that it has been obsolete for more than a day, it will not be
+			// deleted.
+			kind:           "kind-marked-failure",
+			createdAt:      makeTime(-6),
+			readyAt:        makeTime(-5),
+			lastFailureAt:  makeTime(-4),
+			survivesGC:     true,
+			isLatestOfKind: false,
+		},
+		{
+			// This is the most recent fixture of its kind, so it will not be deleted.
+			kind:           "kind-marked-failure",
+			createdAt:      makeTime(-1),
+			readyAt:        makeTime(-0.5),
+			survivesGC:     true,
+			isLatestOfKind: true,
+		},
 	}
 
 	type fixturesCreated struct {
@@ -167,6 +197,11 @@ func TestFixtureRegistry(t *testing.T) {
 		if !f.readyAt.IsZero() {
 			now = f.readyAt
 			require.NoError(t, handle.SetReadyAt(ctx))
+		}
+
+		if !f.lastFailureAt.IsZero() {
+			now = f.lastFailureAt
+			require.NoError(t, registry.MarkFailure(ctx, l, metadata.MetadataPath))
 		}
 
 		created = append(created, fixturesCreated{

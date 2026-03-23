@@ -16,7 +16,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  HINT:  To call a function, use SELECT.
  CREATE FUNCTION cp_testfunc1(a int) RETURNS int LANGUAGE SQL AS $$ SELECT a $$;
  CREATE TABLE cp_test (a int, b text);
-@@ -16,47 +12,91 @@
+@@ -16,43 +12,78 @@
  INSERT INTO cp_test VALUES (1, x);
  $$;
  \df ptest1
@@ -123,21 +123,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
 +ERROR:  ptest1(x: string) is a procedure
  HINT:  To call a procedure, use CALL.
  CALL ptest1('a');  -- ok
-+--
-+(0 rows)
-+
  CALL ptest1('xy' || 'zzy');  -- ok, constant-folded arg
-+--
-+(0 rows)
-+
- CALL ptest1(substring(random()::numeric(20,15)::text, 1, 1));  -- ok, volatile arg
-+--
-+(0 rows)
-+
- SELECT * FROM cp_test ORDER BY b COLLATE "C";
-  a |   b   
- ---+-------
-@@ -71,34 +111,47 @@
+@@ -71,34 +102,47 @@
  BEGIN ATOMIC
    INSERT INTO cp_test VALUES (1, x);
  END;
@@ -167,9 +154,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
 +
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
-+We appreciate your feedback.
  
++We appreciate your feedback.
++
 +\df ptest1s
 +ERROR:  at or near ".": syntax error
 +DETAIL:  source SQL:
@@ -204,7 +191,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  
  -- utility functions currently not supported here
  CREATE PROCEDURE ptestx()
-@@ -106,13 +159,27 @@
+@@ -106,7 +150,18 @@
  BEGIN ATOMIC
    CREATE TABLE x (a int);
  END;
@@ -224,26 +211,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  CREATE PROCEDURE ptest2()
  LANGUAGE SQL
  AS $$
- SELECT 5;
- $$;
- CALL ptest2();
-+--
-+(0 rows)
-+
- -- nested CALL
- TRUNCATE cp_test;
- CREATE PROCEDURE ptest3(y text)
-@@ -122,6 +189,9 @@
- CALL ptest1($1);
- $$;
- CALL ptest3('b');
-+--
-+(0 rows)
-+
- SELECT * FROM cp_test;
-  a | b 
- ---+---
-@@ -147,7 +217,6 @@
+@@ -147,7 +202,6 @@
  CALL ptest4a(a, b);  -- error, not supported
  $$;
  ERROR:  calling procedures with output arguments is not supported in SQL functions
@@ -251,17 +219,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  DROP PROCEDURE ptest4a;
  -- named and default parameters
  CREATE OR REPLACE PROCEDURE ptest5(a int, b text, c int default 100)
-@@ -158,9 +227,23 @@
- $$;
- TRUNCATE cp_test;
+@@ -160,7 +214,15 @@
  CALL ptest5(10, 'Hello', 20);
-+--
-+(0 rows)
-+
  CALL ptest5(10, 'Hello');
-+--
-+(0 rows)
-+
  CALL ptest5(10, b => 'Hello');
 +ERROR:  at or near ">": syntax error
 +DETAIL:  source SQL:
@@ -275,7 +235,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  SELECT * FROM cp_test;
    a  |   b   
  -----+-------
-@@ -168,11 +251,7 @@
+@@ -168,11 +230,7 @@
    20 | Hello
    10 | Hello
   100 | Hello
@@ -288,24 +248,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  
  -- polymorphic types
  CREATE PROCEDURE ptest6(a int, b anyelement)
-@@ -181,6 +260,9 @@
- SELECT NULL::int;
- $$;
- CALL ptest6(1, 2);
-+--
-+(0 rows)
-+
- -- collation assignment
- CREATE PROCEDURE ptest7(a text, b text)
- LANGUAGE SQL
-@@ -188,28 +270,47 @@
- SELECT a = b;
- $$;
- CALL ptest7(least('a', 'b'), 'a');
-+--
-+(0 rows)
-+
- -- empty body
+@@ -192,24 +250,40 @@
  CREATE PROCEDURE ptest8(x text)
  BEGIN ATOMIC
  END;
@@ -361,7 +304,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  -- OUT parameters
  CREATE PROCEDURE ptest9(OUT a int)
  LANGUAGE SQL
-@@ -226,17 +327,10 @@
+@@ -226,17 +300,10 @@
  
  -- you can write an expression, but it's not evaluated
  CALL ptest9(1/0);  -- no error
@@ -381,7 +324,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  -- check named-parameter matching
  CREATE PROCEDURE ptest10(OUT a int, IN b int, IN c int)
  LANGUAGE SQL AS $$ SELECT b - c $$;
-@@ -247,137 +341,222 @@
+@@ -247,123 +314,176 @@
  (1 row)
  
  CALL ptest10(a => null, b => 8, c => 2);
@@ -626,10 +569,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_procedure.
  RESET ROLE;
  GRANT EXECUTE ON PROCEDURE ptest1(text) TO regress_cp_user1;
  SET ROLE regress_cp_user1;
- CALL ptest1('a');  -- ok
-+--
-+(0 rows)
-+
+@@ -371,13 +491,42 @@
  RESET ROLE;
  -- ROUTINE syntax
  ALTER ROUTINE cp_testfunc1(int) RENAME TO cp_testfunc1a;

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -50,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	gogotypes "github.com/gogo/protobuf/types"
 )
 
 const (
@@ -160,7 +162,7 @@ func (sc *SchemaChanger) makeFixedTimestampRunner(readAsOf hlc.Timestamp) histor
 	return runner
 }
 
-// makeFixedTimestampRunner creates a HistoricalTxnRunner suitable for use by the helpers.
+// makeFixedTimestampInternalExecRunner creates a HistoricalInternalExecTxnRunner suitable for use by the helpers.
 func (sc *SchemaChanger) makeFixedTimestampInternalExecRunner(
 	readAsOf hlc.Timestamp,
 ) descs.HistoricalInternalExecTxnRunner {
@@ -196,6 +198,8 @@ func (sc *SchemaChanger) fixedTimestampTxnWithExecutor(
 		txn descs.Txn,
 	) error,
 ) error {
+	// This type of transaction is only used for validation or backfill. Use
+	// bulkNormalPri to run.
 	return sc.txn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
@@ -203,7 +207,7 @@ func (sc *SchemaChanger) fixedTimestampTxnWithExecutor(
 			return err
 		}
 		return retryable(ctx, txn)
-	})
+	}, validationTxn)
 }
 
 // runBackfill runs the backfill for the schema changer.
@@ -539,7 +543,7 @@ func (sc *SchemaChanger) dropConstraints(
 			return err
 		}
 		return txn.KV().Run(ctx, b)
-	}); err != nil {
+	}, metadataOnlyTxn); err != nil {
 		return nil, err
 	}
 
@@ -563,7 +567,7 @@ func (sc *SchemaChanger) dropConstraints(
 			}
 		}
 		return nil
-	}); err != nil {
+	}, metadataOnlyTxn); err != nil {
 		return nil, err
 	}
 	return tableDescs, nil
@@ -716,7 +720,7 @@ func (sc *SchemaChanger) addConstraints(
 			return err
 		}
 		return txn.KV().Run(ctx, b)
-	}); err != nil {
+	}, metadataOnlyTxn); err != nil {
 		return err
 	}
 	log.Dev.Info(ctx, "finished adding constraints")
@@ -943,17 +947,20 @@ func (sc *SchemaChanger) distIndexBackfill(
 ) error {
 	// Gather the initial resume spans for the table.
 	var todoSpans []roachpb.Span
+	var resumeManifests []jobspb.BulkSSTManifest
 	var mutationIdx int
+	jobDetails := sc.job.Details().(jobspb.SchemaChangeDetails)
+	useDistributedMerge := jobDetails.DistributedMergeMode == jobspb.IndexBackfillDistributedMergeMode_Enabled
 
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) (err error) {
-		todoSpans, _, mutationIdx, err = rowexec.GetResumeSpans(
+		todoSpans, resumeManifests, _, mutationIdx, err = rowexec.GetResumeSpansAndSSTManifests(
 			ctx, sc.jobRegistry, txn, sc.execCfg.Codec, txn.Descriptors(), sc.descID,
 			sc.mutationID, filter,
 		)
 		return err
-	}); err != nil {
+	}, metadataOnlyTxn); err != nil {
 		return err
 	}
 
@@ -963,7 +970,9 @@ func (sc *SchemaChanger) distIndexBackfill(
 		return nil
 	}
 
-	writeAsOf := sc.job.Details().(jobspb.SchemaChangeDetails).WriteTimestamp
+	manifestBuf := backfill.NewSSTManifestBuffer(resumeManifests)
+
+	writeAsOf := jobDetails.WriteTimestamp
 	if writeAsOf.IsEmpty() {
 		status := jobs.StatusMessage("scanning target index for in-progress transactions")
 		if err := sc.job.NoTxn().UpdateStatusMessage(ctx, status); err != nil {
@@ -1002,7 +1011,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 			details := sc.job.Details().(jobspb.SchemaChangeDetails)
 			details.WriteTimestamp = writeAsOf
 			return sc.job.WithTxn(txn).SetDetails(ctx, details)
-		}); err != nil {
+		}, metadataOnlyTxn); err != nil {
 			return err
 		}
 		if err := sc.job.NoTxn().UpdateStatusMessage(ctx, StatusBackfill); err != nil {
@@ -1017,6 +1026,8 @@ func (sc *SchemaChanger) distIndexBackfill(
 	var planCtx *PlanningCtx
 	// The txn is used to fetch a tableDesc, partition the spans and set the
 	// evalCtx ts all of which is during planning of the DistSQL flow.
+	// Creating the plan is relatively fast, but use bulkNormalPri
+	// for running it to be safe.
 	if err := sc.txn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
@@ -1044,9 +1055,12 @@ func (sc *SchemaChanger) distIndexBackfill(
 		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
 		chunkSize := sc.getChunkSize(indexBatchSize)
 		spec := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize, addedIndexes, 0)
+		if useDistributedMerge {
+			backfill.EnableDistributedMergeIndexBackfillSink(sc.job.ID(), &spec)
+		}
 		p, err = sc.distSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, todoSpans)
 		return err
-	}); err != nil {
+	}, backfillTxn); err != nil {
 		return err
 	}
 
@@ -1071,6 +1085,18 @@ func (sc *SchemaChanger) distIndexBackfill(
 				mu.updatedTodoSpans = make([]roachpb.Span, len(todoSpans))
 				copy(mu.updatedTodoSpans, todoSpans)
 			}()
+
+			if useDistributedMerge {
+				var mapProgress execinfrapb.BulkMapProgress
+				if gogotypes.Is(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress) {
+					if err := gogotypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress); err != nil {
+						return err
+					}
+					if len(mapProgress.SSTManifests) > 0 {
+						manifestBuf.Append(mapProgress.SSTManifests)
+					}
+				}
+			}
 
 			if sc.testingKnobs.AlwaysUpdateIndexBackfillDetails {
 				if err := updateJobDetails(); err != nil {
@@ -1135,9 +1161,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 				if err != nil {
 					return err
 				}
-				if err := sc.job.WithTxn(txn).FractionProgressed(
-					ctx, jobs.FractionUpdater(fractionCompleted),
-				); err != nil {
+				if err := jobs.ProgressStorage(sc.job.ID()).SetFraction(ctx, txn, float64(fractionCompleted)); err != nil {
 					return jobs.SimplifyInvalidStateError(err)
 				}
 			}
@@ -1152,15 +1176,28 @@ func (sc *SchemaChanger) distIndexBackfill(
 	var updateJobMu syncutil.Mutex
 	updateJobDetails = func() error {
 		updatedTodoSpans := getTodoSpansForUpdate()
+		manifestDirty := manifestBuf.Dirty()
 		return sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			updateJobMu.Lock()
 			defer updateJobMu.Unlock()
-			// No processor has returned completed spans yet.
-			if updatedTodoSpans == nil {
+			// No processor has returned completed spans yet and no new manifests.
+			if updatedTodoSpans == nil && !manifestDirty {
 				return nil
 			}
-			log.VEventf(ctx, 2, "writing todo spans to job details: %+v", updatedTodoSpans)
-			return rowexec.SetResumeSpansInJob(ctx, updatedTodoSpans, mutationIdx, txn, sc.job)
+			spansToPersist := updatedTodoSpans
+			if spansToPersist == nil {
+				spansToPersist = todoSpans
+			}
+			var manifestSnapshot []jobspb.BulkSSTManifest
+			if manifestDirty {
+				manifestSnapshot = manifestBuf.SnapshotAndMarkClean()
+			} else {
+				manifestSnapshot = manifestBuf.Snapshot()
+			}
+			log.VEventf(ctx, 2, "writing todo spans to job details: %+v", spansToPersist)
+			return rowexec.SetResumeSpansAndSSTManifestsInJob(
+				ctx, &sc.execCfg.Codec, spansToPersist, manifestSnapshot, mutationIdx, txn, sc.job,
+			)
 		})
 	}
 
@@ -1263,7 +1300,16 @@ func (sc *SchemaChanger) distColumnBackfill(
 	chunkSize := sc.getChunkSize(backfillChunkSize)
 
 	origNRanges := -1
-	origFractionCompleted := sc.job.FractionCompleted()
+
+	var origFractionCompleted float32
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		ts, _, _, err := jobs.ProgressStorage(sc.job.ID()).Get(ctx, txn)
+		origFractionCompleted = float32(ts)
+		return err
+	}); err != nil {
+		return err
+	}
+
 	fractionLeft := 1 - origFractionCompleted
 	// Gather the initial resume spans for the table.
 	var todoSpans []roachpb.Span
@@ -1288,13 +1334,11 @@ func (sc *SchemaChanger) distColumnBackfill(
 		}
 		fractionRangesFinished := float32(origNRanges-nRanges) / float32(origNRanges)
 		fractionCompleted := origFractionCompleted + fractionLeft*fractionRangesFinished
-		// Note that this explicitly uses a nil txn, which will lead to a new
-		// transaction being created as a part of this update. We want this
-		// update operation to be short and to not be coupled to any other
-		// backfill work, which may take much longer.
-		return sc.job.NoTxn().FractionProgressed(
-			ctx, jobs.FractionUpdater(fractionCompleted),
-		)
+		// Use a short dedicated transaction for this progress update so it's
+		// not coupled to any other backfill work, which may take much longer.
+		return sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return jobs.ProgressStorage(sc.job.ID()).SetFraction(ctx, txn, float64(fractionCompleted))
+		})
 	}
 
 	readAsOf := sc.clock.Now()
@@ -1315,6 +1359,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 		// Make sure not to update todoSpans inside the transaction closure as it
 		// may not commit. Instead write the updated value for todoSpans to this
 		// variable and assign to todoSpans after committing.
+		// Creating the plan is relatively fast, but use bulkNormalPri to be safe.
 		var updatedTodoSpans []roachpb.Span
 		if err := sc.txn(ctx, func(
 			ctx context.Context, txn descs.Txn,
@@ -1365,7 +1410,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 				nil, /* finishedSetupFn */
 			)
 			return cbw.Err()
-		}); err != nil {
+		}, backfillTxn); err != nil {
 			return err
 		}
 		todoSpans = updatedTodoSpans
@@ -1541,9 +1586,11 @@ func ValidateConstraint(
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (err error) {
-	// Validation queries use full table scans which we always want to distribute.
+	// Validation queries use full table scans which we always want to distribute
+	// and partition across nodes.
 	// See https://github.com/cockroachdb/cockroach/issues/152859.
 	execOverride.AlwaysDistributeFullScans = true
+	execOverride.PreventPartitioningSoftLimitedScans = &sessiondata.False
 
 	tableDesc, err = tableDesc.MakeFirstMutationPublic(catalog.IgnoreConstraints)
 	if err != nil {
@@ -1670,9 +1717,11 @@ func ValidateInvertedIndexes(
 	execOverride sessiondata.InternalExecutorOverride,
 	protectedTSManager scexec.ProtectedTimestampManager,
 ) (err error) {
-	// Validation queries use full table scans which we always want to distribute.
+	// Validation queries use full table scans which we always want to distribute
+	// and partition across nodes.
 	// See https://github.com/cockroachdb/cockroach/issues/152859.
 	execOverride.AlwaysDistributeFullScans = true
+	execOverride.PreventPartitioningSoftLimitedScans = &sessiondata.False
 
 	grp := ctxgroup.WithContext(ctx)
 	invalid := make(chan descpb.IndexID, len(indexes))
@@ -1682,7 +1731,7 @@ func ValidateInvertedIndexes(
 
 	// Removes the protected timestamp, if one was added when this
 	// function returns.
-	protectedTSCleaner := protectedTSManager.TryToProtectBeforeGC(ctx, job, tableDesc, runHistoricalTxn.ReadAsOf())
+	protectedTSCleaner := protectedTSManager.TryToProtectBeforeGC(ctx, job, tableDesc.GetID(), runHistoricalTxn.ReadAsOf())
 	defer func() {
 		if unprotectErr := protectedTSCleaner(ctx); unprotectErr != nil {
 			err = errors.CombineErrors(err, unprotectErr)
@@ -1778,9 +1827,11 @@ func countExpectedRowsForInvertedIndex(
 	desc := tableDesc
 	start := timeutil.Now()
 
-	// Validation queries use full table scans which we always want to distribute.
+	// Validation queries use full table scans which we always want to distribute
+	// and partition across nodes.
 	// See https://github.com/cockroachdb/cockroach/issues/152859.
 	execOverride.AlwaysDistributeFullScans = true
+	execOverride.PreventPartitioningSoftLimitedScans = &sessiondata.False
 
 	if withFirstMutationPublic {
 		// Make the mutations public in an in-memory copy of the descriptor and
@@ -1882,9 +1933,11 @@ func ValidateForwardIndexes(
 	execOverride sessiondata.InternalExecutorOverride,
 	protectedTSManager scexec.ProtectedTimestampManager,
 ) (err error) {
-	// Validation queries use full table scans which we always want to distribute.
+	// Validation queries use full table scans which we always want to distribute
+	// and partition across nodes.
 	// See https://github.com/cockroachdb/cockroach/issues/152859.
 	execOverride.AlwaysDistributeFullScans = true
+	execOverride.PreventPartitioningSoftLimitedScans = &sessiondata.False
 
 	grp := ctxgroup.WithContext(ctx)
 
@@ -1897,7 +1950,7 @@ func ValidateForwardIndexes(
 
 	// Removes the protected timestamp, if one was added when this
 	// function returns.
-	protectedTSCleaner := protectedTSManager.TryToProtectBeforeGC(ctx, job, tableDesc, runHistoricalTxn.ReadAsOf())
+	protectedTSCleaner := protectedTSManager.TryToProtectBeforeGC(ctx, job, tableDesc.GetID(), runHistoricalTxn.ReadAsOf())
 	defer func() {
 		if unprotectErr := protectedTSCleaner(ctx); unprotectErr != nil {
 			err = errors.CombineErrors(err, unprotectErr)
@@ -2002,9 +2055,11 @@ func populateExpectedCounts(
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (int64, error) {
-	// Validation queries use full table scans which we always want to distribute.
+	// Validation queries use full table scans which we always want to distribute
+	// and partition across nodes.
 	// See https://github.com/cockroachdb/cockroach/issues/152859.
 	execOverride.AlwaysDistributeFullScans = true
+	execOverride.PreventPartitioningSoftLimitedScans = &sessiondata.False
 
 	desc := tableDesc
 	if withFirstMutationPublic {
@@ -2072,9 +2127,11 @@ func countIndexRowsAndMaybeCheckUniqueness(
 	runHistoricalTxn descs.HistoricalInternalExecTxnRunner,
 	execOverride sessiondata.InternalExecutorOverride,
 ) (int64, error) {
-	// Validation queries use full table scans which we always want to distribute.
+	// Validation queries use full table scans which we always want to distribute
+	// and partition across nodes.
 	// See https://github.com/cockroachdb/cockroach/issues/152859.
 	execOverride.AlwaysDistributeFullScans = true
+	execOverride.PreventPartitioningSoftLimitedScans = &sessiondata.False
 
 	// If we are doing a REGIONAL BY ROW locality change, we can
 	// bypass the uniqueness check below as we are only adding or
@@ -2284,7 +2341,16 @@ func (sc *SchemaChanger) backfillIndexes(
 		fn()
 	}
 
-	fractionScaler := &multiStageFractionScaler{initial: sc.job.FractionCompleted(), stages: backfillStageFractions}
+	var initalFrac float32
+	if err := sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		f, _, _, err := jobs.ProgressStorage(sc.job.ID()).Get(ctx, txn)
+		initalFrac = float32(f)
+		return err
+	}); err != nil {
+		return err
+	}
+
+	fractionScaler := &multiStageFractionScaler{initial: initalFrac, stages: backfillStageFractions}
 	if writeAtRequestTimestamp {
 		fractionScaler.stages = mvccCompatibleBackfillStageFractions
 	}
@@ -2347,7 +2413,7 @@ func (sc *SchemaChanger) mergeFromTemporaryIndex(
 		var err error
 		tbl, err = txn.Descriptors().MutableByID(txn.KV()).Table(ctx, sc.descID)
 		return err
-	}); err != nil {
+	}, metadataOnlyTxn); err != nil {
 		return err
 	}
 	clusterVersion := tbl.ClusterVersion()
@@ -2407,7 +2473,7 @@ func (sc *SchemaChanger) runStateMachineAfterTempIndexMerge(ctx context.Context)
 			}
 		}
 		return nil
-	})
+	}, metadataOnlyTxn)
 }
 
 // truncateAndBackfillColumns performs the backfill operation on the given leased
@@ -2755,9 +2821,9 @@ func validateCheckInTxn(
 					if err != nil {
 						return err
 					}
-					return newNotNullViolationErr(notNullCol.GetName(), tableDesc.AccessibleColumns(), violatingRow)
+					return scerrors.SchemaChangerUserError(newNotNullViolationErr(notNullCol.GetName(), tableDesc.AccessibleColumns(), violatingRow))
 				} else {
-					return newCheckViolationErr(formattedCkExpr, tableDesc.AccessibleColumns(), violatingRow)
+					return scerrors.SchemaChangerUserError(newCheckViolationErr(formattedCkExpr, tableDesc.AccessibleColumns(), violatingRow))
 				}
 			}
 			return nil
@@ -2894,17 +2960,16 @@ func columnBackfillInTxn(
 	if tableDesc.Adding() {
 		return nil
 	}
-	var columnBackfillerMon *mon.BytesMonitor
-	if evalCtx.Planner.Mon() != nil {
-		columnBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Planner.Mon(),
-			mon.MakeName("local-column-backfill-mon"))
-	}
+	columnBackfillerMon := execinfra.NewMonitor(
+		ctx, evalCtx.Planner.TxnMon(), mon.MakeName("local-column-backfill-mon"),
+	)
 
 	rowMetrics := execCfg.GetRowMetrics(evalCtx.SessionData().Internal)
 	var backfiller backfill.ColumnBackfiller
 	if err := backfiller.InitForLocalUse(
 		ctx, txn, evalCtx, semaCtx, tableDesc, columnBackfillerMon, rowMetrics, traceKV,
 	); err != nil {
+		columnBackfillerMon.Stop(ctx)
 		return err
 	}
 	defer backfiller.Close(ctx)
@@ -2939,7 +3004,7 @@ func indexBackfillInTxn(
 	traceKV bool,
 ) error {
 	indexBackfillerMon := execinfra.NewMonitor(
-		ctx, evalCtx.Planner.Mon(), mon.MakeName("local-index-backfill-mon"),
+		ctx, evalCtx.Planner.TxnMon(), mon.MakeName("local-index-backfill-mon"),
 	)
 
 	var backfiller backfill.IndexBackfiller
@@ -3056,7 +3121,7 @@ func (sc *SchemaChanger) distIndexMerge(
 	rc := func(ctx context.Context, spans []roachpb.Span) (int, error) {
 		return NumRangesInSpans(ctx, sc.db.KV(), sc.distSQLPlanner, spans)
 	}
-	tracker := NewIndexMergeTracker(progress, sc.job, rc, fractionScaler)
+	tracker := NewIndexMergeTracker(progress, sc.job, sc.db, rc, fractionScaler)
 	periodicFlusher := newPeriodicProgressFlusher(sc.settings)
 
 	metaFn := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {

@@ -417,3 +417,117 @@ func (bts *backfillerTrackerTestState) getCheckpointUpdatedCalls() interface{} {
 	defer bts.mu.Unlock()
 	return bts.mu.checkpointUpdatedCalls
 }
+
+// TestCalculatePhasedProgress tests the calculatePhasedProgress function which
+// computes the overall fraction complete for a distributed merge backfill using
+// a 3-phase model:
+//   - Phase 0 (map): 0-33%
+//   - Phase 1 (merge iteration 1): 34-66%
+//   - Phase 2 (merge iteration 2): 67-100%
+func TestCalculatePhasedProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tests := []struct {
+		name                string
+		currentPhase        int32
+		completedRanges     int
+		totalRanges         int
+		tasksCompleted      int64
+		tasksTotal          int64
+		expectedProgressMin float32
+		expectedProgressMax float32
+	}{
+		{
+			name:                "map phase start",
+			currentPhase:        0,
+			completedRanges:     0,
+			totalRanges:         100,
+			expectedProgressMin: 0.0,
+			expectedProgressMax: 0.01,
+		},
+		{
+			name:                "map phase half complete",
+			currentPhase:        0,
+			completedRanges:     50,
+			totalRanges:         100,
+			expectedProgressMin: 0.16,
+			expectedProgressMax: 0.17,
+		},
+		{
+			name:                "map phase complete",
+			currentPhase:        0,
+			completedRanges:     100,
+			totalRanges:         100,
+			expectedProgressMin: 0.32,
+			expectedProgressMax: 0.34,
+		},
+		{
+			name:                "merge iteration 1 start",
+			currentPhase:        0, // Map complete, iter 1 in progress.
+			tasksCompleted:      0,
+			tasksTotal:          50,
+			expectedProgressMin: 0.33,
+			expectedProgressMax: 0.34,
+		},
+		{
+			name:                "merge iteration 1 half complete",
+			currentPhase:        0, // Map complete, iter 1 in progress.
+			tasksCompleted:      25,
+			tasksTotal:          50,
+			expectedProgressMin: 0.49,
+			expectedProgressMax: 0.51,
+		},
+		{
+			name:                "merge iteration 1 complete",
+			currentPhase:        1, // Iter 1 just finished.
+			tasksCompleted:      0, // Tasks cleared after iteration.
+			tasksTotal:          0, // Tasks cleared after iteration.
+			expectedProgressMin: 0.65,
+			expectedProgressMax: 0.67,
+		},
+		{
+			name:                "merge iteration 2 half complete",
+			currentPhase:        1, // Iter 1 complete, iter 2 in progress.
+			tasksCompleted:      25,
+			tasksTotal:          50,
+			expectedProgressMin: 0.82,
+			expectedProgressMax: 0.84,
+		},
+		{
+			name:                "merge iteration 2 complete",
+			currentPhase:        2, // Iter 2 complete.
+			tasksCompleted:      0, // Tasks cleared after iteration.
+			tasksTotal:          0, // Tasks cleared after iteration.
+			expectedProgressMin: 0.99,
+			expectedProgressMax: 1.01,
+		},
+		{
+			name:                "edge case: zero ranges in map phase",
+			currentPhase:        0,
+			completedRanges:     0,
+			totalRanges:         0,
+			expectedProgressMin: 0.0,
+			expectedProgressMax: 0.01,
+		},
+		{
+			name:                "edge case: zero tasks in merge iteration",
+			currentPhase:        1, // Iter 1 complete, iter 2 not started.
+			tasksCompleted:      0,
+			tasksTotal:          0, // No tasks yet for iter 2.
+			expectedProgressMin: 0.65,
+			expectedProgressMax: 0.67,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			progress := calculatePhasedProgress(
+				tc.currentPhase, tc.completedRanges, tc.totalRanges,
+				tc.tasksCompleted, tc.tasksTotal)
+			require.GreaterOrEqual(t, progress, tc.expectedProgressMin,
+				"progress %.4f should be >= %.4f", progress, tc.expectedProgressMin)
+			require.LessOrEqual(t, progress, tc.expectedProgressMax,
+				"progress %.4f should be <= %.4f", progress, tc.expectedProgressMax)
+		})
+	}
+}

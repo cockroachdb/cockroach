@@ -17,13 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/tableset"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -40,9 +41,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -59,8 +62,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -170,15 +173,10 @@ func maybeShowCursorAgeWarning(
 	}()
 
 	if cursorAge > warningAge {
-		err = p.SendClientNotice(ctx,
-			pgnotice.Newf(
-				`the provided cursor is %d hours old; `+
-					`older cursors can result in increased changefeed latency`,
-				cursorAge/int64(time.Hour),
-			),
-			true,
-		)
-		if err != nil {
+		warningMsg := fmt.Sprintf("the provided cursor is %d hours old; "+
+			"older cursors can result in increased changefeed latency", cursorAge/int64(time.Hour))
+		log.Changefeed.Warningf(ctx, "%s", warningMsg)
+		if err := p.SendClientNotice(ctx, pgnotice.Newf("%s", warningMsg), true); err != nil {
 			return err
 		}
 	}
@@ -342,11 +340,12 @@ func changefeedPlanHook(
 			// ptsRecords is the protected timestamp records object containing all per-table protected
 			// timestamp records. Its format matches what will be persisted to the job info table.
 			var ptsRecords *cdcprogresspb.ProtectedTimestampRecords
-			codec := p.ExecCfg().Codec
 
 			// We do not yet have the progress config here, so we need to check the settings directly.
 			perTableTrackingEnabled := changefeedbase.TrackPerTableProgress.Get(&p.ExecCfg().Settings.SV)
-			perTableProtectedTimestampsEnabled := changefeedbase.PerTableProtectedTimestamps.Get(&p.ExecCfg().Settings.SV)
+			// TODO(#158779): Re-add per table protected timestamps setting and
+			// fetch this value from that cluster setting.
+			perTableProtectedTimestampsEnabled := false
 			usingPerTablePTS := perTableTrackingEnabled && perTableProtectedTimestampsEnabled
 			if usingPerTablePTS {
 				protectedTimestampRecords := make(map[descpb.ID]uuid.UUID)
@@ -357,7 +356,6 @@ func changefeedPlanHook(
 					ptsTargets.Add(target)
 					ptsRecord := createUserTablesProtectedTimestampRecord(
 						ctx,
-						codec,
 						jobID,
 						ptsTargets,
 						details.StatementTime,
@@ -371,7 +369,6 @@ func changefeedPlanHook(
 				}
 				systemTablesPTSRecord = createSystemTablesProtectedTimestampRecord(
 					ctx,
-					codec,
 					jobID,
 					details.StatementTime,
 				)
@@ -382,7 +379,6 @@ func changefeedPlanHook(
 			} else {
 				ptr = createCombinedProtectedTimestampRecord(
 					ctx,
-					codec,
 					jobID,
 					targets,
 					details.StatementTime,
@@ -526,9 +522,8 @@ func coreChangefeed(
 	resultsCh chan<- tree.Datums,
 	targets changefeedbase.Targets,
 ) error {
-	localState := &cachedState{progress: progress}
-	p.ExtendedEvalContext().ChangefeedState = localState
 	knobs, _ := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
+	var prevResult flowResult
 
 	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&p.ExecCfg().Settings.SV)
 	backoffReset := changefeedbase.RetryBackoffReset.Get(&p.ExecCfg().Settings.SV)
@@ -543,19 +538,29 @@ func coreChangefeed(
 			knobs.BeforeDistChangefeed()
 		}
 
-		initialHighWater, schemaTS, err := computeDistChangefeedTimestamps(ctx, p, details, localState)
+		initialHighWater, schemaTS, err := computeDistChangefeedTimestamps(ctx, p, details, progress)
 		if err != nil {
 			return err
 		}
-		maybeCfKnobs, haveKnobs := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
-		if haveKnobs && maybeCfKnobs.AfterComputeDistChangefeedTimestamps != nil {
-			maybeCfKnobs.AfterComputeDistChangefeedTimestamps(ctx)
+		if knobs != nil && knobs.AfterComputeDistChangefeedTimestamps != nil {
+			knobs.AfterComputeDistChangefeedTimestamps(ctx)
 		}
-		err = startDistChangefeed(ctx, p, 0 /* jobID */, schemaTS, details, description, initialHighWater, localState, resultsCh, nil, targets)
+		var resolvedSpans []jobspb.ResolvedSpan
+		if prevResult.coreProgress != nil {
+			resolvedSpans = prevResult.coreProgress.frontierSpans
+		}
+		result, err := startDistChangefeed(ctx, p, 0 /* jobID */, schemaTS, details, description,
+			initialHighWater, progress, resolvedSpans, prevResult, resultsCh, nil, targets)
 		if err == nil {
 			log.Changefeed.Infof(ctx, "core changefeed completed with no error")
 			return nil
 		}
+
+		// Update progress from the flow result for the next retry.
+		if result.coreProgress != nil {
+			progress = result.coreProgress.progress
+		}
+		prevResult = result
 
 		if knobs != nil && knobs.HandleDistChangefeedError != nil {
 			err = knobs.HandleDistChangefeedError(err)
@@ -566,8 +571,6 @@ func coreChangefeed(
 			return err
 		}
 
-		// All other errors retry; but we'll use an up-to-date progress
-		// information which is saved in the localState.
 		log.Changefeed.Infof(ctx, "core changefeed retrying due to transient error: %s", err)
 	}
 }
@@ -781,7 +784,7 @@ func createChangefeedJobRecord(
 		_, tableToDatabaseLookup := buildTableToDatabaseAndSchemaLookup(tableAndParentDescs)
 		for _, desc := range tableNameToDescriptor {
 			if table, isTable := desc.(catalog.TableDescriptor); isTable {
-				if err := changefeedvalidators.ValidateTable(targets, table, tolerances); err != nil {
+				if err := changefeedvalidators.ValidateTable(targets, table, tolerances, false /* allowOfflineDescriptor */); err != nil {
 					return nil, changefeedbase.Targets{}, err
 				}
 				for _, warning := range changefeedvalidators.WarningsForTable(table, tolerances) {
@@ -903,7 +906,7 @@ func createChangefeedJobRecord(
 		)
 	}
 
-	if err = validateDetailsAndOptions(details, opts); err != nil {
+	if err = validateDetailsAndOptions(details, opts, p.ExecCfg().Settings); err != nil {
 		return nil, changefeedbase.Targets{}, err
 	}
 
@@ -938,13 +941,6 @@ func createChangefeedJobRecord(
 	}
 
 	if scope, ok := opts.GetMetricScope(); ok {
-		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, "CHANGEFEED",
-		); err != nil {
-			return nil, changefeedbase.Targets{}, errors.Wrapf(err,
-				"use of %q option requires an enterprise license.", changefeedbase.OptMetricsScope)
-		}
-
 		if scope == defaultSLIScope {
 			return nil, changefeedbase.Targets{}, pgerror.Newf(pgcode.InvalidParameterValue,
 				"%[1]q=%[2]q is the default metrics scope which keeps track of statistics "+
@@ -965,15 +961,6 @@ func createChangefeedJobRecord(
 	}
 
 	if details.SinkURI == `` {
-
-		if details.Select != `` {
-			if err := utilccl.CheckEnterpriseEnabled(
-				p.ExecCfg().Settings, "CHANGEFEED",
-			); err != nil {
-				return nil, changefeedbase.Targets{}, errors.Wrap(err, "use of AS SELECT requires an enterprise license.")
-			}
-		}
-
 		details.Opts = opts.AsMap()
 		// Jobs should not be created for sinkless changefeeds. However, note that
 		// we create and return a job record for sinkless changefeeds below. This is
@@ -986,12 +973,6 @@ func createChangefeedJobRecord(
 			Details:     details,
 		}
 		return sinklessRecord, targets, nil
-	}
-
-	if err := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings, "CHANGEFEED",
-	); err != nil {
-		return nil, changefeedbase.Targets{}, err
 	}
 
 	if telemetryPath != `` {
@@ -1018,12 +999,6 @@ func createChangefeedJobRecord(
 	details.Opts = opts.AsMap()
 
 	if locFilter := details.Opts[changefeedbase.OptExecutionLocality]; locFilter != "" {
-		if err := utilccl.CheckEnterpriseEnabled(
-			p.ExecCfg().Settings, changefeedbase.OptExecutionLocality,
-		); err != nil {
-			return nil, changefeedbase.Targets{}, err
-		}
-
 		var executionLocality roachpb.Locality
 		if err := executionLocality.Set(locFilter); err != nil {
 			return nil, changefeedbase.Targets{}, err
@@ -1170,7 +1145,7 @@ func getTargetDescriptors(
 		}
 	}
 	// targetTableDescs is empty if the targets are not tables, targetDatabaseDescs is empty if the targets are not databases
-	targetAndParentDescs, _, targetDatabaseDescs, targetTableDescs, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
+	targetAndParentDescs, _, targetDatabaseDescs, targetTableDescs, err := backupresolver.ResolveTargets(ctx, p, statementTime, targets)
 	if err != nil {
 		var m *backupresolver.MissingTableErr
 		if errors.As(err, &m) {
@@ -1342,7 +1317,7 @@ func validateSink(
 
 	var nilOracle timestampLowerBoundOracle
 	canarySink, err := getAndDialSink(ctx, &p.ExecCfg().DistSQLSrv.ServerConfig, details,
-		nilOracle, p.User(), jobID, sli, targets)
+		nilOracle, p.User(), jobID, sli, targets, true /* initialValidation */)
 	if err != nil {
 		return err
 	}
@@ -1413,6 +1388,45 @@ func requiresTopicInValue(s Sink) bool {
 	return s.getConcreteType() == sinkTypeWebhook
 }
 
+// buildDatabaseWatcherFilterFromSpec constructs a tableset watcher filter from a
+// database-level changefeed target specification.
+func buildDatabaseWatcherFilterFromSpec(
+	spec jobspb.ChangefeedTargetSpecification,
+) (tableset.Filter, error) {
+	filter := tableset.Filter{
+		DatabaseID: spec.DescID,
+	}
+	if spec.FilterList != nil && len(spec.FilterList.Tables) > 0 {
+		switch spec.FilterList.FilterType {
+		case tree.IncludeFilter:
+			filter.IncludeTables = make(map[string]struct{})
+			for fqTableName := range spec.FilterList.Tables {
+				// TODO(#156859): use fully qualified names once watcher supports it.
+				// Extract just the table name from the fully qualified name (e.g., "db.public.table" -> "table")
+				tn, err := parser.ParseQualifiedTableName(fqTableName)
+				if err != nil {
+					return tableset.Filter{}, errors.Wrapf(err, "failed to parse name in filter list: %s", fqTableName)
+				}
+				filter.IncludeTables[tn.Object()] = struct{}{}
+			}
+		case tree.ExcludeFilter:
+			filter.ExcludeTables = make(map[string]struct{})
+			for fqTableName := range spec.FilterList.Tables {
+				// TODO(#156859): use fully qualified names once watcher supports it.
+				// Extract just the table name from the fully qualified name (e.g., "db.public.table" -> "table")
+				tn, err := parser.ParseQualifiedTableName(fqTableName)
+				if err != nil {
+					return tableset.Filter{}, errors.Wrapf(err, "failed to parse name in filter list: %s", fqTableName)
+				}
+				filter.ExcludeTables[tn.Object()] = struct{}{}
+			}
+		}
+	}
+	return filter, nil
+}
+
+var errDoneWatching = errors.New("done watching")
+
 func makeChangefeedDescription(
 	ctx context.Context,
 	changefeed *tree.CreateChangefeed,
@@ -1466,7 +1480,9 @@ func logSanitizedChangefeedDestination(ctx context.Context, destination string) 
 }
 
 func validateDetailsAndOptions(
-	details jobspb.ChangefeedDetails, opts changefeedbase.StatementOptions,
+	details jobspb.ChangefeedDetails,
+	opts changefeedbase.StatementOptions,
+	settings *cluster.Settings,
 ) error {
 	if err := opts.ValidateForCreateChangefeed(details.Select != ""); err != nil {
 		return err
@@ -1479,6 +1495,12 @@ func validateDetailsAndOptions(
 		if scanType == changefeedbase.OnlyInitialScan {
 			return errors.Errorf(
 				`cannot specify %s on a database level changefeed`, changefeedbase.OptInitialScanOnly)
+		}
+	} else {
+		if opts.IsSet(changefeedbase.OptHibernationPollingFrequency) {
+			return errors.Errorf(
+				"%s is only supported for database-level changefeeds",
+				changefeedbase.OptHibernationPollingFrequency)
 		}
 	}
 	if opts.HasEndTime() {
@@ -1509,6 +1531,17 @@ func validateDetailsAndOptions(
 			}
 		}
 	}
+
+	if opts.IsSet(changefeedbase.OptPartitionAlg) {
+		if !changefeedbase.PartitionAlgEnabled.Get(&settings.SV) {
+			return errors.Newf(
+				"option %q requires cluster setting %q to be enabled",
+				changefeedbase.OptPartitionAlg,
+				changefeedbase.PartitionAlgEnabled.Name(),
+			)
+		}
+	}
+
 	return nil
 }
 
@@ -1585,14 +1618,13 @@ func (b *changefeedResumer) Resume(ctx context.Context, execCtx interface{}) err
 	execCfg := jobExec.ExecCfg()
 	jobID := b.job.ID()
 	details := b.job.Details().(jobspb.ChangefeedDetails)
-	progress := b.job.Progress()
 	description := b.job.Payload().Description
 
 	if err := b.ensureClusterIDMatches(ctx, jobExec.ExtendedEvalContext().ClusterID); err != nil {
 		return err
 	}
 
-	err := b.resumeWithRetries(ctx, jobExec, jobID, details, description, progress, execCfg)
+	err := b.resumeWithRetries(ctx, jobExec, jobID, details, description, execCfg)
 	if err != nil {
 		return b.handleChangefeedError(ctx, err, details, jobExec)
 	}
@@ -1631,14 +1663,14 @@ func (b *changefeedResumer) maybeRelocateJobExecution(
 	ctx context.Context, p sql.JobExecContext, locality roachpb.Locality,
 ) error {
 	if locality.NonEmpty() {
-		current, err := p.DistSQLPlanner().GetSQLInstanceInfo(p.ExecCfg().JobRegistry.ID())
+		current, err := p.DistSQLPlanner().GetSQLInstanceInfo(ctx, p.ExecCfg().JobRegistry.ID())
 		if err != nil {
 			return err
 		}
 		if ok, missedTier := current.Locality.Matches(locality); !ok {
 			log.Changefeed.Infof(ctx,
 				"CHANGEFEED job %d initially adopted on instance %d but it does not match locality filter %s, finding a new coordinator",
-				b.job.ID(), current.NodeID, missedTier.String(),
+				b.job.ID(), current.GetInstanceID(), missedTier.String(),
 			)
 
 			instancesInRegion, err := p.DistSQLPlanner().GetAllInstancesByLocality(ctx, locality)
@@ -1715,7 +1747,6 @@ func (b *changefeedResumer) resumeWithRetries(
 	jobID jobspb.JobID,
 	details jobspb.ChangefeedDetails,
 	description string,
-	initialProgress jobspb.Progress,
 	execCfg *sql.ExecutorConfig,
 ) error {
 	// If execution needs to be and is relocated, the resulting error should be
@@ -1731,24 +1762,11 @@ func (b *changefeedResumer) resumeWithRetries(
 		}
 	}
 
-	// Grab a "reference" to this nodes job registry in order to make sure
-	// this resumer has enough time to persist up to date checkpoint in case
-	// of node drain.
-	drainCh, cleanup := execCfg.JobRegistry.OnDrain()
-	defer cleanup()
-
-	// We'd like to avoid failing a changefeed unnecessarily, so when an error
-	// bubbles up to this level, we'd like to "retry" the flow if possible. This
-	// could be because the sink is down or because a cockroach node has crashed
-	// or for many other reasons.
-	var lastRunStatusUpdate time.Time
-
-	// Setup local state information.
-	// This information is used by dist flow process to communicate back
-	// the up-to-date checkpoint and node health information in case
-	// changefeed encounters transient error.
-	localState := &cachedState{progress: initialProgress}
-	jobExec.ExtendedEvalContext().ChangefeedState = localState
+	progress, resolvedSpans, err := reloadJobProgress(ctx, jobID, execCfg)
+	if err != nil {
+		return err
+	}
+	var prevResult flowResult
 	knobs, _ := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
 
 	resolvedDest, err := resolveDest(ctx, execCfg, details.SinkURI)
@@ -1767,9 +1785,31 @@ func (b *changefeedResumer) resumeWithRetries(
 		b.mu.perNodeAggregatorStats[componentID] = *meta
 	}
 
+	// Create memory monitor for tableset watcher. Similar to how processors create
+	// their monitors at function start, we create this unconditionally.
+	watcherMemMonitor := execinfra.NewMonitor(ctx, execCfg.DistSQLSrv.ChangefeedMonitor, mon.MakeName("changefeed-tableset-watcher-mem"))
+	defer watcherMemMonitor.Stop(ctx)
+
+	// We'd like to avoid failing a changefeed unnecessarily, so when an error
+	// bubbles up to this level, we'd like to "retry" the flow if possible. This
+	// could be because the sink is down or because a cockroach node has crashed
+	// or for many other reasons.
 	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&execCfg.Settings.SV)
 	backoffReset := changefeedbase.RetryBackoffReset.Get(&execCfg.Settings.SV)
+
+	// lastRunStatusUpdate is used to track the last time the job status was updated
+	// to avoid updating the job status too frequently.
+	var lastRunStatusUpdate time.Time
+
 	for r := getRetry(ctx, maxBackoff, backoffReset); r.Next(); {
+		// Capture the current highwater before running the flow so we can
+		// detect if the changefeed made forward progress. If it did, the
+		// retry backoff is reset regardless of how long the flow ran.
+		var preFlowHighWater hlc.Timestamp
+		if hw := progress.GetHighWater(); hw != nil {
+			preFlowHighWater = *hw
+		}
+
 		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
 
 		if flowErr == nil {
@@ -1782,9 +1822,9 @@ func (b *changefeedResumer) resumeWithRetries(
 				knobs.BeforeDistChangefeed()
 			}
 
-			confPoller := make(chan struct{})
+			changefeedDoneCh := make(chan struct{})
 			g := ctxgroup.WithContext(ctx)
-			initialHighWater, schemaTS, err := computeDistChangefeedTimestamps(ctx, jobExec, details, localState)
+			initialHighWater, schemaTS, err := computeDistChangefeedTimestamps(ctx, jobExec, details, progress)
 			if err != nil {
 				return err
 			}
@@ -1796,11 +1836,79 @@ func (b *changefeedResumer) resumeWithRetries(
 			if err != nil {
 				return err
 			}
+
+			// This watcher is only used for db-level changefeeds with no watched tables.
+			var watcher *tableset.Watcher
+			var cancelWatcher context.CancelCauseFunc
+			var watcherCtx context.Context
+			waitForTables := isDBLevelChangefeed(details) && targets.NumUniqueTables() == 0
+			if waitForTables {
+				// Create a watcher for the database.
+				filter, err := buildDatabaseWatcherFilterFromSpec(details.TargetSpecifications[0])
+				if err != nil {
+					return err
+				}
+
+				watcher = tableset.NewWatcher(filter, execCfg, watcherMemMonitor, int64(jobID))
+				g.GoCtx(func(ctx context.Context) error {
+					// This method runs the watcher until its context is canceled.
+					// The watcher context is canceled when diffs are sent to the
+					// watcherChan or when the the parent group context is canceled.
+					watcherCtx, cancelWatcher = context.WithCancelCause(ctx)
+					defer cancelWatcher(nil)
+					err := watcher.Start(watcherCtx, schemaTS)
+					if err != nil {
+						if errors.Is(context.Cause(watcherCtx), errDoneWatching) {
+							return nil
+						}
+						return err
+					}
+					return nil
+				})
+			}
+
+			// Run the changefeed until it completes or is shut down.
+			// If the changefeed's target tableset is empty, it will need to block
+			// until a diff in the tableset is found from the watcher.
 			g.GoCtx(func(ctx context.Context) error {
-				defer close(confPoller)
-				return startDistChangefeed(ctx, jobExec, jobID, schemaTS, details, description,
-					initialHighWater, localState, startedCh, onTracingEvent, targets)
+				defer close(changefeedDoneCh)
+				if waitForTables {
+					opts := changefeedbase.MakeStatementOptions(details.Opts)
+					frequency, err := opts.GetHibernationPollingFrequency()
+					if err != nil {
+						return err
+					}
+				watchLoop:
+					for ts := schemaTS; ctx.Err() == nil; ts = ts.AddDuration(*frequency) {
+						unchanged, diffs, err := watcher.PopUnchangedUpTo(ctx, ts)
+						if err != nil {
+							return err
+						}
+						if !unchanged {
+							// todo(#156874): once watcher gives us only adds,
+							// we can safely take the first diff.
+							for _, diff := range diffs {
+								if diff.Added.ID != 0 {
+									schemaTS = diff.AsOf
+									initialHighWater = diff.AsOf
+									targets, err = AllTargets(ctx, details, execCfg, schemaTS)
+									if err != nil {
+										return err
+									}
+									cancelWatcher(errDoneWatching)
+									break watchLoop
+								}
+							}
+						}
+					}
+				}
+				var err error
+				prevResult, err = startDistChangefeed(ctx, jobExec, jobID, schemaTS, details, description,
+					initialHighWater, progress, resolvedSpans, prevResult, startedCh, onTracingEvent, targets)
+				return err
 			})
+
+			// Poll for updated configuration or new database tables if hibernating.
 			g.GoCtx(func(ctx context.Context) error {
 				t := time.NewTicker(15 * time.Second)
 				defer t.Stop()
@@ -1808,7 +1916,7 @@ func (b *changefeedResumer) resumeWithRetries(
 					select {
 					case <-ctx.Done():
 						return ctx.Err()
-					case <-confPoller:
+					case <-changefeedDoneCh:
 						return nil
 					case <-t.C:
 						newDest, err := reloadDest(ctx, jobID, execCfg)
@@ -1829,7 +1937,7 @@ func (b *changefeedResumer) resumeWithRetries(
 			}
 
 			if errors.Is(flowErr, replanErr) {
-				log.Changefeed.Infof(ctx, "restarting changefeed due to updated configuration")
+				log.Changefeed.Infof(ctx, "restarting changefeed due to updated configuration (approx backoff: %s)", r.NextBackoff())
 				continue
 			}
 
@@ -1850,8 +1958,8 @@ func (b *changefeedResumer) resumeWithRetries(
 		}
 
 		// All other errors retry.
-		log.Changefeed.Warningf(ctx, `Changefeed job %d encountered transient error: %v (attempt %d)`,
-			jobID, flowErr, 1+r.CurrentAttempt())
+		log.Changefeed.Warningf(ctx, `Changefeed job %d encountered transient error: %v (attempt %d) (approx backoff: %s)`,
+			jobID, flowErr, 1+r.CurrentAttempt(), r.NextBackoff())
 		lastRunStatusUpdate = b.setJobStatusMessage(ctx, lastRunStatusUpdate, "transient error: %s", flowErr)
 
 		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
@@ -1862,30 +1970,31 @@ func (b *changefeedResumer) resumeWithRetries(
 			sli.ErrorRetries.Inc(1)
 		}
 
-		if err := reconcileJobStateWithLocalState(ctx, jobID, localState, execCfg); err != nil {
+		var err error
+		progress, resolvedSpans, err = reloadJobProgress(ctx, jobID, execCfg)
+		if err != nil {
 			// Any errors during reconciliation are retry-able.
 			// When retry-able error propagates to jobs registry, it will clear out
 			// claim information, and will restart this job somewhere else (though,
 			// it's possible that the job gets restarted on this node).
 			return jobs.MarkAsRetryJobError(err)
 		}
+		if knobs != nil && knobs.AfterReloadJobProgressForRetry != nil {
+			if err := knobs.AfterReloadJobProgressForRetry(); err != nil {
+				return jobs.MarkAsRetryJobError(err)
+			}
+		}
 
-		if errors.Is(flowErr, changefeedbase.ErrNodeDraining) {
-			select {
-			case <-drainCh:
-				// If this node is draining, there is no point in retrying.
-				return jobs.MarkAsRetryJobError(changefeedbase.ErrNodeDraining)
-			default:
-				// We know that some node (other than this one) is draining.
-				// When we retry, the planner ought to take into account
-				// this information.  However, there is a bit of a race here
-				// between draining node propagating information to this node,
-				// and this node restarting changefeed before this happens.
-				// We could come up with a mechanism to provide additional
-				// information to dist sql planner.  Or... we could just wait a bit.
-				log.Changefeed.Warningf(ctx, "Changefeed %d delaying restart due to %d node(s) (%v) draining",
-					jobID, len(localState.drainingNodes), localState.drainingNodes)
-				r.Next() // default config: ~5 sec delay, plus 10 sec on the retry loop.
+		// Reset retry backoff if the highwater advanced, indicating the
+		// changefeed made meaningful forward progress before the error.
+		resetOnProgress := changefeedbase.ResetBackoffOnHighwaterAdvance.Get(&execCfg.Settings.SV)
+		if hw := progress.GetHighWater(); resetOnProgress && hw != nil && preFlowHighWater.Less(*hw) {
+			log.Changefeed.Infof(ctx,
+				"changefeed %d highwater advanced (%s -> %s); resetting retry backoff",
+				jobID, preFlowHighWater, *hw)
+			r.Reset()
+			if knobs != nil && knobs.OnRetryBackoffReset != nil {
+				knobs.OnRetryBackoffReset()
 			}
 		}
 	}
@@ -1922,84 +2031,59 @@ func reloadDest(ctx context.Context, id jobspb.JobID, execCfg *sql.ExecutorConfi
 	return resolveDest(ctx, execCfg, newDetails.SinkURI)
 }
 
-// reconcileJobStateWithLocalState ensures that the job progress information
-// is consistent with the state present in the local state.
-func reconcileJobStateWithLocalState(
-	ctx context.Context, jobID jobspb.JobID, localState *cachedState, execCfg *sql.ExecutorConfig,
-) error {
-	// Re-load the job in order to update our progress object, which may have
-	// been updated by the changeFrontier processor since the flow started.
-	reloadedJob, reloadErr := execCfg.JobRegistry.LoadClaimedJob(ctx, jobID)
-	if reloadErr != nil {
-		log.Changefeed.Warningf(ctx, `CHANGEFEED job %d could not reload job progress (%s); `+
-			`job should be retried later`, jobID, reloadErr)
-		return reloadErr
-	}
-	knobs, _ := execCfg.DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
-	if knobs != nil && knobs.LoadJobErr != nil {
-		if err := knobs.LoadJobErr(); err != nil {
-			return err
-		}
-	}
-
-	localState.progress = reloadedJob.Progress()
-
-	// localState contains an up-to-date checkpoint information transmitted by
-	// aggregator when flow was terminated. To be safe, we don't blindly trust
-	// local state; instead, this checkpoint is applied to the reloaded job
-	// progress, and the resulting progress record persisted back to the jobs
-	// table.
-	var highWater hlc.Timestamp
-	if hw := localState.progress.GetHighWater(); hw != nil {
-		highWater = *hw
-	}
-
-	// Build frontier based on tracked spans.
-	sf, err := span.MakeFrontierAt(highWater, localState.trackedSpans...)
-	if err != nil {
-		return err
-	}
-	// Advance frontier based on the information received from the aggregators.
-	for sp, ts := range localState.AggregatorFrontierSpans() {
-		_, err := sf.Forward(sp, ts)
+// reloadJobProgress reloads the job progress and persisted frontier
+// from the database. All reads happen in a single transaction to
+// ensure consistency with the schema version gate checks.
+//
+// If the schema version indicates that span-level checkpoints are no
+// longer being read, the span-level checkpoint is cleared from the
+// returned progress so that downstream code does not use stale data.
+func reloadJobProgress(
+	ctx context.Context, jobID jobspb.JobID, execCfg *sql.ExecutorConfig,
+) (jobspb.Progress, []jobspb.ResolvedSpan, error) {
+	var progress jobspb.Progress
+	var resolvedSpans []jobspb.ResolvedSpan
+	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		reloadedJob, err := execCfg.JobRegistry.LoadClaimedJobWithTxn(ctx, jobID, txn)
 		if err != nil {
 			return err
 		}
+		progress = reloadedJob.Progress()
+
+		v, err := txn.GetSystemSchemaVersion(ctx)
+		if err != nil {
+			return err
+		}
+
+		// Load the persisted frontier.
+		spans, ok, err := jobfrontier.GetAllResolvedSpans(ctx, txn, jobID)
+		if err != nil {
+			return err
+		}
+		if ok {
+			resolvedSpans = spans
+		}
+
+		// Check what to do with a non-nil span-level checkpoint.
+		if cfProgress := progress.GetChangefeed(); cfProgress != nil &&
+			cfProgress.SpanLevelCheckpoint != nil {
+			switch {
+			case v.AtLeast(clusterversion.V26_2_ChangefeedsNoLongerHaveSpanLevelCheckpoints.Version()):
+				return errors.AssertionFailedf("span-level checkpoint should have been purged")
+			case v.AtLeast(clusterversion.V26_2_ChangefeedsStopReadingSpanLevelCheckpoints.Version()):
+				cfProgress.SpanLevelCheckpoint = nil
+			default:
+			}
+		}
+
+		return nil
+	}); err != nil {
+		log.Changefeed.Warningf(ctx, `CHANGEFEED job %d could not reload job progress (%s); `+
+			`job should be retried later`, jobID, err)
+		return jobspb.Progress{}, nil, err
 	}
 
-	maxBytes := changefeedbase.SpanCheckpointMaxBytes.Get(&execCfg.Settings.SV)
-	checkpoint := checkpoint.Make(
-		sf.Frontier(),
-		localState.AggregatorFrontierSpans(),
-		maxBytes,
-		nil, /* metrics */
-	)
-
-	// Update checkpoint.
-	updateHW := highWater.Less(sf.Frontier())
-	updateSpanCheckpoint := !checkpoint.IsEmpty()
-
-	if updateHW || updateSpanCheckpoint {
-		if updateHW {
-			localState.SetHighwater(sf.Frontier())
-		}
-		localState.SetCheckpoint(checkpoint)
-		if log.V(1) {
-			log.Changefeed.Infof(ctx, "Applying checkpoint to job record:  hw=%v, cf=%v",
-				localState.progress.GetHighWater(), localState.progress.GetChangefeed())
-		}
-		return reloadedJob.NoTxn().Update(ctx,
-			func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-				if err := md.CheckRunningOrReverting(); err != nil {
-					return err
-				}
-				ju.UpdateProgress(&localState.progress)
-				return nil
-			},
-		)
-	}
-
-	return nil
+	return progress, resolvedSpans, nil
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.

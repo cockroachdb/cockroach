@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
@@ -187,6 +188,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	cfg.ClusterName = params.ClusterName
 	cfg.ExternalIODirConfig = params.ExternalIODirConfig
 	cfg.Insecure = params.Insecure
+	cfg.UseDRPC = params.UseDRPC
 	cfg.AutoInitializeCluster = !params.NoAutoInitializeCluster
 	cfg.SocketFile = params.SocketFile
 	cfg.RetryOptions = params.RetryOptions
@@ -333,11 +335,8 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 		cfg.TestingKnobs.AdmissionControlOptions = &admission.Options{}
 	}
 
-	switch params.DefaultDRPCOption {
-	case base.TestDRPCEnabled:
-		rpcbase.ExperimentalDRPCEnabled.Override(context.Background(), &st.SV, true)
-	case base.TestDRPCDisabled:
-		rpcbase.ExperimentalDRPCEnabled.Override(context.Background(), &st.SV, false)
+	if params.DefaultDRPCOption == base.TestDRPCEnabled {
+		cfg.UseDRPC = true
 	}
 
 	return cfg
@@ -636,6 +635,14 @@ func (ts *testServer) startDefaultTestTenant(
 ) (serverutils.ApplicationLayerInterface, error) {
 	tenantSettings := cluster.MakeTestingClusterSettings()
 	if st := ts.params.Settings; st != nil {
+		// Use the same version constraints as the parent settings so that
+		// external process tenants can start when the cluster is running at
+		// a version older than Latest.
+		tenantSettings = cluster.MakeTestingClusterSettingsWithVersions(
+			st.Version.LatestVersion(),
+			st.Version.MinSupportedVersion(),
+			false, /* initializeVersion */
+		)
 		// Copy overrides and other test-specific configuration,
 		// as a convenience for test writers that do the following:
 		// - create a new Settings
@@ -656,18 +663,19 @@ func (ts *testServer) startDefaultTestTenant(
 		TenantName: ts.params.DefaultTenantName,
 		// Currently, all the servers leverage the same tenant ID. We may
 		// want to change this down the road, for more elaborate testing.
-		TenantID:                  serverutils.TestTenantID(),
-		MemoryPoolSize:            ts.params.SQLMemoryPoolSize,
-		TempStorageConfig:         &tempStorageConfig,
-		Locality:                  ts.params.Locality,
-		ExternalIODir:             ts.params.ExternalIODir,
-		ExternalIODirConfig:       ts.params.ExternalIODirConfig,
-		ForceInsecure:             ts.Insecure(),
-		UseDatabase:               ts.params.UseDatabase,
-		SSLCertsDir:               ts.params.SSLCertsDir,
-		TestingKnobs:              ts.params.Knobs,
-		StartDiagnosticsReporting: ts.params.StartDiagnosticsReporting,
-		Settings:                  tenantSettings,
+		TenantID:                   serverutils.TestTenantID(),
+		MemoryPoolSize:             ts.params.SQLMemoryPoolSize,
+		TempStorageConfig:          &tempStorageConfig,
+		Locality:                   ts.params.Locality,
+		ExternalIODir:              ts.params.ExternalIODir,
+		ExternalIODirConfig:        ts.params.ExternalIODirConfig,
+		ForceInsecure:              ts.Insecure(),
+		UseDatabase:                ts.params.UseDatabase,
+		SSLCertsDir:                ts.params.SSLCertsDir,
+		TestingKnobs:               ts.params.Knobs,
+		StartDiagnosticsReporting:  ts.params.StartDiagnosticsReporting,
+		Settings:                   tenantSettings,
+		DisableElasticCPUAdmission: ts.params.DisableElasticCPUAdmission,
 	}
 	ts.setupTenantTestingKnobs(&params.TestingKnobs)
 	return ts.StartTenant(ctx, params)
@@ -675,11 +683,12 @@ func (ts *testServer) startDefaultTestTenant(
 
 func (ts *testServer) getSharedProcessDefaultTenantArgs() base.TestSharedProcessTenantArgs {
 	args := base.TestSharedProcessTenantArgs{
-		TenantName:  ts.params.DefaultTenantName,
-		TenantID:    serverutils.TestTenantID(),
-		Knobs:       ts.params.Knobs,
-		UseDatabase: ts.params.UseDatabase,
-		Settings:    ts.params.Settings,
+		TenantName:                 ts.params.DefaultTenantName,
+		TenantID:                   serverutils.TestTenantID(),
+		Knobs:                      ts.params.Knobs,
+		UseDatabase:                ts.params.UseDatabase,
+		Settings:                   ts.params.Settings,
+		DisableElasticCPUAdmission: ts.params.DisableElasticCPUAdmission,
 	}
 	ts.setupTenantTestingKnobs(&args.Knobs)
 	return args
@@ -700,6 +709,7 @@ func (ts *testServer) setupTenantTestingKnobs(tenantKnobs *base.TestingKnobs) {
 		}
 		tenantKnobs.Server.(*TestingKnobs).StubTimeNow = ts.params.Knobs.Server.(*TestingKnobs).StubTimeNow
 	}
+	serverutils.SetUnsafeOverride(tenantKnobs)
 	if ts.params.Knobs.UpgradeManager != nil {
 		tenantKnobs.UpgradeManager.(*upgradebase.TestingKnobs).SkipSomeUpgradeSteps = ts.params.Knobs.UpgradeManager.(*upgradebase.TestingKnobs).SkipSomeUpgradeSteps
 	}
@@ -1394,6 +1404,10 @@ func (ts *testServer) StartSharedProcessTenant(
 		_, err := ie.ExecEx(ctx, opName, nil /* txn */, sessiondata.NodeUserSessionDataOverride, stmt, qargs...)
 		return err
 	}
+
+	// Allow access to unsafe internals for the tenant server in test environments.
+	serverutils.SetUnsafeOverride(&args.Knobs)
+
 	// Save the args for use if the server needs to be created.
 	func() {
 		ts.topLevelServer.serverController.mu.Lock()
@@ -1477,6 +1491,29 @@ func (ts *testServer) StartSharedProcessTenant(
 
 	sqlServerWrapper := s.(*tenantServerWrapper).server
 	sqlServer := sqlServerWrapper.sqlServer
+
+	// Disable yield AC for tenant servers in tests, for the same reason as the
+	// system tenant (see comment in serverutils.NewServer).
+	// NB: ElasticAdmission is a SystemOnly setting so it can only be set on the
+	// system tenant; for shared-process tenants, the system tenant's setting
+	// already applies at the KV layer.
+	if args.DisableElasticCPUAdmission {
+		for _, key := range []string{
+			"sqladmission.low_pri_read_response_elastic_control.enabled",
+			"bulkio.index_backfill.elastic_control.enabled",
+			"bulkio.ingest.sst_batcher_elastic_control.enabled",
+			"bulkio.import.elastic_control.enabled",
+			"bulkio.backup.file_sst_sink_elastic_control.enabled",
+		} {
+			if s, ok := settings.LookupForLocalAccessByKey(
+				settings.InternalKey(key), false, /* forSystemTenant */
+			); ok {
+				s.(*settings.BoolSetting).Override(ctx, &sqlServer.cfg.Settings.SV, false)
+			}
+		}
+	}
+	admission.YieldForElasticCPU.Override(ctx, &sqlServer.cfg.Settings.SV, false)
+
 	hts := &httpTestServer{}
 	hts.t.authentication = sqlServerWrapper.authentication
 	hts.t.sqlServer = sqlServer
@@ -1778,6 +1815,9 @@ func (ts *testServer) StartTenant(
 		stopper.SetTracer(tr)
 	}
 
+	// Allow access to unsafe internals on this tenant.
+	serverutils.SetUnsafeOverride(&params.TestingKnobs)
+
 	baseCfg := makeTestBaseConfig(st, stopper.Tracer())
 	baseCfg.TestingKnobs = params.TestingKnobs
 	baseCfg.Insecure = params.ForceInsecure
@@ -1862,6 +1902,27 @@ func (ts *testServer) StartTenant(
 		return nil, err
 	}
 
+	// Disable yield AC for tenant servers in tests, for the same reason as the
+	// system tenant (see comment in serverutils.NewServer).
+	// NB: ElasticAdmission is a SystemOnly setting so it can only be set on the
+	// system tenant; the setting on the host cluster already applies at the KV layer.
+	if params.DisableElasticCPUAdmission {
+		for _, key := range []string{
+			"sqladmission.low_pri_read_response_elastic_control.enabled",
+			"bulkio.index_backfill.elastic_control.enabled",
+			"bulkio.ingest.sst_batcher_elastic_control.enabled",
+			"bulkio.import.elastic_control.enabled",
+			"bulkio.backup.file_sst_sink_elastic_control.enabled",
+		} {
+			if s, ok := settings.LookupForLocalAccessByKey(
+				settings.InternalKey(key), false, /* forSystemTenant */
+			); ok {
+				s.(*settings.BoolSetting).Override(ctx, &st.SV, false)
+			}
+		}
+	}
+	admission.YieldForElasticCPU.Override(ctx, &st.SV, false)
+
 	hts := &httpTestServer{}
 	hts.t.authentication = sw.authentication
 	hts.t.sqlServer = sw.sqlServer
@@ -1921,7 +1982,7 @@ func (ts *testServer) SettingsWatcher() interface{} {
 }
 
 // Engines returns the testServer's engines.
-func (ts *testServer) Engines() []storage.Engine {
+func (ts *testServer) Engines() []kvstorage.Engines {
 	return ts.engines
 }
 
@@ -2641,7 +2702,7 @@ func (ts *testServer) RPCClientConn(
 func (ts *testServer) RPCClientConnE(user username.SQLUsername) (serverutils.RPCConn, error) {
 	ctx := context.Background()
 	rpcCtx := ts.NewClientRPCContext(ctx, user)
-	if !rpcbase.DRPCEnabled(ctx, rpcCtx.Settings) {
+	if !rpcCtx.UseDRPC {
 		conn, err := rpcCtx.GRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), ts.Locality(), rpcbase.DefaultClass).Connect(ctx)
 		if err != nil {
 			return nil, err
@@ -2693,7 +2754,7 @@ func (t *testTenant) RPCClientConn(
 func (t *testTenant) RPCClientConnE(user username.SQLUsername) (serverutils.RPCConn, error) {
 	ctx := context.Background()
 	rpcCtx := t.NewClientRPCContext(ctx, user)
-	if !rpcbase.DRPCEnabled(ctx, rpcCtx.Settings) {
+	if !rpcCtx.UseDRPC {
 		conn, err := rpcCtx.GRPCDialPod(t.AdvRPCAddr(), t.SQLInstanceID(), t.Locality(), rpcbase.DefaultClass).Connect(ctx)
 		if err != nil {
 			return nil, err

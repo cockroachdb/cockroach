@@ -103,12 +103,15 @@ func (s *SerialUnorderedSynchronizer) Init(ctx context.Context) {
 }
 
 // Next is part of the colexecop.Operator interface.
-func (s *SerialUnorderedSynchronizer) Next() coldata.Batch {
+func (s *SerialUnorderedSynchronizer) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
 		if s.curSerialInputIdx == len(s.inputs) {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
-		b := s.inputs[s.curSerialInputIdx].Root.Next()
+		b, meta := s.inputs[s.curSerialInputIdx].Root.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if b.Length() == 0 {
 			s.curSerialInputIdx++
 			if s.serialInputIdxExclusiveUpperBound > 0 && s.curSerialInputIdx >= int(s.serialInputIdxExclusiveUpperBound) {
@@ -119,7 +122,7 @@ func (s *SerialUnorderedSynchronizer) Next() coldata.Batch {
 				s.outputBatch.ReplaceCol(vec, i)
 			}
 			colexecutils.UpdateBatchState(s.outputBatch, b.Length(), b.Selection() != nil /* usesSel */, b.Selection())
-			return s.outputBatch
+			return s.outputBatch, nil
 		}
 	}
 }

@@ -74,6 +74,10 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *RestartNodeOperation:
 		return &o.Result
+	case *CrashNodeOperation:
+		return &o.Result
+	case *MvccGCOperation:
+		return &o.Result
 	default:
 		panic(errors.AssertionFailedf(`unknown operation: %T %v`, o, o))
 	}
@@ -254,6 +258,10 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 		o.format(w, fctx)
 	case *RestartNodeOperation:
 		o.format(w, fctx)
+	case *CrashNodeOperation:
+		o.format(w, fctx)
+	case *MvccGCOperation:
+		o.format(w, fctx)
 	default:
 		fmt.Fprintf(w, "%v", op.GetValue())
 	}
@@ -392,7 +400,7 @@ func (op AddSSTableOperation) format(w *strings.Builder, fctx formatCtx) {
 		if iter.RangeKeyChanged() {
 			hasPoint, hasRange := iter.HasPointAndRange()
 			if hasRange {
-				for _, rkv := range iter.RangeKeys().AsRangeKeyValues() {
+				for rkv := range iter.RangeKeys().AsRangeKeyValues() {
 					mvccValue, err := storage.DecodeMVCCValue(rkv.Value)
 					if err != nil {
 						panic(err)
@@ -474,6 +482,8 @@ func (op ChangeSettingOperation) format(w *strings.Builder, fctx formatCtx) {
 	switch op.Type {
 	case ChangeSettingType_SetLeaseType:
 		fmt.Fprintf(w, `env.SetClusterSetting(ctx, %s, %s)`, op.Type, op.LeaseType)
+	case ChangeSettingType_ToggleVirtualIntentResolution:
+		fmt.Fprintf(w, `env.SetClusterSetting(ctx, %s, %v)`, op.Type, op.VirEnabled)
 	default:
 		panic(errors.AssertionFailedf(`unknown ChangeSettingType: %v`, op.Type))
 	}
@@ -526,12 +536,22 @@ func (op RemoveNetworkPartitionOperation) format(w *strings.Builder, fctx format
 }
 
 func (op StopNodeOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `env.Restarter.StopNode(%d)`, int(op.NodeId))
+	fmt.Fprintf(w, `env.ServerController.StopNode(%d)`, int(op.NodeId))
 	op.Result.format(w)
 }
 
 func (op RestartNodeOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `env.Restarter.RestartNode(%d)`, int(op.NodeId))
+	fmt.Fprintf(w, `env.ServerController.RestartNode(%d)`, int(op.NodeId))
+	op.Result.format(w)
+}
+
+func (op CrashNodeOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `env.ServerController.CrashNode(%d)`, int(op.NodeId))
+	op.Result.format(w)
+}
+
+func (op MvccGCOperation) format(w *strings.Builder, _ formatCtx) {
+	fmt.Fprintf(w, `env.MvccGCController.MvccGCRangeForKey(%s)`, fmtKey(op.Key))
 	op.Result.format(w)
 }
 

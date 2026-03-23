@@ -1,0 +1,362 @@
+# LogicTest: multiregion-9node-3region-3azs
+
+# Test the skip_unique_checks storage parameter on UNIQUE indexes in a
+# Regional By Row table. This creates a UNIQUE WITHOUT INDEX constraint
+# since the region column is implicitly added to the beginning of the index.
+
+statement ok
+CREATE DATABASE multi_region_test_db PRIMARY REGION "us-east-1" REGIONS "ca-central-1", "ap-southeast-2"
+
+statement ok
+USE multi_region_test_db
+
+# checked_index: extracts the index name from an EXPLAIN info line containing
+# "table:". Used to check which indexes have unique checks planned.
+statement ok
+CREATE FUNCTION checked_index(info STRING) RETURNS STRING LANGUAGE SQL AS $$
+  SELECT regexp_extract(info, 'table:\s+\w+@([\w_]+)')
+$$
+
+# show_index: extracts the definition of a named index from a SHOW CREATE
+# statement.
+statement ok
+CREATE FUNCTION show_index(stmt STRING, idx STRING) RETURNS STRING LANGUAGE SQL AS $$
+  SELECT regexp_extract(stmt, '(' || idx || '[^\n]*)')
+$$
+
+statement ok
+CREATE TABLE t (
+  a INT PRIMARY KEY,
+  b INT,
+  UNIQUE INDEX idx_b (b)
+) WITH (schema_locked = false) LOCALITY REGIONAL BY ROW
+
+# Without the storage parameter, unique checks are planned for both indexes.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES (1, 10), (2, 20)]
+WHERE info ~ 'table:';
+----
+t_pkey
+idx_b
+
+# Set the storage parameter to skip unique checks on the secondary index.
+statement ok
+ALTER INDEX t@idx_b SET (skip_unique_checks = true)
+
+query T
+SELECT show_index(create_statement, 'idx_b') FROM [SHOW CREATE TABLE t]
+----
+idx_b (b ASC) WITH (skip_unique_checks=true),
+
+# Now unique checks should not be planned for the secondary.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES (3, 30), (4, 40)]
+WHERE info ~ 'table:';
+----
+t_pkey
+
+# Set the storage parameter to skip unique checks on the primary index.
+statement ok
+ALTER INDEX t@t_pkey SET (skip_unique_checks = true)
+
+query T
+SELECT show_index(create_statement, 't_pkey') FROM [SHOW CREATE TABLE t]
+----
+t_pkey PRIMARY KEY (a ASC) WITH (skip_unique_checks=true),
+
+# Now unique checks should not be planned for the primary either.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES (3, 30), (4, 40)]
+WHERE info ~ 'table:';
+----
+
+# Reset the parameter for the secondary.
+statement ok
+ALTER INDEX t@idx_b RESET (skip_unique_checks)
+
+query T
+SELECT show_index(create_statement, 'idx_b') FROM [SHOW CREATE TABLE t]
+----
+idx_b (b ASC),
+
+# Checks should be planned again for the secondary only.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES (5, 50), (6, 60)]
+WHERE info ~ 'table:';
+----
+idx_b
+
+# Reset the parameter for the primary.
+statement ok
+ALTER INDEX t@t_pkey RESET (skip_unique_checks)
+
+query T
+SELECT show_index(create_statement, 't_pkey') FROM [SHOW CREATE TABLE t]
+----
+t_pkey PRIMARY KEY (a ASC),
+
+# Checks should be planned again for both indexes.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES (5, 50), (6, 60)]
+WHERE info ~ 'table:';
+----
+t_pkey
+idx_b
+
+# Test creating an index with skip_unique_checks set at creation time.
+statement ok
+ALTER TABLE t ADD COLUMN c INT
+
+statement ok
+CREATE UNIQUE INDEX idx_c ON t(c) WITH (skip_unique_checks = true)
+
+query T
+SELECT show_index(create_statement, 'idx_c') FROM [SHOW CREATE TABLE t]
+----
+idx_c (c ASC) WITH (skip_unique_checks=true),
+
+# Verify that unique checks are not planned for the newly created index.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES (7, 70, 700), (8, 80, 800)]
+WHERE info ~ 'table:';
+----
+t_pkey
+idx_b
+
+# Reset the parameter for idx_c.
+statement ok
+ALTER INDEX t@idx_c RESET (skip_unique_checks)
+
+query T
+SELECT show_index(create_statement, 'idx_c') FROM [SHOW CREATE TABLE t]
+----
+idx_c (c ASC),
+
+# Checks should now be planned for idx_c as well.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES (9, 90, 900), (10, 100, 1000)]
+WHERE info ~ 'table:';
+----
+t_pkey
+idx_b
+idx_c
+
+# Test ALTER PRIMARY KEY behavior with skip_unique_checks.
+# Set skip_unique_checks on the primary and secondary indexes.
+statement ok
+ALTER INDEX t@t_pkey SET (skip_unique_checks = true)
+
+query T
+SELECT show_index(create_statement, 't_pkey') FROM [SHOW CREATE TABLE t]
+----
+t_pkey PRIMARY KEY (a ASC) WITH (skip_unique_checks=true),
+
+statement ok
+ALTER INDEX t@idx_b SET (skip_unique_checks = true)
+
+query T
+SELECT show_index(create_statement, 'idx_b') FROM [SHOW CREATE TABLE t]
+----
+idx_b (b ASC) WITH (skip_unique_checks=true),
+
+statement ok
+ALTER INDEX t@idx_c SET (skip_unique_checks = true)
+
+query T
+SELECT show_index(create_statement, 'idx_c') FROM [SHOW CREATE TABLE t]
+----
+idx_c (c ASC) WITH (skip_unique_checks=true),
+
+# Verify no checks are planned.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES (11, 110, 1100), (12, 120, 1200)]
+WHERE info ~ 'table:';
+----
+
+# Add a new column for the new primary key.
+statement ok
+ALTER TABLE t ADD COLUMN d INT NOT NULL DEFAULT 0
+
+# ALTER PRIMARY KEY without WITH clause.
+# The old PK (becomes unique secondary) and recreated secondaries preserve
+# skip_unique_checks, but the NEW primary key does NOT inherit it (resets to
+# default false).
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (d)
+
+query T
+SELECT show_index(create_statement, 't_pkey') FROM [SHOW CREATE TABLE t]
+----
+t_pkey PRIMARY KEY (d ASC),
+
+query T
+SELECT show_index(create_statement, 't_a_key') FROM [SHOW CREATE TABLE t]
+----
+t_a_key (a ASC) WITH (skip_unique_checks=true),
+
+# New PK has checks, but secondaries don't (old PK->secondary and recreated
+# indexes preserved it).
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES (13, 130, 1300, 1), (14, 140, 1400, 2)]
+WHERE info ~ 'table:';
+----
+t_pkey
+
+# Now ALTER PRIMARY KEY again, this time WITH (skip_unique_checks = true).
+statement ok
+ALTER TABLE t ADD COLUMN e INT NOT NULL DEFAULT 0
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (e) WITH (skip_unique_checks = true)
+
+query T
+SELECT show_index(create_statement, 't_pkey') FROM [SHOW CREATE TABLE t]
+----
+t_pkey PRIMARY KEY (e ASC) WITH (skip_unique_checks=true),
+
+query T
+SELECT show_index(create_statement, 't_d_key') FROM [SHOW CREATE TABLE t]
+----
+t_d_key (d ASC),
+
+# New PK has skip_unique_checks=true (from WITH), but old PK->unique secondary
+# (t_d_key) does not, so it still needs checks.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES (15, 150, 1500, 1, 1), (16, 160, 1600, 2, 2)]
+WHERE info ~ 'table:';
+----
+t_d_key
+
+# Test SET LOCALITY behavior: when changing from REGIONAL BY ROW to GLOBAL,
+# implicit partitioning is removed, so skip_unique_checks must be cleared on
+# all indexes (since it requires implicit partitioning).
+
+# First, set skip_unique_checks on all unique indexes.
+statement ok
+ALTER INDEX t@t_a_key SET (skip_unique_checks = true)
+
+statement ok
+ALTER INDEX t@idx_b SET (skip_unique_checks = true)
+
+statement ok
+ALTER INDEX t@idx_c SET (skip_unique_checks = true)
+
+statement ok
+ALTER INDEX t@t_d_key SET (skip_unique_checks = true)
+
+# Verify all secondaries have skip_unique_checks set.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES (17, 170, 1700, 3, 3), (18, 180, 1800, 4, 4)]
+WHERE info ~ 'table:';
+----
+
+# Now change locality from REGIONAL BY ROW to GLOBAL.
+# This removes implicit partitioning, so skip_unique_checks should be cleared.
+statement ok
+ALTER TABLE t SET LOCALITY GLOBAL
+
+# After changing to GLOBAL, indexes no longer have implicit partitioning, and
+# skip_unique_checks should be cleared. No unique checks are planned anyway,
+# since those are only needed for implicitly partitioned indexes.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t VALUES (19, 190, 1900, 5, 5), (20, 200, 2000, 6, 6)]
+WHERE info ~ 'table:';
+----
+
+# Verify that skip_unique_checks is no longer shown in SHOW CREATE TABLE.
+query T
+SELECT show_index(create_statement, 't_a_key') FROM [SHOW CREATE TABLE t]
+----
+t_a_key (a ASC),
+
+query T
+SELECT show_index(create_statement, 'idx_b') FROM [SHOW CREATE TABLE t]
+----
+idx_b (b ASC),
+
+query T
+SELECT show_index(create_statement, 'idx_c') FROM [SHOW CREATE TABLE t]
+----
+idx_c (c ASC),
+
+query T
+SELECT show_index(create_statement, 't_d_key') FROM [SHOW CREATE TABLE t]
+----
+t_d_key (d ASC),
+
+# Test SET LOCALITY behavior: when changing from REGIONAL BY ROW to REGIONAL
+# BY ROW (e.g., changing the partitioning column), skip_unique_checks should be
+# preserved on all indexes since the indexes remain implicitly partitioned.
+
+# Create a fresh table for this test.
+statement ok
+CREATE TABLE t2 (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  UNIQUE INDEX idx_b2 (b),
+  UNIQUE INDEX idx_c2 (c)
+) WITH (schema_locked = false) LOCALITY REGIONAL BY ROW
+
+# Set skip_unique_checks on all unique indexes.
+statement ok
+ALTER INDEX t2@t2_pkey SET (skip_unique_checks = true)
+
+statement ok
+ALTER INDEX t2@idx_b2 SET (skip_unique_checks = true)
+
+statement ok
+ALTER INDEX t2@idx_c2 SET (skip_unique_checks = true)
+
+# Verify that no unique checks are planned.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t2 VALUES (1, 10, 100), (2, 20, 200)]
+WHERE info ~ 'table:';
+----
+
+# Add a column that will become the new REGIONAL BY ROW column.
+statement ok
+ALTER TABLE t2 ADD COLUMN my_region crdb_internal_region NOT NULL DEFAULT gateway_region()::crdb_internal_region
+
+# Change from RBR (crdb_region) to RBR AS my_region. This rebuilds all indexes
+# with new implicit partitioning. skip_unique_checks should be preserved.
+statement ok
+ALTER TABLE t2 SET LOCALITY REGIONAL BY ROW AS my_region
+
+# Verify skip_unique_checks is preserved on all indexes. The PK columns aren't
+# changing during an RBR-to-RBR swap — only the implicit partitioning column is
+# swapped — so skip_unique_checks is preserved on the PK as well.
+query T
+SELECT show_index(create_statement, 't2_pkey') FROM [SHOW CREATE TABLE t2]
+----
+t2_pkey PRIMARY KEY (a ASC) WITH (skip_unique_checks=true),
+
+query T
+SELECT show_index(create_statement, 'idx_b2') FROM [SHOW CREATE TABLE t2]
+----
+idx_b2 (b ASC) WITH (skip_unique_checks=true),
+
+query T
+SELECT show_index(create_statement, 'idx_c2') FROM [SHOW CREATE TABLE t2]
+----
+idx_c2 (c ASC) WITH (skip_unique_checks=true),
+
+# Verify that unique checks are still skipped for all indexes.
+query T
+SELECT DISTINCT checked_index(info)
+FROM [EXPLAIN INSERT INTO t2 VALUES (3, 30, 300, 'us-east-1'), (4, 40, 400, 'us-east-1')]
+WHERE info ~ 'table:';
+----

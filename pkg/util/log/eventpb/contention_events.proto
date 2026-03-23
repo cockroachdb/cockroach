@@ -29,5 +29,19 @@ message AggregatedContentionInfo {
   string waiting_txn_fingerprint_id = 3 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   string blocking_txn_fingerprint_id = 4 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
   string contended_key = 5 [(gogoproto.jsontag) = ",omitempty", (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString", (gogoproto.nullable) = false, (gogoproto.moretags) = "redact:\"mixed\""];
-	int64 duration = 6 [(gogoproto.jsontag) = ",omitempty"];
+  int64 duration = 6 [(gogoproto.jsontag) = ",omitempty"];
+  // Decoded key information (populated when key decoding is available).
+  uint32 table_id = 7 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  uint32 index_id = 8 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  string database_name = 9 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  string schema_name = 10 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  string table_name = 11 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  string index_name = 12 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // Decoded key column information. Arrays are parallel (same index = same column).
+  // Column names (schema metadata, safe).
+  repeated string key_column_names = 13 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // Column types (schema metadata, safe).
+  repeated string key_column_types = 14 [(gogoproto.jsontag) = ",omitempty", (gogoproto.moretags) = "redact:\"nonsensitive\""];
+  // Column values (potentially sensitive user data).
+  repeated string key_column_values = 15 [(gogoproto.jsontag) = ",omitempty"];
 }

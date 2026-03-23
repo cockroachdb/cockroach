@@ -1,0 +1,349 @@
+setup
+CREATE TABLE t(
+  a INT PRIMARY KEY,
+  b INT,
+  C INT,
+  INDEX t_idx_b(b),
+  INDEX t_idx_c(c)
+);
+CREATE SEQUENCE sq1;
+CREATE VIEW v AS SELECT a FROM t;
+CREATE TYPE notmyworkday AS ENUM ('Monday', 'Tuesday');
+CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL AS $$
+  SELECT a FROM t;
+  SELECT b FROM t@t_idx_b;
+  SELECT c FROM t@t_idx_c;
+  SELECT a FROM v;
+  SELECT nextval('sq1');
+$$;
+----
+
+ops
+CREATE OR REPLACE FUNCTION f(a notmyworkday) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT 1;
+$$;
+----
+StatementPhase stage 1 of 1 with 8 MutationType ops
+  transitions:
+    [[FunctionVolatility:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionLeakProof:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionNullInputBehavior:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionSecurity:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionParams:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetFunctionVolatility
+      FunctionID: 109
+      Volatility: 2
+    *scop.SetFunctionLeakProof
+      FunctionID: 109
+    *scop.SetFunctionNullInputBehavior
+      FunctionID: 109
+      NullInputBehavior: 1
+    *scop.SetFunctionSecurity
+      FunctionID: 109
+    *scop.SetFunctionParams
+      Params:
+        FunctionID: 109
+        Params:
+        - name: a
+          class:
+            class: 0
+          type:
+            type: |
+              family: EnumFamily
+              width: 0
+              precision: 0
+              locale: ""
+              oid: 100107
+              time_precision_is_set: false
+              udt_metadata: <
+                array_type_oid: 100108
+              >
+            closedtypeids:
+            - 107
+            - 108
+            typename: public.notmyworkday
+          defaultexpr: ""
+    *scop.SetFunctionBody
+      Body:
+        Body: SELECT 1;
+        FunctionID: 109
+        Lang:
+          Lang: 1
+        UsesTypeIDs:
+        - 107
+        - 108
+    *scop.UpdateFunctionTypeReferences
+      FunctionID: 109
+      TypeIDs:
+      - 107
+      - 108
+    *scop.UpdateFunctionRelationReferences
+      FunctionID: 109
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[FunctionVolatility:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionLeakProof:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionNullInputBehavior:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionSecurity:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionParams:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionBody:{DescID: 109}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 8 MutationType ops
+  transitions:
+    [[FunctionVolatility:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionLeakProof:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionNullInputBehavior:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionSecurity:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionParams:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionBody:{DescID: 109}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetFunctionVolatility
+      FunctionID: 109
+      Volatility: 2
+    *scop.SetFunctionLeakProof
+      FunctionID: 109
+    *scop.SetFunctionNullInputBehavior
+      FunctionID: 109
+      NullInputBehavior: 1
+    *scop.SetFunctionSecurity
+      FunctionID: 109
+    *scop.SetFunctionParams
+      Params:
+        FunctionID: 109
+        Params:
+        - name: a
+          class:
+            class: 0
+          type:
+            type: |
+              family: EnumFamily
+              width: 0
+              precision: 0
+              locale: ""
+              oid: 100107
+              time_precision_is_set: false
+              udt_metadata: <
+                array_type_oid: 100108
+              >
+            closedtypeids:
+            - 107
+            - 108
+            typename: public.notmyworkday
+          defaultexpr: ""
+    *scop.SetFunctionBody
+      Body:
+        Body: SELECT 1;
+        FunctionID: 109
+        Lang:
+          Lang: 1
+        UsesTypeIDs:
+        - 107
+        - 108
+    *scop.UpdateFunctionTypeReferences
+      FunctionID: 109
+      TypeIDs:
+      - 107
+      - 108
+    *scop.UpdateFunctionRelationReferences
+      FunctionID: 109
+
+# Replace a trigger function that has an active trigger. The trigger's
+# TriggerDeps and TriggerFunctionCall are updated (Drop+Add for deps).
+setup
+CREATE TABLE tr_t (a INT PRIMARY KEY);
+CREATE TABLE log1 (val TEXT);
+CREATE TABLE log2 (val TEXT);
+CREATE FUNCTION tf() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO log1 VALUES ('fired');
+    RETURN NEW;
+  END
+$$;
+CREATE TRIGGER tr BEFORE INSERT ON tr_t FOR EACH ROW EXECUTE FUNCTION tf();
+----
+
+ops
+CREATE OR REPLACE FUNCTION tf() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO log2 VALUES ('replaced');
+    RETURN NEW;
+  END
+$$;
+----
+----
+StatementPhase stage 1 of 1 with 12 MutationType ops
+  transitions:
+    [[FunctionVolatility:{DescID: 113}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionLeakProof:{DescID: 113}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionNullInputBehavior:{DescID: 113}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionSecurity:{DescID: 113}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionParams:{DescID: 113}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionBody:{DescID: 113}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerFunctionCall:{DescID: 110, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerDeps:{DescID: 110, TriggerID: 1, ReferencedFunctionIDs: [113]}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetFunctionVolatility
+      FunctionID: 113
+      Volatility: 1
+    *scop.SetFunctionLeakProof
+      FunctionID: 113
+    *scop.SetFunctionNullInputBehavior
+      FunctionID: 113
+      NullInputBehavior: 1
+    *scop.SetFunctionSecurity
+      FunctionID: 113
+    *scop.SetFunctionParams
+      Params:
+        FunctionID: 113
+        Params: []
+    *scop.SetFunctionBody
+      Body:
+        Body: |2
+      
+            BEGIN
+              INSERT INTO log2 VALUES ('replaced');
+              RETURN NEW;
+            END
+        FunctionID: 113
+        Lang:
+          Lang: 2
+    *scop.UpdateFunctionTypeReferences
+      FunctionID: 113
+    *scop.UpdateFunctionRelationReferences
+      FunctionID: 113
+    *scop.SetTriggerFunctionCall
+      FunctionCall:
+        FuncBody: |
+          BEGIN
+          INSERT INTO defaultdb.public.log2 VALUES ('replaced');
+          RETURN new;
+          END;
+        FuncID: 113
+        TableID: 110
+        TriggerID: 1
+    *scop.SetTriggerForwardReferences
+      Deps:
+        TableID: 110
+        TriggerID: 1
+        UsesRelations:
+        - id: 112
+          columnids:
+          - 1
+          indexid: 0
+        UsesRoutineIDs:
+        - 113
+    *scop.UpdateTriggerBackReferencesInRelations
+      RelationReferences:
+      - id: 112
+        columnids:
+        - 1
+        indexid: 0
+      TableID: 110
+      TriggerID: 1
+    *scop.AddTriggerBackReferencesInRoutines
+      BackReferencedTableID: 110
+      BackReferencedTriggerID: 1
+      RoutineIDs:
+      - 113
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[FunctionVolatility:{DescID: 113}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionLeakProof:{DescID: 113}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionNullInputBehavior:{DescID: 113}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionSecurity:{DescID: 113}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionParams:{DescID: 113}, PUBLIC], PUBLIC] -> ABSENT
+    [[FunctionBody:{DescID: 113}, PUBLIC], PUBLIC] -> ABSENT
+    [[TriggerFunctionCall:{DescID: 110, TriggerID: 1}, PUBLIC], PUBLIC] -> ABSENT
+    [[TriggerDeps:{DescID: 110, TriggerID: 1, ReferencedFunctionIDs: [113]}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 12 MutationType ops
+  transitions:
+    [[FunctionVolatility:{DescID: 113}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionLeakProof:{DescID: 113}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionNullInputBehavior:{DescID: 113}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionSecurity:{DescID: 113}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionParams:{DescID: 113}, PUBLIC], ABSENT] -> PUBLIC
+    [[FunctionBody:{DescID: 113}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerFunctionCall:{DescID: 110, TriggerID: 1}, PUBLIC], ABSENT] -> PUBLIC
+    [[TriggerDeps:{DescID: 110, TriggerID: 1, ReferencedFunctionIDs: [113]}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.SetFunctionVolatility
+      FunctionID: 113
+      Volatility: 1
+    *scop.SetFunctionLeakProof
+      FunctionID: 113
+    *scop.SetFunctionNullInputBehavior
+      FunctionID: 113
+      NullInputBehavior: 1
+    *scop.SetFunctionSecurity
+      FunctionID: 113
+    *scop.SetFunctionParams
+      Params:
+        FunctionID: 113
+        Params: []
+    *scop.SetFunctionBody
+      Body:
+        Body: |2
+      
+            BEGIN
+              INSERT INTO log2 VALUES ('replaced');
+              RETURN NEW;
+            END
+        FunctionID: 113
+        Lang:
+          Lang: 2
+    *scop.UpdateFunctionTypeReferences
+      FunctionID: 113
+    *scop.UpdateFunctionRelationReferences
+      FunctionID: 113
+    *scop.SetTriggerFunctionCall
+      FunctionCall:
+        FuncBody: |
+          BEGIN
+          INSERT INTO defaultdb.public.log2 VALUES ('replaced');
+          RETURN new;
+          END;
+        FuncID: 113
+        TableID: 110
+        TriggerID: 1
+    *scop.SetTriggerForwardReferences
+      Deps:
+        TableID: 110
+        TriggerID: 1
+        UsesRelations:
+        - id: 112
+          columnids:
+          - 1
+          indexid: 0
+        UsesRoutineIDs:
+        - 113
+    *scop.UpdateTriggerBackReferencesInRelations
+      RelationReferences:
+      - id: 112
+        columnids:
+        - 1
+        indexid: 0
+      TableID: 110
+      TriggerID: 1
+    *scop.AddTriggerBackReferencesInRoutines
+      BackReferencedTableID: 110
+      BackReferencedTriggerID: 1
+      RoutineIDs:
+      - 113
+----
+----
+
+deps
+CREATE OR REPLACE FUNCTION tf() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    INSERT INTO log2 VALUES ('replaced');
+    RETURN NEW;
+  END
+$$;
+----

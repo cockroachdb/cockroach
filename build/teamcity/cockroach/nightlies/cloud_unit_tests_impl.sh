@@ -63,7 +63,7 @@ bazel_test_env=(--test_env=GO_TEST_WRAP_TESTV=1 \
 exit_status=0
 
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci \
-    //pkg/cloud/gcp:gcp_test //pkg/cloud/amazon:amazon_test //pkg/ccl/cloudccl/gcp:gcp_test //pkg/ccl/cloudccl/amazon:amazon_test \
+    //pkg/cloud/gcp:gcp_test //pkg/cloud/amazon:amazon_test \
     //pkg/cloud/azure:azure_test //pkg/cloud/azure:azure_test \
     "${bazel_test_env[@]}" \
     --test_timeout=900 \

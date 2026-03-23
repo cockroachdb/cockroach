@@ -507,8 +507,7 @@ type noopStatsReferesher struct{}
 
 var _ scexec.StatsRefresher = noopStatsReferesher{}
 
-func (noopStatsReferesher) NotifyMutation(table catalog.TableDescriptor, rowsAffected int) {
-}
+func (noopStatsReferesher) NotifyMutation(context.Context, catalog.TableDescriptor, int) {}
 
 type noopMetadataUpdater struct{}
 
@@ -526,6 +525,18 @@ func (noopMetadataUpdater) DeleteSchedule(ctx context.Context, scheduleID jobspb
 
 // UpdateTTLScheduleLabel implements scexec.DescriptorMetadataUpdater.
 func (noopMetadataUpdater) UpdateTTLScheduleLabel(
+	ctx context.Context, tbl catalog.TableDescriptor,
+) error {
+	return nil
+}
+
+func (u noopMetadataUpdater) UpdateTTLScheduleCron(
+	ctx context.Context, scheduleID jobspb.ScheduleID, cronExpr string,
+) error {
+	return nil
+}
+
+func (u noopMetadataUpdater) CreateRowLevelTTLSchedule(
 	ctx context.Context, tbl catalog.TableDescriptor,
 ) error {
 	return nil

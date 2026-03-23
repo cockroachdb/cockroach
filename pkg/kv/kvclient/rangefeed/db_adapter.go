@@ -107,7 +107,7 @@ func (dbc *dbAdapter) Scan(
 	spans []roachpb.Span,
 	asOf hlc.Timestamp,
 	rowFn func(value roachpb.KeyValue),
-	rowsFn func([]kv.KeyValue),
+	rowsFn func([]kvpb.RangeFeedValue),
 	cfg scanConfig,
 ) error {
 	if len(spans) == 0 {
@@ -173,7 +173,7 @@ func (dbc *dbAdapter) scanSpan(
 	span roachpb.Span,
 	asOf hlc.Timestamp,
 	rowFn func(value roachpb.KeyValue),
-	rowsFn func([]kv.KeyValue),
+	rowsFn func([]kvpb.RangeFeedValue),
 	targetScanBytes int64,
 	onScanDone OnScanCompleted,
 	overSystemTable bool,
@@ -208,7 +208,16 @@ func (dbc *dbAdapter) scanSpan(
 				}
 				res := b.Results[0]
 				if rowsFn != nil {
-					rowsFn(res.Rows)
+					// NB: We allocate a new slice to convert to RangeFeedValues. PrevValue
+					// is not set as initial scans are point-in-time snapshots with no diff.
+					buf := make([]kvpb.RangeFeedValue, len(res.Rows))
+					for i := range res.Rows {
+						buf[i] = kvpb.RangeFeedValue{
+							Key:   res.Rows[i].Key,
+							Value: *res.Rows[i].Value,
+						}
+					}
+					rowsFn(buf)
 				} else {
 					for _, row := range res.Rows {
 						rowFn(roachpb.KeyValue{Key: row.Key, Value: *row.Value})
@@ -242,7 +251,7 @@ func (dbc *dbAdapter) divideAndSendScanRequests(
 	spans []roachpb.Span,
 	asOf hlc.Timestamp,
 	rowFn func(value roachpb.KeyValue),
-	rowsFn func(values []kv.KeyValue),
+	rowsFn func(values []kvpb.RangeFeedValue),
 	parallelismFn func() int,
 	targetScanBytes int64,
 	onSpanDone OnScanCompleted,

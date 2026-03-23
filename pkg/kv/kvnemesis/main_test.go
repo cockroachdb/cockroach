@@ -21,18 +21,11 @@ import (
 func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
-	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithDRPCOption(base.TestDRPCDisabled),
 		// All the tests in this package are specific to the storage layer.
-		base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-	)()
-
-	defer serverutils.TestingGlobalDRPCOption(
-		base.TestDRPCDisabled,
-	)()
-
+		serverutils.WithTenantOption(base.TestIsSpecificToStorageLayerAndNeedsASystemTenant))
+	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	os.Exit(m.Run())
 }
 

@@ -19,7 +19,7 @@ import { formatDurationHours } from "./spanTable";
 
 const cx = classNames.bind(styles);
 
-class SpanMetadataSortedTable extends SortedTable<NamedOperationMetadata> {}
+const SpanMetadataSortedTable = SortedTable<NamedOperationMetadata>;
 
 const columns: ColumnDescriptor<NamedOperationMetadata>[] = [
   {

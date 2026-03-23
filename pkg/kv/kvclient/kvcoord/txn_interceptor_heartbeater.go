@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -471,6 +472,8 @@ func (h *txnHeartbeater) heartbeatLocked(ctx context.Context) bool {
 	}
 	ba := &kvpb.BatchRequest{}
 	ba.Txn = txn
+	ba.Header.WorkloadID = uint64(workloadid.WORKLOAD_ID_TXN_HEARTBEAT)
+	ba.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
 	ba.Add(&kvpb.HeartbeatTxnRequest{
 		RequestHeader: kvpb.RequestHeader{
 			Key: txn.Key,
@@ -554,6 +557,8 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 	txn := h.mu.txn.Clone()
 	ba := &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: txn}
+	ba.Header.WorkloadID = uint64(workloadid.WORKLOAD_ID_TXN_HEARTBEAT)
+	ba.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
 	ba.Add(&kvpb.EndTxnRequest{
 		Commit: false,
 		// Resolved intents should maintain an abort span entry to prevent
@@ -564,7 +569,7 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 	// bypass AC.
 	ba.AdmissionHeader = kvpb.AdmissionHeader{
 		Priority:   txn.AdmissionPriority,
-		CreateTime: timeutil.Now().UnixNano(),
+		CreateTime: h.clock.PhysicalTime().UnixNano(),
 		Source:     kvpb.AdmissionHeader_OTHER,
 	}
 

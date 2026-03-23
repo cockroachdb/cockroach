@@ -1,5 +1,3 @@
-# LogicTest: !local-prepared
-
 # SELECT with no table.
 
 query I
@@ -245,9 +243,14 @@ SELECT * FROM xyzw LIMIT -100
 query error negative value for OFFSET
 SELECT * FROM xyzw OFFSET -100
 
+# In local-prepared, this value overflows int64 so it becomes a DECIMAL
+# placeholder, producing a type mismatch error instead of a range error.
+skipif config local-prepared
 query error numeric constant out of int64 range
 SELECT * FROM xyzw LIMIT 9223372036854775808
 
+# Same as above for OFFSET.
+skipif config local-prepared
 query error numeric constant out of int64 range
 SELECT * FROM xyzw OFFSET 9223372036854775808
 
@@ -370,6 +373,9 @@ SELECT a FROM MaxIntTest WHERE a = 9223372036854775807
 ----
 9223372036854775807
 
+# In local-prepared, $1 is treated as a placeholder from scalar replacement
+# rather than a literal in the SQL text, so the error differs.
+skipif config local-prepared
 query error no value provided for placeholder
 SELECT $1::int
 

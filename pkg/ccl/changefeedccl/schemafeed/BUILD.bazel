@@ -30,6 +30,7 @@ go_library(
         "//pkg/sql/execinfra",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/storage",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/intsets",

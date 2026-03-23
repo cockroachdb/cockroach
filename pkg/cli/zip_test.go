@@ -75,6 +75,7 @@ table_name NOT IN (
 	'builtin_functions',
 	'cluster_contended_keys',
 	'cluster_contended_indexes',
+	'cluster_active_session_history',
 	'cluster_contended_tables',
 	'cluster_execution_insights',
 	'cluster_inflight_traces',
@@ -100,6 +101,7 @@ table_name NOT IN (
 	'kv_flow_token_deductions',
 	'kv_flow_token_deductions_v2',
 	'lost_descriptors_with_data',
+	'node_active_session_history',
 	'table_columns',
 	'table_row_statistics',
 	'ranges',
@@ -383,6 +385,27 @@ func TestZipExcludeRangeInfo(t *testing.T) {
 			return out
 		},
 	)
+}
+
+func TestZipExcludeLogSeverityValidation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	c := NewCLITest(TestCLIParams{
+		StoreSpecs: []base.StoreSpec{{
+			Path: dir,
+		}},
+	})
+	defer c.Cleanup()
+
+	// Invalid severity name should produce an error.
+	out, err := c.RunWithCapture(
+		"debug zip --exclude-log-severities=INVALID " + os.DevNull)
+	require.NoError(t, err)
+	require.Contains(t, out, `unknown log severity "INVALID"`)
 }
 
 // This tests the operation of zip running concurrently.
@@ -695,6 +718,8 @@ func eraseNonDeterministicZipOutput(out string) string {
 	out = re.ReplaceAllString(out, ``)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving goroutine_dump.*$` + "\n")
 	out = re.ReplaceAllString(out, ``)
+	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving ash_report.*$` + "\n")
+	out = re.ReplaceAllString(out, ``)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ execution traces found$`)
 	out = re.ReplaceAllString(out, `[node ?] ? execution traces found`)
 
@@ -718,6 +743,7 @@ func TestPartialZip(t *testing.T) {
 	// however low timeouts make race runs flaky with false positives.
 	skip.UnderShort(t)
 	skip.UnderRace(t)
+	skip.UnderDeadlock(t, "flaky under deadlock")
 
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
@@ -830,6 +856,7 @@ func TestZipDisallowFullScans(t *testing.T) {
 
 	skip.UnderShort(t)
 	skip.UnderRace(t)
+	skip.UnderDeadlock(t, "flaky under deadlock")
 
 	dir, cleanupFn := testutils.TempDir(t)
 	defer cleanupFn()
@@ -940,6 +967,63 @@ test/generate_series(1,15000) as t(x).4.json
 test/generate_series(1,15000) as t(x).4.json.err.txt
 `
 	assert.Equal(t, expected, fileList.String())
+}
+
+// TestZipNonRootUser verifies that debug zip works with non-root users.
+func TestZipNonRootUser(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+	skip.UnderRace(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{Insecure: true})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := s.SQLConn(t, serverutils.DBName("system"))
+	defer sqlDB.Close()
+
+	// Create a test user with ADMIN privileges
+	_, err := sqlDB.Exec(`CREATE USER testuser`)
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`GRANT ADMIN TO testuser`)
+	require.NoError(t, err)
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	// Test with non-root user
+	c := TestCLI{
+		t:        t,
+		Server:   s,
+		Insecure: true,
+	}
+
+	zipName := filepath.Join(dir, "test.zip")
+	out, err := c.RunWithCapture(fmt.Sprintf(
+		"debug zip --user=testuser --concurrency=1 --cpu-profile-duration=0s --validate-zip-file=false %s",
+		zipName,
+	))
+	require.NoError(t, err)
+	require.NotEmpty(t, out)
+
+	// Verify the zip file was created
+	_, err = os.Stat(zipName)
+	require.NoError(t, err)
+
+	// Test that root user still works (regression test)
+	zipNameRoot := filepath.Join(dir, "test_root.zip")
+	out, err = c.RunWithCapture(fmt.Sprintf(
+		"debug zip --concurrency=1 --cpu-profile-duration=0s --validate-zip-file=false %s",
+		zipNameRoot,
+	))
+	require.NoError(t, err)
+	require.NotEmpty(t, out)
+
+	// Verify the zip file was created
+	_, err = os.Stat(zipNameRoot)
+	require.NoError(t, err)
 }
 
 // This checks that SQL retry errors are properly handled.
@@ -1435,7 +1519,13 @@ func trimNonDeterministicZipOutputFiles(out string) string {
 	out = re.ReplaceAllString(out, ``)
 	re = regexp.MustCompile(`(?m).*(memprof|memstats|memmonitoring).*\.(txt|pprof)$` + "\n")
 	out = re.ReplaceAllString(out, ``)
-	re = regexp.MustCompile(`(?m).*goroutine_dump.*\.txt\.gz$` + "\n")
+	re = regexp.MustCompile(`(?m).*goroutine_dump.*\.pb\.gz$` + "\n")
+	out = re.ReplaceAllString(out, ``)
+	// CPU profiles are non-deterministic: stored profiles have timestamps in
+	// filenames, and live profile collection may fail producing error files.
+	re = regexp.MustCompile(`(?m).*cpuprof/cpuprof\..*\.pprof$` + "\n")
+	out = re.ReplaceAllString(out, ``)
+	re = regexp.MustCompile(`(?m).*cpu\.pprof\.err\.txt$` + "\n")
 	out = re.ReplaceAllString(out, ``)
 	return out
 }
@@ -1443,6 +1533,8 @@ func trimNonDeterministicZipOutputFiles(out string) string {
 func TestZipIncludeAndExcludeFilesDataDriven(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderDeadlock(t, "flaky under deadlock")
 
 	datadriven.Walk(t, "testdata/zip/file-filters", func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {

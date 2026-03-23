@@ -1,0 +1,3 @@
+opt_with_show_hints_options ::=
+	'WITH' show_hints_options_list
+	| 'WITH' 'OPTIONS' '(' show_hints_options_list ')'

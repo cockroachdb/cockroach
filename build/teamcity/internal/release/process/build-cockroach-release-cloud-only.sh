@@ -15,26 +15,21 @@ tc_start_block "Variable Setup"
 version=$(grep -v "^#" "$dir/../pkg/build/version.txt" | head -n1)
 if [[ -z "${DRY_RUN}" ]] ; then
   gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/cockroach"
-  gcr_staged_credentials="$GCS_CREDENTIALS_PROD"
   gcr_repository="us-docker.pkg.dev/cockroach-cloud-images/cockroachdb/cockroach"
   gcr_credentials="$GOOGLE_COCKROACH_CLOUD_IMAGES_COCKROACHDB_CREDENTIALS"
 else
   gcr_staged_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/cockroach"
-  gcr_staged_credentials="$GCS_CREDENTIALS_DEV"
   gcr_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/cockroach-cloud-only"
   gcr_credentials="$GCS_CREDENTIALS_DEV"
 fi
 tc_end_block "Variable Setup"
 
-
-docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
-docker pull "${gcr_staged_repository}:amd64-${version}"
-docker pull "${gcr_staged_repository}:arm64-${version}"
+docker_login_gcr "$gcr_repository" "$gcr_credentials"
 
 cloud_release=
 for i in $(seq 1 10); do
   maybe_manifest="${gcr_repository}:$version-cloudonly.$i"
-  if ! docker manifest inspect "$maybe_manifest"; then
+  if ! docker buildx imagetools inspect "$maybe_manifest" > /dev/null 2>&1; then
     echo "$maybe_manifest not found, assuming this is what we need"
     cloud_release="$i"
     break
@@ -51,25 +46,11 @@ fi
 version_cloudonly="${version}-cloudonly.${cloud_release}"
 manifest="${gcr_repository}:${version_cloudonly}"
 
-docker_login_gcr "$gcr_repository" "$gcr_credentials"
-
-docker tag \
-  "${gcr_staged_repository}:amd64-${version}" \
-  "${gcr_repository}:amd64-${version_cloudonly}"
-docker tag \
-  "${gcr_staged_repository}:arm64-${version}" \
-  "${gcr_repository}:arm64-${version_cloudonly}"
-
-docker push "${gcr_repository}:amd64-${version_cloudonly}"
-docker push "${gcr_repository}:arm64-${version_cloudonly}"
-
-docker manifest rm "$manifest" || :
-docker manifest create \
-  "$manifest" \
-  "${gcr_repository}:amd64-${version_cloudonly}" \
-  "${gcr_repository}:arm64-${version_cloudonly}"
-
-docker manifest push "$manifest" 
+# Copy the multi-arch manifest from the staged repo to the cloud-only repo
+# server-side using docker buildx imagetools.
+docker buildx imagetools create \
+  -t "$manifest" \
+  "${gcr_staged_repository}:${version}"
 echo "==========="
 echo "published to"
 echo "$manifest"
@@ -77,7 +58,7 @@ echo "==========="
 
 tc_start_block "Verify docker images"
 error=0
-for arch in amd64 arm64; do
+for arch in amd64 arm64 s390x; do
     tc_start_block "Verify $manifest on $arch"
     if ! verify_docker_image "$manifest" "linux/$arch" "$BUILD_VCS_NUMBER" "$version" false false; then
       error=1

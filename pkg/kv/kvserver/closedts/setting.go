@@ -123,3 +123,27 @@ var SideTransportPacingSmearInterval = settings.RegisterDurationSetting(
 	1*time.Millisecond,
 	settings.WithPublic,
 )
+
+// FollowerReadsEnabled controls whether replicas attempt to serve follower
+// reads. The closed timestamp machinery is unaffected by this, i.e. the same
+// information is collected and passed around, regardless of the value of this
+// setting.
+var FollowerReadsEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible, // needed for planning in SQL
+	"kv.closed_timestamp.follower_reads_enabled",
+	"allow (all) replicas to serve consistent historical reads based on closed timestamp information",
+	true,
+	settings.WithName("kv.closed_timestamp.follower_reads.enabled"),
+	settings.WithPublic)
+
+// ClosedTimestampPropagationSlack is used by follower_read_timestamp() as a
+// measure of how long closed timestamp updates are supposed to take from the
+// leaseholder to the followers.
+var ClosedTimestampPropagationSlack = settings.RegisterDurationSetting(
+	settings.SystemVisible,
+	"kv.closed_timestamp.propagation_slack",
+	"a conservative estimate of the amount of time expect for closed timestamps to "+
+		"propagate from a leaseholder to followers. This is taken into account by "+
+		"follower_read_timestamp().",
+	time.Second,
+)

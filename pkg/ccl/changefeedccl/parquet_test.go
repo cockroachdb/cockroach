@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -52,8 +53,9 @@ func TestParquetRows(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
-	sysDB := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
-	sysDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
+	for _, l := range []serverutils.ApplicationLayerInterface{s, srv.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+	}
 
 	maxRowGroupSize := int64(4)
 
@@ -205,13 +207,15 @@ func TestParquetRows(t *testing.T) {
 			for i := 0; i < numRows; i++ {
 				v := popRow(t)
 
-				updatedRow, err := decoder.DecodeKV(
+				updatedRow, status, err := decoder.DecodeKV(
 					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, cdcevent.CurrentRow, v.Timestamp(), false)
 				require.NoError(t, err)
+				require.Equal(t, cdcevent.DecodeOK, status)
 
-				prevRow, err := decoder.DecodeKV(
+				prevRow, prevStatus, err := decoder.DecodeKV(
 					ctx, roachpb.KeyValue{Key: v.Key, Value: v.PrevValue}, cdcevent.PrevRow, v.Timestamp(), false)
 				require.NoError(t, err)
+				require.Equal(t, cdcevent.DecodeOK, prevStatus)
 
 				encodingOpts := changefeedbase.EncodingOptions{}
 
@@ -275,7 +279,7 @@ func makeRangefeedReaderAndDecoder(
 	})
 	sqlExecCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	ctx := context.Background()
-	decoder, err := cdcevent.NewEventDecoder(ctx, &sqlExecCfg, targets, false, false)
+	decoder, err := cdcevent.NewEventDecoder(ctx, &sqlExecCfg, targets, false, false, cdcevent.DecoderOptions{})
 	require.NoError(t, err)
 	return popRow, cleanup, decoder
 }

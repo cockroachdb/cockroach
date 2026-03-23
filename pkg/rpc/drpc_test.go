@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/metadata"
 	"storj.io/drpc"
 )
 
@@ -36,6 +37,7 @@ func (d dummyStream) MsgSend(drpc.Message, drpc.Encoding) error { return nil }
 func (d dummyStream) MsgRecv(drpc.Message, drpc.Encoding) error { return nil }
 func (d dummyStream) CloseSend() error                          { return nil }
 func (d dummyStream) Close() error                              { return nil }
+func (d dummyStream) Kind() drpc.StreamKind                     { return drpc.StreamKindUnknown }
 
 // TestMakeStopperInterceptors verifies that the stopper interceptors allow RPCs
 // to run before the stopper quiesces and reject them afterward.
@@ -92,7 +94,11 @@ func TestGatewayRequestDRPCRecoveryInterceptor(t *testing.T) {
 
 	// With gateway metadata - should recover from panic
 	t.Run("with gateway metadata", func(t *testing.T) {
-		ctx := MarkDRPCGatewayRequest(context.Background())
+		md := metadata.New(map[string]string{
+			gwRequestKey: "test",
+		})
+		// Create a context with the gateway metadata
+		ctx := metadata.NewIncomingContext(context.Background(), md)
 
 		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 			panic("test panic")
@@ -123,7 +129,11 @@ func TestGatewayRequestDRPCRecoveryInterceptor(t *testing.T) {
 
 	// With gateway metadata but no panic - should pass through normally
 	t.Run("with gateway metadata no panic", func(t *testing.T) {
-		ctx := MarkDRPCGatewayRequest(context.Background())
+		// Create a context with the gateway metadata
+		md := metadata.New(map[string]string{
+			gwRequestKey: "test",
+		})
+		ctx := metadata.NewIncomingContext(context.Background(), md)
 
 		expectedResp := "success"
 		expectedErr := errors.New("expected error")

@@ -10,7 +10,7 @@ set -euxo pipefail
 
 EXTRA_PARAMS=""
 
-if [ "$GITHUB_ACTIONS_BRANCH" == "staging" ]; then
+if [[ "$GITHUB_ACTIONS_BRANCH" == "staging" || "$GITHUB_ACTIONS_BRANCH" == trunk-merge/* ]]; then
   # enable up to 1 retry (2 attempts, worst-case) per test executable to report flakes but only on release branches and staging.
   EXTRA_PARAMS=" --flaky_test_attempts=2"
 fi

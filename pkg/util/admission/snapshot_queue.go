@@ -28,7 +28,16 @@ type snapshotWorkItem struct {
 	mu             struct {
 		// These fields are updated after creation. The mutex in SnapshotQueue must
 		// be held to read and write to these fields.
-		inQueue   bool
+
+		// The granted value transitions at most once from false to true. Granting
+		// can race with context cancellation, so when context cancellation is
+		// processed, it is possible that the grant was already made. In that
+		// case, the grant needs to be returned.
+		granted bool
+		// The cancelled value transitions at most once from false to true. Since
+		// cancelled items are not immediately removed from SnapshotQueue.mu.q,
+		// this bool tells the queue to ignore (and lazily remove) an item that
+		// has been cancelled, when a grant happens.
 		cancelled bool
 	}
 }
@@ -54,6 +63,16 @@ var DiskBandwidthForSnapshotIngest = settings.RegisterBoolSetting(
 	settings.WithPublic,
 )
 
+var DiskBandwidthForSnapshotIngestMinRateEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kvadmission.store.snapshot_ingest_bandwidth_control.min_rate.enabled",
+	"if set to true, snapshot ingests will be admitted at a minimum rate when "+
+		"kvadmission.store.provisioned_bandwidth is set to a non-zero value. Disabling this "+
+		"setting can lead to snapshots being starved out by foreground traffic.",
+	true,
+	settings.WithPublic,
+)
+
 var snapshotWaitDur = metric.Metadata{
 	Name:        "admission.wait_durations.snapshot_ingest",
 	Help:        "Wait time for snapshot ingest requests that waited",
@@ -62,7 +81,8 @@ var snapshotWaitDur = metric.Metadata{
 }
 
 type SnapshotMetrics struct {
-	WaitDurations metric.IHistogram
+	WaitDurations         metric.IHistogram
+	AdmittedSnapshotBytes metric.Counter
 }
 
 func makeSnapshotQueueMetrics(registry *metric.Registry) *SnapshotMetrics {
@@ -73,6 +93,12 @@ func makeSnapshotQueueMetrics(registry *metric.Registry) *SnapshotMetrics {
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
+		AdmittedSnapshotBytes: *metric.NewCounter(metric.Metadata{
+			Name:        "admission.admitted_snapshot_bytes",
+			Help:        "Number of bytes admitted for snapshot ingests when provisioned bandwidth AC is enabled",
+			Measurement: "Bytes",
+			Unit:        metric.Unit_BYTES,
+		}),
 	}
 	registry.AddMetricStruct(m)
 	return m
@@ -80,7 +106,7 @@ func makeSnapshotQueueMetrics(registry *metric.Registry) *SnapshotMetrics {
 
 // snapshotRequester is a wrapper used for test purposes.
 type snapshotRequester interface {
-	Admit(ctx context.Context, count int64) error
+	Admit(ctx context.Context, count int64, minRate int64, timerForMinRate timeutil.TimerI) error
 }
 
 // SnapshotQueue implements the requester interface. It is used to request
@@ -89,6 +115,9 @@ type snapshotRequester interface {
 type SnapshotQueue struct {
 	snapshotGranter granter
 	mu              struct {
+		// Reminder: this mutex must not be held when calling into
+		// snapshotGranter, as documented near the declaration of requester and
+		// granter.
 		syncutil.Mutex
 		q *queue.Queue[*snapshotWorkItem]
 	}
@@ -135,6 +164,7 @@ func (s *SnapshotQueue) granted(_ grantChainID) int64 {
 		break
 	}
 	count := item.count
+	item.mu.granted = true
 	// After signalling to the channel, we transfer ownership of item back to the
 	// `Admit` goroutine, it should no longer be accessed here.
 	item.admitCh <- true
@@ -152,7 +182,14 @@ func (s *SnapshotQueue) close() {
 // Admit is called whenever a snapshot ingest request needs to update the number
 // of byte tokens it is using. Note that it accepts negative values, in which
 // case it will return the tokens back to the granter.
-func (s *SnapshotQueue) Admit(ctx context.Context, count int64) error {
+func (s *SnapshotQueue) Admit(
+	ctx context.Context, count int64, minRate int64, timerForMinRate timeutil.TimerI,
+) (err error) {
+	defer func() {
+		if err == nil && count > 0 {
+			s.metrics.AdmittedSnapshotBytes.Inc(count)
+		}
+	}()
 	if count == 0 {
 		return nil
 	}
@@ -163,7 +200,16 @@ func (s *SnapshotQueue) Admit(ctx context.Context, count int64) error {
 	if s.snapshotGranter.tryGet(canBurst /*arbitrary*/, count) {
 		return nil
 	}
+	// INVARIANT: count > 0.
+
 	// We were unable to get tokens for admission, so we queue.
+	//
+	// Reminder: there is a race here where a call to hasWaitingRequests after
+	// tryGet and before the mutex is acquired and the item is added to the
+	// queue will not see the waiting request. Such a race would result in an
+	// end state where the granter has resources and the requester has waiting
+	// requests. This is harmless since hasWaitingRequests is called
+	// periodically at a high enough frequency when tokens are limited.
 	shouldRelease := true
 	item := newSnapshotWorkItem(count)
 	defer func() {
@@ -178,15 +224,24 @@ func (s *SnapshotQueue) Admit(ctx context.Context, count int64) error {
 		s.addLocked(item)
 	}()
 
+	if minRate != 0 {
+		maxWaitDuration := (time.Second * time.Duration(count)) / time.Duration(minRate)
+		timerForMinRate.Reset(maxWaitDuration)
+		defer timerForMinRate.Stop()
+	}
 	// Start waiting for admission.
 	select {
 	case <-ctx.Done():
 		waitDur := timeutil.Since(item.enqueueingTime).Nanoseconds()
+		// INVARIANT: tokensToReturn >= 0, since item.count >= 0.
+		var tokensToReturn int64
 		func() {
 			s.mu.Lock()
 			defer s.mu.Unlock()
-			if !item.mu.inQueue {
-				s.snapshotGranter.returnGrant(item.count)
+			if item.mu.granted {
+				// NB: we must call snapshotGranter.returnGrant after releasing the
+				// mutex.
+				tokensToReturn = item.count
 			}
 			// TODO(aaditya): Ideally, we also remove the item from the actual queue.
 			// Right now, if we cancel the work, it remains in the queue. A call to
@@ -196,6 +251,9 @@ func (s *SnapshotQueue) Admit(ctx context.Context, count int64) error {
 			// non-ideal behavior, but still provides accurate token accounting.
 			item.mu.cancelled = true
 		}()
+		if tokensToReturn != 0 {
+			s.snapshotGranter.returnGrant(tokensToReturn)
+		}
 		shouldRelease = false
 		s.metrics.WaitDurations.RecordValue(waitDur)
 		var deadlineSubstring string
@@ -209,13 +267,34 @@ func (s *SnapshotQueue) Admit(ctx context.Context, count int64) error {
 		waitDur := timeutil.Since(item.enqueueingTime).Nanoseconds()
 		s.metrics.WaitDurations.RecordValue(waitDur)
 		return nil
+	case t := <-timerForMinRate.Ch():
+		waitDur := t.Sub(item.enqueueingTime).Nanoseconds()
+		// INVARIANT: tokensToSubtract >= 0, since item.count >= 0.
+		tokensToSubtract := item.count
+		func() {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			if item.mu.granted {
+				// NB: we must call snapshotGranter.tookWithoutPermission after
+				// releasing the mutex.
+				tokensToSubtract = 0
+			}
+			// NB: See the ctx.Done() case above for why we mark the item as
+			// cancelled instead of removing the item from the queue.
+			item.mu.cancelled = true
+		}()
+		if tokensToSubtract != 0 {
+			s.snapshotGranter.tookWithoutPermission(tokensToSubtract)
+		}
+		shouldRelease = false
+		s.metrics.WaitDurations.RecordValue(waitDur)
+		return nil
 	}
 }
 
 func (s *SnapshotQueue) addLocked(item *snapshotWorkItem) {
 	item.enqueueingTime = timeutil.Now()
 	s.mu.q.Enqueue(item)
-	item.mu.inQueue = true
 }
 
 func (s *SnapshotQueue) popLocked() *snapshotWorkItem {
@@ -223,7 +302,6 @@ func (s *SnapshotQueue) popLocked() *snapshotWorkItem {
 	if !ok {
 		return nil
 	}
-	item.mu.inQueue = false
 	return item
 }
 
@@ -258,19 +336,25 @@ func newSnapshotWorkItem(count int64) *snapshotWorkItem {
 		count:          count,
 	}
 	item.mu.cancelled = false
-	item.mu.inQueue = false
+	item.mu.granted = false
 	return item
 }
 
 type SnapshotPacer struct {
-	snapshotQ     snapshotRequester
-	intWriteBytes int64
+	snapshotQ       snapshotRequester
+	intWriteBytes   int64
+	minRate         int64
+	timerForMinRate timeutil.TimerI
 }
 
-func NewSnapshotPacer(q snapshotRequester) *SnapshotPacer {
+func NewSnapshotPacer(
+	q snapshotRequester, minRate int64, timerForMinRate timeutil.TimerI,
+) *SnapshotPacer {
 	return &SnapshotPacer{
-		snapshotQ:     q,
-		intWriteBytes: 0,
+		snapshotQ:       q,
+		intWriteBytes:   0,
+		minRate:         minRate,
+		timerForMinRate: timerForMinRate,
 	}
 }
 
@@ -283,7 +367,7 @@ func (p *SnapshotPacer) Pace(ctx context.Context, writeBytes int64, final bool) 
 	if p.intWriteBytes <= SnapshotBurstSize && !final {
 		return nil
 	}
-	if err := p.snapshotQ.Admit(ctx, p.intWriteBytes); err != nil {
+	if err := p.snapshotQ.Admit(ctx, p.intWriteBytes, p.minRate, p.timerForMinRate); err != nil {
 		return errors.Wrapf(err, "snapshot admission queue")
 	}
 	p.intWriteBytes = 0

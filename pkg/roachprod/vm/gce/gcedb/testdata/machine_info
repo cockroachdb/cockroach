@@ -1,0 +1,745 @@
+# N2 standard (example from CLAUDE.md)
+n2-standard-32
+----
+CPUCores: 32
+MemoryGiB: 128
+Architecture: amd64
+AllowedLocalSSDCount: {4, 8, 16, 24}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme, hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Intel Cascade Lake, Intel Ice Lake)
+
+n2-highmem-8
+----
+CPUCores: 8
+MemoryGiB: 64
+Architecture: amd64
+AllowedLocalSSDCount: {1, 2, 4, 8, 16, 24}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme, hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Intel Cascade Lake, Intel Ice Lake)
+
+n2-custom-16-32768
+----
+CPUCores: 16
+MemoryGiB: 32
+Architecture: amd64
+AllowedLocalSSDCount: {2, 4, 8, 16, 24}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme, hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Intel Cascade Lake, Intel Ice Lake)
+
+# N1 variants
+n1-standard-8
+----
+CPUCores: 8
+MemoryGiB: 30
+Architecture: amd64
+AllowedLocalSSDCount: {1, 2, 3, 4, 5, 6, 7, 8, 16, 24}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd)
+CPUPlatforms: (Intel Sandy Bridge, Intel Ivy Bridge, Intel Haswell, Intel Broadwell, Intel Skylake)
+
+n1-highmem-16
+----
+CPUCores: 16
+MemoryGiB: 104
+Architecture: amd64
+AllowedLocalSSDCount: {1, 2, 3, 4, 5, 6, 7, 8, 16, 24}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd)
+CPUPlatforms: (Intel Sandy Bridge, Intel Ivy Bridge, Intel Haswell, Intel Broadwell, Intel Skylake)
+
+n1-highcpu-32
+----
+CPUCores: 32
+MemoryGiB: 28
+Architecture: amd64
+AllowedLocalSSDCount: {1, 2, 3, 4, 5, 6, 7, 8, 16, 24}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd)
+CPUPlatforms: (Intel Sandy Bridge, Intel Ivy Bridge, Intel Haswell, Intel Broadwell, Intel Skylake)
+
+# E2 standard
+e2-standard-8
+----
+CPUCores: 8
+MemoryGiB: 32
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd)
+CPUPlatforms: ()
+
+# Shared-core machines
+e2-micro
+----
+CPUCores: 1
+MemoryGiB: 1
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd)
+CPUPlatforms: ()
+
+e2-small
+----
+CPUCores: 1
+MemoryGiB: 2
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd)
+CPUPlatforms: ()
+
+e2-medium
+----
+CPUCores: 1
+MemoryGiB: 4
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd)
+CPUPlatforms: ()
+
+f1-micro
+----
+CPUCores: 1
+MemoryGiB: 1
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd)
+CPUPlatforms: (Intel Sandy Bridge, Intel Ivy Bridge, Intel Haswell, Intel Broadwell, Intel Skylake)
+
+g1-small
+----
+CPUCores: 1
+MemoryGiB: 1
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd)
+CPUPlatforms: (Intel Sandy Bridge, Intel Ivy Bridge, Intel Haswell, Intel Broadwell, Intel Skylake)
+
+# Custom machine type
+n2-custom-16-32768
+----
+CPUCores: 16
+MemoryGiB: 32
+Architecture: amd64
+AllowedLocalSSDCount: {2, 4, 8, 16, 24}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme, hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Intel Cascade Lake, Intel Ice Lake)
+
+# C3
+c3-standard-88
+----
+CPUCores: 88
+MemoryGiB: 352
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (Intel Sapphire Rapids)
+
+# H3
+h3-standard-88
+----
+CPUCores: 88
+MemoryGiB: 352
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (pd-balanced, hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Intel Sapphire Rapids)
+
+# Memory optimized
+m1-megamem-96
+----
+CPUCores: 96
+MemoryGiB: 1434
+Architecture: amd64
+AllowedLocalSSDCount: {1, 2, 3, 4, 5, 6, 7, 8}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
+CPUPlatforms: (Intel Broadwell, Intel Skylake)
+
+m1-ultramem-160
+----
+CPUCores: 160
+MemoryGiB: 3844
+Architecture: amd64
+AllowedLocalSSDCount: {1, 2, 3, 4, 5, 6, 7, 8}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
+CPUPlatforms: (Intel Broadwell, Intel Skylake)
+
+m3-megamem-64
+----
+CPUCores: 64
+MemoryGiB: 976
+Architecture: amd64
+AllowedLocalSSDCount: {4, 8}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (Intel Ice Lake)
+
+m3-ultramem-128
+----
+CPUCores: 128
+MemoryGiB: 3904
+Architecture: amd64
+AllowedLocalSSDCount: {8}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (Intel Ice Lake)
+
+# N4 (Intel Emerald Rapids)
+n4-standard-8
+----
+CPUCores: 8
+MemoryGiB: 32
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Intel Emerald Rapids)
+
+n4-highmem-16
+----
+CPUCores: 16
+MemoryGiB: 128
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Intel Emerald Rapids)
+
+n4-highcpu-32
+----
+CPUCores: 32
+MemoryGiB: 64
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Intel Emerald Rapids)
+
+# N4D (AMD EPYC Turin)
+n4d-standard-8
+----
+CPUCores: 8
+MemoryGiB: 32
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (AMD Turin)
+
+n4d-highmem-16
+----
+CPUCores: 16
+MemoryGiB: 128
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (AMD Turin)
+
+n4d-highcpu-32
+----
+CPUCores: 32
+MemoryGiB: 64
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (AMD Turin)
+
+n4d-standard-96
+----
+CPUCores: 96
+MemoryGiB: 384
+Architecture: amd64
+AllowedLocalSSDCount: {}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (AMD Turin)
+
+# N4A (Google Axion ARM64)
+n4a-standard-8
+----
+CPUCores: 8
+MemoryGiB: 32
+Architecture: arm64
+AllowedLocalSSDCount: {}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Google Axion)
+
+n4a-highmem-16
+----
+CPUCores: 16
+MemoryGiB: 128
+Architecture: arm64
+AllowedLocalSSDCount: {}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Google Axion)
+
+n4a-highcpu-32
+----
+CPUCores: 32
+MemoryGiB: 64
+Architecture: arm64
+AllowedLocalSSDCount: {}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Google Axion)
+
+n4a-standard-64
+----
+CPUCores: 64
+MemoryGiB: 256
+Architecture: arm64
+AllowedLocalSSDCount: {}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Google Axion)
+
+# ARM architecture
+t2a-standard-16
+----
+CPUCores: 16
+MemoryGiB: 64
+Architecture: arm64
+AllowedLocalSSDCount: {}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd)
+CPUPlatforms: (Ampere Altra)
+
+c3-standard-4-lssd
+----
+CPUCores: 4
+MemoryGiB: 16
+Architecture: amd64
+AllowedLocalSSDCount: {1}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (Intel Sapphire Rapids)
+
+c3-standard-8-lssd
+----
+CPUCores: 8
+MemoryGiB: 32
+Architecture: amd64
+AllowedLocalSSDCount: {2}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (Intel Sapphire Rapids)
+
+c3-standard-22-lssd
+----
+CPUCores: 22
+MemoryGiB: 88
+Architecture: amd64
+AllowedLocalSSDCount: {4}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (Intel Sapphire Rapids)
+
+c3-standard-44-lssd
+----
+CPUCores: 44
+MemoryGiB: 176
+Architecture: amd64
+AllowedLocalSSDCount: {8}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (Intel Sapphire Rapids)
+
+c3-standard-88-lssd
+----
+CPUCores: 88
+MemoryGiB: 352
+Architecture: amd64
+AllowedLocalSSDCount: {16}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (Intel Sapphire Rapids)
+
+c3-standard-176-lssd
+----
+CPUCores: 176
+MemoryGiB: 704
+Architecture: amd64
+AllowedLocalSSDCount: {32}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (Intel Sapphire Rapids)
+
+c3d-standard-8-lssd
+----
+CPUCores: 8
+MemoryGiB: 32
+Architecture: amd64
+AllowedLocalSSDCount: {1}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (AMD Genoa)
+
+c3d-standard-16-lssd
+----
+CPUCores: 16
+MemoryGiB: 64
+Architecture: amd64
+AllowedLocalSSDCount: {1}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (AMD Genoa)
+
+c3d-standard-30-lssd
+----
+CPUCores: 30
+MemoryGiB: 120
+Architecture: amd64
+AllowedLocalSSDCount: {2}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (AMD Genoa)
+
+c3d-standard-60-lssd
+----
+CPUCores: 60
+MemoryGiB: 240
+Architecture: amd64
+AllowedLocalSSDCount: {4}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (AMD Genoa)
+
+c3d-standard-90-lssd
+----
+CPUCores: 90
+MemoryGiB: 360
+Architecture: amd64
+AllowedLocalSSDCount: {8}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (AMD Genoa)
+
+c3d-standard-180-lssd
+----
+CPUCores: 180
+MemoryGiB: 720
+Architecture: amd64
+AllowedLocalSSDCount: {16}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (AMD Genoa)
+
+c3d-standard-360-lssd
+----
+CPUCores: 360
+MemoryGiB: 1440
+Architecture: amd64
+AllowedLocalSSDCount: {32}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (AMD Genoa)
+
+c4-standard-4-lssd
+----
+CPUCores: 4
+MemoryGiB: 15
+Architecture: amd64
+AllowedLocalSSDCount: {1}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Intel Emerald Rapids, Intel Granite Rapids)
+
+c4-standard-8-lssd
+----
+CPUCores: 8
+MemoryGiB: 30
+Architecture: amd64
+AllowedLocalSSDCount: {1}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Intel Emerald Rapids, Intel Granite Rapids)
+
+c4-standard-16-lssd
+----
+CPUCores: 16
+MemoryGiB: 60
+Architecture: amd64
+AllowedLocalSSDCount: {2}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Intel Emerald Rapids, Intel Granite Rapids)
+
+c4-standard-48-lssd
+----
+CPUCores: 48
+MemoryGiB: 180
+Architecture: amd64
+AllowedLocalSSDCount: {8}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Intel Emerald Rapids, Intel Granite Rapids)
+
+c4-standard-96-lssd
+----
+CPUCores: 96
+MemoryGiB: 360
+Architecture: amd64
+AllowedLocalSSDCount: {16}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Intel Emerald Rapids, Intel Granite Rapids)
+
+c4-standard-192-lssd
+----
+CPUCores: 192
+MemoryGiB: 720
+Architecture: amd64
+AllowedLocalSSDCount: {32}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Intel Emerald Rapids, Intel Granite Rapids)
+
+c4-standard-288-lssd
+----
+CPUCores: 288
+MemoryGiB: 1080
+Architecture: amd64
+AllowedLocalSSDCount: {48}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Intel Emerald Rapids, Intel Granite Rapids)
+
+c4a-standard-4
+----
+CPUCores: 4
+MemoryGiB: 16
+Architecture: arm64
+AllowedLocalSSDCount: {}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Google Axion)
+
+c4a-standard-4-lssd
+----
+CPUCores: 4
+MemoryGiB: 16
+Architecture: arm64
+AllowedLocalSSDCount: {1}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Google Axion)
+
+c4a-standard-8-metal
+----
+CPUCores: 8
+MemoryGiB: 32
+Architecture: arm64
+AllowedLocalSSDCount: {}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Google Axion)
+
+c4a-standard-8-metal-lssd
+----
+CPUCores: 8
+MemoryGiB: 32
+Architecture: arm64
+AllowedLocalSSDCount: {2}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Google Axion)
+
+c4a-standard-16-lssd
+----
+CPUCores: 16
+MemoryGiB: 64
+Architecture: arm64
+AllowedLocalSSDCount: {4}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Google Axion)
+
+c4a-standard-32-lssd
+----
+CPUCores: 32
+MemoryGiB: 128
+Architecture: arm64
+AllowedLocalSSDCount: {6}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Google Axion)
+
+c4a-standard-48-lssd
+----
+CPUCores: 48
+MemoryGiB: 192
+Architecture: arm64
+AllowedLocalSSDCount: {10}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Google Axion)
+
+c4a-standard-72-lssd
+----
+CPUCores: 72
+MemoryGiB: 288
+Architecture: arm64
+AllowedLocalSSDCount: {16}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (Google Axion)
+
+c4d-standard-8-lssd
+----
+CPUCores: 8
+MemoryGiB: 24
+Architecture: amd64
+AllowedLocalSSDCount: {1}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (AMD Turin)
+
+c4d-standard-32-lssd
+----
+CPUCores: 32
+MemoryGiB: 99
+Architecture: amd64
+AllowedLocalSSDCount: {2}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (AMD Turin)
+
+c4d-standard-48-lssd
+----
+CPUCores: 48
+MemoryGiB: 148
+Architecture: amd64
+AllowedLocalSSDCount: {4}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (AMD Turin)
+
+c4d-standard-96-lssd
+----
+CPUCores: 96
+MemoryGiB: 297
+Architecture: amd64
+AllowedLocalSSDCount: {8}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (AMD Turin)
+
+c4d-standard-192-lssd
+----
+CPUCores: 192
+MemoryGiB: 595
+Architecture: amd64
+AllowedLocalSSDCount: {16}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (AMD Turin)
+
+c4d-standard-384-lssd
+----
+CPUCores: 384
+MemoryGiB: 1190
+Architecture: amd64
+AllowedLocalSSDCount: {32}
+StorageTypes: (hyperdisk-balanced, hyperdisk-throughput)
+CPUPlatforms: (AMD Turin)
+
+c2d-standard-8
+----
+CPUCores: 8
+MemoryGiB: 32
+Architecture: amd64
+AllowedLocalSSDCount: {1, 2, 4, 8}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
+CPUPlatforms: (AMD Milan)
+
+c2d-standard-16
+----
+CPUCores: 16
+MemoryGiB: 64
+Architecture: amd64
+AllowedLocalSSDCount: {1, 2, 4, 8}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
+CPUPlatforms: (AMD Milan)
+
+c2d-standard-32
+----
+CPUCores: 32
+MemoryGiB: 128
+Architecture: amd64
+AllowedLocalSSDCount: {2, 4, 8}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
+CPUPlatforms: (AMD Milan)
+
+c2d-standard-56
+----
+CPUCores: 56
+MemoryGiB: 224
+Architecture: amd64
+AllowedLocalSSDCount: {4, 8}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
+CPUPlatforms: (AMD Milan)
+
+c2d-standard-112
+----
+CPUCores: 112
+MemoryGiB: 448
+Architecture: amd64
+AllowedLocalSSDCount: {8}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
+CPUPlatforms: (AMD Milan)
+
+m1-megamem-40
+----
+CPUCores: 40
+MemoryGiB: 597
+Architecture: amd64
+AllowedLocalSSDCount: {1, 2, 3, 4, 5}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
+CPUPlatforms: (Intel Broadwell, Intel Skylake)
+
+m1-ultramem-80
+----
+CPUCores: 80
+MemoryGiB: 1922
+Architecture: amd64
+AllowedLocalSSDCount: {1, 2, 3, 4, 5, 6, 7, 8}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
+CPUPlatforms: (Intel Broadwell, Intel Skylake)
+
+m3-megamem-32
+----
+CPUCores: 32
+MemoryGiB: 488
+Architecture: amd64
+AllowedLocalSSDCount: {4, 8}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-extreme, hyperdisk-throughput)
+CPUPlatforms: (Intel Ice Lake)
+
+g2-standard-4
+----
+CPUCores: 4
+MemoryGiB: 16
+Architecture: amd64
+AllowedLocalSSDCount: {1}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-ml, hyperdisk-throughput)
+CPUPlatforms: (Intel Cascade Lake)
+
+g2-standard-24
+----
+CPUCores: 24
+MemoryGiB: 96
+Architecture: amd64
+AllowedLocalSSDCount: {2}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-ml, hyperdisk-throughput)
+CPUPlatforms: (Intel Cascade Lake)
+
+g2-standard-48
+----
+CPUCores: 48
+MemoryGiB: 192
+Architecture: amd64
+AllowedLocalSSDCount: {4}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-ml, hyperdisk-throughput)
+CPUPlatforms: (Intel Cascade Lake)
+
+g2-standard-96
+----
+CPUCores: 96
+MemoryGiB: 384
+Architecture: amd64
+AllowedLocalSSDCount: {8}
+StorageTypes: (pd-balanced, pd-ssd, hyperdisk-balanced, hyperdisk-ml, hyperdisk-throughput)
+CPUPlatforms: (Intel Cascade Lake)
+
+# --- C2: verify existing logic ---
+c2-standard-8
+----
+CPUCores: 8
+MemoryGiB: 32
+Architecture: amd64
+AllowedLocalSSDCount: {1, 2, 4, 8}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
+CPUPlatforms: (Intel Cascade Lake)
+
+c2-standard-30
+----
+CPUCores: 30
+MemoryGiB: 120
+Architecture: amd64
+AllowedLocalSSDCount: {4, 8}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
+CPUPlatforms: (Intel Cascade Lake)
+
+c2-standard-60
+----
+CPUCores: 60
+MemoryGiB: 240
+Architecture: amd64
+AllowedLocalSSDCount: {8}
+StorageTypes: (pd-standard, pd-balanced, pd-ssd, pd-extreme)
+CPUPlatforms: (Intel Cascade Lake)
+
+# Error cases
+invalid
+----
+invalid machine type format: invalid
+
+x-y
+----
+invalid machine type format: x-y
+
+z9-standard-8
+----
+unknown machine family: z9

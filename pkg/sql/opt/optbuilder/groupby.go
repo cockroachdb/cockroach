@@ -771,6 +771,10 @@ func (b *Builder) buildAggregateFunction(
 	return &info
 }
 
+var stAsMVTWindowFunctionErr = pgerror.New(
+	pgcode.FeatureNotSupported, "aggregate function st_asmvt does not support use as a window function",
+)
+
 func (b *Builder) constructWindowFn(name string, args []opt.ScalarExpr) opt.ScalarExpr {
 	switch name {
 	case "rank":
@@ -795,6 +799,8 @@ func (b *Builder) constructWindowFn(name string, args []opt.ScalarExpr) opt.Scal
 		return b.factory.ConstructLastValue(args[0])
 	case "nth_value":
 		return b.factory.ConstructNthValue(args[0], args[1])
+	case "st_asmvt":
+		panic(stAsMVTWindowFunctionErr)
 	default:
 		return b.constructAggregate(name, args)
 	}
@@ -872,6 +878,24 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructSTExtent(args[0])
 	case "st_union", "st_memunion":
 		return b.factory.ConstructSTUnion(args[0])
+	case "st_asmvt":
+		layerName := b.factory.ConstructNull(types.String)
+		if len(args) >= 2 {
+			layerName = args[1]
+		}
+		extent := b.factory.ConstructNull(types.Int)
+		if len(args) >= 3 {
+			extent = args[2]
+		}
+		geomColumn := b.factory.ConstructNull(types.String)
+		if len(args) >= 4 {
+			geomColumn = args[3]
+		}
+		featureIDColumn := b.factory.ConstructNull(types.String)
+		if len(args) >= 5 {
+			featureIDColumn = args[4]
+		}
+		return b.factory.ConstructSTAsMVT(args[0], layerName, extent, geomColumn, featureIDColumn)
 	case "xor_agg":
 		return b.factory.ConstructXorAgg(args[0])
 	case "json_agg":

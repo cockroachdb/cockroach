@@ -146,12 +146,14 @@ message TransferLeaseOperation {
 
 enum ChangeSettingType {
   SetLeaseType = 0;
+  ToggleVirtualIntentResolution = 1;
 }
 
 message ChangeSettingOperation {
   ChangeSettingType type = 1;
   int32 lease_type = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.LeaseType"];
   Result result = 3 [(gogoproto.nullable) = false];
+  bool vir_enabled = 4;
 }
 
 enum ChangeZoneType {
@@ -206,6 +208,16 @@ message RestartNodeOperation {
   Result result = 2 [(gogoproto.nullable) = false];
 }
 
+message CrashNodeOperation {
+  int32 node_id = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message MvccGCOperation {
+  bytes key = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
 message Operation {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.onlyone) = true;
@@ -242,6 +254,8 @@ message Operation {
   RemoveNetworkPartitionOperation removeNetworkPartition = 28;
   StopNodeOperation stopNode = 29;
   RestartNodeOperation restartNode = 30;
+  CrashNodeOperation crashNode = 31;
+  MvccGCOperation mvccGC = 32;
 }
 
 enum ResultType {

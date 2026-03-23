@@ -11,3 +11,5 @@ alter_view_stmt ::=
 	| 'ALTER' 'MATERIALIZED' 'VIEW' view_name 'OWNER' 'TO' role_spec
 	| 'ALTER' 'VIEW' 'IF' 'EXISTS' view_name 'OWNER' 'TO' role_spec
 	| 'ALTER' 'MATERIALIZED' 'VIEW' 'IF' 'EXISTS' view_name 'OWNER' 'TO' role_spec
+	| alter_view_set_options_stmt
+	| alter_view_reset_options_stmt

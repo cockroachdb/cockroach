@@ -8,14 +8,17 @@ package jobutils
 import (
 	"context"
 	gosql "database/sql"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -103,11 +106,17 @@ func WaitForJobToHaveStatus(
 // BulkOpResponseFilter creates a blocking response filter for the responses
 // related to bulk IO/backup/restore/import: Export, Import and AddSSTable. See
 // discussion on RunJob for where this might be useful.
-func BulkOpResponseFilter(allowProgressIota *chan struct{}) kvserverbase.ReplicaResponseFilter {
+func BulkOpResponseFilter(
+	codec *atomic.Pointer[keys.SQLCodec], allowProgressIota *chan struct{},
+) kvserverbase.ReplicaResponseFilter {
 	return func(ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse) *kvpb.Error {
-		for _, ru := range br.Responses {
+		for idx, ru := range br.Responses {
 			switch ru.GetInner().(type) {
 			case *kvpb.ExportResponse, *kvpb.AddSSTableResponse:
+				// Skip over lease manager export requests.
+				if exp := ba.Requests[idx].GetExport(); exp != nil && lease.TestIsLeasingTxnExportRequest(codec.Load(), ba, exp) {
+					continue
+				}
 				select {
 				case <-*allowProgressIota:
 				case <-ctx.Done():

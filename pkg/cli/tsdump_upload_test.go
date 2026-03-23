@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/klauspost/compress/zstd"
 	"github.com/stretchr/testify/require"
 )
 
@@ -416,6 +417,15 @@ func generateMockTSDumpFromCSV(t *testing.T, csvInput string, options ...mockTSD
 		require.NoError(t, err)
 		encoder = gob.NewEncoder(writer)
 
+	case "zstd":
+		filePattern = "mock_tsdump_*.gob.zst"
+		zstdWriter, err := zstd.NewWriter(tmpFile)
+		require.NoError(t, err)
+		defer func() {
+			require.NoError(t, zstdWriter.Close(), "failed to close zstd writer")
+		}()
+		encoder = gob.NewEncoder(zstdWriter)
+
 	default:
 		filePattern = "mock_tsdump_*.gob"
 		encoder = gob.NewEncoder(tmpFile)
@@ -530,6 +540,44 @@ func createMockTimeSeriesKV(
 	return roachpb.KeyValue{Key: key, Value: roachValue}, nil
 }
 
+// createMockTimeSeriesKVWithResolution is like createMockTimeSeriesKV but
+// allows specifying the time series resolution (e.g., ts.Resolution10s,
+// ts.Resolution30m).
+func createMockTimeSeriesKVWithResolution(
+	name, source string, timestamp int64, value float64, resolution ts.Resolution,
+) (roachpb.KeyValue, error) {
+	tsData := tspb.TimeSeriesData{
+		Name:   name,
+		Source: source,
+		Datapoints: []tspb.TimeSeriesDatapoint{
+			{TimestampNanos: timestamp, Value: value},
+		},
+	}
+
+	idatas, err := tsData.ToInternal(
+		resolution.SlabDuration(),
+		resolution.SampleDuration(),
+		true,
+	)
+	if err != nil {
+		return roachpb.KeyValue{}, err
+	}
+
+	if len(idatas) != 1 {
+		return roachpb.KeyValue{}, fmt.Errorf("expected 1 internal data entry, got %d", len(idatas))
+	}
+
+	idata := idatas[0]
+	key := ts.MakeDataKey(name, source, resolution, idata.StartTimestampNanos)
+
+	var roachValue roachpb.Value
+	if err := roachValue.SetProto(&idata); err != nil {
+		return roachpb.KeyValue{}, err
+	}
+
+	return roachpb.KeyValue{Key: key, Value: roachValue}, nil
+}
+
 // generateMockJSONFromInput creates a mock JSON file from input data.
 // The input data is written directly to the JSON file.
 // This is useful for testing JSON file generation functionality.
@@ -617,6 +665,13 @@ func TestDeltaCalculationForCounters(t *testing.T) {
 				expectedValue := tc.expectedValues[i]
 				require.Equal(t, expectedValue, actualValue,
 					"Call %d: expected %f, got %f", i+1, expectedValue, actualValue)
+
+				if i == 0 {
+					// First point's timestamp should be shifted back by 60 days.
+					expectedTS := time.Unix(0, timestamp).Add(-baselineOffset).Unix()
+					require.Equal(t, expectedTS, *series.Points[0].Timestamp,
+						"first point timestamp should be shifted to T-60days")
+				}
 			}
 		})
 	}
@@ -641,6 +696,9 @@ func TestDeltaCalculationResetDetection(t *testing.T) {
 	series1, err := writer.dump(&kv1)
 	require.NoError(t, err)
 	require.Equal(t, 100.0, *series1.Points[0].Value)
+	// First point timestamp should be shifted back by 60 days.
+	expectedTS := time.Unix(0, timestamp).Add(-baselineOffset).Unix()
+	require.Equal(t, expectedTS, *series1.Points[0].Timestamp)
 
 	// Second call with value 150 (normal increment)
 	kv2, err := createMockTimeSeriesKV(metricName, source, timestamp+1e10, 150)
@@ -676,7 +734,7 @@ func TestDeltaCalculationCrossBatchPersistence(t *testing.T) {
 	metricName := "cr.node.cross-batch-test-count"
 	source := "1"
 
-	timestamp := time.Date(2025, 6, 26, 22, 49, 24, 0, time.UTC).UnixNano()
+	timestamp := time.Date(2025, 6, 26, 22, 49, 20, 0, time.UTC).UnixNano()
 
 	// Simulate first batch
 	kv1, err := createMockTimeSeriesKV(metricName, source, timestamp, 100)
@@ -684,6 +742,9 @@ func TestDeltaCalculationCrossBatchPersistence(t *testing.T) {
 	series1, err := writer.dump(&kv1)
 	require.NoError(t, err)
 	require.Equal(t, 100.0, *series1.Points[0].Value) // first value
+	// First point timestamp should be shifted back by 60 days.
+	expectedTS := time.Unix(0, timestamp).Add(-baselineOffset).Unix()
+	require.Equal(t, expectedTS, *series1.Points[0].Timestamp)
 
 	// Simulate processing other metrics (different batch)
 	otherKv, err := createMockTimeSeriesKV("cr.node.other-metric-count", "2", timestamp+5e9, 50)
@@ -742,13 +803,13 @@ func TestDeltaCalculationWithUnsortedTimestamps(t *testing.T) {
 	// After processing, points should be sorted by timestamp and have correct deltas
 	require.Len(t, series.Points, 3)
 
-	// Check that points are now sorted by timestamp
-	require.Equal(t, int64(100), *series.Points[0].Timestamp)
+	// First point's timestamp is shifted back by 60 days; the rest are unchanged.
+	require.Equal(t, time.Unix(100, 0).Add(-baselineOffset).Unix(), *series.Points[0].Timestamp)
 	require.Equal(t, int64(500), *series.Points[1].Timestamp)
 	require.Equal(t, int64(1000), *series.Points[2].Timestamp)
 
 	// Check that delta calculation is correct (based on chronological order)
-	require.Equal(t, 100.0, *series.Points[0].Value) // first point: keep original value
+	require.Equal(t, 100.0, *series.Points[0].Value) // first point: keep original value (timestamp shifted)
 	require.Equal(t, 50.0, *series.Points[1].Value)  // delta: 150 - 100
 	require.Equal(t, 150.0, *series.Points[2].Value) // delta: 300 - 150
 }
@@ -894,4 +955,386 @@ func TestGapFillProcessor30MinTo10s(t *testing.T) {
 	lastIndex := len(series.Points) - 1
 	require.Equal(t, int64(4590), *series.Points[lastIndex].Timestamp)
 	require.Equal(t, 0.0, *series.Points[lastIndex].Value)
+}
+
+// TestGapFillProcessor60SecTo10s tests the gap-filling functionality for 60-second (1-minute)
+// resolution counter metrics. It verifies that 1-minute resolution counter metrics are correctly
+// interpolated to 10-second resolution with zero-filled gaps between original data points.
+func TestGapFillProcessor60SecTo10s(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	processor := NewGapFillProcessor()
+
+	// Create a mock 60-second resolution counter metric with 3 data points
+	series := &datadogV2.MetricSeries{
+		Metric:   "cr.node.child-counter-count",
+		Tags:     []string{"node_id:1", "label1:value1"},
+		Type:     datadogV2.METRICINTAKETYPE_COUNT.Ptr(),
+		Interval: datadog.PtrInt64(60), // 60 seconds (1 minute)
+		Points: []datadogV2.MetricPoint{
+			{
+				Timestamp: datadog.PtrInt64(1000), // t=1000
+				Value:     datadog.PtrFloat64(60), // first 1-min point
+			},
+			{
+				Timestamp: datadog.PtrInt64(1060),  // t=1060 (60 seconds later)
+				Value:     datadog.PtrFloat64(120), // second 1-min point
+			},
+			{
+				Timestamp: datadog.PtrInt64(1120), // t=1120 (another 60 seconds later)
+				Value:     datadog.PtrFloat64(90), // third 1-min point
+			},
+		},
+	}
+
+	// Process the series
+	err := processor.processCounterMetric(series)
+	require.NoError(t, err)
+
+	// Verify the interval was updated to 10 seconds
+	require.NotNil(t, series.Interval)
+	require.Equal(t, int64(10), *series.Interval)
+
+	// Verify we have the correct number of points
+	// Original: 3 points at 60-second resolution
+	// Each point expands to 6 points (60s / 10s = 6)
+	// Expected: 3 * 6 = 18 points
+	expectedPoints := 18
+	require.Len(t, series.Points, expectedPoints)
+
+	// Verify the first original point: value distributed across 6 points
+	// 60 / 6 = 10
+	require.Equal(t, int64(1000), *series.Points[0].Timestamp)
+	require.Equal(t, 60.0/6, *series.Points[0].Value)
+
+	// Verify the interpolated points after first data point are zeros
+	require.Equal(t, int64(1010), *series.Points[1].Timestamp)
+	require.Equal(t, 0.0, *series.Points[1].Value)
+
+	require.Equal(t, int64(1020), *series.Points[2].Timestamp)
+	require.Equal(t, 0.0, *series.Points[2].Value)
+
+	require.Equal(t, int64(1050), *series.Points[5].Timestamp)
+	require.Equal(t, 0.0, *series.Points[5].Value)
+
+	// Verify the second original point (at index 6): 120 / 6 = 20
+	require.Equal(t, int64(1060), *series.Points[6].Timestamp)
+	require.Equal(t, 120.0/6, *series.Points[6].Value)
+
+	// Verify interpolated points after second data point
+	require.Equal(t, int64(1070), *series.Points[7].Timestamp)
+	require.Equal(t, 0.0, *series.Points[7].Value)
+
+	// Verify the third original point (at index 12): 90 / 6 = 15
+	require.Equal(t, int64(1120), *series.Points[12].Timestamp)
+	require.Equal(t, 90.0/6, *series.Points[12].Value)
+
+	// Verify the last interpolated point
+	lastIndex := len(series.Points) - 1
+	require.Equal(t, int64(1170), *series.Points[lastIndex].Timestamp)
+	require.Equal(t, 0.0, *series.Points[lastIndex].Value)
+}
+
+// TestGapFillProcessorSkipsGaugeMetrics verifies that gauge metrics are not processed
+// by the gap fill processor. Gauges should retain their original interval.
+func TestGapFillProcessorSkipsGaugeMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	processor := NewGapFillProcessor()
+
+	testCases := []struct {
+		name     string
+		interval int64
+	}{
+		{"60-second gauge", 60},
+		{"30-minute gauge", 1800},
+		{"10-second gauge", 10},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			series := &datadogV2.MetricSeries{
+				Metric:   "cr.node.test-gauge",
+				Tags:     []string{"node_id:1"},
+				Type:     datadogV2.METRICINTAKETYPE_GAUGE.Ptr(),
+				Interval: datadog.PtrInt64(tc.interval),
+				Points: []datadogV2.MetricPoint{
+					{
+						Timestamp: datadog.PtrInt64(1000),
+						Value:     datadog.PtrFloat64(100),
+					},
+					{
+						Timestamp: datadog.PtrInt64(1000 + tc.interval),
+						Value:     datadog.PtrFloat64(150),
+					},
+				},
+			}
+
+			originalPointCount := len(series.Points)
+
+			// Process the series
+			err := processor.processCounterMetric(series)
+			require.NoError(t, err)
+
+			// Verify the interval is unchanged
+			require.Equal(t, tc.interval, *series.Interval)
+
+			// Verify points are unchanged
+			require.Len(t, series.Points, originalPointCount)
+			require.Equal(t, 100.0, *series.Points[0].Value)
+			require.Equal(t, 150.0, *series.Points[1].Value)
+		})
+	}
+}
+
+// TestParseChildLabels tests the parseChildLabels function that converts
+// Prometheus-style labels to Datadog tags.
+func TestParseChildLabels(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name         string
+		labelsStr    string
+		expectedTags []string
+	}{
+		{
+			name:         "single label",
+			labelsStr:    `label1="value1"`,
+			expectedTags: []string{"label1:value1"},
+		},
+		{
+			name:         "multiple labels",
+			labelsStr:    `label1="value1", label2="value2"`,
+			expectedTags: []string{"label1:value1", "label2:value2"},
+		},
+		{
+			name:         "empty string",
+			labelsStr:    "",
+			expectedTags: nil,
+		},
+		{
+			name:         "label with special characters in value",
+			labelsStr:    `path="/api/v1/query", method="GET"`,
+			expectedTags: []string{"path:/api/v1/query", "method:GET"},
+		},
+		{
+			name:         "label with numeric value",
+			labelsStr:    `bucket="100", le="0.5"`,
+			expectedTags: []string{"bucket:100", "le:0.5"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tags := parseChildLabels(tc.labelsStr)
+			require.Equal(t, tc.expectedTags, tags)
+		})
+	}
+}
+
+// TestHasTagKey tests the hasTagKey helper function.
+func TestHasTagKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tags := []string{"node_id:1", "store:2", "label:value"}
+
+	testCases := []struct {
+		key      string
+		expected bool
+	}{
+		{"node_id", true},
+		{"store", true},
+		{"label", true},
+		{"missing", false},
+		{"node", false}, // partial match should not work
+		{"", false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.key, func(t *testing.T) {
+			result := hasTagKey(tags, tc.key)
+			require.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+// TestBuildDashboardLink verifies that buildDashboardLink produces a URL whose
+// from_ts/to_ts query parameters reflect the actual tsdump data time range, and
+// that the fallback (now - 30 days) is used when no data was processed.
+func TestBuildDashboardLink(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	now := time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC)
+	defer testutils.TestingHook(&getCurrentTime, func() time.Time {
+		return now
+	})()
+
+	earliest := time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC)
+	latest := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+	middle := time.Date(2024, 6, 10, 8, 0, 0, 0, time.UTC)
+
+	type metricInput struct {
+		name       string
+		source     string
+		tsNanos    int64
+		value      float64
+		resolution ts.Resolution
+	}
+
+	testCases := []struct {
+		name           string
+		metrics        []metricInput
+		expectedFromTS int64
+		expectedToTS   int64
+	}{
+		{
+			name: "url reflects actual data time range",
+			metrics: []metricInput{
+				{"cr.node.test.gauge", "1", earliest.UnixNano(), 10, ts.Resolution10s},
+				{"cr.node.test.gauge2", "1", latest.UnixNano(), 20, ts.Resolution10s},
+				{"cr.node.test.gauge3", "1", middle.UnixNano(), 30, ts.Resolution10s},
+			},
+			expectedFromTS: (earliest.Unix() + 10) * 1000,
+			expectedToTS:   latest.Unix() * 1000,
+		},
+		{
+			name: "mixed resolutions uses smallest interval",
+			metrics: []metricInput{
+				{"cr.node.test.gauge", "1", earliest.UnixNano(), 10, ts.Resolution10s},
+				{"cr.node.test.rollup", "1", latest.UnixNano(), 20, ts.Resolution30m},
+			},
+			expectedFromTS: (earliest.Unix() + 10) * 1000,
+			expectedToTS:   latest.Unix() * 1000,
+		},
+		{
+			name:           "fallback when no data points processed",
+			metrics:        nil,
+			expectedFromTS: now.UnixMilli() - (30 * 24 * 60 * 60 * 1000),
+			expectedToTS:   now.UnixMilli(),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1, false)
+			require.NoError(t, err)
+			debugTimeSeriesDumpOpts.clusterLabel = "test-cluster"
+
+			for _, m := range tc.metrics {
+				kv, err := createMockTimeSeriesKVWithResolution(
+					m.name, m.source, m.tsNanos, m.value, m.resolution,
+				)
+				require.NoError(t, err)
+				_, err = writer.dump(&kv)
+				require.NoError(t, err)
+			}
+
+			link := writer.buildDashboardLink()
+			require.Contains(t, link, fmt.Sprintf("from_ts=%d", tc.expectedFromTS))
+			require.Contains(t, link, fmt.Sprintf("to_ts=%d", tc.expectedToTS))
+		})
+	}
+}
+
+// TestChildMetricDumpParsing tests that child metrics with labels are correctly
+// parsed and converted to Datadog format.
+func TestChildMetricDumpParsing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1, false)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name               string
+		metricName         string
+		source             string
+		expectedMetricName string
+		expectedTags       []string
+	}{
+		{
+			name:               "child metric with single label",
+			metricName:         `cr.node.changefeed.sink_io_inflight{store="1"}`,
+			source:             "1",
+			expectedMetricName: "changefeed.sink_io_inflight.child",
+			expectedTags:       []string{"store:1", "node_id:1"},
+		},
+		{
+			name:               "child metric with multiple labels",
+			metricName:         `cr.node.sql.exec.latency{app="myapp", action="query"}`,
+			source:             "2",
+			expectedMetricName: "sql.exec.latency.child",
+			expectedTags:       []string{"app:myapp", "action:query", "node_id:2"},
+		},
+		{
+			name:               "child metric with histogram suffix -p50",
+			metricName:         `cr.node.changefeed.sink_io_inflight{store="1"}-p50`,
+			source:             "1",
+			expectedMetricName: "changefeed.sink_io_inflight-p50.child",
+			expectedTags:       []string{"store:1", "node_id:1"},
+		},
+		{
+			name:               "child metric with histogram suffix -avg",
+			metricName:         `cr.node.sql.latency{type="exec"}-avg`,
+			source:             "3",
+			expectedMetricName: "sql.latency-avg.child",
+			expectedTags:       []string{"type:exec", "node_id:3"},
+		},
+		{
+			name:               "child metric with histogram suffix -count",
+			metricName:         `cr.node.distsender.batches{method="scan"}-count`,
+			source:             "1",
+			expectedMetricName: "distsender.batches-count.child",
+			expectedTags:       []string{"method:scan", "node_id:1"},
+		},
+		{
+			name:               "child metric with node_id already in labels",
+			metricName:         `cr.node.test.metric{node_id="5", label="value"}`,
+			source:             "1",
+			expectedMetricName: "test.metric.child",
+			// node_id from labels should be preserved, not overwritten
+			expectedTags: []string{"node_id:5", "label:value"},
+		},
+		{
+			name:               "regular metric without labels (not a child)",
+			metricName:         "cr.node.sql.query.count",
+			source:             "1",
+			expectedMetricName: "sql.query.count",
+			expectedTags:       []string{"node_id:1"},
+		},
+		{
+			name:               "store metric child with store already in labels",
+			metricName:         `cr.store.raft.rcvd{store="3"}`,
+			source:             "3",
+			expectedMetricName: "raft.rcvd.child",
+			// store from labels should be preserved
+			expectedTags: []string{"store:3"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			timestamp := time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC).UnixNano()
+
+			kv, err := createMockTimeSeriesKV(tc.metricName, tc.source, timestamp, 100)
+			require.NoError(t, err)
+
+			series, err := writer.dump(&kv)
+			require.NoError(t, err)
+
+			// Check metric name (after stripping cr.node. or cr.store. prefix)
+			require.Equal(t, tc.expectedMetricName, series.Metric)
+
+			// Check tags contain expected values
+			for _, expectedTag := range tc.expectedTags {
+				require.Contains(t, series.Tags, expectedTag,
+					"expected tag %s not found in %v", expectedTag, series.Tags)
+			}
+		})
+	}
 }

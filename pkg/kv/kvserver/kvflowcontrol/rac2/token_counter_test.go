@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
@@ -509,7 +510,8 @@ func (ts *evalTestState) startWaitForEval(
 
 	go func() {
 		state, _ := WaitForEval(
-			ctx, configRefreshCh, replicaRefreshCh, handles, quorum, false, nil)
+			ctx, configRefreshCh, replicaRefreshCh, handles, quorum, false, nil,
+			roachpb.TenantID{}, ash.WorkloadInfo{})
 		ts.mu.Lock()
 		defer ts.mu.Unlock()
 

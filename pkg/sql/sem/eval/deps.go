@@ -7,10 +7,12 @@ package eval
 
 import (
 	"context"
+	"iter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/redact"
@@ -82,6 +85,9 @@ type CastFunc = func(context.Context, tree.Datum, *types.T) (tree.Datum, error)
 // of the Planner interface as we subsume its privilege checking into an
 // intermediate layer.
 type CatalogBuiltins interface {
+	// SetTxn updates the kv.Txn used by the builtins.
+	SetTxn(txn *kv.Txn)
+
 	// EncodeTableIndexKey constructs a deterministic and immutable encoding of
 	// a table index key from a tuple of datums. It is leveraged as the
 	// input to a hash function for hash-sharded indexes.
@@ -92,6 +98,12 @@ type CatalogBuiltins interface {
 		rowDatums *tree.DTuple,
 		performCast CastFunc,
 	) ([]byte, error)
+
+	// DecodeTableIndexKey decodes an encoded key and resolves it to
+	// table, index, and column information, returning the result as JSON.
+	// Returns an error if the key cannot be decoded.
+	// Returns a partial result if descriptors cannot be found.
+	DecodeTableIndexKey(ctx context.Context, key []byte) (json.JSON, error)
 
 	// NumGeometryInvertedIndexEntries computes the number of inverted index
 	// entries we'd expect to generate from a given geometry value given the
@@ -205,12 +217,20 @@ type Planner interface {
 	TypeResolver
 	tree.FunctionReferenceResolver
 
-	// Mon returns the Planner's monitor.
+	// TxnMon returns the monitor bound to the txn. It should be used whenever
+	// the memory allocation outlives the scope of a single query planning and
+	// execution step.
 	//
-	// TODO(yuzefovich): memory usage against this monitor doesn't count against
-	// sql.mem.distsql.current metric, audit the callers to see whether this is
-	// undesirable in some places.
-	Mon() *mon.BytesMonitor
+	// Usage against this monitor is tracked by sql.mem.txn.current metric.
+	TxnMon() *mon.BytesMonitor
+
+	// ExecMon returns the monitor bound to the scope of a single query planning
+	// and execution step, and it (or its child) should be used for all planning
+	// and execution allocations.
+	//
+	// Usage against this monitor is tracked by sql.mem.distsql.current metric
+	// and is also reported on EXPLAIN ANALYZE.
+	ExecMon() *mon.BytesMonitor
 
 	// ExecutorConfig returns *ExecutorConfig
 	ExecutorConfig() interface{}
@@ -285,6 +305,13 @@ type Planner interface {
 		descID int64,
 		force bool,
 	) error
+
+	// ResetLeaseTimestamp is used to release the locked lease timestamp.
+	// Note: This should only be used if we have a deadlock between the current txn
+	// and another txn conducting a schema change on our behalf. The correct way
+	// to achieve this is to execute the schema change on the same transaction,
+	// which also reduces the risk of waiting for leases to expire.
+	ResetLeaseTimestamp(ctx context.Context)
 
 	// UnsafeDeleteComment is used to delete comments for a non-existent object.
 	UnsafeDeleteComment(ctx context.Context, objectID int64) error
@@ -474,8 +501,42 @@ type Planner interface {
 
 	// InsertStatementHint adds a new hint for the given statement fingerprint to
 	// the system.statement_hints table. It returns the hint ID of the newly
-	// created hint.
-	InsertStatementHint(ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion) (int64, error)
+	// created hint. If optDatabase is non-empty, the hint is scoped to the
+	// given database.
+	InsertStatementHint(ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion, optDatabase string) (int64, error)
+
+	// DeleteStatementHint deletes statement hints from
+	// system.statement_hints, filtered by the row ID or fingerprint. If the
+	// provided rowID is zero, we don't filter on row ID. If the fingerprint
+	// is empty string, we don't filter on fingerprint. Returns the row_id,
+	// fingerprint, and raw hint protobuf bytes of all deleted rows.
+	DeleteStatementHint(ctx context.Context, rowID int64, statementFingerprint string) (rowIDs []int64, fingerprints []string, hintBytes [][]byte, err error)
+
+	// SetStatementHintEnabled updates the enabled status of statement hints
+	// in system.statement_hints, filtered by row ID or fingerprint. If the
+	// provided rowID is zero, we don't filter on row ID. If the fingerprint
+	// is empty string, we don't filter on fingerprint. Returns the number
+	// of affected rows.
+	SetStatementHintEnabled(ctx context.Context, rowID int64, statementFingerprint string, enabled bool) (int64, error)
+
+	// ValidateSessionVariableHint checks that a session variable with the given
+	// name exists, is writable, and is allowed to be overridden via statement
+	// hints. It also validates the value by attempting a dry-run set. Variables
+	// not marked as safe to hint require safeUpdates to be true.
+	ValidateSessionVariableHint(ctx context.Context, varName, varValue string, safeUpdates bool) error
+
+	// UsingHintInjection returns whether we are planning with externally-injected
+	// hints.
+	UsingHintInjection() bool
+
+	// GetHintIDs returns the external statement hints we're using for this
+	// statement.
+	GetHintIDs() []int64
+
+	// LogEvent logs an event to both the system.eventlog table and external
+	// structured logs. This is exposed on the Planner interface to allow builtins
+	// to log events.
+	LogEvent(ctx context.Context, event interface{}) error
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -685,15 +746,16 @@ type SequenceOperators interface {
 	GetLastSequenceValueByID(ctx context.Context, seqID uint32) (value int64, wasCalled bool, err error)
 }
 
-// ChangefeedState is used to track progress and checkpointing for sinkless/core changefeeds.
-// Because a CREATE CHANGEFEED statement for a sinkless changefeed will hang and return data
-// over the SQL connection, this state belongs in the EvalCtx.
-type ChangefeedState interface {
+// CoreChangefeedState is used to track progress for core (sinkless) changefeeds.
+// Because a CREATE CHANGEFEED statement for a sinkless changefeed will hang
+// and return data over the SQL connection, this state is stored in the EvalCtx
+// so the changeFrontier processor can write to it.
+type CoreChangefeedState interface {
 	// SetHighwater sets the frontier timestamp for the changefeed.
 	SetHighwater(frontier hlc.Timestamp)
 
-	// SetCheckpoint sets the checkpoint for the changefeed.
-	SetCheckpoint(checkpoint *jobspb.TimestampSpansMap)
+	// SetFrontier saves a snapshot of the frontier spans.
+	SetFrontier(frontier iter.Seq[jobspb.ResolvedSpan])
 }
 
 // TenantOperator is capable of interacting with tenant state, allowing SQL

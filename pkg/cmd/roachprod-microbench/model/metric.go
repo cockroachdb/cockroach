@@ -6,7 +6,11 @@
 
 package model
 
-import "golang.org/x/perf/benchmath"
+import (
+	"math"
+
+	"golang.org/x/perf/benchmath"
+)
 
 // MetricMap is a map from metric name to metric.
 type MetricMap map[string]*Metric
@@ -50,6 +54,21 @@ type ConfidenceInterval struct {
 	Low    float64
 	High   float64
 	Center float64
+}
+
+// UndefinedConfidenceInterval indicates that the confidence interval could not
+// be computed, e.g. because the input values were empty or all baseline medians
+// were zero.
+var UndefinedConfidenceInterval = ConfidenceInterval{
+	Low:    math.NaN(),
+	High:   math.NaN(),
+	Center: math.NaN(),
+}
+
+// IsUndefinedConfidenceInterval returns true if the confidence interval is
+// undefined.
+func IsUndefinedConfidenceInterval(ci ConfidenceInterval) bool {
+	return math.IsNaN(ci.Low) || math.IsNaN(ci.High) || math.IsNaN(ci.Center)
 }
 
 // ComparisonResult holds the comparison results for a specific metric.

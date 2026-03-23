@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
@@ -48,9 +49,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// FilterTracingSpans exposes filterTracingSpans for testing.
+func FilterTracingSpans(rec tracingpb.Recording, opNamesToFilter ...string) tracingpb.Recording {
+	return filterTracingSpans(rec, opNamesToFilter...)
+}
 
 func (s *Store) Transport() *RaftTransport {
 	return s.cfg.Transport
@@ -230,6 +237,14 @@ func (s *Store) ManualReplicaGC(repl *Replica) error {
 	return manualQueue(s, s.replicaGCQueue, repl)
 }
 
+// IsReplicaGCDelayedDueToLeftNeighborError returns true if the error is a
+// replicaGCDelayedDueToLeftNeighborError, i.e. the replica GC queue could not
+// GC the replica because its left neighbor hasn't caught up with meta yet.
+func IsReplicaGCDelayedDueToLeftNeighborError(err error) bool {
+	var target *replicaGCDelayedDueToLeftNeighborError
+	return errors.As(err, &target)
+}
+
 // ManualRaftSnapshot will manually send a raft snapshot to the target replica.
 func (s *Store) ManualRaftSnapshot(repl *Replica, target roachpb.ReplicaID) error {
 	_, err := s.raftSnapshotQueue.processRaftSnapshot(context.Background(), repl, target)
@@ -306,6 +321,7 @@ func NewTestStorePool(cfg StoreConfig) *storepool.StorePool {
 		func(roachpb.NodeID) livenesspb.NodeLivenessStatus {
 			return livenesspb.NodeLivenessStatus_LIVE
 		},
+		storepool.NewMockStoreLiveness().StoreLivenessFunc,
 		/* deterministic */ false,
 	)
 }
@@ -318,12 +334,14 @@ func (r *Replica) Breaker() *circuit.Breaker {
 	return r.breaker.wrapped
 }
 
-func (r *Replica) AssertState(ctx context.Context, reader storage.Reader) {
+func (r *Replica) AssertState(
+	ctx context.Context, stateRO kvstorage.StateRO, raftRO kvstorage.RaftRO,
+) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, reader)
+	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, stateRO, raftRO)
 }
 
 func (r *Replica) RaftLock() {
@@ -531,7 +549,7 @@ func ProposeAddSSTable(ctx context.Context, key, val string, ts hlc.Timestamp, s
 	addReq.EndKey = addReq.Key.Next()
 	ba.Add(&addReq)
 
-	_, pErr := store.Send(ctx, ba)
+	_, pErr := ToSenderForTesting(store).Send(ctx, ba)
 	if pErr != nil {
 		return pErr.GoError()
 	}

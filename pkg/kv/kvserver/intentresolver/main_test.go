@@ -22,12 +22,9 @@ func init() {
 
 func TestMain(m *testing.M) {
 	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		// All the tests in this package are specific to the storage layer.
-		base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-	)()
-
+	// All the tests in this package are specific to the storage layer.
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithDRPCOption(base.TestDRPCEnabledRandomly),
+		serverutils.WithTenantOption(base.TestIsSpecificToStorageLayerAndNeedsASystemTenant))
 	os.Exit(m.Run())
 }

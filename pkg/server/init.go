@@ -8,6 +8,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -33,6 +35,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
+	"storj.io/drpc/drpcclient"
 )
 
 // ErrClusterInitialized is reported when the Bootstrap RPC is run on
@@ -131,8 +134,8 @@ type initState struct {
 	nodeID               roachpb.NodeID
 	clusterID            uuid.UUID
 	clusterVersion       clusterversion.ClusterVersion
-	initializedEngines   []storage.Engine
-	uninitializedEngines []storage.Engine
+	initializedEngines   Engines
+	uninitializedEngines Engines
 	initialSettingsKVs   []roachpb.KeyValue
 	initType             serverpb.InitType
 }
@@ -448,26 +451,16 @@ func (s *initServer) startJoinLoop(ctx context.Context, stopper *stop.Stopper) (
 func (s *initServer) attemptJoinTo(
 	ctx context.Context, addr string,
 ) (*kvpb.JoinNodeResponse, error) {
-	dialOpts, err := s.config.getDialOpts(ctx, addr, rpcbase.SystemClass)
+	conn, initClient, err := s.newNodeClient(ctx, addr)
 	if err != nil {
 		return nil, err
 	}
-	conn, err := grpc.DialContext(ctx, addr, dialOpts...)
-	if err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		_ = conn.Close() // nolint:grpcconnclose
-	}()
+	defer conn.Close()
 
 	latestVersion := s.config.latestVersion
 	req := &kvpb.JoinNodeRequest{
 		BinaryVersion: &latestVersion,
 	}
-
-	// TODO(server): add support for DRPC initClient
-	var initClient kvpb.RPCNodeClient = kvpb.NewGRPCInternalClientAdapter(conn)
 	resp, err := initClient.Join(ctx, req)
 	if err != nil {
 		status, ok := grpcstatus.FromError(errors.UnwrapAll(err))
@@ -516,7 +509,7 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 
 	firstEngine := s.inspectedDiskState.uninitializedEngines[0]
 	clusterVersion := clusterversion.ClusterVersion{Version: *resp.ActiveVersion}
-	if err := kvstorage.WriteClusterVersion(ctx, firstEngine, clusterVersion); err != nil {
+	if err := firstEngine.SetMinVersion(clusterVersion); err != nil {
 		return nil, err
 	}
 
@@ -534,45 +527,49 @@ func (s *initServer) initializeFirstStoreAfterJoin(
 	)
 }
 
-func assertEnginesEmpty(engines []storage.Engine) error {
-	storeClusterVersionKey := keys.DeprecatedStoreClusterVersionKey()
-
+func assertEnginesEmpty(engines []kvstorage.Engines) error {
 	// TODO(sumeer): plumb a context if necessary.
 	ctx := context.Background()
-	for _, engine := range engines {
-		err := func() error {
-			iter, err := engine.NewEngineIterator(ctx, storage.IterOptions{
-				KeyTypes:   storage.IterKeyTypePointsAndRanges,
-				UpperBound: roachpb.KeyMax,
-			})
-			if err != nil {
+	check := func(_ storage.MVCCKey) error {
+		return errors.New("engine is not empty")
+	}
+	for _, eng := range engines {
+		if eng.Separated() {
+			if err := kvstorage.CheckEngineKeys(ctx, eng.StateEngine(), check); err != nil {
 				return err
 			}
-			defer iter.Close()
-
-			valid, err := iter.SeekEngineKeyGE(storage.EngineKey{Key: roachpb.KeyMin})
-			for ; valid && err == nil; valid, err = iter.NextEngineKey() {
-				k, err := iter.UnsafeEngineKey()
-				if err != nil {
-					return err
-				}
-				hasPoint, hasRange := iter.HasPointAndRange()
-
-				// The store cluster version key is written multiple times,
-				// including before bootstrapping or joining a cluster.
-				// Skip it if it exists.
-				if hasPoint && !hasRange && storeClusterVersionKey.Equal(k.Key) {
-					continue
-				}
-				return errors.New("engine is not empty")
-			}
-			return err
-		}()
-		if err != nil {
+		}
+		if err := kvstorage.CheckEngineKeys(ctx, eng.LogEngine(), check); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *initServer) newNodeClient(
+	ctx context.Context, addr string,
+) (io.Closer, kvpb.RPCNodeClient, error) {
+	if !s.config.useDRPC {
+		dialOpts, err := s.config.getGRPCDialOpts(ctx, addr, rpcbase.SystemClass)
+		if err != nil {
+			return nil, nil, err
+		}
+		conn, err := grpc.DialContext(ctx, addr, dialOpts...)
+		if err != nil {
+			return nil, nil, err
+		}
+		return conn, kvpb.NewGRPCInternalClientAdapter(conn), nil
+	}
+
+	dialOpts, err := s.config.getDRPCDialOpts(ctx, addr, rpcbase.SystemClass)
+	if err != nil {
+		return nil, nil, err
+	}
+	conn, err := drpcclient.DialContext(ctx, addr, dialOpts...)
+	if err != nil {
+		return nil, nil, err
+	}
+	return conn, kvpb.NewDRPCNodeClientAdapter(conn), nil
 }
 
 // initServerCfg is a thin wrapper around the server Config object, exposing
@@ -584,8 +581,11 @@ type initServerCfg struct {
 	defaultSystemZoneConfig zonepb.ZoneConfig
 	defaultZoneConfig       zonepb.ZoneConfig
 
-	// getDialOpts retrieves the gRPC dial options to use to issue Join RPCs.
-	getDialOpts func(ctx context.Context, target string, class rpcbase.ConnectionClass) ([]grpc.DialOption, error)
+	// getGRPCDialOpts retrieves the gRPC dial options to use to issue Join RPCs.
+	getGRPCDialOpts func(ctx context.Context, target string, class rpcbase.ConnectionClass) ([]grpc.DialOption, error)
+
+	// getDRPCDialOpts retrieves the DRPC dial options to use to issue Join RPCs.
+	getDRPCDialOpts func(ctx context.Context, target string, class rpcbase.ConnectionClass) ([]drpcclient.DialOption, error)
 
 	// bootstrapAddresses is a list of node addresses (populated using --join
 	// addresses) that is used to form a connected graph/network of CRDB servers.
@@ -599,6 +599,13 @@ type initServerCfg struct {
 	// not be true.
 	bootstrapAddresses []util.UnresolvedAddr
 
+	// useDRPC determines whether to use DRPC for internode communication
+	// instead of gRPC.
+	//
+	// NB: This configuration option is provided via a CLI flag and is not
+	// controlled by the "rpc.experimental_drpc.enabled" cluster setting.
+	useDRPC bool
+
 	// testingKnobs is used for internal test controls only.
 	testingKnobs base.TestingKnobs
 }
@@ -606,7 +613,8 @@ type initServerCfg struct {
 func newInitServerConfig(
 	ctx context.Context,
 	cfg Config,
-	getDialOpts func(context.Context, string, rpcbase.ConnectionClass) ([]grpc.DialOption, error),
+	getGRPCDialOpts func(context.Context, string, rpcbase.ConnectionClass) ([]grpc.DialOption, error),
+	getDRPCDialOpts func(context.Context, string, rpcbase.ConnectionClass) ([]drpcclient.DialOption, error),
 ) initServerCfg {
 	latestVersion := cfg.Settings.Version.LatestVersion()
 	minSupportedVersion := cfg.Settings.Version.MinSupportedVersion()
@@ -643,10 +651,45 @@ func newInitServerConfig(
 		latestVersion:           latestVersion,
 		defaultSystemZoneConfig: cfg.DefaultSystemZoneConfig,
 		defaultZoneConfig:       cfg.DefaultZoneConfig,
-		getDialOpts:             getDialOpts,
+		getGRPCDialOpts:         getGRPCDialOpts,
+		getDRPCDialOpts:         getDRPCDialOpts,
+		useDRPC:                 cfg.UseDRPC,
 		bootstrapAddresses:      bootstrapAddresses,
 		testingKnobs:            cfg.TestingKnobs,
 	}
+}
+
+// removeDeprecatedStoreClusterVersionKey removes the deprecated store cluster
+// version key from the given engines if it exists. This key was deprecated in
+// v23.1 and is no longer needed.
+func removeDeprecatedStoreClusterVersionKey(ctx context.Context, engines Engines) error {
+	deprecatedKey := keys.DeprecatedStoreClusterVersionKey()
+	cleanup := func(eng kvstorage.Engines) error {
+		// Check if the key exists before attempting to delete it.
+		if val, err := storage.MVCCGet(
+			ctx, eng.LogEngine(), deprecatedKey, hlc.Timestamp{}, storage.MVCCGetOptions{},
+		); err != nil {
+			return errors.Wrap(err, "checking for deprecated store cluster version key")
+		} else if !val.Value.IsPresent() {
+			return nil // key doesn't exist, nothing to clean up
+		}
+		// Key exists, delete it.
+		batch := eng.LogEngine().NewWriteBatch()
+		defer batch.Close()
+		if err := batch.ClearUnversioned(deprecatedKey, storage.ClearOptions{}); err != nil {
+			return errors.Wrap(err, "clearing deprecated store cluster version key")
+		}
+		if err := batch.Commit(true /* sync */); err != nil {
+			return errors.Wrap(err, "committing deprecated key cleanup")
+		}
+		return nil
+	}
+	for _, eng := range engines {
+		if err := cleanup(eng); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // inspectEngines goes through engines and constructs an initState. The
@@ -654,24 +697,26 @@ func newInitServerConfig(
 // been assigned yet (i.e. if none of the engines is initialized). See
 // commentary on initState for the intended usage of inspectEngines.
 func inspectEngines(
-	ctx context.Context, engines []storage.Engine, latestVersion, minSupportedVersion roachpb.Version,
+	ctx context.Context,
+	engines []kvstorage.Engines,
+	latestVersion, minSupportedVersion roachpb.Version,
 ) (*initState, error) {
 	var clusterID uuid.UUID
 	var nodeID roachpb.NodeID
-	var initializedEngines, uninitializedEngines []storage.Engine
+	var initializedEngines, uninitializedEngines Engines
 	var initialSettingsKVs []roachpb.KeyValue
 
 	for _, eng := range engines {
 		// Once cached settings are loaded from any engine we can stop.
 		if len(initialSettingsKVs) == 0 {
 			var err error
-			initialSettingsKVs, err = loadCachedSettingsKVs(ctx, eng)
+			initialSettingsKVs, err = loadCachedSettingsKVs(ctx, eng.LogEngine())
 			if err != nil {
 				return nil, err
 			}
 		}
 
-		storeIdent, err := kvstorage.ReadStoreIdent(ctx, eng)
+		storeIdent, err := kvstorage.ReadStoreIdent(ctx, eng.LogEngine())
 		if errors.HasType(err, (*kvstorage.NotBootstrappedError)(nil)) {
 			uninitializedEngines = append(uninitializedEngines, eng)
 			continue
@@ -693,11 +738,23 @@ func inspectEngines(
 		}
 		nodeID = storeIdent.NodeID
 
-		if err := eng.SetStoreID(ctx, int32(storeIdent.StoreID)); err != nil {
+		if err := eng.SetStoreID(ctx, storeIdent.StoreID); err != nil {
 			return nil, err
 		}
+
 		initializedEngines = append(initializedEngines, eng)
 	}
+
+	// Clean up the deprecated store cluster version key from all engines if we
+	// are on v26.2 or less.
+	// TODO(pav-kv): Remove this cleanup when MinSupported is bumped above V26_2,
+	// as all clusters will have gone through this cleanup by then.
+	if v26dot2 := clusterversion.V26_2.Version(); !v26dot2.Less(minSupportedVersion) {
+		if err := removeDeprecatedStoreClusterVersionKey(ctx, engines); err != nil {
+			return nil, err
+		}
+	}
+
 	clusterVersion, err := kvstorage.SynthesizeClusterVersionFromEngines(
 		ctx, initializedEngines, latestVersion, minSupportedVersion,
 	)

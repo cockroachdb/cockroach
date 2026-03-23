@@ -719,6 +719,14 @@ information.
 `,
 	}
 
+	UseNewRPC = FlagInfo{
+		Name: "use-new-rpc",
+		Description: `
+Use the new RPC framework for internode communication instead of gRPC. This is
+a preview feature and is intended for non-production use only.
+`,
+	}
+
 	LocalityAdvertiseAddr = FlagInfo{
 		Name: "locality-advertise-addr",
 		Description: `
@@ -939,6 +947,60 @@ A string of comma separated list of distinguished-name
 <attribute-type>=<attribute-value> mappings in accordance with RFC4514 for the node
 user. This strictly needs to match the DN subject in the client certificate
 provided for node user if this flag is set.
+`,
+	}
+
+	DisallowRootLogin = FlagInfo{
+		Name: "disallow-root-login",
+		Description: `
+When set, prevents authentication attempts by clients presenting certificates
+with "root" as one of the principals (CommonName or SubjectAlternativeName).
+This applies to both SQL client connections and RPC connections. Authentication
+attempts by root will be rejected with an error.
+<PRE>
+
+</PRE>
+Note: Please ensure none of the certificates that are in use by the cluster or
+the SQL/RPC clients have a root in the SAN fields since the flag will block
+access to that client.
+`,
+	}
+
+	AllowDebugUser = FlagInfo{
+		Name: "allow-debug-user",
+		Description: `
+When set, allows authentication attempts by clients presenting certificates
+with "debuguser" as one of the principals (CommonName or SubjectAlternativeName).
+This applies to both SQL client connections and RPC connections. By default,
+the debuguser is not allowed to authenticate. Authentication attempts by debuguser
+will be rejected with an error unless this flag is explicitly set.
+<PRE>
+
+</PRE>
+Note: This flag is intended for debugging and troubleshooting purposes. The
+debuguser should only be enabled when necessary and disabled when not in use.
+`,
+	}
+
+	RootCertSAN = FlagInfo{
+		Name: "root-cert-san",
+		Description: `
+A string of comma separated list of subject-alternate-name
+<attribute-type>=<attribute-value> mappings for the root
+user. This strictly needs to match the SAN in the client certificate
+provided for root user if this flag is set. Attribute type can be DNS, IP or URI.
+The entire list mentioned here is matched against the SANs in the certificate.
+`,
+	}
+
+	NodeCertSAN = FlagInfo{
+		Name: "node-cert-san",
+		Description: `
+A string of comma separated list of subject-alternate-name
+<attribute-type>=<attribute-value> mappings for the node
+user. This strictly needs to match the SAN in the client certificate
+provided for node user if this flag is set. Attribute type can be DNS, IP or URI.
+The entire list mentioned here is matched against the SANs in the certificate.
 `,
 	}
 
@@ -1659,8 +1721,17 @@ The default is to not exclude any node.`,
 List of glob patterns that determine files that can be included
 in the output. The list can be specified as a comma-delimited
 list of patterns, or by using the flag multiple times.
-The patterns apply to the base name of the file, without
-a path prefix.
+<PRE>
+
+</PRE>
+Patterns without '/' apply to the base name of the file (e.g. '*.json').
+Patterns containing '/' are matched against the full path within the zip
+archive (e.g. 'debug/nodes/1/*.json' or 'debug/nodes/*/ranges.json').
+The path matching uses Go's filepath.Match syntax, where '*' matches
+any sequence of non-separator characters within a single path component.
+<PRE>
+
+</PRE>
 The default is to include all files.
 <PRE>
 
@@ -1682,8 +1753,14 @@ List of glob patterns that determine files that are to
 be excluded from the output. The list can be specified
 as a comma-delimited list of patterns, or by using the
 flag multiple times.
-The patterns apply to the base name of the file, without
-a path prefix.
+<PRE>
+
+</PRE>
+Patterns without '/' apply to the base name of the file (e.g. '*.log').
+Patterns containing '/' are matched against the full path within the zip
+archive (e.g. 'debug/nodes/*/ranges.json').
+The path matching uses Go's filepath.Match syntax, where '*' matches
+any sequence of non-separator characters within a single path component.
 <PRE>
 
 </PRE>
@@ -1785,12 +1862,13 @@ Labs support.
 	ZipIncludeGoroutineStacks = FlagInfo{
 		Name: "include-goroutine-stacks",
 		Description: `
-Fetch stack traces for all goroutines running on each targeted node in nodes/*/stacks.txt
-and nodes/*/stacks_with_labels.txt files. Note that fetching stack traces for all goroutines is
-a "stop-the-world" operation, which can momentarily have negative impacts on SQL service
-latency. Note that any periodic goroutine dumps previously taken on the node will still be
-included in nodes/*/goroutines/*.txt.gz, as these would have already been generated and don't
-require any additional stop-the-world operations to be collected.
+Fetch full stack traces for all goroutines running on each targeted node in nodes/*/stacks.txt files.
+Note that fetching text stack traces for all goroutines incurs a brief "stop-the-world" pause of each
+node which can momentarily have negative impacts on SQL service latency. This flag only controls
+collection of new full dump of all current goroutine stacks -- any previously recorded, periodic
+goroutine dumps retained in the logs directories are still included (in nodes/*/goroutines/*.txt.gz)
+and collection of aggregate counts of current goroutine stacks -- which does not incur a stop-the-world
+pause -- remains enabled regardless of this flag's value.
 `,
 	}
 
@@ -1800,6 +1878,21 @@ require any additional stop-the-world operations to be collected.
 Include information about each running, traceable job in jobs/*/*/trace.zip
 files. This involves collecting cluster-wide traces for each running job in the
 cluster.
+`,
+	}
+
+	ZipExcludeLogSeverity = FlagInfo{
+		Name: "exclude-log-severities",
+		Description: `
+List of log severities to exclude from the collected log files.
+The list can be specified as a comma-delimited list of severity
+names, or by using the flag multiple times. Valid severity names
+are: INFO, WARNING, ERROR, FATAL.
+<PRE>
+
+</PRE>
+For example, --exclude-log-severities=INFO will skip all INFO-level
+log entries, significantly reducing zip file size for large clusters.
 `,
 	}
 

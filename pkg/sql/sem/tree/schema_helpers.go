@@ -7,9 +7,9 @@ package tree
 
 import "slices"
 
-// IsSetOrResetSchemaLocked returns true if `n` contains a command to
-// set/reset "schema_locked" storage parameter.
-func IsSetOrResetSchemaLocked(n Statement) bool {
+// HasSetOrResetSchemaLocked checks if the statement contains a command to
+// set/reset the "schema_locked" storage parameter.
+func HasSetOrResetSchemaLocked(n Statement) (hasSchemaLockedChange bool) {
 	alterStmt, ok := n.(*AlterTable)
 	if !ok {
 		return false

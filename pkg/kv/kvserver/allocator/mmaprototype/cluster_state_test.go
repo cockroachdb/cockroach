@@ -74,8 +74,7 @@ func parseSecondaryLoadVector(t *testing.T, in string) SecondaryLoadVector {
 	return vec
 }
 
-func parseStatusFromArgs(t *testing.T, d *datadriven.TestData) Status {
-	var status Status
+func parseStatusFromArgs(t *testing.T, d *datadriven.TestData, status *Status) {
 	if d.HasArg("health") {
 		healthStr := dd.ScanArg[string](t, d, "health")
 		found := false
@@ -118,11 +117,11 @@ func parseStatusFromArgs(t *testing.T, d *datadriven.TestData) Status {
 			t.Fatalf("unknown replica disposition: %s", replicaStr)
 		}
 	}
-	return status
 }
 
 func parseStoreLoadMsg(t *testing.T, in string) StoreLoadMsg {
 	var msg StoreLoadMsg
+	hasNodeCPULoad, hasNodeCPUCapacity := false, false
 	for _, v := range strings.Fields(in) {
 		parts := strings.Split(v, "=")
 		require.Len(t, parts, 2)
@@ -146,9 +145,24 @@ func parseStoreLoadMsg(t *testing.T, in string) StoreLoadMsg {
 			msg.LoadTime = testingBaseTime.Add(duration)
 		case "secondary-load":
 			msg.SecondaryLoad = parseSecondaryLoadVector(t, parts[1])
+		case "node-cpu-load":
+			msg.NodeCPULoad = LoadValue(parseInt(t, parts[1]))
+			hasNodeCPULoad = true
+		case "node-cpu-capacity":
+			msg.NodeCPUCapacity = LoadValue(parseInt(t, parts[1]))
+			hasNodeCPUCapacity = true
 		default:
 			t.Fatalf("Unknown argument: %s", parts[0])
 		}
+	}
+	// Default node-level CPU to store-level CPU values. This is correct for
+	// single-store-per-node setups (the common case). Multi-store tests
+	// should specify these fields explicitly.
+	if !hasNodeCPULoad {
+		msg.NodeCPULoad = msg.Load[CPURate]
+	}
+	if !hasNodeCPUCapacity {
+		msg.NodeCPUCapacity = msg.Capacity[CPURate]
 	}
 	return msg
 }
@@ -187,7 +201,7 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 				case "raft-cpu":
 					rMsg.RangeLoad.RaftCPU = LoadValue(parseInt(t, parts[1]))
 					rMsg.MaybeSpanConfIsPopulated = true
-				case "not-populated":
+				case "span-config-not-populated":
 					notPopulatedOverride = true
 				default:
 					t.Fatalf("unknown argument: %s", parts[0])
@@ -215,6 +229,18 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 					replType, err := parseReplicaType(parts[1])
 					require.NoError(t, err)
 					repl.ReplicaType.ReplicaType = replType
+				case "lease-disposition":
+					found := false
+					for i := LeaseDisposition(0); i < leaseDispositionCount; i++ {
+						if i.String() == parts[1] {
+							repl.LeaseDisposition = i
+							found = true
+							break
+						}
+					}
+					if !found {
+						t.Fatalf("unknown lease disposition: %s", parts[1])
+					}
 				default:
 					t.Fatalf("unknown argument: %s", parts[0])
 				}
@@ -338,6 +364,27 @@ func testingGetPendingChanges(t *testing.T, cs *clusterState) []*pendingReplicaC
 	return storeLoadPendingChangeList
 }
 
+// safeTrace returns the trace output and asserts that all values in it are
+// properly marked as redaction-safe. The allocator logs only operational data
+// (store IDs, load values, etc.) which should never be redacted. If any
+// argument in a log call is not properly marked as safe, it will be enclosed
+// in redaction markers ‹...› in the redactable string. This function detects
+// that by comparing the redactable string to its stripped form: if they
+// differ, some value was not safe, and the test fails showing which markers
+// are present.
+func safeTrace(t *testing.T, sb *redact.StringBuilder) string {
+	t.Helper()
+	rs := sb.RedactableString()
+	stripped := rs.StripMarkers()
+	if string(rs) != stripped {
+		redacted := string(rs.Redact())
+		t.Errorf("trace output contains values not marked as redaction-safe.\n"+
+			"Redacted output (‹×› shows where data would be lost):\n%s\n\n"+
+			"Full output with markers:\n%s", redacted, string(rs))
+	}
+	return stripped
+}
+
 func TestClusterState(t *testing.T) {
 	tdPath := datapathutils.TestDataPath(t, "cluster_state")
 	datadriven.Walk(t,
@@ -345,6 +392,12 @@ func TestClusterState(t *testing.T) {
 		func(t *testing.T, path string) {
 			ts := timeutil.NewManualTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
 			cs := newClusterState(ts, newStringInterner())
+			// Set default disk utilization thresholds for tests (matches original MMA behavior).
+			cs.diskUtilRefuseThreshold = 0.9
+			cs.diskUtilShedThreshold = 0.9
+			tr := tracing.NewTracer()
+			tr.SetRedactable(true)
+			defer tr.Close()
 
 			printNodeListMeta := func(t *testing.T) string {
 				nodeList := []int{}
@@ -400,7 +453,24 @@ func TestClusterState(t *testing.T) {
 
 			// Recursively invoked in `include` directive.
 			var invokeFn func(t *testing.T, d *datadriven.TestData) string
-			invokeFn = func(t *testing.T, d *datadriven.TestData) string {
+			invokeFn = func(t *testing.T, d *datadriven.TestData) (output string) {
+				// Catch panics and return them as output instead of failing the test.
+				// This allows us to write regression tests for panics.
+				defer func() {
+					if r := recover(); r != nil {
+						output = fmt.Sprintf("panic: %v", r)
+					}
+				}()
+				// Start a recording span for each command. Commands that want to
+				// include the trace in their output can call finishAndGet().
+				ctx, finishAndGet := tracing.ContextWithRecordingSpan(
+					context.Background(), tr, d.Cmd,
+				)
+				if d.HasArg("breakpoint") {
+					// You can set a debugger breakpoint here and use `breakpoint=true`
+					// in a datadriven command to hit it.
+					t.Log("hit breakpoint")
+				}
 				switch d.Cmd {
 				case "include":
 					loc := dd.ScanArg[string](t, d, "path")
@@ -437,7 +507,7 @@ func TestClusterState(t *testing.T) {
 						fmt.Fprintf(&buf,
 							"store-id=%v node-id=%v status=%s reported=%v adjusted=%v node-reported-cpu=%v node-adjusted-cpu=%v seq"+
 								"=%d\n",
-							ss.StoreID, ss.NodeID, ss.status, ss.reportedLoad, ss.adjusted.load, ns.ReportedCPU, ns.adjustedCPU,
+							ss.StoreID, ss.NodeID, ss.status, ss.reportedLoad, ss.adjusted.load, ns.NodeCPULoad, ns.adjustedCPU,
 							ss.loadSeqNum,
 						)
 						var localStores []roachpb.StoreID
@@ -471,15 +541,36 @@ func TestClusterState(t *testing.T) {
 					}
 					return printNodeListMeta(t)
 
-				case "set-store-status":
-					storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
-					ss, ok := cs.stores[storeID]
-					if !ok {
-						t.Fatalf("store %d not found", storeID)
+				case "update-store-status":
+					// Sets the store status from args. If update=true, calls
+					// updateStoreStatuses which triggers the disk utilization check
+					// to augment the replica disposition based on current adjusted
+					// load. Thresholds must be set via set-disk-thresholds first.
+					//
+					// NB: we intentionally bypass the assertion in MakeStatus
+					// here so that we can test all combinations of health,
+					// lease, and replica dispositions, even those that we never
+					// want to see in production.
+					if storeID, ok := dd.ScanArgOpt[roachpb.StoreID](t, d, "store-id"); ok {
+						ss, ok := cs.stores[storeID]
+						if !ok {
+							t.Fatalf("store %d not found", storeID)
+						}
+						parseStatusFromArgs(t, d, &ss.status)
+						return ss.status.String()
 					}
-					status := parseStatusFromArgs(t, d)
-					ss.status = MakeStatus(status.Health, status.Disposition.Lease, status.Disposition.Replica)
-					return ss.status.String()
+
+					storeStatuses := make(map[roachpb.StoreID]Status)
+					for storeID, ss := range cs.stores {
+						storeStatuses[storeID] = ss.status
+					}
+					cs.updateStoreStatuses(ctx, storeStatuses)
+					// Read updated status from cs.stores. Go auto-sorts map keys when printing.
+					updatedStatuses := make(map[roachpb.StoreID]Status)
+					for storeID, ss := range cs.stores {
+						updatedStatuses[storeID] = ss.status
+					}
+					return fmt.Sprintf("updated: %v", updatedStatuses)
 
 				case "store-load-msg":
 					// TODO(sumeer): the load-time is passed as an argument, and is
@@ -489,7 +580,7 @@ func TestClusterState(t *testing.T) {
 					// Consider making it relative to ts.
 					for line := range strings.Lines(d.Input) {
 						msg := parseStoreLoadMsg(t, line)
-						cs.processStoreLoadMsg(context.Background(), &msg)
+						cs.processStoreLoadMsg(context.Background(), &msg, nil)
 					}
 					return ""
 
@@ -499,7 +590,13 @@ func TestClusterState(t *testing.T) {
 					if o, ok := dd.ScanArgOpt[int](t, d, "num-top-k-replicas"); ok {
 						n = o
 					}
-					cs.processStoreLeaseholderMsgInternal(context.Background(), &msg, n, nil)
+					cs.processStoreLeaseholderMsgInternal(ctx, &msg, n, nil)
+					if d.HasArg("trace") {
+						rec := finishAndGet()
+						var sb redact.StringBuilder
+						rec.SafeFormatMinimal(&sb)
+						return safeTrace(t, &sb)
+					}
 					return ""
 
 				case "make-pending-changes":
@@ -540,16 +637,17 @@ func TestClusterState(t *testing.T) {
 							add, remove, _ := parseChangeAddRemove(t, parts[1])
 							addTarget := roachpb.ReplicationTarget{NodeID: cs.stores[add].NodeID, StoreID: add}
 							removeTarget := roachpb.ReplicationTarget{NodeID: cs.stores[remove].NodeID, StoreID: remove}
-							rebalanceChanges := makeRebalanceReplicaChanges(rangeID, rState.replicas, rState.load, addTarget, removeTarget)
+							rebalanceChanges := makeRebalanceReplicaChanges(
+								ctx, rangeID, rState.replicas, rState.load, addTarget, removeTarget)
 							changes = append(changes, rebalanceChanges[:]...)
 						}
 					}
 					rangeChange := MakePendingRangeChange(rangeID, changes)
-					cs.addPendingRangeChange(rangeChange)
+					cs.addPendingRangeChange(ctx, rangeChange)
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "gc-pending-changes":
-					cs.gcPendingChanges(cs.ts.Now())
+					cs.gcPendingChanges(ctx, cs.ts.Now())
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "reject-pending-changes":
@@ -561,10 +659,10 @@ func TestClusterState(t *testing.T) {
 					for _, id := range changeIDsInt {
 						if expectPanic {
 							require.Panics(t, func() {
-								cs.undoPendingChange(id)
+								cs.undoPendingChange(ctx, id)
 							})
 						} else {
-							cs.undoPendingChange(id)
+							cs.undoPendingChange(ctx, id)
 						}
 					}
 					return printPendingChangesTest(testingGetPendingChanges(t, cs))
@@ -576,11 +674,8 @@ func TestClusterState(t *testing.T) {
 					storeID := dd.ScanArg[roachpb.StoreID](t, d, "store-id")
 					rng := rand.New(rand.NewSource(0))
 					dsm := newDiversityScoringMemo()
-					tr := tracing.NewTracer()
-					tr.SetRedactable(true)
-					defer tr.Close()
-					ctx, finishAndGet := tracing.ContextWithRecordingSpan(context.Background(), tr, "rebalance-stores")
-					re := newRebalanceEnv(cs, rng, dsm, cs.ts.Now())
+					passObs := makeRebalancingPassMetricsAndLogger(storeID)
+					re := newRebalanceEnv(cs, rng, dsm, cs.ts.Now(), passObs)
 
 					if n, ok := dd.ScanArgOpt[int](t, d, "max-lease-transfer-count"); ok {
 						re.maxLeaseTransferCount = n
@@ -596,12 +691,35 @@ func TestClusterState(t *testing.T) {
 					rec := finishAndGet()
 					var sb redact.StringBuilder
 					rec.SafeFormatMinimal(&sb)
-					return sb.String() + printPendingChangesTest(testingGetPendingChanges(t, cs))
+					return safeTrace(t, &sb) + printPendingChangesTest(testingGetPendingChanges(t, cs))
 
 				case "tick":
 					seconds := dd.ScanArg[int](t, d, "seconds")
 					ts.Advance(time.Second * time.Duration(seconds))
 					return fmt.Sprintf("t=%v", ts.Now().Sub(testingBaseTime))
+
+				case "retain-ready-lease-target-stores-only":
+					in := dd.ScanArg[[]roachpb.StoreID](t, d, "in")
+					rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+					lh, _ := dd.ScanArgOpt[roachpb.StoreID](t, d, "leaseholder")
+					out := retainReadyLeaseTargetStoresOnly(ctx, storeSet(in), cs.stores, rangeID, lh)
+					rec := finishAndGet()
+					var sb redact.StringBuilder
+					rec.SafeFormatMinimal(&sb)
+					return fmt.Sprintf("%s%v\n", safeTrace(t, &sb), out)
+
+				case "retain-ready-replica-target-stores-only":
+					in := dd.ScanArg[[]roachpb.StoreID](t, d, "in")
+					replicas, _ := dd.ScanArgOpt[[]roachpb.StoreID](t, d, "replicas")
+					var replicasSet storeSet
+					for _, replica := range replicas {
+						replicasSet.insert(replica)
+					}
+					out := retainReadyReplicaTargetStoresOnly(ctx, storeSet(in), cs.stores, replicasSet)
+					rec := finishAndGet()
+					var sb redact.StringBuilder
+					rec.SafeFormatMinimal(&sb)
+					return fmt.Sprintf("%s%v\n", safeTrace(t, &sb), out)
 
 				default:
 					panic(fmt.Sprintf("unknown command: %v", d.Cmd))

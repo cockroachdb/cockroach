@@ -24,6 +24,14 @@ import (
 // This structure facilitates a registry concept without needing to rename
 // existing benchmarks.
 //
+// All registered benchmark tests can be run with the command:
+//
+//	./dev test pkg/bench/rttanalysis -f TestBenchmarkExpectation
+//
+// A specific benchmark test can be run by adding its registered name as a suffix to the filter:
+//
+//	./dev test pkg/bench/rttanalysis -f TestBenchmarkExpectation/CreateRole
+//
 // The expectation is that there should be a single registry per package and
 // that tests are registered to it during initialization.
 type Registry struct {

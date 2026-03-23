@@ -413,7 +413,8 @@ create-view t.public.v26
  ├── SELECT fb FROM t.public.foobars
  ├── columns: fb:1
  └── dependencies
-      └── foobars [columns: fb]
+      ├── foobars [columns: fb]
+      └── foobar
 
 # Test UDFs called from a view.
 build

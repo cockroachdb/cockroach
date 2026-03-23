@@ -7,6 +7,7 @@ package scmutationexec
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -48,6 +49,8 @@ func (i *immediateVisitor) CreateSequenceDescriptor(
 	return nil
 }
 
+// SetSequenceOption sets a sequence option to the provided value. It updates
+// the current value of the sequence on restart.
 func (i *immediateVisitor) SetSequenceOption(ctx context.Context, op scop.SetSequenceOption) error {
 	sc, err := i.checkOutTable(ctx, op.SequenceID)
 	if err != nil {
@@ -83,7 +86,72 @@ func (i *immediateVisitor) SetSequenceOption(ctx context.Context, op scop.SetSeq
 			return nil
 		}},
 	}
+
+	switch key := op.Key; key {
+	case tree.SeqOptRestart:
+		restartWith, err := strconv.ParseInt(op.Value, 10, 64)
+		if err != nil {
+			return err
+		}
+		i.ImmediateMutationStateUpdater.SetSequence(op.SequenceID, restartWith)
+		return nil
+	}
+
 	return sequenceOptionMeta[op.Key].SetFunc(op.Value)
+}
+
+// UnsetSequenceOption sets a sequence option to its default.
+func (i *immediateVisitor) UnsetSequenceOption(
+	ctx context.Context, op scop.UnsetSequenceOption,
+) error {
+	defaultOpts := schemaexpr.DefaultSequenceOptions()
+
+	setOp := scop.SetSequenceOption{
+		SequenceID: op.SequenceID,
+		Key:        op.Key,
+	}
+
+	switch op.Key {
+
+	case tree.SeqOptAs:
+		setOp.Value = defaultOpts.AsIntegerType
+	case tree.SeqOptCacheNode:
+		setOp.Value = fmt.Sprintf("%d", defaultOpts.NodeCacheSize)
+	case tree.SeqOptCacheSession:
+		setOp.Value = fmt.Sprintf("%d", defaultOpts.SessionCacheSize)
+	case tree.SeqOptIncrement:
+		setOp.Value = fmt.Sprintf("%d", defaultOpts.Increment)
+	case tree.SeqOptMinValue:
+		setOp.Value = fmt.Sprintf("%d", defaultOpts.MinValue)
+	case tree.SeqOptMaxValue:
+		setOp.Value = fmt.Sprintf("%d", defaultOpts.MaxValue)
+	case tree.SeqOptStart:
+		setOp.Value = fmt.Sprintf("%d", defaultOpts.Start)
+	case tree.SeqOptRestart:
+		// Noop on unsetting a transient element.
+		return nil
+	case tree.SeqOptVirtual:
+		setOp.Value = fmt.Sprintf("%t", defaultOpts.Virtual)
+	default:
+		panic(fmt.Sprintf("unexpected sequence option: %s", op.Key))
+	}
+
+	return i.SetSequenceOption(ctx, setOp)
+}
+
+// MaybeUpdateSequenceValue updates the value of the sequence when changes to
+// the sequence options demand it. It is best effort.
+func (i *immediateVisitor) MaybeUpdateSequenceValue(
+	ctx context.Context, op scop.MaybeUpdateSequenceValue,
+) error {
+	_, err := i.checkOutTable(ctx, op.SequenceID)
+	if err != nil {
+		return err
+	}
+
+	i.ImmediateMutationStateUpdater.MaybeUpdateSequenceValue(op.SequenceID, op)
+
+	return nil
 }
 
 func (i *immediateVisitor) InitSequence(ctx context.Context, op scop.InitSequence) error {

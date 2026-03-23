@@ -68,6 +68,7 @@ const statementDetailsNoData: StatementDetailsResponse = {
   internal_app_name_prefix: "$ internal",
   statement_statistics_per_aggregated_ts: [],
   statement_statistics_per_plan_hash: [],
+  statement_statistics_per_aggregated_ts_and_plan_hash: [],
 };
 
 const statementDetailsData: StatementDetailsResponse = {
@@ -819,6 +820,7 @@ const statementDetailsData: StatementDetailsResponse = {
     },
   ],
   internal_app_name_prefix: "$ internal",
+  statement_statistics_per_aggregated_ts_and_plan_hash: [],
 };
 
 export const getStatementDetailsPropsFixture = (
@@ -828,17 +830,16 @@ export const getStatementDetailsPropsFixture = (
   return {
     history,
     location: {
-      pathname: "/statement/true/4705782015019656142",
+      pathname: "/statement/4705782015019656142",
       search: "",
       hash: "",
       state: null,
     },
     match: {
-      path: "/statement/:implicitTxn/:statement",
-      url: "/statement/true/4705782015019656142",
+      path: "/statement/:statement",
+      url: "/statement/4705782015019656142",
       isExact: true,
       params: {
-        implicitTxn: "true",
         statement: "4705782015019656142",
       },
     },

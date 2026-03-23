@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/replicastats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -45,9 +47,9 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 	true,
 )
 
-// Send executes a command on this range, dispatching it to the
-// read-only, read-write, or admin execution path as appropriate.
-// ctx should contain the log tags from the store (and up).
+// SendWithWriteBytes executes a command on this range, dispatching it to the
+// read-only, read-write, or admin execution path as appropriate. ctx should
+// contain the log tags from the store (and up).
 //
 // A rough schematic for the path requests take through a Replica
 // is presented below, with a focus on where requests may spend
@@ -64,7 +66,7 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 //	               Admission control
 //	                       │
 //	                       ▼
-//	                  Replica.Send
+//	              Replica.SendWithWriteBytes
 //	                       │
 //	                 Circuit breaker
 //	                       │
@@ -110,20 +112,19 @@ var optimisticEvalLimitedScans = settings.RegisterBoolSetting(
 //
 //	to commit the command, then signaling proposer and
 //	applying the command)
-func (r *Replica) Send(
-	ctx context.Context, ba *kvpb.BatchRequest,
-) (*kvpb.BatchResponse, *kvpb.Error) {
-	br, writeBytes, pErr := r.SendWithWriteBytes(ctx, ba)
-	writeBytes.Release()
-	return br, pErr
-}
-
-// SendWithWriteBytes is the implementation of Send with an additional
-// *StoreWriteBytes return value.
 func (r *Replica) SendWithWriteBytes(
-	ctx context.Context, ba *kvpb.BatchRequest,
+	ctx context.Context, ba *kvpb.BatchRequest, admissionInfo kvadmission.AdmissionInfo,
 ) (*kvpb.BatchResponse, *kvadmission.StoreWriteBytes, *kvpb.Error) {
 	tenantIDOrZero, _ := roachpb.ClientTenantFromContext(ctx)
+	cleanup := ash.SetWorkState(
+		tenantIDOrZero, ash.WorkloadInfo{
+			WorkloadID:    ba.WorkloadID,
+			AppNameID:     ba.AppNameID,
+			GatewayNodeID: ba.GatewayNodeID,
+			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+		},
+		ash.WorkCPU, "ReplicaSend")
+	defer cleanup()
 
 	// Record the CPU time processing the request for this replica. This is
 	// recorded regardless of errors that are encountered.
@@ -139,7 +140,21 @@ func (r *Replica) SendWithWriteBytes(
 		}
 		defer reset()
 	}
+
 	if trace.IsEnabled() {
+		foundLabel := ""
+		for i, l := range ba.ProfileLabels {
+			if i%2 == 0 && l == workloadid.ProfileTag && i < len(ba.ProfileLabels)-1 {
+				// This label is set in conn_executor_exec if tracing is active.
+				foundLabel = ba.ProfileLabels[i+1]
+				break
+			}
+		}
+		// This construction avoids calling `defer` in a loop which is
+		// not permitted by our linter.
+		if foundLabel != "" {
+			defer trace.StartRegion(ctx, foundLabel).End()
+		}
 		defer trace.StartRegion(ctx, r.rangeStr.String() /* cheap */).End()
 	}
 	// Add the range log tag.
@@ -179,11 +194,11 @@ func (r *Replica) SendWithWriteBytes(
 	if isReadOnly {
 		log.Event(ctx, "read-only path")
 		fn := (*Replica).executeReadOnlyBatch
-		br, _, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn)
+		br, _, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn, admissionInfo)
 	} else if ba.IsWrite() {
 		log.Event(ctx, "read-write path")
 		fn := (*Replica).executeWriteBatch
-		br, writeBytes, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn)
+		br, writeBytes, pErr = r.executeBatchWithConcurrencyRetries(ctx, ba, fn, admissionInfo)
 	} else if ba.IsAdmin() {
 		log.Event(ctx, "admin path")
 		br, pErr = r.executeAdminBatch(ctx, ba)
@@ -203,6 +218,10 @@ func (r *Replica) SendWithWriteBytes(
 		}
 	}
 
+	cpuTime := grunning.Difference(startCPU, grunning.Time())
+	if br != nil {
+		br.CPUTime = int64(cpuTime)
+	}
 	if pErr == nil {
 		// Return range information if it was requested. Note that we don't return it
 		// on errors because the code doesn't currently support returning both a br
@@ -210,7 +229,7 @@ func (r *Replica) SendWithWriteBytes(
 		// ways of returning range info.
 		r.maybeAddRangeInfoToResponse(ctx, ba, br)
 		// Handle load-based splitting, if necessary.
-		r.recordBatchForLoadBasedSplitting(ctx, ba, br, int(grunning.Difference(startCPU, grunning.Time())))
+		r.recordBatchForLoadBasedSplitting(ctx, ba, br, int(cpuTime))
 	}
 
 	// Record summary throughput information about the batch request for
@@ -297,6 +316,17 @@ func (r *Replica) maybeCommitWaitBeforeCommitTrigger(
 	est := waitUntil.GoTime().Sub(before)
 	log.VEventf(ctx, 1, "performing server-side commit-wait sleep for ~%s", est)
 
+	tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+	cleanup := ash.SetWorkState(
+		tenantID, ash.WorkloadInfo{
+			WorkloadID:    ba.WorkloadID,
+			AppNameID:     ba.AppNameID,
+			GatewayNodeID: ba.GatewayNodeID,
+			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+		},
+		ash.WorkOther, "CommitWaitSleep")
+	defer cleanup()
+
 	if err := r.Clock().SleepUntil(ctx, waitUntil); err != nil {
 		return err
 	}
@@ -373,7 +403,7 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 
 // batchExecutionFn is a method on Replica that executes a BatchRequest. It is
 // called with the batch, along with a guard for the latches protecting the
-// request.
+// request, and admission control state.
 //
 // The function will return either a batch response or an error. The function
 // also has the option to pass ownership of the concurrency guard back to the
@@ -396,8 +426,8 @@ func (r *Replica) maybeAddRangeInfoToResponse(
 // the function returns one of these errors, it must also pass ownership of the
 // concurrency guard back to the caller.
 type batchExecutionFn func(
-	*Replica, context.Context, *kvpb.BatchRequest, *concurrency.Guard,
-) (*kvpb.BatchResponse, *concurrency.Guard, *kvadmission.StoreWriteBytes, *kvpb.Error)
+	*Replica, context.Context, *kvpb.BatchRequest, concurrency.Guard, kvadmission.AdmissionInfo,
+) (*kvpb.BatchResponse, concurrency.Guard, *kvadmission.StoreWriteBytes, *kvpb.Error)
 
 var _ batchExecutionFn = (*Replica).executeWriteBatch
 var _ batchExecutionFn = (*Replica).executeReadOnlyBatch
@@ -417,13 +447,16 @@ var _ batchExecutionFn = (*Replica).executeReadOnlyBatch
 // a TransactionPushError it will propagate the error back to this method, which
 // handles the process of retrying batch execution after addressing the error.
 func (r *Replica) executeBatchWithConcurrencyRetries(
-	ctx context.Context, ba *kvpb.BatchRequest, fn batchExecutionFn,
+	ctx context.Context,
+	ba *kvpb.BatchRequest,
+	fn batchExecutionFn,
+	admissionInfo kvadmission.AdmissionInfo,
 ) (br *kvpb.BatchResponse, writeBytes *kvadmission.StoreWriteBytes, pErr *kvpb.Error) {
 	// Try to execute command; exit retry loop on success.
 	var latchSpans *spanset.SpanSet
 	var lockSpans *lockspanset.LockSpanSet
 	var requestEvalKind concurrency.RequestEvalKind
-	var g *concurrency.Guard
+	var g concurrency.Guard
 	defer func() {
 		// NB: wrapped to delay g evaluation to its value when returning.
 		if g != nil {
@@ -506,7 +539,7 @@ func (r *Replica) executeBatchWithConcurrencyRetries(
 		}
 		latchSpans, lockSpans = nil, nil // ownership released
 
-		br, g, writeBytes, pErr = fn(r, ctx, ba, g)
+		br, g, writeBytes, pErr = fn(r, ctx, ba, g, admissionInfo)
 		if pErr == nil {
 			// Success.
 			return br, writeBytes, nil
@@ -662,7 +695,7 @@ func isConcurrencyRetryError(pErr *kvpb.Error) bool {
 		// [1] if a locking read observes a write at a later timestamp, it returns a
 		// WriteTooOld error. It's uncertainty interval does not matter.
 		// [2] in practice, this is enforced by tryBumpBatchTimestamp's call to
-		// (*concurrency.Guard).IsolatedAtLaterTimestamps.
+		// concurrency.Guard.IsolatedAtLaterTimestamps.
 	case *kvpb.InvalidLeaseError:
 		// If a request hits an InvalidLeaseError, the replica it is being
 		// evaluated against does not have a valid lease under which it can
@@ -747,10 +780,10 @@ func maybeAttachLease(pErr *kvpb.Error, lease *roachpb.Lease) *kvpb.Error {
 func (r *Replica) handleLockConflictError(
 	ctx context.Context,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	pErr *kvpb.Error,
 	t *kvpb.LockConflictError,
-) (*concurrency.Guard, *kvpb.Error) {
+) (concurrency.Guard, *kvpb.Error) {
 	if r.store.cfg.TestingKnobs.DontPushOnLockConflictError {
 		return g, pErr
 	}
@@ -761,10 +794,10 @@ func (r *Replica) handleLockConflictError(
 func (r *Replica) handleTransactionPushError(
 	ctx context.Context,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	pErr *kvpb.Error,
 	t *kvpb.TransactionPushError,
-) (*concurrency.Guard, *kvpb.Error) {
+) (concurrency.Guard, *kvpb.Error) {
 	// On a transaction push error, retry immediately if doing so will enqueue
 	// into the txnWaitQueue in order to await further updates to the unpushed
 	// txn's status. We check ShouldPushImmediately to avoid retrying
@@ -845,7 +878,15 @@ func (r *Replica) handleInvalidLeaseError(ctx context.Context, ba *kvpb.BatchReq
 	// On an invalid lease error, attempt to acquire a new lease. If in the
 	// process of doing so, we determine that the lease now lives elsewhere,
 	// redirect.
-	_, pErr := r.redirectOnOrAcquireLeaseForRequest(ctx, ba.Timestamp, r.signallerForBatch(ba))
+	tenantIDOrZero, _ := roachpb.ClientTenantFromContext(ctx)
+	_, pErr := r.redirectOnOrAcquireLeaseForRequest(
+		ctx, ba.Timestamp, r.signallerForBatch(ba), tenantIDOrZero, ash.WorkloadInfo{
+			WorkloadID:    ba.WorkloadID,
+			AppNameID:     ba.AppNameID,
+			GatewayNodeID: ba.GatewayNodeID,
+			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+		},
+	)
 	// If we managed to get a lease (i.e. pErr == nil), the request evaluation
 	// will be retried.
 	return pErr
@@ -932,7 +973,15 @@ func (r *Replica) executeAdminBatch(
 		case errors.HasType(err, (*kvpb.InvalidLeaseError)(nil)):
 			// If the replica does not have the lease, attempt to acquire it, or
 			// redirect to the current leaseholder by returning an error.
-			_, pErr := r.redirectOnOrAcquireLeaseForRequest(ctx, ba.Timestamp, r.signallerForBatch(ba))
+			tenantIDOrZero, _ := roachpb.ClientTenantFromContext(ctx)
+			_, pErr := r.redirectOnOrAcquireLeaseForRequest(
+				ctx, ba.Timestamp, r.signallerForBatch(ba), tenantIDOrZero, ash.WorkloadInfo{
+					WorkloadID:    ba.WorkloadID,
+					AppNameID:     ba.AppNameID,
+					GatewayNodeID: ba.GatewayNodeID,
+					WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+				},
+			)
 			if pErr != nil {
 				return nil, pErr
 			}
@@ -1261,7 +1310,7 @@ func (r *Replica) collectSpans(
 // or after a read-only request has finished evaluation.
 type endCmds struct {
 	repl             *Replica
-	g                *concurrency.Guard
+	g                concurrency.Guard
 	st               kvserverpb.LeaseStatus // empty for follower reads
 	replicatingSince time.Time
 }
@@ -1269,7 +1318,7 @@ type endCmds struct {
 // makeUnreplicatedEndCmds sets up an endCmds to track an unreplicated,
 // that is, read-only, command.
 func makeUnreplicatedEndCmds(
-	repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus,
+	repl *Replica, g concurrency.Guard, st kvserverpb.LeaseStatus,
 ) endCmds {
 	return makeReplicatedEndCmds(repl, g, st, time.Time{})
 }
@@ -1279,7 +1328,7 @@ func makeUnreplicatedEndCmds(
 // (including read-write commands that end up not queueing any mutations to the
 // state machine).
 func makeReplicatedEndCmds(
-	repl *Replica, g *concurrency.Guard, st kvserverpb.LeaseStatus, replicatingSince time.Time,
+	repl *Replica, g concurrency.Guard, st kvserverpb.LeaseStatus, replicatingSince time.Time,
 ) endCmds {
 	return endCmds{repl: repl, g: g, st: st, replicatingSince: replicatingSince}
 }

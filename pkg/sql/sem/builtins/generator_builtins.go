@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/lib/pq/oid"
 )
 
 // See the comments at the start of generators.go for details about
@@ -113,14 +114,153 @@ var aclexplodeGeneratorType = types.MakeLabeledTuple(
 	[]string{"grantor", "grantee", "privilege_type", "is_grantable"},
 )
 
-// aclExplodeGenerator supports the execution of aclexplode.
-type aclexplodeGenerator struct{}
+// aclexplodeGenerator supports the execution of aclexplode.
+type aclexplodeGenerator struct {
+	// items holds the parsed ACL item rows to emit.
+	items []aclexplodeRow
+	// nextIdx is the index of the next row to emit.
+	nextIdx int
+}
 
-func (aclexplodeGenerator) ResolvedType() *types.T                   { return aclexplodeGeneratorType }
-func (aclexplodeGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
-func (aclexplodeGenerator) Close(_ context.Context)                  {}
-func (aclexplodeGenerator) Next(_ context.Context) (bool, error)     { return false, nil }
-func (aclexplodeGenerator) Values() (tree.Datums, error)             { return nil, nil }
+type aclexplodeRow struct {
+	grantor       tree.Datum
+	grantee       tree.Datum
+	privilegeType tree.Datum
+	isGrantable   tree.Datum
+}
+
+// resolveRoleOid resolves a role name to its OID by querying
+// pg_catalog.pg_roles. Returns 0 for empty string (PUBLIC).
+func resolveRoleOid(ctx context.Context, evalCtx *eval.Context, roleName string) (oid.Oid, error) {
+	if roleName == "" {
+		return 0, nil
+	}
+	r, err := evalCtx.Planner.QueryRowEx(
+		ctx, "aclexplode-resolve-role",
+		sessiondata.NoSessionDataOverride,
+		"SELECT oid FROM pg_catalog.pg_roles WHERE rolname = $1 LIMIT 1",
+		tree.NewDString(roleName),
+	)
+	if err != nil {
+		return 0, err
+	}
+	if r == nil {
+		// Role not found — return 0 rather than erroring, matching
+		// graceful behavior for stale ACL strings.
+		return 0, nil
+	}
+	return tree.MustBeDOid(r[0]).Oid, nil
+}
+
+func newAclexplodeGenerator(
+	ctx context.Context, evalCtx *eval.Context, args tree.Datums,
+) (eval.ValueGenerator, error) {
+	aclArr := tree.MustBeDArray(args[0])
+	var items []aclexplodeRow
+	// Cache role name → OID lookups to avoid repeated queries for the
+	// same role across multiple aclitem entries.
+	roleOidCache := make(map[string]oid.Oid)
+	cachedResolveRoleOid := func(roleName string) (oid.Oid, error) {
+		if roleName == "" {
+			return 0, nil
+		}
+		if cached, ok := roleOidCache[roleName]; ok {
+			return cached, nil
+		}
+		resolved, err := resolveRoleOid(ctx, evalCtx, roleName)
+		if err != nil {
+			return 0, err
+		}
+		roleOidCache[roleName] = resolved
+		return resolved, nil
+	}
+
+	for _, aclDatum := range aclArr.Array {
+		// Each aclitem is a string in the format "grantee=privchars/grantor".
+		// An empty grantee means PUBLIC (OID 0).
+		var aclStr string
+		switch d := tree.UnwrapDOidWrapper(aclDatum).(type) {
+		case *tree.DString:
+			aclStr = string(*d)
+		default:
+			continue
+		}
+
+		// Parse grantee (possibly quoted), then expect '='.
+		granteeStr, i := privilege.ExtractACLIdentifier(aclStr, 0)
+		if i < 0 || i >= len(aclStr) || aclStr[i] != '=' {
+			continue
+		}
+		i++ // skip '='
+
+		// Parse privchars until '/' or end of string.
+		privStart := i
+		for i < len(aclStr) && aclStr[i] != '/' {
+			i++
+		}
+		privChars := aclStr[privStart:i]
+
+		// Parse grantor (possibly quoted) after '/'.
+		var grantorStr string
+		if i < len(aclStr) && aclStr[i] == '/' {
+			i++ // skip '/'
+			grantorStr, i = privilege.ExtractACLIdentifier(aclStr, i)
+			if i < 0 {
+				continue
+			}
+		}
+
+		// Resolve role names to OIDs.
+		granteeOid, err := cachedResolveRoleOid(granteeStr)
+		if err != nil {
+			return nil, err
+		}
+		grantorOid, err := cachedResolveRoleOid(grantorStr)
+		if err != nil {
+			return nil, err
+		}
+
+		// Iterate over privilege characters. A '*' after a character means
+		// the privilege is grantable.
+		for j := 0; j < len(privChars); j++ {
+			ch := privChars[j]
+			if ch == '*' {
+				continue
+			}
+			privName, ok := privilege.ACLCharToPrivName[ch]
+			if !ok {
+				continue
+			}
+			grantable := j+1 < len(privChars) && privChars[j+1] == '*'
+			items = append(items, aclexplodeRow{
+				grantor:       tree.NewDOid(grantorOid),
+				grantee:       tree.NewDOid(granteeOid),
+				privilegeType: tree.NewDString(privName),
+				isGrantable:   tree.MakeDBool(tree.DBool(grantable)),
+			})
+		}
+	}
+	return &aclexplodeGenerator{items: items}, nil
+}
+
+func (g *aclexplodeGenerator) ResolvedType() *types.T { return aclexplodeGeneratorType }
+
+func (g *aclexplodeGenerator) Start(_ context.Context, _ *kv.Txn) error { return nil }
+
+func (g *aclexplodeGenerator) Close(_ context.Context) {}
+
+func (g *aclexplodeGenerator) Next(_ context.Context) (bool, error) {
+	if g.nextIdx >= len(g.items) {
+		return false, nil
+	}
+	g.nextIdx++
+	return true, nil
+}
+
+func (g *aclexplodeGenerator) Values() (tree.Datums, error) {
+	row := g.items[g.nextIdx-1]
+	return tree.Datums{row.grantor, row.grantee, row.privilegeType, row.isGrantable}, nil
+}
 
 // generators is a map from name to slice of Builtins for all built-in
 // generators.
@@ -131,13 +271,17 @@ var generators = map[string]builtinDefinition{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
 	"aclexplode": makeBuiltin(genProps(),
 		makeGeneratorOverload(
+			tree.ParamTypes{{Name: "aclitems", Typ: types.MakeArray(types.AclItem)}},
+			aclexplodeGeneratorType,
+			newAclexplodeGenerator,
+			"Produces a virtual table containing aclitem privileges.",
+			volatility.Stable,
+		),
+		makeGeneratorOverload(
 			tree.ParamTypes{{Name: "aclitems", Typ: types.StringArray}},
 			aclexplodeGeneratorType,
-			func(_ context.Context, _ *eval.Context, args tree.Datums) (eval.ValueGenerator, error) {
-				return aclexplodeGenerator{}, nil
-			},
-			"Produces a virtual table containing aclitem stuff ("+
-				"returns no rows as this feature is unsupported in CockroachDB)",
+			newAclexplodeGenerator,
+			"Produces a virtual table containing aclitem privileges.",
 			volatility.Stable,
 		),
 	),
@@ -1274,7 +1418,11 @@ func makeVariadicUnnestGenerator(
 ) (eval.ValueGenerator, error) {
 	var arrays []*tree.DArray
 	for _, a := range args {
-		arrays = append(arrays, tree.MustBeDArray(a))
+		arr, err := checkIfDArrayErrOnDString(a)
+		if err != nil {
+			return nil, err
+		}
+		arrays = append(arrays, arr)
 	}
 	g := &multipleArrayValueGenerator{arrays: arrays}
 	return g, nil
@@ -1424,7 +1572,10 @@ func (w *WorkloadIndexRecsGenerator) Close(ctx context.Context) {
 func makeArrayGenerator(
 	_ context.Context, _ *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	arr := tree.MustBeDArray(args[0])
+	arr, err := checkIfDArrayErrOnDString(args[0])
+	if err != nil {
+		return nil, err
+	}
 	return &arrayValueGenerator{array: arr}, nil
 }
 
@@ -1466,7 +1617,10 @@ func (s *arrayValueGenerator) Values() (tree.Datums, error) {
 func makeExpandArrayGenerator(
 	_ context.Context, _ *eval.Context, args tree.Datums,
 ) (eval.ValueGenerator, error) {
-	arr := tree.MustBeDArray(args[0])
+	arr, err := checkIfDArrayErrOnDString(args[0])
+	if err != nil {
+		return nil, err
+	}
 	g := &expandArrayValueGenerator{avg: arrayValueGenerator{array: arr}}
 	g.buf[1] = tree.NewDInt(tree.DInt(-1))
 	return g, nil
@@ -1522,7 +1676,11 @@ func makeGenerateSubscriptsGenerator(
 	}
 	// We sadly only support 1D arrays right now.
 	if dim == 1 {
-		arr = tree.MustBeDArray(args[0])
+		var err error
+		arr, err = checkIfDArrayErrOnDString(args[0])
+		if err != nil {
+			return nil, err
+		}
 	} else {
 		arr = &tree.DArray{}
 	}
@@ -2577,7 +2735,7 @@ type spanKeyIterator struct {
 
 func newSpanKeyIterator(evalCtx *eval.Context, span roachpb.Span) *spanKeyIterator {
 	return &spanKeyIterator{
-		acc:  evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:  evalCtx.Planner.ExecMon().MakeBoundAccount(),
 		span: span,
 	}
 }
@@ -2683,7 +2841,7 @@ func makeRangeKeyIterator(
 	rangeID := roachpb.RangeID(tree.MustBeDInt(args[0]))
 	return &rangeKeyIterator{
 		spanKeyIterator: spanKeyIterator{
-			acc: planner.Mon().MakeBoundAccount(),
+			acc: planner.ExecMon().MakeBoundAccount(),
 		},
 		rangeID: rangeID,
 		planner: planner,
@@ -2998,7 +3156,7 @@ func makeShowCreateAllSchemasGenerator(
 	return &showCreateAllSchemasGenerator{
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:         evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}, nil
 }
 
@@ -3154,7 +3312,7 @@ func makeShowCreateAllTablesGenerator(
 	return &showCreateAllTablesGenerator{
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:         evalCtx.Planner.ExecMon().MakeBoundAccount(),
 		sessionData: evalCtx.SessionData(),
 	}, nil
 }
@@ -3232,7 +3390,7 @@ func makeShowCreateAllTriggersGenerator(
 	return &showCreateAllTriggersGenerator{
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:         evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}, nil
 }
 
@@ -3312,7 +3470,7 @@ func makeShowCreateAllTypesGenerator(
 	return &showCreateAllTypesGenerator{
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:         evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}, nil
 }
 
@@ -3404,7 +3562,7 @@ func makeShowCreateAllRoutinesGenerator(
 	return &showCreateAllRoutinesGenerator{
 		evalPlanner: evalCtx.Planner,
 		dbName:      dbName,
-		acc:         evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:         evalCtx.Planner.ExecMon().MakeBoundAccount(),
 	}, nil
 }
 
@@ -3540,7 +3698,7 @@ func makeIdentGenerator(
 	rand := rand.New(rand.NewSource(seed))
 	return &identGenerator{
 		gen:   randident.NewNameGenerator(&cfg, rand, pattern),
-		acc:   evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc:   evalCtx.Planner.ExecMon().MakeBoundAccount(),
 		count: count,
 	}, nil
 }

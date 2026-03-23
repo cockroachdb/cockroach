@@ -164,6 +164,11 @@ type mutationPlanNode interface {
 	// returnsRowsAffected indicates that the planNode returns the number of
 	// rows affected by the mutation, rather than the rows themselves.
 	returnsRowsAffected() bool
+
+	// kvCPUTime returns the cumulative CPU time (in nanoseconds) that KV reported
+	// in BatchResponse headers during the execution of this mutation. It should
+	// only be called once Next returns false.
+	kvCPUTime() int64
 }
 
 // planNodeReadingOwnWrites can be implemented by planNodes which do
@@ -411,6 +416,7 @@ const (
 	planComponentTypeMainQuery
 	planComponentTypeSubquery
 	planComponentTypePostquery
+	planComponentTypeInner
 )
 
 func (t planComponentType) String() string {
@@ -685,6 +691,17 @@ const (
 	planFlagContainsInsert
 	planFlagContainsUpdate
 	planFlagContainsUpsert
+
+	// planFlagUsesRLS is set if the plan applies row-level security policies.
+	planFlagUsesRLS
+
+	// planFlagCanaryAndStableStatsDiffer is set if at least one table
+	// referenced by the query has genuinely different canary (newest) vs.
+	// stable (second-newest) statistics within its canary window. This
+	// gates experiment metric recording: when false, the execution is not
+	// recorded in canary/stable experiment buckets even if StatsRollout is
+	// Canary or Stable.
+	planFlagCanaryAndStableStatsDiffer
 )
 
 // IsSet returns true if the receiver has all of the given flags set.

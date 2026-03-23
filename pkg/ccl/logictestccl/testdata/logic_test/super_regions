@@ -1,7 +1,7 @@
 # LogicTest: multiregion-15node-5region-3azs
 
-statement ok
-SET enable_super_regions = 'on'
+statement error cannot add super region to a non-multi-region database
+CREATE DATABASE nosuperregion SUPER REGION "sr" VALUES "us-east-1"
 
 statement ok
 CREATE DATABASE oncreate PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SUPER REGION "create" VALUES "ap-southeast-2", "us-east-1"
@@ -21,7 +21,7 @@ TABLE oncreate.public.rbt  ALTER TABLE oncreate.public.rbt CONFIGURE ZONE USING
                              gc.ttlseconds = 14400,
                              num_replicas = 4,
                              num_voters = 3,
-                             constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                             constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 3}',
                              voter_constraints = '[+region=us-east-1]',
                              lease_preferences = '[[+region=us-east-1]]'
 
@@ -34,7 +34,7 @@ PARTITION "us-east-1" OF TABLE oncreate.public.rbr  ALTER PARTITION "us-east-1" 
                                                       gc.ttlseconds = 14400,
                                                       num_replicas = 4,
                                                       num_voters = 3,
-                                                      constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                      constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 3}',
                                                       voter_constraints = '[+region=us-east-1]',
                                                       lease_preferences = '[[+region=us-east-1]]'
 
@@ -85,7 +85,7 @@ TABLE mr1.public.rbt  ALTER TABLE mr1.public.rbt CONFIGURE ZONE USING
                         gc.ttlseconds = 14400,
                         num_replicas = 3,
                         num_voters = 3,
-                        constraints = '{+region=us-east-1: 1}',
+                        constraints = '{+region=us-east-1: 3}',
                         voter_constraints = '[+region=us-east-1]',
                         lease_preferences = '[[+region=us-east-1]]'
 
@@ -112,7 +112,7 @@ PARTITION "us-east-1" OF TABLE mr1.public.rbr  ALTER PARTITION "us-east-1" OF TA
                                                  gc.ttlseconds = 14400,
                                                  num_replicas = 3,
                                                  num_voters = 3,
-                                                 constraints = '{+region=us-east-1: 1}',
+                                                 constraints = '{+region=us-east-1: 3}',
                                                  voter_constraints = '[+region=us-east-1]',
                                                  lease_preferences = '[[+region=us-east-1]]'
 
@@ -158,7 +158,7 @@ TABLE mr2.public.t_rt_us_east_1  ALTER TABLE mr2.public.t_rt_us_east_1 CONFIGURE
                                    gc.ttlseconds = 14400,
                                    num_replicas = 4,
                                    num_voters = 3,
-                                   constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                   constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 3}',
                                    voter_constraints = '[+region=us-east-1]',
                                    lease_preferences = '[[+region=us-east-1]]'
 
@@ -171,7 +171,7 @@ TABLE mr2.public.t_rt_primary_region  ALTER TABLE mr2.public.t_rt_primary_region
                                         gc.ttlseconds = 14400,
                                         num_replicas = 4,
                                         num_voters = 3,
-                                        constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                        constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 3}',
                                         voter_constraints = '[+region=us-east-1]',
                                         lease_preferences = '[[+region=us-east-1]]'
 
@@ -184,7 +184,7 @@ TABLE mr2.public.t_rt  ALTER TABLE mr2.public.t_rt CONFIGURE ZONE USING
                          gc.ttlseconds = 14400,
                          num_replicas = 4,
                          num_voters = 3,
-                         constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                         constraints = '{+region=ap-southeast-2: 3, +region=us-east-1: 1}',
                          voter_constraints = '[+region=ap-southeast-2]',
                          lease_preferences = '[[+region=ap-southeast-2]]'
 
@@ -197,7 +197,7 @@ TABLE mr2.public.t_rt_with_idx  ALTER TABLE mr2.public.t_rt_with_idx CONFIGURE Z
                                   gc.ttlseconds = 14400,
                                   num_replicas = 4,
                                   num_voters = 3,
-                                  constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                  constraints = '{+region=ap-southeast-2: 3, +region=us-east-1: 1}',
                                   voter_constraints = '[+region=ap-southeast-2]',
                                   lease_preferences = '[[+region=ap-southeast-2]]'
 
@@ -210,7 +210,7 @@ TABLE mr2.public.t_rt_with_idx  ALTER TABLE mr2.public.t_rt_with_idx CONFIGURE Z
                                   gc.ttlseconds = 14400,
                                   num_replicas = 4,
                                   num_voters = 3,
-                                  constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                  constraints = '{+region=ap-southeast-2: 3, +region=us-east-1: 1}',
                                   voter_constraints = '[+region=ap-southeast-2]',
                                   lease_preferences = '[[+region=ap-southeast-2]]'
 
@@ -223,7 +223,7 @@ PARTITION "us-east-1" OF TABLE mr2.public.t_rbr  ALTER PARTITION "us-east-1" OF 
                                                    gc.ttlseconds = 14400,
                                                    num_replicas = 4,
                                                    num_voters = 3,
-                                                   constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                   constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 3}',
                                                    voter_constraints = '[+region=us-east-1]',
                                                    lease_preferences = '[[+region=us-east-1]]'
 
@@ -236,7 +236,7 @@ PARTITION "ap-southeast-2" OF TABLE mr2.public.t_rbr_with_idx  ALTER PARTITION "
                                                                  gc.ttlseconds = 14400,
                                                                  num_replicas = 4,
                                                                  num_voters = 3,
-                                                                 constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                                 constraints = '{+region=ap-southeast-2: 3, +region=us-east-1: 1}',
                                                                  voter_constraints = '[+region=ap-southeast-2]',
                                                                  lease_preferences = '[[+region=ap-southeast-2]]'
 
@@ -263,7 +263,7 @@ PARTITION "ap-southeast-2" OF INDEX mr2.public.t_rbr_with_idx@idx  ALTER PARTITI
                                                                      gc.ttlseconds = 14400,
                                                                      num_replicas = 4,
                                                                      num_voters = 3,
-                                                                     constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                                     constraints = '{+region=ap-southeast-2: 3, +region=us-east-1: 1}',
                                                                      voter_constraints = '[+region=ap-southeast-2]',
                                                                      lease_preferences = '[[+region=ap-southeast-2]]'
 
@@ -289,7 +289,7 @@ TABLE mr2.public.t_rt2  ALTER TABLE mr2.public.t_rt2 CONFIGURE ZONE USING
                           gc.ttlseconds = 14400,
                           num_replicas = 4,
                           num_voters = 3,
-                          constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                          constraints = '{+region=ap-southeast-2: 3, +region=us-east-1: 1}',
                           voter_constraints = '[+region=ap-southeast-2]',
                           lease_preferences = '[[+region=ap-southeast-2]]'
 
@@ -302,7 +302,7 @@ TABLE mr2.public.t_rt_with_idx2  ALTER TABLE mr2.public.t_rt_with_idx2 CONFIGURE
                                    gc.ttlseconds = 14400,
                                    num_replicas = 4,
                                    num_voters = 3,
-                                   constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                   constraints = '{+region=ap-southeast-2: 3, +region=us-east-1: 1}',
                                    voter_constraints = '[+region=ap-southeast-2]',
                                    lease_preferences = '[[+region=ap-southeast-2]]'
 
@@ -315,7 +315,7 @@ TABLE mr2.public.t_rt_with_idx2  ALTER TABLE mr2.public.t_rt_with_idx2 CONFIGURE
                                    gc.ttlseconds = 14400,
                                    num_replicas = 4,
                                    num_voters = 3,
-                                   constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                   constraints = '{+region=ap-southeast-2: 3, +region=us-east-1: 1}',
                                    voter_constraints = '[+region=ap-southeast-2]',
                                    lease_preferences = '[[+region=ap-southeast-2]]'
 
@@ -328,7 +328,7 @@ PARTITION "us-east-1" OF TABLE mr2.public.t_rbr2  ALTER PARTITION "us-east-1" OF
                                                     gc.ttlseconds = 14400,
                                                     num_replicas = 4,
                                                     num_voters = 3,
-                                                    constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                    constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 3}',
                                                     voter_constraints = '[+region=us-east-1]',
                                                     lease_preferences = '[[+region=us-east-1]]'
 
@@ -341,7 +341,7 @@ PARTITION "ap-southeast-2" OF TABLE mr2.public.t_rbr_with_idx2  ALTER PARTITION 
                                                                   gc.ttlseconds = 14400,
                                                                   num_replicas = 4,
                                                                   num_voters = 3,
-                                                                  constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                                  constraints = '{+region=ap-southeast-2: 3, +region=us-east-1: 1}',
                                                                   voter_constraints = '[+region=ap-southeast-2]',
                                                                   lease_preferences = '[[+region=ap-southeast-2]]'
 
@@ -355,7 +355,7 @@ PARTITION "ap-southeast-2" OF INDEX mr2.public.t_rbr_with_idx2@idx  ALTER PARTIT
                                                                       gc.ttlseconds = 14400,
                                                                       num_replicas = 4,
                                                                       num_voters = 3,
-                                                                      constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                                      constraints = '{+region=ap-southeast-2: 3, +region=us-east-1: 1}',
                                                                       voter_constraints = '[+region=ap-southeast-2]',
                                                                       lease_preferences = '[[+region=ap-southeast-2]]'
 
@@ -368,7 +368,7 @@ PARTITION "us-east-1" OF INDEX mr2.public.t_rbr_with_idx2@idx  ALTER PARTITION "
                                                                  gc.ttlseconds = 14400,
                                                                  num_replicas = 4,
                                                                  num_voters = 3,
-                                                                 constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                                 constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 3}',
                                                                  voter_constraints = '[+region=us-east-1]',
                                                                  lease_preferences = '[[+region=us-east-1]]'
 
@@ -418,7 +418,7 @@ TABLE mr2.public.t_rt_ca_central_1  ALTER TABLE mr2.public.t_rt_ca_central_1 CON
                                       gc.ttlseconds = 14400,
                                       num_replicas = 3,
                                       num_voters = 3,
-                                      constraints = '{+region=ca-central-1: 1}',
+                                      constraints = '{+region=ca-central-1: 3}',
                                       voter_constraints = '[+region=ca-central-1]',
                                       lease_preferences = '[[+region=ca-central-1]]'
 
@@ -446,7 +446,7 @@ PARTITION "us-east-1" OF TABLE mr3.public.rt  ALTER PARTITION "us-east-1" OF TAB
                                                 gc.ttlseconds = 14400,
                                                 num_replicas = 4,
                                                 num_voters = 3,
-                                                constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 3}',
                                                 voter_constraints = '[+region=us-east-1]',
                                                 lease_preferences = '[[+region=us-east-1]]'
 
@@ -459,7 +459,7 @@ PARTITION "ap-southeast-2" OF TABLE mr3.public.rt  ALTER PARTITION "ap-southeast
                                                      gc.ttlseconds = 14400,
                                                      num_replicas = 4,
                                                      num_voters = 3,
-                                                     constraints = '{+region=ap-southeast-2: 1, +region=us-east-1: 1}',
+                                                     constraints = '{+region=ap-southeast-2: 3, +region=us-east-1: 1}',
                                                      voter_constraints = '[+region=ap-southeast-2]',
                                                      lease_preferences = '[[+region=ap-southeast-2]]'
 
@@ -472,7 +472,7 @@ PARTITION "ca-central-1" OF TABLE mr3.public.rt  ALTER PARTITION "ca-central-1" 
                                                    gc.ttlseconds = 14400,
                                                    num_replicas = 5,
                                                    num_voters = 3,
-                                                   constraints = '{+region=ca-central-1: 1, +region=us-central-1: 1, +region=us-west-1: 1}',
+                                                   constraints = '{+region=ca-central-1: 3, +region=us-central-1: 1, +region=us-west-1: 1}',
                                                    voter_constraints = '[+region=ca-central-1]',
                                                    lease_preferences = '[[+region=ca-central-1]]'
 
@@ -485,7 +485,7 @@ PARTITION "us-west-1" OF TABLE mr3.public.rt  ALTER PARTITION "us-west-1" OF TAB
                                                 gc.ttlseconds = 14400,
                                                 num_replicas = 5,
                                                 num_voters = 3,
-                                                constraints = '{+region=ca-central-1: 1, +region=us-central-1: 1, +region=us-west-1: 1}',
+                                                constraints = '{+region=ca-central-1: 1, +region=us-central-1: 1, +region=us-west-1: 3}',
                                                 voter_constraints = '[+region=us-west-1]',
                                                 lease_preferences = '[[+region=us-west-1]]'
 
@@ -498,7 +498,7 @@ PARTITION "us-central-1" OF TABLE mr3.public.rt  ALTER PARTITION "us-central-1" 
                                                    gc.ttlseconds = 14400,
                                                    num_replicas = 5,
                                                    num_voters = 3,
-                                                   constraints = '{+region=ca-central-1: 1, +region=us-central-1: 1, +region=us-west-1: 1}',
+                                                   constraints = '{+region=ca-central-1: 1, +region=us-central-1: 3, +region=us-west-1: 1}',
                                                    voter_constraints = '[+region=us-central-1]',
                                                    lease_preferences = '[[+region=us-central-1]]'
 
@@ -580,9 +580,9 @@ us-east-1       primary
 us-west-1       other
 
 # In the case where we have 3 regions within the super region under
-# survive region failure mode, the first non-primary region constraint should
-# have 2 replicas, this is so all replicas are accounted for.
-# ap-southeast-2 in the example below should have 2 replicas because of this.
+# survive region failure mode, replicas are distributed evenly across regions
+# with the affinity region receiving priority for any extra replicas.
+# This ensures all replicas are accounted for within the super region.
 query TT
 SHOW ZONE CONFIGURATION FOR PARTITION "us-central-1" OF TABLE mr3.rt
 ----
@@ -592,7 +592,7 @@ PARTITION "us-central-1" OF TABLE mr3.public.rt  ALTER PARTITION "us-central-1" 
                                                    gc.ttlseconds = 14400,
                                                    num_replicas = 5,
                                                    num_voters = 5,
-                                                   constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-central-1: 1}',
+                                                   constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-central-1: 2}',
                                                    voter_constraints = '{+region=us-central-1: 2}',
                                                    lease_preferences = '[[+region=us-central-1]]'
 
@@ -605,7 +605,7 @@ PARTITION "ap-southeast-2" OF TABLE mr3.public.rt  ALTER PARTITION "ap-southeast
                                                      gc.ttlseconds = 14400,
                                                      num_replicas = 5,
                                                      num_voters = 5,
-                                                     constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 2, +region=us-central-1: 1}',
+                                                     constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2, +region=us-central-1: 1}',
                                                      voter_constraints = '{+region=ap-southeast-2: 2}',
                                                      lease_preferences = '[[+region=ap-southeast-2]]'
 
@@ -625,7 +625,7 @@ PARTITION "us-central-1" OF TABLE mr3.public.rt  ALTER PARTITION "us-central-1" 
                                                    gc.ttlseconds = 14400,
                                                    num_replicas = 6,
                                                    num_voters = 5,
-                                                   constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                                                   constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 2, +region=us-east-1: 1, +region=us-west-1: 1}',
                                                    voter_constraints = '{+region=us-central-1: 2}',
                                                    lease_preferences = '[[+region=us-central-1]]'
 
@@ -638,7 +638,7 @@ PARTITION "ap-southeast-2" OF TABLE mr3.public.rt  ALTER PARTITION "ap-southeast
                                                      gc.ttlseconds = 14400,
                                                      num_replicas = 6,
                                                      num_voters = 5,
-                                                     constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                                                     constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
                                                      voter_constraints = '{+region=ap-southeast-2: 2}',
                                                      lease_preferences = '[[+region=ap-southeast-2]]'
 
@@ -680,7 +680,7 @@ TABLE db3.public.t  ALTER TABLE db3.public.t CONFIGURE ZONE USING
                       gc.ttlseconds = 14400,
                       num_replicas = 4,
                       num_voters = 3,
-                      constraints = '{+region=ca-central-1: 1, +region=us-west-1: 1}',
+                      constraints = '{+region=ca-central-1: 3, +region=us-west-1: 1}',
                       voter_constraints = '[+region=ca-central-1]',
                       lease_preferences = '[[+region=ca-central-1]]'
 
@@ -712,7 +712,7 @@ TABLE db3.public.t  ALTER TABLE db3.public.t CONFIGURE ZONE USING
                       gc.ttlseconds = 14400,
                       num_replicas = 3,
                       num_voters = 3,
-                      constraints = '{+region=us-east-1: 1}',
+                      constraints = '{+region=us-east-1: 3}',
                       voter_constraints = '[+region=us-east-1]',
                       lease_preferences = '[[+region=us-east-1]]'
 
@@ -734,7 +734,7 @@ TABLE db3.public.t  ALTER TABLE db3.public.t CONFIGURE ZONE USING
                       gc.ttlseconds = 14400,
                       num_replicas = 4,
                       num_voters = 3,
-                      constraints = '{+region=ca-central-1: 1, +region=us-west-1: 1}',
+                      constraints = '{+region=ca-central-1: 1, +region=us-west-1: 3}',
                       voter_constraints = '[+region=us-west-1]',
                       lease_preferences = '[[+region=us-west-1]]'
 
@@ -769,7 +769,7 @@ TABLE db3.public.t  ALTER TABLE db3.public.t CONFIGURE ZONE USING
                       gc.ttlseconds = 14400,
                       num_replicas = 5,
                       num_voters = 3,
-                      constraints = '{+region=ca-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                      constraints = '{+region=ca-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 3}',
                       voter_constraints = '[+region=us-west-1]',
                       lease_preferences = '[[+region=us-west-1]]'
 
@@ -785,7 +785,7 @@ TABLE db3.public.t  ALTER TABLE db3.public.t CONFIGURE ZONE USING
                       gc.ttlseconds = 14400,
                       num_replicas = 3,
                       num_voters = 3,
-                      constraints = '{+region=us-west-1: 1}',
+                      constraints = '{+region=us-west-1: 3}',
                       voter_constraints = '[+region=us-west-1]',
                       lease_preferences = '[[+region=us-west-1]]'
 
@@ -835,3 +835,79 @@ query TTT
 SHOW SUPER REGIONS FROM DATABASE mr3
 ----
 mr3  r1  {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}
+
+# Verify that a secondary region outside a super region does not leak into
+# lease_preferences or voter_constraints for tables in the super region.
+subtest secondary_region_outside_super_region
+
+statement ok
+CREATE DATABASE sr_sec
+  PRIMARY REGION "ap-southeast-2"
+  REGIONS "us-east-1", "us-west-1", "us-central-1", "ca-central-1"
+
+statement ok
+ALTER DATABASE sr_sec ADD SUPER REGION "east" VALUES "us-east-1", "us-west-1", "us-central-1"
+
+statement ok
+ALTER DATABASE sr_sec SET SECONDARY REGION "ca-central-1"
+
+statement ok
+ALTER DATABASE sr_sec SURVIVE REGION FAILURE
+
+# REGIONAL BY TABLE inside the super region.
+statement ok
+CREATE TABLE sr_sec.rbt_in_sr(k INT PRIMARY KEY) LOCALITY REGIONAL BY TABLE IN "us-east-1"
+
+# The lease_preferences must reference only us-east-1 (the home region inside
+# the super region). The secondary region ca-central-1 is outside the super
+# region and must NOT appear.
+query TT
+SHOW ZONE CONFIGURATION FOR TABLE sr_sec.rbt_in_sr
+----
+TABLE sr_sec.public.rbt_in_sr  ALTER TABLE sr_sec.public.rbt_in_sr CONFIGURE ZONE USING
+                                 range_min_bytes = 134217728,
+                                 range_max_bytes = 536870912,
+                                 gc.ttlseconds = 14400,
+                                 num_replicas = 5,
+                                 num_voters = 5,
+                                 constraints = '{+region=us-central-1: 2, +region=us-east-1: 2, +region=us-west-1: 1}',
+                                 voter_constraints = '{+region=us-east-1: 2}',
+                                 lease_preferences = '[[+region=us-east-1]]'
+
+# REGIONAL BY ROW table for testing per-partition zone configs.
+statement ok
+CREATE TABLE sr_sec.rbr_sr(k INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
+
+# Partition inside the super region: no secondary region in lease_preferences.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "us-east-1" OF TABLE sr_sec.rbr_sr
+----
+PARTITION "us-east-1" OF TABLE sr_sec.public.rbr_sr  ALTER PARTITION "us-east-1" OF TABLE sr_sec.public.rbr_sr CONFIGURE ZONE USING
+                                                       range_min_bytes = 134217728,
+                                                       range_max_bytes = 536870912,
+                                                       gc.ttlseconds = 14400,
+                                                       num_replicas = 5,
+                                                       num_voters = 5,
+                                                       constraints = '{+region=us-central-1: 2, +region=us-east-1: 2, +region=us-west-1: 1}',
+                                                       voter_constraints = '{+region=us-east-1: 2}',
+                                                       lease_preferences = '[[+region=us-east-1]]'
+
+# Partition outside the super region: secondary region SHOULD appear in
+# lease_preferences and voter_constraints.
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-2" OF TABLE sr_sec.rbr_sr
+----
+PARTITION "ap-southeast-2" OF TABLE sr_sec.public.rbr_sr  ALTER PARTITION "ap-southeast-2" OF TABLE sr_sec.public.rbr_sr CONFIGURE ZONE USING
+                                                            range_min_bytes = 134217728,
+                                                            range_max_bytes = 536870912,
+                                                            gc.ttlseconds = 14400,
+                                                            num_replicas = 7,
+                                                            num_voters = 5,
+                                                            constraints = '{+region=ap-southeast-2: 1, +region=ca-central-1: 1, +region=us-central-1: 1, +region=us-east-1: 1, +region=us-west-1: 1}',
+                                                            voter_constraints = '{+region=ap-southeast-2: 2, +region=ca-central-1: 2}',
+                                                            lease_preferences = '[[+region=ap-southeast-2], [+region=ca-central-1]]'
+
+statement ok
+SELECT crdb_internal.validate_multi_region_zone_configs()
+
+subtest end

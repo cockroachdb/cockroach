@@ -1,0 +1,111 @@
+# -------------------------------------------------------------
+# This test verifies the behavior of lastSupportWithdrawnTime.
+# Specifically:
+# 1. It is set when support is first withdrawn.
+# 2. It is NOT updated on subsequent withdrawal attempts.
+# 3. It is preserved when handling successful heartbeats.
+# -------------------------------------------------------------
+
+# -------------------------------------------------------------
+# Store (n1, s1) provides support to (n2, s2).
+# -------------------------------------------------------------
+
+handle-messages
+  msg type=MsgHeartbeat from-node-id=2 from-store-id=2 epoch=1 expiration=100
+----
+responses:
+{Type:MsgHeartbeatResp From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:1 Expiration:100.000000000,0}
+
+debug-supporter-state
+----
+meta:
+{MaxWithdrawn:0,0}
+support for:
+{Target:{NodeID:2 StoreID:2} Epoch:1 Expiration:100.000000000,0} lastSupportWithdrawnTime:0,0
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) withdraws support at time 200.
+# lastSupportWithdrawnTime should be set to 200.
+# -------------------------------------------------------------
+
+withdraw-support now=200
+----
+
+debug-supporter-state
+----
+meta:
+{MaxWithdrawn:200.000000000,0}
+support for:
+{Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:0,0} lastSupportWithdrawnTime:200.000000000,0
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) attempts to withdraw support again at time 300.
+# lastSupportWithdrawnTime should NOT be updated.
+# -------------------------------------------------------------
+
+withdraw-support now=300
+----
+
+debug-supporter-state
+----
+meta:
+{MaxWithdrawn:200.000000000,0}
+support for:
+{Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:0,0} lastSupportWithdrawnTime:200.000000000,0
+
+
+# -------------------------------------------------------------
+# Store (n2, s2) re-establishes support via heartbeat.
+# lastSupportWithdrawnTime should be preserved.
+# -------------------------------------------------------------
+
+handle-messages
+  msg type=MsgHeartbeat from-node-id=2 from-store-id=2 epoch=2 expiration=400
+----
+responses:
+{Type:MsgHeartbeatResp From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:2 Expiration:400.000000000,0}
+
+debug-supporter-state
+----
+meta:
+{MaxWithdrawn:200.000000000,0}
+support for:
+{Target:{NodeID:2 StoreID:2} Epoch:2 Expiration:400.000000000,0} lastSupportWithdrawnTime:200.000000000,0
+
+
+# -------------------------------------------------------------
+# Store (n2, s2) extends support with a new epoch.
+# lastSupportWithdrawnTime should still be preserved.
+# -------------------------------------------------------------
+
+handle-messages
+  msg type=MsgHeartbeat from-node-id=2 from-store-id=2 epoch=3 expiration=500
+----
+responses:
+{Type:MsgHeartbeatResp From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:3 Expiration:500.000000000,0}
+
+debug-supporter-state
+----
+meta:
+{MaxWithdrawn:200.000000000,0}
+support for:
+{Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:500.000000000,0} lastSupportWithdrawnTime:200.000000000,0
+
+
+# -------------------------------------------------------------
+# Store (n1, s1) withdraws support again at time 600.
+# lastSupportWithdrawnTime should now be updated to 600.
+# -------------------------------------------------------------
+
+withdraw-support now=600
+----
+
+debug-supporter-state
+----
+meta:
+{MaxWithdrawn:600.000000000,0}
+support for:
+{Target:{NodeID:2 StoreID:2} Epoch:4 Expiration:0,0} lastSupportWithdrawnTime:600.000000000,0
+

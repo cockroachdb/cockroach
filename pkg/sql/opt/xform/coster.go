@@ -1237,8 +1237,15 @@ func (c *coster) computeIndexLookupJoinCost(
 		perLookupCost.C += 4 * randIOCostFactor
 	}
 	if c.mem.Metadata().Table(table).IsVirtualTable() {
-		// It's expensive to perform a lookup join into a virtual table because
-		// we need to fetch the table descriptors on each lookup.
+		// It's expensive to perform a lookup join into a virtual table because we
+		// need to fetch the table descriptors on each lookup. Note that virtual
+		// tables with incomplete indexes (e.g. pg_class, pg_attribute) may fall
+		// back to a full table scan when the lookup key is not found. The actual
+		// cost can match a full table scan, which is much higher than modeled
+		// here. For now, we rely on @primary index hints in known-problematic
+		// queries to avoid this.
+		// TODO(michae2): differentiate cost for complete vs incomplete virtual
+		// index lookups, so the optimizer naturally avoids the degenerate case.
 		perLookupCost.C += virtualScanTableDescriptorFetchCost
 	}
 	cost := memo.Cost{C: lookupCount * perLookupCost.C}

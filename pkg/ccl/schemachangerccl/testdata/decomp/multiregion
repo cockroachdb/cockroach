@@ -93,6 +93,12 @@ ElementState:
   Status: PUBLIC
 - UserPrivileges:
     descriptorId: 104
+    privileges: "17592186046464"
+    userName: public
+    withGrantOption: "0"
+  Status: PUBLIC
+- UserPrivileges:
+    descriptorId: 104
     privileges: "2"
     userName: admin
     withGrantOption: "2"
@@ -102,12 +108,6 @@ ElementState:
     privileges: "2"
     userName: root
     withGrantOption: "2"
-  Status: PUBLIC
-- UserPrivileges:
-    descriptorId: 104
-    privileges: "2048"
-    userName: public
-    withGrantOption: "0"
   Status: PUBLIC
 
 decompose
@@ -248,9 +248,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 1
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -269,7 +267,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 64
     typeName: INT8
   Status: PUBLIC
@@ -277,9 +274,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 2
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -298,7 +293,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 64
     typeName: INT8
   Status: PUBLIC
@@ -306,9 +300,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967292e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -327,7 +319,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: DECIMAL
   Status: PUBLIC
@@ -335,9 +326,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967293e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -356,7 +345,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 32
     typeName: INT4
   Status: PUBLIC
@@ -364,9 +352,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967294e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -385,7 +371,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: OID
   Status: PUBLIC
@@ -393,9 +378,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967295e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -414,7 +397,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: DECIMAL
   Status: PUBLIC
@@ -468,6 +450,7 @@ ElementState:
     isNotVisible: false
     isUnique: true
     sharding: null
+    skipUniqueChecks: false
     sourceIndexId: 0
     tableId: 110
     temporaryIndexId: 0
@@ -662,9 +645,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 1
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -683,7 +664,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 64
     typeName: INT8
   Status: PUBLIC
@@ -691,9 +671,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 2
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -712,7 +690,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 64
     typeName: INT8
   Status: PUBLIC
@@ -720,9 +697,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967292e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -741,7 +716,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: DECIMAL
   Status: PUBLIC
@@ -749,9 +723,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967293e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -770,7 +742,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 32
     typeName: INT4
   Status: PUBLIC
@@ -778,9 +749,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967294e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -799,7 +768,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: OID
   Status: PUBLIC
@@ -807,9 +775,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967295e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -828,7 +794,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: DECIMAL
   Status: PUBLIC
@@ -882,6 +847,7 @@ ElementState:
     isNotVisible: false
     isUnique: true
     sharding: null
+    skipUniqueChecks: false
     sourceIndexId: 0
     tableId: 109
     temporaryIndexId: 0
@@ -922,7 +888,7 @@ ElementState:
         - key: region
           type: REQUIRED
           value: us-east2
-        numReplicas: 1
+        numReplicas: 2
       - constraints:
         - key: region
           type: REQUIRED
@@ -1132,9 +1098,7 @@ ElementState:
     - 107
     columnFamilyOrderFollowsColumnId: 0
     columnId: 3
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1154,7 +1118,6 @@ ElementState:
       tupleLabels: []
       udtMetadata:
         arrayTypeOid: 100107
-      visibleType: 0
       width: 0
     typeName: public.crdb_internal_region
   Status: PUBLIC
@@ -1162,9 +1125,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 1
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1183,7 +1144,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 64
     typeName: INT8
   Status: PUBLIC
@@ -1191,9 +1151,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 2
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1212,7 +1170,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: STRING
   Status: PUBLIC
@@ -1220,9 +1177,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967292e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1241,7 +1196,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: DECIMAL
   Status: PUBLIC
@@ -1249,9 +1203,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967293e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1270,7 +1222,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 32
     typeName: INT4
   Status: PUBLIC
@@ -1278,9 +1229,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967294e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1299,7 +1248,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: OID
   Status: PUBLIC
@@ -1307,9 +1255,7 @@ ElementState:
     closedTypeIds: []
     columnFamilyOrderFollowsColumnId: 0
     columnId: 4.294967295e+09
-    computeExpr: null
     elementCreationMetadata:
-      in243OrLater: true
       in261OrLater: true
     familyId: 0
     isVirtual: false
@@ -1328,7 +1274,6 @@ ElementState:
       tupleContents: []
       tupleLabels: []
       udtMetadata: null
-      visibleType: 0
       width: 0
     typeName: DECIMAL
   Status: PUBLIC
@@ -1431,7 +1376,7 @@ ElementState:
           - key: region
             type: REQUIRED
             value: us-east1
-          numReplicas: 1
+          numReplicas: 2
         - constraints:
           - key: region
             type: REQUIRED
@@ -1489,7 +1434,7 @@ ElementState:
           - key: region
             type: REQUIRED
             value: us-east2
-          numReplicas: 1
+          numReplicas: 2
         - constraints:
           - key: region
             type: REQUIRED
@@ -1547,7 +1492,7 @@ ElementState:
           - key: region
             type: REQUIRED
             value: us-east3
-          numReplicas: 1
+          numReplicas: 2
         gc: null
         globalReads: null
         inheritedConstraints: false
@@ -1589,6 +1534,7 @@ ElementState:
     isNotVisible: false
     isUnique: true
     sharding: null
+    skipUniqueChecks: false
     sourceIndexId: 0
     tableId: 108
     temporaryIndexId: 0
@@ -1653,7 +1599,7 @@ ElementState:
             - key: region
               type: REQUIRED
               value: us-east1
-            numReplicas: 1
+            numReplicas: 2
           - constraints:
             - key: region
               type: REQUIRED
@@ -1699,7 +1645,7 @@ ElementState:
             - key: region
               type: REQUIRED
               value: us-east2
-            numReplicas: 1
+            numReplicas: 2
           - constraints:
             - key: region
               type: REQUIRED
@@ -1745,7 +1691,7 @@ ElementState:
             - key: region
               type: REQUIRED
               value: us-east3
-            numReplicas: 1
+            numReplicas: 2
           gc: null
           globalReads: null
           inheritedConstraints: false

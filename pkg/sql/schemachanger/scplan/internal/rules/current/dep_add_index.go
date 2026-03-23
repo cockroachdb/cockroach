@@ -238,6 +238,7 @@ func init() {
 					"primary-index-id",
 				),
 				StatusesToPublicOrTransient(from, scpb.Status_VALIDATED, to, scpb.Status_PUBLIC),
+				to.TargetStatus(scpb.ToPublic),
 			}
 		})
 

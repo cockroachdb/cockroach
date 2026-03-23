@@ -98,32 +98,46 @@ func (r ioReadCloserAdapter) Close(context.Context) error {
 	return r.r.Close()
 }
 
-// ReadAll reads from r until an error or EOF and returns the data it read.
-// A successful call returns err == nil, not err == EOF. Because ReadAll is
-// defined to read from src until EOF, it does not treat an EOF from Read
-// as an error to be reported.
+// ReadAllWithScratch reads from r until an error or EOF and returns the data
+// it read. A successful call returns err == nil, not err == EOF. Because
+// ReadAllWithScratch is defined to read from r until EOF, it does not treat an
+// EOF from Read as an error to be reported.
 //
 // This code is adapted from the stdlib io.ReadAll, except that:
-// - it operates on a ReaderCtx instead of a io.Reader
+// - it operates on a ReaderCtx instead of an io.Reader
 // - it takes in a ctx
 // - it terminates successfully on errors that wrap io.EOF, not just on io.EOF
-// itself.
-func ReadAll(ctx context.Context, r ReaderCtx) ([]byte, error) {
-	b := make([]byte, 0, 512)
+// itself
+//
+// This will reuse scratch for buffer management, handling allocation if scratch
+// is nil or too small. The new scratch buffer is returned.
+func ReadAllWithScratch(ctx context.Context, r ReaderCtx, scratch []byte) ([]byte, error) {
+	if scratch == nil {
+		scratch = make([]byte, 0, 512)
+	} else {
+		scratch = scratch[:0]
+	}
 	for {
-		if len(b) == cap(b) {
+		if len(scratch) == cap(scratch) {
 			// Add more capacity (let append pick how much).
-			b = append(b, 0)[:len(b)]
+			scratch = append(scratch, 0)[:len(scratch)]
 		}
-		n, err := r.Read(ctx, b[len(b):cap(b)])
-		b = b[:len(b)+n]
+		n, err := r.Read(ctx, scratch[len(scratch):cap(scratch)])
+		scratch = scratch[:len(scratch)+n]
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				err = nil
 			}
-			return b, err
+			return scratch, err
 		}
 	}
+}
+
+// ReadAll reads from r until an error or EOF and returns the data it read.
+// It allocates a new buffer and is a convenience wrapper around
+// ReadAllWithScratch.
+func ReadAll(ctx context.Context, r ReaderCtx) ([]byte, error) {
+	return ReadAllWithScratch(ctx, r, nil)
 }
 
 // NopCloser returns a ReadCloser with a no-op Close method wrapping

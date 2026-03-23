@@ -3,6 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { PayloadAction } from "@reduxjs/toolkit";
 import {
   all,
   call,
@@ -14,7 +15,7 @@ import {
   select,
 } from "redux-saga/effects";
 
-import { getSessions } from "src/api/sessionsApi";
+import { getSessions, SessionsRequest } from "src/api/sessionsApi";
 
 import { maybeError } from "../../util";
 import { actions as clusterLockActions } from "../clusterLocks/clusterLocks.reducer";
@@ -22,20 +23,25 @@ import { selectIsTenant } from "../uiConfig";
 
 import { actions } from "./sessions.reducer";
 
-export function* refreshSessionsAndClusterLocksSaga(): Generator<
-  AllEffect<PutEffect> | SelectEffect | PutEffect
-> {
+export function* refreshSessionsAndClusterLocksSaga(
+  action: PayloadAction<SessionsRequest | undefined>,
+): Generator<AllEffect<PutEffect> | SelectEffect | PutEffect> {
   const isTenant = yield select(selectIsTenant);
   if (isTenant) {
-    yield put(actions.request());
+    yield put(actions.request(action?.payload));
     return;
   }
-  yield all([put(actions.request()), put(clusterLockActions.request())]);
+  yield all([
+    put(actions.request(action?.payload)),
+    put(clusterLockActions.request()),
+  ]);
 }
 
-export function* requestSessionsSaga(): any {
+export function* requestSessionsSaga(
+  action: PayloadAction<SessionsRequest | undefined>,
+): any {
   try {
-    const result = yield call(getSessions);
+    const result = yield call(getSessions, action?.payload);
     yield put(actions.received(result));
   } catch (e) {
     yield put(actions.failed(maybeError(e)));

@@ -539,6 +539,9 @@ message SampledExecStats {
 
   // Internal storage iteration statistics.
   MVCCIteratorStats mvcc_iterator_stats = 7 [(gogoproto.nullable) = false, (gogoproto.customname) = "MVCCIteratorStats"];
+
+  // AdmissionWaitTime is the cumulative time spent in admission control queues.
+  int64 admission_wait_time = 8 [(gogoproto.jsontag) = ",includeempty"];
 }
 
 // Internal storage iteration statistics for a single execution.

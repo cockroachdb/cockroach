@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // FailureStage represents a single stage in the failure injection lifecycle
@@ -38,6 +39,8 @@ const (
 	StageRecover FailureStage = "recover"
 	// StageCleanup runs only the cleanup phase
 	StageCleanup FailureStage = "cleanup"
+	// StageInjectRecover runs inject, waits, then recovers (without setup/cleanup)
+	StageInjectRecover FailureStage = "inject-recover"
 )
 
 // ValidStages returns all valid lifecycle stage values for a failure
@@ -48,12 +51,13 @@ func ValidStages() []string {
 		string(StageInject),
 		string(StageRecover),
 		string(StageCleanup),
+		string(StageInjectRecover),
 	}
 }
 
 // Global chaos options that apply to all chaos commands
 var (
-	chaosWaitBeforeCleanup time.Duration
+	chaosWaitBeforeRecover time.Duration
 	chaosRunForever        bool
 	chaosCertsDir          string
 	chaosReplicationFactor int
@@ -67,11 +71,48 @@ var (
 
 // GlobalChaosOpts captures global chaos flags
 type GlobalChaosOpts struct {
-	WaitBeforeCleanup time.Duration
+	WaitBeforeRecover time.Duration
 	RunForever        bool
 	Stage             FailureStage
 	Verbose           bool
 }
+
+// chaosSubcmdUsageTemplate is a custom usage template for chaos subcommands
+// that separates chaos-level persistent flags from root-level global flags.
+// This is a modified version of cobra's default usage template.
+var chaosSubcmdUsageTemplate = `Usage:{{if .Runnable}}
+  {{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
+  {{.CommandPath}} [command]{{end}}{{if gt (len .Aliases) 0}}
+
+Aliases:
+  {{.NameAndAliases}}{{end}}{{if .HasExample}}
+
+Examples:
+{{.Example}}{{end}}{{if .HasAvailableSubCommands}}{{$cmds := .Commands}}{{if eq (len .Groups) 0}}
+
+Available Commands:{{range $cmds}}{{if (or .IsAvailableCommand (eq .Name "help"))}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{else}}{{range $group := .Groups}}
+
+{{.Title}}{{range $cmds}}{{if (and (eq .GroupID $group.ID) (or .IsAvailableCommand (eq .Name "help")))}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if not .AllChildCommandsHaveGroup}}
+
+Additional Commands:{{range $cmds}}{{if (and (eq .GroupID "") (or .IsAvailableCommand (eq .Name "help")))}}
+  {{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
+
+Flags:
+{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if chaosFlags .}}
+
+Chaos Flags:
+{{chaosFlags . | trimTrailingWhitespaces}}{{end}}{{if nonChaosGlobalFlags .}}
+
+Global Flags:
+{{nonChaosGlobalFlags . | trimTrailingWhitespaces}}{{end}}{{if .HasHelpSubCommands}}
+
+Additional help topics:{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
+  {{rpad .CommandPath .CommandPathPadding}} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
+
+Use "{{.CommandPath}} [command] --help" for more information about a command.{{end}}
+`
 
 // buildChaosCmd creates the root chaos command
 func (cr *commandRegistry) buildChaosCmd() *cobra.Command {
@@ -93,12 +134,12 @@ Global flags control the duration and cleanup behavior of all chaos commands.
 	}
 
 	// Add global flags
-	chaosCmd.PersistentFlags().DurationVar(&chaosWaitBeforeCleanup,
-		"wait-before-cleanup", 5*time.Minute,
-		"time to wait before cleaning up the failure")
+	chaosCmd.PersistentFlags().DurationVar(&chaosWaitBeforeRecover,
+		"wait-before-recover", 5*time.Minute,
+		"time to wait before recovering from the failure")
 	chaosCmd.PersistentFlags().BoolVar(&chaosRunForever,
 		"run-forever", false,
-		"if set, takes precedence over --wait-before-cleanup. On graceful shutdown, cleans up the injected failure")
+		"if set, takes precedence over --wait-before-recover. On graceful shutdown, cleans up the injected failure")
 	chaosCmd.PersistentFlags().StringVar(&chaosCertsDir,
 		"certs-dir", install.CockroachNodeCertsDir,
 		"local path to certs directory for secure clusters")
@@ -113,6 +154,7 @@ Global flags control the duration and cleanup behavior of all chaos commands.
   - inject: runs only the inject phase (activates the failure)
   - recover: runs only the recover phase (removes the failure)
   - cleanup: runs only the cleanup phase (removes failure dependencies)
+  - inject-recover: runs inject, waits for --wait-before-recover or --run-forever, then recovers
 Default: all`)
 	chaosCmd.PersistentFlags().BoolVar(&verbose,
 		"verbose", false,
@@ -121,6 +163,39 @@ Default: all`)
 	// Add subcommands
 	chaosCmd.AddCommand(cr.buildChaosNetworkPartitionCmd())
 	chaosCmd.AddCommand(cr.buildChaosNetworkLatencyCmd())
+	chaosCmd.AddCommand(cr.buildChaosDiskStallCmd())
+	chaosCmd.AddCommand(cr.buildChaosProcessKillCmd())
+	chaosCmd.AddCommand(cr.buildChaosResetVMCmd())
+
+	// Collect chaos persistent flag names so we can separate them from
+	// root-level global flags in the help output.
+	chaosFlagNames := make(map[string]bool)
+	chaosCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+		chaosFlagNames[f.Name] = true
+	})
+
+	cobra.AddTemplateFunc("chaosFlags", func(cmd *cobra.Command) string {
+		fs := pflag.NewFlagSet("chaos", pflag.ContinueOnError)
+		cmd.InheritedFlags().VisitAll(func(f *pflag.Flag) {
+			if chaosFlagNames[f.Name] {
+				fs.AddFlag(f)
+			}
+		})
+		return fs.FlagUsages()
+	})
+	cobra.AddTemplateFunc("nonChaosGlobalFlags", func(cmd *cobra.Command) string {
+		fs := pflag.NewFlagSet("global", pflag.ContinueOnError)
+		cmd.InheritedFlags().VisitAll(func(f *pflag.Flag) {
+			if !chaosFlagNames[f.Name] {
+				fs.AddFlag(f)
+			}
+		})
+		return fs.FlagUsages()
+	})
+
+	for _, sub := range chaosCmd.Commands() {
+		sub.SetUsageTemplate(chaosSubcmdUsageTemplate)
+	}
 
 	return chaosCmd
 }
@@ -145,16 +220,18 @@ func getGlobalChaosOpts() (GlobalChaosOpts, error) {
 	}
 
 	return GlobalChaosOpts{
-		WaitBeforeCleanup: chaosWaitBeforeCleanup,
+		WaitBeforeRecover: chaosWaitBeforeRecover,
 		RunForever:        chaosRunForever,
 		Stage:             stage,
 	}, nil
 }
 
-// getClusterOptions returns cluster options for creating a failer
-func getClusterOptions() []failures.ClusterOptionFunc {
+// getClusterOptions returns cluster options for creating a failer.
+// The secure parameter should be the computed Secure value from the cluster,
+// which accounts for ephemeral project defaults.
+func getClusterOptions(secure bool) []failures.ClusterOptionFunc {
 	opts := []failures.ClusterOptionFunc{
-		failures.Secure(!insecure),
+		failures.Secure(secure),
 		failures.LocalCertsPath(chaosCertsDir),
 	}
 	if chaosReplicationFactor > 0 {
@@ -229,6 +306,8 @@ func runFailureLifecycle(
 		return runRecoverStage(ctx, failer, args)
 	case StageCleanup:
 		return runCleanupStage(ctx, failer, args)
+	case StageInjectRecover:
+		return runInjectRecoverStage(ctx, failer, args, opts)
 	case StageAll:
 		return runFullLifecycle(ctx, failer, args, opts)
 	default:
@@ -299,6 +378,29 @@ func runCleanupStage(
 	return nil
 }
 
+// runInjectRecoverStage runs inject, waits for the configured duration or interrupt,
+// then recovers. This is useful when setup has already been run separately and cleanup
+// will be run separately afterward.
+func runInjectRecoverStage(
+	ctx context.Context, failer *failures.Failer, args failures.FailureArgs, opts GlobalChaosOpts,
+) error {
+	// Inject phase
+	if err := runInjectStage(ctx, failer, args); err != nil {
+		return err
+	}
+
+	// Wait phase
+	waitForDurationOrInterrupt(opts)
+
+	// Recover phase
+	if err := runRecoverStage(ctx, failer, args); err != nil {
+		return err
+	}
+
+	config.Logger.Printf("Inject-recover stage completed successfully")
+	return nil
+}
+
 // runFullLifecycle executes the complete failure lifecycle:
 // Setup → Inject → Wait → Recover → Cleanup
 func runFullLifecycle(
@@ -326,19 +428,7 @@ func runFullLifecycle(
 	}
 
 	// Wait phase
-	if opts.RunForever {
-		config.Logger.Printf("Failure injected. Waiting for interrupt (Ctrl+C)...")
-		<-waitForInterrupt()
-		config.Logger.Printf("Interrupt received. Beginning recovery...")
-	} else {
-		config.Logger.Printf("Failure injected. Waiting %s before recovery...", opts.WaitBeforeCleanup)
-		select {
-		case <-time.After(opts.WaitBeforeCleanup):
-			config.Logger.Printf("Wait period complete. Beginning recovery...")
-		case <-waitForInterrupt():
-			config.Logger.Printf("Interrupt received. Beginning recovery...")
-		}
-	}
+	waitForDurationOrInterrupt(opts)
 
 	// Recover phase
 	if err := runRecoverStage(ctx, failer, args); err != nil {
@@ -355,6 +445,24 @@ func runFullLifecycle(
 	return nil
 }
 
+// waitForDurationOrInterrupt waits for the configured duration or until an interrupt signal
+// is received, whichever comes first. If RunForever is set, it waits indefinitely until interrupted.
+func waitForDurationOrInterrupt(opts GlobalChaosOpts) {
+	if opts.RunForever {
+		config.Logger.Printf("Failure injected. Waiting for interrupt (Ctrl+C)...")
+		<-waitForInterrupt()
+		config.Logger.Printf("Interrupt received. Beginning recovery...")
+	} else {
+		config.Logger.Printf("Failure injected. Waiting %s before recovery...", opts.WaitBeforeRecover)
+		select {
+		case <-time.After(opts.WaitBeforeRecover):
+			config.Logger.Printf("Wait period complete. Beginning recovery...")
+		case <-waitForInterrupt():
+			config.Logger.Printf("Interrupt received. Beginning recovery...")
+		}
+	}
+}
+
 // waitForInterrupt returns a channel that receives a signal when SIGINT or SIGTERM is received
 func waitForInterrupt() <-chan os.Signal {
 	sigCh := make(chan os.Signal, 1)
@@ -362,52 +470,44 @@ func waitForInterrupt() <-chan os.Signal {
 	return sigCh
 }
 
-// validateClusterAndNodes validates that:
-// 1. The cluster exists
-// 2. The source and destination nodes are valid for the cluster
-func validateClusterAndNodes(clusterName string, srcNodes, destNodes install.Nodes) error {
-	// Get cluster to validate it exists and get node count
-	c, err := roachprod.GetClusterFromCache(
+// getCluster retrieves the cluster from the cache using the global isSecure option.
+// This ensures ephemeral clusters in cockroach-ephemeral project default to insecure mode.
+func getCluster(clusterName string) (*install.SyncedCluster, error) {
+	return roachprod.GetClusterFromCache(
 		config.Logger,
 		clusterName,
-		install.SimpleSecureOption(!insecure),
+		isSecure,
 	)
-	if err != nil {
-		return errors.Wrapf(err, "cluster %q not found", clusterName)
-	}
-
-	// Validate source nodes
-	if err := validateNodesInCluster(c, srcNodes, "source"); err != nil {
-		return err
-	}
-
-	// Validate destination nodes
-	if err := validateNodesInCluster(c, destNodes, "destination"); err != nil {
-		return err
-	}
-
-	return nil
 }
 
-// validateNodesInCluster validates that all nodes are within the cluster's range
-func validateNodesInCluster(c *install.SyncedCluster, nodes install.Nodes, name string) error {
+// validateNodesInCluster validates that the cluster exists and all provided nodes
+// are within the cluster's valid range. The name parameter is used in error messages
+// to describe which node list failed validation (e.g., "source", "destination", "target").
+// Returns the cluster so callers can access the computed Secure value.
+func validateNodesInCluster(
+	clusterName string, nodes install.Nodes, name string,
+) (*install.SyncedCluster, error) {
 	if len(nodes) == 0 {
-		return errors.Newf("%s nodes cannot be empty", name)
+		return nil, errors.Newf("%s nodes cannot be empty", name)
 	}
 
-	clusterNodes := c.Nodes
-	if len(clusterNodes) == 0 {
-		return errors.Newf("cluster has no nodes")
+	c, err := getCluster(clusterName)
+	if err != nil {
+		return nil, errors.Wrapf(err, "cluster %q not found", clusterName)
 	}
 
-	maxNode := clusterNodes[len(clusterNodes)-1]
+	if len(c.Nodes) == 0 {
+		return nil, errors.Newf("cluster has no nodes")
+	}
+
+	maxNode := c.Nodes[len(c.Nodes)-1]
 	for _, n := range nodes {
 		if n < 1 || n > maxNode {
-			return errors.Newf("%s node %d is out of range (cluster has nodes 1-%d)",
+			return nil, errors.Newf("%s node %d is out of range (cluster has nodes 1-%d)",
 				name, n, maxNode)
 		}
 	}
-	return nil
+	return c, nil
 }
 
 // formatNodeList formats a node list for display

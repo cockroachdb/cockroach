@@ -72,6 +72,9 @@ type tableWriterBase struct {
 	// indexBytesWritten tracks the number of primary and secondary index bytes
 	// written by this tableWriterBase so far.
 	indexBytesWritten int64
+	// kvCPUTime tracks the cumulative CPU time (in nanoseconds) that KV
+	// reported in BatchResponse headers during the execution of this table writer.
+	kvCPUTime int64
 	// rowsWrittenLimit if positive indicates that
 	// `transaction_rows_written_err` is enabled. The limit will be checked in
 	// finalize() before deciding whether it is safe to auto commit (if auto
@@ -89,6 +92,8 @@ type tableWriterBase struct {
 	// originally written with before being replicated via Logical Data
 	// Replication.
 	originTimestamp hlc.Timestamp
+	// workloadID is the statement fingerprint ID or job ID for ASH sampling.
+	workloadID uint64
 }
 
 var maxBatchBytes = settings.RegisterByteSizeSetting(
@@ -116,6 +121,7 @@ func (tb *tableWriterBase) init(
 		tb.deadlockTimeout = evalCtx.SessionData().DeadlockTimeout
 		tb.originID = evalCtx.SessionData().OriginIDForLogicalDataReplication
 		tb.originTimestamp = evalCtx.SessionData().OriginTimestampForLogicalDataReplication
+		tb.workloadID = evalCtx.WorkloadID
 	}
 	tb.forceProductionBatchSizes = evalCtx != nil && evalCtx.TestingKnobs.ForceProductionValues
 	tb.maxBatchSize = mutations.MaxBatchSize(tb.forceProductionBatchSizes)
@@ -148,6 +154,9 @@ func (tb *tableWriterBase) flushAndStartNewBatch(ctx context.Context) error {
 	}
 	if err := tb.tryDoResponseAdmission(ctx); err != nil {
 		return err
+	}
+	if br := tb.b.RawResponse(); br != nil && br.CPUTime > 0 {
+		tb.kvCPUTime += br.CPUTime
 	}
 	tb.rowsWritten += int64(tb.currentBatchSize)
 	// The mutation operators add one request to the KV batch for each index
@@ -189,6 +198,9 @@ func (tb *tableWriterBase) finalize(ctx context.Context) (err error) {
 	if err != nil {
 		return row.ConvertBatchError(ctx, tb.desc, tb.b, false /* alwaysConvertCondFailed */)
 	}
+	if br := tb.b.RawResponse(); br != nil && br.CPUTime > 0 {
+		tb.kvCPUTime += br.CPUTime
+	}
 	return tb.tryDoResponseAdmission(ctx)
 }
 
@@ -202,6 +214,7 @@ func (tb *tableWriterBase) tryDoResponseAdmission(ctx context.Context) error {
 			TenantID:   roachpb.SystemTenantID,
 			Priority:   admissionpb.WorkPriority(requestAdmissionHeader.Priority),
 			CreateTime: requestAdmissionHeader.CreateTime,
+			WorkloadID: tb.workloadID,
 		}
 		if _, err := responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
 			return err

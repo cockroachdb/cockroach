@@ -138,11 +138,11 @@ func (a *Cache) GetAuthInfo(
 		if err := txn.Descriptors().MaybeSetReplicationSafeTS(ctx, txn.KV()); err != nil {
 			return err
 		}
-		usersTableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.UsersTableID)
+		usersTableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutLockedTimestamp().Get().Table(ctx, keys.UsersTableID)
 		if err != nil {
 			return err
 		}
-		roleOptionsTableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.RoleOptionsTableID)
+		roleOptionsTableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutLockedTimestamp().Get().Table(ctx, keys.RoleOptionsTableID)
 		return err
 	})
 	if err != nil {
@@ -306,7 +306,7 @@ func (a *Cache) GetDefaultSettings(
 	err = db.DescsTxn(ctx, func(
 		ctx context.Context, txn descs.Txn,
 	) error {
-		dbRoleSettingsTableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.DatabaseRoleSettingsTableID)
+		dbRoleSettingsTableDesc, err = txn.Descriptors().ByIDWithLeased(txn.KV()).WithoutLockedTimestamp().Get().Table(ctx, keys.DatabaseRoleSettingsTableID)
 		if err != nil {
 			return err
 		}

@@ -63,6 +63,16 @@ var IndexBackfillCheckpointInterval = settings.RegisterDurationSetting(
 	30*time.Second,
 )
 
+// IndexBackfillProgressInterval is the duration between backfill progress
+// fraction updates. This is distinct from the checkpoint interval which
+// controls how often the backfill progress details are persisted.
+var IndexBackfillProgressInterval = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"bulkio.index_backfill.progress_interval",
+	"the amount of time between index backfill progress fraction updates",
+	10*time.Second,
+)
+
 // MutationFilter is the type of a simple predicate on a mutation.
 type MutationFilter func(catalog.Mutation) bool
 
@@ -162,10 +172,6 @@ func (cb *ColumnBackfiller) init(
 		return err
 	}
 
-	// Create a bound account associated with the column backfiller.
-	if mon == nil {
-		return errors.AssertionFailedf("no memory monitor linked to ColumnBackfiller during init")
-	}
 	cb.mon = mon
 	cb.rowMetrics = rowMetrics
 
@@ -962,6 +968,16 @@ func (ib *IndexBackfiller) ContainsInvertedIndex() bool {
 	return false
 }
 
+// ContainsUniqueIndex returns true if backfilling a unique index.
+func (ib *IndexBackfiller) ContainsUniqueIndex() bool {
+	for _, idx := range ib.added {
+		if idx.IsUnique() {
+			return true
+		}
+	}
+	return false
+}
+
 // InitForLocalUse initializes an IndexBackfiller for use during local execution
 // within a transaction. In this case, the entire backfill process is occurring
 // on the gateway as part of the user's transaction.
@@ -977,9 +993,6 @@ func (ib *IndexBackfiller) InitForLocalUse(
 	mon *mon.BytesMonitor,
 	vecIndexManager *vecindex.Manager,
 ) (retErr error) {
-	if mon == nil {
-		return errors.AssertionFailedf("memory monitor must be provided")
-	}
 	defer func() {
 		if retErr != nil {
 			mon.Stop(ctx)
@@ -1134,9 +1147,6 @@ func (ib *IndexBackfiller) InitForDistributedUse(
 	sourceIndexID catid.IndexID,
 	mon *mon.BytesMonitor,
 ) (retErr error) {
-	if mon == nil {
-		return errors.AssertionFailedf("memory monitor must be provided")
-	}
 	defer func() {
 		if retErr != nil {
 			mon.Stop(ctx)
@@ -1462,7 +1472,8 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 				// Explicitly mark with user errors for codes that we know
 				// cannot be retried.
 				if code := pgerror.GetPGCode(err); code == pgcode.FeatureNotSupported ||
-					code == pgcode.InvalidParameterValue {
+					code == pgcode.InvalidParameterValue ||
+					code == pgcode.InvalidTextRepresentation {
 					return scerrors.SchemaChangerUserError(err)
 				}
 				return err
@@ -1551,10 +1562,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			}
 
 			vectorValue := tree.MustBeDPGVector(ib.rowVals[vectorIndexHelper.vectorOrd]).T
-			encodedVector, err := vector.Encode([]byte{}, vectorValue)
-			if err != nil {
-				return nil, nil, memUsedPerChunk, err
-			}
+			encodedVector := vector.Encode([]byte{}, vectorValue)
 			ib.vectorEncodingHelper.QuantizedVecs[indexID] = tree.NewDBytes(tree.DBytes(encodedVector))
 			ib.vectorEncodingHelper.PartitionKeys[indexID] = tree.NewDInt(tree.DInt(cspann.RootKey))
 		}

@@ -14,9 +14,11 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
@@ -908,6 +910,122 @@ func TestVerifyLibraries(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestStartFlagsInjection tests that --start-env and --start-setting flags
+// correctly inject values into ClusterSettings before cluster start.
+func TestStartFlagsInjection(t *testing.T) {
+	// Save original flag values and restore after test
+	origStartEnv := roachtestflags.StartEnv
+	origStartSettings := roachtestflags.StartSettings
+	defer func() {
+		roachtestflags.StartEnv = origStartEnv
+		roachtestflags.StartSettings = origStartSettings
+	}()
+
+	t.Run("env_injection", func(t *testing.T) {
+		// Simulate flag values
+		roachtestflags.StartEnv = []string{"GODEBUG=gctrace=1", "COCKROACH_SCAN_INTERVAL=100ms"}
+		roachtestflags.StartSettings = nil
+
+		// Create settings with some pre-existing env vars
+		settings := install.ClusterSettings{
+			Env:             []string{"EXISTING_VAR=existing"},
+			ClusterSettings: make(map[string]string),
+		}
+
+		// Apply the same injection logic as StartE()
+		if len(roachtestflags.StartEnv) > 0 {
+			settings.Env = append(settings.Env, roachtestflags.StartEnv...)
+		}
+		for name, value := range roachtestflags.StartSettings {
+			settings.ClusterSettings[name] = value
+		}
+
+		// Verify env vars are appended after existing
+		require.Equal(t, []string{
+			"EXISTING_VAR=existing",
+			"GODEBUG=gctrace=1",
+			"COCKROACH_SCAN_INTERVAL=100ms",
+		}, settings.Env)
+	})
+
+	t.Run("settings_injection", func(t *testing.T) {
+		// Simulate flag values
+		roachtestflags.StartEnv = nil
+		roachtestflags.StartSettings = map[string]string{
+			"kv.range_split.by_load_enabled":         "false",
+			"sql.stats.automatic_collection.enabled": "false",
+		}
+
+		// Create settings with an existing cluster setting
+		settings := install.ClusterSettings{
+			Env:             nil,
+			ClusterSettings: map[string]string{"existing.setting": "existing_value"},
+		}
+
+		// Apply the same injection logic as StartE()
+		if len(roachtestflags.StartEnv) > 0 {
+			settings.Env = append(settings.Env, roachtestflags.StartEnv...)
+		}
+		for name, value := range roachtestflags.StartSettings {
+			settings.ClusterSettings[name] = value
+		}
+
+		// Verify cluster settings are merged
+		require.Equal(t, "existing_value", settings.ClusterSettings["existing.setting"])
+		require.Equal(t, "false", settings.ClusterSettings["kv.range_split.by_load_enabled"])
+		require.Equal(t, "false", settings.ClusterSettings["sql.stats.automatic_collection.enabled"])
+	})
+
+	t.Run("both_injection", func(t *testing.T) {
+		// Simulate both flags
+		roachtestflags.StartEnv = []string{"MY_VAR=value"}
+		roachtestflags.StartSettings = map[string]string{"my.setting": "my_value"}
+
+		settings := install.ClusterSettings{
+			Env:             nil,
+			ClusterSettings: make(map[string]string),
+		}
+
+		// Apply the same injection logic as StartE()
+		if len(roachtestflags.StartEnv) > 0 {
+			settings.Env = append(settings.Env, roachtestflags.StartEnv...)
+		}
+		for name, value := range roachtestflags.StartSettings {
+			settings.ClusterSettings[name] = value
+		}
+
+		require.Equal(t, []string{"MY_VAR=value"}, settings.Env)
+		require.Equal(t, "my_value", settings.ClusterSettings["my.setting"])
+	})
+
+	t.Run("empty_flags_no_effect", func(t *testing.T) {
+		// No flags set
+		roachtestflags.StartEnv = nil
+		roachtestflags.StartSettings = nil
+
+		settings := install.ClusterSettings{
+			Env:             []string{"ORIGINAL=value"},
+			ClusterSettings: map[string]string{"original.setting": "original"},
+		}
+		origEnvLen := len(settings.Env)
+		origSettingsLen := len(settings.ClusterSettings)
+
+		// Apply the same injection logic as StartE()
+		if len(roachtestflags.StartEnv) > 0 {
+			settings.Env = append(settings.Env, roachtestflags.StartEnv...)
+		}
+		for name, value := range roachtestflags.StartSettings {
+			settings.ClusterSettings[name] = value
+		}
+
+		// Original values unchanged, no new additions
+		require.Equal(t, origEnvLen, len(settings.Env))
+		require.Equal(t, origSettingsLen, len(settings.ClusterSettings))
+		require.Equal(t, "ORIGINAL=value", settings.Env[0])
+		require.Equal(t, "original", settings.ClusterSettings["original.setting"])
+	})
 }
 
 func TestRandomArchProbabilities(t *testing.T) {

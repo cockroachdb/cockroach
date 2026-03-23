@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -64,11 +63,7 @@ type rowLevelTTLTestJobTestHelper struct {
 }
 
 func newRowLevelTTLTestJobTestHelper(
-	t *testing.T,
-	testingKnobs *sql.TTLTestingKnobs,
-	testMultiTenant bool,
-	numNodes int,
-	runMinActiveVersion bool,
+	t *testing.T, testingKnobs *sql.TTLTestingKnobs, numNodes int, runMinActiveVersion bool,
 ) (*rowLevelTTLTestJobTestHelper, func()) {
 	th := &rowLevelTTLTestJobTestHelper{
 		env: jobstest.NewJobSchedulerTestEnv(
@@ -91,6 +86,10 @@ func newRowLevelTTLTestJobTestHelper(
 		return st
 	}
 
+	jobsInterval := 5 * time.Second
+	if skip.Duress() {
+		jobsInterval = 30 * time.Second
+	}
 	requestFilter, _ := testutils.TestingRequestFilterRetryTxnWithPrefix(t, "ttljob-", 1)
 	baseTestingKnobs := base.TestingKnobs{
 		Server: &server.TestingKnobs{
@@ -105,6 +104,10 @@ func newRowLevelTTLTestJobTestHelper(
 		},
 		JobsTestingKnobs: &jobs.TestingKnobs{
 			JobSchedulerEnv: th.env,
+			IntervalOverrides: jobs.TestingIntervalOverrides{
+				Adopt:  &jobsInterval,
+				Cancel: &jobsInterval,
+			},
 			TakeOverJobsScheduling: func(fn func(ctx context.Context, maxSchedules int64) error) {
 				th.executeSchedules = func() error {
 					th.env.SetTime(timeutil.Now().Add(time.Hour * 24))
@@ -124,33 +127,15 @@ func newRowLevelTTLTestJobTestHelper(
 	testCluster := serverutils.StartCluster(t, numNodes, base.TestClusterArgs{
 		ReplicationMode: replicationMode,
 		ServerArgs: base.TestServerArgs{
-			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109391),
 			Settings:          makeSettings(),
 			Knobs:             baseTestingKnobs,
 			InsecureWebAccess: true,
 		},
 	})
 	th.testCluster = testCluster
-	ts := testCluster.Server(0)
-	// As `ALTER TABLE ... SPLIT AT ...` is not supported in multi-tenancy, we
-	// do not run those tests.
-	if testMultiTenant {
-		tenantServer, db := serverutils.StartTenant(
-			t, ts, base.TestTenantArgs{
-				Settings:     makeSettings(),
-				TenantID:     serverutils.TestTenantID(),
-				TestingKnobs: baseTestingKnobs,
-			},
-		)
-		th.sqlDB = sqlutils.MakeSQLRunner(db)
-		th.server = tenantServer
-	} else {
-		db := ts.SystemLayer().SQLConn(t)
-		th.sqlDB = sqlutils.MakeSQLRunner(db)
-		th.server = ts
-	}
-
-	th.kvDB = ts.DB()
+	th.server = testCluster.ApplicationLayer(0)
+	th.sqlDB = sqlutils.MakeSQLRunner(th.server.SQLConn(t))
+	th.kvDB = testCluster.Server(0).DB()
 
 	return th, func() {
 		testCluster.Stopper().Stop(context.Background())
@@ -334,7 +319,7 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRows(
 			// Load completed spans from jobfrontier storage.
 			if expectedJobSpanCount > 0 {
 				ctx := context.Background()
-				internalDB := h.testCluster.ApplicationLayer(0).InternalDB().(isql.DB)
+				internalDB := h.server.InternalDB().(isql.DB)
 
 				var completedSpans []roachpb.Span
 				err := internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
@@ -414,9 +399,8 @@ func TestRowLevelTTLNoTestingKnobs(t *testing.T) {
 		t.Run(tc.desc, func(t *testing.T) {
 			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
 				t,
-				nil,  /* SQLTestingKnobs */
-				true, /* testMultiTenant */
-				1,    /* numNodes */
+				nil, /* SQLTestingKnobs */
+				1,   /* numNodes */
 				tc.runMinActiveVersion,
 			)
 			defer cleanupFunc()
@@ -479,7 +463,6 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 					PreDeleteChangeTableVersion: tc.preDeleteChangeTableVersion,
 					PreSelectStatement:          tc.preSelectStatement,
 				},
-				false, /* testMultiTenant */
 				1,     /* numNodes */
 				false, /* runMinActiveVersion */
 			)
@@ -512,8 +495,7 @@ func TestRowLevelTTLAlterTypeInPrimaryKey(t *testing.T) {
 					// pre-select ALTER TYPE statement would hang forever.
 					PreSelectStatement: `ALTER TYPE defaultdb.public.typ ADD VALUE 'c'`,
 				},
-				false, /* testMultiTenant */
-				1,     /* numNodes */
+				1, /* numNodes */
 				tc.runMinActiveVersion,
 			)
 			defer cleanupFunc()
@@ -572,7 +554,6 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 				&sql.TTLTestingKnobs{
 					AOSTDuration: &zeroDuration,
 				},
-				true,  /* testMultiTenant */
 				1,     /* numNodes */
 				false, /* runMinActiveVersion */
 			)
@@ -631,7 +612,6 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 						ReturnStatsError:          true,
 						ExpectedNumSpanPartitions: numRanges,
 					},
-					false, /* testMultiTenant */ // SHOW RANGES FROM TABLE does not work with multi-tenant
 					numNodes,
 					runAtMinClusterVersion,
 				)
@@ -774,14 +754,6 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 				// test is wrapping JSON objects in multiple single quotes which
 				// causes parsing errors.
 				return false
-			case types.CollatedStringFamily:
-				if typ.Oid() == oidext.T_citext || typ.Oid() == oidext.T__citext {
-					// CITEXT is only supported in 25.3+, so if we happen to run
-					// the test in the mixed version variant, we can't use the
-					// type.
-					return int(clusterversion.MinSupported) >= int(clusterversion.V25_3)
-				}
-				return true
 			case types.LTreeFamily:
 				// LTREE is only supported in 25.4+, so if we happen to run the
 				// test in the mixed version variant, we can't use the type.
@@ -803,7 +775,6 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 		numExpiredRows       int
 		numNonExpiredRows    int
 		numSplits            int
-		forceNonMultiTenant  bool
 		expirationExpression string
 		addRow               func(th *rowLevelTTLTestJobTestHelper, t *testing.T, createTableStmt *tree.CreateTable, ts time.Time)
 	}
@@ -832,9 +803,8 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 				`CREATE TABLE tbl2 (id INT PRIMARY KEY)`,
 				`ALTER TABLE tbl2 SPLIT AT VALUES (1)`,
 			},
-			numExpiredRows:      1001,
-			numNonExpiredRows:   5,
-			forceNonMultiTenant: true,
+			numExpiredRows:    1001,
+			numNonExpiredRows: 5,
 		},
 		{
 			desc: "one column pk with statistics",
@@ -1047,7 +1017,6 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 				&sql.TTLTestingKnobs{
 					AOSTDuration: &zeroDuration,
 				},
-				tc.numSplits == 0 && !tc.forceNonMultiTenant, // SPLIT AT does not work with multi-tenant
 				1, /* numNodes */
 				runAtMixedClusterVersion,
 			)
@@ -1150,7 +1119,6 @@ func TestRowLevelTTLCancelStats(t *testing.T) {
 			ReturnStatsError: true,
 			ExtraStatsQuery:  "SELECT pg_sleep(100)",
 		},
-		false, /* testMultiTenant */
 		1,     /* numNodes */
 		false, /* runMinActiveVersion */
 	)
@@ -1193,8 +1161,7 @@ func TestOutboundForeignKey(t *testing.T) {
 					AOSTDuration:     &zeroDuration,
 					ReturnStatsError: true,
 				},
-				false, /* testMultiTenant */
-				1,     /* numNodes */
+				1, /* numNodes */
 				tc.runMinActiveVersion,
 			)
 			defer cleanupFunc()
@@ -1225,7 +1192,6 @@ func TestInboundForeignKeyOnDeleteCascade(t *testing.T) {
 			AOSTDuration:     &zeroDuration,
 			ReturnStatsError: true,
 		},
-		false, /* testMultiTenant */
 		1,     /* numNodes */
 		false, /* runMinActiveVersion */
 	)
@@ -1258,7 +1224,6 @@ func TestInboundForeignKeyOnDeleteRestrict(t *testing.T) {
 			AOSTDuration:     &zeroDuration,
 			ReturnStatsError: true,
 		},
-		false, /* testMultiTenant */
 		1,     /* numNodes */
 		false, /* runMinActiveVersion */
 	)
@@ -1291,7 +1256,6 @@ func TestInboundForeignKeyOnDeleteRestrictNull(t *testing.T) {
 			AOSTDuration:     &zeroDuration,
 			ReturnStatsError: true,
 		},
-		false, /* testMultiTenant */
 		1,     /* numNodes */
 		false, /* runMinActiveVersion */
 	)
@@ -1358,7 +1322,6 @@ func TestMakeTTLJobDescription(t *testing.T) {
 				&sql.TTLTestingKnobs{
 					AOSTDuration: &zeroDuration,
 				},
-				false, /* testMultiTenant */
 				1,     /* numNodes */
 				false, /* runMinActiveVersion */
 			)
@@ -1371,6 +1334,154 @@ func TestMakeTTLJobDescription(t *testing.T) {
 			require.Len(t, rows, 1)
 			row := rows[0]
 			require.Contains(t, row[0], fmt.Sprintf("LIMIT %d", testCase.jobSelectBatchSize))
+		})
+	}
+}
+
+// TestRowLevelTTLJobCancelPrivileges verifies the privileges required to cancel
+// TTL jobs. TTL jobs are owned by the user who created the schedule (not the
+// node user), so the standard job privilege model applies:
+//   - Admin users can cancel any TTL job
+//   - Users with CONTROLJOB privilege can cancel any TTL job
+//   - The job owner can cancel their own job
+//   - Users without privileges cannot cancel TTL jobs
+func TestRowLevelTTLJobCancelPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "job adoption interval is longer under duress, so the test is too slow")
+
+	type testCase struct {
+		name string
+		// cancelUser is the user that will attempt to cancel the job.
+		cancelUser string
+		// cancelUserPrivileges are the privileges to grant to cancelUser.
+		cancelUserPrivileges []string
+		// expectCancel indicates whether the cancel should succeed.
+		expectCancel bool
+	}
+
+	testCases := []testCase{
+		{
+			name:                 "admin can cancel any TTL job",
+			cancelUser:           "adminuser",
+			cancelUserPrivileges: []string{"GRANT admin TO adminuser"},
+			expectCancel:         true,
+		},
+		{
+			name:                 "user with CONTROLJOB can cancel any TTL job",
+			cancelUser:           "controljobuser",
+			cancelUserPrivileges: []string{"GRANT SYSTEM CONTROLJOB TO controljobuser"},
+			expectCancel:         true,
+		},
+		{
+			name:                 "job owner can cancel own job",
+			cancelUser:           "ttluser",
+			cancelUserPrivileges: nil, // ttluser owns the job, which is sufficient
+			expectCancel:         true,
+		},
+		{
+			name:                 "user without privileges cannot cancel TTL job",
+			cancelUser:           "noprivuser",
+			cancelUserPrivileges: nil,
+			expectCancel:         false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Use a channel to signal when the job has started.
+			jobStarted := make(chan struct{})
+
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+				t,
+				&sql.TTLTestingKnobs{
+					AOSTDuration: &zeroDuration,
+					// Use BeforeProcessorStart to synchronize with the job. The hook
+					// signals that the job has started, then blocks until the job's
+					// context is canceled (which happens when the job is canceled).
+					BeforeProcessorStart: func(ctx context.Context) error {
+						close(jobStarted)
+						<-ctx.Done()
+						return ctx.Err()
+					},
+				},
+				1,     /* numNodes */
+				false, /* runMinActiveVersion */
+			)
+			defer cleanupFunc()
+
+			// Create ttluser who will own the table/schedule.
+			th.sqlDB.Exec(t, `CREATE USER ttluser WITH PASSWORD 'password'`)
+			th.sqlDB.Exec(t, `GRANT admin TO ttluser`)
+
+			// Create the cancel user if different from ttluser.
+			if tc.cancelUser != "ttluser" {
+				th.sqlDB.Exec(t, fmt.Sprintf(`CREATE USER %s WITH PASSWORD 'password'`, tc.cancelUser))
+			}
+
+			// Grant privileges to the cancel user.
+			for _, priv := range tc.cancelUserPrivileges {
+				th.sqlDB.Exec(t, priv)
+			}
+
+			// Connect as ttluser and create a table with TTL.
+			ttlUserConn := th.server.SQLConn(t, serverutils.UserPassword("ttluser", "password"), serverutils.ClientCerts(false))
+			ttlUserDB := sqlutils.MakeSQLRunner(ttlUserConn)
+			ttlUserDB.Exec(t, `CREATE TABLE t (
+				id INT PRIMARY KEY,
+				expire_at TIMESTAMPTZ
+			) WITH (ttl_expiration_expression = 'expire_at')`)
+			ttlUserDB.Exec(t, `INSERT INTO t (id, expire_at) VALUES (1, '2000-01-01')`)
+
+			// Revoke admin from ttluser now that the table is created.
+			th.sqlDB.Exec(t, `REVOKE admin FROM ttluser`)
+
+			// Execute the schedule to create a TTL job.
+			require.NoError(t, th.executeSchedules())
+
+			// Wait for the job to start and reach the synchronization point.
+			select {
+			case <-jobStarted:
+			case <-time.After(30 * time.Second):
+				t.Fatal("timed out waiting for TTL job to start")
+			}
+
+			// Find the job ID.
+			rows := th.sqlDB.QueryStr(t, `
+				SELECT job_id FROM [SHOW JOBS]
+				WHERE job_type = 'ROW LEVEL TTL' AND status = 'running'
+			`)
+			require.Len(t, rows, 1, "expected exactly one running TTL job")
+			jobID, err := strconv.ParseInt(rows[0][0], 10, 64)
+			require.NoError(t, err)
+
+			// Verify the job is owned by ttluser, not node.
+			var jobOwner string
+			th.sqlDB.QueryRow(t, `SELECT user_name FROM [SHOW JOBS] WHERE job_id = $1`, jobID).Scan(&jobOwner)
+			require.Equal(t, "ttluser", jobOwner, "TTL job should be owned by the user who created the schedule")
+
+			// Connect as the cancel user.
+			cancelConn := th.server.SQLConn(t, serverutils.UserPassword(tc.cancelUser, "password"), serverutils.ClientCerts(false))
+
+			// Attempt to cancel the job.
+			_, err = cancelConn.Exec(fmt.Sprintf(`CANCEL JOB %d`, jobID))
+
+			if tc.expectCancel {
+				require.NoError(t, err, "expected %s to be able to cancel the job", tc.cancelUser)
+
+				// Wait for the job to reach canceled status.
+				testutils.SucceedsWithin(t, func() error {
+					var status string
+					th.sqlDB.QueryRow(t, `SELECT status FROM [SHOW JOBS] WHERE job_id = $1`, jobID).Scan(&status)
+					if status != "canceled" {
+						return errors.Newf("job status is %q, waiting for 'canceled'", status)
+					}
+					return nil
+				}, 5*time.Minute)
+			} else {
+				require.Errorf(t, err, "expected %s to not be able to cancel the job", tc.cancelUser)
+				require.ErrorContains(t, err, "does not have privileges")
+			}
 		})
 	}
 }

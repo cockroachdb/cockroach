@@ -425,6 +425,9 @@ type ContextOptions struct {
 
 	// Locality stores the locality of this node.
 	Locality roachpb.Locality
+
+	// UseDRPC indicates if DRPC must be used for internode communication.
+	UseDRPC bool
 }
 
 // DefaultContextOptions are mostly used in tests.
@@ -458,6 +461,7 @@ func ServerContextOptionsFromBaseConfig(cfg *base.Config) ContextOptions {
 		AdvertiseAddrH:                 &cfg.AdvertiseAddrH,
 		SQLAdvertiseAddrH:              &cfg.SQLAdvertiseAddrH,
 		DisableTLSForHTTP:              cfg.DisableTLSForHTTP,
+		UseDRPC:                        cfg.UseDRPC,
 	}
 }
 
@@ -1393,7 +1397,7 @@ func (rpcCtx *Context) ConnHealth(
 		return nil
 	}
 
-	if !rpcbase.DRPCEnabled(context.Background(), rpcCtx.Settings) {
+	if !rpcCtx.UseDRPC {
 		return rpcCtx.grpcConnHealth(target, nodeID, class)
 	}
 	return rpcCtx.drpcConnHealth(target, nodeID, class)
@@ -1449,6 +1453,17 @@ func (rpcCtx *Context) GRPCDialOptions(
 	// backing a gRPC channel so onNetworkDial is a no-op.
 	onNetworkDial := func(conn net.Conn) {}
 	return rpcCtx.grpcDialOptionsInternal(ctx, target, class, transport, onNetworkDial)
+}
+
+// DRPCDialOptions is same as GRPCDialOptions but for drpc connections.
+func (rpcCtx *Context) DRPCDialOptions(
+	ctx context.Context, target string, class rpcbase.ConnectionClass,
+) ([]drpcclient.DialOption, error) {
+	transport := tcpTransport
+	if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
+		transport = loopbackTransport
+	}
+	return rpcCtx.drpcDialOptionsInternal(ctx, target, class, transport)
 }
 
 // grpcDialOptions produces dial options suitable for connecting to the given target and class.
@@ -1524,7 +1539,7 @@ func (rpcCtx *Context) GetBreakerForAddr(
 		Class:      class,
 	}
 
-	if !rpcbase.DRPCEnabled(context.Background(), rpcCtx.Settings) {
+	if !rpcCtx.UseDRPC {
 		return rpcCtx.grpcGetBreakerForAddr(k)
 	}
 	return rpcCtx.drpcGetBreakerForAddr(k)
@@ -2102,6 +2117,32 @@ func (rpcCtx *Context) grpcDialRaw(
 	return grpc.DialContext(ctx, target, dialOpts...)
 }
 
+// drpcDialRaw is similar to grpcDialRaw but for drpc connections.
+func (rpcCtx *Context) drpcDialRaw(
+	ctx context.Context,
+	target string,
+	class rpcbase.ConnectionClass,
+	additionalOpts ...drpcclient.DialOption,
+) (*drpcclient.ClientConn, error) {
+	transport := tcpTransport
+	if rpcCtx.ContextOptions.AdvertiseAddr == target && rpcCtx.canLoopbackDial() {
+		transport = loopbackTransport
+	}
+	drpcDialOpts, err := rpcCtx.drpcDialOptionsInternal(ctx, target, class, transport)
+	if err != nil {
+		return nil, err
+	}
+
+	drpcDialOpts = append(drpcDialOpts, additionalOpts...)
+
+	drpcConn, err := drpcclient.DialContext(ctx, target, drpcDialOpts...)
+	if err != nil {
+		return nil, err
+	}
+
+	return drpcclient.NewClientConnWithOptions(ctx, drpcConn, drpcDialOpts...)
+}
+
 // GRPCUnvalidatedDial uses GRPCDialNode and disables validation of the
 // node ID between client and server. This function should only be
 // used with the gossip client and CLI commands which can talk to any
@@ -2289,13 +2330,15 @@ func (rpcCtx *Context) NewHeartbeatService() *HeartbeatService {
 	}
 }
 
-type Dialbacker interface {
-	GRPCUnvalidatedDial(string, roachpb.Locality) *GRPCConnection
-	GRPCDialNode(string, roachpb.NodeID, roachpb.Locality, rpcbase.ConnectionClass) *GRPCConnection
-	grpcDialRaw(
-		context.Context, string, rpcbase.ConnectionClass, onDialFunc, ...grpc.DialOption,
-	) (*grpc.ClientConn, error)
-	wrapCtx(
+// Dialbacker is a generic interface for verifying dialback connectivity.
+// Protocol-specific adapters (GRPCDialbackAdapter, DRPCDialbackAdapter)
+// implement this interface, and the caller dispatches based on the active
+// protocol.
+type Dialbacker[Conn rpcConn] interface {
+	UnvalidatedDial(string, roachpb.Locality) *Connection[Conn]
+	DialNode(string, roachpb.NodeID, roachpb.Locality, rpcbase.ConnectionClass) *Connection[Conn]
+	DialRaw(ctx context.Context, target string, class rpcbase.ConnectionClass) error
+	WrapCtx(
 		ctx context.Context, target string, remoteNodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 	) context.Context
 }
@@ -2311,9 +2354,9 @@ type Dialbacker interface {
 //     attempt succeeded.
 //   - for a non-blocking ping, returns the health state of the system-class
 //     connection, with the exception of ErrNotHeartbeated, which maps to `nil`.
-func VerifyDialback(
+func VerifyDialback[Conn rpcConn](
 	ctx context.Context,
-	rpcCtx Dialbacker,
+	d Dialbacker[Conn],
 	request *PingRequest,
 	_ *PingResponse,
 	locality roachpb.Locality,
@@ -2338,12 +2381,14 @@ func VerifyDialback(
 	// check will return an error until the connection is re-established.
 	var connHealthErr error
 	if request.OriginNodeID == 0 {
-		// The incoming connection was initiated using rpcCtx.GRPCUnvalidatedDial,
-		// so we don't know the origin's NodeID and use gRPCUnvalidatedDial to
-		// inform the fast path as well.
-		connHealthErr = rpcCtx.GRPCUnvalidatedDial(target, roachpb.Locality{}).Health() // NB: dials SystemClass
+		// The incoming connection was initiated using UnvalidatedDial, so we
+		// don't know the origin's NodeID and use UnvalidatedDial to inform
+		// the fast path as well.
+		connHealthErr = d.UnvalidatedDial(target, roachpb.Locality{}).Health() // NB: dials SystemClass
 	} else {
-		connHealthErr = rpcCtx.GRPCDialNode(target, request.OriginNodeID, roachpb.Locality{}, rpcbase.SystemClass).Health()
+		connHealthErr = d.DialNode(
+			target, request.OriginNodeID, roachpb.Locality{}, rpcbase.SystemClass,
+		).Health()
 	}
 
 	// We have a successful connection so report success. Any ongoing attempts no
@@ -2357,28 +2402,26 @@ func VerifyDialback(
 			return nil
 		}
 		return connHealthErr
-	} else {
-		log.VEventf(ctx, 2, "unable to verify health on existing conn, trying dialback conn to %s, n%d mode %v, %v",
-			target, request.OriginNodeID, request.NeedsDialback, connHealthErr)
-
-		// Since we don't have a successful reverse connection, try and dial back
-		// manually. We don't use the regular dialer pool to avoid a circular dependency:
-		// Dialing through the pool starts with a BLOCKING connection, which the remote
-		// side would try to dial back, which would call into VerifyDialback for this
-		// connection again, etc, for an infinite loop of blocking connections.
-		// A throwaway connection keeps it simple.
-		ctx := rpcCtx.wrapCtx(ctx, target, request.OriginNodeID, rpcbase.SystemClass)
-		ctx = logtags.AddTag(ctx, "dialback", nil)
-		onNetworkDial := func(conn net.Conn) {}
-		conn, err := rpcCtx.grpcDialRaw(ctx, target, rpcbase.SystemClass, onNetworkDial, grpc.WithBlock())
-		if conn != nil { // NB: the nil check simplifies mocking in TestVerifyDialback
-			_ = conn.Close() // nolint:grpcconnclose
-		}
-		if err != nil {
-			log.Dev.Infof(ctx, "blocking dialback connection failed to %s, n%d, %v", target, request.OriginNodeID, err)
-			return err
-		}
-		log.VEventf(ctx, 2, "blocking dialback connection to n%d succeeded", request.OriginNodeID)
-		return nil
 	}
+
+	log.VEventf(ctx, 2,
+		"unable to verify health on existing conn, trying dialback conn to %s, n%d mode %v, %v",
+		target, request.OriginNodeID, request.NeedsDialback, connHealthErr)
+
+	// Since we don't have a successful reverse connection, try and dial back
+	// manually. We don't use the regular dialer pool to avoid a circular
+	// dependency: dialing through the pool starts with a BLOCKING connection,
+	// which the remote side would try to dial back, which would call into
+	// VerifyDialback for this connection again, etc, for an infinite loop of
+	// blocking connections. A throwaway connection keeps it simple.
+	ctx = d.WrapCtx(ctx, target, request.OriginNodeID, rpcbase.SystemClass)
+	ctx = logtags.AddTag(ctx, "dialback", nil)
+	if err := d.DialRaw(ctx, target, rpcbase.SystemClass); err != nil {
+		log.Dev.Infof(ctx,
+			"blocking dialback connection failed to %s, n%d, %v",
+			target, request.OriginNodeID, err)
+		return err
+	}
+	log.VEventf(ctx, 2, "blocking dialback connection to n%d succeeded", request.OriginNodeID)
+	return nil
 }

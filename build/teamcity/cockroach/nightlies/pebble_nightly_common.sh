@@ -68,9 +68,15 @@ function prepare_datadir() {
   # mkbench expects artifacts to be gzip compressed.
   find "$artifacts" -name '*.log' | xargs gzip -9
 
-  # mkbench expects the benchmark data to be stored in data/YYYYMMDD.
+  # The pebble docs/js code expects the benchmark data to be stored in
+  # data/YYYYMMDD[-PEBBLE_SHA].
+  local data_subdir
+  data_subdir=$(date +"%Y%m%d")
+  if [ -n "${PEBBLE_SHA:-}" ]; then
+    data_subdir="$data_subdir-$PEBBLE_SHA"
+  fi
   mkdir data
-  ln -sf "$PWD/artifacts" "data/$(date +"%Y%m%d")"
+  ln -sf "$PWD/artifacts" "data/$data_subdir"
 }
 
 # Build the mkbench tool from within the Pebble repo. This is used to parse

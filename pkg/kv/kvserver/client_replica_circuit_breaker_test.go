@@ -8,6 +8,7 @@ package kvserver_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1314,7 +1315,7 @@ func (cbt *circuitBreakerTest) SendCtxTS(
 	// going to leak memory.
 	ctx = context.WithValue(ctx, req, struct{}{})
 
-	_, pErr := repl.Send(ctx, ba)
+	_, pErr := kvserver.ToSenderForTesting(repl.Replica).Send(ctx, ba)
 	// If our context got canceled, return an opaque error regardless of presence or
 	// absence of actual error. This makes sure we don't accidentally pass tests as
 	// a result of our context cancellation.
@@ -1351,10 +1352,30 @@ func (*circuitBreakerTest) IsBreakerOpen(err error) bool {
 	// NB: we will see AmbiguousResultError here when proposals are inflight while
 	// the breaker trips. These are wrapping errors, so the assertions below will
 	// look through them.
-	if !errors.Is(err, circuit.ErrBreakerOpen) {
-		return false
+	if errors.Is(err, circuit.ErrBreakerOpen) &&
+		errors.HasType(err, (*kvpb.ReplicaUnavailableError)(nil)) {
+		return true
 	}
-	return errors.HasType(err, (*kvpb.ReplicaUnavailableError)(nil))
+	// Unfortunately, selectBestError in dist_sender.go can "flatten" an
+	// AmbiguousResultError by formatting it as a string via NewAmbiguousResultErrorf,
+	// which loses the error markers. In that case, the ReplicaUnavailableError and
+	// ErrBreakerOpen are only present as stringified text, not as proper error types.
+	// See: https://github.com/cockroachdb/cockroach/issues/159582
+	//
+	// TODO(kvserver): Consider fixing selectBestError to properly wrap errors instead
+	// of formatting them as strings, e.g.:
+	//   return kvpb.NewAmbiguousResultError(errors.WithSecondaryError(ambiguousErr, lastAttemptErr))
+	//
+	// For now, we fall back to string matching for this edge case. The "replica
+	// unavailable" text comes from the stringified ReplicaUnavailableError which
+	// is only produced by the circuit breaker code path.
+	if errors.HasType(err, (*kvpb.AmbiguousResultError)(nil)) {
+		errStr := err.Error()
+		if strings.Contains(errStr, "replica unavailable") {
+			return true
+		}
+	}
+	return false
 }
 
 func (cbt *circuitBreakerTest) RequireIsBreakerOpen(t *testing.T, err error) {

@@ -93,7 +93,7 @@ func registerMultiStoreOverload(r registry.Registry) {
 		Benchmark:        true,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Weekly),
-		Cluster:          r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNode(), spec.SSD(2)),
+		Cluster:          r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNode(), spec.Disks(2)),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKV(ctx, t, c)

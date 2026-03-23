@@ -168,10 +168,7 @@ func MarshalLegacy(colType *types.T, val tree.Datum) (roachpb.Value, error) {
 		}
 	case types.PGVectorFamily:
 		if v, ok := val.(*tree.DPGVector); ok {
-			data, err := vector.Encode(nil, v.T)
-			if err != nil {
-				return r, err
-			}
+			data := vector.Encode(nil, v.T)
 			r.SetBytes(data)
 			return r, nil
 		}
@@ -293,6 +290,9 @@ func UnmarshalLegacy(a *tree.DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		}
 		if typ.Oid() == oid.T_name {
 			return a.NewDName(tree.DString(v)), nil
+		}
+		if typ.Oid() == oidext.T_aclitem {
+			return a.NewDACLItem(tree.DString(v))
 		}
 		return a.NewDString(tree.DString(v)), nil
 	case types.BytesFamily:

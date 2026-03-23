@@ -923,6 +923,9 @@ type Engine interface {
 	Attrs() roachpb.Attributes
 	// Capacity returns capacity details for the engine's available storage.
 	Capacity() (roachpb.StoreCapacity, error)
+	// WALFailoverDiskUsage returns disk usage for the WAL failover secondary
+	// volume. Returns vfs.ErrUnsupported if WAL failover is not configured.
+	WALFailoverDiskUsage() (vfs.DiskUsage, error)
 	// Properties returns the low-level properties for the engine's underlying storage.
 	Properties() roachpb.StoreProperties
 	// ProfileSeparatedValueRetrievals collects a profile of the engine's
@@ -1055,20 +1058,20 @@ type Engine interface {
 	// counts for the given key span, along with how many of those bytes are on
 	// remote, as well as specifically external remote, storage.
 	ApproximateDiskBytes(from, to roachpb.Key) (total, remote, external uint64, _ error)
-	// ConvertFilesToBatchAndCommit converts local files with the given paths to
-	// a WriteBatch and commits the batch with sync=true. The files represented
-	// in paths must not be overlapping -- this is the same contract as
-	// IngestLocalFiles*. Additionally, clearedSpans represents the spans which
-	// must be deleted before writing the data contained in these paths.
+	// IngestLocalFilesToWriter converts local files with the given paths to
+	// equivalent writes into the Writer, after also clearing the specified spans.
+	// The caller is then responsible for committing the batch behind the Writer.
 	//
-	// This method is expected to be used instead of IngestLocalFiles* or
-	// IngestAndExciseFiles when the sum of the file sizes is small.
+	// This call bears that same expectations as other Ingest* methods, e.g. the
+	// files must not overlap. The call is semantically same, except that instead
+	// of running an ingestion, it populates a batch with an equivalent write. It
+	// is used when the sum of the file sizes is small.
 	//
 	// TODO(sumeer): support this as an alternative to IngestAndExciseFiles.
 	// This should be easy since we use NewSSTEngineIterator to read the ssts,
 	// which supports multiple levels.
-	ConvertFilesToBatchAndCommit(
-		ctx context.Context, paths []string, clearedSpans []roachpb.Span,
+	IngestLocalFilesToWriter(
+		ctx context.Context, paths []string, clearedSpans []roachpb.Span, writer Writer,
 	) error
 	// CompactRange ensures that the specified range of key value pairs is
 	// optimized for space efficiency.
@@ -1337,6 +1340,7 @@ type MetricsForInterval struct {
 	WALFsyncLatency                prometheusgo.Metric
 	FlushWriteThroughput           pebble.ThroughputMetric
 	WALFailoverWriteAndSyncLatency prometheusgo.Metric
+	WALSecondaryFileOpLatency      prometheusgo.Metric
 }
 
 // NumSSTables returns the total number of SSTables in the LSM, aggregated
@@ -1590,17 +1594,12 @@ func ScanLocks(
 
 // WriteSyncNoop carries out a synchronous no-op write to the engine.
 func WriteSyncNoop(eng Engine) error {
-	batch := eng.NewBatch()
+	batch := eng.NewWriteBatch()
 	defer batch.Close()
-
 	if err := batch.LogData(nil); err != nil {
 		return err
 	}
-
-	if err := batch.Commit(true /* sync */); err != nil {
-		return err
-	}
-	return nil
+	return batch.Commit(true /* sync */)
 }
 
 // ClearRangeWithHeuristic clears the keys from start (inclusive) to end
@@ -1978,6 +1977,7 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 	intents *[]roachpb.Intent,
 	maxLockConflicts int64,
 	targetLockConflictBytes int64,
+	preferDistinctTxns bool,
 ) (needIntentHistory bool, err error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
@@ -2021,6 +2021,16 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 	var meta enginepb.MVCCMetadata
 	var ok bool
 	intentSize := int64(0)
+	// When preferDistinctTxns is set, we skip intents from transactions we've
+	// already collected, maximizing the number of distinct conflicting txns
+	// discovered within the maxLockConflicts budget.
+	// TODO(mira): consider collecting the first and last intent per transaction
+	// so that range resolve requests can be constructed more precisely, rather
+	// than widening to the full request span.
+	var seenTxns map[uuid.UUID]struct{}
+	if preferDistinctTxns {
+		seenTxns = make(map[uuid.UUID]struct{})
+	}
 	for ok, err = iter.SeekEngineKeyGE(EngineKey{Key: ltStart}); ok; ok, err = iter.NextEngineKey() {
 		if maxLockConflicts != 0 && int64(len(*intents)) >= maxLockConflicts {
 			// Return early if we're done accumulating intents; make no claims about
@@ -2075,6 +2085,12 @@ func ScanConflictingIntentsForDroppingLatchesEarly(
 		}
 		if intentConflicts := meta.Timestamp.ToTimestamp().LessEq(ts); !intentConflicts {
 			continue
+		}
+		if seenTxns != nil {
+			if _, seen := seenTxns[meta.Txn.ID]; seen {
+				continue
+			}
+			seenTxns[meta.Txn.ID] = struct{}{}
 		}
 		key, err := iter.EngineKey()
 		if err != nil {

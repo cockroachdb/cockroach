@@ -67,13 +67,9 @@ func TestMain(m *testing.M) {
 	defer ccl.TestingEnableEnterprise()()
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithTenantOption(base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124)))
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124),
-	)()
-
 	os.Exit(m.Run())
 }
 
@@ -204,11 +200,25 @@ func TestTenantLogic_alter_default_privileges_with_grant_option(
 	runLogicTest(t, "alter_default_privileges_with_grant_option")
 }
 
+func TestTenantLogic_alter_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_index")
+}
+
 func TestTenantLogic_alter_primary_key(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_primary_key")
+}
+
+func TestTenantLogic_alter_primary_key_regressions(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_primary_key_regressions")
 }
 
 func TestTenantLogic_alter_role(
@@ -358,11 +368,11 @@ func TestTenantLogic_bytes(
 	runLogicTest(t, "bytes")
 }
 
-func TestTenantLogic_canary_stats(
+func TestTenantLogic_canary_stats_deletion(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "canary_stats")
+	runLogicTest(t, "canary_stats_deletion")
 }
 
 func TestTenantLogic_cascade(
@@ -503,6 +513,13 @@ func TestTenantLogic_connect_privilege(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "connect_privilege")
+}
+
+func TestTenantLogic_crdb_internal_decode_key(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "crdb_internal_decode_key")
 }
 
 func TestTenantLogic_crdb_internal_default_privileges(
@@ -1828,6 +1845,13 @@ func TestTenantLogic_secondary_index_column_families(
 	runLogicTest(t, "secondary_index_column_families")
 }
 
+func TestTenantLogic_security_invoker_view(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "security_invoker_view")
+}
+
 func TestTenantLogic_select(
 	t *testing.T,
 ) {
@@ -2064,6 +2088,13 @@ func TestTenantLogic_show_inspect_errors(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_inspect_errors")
+}
+
+func TestTenantLogic_show_statement_hints(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_statement_hints")
 }
 
 func TestTenantLogic_show_var(
@@ -2316,13 +2347,6 @@ func TestTenantLogic_truncate(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "truncate")
-}
-
-func TestTenantLogic_truncate_with_concurrent_mutation(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "truncate_with_concurrent_mutation")
 }
 
 func TestTenantLogic_tsvector(
@@ -2715,6 +2739,13 @@ func TestTenantLogic_views(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "views")
+}
+
+func TestTenantLogic_views_definer_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "views_definer_privileges")
 }
 
 func TestTenantLogic_virtual_columns(

@@ -12,8 +12,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/keydecoder"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention/contentionutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/contentionpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
@@ -116,6 +119,12 @@ type eventStore struct {
 	}
 
 	timeSrc timeSource
+
+	// keyDecoderDB and keyDecoderCodec are used to decode SQL keys into
+	// human-readable information. They are set after the SQL server is fully
+	// initialized via SetKeyDecoderDeps.
+	keyDecoderDB    descs.DB
+	keyDecoderCodec keys.SQLCodec
 }
 
 var (
@@ -171,6 +180,13 @@ func (s *eventStore) start(ctx context.Context, stopper *stop.Stopper) {
 	s.startResolver(ctx, stopper)
 }
 
+// setKeyDecoderDeps sets the dependencies needed to decode contention keys.
+// This is called after the SQL server is fully initialized.
+func (s *eventStore) setKeyDecoderDeps(db descs.DB, codec keys.SQLCodec) {
+	s.keyDecoderDB = db
+	s.keyDecoderCodec = codec
+}
+
 func (s *eventStore) startEventIntake(ctx context.Context, stopper *stop.Stopper) {
 	handleInsert := func(batch []contentionpb.ExtendedContentionEvent) {
 		s.resolver.enqueue(batch)
@@ -222,7 +238,7 @@ func (s *eventStore) startResolver(ctx context.Context, stopper *stop.Stopper) {
 			case <-timer.C:
 				if err := s.flushAndResolve(ctx); err != nil {
 					if log.V(1) {
-						log.Dev.Warningf(ctx, "unexpected error encountered when performing "+
+						log.SqlExec.Warningf(ctx, "unexpected error encountered when performing "+
 							"txn id resolution %s", err)
 					}
 				}
@@ -327,7 +343,7 @@ func (s *eventStore) flushAndResolve(ctx context.Context) error {
 	s.upsertBatch(result)
 
 	// Aggregate the resolved event information for logging.
-	logResolvedEvents(ctx, result)
+	logResolvedEvents(ctx, result, s.keyDecoderDB, s.keyDecoderCodec)
 
 	return err
 }
@@ -373,39 +389,120 @@ func (s *eventStore) resolutionIntervalWithJitter(rng *rand.Rand) time.Duration 
 	return jitteredInterval
 }
 
+// aggregatedContention holds aggregated contention info for logging.
+type aggregatedContention struct {
+	waitingStmtFingerprintID appstatspb.StmtFingerprintID
+	waitingTxnFingerprintID  appstatspb.TransactionFingerprintID
+	blockingTxnFingerprintID appstatspb.TransactionFingerprintID
+	contendedKey             redact.RedactableString
+	duration                 time.Duration
+	decodedKeyInfo           *keydecoder.DecodedKeyInfo
+}
+
 // contentionKey is used as a key in the eventsAggregated map to group
 // contention events by their characteristics.
 type contentionKey struct {
 	waitingStmtFingerprintID appstatspb.StmtFingerprintID
 	waitingTxnFingerprintID  appstatspb.TransactionFingerprintID
 	blockingTxnFingerprintID appstatspb.TransactionFingerprintID
-	contendedKey             redact.RedactableString
+	contendedKey             string
 }
 
-func logResolvedEvents(ctx context.Context, events []contentionpb.ExtendedContentionEvent) {
-	eventsAggregated := make(map[contentionKey]time.Duration)
+func logResolvedEvents(
+	ctx context.Context,
+	events []contentionpb.ExtendedContentionEvent,
+	db descs.DB,
+	codec keys.SQLCodec,
+) {
+	aggregated := make(map[contentionKey]*aggregatedContention)
+
+	// Cache decoded key info by raw key to avoid decoding the same key
+	// multiple times when it appears with different fingerprint combinations.
+	// All decoding is done within a single transaction so that the descriptor
+	// collection's cache is shared across lookups.
+	decodedKeys := make(map[string]*keydecoder.DecodedKeyInfo)
+	if db != nil {
+		if err := db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+			for _, event := range events {
+				rawKey := string(event.BlockingEvent.Key)
+				if _, ok := decodedKeys[rawKey]; ok {
+					continue
+				}
+				keyToDecode, _, _ := keys.DecodeTenantPrefix(event.BlockingEvent.Key)
+				// Pass nil for authzAccessor since contention logging is internal
+				// and doesn't need authorization checks.
+				info, err := keydecoder.DecodeKey(ctx, codec, txn.Descriptors(), txn.KV(), nil, keyToDecode)
+				if err != nil {
+					if log.V(2) {
+						log.SqlExec.Warningf(ctx, "failed to decode contention key: %v", err)
+					}
+					// Cache nil so we don't retry this key.
+					decodedKeys[rawKey] = nil
+					continue
+				}
+				decodedKeys[rawKey] = info
+			}
+			return nil
+		}); err != nil {
+			if log.V(2) {
+				log.SqlExec.Warningf(ctx, "failed to open txn for contention key decoding: %v", err)
+			}
+		}
+	}
+
 	for _, event := range events {
-		// Create a struct key instead of a composite string
 		key := contentionKey{
 			waitingStmtFingerprintID: event.WaitingStmtFingerprintID,
 			waitingTxnFingerprintID:  event.WaitingTxnFingerprintID,
 			blockingTxnFingerprintID: event.BlockingTxnFingerprintID,
-			contendedKey:             redact.Sprint(event.BlockingEvent.Key),
+			contendedKey:             string(event.BlockingEvent.Key),
 		}
-		// Add the contention time to the existing total for this key combination
-		eventsAggregated[key] += event.BlockingEvent.Duration
+		if agg, ok := aggregated[key]; ok {
+			agg.duration += event.BlockingEvent.Duration
+		} else {
+			aggregated[key] = &aggregatedContention{
+				waitingStmtFingerprintID: event.WaitingStmtFingerprintID,
+				waitingTxnFingerprintID:  event.WaitingTxnFingerprintID,
+				blockingTxnFingerprintID: event.BlockingTxnFingerprintID,
+				contendedKey:             redact.Sprint(event.BlockingEvent.Key),
+				duration:                 event.BlockingEvent.Duration,
+				decodedKeyInfo:           decodedKeys[string(event.BlockingEvent.Key)],
+			}
+		}
 	}
 
-	for key, duration := range eventsAggregated {
-		// Create an AggregatedContentionInfo event for structured logging
-		event := &eventpb.AggregatedContentionInfo{
-			WaitingStmtFingerprintId: "\\x" + sqlstatsutil.EncodeStmtFingerprintIDToString(key.waitingStmtFingerprintID),
-			WaitingTxnFingerprintId:  "\\x" + sqlstatsutil.EncodeTxnFingerprintIDToString(key.waitingTxnFingerprintID),
-			BlockingTxnFingerprintId: "\\x" + sqlstatsutil.EncodeTxnFingerprintIDToString(key.blockingTxnFingerprintID),
-			ContendedKey:             key.contendedKey,
-			Duration:                 duration.Nanoseconds(),
+	for _, agg := range aggregated {
+		logEvent := &eventpb.AggregatedContentionInfo{
+			WaitingStmtFingerprintId: "\\x" + sqlstatsutil.EncodeStmtFingerprintIDToString(agg.waitingStmtFingerprintID),
+			WaitingTxnFingerprintId:  "\\x" + sqlstatsutil.EncodeTxnFingerprintIDToString(agg.waitingTxnFingerprintID),
+			BlockingTxnFingerprintId: "\\x" + sqlstatsutil.EncodeTxnFingerprintIDToString(agg.blockingTxnFingerprintID),
+			ContendedKey:             agg.contendedKey,
+			Duration:                 agg.duration.Nanoseconds(),
 		}
-		log.StructuredEvent(ctx, logpb.Severity_INFO, event)
+
+		if info := agg.decodedKeyInfo; info != nil {
+			logEvent.TableId = info.TableID
+			logEvent.IndexId = info.IndexID
+			logEvent.DatabaseName = info.DatabaseName
+			logEvent.SchemaName = info.SchemaName
+			logEvent.TableName = info.TableName
+			logEvent.IndexName = info.IndexName
+			if len(info.KeyColumns) > 0 {
+				names := make([]string, len(info.KeyColumns))
+				types := make([]string, len(info.KeyColumns))
+				values := make([]string, len(info.KeyColumns))
+				for i, col := range info.KeyColumns {
+					names[i] = col.Name
+					types[i] = col.Type
+					values[i] = col.Value.String()
+				}
+				logEvent.KeyColumnNames = names
+				logEvent.KeyColumnTypes = types
+				logEvent.KeyColumnValues = values
+			}
+		}
+
+		log.StructuredEvent(ctx, logpb.Severity_INFO, logEvent)
 	}
 }
 

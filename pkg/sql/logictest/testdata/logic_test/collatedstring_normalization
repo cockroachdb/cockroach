@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 statement ok
 CREATE TABLE t (
   a STRING COLLATE fr PRIMARY KEY
@@ -14,7 +13,7 @@ SELECT a FROM t WHERE a = (b'Am\xc3\xa9lie' COLLATE fr)
 ----
 Amélie
 
-statement ok
+statement count 1
 DELETE FROM t
 
 # Insert Amélie in NFC form.

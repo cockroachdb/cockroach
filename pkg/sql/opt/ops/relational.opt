@@ -107,9 +107,11 @@ define ScanPrivate {
 }
 
 # PlaceholderScan is a special variant of Scan. It scans exactly one span of a
-# non-inverted index, and the span has the same start and end key. The values
-# for the span key are child scalar operators which are either constants or
-# placeholders. This operator evaluates the placeholders at execbuild time.
+# non-inverted index, and the span has the same start and end key. The span key
+# is built at execbuild-time. Each scalar expression in the Span list
+# corresponds to a column in the index's key prefix, assuming SQL-equality
+# semantics (e.g., NULL is not equal to NULL). The scalar expressions are either
+# constants or placeholders. Placeholders are evaluated at execbuild-time.
 #
 # PlaceholderScan cannot have a Constraint or InvertedConstraint.
 [Relational]

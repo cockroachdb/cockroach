@@ -8,8 +8,8 @@ import { Heading, Icon } from "@cockroachlabs/ui-components";
 import { Col, Row, Tooltip } from "antd";
 import classNames from "classnames/bind";
 import flatMap from "lodash/flatMap";
-import moment, { Moment } from "moment-timezone";
-import React from "react";
+import { Moment } from "moment-timezone";
+import React, { useState, useCallback, useContext, useMemo } from "react";
 
 import { Loading } from "src/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
@@ -25,12 +25,19 @@ import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
 
 import { Anchor } from "../anchor";
 import {
+  resetIndexStatsApi,
+  useTableIndexStats,
+  IndexRecommendation,
+  IndexRecTypeEnum,
+} from "../api/databases/tableIndexesApi";
+import {
   getStatementsUsingIndex,
   StatementsListRequestFromDetails,
-  StatementsUsingIndexRequest,
 } from "../api/indexDetailsApi";
+import { useNodes } from "../api/nodesApi";
+import { useUserSQLRoles } from "../api/userApi";
 import { commonStyles } from "../common";
-import { CockroachCloudContext } from "../contexts";
+import { ClusterDetailsContext } from "../contexts";
 import { Pagination } from "../pagination";
 import {
   calculateActiveFilters,
@@ -50,13 +57,13 @@ import {
   makeStatementsColumns,
   populateRegionNodeForStatements,
 } from "../statementsTable";
-import { UIConfigState } from "../store";
 import { SummaryCard } from "../summaryCard";
 import { TableStatistics } from "../tableStatistics";
 import {
   TimeScale,
   timeScale1hMinOptions,
   TimeScaleDropdown,
+  toRoundedDateRange,
 } from "../timeScaleDropdown";
 import {
   calculateTotalWorkload,
@@ -66,6 +73,7 @@ import {
   performanceTuningRecipes,
   unique,
   unset,
+  useSwrWithClusterId,
 } from "../util";
 import {
   databaseDetailsPagePath,
@@ -78,242 +86,191 @@ import styles from "./indexDetailsPage.module.scss";
 const cx = classNames.bind(styles);
 const stmtCx = classNames.bind(statementsStyles);
 
-// We break out separate interfaces for some of the nested objects in our data
-// so that we can make (typed) test assertions on narrower slices of the data.
-//
-// The loading and loaded flags help us know when to dispatch the appropriate
-// refresh actions.
-//
-// The overall structure is:
-//
-//   interface IndexDetailsPageData {
-//     databaseName: string;
-//     tableName: string;
-//     indexName: string;
-//     details: { // IndexDetails;
-//       loading: boolean;
-//       loaded: boolean;
-//       tableID: string;
-//       indexID: string;
-//       createStatement: string;
-//       totalReads: number;
-//       lastRead: Moment;
-//       lastReset: Moment;
-//     }
-//   }
+// Parses a SQL-quoted schema-qualified table name into its parts.
+// e.g. '"public"."mytable"' -> { schema: "public", table: "mytable" }
+export function parseSchemaQualifiedTableName(qualifiedName: string): {
+  schema: string;
+  table: string;
+} {
+  const splitIdx = qualifiedName.indexOf('"."');
+  if (splitIdx >= 0) {
+    return {
+      schema: qualifiedName.substring(1, splitIdx),
+      table: qualifiedName.substring(splitIdx + 3, qualifiedName.length - 1),
+    };
+  }
+  const dotIdx = qualifiedName.indexOf(".");
+  if (dotIdx >= 0) {
+    return {
+      schema: qualifiedName.substring(0, dotIdx),
+      table: qualifiedName.substring(dotIdx + 1),
+    };
+  }
+  return { schema: "public", table: qualifiedName };
+}
 
-export interface IndexDetailsPageData {
+export interface IndexDetailsPageProps {
   databaseName: string;
   tableName: string;
   indexName: string;
-  details: IndexDetails;
-  isTenant: UIConfigState["isTenant"];
-  hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
-  hasAdminRole?: UIConfigState["hasAdminRole"];
-  nodeRegions: { [nodeId: string]: string };
   timeScale: TimeScale;
-}
-
-interface IndexDetails {
-  loading: boolean;
-  loaded: boolean;
-  tableID: string;
-  indexID: string;
-  createStatement: string;
-  totalReads: number;
-  lastRead: Moment;
-  lastReset: Moment;
-  indexRecommendations: IndexRecommendation[];
-  databaseID: number;
-}
-
-export type RecommendationType = "DROP_UNUSED" | "Unknown";
-
-interface IndexRecommendation {
-  type: RecommendationType;
-  reason: string;
-}
-
-export interface IndexDetailPageActions {
-  refreshIndexStats?: (database: string, table: string) => void;
-  resetIndexUsageStats?: (database: string, table: string) => void;
-  refreshNodes?: () => void;
-  refreshUserSQLRoles: () => void;
   onTimeScaleChange: (ts: TimeScale) => void;
 }
 
-export type IndexDetailsPageProps = IndexDetailsPageData &
-  IndexDetailPageActions;
+export function IndexDetailsPage(
+  props: IndexDetailsPageProps,
+): React.ReactElement {
+  const { databaseName, tableName, indexName, timeScale, onTimeScaleChange } =
+    props;
 
-interface IndexDetailsPageState {
-  activeFilters: number;
-  filters?: Filters;
-  search: string;
-  lastStatementsError: Error | null;
-  lastStatementsUpdated: moment.Moment | null;
-  statements: AggregateStatistics[];
-  stmtPagination: ISortedTablePagination;
-  stmtSortSetting: SortSetting;
-}
+  const { isTenant } = useContext(ClusterDetailsContext);
 
-export class IndexDetailsPage extends React.Component<
-  IndexDetailsPageProps,
-  IndexDetailsPageState
-> {
-  static contextType = CockroachCloudContext;
+  // Parse the schema-qualified table name for the index stats hook.
+  const { schema: schemaName, table: unqualifiedTableName } = useMemo(
+    () => parseSchemaQualifiedTableName(tableName),
+    [tableName],
+  );
 
-  refreshDataInterval: NodeJS.Timeout;
-  constructor(props: IndexDetailsPageProps) {
-    super(props);
+  // Fetch index stats for the table.
+  const { indexStats, refreshIndexStats } = useTableIndexStats({
+    dbName: databaseName,
+    schemaName,
+    tableName: unqualifiedTableName,
+  });
 
-    this.state = {
-      stmtSortSetting: {
-        ascending: true,
-        columnTitle: "time",
-      },
-      stmtPagination: {
-        pageSize: 10,
-        current: 1,
-      },
-      statements: [],
-      lastStatementsUpdated: null,
-      lastStatementsError: null,
-      search: null,
-      activeFilters: 0,
-      filters: defaultFilters,
+  // Find the specific index by name.
+  const indexDetail = useMemo(
+    () => indexStats.tableIndexes.find(idx => idx.indexName === indexName),
+    [indexStats.tableIndexes, indexName],
+  );
+
+  // Fetch node statuses for region info.
+  const { nodeRegionsByID: nodeRegions } = useNodes();
+
+  // Fetch user SQL roles.
+  const { data: userSQLRolesResp } = useUserSQLRoles();
+  const hasAdminRole = userSQLRolesResp?.roles?.includes("ADMIN");
+  const hasViewActivityRedactedRole = userSQLRolesResp?.roles?.includes(
+    "VIEWACTIVITYREDACTED",
+  );
+
+  const [stmtSortSetting, setStmtSortSetting] = useState<SortSetting>({
+    ascending: true,
+    columnTitle: "time",
+  });
+  const [stmtPagination, setStmtPagination] = useState<ISortedTablePagination>({
+    pageSize: 10,
+    current: 1,
+  });
+  const [search, setSearch] = useState<string>(null);
+  const [activeFilters, setActiveFilters] = useState<number>(0);
+  const [filters, setFilters] = useState<Filters>(defaultFilters);
+
+  // Build the SWR key for statements using this index.
+  // Include timeScale range so key changes when the window changes,
+  // triggering a refetch. Pass null when index details aren't loaded
+  // yet to disable fetching.
+  const statementsSwrKey = useMemo(() => {
+    if (!indexDetail) return null;
+    const dateRange: [Moment | null, Moment | null] = timeScale
+      ? toRoundedDateRange(timeScale)
+      : [null, null];
+    return {
+      name: "statementsUsingIndex",
+      tableID: indexDetail.tableID,
+      indexID: indexDetail.indexID,
+      databaseName,
+      start: dateRange[0]?.toISOString(),
+      end: dateRange[1]?.toISOString(),
     };
-  }
+  }, [indexDetail, databaseName, timeScale]);
 
-  componentDidMount(): void {
-    this.refresh();
-
-    this.refreshDataInterval = setInterval(() => {
-      this.refreshStatementsList();
-    }, 100);
-  }
-
-  componentWillUnmount(): void {
-    if (this.refreshDataInterval) {
-      clearInterval(this.refreshDataInterval);
-    }
-  }
-
-  componentDidUpdate(): void {
-    this.refresh();
-  }
-
-  onChangeSortSetting = (ss: SortSetting): void => {
-    this.setState({
-      stmtSortSetting: ss,
-    });
-  };
-
-  onChangePage = (current: number, pageSize: number): void => {
-    const { stmtPagination } = this.state;
-    this.setState({ stmtPagination: { ...stmtPagination, current, pageSize } });
-  };
-
-  resetPagination = (): void => {
-    this.setState({
-      stmtPagination: {
-        current: 1,
-        pageSize: 10,
+  const { data: statementsData, error: lastStatementsError } =
+    useSwrWithClusterId(
+      statementsSwrKey,
+      statementsSwrKey
+        ? () =>
+            getStatementsUsingIndex(
+              StatementsListRequestFromDetails(
+                indexDetail.tableID,
+                indexDetail.indexID,
+                databaseName,
+                timeScale,
+              ),
+            )
+        : null,
+      {
+        refreshInterval: 5 * 60 * 1000, // 5 minutes
+        dedupingInterval: 5 * 60 * 1000,
+        revalidateOnFocus: false,
       },
-    });
+    );
+
+  // Post-process statement results with node region info.
+  const statements = useMemo(() => {
+    if (!statementsData?.results) return [];
+    const results = [...statementsData.results];
+    populateRegionNodeForStatements(results, nodeRegions);
+    return results;
+  }, [statementsData, nodeRegions]);
+
+  const onChangeSortSetting = (ss: SortSetting): void => {
+    setStmtSortSetting(ss);
   };
 
-  onSubmitSearchField = (search: string): void => {
-    this.setState({ search: search });
-    this.resetPagination();
+  const onChangePage = (current: number, pageSize: number): void => {
+    setStmtPagination(prev => ({ ...prev, current, pageSize }));
   };
 
-  onClearSearchField = (): void => {
-    this.onSubmitSearchField("");
-  };
+  const resetPagination = useCallback((): void => {
+    setStmtPagination({ current: 1, pageSize: 10 });
+  }, []);
 
-  onSubmitFilters = (filters: Filters): void => {
-    this.setState({
-      filters: filters,
-      activeFilters: calculateActiveFilters(filters),
-    });
+  const onSubmitSearchField = useCallback(
+    (searchValue: string): void => {
+      setSearch(searchValue);
+      resetPagination();
+    },
+    [resetPagination],
+  );
 
-    this.resetPagination();
-  };
+  const onClearSearchField = useCallback((): void => {
+    onSubmitSearchField("");
+  }, [onSubmitSearchField]);
 
-  onClearFilters = (): void => {
-    this.setState({
-      filters: defaultFilters,
-      activeFilters: 0,
-    });
+  const onSubmitFilters = useCallback(
+    (newFilters: Filters): void => {
+      setFilters(newFilters);
+      setActiveFilters(calculateActiveFilters(newFilters));
+      resetPagination();
+    },
+    [resetPagination],
+  );
 
-    this.resetPagination();
-  };
+  const onClearFilters = useCallback((): void => {
+    setFilters(defaultFilters);
+    setActiveFilters(0);
+    resetPagination();
+  }, [resetPagination]);
 
-  changeTimeScale = (ts: TimeScale): void => {
-    if (this.props.onTimeScaleChange) {
-      this.props.onTimeScaleChange(ts);
+  const handleResetIndexStats = useCallback(async () => {
+    try {
+      await resetIndexStatsApi();
+      refreshIndexStats();
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error("Failed to reset index stats:", e);
     }
-    this.setState({ lastStatementsUpdated: null });
-    this.refresh();
-  };
+  }, [refreshIndexStats]);
 
-  private refresh() {
-    this.props.refreshUserSQLRoles();
-    if (this.props.refreshNodes != null && !this.props.isTenant) {
-      this.props.refreshNodes();
-    }
-    if (!this.props.details.loaded && !this.props.details.loading) {
-      return this.props.refreshIndexStats(
-        this.props.databaseName,
-        this.props.tableName,
-      );
-    }
-  }
-
-  private refreshStatementsList(): void {
-    const noData = this.state.lastStatementsUpdated == null;
-    const movingTimeScaleWithPeriodPassed =
-      this.props.timeScale.key !== "Custom" &&
-      moment().diff(this.state.lastStatementsUpdated, "minutes") >= 5;
-    if (
-      (noData || movingTimeScaleWithPeriodPassed) &&
-      this.props.details.loaded
-    ) {
-      const req: StatementsUsingIndexRequest = StatementsListRequestFromDetails(
-        this.props.details.tableID,
-        this.props.details.indexID,
-        this.props.databaseName,
-        this.props.timeScale,
-      );
-      getStatementsUsingIndex(req)
-        .then(res => {
-          populateRegionNodeForStatements(res.results, this.props.nodeRegions);
-          this.setState({
-            statements: res.results,
-            lastStatementsUpdated: moment(),
-            lastStatementsError: null,
-          });
-        })
-        .catch(error => {
-          this.setState({
-            lastStatementsUpdated: moment(),
-            lastStatementsError: error,
-          });
-        });
-    }
-  }
-
-  private getTimestamp(timestamp: Moment) {
-    const minDate = moment.utc("0001-01-01"); // minimum value as per UTC
-    if (timestamp.isSame(minDate)) {
+  const getTimestampOrNull = (timestamp: Moment | null) => {
+    if (timestamp == null) {
       return <>Never</>;
-    } else {
-      return <Timestamp time={timestamp} format={DATE_FORMAT_24_TZ} />;
     }
-  }
+    return <Timestamp time={timestamp} format={DATE_FORMAT_24_TZ} />;
+  };
 
-  private getApps(): string[] {
-    const { statements } = this.state;
+  const getApps = (): string[] => {
     let sawBlank = false;
     let sawInternal = false;
     const apps: { [app: string]: boolean } = {};
@@ -330,11 +287,11 @@ export class IndexDetailsPage extends React.Component<
       .concat(sawInternal ? [INTERNAL_APP_NAME_PREFIX] : [])
       .concat(sawBlank ? [unset] : [])
       .concat(Object.keys(apps).sort());
-  }
+  };
 
-  private renderIndexRecommendations(
+  const renderIndexRecommendations = (
     indexRecommendations: IndexRecommendation[],
-  ) {
+  ) => {
     if (indexRecommendations.length === 0) {
       return (
         <tr>
@@ -345,8 +302,11 @@ export class IndexDetailsPage extends React.Component<
     return indexRecommendations.map((recommendation, key) => {
       let recommendationType: string;
       switch (recommendation.type) {
-        case "DROP_UNUSED":
+        case IndexRecTypeEnum.DROP_UNUSED:
           recommendationType = "Drop unused index";
+          break;
+        default:
+          recommendationType = "Unknown";
       }
       return (
         <tr key={key} className={cx("index-recommendations-rows")}>
@@ -374,43 +334,40 @@ export class IndexDetailsPage extends React.Component<
         </tr>
       );
     });
-  }
+  };
 
-  private renderBreadcrumbs() {
-    // If no props are passed, render db-console breadcrumb links by default.
+  const renderBreadcrumbs = () => {
+    const databaseID = indexStats.databaseID;
+    const tableID = indexDetail?.tableID;
     return (
       <Breadcrumbs
         items={[
           { link: DB_PAGE_PATH, name: "Databases" },
           {
-            link: databaseDetailsPagePath(this.props.details.databaseID),
-            name: this.props.databaseName,
+            link: databaseDetailsPagePath(databaseID),
+            name: databaseName,
           },
           {
-            link: tableDetailsPagePath(
-              parseInt(this.props.details.tableID, 10),
-            ),
-            name: `Table: ${this.props.tableName}`,
+            link: tableDetailsPagePath(tableID ? parseInt(tableID, 10) : 0),
+            name: `Table: ${unqualifiedTableName}`,
           },
           {
             link: EncodeDatabaseTableIndexUri(
-              this.props.databaseName,
-              this.props.tableName,
-              this.props.indexName,
+              databaseName,
+              tableName,
+              indexName,
             ),
-            name: `Index: ${this.props.indexName}`,
+            name: `Index: ${indexName}`,
           },
         ]}
         divider={<Icon iconName="CaretRight" size="tiny" />}
         className={cx("header-breadcrumbs")}
       />
     );
-  }
+  };
 
-  private filteredStatements = (): AggregateStatistics[] => {
-    const { filters, search, statements } = this.state;
-    const { isTenant } = this.props;
-    let filteredStatements = statements;
+  const filteredStatements = (): AggregateStatistics[] => {
+    let filteredStmts = statements;
     const isInternal = (statement: AggregateStatistics) =>
       statement.applicationName.startsWith(INTERNAL_APP_NAME_PREFIX);
 
@@ -424,245 +381,227 @@ export class IndexDetailsPage extends React.Component<
         criteria.push("");
       }
 
-      filteredStatements = statements.filter(
+      filteredStmts = statements.filter(
         (statement: AggregateStatistics) =>
           (showInternal && isInternal(statement)) ||
           criteria.includes(statement.applicationName),
       );
     }
-    return filterStatementsData(filters, search, filteredStatements, isTenant);
+    return filterStatementsData(filters, search, filteredStmts, isTenant);
   };
 
-  render(): React.ReactElement {
-    const {
-      statements,
-      stmtSortSetting,
-      stmtPagination,
-      search,
-      activeFilters,
-      filters,
-    } = this.state;
-    const { nodeRegions, isTenant, hasViewActivityRedactedRole, hasAdminRole } =
-      this.props;
-    const apps = this.getApps();
-    const nodes = Object.keys(nodeRegions)
-      .map(n => Number(n))
-      .sort();
-    const regions = unique(
-      isTenant
-        ? flatMap(statements, statement => statement.stats.regions)
-        : nodes.map(node => nodeRegions[node.toString()]),
-    ).sort();
+  const apps = getApps();
+  const nodes = Object.keys(nodeRegions)
+    .map(n => Number(n))
+    .sort();
+  const regions = unique(
+    isTenant
+      ? flatMap(statements, statement => statement.stats.regions)
+      : nodes.map(node => nodeRegions[node.toString()]),
+  ).sort();
 
-    const filteredStmts = this.filteredStatements();
+  const filteredStmts = filteredStatements();
 
-    return (
-      <div className={cx("page-container")}>
-        <div className="root table-area">
-          <section className={baseHeadingClasses.wrapper}>
-            {this.renderBreadcrumbs()}
-          </section>
-          <div className={cx("header-container")}>
-            <h3
-              className={`${baseHeadingClasses.tableName} ${cx(
-                "icon__container",
-              )}`}
+  const totalReads = indexDetail?.totalReads ?? 0;
+  const lastRead = indexDetail?.lastRead;
+  const lastReset = indexStats.lastReset;
+  const createStatement = indexDetail?.createStatement ?? "";
+  const indexRecommendations = indexDetail?.indexRecs ?? [];
+
+  return (
+    <div className={cx("page-container")}>
+      <div className="root table-area">
+        <section className={baseHeadingClasses.wrapper}>
+          {renderBreadcrumbs()}
+        </section>
+        <div className={cx("header-container")}>
+          <h3
+            className={`${baseHeadingClasses.tableName} ${cx(
+              "icon__container",
+            )}`}
+          >
+            <IndexIcon className={cx("icon--md", "icon--title")} />
+            {indexName}
+          </h3>
+          <div className={cx("reset-info")}>
+            <Tooltip
+              placement="bottom"
+              title="Index stats accumulate from the time the index was created or had its stats reset.. Clicking 'Reset all index stats' will reset index stats for the entire cluster. Last reset is the timestamp at which the last reset started."
             >
-              <IndexIcon className={cx("icon--md", "icon--title")} />
-              {this.props.indexName}
-            </h3>
-            <div className={cx("reset-info")}>
-              <Tooltip
-                placement="bottom"
-                title="Index stats accumulate from the time the index was created or had its stats reset.. Clicking ‘Reset all index stats’ will reset index stats for the entire cluster. Last reset is the timestamp at which the last reset started."
-              >
-                <div className={cx("last-reset", "underline")}>
-                  Last reset: {this.getTimestamp(this.props.details.lastReset)}
-                </div>
-              </Tooltip>
-              {hasAdminRole && (
-                <div>
-                  <a
-                    className={cx(
-                      "action",
-                      "separator",
-                      "index-stats__reset-btn",
-                    )}
-                    onClick={() =>
-                      this.props.resetIndexUsageStats(
-                        this.props.databaseName,
-                        this.props.tableName,
-                      )
-                    }
-                  >
-                    Reset all index stats
-                  </a>
-                </div>
-              )}
-            </div>
+              <div className={cx("last-reset", "underline")}>
+                Last reset: {getTimestampOrNull(lastReset)}
+              </div>
+            </Tooltip>
+            {hasAdminRole && (
+              <div>
+                <a
+                  className={cx(
+                    "action",
+                    "separator",
+                    "index-stats__reset-btn",
+                  )}
+                  onClick={handleResetIndexStats}
+                >
+                  Reset all index stats
+                </a>
+              </div>
+            )}
           </div>
-          <section className={baseHeadingClasses.wrapper}>
-            <Row gutter={18}>
-              <Col className="gutter-row" span={18}>
-                <SqlBox
-                  value={this.props.details.createStatement}
-                  size={SqlBoxSize.CUSTOM}
-                />
-              </Col>
-            </Row>
-            <Row gutter={18}>
-              <Col className="gutter-row" span={18}>
-                <SummaryCard className={cx("summary-card--row")}>
-                  <table className="table">
-                    <tbody>
-                      <tr className={cx("summary-card--row", "table__row")}>
-                        <td
-                          className={cx(
-                            "table__cell",
-                            "summary-card--label-cell",
-                          )}
-                        >
-                          <h4 className={cx("summary-card--label")}>
-                            Total Reads
-                          </h4>
-                        </td>
-                        <td className="table__cell">
-                          <p className={cx("summary-card--value")}>
-                            {Count(this.props.details.totalReads)}
-                          </p>
-                        </td>
-                      </tr>
-                      <tr className={cx("summary-card--row", "table__row")}>
-                        <td
-                          className={cx(
-                            "table__cell",
-                            "summary-card--label-cell",
-                          )}
-                        >
-                          <h4 className={cx("summary-card--label")}>
-                            Last Read
-                          </h4>
-                        </td>
-                        <td className="table__cell">
-                          <p className={cx("summary-card--value")}>
-                            {this.getTimestamp(this.props.details.lastRead)}
-                          </p>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </SummaryCard>
-              </Col>
-            </Row>
-            <Row gutter={18} className={cx("row-spaced")}>
-              <Col className="gutter-row" span={18}>
-                <SummaryCard className={cx("summary-card--row")}>
-                  <Heading type="h5">Index Recommendations</Heading>
-                  <table>
-                    <tbody>
-                      {this.renderIndexRecommendations(
-                        this.props.details.indexRecommendations,
-                      )}
-                    </tbody>
-                  </table>
-                </SummaryCard>
-              </Col>
-            </Row>
-            <Row gutter={24} className={cx("row-spaced", "bottom-space")}>
-              <Col className="gutter-row" span={24}>
-                <SummaryCard className={cx("summary-card--row")}>
-                  <Heading type="h5">Index Usage</Heading>
-                  <PageConfig whiteBkg={true}>
-                    <PageConfigItem>
-                      <Search
-                        onSubmit={this.onSubmitSearchField}
-                        onClear={this.onClearSearchField}
-                        defaultValue={search}
-                      />
-                    </PageConfigItem>
-                    <PageConfigItem>
-                      <Filter
-                        onSubmitFilters={this.onSubmitFilters}
-                        appNames={apps}
-                        regions={regions}
-                        nodes={nodes.map(n => "n" + n)}
-                        activeFilters={activeFilters}
-                        filters={filters}
-                        hideTimeLabel={true}
-                        showDB={false}
-                        showSqlType={true}
-                        showScan={true}
-                        showRegions={regions.length > 1}
-                        showNodes={!isTenant && nodes.length > 1}
-                      />
-                    </PageConfigItem>
-                    <PageConfigItem className={commonStyles("separator")}>
-                      <TimeScaleDropdown
-                        options={timeScale1hMinOptions}
-                        currentScale={this.props.timeScale}
-                        setTimeScale={this.changeTimeScale}
-                      />
-                    </PageConfigItem>
-                  </PageConfig>
-                  <Loading
-                    loading={statements == null}
-                    page="index details"
-                    error={this.state.lastStatementsError}
-                    renderError={() =>
-                      LoadingError({
-                        statsType: "statements",
-                        error: this.state.lastStatementsError,
-                      })
-                    }
-                  >
-                    <TableStatistics
-                      pagination={stmtPagination}
-                      totalCount={filteredStmts.length}
-                      arrayItemName={
-                        "most executed statement fingerprints using this index"
-                      }
-                      activeFilters={activeFilters}
-                      onClearFilters={this.onClearFilters}
-                    />
-                    <SortedTable
-                      data={filteredStmts}
-                      columns={makeStatementsColumns(
-                        statements,
-                        [],
-                        calculateTotalWorkload(statements),
-                        "statement",
-                        isTenant,
-                        hasViewActivityRedactedRole,
-                      ).filter(c => !(isTenant && c.hideIfTenant))}
-                      className={stmtCx("statements-table")}
-                      tableWrapperClassName={cx("table-scroll")}
-                      sortSetting={stmtSortSetting}
-                      onChangeSortSetting={this.onChangeSortSetting}
-                      pagination={stmtPagination}
-                      renderNoResult={
-                        <EmptyStatementsPlaceholder
-                          isEmptySearchResults={
-                            (search?.length > 0 || activeFilters > 0) &&
-                            filteredStmts?.length === 0
-                          }
-                          statementView={StatementViewType.USING_INDEX}
-                        />
-                      }
-                    />
-                    <Pagination
-                      pageSize={stmtPagination.pageSize}
-                      current={stmtPagination.current}
-                      total={filteredStmts.length}
-                      onChange={this.onChangePage}
-                      onShowSizeChange={this.onChangePage}
-                    />
-                  </Loading>
-                </SummaryCard>
-              </Col>
-            </Row>
-          </section>
         </div>
+        <section className={baseHeadingClasses.wrapper}>
+          <Row gutter={18}>
+            <Col className="gutter-row" span={18}>
+              <SqlBox value={createStatement} size={SqlBoxSize.CUSTOM} />
+            </Col>
+          </Row>
+          <Row gutter={18}>
+            <Col className="gutter-row" span={18}>
+              <SummaryCard className={cx("summary-card--row")}>
+                <table className="table">
+                  <tbody>
+                    <tr className={cx("summary-card--row", "table__row")}>
+                      <td
+                        className={cx(
+                          "table__cell",
+                          "summary-card--label-cell",
+                        )}
+                      >
+                        <h4 className={cx("summary-card--label")}>
+                          Total Reads
+                        </h4>
+                      </td>
+                      <td className="table__cell">
+                        <p className={cx("summary-card--value")}>
+                          {Count(totalReads)}
+                        </p>
+                      </td>
+                    </tr>
+                    <tr className={cx("summary-card--row", "table__row")}>
+                      <td
+                        className={cx(
+                          "table__cell",
+                          "summary-card--label-cell",
+                        )}
+                      >
+                        <h4 className={cx("summary-card--label")}>Last Read</h4>
+                      </td>
+                      <td className="table__cell">
+                        <p className={cx("summary-card--value")}>
+                          {getTimestampOrNull(lastRead)}
+                        </p>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </SummaryCard>
+            </Col>
+          </Row>
+          <Row gutter={18} className={cx("row-spaced")}>
+            <Col className="gutter-row" span={18}>
+              <SummaryCard className={cx("summary-card--row")}>
+                <Heading type="h5">Index Recommendations</Heading>
+                <table>
+                  <tbody>
+                    {renderIndexRecommendations(indexRecommendations)}
+                  </tbody>
+                </table>
+              </SummaryCard>
+            </Col>
+          </Row>
+          <Row gutter={24} className={cx("row-spaced", "bottom-space")}>
+            <Col className="gutter-row" span={24}>
+              <SummaryCard className={cx("summary-card--row")}>
+                <Heading type="h5">Index Usage</Heading>
+                <PageConfig whiteBkg={true}>
+                  <PageConfigItem>
+                    <Search
+                      onSubmit={onSubmitSearchField}
+                      onClear={onClearSearchField}
+                      defaultValue={search}
+                    />
+                  </PageConfigItem>
+                  <PageConfigItem>
+                    <Filter
+                      onSubmitFilters={onSubmitFilters}
+                      appNames={apps}
+                      regions={regions}
+                      nodes={nodes.map(n => "n" + n)}
+                      activeFilters={activeFilters}
+                      filters={filters}
+                      hideTimeLabel={true}
+                      showDB={false}
+                      showSqlType={true}
+                      showScan={true}
+                      showRegions={regions.length > 1}
+                      showNodes={!isTenant && nodes.length > 1}
+                    />
+                  </PageConfigItem>
+                  <PageConfigItem className={commonStyles("separator")}>
+                    <TimeScaleDropdown
+                      options={timeScale1hMinOptions}
+                      currentScale={timeScale}
+                      setTimeScale={onTimeScaleChange}
+                    />
+                  </PageConfigItem>
+                </PageConfig>
+                <Loading
+                  loading={!statementsData && !lastStatementsError}
+                  page="index details"
+                  error={lastStatementsError}
+                  renderError={() =>
+                    LoadingError({
+                      statsType: "statements",
+                      error: lastStatementsError,
+                    })
+                  }
+                >
+                  <TableStatistics
+                    pagination={stmtPagination}
+                    totalCount={filteredStmts.length}
+                    arrayItemName={
+                      "most executed statement fingerprints using this index"
+                    }
+                    activeFilters={activeFilters}
+                    onClearFilters={onClearFilters}
+                  />
+                  <SortedTable
+                    data={filteredStmts}
+                    columns={makeStatementsColumns(
+                      statements,
+                      [],
+                      calculateTotalWorkload(statements),
+                      "statement",
+                      isTenant,
+                      hasViewActivityRedactedRole,
+                    ).filter(c => !(isTenant && c.hideIfTenant))}
+                    className={stmtCx("statements-table")}
+                    tableWrapperClassName={cx("table-scroll")}
+                    sortSetting={stmtSortSetting}
+                    onChangeSortSetting={onChangeSortSetting}
+                    pagination={stmtPagination}
+                    renderNoResult={
+                      <EmptyStatementsPlaceholder
+                        isEmptySearchResults={
+                          (search?.length > 0 || activeFilters > 0) &&
+                          filteredStmts?.length === 0
+                        }
+                        statementView={StatementViewType.USING_INDEX}
+                      />
+                    }
+                  />
+                  <Pagination
+                    pageSize={stmtPagination.pageSize}
+                    current={stmtPagination.current}
+                    total={filteredStmts.length}
+                    onChange={onChangePage}
+                    onShowSizeChange={onChangePage}
+                  />
+                </Loading>
+              </SummaryCard>
+            </Col>
+          </Row>
+        </section>
       </div>
-    );
-  }
+    </div>
+  );
 }

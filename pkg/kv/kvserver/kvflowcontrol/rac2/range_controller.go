@@ -15,9 +15,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
@@ -29,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -64,7 +67,11 @@ type RangeController interface {
 	// waiting on the local store.
 	//
 	// No mutexes should be held.
-	WaitForEval(ctx context.Context, pri admissionpb.WorkPriority) (waited bool, err error)
+	WaitForEval(
+		ctx context.Context,
+		pri admissionpb.WorkPriority,
+		info ash.WorkloadInfo,
+	) (waited bool, err error)
 	// HandleRaftEventRaftMuLocked handles the provided raft event for the range.
 	//
 	// Requires replica.raftMu to be held.
@@ -709,8 +716,8 @@ var _ RangeController = &rangeController{}
 func NewRangeController(
 	ctx context.Context, o RangeControllerOptions, init RangeControllerInitState,
 ) *rangeController {
-	if log.V(1) {
-		log.KvDistribution.VInfof(ctx, 1, "r%v creating range controller", o.RangeID)
+	if log.V(2) {
+		log.KvDistribution.VInfof(ctx, 2, "r%v creating range controller", o.RangeID)
 	}
 	if o.RaftMaxInflightBytes == 0 {
 		o.RaftMaxInflightBytes = math.MaxUint64
@@ -734,7 +741,7 @@ func NewRangeController(
 
 // WaitForEval implements RangeController.WaitForEval.
 func (rc *rangeController) WaitForEval(
-	ctx context.Context, pri admissionpb.WorkPriority,
+	ctx context.Context, pri admissionpb.WorkPriority, info ash.WorkloadInfo,
 ) (waited bool, err error) {
 	expensiveLoggingEnabled := log.ExpensiveLogEnabled(ctx, 2)
 	wc := admissionpb.WorkClassFromPri(pri)
@@ -858,7 +865,7 @@ retry:
 			// is a superset of when tracing is enabled (and in a production setting
 			// is likely to be identical, so there isn't much waste).
 			state, selectCasesScratch = WaitForEval(ctx, waitCategoryChangeCh, refreshCh, handles,
-				remainingForQuorum, expensiveLoggingEnabled, selectCasesScratch)
+				remainingForQuorum, expensiveLoggingEnabled, selectCasesScratch, rc.opts.TenantID, info)
 			switch state {
 			case WaitSuccess:
 				continue
@@ -890,6 +897,14 @@ retry:
 		}
 	}
 	waitDuration := rc.opts.Clock.PhysicalTime().Sub(start)
+	// TODO(alyshan): We should have an API to log and additionally record
+	// structured events on the span. Currently this duplicates some info
+	// on the trace since logging calls will record to the span (in verbose mode).
+	if span := tracing.SpanFromContext(ctx); span != nil {
+		span.RecordStructured(&kvpb.QuorumReplicationFlowAdmissionEvent{
+			WaitDurationNanos: waitDuration,
+		})
+	}
 	if expensiveLoggingEnabled {
 		log.VEventf(ctx, 2, "r%v/%v admitted request (pri=%v wait-duration=%v wait-for-all=%v)",
 			rc.opts.RangeID, rc.opts.LocalReplicaID, pri, waitDuration, waitForAllReplicateHandles)
@@ -1564,8 +1579,8 @@ func (rc *rangeController) SetLeaseholderRaftMuLocked(
 	if replica == rc.leaseholder {
 		return
 	}
-	if log.V(1) {
-		log.KvDistribution.VInfof(ctx, 1, "r%v setting range leaseholder replica_id=%v", rc.opts.RangeID, replica)
+	if log.V(2) {
+		log.KvDistribution.VInfof(ctx, 2, "r%v setting range leaseholder replica_id=%v", rc.opts.RangeID, replica)
 	}
 	rc.leaseholder = replica
 	rc.updateWaiterSetsRaftMuLocked()
@@ -1583,8 +1598,8 @@ func (rc *rangeController) ForceFlushIndexChangedLocked(ctx context.Context, ind
 // Requires replica.raftMu to be held.
 func (rc *rangeController) CloseRaftMuLocked(ctx context.Context) {
 	rc.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
-	if log.V(1) {
-		log.KvDistribution.VInfof(ctx, 1, "r%v closing range controller", rc.opts.RangeID)
+	if log.V(2) {
+		log.KvDistribution.VInfof(ctx, 2, "r%v closing range controller", rc.opts.RangeID)
 	}
 	func() {
 		rc.mu.Lock()
@@ -2311,8 +2326,8 @@ func (rs *replicaState) createReplicaSendStreamRaftMuLocked(
 ) {
 	rs.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	// Must be in StateReplicate on creation.
-	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.VEventf(ctx, 1, "r%v creating send stream %v for replica %v",
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "r%v creating send stream %v for replica %v",
 			rs.parent.opts.RangeID, rs.stream, rs.desc)
 	}
 	rs.sendStream = &replicaSendStream{
@@ -2700,8 +2715,8 @@ func (rs *replicaState) scheduledRaftMuLocked(
 
 func (rs *replicaState) closeSendStreamRaftMuLocked(ctx context.Context) {
 	rs.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
-	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.VEventf(ctx, 1, "r%v closing send stream %v for replica %v",
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "r%v closing send stream %v for replica %v",
 			rs.parent.opts.RangeID, rs.stream, rs.desc)
 	}
 	rs.sendStream.mu.Lock()
@@ -3101,8 +3116,8 @@ func (rss *replicaSendStream) changeToProbeRaftMuAndStreamLocked(
 ) {
 	rss.parent.parent.opts.ReplicaMutexAsserter.RaftMuAssertHeld()
 	rss.mu.AssertHeld()
-	if log.ExpensiveLogEnabled(ctx, 1) {
-		log.VEventf(ctx, 1, "r%v:%v stream %v changing to probe",
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventf(ctx, 2, "r%v:%v stream %v changing to probe",
 			rss.parent.parent.opts.RangeID, rss.parent.desc, rss.parent.stream)
 	}
 	// This is the first time we've seen the replica change to StateProbe,

@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -32,7 +33,7 @@ func TestApplyVerifiesVersion(t *testing.T) {
 	clock := timeutil.NewManualTime(testTime)
 	ps := NewPlanStore("", vfs.NewMem())
 	cid := uuid.MakeV4()
-	engines := []storage.Engine{
+	engines := []kvstorage.Engines{
 		createEngineOrFatal(ctx, t, cid, 1),
 		createEngineOrFatal(ctx, t, cid, 2),
 	}
@@ -43,7 +44,7 @@ func TestApplyVerifiesVersion(t *testing.T) {
 		require.NoError(t, ps.SavePlan(plan), "failed to stage plan")
 		err := MaybeApplyPendingRecoveryPlan(ctx, ps, engines, clock)
 		require.NoError(t, err, "fatal error applying recovery plan")
-		report, ok, err := readNodeRecoveryStatusInfo(ctx, engines[0])
+		report, ok, err := readNodeRecoveryStatusInfo(ctx, engines[0].LogEngine())
 		require.NoError(t, err, "failed to read application outcome")
 		require.True(t, ok, "didn't find application outcome in engine")
 		require.NotEmpty(t, report.AppliedPlanID, "plan was not processed")
@@ -73,23 +74,24 @@ func TestApplyVerifiesVersion(t *testing.T) {
 	})
 }
 
-func createEngineOrFatal(ctx context.Context, t *testing.T, uuid uuid.UUID, id int) storage.Engine {
+func createEngineOrFatal(
+	ctx context.Context, t *testing.T, uuid uuid.UUID, id int,
+) kvstorage.Engines {
 	eng, err := storage.Open(ctx,
 		storage.InMemory(),
 		cluster.MakeClusterSettings(),
 		storage.CacheSize(1<<20 /* 1 MiB */))
-	if err != nil {
-		t.Fatalf("failed to crate in mem store: %v", err)
-	}
-	sIdent := roachpb.StoreIdent{
-		ClusterID: uuid,
-		NodeID:    roachpb.NodeID(id),
-		StoreID:   roachpb.StoreID(id),
-	}
-	if err = storage.MVCCPutProto(
-		context.Background(), eng, keys.StoreIdentKey(), hlc.Timestamp{}, &sIdent, storage.MVCCWriteOptions{},
-	); err != nil {
-		t.Fatalf("failed to populate test store ident: %v", err)
-	}
-	return eng
+	require.NoError(t, err)
+
+	engines := kvstorage.MakeEngines(eng)
+	require.NoError(t, storage.MVCCPutProto(
+		context.Background(), engines.LogEngine(), keys.StoreIdentKey(), hlc.Timestamp{},
+		&roachpb.StoreIdent{
+			ClusterID: uuid,
+			NodeID:    roachpb.NodeID(id),
+			StoreID:   roachpb.StoreID(id),
+		},
+		storage.MVCCWriteOptions{},
+	))
+	return engines
 }

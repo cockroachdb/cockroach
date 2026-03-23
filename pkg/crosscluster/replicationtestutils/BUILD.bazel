@@ -59,6 +59,7 @@ go_library(
         "//pkg/util/metamorphic",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
+        "//pkg/util/rangescanstats/rangescanstatspb",
         "//pkg/util/retry",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
@@ -75,8 +76,8 @@ go_test(
     data = ["//c-deps:libgeos"],
     embed = [":replicationtestutils"],
     deps = [
+        "//pkg/base",
         "//pkg/ccl",
-        "//pkg/ccl/storageccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

@@ -80,6 +80,63 @@ func TestStack(t *testing.T) {
 	require.Equal(t, s.Base(), initialElem)
 }
 
+func TestStmtLevel(t *testing.T) {
+	sd := &SessionData{
+		SessionData: sessiondatapb.SessionData{ApplicationName: "base"},
+	}
+	s := NewStack(sd)
+
+	// Initially no stmtLevel.
+	require.False(t, s.HasStmtLevel())
+	require.Nil(t, s.StmtLevel())
+	require.Equal(t, "base", s.Top().ApplicationName)
+
+	// Push a txn frame, then push stmt level.
+	s.PushTopClone()
+	s.Top().ApplicationName = "txn"
+	s.PushStmtLevel()
+	require.True(t, s.HasStmtLevel())
+	require.Equal(t, "txn", s.Top().ApplicationName) // cloned from txn frame
+
+	// Modifying the stmt level does not affect the stack top.
+	s.Top().ApplicationName = "stmt"
+	require.Equal(t, "stmt", s.StmtLevel().ApplicationName)
+	require.Equal(t, "txn", s.Elems()[1].ApplicationName) // stack top unchanged
+
+	// Pop stmt level.
+	s.PopStmtLevel()
+	require.False(t, s.HasStmtLevel())
+	require.Equal(t, "txn", s.Top().ApplicationName) // back to stack top
+
+	// Double push panics.
+	s.PushStmtLevel()
+	require.Panics(t, func() { s.PushStmtLevel() })
+	s.PopStmtLevel()
+
+	// Pop without push panics.
+	require.Panics(t, func() { s.PopStmtLevel() })
+
+	// Stack ops while stmtLevel is set panic.
+	s.PushStmtLevel()
+	require.Panics(t, func() { s.Push(sd.Clone()) })
+	require.Panics(t, func() { s.PushTopClone() })
+	require.Panics(t, func() { _ = s.Pop() })
+	require.Panics(t, func() { _ = s.PopN(1) })
+	require.Panics(t, func() { s.PopAll() })
+	s.PopStmtLevel()
+
+	// Clone preserves stmtLevel.
+	s.PushStmtLevel()
+	s.Top().ApplicationName = "cloned-stmt"
+	c := s.Clone()
+	require.True(t, c.HasStmtLevel())
+	require.Equal(t, "cloned-stmt", c.Top().ApplicationName)
+	// Cloned stmtLevel is independent.
+	c.Top().ApplicationName = "modified"
+	require.Equal(t, "cloned-stmt", s.Top().ApplicationName)
+	s.PopStmtLevel()
+}
+
 func TestUpdateSessionData(t *testing.T) {
 	var sd SessionData
 	unchangedLocal := sd.LocalOnlySessionData.String()

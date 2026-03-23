@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/objstorage"
-	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
@@ -140,7 +139,7 @@ func TestPebbleIterator_ExternalCorruption(t *testing.T) {
 	//b[rng.Intn(len(b)-nAvoidLastBytes)]++
 	b[len(b)-60+rng.Intn(60-nAvoidLastBytes)]++
 
-	it, err := NewSSTIterator([][]sstable.ReadableFile{{vfs.NewMemFile(b)}},
+	it, err := NewSSTIterator([][]objstorage.ReadableFile{{vfs.NewMemFile(b)}},
 		IterOptions{UpperBound: roachpb.KeyMax})
 
 	// We may error early, while opening the iterator.

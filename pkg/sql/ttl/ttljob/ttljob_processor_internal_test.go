@@ -7,6 +7,7 @@ package ttljob
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -329,4 +330,90 @@ func TestSendProgressMeta(t *testing.T) {
 			require.Equal(t, tc.deletedRowCount, ttlProgress.DeletedRowCount)
 		})
 	}
+}
+
+// asyncSerializingReceiver is an execinfra.RowReceiver that simulates the
+// behavior of gRPC where serialization happens asynchronously after Push
+// returns.
+type asyncSerializingReceiver struct {
+	pushResult execinfra.ConsumerStatus
+	// serializeWg is used to wait for all async serialization goroutines.
+	serializeWg sync.WaitGroup
+	// writerReady is closed when the writer goroutine is ready to start writing.
+	writerReady chan struct{}
+	// readerStarted is closed when the reader goroutine has started reading.
+	readerStarted chan struct{}
+}
+
+var _ execinfra.RowReceiver = &asyncSerializingReceiver{}
+
+// Push is part of the execinfra.RowReceiver interface. It spawns a goroutine
+// to serialize the metadata asynchronously, simulating gRPC behavior.
+func (r *asyncSerializingReceiver) Push(
+	_ rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+) execinfra.ConsumerStatus {
+	if meta != nil && meta.BulkProcessorProgress != nil {
+		// Capture the pointer to CompletedSpans - this is what gRPC would do.
+		completedSpans := meta.BulkProcessorProgress.CompletedSpans
+		r.serializeWg.Go(func() {
+			// Wait for writer to be ready, then signal we're about to read.
+			<-r.writerReady
+			close(r.readerStarted)
+			// Simulate serialization by reading the spans.
+			for i := 0; i < len(completedSpans); i++ {
+				_ = completedSpans[i].Key
+				_ = completedSpans[i].EndKey
+			}
+		})
+	}
+	return r.pushResult
+}
+
+// ProducerDone is part of the execinfra.RowReceiver interface.
+func (r *asyncSerializingReceiver) ProducerDone() {}
+
+// TestProgressUpdateDataRace is a regression test for a data race during
+// progress updates between serializing an old update and populating a new one.
+func TestProgressUpdateDataRace(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const totalSpans = 100
+
+	processor := mockProcessor(1 /* processorID */, 1 /* nodeID */, totalSpans)
+	receiver := &asyncSerializingReceiver{
+		pushResult:    execinfra.NeedMoreRows,
+		writerReady:   make(chan struct{}),
+		readerStarted: make(chan struct{}),
+	}
+
+	ctx := context.Background()
+
+	// Add some spans so the slice has capacity.
+	spans := makeFakeSpans(5)
+	for _, span := range spans {
+		processor.progressUpdater.OnSpanProcessed(span, 0 /* deletedRowCount */)
+	}
+
+	// Call UpdateProgress - this creates metadata with a reference to the
+	// slice, then resets the slice with [:0]. After this call returns,
+	// the metadata still holds a reference to the (now reset) slice.
+	err := processor.progressUpdater.UpdateProgress(ctx, receiver)
+	require.NoError(t, err)
+
+	// Signal to the reader that we're ready to write, then wait for reader to
+	// start.
+	close(receiver.writerReady)
+	<-receiver.readerStarted
+
+	// Now write new spans concurrently with the reader. Since the slice was
+	// reset with [:0], this append reuses the same underlying array,
+	// overwriting the data that the reader goroutine is reading.
+	moreSpans := makeFakeSpans(5)
+	for _, span := range moreSpans {
+		processor.progressUpdater.OnSpanProcessed(span, 0)
+	}
+
+	// Wait for serialization to complete.
+	receiver.serializeWg.Wait()
 }

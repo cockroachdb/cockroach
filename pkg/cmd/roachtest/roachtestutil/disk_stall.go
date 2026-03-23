@@ -159,11 +159,13 @@ type dmsetupDiskStaller struct {
 var _ DiskStaller = (*dmsetupDiskStaller)(nil)
 
 func MakeDmsetupDiskStaller(f Fataler, c cluster.Cluster, disableStateValidation bool) DiskStaller {
-	diskStaller, err := c.GetFailer(f.L(), c.CRDBNodes(), failures.DmsetupDiskStallName, disableStateValidation)
+	// Use MakeDmsetupDiskStallFailer to get the failer, ignoring the returned args
+	// since the DiskStaller interface creates args dynamically in its methods.
+	failer, _, err := MakeDmsetupDiskStallFailer(f.L(), c, c.CRDBNodes(), disableStateValidation)
 	if err != nil {
 		f.Fatalf("failed to get failer: %s", err)
 	}
-	return &dmsetupDiskStaller{Failer: diskStaller, f: f, c: c}
+	return &dmsetupDiskStaller{Failer: failer, f: f, c: c}
 }
 
 func (s *dmsetupDiskStaller) Setup(ctx context.Context) {

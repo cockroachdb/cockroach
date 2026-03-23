@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -78,13 +79,21 @@ SET TRACING=on;
 BEGIN;
 UPDATE test SET x = 100 WHERE x = 1;
 `)
-	server2Conn.Exec(t, `
-SET TRACING=on;
-BEGIN PRIORITY HIGH;
-UPDATE test SET x = 1000 WHERE x = 1;
-COMMIT;
-SET TRACING=off;
-`)
+	_, err = server2Conn.DB.ExecContext(ctx, `
+ SET TRACING=on;
+ BEGIN PRIORITY HIGH;
+ UPDATE test SET x = 1000 WHERE x = 1;
+ COMMIT;
+ SET TRACING=off;
+ `)
+	// This test can trigger "duplicate span" errors due to a known race condition
+	// in multi-node tracing. When two connections have SET TRACING=on and execute
+	// concurrent DistSQL queries, remote span recordings may be imported multiple
+	// times. This is benign for this test which is focused on contention events,
+	// not tracing correctness.
+	if err != nil && !strings.Contains(err.Error(), "duplicate span") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	server1Conn.ExpectErr(
 		t,
 		"^pq: restart transaction.+",
@@ -120,7 +129,7 @@ SET TRACING=off;
 	require.True(t, found,
 		"expect to find contention event for table %d, but found %+v", testTableID, resp)
 
-	server1Conn.CheckQueryResults(t, `
+	server1Conn.CheckQueryResultsRetry(t, `
   SELECT count(*)
   FROM crdb_internal.statement_statistics
   WHERE
@@ -128,7 +137,7 @@ SET TRACING=off;
     AND app_name = 'contentionTest'
 `, [][]string{{"1"}})
 
-	server1Conn.CheckQueryResults(t, `
+	server1Conn.CheckQueryResultsRetry(t, `
   SELECT count(*)
   FROM crdb_internal.transaction_statistics
   WHERE
@@ -149,9 +158,7 @@ func TestTransactionContentionEvents(t *testing.T) {
 
 	ctx := context.Background()
 
-	srv, conn1, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultDRPCOption: base.TestDRPCDisabled,
-	})
+	srv, conn1, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 

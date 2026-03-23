@@ -136,8 +136,19 @@ targets:
       - command: put
         args:
           - $WORKLOAD_CLUSTER
+          - artifacts/drtprod
+          - drtprod
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/roachtest
+          - roachtest-operations
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
           - pkg/cmd/drt/scripts/roachtest_operations_run.sh
           - roachtest_operations_run.sh
+      - script: pkg/cmd/drtprod/scripts/populate_workload_keys.sh
       - command: ssh
         args:
           - $WORKLOAD_CLUSTER
@@ -162,7 +173,6 @@ targets:
           max-rate: 500
           workers: 50
           conns: 50
-          duration: 12h
           ramp: 10m
           wait: 0
       - script: "pkg/cmd/drtprod/scripts/generate_kv_run.sh"

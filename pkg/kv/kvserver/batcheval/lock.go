@@ -79,11 +79,11 @@ func readProvisionalVal(
 		if err != nil {
 			return roachpb.KeyValue{}, err
 		}
-		if valRes.Value == nil {
+		if !valRes.Value.IsPresent() {
 			// Intent is a deletion.
 			return roachpb.KeyValue{}, nil
 		}
-		return roachpb.KeyValue{Key: intent.Key, Value: *valRes.Value}, nil
+		return roachpb.KeyValue{Key: intent.Key, Value: valRes.Value.Value}, nil
 	}
 	res, err := storage.MVCCScanAsTxn(
 		ctx, reader, intent.Key, intent.Key.Next(), intent.Txn.WriteTimestamp, intent.Txn,

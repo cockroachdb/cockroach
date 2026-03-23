@@ -37,7 +37,7 @@ var (
 type ElasticCPUWorkQueue struct {
 	settings  *cluster.Settings
 	workQueue elasticCPUInternalWorkQueue
-	granter   granter
+	granter   granterAndYieldDelayRecorder
 	metrics   *elasticCPUGranterMetrics
 
 	testingEnabled bool
@@ -46,7 +46,7 @@ type ElasticCPUWorkQueue struct {
 // elasticCPUInternalWorkQueue abstracts *WorkQueue for testing.
 type elasticCPUInternalWorkQueue interface {
 	requester
-	Admit(ctx context.Context, info WorkInfo) (enabled bool, err error)
+	Admit(ctx context.Context, info WorkInfo) (AdmitResponse, error)
 	SetTenantWeights(tenantWeights map[uint64]uint32)
 	adjustTenantUsed(tenantID roachpb.TenantID, additionalUsed int64)
 }
@@ -54,7 +54,7 @@ type elasticCPUInternalWorkQueue interface {
 func makeElasticCPUWorkQueue(
 	settings *cluster.Settings,
 	workQueue elasticCPUInternalWorkQueue,
-	granter granter,
+	granter granterAndYieldDelayRecorder,
 	metrics *elasticCPUGranterMetrics,
 ) *ElasticCPUWorkQueue {
 	return &ElasticCPUWorkQueue{
@@ -65,10 +65,13 @@ func makeElasticCPUWorkQueue(
 	}
 }
 
-// Admit is called when requesting admission for elastic CPU work.
+// Admit is called when requesting admission for elastic CPU work. When
+// yieldInHandle is true, the returned ElasticCPUWorkHandle yields in each
+// IsOverLimitAndPossiblyYield call.
+//
 // Non-nil errors are returned only if the context is canceled.
 func (e *ElasticCPUWorkQueue) Admit(
-	ctx context.Context, duration time.Duration, info WorkInfo,
+	ctx context.Context, duration time.Duration, info WorkInfo, yieldInHandle bool,
 ) (*ElasticCPUWorkHandle, error) {
 	if !e.enabled() {
 		return nil, nil
@@ -80,15 +83,18 @@ func (e *ElasticCPUWorkQueue) Admit(
 		duration = MaxElasticCPUDuration
 	}
 	info.RequestedCount = duration.Nanoseconds()
-	enabled, err := e.workQueue.Admit(ctx, info)
+	resp, err := e.workQueue.Admit(ctx, info)
 	if err != nil {
 		return nil, err
 	}
-	if !enabled {
+	if !resp.Enabled {
 		return nil, nil
 	}
 	e.metrics.AcquiredNanos.Inc(duration.Nanoseconds())
-	return newElasticCPUWorkHandle(info.TenantID, duration), nil
+	if info.BypassAdmission {
+		e.metrics.bypassedAdmissionCumNanos.Add(duration.Nanoseconds())
+	}
+	return newElasticCPUWorkHandle(info.TenantID, duration, yieldInHandle, info.BypassAdmission, e.granter), nil
 }
 
 // AdmittedWorkDone indicates to the queue that the admitted work has
@@ -99,8 +105,11 @@ func (e *ElasticCPUWorkQueue) AdmittedWorkDone(h *ElasticCPUWorkHandle) {
 	}
 
 	e.metrics.PreWorkNanos.Inc(h.preWork.Nanoseconds())
-	_, difference := h.OverLimit()
+	_, difference := h.overLimitInner()
 	e.workQueue.adjustTenantUsed(h.tenantID, difference.Nanoseconds())
+	if h.bypassedAdmission {
+		e.metrics.bypassedAdmissionCumNanos.Add(difference.Nanoseconds())
+	}
 	if difference > 0 {
 		// We've used up our allotted slice, which we've already deducted tokens
 		// for. But we've gone over by difference, which we now need to deduct

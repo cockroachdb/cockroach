@@ -69,6 +69,9 @@ type Table interface {
 	// This method should be used when mutation columns can be ignored (the common
 	// case). The returned indexes include the primary index, so the count is
 	// always >= 1.
+	// This count excludes secondary indexes that are not ready for reads yet.
+	// Those are indexes that are created during a primary index swap and are not
+	// usable until the new primary index goes public.
 	IndexCount() int
 
 	// WritableIndexCount returns the number of public and write-only indexes
@@ -205,6 +208,17 @@ type Table interface {
 
 	// Policies returns all the policies defined for this table.
 	Policies() *Policies
+
+	// CanaryAndStableStatsDiffer returns true when the canary (newest) and
+	// stable (second-newest) statistics for this table genuinely differ
+	// within the canary window. This is used solely to gate canary/stable
+	// experiment metric recording.
+	CanaryAndStableStatsDiffer() bool
+
+	// StatsCanaryWindow returns the configured canary window duration for
+	// this table. A non-zero value means the table participates in canary
+	// statistics rollout.
+	StatsCanaryWindow() time.Duration
 }
 
 // CheckConstraint represents a check constraint on a table. Check constraints
@@ -402,12 +416,14 @@ type UniqueConstraint interface {
 	// needs to be enforced on new mutations.
 	Validated() bool
 
-	// UniquenessGuaranteedByAnotherIndex returns true when WithoutIndex() returns
-	// true and the uniqueness of the constraint is guaranteed by another index.
-	// When true, the optimizer will always consider the constraint to be
-	// satisfied when building functional dependencies for the table. This enables
-	// additional optimizations, such as omission of uniqueness checks.
-	UniquenessGuaranteedByAnotherIndex() bool
+	// CanElideUniqueCheck returns true when WithoutIndex() returns
+	// true and the uniqueness check for the constraint can be elided. This can
+	// happen when the uniqueness is guaranteed by another index, or when the
+	// skip_unique_checks storage parameter is set on the index. When true, the
+	// optimizer will not plan uniqueness checks for mutations, and will assume
+	// the unique constraint is satisfied when calculating functional
+	// dependencies.
+	CanElideUniqueCheck() bool
 }
 
 // UniqueOrdinal identifies a unique constraint (in the context of a Table).

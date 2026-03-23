@@ -45,12 +45,11 @@ type testCase struct {
 	// this isn't Java so there isn't a classname) and excluding it causes
 	// the TeamCity UI to display the same data in a slightly more coherent
 	// and usable way.
-	Classname string      `xml:"classname,attr"`
-	Name      string      `xml:"name,attr"`
-	Time      string      `xml:"time,attr"`
-	Failure   *XMLMessage `xml:"failure,omitempty"`
-	Error     *XMLMessage `xml:"error,omitempty"`
-	Skipped   *XMLMessage `xml:"skipped,omitempty"`
+	Name    string      `xml:"name,attr"`
+	Time    string      `xml:"time,attr"`
+	Failure *XMLMessage `xml:"failure,omitempty"`
+	Error   *XMLMessage `xml:"error,omitempty"`
+	Skipped *XMLMessage `xml:"skipped,omitempty"`
 }
 
 // XMLMessage is a catch-all structure containing details about a test
@@ -59,6 +58,18 @@ type XMLMessage struct {
 	Message  string     `xml:"message,attr"`
 	Attrs    []xml.Attr `xml:",any,attr"`
 	Contents string     `xml:",chardata"`
+}
+
+// AnyFailures returns true iff there are any errors/failures in the test.xml.
+func AnyFailures(suites TestSuites) bool {
+	for _, suite := range suites.Suites {
+		for _, testCase := range suite.TestCases {
+			if testCase.Failure != nil || testCase.Error != nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // OutputOfBinaryRule returns the path of the binary produced by the

@@ -31,7 +31,7 @@ import {
   uiDebugPages,
 } from "src/util/docs";
 
-import styles from "./hotRanges.module.styl";
+import styles from "./hotRanges.module.scss";
 
 const PAGE_SIZE = 50;
 const cx = classNames.bind(styles);
@@ -330,6 +330,7 @@ const HotRangesTable = ({
             }
           />
         }
+        dataTestId="top-ranges-table"
       />
       <Pagination
         pageSize={pagination.pageSize}

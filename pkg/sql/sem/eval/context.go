@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -50,6 +51,34 @@ import (
 )
 
 var ErrNilTxnInClusterContext = errors.New("nil txn in cluster context")
+
+// StatsRolloutSelection describes the role of a query execution in the
+// canary stats rollout experiment.
+type StatsRolloutSelection int
+
+const (
+	// StatsRolloutDefault means the canary experiment is not active for
+	// this execution. The optimizer uses default stats.
+	StatsRolloutDefault StatsRolloutSelection = iota
+	// StatsRolloutCanary means this execution uses canary (newest) table
+	// statistics as part of the canary experiment.
+	StatsRolloutCanary
+	// StatsRolloutStable means this execution uses stable (second-newest)
+	// table statistics while the canary experiment is active.
+	StatsRolloutStable
+)
+
+// String returns the string representation for the stats rollout selection.
+func (s StatsRolloutSelection) String() string {
+	switch s {
+	case StatsRolloutCanary:
+		return "canary"
+	case StatsRolloutStable:
+		return "stable"
+	default:
+		return "default"
+	}
+}
 
 // Context defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
@@ -198,6 +227,12 @@ type Context struct {
 	// where each aggregate function struct grows its own memory account by
 	// tiny amount, yet the account reserves a lot more resulting in
 	// significantly overestimating the memory usage.
+	//
+	// Additionally, this memory account is touched by some aggregate builtins
+	// that store multiple datums in order to access the memory monitor this
+	// account is bound to.
+	//
+	// It **must** be bound to an unlimited memory monitor.
 	SingleDatumAggMemAccount *mon.BoundAccount
 
 	SQLLivenessReader sqlliveness.Reader
@@ -264,8 +299,8 @@ type Context struct {
 	// RangeStatsFetcher is used to fetch RangeStats.
 	RangeStatsFetcher RangeStatsFetcher
 
-	// ChangefeedState stores the state (progress) of core changefeeds.
-	ChangefeedState ChangefeedState
+	// CoreChangefeedState stores the in-memory progress of core changefeeds.
+	CoreChangefeedState CoreChangefeedState
 
 	// ParseHelper makes date parsing more efficient.
 	ParseHelper pgdate.ParseHelper
@@ -320,40 +355,50 @@ type Context struct {
 	// ExecutedStatementCounters contains metrics for successfully executed
 	// statements defined within the body of a UDF/SP.
 	ExecutedRoutineStatementCounters RoutineStatementCounters
-	// UseCanaryStats indicates whether this query participates in the canary
-	// statistics rollout feature. When set to true, the optimizer attempts to use
-	// "canary statistics" for all tables referenced by the query.
+	// StatsRollout records the outcome of the canary stats rollout dice
+	// roll for this query execution. It has three possible values:
 	//
-	// This flag is determined probabilistically during query planning based on the
-	// sql.stats.canary_fraction cluster setting. The selection is atomic per query:
-	// either all tables use canary stats (when available) or all use stable stats.
+	//   - StatsRolloutDefault: the canary experiment is not active
+	//     (sql.stats.canary_fraction = 0 or mode is off). The optimizer
+	//     uses whatever stats are available (default behavior). The
+	//     execution is not classified as canary or stable.
 	//
-	// Canary statistics are newly collected table statistics that are still within
-	// their configured "canary window" (sql_stats_canary_window storage parameter).
-	// These stats provide a controlled way to gradually roll out new statistics
-	// before promoting them to stable, allowing for manual intervention if
-	// performance regressions are detected.
+	//   - StatsRolloutCanary: the canary experiment is active and this
+	//     execution was selected to use canary (newest) table statistics.
+	//     The optimizer attempts to use canary stats for all tables
+	//     referenced by the query. If a table lacks distinct canary stats
+	//     (e.g., only one version exists or canary stats have expired),
+	//     the optimizer falls back to stable stats for that table.
 	//
-	// Stable statistics are the previously established statistics that have either
-	// been promoted from canary status or were collected before canary mode was
-	// enabled for the table.
+	//   - StatsRolloutStable: the canary experiment is active but this
+	//     execution was not selected for canary — it uses stable
+	//     (second-newest) table statistics.
 	//
-	// Fallback behavior: If a table lacks distinct canary statistics (e.g., only
-	// one statistics version exists, or canary stats have expired), the optimizer
-	// will use the available stable statistics even when this flag is true.
+	// The selection is determined probabilistically during query planning
+	// based on the sql.stats.canary_fraction cluster setting. It is
+	// atomic per query: all tables use the same rollout path.
 	//
-	// UseCanaryStats should only be set True for non-internal and when creating
-	// a not-prepared stmt. In other words, internal queries and prepared statements
-	// will always use stable statistics.
+	// Only set for non-internal, non-prepared queries. Internal queries
+	// and prepared statements always use StatsRolloutDefault.
 	//
-	// When UseCanaryStats is true, the optimizer will bypass query cache or
-	// the cached memo within a prepared stmt, but rather build a one-off memo
-	// only for this query execution. This is because we roll the dice for
-	// query execution to decide whether to use canary stats or not, and
-	// we'd like to avoid frequently invalidating cached plans. The rule of
-	// thumb is: the cached memo, either in query cache or prepared stmt,
-	// are always for stable stats.
-	UseCanaryStats bool
+	// When StatsRolloutCanary, the optimizer bypasses the query cache and
+	// the cached memo within a prepared stmt, building a one-off memo for
+	// this execution. Cached memos are always built with stable stats.
+	StatsRollout StatsRolloutSelection
+
+	// WorkloadID for ASH sampling.
+	WorkloadID uint64
+
+	// AppNameID is the hash of the application name, for ASH
+	// sampling. Set alongside WorkloadID in the connExecutor.
+	// Note(alyshan): This will eventually be replaced by a general
+	// enrichment_id field which will enable the ASH sampler to
+	// enrich samples with more workload context.
+	AppNameID uint64
+
+	// WorkloadType distinguishes the kind of workload that WorkloadID
+	// represents (statement fingerprint, job ID, system task).
+	WorkloadType workloadid.WorkloadType
 }
 
 // RoutineStatementCounters encapsulates metrics for tracking the execution
@@ -537,8 +582,13 @@ type fakePlannerWithMonitor struct {
 	monitor *mon.BytesMonitor
 }
 
-// Mon is part of the Planner interface.
-func (p *fakePlannerWithMonitor) Mon() *mon.BytesMonitor {
+// TxnMon is part of the Planner interface.
+func (p *fakePlannerWithMonitor) TxnMon() *mon.BytesMonitor {
+	return p.monitor
+}
+
+// ExecMon is part of the Planner interface.
+func (p *fakePlannerWithMonitor) ExecMon() *mon.BytesMonitor {
 	return p.monitor
 }
 
@@ -573,6 +623,16 @@ func (p *fakePlannerWithMonitor) AutoCommit() bool {
 	return false
 }
 
+// UsingHintInjection is part of the eval.Planner interface.
+func (p *fakePlannerWithMonitor) UsingHintInjection() bool {
+	return false
+}
+
+// GetHintIDs is part of the eval.Planner interface.
+func (o *fakePlannerWithMonitor) GetHintIDs() []int64 {
+	return nil
+}
+
 type fakeStreamManagerFactory struct {
 	StreamManagerFactory
 }
@@ -585,9 +645,12 @@ func (ec *Context) SessionData() *sessiondata.SessionData {
 	return ec.SessionDataStack.Top()
 }
 
-// Copy returns a deep copy of ctx.
+// Copy returns a copy of the EvalCtx that can safely be used concurrently with
+// the original.
 func (ec *Context) Copy() *Context {
 	ctxCopy := *ec
+	// CollationEnvironment is not thread safe.
+	ctxCopy.CollationEnv = tree.CollationEnvironment{}
 	ctxCopy.iVarContainerStack = make([]tree.IndexedVarContainer, len(ec.iVarContainerStack), cap(ec.iVarContainerStack))
 	copy(ctxCopy.iVarContainerStack, ec.iVarContainerStack)
 	return &ctxCopy
@@ -999,6 +1062,7 @@ type ReplicationStreamManager interface {
 
 	DebugGetProducerStatuses(ctx context.Context) ([]streampb.DebugProducerStatus, error)
 	DebugGetLogicalConsumerStatuses(ctx context.Context) ([]*streampb.DebugLogicalConsumerStatus, error)
+	DebugGetPhysicalConsumerStatuses(ctx context.Context) ([]streampb.DebugPhysicalConsumerStatus, error)
 
 	PlanLogicalReplication(
 		ctx context.Context,
@@ -1031,4 +1095,23 @@ type StreamIngestManager interface {
 		tenantName roachpb.TenantName,
 		revertTo hlc.Timestamp,
 	) error
+}
+
+// triggerDepthKey is the context key for storing the current trigger nesting
+// depth. This is used by pg_trigger_depth() and for enforcing recursion limits.
+type triggerDepthKey struct{}
+
+// GetTriggerDepth returns the current trigger nesting depth from the context.
+// Returns 0 if not currently executing within a trigger.
+func GetTriggerDepth(ctx context.Context) int {
+	if v := ctx.Value(triggerDepthKey{}); v != nil {
+		return v.(int)
+	}
+	return 0
+}
+
+// ContextWithIncrementedTriggerDepth returns a new context with the trigger
+// depth incremented by 1.
+func ContextWithIncrementedTriggerDepth(ctx context.Context) context.Context {
+	return context.WithValue(ctx, triggerDepthKey{}, GetTriggerDepth(ctx)+1)
 }

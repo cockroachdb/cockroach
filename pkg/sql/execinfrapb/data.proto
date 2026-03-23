@@ -17,6 +17,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb";
 import "kv/kvpb/api.proto";
 import "roachpb/data.proto";
 import "errorspb/errors.proto";
+import "jobs/jobspb/jobs.proto";
 import "sql/catalog/catenumpb/encoded_datum.proto";
 import "sql/types/types.proto";
 import "util/tracing/tracingpb/recorded_span.proto";
@@ -162,7 +163,7 @@ message OutputRouterSpec {
   repeated StreamEndpointSpec streams = 2 [(gogoproto.nullable) = false];
 
   // Only used for the BY_HASH type; these are the indexes of the columns we are
-  // hashing.
+  // hashing. Can be empty in which case the routing can be done arbitrarily.
   repeated uint32 hash_columns = 3;
 
   message RangeRouterSpec {
@@ -250,34 +251,6 @@ message ProducerMessage {
   reserved 2;
 }
 
-message ChangefeedMeta {
-  message FrontierSpan {
-    optional roachpb.Span span = 1 [(gogoproto.nullable) = false];
-    optional util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
-  }
-  message DrainInfo {
-    // Node id of the node being drained.
-    optional int32 node_id = 1 [
-      (gogoproto.nullable) = false,
-      (gogoproto.customname) = "NodeID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
-  }
-
-  // Checkpoint is set by the aggregator when it exits.
-  // It contains an up to date snapshot of its local frontier.
-  repeated FrontierSpan checkpoint = 1 [(gogoproto.nullable) = false];
-
-  // DrainInfo is set by the aggregator when it detects that the node is
-  // being drained.  In those cases, it emits an up to date state, containing
-  // checkpoint information.
-  optional DrainInfo drain_info = 2;
-
-  // Heartbeat is set by the aggregators when they send heartbeat
-  // metadata to the coordinator.
-// This message is used by the aggregator to check/ping the coordinator processor.
-  optional bool heartbeat = 3  [(gogoproto.nullable) = false];
-}
-
 // RemoteProducerMetadata represents records that a producer wants to pass to
 // a consumer, other than data rows. It's named RemoteProducerMetadata to not
 // clash with ProducerMetadata, which is used internally within a node and has
@@ -330,6 +303,7 @@ message RemoteProducerMetadata {
     optional bool drained = 9 [(gogoproto.nullable) = false];
     // ProcessorID is the ID of the processor that published the metadata.
     optional int32 processor_id = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "ProcessorID"];
+    // NEXT ID: 11
   }
   // Metrics are unconditionally emitted by table readers.
   message Metrics {
@@ -355,7 +329,11 @@ message RemoteProducerMetadata {
     // we enumerate physical plan stages starting at 1, so the default value of
     // 0 isn't conflated with any actual plan stage.
     optional int32 stage_id = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "StageID"];
-    // NEXT ID: 7
+    // KVCPUTime is the total cpu time reported by KV BatchResponses. This is
+    // representative of the "synchronous" portion of work performed by KV.
+    // See the CPUTime field in the kvpb.BatchResponse_Header.
+    optional int64 kv_cpu_time = 7 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVCPUTime"];
+    // NEXT ID: 8
   }
   oneof value {
     RangeInfos range_info = 1;
@@ -366,11 +344,19 @@ message RemoteProducerMetadata {
     SamplerProgress sampler_progress = 7;
     Metrics metrics = 8;
     BulkProcessorProgress bulk_processor_progress = 9;
-    ChangefeedMeta changefeed = 11;
     TracingAggregatorEvents tracing_aggregator_events= 12;
   }
-  reserved 6, 10;
+  reserved 6, 10, 11;
   // NEXT ID: 13
+}
+
+// MergeIterationProgress reports task completion progress during distributed
+// merge iterations. This message is passed via BulkProcessorProgress.progress_details.
+message MergeIterationProgress {
+  // Task ID that was completed.
+  optional int64 completed_task_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "CompletedTaskID"];
+  // Total number of tasks in the current merge iteration.
+  optional int64 tasks_total = 2 [(gogoproto.nullable) = false, (gogoproto.customname) = "TasksTotal"];
 }
 
 // DistSQLDrainingInfo represents the DistSQL draining state that gets gossiped

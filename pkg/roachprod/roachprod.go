@@ -35,12 +35,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/opentelemetry"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/agents/parca"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/promhelperclient"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/pyroscope"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
@@ -261,7 +263,7 @@ func CachedClusters(fn func(clusterName string, numVMs int)) {
 }
 
 // CachedCluster returns the cached information about a given cluster.
-func CachedCluster(name string) (*cloud.Cluster, bool) {
+func CachedCluster(name string) (*cloudcluster.Cluster, bool) {
 	return readSyncedClusters(name)
 }
 
@@ -642,7 +644,7 @@ func SetupSSH(ctx context.Context, l *logger.Logger, clusterName string, sync bo
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	var cloudCluster *cloud.Cluster
+	var cloudCluster *cloudcluster.Cluster
 	if sync {
 		cld, err := Sync(l, vm.ListOptions{})
 		if err != nil {
@@ -793,11 +795,25 @@ func UpdateTargets(
 	if err := LoadClusters(); err != nil {
 		return err
 	}
-	return updatePrometheusTargets(ctx, l, clusterName, clusterSettingsOpts...)
+	updatePrometheusTargets(ctx, l, clusterName, clusterSettingsOpts...)
+	return nil
 }
 
-// updatePrometheusTargets updates the prometheus instance cluster config. Any error is logged and ignored.
+// updatePrometheusTargets updates the prometheus instance cluster config.
+// This is best-effort: errors are logged but never propagated, since
+// monitoring failures should not cause test or start failures.
 func updatePrometheusTargets(
+	ctx context.Context,
+	l *logger.Logger,
+	clusterName string,
+	clusterSettingsOpts ...install.ClusterSettingOption,
+) {
+	if err := updatePrometheusTargetsErr(ctx, l, clusterName, clusterSettingsOpts...); err != nil {
+		l.Errorf("updating prometheus targets: %v", err)
+	}
+}
+
+func updatePrometheusTargetsErr(
 	ctx context.Context,
 	l *logger.Logger,
 	clusterName string,
@@ -840,6 +856,11 @@ func updatePrometheusTargets(
 			nodeIP := v.PrivateIP
 			if reachability == promhelperclient.Public {
 				nodeIP = v.PublicIP
+			}
+			// N.B. nodeIP can be missing, e.g., if the VM is stopped.
+			if nodeIP == "" {
+				l.Errorf("no reachable IP found for node %d (is the VM running?)", nodeID)
+				return
 			}
 
 			// ensure atomicity in map update
@@ -888,10 +909,10 @@ func updatePrometheusTargets(
 	if len(nodeIPPorts) > 0 {
 		cl, err := promhelperclient.NewPromClient()
 		if err != nil {
-			return err
+			return errors.Wrap(err, "creating prometheus helper client")
 		}
 		if err := cl.UpdatePrometheusTargets(ctx, c.Name, nodeIPPorts, l); err != nil {
-			l.Errorf("creating cluster config failed for the ip:ports %v: %v", nodeIPPorts, err)
+			return errors.Wrapf(err, "updating targets for ip:ports %v", nodeIPPorts)
 		}
 	}
 	return nil
@@ -1033,14 +1054,20 @@ func Reformat(ctx context.Context, l *logger.Logger, clusterName string, fs stri
 	}
 
 	var fsCmd string
-	switch fs {
+	switch vm.Filesystem(fs) {
 	case vm.Zfs:
-		if err := install.Install(ctx, l, c, []string{vm.Zfs}); err != nil {
+		if err := install.Install(ctx, l, c, []string{string(vm.Zfs)}); err != nil {
 			return err
 		}
 		fsCmd = `sudo zpool create -f data1 -m /mnt/data1 /dev/sdb`
 	case vm.Ext4:
 		fsCmd = `sudo mkfs.ext4 -F /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
+	case vm.Xfs:
+		fsCmd = `sudo mkfs.xfs -f /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
+	case vm.F2fs:
+		fsCmd = `sudo mkfs.f2fs -f /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
+	case vm.Btrfs:
+		fsCmd = `sudo mkfs.btrfs -f /dev/sdb && sudo mount -o defaults /dev/sdb /mnt/data1`
 	default:
 		return fmt.Errorf("unknown filesystem %q", fs)
 	}
@@ -1745,13 +1772,21 @@ func Create(
 	}
 
 	for _, o := range opts {
-		if o.CreateOpts.SSDOpts.FileSystem == vm.Zfs {
+		// Validate Filesystem option + check compatibility with providers.
+
+		fs, err := vm.ParseFileSystemOption(o.CreateOpts.SSDOpts.FileSystem)
+		if err != nil {
+			return err
+		}
+
+		if fs == vm.F2fs {
 			for _, provider := range o.CreateOpts.VMProviders {
-				// TODO(DarrylWong): support zfs on other providers, see: #123775.
-				// Once done, revisit all tests that set zfs to see if they can run on non GCE.
-				if !(provider == gce.ProviderName || provider == aws.ProviderName || provider == ibm.ProviderName) {
+				// TODO(golgeek): f2fs requires kernel 6+, which isn't available
+				// on IBM Cloud for Ubuntu 22.04 as of now. Remove this check when
+				// support is added.
+				if provider == ibm.ProviderName {
 					return fmt.Errorf(
-						"creating a node with --filesystem=zfs is currently not supported in %q", provider,
+						"creating a node with --filesystem=f2fs is currently not supported in %q", provider,
 					)
 				}
 			}
@@ -1818,9 +1853,13 @@ func Grow(
 		// reload the clusters before returning.
 		err = LoadClusters()
 	default:
-		// Save the cluster to the cache.
+		// Save the cluster to the cache and reload in-memory state so that
+		// subsequent operations (e.g., SetupSSH, Put) see the new nodes.
 		err = saveCluster(l, &c.Cluster)
 		if err != nil {
+			return err
+		}
+		if err = LoadClusters(); err != nil {
 			return err
 		}
 		err = SetupSSH(ctx, l, clusterName, false /* sync */)
@@ -2020,6 +2059,114 @@ func InitProviders() map[string]string {
 	}
 
 	return providersState
+}
+
+// StartPyroscope deploys and starts the Pyroscope profiling stack on a node.
+func StartPyroscope(ctx context.Context, l *logger.Logger, clusterName string) error {
+	c, err := GetClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+	if len(c.Nodes) != 1 {
+		return errors.New("pyroscope can only be started on a single node")
+	}
+
+	return pyroscope.Start(ctx, l, c)
+}
+
+// StopPyroscope tears down the Pyroscope profiling stack on a node.
+func StopPyroscope(ctx context.Context, l *logger.Logger, clusterName string) error {
+	c, err := GetClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+	if len(c.Nodes) != 1 {
+		return errors.New("pyroscope can only be stopped on a single node")
+	}
+
+	return pyroscope.Stop(ctx, l, c)
+}
+
+// AddPyroscopeNodes adds nodes from the target cluster to the Pyroscope scrape configuration.
+func AddPyroscopeNodes(
+	ctx context.Context, l *logger.Logger, pyroscopeClusterName string, targetClusterName string,
+) error {
+	pyroscopeCluster, err := GetClusterFromCache(l, pyroscopeClusterName)
+	if err != nil {
+		return err
+	}
+	if len(pyroscopeCluster.Nodes) != 1 {
+		return errors.New("pyroscope cluster must be a single node")
+	}
+
+	targetCluster, err := GetClusterFromCache(l, targetClusterName)
+	if err != nil {
+		return err
+	}
+
+	return pyroscope.AddNodes(ctx, l, pyroscopeCluster, targetCluster)
+}
+
+// RemovePyroscopeNodes removes nodes from the target cluster from the Pyroscope scrape
+// configuration.
+func RemovePyroscopeNodes(
+	ctx context.Context, l *logger.Logger, pyroscopeClusterName string, targetClusterName string,
+) error {
+	pyroscopeCluster, err := GetClusterFromCache(l, pyroscopeClusterName)
+	if err != nil {
+		return err
+	}
+	if len(pyroscopeCluster.Nodes) != 1 {
+		return errors.New("pyroscope cluster must be a single node")
+	}
+
+	targetCluster, err := GetClusterFromCache(l, targetClusterName)
+	if err != nil {
+		return err
+	}
+
+	return pyroscope.RemoveNodes(ctx, l, pyroscopeCluster, targetCluster)
+}
+
+// ListPyroscopeNodes displays the nodes from the target cluster currently being scraped by
+// Pyroscope.
+func ListPyroscopeNodes(
+	ctx context.Context, l *logger.Logger, pyroscopeClusterName string, targetClusterName string,
+) error {
+	pyroscopeCluster, err := GetClusterFromCache(l, pyroscopeClusterName)
+	if err != nil {
+		return err
+	}
+	if len(pyroscopeCluster.Nodes) != 1 {
+		return errors.New("pyroscope cluster must be a single node")
+	}
+
+	targetCluster, err := GetClusterFromCache(l, targetClusterName)
+	if err != nil {
+		return err
+	}
+
+	return pyroscope.ListNodes(ctx, l, pyroscopeCluster, targetCluster)
+}
+
+// InitPyroscopeTarget initializes the target cluster in the Pyroscope scrape configuration,
+// setting up authentication if the target cluster is secure.
+func InitPyroscopeTarget(
+	ctx context.Context,
+	l *logger.Logger,
+	pyroscopeClusterName, targetClusterName string,
+	secure install.ComplexSecureOption,
+) error {
+	pyroscopeCluster, err := GetClusterFromCache(l, pyroscopeClusterName)
+	if err != nil {
+		return err
+	}
+	targetCluster, err := GetClusterFromCache(l, targetClusterName, secure)
+	if err != nil {
+		return err
+	}
+
+	return pyroscope.InitTarget(ctx, l, pyroscopeCluster, targetCluster)
 }
 
 // StartGrafana spins up a prometheus and grafana instance on the last node provided and scrapes
@@ -2979,6 +3126,28 @@ func LoadBalancerIP(
 	return addr.IP, nil
 }
 
+// ListLoadBalancers returns all load balancers for the given cluster.
+func ListLoadBalancers(l *logger.Logger, clusterName string) ([]vm.ServiceAddress, error) {
+	c, err := GetClusterFromCache(l, clusterName)
+	if err != nil {
+		return nil, err
+	}
+	return c.ListLoadBalancers(l)
+}
+
+// DeleteLoadBalancer deletes all load balancers for the given cluster.
+func DeleteLoadBalancer(l *logger.Logger, clusterName string) error {
+	c, err := GetClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	// Delete all load balancers for the cluster (port=0 means delete all).
+	return vm.FanOut(c.VMs, func(provider vm.Provider, vms vm.List) error {
+		return provider.DeleteLoadBalancer(l, vms, 0)
+	})
+}
+
 // Deploy deploys a new version of cockroach to the given cluster. It currently
 // does not support clusters running external SQL instances.
 // TODO(herko): Add support for virtual clusters (external SQL processes)
@@ -3075,7 +3244,7 @@ func GetClusterFromCache(
 
 // getClusterFromCloud finds and returns a specified cluster by querying
 // provider APIs. This also syncs the local cluster cache through ListCloud.
-func getClusterFromCloud(l *logger.Logger, clusterName string) (*cloud.Cluster, error) {
+func getClusterFromCloud(l *logger.Logger, clusterName string) (*cloudcluster.Cluster, error) {
 	// ListCloud may fail due to a transient provider error, but
 	// we may have still found the cluster we care about. It will
 	// fail below if it can't find the cluster.
@@ -3083,9 +3252,9 @@ func getClusterFromCloud(l *logger.Logger, clusterName string) (*cloud.Cluster, 
 	c, ok := cld.Clusters[clusterName]
 	if !ok {
 		if err != nil {
-			return &cloud.Cluster{}, errors.Wrapf(err, "cluster %s not found", clusterName)
+			return &cloudcluster.Cluster{}, errors.Wrapf(err, "cluster %s not found", clusterName)
 		}
-		return &cloud.Cluster{}, fmt.Errorf("cluster %s does not exist", clusterName)
+		return &cloudcluster.Cluster{}, fmt.Errorf("cluster %s does not exist", clusterName)
 	}
 
 	return c, nil

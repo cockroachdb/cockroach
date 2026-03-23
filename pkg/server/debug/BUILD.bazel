@@ -7,6 +7,7 @@ go_library(
         "logspy.go",
         "queries_writer.go",
         "server.go",
+        "trace.go",
         "vmodule.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/server/debug",
@@ -15,6 +16,7 @@ go_library(
         "//pkg/base/serverident",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/closedts/sidetransport",
+        "//pkg/kv/kvserver/kvstorage",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
         "//pkg/server/debug/goroutineui",
@@ -56,7 +58,6 @@ go_test(
     embed = [":debug"],
     deps = [
         "//pkg/base",
-        "//pkg/kv/kvclient/kvtenant",
         "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",

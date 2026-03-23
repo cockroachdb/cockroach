@@ -30,9 +30,9 @@ func TestWALFailover(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	// Mock the encryption-at-rest constructor.
-	oldNewEncryptedEnvFunc := fs.NewEncryptedEnvFunc
-	defer func() { fs.NewEncryptedEnvFunc = oldNewEncryptedEnvFunc }()
-	fs.NewEncryptedEnvFunc = fauxNewEncryptedEnvFunc
+	oldNewEncryptedEnvFunc := fs.NewEncryptedEnv
+	defer func() { fs.NewEncryptedEnv = oldNewEncryptedEnvFunc }()
+	fs.NewEncryptedEnv = fauxNewEncryptedEnvFunc
 
 	var allEnvs fs.Envs
 	defer func() { allEnvs.CloseAll() }()

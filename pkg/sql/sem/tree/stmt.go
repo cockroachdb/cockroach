@@ -88,7 +88,9 @@ const (
 )
 
 const (
+	AlterSequenceTag       = "ALTER SEQUENCE"
 	AlterTableTag          = "ALTER TABLE"
+	AlterTypeTag           = "ALTER TYPE"
 	AlterPolicyTag         = "ALTER POLICY"
 	BackupTag              = "BACKUP"
 	CreateIndexTag         = "CREATE INDEX"
@@ -525,6 +527,28 @@ func (*AlterTableOwner) StatementTag() string { return "ALTER TABLE" }
 
 func (*AlterTableOwner) hiddenFromShowQueries() {}
 
+// StatementReturnType implements the Statement interface.
+func (*AlterViewSetOptions) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterViewSetOptions) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterViewSetOptions) StatementTag() string { return "ALTER VIEW" }
+
+func (*AlterViewSetOptions) hiddenFromShowQueries() {}
+
+// StatementReturnType implements the Statement interface.
+func (*AlterViewResetOptions) StatementReturnType() StatementReturnType { return DDL }
+
+// StatementType implements the Statement interface.
+func (*AlterViewResetOptions) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterViewResetOptions) StatementTag() string { return "ALTER VIEW" }
+
+func (*AlterViewResetOptions) hiddenFromShowQueries() {}
+
 // StatementType implements the Statement interface.
 func (*AlterTableSetLogged) StatementReturnType() StatementReturnType { return DDL }
 
@@ -650,7 +674,7 @@ func (*AlterSequence) StatementReturnType() StatementReturnType { return DDL }
 func (*AlterSequence) StatementType() StatementType { return TypeDDL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*AlterSequence) StatementTag() string { return "ALTER SEQUENCE" }
+func (*AlterSequence) StatementTag() string { return AlterSequenceTag }
 
 // StatementReturnType implements the Statement interface.
 func (*AlterRole) StatementReturnType() StatementReturnType { return DDL }
@@ -737,6 +761,8 @@ func (*BeginTransaction) StatementType() StatementType { return TypeTCL }
 // StatementTag returns a short string identifying the type of statement.
 func (*BeginTransaction) StatementTag() string { return "BEGIN" }
 
+const CallStmtTag = `CALL`
+
 // StatementReturnType implements the Statement interface.
 func (*Call) StatementReturnType() StatementReturnType { return Rows }
 
@@ -744,7 +770,7 @@ func (*Call) StatementReturnType() StatementReturnType { return Rows }
 func (*Call) StatementType() StatementType { return TypeTCL }
 
 // StatementTag returns a short string identifying the type of statement.
-func (*Call) StatementTag() string { return "CALL" }
+func (*Call) StatementTag() string { return CallStmtTag }
 
 // StatementReturnType implements the Statement interface.
 func (*ControlJobs) StatementReturnType() StatementReturnType { return RowsAffected }
@@ -2181,6 +2207,15 @@ func (*ShowFingerprints) StatementType() StatementType { return TypeDML }
 func (*ShowFingerprints) StatementTag() string { return "SHOW EXPERIMENTAL_FINGERPRINTS" }
 
 // StatementReturnType implements the Statement interface.
+func (*ShowStatementHints) StatementReturnType() StatementReturnType { return Rows }
+
+// StatementType implements the Statement interface.
+func (*ShowStatementHints) StatementType() StatementType { return TypeDML }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*ShowStatementHints) StatementTag() string { return "SHOW STATEMENT HINTS" }
+
+// StatementReturnType implements the Statement interface.
 func (*ShowConstraints) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -2588,6 +2623,8 @@ func (n *AlterTableSetNotNull) String() string                { return AsString(
 func (n *AlterTableOwner) String() string                     { return AsString(n) }
 func (n *AlterTableSetLogged) String() string                 { return AsString(n) }
 func (n *AlterTableSetSchema) String() string                 { return AsString(n) }
+func (n *AlterViewSetOptions) String() string                 { return AsString(n) }
+func (n *AlterViewResetOptions) String() string               { return AsString(n) }
 func (n *AlterTenantCapability) String() string               { return AsString(n) }
 func (n *AlterTenantSetClusterSetting) String() string        { return AsString(n) }
 func (n *AlterTenantReset) String() string                    { return AsString(n) }
@@ -2760,6 +2797,7 @@ func (n *ShowDefaultSessionVariablesForRole) String() string  { return AsString(
 func (n *ShowVar) String() string                             { return AsString(n) }
 func (n *ShowZoneConfig) String() string                      { return AsString(n) }
 func (n *ShowFingerprints) String() string                    { return AsString(n) }
+func (n *ShowStatementHints) String() string                  { return AsString(n) }
 func (n *ShowDefaultPrivileges) String() string               { return AsString(n) }
 func (n *ShowCompletions) String() string                     { return AsString(n) }
 func (n *ShowCommitTimestamp) String() string                 { return AsString(n) }

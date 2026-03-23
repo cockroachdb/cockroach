@@ -1,4 +1,4 @@
-# LogicTest: !local-prepared
+# LogicTest: default-configs 3node-tenant !local-prepared local-dist-merge-backfill-declarative-schema-changer
 # We've seen this file take more than an hour under race.
 skip under race
 
@@ -127,7 +127,7 @@ INSERT INTO t (a, f) VALUES (-2, 9)
 statement error validation of CHECK "a > 0:::INT8" failed on row: a=-2, f=9, b=NULL, c=NULL
 ALTER TABLE t ADD CONSTRAINT check_a CHECK (a > 0)
 
-statement ok
+statement count 1
 DELETE FROM t WHERE a = -2
 
 statement ok
@@ -214,9 +214,17 @@ ALTER TABLE t DROP CONSTRAINT bar
 statement ok
 ALTER TABLE t DROP CONSTRAINT IF EXISTS bar
 
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE t SET (schema_locked = false)
+
+# Legacy schema changer does not support dropping unique constraints via
+# ALTER TABLE DROP CONSTRAINT.
+onlyif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
 statement error cannot drop UNIQUE constraint \"foo\" using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead
 ALTER TABLE t DROP CONSTRAINT foo
 
+onlyif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
 statement ok
 DROP INDEX foo CASCADE
 
@@ -231,8 +239,13 @@ LIMIT 2
 SCHEMA CHANGE GC  GC for DROP INDEX test.public.t@foo CASCADE  root  running    0  ·
 SCHEMA CHANGE     DROP INDEX test.public.t@foo CASCADE         root  succeeded  1  ·
 
+# Declarative schema changer supports dropping unique constraints via
+# ALTER TABLE DROP CONSTRAINT.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE t DROP CONSTRAINT foo
 
-skipif config local-legacy-schema-changer
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
 query TTTTRT retry
 SELECT job_type, description, user_name, status, fraction_completed, error
 FROM crdb_internal.jobs
@@ -240,9 +253,8 @@ WHERE job_type = 'NEW SCHEMA CHANGE' OR job_type = 'SCHEMA CHANGE GC'
 ORDER BY created DESC
 LIMIT 2
 ----
-SCHEMA CHANGE GC   GC for DROP INDEX test.public.t@foo CASCADE  node  running    0  ·
-NEW SCHEMA CHANGE  DROP INDEX test.public.t@foo CASCADE         root  succeeded  1  ·
-
+SCHEMA CHANGE GC   GC for ALTER TABLE test.public.t DROP CONSTRAINT foo  node  running    0  ·
+NEW SCHEMA CHANGE  ALTER TABLE test.public.t DROP CONSTRAINT foo         root  succeeded  1  ·
 
 
 query TTBITTTBBBF colnames,rowsort
@@ -1041,7 +1053,7 @@ INSERT INTO t VALUES (1), (NULL)
 statement error (.*validation of CHECK "a IS NOT NULL" failed on row: a=NULL, rowid=\d+|pq: validation of column "a" NOT NULL failed on row: a=NULL, rowid=\d+)
 ALTER TABLE t ALTER COLUMN a SET NOT NULL
 
-statement ok
+statement count 1
 DELETE FROM t WHERE a IS NULL
 
 statement ok
@@ -1120,7 +1132,7 @@ INSERT INTO t VALUES (20)
 statement error pq: validation of CHECK "a < 16:::INT8" failed on row: a=17
 ALTER TABLE t VALIDATE CONSTRAINT check_a1
 
-statement ok
+statement count 1
 DELETE FROM t WHERE a = 17
 
 statement ok
@@ -1735,19 +1747,19 @@ statement error column "g" does not exist
 ALTER TABLE unique_without_index ADD CONSTRAINT bad_partial_unique UNIQUE WITHOUT INDEX (f) WHERE g > 0
 
 # The unique constraint prevents new duplicate values.
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error pgcode 23505 pq: duplicate key value violates unique constraint "my_unique_f"\nDETAIL: Key \(f\)=\(1\) already exists\.
 INSERT INTO unique_without_index (f) VALUES (1), (1)
 
 # There is no unique constraint on e, yet, so this insert succeeds.
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement ok
 INSERT INTO unique_without_index (e, f) VALUES (1, 1), (1, 2)
 
 # But trying to add a unique constraint now fails.
 # Note that we omit the constraint name in the expected error message because if the declarative schema changer is used,
 # the constraint name, at the time of validation failure, is still a place-holder name.
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX (e)
 
@@ -1757,19 +1769,20 @@ ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e UNIQUE WITHOUT INDEX
 ALTER TABLE unique_without_index ADD CONSTRAINT my_unique_e2 UNIQUE WITHOUT INDEX (e) NOT VALID
 
 # Trying to validate one of the constraints will fail.
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL: Key \(e\)=\(1\) is duplicated\.
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
 
 # But after we delete a row, validation should succeed.
-statement ok
+skipif config #126592 weak-iso-level-configs
+statement count 1
 DELETE FROM unique_without_index WHERE e = 1 AND f = 1;
 
 statement ok
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT my_unique_e
 
 # All these constraints are already valid, so validation should succeed.
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement ok
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_b;
 ALTER TABLE unique_without_index VALIDATE CONSTRAINT unique_a_b;
@@ -1826,7 +1839,7 @@ statement error pgcode 23505 pq: could not create unique constraint ".*"\nDETAIL
 ALTER TABLE unique_without_index_partial VALIDATE CONSTRAINT uniq_a_1
 
 # But after we delete a row, validation should succeed.
-statement ok
+statement count 1
 DELETE FROM unique_without_index_partial WHERE a = 1 AND b = 3 AND c = -3;
 
 statement ok
@@ -1881,8 +1894,24 @@ unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT IN
 unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
 unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
+# Drop an index-backed unique constraint using ALTER TABLE DROP CONSTRAINT.
+skipif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE unique_without_index DROP CONSTRAINT unique_without_index_c_key
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement ok
+ALTER TABLE unique_without_index SET (schema_locked = false)
+
+# Dropping the constraint only works with the declarative schema changer.
+# For the legacy config, drop the index itself.
+onlyif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
 statement error pgcode 0A000 cannot drop UNIQUE constraint \"unique_without_index_c_key\"
 ALTER TABLE unique_without_index DROP CONSTRAINT unique_without_index_c_key
+
+onlyif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1
+statement ok
+DROP INDEX unique_without_index_c_key CASCADE
 
 statement error pgcode 42704 constraint \"unique_b\" of relation \"unique_without_index\" does not exist
 ALTER TABLE unique_without_index DROP CONSTRAINT unique_b
@@ -1906,7 +1935,6 @@ unique_without_index  unique_b_1                  UNIQUE       UNIQUE WITHOUT IN
 unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
 unique_without_index  unique_d                    UNIQUE       UNIQUE WITHOUT INDEX (d)                true
 unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
 unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
 # Dropping a column in a unique constraint drops the constraint.
@@ -1922,7 +1950,6 @@ unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT IN
 unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
 unique_without_index  unique_d                    UNIQUE       UNIQUE WITHOUT INDEX (d)                true
 unique_without_index  unique_d_e                  UNIQUE       UNIQUE WITHOUT INDEX (d, e)             true
-unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
 unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
 query TTTTB nosort
@@ -1948,7 +1975,6 @@ unique_without_index  my_partial_unique_f         UNIQUE       UNIQUE WITHOUT IN
 unique_without_index  my_unique_e                 UNIQUE       UNIQUE WITHOUT INDEX (e)                true
 unique_without_index  my_unique_f                 UNIQUE       UNIQUE WITHOUT INDEX (f)                true
 unique_without_index  unique_c                    UNIQUE       UNIQUE WITHOUT INDEX (c)                true
-unique_without_index  unique_without_index_c_key  UNIQUE       UNIQUE (c ASC)                          true
 unique_without_index  unique_without_index_pkey   PRIMARY KEY  PRIMARY KEY (rowid ASC)                 true
 
 query TTTTB
@@ -2688,6 +2714,9 @@ ALTER TABLE storage_param_table SET (foo=100)
 statement error parameter "fillfactor" requires a float value
 ALTER TABLE storage_param_table SET (fillfactor=true)
 
+statement error pgcode 22023 error decoding "fillfactor": strconv.ParseFloat: parsing "invalid_val": invalid syntax
+ALTER TABLE storage_param_table SET (fillfactor=invalid_val)
+
 statement error unimplemented: storage parameter "toast_tuple_target"
 ALTER TABLE storage_param_table SET (toast_tuple_target=100)
 
@@ -2975,7 +3004,7 @@ WHERE
 ----
 {}
 
-statement error pq: invalid float value for sql_stats_automatic_collection_fraction_stale_rows: could not parse "hello" as type float: strconv.ParseFloat: parsing "hello": invalid syntax
+statement error pgcode 22P02 pq: invalid float value for sql_stats_automatic_collection_fraction_stale_rows: could not parse "hello" as type float: strconv.ParseFloat: parsing "hello": invalid syntax
 ALTER TABLE t5 SET (sql_stats_automatic_collection_fraction_stale_rows = 'hello')
 
 statement error pq: invalid integer value for sql_stats_automatic_collection_min_stale_rows: could not parse "world" as type int: strconv.ParseInt: parsing "world": invalid syntax
@@ -3019,6 +3048,149 @@ CREATE TABLE public.t5 (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t5_pkey PRIMARY KEY (rowid ASC)
 ) WITH (sql_stats_automatic_collection_min_stale_rows = 1234, sql_stats_automatic_collection_fraction_stale_rows = 0.15, schema_locked = true);
+
+# -----------------------------------------------------------------------------
+# sql_stats_forecasts_enabled - boolean storage parameter for statistics forecasting
+# -----------------------------------------------------------------------------
+
+statement ok
+ALTER TABLE t5 SET (sql_stats_forecasts_enabled = true)
+
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->>'forecastStats'
+FROM
+    system.namespace AS ns
+    INNER JOIN system.descriptor AS d ON d.id = ns.id
+WHERE
+    ns.name = 't5'
+----
+true
+
+statement ok
+ALTER TABLE t5 SET (sql_stats_forecasts_enabled = false)
+
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->>'forecastStats'
+FROM
+    system.namespace AS ns
+    INNER JOIN system.descriptor AS d ON d.id = ns.id
+WHERE
+    ns.name = 't5'
+----
+false
+
+statement ok
+ALTER TABLE t5 RESET (sql_stats_forecasts_enabled)
+
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->'forecastStats'
+FROM
+    system.namespace AS ns
+    INNER JOIN system.descriptor AS d ON d.id = ns.id
+WHERE
+    ns.name = 't5'
+----
+NULL
+
+statement error parameter "sql_stats_forecasts_enabled" requires a Boolean value
+ALTER TABLE t5 SET (sql_stats_forecasts_enabled = 'invalid')
+
+# -----------------------------------------------------------------------------
+# sql_stats_automatic_partial_collection_min_stale_rows - integer storage parameter
+# -----------------------------------------------------------------------------
+
+statement ok
+ALTER TABLE t5 SET (sql_stats_automatic_partial_collection_min_stale_rows = 1000)
+
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->'autoStatsSettings'->>'partialMinStaleRows'
+FROM
+    system.namespace AS ns
+    INNER JOIN system.descriptor AS d ON d.id = ns.id
+WHERE
+    ns.name = 't5'
+----
+1000
+
+statement ok
+ALTER TABLE t5 RESET (sql_stats_automatic_partial_collection_min_stale_rows)
+
+statement error pq: invalid integer value for sql_stats_automatic_partial_collection_min_stale_rows: cannot be set to a negative value: -1
+ALTER TABLE t5 SET (sql_stats_automatic_partial_collection_min_stale_rows = -1)
+
+# -----------------------------------------------------------------------------
+# sql_stats_automatic_partial_collection_fraction_stale_rows - float storage parameter
+# -----------------------------------------------------------------------------
+
+statement ok
+ALTER TABLE t5 SET (sql_stats_automatic_partial_collection_fraction_stale_rows = 0.25)
+
+query T
+SELECT
+    crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor',
+                              d.descriptor, false)->'table'->'autoStatsSettings'->>'partialFractionStaleRows'
+FROM
+    system.namespace AS ns
+    INNER JOIN system.descriptor AS d ON d.id = ns.id
+WHERE
+    ns.name = 't5'
+----
+0.25
+
+statement ok
+ALTER TABLE t5 RESET (sql_stats_automatic_partial_collection_fraction_stale_rows)
+
+statement error pq: invalid float value for sql_stats_automatic_partial_collection_fraction_stale_rows: cannot set to a negative value: -0.500000
+ALTER TABLE t5 SET (sql_stats_automatic_partial_collection_fraction_stale_rows = -0.5)
+
+statement error pgcode 22P02 pq: invalid float value for sql_stats_automatic_partial_collection_fraction_stale_rows: could not parse "invalid" as type float: strconv.ParseFloat: parsing "invalid": invalid syntax
+ALTER TABLE t5 SET (sql_stats_automatic_partial_collection_fraction_stale_rows = 'invalid')
+
+statement ok
+DROP TABLE t5
+
+subtest end
+
+# -----------------------------------------------------------------------------
+# Unimplemented index storage parameters
+# These should all return an unimplemented error with issue 43299.
+# -----------------------------------------------------------------------------
+
+subtest unimplemented_index_storage_params
+
+statement ok
+CREATE TABLE t_index_params (a INT PRIMARY KEY, b INT)
+
+statement error unimplemented: storage parameter "vacuum_cleanup_index_scale_factor"
+CREATE INDEX idx ON t_index_params (b) WITH (vacuum_cleanup_index_scale_factor = 0.1)
+
+statement error unimplemented: storage parameter "buffering"
+CREATE INDEX idx ON t_index_params (b) WITH (buffering = 'on')
+
+statement error unimplemented: storage parameter "fastupdate"
+CREATE INDEX idx ON t_index_params (b) WITH (fastupdate = true)
+
+statement error unimplemented: storage parameter "gin_pending_list_limit"
+CREATE INDEX idx ON t_index_params (b) WITH (gin_pending_list_limit = 1000)
+
+statement error unimplemented: storage parameter "pages_per_range"
+CREATE INDEX idx ON t_index_params (b) WITH (pages_per_range = 128)
+
+statement error unimplemented: storage parameter "autosummarize"
+CREATE INDEX idx ON t_index_params (b) WITH (autosummarize = true)
+
+statement ok
+DROP TABLE t_index_params
+
+subtest end
 
 subtest add_volatile_unique_column_81448
 
@@ -4422,7 +4594,7 @@ statement ok
 INSERT INTO t_alter_identity DEFAULT VALUES;
 
 statement ok
-ALTER TABLE t_alter_identity ALTER COLUMN b SET MAXVALUE 40 RESTART WITH 20 SET CACHE 5 SET INCREMENT BY 2
+ALTER TABLE t_alter_identity ALTER COLUMN b SET MAXVALUE 40 RESTART WITH 20 SET CACHE 5 SET INCREMENT BY 2;
 
 statement ok
 INSERT INTO t_alter_identity DEFAULT VALUES;
@@ -4438,6 +4610,107 @@ SELECT b from t_alter_identity ORDER BY b;
 9
 20
 22
+
+subtest issue-52552
+
+statement ok
+CREATE TABLE test_52552_asc (c1 int GENERATED ALWAYS AS IDENTITY);
+
+statement ok
+ALTER TABLE test_52552_asc ALTER COLUMN c1 SET INCREMENT BY 3 SET MINVALUE 1 SET MAXVALUE 12 RESTART;
+
+statement ok
+ALTER TABLE test_52552_asc ALTER COLUMN c1 SET INCREMENT BY 8;
+
+statement ok
+INSERT INTO test_52552_asc DEFAULT VALUES;
+
+statement ok
+INSERT INTO test_52552_asc DEFAULT VALUES;
+
+statement error pq: reached maximum value of sequence "test_52552_asc_c1_seq"
+INSERT INTO test_52552_asc DEFAULT VALUES;
+
+statement error pq: reached maximum value of sequence "test_52552_asc_c1_seq"
+INSERT INTO test_52552_asc DEFAULT VALUES;
+
+query I rowsort
+SELECT c1 FROM test_52552_asc;
+----
+1
+9
+
+statement ok
+ALTER TABLE test_52552_asc ALTER COLUMN c1 SET NO MAXVALUE;
+
+statement ok
+INSERT INTO test_52552_asc DEFAULT VALUES;
+
+query I rowsort
+SELECT c1 FROM test_52552_asc;
+----
+1
+9
+17
+
+statement ok
+CREATE TABLE test_52552_desc (c1 int GENERATED ALWAYS AS IDENTITY);
+
+statement ok
+ALTER TABLE test_52552_desc ALTER COLUMN c1 SET INCREMENT BY -5 SET MINVALUE 1 SET MAXVALUE 12 SET START 12 RESTART;
+
+statement ok
+ALTER TABLE test_52552_desc ALTER COLUMN c1 SET INCREMENT BY -8;
+
+statement ok
+INSERT INTO test_52552_desc DEFAULT VALUES;
+
+statement ok
+INSERT INTO test_52552_desc DEFAULT VALUES;
+
+query I rowsort
+SELECT c1 FROM test_52552_desc;
+----
+12
+4
+
+statement error pq: reached minimum value of sequence "test_52552_desc_c1_seq" \(1\)
+INSERT INTO test_52552_desc DEFAULT VALUES;
+
+statement error pq: reached minimum value of sequence "test_52552_desc_c1_seq" \(1\)
+INSERT INTO test_52552_desc DEFAULT VALUES;
+
+statement ok
+ALTER TABLE test_52552_desc ALTER COLUMN c1 SET NO MINVALUE;
+
+statement ok
+INSERT INTO test_52552_desc DEFAULT VALUES;
+
+query I rowsort
+SELECT c1 FROM test_52552_desc;
+----
+12
+4
+-4
+
+statement ok
+CREATE TABLE test_52552_start (c1 int GENERATED ALWAYS AS IDENTITY);
+
+statement ok
+ALTER TABLE test_52552_start ALTER COLUMN c1 SET INCREMENT 3 SET MINVALUE 1 SET MAXVALUE 100 SET START 50;
+
+statement ok
+ALTER TABLE test_52552_start ALTER COLUMN c1 SET INCREMENT 8;
+
+statement ok
+INSERT INTO test_52552_start DEFAULT VALUES;
+
+query I
+SELECT c1 FROM test_52552_start;
+----
+50
+
+subtest end
 
 statement ok
 CREATE TABLE t_identity_drop (a int GENERATED ALWAYS AS IDENTITY (START WITH 10), b int GENERATED BY DEFAULT AS IDENTITY);
@@ -4573,7 +4846,7 @@ ALTER TABLE y DROP CONSTRAINT y_computed_col_fkey;
 statement ok
 ALTER TABLE y ADD FOREIGN KEY (computed_col) REFERENCES x ON DELETE CASCADE;
 
-statement ok
+statement count 2
 DELETE FROM x WHERE A IN (0,2);
 
 query II rowsort
@@ -4939,6 +5212,129 @@ CREATE SEQUENCE public.t1_serial_columns_z_seq1 MINVALUE 1 MAXVALUE 922337203685
 statement ok
 RESET create_table_with_schema_locked
 
+# Regression for #158804: dropping constraints with comments should not leave
+# dangling constraint comments in system.comments table.
+subtest drop_constraint_removes_comments
+
+# Setup: Create parent table for foreign key constraints.
+statement ok
+CREATE TABLE t_parent (
+  id INT PRIMARY KEY
+);
+
+# Test table with various constraint types.
+statement ok
+CREATE TABLE t_constraints (
+  a INT,
+  b INT NOT NULL,
+  c INT UNIQUE,
+  d INT,
+  e INT,
+  CONSTRAINT pkey_a PRIMARY KEY (a),
+  CONSTRAINT check_b CHECK (b > 0),
+  CONSTRAINT unique_d UNIQUE WITHOUT INDEX (d),
+  CONSTRAINT fk_e FOREIGN KEY (e) REFERENCES t_parent(id),
+  FAMILY f1 (a, b, c, d, e)
+) WITH (schema_locked = false);
+
+# Add comments on all constraints.
+statement ok
+COMMENT ON CONSTRAINT pkey_a ON t_constraints IS 'primary key comment';
+
+statement ok
+COMMENT ON CONSTRAINT check_b ON t_constraints IS 'check constraint comment';
+
+statement ok
+COMMENT ON CONSTRAINT t_constraints_c_key ON t_constraints IS 'unique with index comment';
+
+statement ok
+COMMENT ON CONSTRAINT unique_d ON t_constraints IS 'unique without index comment';
+
+statement ok
+COMMENT ON CONSTRAINT fk_e ON t_constraints IS 'foreign key comment';
+
+# Verify all comments exist (5 constraint comments).
+query I
+SELECT count(*) FROM system.comments WHERE type = 5 AND object_id = (
+  SELECT table_id FROM crdb_internal.tables
+  WHERE name = 't_constraints' AND schema_name = 'public' AND database_name = current_database()
+);
+----
+5
+
+# Drop check constraint directly - should remove its comment.
+statement ok
+ALTER TABLE t_constraints DROP CONSTRAINT check_b;
+
+query I
+SELECT count(*) FROM system.comments WHERE type = 5 AND object_id = (
+  SELECT table_id FROM crdb_internal.tables
+  WHERE name = 't_constraints' AND schema_name = 'public' AND database_name = current_database()
+);
+----
+4
+
+# Drop foreign key constraint via column drop - should remove its comment.
+statement ok
+ALTER TABLE t_constraints DROP COLUMN e;
+
+query I
+SELECT count(*) FROM system.comments WHERE type = 5 AND object_id = (
+  SELECT table_id FROM crdb_internal.tables
+  WHERE name = 't_constraints' AND schema_name = 'public' AND database_name = current_database()
+);
+----
+3
+
+# Drop unique without index constraint via column drop - should remove its comment.
+statement ok
+ALTER TABLE t_constraints DROP COLUMN d;
+
+query I
+SELECT count(*) FROM system.comments WHERE type = 5 AND object_id = (
+  SELECT table_id FROM crdb_internal.tables
+  WHERE name = 't_constraints' AND schema_name = 'public' AND database_name = current_database()
+);
+----
+2
+
+# Drop unique constraint with index via column drop - should remove its comment.
+statement ok
+ALTER TABLE t_constraints DROP COLUMN c;
+
+query I
+SELECT count(*) FROM system.comments WHERE type = 5 AND object_id = (
+  SELECT table_id FROM crdb_internal.tables
+  WHERE name = 't_constraints' AND schema_name = 'public' AND database_name = current_database()
+);
+----
+1
+
+# Change primary key - should retain old primary key comment and move it to the new PK.
+statement ok
+ALTER TABLE t_constraints ALTER PRIMARY KEY USING COLUMNS (b);
+
+query I
+SELECT count(*) FROM system.comments WHERE type = 5 AND object_id = (
+  SELECT table_id FROM crdb_internal.tables
+  WHERE name = 't_constraints' AND schema_name = 'public' AND database_name = current_database()
+);
+----
+1
+
+query T
+SELECT obj_description(oid) FROM pg_constraint WHERE conrelid = 't_constraints'::regclass AND contype = 'p';
+----
+primary key comment
+
+statement ok
+DROP TABLE t_constraints;
+
+statement ok
+DROP TABLE t_parent;
+
+subtest end
+
 # Regression tests for issue #137326. Add column with IF NOT EXIST.
 subtest add_col_if_not_exists
 
@@ -5197,7 +5593,7 @@ t_128420  CREATE TABLE public.t_128420 (
             i INT8 NOT NULL,
             box BOX2D NULL,
             crdb_internal_i_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(i))), 16:::INT8)) VIRTUAL,
-            CONSTRAINT t_128420_pkey PRIMARY KEY (i ASC) USING HASH WITH (bucket_count=16),
+            CONSTRAINT t_128420_pkey PRIMARY KEY (i ASC) USING HASH WITH (bucket_count=16, shard_columns=(i)),
             UNIQUE INDEX t_128420_box_key (box ASC)
           );
 
@@ -5272,7 +5668,6 @@ CREATE TABLE tbl_with_unique_without_index (i INT DEFAULT 11, j INT);
 statement ok
 ALTER TABLE tbl_with_unique_without_index ADD CONSTRAINT c UNIQUE WITHOUT INDEX (i, j) WHERE i IS NOT NULL;
 
-skipif config local-mixed-25.3
 skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE tbl_with_unique_without_index DROP CONSTRAINT c, DROP COLUMN i;
@@ -5303,5 +5698,43 @@ INSERT INTO t_alter_pk_with_inverted VALUES ('test', ARRAY[1.0, 2.0]);
 
 statement ok
 ALTER TABLE t_alter_pk_with_inverted ALTER PRIMARY KEY USING COLUMNS (a) USING HASH;
+
+subtest end
+
+# Regression test for #160436: NOT NULL validation errors containing strings
+# that match IsClosedConnection patterns (like "EOF", "is closing",
+# "use of closed connection", etc.) should not be incorrectly classified as
+# retriable connection errors.
+subtest regression_160436_not_null_validation_error_patterns
+
+statement ok
+CREATE TABLE t160436_patterns (
+    i INT PRIMARY KEY,
+    j INT,
+    pattern_eof STRING,
+    pattern_is_closing STRING,
+    pattern_tls_closed STRING,
+    pattern_network_closed STRING,
+    pattern_closed_pipe STRING,
+    pattern_node_unavailable STRING
+);
+
+statement ok
+INSERT INTO t160436_patterns VALUES (
+    1,
+    NULL,
+    '{"IYUH31EOF": 0.123}',
+    'the connection is closing now',
+    'error: tls: use of closed connection',
+    'use of closed network connection detected',
+    'io: read/write on closed pipe',
+    'the node unavailable for requests'
+);
+
+statement error validation of column "j" NOT NULL failed on row:
+ALTER TABLE t160436_patterns ALTER COLUMN j SET NOT NULL;
+
+statement ok
+DROP TABLE t160436_patterns;
 
 subtest end

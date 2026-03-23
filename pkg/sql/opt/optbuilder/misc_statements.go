@@ -163,12 +163,16 @@ func (b *Builder) buildCreateStatistics(n *tree.CreateStats, inScope *scope) (ou
 
 	var tabID opt.TableID
 	var ds cat.DataSource
+	// ANALYZE / CREATE STATISTICS requires MAINTAIN or SELECT privilege. In a
+	// future release, we could require only MAINTAIN and remove the SELECT
+	// fallback. The SELECT check is kept for backwards compatibility with
+	// pre-26.2 behavior.
 	switch t := n.Table.(type) {
 	case *tree.UnresolvedObjectName:
 		tn := t.ToTableName()
-		ds, _, _ = b.resolveDataSource(&tn, privilege.SELECT)
+		ds, _, _ = b.resolveDataSource(&tn, privilege.MAINTAIN, privilege.SELECT)
 	case *tree.TableRef:
-		ds, _ = b.resolveDataSourceRef(t, privilege.SELECT)
+		ds, _ = b.resolveDataSourceRef(t, privilege.MAINTAIN, privilege.SELECT)
 	default:
 		panic(errors.AssertionFailedf("unexpected table type: %T", t))
 	}

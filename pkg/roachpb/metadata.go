@@ -802,6 +802,10 @@ const MaxDiversityScore = 1.0
 // There is also a need to consider the cases where the localities have
 // different lengths. For these cases, we treat the missing key on one side as
 // different.
+//
+// Note that the diversity score calculation in MMA takes the pessimistic
+// approach of treating missing keys as identical, resulting in lower diversity
+// scores when the localities have different lengths.
 func (l Locality) DiversityScore(other Locality) float64 {
 	length := len(l.Tiers)
 	if len(other.Tiers) < length {

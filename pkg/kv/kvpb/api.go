@@ -754,6 +754,7 @@ func (h *BatchResponse_Header) combine(o BatchResponse_Header) error {
 	h.Now.Forward(o.Now)
 	h.RangeInfos = append(h.RangeInfos, o.RangeInfos...)
 	h.CollectedSpans = append(h.CollectedSpans, o.CollectedSpans...)
+	h.CPUTime += o.CPUTime
 	return nil
 }
 
@@ -1902,8 +1903,10 @@ func (*DeleteRequest) flags() flag {
 }
 
 func (drr *DeleteRangeRequest) flags() flag {
-	// DeleteRangeRequest using MVCC range tombstones cannot be transactional.
-	if drr.UseRangeTombstone {
+	// DeleteRangeRequest using MVCC range tombstones or deletion predicates
+	// cannot be transactional.
+	hasPredicate := drr.Predicates != (DeleteRangePredicates{})
+	if drr.UseRangeTombstone || hasPredicate {
 		return isWrite | isRange | isAlone | appliesTSCache
 	}
 	// DeleteRangeRequest has different properties if the "inline" flag is set.
@@ -2656,4 +2659,69 @@ func (r *AddSSTableRequest) Validate(bh Header) error {
 		}
 	}
 	return nil
+}
+
+func (m *QuorumReplicationFlowAdmissionEvent) String() string {
+	return redact.StringWithoutMarkers(m)
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (m *QuorumReplicationFlowAdmissionEvent) SafeFormat(w redact.SafePrinter, _ rune) {
+	prefix := redact.SafeString("range controller waited for quorum flow control")
+	w.Printf("%s for %d nanos", prefix, m.WaitDurationNanos)
+}
+
+// BatchCanBeEvaluatedOnFollower determines if a batch consists exclusively of
+// requests that can be evaluated on a follower replica, given a sufficiently
+// advanced closed timestamp.
+func BatchCanBeEvaluatedOnFollower(ctx context.Context, ba *BatchRequest) bool {
+	// Various restrictions apply to a batch for it to be successfully considered
+	// for evaluation on a follower replica, which are described inline.
+	//
+	// The batch cannot have or intend to receive a timestamp set from a
+	// server-side clock. If follower with a lagging clock sets its timestamp
+	// and this then allows the follower to evaluate the batch as a follower read,
+	// then the batch might miss past writes served at higher timestamps on the
+	// leaseholder.
+	tsFromServerClock := ba.Txn == nil && (ba.Timestamp.IsEmpty() || ba.TimestampFromServerClock != nil)
+	if tsFromServerClock {
+		return false
+	}
+	if len(ba.Requests) == 0 {
+		// No requests to evaluate.
+		return false
+	}
+	// Each request in the batch needs to have clearly defined semantics when
+	// served under the closed timestamp.
+	for _, ru := range ba.Requests {
+		r := ru.GetInner()
+		switch {
+		case IsTransactional(r):
+			// Transactional requests have clear semantics when served under the
+			// closed timestamp. The request must be read-only, as follower replicas
+			// cannot propose writes to Raft. The request also needs to be
+			// non-locking, because unreplicated locks are only held on the
+			// leaseholder.
+			if !IsReadOnly(r) || IsLocking(r) {
+				return false
+			}
+		case r.Method() == Export:
+			// Export requests also have clear semantics when served under the closed
+			// timestamp as well, even though they are non-transactional, as they
+			// define the start and end timestamp to export data over.
+			if r.(*ExportRequest).ExportFingerprint {
+				// Fingerprint reuses a lot of the backup code by sending export requests,
+				// but unlike backup requests, doesn't have a job and multiple backup processors
+				// to spread the workload around the cluster. In a 3-node cluster, the request
+				// routing logic will determine that all replicas exist on the gateway node and
+				// with following reads allowed, will attempt to route all the export requests to
+				// the gateway node. This leads to one node doing all the work while the others sit
+				// idle. Return false to prevent follower reads for fingerprinting
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
 }

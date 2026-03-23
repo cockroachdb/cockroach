@@ -215,6 +215,7 @@ func assertColumnOwnsSequences(
 	colIdx int,
 	seqNames []string,
 ) {
+	t.Helper()
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, dbName, tbName)
 	col := tableDesc.PublicColumns()[colIdx]
 	var seqDescs []catalog.TableDescriptor

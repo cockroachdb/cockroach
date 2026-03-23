@@ -40,6 +40,8 @@ const (
 // OIDs in this block are not extensions of postgres, but are not supported in
 // github.com/lib/pq/oid. See postgres/src/include/catalog/pg_type.dat for oids.
 const (
+	T_aclitem   = oid.Oid(1033)
+	T__aclitem  = oid.Oid(1034)
 	T_jsonpath  = oid.Oid(4072)
 	T__jsonpath = oid.Oid(4073)
 )
@@ -55,6 +57,8 @@ var ExtensionTypeName = map[oid.Oid]string{
 	T__box2d:     "_BOX2D",
 	T_pgvector:   "VECTOR",
 	T__pgvector:  "_VECTOR",
+	T_aclitem:    "ACLITEM",
+	T__aclitem:   "_ACLITEM",
 	T_jsonpath:   "JSONPATH",
 	T__jsonpath:  "_JSONPATH",
 	T_citext:     "CITEXT",

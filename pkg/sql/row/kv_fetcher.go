@@ -61,14 +61,16 @@ func newTxnKVFetcher(
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
+	workloadID uint64,
 ) *txnKVFetcher {
 	alloc := new(struct {
 		batchRequestsIssued int64
 		kvPairsRead         int64
+		kvCPUTime           int64
 	})
 	var sendFn sendFunc
 	if bsHeader == nil {
-		sendFn = makeSendFunc(txn, ext, &alloc.batchRequestsIssued)
+		sendFn = makeSendFunc(txn, ext, &alloc.batchRequestsIssued, &alloc.kvCPUTime)
 	} else {
 		negotiated := false
 		sendFn = func(ctx context.Context, ba *kvpb.BatchRequest) (br *kvpb.BatchResponse, _ error) {
@@ -95,6 +97,9 @@ func newTxnKVFetcher(
 				return nil, pErr.GoError()
 			}
 			alloc.batchRequestsIssued++
+			if br.CPUTime > 0 {
+				alloc.kvCPUTime += br.CPUTime
+			}
 			return br, nil
 		}
 	}
@@ -112,6 +117,8 @@ func newTxnKVFetcher(
 		forceProductionKVBatchSize: forceProductionKVBatchSize,
 		kvPairsRead:                &alloc.kvPairsRead,
 		batchRequestsIssued:        &alloc.batchRequestsIssued,
+		kvCPUTime:                  &alloc.kvCPUTime,
+		workloadID:                 workloadID,
 	}
 	fetcherArgs.admission.requestHeader = txn.AdmissionHeader()
 	fetcherArgs.admission.responseQ = txn.DB().SQLKVResponseAdmissionQ
@@ -143,10 +150,11 @@ func NewDirectKVBatchFetcher(
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
+	workloadID uint64,
 ) KVBatchFetcher {
 	f := newTxnKVFetcher(
 		txn, bsHeader, reverse, rawMVCCValues, lockStrength, lockWaitPolicy, lockDurability,
-		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext,
+		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext, workloadID,
 	)
 	f.scanFormat = kvpb.COL_BATCH_RESPONSE
 	f.indexFetchSpec = spec
@@ -172,10 +180,11 @@ func NewKVFetcher(
 	acc *mon.BoundAccount,
 	forceProductionKVBatchSize bool,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
+	workloadID uint64,
 ) *KVFetcher {
 	return newKVFetcher(newTxnKVFetcher(
 		txn, bsHeader, reverse, rawMVCCValues, lockStrength, lockWaitPolicy, lockDurability,
-		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext,
+		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext, workloadID,
 	))
 }
 
@@ -203,10 +212,12 @@ func NewStreamingKVFetcher(
 	kvFetcherMemAcc *mon.BoundAccount,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 	rawMVCCValues bool,
+	workloadID uint64,
 ) *KVFetcher {
 	var kvPairsRead int64
 	var batchRequestsIssued int64
-	sendFn := makeSendFunc(txn, ext, &batchRequestsIssued)
+	var kvCPUTime int64
+	sendFn := makeSendFunc(txn, ext, &batchRequestsIssued, &kvCPUTime)
 	streamer := kvstreamer.NewStreamer(
 		distSender,
 		metrics,
@@ -219,9 +230,11 @@ func NewStreamingKVFetcher(
 		streamerBudgetLimit,
 		streamerBudgetAcc,
 		&kvPairsRead,
+		&kvCPUTime,
 		GetKeyLockingStrength(lockStrength),
 		GetKeyLockingDurability(lockDurability),
 		reverse,
+		workloadID,
 	)
 	mode := kvstreamer.OutOfOrder
 	if maintainOrdering {
@@ -238,7 +251,7 @@ func NewStreamingKVFetcher(
 	)
 	return newKVFetcher(newTxnKVStreamer(
 		streamer, lockStrength, lockDurability, kvFetcherMemAcc,
-		&kvPairsRead, &batchRequestsIssued, rawMVCCValues, reverse,
+		&kvPairsRead, &batchRequestsIssued, &kvCPUTime, rawMVCCValues, reverse,
 	))
 }
 
@@ -418,6 +431,11 @@ func (f *KVProvider) GetKVPairsRead() int64 {
 
 // GetBatchRequestsIssued implements the KVBatchFetcher interface.
 func (f *KVProvider) GetBatchRequestsIssued() int64 {
+	return 0
+}
+
+// GetKVCPUTime implements the KVBatchFetcher interface.
+func (f *KVProvider) GetKVCPUTime() int64 {
 	return 0
 }
 

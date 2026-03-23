@@ -1426,6 +1426,10 @@ func randRangeOpt(rng *rand.Rand) rangeOptions {
 	return rangeOptions(rng.Intn(int(excludeFrom|excludeTo) + 1))
 }
 
+// NOTE: if this benchmark, specifically the "time" variants (i.e. sec/op) is
+// being flagged in a benchmark GH issue, it can likely be ignored, as the
+// benchmark is sensitive to timings. We care more about the allocation
+// benchmarks.
 func BenchmarkIntervalSklDecodeValue(b *testing.B) {
 	runBenchWithVals(b, func(b *testing.B, val cacheValue) {
 		var arr [encodedValSize]byte

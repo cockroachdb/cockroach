@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
 
@@ -250,7 +251,7 @@ func (r *commandResult) beforeAdd() error {
 	return nil
 }
 
-// JobIdColIdx is based on jobs.BulkJobExecutionResultHeader and
+// JobIdColIdx is based on jobs.ImportJobExecutionResultHeader and
 // jobs.DetachedJobExecutionResultHeader.
 var JobIdColIdx int
 
@@ -343,10 +344,12 @@ func (r *commandResult) SendNotice(
 }
 
 // SetColumns is part of the sql.RestrictedCommandResult interface.
-func (r *commandResult) SetColumns(ctx context.Context, cols colinfo.ResultColumns) {
+func (r *commandResult) SetColumns(
+	ctx context.Context, cols colinfo.ResultColumns, skipRowDescription bool,
+) {
 	r.assertNotReleased()
 	r.conn.writerState.fi.registerCmd(r.pos)
-	if r.descOpt == sql.NeedRowDesc {
+	if r.descOpt == sql.NeedRowDesc && !skipRowDescription {
 		_ /* err */ = r.conn.writeRowDescription(ctx, cols, r.formatCodes, &r.conn.writerState.buf)
 	}
 	r.types = make([]*types.T, len(cols))
@@ -743,33 +746,41 @@ func (r *limitedCommandResult) Close(ctx context.Context, t sql.TransactionStatu
 }
 
 // Get the column index for job id based on the result header defined in
-// jobs.BulkJobExecutionResultHeader and jobs.DetachedJobExecutionResultHeader.
+// jobs.ImportJobExecutionResultHeader, jobs.BulkJobExecutionResultHeader, and
+// jobs.DetachedJobExecutionResultHeader.
 func init() {
-	jobIdIdxInBulkJobExecutionResultHeader := -1
-	jobIdIdxInDetachedJobExecutionResultHeader := -1
-	for i, col := range jobs.BulkJobExecutionResultHeader {
+	jobIdIdxInImportJobExecutionResultHeader := -1
+	for i, col := range jobs.ImportJobExecutionResultHeader {
 		if col.Name == "job_id" {
-			jobIdIdxInBulkJobExecutionResultHeader = i
+			jobIdIdxInImportJobExecutionResultHeader = i
 			break
 		}
 	}
-	if jobIdIdxInBulkJobExecutionResultHeader == -1 {
-		panic("cannot find the job id column in BulkJobExecutionResultHeader")
+	if jobIdIdxInImportJobExecutionResultHeader == -1 {
+		panic("cannot find the job id column in ImportJobExecutionResultHeader")
 	}
 
-	for i, col := range jobs.DetachedJobExecutionResultHeader {
-		if col.Name == "job_id" {
-			if i != jobIdIdxInBulkJobExecutionResultHeader {
-				panic("column index of job_id in DetachedJobExecutionResultHeader and" +
-					" BulkJobExecutionResultHeader should be the same")
-			} else {
-				jobIdIdxInDetachedJobExecutionResultHeader = i
+	for _, h := range []struct {
+		name   redact.SafeString
+		header colinfo.ResultColumns
+	}{
+		{"BulkJobExecutionResultHeader", jobs.BulkJobExecutionResultHeader},
+		{"DetachedJobExecutionResultHeader", jobs.DetachedJobExecutionResultHeader},
+	} {
+		found := false
+		for i, col := range h.header {
+			if col.Name == "job_id" {
+				if i != jobIdIdxInImportJobExecutionResultHeader {
+					panic(fmt.Sprintf("column index of job_id in %s and"+
+						" ImportJobExecutionResultHeader should be the same", h.name))
+				}
+				found = true
 				break
 			}
 		}
+		if !found {
+			panic(fmt.Sprintf("cannot find the job id column in %s", h.name))
+		}
 	}
-	if jobIdIdxInDetachedJobExecutionResultHeader == -1 {
-		panic("cannot find the job id column in DetachedJobExecutionResultHeader")
-	}
-	JobIdColIdx = jobIdIdxInBulkJobExecutionResultHeader
+	JobIdColIdx = jobIdIdxInImportJobExecutionResultHeader
 }

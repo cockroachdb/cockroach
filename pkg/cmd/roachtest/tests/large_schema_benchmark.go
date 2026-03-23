@@ -14,9 +14,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -42,7 +44,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 		spec.WorkloadNode(),
 		spec.WorkloadNodeCPU(8),
 		spec.VolumeSize(800),
-		spec.GCEVolumeType("pd-ssd"),
+		spec.VolumeType("pd-ssd"),
 		spec.GCEMachineType("n2-standard-8"),
 	}
 	testTimeout := 19 * time.Hour
@@ -73,8 +75,13 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Weekly),
 		Timeout:          testTimeout,
+		// Skip INSPECT and descriptor post-validation because this benchmark
+		// creates many databases and tables, and running them would take too long.
+		SkipPostValidations: registry.PostValidationInspect | registry.PostValidationInvalidDescriptors,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			numWorkers := (len(c.All()) - 1) * 10
+			// Cap the total number of workers based on the number of
+			// nodes and CPUs on them.
+			numTotalWorkers := len(c.All()) - 1
 			// Number of tables per-database from the TPCC template.
 			const numTablesForTPCC = 9
 			// Active databases will continually execute a mix of TPCC + ORM
@@ -179,6 +186,11 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 						// test with a large number of tables.
 						_, err = conn.Exec("SET CLUSTER SETTING sql.schema.approx_max_object_count = 0")
 						require.NoError(t, err)
+						// Disable the automatic INSPECT job that runs after each
+						// IMPORT. With high-concurrency imports of many tables, the
+						// INSPECT jobs exhaust the memory budget.
+						_, err = conn.Exec("SET CLUSTER SETTING bulkio.import.row_count_validation.mode = 'off'")
+						require.NoError(t, err)
 						// Create a user that will be used for authentication for the REST
 						// API calls.
 						_, err = conn.Exec("CREATE USER roachadmin password 'roacher'")
@@ -200,14 +212,28 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 				"apiCalls",
 				0755,
 				c.WorkloadNode()))
-			// Get a list of web console URLs.
-			webConsoleURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), c.Range(1, c.Spec().NodeCount-1))
+
+			// Determine which nodes to use for the workload. In multi-region mode,
+			// we only connect to nodes in the same region as the workload node to
+			// avoid cross-region latency being included in query latency measurements.
+			// The zone assignment pattern is: us-east1, us-west1, us-central1 repeating,
+			// so nodes 1, 4, 7 are in us-east1 (same region as workload node 10).
+			localNodes := c.CRDBNodes()
+			if isMultiRegion {
+				localNodes = c.Nodes(1, 4, 7)
+			}
+
+			// Get a list of web console URLs for local nodes only.
+			webConsoleURLs, err := c.ExternalAdminUIAddr(ctx, t.L(), localNodes)
 			require.NoError(t, err)
 			for urlIdx := range webConsoleURLs {
 				webConsoleURLs[urlIdx] = "https://" + webConsoleURLs[urlIdx]
 			}
-			// Next startup the workload for our list of databases from earlier.
-			for dbListType, dbList := range [][]string{activeDBList, inactiveDBList} {
+			// Next, start up the workload for our list of databases from earlier.
+			tpccDatabaseLists := [][]string{activeDBList, inactiveDBList}
+			// Cap the number of workers to reduce noise in measurements.
+			numWorkers := numTotalWorkers / len(tpccDatabaseLists)
+			for dbListType, dbList := range tpccDatabaseLists {
 				dbList := dbList
 				dbListType := dbListType
 				populateFileName := fmt.Sprintf("populate_%d", dbListType)
@@ -215,10 +241,14 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 					waitEnabled := "--wait 0.0"
 					var wlInstance []workloadInstance
 					disableHistogram := false
+					numWarehouses := len(c.All()) - 1
 					// Inactive databases will intentionally have wait time on
 					// them and not include them in our histograms.
 					if dbListType == inactiveDbListType {
 						waitEnabled = "--wait 1.0"
+						// TPCC requires workers = warehouses * 10 when --wait > 0.
+						// Use 1 warehouse to allow running with fewer workers.
+						numWarehouses = 1
 
 						// disable histogram since they shouldn't be included
 						disableHistogram = true
@@ -232,11 +262,28 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 								prometheusPort: 5050,
 							},
 						)
+					} else {
+						// For active databases, connect only to local nodes to avoid
+						// cross-region latency in measurements.
+						wlInstance = append(
+							wlInstance,
+							workloadInstance{
+								nodes:          localNodes,
+								prometheusPort: 2112,
+							},
+						)
+					}
+					// TPCC requires workers = warehouses * 10 when --wait > 0.
+					// For active DBs (--wait 0), we can use reduced workers.
+					// For inactive DBs (--wait 1.0), we use 1 warehouse to allow 10 workers.
+					tpccWorkers := numWorkers
+					if dbListType == inactiveDbListType {
+						tpccWorkers = numWarehouses * tpcc.NumWorkersPerWarehouse
 					}
 					options := tpccOptions{
 						WorkloadCmd:       "tpccmultidb",
 						DB:                strings.Split(dbList[0], ".")[0],
-						Warehouses:        len(c.All()) - 1,
+						Warehouses:        numWarehouses,
 						SkipSetup:         true,
 						DisablePrometheus: true,
 						DisableHistogram:  disableHistogram, // We setup the flag above.
@@ -250,7 +297,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 							"roachadmin",
 							"roacher",
 							numWorkers,
-							numWorkers,
+							tpccWorkers,
 							waitEnabled),
 					}
 					runTPCC(ctx, t, t.L(), c, options)
@@ -262,20 +309,196 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 	})
 }
 
+// registerLargeSchemaIntrospectionBenchmark registers tests that create
+// empty tables and benchmark introspection queries without any data import
+// or TPCC workload. This measures how introspection performs with large
+// numbers of tables.
+func registerLargeSchemaIntrospectionBenchmark(r registry.Registry) {
+	for _, numTables := range []int{10_000, 100_000, 1_000_000} {
+		numTables := numTables // capture loop variable
+		clusterSpec := []spec.Option{
+			spec.CPU(16),
+			spec.WorkloadNode(),
+			spec.WorkloadNodeCPU(8),
+			spec.VolumeSize(500),
+			spec.VolumeType("pd-ssd"),
+			// Use highmem variant for more memory per node (128 GB vs 64 GB for
+			// n2-standard-16). Large schema operations require significant memory
+			// for the descriptor lease manager and span config subscriber.
+			spec.GCEMachineType("n2-highmem-16"),
+		}
+
+		// Adjust timeout based on number of tables. Larger table counts take
+		// longer to create.
+		timeout := 4 * time.Hour
+		if numTables >= 1_000_000 {
+			timeout = 48 * time.Hour
+		} else if numTables >= 100_000 {
+			timeout = 12 * time.Hour
+		}
+
+		r.Add(registry.TestSpec{
+			Name:             fmt.Sprintf("large-schema-benchmark/multiregion=false/tables=%d", numTables),
+			Owner:            registry.OwnerSQLFoundations,
+			Benchmark:        true,
+			Cluster:          r.MakeClusterSpec(10, clusterSpec...),
+			CompatibleClouds: registry.OnlyGCE,
+			Suites:           registry.Suites(registry.Weekly),
+			Timeout:          timeout,
+			// Skip INSPECT and descriptor post-validation because this benchmark
+			// creates many databases and tables, and running them would take too long.
+			SkipPostValidations: registry.PostValidationInspect | registry.PostValidationInvalidDescriptors,
+			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				runLargeSchemaIntrospectionBenchmark(ctx, t, c, numTables)
+			},
+		})
+	}
+}
+
+func runLargeSchemaIntrospectionBenchmark(
+	ctx context.Context, t test.Test, c cluster.Cluster, numTables int,
+) {
+	// Number of tables per-database from the TPCC template.
+	const numTablesForTPCC = 9
+	const maxSchemasForDatabase = 72
+
+	// Build the list of databases and schemas needed to create numTables.
+	var dbList []string
+	numTablesRemaining := numTables
+	databaseIdx := 0
+	numSchemasForDatabase := 1
+	for numTablesRemaining > 0 {
+		databaseName := fmt.Sprintf("warehouse_%d", databaseIdx)
+		for schemaIdx := 0; schemaIdx < numSchemasForDatabase && numTablesRemaining > 0; schemaIdx++ {
+			schemaName := fmt.Sprintf("schema_%d", schemaIdx)
+			if schemaIdx == 0 {
+				schemaName = "public"
+			}
+			dbList = append(dbList, fmt.Sprintf("%s.%s", databaseName, schemaName))
+			numTablesRemaining -= numTablesForTPCC
+		}
+		numSchemasForDatabase++
+		numSchemasForDatabase = min(numSchemasForDatabase, maxSchemasForDatabase)
+		databaseIdx++
+	}
+
+	t.L().Printf("Creating %d tables across %d database.schema entries", numTables, len(dbList))
+
+	// Start the cluster and configure settings for large schema.
+	settings := install.MakeClusterSettings()
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ScheduleBackups = false
+	c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
+
+	conn := c.Conn(ctx, t.L(), 1)
+	defer conn.Close()
+
+	// Configure cluster settings for large schema operations.
+	clusterSettings := []string{
+		"SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'",
+		"SET CLUSTER SETTING sql.catalog.allow_leased_descriptors.enabled = 'true'",
+		"SET CLUSTER SETTING sql.catalog.descriptor_lease.use_locked_timestamps.enabled = 'true'",
+		"SET CLUSTER SETTING jobs.retention_time='2h'",
+		"SET CLUSTER SETTING kv.transaction.internal.max_auto_retries=1000",
+		"SET CLUSTER SETTING sql.schema.approx_max_object_count = 0",
+		// Auto stats job can starve out other jobs when there are many tables.
+		// See https://github.com/cockroachdb/cockroach/issues/149475.
+		"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
+		// Increase the lease refresh limit to handle the large number of
+		// descriptors being created. The default (500) is too low for 1M tables.
+		"SET CLUSTER SETTING sql.tablecache.lease.refresh_limit = 50000",
+		// Increase the intent tracking limit for bulk DDL transactions. The
+		// default is too low for creating 1M tables, causing long waits when
+		// transactions block on system.descriptor intents.
+		"SET CLUSTER SETTING kv.transaction.max_intents_bytes = 16777216",
+		// Increase the refresh span tracking limit for serializable transactions.
+		// When creating many tables per transaction, the read spans on
+		// system.descriptor and system.namespace accumulate beyond the default
+		// 4MB limit. Once exceeded, the transaction loses its ability to refresh
+		// and must fully restart on any timestamp push, causing
+		// RETRY_SERIALIZABLE errors with "can't refresh txn spans; not valid".
+		"SET CLUSTER SETTING kv.transaction.max_refresh_spans_bytes = 67108864",
+	}
+	for _, stmt := range clusterSettings {
+		_, err := conn.Exec(stmt)
+		require.NoError(t, err)
+	}
+
+	// Upload the database list file to the workload node.
+	const populateFileName = "populate_introspection"
+	err := c.PutString(ctx, strings.Join(dbList, "\n"), populateFileName, 0755, c.WorkloadNode())
+	require.NoError(t, err)
+
+	// Create the schema using tpccmultidb with --data-loader=none to create
+	// only the table schema without loading any data. This significantly
+	// speeds up the setup phase since we don't need data for introspection
+	// benchmarks.
+	t.L().Printf("Starting schema creation with tpccmultidb (schema only, no data)")
+	options := tpccOptions{
+		WorkloadCmd: "tpccmultidb",
+		DB:          strings.Split(dbList[0], ".")[0],
+		SetupType:   usingInit,
+		Warehouses:  1, // Required for schema generation but no data will be loaded
+		ExtraSetupArgs: fmt.Sprintf("--db-list-file=%s --data-loader=none --fks=false",
+			populateFileName,
+		),
+		// Use all CRDB nodes for init to distribute table creation load.
+		InitNodes: c.CRDBNodes(),
+		Start: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			// Cluster is already started, this is a no-op.
+		},
+	}
+	setupTPCC(ctx, t, t.L(), c, options)
+
+	t.L().Printf("Schema creation complete, starting introspection benchmark")
+
+	// Write query file in querybench's named-query format (name: query).
+	// querybench expects the entire query to be on a single line.
+	flatQuery := "orm_queries: " + strings.ReplaceAll(strings.TrimSpace(LargeSchemaOrmQueries), "\n", " ")
+	require.NoError(t, c.PutString(ctx, flatQuery, "ormQueries.sql", 0755, c.WorkloadNode()))
+
+	const benchmarkDuration = 20 * time.Minute
+	numWorkers := (len(c.All()) - 1) * 10
+	dbName := strings.Split(dbList[0], ".")[0]
+
+	t.L().Printf("Running introspection benchmark for %v with %d workers on db %s",
+		benchmarkDuration, numWorkers, dbName)
+
+	cmd := fmt.Sprintf(
+		"%s workload run querybench --db=%s --concurrency=%d --query-file=%s "+
+			"--duration=%s --tolerate-errors {pgurl%s} %s",
+		test.DefaultCockroachPath,
+		dbName,
+		numWorkers,
+		"ormQueries.sql",
+		benchmarkDuration,
+		c.CRDBNodes(),
+		roachtestutil.GetWorkloadHistogramArgs(t, c, map[string]string{
+			"concurrency": fmt.Sprintf("%d", numWorkers),
+			"num_tables":  fmt.Sprintf("%d", numTables),
+		}),
+	)
+	if err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd); err != nil {
+		t.Fatal(err)
+	}
+
+	t.L().Printf("Introspection benchmark complete")
+}
+
 // LargeSchemaOrmQueries is extracted from the round trip analysis tests for
 // ORM queries.
 const LargeSchemaOrmQueries = `
--- JDBC ORM query for types
-    SELECT typinput='pg_catalog.array_in'::regproc as is_array, typtype, typname, pg_type.oid 
-      FROM pg_catalog.pg_type 
-      LEFT JOIN (select ns.oid as nspoid, ns.nspname, r.r 
-              from pg_namespace as ns 
-     -- go with older way of unnesting array to be compatible with 8.0
-              join ( select s.r, (current_schemas(false))[s.r] as nspname 
-                       from generate_series(1, array_upper(current_schemas(false), 1)) as s(r) ) as r 
-             using ( nspname ) 
+/* JDBC ORM query for types */
+    SELECT typinput='pg_catalog.array_in'::regproc as is_array, typtype, typname, pg_type.oid
+      FROM pg_catalog.pg_type
+      LEFT JOIN (select ns.oid as nspoid, ns.nspname, r.r
+              from pg_namespace as ns
+     /* go with older way of unnesting array to be compatible with 8.0 */
+              join ( select s.r, (current_schemas(false))[s.r] as nspname
+                       from generate_series(1, array_upper(current_schemas(false), 1)) as s(r) ) as r
+             using ( nspname )
            ) as sp
-        ON sp.nspoid = typnamespace 
+        ON sp.nspoid = typnamespace
      ORDER BY sp.r, pg_type.oid DESC;
 `
 

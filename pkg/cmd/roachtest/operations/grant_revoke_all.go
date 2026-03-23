@@ -41,7 +41,7 @@ func (cl *revoke) Cleanup(ctx context.Context, o operation.Operation, c cluster.
 		o.Fatal(err)
 	}
 	o.Status(fmt.Sprintf("Revoked ALL for user %s from table %s.%s", cl.dbUser, cl.db, cl.table))
-	_, err = conn.ExecContext(ctx, fmt.Sprintf("DROP USER %s", cl.dbUser))
+	_, err = conn.ExecContext(ctx, fmt.Sprintf("DROP USER IF EXISTS %s", cl.dbUser))
 	if err != nil {
 		o.Fatal(err)
 	}

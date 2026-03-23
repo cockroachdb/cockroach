@@ -867,7 +867,7 @@ type RestrictedCommandResult interface {
 	// can be nil.
 	//
 	// This needs to be called (once) before AddRow.
-	SetColumns(context.Context, colinfo.ResultColumns)
+	SetColumns(ctx context.Context, cols colinfo.ResultColumns, skipRowDescription bool)
 
 	// ResetStmtType allows a client to change the statement type of the current
 	// result, from the original one set when the result was created trough
@@ -948,7 +948,7 @@ type DescribeResult interface {
 	SetPrepStmtOutput(context.Context, colinfo.ResultColumns)
 	// SetPortalOutput tells the client about the results schema and formatting of
 	// a portal.
-	SetPortalOutput(context.Context, colinfo.ResultColumns, []pgwirebase.FormatCode)
+	SetPortalOutput(ctx context.Context, cols colinfo.ResultColumns, fmtCode []pgwirebase.FormatCode)
 }
 
 // ParseResult represents the result of a Parse command.
@@ -1114,7 +1114,9 @@ func (r *streamingCommandResult) RevokePortalPausability() error {
 }
 
 // SetColumns is part of the RestrictedCommandResult interface.
-func (r *streamingCommandResult) SetColumns(ctx context.Context, cols colinfo.ResultColumns) {
+func (r *streamingCommandResult) SetColumns(
+	ctx context.Context, cols colinfo.ResultColumns, skipRowDescription bool,
+) {
 	// The interface allows for cols to be nil, yet the iterator result expects
 	// non-nil value to indicate that it was the column metadata.
 	if cols == nil {

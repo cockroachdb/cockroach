@@ -85,13 +85,11 @@ func FindAllIncrementalPaths(
 	incStore cloud.ExternalStorage,
 	rootStore cloud.ExternalStorage,
 	subdir string,
-	customIncLocation bool,
 ) ([]string, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "backupdest.FindAllIncrementalPaths")
 	defer sp.Finish()
 
-	// Backup indexes do not support custom incremental locations.
-	if customIncLocation || !backupinfo.ReadBackupIndexEnabled.Get(&execCfg.Settings.SV) {
+	if !backupinfo.ReadBackupIndexEnabled.Get(&execCfg.Settings.SV) {
 		return LegacyFindPriorBackups(ctx, incStore, OmitManifest)
 	}
 
@@ -131,62 +129,33 @@ func LegacyFindPriorBackups(
 	defer sp.Finish()
 
 	var prev []string
-	if err := store.List(ctx, "", backupbase.ListingDelimDataSlash, func(p string) error {
-		matchesGlob, err := path.Match(incBackupSubdirGlob+backupbase.DeprecatedBackupManifestName, p)
-		if err != nil {
-			return err
-		} else if !matchesGlob {
-			matchesGlob, err = path.Match(incBackupSubdirGlobWithSuffix+backupbase.DeprecatedBackupManifestName, p)
+	if err := store.List(
+		ctx, "", cloud.ListOptions{Delimiter: backupbase.ListingDelimDataSlash},
+		func(p string) error {
+			matchesGlob, err := path.Match(incBackupSubdirGlob+backupbase.DeprecatedBackupManifestName, p)
 			if err != nil {
 				return err
+			} else if !matchesGlob {
+				matchesGlob, err = path.Match(incBackupSubdirGlobWithSuffix+backupbase.DeprecatedBackupManifestName, p)
+				if err != nil {
+					return err
+				}
 			}
-		}
 
-		if matchesGlob {
-			if !includeManifest {
-				p = strings.TrimSuffix(p, "/"+backupbase.DeprecatedBackupManifestName)
+			if matchesGlob {
+				if !includeManifest {
+					p = strings.TrimSuffix(p, "/"+backupbase.DeprecatedBackupManifestName)
+				}
+				prev = append(prev, p)
+				return nil
 			}
-			prev = append(prev, p)
 			return nil
-		}
-		return nil
-	}); err != nil {
+		},
+	); err != nil {
 		return nil, errors.Wrap(err, "reading previous backup layers")
 	}
 	sort.Strings(prev)
 	return prev, nil
-}
-
-// backupsFromLocation is a small helper function to retrieve all prior
-// backups from the specified location.
-func backupsFromLocation(
-	ctx context.Context,
-	user username.SQLUsername,
-	execCfg *sql.ExecutorConfig,
-	collectionURI string,
-	subdir string,
-	incLoc string,
-	customIncLocation bool,
-) ([]string, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "backupdest.backupsFromLocation")
-	defer sp.Finish()
-
-	mkStore := execCfg.DistSQLSrv.ExternalStorageFromURI
-	rootStore, err := mkStore(ctx, collectionURI, user)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open root storage location")
-	}
-	defer rootStore.Close()
-
-	incStore, err := mkStore(ctx, incLoc, user)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open backup storage location")
-	}
-	defer incStore.Close()
-
-	return FindAllIncrementalPaths(
-		ctx, execCfg, incStore, rootStore, subdir, customIncLocation,
-	)
 }
 
 // MakeBackupDestinationStores makes ExternalStorage handles to the passed in
@@ -198,17 +167,8 @@ func MakeBackupDestinationStores(
 	mkStore cloud.ExternalStorageFromURIFactory,
 	destinationDirs []string,
 ) ([]cloud.ExternalStorage, func() error, error) {
-	stores := make([]cloud.ExternalStorage, len(destinationDirs))
-	for i := range destinationDirs {
-		store, err := mkStore(ctx, destinationDirs[i], user)
-		if err != nil {
-			return nil, nil, errors.Wrapf(err, "failed to open backup storage location")
-		}
-		stores[i] = store
-	}
-
-	return stores, func() error {
-		// Close all the stores in the returned cleanup function.
+	stores := make([]cloud.ExternalStorage, 0, len(destinationDirs))
+	cleanup := func() error {
 		var combinedErr error
 		for _, store := range stores {
 			if err := store.Close(); err != nil {
@@ -216,61 +176,26 @@ func MakeBackupDestinationStores(
 			}
 		}
 		return combinedErr
-	}, nil
+	}
+
+	for _, dir := range destinationDirs {
+		store, err := mkStore(ctx, dir, user)
+		if err != nil {
+			err := errors.Wrapf(err, "failed to open backup storage location")
+			return nil, nil, errors.CombineErrors(err, cleanup())
+		}
+		stores = append(stores, store)
+	}
+
+	return stores, cleanup, nil
 }
 
 // ResolveIncrementalsBackupLocation returns the resolved locations of
-// incremental backups by looking into either the explicitly provided
-// incremental backup collections, or the full backup collections if no explicit
-// incremental collections are provided.
+// incremental backups within the default incremental directory.
 func ResolveIncrementalsBackupLocation(
-	ctx context.Context,
-	user username.SQLUsername,
-	execCfg *sql.ExecutorConfig,
-	explicitIncrementalCollections []string,
-	fullBackupCollections []string,
-	subdir string,
+	fullBackupCollections []string, subdir string,
 ) ([]string, error) {
-	ctx, sp := tracing.ChildSpan(ctx, "backupdest.ResolveIncrementalsBackupLocation")
-	defer sp.Finish()
-	defaultCollectionURI, _, err := GetURIsByLocalityKV(fullBackupCollections, "")
-	if err != nil {
-		return nil, errors.Wrapf(err, "get default full backup collection URI")
-	}
-	rootStore, err := execCfg.DistSQLSrv.ExternalStorageFromURI(ctx, defaultCollectionURI, user)
-	if err != nil {
-		return nil, errors.Wrapf(err, "failed to open root storage location")
-	}
-	defer rootStore.Close()
-
-	customIncLocation := len(explicitIncrementalCollections) > 0
-	if customIncLocation {
-		incPaths, err := backuputils.AppendPaths(explicitIncrementalCollections, subdir)
-		if err != nil {
-			return nil, err
-		}
-
-		// Check we can read from this location, though we don't need the backups here.
-		// If we can't read, we want to throw the appropriate error so the caller
-		// knows this isn't a usable incrementals store.
-		// Some callers will abort, e.g. BACKUP. Others will proceed with a
-		// warning, e.g. SHOW and RESTORE.
-		_, err = backupsFromLocation(
-			ctx, user, execCfg, defaultCollectionURI, subdir, incPaths[0], customIncLocation,
-		)
-		if err != nil {
-			return nil, err
-		}
-		return incPaths, nil
-	}
 	resolvedIncrementalsBackupLocation, err := backuputils.AppendPaths(fullBackupCollections, backupbase.DefaultIncrementalsSubdir, subdir)
-	if err != nil {
-		return nil, err
-	}
-	_, err = backupsFromLocation(
-		ctx, user, execCfg, defaultCollectionURI, subdir,
-		resolvedIncrementalsBackupLocation[0], customIncLocation,
-	)
 	if err != nil {
 		return nil, err
 	}

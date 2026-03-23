@@ -239,23 +239,24 @@ func getCountLeaseColumns() string {
 func handleRegionLivenessErrors(
 	ctx context.Context, prober regionliveness.Prober, region string, err error,
 ) (bool, error) {
-	if err != nil {
+	// Missing region enum errors should always skip the region,
+	// regardless of whether region liveness is enabled. Since the
+	// database regions are cached, they may be stale and have
+	// regions that are not yet public or have been dropped.
+	if regionliveness.IsMissingRegionEnumErr(err) {
+		log.Dev.Infof(ctx, "count-lease skipping region %s due to error: %v", region, err)
+		return true, nil
+	}
+	// Only attempt liveness probing if region liveness is enabled.
+	if hasRegionLiveness, _ := prober.GetProbeTimeout(); hasRegionLiveness {
 		if regionliveness.IsQueryTimeoutErr(err) {
 			// Probe and mark the region potentially.
 			probeErr := prober.ProbeLiveness(ctx, region)
 			if probeErr != nil {
-				err = errors.WithSecondaryError(err, probeErr)
-				return false, err
+				return false, errors.WithSecondaryError(err, probeErr)
 			}
 			return false, errors.Wrapf(err, "count-lease timed out reading from a region")
-		} else if regionliveness.IsMissingRegionEnumErr(err) {
-			// Skip this region because we were unable to find region in
-			// type descriptor. Since the database regions are cached, they
-			// may be stale and have dropped regions.
-			log.Dev.Infof(ctx, "count-lease skipping region %s due to error: %v", region, err)
-			return true, nil
 		}
-		return false, err
 	}
 	return false, err
 }

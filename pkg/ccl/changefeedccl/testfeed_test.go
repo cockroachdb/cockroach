@@ -424,6 +424,8 @@ type jobFeed struct {
 	shutdown chan struct{}
 	makeSink wrapSinkFn
 
+	closeOnce sync.Once
+
 	jobID jobspb.JobID
 
 	mu struct {
@@ -456,13 +458,14 @@ func (f *jobFeed) SetForcedEnriched(forced bool) {
 	f.forcedEnriched = forced
 }
 
+// closeShutdown closes the shutdown channel at most once.
+// Use this instead of directly calling close(f.shutdown).
+func (f *jobFeed) closeShutdown() {
+	f.closeOnce.Do(func() { close(f.shutdown) })
+}
+
 // jobFailed marks this job as failed.
 func (f *jobFeed) jobFailed(err error) {
-	// protect against almost concurrent terminations of the same job.
-	// this could happen if the caller invokes `cancel job` just as we're
-	// trying to close this feed.  Part of jobFailed handling involves
-	// closing shutdown channel -- and doing this multiple times panics.
-
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.mu.terminalErr != nil {
@@ -470,7 +473,7 @@ func (f *jobFeed) jobFailed(err error) {
 		return
 	}
 	f.mu.terminalErr = err
-	close(f.shutdown)
+	f.closeShutdown()
 }
 
 func (f *jobFeed) terminalJobError() error {
@@ -638,15 +641,21 @@ func (f *jobFeed) Close() error {
 		if status == string(jobs.StateSucceeded) {
 			f.mu.Lock()
 			defer f.mu.Unlock()
+			if f.mu.terminalErr != nil {
+				return nil
+			}
 			f.mu.terminalErr = errors.New("changefeed completed")
-			close(f.shutdown)
+			f.closeShutdown()
 			return nil
 		}
 		if status == string(jobs.StateFailed) {
 			f.mu.Lock()
 			defer f.mu.Unlock()
+			if f.mu.terminalErr != nil {
+				return nil
+			}
 			f.mu.terminalErr = errors.New("changefeed failed")
-			close(f.shutdown)
+			f.closeShutdown()
 			return nil
 		}
 		if _, err := f.db.Exec(`CANCEL JOB $1`, f.jobID); err != nil {

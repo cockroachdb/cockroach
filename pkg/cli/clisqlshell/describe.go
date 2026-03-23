@@ -412,8 +412,16 @@ func listTables(tabTypes string, hasPattern bool, verbose, showSystem bool) (str
           COALESCE(pg_catalog.obj_description(c.oid, 'pg_class'),'') as "Description"`)
 	}
 
+	if showIndexes {
+		// Use an index hint to avoid an incomplete virtual index lookup join that
+		// degrades to a full scan.
+		buf.WriteString(`
+     FROM pg_catalog.pg_class@primary c`)
+	} else {
+		buf.WriteString(`
+     FROM pg_catalog.pg_class c`)
+	}
 	buf.WriteString(`
-     FROM pg_catalog.pg_class c
 LEFT JOIN pg_catalog.pg_namespace n on n.oid = c.relnamespace`)
 
 	if showTables || showMatViews || showIndexes {

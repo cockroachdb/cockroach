@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -48,7 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/bloom"
+	"github.com/cockroachdb/pebble/sstable/tablefilters/bloom"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/redact"
 )
@@ -210,6 +211,19 @@ type BaseConfig struct {
 	// EnableDemoLoginEndpoint enables the HTTP GET endpoint for user logins,
 	// which a feature unique to the demo shell.
 	EnableDemoLoginEndpoint bool
+
+	// DisallowRootLogin when set, prevents authentication attempts by clients
+	// presenting certificates with "root" as one of the principals (CommonName
+	// or SubjectAlternativeName). This applies to both SQL client connections
+	// and RPC connections.
+	DisallowRootLogin bool
+
+	// AllowDebugUser when set, allows authentication attempts by clients
+	// presenting certificates with "debuguser" as one of the principals
+	// (CommonName or SubjectAlternativeName). This applies to both SQL client
+	// connections and RPC connections. By default, debuguser is not allowed to
+	// authenticate.
+	AllowDebugUser bool
 
 	// ReadyFn is called when the server has started listening on its
 	// sockets.
@@ -679,7 +693,7 @@ func (cfg *Config) Report(ctx context.Context) {
 }
 
 // Engines is a container of engines, allowing convenient closing.
-type Engines []storage.Engine
+type Engines []kvstorage.Engines
 
 // Close closes all the Engines.
 // This method has a pointer receiver so that the following pattern works:
@@ -791,6 +805,8 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	for i, spec := range cfg.Stores.Specs {
 		log.Eventf(ctx, "initializing %+v", spec)
 
+		// TODO(sep-raft-log): store Attributes only in the LogEngine or the
+		// overarching kvstorage.Engines.
 		storageConfigOpts := []storage.ConfigOption{
 			walFailoverConfig,
 			storage.Attributes(roachpb.Attributes{Attrs: spec.Attributes}),
@@ -872,13 +888,15 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 			// If the spec contains Pebble options, set those too.
 			if spec.PebbleOptions != "" {
 				addCfgOpt(storage.PebbleOptions(spec.PebbleOptions, &pebble.ParseHooks{
-					NewFilterPolicy: func(name string) (pebble.FilterPolicy, error) {
-						switch name {
-						case "none":
+					NewFilterPolicy: func(name string) (pebble.TableFilterPolicy, error) {
+						if name == "none" {
 							return nil, nil
-						case "rocksdb.BuiltinBloomFilter":
-							return bloom.FilterPolicy(10), nil
 						}
+						if p, ok := bloom.PolicyFromName(name); ok {
+							return p, nil
+						}
+						// Ignore unknown policies.
+						log.Dev.Warningf(ctx, "ignoring unknown table filter policy %q", name)
 						return nil, nil
 					},
 				}))
@@ -894,7 +912,8 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 		// or leave ownership with the caller of Open.
 		storeEnvs[i] = nil
 		detail(redact.Sprintf("store %d: %s", i, eng.Properties()))
-		engines = append(engines, eng)
+
+		engines = append(engines, kvstorage.MakeEngines(eng))
 	}
 
 	if fileCache != nil {

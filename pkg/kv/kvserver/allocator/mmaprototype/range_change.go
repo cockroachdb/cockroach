@@ -15,14 +15,26 @@ import (
 // ExternalRangeChange is a proposed set of change(s) to a range. It can
 // consist of multiple replica changes, such as adding or removing replicas,
 // or transferring the lease. There is at most one change per store in the
-// set.
+// set. It is immutable after creation.
+//
+// It is a partial external representation of a set of changes that are
+// internally modeled using a slice of *pendingReplicaChanges.
 type ExternalRangeChange struct {
+	origin       ChangeOrigin
+	localStoreID roachpb.StoreID
+
 	roachpb.RangeID
 	Changes []ExternalReplicaChange
 }
 
 // ExternalReplicaChange is a proposed change to a single replica. Some
 // external entity (the leaseholder of the range) may choose to enact this
+// change.
+//
+// It is a partial external representation of a pendingReplicaChange that is
+// internal to MMA. While pendingReplicaChange has fields that are mutable,
+// since partial changes can be observed to a store, the ExternalReplicaChange
+// is immutable and represents the original before and after state of the
 // change.
 type ExternalReplicaChange struct {
 	changeID
@@ -39,7 +51,9 @@ type ExternalReplicaChange struct {
 	ChangeType ReplicaChangeType
 }
 
-func MakeExternalRangeChange(change PendingRangeChange) ExternalRangeChange {
+func MakeExternalRangeChange(
+	origin ChangeOrigin, localStoreID roachpb.StoreID, change PendingRangeChange,
+) ExternalRangeChange {
 	changes := make([]ExternalReplicaChange, len(change.pendingReplicaChanges))
 	for i, rc := range change.pendingReplicaChanges {
 		changeType := rc.replicaChangeType()
@@ -55,8 +69,10 @@ func MakeExternalRangeChange(change PendingRangeChange) ExternalRangeChange {
 		}
 	}
 	return ExternalRangeChange{
-		RangeID: change.RangeID,
-		Changes: changes,
+		origin:       origin,
+		localStoreID: localStoreID,
+		RangeID:      change.RangeID,
+		Changes:      changes,
 	}
 }
 
@@ -82,14 +98,14 @@ func (rc *ExternalRangeChange) SafeFormat(w redact.SafePrinter, _ rune) {
 	if !found {
 		panic("unknown change type")
 	}
-	w.Print(" cids=")
+	w.SafeString(" cids=")
 	for i, c := range rc.Changes {
 		if i > 0 {
-			w.Print(",")
+			w.SafeRune(',')
 		}
 		w.Printf("%v", c.changeID)
 	}
-	w.Print("]")
+	w.SafeRune(']')
 }
 
 // TODO(sumeer): A single ExternalRangeChange can model a bunch of replica

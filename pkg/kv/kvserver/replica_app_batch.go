@@ -9,14 +9,18 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -38,8 +42,9 @@ type replicaAppBatch struct {
 	r          *Replica
 	applyStats *applyCommittedEntriesStats
 
-	// batch accumulates writes implied by the raft entries in this batch.
-	batch storage.Batch
+	// batch accumulates writes implied by the raft entries in this batch, across
+	// both the state and raft engines. It is engine separation aware.
+	batch kvstorage.Batch[storage.Batch]
 	// state is this batch's view of the replica's state. It is copied from
 	// under the Replica.mu when the batch is initialized and is updated in
 	// stageTrivialReplicatedEvalResult.
@@ -69,7 +74,7 @@ type replicaAppBatch struct {
 	start                   time.Time // time at NewBatch()
 	followerStoreWriteBytes kvadmission.FollowerStoreWriteBytes
 
-	// Reused by addAppliedStateKeyToBatch to avoid heap allocations.
+	// Reused by addAppliedStateToBatch to avoid heap allocations.
 	asAlloc kvserverpb.RangeAppliedState
 }
 
@@ -138,7 +143,7 @@ func (b *replicaAppBatch) Stage(
 	}
 
 	// Stage the command's write batch in the application batch.
-	if err := b.ab.addWriteBatch(ctx, b.batch, cmd); err != nil {
+	if err := b.ab.addWriteBatch(ctx, b.batch.State(), cmd); err != nil {
 		return nil, err
 	}
 
@@ -148,7 +153,7 @@ func (b *replicaAppBatch) Stage(
 	// will be committed, but all of these commands will be `IsTrivial()`.
 	if err := b.ab.runPostAddTriggers(ctx, &cmd.ReplicatedCmd, postAddEnv{
 		st:          b.r.store.cfg.Settings,
-		eng:         b.r.store.TODOEngine(),
+		eng:         b.r.store.StateEngine(),
 		sideloaded:  b.r.logStorage.ls.Sideload,
 		bulkLimiter: b.r.store.limiters.BulkIOWriteRate,
 	}); err != nil {
@@ -178,6 +183,13 @@ func (b *replicaAppBatch) Stage(
 	return cmd, nil
 }
 
+func (b *replicaAppBatch) ReadWriter() kvstorage.ReadWriter {
+	return kvstorage.ReadWriter{
+		State: kvstorage.WrapState(b.batch.State()),
+		Raft:  b.RaftRW(),
+	}
+}
+
 // changeRemovesStore returns true if any of the removals in this change have storeID.
 func changeRemovesStore(
 	desc *roachpb.RangeDescriptor, change *kvserverpb.ChangeReplicas, storeID roachpb.StoreID,
@@ -202,7 +214,7 @@ func (b *replicaAppBatch) runPreAddTriggersReplicaOnly(
 		// application there are no listening rangefeeds. So we do this only
 		// in Replica application.
 		if p, filter := b.r.getRangefeedProcessorAndFilter(); p != nil {
-			if err := populatePrevValsInLogicalOpLog(ctx, filter, ops, b.batch); err != nil {
+			if err := populatePrevValsInLogicalOpLog(ctx, filter, ops, b.batch.State()); err != nil {
 				b.r.disconnectRangefeedWithErr(p, kvpb.NewError(err))
 			}
 		}
@@ -322,12 +334,15 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// NB: another reason why we shouldn't write HardState at evaluation time is
 		// that it belongs to the log engine, whereas the evaluated batch must
 		// contain only state machine updates.
-		in, err := validateAndPrepareSplit(ctx, b.r, res.Split.SplitTrigger, cmd.Cmd.ClosedTimestamp)
+		in, err := validateAndPrepareSplit(ctx, b.r, res.Split.SplitTrigger, cmd.Index(), cmd.Cmd.ClosedTimestamp)
 		if err != nil {
 			log.KvExec.Fatalf(ctx, "unable to validate split: %s", err)
 		}
 
-		splitPreApply(ctx, kvstorage.StateRW(b.batch), kvstorage.TODORaft(b.batch), in)
+		// TODO(arul): consider passing in a kvstorage.Batch to splitPreApply
+		// instead. That way, we don't need to get the WagWriter out of the batch
+		// here, and can instead just have an AddEvent method on the type instead.
+		splitPreApply(ctx, kvstorage.StateRW(b.batch.State()), b.RaftRW(), b.batch.WagWriter(), in)
 
 		// The rangefeed processor will no longer be provided logical ops for
 		// its entire range, so it needs to be shut down and all registrations
@@ -366,8 +381,8 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		rhsRepl.mu.Unlock()
 		rhsRepl.readOnlyCmdMu.Unlock()
 
-		if _, err := kvstorage.SubsumeReplica(
-			ctx, kvstorage.TODOReadWriter(b.batch), rhsRepl.destroyInfoRaftMuLocked(),
+		if err := kvstorage.SubsumeReplica(
+			ctx, b.ReadWriter(), rhsRepl.destroyInfoRaftMuLocked(),
 		); err != nil {
 			return errors.Wrapf(err, "unable to subsume replica before merge")
 		}
@@ -456,7 +471,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// above, and DestroyReplica will also add a range tombstone to the
 		// batch, so that when we commit it, the removal is finalized.
 		if err := kvstorage.DestroyReplica(
-			ctx, kvstorage.TODOReadWriter(b.batch),
+			ctx, b.ReadWriter(),
 			b.r.destroyInfoRaftMuLocked(), change.NextReplicaID(),
 		); err != nil {
 			return errors.Wrapf(err, "unable to destroy replica before removal")
@@ -471,7 +486,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	// shutdown of the rangefeed in that situation, so we don't pass anything to
 	// the rangefeed. If no rangefeed is running at all, this call will be a noop.
 	if ops := cmd.Cmd.LogicalOpLog; cmd.Cmd.WriteBatch != nil {
-		b.r.handleLogicalOpLogRaftMuLocked(ctx, ops, b.batch)
+		b.r.handleLogicalOpLogRaftMuLocked(ctx, ops, b.batch.State())
 	} else if ops != nil {
 		log.KvExec.Fatalf(ctx, "non-nil logical op log with nil write batch: %v", cmd.Cmd)
 	}
@@ -510,9 +525,13 @@ func (b *replicaAppBatch) stageTruncation(
 
 	// This truncation will apply synchronously in this batch. Stage the write
 	// into the batch, and compute metadata used after applying it.
+	//
+	// TODO(sep-raft-log): with separated engines, this strongly-coupled
+	// truncation path must not be taken. Add guardrails for that. This is allowed
+	// for now only to enable experimental testing.
 	if err := handleTruncatedStateBelowRaftPreApply(
 		ctx, b.truncState, *truncatedState,
-		b.r.raftMu.stateLoader.StateLoader, b.batch,
+		b.r.raftMu.stateLoader.StateLoader, b.batch.Raft(),
 	); err != nil {
 		return errors.Wrap(err, "unable to handle truncated state")
 	}
@@ -576,16 +595,13 @@ func (b *replicaAppBatch) stageTrivialReplicatedEvalResult(
 	deltaStats := res.Delta.ToStats()
 	b.state.Stats.Add(deltaStats)
 
-	if res.DoTimelyApplicationToAllReplicas && !b.changeRemovesReplica {
-		// Update in-memory and persistent state. A later command accumulated in
-		// this batch may update these again. Also, a later command may set
-		// changeRemovesReplica to true and wipe out the state in the batch. These
-		// are all safe.
+	if res.DoTimelyApplicationToAllReplicas {
+		// Update the pending ForceFlushIndex of this batch. Writing is deferred to
+		// addAppliedStateToBatch, following the same pattern as AppliedState
+		// fields (RaftAppliedIndex, LeaseAppliedIndex). This allows multiple
+		// commands in the same batch to update ForceFlushIndex, with only the final
+		// value being written.
 		b.state.ForceFlushIndex = roachpb.ForceFlushIndex{Index: cmd.Entry.Index}
-		if err := b.r.raftMu.stateLoader.SetForceFlushIndex(
-			ctx, b.batch, b.state.Stats, &b.state.ForceFlushIndex); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -603,16 +619,19 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 	// Add the replica applied state key to the write batch if this change
 	// doesn't remove us.
 	if !b.changeRemovesReplica {
-		if err := b.addAppliedStateKeyToBatch(ctx); err != nil {
+		if err := b.addAppliedStateToBatch(ctx); err != nil {
 			return err
 		}
 	}
 
-	// Apply the write batch to Pebble. Entry application is done without syncing
-	// to disk. The atomicity guarantees of the batch, and the fact that the
-	// applied state is stored in this batch, ensure that if the batch ends up not
-	// being durably committed then the entries in this batch will be applied
-	// again upon startup. However, there are a couple of exceptions.
+	// Commit the batch to Pebble. When engines are separated, this also flushes
+	// any staged WAG nodes and commits the raft batch.
+	//
+	// Entry application is done without syncing the state engine to disk. The
+	// atomicity guarantees of the batch, and the fact that the applied state is
+	// stored in this batch, ensure that if the batch ends up not being durably
+	// committed then the entries in this batch will be applied again upon
+	// startup. However, there are a couple of exceptions.
 	//
 	// If we're removing the replica's data then we sync this batch as it is not
 	// safe to call postDestroyRaftMuLocked before ensuring that the replica's
@@ -639,7 +658,6 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 		return errors.Wrapf(err, "unable to commit Raft entry batch")
 	}
 	b.batch.Close()
-	b.batch = nil
 
 	// Update the replica's applied indexes, mvcc stats and closed timestamp.
 	r := b.r
@@ -704,17 +722,34 @@ func (b *replicaAppBatch) ApplyToStateMachine(ctx context.Context) error {
 
 	b.recordStatsOnCommit()
 
+	// If the testing knob is enabled, verify that the tracked SysBytes matches
+	// the actual SysBytes computed from the data. This is useful for debugging
+	// MVCCStats discrepancies (e.g. issue #159331).
+	if knobs := b.r.store.TestingKnobs(); knobs != nil && knobs.SysBytesVerificationOnRaftApply != nil {
+		knobs.SysBytesVerificationOnRaftApply(b.verifySysBytes(ctx))
+	}
+
 	return nil
 }
 
-// addAppliedStateKeyToBatch adds the applied state key to the application
-// batch's Pebble batch. This records the highest raft and lease index that have
-// been applied as of this batch. It also records the Range's MVCC stats.
-func (b *replicaAppBatch) addAppliedStateKeyToBatch(ctx context.Context) error {
+// addAppliedStateToBatch adds the applied state to the application batch's
+// Pebble batch. This records the highest raft and lease index that have been
+// applied as of this batch. It also records the Range's MVCC stats.
+func (b *replicaAppBatch) addAppliedStateToBatch(ctx context.Context) error {
+	// Write the ForceFlushIndex if it was staged during this batch. This index is
+	// stored in a separate RangeForceFlushKey but follows the same deferred-write
+	// pattern as RangeAppliedState.
+	if b.state.ForceFlushIndex != b.r.shMu.state.ForceFlushIndex {
+		// NB: this branch goes first, so that MVCC stats are accurate below.
+		if err := b.r.raftMu.stateLoader.SetForceFlushIndex(
+			ctx, b.batch.State(), b.state.Stats, &b.state.ForceFlushIndex); err != nil {
+			return err
+		}
+	}
 	// Set the range applied state, which includes the last applied raft and lease
 	// index along with the MVCC stats, all in one key.
 	b.asAlloc = b.state.ToRangeAppliedState()
-	return b.r.raftMu.stateLoader.SetRangeAppliedState(ctx, b.batch, &b.asAlloc)
+	return b.r.raftMu.stateLoader.SetRangeAppliedState(ctx, b.batch.State(), &b.asAlloc)
 }
 
 func (b *replicaAppBatch) recordStatsOnCommit() {
@@ -734,12 +769,84 @@ func (b *replicaAppBatch) recordStatsOnCommit() {
 	b.r.store.metrics.RaftCommandCommitLatency.RecordValue(elapsed.Nanoseconds())
 }
 
+// verifySysBytes recomputes SysBytes and compares it to the tracked stats.
+// Returns an error describing the mismatch if one is detected, nil otherwise.
+//
+// verifySysBytes is only intended for use in tests.
+func (b *replicaAppBatch) verifySysBytes(ctx context.Context) error {
+	// Skip verification if the replica is being removed (its data has been
+	// deleted) or if stats contain estimates (we can't rely on them being exact).
+	if b.changeRemovesReplica || b.state.Stats.ContainsEstimates != 0 {
+		return nil
+	}
+
+	// NB: Read the current descriptor from the engine. This is important because
+	// b.state.Desc's bounds (specifically the EndKey) may be stale after a split
+	// or a merge -- that's because the state is read when the batch is
+	// initialized, but the descriptor isn't updated until side effects are
+	// applied via handleNonTrivialReplicatedEvalResult.
+	var desc roachpb.RangeDescriptor
+	descKey := keys.RangeDescriptorKey(b.state.Desc.StartKey)
+	ok, err := storage.MVCCGetProto(ctx, b.r.store.StateEngine(), descKey,
+		hlc.MaxTimestamp, &desc, storage.MVCCGetOptions{
+			Inconsistent: true, ReadCategory: fs.UnknownReadCategory})
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errors.Errorf("range descriptor not found at key %s", descKey)
+	}
+
+	// Compute stats for only the key spans that contribute to SysBytes:
+	// 1. Replicated range-ID local keys.
+	// 2. Range-local keys.
+	sysKeySpans := rditer.Select(desc.RangeID, rditer.SelectOpts{
+		ReplicatedByRangeID: true,
+		Ranged: rditer.SelectRangedOptions{
+			RSpan:      desc.RSpan(),
+			SystemKeys: true,
+		},
+	})
+	var computedSysBytes, computedSysCount int64
+	for _, span := range sysKeySpans {
+		ms, err := storage.ComputeStats(
+			ctx, b.r.store.StateEngine(), fs.UnknownReadCategory,
+			span.Key, span.EndKey, 0 /* nowNanos */)
+		if err != nil {
+			return err
+		}
+		computedSysBytes += ms.SysBytes
+		computedSysCount += ms.SysCount
+	}
+
+	trackedSysBytes := b.state.Stats.SysBytes
+	trackedSysCount := b.state.Stats.SysCount
+	if trackedSysBytes != computedSysBytes || trackedSysCount != computedSysCount {
+		err := errors.AssertionFailedf("SysBytes/SysCount mismatch: r%d s%d at raft index %d: "+
+			"trackedBytes=%d computedBytes=%d deltaBytes=%d "+
+			"trackedCount=%d computedCount=%d deltaCount=%d desc=%s",
+			desc.RangeID, b.r.store.StoreID(), b.state.RaftAppliedIndex,
+			trackedSysBytes, computedSysBytes, trackedSysBytes-computedSysBytes,
+			trackedSysCount, computedSysCount, trackedSysCount-computedSysCount, &desc)
+		log.KvExec.Warningf(ctx, "%v", err)
+		return err
+	}
+	return nil
+}
+
 // Close implements the apply.Batch interface.
 func (b *replicaAppBatch) Close() {
-	if b.batch != nil {
-		b.batch.Close()
-	}
+	b.batch.Close()
 	*b = replicaAppBatch{}
+}
+
+// RaftRW returns a read/write accessor to the LogEngine. Reads from the engine,
+// writes to the batch's raft writer.
+func (b *replicaAppBatch) RaftRW() kvstorage.Raft {
+	return kvstorage.Raft{
+		RO: b.r.LogEngine(),
+		WO: b.batch.Raft(),
+	}
 }
 
 // Assert that the current command is not writing under the closed timestamp.

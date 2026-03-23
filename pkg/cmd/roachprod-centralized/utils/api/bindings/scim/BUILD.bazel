@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "scim",
+    srcs = [
+        "field_mapping.go",
+        "mapper.go",
+        "parser.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/utils/api/bindings/scim",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/cmd/roachprod-centralized/utils/filters",
+        "//pkg/cmd/roachprod-centralized/utils/filters/types",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_scim2_filter_parser_v2//:filter-parser",
+    ],
+)
+
+go_test(
+    name = "scim_test",
+    srcs = [
+        "mapper_test.go",
+        "parser_test.go",
+    ],
+    embed = [":scim"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/cmd/roachprod-centralized/utils/filters/types",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

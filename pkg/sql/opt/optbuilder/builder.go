@@ -9,7 +9,6 @@ import (
 	"context"
 	"strconv"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -186,11 +185,29 @@ type Builder struct {
 	// expansion.
 	subqueryNameIdx int
 
-	// checkPrivilegeUser helps identify the username.SQLUsername for privilege
-	// checks performed. For routines that are specified with SECURITY
-	// DEFINER, the owner of the routine is checked. Otherwise, the check is
-	// against the user of the current session.
-	checkPrivilegeUser username.SQLUsername
+	// currentUser is the session user at the time the Builder was created. It
+	// is the default user for all privilege checks unless overridden by
+	// dataSourcePrivilegeUserOverride or executePrivilegeUserOverride.
+	currentUser username.SQLUsername
+
+	// dataSourcePrivilegeUserOverride, when set, overrides currentUser for
+	// data source (e.g., table, view) privilege checks. It is set in two
+	// cases:
+	//   1. Views: set to the view owner so that SELECT privilege on the
+	//      view's underlying tables is checked as the definer.
+	//   2. SECURITY DEFINER routines: set to the routine owner so that all
+	//      data source access within the routine body uses the definer's
+	//      privileges.
+	dataSourcePrivilegeUserOverride username.SQLUsername
+
+	// executePrivilegeUserOverride, when set, overrides currentUser for
+	// EXECUTE privilege checks on functions and procedures. This is separate
+	// from dataSourcePrivilegeUserOverride because views set
+	// dataSourcePrivilegeUserOverride to the view owner for table access,
+	// but EXECUTE privilege on functions called by the view should still be
+	// checked against the invoker, matching PostgreSQL behavior. SECURITY
+	// DEFINER routines set both override fields to the routine owner.
+	executePrivilegeUserOverride username.SQLUsername
 
 	// builtTriggerFuncs caches already-built trigger functions for a table. It is
 	// necessary to cache these functions since triggers can recursively reference
@@ -223,14 +240,14 @@ func New(
 	// be repeated.
 	semaCtx.Properties.IgnoreUnpreferredOverloads = evalCtx.SessionData().LegacyVarcharTyping
 	return &Builder{
-		factory:            factory,
-		stmt:               stmt,
-		ctx:                ctx,
-		verboseTracing:     log.ExpensiveLogEnabled(ctx, 2),
-		semaCtx:            semaCtx,
-		evalCtx:            evalCtx,
-		catalog:            catalog,
-		checkPrivilegeUser: catalog.GetCurrentUser(),
+		factory:        factory,
+		stmt:           stmt,
+		ctx:            ctx,
+		verboseTracing: log.ExpensiveLogEnabled(ctx, 2),
+		semaCtx:        semaCtx,
+		evalCtx:        evalCtx,
+		catalog:        catalog,
+		currentUser:    catalog.GetCurrentUser(),
 	}
 }
 
@@ -240,23 +257,12 @@ func New(
 //
 // If any subroutines panic with a non-runtime error as part of the build
 // process, the panic is caught here and returned as an error.
-func (b *Builder) Build() (err error) {
+func (b *Builder) Build() (retErr error) {
 	log.VEventf(b.ctx, 1, "optbuilder start")
 	defer log.VEventf(b.ctx, 1, "optbuilder finish")
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate errors without adding lots of checks
-			// for `if err != nil` throughout the construction code. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-				log.VEventf(b.ctx, 1, "%v", err)
-			} else {
-				panic(r)
-			}
-		}
-	}()
+	defer errorutil.MaybeCatchPanic(&retErr, func(caughtErr error) {
+		log.VEventf(b.ctx, 1, "%v", caughtErr)
+	})
 
 	// TODO (rohany): We shouldn't be modifying the semaCtx passed to the builder
 	//  but we unfortunately rely on mutation to the semaCtx. We modify the input
@@ -375,9 +381,6 @@ func (b *Builder) buildStmt(
 		case *tree.Insert, *tree.Update, *tree.Delete:
 		case *tree.Call:
 		case *tree.DoBlock:
-			if !b.evalCtx.Settings.Version.ActiveVersion(b.ctx).IsActive(clusterversion.V25_1) {
-				panic(doBlockVersionErr)
-			}
 		default:
 			if tree.CanModifySchema(stmt) {
 				panic(unimplemented.NewWithIssuef(110080,
@@ -610,6 +613,47 @@ func (b *Builder) DisableUnsafeInternalCheck() func() {
 			cleanup()
 		}
 	}
+}
+
+// DisableSchemaDepTracking is used to disable dependency tracking for views and
+// routines, so that users don't have to face unnecessary restrictions during
+// schema changes.
+//
+// For example, we must prevent dropping a column that is referenced in the
+// WHERE clause or SET clause of an UPDATE statement. However, adding or
+// dropping columns that are synthesized with default or computed values is
+// perfectly safe, because those columns are determined from the table schema
+// rather than being user specified. If such a column is dropped, its value will
+// simply not be synthesized in mutation statements going forward.
+func (b *Builder) DisableSchemaDepTracking() func() {
+	if !b.trackSchemaDeps {
+		return func() {}
+	}
+	originalTrackSchemaDeps := b.trackSchemaDeps
+	b.trackSchemaDeps = false
+	return func() {
+		b.trackSchemaDeps = originalTrackSchemaDeps
+	}
+}
+
+// checkPrivilegeUser returns the user whose privileges should be checked for
+// data source access. Returns dataSourcePrivilegeUserOverride if set, or
+// currentUser otherwise.
+func (b *Builder) checkPrivilegeUser() username.SQLUsername {
+	if b.dataSourcePrivilegeUserOverride.Undefined() {
+		return b.currentUser
+	}
+	return b.dataSourcePrivilegeUserOverride
+}
+
+// checkExecutePrivilegeUser returns the user whose EXECUTE privilege should be
+// checked for functions and procedures. Returns executePrivilegeUserOverride if
+// set, or currentUser otherwise.
+func (b *Builder) checkExecutePrivilegeUser() username.SQLUsername {
+	if b.executePrivilegeUserOverride.Undefined() {
+		return b.currentUser
+	}
+	return b.executePrivilegeUserOverride
 }
 
 // optTrackingTypeResolver is a wrapper around a TypeReferenceResolver that

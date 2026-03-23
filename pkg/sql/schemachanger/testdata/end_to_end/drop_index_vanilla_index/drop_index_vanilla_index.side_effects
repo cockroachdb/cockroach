@@ -1,6 +1,13 @@
 /* setup */
 CREATE TABLE t (i INT PRIMARY KEY, j INT);
 CREATE INDEX idx ON t(j);
+CREATE FUNCTION f_trigger() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+BEGIN
+  SELECT j FROM t@idx WHERE j = 1;
+  RETURN NULL;
+END;
+$$;
+CREATE TRIGGER trg AFTER INSERT ON t FOR EACH ROW EXECUTE FUNCTION f_trigger();
 ----
 ...
 +object {100 101 t} -> 104
@@ -22,102 +29,18 @@ write *eventpb.DropIndex to event log:
     tag: DROP INDEX
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 2 MutationType ops
-upsert descriptor #104
-  ...
-     formatVersion: 3
-     id: 104
-  -  indexes:
-  -  - createdAtNanos: "1640995200000000000"
-  -    createdExplicitly: true
-  -    foreignKey: {}
-  -    geoConfig: {}
-  -    id: 2
-  -    interleave: {}
-  -    keyColumnDirections:
-  -    - ASC
-  -    keyColumnIds:
-  -    - 2
-  -    keyColumnNames:
-  -    - j
-  -    keySuffixColumnIds:
-  -    - 1
-  -    name: idx
-  -    partitioning: {}
-  -    sharded: {}
-  -    vecConfig: {}
-  -    version: 4
-  +  indexes: []
-     modificationTime: {}
-  +  mutations:
-  +  - direction: DROP
-  +    index:
-  +      createdAtNanos: "1640995200000000000"
-  +      createdExplicitly: true
-  +      foreignKey: {}
-  +      geoConfig: {}
-  +      id: 2
-  +      interleave: {}
-  +      keyColumnDirections:
-  +      - ASC
-  +      keyColumnIds:
-  +      - 2
-  +      keyColumnNames:
-  +      - j
-  +      keySuffixColumnIds:
-  +      - 1
-  +      name: idx
-  +      partitioning: {}
-  +      sharded: {}
-  +      vecConfig: {}
-  +      version: 4
-  +    mutationId: 1
-  +    state: WRITE_ONLY
-     name: t
-     nextColumnId: 3
-  ...
-     replacementOf:
-       time: {}
-  -  schemaLocked: true
-     unexposedParentSchemaId: 101
-  -  version: "8"
-  +  version: "9"
-# end StatementPhase
-# begin PreCommitPhase
-## PreCommitPhase stage 1 of 2 with 1 MutationType op
-undo all catalog changes within txn #1
-persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 4 MutationType ops
+## StatementPhase stage 1 of 1 with 10 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
-  +  declarativeSchemaChangerState:
-  +    authorization:
-  +      userName: root
-  +    currentStatuses: <redacted>
-  +    jobId: "1"
-  +    nameMapping:
-  +      columns:
-  +        "1": i
-  +        "2": j
-  +        "4294967292": crdb_internal_origin_timestamp
-  +        "4294967293": crdb_internal_origin_id
-  +        "4294967294": tableoid
-  +        "4294967295": crdb_internal_mvcc_timestamp
-  +      families:
-  +        "0": primary
-  +      id: 104
-  +      indexes:
-  +        "1": t_pkey
-  +      name: t
-  +    relevantStatements:
-  +    - statement:
-  +        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
-  +        statement: DROP INDEX idx CASCADE
-  +        statementTag: DROP INDEX
-  +    targetRanks: <redacted>
-  +    targets: <redacted>
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 2
+  -    id: 104
+  -    indexId: 2
+  -    triggerId: 1
+  +  dependedOnBy: []
      families:
      - columnIds:
   ...
@@ -175,12 +98,188 @@ upsert descriptor #104
      replacementOf:
        time: {}
   -  schemaLocked: true
+  -  triggers:
+  -  - actionTime: AFTER
+  -    dependsOn:
+  -    - 104
+  -    dependsOnRoutines:
+  -    - 105
+  -    enabled: true
+  -    events:
+  -    - type: INSERT
+  -    forEachRow: true
+  -    funcBody: |
+  -      BEGIN
+  -      SELECT j FROM defaultdb.public.t@idx WHERE j = 1;
+  -      RETURN NULL;
+  -      END;
+  -    funcId: 105
+  -    id: 1
+  -    name: trg
+  +  triggers: []
      unexposedParentSchemaId: 101
-  -  version: "8"
-  +  version: "9"
+  -  version: "10"
+  +  version: "11"
+upsert descriptor #105
+   function:
+  -  dependedOnBy:
+  -  - id: 104
+  -    triggerIds:
+  -    - 1
+     functionBody: |
+       BEGIN
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "3"
+  +  version: "4"
+     volatility: VOLATILE
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 13 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - columnIds:
+  -    - 2
+  -    id: 104
+  -    indexId: 2
+  -    triggerId: 1
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "2": j
+  +        "4294967292": crdb_internal_origin_timestamp
+  +        "4294967293": crdb_internal_origin_id
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 104
+  +      indexes:
+  +        "1": t_pkey
+  +      name: t
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CASCADE
+  +        statement: DROP INDEX idx CASCADE
+  +        statementTag: DROP INDEX
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+  +  dependedOnBy: []
+     families:
+     - columnIds:
+  ...
+     formatVersion: 3
+     id: 104
+  -  indexes:
+  -  - createdAtNanos: "1640995200000000000"
+  -    createdExplicitly: true
+  -    foreignKey: {}
+  -    geoConfig: {}
+  -    id: 2
+  -    interleave: {}
+  -    keyColumnDirections:
+  -    - ASC
+  -    keyColumnIds:
+  -    - 2
+  -    keyColumnNames:
+  -    - j
+  -    keySuffixColumnIds:
+  -    - 1
+  -    name: idx
+  -    partitioning: {}
+  -    sharded: {}
+  -    vecConfig: {}
+  -    version: 4
+  +  indexes: []
+     modificationTime: {}
+  +  mutations:
+  +  - direction: DROP
+  +    index:
+  +      createdAtNanos: "1640995200000000000"
+  +      createdExplicitly: true
+  +      foreignKey: {}
+  +      geoConfig: {}
+  +      id: 2
+  +      interleave: {}
+  +      keyColumnDirections:
+  +      - ASC
+  +      keyColumnIds:
+  +      - 2
+  +      keyColumnNames:
+  +      - j
+  +      keySuffixColumnIds:
+  +      - 1
+  +      name: idx
+  +      partitioning: {}
+  +      sharded: {}
+  +      vecConfig: {}
+  +      version: 4
+  +    mutationId: 1
+  +    state: WRITE_ONLY
+     name: t
+     nextColumnId: 3
+  ...
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
+  -  triggers:
+  -  - actionTime: AFTER
+  -    dependsOn:
+  -    - 104
+  -    dependsOnRoutines:
+  -    - 105
+  -    enabled: true
+  -    events:
+  -    - type: INSERT
+  -    forEachRow: true
+  -    funcBody: |
+  -      BEGIN
+  -      SELECT j FROM defaultdb.public.t@idx WHERE j = 1;
+  -      RETURN NULL;
+  -      END;
+  -    funcId: 105
+  -    id: 1
+  -    name: trg
+  +  triggers: []
+     unexposedParentSchemaId: 101
+  -  version: "10"
+  +  version: "11"
+upsert descriptor #105
+   function:
+  -  dependedOnBy:
+  -  - id: 104
+  -    triggerIds:
+  -    - 1
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 105
+  +      name: f_trigger
+     functionBody: |
+       BEGIN
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "3"
+  +  version: "4"
+     volatility: VOLATILE
 persist all catalog changes to storage
 create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.t@idx CASCADE"
-  descriptor IDs: [104]
+  descriptor IDs: [104 105]
 # end PreCommitPhase
 commit transaction #1
 notified job registry to adopt jobs: [1]
@@ -188,7 +287,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 3 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 3 with 7 MutationType ops
 upsert descriptor #104
   ...
          keySuffixColumnIds:
@@ -205,15 +304,22 @@ upsert descriptor #104
      name: t
      nextColumnId: 3
   ...
-       time: {}
+     triggers: []
      unexposedParentSchemaId: 101
-  -  version: "9"
-  +  version: "10"
+  -  version: "11"
+  +  version: "12"
+upsert descriptor #105
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "4"
+  +  version: "5"
+     volatility: VOLATILE
 persist all catalog changes to storage
 update progress of schema change job #1: "Pending: Updating schema metadata (2 operations) — PostCommitNonRevertible phase (stage 2 of 3)."
 commit transaction #3
 begin transaction #4
-## PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 5 MutationType ops
 upsert descriptor #104
   ...
      indexes: []
@@ -246,10 +352,17 @@ upsert descriptor #104
      name: t
      nextColumnId: 3
   ...
-       time: {}
+     triggers: []
      unexposedParentSchemaId: 101
-  -  version: "10"
-  +  version: "11"
+  -  version: "12"
+  +  version: "13"
+upsert descriptor #105
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "5"
+  +  version: "6"
+     volatility: VOLATILE
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.t@idx CASCADE"
   descriptor IDs: [104]
@@ -257,7 +370,7 @@ update progress of schema change job #1: "Pending: Updating schema metadata (1 o
 commit transaction #4
 notified job registry to adopt jobs: [2]
 begin transaction #5
-## PostCommitNonRevertiblePhase stage 3 of 3 with 3 MutationType ops
+## PostCommitNonRevertiblePhase stage 3 of 3 with 4 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -288,15 +401,33 @@ upsert descriptor #104
   -        statementTag: DROP INDEX
   -    targetRanks: <redacted>
   -    targets: <redacted>
+     dependedOnBy: []
      families:
-     - columnIds:
   ...
      replacementOf:
        time: {}
   +  schemaLocked: true
+     triggers: []
      unexposedParentSchemaId: 101
-  -  version: "11"
-  +  version: "12"
+  -  version: "13"
+  +  version: "14"
+upsert descriptor #105
+   function:
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 105
+  -      name: f_trigger
+     functionBody: |
+       BEGIN
+  ...
+         family: TriggerFamily
+         oid: 2279
+  -  version: "6"
+  +  version: "7"
+     volatility: VOLATILE
 persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable

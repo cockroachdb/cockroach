@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -218,11 +219,14 @@ func cmpIn_TYPE(
 	}
 }
 
-func (si *selectInOp_TYPE) Next() coldata.Batch {
+func (si *selectInOp_TYPE) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := si.Input.Next()
+		batch, meta := si.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 
 		vec := batch.ColVec(si.colIdx)
@@ -290,15 +294,18 @@ func (si *selectInOp_TYPE) Next() coldata.Batch {
 
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
 
-func (pi *projectInOp_TYPE) Next() coldata.Batch {
-	batch := pi.Input.Next()
+func (pi *projectInOp_TYPE) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := pi.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	vec := batch.ColVec(pi.colIdx)
@@ -379,7 +386,7 @@ func (pi *projectInOp_TYPE) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 // {{end}}

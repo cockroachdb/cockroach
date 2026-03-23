@@ -8,6 +8,7 @@ on:
 
 jobs:
   stale:
+    if: github.repository == 'cockroachdb/cockroach'
     runs-on: ubuntu-latest
     permissions:
       issues: write

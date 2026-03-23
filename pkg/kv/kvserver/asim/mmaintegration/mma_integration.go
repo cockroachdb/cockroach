@@ -10,14 +10,27 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	kvmmaintegration "github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 // MakeStoreLeaseholderMsgFromState creates a StoreLeaseholderMsg from the
 // state of the simulator.
+//
+// The span config is populated when the replica's mmaSpanConfigIsUpToDate flag
+// is false (new replica, span config changed, or lease was just acquired).
+// The caller is responsible for setting mmaSpanConfigIsUpToDate=true on replicas
+// after successfully sending the message to MMA.
 func MakeStoreLeaseholderMsgFromState(
 	s state.State, storeID state.StoreID,
 ) mmaprototype.StoreLeaseholderMsg {
+	// Compute amplification factors once for all ranges on this store, matching
+	// the real kvserver which derives these from the store descriptor.
+	amp := mmaprototype.IdentityAmpVector()
+	if descs := s.StoreDescriptors(true /* cached */, storeID); len(descs) > 0 {
+		amp = kvmmaintegration.ComputeAmplificationFactors(descs[0])
+	}
+
 	var rangeMessages []mmaprototype.RangeMsg
 	for _, replica := range s.Replicas(storeID) {
 		if !replica.HoldsLease() {
@@ -69,20 +82,25 @@ func MakeStoreLeaseholderMsgFromState(
 				"msg for s%d: did not find itself in the set of replicas", replica.Range(), storeID))
 		}
 
-		var rl mmaprototype.RangeLoad
 		load := s.RangeUsageInfo(rng.RangeID(), replica.StoreID())
-		rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(load.WriteBytesPerSecond)
-		rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(load.LogicalBytes)
-		rl.Load[mmaprototype.CPURate] = mmaprototype.LoadValue(load.RaftCPUNanosPerSecond + load.RequestCPUNanosPerSecond)
-		rl.RaftCPU = mmaprototype.LoadValue(load.RaftCPUNanosPerSecond)
+		rl := kvmmaintegration.MakePhysicalRangeLoad(
+			load.RequestCPUNanosPerSecond,
+			load.RaftCPUNanosPerSecond,
+			load.WriteBytesPerSecond,
+			load.LogicalBytes,
+			amp,
+		)
 
-		rangeMessages = append(rangeMessages, mmaprototype.RangeMsg{
+		rangeMsg := mmaprototype.RangeMsg{
 			RangeID:                  roachpb.RangeID(replica.Range()),
-			MaybeSpanConfIsPopulated: true,
+			MaybeSpanConfIsPopulated: !replica.MMASpanConfigIsUpToDate(),
 			Replicas:                 replicas,
-			MaybeSpanConf:            *rng.SpanConfig(),
 			RangeLoad:                rl,
-		})
+		}
+		if rangeMsg.MaybeSpanConfIsPopulated {
+			rangeMsg.MaybeSpanConf = *rng.SpanConfig()
+		}
+		rangeMessages = append(rangeMessages, rangeMsg)
 	}
 
 	return mmaprototype.StoreLeaseholderMsg{

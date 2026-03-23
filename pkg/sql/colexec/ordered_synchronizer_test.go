@@ -219,6 +219,6 @@ func BenchmarkOrderedSynchronizer(b *testing.B) {
 	b.SetBytes(8 * int64(coldata.BatchSize()) * numInputs)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		op.Next()
+		colexecop.NextNoMeta(op)
 	}
 }

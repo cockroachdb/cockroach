@@ -1,0 +1,3 @@
+echo
+----
+numKeysAffected=250, numRangeKeysAffected=10, keysReclaimedBytes=17408, valuesReclaimedBytes=135168, locksConsidered=50, lockTxns=8, pushTxn=10, resolveTotal=50, txnSpanTotal=20, txnSpanGCAborted=5, txnSpanGCCommitted=12, txnSpanGCStaging=1, txnSpanGCPending=2, txnSpanGCPrepared=3, abortSpanTotal=10, abortSpanConsidered=7, abortSpanGCNum=5, clearRangeSpanOps=3, clearRangeSpanFailures=1

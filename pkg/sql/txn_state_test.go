@@ -85,7 +85,7 @@ func (tc *testContext) createOpenState(typ txnType) (fsm.State, *txnState) {
 		Ctx:           ctx,
 		connCtx:       tc.ctx,
 		sqlTimestamp:  timeutil.Now(),
-		mon:           txnStateMon,
+		txnMon:        txnStateMon,
 		txnAbortCount: metric.NewCounter(MetaTxnAbort),
 	}
 	ts.mu.txn = kv.NewTxn(ctx, tc.mockDB, roachpb.NodeID(1) /* gatewayNodeID */)
@@ -121,7 +121,7 @@ func (tc *testContext) createNoTxnState() (fsm.State, *txnState) {
 		Name:     mon.MakeName("test mon"),
 		Settings: cluster.MakeTestingClusterSettings(),
 	})
-	ts := txnState{mon: txnStateMon, connCtx: tc.ctx}
+	ts := txnState{txnMon: txnStateMon, connCtx: tc.ctx}
 	return stateNoTxn{}, &ts
 }
 

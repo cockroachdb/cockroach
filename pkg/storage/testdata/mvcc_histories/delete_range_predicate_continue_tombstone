@@ -52,21 +52,24 @@ data: "g"/3.000000000,0 -> /BYTES/g3
 stats: key_count=7 key_bytes=122 val_count=9 val_bytes=81 live_count=4 live_bytes=84 gc_bytes_age=11662
 
 # Even though b, c, e do not satisfy the predicate, their latest versions are
-# tombstones, so the run continues and we write [a,g)@4.
+# tombstones, so we continue iterating and write point tombstones for a, d, f, g.
 run stats ok
-del_range_pred k=a end=z ts=4 startTime=2 rangeThreshold=3
+del_range_pred k=a end=z ts=4 startTime=2
 ----
->> del_range_pred k=a end=z ts=4 startTime=2 rangeThreshold=3
-stats: range_key_count=+1 range_key_bytes=+14 range_val_count=+1 live_count=-4 live_bytes=-84 gc_bytes_age=+9408
+>> del_range_pred k=a end=z ts=4 startTime=2
+stats: key_bytes=+48 val_count=+4 live_count=-4 live_bytes=-84 gc_bytes_age=+12672
 >> at end:
-rangekey: {a-g\x00}/[4.000000000,0=/<empty>]
+data: "a"/4.000000000,0 -> /<empty>
 data: "a"/3.000000000,0 -> /BYTES/a3
 data: "b"/2.000000000,0 -> {localTs=1.000000000,0}/<empty>
 data: "b"/1.000000000,0 -> /BYTES/b1
 data: "c"/2.000000000,0 -> {localTs=1.000000000,0}/<empty>
 data: "c"/1.000000000,0 -> /BYTES/c1
+data: "d"/4.000000000,0 -> /<empty>
 data: "d"/3.000000000,0 -> /BYTES/d3
 data: "e"/2.000000000,0 -> {localTs=1.000000000,0}/<empty>
+data: "f"/4.000000000,0 -> /<empty>
 data: "f"/3.000000000,0 -> /BYTES/f3
+data: "g"/4.000000000,0 -> /<empty>
 data: "g"/3.000000000,0 -> /BYTES/g3
-stats: key_count=7 key_bytes=122 val_count=9 val_bytes=81 range_key_count=1 range_key_bytes=14 range_val_count=1 gc_bytes_age=21070
+stats: key_count=7 key_bytes=170 val_count=13 val_bytes=81 gc_bytes_age=24334

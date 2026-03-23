@@ -63,6 +63,7 @@ type OperationConfig struct {
 	ChangeSetting  ChangeSettingConfig
 	ChangeZone     ChangeZoneConfig
 	Fault          FaultConfig
+	MvccGC         MvccGCConfig
 }
 
 // ClosureTxnConfig configures the relative probability of running some
@@ -390,6 +391,9 @@ type ChangeLeaseConfig struct {
 type ChangeSettingConfig struct {
 	// SetLeaseType changes the default range lease type.
 	SetLeaseType int
+	// ToggleVirtualIntentResolution toggles the VIR cluster setting, exercising
+	// transitions between physical and virtual intent resolution.
+	ToggleVirtualIntentResolution int
 }
 
 // ChangeZoneConfig configures the relative probability of generating a zone
@@ -423,7 +427,16 @@ type FaultConfig struct {
 	StopNode int
 	// RestartNode is an operation that restarts a randomly chosen node.
 	RestartNode int
+	// CrashNode is an operation that crashes a randomly chosen node.
+	CrashNode int
 	// Disk stalls and other faults belong here.
+}
+
+// MvccGCConfig configures the relative probability of generating an MVCC GC
+// operation.
+type MvccGCConfig struct {
+	// MvccGC is an operation that performs MVCC GC on a range.
+	MvccGC int
 }
 
 // newAllOperationsConfig returns a GeneratorConfig that exercises *all*
@@ -544,7 +557,8 @@ func newAllOperationsConfig() GeneratorConfig {
 			TransferLease: 1,
 		},
 		ChangeSetting: ChangeSettingConfig{
-			SetLeaseType: 1,
+			SetLeaseType:                  1,
+			ToggleVirtualIntentResolution: 1,
 		},
 		ChangeZone: ChangeZoneConfig{
 			ToggleGlobalReads: 1,
@@ -554,6 +568,10 @@ func newAllOperationsConfig() GeneratorConfig {
 			RemoveNetworkPartition: 1,
 			StopNode:               1,
 			RestartNode:            1,
+			CrashNode:              1,
+		},
+		MvccGC: MvccGCConfig{
+			MvccGC: 1,
 		},
 	}}
 }
@@ -654,6 +672,10 @@ func NewDefaultConfig() GeneratorConfig {
 	config.Ops.Fault.RemoveNetworkPartition = 0
 	config.Ops.Fault.StopNode = 0
 	config.Ops.Fault.RestartNode = 0
+	config.Ops.Fault.CrashNode = 0
+
+	// MVCC GC operations are only enabled in specific test variants.
+	config.Ops.MvccGC.MvccGC = 0
 	return config
 }
 
@@ -811,6 +833,7 @@ type nodes struct {
 	mu      syncutil.RWMutex
 	running map[int]struct{}
 	stopped map[int]struct{}
+	crashed map[int]struct{}
 }
 
 func randNodeFromMap(m map[int]struct{}, rng *rand.Rand) int {
@@ -825,11 +848,26 @@ func (n *nodes) removeRandRunning(rng *rand.Rand) int {
 	return nodeID
 }
 
-func (n *nodes) removeRandStopped(rng *rand.Rand) int {
+// removeRandStoppedOrCrashed randomly picks a node from either the stopped or
+// crashed sets with uniform probability across all nodes.
+func (n *nodes) removeRandStoppedOrCrashed(rng *rand.Rand) int {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	nodeID := randNodeFromMap(n.stopped, rng)
-	delete(n.stopped, nodeID)
+	stopped := len(n.stopped)
+	crashed := len(n.crashed)
+
+	if stopped == 0 && crashed == 0 {
+		panic("no stopped or crashed nodes available")
+	}
+
+	var nodeID int
+	if rng.Intn(stopped+crashed) < stopped {
+		nodeID = randNodeFromMap(n.stopped, rng)
+		delete(n.stopped, nodeID)
+	} else {
+		nodeID = randNodeFromMap(n.crashed, rng)
+		delete(n.crashed, nodeID)
+	}
 	return nodeID
 }
 
@@ -843,6 +881,12 @@ func (n *nodes) setStopped(nodeID int) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.stopped[nodeID] = struct{}{}
+}
+
+func (n *nodes) setCrashed(nodeID int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.crashed[nodeID] = struct{}{}
 }
 
 // RandStep returns a single randomly generated next operation to execute.
@@ -923,14 +967,22 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	}
 
 	addOpGen(&allowed, setLeaseType, g.Config.Ops.ChangeSetting.SetLeaseType)
+	addOpGen(&allowed, toggleVirtualIntentResolution, g.Config.Ops.ChangeSetting.ToggleVirtualIntentResolution)
 	addOpGen(&allowed, toggleGlobalReads, g.Config.Ops.ChangeZone.ToggleGlobalReads)
 	addOpGen(&allowed, addRandNetworkPartition, g.Config.Ops.Fault.AddNetworkPartition)
 	addOpGen(&allowed, removeRandNetworkPartition, g.Config.Ops.Fault.RemoveNetworkPartition)
 	if len(g.nodes.running) > 0 {
 		addOpGen(&allowed, stopRandNode, g.Config.Ops.Fault.StopNode)
 	}
-	if len(g.nodes.stopped) > 0 {
+	if len(g.nodes.stopped) > 0 || len(g.nodes.crashed) > 0 {
 		addOpGen(&allowed, restartRandNode, g.Config.Ops.Fault.RestartNode)
+	}
+	if len(g.nodes.running) > 0 {
+		addOpGen(&allowed, crashRandNode, g.Config.Ops.Fault.CrashNode)
+	}
+
+	if len(g.keys) > 0 {
+		addOpGen(&allowed, randMvccGC, g.Config.Ops.MvccGC.MvccGC)
 	}
 
 	return step(g.selectOp(rng, allowed))
@@ -949,7 +1001,9 @@ type opGen struct {
 }
 
 func addOpGen(valid *[]opGen, fn opGenFunc, weight int) {
-	*valid = append(*valid, opGen{fn: fn, weight: weight})
+	if weight > 0 {
+		*valid = append(*valid, opGen{fn: fn, weight: weight})
+	}
 }
 
 func (g *generator) selectOp(rng *rand.Rand, contextuallyValid []opGen) Operation {
@@ -1839,6 +1893,12 @@ func setLeaseType(_ *generator, rng *rand.Rand) Operation {
 	return op
 }
 
+func toggleVirtualIntentResolution(_ *generator, rng *rand.Rand) Operation {
+	op := changeSetting(ChangeSettingType_ToggleVirtualIntentResolution)
+	op.ChangeSetting.VirEnabled = rng.Intn(2) == 0
+	return op
+}
+
 func toggleGlobalReads(_ *generator, _ *rand.Rand) Operation {
 	return changeZone(ChangeZoneType_ToggleGlobalReads)
 }
@@ -1877,8 +1937,18 @@ func stopRandNode(g *generator, rng *rand.Rand) Operation {
 }
 
 func restartRandNode(g *generator, rng *rand.Rand) Operation {
-	randNode := g.nodes.removeRandStopped(rng)
+	randNode := g.nodes.removeRandStoppedOrCrashed(rng)
 	return restartNode(randNode)
+}
+
+func crashRandNode(g *generator, rng *rand.Rand) Operation {
+	randNode := g.nodes.removeRandRunning(rng)
+	return crashNode(randNode)
+}
+
+func randMvccGC(g *generator, rng *rand.Rand) Operation {
+	key := randSliceKey(rng, maps.Keys(g.keys))
+	return mvccGC(key)
 }
 
 func isFollowerReadEligibleOp(op Operation) bool {
@@ -2528,6 +2598,12 @@ func stopNode(nodeID int) Operation {
 func restartNode(nodeID int) Operation {
 	return Operation{RestartNode: &RestartNodeOperation{NodeId: int32(nodeID)}}
 }
+
+func crashNode(nodeID int) Operation {
+	return Operation{CrashNode: &CrashNodeOperation{NodeId: int32(nodeID)}}
+}
+
+func mvccGC(key string) Operation { return Operation{MvccGC: &MvccGCOperation{Key: []byte(key)}} }
 
 type countingRandSource struct {
 	count atomic.Uint64

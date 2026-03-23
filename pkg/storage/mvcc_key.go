@@ -8,6 +8,7 @@ package storage
 import (
 	"bytes"
 	"fmt"
+	"iter"
 	"slices"
 	"sort"
 	"strings"
@@ -413,14 +414,16 @@ func (s MVCCRangeKeyStack) AsRangeKey(v MVCCRangeKeyVersion) MVCCRangeKey {
 	}
 }
 
-// AsRangeKeys converts the stack into a slice of MVCCRangeKey. Byte slices
+// All returns an iterator over the stack of MVCCRangeKeys. Byte slices
 // are shared with the stack.
-func (s MVCCRangeKeyStack) AsRangeKeys() []MVCCRangeKey {
-	rangeKeys := make([]MVCCRangeKey, 0, len(s.Versions))
-	for _, v := range s.Versions {
-		rangeKeys = append(rangeKeys, s.AsRangeKey(v))
+func (s MVCCRangeKeyStack) All() iter.Seq[MVCCRangeKey] {
+	return func(yield func(MVCCRangeKey) bool) {
+		for _, v := range s.Versions {
+			if !yield(s.AsRangeKey(v)) {
+				return
+			}
+		}
 	}
-	return rangeKeys
 }
 
 // AsRangeKeyValue returns an MVCCRangeKeyValue for the given version. Byte
@@ -432,14 +435,16 @@ func (s MVCCRangeKeyStack) AsRangeKeyValue(v MVCCRangeKeyVersion) MVCCRangeKeyVa
 	}
 }
 
-// AsRangeKeyValues converts the stack into a slice of MVCCRangeKeyValue. Byte
-// slices are shared with the stack.
-func (s MVCCRangeKeyStack) AsRangeKeyValues() []MVCCRangeKeyValue {
-	kvs := make([]MVCCRangeKeyValue, 0, len(s.Versions))
-	for _, v := range s.Versions {
-		kvs = append(kvs, s.AsRangeKeyValue(v))
+// AsRangeKeyValues returns an iterator over the stack's MVCCRangeKeyValues.
+// Byte slices are shared with the stack.
+func (s MVCCRangeKeyStack) AsRangeKeyValues() iter.Seq[MVCCRangeKeyValue] {
+	return func(yield func(MVCCRangeKeyValue) bool) {
+		for _, v := range s.Versions {
+			if !yield(s.AsRangeKeyValue(v)) {
+				return
+			}
+		}
 	}
-	return kvs
 }
 
 // CanMergeRight returns true if the current stack will merge with the given
@@ -554,11 +559,6 @@ func (s *MVCCRangeKeyStack) Remove(ts hlc.Timestamp) (MVCCRangeKeyVersion, bool)
 // String formats the MVCCRangeKeyStack as a string.
 func (s MVCCRangeKeyStack) String() string {
 	return fmt.Sprintf("%s%s", s.Bounds, s.Versions)
-}
-
-// Timestamps returns the timestamps of all versions.
-func (s MVCCRangeKeyStack) Timestamps() []hlc.Timestamp {
-	return s.Versions.Timestamps()
 }
 
 // Trim trims the versions to the time span [from, to] (both inclusive in order)
@@ -742,15 +742,6 @@ func (v MVCCRangeKeyVersions) String() string {
 	}
 	sb.WriteString("]")
 	return sb.String()
-}
-
-// Timestamps returns the timestamps of all versions.
-func (v MVCCRangeKeyVersions) Timestamps() []hlc.Timestamp {
-	timestamps := make([]hlc.Timestamp, 0, len(v))
-	for _, version := range v {
-		timestamps = append(timestamps, version.Timestamp)
-	}
-	return timestamps
 }
 
 // Trim trims the versions to the time span [from, to] (both inclusive in

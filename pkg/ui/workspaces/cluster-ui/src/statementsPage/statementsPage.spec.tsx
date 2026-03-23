@@ -3,8 +3,6 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { assert } from "chai";
-
 import { filterBySearchQuery } from "src/sqlActivity/util";
 
 import { FlatPlanNode } from "../statementDetails";
@@ -66,15 +64,15 @@ describe("StatementsPage", () => {
       },
     };
 
-    assert.equal(filterBySearchQuery(statement, "select"), true);
-    assert.equal(filterBySearchQuery(statement, "count"), true);
-    assert.equal(filterBySearchQuery(statement, "select count"), true);
-    assert.equal(filterBySearchQuery(statement, "cluster settings"), true);
+    expect(filterBySearchQuery(statement, "select")).toBe(true);
+    expect(filterBySearchQuery(statement, "count")).toBe(true);
+    expect(filterBySearchQuery(statement, "select count")).toBe(true);
+    expect(filterBySearchQuery(statement, "cluster settings")).toBe(true);
 
     // Searching by plan should be false.
-    assert.equal(filterBySearchQuery(statement, "virtual table"), false);
-    assert.equal(filterBySearchQuery(statement, "group (scalar)"), false);
-    assert.equal(filterBySearchQuery(statement, "node_build_info"), false);
-    assert.equal(filterBySearchQuery(statement, "crdb_internal"), false);
+    expect(filterBySearchQuery(statement, "virtual table")).toBe(false);
+    expect(filterBySearchQuery(statement, "group (scalar)")).toBe(false);
+    expect(filterBySearchQuery(statement, "node_build_info")).toBe(false);
+    expect(filterBySearchQuery(statement, "crdb_internal")).toBe(false);
   });
 });

@@ -178,6 +178,7 @@ func TestDistSQLRunningInAbortedTxn(t *testing.T) {
 			ctx, stmt, clusterunique.ID{},
 			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&execCfg.Settings.SV)),
 			nil, /* statementHintsCache */
+			"",  /* currentDB */
 		)
 		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)
@@ -300,6 +301,7 @@ func TestDistSQLRunningParallelFKChecksAfterAbort(t *testing.T) {
 			ctx, stmt, clusterunique.ID{},
 			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&s.ClusterSettings().SV)),
 			nil, /* statementHintsCache */
+			"",  /* currentDB */
 		)
 		if err := p.makeOptimizerPlan(ctx); err != nil {
 			t.Fatal(err)
@@ -619,7 +621,7 @@ func TestDistSQLReceiverDrainsMeta(t *testing.T) {
 				},
 			},
 			Insecure:          true,
-			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(112960),
+			DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(160517),
 		}})
 	defer tc.Stopper().Stop(ctx)
 	s := tc.ApplicationLayer(0)
@@ -926,13 +928,14 @@ func TestDistSQLPlannerParallelChecks(t *testing.T) {
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	// Set up a child table with two foreign keys into two parent tables.
-	sqlDB.Exec(t, `CREATE TABLE parent1 (id1 INT8 PRIMARY KEY)`)
-	sqlDB.Exec(t, `CREATE TABLE parent2 (id2 INT8 PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE TYPE status AS ENUM ('open')`)
+	sqlDB.Exec(t, `CREATE TABLE parent1 (e1 status, id1 INT8, PRIMARY KEY (e1, id1))`)
+	sqlDB.Exec(t, `CREATE TABLE parent2 (e2 status, id2 INT8, PRIMARY KEY (e2, id2))`)
 	sqlDB.Exec(t, `
 CREATE TABLE child (
-    id INT8 PRIMARY KEY, parent_id1 INT8 NOT NULL, parent_id2 INT8 NOT NULL,
-    FOREIGN KEY (parent_id1) REFERENCES parent1 (id1),
-    FOREIGN KEY (parent_id2) REFERENCES parent2 (id2)
+    e status, id INT8, parent_id1 INT8 NOT NULL, parent_id2 INT8 NOT NULL,
+    FOREIGN KEY (e, parent_id1) REFERENCES parent1 (e1, id1),
+    FOREIGN KEY (e, parent_id2) REFERENCES parent2 (e2, id2)
 );`)
 	// Disable the insert fast path in order for the foreign key checks to be
 	// planned as parallel postqueries.
@@ -945,8 +948,8 @@ CREATE TABLE child (
 
 	const numIDs = 1000
 	for id := 0; id < numIDs; id++ {
-		sqlDB.Exec(t, `INSERT INTO parent1 VALUES ($1)`, id)
-		sqlDB.Exec(t, `INSERT INTO parent2 VALUES ($1)`, id)
+		sqlDB.Exec(t, `INSERT INTO parent1 VALUES ('open', $1)`, id)
+		sqlDB.Exec(t, `INSERT INTO parent2 VALUES ('open', $1)`, id)
 		var prefix string
 		if rng.Float64() < 0.5 {
 			// In 50% of the cases, run the INSERT query with FK checks via
@@ -968,12 +971,12 @@ CREATE TABLE child (
 			// error for parent_id1 is always chosen.
 			sqlDB.ExpectErr(
 				t,
-				`insert on table "child" violates foreign key constraint "child_parent_id1_fkey"`,
-				fmt.Sprintf(`%[1]sINSERT INTO child VALUES (%[2]d, %[2]d, %[2]d)`, prefix, invalidID),
+				`insert on table "child" violates foreign key constraint "child_e_parent_id1_fkey"`,
+				fmt.Sprintf(`%[1]sINSERT INTO child VALUES ('open', %[2]d, %[2]d, %[2]d)`, prefix, invalidID),
 			)
 			continue
 		}
-		sqlDB.Exec(t, fmt.Sprintf(`%[1]sINSERT INTO child VALUES (%[2]d, %[2]d, %[2]d)`, prefix, id))
+		sqlDB.Exec(t, fmt.Sprintf(`%[1]sINSERT INTO child VALUES ('open', %[2]d, %[2]d, %[2]d)`, prefix, id))
 	}
 }
 
@@ -998,14 +1001,17 @@ func TestDistributedQueryErrorIsRetriedLocally(t *testing.T) {
 
 	// We use different queries to simplify handling the node ID on which the
 	// error should be injected (i.e. we avoid the need for synchronization in
-	// the test). In particular, the difficulty comes from the fact that some of
-	// the SetupFlow RPCs might not be issued at all while others are served
-	// after the corresponding flow on the gateway has exited.
+	// the test).
+	//
+	// We'll inject errors for the first two queries, and they must have such
+	// plans that no query result row can be produced by any flow independently
+	// (i.e. we must have a "final" processor on the gateway that waits for
+	// remote flows' data).
 	queries := []string{
-		"SELECT k FROM test.foo",
+		"SELECT count(v) FROM test.foo",
 		// Run one of the queries via EXPLAIN ANALYZE (DEBUG) so that we can
 		// check the contents of the bundle later.
-		"EXPLAIN ANALYZE (DEBUG) SELECT v FROM test.foo",
+		"EXPLAIN ANALYZE (DEBUG) SELECT max(v) FROM test.foo",
 		"SELECT * FROM test.foo",
 	}
 	stmtToNodeIDForError := map[string]base.SQLInstanceID{
@@ -1251,9 +1257,7 @@ func TestTopLevelQueryStats(t *testing.T) {
 	ctx := context.Background()
 	// testQuery will be updated throughout the test to the current target.
 	var testQuery atomic.Value
-	// The callback will send number of rows read and rows written (for each
-	// ProducerMetadata.Metrics object) on these channels, respectively.
-	rowsReadCh, rowsWrittenCh, indexRowsWrittenCh := make(chan int64), make(chan int64), make(chan int64)
+	rowsReadCh, rowsWrittenCh, indexRowsWrittenCh, kvCPUTimeCh := make(chan int64), make(chan int64), make(chan int64), make(chan int64)
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &ExecutorTestingKnobs{
@@ -1266,6 +1270,7 @@ func TestTopLevelQueryStats(t *testing.T) {
 							rowsReadCh <- meta.Metrics.RowsRead
 							rowsWrittenCh <- meta.Metrics.RowsWritten
 							indexRowsWrittenCh <- meta.Metrics.IndexRowsWritten
+							kvCPUTimeCh <- meta.Metrics.KVCPUTime
 						}
 						return row, batch, meta
 					}
@@ -1381,7 +1386,7 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x, x); SELECT
 			}()
 			// In the main goroutine, loop until the query is completed while
 			// accumulating the top-level query stats.
-			var rowsRead, rowsWritten, indexRowsWritten int64
+			var rowsRead, rowsWritten, indexRowsWritten, kvCPUTime int64
 		LOOP:
 			for {
 				select {
@@ -1391,6 +1396,8 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x, x); SELECT
 					rowsWritten += written
 				case written := <-indexRowsWrittenCh:
 					indexRowsWritten += written
+				case cpuTime := <-kvCPUTimeCh:
+					kvCPUTime += cpuTime
 				case err := <-errCh:
 					require.NoError(t, err)
 					break LOOP
@@ -1399,6 +1406,9 @@ CREATE FUNCTION write(x INT) RETURNS INT AS 'INSERT INTO t VALUES (x, x); SELECT
 			require.Equal(t, tc.expRowsRead, rowsRead)
 			require.Equal(t, tc.expRowsWritten, rowsWritten)
 			require.Equal(t, tc.expIndexRowsWritten, indexRowsWritten)
+			if rowsWritten > 0 || rowsRead > 0 {
+				require.Positive(t, kvCPUTime, "KVCPUTime should be positive")
+			}
 		})
 	}
 }

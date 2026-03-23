@@ -66,6 +66,9 @@ type kvRangefeedTest struct {
 	// latencyAssertions controls whether we should assert that the foreground
 	// latency was not impacted during the test.
 	latencyAssertions bool
+
+	// cpus is the number of vCPUs per CRDB node. Defaults to 8 if not set.
+	cpus int
 }
 
 const (
@@ -142,6 +145,12 @@ func makeKVRangefeedOptions(c cluster.Cluster) (option.StartOpts, install.Cluste
 	// is happening server-side since we'll have less work queued client-side.
 	settings.ClusterSettings["changefeed.memory.per_changefeed_limit"] = "512KiB"
 	settings.ClusterSettings["kv.rangefeed.buffered_sender.enabled"] = "true"
+	// TODO(#161392): Disable per-event elastic CPU control for changefeeds as
+	// an experiment to see if the test is stable in the absence of changefeed
+	// throttling. The AC pacer's runtime.Yield adds enough delay on the node
+	// running the changefeed to reduce throughput below the sink rate assumed
+	// by this test.
+	settings.ClusterSettings["changefeed.cpu.per_event_elastic_control.enabled"] = "false"
 	return startOpts, settings
 }
 
@@ -256,25 +265,25 @@ func runKVRangefeed(ctx context.Context, t test.Test, c cluster.Cluster, opts kv
 		t.Fatal(err)
 	}
 
-	// Assert that the changefeed caught up in a reasonable time.
-	actualCatchUpDuration := findP99Below(metrics["changefeed-resolved"], resolvedTarget*2) - opts.changefeedDelay
+	// Assert that the changefeed caught up in a reasonable time. We look for the
+	// point where we fall below 2*resolvedTarget rather than just resolvedTarget
+	// because we will never actually observe the resolved timestamp below
+	// resolvedTarget since it also depends on the checkpoint interval.
+	caughtUpAt, caughtUp := findP99Below(metrics["changefeed-resolved"], resolvedTarget*2)
 	if opts.expectChangefeedCatchesUp {
+		if !caughtUp {
+			t.Fatalf("changefeed never caught up")
+		}
+		actualCatchUpDuration := caughtUpAt - opts.changefeedDelay
 		// We allow the changefeed to miss the expected runtime by 10% to hopefully
 		// cut down on infra-flakes.
 		allowedCatchUpDuration := time.Duration(int64(float64(catchUpDur) * catchUpToleranceMultiplier))
-		// Note that we look for the point where we fall below 2*resolvedTarget
-		// rather than just resolvedTarget because we will never actually observe
-		// the resolved timestamp below resolvedTarget since it also depends on the
-		// checkpoint interval.
-		if actualCatchUpDuration <= 0 {
-			t.Fatal("changefeed never caught up")
-		} else if actualCatchUpDuration > allowedCatchUpDuration {
+		if actualCatchUpDuration > allowedCatchUpDuration {
 			t.Fatalf("changefeed caught up too slowly: %s > %s (%s+10%%)", actualCatchUpDuration, allowedCatchUpDuration, catchUpDur)
-		} else {
-			t.L().Printf("changefeed caught up quickly enough %s < %s", actualCatchUpDuration, allowedCatchUpDuration)
 		}
+		t.L().Printf("changefeed caught up quickly enough %s < %s", actualCatchUpDuration, allowedCatchUpDuration)
 	} else {
-		if actualCatchUpDuration > 0 {
+		if caughtUp {
 			t.Fatal("changefeed unexpectedly caught up in under-provisioned state, are we testing what we think we are?")
 		}
 	}
@@ -351,9 +360,9 @@ func p99sBetween(
 	return ret
 }
 
-func findP99Below(ticks []exporter.SnapshotTick, target time.Duration) time.Duration {
+func findP99Below(ticks []exporter.SnapshotTick, target time.Duration) (time.Duration, bool) {
 	if len(ticks) == 0 {
-		return 0
+		return 0, false
 	}
 
 	startTime := ticks[0].Now
@@ -372,10 +381,10 @@ func findP99Below(ticks []exporter.SnapshotTick, target time.Duration) time.Dura
 		// changefeed-resolved to indicate no resolved timestamp has been received.
 		p99 := time.Duration(h.ValueAtQuantile(99))
 		if p99 > 0 && p99 < target {
-			return tick.Now.Sub(startTime)
+			return tick.Now.Sub(startTime), true
 		}
 	}
-	return 0
+	return 0, false
 }
 
 func metricsFileName(t test.Test) string {
@@ -414,8 +423,13 @@ func registerKVRangefeed(r registry.Registry) {
 	testConfigs := []kvRangefeedTest{
 		// Adequately provisioned sink
 		{
-			writeMaxRate:              10000,
-			duration:                  30 * time.Minute,
+			writeMaxRate: 10000,
+			// The theoretical catch-up rate is 2,000 events/sec (12,000 sink - 10,000
+			// writes), giving a 25min catch-up time. In practice, the changefeed
+			// achieves ~96% of the sink rate, reducing the effective catch-up rate to
+			// ~1,500/sec and extending catch-up to ~33min. The 35min duration
+			// accommodates this.
+			duration:                  35 * time.Minute,
 			sinkProvisioning:          1.2,
 			splits:                    splits,
 			expectChangefeedCatchesUp: true,
@@ -423,6 +437,9 @@ func registerKVRangefeed(r registry.Registry) {
 			catchUpInterval:           5 * time.Minute,
 			// TODO(ssd): Re-enable once we can make this more stable.
 			latencyAssertions: false,
+			// Use more CPUs to provide headroom for rangefeed event processing.
+			// See #157216.
+			cpus: 16,
 		},
 		// Underprovisioned sink
 		{
@@ -476,15 +493,30 @@ func registerKVRangefeed(r registry.Registry) {
 			opts.splits,
 			dist,
 		)
+		cpus := opts.cpus
+		if cpus == 0 {
+			cpus = 8 // default
+		}
 		r.Add(registry.TestSpec{
 			Name:      testName,
 			Owner:     registry.OwnerKV,
 			Benchmark: true,
-			Cluster:   r.MakeClusterSpec(4, spec.CPU(8), spec.WorkloadNode(), spec.WorkloadNodeCPU(4)),
+			Cluster: r.MakeClusterSpec(
+				4,
+				spec.CPU(cpus),
+				spec.WorkloadNode(),
+				spec.WorkloadNodeCPU(4),
+				spec.RandomizeVolumeType(),
+				spec.RandomlyUseXfs(),
+			),
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runKVRangefeed(ctx, t, c, opts)
 			},
-			CompatibleClouds: registry.AllClouds,
+			// This test is compatible with all clouds, but suspected disk
+			// throughput issues (e.g. gp3 on AWS) and lower observability
+			// (no Grafana on AWS) prompted us to restrict to GCE for the
+			// time being. See #163197.
+			CompatibleClouds: registry.OnlyGCE,
 			Suites:           registry.Suites(registry.Nightly),
 		})
 	}

@@ -529,7 +529,9 @@
 <p>Note that a TimestampTZ has less precision than a CockroachDB HLC. It is intended as
 a convenience function to display HLCs in a print-friendly form. Use the decimal
 value if you rely on the HLC for accuracy.</p>
-</span></td><td>Immutable</td></tr></tbody>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="to_number"></a><code>to_number(value: <a href="string.html">string</a>, format: <a href="string.html">string</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Convert a string to a numeric using the given format.</p>
+</span></td><td>Stable</td></tr></tbody>
 </table>
 
 ### Date and time functions
@@ -804,11 +806,21 @@ has no relationship with the commit order of concurrent transactions.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="to_char"></a><code>to_char(interval: <a href="interval.html">interval</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an interval to a string using the given format.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="to_char"></a><code>to_char(number: <a href="decimal.html">decimal</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a decimal to a string using the given format.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="to_char"></a><code>to_char(number: <a href="float.html">float</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a float to a string using the given format.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="to_char"></a><code>to_char(number: <a href="int.html">int</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an integer to a string using the given format.</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="to_char"></a><code>to_char(timestamp: <a href="timestamp.html">timestamp</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an timestamp to a string assuming the ISO, MDY DateStyle.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="to_char"></a><code>to_char(timestamp: <a href="timestamp.html">timestamp</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert an timestamp to a string using the given format.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="to_char"></a><code>to_char(timestamptz: <a href="timestamp.html">timestamptz</a>, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Convert a timestamp with time zone to a string using the given format.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="to_date"></a><code>to_date(date_string: <a href="string.html">string</a>, format: <a href="string.html">string</a>) &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Convert a string to a date using the given format.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="to_timestamp"></a><code>to_timestamp(date_string: <a href="string.html">string</a>, format: <a href="string.html">string</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Convert a string to a timestamp with time zone using the given format.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="to_timestamp"></a><code>to_timestamp(timestamp: <a href="float.html">float</a>) &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Convert Unix epoch (seconds since 1970-01-01 00:00:00+00) to timestamp with time zone.</p>
 </span></td><td>Immutable</td></tr>
@@ -1064,6 +1076,12 @@ available replica will error.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
 <tbody>
+<tr><td><a name="daitch_mokotoff"></a><code>daitch_mokotoff(source: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a>[]</code></td><td><span class="funcdesc"><p>Returns an array of Daitch-Mokotoff soundex codes for the input string.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="dmetaphone"></a><code>dmetaphone(source: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the primary Double Metaphone code for the input string.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="dmetaphone_alt"></a><code>dmetaphone_alt(source: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the alternate Double Metaphone code for the input string.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. Maximum input length is 255 characters.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="levenshtein"></a><code>levenshtein(source: <a href="string.html">string</a>, target: <a href="string.html">string</a>, ins_cost: <a href="int.html">int</a>, del_cost: <a href="int.html">int</a>, sub_cost: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Calculates the Levenshtein distance between two strings. The cost parameters specify how much to charge for each edit operation. Maximum input length is 255 characters.</p>
@@ -1541,7 +1559,9 @@ the locality flag on node startup. Returns an error if no region is set.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
 <tbody>
-<tr><td><a name="aclexplode"></a><code>aclexplode(aclitems: <a href="string.html">string</a>[]) &rarr; tuple{oid AS grantor, oid AS grantee, string AS privilege_type, bool AS is_grantable}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing aclitem stuff (returns no rows as this feature is unsupported in CockroachDB)</p>
+<tr><td><a name="aclexplode"></a><code>aclexplode(aclitems: <a href="string.html">string</a>[]) &rarr; tuple{oid AS grantor, oid AS grantee, string AS privilege_type, bool AS is_grantable}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing aclitem privileges.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="aclexplode"></a><code>aclexplode(aclitems: aclitem[]) &rarr; tuple{oid AS grantor, oid AS grantee, string AS privilege_type, bool AS is_grantable}</code></td><td><span class="funcdesc"><p>Produces a virtual table containing aclitem privileges.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="generate_series"></a><code>generate_series(start: <a href="int.html">int</a>, end: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Produces a virtual table containing the integer values from <code>start</code> to <code>end</code>, inclusive.</p>
 </span></td><td>Immutable</td></tr>
@@ -3349,6 +3369,8 @@ may increase either contention or retry errors, or both.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="current_user"></a><code>current_user() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the current user. This function is provided for compatibility with PostgreSQL.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="information_schema.crdb_datums_to_bytes"></a><code>information_schema.crdb_datums_to_bytes(any...) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Converts datums into key-encoded bytes. Supports NULLs and all data types which may be used in index keys</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="session_user"></a><code>session_user() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the session user. This function is provided for compatibility with PostgreSQL.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="to_regclass"></a><code>to_regclass(text: <a href="string.html">string</a>) &rarr; regtype</code></td><td><span class="funcdesc"><p>Translates a textual relation name to its OID</p>
@@ -3364,6 +3386,29 @@ may increase either contention or retry errors, or both.</p>
 <tr><td><a name="to_regtype"></a><code>to_regtype(text: <a href="string.html">string</a>) &rarr; regtype</code></td><td><span class="funcdesc"><p>Translates a textual type name to its OID</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="version"></a><code>version() &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the node’s version of CockroachDB.</p>
+</span></td><td>Volatile</td></tr></tbody>
+</table>
+
+### System repair functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
+<tbody>
+<tr><td><a name="information_schema.crdb_delete_statement_hints"></a><code>information_schema.crdb_delete_statement_hints(rowid: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function deletes a statement hint by its row ID. It returns the number of deleted rows.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="information_schema.crdb_delete_statement_hints"></a><code>information_schema.crdb_delete_statement_hints(statement_fingerprint: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function deletes all statement hints matching the given statement fingerprint. The statement fingerprint argument is normalized before matching. It returns the number of deleted rows.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="information_schema.crdb_enable_statement_hints"></a><code>information_schema.crdb_enable_statement_hints(enabled: <a href="bool.html">bool</a>, rowid: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function enables or disables the statement hint with the given row ID. It returns the number of affected rows.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="information_schema.crdb_enable_statement_hints"></a><code>information_schema.crdb_enable_statement_hints(enabled: <a href="bool.html">bool</a>, statement_fingerprint: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function enables or disables all statement hints matching the given statement fingerprint. The statement fingerprint argument is normalized before matching. It returns the number of affected rows.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="information_schema.crdb_rewrite_inline_hints"></a><code>information_schema.crdb_rewrite_inline_hints(statement_fingerprint: <a href="string.html">string</a>, donor_sql: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function adds an inline-hints rewrite rule for a statement fingerprint. It returns the hint ID of the newly created rewrite rule. The rewrite rule only applies to matching statement fingerprints. It first removes all inline hints from the target statement, and then copies inline hints from the donor statement.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="information_schema.crdb_rewrite_inline_hints"></a><code>information_schema.crdb_rewrite_inline_hints(statement_fingerprint: <a href="string.html">string</a>, donor_sql: <a href="string.html">string</a>, database: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function adds an inline-hints rewrite rule for a statement fingerprint, scoped to the given database. It returns the hint ID of the newly created rewrite rule. The rewrite rule only applies to matching statement fingerprints when the current database matches the specified database. It first removes all inline hints from the target statement, and then copies inline hints from the donor statement.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="information_schema.crdb_set_session_variable_hint"></a><code>information_schema.crdb_set_session_variable_hint(statement_fingerprint: <a href="string.html">string</a>, variable_name: <a href="string.html">string</a>, variable_value: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function adds a session variable override hint for a statement fingerprint. It returns the hint ID of the newly created hint. The hint only applies to matching statement fingerprints and temporarily overrides the specified session variable for that statement only. Safe variables can be hinted without restrictions. Unsafe variables cannot be hinted when sql_safe_updates is enabled.</p>
+</span></td><td>Volatile</td></tr>
+<tr><td><a name="information_schema.crdb_set_session_variable_hint"></a><code>information_schema.crdb_set_session_variable_hint(statement_fingerprint: <a href="string.html">string</a>, variable_name: <a href="string.html">string</a>, variable_value: <a href="string.html">string</a>, database: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function adds a session variable override hint for a statement fingerprint, scoped to the given database. It returns the hint ID of the newly created hint. The hint only applies to matching statement fingerprints when the current database matches the specified database, and temporarily overrides the specified session variable for that statement only. Safe variables can be hinted without restrictions. Unsafe variables cannot be hinted when sql_safe_updates is enabled.</p>
 </span></td><td>Volatile</td></tr></tbody>
 </table>
 
@@ -3419,6 +3464,8 @@ may increase either contention or retry errors, or both.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
 <tbody>
+<tr><td><a name="acldefault"></a><code>acldefault(type: "char", ownerId: oid) &rarr; aclitem[]</code></td><td><span class="funcdesc"><p>Returns the default access privileges for an object of the given type belonging to the given owner.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="col_description"></a><code>col_description(table_oid: oid, column_number: <a href="int.html">int</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a table column, which is specified by the OID of its table and its column number. (obj_description cannot be used for table columns, since columns do not have OIDs of their own.)</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="current_setting"></a><code>current_setting(setting_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>System info</p>
@@ -3597,6 +3644,8 @@ may increase either contention or retry errors, or both.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="information_schema._pg_numeric_scale"></a><code>information_schema._pg_numeric_scale(typid: oid, typmod: int4) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the scale of the given type with type modifier</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="makeaclitem"></a><code>makeaclitem(grantee: oid, grantor: oid, privileges: <a href="string.html">string</a>, is_grantable: <a href="bool.html">bool</a>) &rarr; aclitem</code></td><td><span class="funcdesc"><p>Constructs an aclitem from the given grantee, grantor, privileges, and grant option.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="nameconcatoid"></a><code>nameconcatoid(name: <a href="string.html">string</a>, oid: oid) &rarr; name</code></td><td><span class="funcdesc"><p>Used in the information_schema to produce specific_name columns, which are supposed to be unique per schema. The result is the same as ($1::text || ‘_’ || $2::text)::name except that, if it would not fit in 63 characters, we make it do so by truncating the name input (not the oid).</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="obj_description"></a><code>obj_description(object_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the comment for a database object specified by its OID alone. This is deprecated since there is no guarantee that OIDs are unique across different system catalogs; therefore, the wrong comment might be returned.</p>
@@ -3615,6 +3664,10 @@ may increase either contention or retry errors, or both.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_function_is_visible"></a><code>pg_function_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the function with the given OID belongs to one of the schemas on the search path.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="pg_get_constraintdef"></a><code>pg_get_constraintdef(constraint_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the definition of the specified constraint.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="pg_get_constraintdef"></a><code>pg_get_constraintdef(constraint_oid: oid, pretty_bool: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the definition of the specified constraint.</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_function_arg_default"></a><code>pg_get_function_arg_default(func_oid: oid, arg_num: int4) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Get textual representation of a function argument’s default value. The second argument of this function is the argument number among all arguments (i.e. proallargtypes, <em>not</em> proargtypes), starting with 1, because that’s how information_schema.sql uses it.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_function_arguments"></a><code>pg_get_function_arguments(func_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the argument list (with defaults) necessary to identify a function, in the form it would need to appear in within CREATE FUNCTION.</p>
@@ -3630,6 +3683,10 @@ may increase either contention or retry errors, or both.</p>
 <tr><td><a name="pg_get_indexdef"></a><code>pg_get_indexdef(index_oid: oid, column_no: <a href="int.html">int</a>, pretty_bool: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Gets the CREATE INDEX command for index, or definition of just one index column when given a non-zero column number</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_serial_sequence"></a><code>pg_get_serial_sequence(table_name: <a href="string.html">string</a>, column_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the name of the sequence used by the given column_name in the table table_name.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="pg_get_triggerdef"></a><code>pg_get_triggerdef(trigger_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the CREATE TRIGGER statement for the specified trigger.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="pg_get_triggerdef"></a><code>pg_get_triggerdef(trigger_oid: oid, pretty_bool: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the CREATE TRIGGER statement for the specified trigger.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_viewdef"></a><code>pg_get_viewdef(view_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the CREATE statement for an existing view.</p>
 </span></td><td>Stable</td></tr>
@@ -3659,6 +3716,8 @@ may increase either contention or retry errors, or both.</p>
 </span></td><td>Volatile</td></tr>
 <tr><td><a name="pg_table_is_visible"></a><code>pg_table_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the table with the given OID belongs to one of the schemas on the search path.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="pg_trigger_depth"></a><code>pg_trigger_depth() &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Returns the current nesting level of PostgreSQL triggers (0 if not called, directly or indirectly, from inside a trigger).</p>
+</span></td><td>Volatile</td></tr>
 <tr><td><a name="pg_type_is_visible"></a><code>pg_type_is_visible(oid: oid) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether the type with the given OID belongs to one of the schemas on the search path.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="set_config"></a><code>set_config(setting_name: <a href="string.html">string</a>, new_value: <a href="string.html">string</a>, is_local: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>System info</p>

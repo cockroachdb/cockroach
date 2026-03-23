@@ -281,6 +281,7 @@ func (f *FlowBase) Setup(
 func (f *FlowBase) SetTxn(txn *kv.Txn) {
 	f.FlowCtx.Txn = txn
 	f.EvalCtx.Txn = txn
+	f.EvalCtx.CatalogBuiltins.SetTxn(txn)
 }
 
 // ConcurrentTxnUse is part of the Flow interface.
@@ -331,6 +332,10 @@ func NewFlowBase(
 	// within SQL (not KV), so using an arbitrary tenant is ok -- we choose to
 	// use SystemTenantID since it is already defined.
 	admissionInfo := admission.WorkInfo{TenantID: roachpb.SystemTenantID}
+	admissionInfo.WorkloadID = flowCtx.EvalCtx.WorkloadID
+	admissionInfo.AppNameID = flowCtx.EvalCtx.AppNameID
+	admissionInfo.GatewayNodeID = roachpb.NodeID(flowCtx.NodeID.SQLInstanceID())
+	admissionInfo.WorkloadType = flowCtx.EvalCtx.WorkloadType
 	if flowCtx.Txn == nil {
 		admissionInfo.Priority = admissionpb.NormalPri
 		admissionInfo.CreateTime = timeutil.Now().UnixNano()
@@ -461,6 +466,7 @@ func (f *FlowBase) StartInternal(
 		ctx, 1, "starting (%d processors, %d startables) asynchronously", len(processors), len(f.startables),
 	)
 
+	cpuHandle := admission.SQLCPUHandleFromContext(ctx)
 	// Only register the flow if it is a part of the distributed plan. This is
 	// needed to satisfy two different use cases:
 	// 1. there are inbound stream connections that need to look up this flow in
@@ -505,6 +511,10 @@ func (f *FlowBase) StartInternal(
 	for i := 0; i < len(processors); i++ {
 		f.waitGroup.Add(1)
 		go func(i int) {
+			if cpuHandle != nil {
+				gh := cpuHandle.RegisterGoroutine()
+				defer gh.Close(ctx)
+			}
 			processors[i].Run(ctx, outputs[i])
 			f.waitGroup.Done()
 		}(i)
@@ -740,4 +750,50 @@ func (f *FlowBase) cancel() {
 	// Pending streams have yet to be started; send an error to its receivers
 	// and prevent them from being connected.
 	f.flowRegistry.cancelPendingStreams(f.ID, cancelchecker.QueryCanceledError)
+}
+
+// MakeCPUHandle creates a SQLCPUHandle and injects it into the context, and
+// returns the new context along with the SQLCPUHandle and the GoroutineCPUHandle
+// for the calling goroutine. The SQLCPUHandle is available to other code,
+// including other goroutines, that use the same context. The calling goroutine
+// is registered, which starts measuring that goroutine at this point (and
+// possibly waits for admission).
+//
+// The caller is responsible for:
+//  1. Calling gh.Close() when the calling goroutine's flow-related work is done
+//     (typically in a defer at the flow entry point).
+//  2. Calling cpuHandle.Close() after all goroutines have closed their
+//     GoroutineCPUHandles.
+func MakeCPUHandle(
+	ctx context.Context,
+	provider admission.SQLCPUProvider,
+	tenantID roachpb.TenantID,
+	txn *kv.Txn,
+	atGateway bool,
+) (context.Context, *admission.SQLCPUHandle, *admission.GoroutineCPUHandle, error) {
+	var priority admissionpb.WorkPriority
+	var createTime int64
+	if txn == nil {
+		priority = admissionpb.NormalPri
+		createTime = timeutil.Now().UnixNano()
+	} else {
+		h := txn.AdmissionHeader()
+		priority = admissionpb.WorkPriority(h.Priority)
+		createTime = h.CreateTime
+	}
+	cpuHandle := provider.GetHandle(admission.SQLWorkInfo{
+		AtGateway:  atGateway,
+		TenantID:   tenantID,
+		Priority:   priority,
+		CreateTime: createTime,
+	})
+	newCtx := admission.ContextWithSQLCPUHandle(ctx, cpuHandle)
+	gh := cpuHandle.RegisterGoroutine()
+	err := gh.MeasureAndAdmit(ctx)
+	if err != nil {
+		gh.Close(ctx)
+		cpuHandle.Close()
+		return ctx, nil, nil, err
+	}
+	return newCtx, cpuHandle, gh, err
 }

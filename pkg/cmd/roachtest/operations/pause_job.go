@@ -75,7 +75,8 @@ func runPauseJob(
 
 		o.Status(fmt.Sprintf("pausing %s job %s", jobType, jobId))
 		pauseStmt := fmt.Sprintf("PAUSE JOB %s WITH REASON = 'roachtest operation'", jobId)
-		if _, err := conn.ExecContext(ctx, pauseStmt); err != nil {
+		_, err = conn.ExecContext(ctx, pauseStmt)
+		if err != nil {
 			o.Fatal(err)
 		}
 

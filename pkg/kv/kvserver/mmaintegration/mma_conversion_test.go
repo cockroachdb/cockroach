@@ -103,18 +103,19 @@ func TestConvertReplicaChangeToMMA(t *testing.T) {
 				if expectPanic {
 					require.Panics(t,
 						func() {
-							_, _ = convertReplicaChangeToMMA(&desc, rangeUsageInfo, changes, leaseholderStoreID)
+							_, _ = convertReplicaChangeToMMA(&desc, rangeUsageInfo, mmaprototype.IdentityAmpVector(), changes, leaseholderStoreID)
 						})
 					return "panicked as expected"
 				} else {
-					mmaChanges, err := convertReplicaChangeToMMA(&desc, rangeUsageInfo, changes, leaseholderStoreID)
+					mmaChanges, err := convertReplicaChangeToMMA(&desc, rangeUsageInfo, mmaprototype.IdentityAmpVector(), changes, leaseholderStoreID)
 					if err != nil {
 						return fmt.Sprintf("error: %s", err.Error())
 					}
 					mmaChanges.SortForTesting()
 					var b strings.Builder
 					fmt.Fprintf(&b, "PendingRangeChange: %s", mmaChanges.StringForTesting())
-					externalChange := mmaprototype.MakeExternalRangeChange(mmaChanges)
+					externalChange := mmaprototype.MakeExternalRangeChange(
+						mmaprototype.OriginExternal, 1 /* arbitrary local store */, mmaChanges)
 					if externalChange.IsChangeReplicas() {
 						fmt.Fprintf(&b, "As kvpb.ReplicationChanges:\n %v\n", externalChange.ReplicationChanges())
 					} else if externalChange.IsPureTransferLease() {

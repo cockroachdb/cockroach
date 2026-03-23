@@ -70,7 +70,7 @@ func (sc *storeCodec) EncodeVector(w *workspace.T, v vector.T, centroid vector.T
 
 	switch t := sc.tmpVectorSet.(type) {
 	case *quantize.UnQuantizedVectorSet:
-		return vecencoding.EncodeUnquantizerVector([]byte{}, t.Vectors.At(0))
+		return vecencoding.EncodeUnquantizerVector([]byte{}, t.Vectors.At(0)), nil
 	case *quantize.RaBitQuantizedVectorSet:
 		return vecencoding.EncodeRaBitQVectorFromSet([]byte{}, t, 0), nil
 	default:

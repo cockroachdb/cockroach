@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 # Test that we don't allow FAMILY constraints with virtual columns.
 statement error virtual computed column "v" cannot be part of a family
 CREATE TABLE t (
@@ -56,7 +55,7 @@ a  b  v
 1  1  2
 2  2  4
 
-statement ok
+statement count 2
 DELETE FROM t WHERE a > 0
 
 statement ok
@@ -75,7 +74,7 @@ a  b   v
 3  30  33
 4  40  44
 
-statement ok
+statement count 1
 DELETE FROM t WHERE v = 33
 
 query III colnames,rowsort
@@ -160,7 +159,7 @@ SELECT a, b, v, x FROM (VALUES (1), (2), (10), (5)) AS u(x) INNER LOOKUP JOIN t_
 4  6  10  10
 5  0  5   5
 
-statement ok
+statement count 1
 DELETE FROM t_idx WHERE v = 6
 
 query IIIII colnames,rowsort
@@ -172,7 +171,7 @@ a  b  c  v   w
 4  6  4  10  5
 5  0  5  5   6
 
-statement ok
+statement count 2
 DELETE FROM t_idx WHERE a+b = 10
 
 query IIIII colnames,rowsort
@@ -721,27 +720,27 @@ CREATE TABLE uniq_no_index (
   UNIQUE WITHOUT INDEX (v)
 )
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement ok
 INSERT INTO uniq_no_index VALUES (1, 10), (2, 20)
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 INSERT INTO uniq_no_index VALUES (3, 8)
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 UPDATE uniq_no_index SET b=b+11 WHERE a < 2
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 UPSERT INTO uniq_no_index VALUES (2, 30), (5, 6)
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement ok
 INSERT INTO uniq_no_index VALUES (5, 6) ON CONFLICT (v) DO UPDATE SET b=15
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 query III colnames,rowsort
 SELECT * FROM uniq_no_index
 ----
@@ -758,23 +757,23 @@ CREATE TABLE uniq_no_index_multi (
   UNIQUE WITHOUT INDEX (v, c)
 )
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement ok
 INSERT INTO uniq_no_index_multi VALUES (1, 1, 1), (2, 4, 2), (3, 3, 3)
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 INSERT INTO uniq_no_index_multi VALUES (4, 2, 2)
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 UPDATE uniq_no_index_multi SET c=2 WHERE a=3
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement ok
 UPSERT INTO uniq_no_index_multi VALUES (3, 3, 10)
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement error duplicate key value violates unique constraint
 UPSERT INTO uniq_no_index_multi VALUES (3, 3, 2)
 
@@ -1120,12 +1119,12 @@ subtest referencing_mutations
 statement ok
 CREATE TABLE t_ref (i INT PRIMARY KEY) WITH (schema_locked = false);
 
-onlyif config local-legacy-schema-changer local-mixed-25.3
+onlyif config local-legacy-schema-changer
 statement error pgcode 0A000 virtual computed column "k" referencing columns \("j"\) added in the current transaction
 ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42,
    ADD COLUMN k INT AS (i+j) VIRTUAL;
 
-onlyif config local-legacy-schema-changer local-mixed-25.3
+onlyif config local-legacy-schema-changer
 statement error pgcode 0A000 virtual computed column "l" referencing columns \("j", "k"\) added in the current transaction
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
     SET LOCAL autocommit_before_ddl = false;
@@ -1138,7 +1137,7 @@ statement ok
 ROLLBACK;
 
 # The declarative schema changer allows this.
-skipif config local-legacy-schema-changer local-mixed-25.3 local-mixed-25.4
+skipif config local-legacy-schema-changer local-mixed-25.4
 statement ok
 ALTER TABLE t_ref ADD COLUMN j INT NOT NULL DEFAULT 42,
    ADD COLUMN k INT AS (i+j) VIRTUAL;
@@ -1210,7 +1209,7 @@ statement ok
 INSERT INTO c_delete_cascade VALUES (2), (3);
 INSERT INTO c_delete_set VALUES (2, 2), (3, 3);
 
-statement ok
+statement count 1
 DELETE FROM p WHERE p = 3
 
 query II colnames,rowsort
@@ -1505,3 +1504,178 @@ GROUP BY k, v
 HAVING every(true)
 ----
 0
+
+# Test that virtual columns can have user-defined types (enums).
+# Unlike PostgreSQL, CockroachDB does not restrict virtual columns from using
+# user-defined types or referencing them in expressions.
+subtest virtual_columns_with_enums
+
+statement ok
+CREATE TYPE color AS ENUM ('red', 'green', 'blue');
+
+# Virtual column with enum type.
+statement ok
+CREATE TABLE t_enum_virtual (
+  a INT PRIMARY KEY,
+  c color,
+  v color AS (c) VIRTUAL
+);
+
+statement ok
+INSERT INTO t_enum_virtual VALUES (1, 'red'), (2, 'green'), (3, 'blue');
+
+query IT rowsort
+SELECT a, v FROM t_enum_virtual
+----
+1  red
+2  green
+3  blue
+
+# Virtual column expression that uses enum in a CASE expression.
+statement ok
+CREATE TABLE t_enum_expr (
+  a INT PRIMARY KEY,
+  c color,
+  v STRING AS (CASE c WHEN 'red' THEN 'stop' WHEN 'green' THEN 'go' ELSE 'caution' END) VIRTUAL
+);
+
+statement ok
+INSERT INTO t_enum_expr VALUES (1, 'red'), (2, 'green'), (3, 'blue');
+
+query IT rowsort
+SELECT a, v FROM t_enum_expr
+----
+1  stop
+2  go
+3  caution
+
+# Index on virtual column with enum type.
+statement ok
+CREATE INDEX ON t_enum_virtual (v);
+
+query IT rowsort
+SELECT a, v FROM t_enum_virtual@t_enum_virtual_v_idx WHERE v = 'green'
+----
+2  green
+
+# Test that virtual columns can use user-defined functions (UDFs) in their expressions.
+# Unlike PostgreSQL, CockroachDB allows UDFs in virtual computed column expressions.
+# Note: UDFs must be IMMUTABLE to be used in virtual computed columns.
+subtest virtual_columns_with_udfs
+
+statement ok
+CREATE FUNCTION double_it(x INT) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT x * 2 $$;
+
+statement ok
+CREATE TABLE t_udf_virtual (
+  a INT PRIMARY KEY,
+  b INT,
+  v INT AS (double_it(b)) VIRTUAL
+);
+
+statement ok
+INSERT INTO t_udf_virtual VALUES (1, 10), (2, 20), (3, 30);
+
+query III rowsort
+SELECT * FROM t_udf_virtual
+----
+1  10  20
+2  20  40
+3  30  60
+
+# Update should recompute the virtual column using the UDF.
+statement ok
+UPDATE t_udf_virtual SET b = 5 WHERE a = 1;
+
+query III
+SELECT * FROM t_udf_virtual WHERE a = 1
+----
+1  5  10
+
+# Filter by virtual column that uses UDF.
+query III rowsort
+SELECT * FROM t_udf_virtual WHERE v = 40
+----
+2  20  40
+
+# Virtual column using UDF with enum parameter.
+statement ok
+CREATE FUNCTION color_to_int(c color) RETURNS INT IMMUTABLE LANGUAGE SQL AS $$
+  SELECT CASE c WHEN 'red' THEN 1 WHEN 'green' THEN 2 WHEN 'blue' THEN 3 ELSE 0 END
+$$;
+
+statement ok
+CREATE TABLE t_udf_enum_virtual (
+  a INT PRIMARY KEY,
+  c color,
+  v INT AS (color_to_int(c)) VIRTUAL
+);
+
+statement ok
+INSERT INTO t_udf_enum_virtual VALUES (1, 'red'), (2, 'green'), (3, 'blue');
+
+query ITI rowsort
+SELECT * FROM t_udf_enum_virtual
+----
+1  red    1
+2  green  2
+3  blue   3
+
+subtest virtual_column_error_conditions
+
+# Virtual columns are computed at write time, so errors like overflow or division
+# by zero occur when the row is inserted or updated.
+
+# Test integer overflow in virtual column expression.
+statement ok
+CREATE TABLE t_overflow_virtual (
+  a INT PRIMARY KEY,
+  b INT,
+  doubled INT AS (b * 2) VIRTUAL,
+  FAMILY (a, b)
+);
+
+statement ok
+INSERT INTO t_overflow_virtual (a, b) VALUES (1, 100);
+
+query III
+SELECT * FROM t_overflow_virtual
+----
+1  100  200
+
+# Insert a value that will overflow when doubled.
+# 4611686018427387904 * 2 = 9223372036854775808 > MAX_INT64
+statement error integer out of range
+INSERT INTO t_overflow_virtual (a, b) VALUES (2, 4611686018427387904);
+
+# Update to a value that will overflow.
+statement error integer out of range
+UPDATE t_overflow_virtual SET b = 4611686018427387904 WHERE a = 1
+
+# Test division by zero in virtual column expression.
+statement ok
+CREATE TABLE t_divzero_virtual (
+  a INT PRIMARY KEY,
+  b INT,
+  c INT,
+  ratio INT AS (b // c) VIRTUAL,
+  FAMILY (a, b, c)
+);
+
+statement ok
+INSERT INTO t_divzero_virtual (a, b, c) VALUES (1, 100, 10);
+
+query IIII
+SELECT * FROM t_divzero_virtual
+----
+1  100  10  10
+
+# Insert with zero divisor fails at write time.
+statement error division by zero
+INSERT INTO t_divzero_virtual (a, b, c) VALUES (2, 50, 0);
+
+# Update to zero divisor fails.
+statement error division by zero
+UPDATE t_divzero_virtual SET c = 0 WHERE a = 1
+
+subtest end

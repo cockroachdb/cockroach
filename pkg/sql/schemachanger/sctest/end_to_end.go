@@ -105,6 +105,11 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 				// for end-to-end side-effect testing, so we ignore them.
 				break
 			case "test":
+				var skipUnderSecondaryTenant bool
+				d.MaybeScanArgs(t, "skip-under-secondary-tenant", &skipUnderSecondaryTenant)
+				if skipUnderSecondaryTenant && !s.Codec().ForSystemTenant() {
+					skip.IgnoreLint(t, "test is skipped under secondary tenant")
+				}
 				stmts, _ := parseStmts()
 				require.Lessf(t, numTestStatementsObserved, 1, "only one test per-file.")
 				numTestStatementsObserved++
@@ -127,8 +132,9 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 				)
 				defer refFactoryCleanup()
 
+				allDescs := sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb)
 				deps = sctestdeps.NewTestDependencies(
-					sctestdeps.WithDescriptors(sctestdeps.ReadDescriptorsFromDB(ctx, t, tdb).Catalog),
+					sctestdeps.WithDescriptors(allDescs.Catalog),
 					sctestdeps.WithSystemDatabaseDescriptor(),
 					sctestdeps.WithNamespace(sctestdeps.ReadNamespaceFromDB(t, tdb).Catalog),
 					sctestdeps.WithCurrentDatabase(sctestdeps.ReadCurrentDatabaseFromDB(t, tdb)),
@@ -154,6 +160,8 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 					sctestdeps.WithIDGenerator(s.ApplicationLayer()),
 					sctestdeps.WithReferenceProviderFactory(refFactory),
 					sctestdeps.WithClusterSettings(s.ClusterSettings()),
+					sctestdeps.WithCodec(s.Codec()),
+					sctestdeps.WithZoneConfigs(sctestdeps.ReadZoneConfigsFromDB(t, tdb, allDescs.Catalog)),
 				)
 				stmtStates := execStatementWithTestDeps(ctx, t, deps, stmts...)
 				var fileNameSuffix string
@@ -254,6 +262,8 @@ func checkExplainDiagrams(
 		require.NoError(t, err)
 		out, err := fn()
 		require.NoError(t, err)
+		// Normalize non-deterministic values in the explain output.
+		out = replaceNonDeterministicOutput(out)
 		_, err = io.WriteString(file, out)
 		require.NoError(t, err)
 	}
@@ -296,12 +306,21 @@ func checkExplainDiagrams(
 // scheduleIDRegexp captures either `scheduleId: 384784` or `scheduleId: "374764"`.
 var scheduleIDRegexp = regexp.MustCompile(`scheduleId: "?[0-9]+"?`)
 
+// scheduleIDJSONRegexp captures `"ScheduleID":1234567890` in JSON output.
+var scheduleIDJSONRegexp = regexp.MustCompile(`"ScheduleID":[0-9]+`)
+
+// scheduleIDLogRegexp captures `#1234567890` schedule IDs in log output like
+// "update ttl schedule cron #1234567890 to ...".
+var scheduleIDLogRegexp = regexp.MustCompile(`(update ttl schedule cron )#[0-9]+`)
+
 // dropTimeRegexp captures either `dropTime: \"time\"`.
 var dropTimeRegexp = regexp.MustCompile("dropTime: \"[0-9]+")
 
 func replaceNonDeterministicOutput(text string) string {
 	// scheduleIDs change based on execution time, so redact the output.
 	nextString := scheduleIDRegexp.ReplaceAllString(text, "scheduleId: <redacted>")
+	nextString = scheduleIDJSONRegexp.ReplaceAllString(nextString, `"ScheduleID":<redacted>`)
+	nextString = scheduleIDLogRegexp.ReplaceAllString(nextString, "${1}#<redacted>")
 	return dropTimeRegexp.ReplaceAllString(nextString, "dropTime: <redacted>")
 }
 

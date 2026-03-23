@@ -64,6 +64,9 @@ type OrderedSynchronizer struct {
 	// to be merged by synchronizer.
 	tuplesToMerge int64
 
+	// heapInitalized, if set, indicates that we've fetched a batch from each
+	// input and initialized the heap over batches' first rows.
+	heapInitialized bool
 	// inputBatches stores the current batch for each input.
 	inputBatches []coldata.Batch
 	// inputIndices stores the current index into each input batch.
@@ -81,6 +84,14 @@ type OrderedSynchronizer struct {
 	comparators []vecComparator
 	output      coldata.Batch
 	outVecs     coldata.TypedVecs
+	// outputIdx tracks the next tuple to be added to the output batch.
+	outputIdx int
+	// continueBatch, if set, indicates that the current output batch should be
+	// continued.
+	continueBatch bool
+	// tempBufferedMeta contains temporarily buffered metadata until the next
+	// input batch from the minimum input is fetched.
+	tempBufferedMeta []execinfrapb.ProducerMetadata
 }
 
 var (
@@ -120,28 +131,65 @@ func NewOrderedSynchronizer(
 		typs:                  typs,
 		canonicalTypeFamilies: typeconv.ToCanonicalTypeFamilies(typs),
 		tuplesToMerge:         tuplesToMerge,
+		inputBatches:          make([]coldata.Batch, len(inputs)),
+		heap:                  make([]int, 0, len(inputs)),
 	}
 	os.accountingHelper.Init(allocator, memoryLimit, typs, false /* alwaysReallocate */)
 	return os
 }
 
+// maybeEmitMeta checks whether the synchronizer has temporarily buffered any
+// metadata and returns one object if so.
+func (o *OrderedSynchronizer) maybeEmitMeta() *execinfrapb.ProducerMetadata {
+	if len(o.tempBufferedMeta) == 0 {
+		return nil
+	}
+	meta := o.tempBufferedMeta[0]
+	o.tempBufferedMeta[0] = execinfrapb.ProducerMetadata{}
+	o.tempBufferedMeta = o.tempBufferedMeta[1:]
+	return &meta
+}
+
 // Next is part of the Operator interface.
-func (o *OrderedSynchronizer) Next() coldata.Batch {
-	if o.inputBatches == nil {
-		o.inputBatches = make([]coldata.Batch, len(o.inputs))
-		o.heap = make([]int, 0, len(o.inputs))
+func (o *OrderedSynchronizer) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	if meta := o.maybeEmitMeta(); meta != nil {
+		return nil, meta
+	}
+	if !o.heapInitialized {
 		for i := range o.inputs {
-			o.inputBatches[i] = o.inputs[i].Root.Next()
+			if o.inputBatches[i] != nil {
+				// Already fetched from this input.
+				continue
+			}
+			var meta *execinfrapb.ProducerMetadata
+			o.inputBatches[i], meta = o.inputs[i].Root.Next()
+			if meta != nil {
+				return nil, meta
+			}
 			o.updateComparators(i)
 			if o.inputBatches[i].Length() > 0 {
 				o.heap = append(o.heap, i)
 			}
 		}
 		heap.Init(o)
+		o.heapInitialized = true
 	}
-	o.resetOutput()
-	outputIdx := 0
+	if !o.continueBatch {
+		var reallocated bool
+		o.output, reallocated = o.accountingHelper.ResetMaybeReallocate(
+			o.typs, o.output, int(o.tuplesToMerge), /* tuplesToBeSet */
+		)
+		if reallocated {
+			o.outVecs.SetBatch(o.output)
+		}
+		o.outputIdx = 0
+	}
+	o.continueBatch = false
 	for batchDone := false; !batchDone; {
+		if meta := o.maybeEmitMeta(); meta != nil {
+			o.continueBatch = true
+			return nil, meta
+		}
 		if o.advanceMinBatch {
 			// Advance the minimum input batch, fetching a new batch if
 			// necessary.
@@ -149,7 +197,19 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 			if o.inputIndices[minBatch]+1 < o.inputBatches[minBatch].Length() {
 				o.inputIndices[minBatch]++
 			} else {
-				o.inputBatches[minBatch] = o.inputs[minBatch].Root.Next()
+				// We're in the middle of updating the heap, so we need to fetch
+				// the next batch and update the comparators before we can emit
+				// any metadata. Thus, we'll temporarily buffer all meta and
+				// emit it at a convenient point in time.
+				for {
+					batch, meta := o.inputs[minBatch].Root.Next()
+					if meta != nil {
+						o.tempBufferedMeta = append(o.tempBufferedMeta, *meta)
+						continue
+					}
+					o.inputBatches[minBatch] = batch
+					break
+				}
 				o.inputIndices[minBatch] = 0
 				o.updateComparators(minBatch)
 			}
@@ -176,7 +236,7 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 		for i := range o.typs {
 			vec := batch.ColVec(i)
 			if vec.Nulls().MaybeHasNulls() && vec.Nulls().NullAt(srcRowIdx) {
-				o.outVecs.Nulls[i].SetNull(outputIdx)
+				o.outVecs.Nulls[i].SetNull(o.outputIdx)
 			} else {
 				switch o.canonicalTypeFamilies[i] {
 				// {{range .}}
@@ -187,10 +247,10 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 						srcCol := vec._TYPE()
 						outCol := o.outVecs._TYPECols[o.outVecs.ColsMap[i]]
 						// {{if .IsBytesLike}}
-						outCol.Copy(srcCol, outputIdx, srcRowIdx)
+						outCol.Copy(srcCol, o.outputIdx, srcRowIdx)
 						// {{else}}
 						v := srcCol.Get(srcRowIdx)
-						outCol.Set(outputIdx, v)
+						outCol.Set(o.outputIdx, v)
 						// {{end}}
 						// {{end}}
 					}
@@ -206,25 +266,15 @@ func (o *OrderedSynchronizer) Next() coldata.Batch {
 		o.advanceMinBatch = true
 
 		// Account for the memory of the row we have just set.
-		batchDone = o.accountingHelper.AccountForSet(outputIdx)
-		outputIdx++
+		batchDone = o.accountingHelper.AccountForSet(o.outputIdx)
+		o.outputIdx++
 	}
 
-	o.output.SetLength(outputIdx)
+	o.output.SetLength(o.outputIdx)
 	// Note that it's ok if this number becomes negative - the accounting helper
 	// will ignore it.
-	o.tuplesToMerge -= int64(outputIdx)
-	return o.output
-}
-
-func (o *OrderedSynchronizer) resetOutput() {
-	var reallocated bool
-	o.output, reallocated = o.accountingHelper.ResetMaybeReallocate(
-		o.typs, o.output, int(o.tuplesToMerge), /* tuplesToBeSet */
-	)
-	if reallocated {
-		o.outVecs.SetBatch(o.output)
-	}
+	o.tuplesToMerge -= int64(o.outputIdx)
+	return o.output, nil
 }
 
 // Init is part of the Operator interface.
@@ -245,7 +295,11 @@ func (o *OrderedSynchronizer) Init(ctx context.Context) {
 }
 
 func (o *OrderedSynchronizer) DrainMeta() []execinfrapb.ProducerMetadata {
-	var bufferedMeta []execinfrapb.ProducerMetadata
+	// We generally don't expect any temporarily buffered metadata here, but in
+	// some edge cases it's possible - guarantee that it's emitted at least
+	// during DrainMeta.
+	bufferedMeta := o.tempBufferedMeta
+	o.tempBufferedMeta = nil
 	if o.span != nil {
 		for i := range o.inputs {
 			for _, stats := range o.inputs[i].StatsCollectors {

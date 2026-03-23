@@ -168,8 +168,11 @@ SELECT x.b, ~x.b AS comp FROM bits x WHERE b IS NOT NULL
 0110  1001
 0011  1100
 
+statement count 17
+DELETE FROM bits
+
 statement ok
-DELETE FROM bits; INSERT INTO bits(c) VALUES (B'0'), (B'1')
+INSERT INTO bits(c) VALUES (B'0'), (B'1')
 
 query TT rowsort
 SELECT x.c, ~x.c AS comp FROM bits x

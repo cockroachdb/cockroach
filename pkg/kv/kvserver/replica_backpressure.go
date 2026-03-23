@@ -11,6 +11,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -192,6 +194,7 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 	if !canBackpressureBatch(ba) {
 		return nil
 	}
+	tenantID, _ := roachpb.ClientTenantFromContext(ctx)
 
 	// If we need to apply backpressure, wait for an ongoing split to finish
 	// if one exists. This does not place a hard upper bound on the size of
@@ -199,6 +202,16 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 	// the quota pool), but it does create an effective soft upper bound.
 	for first := true; r.shouldBackpressureWrites(); first = false {
 		if first {
+			cleanup := ash.SetWorkState(
+				tenantID, ash.WorkloadInfo{
+					WorkloadID:    ba.WorkloadID,
+					AppNameID:     ba.AppNameID,
+					GatewayNodeID: ba.GatewayNodeID,
+					WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+				},
+				ash.WorkOther, "Backpressure")
+			defer cleanup() //nolint:deferloop
+
 			r.store.metrics.BackpressuredOnSplitRequests.Inc(1)
 			defer r.store.metrics.BackpressuredOnSplitRequests.Dec(1) //nolint:deferloop
 

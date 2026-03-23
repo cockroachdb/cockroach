@@ -117,7 +117,6 @@ func (f SingleNodeTestClusterFactory) Start(ctx context.Context, t *testing.T) T
 				UseTransactionalDescIDGenerator: true,
 			},
 		},
-		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(142814),
 	}
 	if f.server != nil {
 		args.Knobs.Server = f.server

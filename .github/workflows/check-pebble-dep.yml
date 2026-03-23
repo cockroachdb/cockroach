@@ -6,6 +6,7 @@ on:
 
 jobs:
   check-pebble-dep:
+    if: github.repository == 'cockroachdb/cockroach'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}

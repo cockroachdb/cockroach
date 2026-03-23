@@ -45,11 +45,10 @@ var _ CPULoadListener = &kvSlotAdjuster{}
 func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int, samplePeriod time.Duration) {
 	threshold := int(KVSlotAdjusterOverloadThreshold.Get(&kvsa.settings.SV))
 
-	periodDurationMicros := samplePeriod.Microseconds()
 	if samplePeriod > time.Millisecond {
-		kvsa.cpuLoadLongPeriodDurationMetric.Inc(periodDurationMicros)
+		kvsa.cpuLoadLongPeriodDurationMetric.Inc(samplePeriod.Nanoseconds())
 	} else {
-		kvsa.cpuLoadShortPeriodDurationMetric.Inc(periodDurationMicros)
+		kvsa.cpuLoadShortPeriodDurationMetric.Inc(samplePeriod.Nanoseconds())
 	}
 
 	// Simple heuristic, which worked ok in experiments. More sophisticated ones

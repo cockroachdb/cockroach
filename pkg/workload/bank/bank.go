@@ -72,8 +72,10 @@ var bankMeta = workload.Meta{
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		// Because this workload can create a large number of objects, the import
-		// concurrent may need to be limited.
-		g.flags.Int(workload.ImportDataLoaderConcurrencyFlag, 32, workload.ImportDataLoaderConcurrencyFlagDescription)
+		// concurrent may need to be limited. With a large number of tables,
+		// high concurrency can cause one of the table imports to fail after
+		// retrying the transaction too many times.
+		g.flags.Int(workload.ImportDataLoaderConcurrencyFlag, 8, workload.ImportDataLoaderConcurrencyFlagDescription)
 		return g
 	},
 }
@@ -115,6 +117,11 @@ func (b *bank) ConnFlags() *workload.ConnFlags { return b.connFlags }
 func (b *bank) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
+			if b.rows != 0 && b.rows < 2 {
+				// We need at least two rows to do any transfers.
+				// Allow rows=0 for schema-only initialization (e.g., workload init --rows=0).
+				return errors.Errorf(`Value of rows must be greater than one; was %d`, b.rows)
+			}
 			if b.rows < b.ranges {
 				return errors.Errorf(
 					"Value of 'rows' (%d) must be greater than or equal to value of 'ranges' (%d)",
@@ -233,13 +240,21 @@ func (b *bank) Ops(
 		hists := reg.GetHandle()
 
 		workerFn := func(ctx context.Context) error {
+			// N.B. We allow initializing the bank workload with zero rows as many tests
+			// unfortunately depend on this behavior to quickly create schema only tables.
+			// However, throw an error if we attempt to run the workload with zero rows.
+			if b.rows == 0 {
+				return errors.Errorf("attempting to run bank workload with zero rows")
+			}
+
 			tableIdx := rng.IntN(b.tables)
 			updateStmt := updateStmts[tableIdx]
 
+			// Rows are always expected to be at least two (via validation).
 			from := rng.IntN(b.rows)
-			to := rng.IntN(b.rows - 1)
-			for from == to && b.rows != 1 {
-				to = rng.IntN(b.rows - 1)
+			to := rng.IntN(b.rows)
+			for from == to {
+				to = rng.IntN(b.rows)
 			}
 			amount := rand.IntN(maxTransfer)
 			start := timeutil.Now()

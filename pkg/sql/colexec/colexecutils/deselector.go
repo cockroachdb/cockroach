@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -44,10 +45,13 @@ func NewDeselectorOp(
 	}
 }
 
-func (p *deselectorOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p *deselectorOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Selection() == nil || batch.Length() == 0 {
-		return batch
+		return batch, nil
 	}
 	// deselectorOp should *not* limit the capacities of the returned batches,
 	// so we don't use a memory limit here. It is up to the wrapped operator to
@@ -70,5 +74,5 @@ func (p *deselectorOp) Next() coldata.Batch {
 		}
 	})
 	p.output.SetLength(batch.Length())
-	return p.output
+	return p.output, nil
 }

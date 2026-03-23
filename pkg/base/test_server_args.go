@@ -100,6 +100,7 @@ type TestServerArgs struct {
 
 	// Fields copied to the server.Config.
 	Insecure                    bool
+	UseDRPC                     bool
 	RetryOptions                retry.Options // TODO(tbg): make testing knob.
 	SocketFile                  string
 	ScanInterval                time.Duration
@@ -181,6 +182,16 @@ type TestServerArgs struct {
 	// CockroachDB upgrades and periodically reports diagnostics to
 	// Cockroach Labs. Should remain disabled during unit testing.
 	StartDiagnosticsReporting bool
+
+	// DisableElasticCPUAdmission disables elastic CPU admission control for this
+	// test server. This is useful for tests that are sensitive to timing or
+	// resource scheduling where elastic AC can cause flakiness.
+	//
+	// TODO(dt): Flip this to an opt-in flag (EnableElasticCPUAdmission) and
+	// default to disabled in test servers, since they often run under sustained
+	// overload conditions in CI. Tests that specifically test elastic AC
+	// behavior can opt in.
+	DisableElasticCPUAdmission bool
 
 	SlimTestSeverConfig *SlimTestServerConfig
 }
@@ -424,6 +435,11 @@ var (
 	// worth the cost of never running that test with the virtualization
 	// layer active.
 	TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs = TestIsSpecificToStorageLayerAndNeedsASystemTenant
+
+	// TestSkipSecondaryTenantsUnderDuress should be used whenever we want to
+	// disable test tenant randomization under heavy configs (e.g. under race)
+	// due to overload.
+	TestSkipSecondaryTenantsUnderDuress = TestIsSpecificToStorageLayerAndNeedsASystemTenant
 )
 
 func (do DefaultTestTenantOptions) AllowAdditionalTenants() bool {
@@ -675,6 +691,10 @@ type TestSharedProcessTenantArgs struct {
 	SkipTenantCheck bool
 
 	Settings *cluster.Settings
+
+	// DisableElasticCPUAdmission disables elastic CPU admission control for this
+	// tenant server. See TestServerArgs.DisableElasticCPUAdmission.
+	DisableElasticCPUAdmission bool
 }
 
 // TestTenantArgs are the arguments to TestServer.StartTenant.
@@ -786,4 +806,8 @@ type TestTenantArgs struct {
 	// CockroachDB upgrades and periodically reports diagnostics to
 	// Cockroach Labs. Should remain disabled during unit testing.
 	StartDiagnosticsReporting bool
+
+	// DisableElasticCPUAdmission disables elastic CPU admission control for this
+	// tenant server. See TestServerArgs.DisableElasticCPUAdmission.
+	DisableElasticCPUAdmission bool
 }

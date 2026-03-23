@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl/engineccl"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble/vfs"
@@ -41,7 +41,7 @@ func TestGenEncryptionKey(t *testing.T) {
 					assert.EqualValues(t, 32+(keySize/8), info.Size())
 				}
 
-				key, err := engineccl.LoadKeyFromFile(vfs.Default, keyPath)
+				key, err := fs.LoadKeyFromFile(vfs.Default, keyPath)
 				require.NoError(t, err)
 				assert.EqualValues(t, keySize/8, len(key.Key))
 				// Key ID is hex encoded on load so it's 64 bytes here but 32 in the file size.

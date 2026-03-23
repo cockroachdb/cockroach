@@ -13,7 +13,7 @@ ARTIFACTS_DIR="${ARTIFACTS_DIR:-/artifacts}"
 
 # TEST_PACKAGE_TARGETS is a space-separated list of package containing the
 # tests in test_to_run.
-export TEST_PACKAGE_TARGETS="//pkg/kv/kvnemesis:kvnemesis_test"
+export TEST_PACKAGE_TARGETS="//pkg/kv/kvnemesis:kvnemesis_test //pkg/backup:backup_test"
 
 # tests_to_run is a hand-curated list of tests that we want to run more often
 # under stress.
@@ -22,6 +22,7 @@ export TEST_PACKAGE_TARGETS="//pkg/kv/kvnemesis:kvnemesis_test"
 declare -a tests_to_run=(
   "TestKVNemesisMultiNode"
   "TestKVNemesisMultiNode_BufferedWritesLockDurabilityUpgrades"
+  "TestBackupRestore_FlakyStorage"
 )
 
 test_exists() {
@@ -71,6 +72,7 @@ $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test $TEST_PACKAGE_TARGETS \
                                       --test_env TC_SERVER_URL \
                                       $TEST_ARGS \
                                       --test_filter="$test_filter" \
+                                      --test_sharding_strategy=disabled \
     || exit_status=$?
 
 exit $exit_status

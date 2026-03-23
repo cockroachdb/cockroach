@@ -29,19 +29,6 @@ var (
 	MinClockTimestamp = ClockTimestamp{WallTime: 0, Logical: 1}
 )
 
-// EqOrdering returns whether the receiver sorts equally to the parameter.
-//
-// This method is split from tests of structural equality (Equal and the equals
-// operator) because it does not consider differences in flags and only
-// considers whether the walltime and logical time differ between the
-// timestamps.
-//
-// TODO(nvanbenschoten): remove this method and its uses. It's now equivalent to
-// a direct struct comparison.
-func (t Timestamp) EqOrdering(s Timestamp) bool {
-	return t.WallTime == s.WallTime && t.Logical == s.Logical
-}
-
 // Less returns whether the receiver is less than the parameter.
 func (t Timestamp) Less(s Timestamp) bool {
 	return t.WallTime < s.WallTime || (t.WallTime == s.WallTime && t.Logical < s.Logical)
@@ -189,7 +176,7 @@ func (t Timestamp) AsOfSystemTime() string {
 func (t Timestamp) IsEmpty() bool {
 	// TODO(radu): consider making timestamps with zero wall time and non-zero
 	// logical time illegal. Then we can check just the wall time.
-	return t == Timestamp{}
+	return t.WallTime == 0 && t.Logical == 0
 }
 
 // IsSet returns true if t is not an empty Timestamp.

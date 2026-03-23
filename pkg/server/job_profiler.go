@@ -135,7 +135,9 @@ func (e *executionDetailsBuilder) addLabelledGoroutines(ctx context.Context) {
 	}
 }
 
-// addDistSQLDiagram generates and persists a `distsql.<timestamp>.html` file.
+// addDistSQLDiagram generates and persists a `distsql-plan.url` file containing
+// the raw DistSQL diagram URL. The UI layer converts this to a `.html` virtual
+// file on the fly via ReadExecutionDetailFile.
 func (e *executionDetailsBuilder) addDistSQLDiagram(ctx context.Context) {
 	query := `SELECT plan_diagram FROM [SHOW JOB $1 WITH EXECUTION DETAILS]`
 	row, err := e.db.Executor().QueryRowEx(ctx, "profiler-bundler-add-diagram", nil, /* txn */
@@ -146,10 +148,10 @@ func (e *executionDetailsBuilder) addDistSQLDiagram(ctx context.Context) {
 	}
 	if row != nil && row[0] != tree.DNull {
 		dspDiagramURL := string(tree.MustBeDString(row[0]))
-		filename := fmt.Sprintf("%s/distsql-plan.html", timeutil.Now().Format("20060102_150405.00"))
+		filename := fmt.Sprintf("%s/distsql-plan.url", timeutil.Now().Format("20060102_150405.00"))
 		if err := e.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			return jobs.WriteExecutionDetailFile(ctx, filename,
-				[]byte(fmt.Sprintf(`<meta http-equiv="Refresh" content="0; url=%s">`, dspDiagramURL)),
+				[]byte(dspDiagramURL),
 				txn, e.jobID)
 		}); err != nil {
 			log.Dev.Errorf(ctx, "failed to write DistSQL diagram for job %d: %v", e.jobID, err.Error())

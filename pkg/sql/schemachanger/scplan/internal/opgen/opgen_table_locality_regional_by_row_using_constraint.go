@@ -15,15 +15,23 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.TableLocalityRegionalByRowUsingConstraint) *scop.NotImplemented {
-					return notImplemented(this)
+				emit(func(this *scpb.TableLocalityRegionalByRowUsingConstraint) *scop.SetTableRBRUsingConstraint {
+					return &scop.SetTableRBRUsingConstraint{
+						TableID:      this.TableID,
+						ConstraintID: this.ConstraintID,
+					}
 				}),
 			),
 		),
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				revertible(false),
+				emit(func(this *scpb.TableLocalityRegionalByRowUsingConstraint) *scop.SetTableRBRUsingConstraint {
+					return &scop.SetTableRBRUsingConstraint{
+						TableID:      this.TableID,
+						ConstraintID: 0,
+					}
+				}),
 			),
 		),
 	)

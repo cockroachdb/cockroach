@@ -162,10 +162,6 @@ func redactElement(element scpb.Element) error {
 		return redactExpr(&e.Expression.Expr)
 	case *scpb.ColumnOnUpdateExpression:
 		return redactExpr(&e.Expression.Expr)
-	case *scpb.ColumnType:
-		if e.ComputeExpr != nil {
-			return redactExpr(&e.ComputeExpr.Expr)
-		}
 	case *scpb.ColumnComputeExpression:
 		return redactExpr(&e.Expression.Expr)
 	case *scpb.FunctionBody:

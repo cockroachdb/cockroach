@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"math"
 	"os"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmmetrics"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -44,6 +46,7 @@ import (
 	// metrics functionality into pkg/util/log.
 	_ "github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
@@ -61,10 +64,12 @@ const (
 	// nodeTimeSeriesPrefix is the common prefix for time series keys which
 	// record node-specific data.
 	nodeTimeSeriesPrefix = "cr.node.%s"
-
-	advertiseAddrLabelKey = "advertise-addr"
-	httpAddrLabelKey      = "http-addr"
-	sqlAddrLabelKey       = "sql-addr"
+	// clusterTimeSeriesPrefix is the common prefix for time series keys which
+	// record cluster-wide data.
+	clusterTimeSeriesPrefix = "cr.cluster.%s"
+	advertiseAddrLabelKey   = "advertise-addr"
+	httpAddrLabelKey        = "http-addr"
+	sqlAddrLabelKey         = "sql-addr"
 
 	disableNodeAndTenantLabelsEnvVar = "COCKROACH_DISABLE_NODE_AND_TENANT_METRIC_LABELS"
 )
@@ -114,10 +119,44 @@ var bugfix149481Enabled = settings.RegisterBoolSetting(
 // This setting enables debugging of changefeeds and should not be considered functionality
 // to expand support for.
 var ChildMetricsStorageEnabled = settings.RegisterBoolSetting(
-	settings.ApplicationLevel, "timeseries.child_metrics.enabled",
+	settings.ApplicationLevel, "timeseries.persist_child_metrics.enabled",
 	"enables the collection of high-cardinality child metrics into the time series database",
 	false,
 	settings.WithVisibility(settings.Reserved))
+
+// ScrapeMetrics holds meta-metrics that describe the volume of a Prometheus
+// scrape. They are updated at the end of each /_status/vars scrape cycle and
+// therefore report values from the most recent (or, on first scrape, zero)
+// scrape. Because the metrics themselves live in the node registry, they are
+// self-referentially included in the output.
+type ScrapeMetrics struct {
+	NameCount  *metric.Gauge
+	LineCount  *metric.Gauge
+	ChildCount *metric.GaugeVec
+}
+
+func newScrapeMetrics() *ScrapeMetrics {
+	return &ScrapeMetrics{
+		NameCount: metric.NewGauge(metric.Metadata{
+			Name:        "obs.metric_export.name.count",
+			Help:        "Number of metric families (unique metric names) in the most recent Prometheus scrape",
+			Measurement: "Metric Names",
+			Unit:        metric.Unit_COUNT,
+		}),
+		LineCount: metric.NewGauge(metric.Metadata{
+			Name:        "obs.metric_export.line.count",
+			Help:        "Total individual time series (all label combinations) in the most recent Prometheus scrape",
+			Measurement: "Time Series",
+			Unit:        metric.Unit_COUNT,
+		}),
+		ChildCount: metric.NewExportedGaugeVec(metric.Metadata{
+			Name:        "obs.metric_export.child.count",
+			Help:        "Exported-line-weighted child count per parent metric: histogram children count their expanded Prometheus lines, others count 1",
+			Measurement: "Child Instances",
+			Unit:        metric.Unit_COUNT,
+		}, []string{"metric_name"}),
+	}
+}
 
 // MetricsRecorder is used to periodically record the information in a number of
 // metric registries.
@@ -151,6 +190,10 @@ type MetricsRecorder struct {
 	// scrape and print so there is no need to have additional lock here.
 	prometheusExporter metric.PrometheusExporter
 
+	// scrapeMetrics holds meta-metrics that describe the volume of the most
+	// recent /_status/vars Prometheus scrape.
+	scrapeMetrics *ScrapeMetrics
+
 	// mu synchronizes the reading of node/store registries against the adding of
 	// nodes/stores. Consequently, almost all uses of it only need to take an
 	// RLock on it.
@@ -172,8 +215,12 @@ type MetricsRecorder struct {
 		// package. NB: The underlying metrics are global, but each server gets
 		// its own separate registry to avoid things such as colliding labels.
 		logRegistry *metric.Registry
-		desc        roachpb.NodeDescriptor
-		startedAt   int64
+		// clusterMetricsRegistry holds metrics that apply to cluster-wide
+		// constructs (eg. backup schedules, jobs) rather than per-node
+		// resources.
+		clusterMetricsRegistry metric.RegistryReader
+		desc                   roachpb.NodeDescriptor
+		startedAt              int64
 
 		// storeRegistries contains a registry for each store on the node. These
 		// are not stored as subregistries, but rather are treated as wholly
@@ -182,13 +229,18 @@ type MetricsRecorder struct {
 		stores          map[roachpb.StoreID]storeMetrics
 
 		// tenantRegistries contains the registries for shared-process tenants.
-		tenantRegistries map[roachpb.TenantID]*metric.Registry
+		tenantRegistries map[roachpb.TenantID]*metric.TenantRegistries
 	}
 
 	// WriteNodeStatus is a potentially long-running method (with a network
 	// round-trip) that requires a mutex to be safe for concurrent usage. We
 	// therefore give it its own mutex to avoid blocking other methods.
 	writeSummaryMu syncutil.Mutex
+
+	// childMetricNameCache caches the encoded names for child metrics to avoid
+	// rebuilding them on every recording. Uses syncutil.Map for lock-free reads.
+	// Stores full cache entries to detect hash collisions.
+	childMetricNameCache syncutil.Map[uint64, cacheEntry]
 }
 
 // NewMetricsRecorder initializes a new MetricsRecorder object that uses the
@@ -214,15 +266,18 @@ func NewMetricsRecorder(
 		tenantID:            tenantID,
 		tenantNameContainer: tenantNameContainer,
 		prometheusExporter:  metric.MakePrometheusExporter(),
+		scrapeMetrics:       newScrapeMetrics(),
 	}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)
-	mr.mu.tenantRegistries = make(map[roachpb.TenantID]*metric.Registry)
+	mr.mu.tenantRegistries = make(map[roachpb.TenantID]*metric.TenantRegistries)
 	return mr
 }
 
 // AddTenantRegistry adds shared-process tenant's registry.
-func (mr *MetricsRecorder) AddTenantRegistry(tenantID roachpb.TenantID, rec *metric.Registry) {
+func (mr *MetricsRecorder) AddTenantRegistry(
+	tenantID roachpb.TenantID, reg *metric.TenantRegistries,
+) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 
@@ -235,9 +290,10 @@ func (mr *MetricsRecorder) AddTenantRegistry(tenantID roachpb.TenantID, rec *met
 			mr.mu.appRegistry.AddLabel("tenant", catconstants.SystemTenantName)
 			mr.mu.logRegistry.AddLabel("tenant", catconstants.SystemTenantName)
 			mr.mu.sysRegistry.AddLabel("tenant", catconstants.SystemTenantName)
+			mr.mu.clusterMetricsRegistry.AddLabel("tenant", catconstants.SystemTenantName)
 		})
 	}
-	mr.mu.tenantRegistries[tenantID] = rec
+	mr.mu.tenantRegistries[tenantID] = reg
 }
 
 // RemoveTenantRegistry removes shared-process tenant's registry.
@@ -270,6 +326,20 @@ func (mr *MetricsRecorder) StoreRegistry(id roachpb.StoreID) *metric.Registry {
 	return mr.mu.storeRegistries[id]
 }
 
+// ClusterMetricRegistry returns the metric registry for cluster-level metrics
+// for the specified tenant ID.
+func (mr *MetricsRecorder) ClusterMetricRegistry(id roachpb.TenantID) metric.RegistryReader {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+	if id == mr.tenantID {
+		return mr.mu.clusterMetricsRegistry
+	}
+	if registries, ok := mr.mu.tenantRegistries[id]; ok {
+		return registries.ClusterMetricsRegistry()
+	}
+	return nil
+}
+
 // AddNode adds various metric registries an initialized server, along
 // with its descriptor and start time.
 // The registries are:
@@ -280,6 +350,7 @@ func (mr *MetricsRecorder) StoreRegistry(id roachpb.StoreID) *metric.Registry {
 // - sys registry - metrics about system-wide properties.
 func (mr *MetricsRecorder) AddNode(
 	nodeReg, appReg, logReg, sysReg *metric.Registry,
+	clusterMetricReg metric.RegistryReader,
 	desc roachpb.NodeDescriptor,
 	startedAt int64,
 	advertiseAddr, httpAddr, sqlAddr string,
@@ -290,6 +361,7 @@ func (mr *MetricsRecorder) AddNode(
 	mr.mu.appRegistry = appReg
 	mr.mu.logRegistry = logReg
 	mr.mu.sysRegistry = sysReg
+	mr.mu.clusterMetricsRegistry = clusterMetricReg
 	mr.mu.desc = desc
 	mr.mu.startedAt = startedAt
 
@@ -307,6 +379,7 @@ func (mr *MetricsRecorder) AddNode(
 	nodeIDGauge := metric.NewGauge(metadata)
 	nodeIDGauge.Update(int64(desc.NodeID))
 	nodeReg.AddMetric(nodeIDGauge)
+	nodeReg.AddMetricStruct(mr.scrapeMetrics)
 
 	if !disableNodeAndTenantLabels {
 		nodeIDInt := int(desc.NodeID)
@@ -315,6 +388,7 @@ func (mr *MetricsRecorder) AddNode(
 			sysReg.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
 			appReg.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
 			logReg.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
+			clusterMetricReg.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
 			for _, s := range mr.mu.storeRegistries {
 				s.AddLabel("node_id", strconv.Itoa(int(desc.NodeID)))
 			}
@@ -324,6 +398,7 @@ func (mr *MetricsRecorder) AddNode(
 			sysReg.AddLabel("tenant", mr.tenantNameContainer)
 			appReg.AddLabel("tenant", mr.tenantNameContainer)
 			logReg.AddLabel("tenant", mr.tenantNameContainer)
+			clusterMetricReg.AddLabel("tenant", mr.tenantNameContainer)
 		}
 	}
 }
@@ -338,6 +413,14 @@ func (mr *MetricsRecorder) AddStore(store storeMetrics) {
 	defer mr.mu.Unlock()
 	storeID := store.StoreID()
 	store.Registry().AddLabel("store", strconv.Itoa(int(storeID)))
+	// If AddNode has already been called, we need to add the node_id label here.
+	// This can happen when stores are initialized asynchronously after node start.
+	// There's no risk of duplicate labels: either the store is added before AddNode
+	// runs (in which case desc.NodeID is 0 here, and AddNode adds the label), or it's
+	// added after (in which case we add it here, and AddNode never saw this store).
+	if !disableNodeAndTenantLabels && mr.mu.desc.NodeID != 0 {
+		store.Registry().AddLabel("node_id", strconv.Itoa(int(mr.mu.desc.NodeID)))
+	}
 	mr.mu.storeRegistries[storeID] = store.Registry()
 	mr.mu.stores[storeID] = store
 }
@@ -401,11 +484,13 @@ func (mr *MetricsRecorder) ScrapeIntoPrometheusWithStaticLabels(
 		pm.ScrapeRegistry(mr.mu.appRegistry, scrapeOptions...)
 		pm.ScrapeRegistry(mr.mu.logRegistry, scrapeOptions...)
 		pm.ScrapeRegistry(mr.mu.sysRegistry, scrapeOptions...)
+		pm.ScrapeRegistry(mr.mu.clusterMetricsRegistry, scrapeOptions...)
 		for _, reg := range mr.mu.storeRegistries {
 			pm.ScrapeRegistry(reg, scrapeOptions...)
 		}
 		for _, tenantRegistry := range mr.mu.tenantRegistries {
-			pm.ScrapeRegistry(tenantRegistry, scrapeOptions...)
+			pm.ScrapeRegistry(tenantRegistry.AppRegistry(), scrapeOptions...)
+			pm.ScrapeRegistry(tenantRegistry.ClusterMetricsRegistry(), scrapeOptions...)
 		}
 	}
 }
@@ -417,11 +502,58 @@ func (mr *MetricsRecorder) PrintAsText(
 	w io.Writer, contentType expfmt.Format, useStaticLabels bool,
 ) error {
 	var buf bytes.Buffer
-	if err := mr.prometheusExporter.ScrapeAndPrintAsText(&buf, contentType, mr.ScrapeIntoPrometheusWithStaticLabels(useStaticLabels)); err != nil {
+	scrapeFunc := mr.ScrapeIntoPrometheusWithStaticLabels(useStaticLabels)
+	// For /_status/vars (useStaticLabels=false), update scrape meta-metrics
+	// after scraping. Values appear in the next scrape (first reports zeros).
+	if !useStaticLabels {
+		inner := scrapeFunc
+		scrapeFunc = func(pm *metric.PrometheusExporter) {
+			inner(pm)
+			mr.updateScrapeMetrics(pm)
+		}
+	}
+	if err := mr.prometheusExporter.ScrapeAndPrintAsText(
+		&buf, contentType, scrapeFunc,
+	); err != nil {
 		return err
+	}
+	// Count actual output lines from the encoded buffer. This must happen
+	// after encoding because histograms expand a single Metric object into
+	// multiple lines (per-bucket + _count + _sum), and Gather() doesn't
+	// reflect that.
+	if !useStaticLabels {
+		mr.scrapeMetrics.LineCount.Update(countTimeSeriesLines(buf.Bytes()))
 	}
 	_, err := buf.WriteTo(w)
 	return err
+}
+
+// countTimeSeriesLines counts data lines in prometheus text format output.
+// Each non-empty, non-comment line corresponds to one time series.
+func countTimeSeriesLines(data []byte) int64 {
+	var count int64
+	for _, line := range bytes.Split(data, []byte("\n")) {
+		if len(line) > 0 && line[0] != '#' {
+			count++
+		}
+	}
+	return count
+}
+
+// updateScrapeMetrics updates the name count and child count meta-metrics
+// from the current exporter state. Called inside ScrapeAndPrintAsText's
+// lock, after all registries have been scraped but before clearMetrics.
+// Line count is set separately from the encoded output buffer.
+func (mr *MetricsRecorder) updateScrapeMetrics(pm *metric.PrometheusExporter) {
+	families, _ := pm.Gather()
+	mr.scrapeMetrics.NameCount.Update(int64(len(families)))
+
+	mr.scrapeMetrics.ChildCount.Clear()
+	for metricName, count := range pm.ChildCounts() {
+		mr.scrapeMetrics.ChildCount.Update(
+			map[string]string{"metric_name": metricName}, count,
+		)
+	}
 }
 
 // ExportToGraphite sends the current metric values to a Graphite server.
@@ -451,18 +583,42 @@ func (mr *MetricsRecorder) GetTimeSeriesData(childMetrics bool) []tspb.TimeSerie
 		return nil
 	}
 
+	now := mr.clock.Now()
+	lastDataCount := atomic.LoadInt64(&mr.lastDataCount)
+	data := make([]tspb.TimeSeriesData, 0, lastDataCount)
+
 	if childMetrics {
 		if !ChildMetricsStorageEnabled.Get(&mr.settings.SV) {
 			return nil
 		}
-		return nil // TODO(jasonlmfong): to be implemented
+
+		// Record child metrics from app registry for system tenant only.
+		recorder := registryRecorder{
+			registry:             mr.mu.appRegistry,
+			format:               nodeTimeSeriesPrefix,
+			source:               mr.mu.desc.NodeID.String(),
+			timestampNanos:       now.UnixNano(),
+			childMetricNameCache: &mr.childMetricNameCache,
+		}
+		recorder.recordChangefeedChildMetrics(&data)
+
+		// Record child metrics from app-level registries for secondary tenants
+		for tenantID, r := range mr.mu.tenantRegistries {
+			tenantRecorder := registryRecorder{
+				registry:             r.AppRegistry(),
+				format:               nodeTimeSeriesPrefix,
+				source:               tsutil.MakeTenantSource(mr.mu.desc.NodeID.String(), tenantID.String()),
+				timestampNanos:       now.UnixNano(),
+				childMetricNameCache: &mr.childMetricNameCache,
+			}
+			tenantRecorder.recordChangefeedChildMetrics(&data)
+		}
+
+		atomic.CompareAndSwapInt64(&mr.lastDataCount, lastDataCount, int64(len(data)))
+		return data
 	}
 
-	lastDataCount := atomic.LoadInt64(&mr.lastDataCount)
-	data := make([]tspb.TimeSeriesData, 0, lastDataCount)
-
 	// Record time series from node-level registries.
-	now := mr.clock.Now()
 	recorder := registryRecorder{
 		registry:       mr.mu.nodeRegistry,
 		format:         nodeTimeSeriesPrefix,
@@ -480,15 +636,31 @@ func (mr *MetricsRecorder) GetTimeSeriesData(childMetrics bool) []tspb.TimeSerie
 	recorder.registry = mr.mu.sysRegistry
 	recorder.record(&data)
 
+	cmRecorder := registryRecorder{
+		registry:       mr.mu.clusterMetricsRegistry,
+		format:         clusterTimeSeriesPrefix,
+		source:         mr.mu.desc.NodeID.String(),
+		timestampNanos: now.UnixNano(),
+	}
+	cmRecorder.record(&data)
+
 	// Record time series from app-level registries for secondary tenants.
 	for tenantID, r := range mr.mu.tenantRegistries {
-		tenantRecorder := registryRecorder{
-			registry:       r,
+		tenantAppRecorder := registryRecorder{
+			registry:       r.AppRegistry(),
 			format:         nodeTimeSeriesPrefix,
 			source:         tsutil.MakeTenantSource(mr.mu.desc.NodeID.String(), tenantID.String()),
 			timestampNanos: now.UnixNano(),
 		}
-		tenantRecorder.record(&data)
+		tenantAppRecorder.record(&data)
+
+		tenantClusterMetricRecorder := registryRecorder{
+			registry:       r.ClusterMetricsRegistry(),
+			format:         clusterTimeSeriesPrefix,
+			source:         tsutil.MakeTenantSource(mr.mu.desc.NodeID.String(), tenantID.String()),
+			timestampNanos: now.UnixNano(),
+		}
+		tenantClusterMetricRecorder.record(&data)
 	}
 
 	// Record time series from store-level registries.
@@ -556,6 +728,7 @@ func (mr *MetricsRecorder) GetMetricsMetadata(
 	mr.mu.appRegistry.WriteMetricsMetadata(appMetrics)
 	mr.mu.logRegistry.WriteMetricsMetadata(srvMetrics)
 	mr.mu.sysRegistry.WriteMetricsMetadata(srvMetrics)
+	cmmetrics.WriteAllRegisteredMetadata(srvMetrics)
 
 	mr.writeStoreMetricsMetadata(nodeMetrics)
 	return nodeMetrics, appMetrics, srvMetrics
@@ -567,12 +740,16 @@ func (mr *MetricsRecorder) GetRecordedMetricNames(
 	allMetadata map[string]metric.Metadata,
 ) map[string]string {
 	storeMetricsMap := make(map[string]metric.Metadata)
+	clusterMetricsMap := make(map[string]metric.Metadata)
 	tsDbMetricNames := make(map[string]string, len(allMetadata))
 	mr.writeStoreMetricsMetadata(storeMetricsMap)
+	cmmetrics.WriteAllRegisteredMetadata(clusterMetricsMap)
 	for metricName, metadata := range allMetadata {
 		prefix := nodeTimeSeriesPrefix
 		if _, ok := storeMetricsMap[metricName]; ok {
 			prefix = storeTimeSeriesPrefix
+		} else if _, ok := clusterMetricsMap[metricName]; ok {
+			prefix = clusterTimeSeriesPrefix
 		}
 		if metadata.MetricType == prometheusgo.MetricType_HISTOGRAM {
 			for _, metricComputer := range metric.HistogramMetricComputers {
@@ -666,6 +843,7 @@ func (mr *MetricsRecorder) GenerateNodeStatus(ctx context.Context) *statuspb.Nod
 		Env:               flattenStrings(envutil.GetEnvVarsUsed()),
 		Activity:          activity,
 		NumCpus:           int32(system.NumCPU()),
+		NumVcpus:          GetVCPUs(ctx),
 		TotalSystemMemory: systemMemory,
 	}
 
@@ -772,10 +950,13 @@ func (mr *MetricsRecorder) WriteNodeStatus(
 // registryRecorder is a helper class for recording time series datapoints
 // from a metrics Registry.
 type registryRecorder struct {
-	registry       *metric.Registry
+	registry       metric.RegistryReader
 	format         string
 	source         string
 	timestampNanos int64
+	// childMetricNameCache is an optional cache for encoded child metric names.
+	// If nil, no caching will be performed.
+	childMetricNameCache *syncutil.Map[uint64, cacheEntry]
 }
 
 // extractValue extracts the metric value(s) for the given metric and passes it, along with the metric name, to the
@@ -803,7 +984,11 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 		// NB: this branch is intentionally at the bottom since all metrics implement it.
 		m := mtr.ToPrometheusMetric()
 		if m.Gauge != nil {
-			fn(name, *m.Gauge.Value)
+			v := *m.Gauge.Value
+			if math.IsInf(v, 0) || math.IsNaN(v) {
+				v = 0
+			}
+			fn(name, v)
 		} else if m.Counter != nil {
 			fn(name, *m.Counter.Value)
 		}
@@ -822,7 +1007,7 @@ func extractValue(name string, mtr interface{}, fn func(string, float64)) error 
 // function once for each recordable value represented by that metric. This is
 // useful to expand certain metric types (such as histograms) into multiple
 // recordable values.
-func eachRecordableValue(reg *metric.Registry, fn func(string, float64)) {
+func eachRecordableValue(reg metric.RegistryReader, fn func(string, float64)) {
 	reg.Each(func(name string, mtr interface{}) {
 		if err := extractValue(name, mtr, fn); err != nil {
 			log.Dev.Warningf(context.TODO(), "%v", err)
@@ -901,6 +1086,187 @@ func (rr registryRecorder) recordChild(
 					},
 				},
 			})
+		}
+		promIter.Each(m.Label, processChildMetric)
+	})
+}
+
+func hashLabels(labels []*prometheusgo.LabelPair) uint64 {
+	h := fnv.New64a()
+	for _, label := range labels {
+		h.Write([]byte(label.GetName()))
+		h.Write([]byte(label.GetValue()))
+	}
+	return h.Sum64()
+}
+
+// cacheEntry holds a cached metric name along with the labels that produced it,
+// used for verification when hash collisions occur.
+type cacheEntry struct {
+	labels []*prometheusgo.LabelPair
+	name   string
+}
+
+// labelsEqual returns true if two label slices are equal.
+func labelsEqual(a, b []*prometheusgo.LabelPair) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].GetName() != b[i].GetName() || a[i].GetValue() != b[i].GetValue() {
+			return false
+		}
+	}
+	return true
+}
+
+// getOrComputeMetricName looks up the encoded metric name in the cache,
+// or computes it using the provided computeFn if not found.
+// Verifies labels on cache hit to detect hash collisions.
+func getOrComputeMetricName(
+	cache *syncutil.Map[uint64, cacheEntry],
+	labels []*prometheusgo.LabelPair,
+	computeFn func() string,
+) string {
+	if cache == nil {
+		return computeFn()
+	}
+	labelHash := hashLabels(labels)
+	if cached, ok := cache.Load(labelHash); ok {
+		if labelsEqual(cached.labels, labels) {
+			return cached.name
+		}
+		// Hash collision detected - proceed to compute
+	}
+	name := computeFn()
+	cache.Store(labelHash, &cacheEntry{
+		labels: labels,
+		name:   name,
+	})
+	return name
+}
+
+// recordChangefeedChildMetrics iterates through changefeed metrics in the registry and processes child metrics
+// for those that have TsdbRecordLabeled set to true in their metadata.
+// Records up to 1024 child metrics per metric to prevent unbounded memory usage and performance issues.
+func (rr registryRecorder) recordChangefeedChildMetrics(dest *[]tspb.TimeSeriesData) {
+	maxChildMetricsPerMetric := 1024
+
+	labels := rr.registry.GetLabels()
+	rr.registry.Each(func(name string, v interface{}) {
+		if _, allowed := tsutil.AllowedChildMetrics[name]; !allowed {
+			return
+		}
+		// Check if the metric has child collection enabled in its metadata
+		iterable, isIterable := v.(metric.Iterable)
+		if !isIterable {
+			return
+		}
+		metadata := iterable.GetMetadata()
+		if !metadata.GetTsdbRecordLabeled() {
+			return // Skip this metric if child collection is not enabled
+		}
+
+		// Handle AggHistogram - use direct child access for per-child snapshots
+		if aggHist, isAggHist := v.(*aggmetric.AggHistogram); isAggHist {
+			var childMetricsCount int
+			aggHist.EachChild(func(labelNames, labelVals []string, child *aggmetric.Histogram) {
+				if childMetricsCount >= maxChildMetricsPerMetric {
+					return
+				}
+
+				// Create label pairs for this child
+				childLabels := make([]*prometheusgo.LabelPair, len(labels), len(labels)+len(labelVals))
+				copy(childLabels, labels)
+
+				for i, val := range labelVals {
+					if i < len(labelNames) {
+						name := labelNames[i]
+						value := val
+						childLabels = append(childLabels, &prometheusgo.LabelPair{
+							Name:  &name,
+							Value: &value,
+						})
+					}
+				}
+
+				// Check cache for encoded name
+				baseName := getOrComputeMetricName(rr.childMetricNameCache, childLabels, func() string {
+					return metadata.Name + metric.EncodeLabeledName(&prometheusgo.Metric{Label: childLabels})
+				})
+				// Record all histogram computed metrics using child-specific snapshots
+				for _, c := range metric.HistogramMetricComputers {
+					var snapshot metric.HistogramSnapshot
+					if c.IsSummaryMetric {
+						snapshot = child.WindowedSnapshot()
+					} else {
+						snapshot = child.CumulativeSnapshot()
+					}
+					count, _ := snapshot.Total()
+					if count < 0 {
+						continue // Skip malformed snapshots
+					}
+					value := c.ComputedMetric(snapshot)
+					metricName := baseName + c.Suffix
+					*dest = append(*dest, tspb.TimeSeriesData{
+						Name:   fmt.Sprintf(rr.format, metricName),
+						Source: rr.source,
+						Datapoints: []tspb.TimeSeriesDatapoint{
+							{
+								TimestampNanos: rr.timestampNanos,
+								Value:          value,
+							},
+						},
+					})
+				}
+				childMetricsCount++
+			})
+			return
+		}
+
+		// Handle Counter and Gauge metrics via Prometheus export
+		prom, ok := v.(metric.PrometheusExportable)
+		if !ok {
+			return
+		}
+		promIter, ok := v.(metric.PrometheusIterable)
+		if !ok {
+			return
+		}
+		m := prom.ToPrometheusMetric()
+		m.Label = append(labels, prom.GetLabels(false /* useStaticLabels */)...)
+
+		var childMetricsCount int
+		processChildMetric := func(childMetric *prometheusgo.Metric) {
+			if childMetricsCount >= maxChildMetricsPerMetric {
+				return
+			}
+
+			var value float64
+			if childMetric.Gauge != nil {
+				value = *childMetric.Gauge.Value
+			} else if childMetric.Counter != nil {
+				value = *childMetric.Counter.Value
+			} else {
+				return
+			}
+
+			// Check cache for encoded name
+			metricName := getOrComputeMetricName(rr.childMetricNameCache, childMetric.Label, func() string {
+				return prom.GetName(false /* useStaticLabels */) + metric.EncodeLabeledName(childMetric)
+			})
+
+			*dest = append(*dest, tspb.TimeSeriesData{
+				Name:   fmt.Sprintf(rr.format, metricName),
+				Source: rr.source,
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: rr.timestampNanos,
+						Value:          value,
+					},
+				},
+			})
+			childMetricsCount++
 		}
 		promIter.Each(m.Label, processChildMetric)
 	})

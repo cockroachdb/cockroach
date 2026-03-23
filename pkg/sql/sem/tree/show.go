@@ -88,18 +88,19 @@ const (
 	BackupValidateDetails
 )
 
-// TODO (msbutler): 22.2 after removing old style show backup syntax, rename
-// Path to Subdir and InCollection to Dest.
-
 // ShowBackup represents a SHOW BACKUP statement.
 //
 // TODO(msbutler): implement a walkableStmt for ShowBackup.
+// TODO(kev-cao): After we deprecate non-ID'd `SHOW BACKUP` statements, we can
+// rename Path to ID.
 type ShowBackup struct {
+	// Path can be either a subdirectory path or a backup ID.
 	Path         Expr
 	InCollection StringOrPlaceholderOptList
 	From         bool
 	Details      ShowBackupDetails
 	Options      ShowBackupOptions
+	TimeRange    ShowBackupTimeFilter
 }
 
 // Format implements the NodeFormatter interface.
@@ -107,6 +108,10 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 	if node.Path == nil {
 		ctx.WriteString("SHOW BACKUPS IN ")
 		ctx.FormatURIs(node.InCollection)
+		if !node.TimeRange.IsDefault() {
+			ctx.WriteString(" ")
+			ctx.FormatNode(&node.TimeRange)
+		}
 		if !node.Options.IsDefault() {
 			ctx.WriteString(" WITH OPTIONS (")
 			ctx.FormatNode(&node.Options)
@@ -140,30 +145,48 @@ func (node *ShowBackup) Format(ctx *FmtCtx) {
 	}
 }
 
+// ShowBackupTimeFilter represents the NEWER THAN <expr> OLDER THAN <expr>
+// option for SHOW BACKUPS.
+type ShowBackupTimeFilter struct {
+	NewerThan Expr
+	OlderThan Expr
+}
+
+var _ NodeFormatter = &ShowBackupTimeFilter{}
+
+func (s *ShowBackupTimeFilter) Format(ctx *FmtCtx) {
+	if s.NewerThan != nil {
+		ctx.WriteString("NEWER THAN ")
+		ctx.FormatNode(s.NewerThan)
+	}
+
+	if s.OlderThan != nil {
+		if s.NewerThan != nil {
+			ctx.WriteString(" ")
+		}
+		ctx.WriteString("OLDER THAN ")
+		ctx.FormatNode(s.OlderThan)
+	}
+}
+
+func (s *ShowBackupTimeFilter) IsDefault() bool {
+	return s.NewerThan == nil && s.OlderThan == nil
+}
+
 type ShowBackupOptions struct {
 	AsJson               bool
 	CheckFiles           bool
 	DebugIDs             bool
-	IncrementalStorage   StringOrPlaceholderOptList
 	DecryptionKMSURI     StringOrPlaceholderOptList
 	EncryptionPassphrase Expr
 	Privileges           bool
 	SkipSize             bool
-	Index                bool
-
-	// EncryptionInfoDir is a hidden option used when the user wants to run the deprecated
-	//
-	// SHOW BACKUP <incremental_dir>
-	//
-	// on an encrypted incremental backup will need to pass their full backup's
-	// directory to the encryption_info_dir parameter because the
-	// `ENCRYPTION-INFO` file necessary to decode the incremental backup lives in
-	// the full backup dir.
-	EncryptionInfoDir Expr
 
 	CheckConnectionTransferSize Expr
 	CheckConnectionDuration     Expr
 	CheckConnectionConcurrency  Expr
+
+	RevisionStartTime bool
 }
 
 var _ NodeFormatter = &ShowBackupOptions{}
@@ -175,10 +198,6 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 			ctx.WriteString(", ")
 		}
 		addSep = true
-	}
-	// Index is only used in SHOW BACKUPS
-	if o.Index {
-		ctx.WriteString("index")
 	}
 
 	if o.AsJson {
@@ -202,22 +221,12 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 			ctx.WriteString(PasswordSubstitution)
 		}
 	}
-	if o.IncrementalStorage != nil {
-		maybeAddSep()
-		ctx.WriteString("incremental_location = ")
-		ctx.FormatURIs(o.IncrementalStorage)
-	}
 
 	if o.Privileges {
 		maybeAddSep()
 		ctx.WriteString("privileges")
 	}
 
-	if o.EncryptionInfoDir != nil {
-		maybeAddSep()
-		ctx.WriteString("encryption_info_dir = ")
-		ctx.FormatNode(o.EncryptionInfoDir)
-	}
 	if o.DecryptionKMSURI != nil {
 		maybeAddSep()
 		ctx.WriteString("kms = ")
@@ -244,6 +253,12 @@ func (o *ShowBackupOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("TIME = ")
 		ctx.FormatNode(o.CheckConnectionDuration)
 	}
+
+	// The following is only used in SHOW BACKUPS.
+	if o.RevisionStartTime {
+		maybeAddSep()
+		ctx.WriteString("REVISION START TIME")
+	}
 }
 
 func (o ShowBackupOptions) IsDefault() bool {
@@ -251,16 +266,14 @@ func (o ShowBackupOptions) IsDefault() bool {
 	return o.AsJson == options.AsJson &&
 		o.CheckFiles == options.CheckFiles &&
 		o.DebugIDs == options.DebugIDs &&
-		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
 		cmp.Equal(o.DecryptionKMSURI, options.DecryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
 		o.Privileges == options.Privileges &&
 		o.SkipSize == options.SkipSize &&
-		o.EncryptionInfoDir == options.EncryptionInfoDir &&
 		o.CheckConnectionTransferSize == options.CheckConnectionTransferSize &&
 		o.CheckConnectionDuration == options.CheckConnectionDuration &&
 		o.CheckConnectionConcurrency == options.CheckConnectionConcurrency &&
-		o.Index == options.Index
+		o.RevisionStartTime == options.RevisionStartTime
 }
 
 func combineBools(v1 bool, v2 bool, label string) (bool, error) {
@@ -311,11 +324,6 @@ func (o *ShowBackupOptions) CombineWith(other *ShowBackupOptions) error {
 	if err != nil {
 		return err
 	}
-	o.IncrementalStorage, err = combineStringOrPlaceholderOptList(o.IncrementalStorage,
-		other.IncrementalStorage, "incremental_location")
-	if err != nil {
-		return err
-	}
 	o.DecryptionKMSURI, err = combineStringOrPlaceholderOptList(o.DecryptionKMSURI,
 		other.DecryptionKMSURI, "kms")
 	if err != nil {
@@ -326,11 +334,6 @@ func (o *ShowBackupOptions) CombineWith(other *ShowBackupOptions) error {
 		return err
 	}
 	o.SkipSize, err = combineBools(o.SkipSize, other.SkipSize, "skip size")
-	if err != nil {
-		return err
-	}
-	o.EncryptionInfoDir, err = combineExpr(o.EncryptionInfoDir, other.EncryptionInfoDir,
-		"encryption_info_dir")
 	if err != nil {
 		return err
 	}
@@ -349,6 +352,13 @@ func (o *ShowBackupOptions) CombineWith(other *ShowBackupOptions) error {
 
 	o.CheckConnectionConcurrency, err = combineExpr(o.CheckConnectionConcurrency, other.CheckConnectionConcurrency,
 		"concurrently")
+	if err != nil {
+		return err
+	}
+
+	o.RevisionStartTime, err = combineBools(
+		o.RevisionStartTime, other.RevisionStartTime, "revision start time",
+	)
 	if err != nil {
 		return err
 	}
@@ -538,16 +548,25 @@ type ShowJobOptions struct {
 	// execution. These details will provide improved observability into the
 	// execution of the job.
 	ExecutionDetails bool
+	// ResolvedTimestamp, if true, will render the resolved timestamp of the job.
+	ResolvedTimestamp bool
 }
 
 func (s *ShowJobOptions) Format(ctx *FmtCtx) {
 	if s.ExecutionDetails {
 		ctx.WriteString(" EXECUTION DETAILS")
 	}
+	if s.ResolvedTimestamp {
+		if s.ExecutionDetails {
+			ctx.WriteString(",")
+		}
+		ctx.WriteString(" RESOLVED TIMESTAMP")
+	}
 }
 
 func (s *ShowJobOptions) CombineWith(other *ShowJobOptions) error {
-	s.ExecutionDetails = other.ExecutionDetails
+	s.ExecutionDetails = s.ExecutionDetails || other.ExecutionDetails
+	s.ResolvedTimestamp = s.ResolvedTimestamp || other.ResolvedTimestamp
 	return nil
 }
 
@@ -1244,6 +1263,54 @@ func (s *ShowFingerprintOptions) CombineWith(other *ShowFingerprintOptions) erro
 func (s ShowFingerprintOptions) IsDefault() bool {
 	options := ShowFingerprintOptions{}
 	return s.StartTimestamp == options.StartTimestamp && cmp.Equal(s.ExcludedUserColumns, options.ExcludedUserColumns)
+}
+
+var _ NodeFormatter = &ShowFingerprintOptions{}
+
+// ShowStatementHints represents a SHOW STATEMENT HINTS statement.
+type ShowStatementHints struct {
+	Expr    Expr
+	Options ShowHintsOptions
+}
+
+var _ Statement = &ShowStatementHints{}
+
+// Format implements the NodeFormatter interface.
+func (n *ShowStatementHints) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW STATEMENT HINTS FOR ")
+	ctx.FormatNode(n.Expr)
+	if !n.Options.IsDefault() {
+		ctx.WriteString(" WITH OPTIONS (")
+		ctx.FormatNode(&n.Options)
+		ctx.WriteString(")")
+	}
+}
+
+// ShowHintsOptions describes options for the SHOW STATEMENT HINTS execution.
+type ShowHintsOptions struct {
+	Details bool
+}
+
+func (s *ShowHintsOptions) Format(ctx *FmtCtx) {
+	if s.Details {
+		ctx.WriteString("DETAILS")
+	}
+}
+
+// CombineWith merges other ShowHintsOptions into this struct.
+func (s *ShowHintsOptions) CombineWith(other *ShowHintsOptions) error {
+	if other.Details {
+		if s.Details {
+			return errors.New("DETAILS option specified multiple times")
+		}
+		s.Details = true
+	}
+	return nil
+}
+
+// IsDefault returns true if this backup options struct has default value.
+func (s ShowHintsOptions) IsDefault() bool {
+	return s == ShowHintsOptions{}
 }
 
 var _ NodeFormatter = &ShowFingerprintOptions{}

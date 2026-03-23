@@ -295,6 +295,13 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		return err
 	}
 
+	// Call the BeforeProcessorStart hook for test synchronization.
+	if knobs.BeforeProcessorStart != nil {
+		if err := knobs.BeforeProcessorStart(ctx); err != nil {
+			return err
+		}
+	}
+
 	if err := t.progressTracker.initJobProgress(ctx, int64(jobSpanCount)); err != nil {
 		return err
 	}
@@ -362,6 +369,13 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 
 	if err := g.Wait(); err != nil {
 		return err
+	}
+
+	// Flush the progress before the job terminates, so that an up-to-date
+	// state is written into the job.
+	// Note: This is also a persistent flush when the Drain flag has been set.
+	if err := t.progressTracker.flushFinalProgress(ctx); err != nil {
+		log.Dev.Warningf(ctx, "failed to flush final progress: %v", err)
 	}
 
 	if err := statsGroup.Wait(); err != nil {

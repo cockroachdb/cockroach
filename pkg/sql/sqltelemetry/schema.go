@@ -231,3 +231,21 @@ var DDLOnlyTransactionSuccessCounter = telemetry.GetCounterOnce("sql.schema.tran
 // DDLOnlyTransactionFailureCounter is incremented whenever an explicit
 // transaction that has only DDL statements fails.
 var DDLOnlyTransactionFailureCounter = telemetry.GetCounterOnce("sql.schema.transaction.ddl_only.failure")
+
+var (
+	// EnableRLSCounter is incremented when row-level security is enabled on a
+	// table via ALTER TABLE ... ENABLE ROW LEVEL SECURITY.
+	EnableRLSCounter = telemetry.GetCounterOnce("sql.schema.enable_rls")
+
+	// DisableRLSCounter is incremented when row-level security is disabled on a
+	// table via ALTER TABLE ... DISABLE ROW LEVEL SECURITY.
+	DisableRLSCounter = telemetry.GetCounterOnce("sql.schema.disable_rls")
+
+	// ForceRLSCounter is incremented when row-level security is forced on a
+	// table via ALTER TABLE ... FORCE ROW LEVEL SECURITY.
+	ForceRLSCounter = telemetry.GetCounterOnce("sql.schema.force_rls")
+
+	// NoForceRLSCounter is incremented when row-level security force is removed
+	// from a table via ALTER TABLE ... NO FORCE ROW LEVEL SECURITY.
+	NoForceRLSCounter = telemetry.GetCounterOnce("sql.schema.no_force_rls")
+)

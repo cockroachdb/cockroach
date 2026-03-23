@@ -196,6 +196,8 @@ func randNonNegInt(rng *rand.Rand) int64 {
 	return v
 }
 
+// TODO: extend statisticsMutator to dynamically mutate statistics
+// during test execution, not just at table creation.
 func statisticsMutator(
 	rng *rand.Rand, stmts []tree.Statement,
 ) (mutated []tree.Statement, changed bool) {
@@ -742,7 +744,9 @@ var postgresStatementMutator MultiStatementMutation = func(rng *rand.Rand, stmts
 		case *tree.AlterTable:
 			for i := 0; i < len(stmt.Cmds); i++ {
 				// Postgres doesn't have alter stats.
-				if _, ok := stmt.Cmds[i].(*tree.AlterTableInjectStats); ok {
+				cmd := stmt.Cmds[i]
+				switch cmd.(type) {
+				case *tree.AlterTableInjectStats, *tree.AlterTablePushStats:
 					stmt.Cmds = append(stmt.Cmds[:i], stmt.Cmds[i+1:]...)
 					i--
 					changed = true

@@ -15,7 +15,6 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/roachpb",
         "//pkg/rpc/rpcbase",
-        "//pkg/settings/cluster",
         "//pkg/util/timeutil",
     ],
 )

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -311,6 +312,10 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 	wg.Add(len(rb.outputs))
 	for i := range rb.outputs {
 		go func(ctx context.Context, rb *routerBase, ro *routerOutput) {
+			if cpuHandle := admission.SQLCPUHandleFromContext(ctx); cpuHandle != nil {
+				gh := cpuHandle.RegisterGoroutine()
+				defer gh.Close(ctx)
+			}
 			defer wg.Done()
 			var span *tracing.Span
 			if rb.statsCollectionEnabled {
@@ -595,9 +600,6 @@ var crc32Table = crc32.MakeTable(crc32.Castagnoli)
 func makeHashRouter(rb routerBase, hashCols []uint32) (router, error) {
 	if len(rb.outputs) < 2 {
 		return nil, errors.Errorf("need at least two streams for hash router")
-	}
-	if len(hashCols) == 0 {
-		return nil, errors.Errorf("no hash columns for BY_HASH router")
 	}
 	return &hashRouter{hashCols: hashCols, routerBase: rb}, nil
 }

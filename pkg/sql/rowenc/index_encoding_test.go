@@ -1305,8 +1305,7 @@ func TestVectorEncoding(t *testing.T) {
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "defaultdb", "prefix_cols")
 
 	testVector := vector.T{1, 2, 4}
-	encodedVector, err := vecencoding.EncodeUnquantizerVector([]byte{}, testVector)
-	require.NoError(t, err)
+	encodedVector := vecencoding.EncodeUnquantizerVector([]byte{}, testVector)
 
 	vh := VectorIndexEncodingHelper{
 		PartitionKeys: make(map[descpb.IndexID]tree.Datum),
@@ -1395,8 +1394,7 @@ func TestVectorCompositeEncoding(t *testing.T) {
 	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "defaultdb", "prefix_cols")
 
 	testVector := vector.T{1, 2, 4}
-	encodedVector, err := vecencoding.EncodeUnquantizerVector([]byte{}, testVector)
-	require.NoError(t, err)
+	encodedVector := vecencoding.EncodeUnquantizerVector([]byte{}, testVector)
 
 	vh := VectorIndexEncodingHelper{
 		PartitionKeys: make(map[descpb.IndexID]tree.Datum),

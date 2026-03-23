@@ -342,12 +342,15 @@ func runBackfiller(
 			pgCode == pgcode.NotNullViolation ||
 			pgCode == pgcode.IntegrityConstraintViolation {
 			deps.Telemetry().IncrementSchemaChangeErrorType("constraint_violation")
-		} else {
-			// We ran into an  uncategorized schema change error.
-			deps.Telemetry().IncrementSchemaChangeErrorType("uncategorized")
+			return scerrors.SchemaChangerUserError(err)
 		}
-		return scerrors.SchemaChangerUserError(err)
+		// We ran into an  uncategorized schema change error.
+		deps.Telemetry().IncrementSchemaChangeErrorType("uncategorized")
+		return err
 	}
+	// Stop the periodic flusher before the final flush to ensure no in-flight
+	// periodic writes can overwrite the final checkpoint state.
+	stop()
 	if err := tracker.FlushFractionCompleted(ctx); err != nil {
 		return err
 	}

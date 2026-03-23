@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	yaml "gopkg.in/yaml.v2"
@@ -119,12 +120,12 @@ func getShowZoneConfigRow(
 	}
 
 	subZoneIdx := uint32(0)
-	zoneID, zone, subzone, err := GetZoneConfigInTxn(
+	zoneID, zone, subzone, err := zoneconfig.GetInTxn(
 		ctx, p.txn, p.Descriptors(), targetID, index, partition, false, /* getInheritedDefault */
 	)
 	if errors.Is(err, sqlerrors.ErrNoZoneConfigApplies) {
 		// TODO(benesch): This shouldn't be the caller's responsibility;
-		// GetZoneConfigInTxn should just return the default zone config if no zone
+		// zoneconfig.GetInTxn should just return the default zone config if no zone
 		// config applies.
 		zone = p.execCfg.DefaultZoneConfig
 		zoneID = keys.RootNamespaceID

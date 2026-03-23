@@ -22,21 +22,28 @@ go_library(
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/lease",
         "//pkg/sql/catalog/multiregion",
+        "//pkg/sql/sem/tree",
         "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_gogo_protobuf//proto",
     ],
 )
 
 go_test(
     name = "regions_test",
-    srcs = ["region_provider_test.go"],
+    srcs = [
+        "region_provider_test.go",
+        "region_util_test.go",
+    ],
+    embed = [":regions"],
     deps = [
-        ":regions",
+        "//pkg/config/zonepb",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/server/serverpb",
         "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/catsessiondata",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/stretchr/testify/require"
 )
 
 // TestStoresClusterVersionIncompatible verifies an error occurs when
@@ -64,11 +65,11 @@ func TestStoresClusterVersionIncompatible(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			engs := []storage.Engine{storage.NewDefaultInMemForTesting()}
+			engs := []Engines{MakeEngines(storage.NewDefaultInMemForTesting())}
 			defer engs[0].Close()
 			// Configure versions and write.
 			cv := clusterversion.ClusterVersion{Version: tc.engV}
-			err := WriteClusterVersionToEngines(ctx, engs, cv)
+			err := WriteClusterVersionToEngines(engs, cv)
 			if err == nil {
 				cv, err = SynthesizeClusterVersionFromEngines(ctx, engs, tc.binV, tc.minV)
 			}
@@ -103,7 +104,7 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 	versionB := minV
 	versionB.Internal = 2
 
-	engines := make([]storage.Engine, 3)
+	engines := make([]Engines, 3)
 	for i := range engines {
 		// Create the stores without an initialized cluster version.
 		st := cluster.MakeTestingClusterSettingsWithVersions(binV, minV, false /* initializeVersion */)
@@ -111,11 +112,9 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 			ctx, storage.InMemory(), st,
 			storage.ForTesting, storage.MaxSizeBytes(1<<20),
 		)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		stopper.AddCloser(eng)
-		engines[i] = eng
+		engines[i] = MakeEngines(eng)
 	}
 	e0 := engines[:1]
 	e01 := engines[:2]
@@ -154,9 +153,7 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 		cv := clusterversion.ClusterVersion{
 			Version: versionB,
 		}
-		if err := WriteClusterVersionToEngines(ctx, e0, cv); err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, WriteClusterVersionToEngines(e0, cv))
 
 		// Verify the same thing comes back on read.
 		if newCV, err := SynthesizeClusterVersionFromEngines(ctx, e0, binV, minV); err != nil {
@@ -180,24 +177,16 @@ func TestClusterVersionWriteSynthesize(t *testing.T) {
 		} else if !reflect.DeepEqual(cv, expCV) {
 			t.Fatalf("expected %+v, got %+v", expCV, cv)
 		}
-
 		// Write an updated Version to both stores.
-		cv := clusterversion.ClusterVersion{
+		require.NoError(t, WriteClusterVersionToEngines(e01, clusterversion.ClusterVersion{
 			Version: versionB,
-		}
-		if err := WriteClusterVersionToEngines(ctx, e01, cv); err != nil {
-			t.Fatal(err)
-		}
+		}))
 	}
 
 	// Third node comes along, for now it's alone. It has a lower use version.
-	cv := clusterversion.ClusterVersion{
+	require.NoError(t, WriteClusterVersionToEngines(e2, clusterversion.ClusterVersion{
 		Version: versionA,
-	}
-
-	if err := WriteClusterVersionToEngines(ctx, e2, cv); err != nil {
-		t.Fatal(err)
-	}
+	}))
 
 	// Reading across all stores, we expect to pick up the lowest useVersion both
 	// from the third store.

@@ -30,11 +30,11 @@ sequence req=req1
 
 on-lock-acquired req=req1 key=k
 ----
-[-] acquire lock: txn 00000001 @ ‹k›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k"›
 
 on-lock-acquired req=req1 key=k2
 ----
-[-] acquire lock: txn 00000001 @ ‹k2›
+[-] acquire lock: txn 00000001 acquiring Unreplicated Exclusive lock on ‹"k2"›
 
 finish req=req1
 ----
@@ -53,7 +53,7 @@ sequence req=req2
 
 on-lock-acquired req=req2 key=k3
 ----
-[-] acquire lock: txn 00000002 @ ‹k3›
+[-] acquire lock: txn 00000002 acquiring Unreplicated Exclusive lock on ‹"k3"›
 
 finish req=req2
 ----
@@ -188,7 +188,7 @@ sequence req=reqTimeout3
 handle-lock-conflict-error req=reqTimeout3 lease-seq=1
   lock txn=txn2 key=k4
 ----
-[8] handle lock conflict error reqTimeout3: handled conflicting locks on ‹"k4"›, released latches
+[8] handle lock conflict error reqTimeout3: added 1 discovered lock(s) to lock table: conflicting locks on ‹"k4"›
 
 sequence req=reqTimeout3
 ----
@@ -245,7 +245,7 @@ sequence req=reqTimeout4
 handle-lock-conflict-error req=reqTimeout4 lease-seq=1
   lock txn=txn2 key=k5
 ----
-[11] handle lock conflict error reqTimeout4: handled conflicting locks on ‹"k5"›, released latches
+[11] handle lock conflict error reqTimeout4: added 1 discovered lock(s) to lock table: conflicting locks on ‹"k5"›
 
 sequence req=reqTimeout4
 ----

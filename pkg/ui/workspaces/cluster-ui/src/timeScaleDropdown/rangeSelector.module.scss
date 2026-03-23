@@ -40,6 +40,7 @@
     height: 100%;
     padding-top: 0;
     padding-bottom: 0;
+    justify-content: flex-start; // text-align no longer works with antd 5.18+
   }
 }
 
@@ -72,6 +73,7 @@
 
   ._time-button {
     text-align: left;
+    justify-content: flex-start; // text-align no longer works with antd 5.18+
     padding: 0;
     margin: 0;
 
@@ -112,6 +114,7 @@
 .Select {
   display: flex;
   justify-content: space-between;
+  width: 100%; // need space inside antd 5.18+ inline-flex button
   .Select-value-label {
     margin-right: 10px;
     font-family: $font-family--base;

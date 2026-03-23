@@ -13,10 +13,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -171,7 +174,22 @@ func (m *Outbox) flush(ctx context.Context) error {
 	msg := m.encoder.FormMessage(ctx)
 
 	log.VEvent(ctx, 2, "Outbox flushing")
+	var sendCleanup func()
+	if m.flowCtx.EvalCtx != nil {
+		sendCleanup = ash.SetWorkState(
+			m.flowCtx.Codec().TenantID,
+			ash.WorkloadInfo{
+				WorkloadID:    m.flowCtx.EvalCtx.WorkloadID,
+				AppNameID:     m.flowCtx.EvalCtx.AppNameID,
+				GatewayNodeID: roachpb.NodeID(m.flowCtx.NodeID.SQLInstanceID()),
+				WorkloadType:  m.flowCtx.EvalCtx.WorkloadType,
+			},
+			ash.WorkNetwork, "OutboxSend")
+	}
 	sendErr := m.stream.Send(msg)
+	if sendCleanup != nil {
+		sendCleanup()
+	}
 	if m.statsCollectionEnabled {
 		m.streamStats.NetTx.BytesSent.Add(int64(msg.Size()))
 		m.streamStats.NetTx.MessagesSent.Add(1)
@@ -233,7 +251,7 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 
 	if err := func() error {
 		client, err := execinfra.GetDistSQLClientForOutbox(
-			ctx, m.flowCtx.Cfg.SQLInstanceDialer, m.flowCtx.Cfg.Settings, m.sqlInstanceID, SettingFlowStreamTimeout.Get(&m.flowCtx.Cfg.Settings.SV),
+			ctx, m.flowCtx.Cfg.SQLInstanceDialer, m.sqlInstanceID, SettingFlowStreamTimeout.Get(&m.flowCtx.Cfg.Settings.SV), m.flowCtx.Cfg.RPCContext.UseDRPC,
 		)
 		if err != nil {
 			log.Dev.VWarningf(ctx, 1, "Outbox Dial connection error, distributed query will fail: %+v", err)
@@ -413,6 +431,10 @@ func (m *Outbox) Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel co
 	m.flowCtxCancel = flowCtxCancel
 	wg.Add(1)
 	go func() {
+		if cpuHandle := admission.SQLCPUHandleFromContext(ctx); cpuHandle != nil {
+			gh := cpuHandle.RegisterGoroutine()
+			defer gh.Close(ctx)
+		}
 		growstack.Grow()
 		defer wg.Done()
 		m.setErr(m.mainLoop(ctx, wg))

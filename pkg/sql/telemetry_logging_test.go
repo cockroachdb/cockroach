@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils/telemetrylogtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -59,9 +60,9 @@ func TestTelemetryLogging(t *testing.T) {
 	txnCleanup := log.InterceptWith(ctx, txnSpy)
 	defer txnCleanup()
 
-	st := logtestutils.StubTime{}
-	sqm := logtestutils.StubQueryStats{}
-	sts := logtestutils.StubTracingStatus{}
+	st := telemetrylogtestutils.StubTime{}
+	sqm := telemetrylogtestutils.StubQueryStats{}
+	sts := telemetrylogtestutils.StubTracingStatus{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -170,7 +171,7 @@ func TestTelemetryLogging(t *testing.T) {
 				MvccKeyBytes:                       110,
 				MvccBlockBytesInCache:              111,
 				MvccBlockBytes:                     112,
-				CPUTime:                            113,
+				SQLCPUTime:                         113,
 				KVBatchRequestsIssued:              113,
 				KVTime:                             114,
 				Regions:                            []string{"eastus1"},
@@ -411,7 +412,7 @@ func TestTelemetryLogging(t *testing.T) {
 				MvccKeyBytes:                       9223372036854775807,
 				MvccBlockBytesInCache:              9223372036854775807,
 				MvccBlockBytes:                     9223372036854775807,
-				CPUTime:                            9223372036854775807,
+				SQLCPUTime:                         9223372036854775807,
 				KVBatchRequestsIssued:              9223372036854775807,
 				KVTime:                             9223372036854775807,
 				Regions:                            []string{"9223372036854775807EastUS9223372036854775807/z^&*&#()(!@%&^61%^7'\\\\&*@#$%"},
@@ -587,7 +588,7 @@ func TestTelemetryLogging(t *testing.T) {
 					require.Equal(t, tc.queryLevelStats.Regions, sampledQueryFromLog.Regions)
 					require.Equal(t, tc.queryLevelStats.SQLInstanceIDs, sampledQueryFromLog.SQLInstanceIDs)
 					require.Equal(t, tc.queryLevelStats.KVNodeIDs, sampledQueryFromLog.KVNodeIDs)
-					require.Equal(t, tc.queryLevelStats.CPUTime.Nanoseconds(), sampledQueryFromLog.CpuTimeNanos)
+					require.Equal(t, tc.queryLevelStats.SQLCPUTime.Nanoseconds(), sampledQueryFromLog.CpuTimeNanos)
 					require.Greater(t, sampledQueryFromLog.PlanLatencyNanos, int64(0))
 					require.Greater(t, sampledQueryFromLog.RunLatencyNanos, int64(0))
 					require.Equal(t, int64(0), sampledQueryFromLog.IdleLatencyNanos)
@@ -714,8 +715,8 @@ func TestTelemetryLoggingInternalEnabled(t *testing.T) {
 	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
-	st := logtestutils.StubTime{}
-	sts := logtestutils.StubTracingStatus{}
+	st := telemetrylogtestutils.StubTime{}
+	sts := telemetrylogtestutils.StubTracingStatus{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -798,8 +799,8 @@ func TestTelemetryLoggingInternalConsoleEnabled(t *testing.T) {
 	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
-	st := logtestutils.StubTime{}
-	sts := logtestutils.StubTracingStatus{}
+	st := telemetrylogtestutils.StubTime{}
+	sts := telemetrylogtestutils.StubTracingStatus{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -894,7 +895,7 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
-	st := logtestutils.StubTime{}
+	st := telemetrylogtestutils.StubTime{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -1553,8 +1554,8 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
-	st := logtestutils.StubTime{}
-	sts := logtestutils.StubTracingStatus{}
+	st := telemetrylogtestutils.StubTime{}
+	sts := telemetrylogtestutils.StubTracingStatus{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{

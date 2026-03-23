@@ -15,9 +15,10 @@ test       root  NULL  NULL  {}  NULL
 query TTTB rowsort
 SHOW GRANTS ON DATABASE test
 ----
-test  admin   ALL      true
-test  public  CONNECT  false
-test  root    ALL      true
+test  admin   ALL        true
+test  public  CONNECT    false
+test  public  TEMPORARY  false
+test  root    ALL        true
 
 statement ok
 CREATE TABLE kv (
@@ -66,9 +67,10 @@ u          root  NULL  NULL  {}  NULL
 query TTTB rowsort
 SHOW GRANTS ON DATABASE u
 ----
-u  admin   ALL      true
-u  public  CONNECT  false
-u  root    ALL      true
+u  admin   ALL        true
+u  public  CONNECT    false
+u  public  TEMPORARY  false
+u  root    ALL        true
 
 statement ok
 SET DATABASE = u
@@ -190,7 +192,6 @@ query T
 EXPLAIN ALTER DATABASE v RENAME TO x
 ----
 distribution: local
-vectorized: true
 ·
 • alter database
 

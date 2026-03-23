@@ -114,12 +114,17 @@ func exceptConditionFailed(err error) bool {
 }
 
 func exceptReplicaUnavailable(err error) bool {
-	return errors.HasType(err, (*kvpb.ReplicaUnavailableError)(nil))
+	return errors.HasType(err, (*kvpb.ReplicaUnavailableError)(nil)) ||
+		strings.Contains(err.Error(), "replica unavailable")
 }
 
 func exceptContextCanceled(err error) bool {
 	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) ||
 		strings.Contains(err.Error(), "query execution canceled")
+}
+
+func exceptBatchTimestampBeforeGC(err error) bool {
+	return errors.HasType(err, (*kvpb.BatchTimestampBeforeGCError)(nil))
 }
 
 const followerReadsOffset = 2 * time.Second
@@ -181,13 +186,21 @@ func (a *Applier) applyOp(ctx context.Context, db *kv.DB, op *Operation) {
 		o.Result = resultInit(ctx, err)
 	case *StopNodeOperation:
 		serverID := int(o.NodeId) - 1
-		a.env.Restarter.StopServer(serverID)
+		a.env.ServerController.StopServer(serverID)
 		a.nodes.setStopped(int(o.NodeId))
 		o.Result = resultInit(ctx, nil)
 	case *RestartNodeOperation:
 		serverID := int(o.NodeId) - 1
-		err := a.env.Restarter.RestartServer(serverID)
+		err := a.env.ServerController.RestartServer(serverID)
 		a.nodes.setRunning(int(o.NodeId))
+		o.Result = resultInit(ctx, err)
+	case *CrashNodeOperation:
+		serverID := int(o.NodeId) - 1
+		a.env.ServerController.CrashNode(serverID)
+		a.nodes.setCrashed(int(o.NodeId))
+		o.Result = resultInit(ctx, nil)
+	case *MvccGCOperation:
+		err := a.env.MvccGCController.MvccGCRangeForKey(o.Key)
 		o.Result = resultInit(ctx, err)
 	case *ClosureTxnOperation:
 		// Use a backoff loop to avoid thrashing on txn aborts. Don't wait between
@@ -883,6 +896,14 @@ func changeClusterSettingInEnv(ctx context.Context, env *Env, op *ChangeSettingO
 			}
 		default:
 			panic(errors.AssertionFailedf(`unknown LeaseType: %v`, op.LeaseType))
+		}
+	case ChangeSettingType_ToggleVirtualIntentResolution:
+		val := "false"
+		if op.VirEnabled {
+			val = "true"
+		}
+		settings = map[string]string{
+			"kv.concurrency.virtual_intent_resolution.enabled": val,
 		}
 	default:
 		panic(errors.AssertionFailedf(`unknown ChangeSettingType: %v`, op.Type))

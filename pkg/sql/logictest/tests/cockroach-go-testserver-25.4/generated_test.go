@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 24
+const configIdx = 22
 
 var logicTestDir string
 
@@ -44,13 +44,9 @@ func init() {
 func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithTenantOption(base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124)))
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124),
-	)()
-
 	os.Exit(m.Run())
 }
 
@@ -94,6 +90,13 @@ func TestLogic_mixed_version_can_login(
 	runLogicTest(t, "mixed_version_can_login")
 }
 
+func TestLogic_mixed_version_statement_hints_session_settings(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_statement_hints_session_settings")
+}
+
 func TestLogic_mixed_version_stats(
 	t *testing.T,
 ) {
@@ -106,6 +109,13 @@ func TestLogic_mixed_version_timeseries_range_already_exists(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "mixed_version_timeseries_range_already_exists")
+}
+
+func TestLogic_mixed_version_trigger_backref(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "mixed_version_trigger_backref")
 }
 
 func TestLogic_mixed_version_upgrade_preserve_ttl(

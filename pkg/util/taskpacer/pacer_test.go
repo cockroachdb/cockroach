@@ -11,7 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -140,7 +140,7 @@ func TestPacer(t *testing.T) {
 			gotWork := make([]int, 0, len(tc.wantWork))
 			gotBy := make([]time.Duration, 0, len(tc.wantBy))
 
-			start := timeutil.Unix(946684800, 0) // Jan 1, 2000
+			start := crtime.NowMono()
 			now := start
 
 			conf := newMockConfig(tc.deadline, tc.smear)
@@ -148,7 +148,7 @@ func TestPacer(t *testing.T) {
 			pacer.StartTask(now)
 
 			for work, startAt := tc.work, now; work != 0; {
-				if startAt.After(now) { // imitate waiting
+				if startAt > now { // imitate waiting
 					now = startAt
 				}
 				todo, by := pacer.Pace(now, work)
@@ -239,7 +239,7 @@ func TestPacerAccommodatesConfChanges(t *testing.T) {
 			gotWork := make([]int, 0, len(tc.wantWork))
 			gotBy := make([]time.Duration, 0, len(tc.wantBy))
 
-			start := timeutil.Unix(946684800, 0) // Jan 1, 2000
+			start := crtime.NowMono()
 			now := start
 
 			conf := newMockConfig(tc.refreshes[0], tc.smears[0])
@@ -252,7 +252,7 @@ func TestPacerAccommodatesConfChanges(t *testing.T) {
 				conf.refresh = tc.refreshes[index]
 				conf.smear = tc.smears[index]
 
-				if startAt.After(now) { // imitate waiting
+				if startAt > now { // imitate waiting
 					now = startAt
 				}
 				todo, by := pacer.Pace(now, work)

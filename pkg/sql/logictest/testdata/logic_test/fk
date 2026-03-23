@@ -1,4 +1,4 @@
-# LogicTest: !local-prepared
+# LogicTest: default-configs 3node-tenant
 statement ok
 SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE
 
@@ -71,7 +71,7 @@ INSERT INTO parent (p, u) VALUES (1, 10), (2, 20)
 statement ok
 INSERT INTO child VALUES (1, 1)
 
-statement ok
+statement count 1
 DELETE FROM parent WHERE p = 2
 
 statement error delete on table "parent" violates foreign key constraint "child_p_fkey" on table "child"\nDETAIL: Key \(p\)=\(1\) is still referenced from table "child"\.
@@ -118,10 +118,10 @@ INSERT INTO child2 VALUES
 statement error delete on table "parent2" violates foreign key constraint "child2_p1_p2_fkey" on table "child2"\nDETAIL: Key \(p1, p2\)=\(10, 100\) is still referenced from table "child2"\.
 DELETE FROM parent2 WHERE p1 = 10 AND p2 = 100
 
-statement ok
+statement count 1
 DELETE FROM child2 WHERE p1 = 10 AND p2 = 100
 
-statement ok
+statement count 1
 DELETE FROM parent2 WHERE p1 = 10 AND p2 = 100
 
 statement ok
@@ -459,7 +459,7 @@ SHOW CONSTRAINTS FROM "user content".review_stats
 ----
 review_stats  review_stats_pkey  PRIMARY KEY  PRIMARY KEY (id ASC)  true
 
-statement ok
+statement count 2
 DELETE FROM "user content"."customer reviews"
 
 statement error pgcode 23503 insert on table "orders" violates foreign key constraint "orders_product_fkey"\nDETAIL: Key \(product\)=\('790'\) is not present in table "products"
@@ -754,12 +754,10 @@ orders      orders_product_fkey  FOREIGN KEY      FOREIGN KEY (product) REFERENC
 orders      valid_customer       FOREIGN KEY      FOREIGN KEY (customer) REFERENCES customers(id)                                       true
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-25.3
 statement error pq: "products_upc_key" is referenced by foreign key from table "delivery"
 DROP INDEX products@products_upc_key
 
 skipif config local-legacy-schema-changer
-skipif config local-mixed-25.3
 statement error pq: "products_upc_key" is referenced by foreign key from table "delivery"
 DROP INDEX products@products_upc_key RESTRICT
 
@@ -865,7 +863,7 @@ statement error pgcode 23503 foreign key
 DELETE FROM employees WHERE id = 2
 
 # Deleting all the rows works - we are checking the FKs after the mutation.
-statement ok
+statement count 4
 DELETE FROM employees WHERE id > 1
 
 statement ok
@@ -1124,7 +1122,7 @@ INSERT INTO a VALUES (2, 1, 1), (3, 1, 2)
 statement ok
 INSERT INTO a VALUES (4, 2, 2)
 
-statement ok
+statement count 1
 DELETE FROM b WHERE id = 3
 
 statement error pgcode 23503 violates foreign key
@@ -1133,10 +1131,10 @@ DELETE FROM b WHERE id = 2
 statement error pgcode 23503 violates foreign key
 DELETE FROM a WHERE id = 1
 
-statement ok
+statement count 2
 DELETE FROM a WHERE id > 2
 
-statement ok
+statement count 1
 DELETE FROM b WHERE id = 2
 
 statement ok
@@ -1317,10 +1315,10 @@ INSERT INTO test20042 (x, y, z) VALUES ('pk1', 'k1', null);
 statement ok
 INSERT INTO test20042 (x, y, z) VALUES ('pk2', 'k2 ', 'k1');
 
-statement ok
+statement count 1
 DELETE FROM test20042 WHERE x = 'pk2';
 
-statement ok
+statement count 1
 DELETE FROM test20042 WHERE x = 'pk1';
 
 subtest 20045
@@ -1341,13 +1339,13 @@ INSERT INTO test20045 (x, y, z) VALUES ('pk2', 'pk1', NULL);
 statement ok
 INSERT INTO test20045 (x, y, z) VALUES ('pk3', 'pk2', 'pk1');
 
-statement ok
+statement count 1
 DELETE FROM test20045 WHERE x = 'pk3';
 
-statement ok
+statement count 1
 DELETE FROM test20045 WHERE x = 'pk2';
 
-statement ok
+statement count 1
 DELETE FROM test20045 WHERE x = 'pk1';
 
 ## Delete cascade without privileges
@@ -1400,7 +1398,7 @@ GRANT DELETE ON d.b TO testuser;
 
 user testuser
 
-statement ok
+statement count 1
 DELETE FROM d.a WHERE id = 'a1';
 
 user root
@@ -1695,7 +1693,7 @@ SELECT * FROM no_default_table
 id  ref1  ref2
 6   2     1
 
-statement ok
+statement count 1
 DELETE FROM a WHERE id1=1
 
 query III colnames
@@ -3052,7 +3050,7 @@ CREATE TABLE t2(
 statement ok
 INSERT INTO t2(x) VALUES (1), (null)
 
-statement ok
+statement count 1
 DELETE FROM t1 WHERE x IS NULL
 
 statement ok
@@ -3131,10 +3129,10 @@ UPDATE parent SET p = 3 WHERE p = 10
 statement ok
 UPDATE child SET p = 3 WHERE p = 1
 
-statement ok
+statement count 1
 DELETE FROM child
 
-statement ok
+statement count 2
 DELETE FROM parent
 
 statement ok
@@ -3377,7 +3375,7 @@ SELECT user_id_1, user_id_2, text FROM messages ORDER BY message_id ASC
 30  10  lucy is a good user
 
 # Delete from users should work as well
-statement ok
+statement count 1
 DELETE FROM users WHERE id = 30
 
 # See that it propagates.
@@ -3439,7 +3437,7 @@ SELECT user_id_1, user_id_2, text FROM messages ORDER BY message_id ASC
 40  10  youre tearing me apart lisa!
 
 # Delete should still be okay since the cascade from id1 should "win".
-statement ok
+statement count 1
 DELETE FROM users WHERE id = 20
 
 query IIT
@@ -3476,7 +3474,7 @@ ALTER TABLE t2 ADD CONSTRAINT fk1 FOREIGN KEY (a) REFERENCES t1 ON DELETE NO ACT
 statement ok
 insert into t1 values (123); insert into t2 values (123)
 
-statement ok
+statement count 1
 DELETE FROM t1 WHERE a = 123
 
 query I
@@ -3518,7 +3516,7 @@ ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE CASCAD
 statement ok
 insert into t1 values (123); insert into t2 values (123)
 
-statement ok
+statement count 1
 DELETE FROM t1 WHERE a = 123
 
 query I
@@ -3559,7 +3557,7 @@ ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET NU
 statement ok
 insert into t1 values (123); insert into t2 values (123)
 
-statement ok
+statement count 1
 DELETE FROM t1 WHERE a = 123
 
 query I
@@ -3601,7 +3599,7 @@ ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE CASCAD
 statement ok
 insert into t1 values (123); insert into t2 values (123)
 
-statement ok
+statement count 1
 DELETE FROM t1 WHERE a = 123
 
 query I
@@ -3642,7 +3640,7 @@ ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET DE
 statement ok
 insert into t1 values (123); insert into t2 values (123)
 
-statement ok
+statement count 1
 DELETE FROM t1 WHERE a = 123
 
 query I
@@ -3683,7 +3681,7 @@ ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET NU
 statement ok
 insert into t1 values (123); insert into t2 values (123)
 
-statement ok
+statement count 1
 DELETE FROM t1 WHERE a = 123
 
 query I
@@ -3806,7 +3804,7 @@ ALTER TABLE t2 ADD CONSTRAINT fk2 FOREIGN KEY (a) REFERENCES t1 ON DELETE SET DE
 statement ok
 insert into t1 values (123); insert into t2 values (123)
 
-statement ok
+statement count 1
 DELETE FROM t1 WHERE a = 123
 
 query I
@@ -4493,8 +4491,11 @@ ALTER TABLE t65890_c ADD CONSTRAINT fk FOREIGN KEY (a, b) REFERENCES t65890_p(a,
 # Ensure that a fast path on ba_idx is used.
 skipif config weak-iso-level-configs
 query T
-SELECT * FROM [EXPLAIN INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)] OFFSET 3
+SELECT * FROM [
+  EXPLAIN INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)
+] WHERE info !~ '(distribution|vectorized):.*'
 ----
+·
 • insert fast path
   into: t65890_c(k, b, a)
   auto commit
@@ -4503,8 +4504,11 @@ SELECT * FROM [EXPLAIN INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)] OFFSET 3
 
 onlyif config weak-iso-level-configs
 query T
-SELECT * FROM [EXPLAIN INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)] OFFSET 3
+SELECT * FROM [
+  EXPLAIN INSERT INTO t65890_c (k, b, a) VALUES (1, 2, 3)
+] WHERE info !~ '(distribution|vectorized):.*'
 ----
+·
 • insert fast path
   into: t65890_c(k, b, a)
   auto commit
@@ -4685,7 +4689,7 @@ ALTER TABLE drop_fk_during_addition
 	ADD CONSTRAINT fk FOREIGN KEY (name) REFERENCES drop_fk_during_addition_ref (name);
 DROP TABLE drop_fk_during_addition_ref;
 
-statement error pgcode XXA00 pq: transaction committed but schema change aborted with error: .* referenced table "drop_fk_during_addition_ref" \(271\) is dropped.*
+statement error pgcode XXA00 pq: transaction committed but schema change aborted with error: .* referenced table "drop_fk_during_addition_ref" \(\d+\) is dropped.*
 COMMIT;
 
 # Regression test for #80828. Do not attempt a fast path cascading delete when
@@ -4714,7 +4718,7 @@ skipif config local-legacy-schema-changer
 statement error job .* was paused before it completed with reason: pause point "schemachanger.before.exec" hit
 CREATE TABLE grandchild80828 (parent_id INT NOT NULL REFERENCES child80828(pid) ON DELETE CASCADE);
 
-statement ok
+statement count 1
 DELETE FROM parent80828 WHERE id = 1;
 
 # Clear the pause point.
@@ -4840,256 +4844,63 @@ DROP TABLE t1_fk;
 
 subtest end
 
-subtest drop_col_dep_non_self_fk_stored
+# Test foreign keys with implicit column references to hash-sharded primary keys
+subtest fk_implicit_hash_sharded
 
-# The logic in this UDF is equivalent to and originated from
-# columnDropViolatesFKIndexRequirements() in pkg/workload/schemachange/error_screening.go.
+# Parent table with hash-sharded primary key
 statement ok
-CREATE FUNCTION column_drop_violates_fk_index_requirements(table_name STRING, column_name STRING) RETURNS BOOL LANGUAGE SQL AS $$
-  WITH fk AS (
-    SELECT
-      oid,
-      (SELECT r.relname FROM pg_class AS r WHERE r.oid = c.confrelid) AS base_table,
-      a.attname AS base_col,
-      array_position(c.confkey, a.attnum) AS base_ordinal,
-      (SELECT r.relname FROM pg_class AS r WHERE r.oid = c.conrelid) AS referencing_table,
-      unnest(
-        (SELECT array_agg(attname)
-         FROM pg_attribute
-         WHERE attrelid = c.conrelid
-           AND ARRAY[attnum] <@ c.conkey
-           AND array_position(c.confkey, a.attnum) = array_position(c.conkey, attnum))
-      ) AS referencing_col
-    FROM pg_constraint AS c
-    JOIN pg_attribute AS a ON
-      c.confrelid = a.attrelid
-      AND ARRAY[attnum] <@ c.conkey
-    WHERE c.confrelid = table_name::REGCLASS::OID
-  ),
-  all_index_columns AS (
-    SELECT
-      i.indexrelid::REGCLASS::STRING AS index_name,
-      a.attname AS col_name,
-      NOT i.indisunique AS non_unique,
-      a.attnum > i.indnkeyatts AS storing
-    FROM pg_index i
-    JOIN pg_attribute a ON a.attrelid = i.indexrelid AND a.attnum > 0
-    WHERE i.indrelid = table_name::REGCLASS::OID
-  ),
-  valid_indexes AS (
-    SELECT *
-    FROM all_index_columns
-    WHERE index_name NOT IN (
-      SELECT DISTINCT index_name
-      FROM all_index_columns
-      WHERE col_name = column_name
-        AND storing = false
-        AND index_name NOT LIKE '%_pkey'
-    )
-  ),
-  fk_col_counts AS (
-    SELECT oid, count(*) AS num_cols
-    FROM fk
-    GROUP BY oid
-  ),
-  index_col_counts AS (
-    SELECT index_name, count(*) AS num_cols
-    FROM valid_indexes
-    WHERE storing = false
-    GROUP BY index_name
-  ),
-  matching_fks AS (
-    SELECT fk.oid
-    FROM fk
-    JOIN valid_indexes
-      ON fk.base_col = valid_indexes.col_name
-    JOIN fk_col_counts
-      ON fk.oid = fk_col_counts.oid
-    JOIN index_col_counts
-      ON valid_indexes.index_name = index_col_counts.index_name
-    WHERE valid_indexes.storing = false
-      AND valid_indexes.non_unique = false
-      AND fk_col_counts.num_cols = index_col_counts.num_cols
-    GROUP BY fk.oid, valid_indexes.index_name, fk_col_counts.num_cols
-    HAVING count(*) = fk_col_counts.num_cols
-  )
-SELECT EXISTS (
-  SELECT *
-  FROM fk
-  WHERE oid NOT IN (
-    SELECT DISTINCT oid FROM matching_fks
-  )
+CREATE TABLE parent_hash_sharded (
+  c1 INT NOT NULL,
+  c2 INT NOT NULL,
+  c3 INT,
+  PRIMARY KEY (c1, c2) USING HASH
 )
-$$;
 
 statement ok
-CREATE TABLE parent_dep_store (
-  id INT PRIMARY KEY,
-  key_col INT UNIQUE,
-  stored STRING,
-  FAMILY f1 (id, key_col, stored)
-) WITH (schema_locked = false);
+INSERT INTO parent_hash_sharded VALUES (1, 1, 1), (2, 2, 2), (3, 3, 3)
+
+# FK without explicit column list should skip the shard column
+statement ok
+CREATE TABLE child_implicit (
+  z INT,
+  y INT,
+  x INT,
+  FOREIGN KEY (z, y) REFERENCES parent_hash_sharded
+)
 
 statement ok
-CREATE UNIQUE INDEX idx_parent_dep_store ON parent_dep_store (key_col) STORING (stored);
+INSERT INTO child_implicit VALUES (1, 1, 1), (2, 2, 2)
+
+# Verify FK constraint enforcement
+statement error pq: insert on table "child_implicit" violates foreign key constraint
+INSERT INTO child_implicit VALUES (99, 99, 99)
+
+# Verify this also works using ALTER TABLE
+statement ok
+CREATE TABLE child_implicit2 (
+  z INT,
+  y INT,
+  x INT
+)
 
 statement ok
-CREATE TABLE child_dep_store (
-  id INT PRIMARY KEY,
-  parent_key INT REFERENCES parent_dep_store (key_col),
-  FAMILY f1 (id, parent_key)
-) WITH (schema_locked = false);
-
-query B
-SELECT column_drop_violates_fk_index_requirements('parent_dep_store', 'stored');
-----
-false
+ALTER TABLE child_implicit2 ADD FOREIGN KEY (z, y) REFERENCES parent_hash_sharded
 
 statement ok
-ALTER TABLE parent_dep_store DROP COLUMN stored;
+INSERT INTO child_implicit2 VALUES (1, 1, 1), (2, 2, 2)
 
-query TT
-SHOW CREATE TABLE parent_dep_store
-----
-parent_dep_store  CREATE TABLE public.parent_dep_store (
-                    id INT8 NOT NULL,
-                    key_col INT8 NULL,
-                    CONSTRAINT parent_dep_store_pkey PRIMARY KEY (id ASC),
-                    UNIQUE INDEX parent_dep_store_key_col_key (key_col ASC),
-                    FAMILY f1 (id, key_col)
-                  );
+# Verify FK constraint enforcement
+statement error pq: insert on table "child_implicit2" violates foreign key constraint
+INSERT INTO child_implicit2 VALUES (99, 99, 99)
+
+# Cleanup
+statement ok
+DROP TABLE child_implicit
 
 statement ok
-DROP TABLE child_dep_store;
+DROP TABLE child_implicit2
 
 statement ok
-DROP TABLE parent_dep_store;
-
-subtest end
-
-subtest drop_col_dep_non_self_fk_key
-
-statement ok
-CREATE TABLE parent_dep_key (
-  id INT PRIMARY KEY,
-  key_col INT,
-  stored STRING,
-  FAMILY f1 (id, key_col, stored)
-) WITH (schema_locked = false);
-
-statement ok
-CREATE UNIQUE INDEX idx_parent_dep_key ON parent_dep_key (key_col) STORING (stored);
-
-statement ok
-CREATE TABLE child_dep_key (
-  id INT PRIMARY KEY,
-  parent_key INT REFERENCES parent_dep_key (key_col),
-  FAMILY f1 (id, parent_key)
-) WITH (schema_locked = false);
-
-query B
-SELECT column_drop_violates_fk_index_requirements('parent_dep_key', 'key_col');
-----
-true
-
-statement error pq: "idx_parent_dep_key" is referenced by foreign key from table "child_dep_key"
-ALTER TABLE parent_dep_key DROP COLUMN key_col;
-
-query TT
-SHOW CREATE TABLE parent_dep_key
-----
-parent_dep_key  CREATE TABLE public.parent_dep_key (
-                  id INT8 NOT NULL,
-                  key_col INT8 NULL,
-                  stored STRING NULL,
-                  CONSTRAINT parent_dep_key_pkey PRIMARY KEY (id ASC),
-                  UNIQUE INDEX idx_parent_dep_key (key_col ASC) STORING (stored),
-                  FAMILY f1 (id, key_col, stored)
-                );
-
-statement ok
-DROP TABLE child_dep_key;
-
-statement ok
-DROP TABLE parent_dep_key;
-
-subtest end
-
-subtest drop_col_dep_self_ref_stored
-
-statement ok
-CREATE TABLE self_dep_store (
-  id INT PRIMARY KEY,
-  ref INT,
-  stored STRING,
-  FAMILY f1 (id, ref, stored)
-) WITH (schema_locked = false);
-
-statement ok
-CREATE UNIQUE INDEX idx_self_dep_store ON self_dep_store (ref) STORING (stored);
-
-statement ok
-ALTER TABLE self_dep_store ADD CONSTRAINT fk_self_dep_store FOREIGN KEY (ref) REFERENCES self_dep_store (id);
-
-query B
-SELECT column_drop_violates_fk_index_requirements('self_dep_store', 'stored');
-----
-false
-
-statement ok
-ALTER TABLE self_dep_store DROP COLUMN stored;
-
-query TT
-SHOW CREATE TABLE self_dep_store
-----
-self_dep_store  CREATE TABLE public.self_dep_store (
-                  id INT8 NOT NULL,
-                  ref INT8 NULL,
-                  CONSTRAINT self_dep_store_pkey PRIMARY KEY (id ASC),
-                  CONSTRAINT fk_self_dep_store FOREIGN KEY (ref) REFERENCES public.self_dep_store(id),
-                  FAMILY f1 (id, ref)
-                );
-
-statement ok
-DROP TABLE self_dep_store;
-
-subtest end
-
-subtest drop_col_dep_self_ref_key
-
-statement ok
-CREATE TABLE self_dep_key (
-  id INT PRIMARY KEY,
-  ref INT,
-  stored STRING,
-  FAMILY f1 (id, ref, stored)
-) WITH (schema_locked = false);
-
-statement ok
-CREATE UNIQUE INDEX idx_self_dep_key ON self_dep_key (ref) STORING (stored);
-
-statement ok
-ALTER TABLE self_dep_key ADD CONSTRAINT fk_self_dep_key FOREIGN KEY (ref) REFERENCES self_dep_key (id);
-
-query B
-SELECT column_drop_violates_fk_index_requirements('self_dep_key', 'ref');
-----
-false
-
-statement ok
-ALTER TABLE self_dep_key DROP COLUMN ref;
-
-query TT
-SHOW CREATE TABLE self_dep_key
-----
-self_dep_key  CREATE TABLE public.self_dep_key (
-                id INT8 NOT NULL,
-                stored STRING NULL,
-                CONSTRAINT self_dep_key_pkey PRIMARY KEY (id ASC),
-                FAMILY f1 (id, stored)
-              );
-
-statement ok
-DROP TABLE self_dep_key;
+DROP TABLE parent_hash_sharded
 
 subtest end

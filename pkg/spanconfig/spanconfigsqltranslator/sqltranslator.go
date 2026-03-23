@@ -19,10 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/errors"
 )
 
@@ -298,7 +298,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForNamedZone(
 		return nil, errors.AssertionFailedf("unknown named zone config %s", name)
 	}
 
-	zoneConfig, err := sql.GetHydratedZoneConfigForNamedZone(
+	zoneConfig, err := zoneconfig.GetHydratedForNamedZone(
 		ctx, txn, s.txn.Descriptors(), name,
 	)
 	if err != nil {
@@ -334,7 +334,7 @@ func (s *SQLTranslator) generateSpanConfigurationsForTable(
 		return nil, nil
 	}
 
-	zone, err := sql.GetHydratedZoneConfigForTable(
+	zone, err := zoneconfig.GetHydratedForTable(
 		ctx, txn, s.txn.Descriptors(), table.GetID(),
 	)
 	if err != nil {
@@ -547,23 +547,14 @@ func (s *SQLTranslator) findDescendantLeafIDsForDescriptor(
 	}
 
 	// Expand the database descriptor to all the tables inside it and return their
-	// IDs.
-
-	// GetAll is the only way to retrieve dropped descriptors whose IDs are not known
-	// ahead of time. This has unfortunate performance implications tracked by
-	// https://github.com/cockroachdb/cockroach/issues/90655
-	all, err := s.txn.Descriptors().GetAll(ctx, s.txn.KV())
+	// IDs. This uses an optimized scan that filters by parent database ID before
+	// fully unmarshaling descriptors, which is much faster than scanning all
+	// descriptors in the cluster.
+	ids, err := s.txn.Descriptors().GetAllTableIDsInDatabaseFromStorage(ctx, s.txn.KV(), db.GetID())
 	if err != nil {
 		return nil, err
 	}
-	var ret catalog.DescriptorIDSet
-	_ = all.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		if desc.GetParentID() == db.GetID() && desc.DescriptorType() == catalog.Table {
-			ret.Add(desc.GetID())
-		}
-		return nil
-	})
-	return ret.Ordered(), nil
+	return ids, nil
 }
 
 // findDescendantLeafIDsForNamedZone finds all leaf IDs below the given named
@@ -651,7 +642,7 @@ func (s *SQLTranslator) maybeGeneratePseudoTableRecords(
 		//      emulate. As for what config to apply over said range -- we do as
 		//      the system config span does, applying the config for the system
 		//      database.
-		zone, err := sql.GetHydratedZoneConfigForDatabase(
+		zone, err := zoneconfig.GetHydratedForDatabase(
 			ctx, s.txn.KV(), s.txn.Descriptors(), keys.SystemDatabaseID,
 		)
 		if err != nil {
@@ -690,7 +681,7 @@ func (s *SQLTranslator) maybeGenerateScratchRangeRecord(
 			continue // nothing to do
 		}
 
-		zone, err := sql.GetHydratedZoneConfigForDatabase(
+		zone, err := zoneconfig.GetHydratedForDatabase(
 			ctx, s.txn.KV(), s.txn.Descriptors(), keys.RootNamespaceID,
 		)
 		if err != nil {

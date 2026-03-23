@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -35,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -100,11 +102,6 @@ func TestValidationWithProtectedTS(t *testing.T) {
 			spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, asOf),
 		)
 		require.NoError(t, repl.TestingReadProtectedTimestamps(ctx))
-	}
-	// Refresh forces the PTS cache to update to at least asOf.
-	refreshPTSCacheTo := func(t *testing.T, asOf hlc.Timestamp) {
-		ptp := ts.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-		require.NoError(t, ptp.Refresh(ctx, asOf))
 	}
 
 	for _, sql := range []string{
@@ -190,7 +187,6 @@ func TestValidationWithProtectedTS(t *testing.T) {
 			break
 		}
 		refreshTo(t, tableKey, ts.Clock().Now())
-		refreshPTSCacheTo(t, ts.Clock().Now())
 		for _, id := range ranges {
 			if _, err := systemSqlDb.ExecContext(ctx, `SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, id); err != nil {
 				return err
@@ -241,7 +237,6 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 	var db *gosql.DB
 	var tableID uint32
 	s, db, _ = serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156127),
 		Knobs: base.TestingKnobs{
 			SQLEvalContext: &eval.TestingKnobs{
 				ForceProductionValues: true,
@@ -318,11 +313,6 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 		}
 		return repl.TestingReadProtectedTimestamps(ctx)
 	}
-	// Refresh forces the PTS cache to update to at least asOf.
-	refreshPTSCacheTo := func(ctx context.Context, asOf hlc.Timestamp) error {
-		ptp := ts.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-		return ptp.Refresh(ctx, asOf)
-	}
 
 	for _, sql := range []string{
 		"SET create_table_with_schema_locked=false",
@@ -365,9 +355,18 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 			for _, sql := range []string{
 				fmt.Sprintf("CREATE TABLE %s(n int primary key)", tc.tableName),
 				fmt.Sprintf("ALTER TABLE %s CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 67108864, gc.ttlseconds = 5", tc.tableName),
-				fmt.Sprintf("INSERT INTO %s(n) SELECT * FROM generate_series(1, %d)", tc.tableName, initialRowCount),
 			} {
 				r.Exec(t, sql)
+			}
+			// Insert initial rows in batches to avoid long-running transactions
+			// that could be affected by the aggressive gc.ttlseconds setting.
+			const insertBatchSize = 10000
+			for i := 1; i <= initialRowCount; i += insertBatchSize {
+				end := i + insertBatchSize - 1
+				if end > initialRowCount {
+					end = initialRowCount
+				}
+				r.Exec(t, fmt.Sprintf("INSERT INTO %s(n) SELECT * FROM generate_series(%d, %d)", tc.tableName, i, end))
 			}
 
 			getTableID := func() (tableID uint32) {
@@ -420,13 +419,29 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 						if err := refreshTo(ctx, tableKey, ts.Clock().Now()); err != nil {
 							return errors.Wrap(err, "failed to refresh in-memory PTS")
 						}
-						if err := refreshPTSCacheTo(ctx, ts.Clock().Now()); err != nil {
-							return errors.Wrap(err, "failed to refresh PTS cache")
+						// Get range IDs from the tenant connection since the table is in the tenant.
+						rows, err := db.QueryContext(ctx, fmt.Sprintf(
+							`SELECT range_id FROM [SHOW RANGES FROM TABLE %s] ORDER BY start_key`, tc.tableName))
+						if err != nil {
+							return errors.Wrap(err, "failed to query ranges")
 						}
-						if _, err := db.ExecContext(ctx, fmt.Sprintf(`
-SELECT crdb_internal.kv_enqueue_replica(range_id, 'mvccGC', true)
-FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE %s] ORDER BY start_key);`, tc.tableName)); err != nil {
-							return errors.Wrap(err, "failed to enqueue replica for GC")
+						var rangeIDs []int64
+						for rows.Next() {
+							var rangeID int64
+							if err := rows.Scan(&rangeID); err != nil {
+								return errors.Wrap(err, "failed to scan range ID")
+							}
+							rangeIDs = append(rangeIDs, rangeID)
+						}
+						if err := rows.Close(); err != nil {
+							return errors.Wrap(err, "failed to close rows")
+						}
+						// Execute kv_enqueue_replica through the system layer since it's
+						// not supported in virtual clusters.
+						for _, rangeID := range rangeIDs {
+							if _, err := systemSqlDb.ExecContext(ctx, `SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, rangeID); err != nil {
+								return errors.Wrap(err, "failed to enqueue replica for GC")
+							}
 						}
 						row := db.QueryRowContext(ctx, "SELECT count(*) FROM system.protected_ts_records WHERE meta_type='jobs'")
 						var count int
@@ -455,11 +470,15 @@ FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE %s] ORDER BY start_key);`, tc
 				t.Logf("%s running backfill with PTS not setup early enough", timeutil.Now().Format(time.RFC3339))
 				blockBackFillsForPTSFailure.Swap(true)
 				_, err := db.ExecContext(ctx, tc.backfillSchemaChange)
-				if err == nil || !testutils.IsError(err, "unable to retry backfill since fixed timestamp is before the GC timestamp") {
-					if err == nil {
-						return errors.AssertionFailedf("expected error was not hit")
-					}
+				if err == nil {
+					return errors.AssertionFailedf("expected error was not hit; got nil")
+				}
+				if !testutils.IsError(err, "unable to backfill since fixed timestamp is before the GC timestamp") {
 					return errors.NewAssertionErrorWithWrappedErrf(err, "expected error was not hit")
+				}
+				if pgErr := (*pq.Error)(nil); !errors.As(err, &pgErr) ||
+					pgcode.MakeCode(string(pgErr.Code)) != pgcode.InvalidParameterValue {
+					return errors.NewAssertionErrorWithWrappedErrf(err, "expected error code was not found")
 				}
 				err = testutils.SucceedsSoonError(func() error {
 					// Wait until schema change is fully rolled back.

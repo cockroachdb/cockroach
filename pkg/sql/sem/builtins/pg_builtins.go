@@ -352,7 +352,24 @@ func makePGGetConstraintDef(paramTypes tree.ParamTypes) tree.Overload {
 		Types:      paramTypes,
 		ReturnType: tree.FixedReturnType(types.String),
 		Body:       `SELECT condef FROM pg_catalog.pg_constraint WHERE oid=$1 LIMIT 1`,
-		Info:       notUsableInfo,
+		Info:       "Returns the definition of the specified constraint.",
+		Volatility: volatility.Stable,
+		Language:   tree.RoutineLangSQL,
+	}
+}
+
+// makePGGetTriggerDef makes a pg_get_triggerdef function with the given arguments.
+func makePGGetTriggerDef(paramTypes tree.ParamTypes) tree.Overload {
+	return tree.Overload{
+		Types:      paramTypes,
+		ReturnType: tree.FixedReturnType(types.String),
+		Body: `SELECT c.create_statement
+           FROM pg_catalog.pg_trigger t
+           JOIN crdb_internal.create_trigger_statements c
+             ON c.table_id = t.tgrelid::INT8 AND c.trigger_name = t.tgname
+           WHERE t.oid = $1
+           LIMIT 1`,
+		Info:       "Returns the CREATE TRIGGER statement for the specified trigger.",
 		Volatility: volatility.Stable,
 		Language:   tree.RoutineLangSQL,
 	}
@@ -637,6 +654,20 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	// See https://www.postgresql.org/docs/current/functions-info.html.
+	"pg_trigger_depth": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, _ *eval.Context, _ tree.Datums) (tree.Datum, error) {
+				return tree.NewDInt(tree.DInt(eval.GetTriggerDepth(ctx))), nil
+			},
+			Info:             "Returns the current nesting level of PostgreSQL triggers (0 if not called, directly or indirectly, from inside a trigger).",
+			Volatility:       volatility.Volatile,
+			DistsqlBlocklist: true,
+		},
+	),
+
 	// See https://www.postgresql.org/docs/9.3/static/catalog-pg-database.html.
 	"pg_encoding_to_char": makeBuiltin(defProps(),
 		tree.Overload{
@@ -716,6 +747,13 @@ var pgBuiltins = map[string]builtinDefinition{
 		makePGGetConstraintDef(tree.ParamTypes{
 			{Name: "constraint_oid", Typ: types.Oid}, {Name: "pretty_bool", Typ: types.Bool}}),
 		makePGGetConstraintDef(tree.ParamTypes{{Name: "constraint_oid", Typ: types.Oid}}),
+	),
+
+	// pg_get_triggerdef functions like SHOW CREATE TRIGGER.
+	"pg_get_triggerdef": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
+		makePGGetTriggerDef(tree.ParamTypes{{Name: "trigger_oid", Typ: types.Oid}}),
+		makePGGetTriggerDef(tree.ParamTypes{
+			{Name: "trigger_oid", Typ: types.Oid}, {Name: "pretty_bool", Typ: types.Bool}}),
 	),
 
 	// pg_get_partkeydef is only provided for compatibility and always returns
@@ -885,7 +923,9 @@ FROM defaults_parsed
 						ELSE a.attname
 					END as pg_get_indexdef
 					FROM pg_catalog.pg_index i
-					LEFT JOIN pg_catalog.pg_attribute a ON (a.attrelid = i.indexrelid AND a.attnum = $2)
+					-- Use an index hint to avoid an incomplete virtual index lookup join
+					-- that degrades to a full scan.
+					LEFT JOIN pg_catalog.pg_attribute@primary AS a ON (a.attrelid = i.indexrelid AND a.attnum = $2)
 					LEFT JOIN pg_catalog.pg_indexes defs ON ($2 = 0 AND defs.crdb_oid = i.indexrelid)
 					WHERE i.indexrelid = $1`,
 			Info:       "Gets the CREATE INDEX command for index, or definition of just one index column when given a non-zero column number",
@@ -1823,6 +1863,8 @@ FROM defaults_parsed
 				"TRIGGER WITH GRANT OPTION":    {Kind: privilege.CREATE, GrantOption: true},
 				"RULE":                         {Kind: privilege.RULE},
 				"RULE WITH GRANT OPTION":       {Kind: privilege.RULE, GrantOption: true},
+				"MAINTAIN":                     {Kind: privilege.MAINTAIN},
+				"MAINTAIN WITH GRANT OPTION":   {Kind: privilege.MAINTAIN, GrantOption: true},
 			})
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -2431,6 +2473,176 @@ SELECT
 			Volatility:        volatility.Immutable,
 			CalledOnNullInput: true,
 			Language:          tree.RoutineLangSQL,
+		},
+	),
+
+	"makeaclitem": makeBuiltin(
+		tree.FunctionProperties{DistsqlBlocklist: true},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "grantee", Typ: types.Oid},
+				{Name: "grantor", Typ: types.Oid},
+				{Name: "privileges", Typ: types.String},
+				{Name: "is_grantable", Typ: types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.AclItem),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				granteeOid := tree.MustBeDOid(args[0]).Oid
+				grantorOid := tree.MustBeDOid(args[1]).Oid
+				privileges := string(tree.MustBeDString(args[2]))
+				isGrantable := bool(tree.MustBeDBool(args[3]))
+
+				// Parse privilege names and convert to ACL characters.
+				var privChars strings.Builder
+				privNames := strings.Split(privileges, ",")
+				for _, name := range privNames {
+					name = strings.TrimSpace(name)
+					if name == "" {
+						continue
+					}
+					ch, ok := privilege.PrivNameToACLChar[strings.ToUpper(name)]
+					if !ok {
+						return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+							"unrecognized privilege type: %q", name)
+					}
+					privChars.WriteByte(ch)
+					if isGrantable {
+						privChars.WriteByte('*')
+					}
+				}
+
+				// Resolve OIDs to role names. OID 0 = PUBLIC (empty grantee).
+				// Like postgres, fall back to the numeric OID if the role
+				// doesn't exist.
+				granteeName := ""
+				if granteeOid != 0 {
+					name, err := getNameForArg(
+						ctx, evalCtx, tree.NewDOid(granteeOid), "pg_roles", "rolname",
+					)
+					if err != nil {
+						return nil, err
+					}
+					if name == "" {
+						granteeName = fmt.Sprintf("%d", granteeOid)
+					} else {
+						granteeName = name
+					}
+				}
+				grantorName, err := getNameForArg(
+					ctx, evalCtx, tree.NewDOid(grantorOid), "pg_roles", "rolname",
+				)
+				if err != nil {
+					return nil, err
+				}
+				if grantorName == "" {
+					grantorName = fmt.Sprintf("%d", grantorOid)
+				}
+
+				// Build the aclitem string: "grantee=privchars/grantor".
+				// Role names that contain special characters (e.g. hyphens,
+				// spaces) must be double-quoted, matching PostgreSQL's putid().
+				var result strings.Builder
+				result.WriteString(privilege.QuoteACLIdentifier(granteeName))
+				result.WriteByte('=')
+				result.WriteString(privChars.String())
+				result.WriteByte('/')
+				result.WriteString(privilege.QuoteACLIdentifier(grantorName))
+
+				return tree.NewDACLItem(result.String())
+			},
+			Info: "Constructs an aclitem from the given grantee, grantor, privileges, and grant option.",
+			// Marked immutable to match postgres. Our implementation resolves
+			// OIDs to role names (a catalog lookup), but the risk of stale
+			// results from constant-folding is low: these functions are
+			// almost always called with column references, and CRDB does
+			// not support role renames.
+			Volatility: volatility.Immutable,
+		},
+	),
+
+	"acldefault": makeBuiltin(
+		tree.FunctionProperties{DistsqlBlocklist: true},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "type", Typ: types.QChar},
+				{Name: "ownerId", Typ: types.Oid},
+			},
+			ReturnType: tree.FixedReturnType(types.MakeArray(types.AclItem)),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				typeChar := string(tree.MustBeDString(tree.UnwrapDOidWrapper(args[0])))
+				ownerOid := tree.MustBeDOid(args[1]).Oid
+
+				// Resolve owner OID to role name. Like postgres, fall back to
+				// the numeric OID if the role doesn't exist.
+				ownerName, err := getNameForArg(
+					ctx, evalCtx, tree.NewDOid(ownerOid), "pg_roles", "rolname",
+				)
+				if err != nil {
+					return nil, err
+				}
+				if ownerName == "" {
+					ownerName = fmt.Sprintf("%d", ownerOid)
+				}
+
+				// PostgreSQL hard-wired default ACLs per object type.
+				// See src/backend/catalog/aclchk.c acldefault().
+				type aclDefault struct {
+					ownerPrivs  string
+					publicPrivs string
+				}
+				defaults := map[string]aclDefault{
+					"r": {ownerPrivs: "arwdDxtm"},               // TABLE
+					"s": {ownerPrivs: "rwU"},                    // SEQUENCE
+					"d": {ownerPrivs: "CTc", publicPrivs: "Tc"}, // DATABASE
+					"f": {ownerPrivs: "X", publicPrivs: "X"},    // FUNCTION
+					"l": {publicPrivs: "U"},                     // LANGUAGE
+					"n": {ownerPrivs: "UC"},                     // SCHEMA
+					"T": {ownerPrivs: "U", publicPrivs: "U"},    // TYPE
+					"c": {},                                     // COLUMN
+					"L": {ownerPrivs: "rw"},                     // LARGE OBJECT
+					"t": {ownerPrivs: "C"},                      // TABLESPACE
+					"F": {ownerPrivs: "U"},                      // FDW
+					"S": {ownerPrivs: "U"},                      // FOREIGN SERVER
+					"p": {ownerPrivs: "sA"},                     // PARAMETER
+				}
+
+				def, ok := defaults[typeChar]
+				if !ok {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"unrecognized object type abbreviation: %q", typeChar)
+				}
+
+				arr := tree.NewDArray(types.AclItem)
+				quotedOwner := privilege.QuoteACLIdentifier(ownerName)
+				// If PUBLIC has privileges, add that first.
+				if def.publicPrivs != "" {
+					item := "=" + def.publicPrivs + "/" + quotedOwner
+					d, err := tree.NewDACLItem(item)
+					if err != nil {
+						return nil, err
+					}
+					if err := arr.Append(d); err != nil {
+						return nil, err
+					}
+				}
+				// If owner has privileges, add that next.
+				if def.ownerPrivs != "" {
+					item := quotedOwner + "=" + def.ownerPrivs + "/" + quotedOwner
+					d, err := tree.NewDACLItem(item)
+					if err != nil {
+						return nil, err
+					}
+					if err := arr.Append(d); err != nil {
+						return nil, err
+					}
+				}
+
+				return arr, nil
+			},
+			Info: "Returns the default access privileges for an object of the given type belonging to the given owner.",
+			// Marked immutable to match postgres. See the comment on
+			// makeaclitem for justification.
+			Volatility: volatility.Immutable,
 		},
 	),
 }

@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -232,18 +231,37 @@ func dropColumn(
 			}
 			dropCascadeDescriptor(b, e.FunctionID)
 		case *scpb.TriggerDeps:
-			if behavior == tree.DropCascade {
-				panic(unimplemented.NewWithIssuef(
-					146667, "ALTER TABLE DROP COLUMN cascade not supported with triggers"))
-			}
 			triggerName := b.QueryByID(e.TableID).FilterTriggerName().Filter(func(_ scpb.Status, _ scpb.TargetStatus, tn *scpb.TriggerName) bool {
 				return tn.TriggerID == e.TriggerID
 			}).MustGetOneElement()
 			tableName := b.QueryByID(e.TableID).FilterNamespace().MustGetOneElement()
-			panic(sqlerrors.NewDependentObjectErrorf(
-				"cannot drop column %q because trigger %q on table %q depends on it",
-				cn.Name, triggerName.Name, tableName.Name,
+			if behavior != tree.DropCascade {
+				panic(sqlerrors.NewDependentObjectErrorf(
+					"cannot drop column %q because trigger %q on table %q depends on it",
+					cn.Name, triggerName.Name, tableName.Name,
+				))
+			}
+			b.EvalCtx().ClientNoticeSender.BufferClientNotice(b, pgnotice.Newf(
+				"drop cascades to trigger %s on table %s",
+				triggerName.Name, tableName.Name,
 			))
+			dropTrigger(b, e.TableID, e.TriggerID)
+		case *scpb.CheckConstraint:
+			constraintElems := b.QueryByID(e.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID))
+			_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
+			alterTableDropConstraint(b, tn, tbl, stmt, &tree.AlterTableDropConstraint{
+				IfExists:     false,
+				Constraint:   tree.Name(constraintName.Name),
+				DropBehavior: behavior,
+			})
+		case *scpb.CheckConstraintUnvalidated:
+			constraintElems := b.QueryByID(e.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID))
+			_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
+			alterTableDropConstraint(b, tn, tbl, stmt, &tree.AlterTableDropConstraint{
+				IfExists:     false,
+				Constraint:   tree.Name(constraintName.Name),
+				DropBehavior: behavior,
+			})
 		case *scpb.UniqueWithoutIndexConstraint:
 			constraintElems := b.QueryByID(e.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID))
 			_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
@@ -260,6 +278,23 @@ func dropColumn(
 				Constraint:   tree.Name(constraintName.Name),
 				DropBehavior: behavior,
 			})
+		case *scpb.ForeignKeyConstraint:
+			constraintElems := b.QueryByID(e.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID))
+			_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
+			alterTableDropConstraint(b, tn, tbl, stmt, &tree.AlterTableDropConstraint{
+				IfExists:     false,
+				Constraint:   tree.Name(constraintName.Name),
+				DropBehavior: behavior,
+			})
+		case *scpb.ForeignKeyConstraintUnvalidated:
+			constraintElems := b.QueryByID(e.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID))
+			_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
+			alterTableDropConstraint(b, tn, tbl, stmt, &tree.AlterTableDropConstraint{
+				IfExists:     false,
+				Constraint:   tree.Name(constraintName.Name),
+				DropBehavior: behavior,
+			})
+
 		case *scpb.RowLevelTTL:
 			// If a duration expression is set, the column level dependency is on the
 			// internal ttl column, which we are attempting to drop.
@@ -308,6 +343,7 @@ func walkColumnDependencies(
 	var sequenceDeps catalog.DescriptorIDSet
 	var indexDeps catid.IndexSet
 	var columnDeps catalog.TableColSet
+	var constraintDeps catid.ConstraintSet
 	tblElts := b.QueryByID(col.TableID).Filter(orFilter(publicTargetFilter, transientTargetFilter))
 
 	// Panic if `col` is referenced in a predicate of an index or
@@ -326,7 +362,7 @@ func walkColumnDependencies(
 				*scpb.UniqueWithoutIndexConstraint, *scpb.CheckConstraint,
 				*scpb.UniqueWithoutIndexConstraintUnvalidated, *scpb.CheckConstraintUnvalidated,
 				*scpb.RowLevelTTL, *scpb.PolicyUsingExpr, *scpb.PolicyWithCheckExpr,
-				*scpb.TriggerDeps, *scpb.ColumnGeneratedAsIdentity, *scpb.ColumnHidden:
+				*scpb.TriggerDeps, *scpb.ColumnGeneratedAsIdentity, *scpb.ColumnHidden, *scpb.TableStorageParam:
 				fn(e, op, objType)
 			case *scpb.ColumnType:
 				if elt.ColumnID == col.ColumnID {
@@ -368,6 +404,7 @@ func walkColumnDependencies(
 			}
 		})
 
+	// First loop: Process columns and indexes, collecting constraint IDs.
 	tblElts.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch elt := e.(type) {
 		case *scpb.Column:
@@ -376,14 +413,31 @@ func walkColumnDependencies(
 			}
 		case *scpb.PrimaryIndex:
 			if indexDeps.Contains(elt.IndexID) {
+				if elt.ConstraintID != 0 {
+					constraintDeps.Add(elt.ConstraintID)
+				}
 				fn(e, op, objType)
 			}
 		case *scpb.SecondaryIndex:
 			if indexDeps.Contains(elt.IndexID) {
+				if elt.ConstraintID != 0 {
+					constraintDeps.Add(elt.ConstraintID)
+				}
 				fn(e, op, objType)
 			}
 		}
 	})
+
+	// Second loop: Process constraint comments using the fully-populated constraintDeps.
+	if !constraintDeps.Empty() {
+		tblElts.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
+			if cc, ok := e.(*scpb.ConstraintComment); ok {
+				if constraintDeps.Contains(cc.ConstraintID) {
+					fn(e, op, objType)
+				}
+			}
+		})
+	}
 	sequenceDeps.ForEach(func(id descpb.ID) {
 		_, target, seq := scpb.FindSequence(b.QueryByID(id))
 		if target == scpb.ToPublic && seq != nil {

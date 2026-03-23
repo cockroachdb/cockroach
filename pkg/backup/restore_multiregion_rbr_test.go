@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -30,6 +29,9 @@ import (
 func TestMultiRegionRegionlessRestoreNoLicense(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	// TODO(at): enable once LinkExternalSSTable is permitted for secondary tenants.
+	backuptestutils.DisableFastRestoreForTest(t)
 
 	skip.UnderRace(t, "test is too heavy to run under stress")
 
@@ -54,8 +56,6 @@ func TestMultiRegionRegionlessRestoreNoLicense(t *testing.T) {
 	if err := backuptestutils.VerifyBackupRestoreStatementResult(t, mrSql, `BACKUP DATABASE d INTO $1`, localFoo); err != nil {
 		t.Fatal(err)
 	}
-
-	defer utilccl.TestingDisableEnterprise()()
 
 	sqlTC := testcluster.StartTestCluster(
 		t, singleNode, base.TestClusterArgs{ServerArgs: base.TestServerArgs{

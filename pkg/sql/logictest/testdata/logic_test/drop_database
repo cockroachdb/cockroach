@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 statement ok
 SET CLUSTER SETTING sql.cross_db_views.enabled = TRUE
 

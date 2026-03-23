@@ -46,13 +46,9 @@ func TestMain(m *testing.M) {
 	defer ccl.TestingEnableEnterprise()()
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithTenantOption(base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124)))
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124),
-	)()
-
 	os.Exit(m.Run())
 }
 
@@ -88,6 +84,13 @@ func TestCCLLogic_global_placement_restricted(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "global_placement_restricted")
+}
+
+func TestCCLLogic_inspect(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "inspect")
 }
 
 func TestCCLLogic_multi_region(
@@ -237,18 +240,18 @@ func TestCCLLogic_regional_by_row_foreign_key(
 	runCCLLogicTest(t, "regional_by_row_foreign_key")
 }
 
-func TestCCLLogic_regional_by_row_hash_sharded_index(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runCCLLogicTest(t, "regional_by_row_hash_sharded_index")
-}
-
 func TestCCLLogic_regional_by_row_hash_sharded_index_query_plan(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "regional_by_row_hash_sharded_index_query_plan")
+}
+
+func TestCCLLogic_regional_by_row_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "regional_by_row_index")
 }
 
 func TestCCLLogic_regional_by_row_insert_fast_path(
@@ -291,6 +294,13 @@ func TestCCLLogic_regional_by_row_safe_updates(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "regional_by_row_safe_updates")
+}
+
+func TestCCLLogic_regional_by_row_skip_unique_checks(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "regional_by_row_skip_unique_checks")
 }
 
 func TestCCLLogic_regional_by_table_placement_restricted(

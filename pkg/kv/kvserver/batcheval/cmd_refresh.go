@@ -62,8 +62,8 @@ func Refresh(
 
 	if err != nil {
 		return result.Result{}, err
-	} else if res.Value != nil {
-		if ts := res.Value.Timestamp; refreshFrom.Less(ts) {
+	} else if res.Value.Exists() {
+		if ts := res.Value.Value.Timestamp; refreshFrom.Less(ts) {
 			return result.Result{},
 				kvpb.NewRefreshFailedError(ctx, kvpb.RefreshFailedError_REASON_COMMITTED_VALUE, args.Key, ts)
 		}

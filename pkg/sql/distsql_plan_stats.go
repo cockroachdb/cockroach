@@ -10,6 +10,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -238,19 +239,23 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 		nil, /* finalizeLastStageCb */
 	)
 
+	canaryStatsEnabled := desc.TableDesc().StatsCanaryWindow != 0 &&
+		dsp.st.Version.IsActive(ctx, clusterversion.V26_2_AddTableStatisticsDelayDeleteColumn)
+
 	// Set up the final SampleAggregator stage.
 	agg := &execinfrapb.SampleAggregatorSpec{
-		Sketches:         sketchSpec,
-		InvertedSketches: invSketchSpec,
-		SampleSize:       sampler.SampleSize,
-		MinSampleSize:    sampler.MinSampleSize,
-		SampledColumnIDs: sampledColumnIDs,
-		TableID:          desc.GetID(),
-		JobID:            jobID,
-		RowsExpected:     rowsExpected,
-		DeleteOtherStats: details.DeleteOtherStats,
-		NumIndexes:       uint64(numIndexes),
-		CurIndex:         uint64(curIndex),
+		Sketches:           sketchSpec,
+		InvertedSketches:   invSketchSpec,
+		SampleSize:         sampler.SampleSize,
+		MinSampleSize:      sampler.MinSampleSize,
+		SampledColumnIDs:   sampledColumnIDs,
+		TableID:            desc.GetID(),
+		JobID:              jobID,
+		RowsExpected:       rowsExpected,
+		DeleteOtherStats:   details.DeleteOtherStats,
+		NumIndexes:         uint64(numIndexes),
+		CurIndex:           uint64(curIndex),
+		CanaryStatsEnabled: canaryStatsEnabled,
 	}
 	// Plan the SampleAggregator on the gateway, unless we have a single Sampler.
 	node := dsp.gatewaySQLInstanceID
@@ -302,7 +307,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		typeResolver = &r
 	}
 	// Fetch all stats for the table that matches the given table descriptor.
-	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver)
+	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetFreshTableStats(ctx, desc, typeResolver)
 	if err != nil {
 		return nil, err
 	}
@@ -627,8 +632,8 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 				// Check that the virtual computed column expression can be distributed.
 				// TODO(michae2): Add the ability to run CREATE STATISTICS locally if a
 				// local-only virtual computed column expression is needed.
-				if err := checkExprForDistSQL(virtComputedExprs[virtIdx], &distSQLVisitor); err != nil {
-					return nil, err
+				if blockers := checkExprForDistSQL(virtComputedExprs[virtIdx], &distSQLVisitor); blockers != 0 {
+					return nil, errors.Newf("cannot be executed with distsql: %s", blockers)
 				}
 				exprs[i] = virtComputedExprs[virtIdx]
 				virtIdx++
@@ -724,7 +729,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		r := descs.NewDistSQLTypeResolver(p.Descriptors(), p.Txn())
 		typeResolver = &r
 	}
-	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc, typeResolver)
+	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetFreshTableStats(ctx, desc, typeResolver)
 	if err != nil {
 		return nil, err
 	}

@@ -11,10 +11,11 @@ import {
   StatementStatus,
   StmtInsightEvent,
 } from "src/insights/types";
+import { TimeScale, timeScaleRangeToObj } from "src/timeScaleDropdown";
 import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
 
 import { getInsightsFromProblemsAndCauses } from "../insights/utils";
-import { FixFingerprintHexValue } from "../util";
+import { FixFingerprintHexValue, useSwrWithClusterId } from "../util";
 
 import { getContentionDetailsApi } from "./contentionApi";
 import {
@@ -138,6 +139,30 @@ export const stmtInsightsByTxnExecutionQuery = (id: string): string => `
  FROM crdb_internal.cluster_execution_insights
  WHERE txn_id = '${id}'
 `;
+
+export function useStmtInsights(timeScale: TimeScale) {
+  const shouldPoll = timeScale?.key !== "Custom";
+  return useSwrWithClusterId<SqlApiResponse<StmtInsightEvent[]>>(
+    timeScale
+      ? {
+          name: "stmtInsights",
+          tsKey: timeScale.key,
+          tsEnd: timeScale.fixedWindowEnd
+            ? timeScale.fixedWindowEnd.toISOString()
+            : undefined,
+        }
+      : null,
+    () => {
+      const { start, end } = timeScaleRangeToObj(timeScale);
+      return getStmtInsightsApi({ start, end });
+    },
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      refreshInterval: shouldPoll ? 10_000 : 0,
+    },
+  );
+}
 
 export async function getStmtInsightsApi(
   req?: StmtInsightsReq,

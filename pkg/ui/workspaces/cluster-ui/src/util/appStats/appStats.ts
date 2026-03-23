@@ -153,6 +153,12 @@ export function addExecStats(a: ExecStats, b: ExecStats): ExecStats {
       countA,
       countB,
     ),
+    admission_wait_time: addMaybeUnsetNumericStat(
+      a.admission_wait_time,
+      b.admission_wait_time,
+      countA,
+      countB,
+    ),
   };
 }
 
@@ -231,6 +237,12 @@ export function addStatementStats(
       countA,
       countB,
     ),
+    kv_cpu_time_nanos: aggregateNumericStats(
+      a.kv_cpu_time_nanos,
+      b.kv_cpu_time_nanos,
+      countA,
+      countB,
+    ),
     rows_read: aggregateNumericStats(a.rows_read, b.rows_read, countA, countB),
     rows_written: aggregateNumericStats(
       a.rows_written,
@@ -258,6 +270,31 @@ export function addStatementStats(
     indexes: indexes,
     latency_info: aggregateLatencyInfo(a, b),
     last_error_code: "",
+    canary_stats: addExperimentStats(a.canary_stats, b.canary_stats),
+    stable_stats: addExperimentStats(a.stable_stats, b.stable_stats),
+  };
+}
+
+function addExperimentStats(
+  a: cockroach.sql.IExperimentStatsInfo | null | undefined,
+  b: cockroach.sql.IExperimentStatsInfo | null | undefined,
+): cockroach.sql.IExperimentStatsInfo {
+  const countA = FixLong(a?.count).toInt();
+  const countB = FixLong(b?.count).toInt();
+  return {
+    count: Long.fromInt(countA + countB),
+    run_lat: aggregateNumericStats(
+      a?.run_lat ?? { mean: 0, squared_diffs: 0 },
+      b?.run_lat ?? { mean: 0, squared_diffs: 0 },
+      countA,
+      countB,
+    ),
+    plan_lat: aggregateNumericStats(
+      a?.plan_lat ?? { mean: 0, squared_diffs: 0 },
+      b?.plan_lat ?? { mean: 0, squared_diffs: 0 },
+      countA,
+      countB,
+    ),
   };
 }
 

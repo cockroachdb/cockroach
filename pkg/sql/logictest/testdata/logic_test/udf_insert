@@ -235,8 +235,19 @@ SELECT f_drop(5,100,101);
 ----
 (5,100,101)
 
-statement error pgcode 2BP01 cannot drop column \"c\" because function \"f_drop\" depends on it
+statement error pgcode 2BP01 pq: cannot drop column "c" because function "f_drop" depends on it
 ALTER TABLE t_alter DROP COLUMN c;
+
+statement ok
+DROP FUNCTION f_drop;
+
+# Columns that aren't explicitly referenced by a routine can be dropped.
+statement ok
+ALTER TABLE t_alter DROP COLUMN c;
+ALTER TABLE t_alter DROP COLUMN b;
+
+statement error pgcode 2BP01 pq: cannot drop column "a" because function "f_int" depends on it
+ALTER TABLE t_alter DROP COLUMN a;
 
 query T
 SELECT f_record(6);
@@ -375,6 +386,7 @@ CREATE TABLE t_computed (
 # will depend on all columns in the table.
 statement ok
 SET use_improved_routine_dependency_tracking = false;
+SET use_improved_routine_deps_triggers_and_computed_cols = false;
 
 statement ok
 CREATE FUNCTION f145098() RETURNS INT LANGUAGE SQL AS $$
@@ -384,6 +396,7 @@ $$;
 
 statement ok
 RESET use_improved_routine_dependency_tracking;
+RESET use_improved_routine_deps_triggers_and_computed_cols;
 
 statement error pgcode 2BP01 pq: cannot drop column "crdb_internal_a_shard_16" because function "f145098" depends on it
 DROP INDEX i;

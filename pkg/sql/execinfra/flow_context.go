@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/evalcatalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -51,7 +50,8 @@ type FlowCtx struct {
 	// higher-level txn (like backfills).
 	Txn *kv.Txn
 
-	// MakeLeafTxn returns a new LeafTxn, different from Txn.
+	// MakeLeafTxn returns a new LeafTxn, different from Txn. MakeLeafTxn could be
+	// unset if it's not possible to create a leaf transaction.
 	MakeLeafTxn func(context.Context) (*kv.Txn, error)
 
 	// Descriptors is used to look up leased table descriptors and to construct
@@ -63,11 +63,6 @@ type FlowCtx struct {
 	// In the latter case, after the flow is complete, all descriptors leased from
 	// this object must be released.
 	Descriptors *descs.Collection
-
-	// EvalCatalogBuiltins is initialized if the flow context is remote and the
-	// above descs.Collection is non-nil. It is referenced in the eval.Context
-	// in order to provide catalog access to builtins.
-	EvalCatalogBuiltins evalcatalog.Builtins
 
 	// IsDescriptorsCleanupRequired is set if Descriptors needs to release the
 	// leases it acquired after the flow is complete.

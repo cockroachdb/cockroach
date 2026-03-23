@@ -39,9 +39,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangestats"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
 	raft "github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -557,7 +559,7 @@ type systemStatusServer struct {
 	gossip             *gossip.Gossip
 	storePool          *storepool.StorePool
 	stores             *kvserver.Stores
-	engines            *Engines
+	engines            Engines
 	nodeLiveness       *liveness.NodeLiveness
 	spanConfigReporter spanconfig.Reporter
 	rangeStatsFetcher  *rangestats.Fetcher
@@ -650,7 +652,7 @@ func newStatusServer(
 			rpcCtx:             rpcCtx,
 			stopper:            stopper,
 			serverIterator:     serverIterator,
-			nd:                 &nodeDialer{cs: st, si: serverIterator},
+			nd:                 &nodeDialer{useDRPC: rpcCtx.UseDRPC, si: serverIterator},
 			clock:              clock,
 		},
 		cfg:              cfg,
@@ -680,7 +682,7 @@ func newSystemStatusServer(
 	storePool *storepool.StorePool,
 	rpcCtx *rpc.Context,
 	stores *kvserver.Stores,
-	engines *Engines,
+	engines Engines,
 	stopper *stop.Stopper,
 	sessionRegistry *sql.SessionRegistry,
 	closedSessionCache *sql.ClosedSessionCache,
@@ -784,7 +786,7 @@ func (s *statusServer) dialNode(
 			return nil, err
 		}
 	}
-	return serverpb.DialStatusClient(s.nd, ctx, nodeID, s.nd.cs)
+	return serverpb.DialStatusClient(s.nd, ctx, nodeID, s.nd.useDRPC)
 }
 
 // Gossip returns current state of gossip information on the given node
@@ -892,7 +894,7 @@ func (s *systemStatusServer) EngineStats(
 		return status.EngineStats(ctx, req)
 	}
 
-	stats, err := debug.GetLSMStats(*s.engines)
+	stats, err := debug.GetLSMStats(s.engines)
 	if err != nil {
 		return nil, srverrors.ServerError(ctx, err)
 	}
@@ -1461,11 +1463,28 @@ func (s *statusServer) LogFile(
 	if s.rpcCtx.TenantID != roachpb.SystemTenantID {
 		tenantIDFilter = s.rpcCtx.TenantID.String()
 	}
+
+	// Build an exclusion set for severity-based filtering.
+	excludeSev := make(map[logpb.Severity]struct{}, len(req.ExcludeSeverities))
+	for _, sev := range req.ExcludeSeverities {
+		excludeSev[sev] = struct{}{}
+	}
+
 	for {
 		var entry logpb.Entry
 		if err := decoder.Decode(&entry); err != nil {
 			if err == io.EOF {
 				break
+			}
+			if errors.Is(err, log.ErrMalformedJSON) {
+				resp.ParseErrors = append(resp.ParseErrors, err.Error())
+				//Append log generated from malformed line.
+				resp.Entries = append(resp.Entries, entry)
+				// The current implementation of decoding JSON formatted logs cannot
+				// recover from malformed lines. Hence, we break out of the loop and
+				// return the logs parsed until now, along with the parse error. This
+				// is better than returning no logs at all.
+				return &resp, nil
 			}
 			if errors.Is(err, log.ErrMalformedLogEntry) {
 				resp.ParseErrors = append(resp.ParseErrors, err.Error())
@@ -1478,6 +1497,9 @@ func (s *statusServer) LogFile(
 			return nil, srverrors.ServerError(ctx, err)
 		}
 		if tenantIDFilter != "" && entry.TenantID != tenantIDFilter {
+			continue
+		}
+		if _, excluded := excludeSev[entry.Severity]; excluded {
 			continue
 		}
 		resp.Entries = append(resp.Entries, entry)
@@ -2689,6 +2711,45 @@ func (s *systemStatusServer) rangesHelper(
 		}
 	}
 
+	// constructRangeInfoForProblems builds a lightweight RangeInfo containing
+	// only the fields needed for problem detection. This significantly reduces
+	// response size when callers only need to identify problematic ranges.
+	// Unlike constructRangeInfo, this avoids calling the expensive rep.State()
+	// method which involves proto cloning and RPC calls, instead using the
+	// lightweight rep.Desc() and rep.HasCircuitBreakerError() methods.
+	constructRangeInfoForProblems := func(
+		rep *kvserver.Replica, storeID roachpb.StoreID, metrics kvserver.ReplicaMetrics,
+	) serverpb.RangeInfo {
+		raftStatus := rep.RaftStatus()
+		desc := rep.Desc()
+		quiescentOrAsleep := metrics.Quiescent || metrics.Asleep
+		return serverpb.RangeInfo{
+			// Only populate the Desc field in State, which is needed for RangeID.
+			// This avoids the expensive rep.State(ctx) call which clones protos
+			// and makes RPC calls.
+			State: kvserverpb.RangeInfo{
+				ReplicaState: kvserverpb.ReplicaState{
+					Desc: desc,
+				},
+			},
+			SourceNodeID:  nodeID,
+			SourceStoreID: storeID,
+			Problems: serverpb.RangeProblems{
+				Unavailable:            metrics.Unavailable,
+				LeaderNotLeaseHolder:   metrics.Leader && metrics.LeaseValid && !metrics.Leaseholder,
+				NoRaftLeader:           !kvserver.HasRaftLeader(raftStatus) && !metrics.Quiescent,
+				Underreplicated:        metrics.Underreplicated,
+				Overreplicated:         metrics.Overreplicated,
+				NoLease:                metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
+				QuiescentEqualsTicking: raftStatus != nil && quiescentOrAsleep == metrics.Ticking,
+				RaftLogTooLarge:        metrics.RaftLogTooLarge,
+				RangeTooLarge:          metrics.RangeTooLarge,
+				CircuitBreakerError:    rep.HasCircuitBreakerError(),
+				PausedFollowers:        metrics.PausedFollowerCount > 0,
+			},
+		}
+	}
+
 	isLiveMap := s.nodeLiveness.ScanNodeVitalityFromCache()
 	clusterNodes := s.storePool.ClusterNodeCount()
 
@@ -2714,11 +2775,20 @@ func (s *systemStatusServer) rangesHelper(
 				}
 			}
 
-			output.Ranges = append(output.Ranges, constructRangeInfo(
-				rep,
-				store.Ident.StoreID,
-				rep.Metrics(ctx, now, isLiveMap, clusterNodes),
-			))
+			metrics := rep.Metrics(ctx, now, isLiveMap, clusterNodes)
+			if req.ProblemsOnly {
+				output.Ranges = append(output.Ranges, constructRangeInfoForProblems(
+					rep,
+					store.Ident.StoreID,
+					metrics,
+				))
+			} else {
+				output.Ranges = append(output.Ranges, constructRangeInfo(
+					rep,
+					store.Ident.StoreID,
+					metrics,
+				))
+			}
 		}
 
 		if len(req.RangeIDs) == 0 {
@@ -3289,6 +3359,128 @@ func (s *statusServer) ListLocalSessions(
 		sessions[i].NodeID = roachpb.NodeID(s.serverIterator.getID())
 	}
 	return &serverpb.ListSessionsResponse{Sessions: sessions}, nil
+}
+
+// ListLocalActiveSessionHistory returns ASH samples from this node.
+// In a shared-process multi-tenant environment, the global ring
+// buffer contains samples from all tenants. Secondary tenants only
+// receive samples matching their tenant ID; the system tenant sees
+// all samples.
+func (s *statusServer) ListLocalActiveSessionHistory(
+	ctx context.Context, req *serverpb.ListActiveSessionHistoryRequest,
+) (*serverpb.ListActiveSessionHistoryResponse, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	if err := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	ashSamples := ash.GetSamples()
+
+	tID, ok := roachpb.ClientTenantFromContext(ctx)
+	filterByTenant := ok && !tID.IsSystem()
+
+	protoSamples := make([]serverpb.ASHSample, 0, len(ashSamples))
+	for _, sample := range ashSamples {
+		if filterByTenant && sample.TenantID != tID {
+			continue
+		}
+		protoSamples = append(protoSamples, serverpb.ASHSample{
+			SampleTime:    sample.SampleTime,
+			NodeID:        sample.NodeID,
+			TenantID:      sample.TenantID,
+			WorkloadID:    sample.WorkloadID,
+			WorkloadType:  sample.WorkloadType,
+			AppName:       sample.AppName,
+			WorkEventType: serverpb.WorkEventType(sample.WorkEventType),
+			WorkEvent:     sample.WorkEvent,
+			GoroutineID:   sample.GoroutineID,
+		})
+	}
+
+	// Apply per-node limit, keeping only the newest samples.
+	if limit := int(req.PerNodeLimit); limit > 0 && len(protoSamples) > limit {
+		protoSamples = protoSamples[len(protoSamples)-limit:]
+	}
+
+	return &serverpb.ListActiveSessionHistoryResponse{
+		Samples: protoSamples,
+	}, nil
+}
+
+// AppNameMappings returns app name ID to string mappings from this
+// node's local cache for the requested IDs. This is used by ASH so
+// that nodes can resolve an app_name_id when they perform work for
+// queries that they have not recieved as a gateway node (i.e. they
+// do not have the app name mapping locally).
+func (s *statusServer) AppNameMappings(
+	ctx context.Context, req *serverpb.AppNameMappingsRequest,
+) (*serverpb.AppNameMappingsResponse, error) {
+	ctx = s.AnnotateCtx(ctx)
+
+	if err := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	return &serverpb.AppNameMappingsResponse{
+		Mappings: ash.GetAppNameMappings(req.Ids),
+	}, nil
+}
+
+// ListActiveSessionHistory returns ASH samples from all nodes in the cluster.
+func (s *statusServer) ListActiveSessionHistory(
+	ctx context.Context, req *serverpb.ListActiveSessionHistoryRequest,
+) (*serverpb.ListActiveSessionHistoryResponse, error) {
+	ctx = authserver.ForwardSQLIdentityThroughRPCCalls(ctx)
+	ctx = s.AnnotateCtx(ctx)
+
+	if err := s.privilegeChecker.RequireViewActivityOrViewActivityRedactedPermission(ctx); err != nil {
+		return nil, err
+	}
+
+	// Apply the default per-node limit from the cluster setting when
+	// the caller has not specified one.
+	if req.PerNodeLimit == 0 {
+		req.PerNodeLimit = int32(ashResponseLimit.Get(&s.st.SV))
+	}
+
+	response := &serverpb.ListActiveSessionHistoryResponse{
+		Samples: make([]serverpb.ASHSample, 0),
+		Errors:  make([]serverpb.ListActiveSessionHistoryError, 0),
+	}
+
+	nodeFn := func(
+		ctx context.Context,
+		statusClient serverpb.RPCStatusClient,
+		_ roachpb.NodeID,
+	) ([]serverpb.ASHSample, error) {
+		resp, err := statusClient.ListLocalActiveSessionHistory(ctx, req)
+		if resp != nil && err == nil {
+			return resp.Samples, nil
+		}
+		return nil, err
+	}
+
+	responseFn := func(_ roachpb.NodeID, samples []serverpb.ASHSample) {
+		response.Samples = append(response.Samples, samples...)
+	}
+
+	errorFn := func(nodeID roachpb.NodeID, err error) {
+		response.Errors = append(response.Errors, serverpb.ListActiveSessionHistoryError{
+			NodeID:  nodeID,
+			Message: err.Error(),
+		})
+	}
+
+	if err := iterateNodes(
+		ctx, s.serverIterator, s.stopper,
+		redact.Sprint("active session history"), noTimeout,
+		s.dialNode, nodeFn, responseFn, errorFn,
+	); err != nil {
+		return nil, srverrors.ServerError(ctx, err)
+	}
+	return response, nil
 }
 
 // iterateNodes calls iterateNodesExt with max concurrency
@@ -4050,7 +4242,7 @@ func (s *systemStatusServer) Stores(
 
 	resp := &serverpb.StoresResponse{}
 	err = s.stores.VisitStores(func(store *kvserver.Store) error {
-		eng := store.TODOEngine()
+		eng := store.TODOBothEngines()
 		envStats, err := eng.GetEnvStats()
 		if err != nil {
 			return err

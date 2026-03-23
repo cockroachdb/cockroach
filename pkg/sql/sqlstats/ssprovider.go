@@ -11,15 +11,19 @@ package sqlstats
 import (
 	"context"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 )
 
 // IteratorOptions provides the ability to the caller to change how it iterates
@@ -84,6 +88,7 @@ type RecordedStmtStats struct {
 	BytesRead                int64
 	RowsRead                 int64
 	RowsWritten              int64
+	KVCPUTimeNanos           int64
 	Nodes                    []int64
 	KVNodeIDs                []int32
 	StatementType            tree.StatementType
@@ -97,6 +102,49 @@ type RecordedStmtStats struct {
 	Indexes                  []string
 	QueryTags                []sqlcommenter.QueryTag
 	UnderOuterTxn            bool
+	StatsRollout             eval.StatsRolloutSelection
+}
+
+var recordedStmtStatsSize = int64(unsafe.Sizeof(RecordedStmtStats{}))
+
+// Size returns the approximate memory footprint of RecordedStmtStats.
+func (r *RecordedStmtStats) Size() int64 {
+	size := recordedStmtStatsSize
+
+	// Account for variable-length string fields.
+	size += int64(len(r.Query))
+	size += int64(len(r.App))
+	size += int64(len(r.Database))
+	size += int64(len(r.QuerySummary))
+	size += int64(len(r.PlanGist))
+
+	// Account for slices.
+	size += int64(cap(r.Nodes)) * memsize.Int64
+	size += int64(cap(r.KVNodeIDs)) * memsize.Int32
+	size += int64(cap(r.IndexRecommendations)) * memsize.String
+	for _, rec := range r.IndexRecommendations {
+		size += int64(len(rec))
+	}
+	size += int64(cap(r.Indexes)) * memsize.String
+	for _, idx := range r.Indexes {
+		size += int64(len(idx))
+	}
+
+	size += int64(cap(r.QueryTags)) * int64(unsafe.Sizeof(sqlcommenter.QueryTag{}))
+	for _, tag := range r.QueryTags {
+		size += int64(len(tag.Key))
+		size += int64(len(tag.Value))
+	}
+
+	// Account for pointer fields.
+	if r.Plan != nil {
+		size += int64(r.Plan.Size())
+	}
+	if r.ExecStats != nil {
+		size += int64(unsafe.Sizeof(*r.ExecStats))
+	}
+
+	return size
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.
@@ -122,6 +170,7 @@ type RecordedTxnStats struct {
 	RowsRead                int64
 	RowsWritten             int64
 	BytesRead               int64
+	KVCPUTimeNanos          time.Duration
 	Priority                roachpb.UserPriority
 	TxnErr                  error
 	Application             string
@@ -232,7 +281,7 @@ func (b *RecordedStatementStatsBuilder) LatencyRecorder(
 }
 
 func (b *RecordedStatementStatsBuilder) QueryLevelStats(
-	bytesRead int64, rowsRead int64, rowsWritten int64,
+	bytesRead int64, rowsRead int64, rowsWritten int64, kvCPUTime int64,
 ) *RecordedStatementStatsBuilder {
 	if b == nil {
 		return b
@@ -240,6 +289,7 @@ func (b *RecordedStatementStatsBuilder) QueryLevelStats(
 	b.stmtStats.BytesRead = bytesRead
 	b.stmtStats.RowsRead = rowsRead
 	b.stmtStats.RowsWritten = rowsWritten
+	b.stmtStats.KVCPUTimeNanos = kvCPUTime
 	return b
 }
 
@@ -365,6 +415,16 @@ func (b *RecordedStatementStatsBuilder) AppliedStatementHints() *RecordedStateme
 	return b
 }
 
+func (b *RecordedStatementStatsBuilder) CanaryStatsRollout(
+	sel eval.StatsRolloutSelection,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.StatsRollout = sel
+	return b
+}
+
 // Build returns the final RecordedStmtStats struct. It returns nil if not all
 // required fields have been set or if the builder itself is nil. In test
 // builds, it panics if not all required fields have been set.
@@ -385,4 +445,81 @@ func (b *RecordedStatementStatsBuilder) validate() bool {
 	}
 
 	return b.planMetadataSet && b.latenciesRecorded
+}
+
+type StatsBuilderWithLatencyRecorder struct {
+	StatsBuilder    *RecordedStatementStatsBuilder
+	LatencyRecorder *LatencyRecorder
+}
+
+type StatementPhase int
+
+const (
+	StatementStarted StatementPhase = iota
+	StatementStartParsing
+	StatementEndParsing
+	StatementStartPlanning
+	StatementEndPlanning
+	StatementStartExec
+	StatementEndExec
+	StatementEnd
+	statementNumPhases
+)
+
+type LatencyRecorder struct {
+	times [statementNumPhases]crtime.Mono
+}
+
+var _ StatementLatencyRecorder = &LatencyRecorder{}
+
+func NewStatementLatencyRecorder() *LatencyRecorder {
+	return &LatencyRecorder{}
+}
+
+func (r *LatencyRecorder) Reset() {
+	*r = LatencyRecorder{}
+}
+
+func (r *LatencyRecorder) RecordPhase(phase StatementPhase, time crtime.Mono) {
+	r.times[phase] = time
+}
+
+func (r *LatencyRecorder) RunLatency() time.Duration {
+	return r.times[StatementEndExec].Sub(r.times[StatementStartExec])
+}
+
+func (r *LatencyRecorder) IdleLatency() time.Duration {
+	return 0
+}
+
+func (r *LatencyRecorder) ServiceLatency() time.Duration {
+	return r.times[StatementEndExec].Sub(r.times[StatementStarted])
+}
+func (r *LatencyRecorder) ParsingLatency() time.Duration {
+	return r.times[StatementEndParsing].Sub(r.times[StatementStartParsing])
+}
+func (r *LatencyRecorder) PlanningLatency() time.Duration {
+	return r.times[StatementEndPlanning].Sub(r.times[StatementStartPlanning])
+}
+
+func (r *LatencyRecorder) ProcessingLatency() time.Duration {
+	return r.ParsingLatency() + r.PlanningLatency() + r.RunLatency()
+}
+
+func (r *LatencyRecorder) ExecOverheadLatency() time.Duration {
+	return r.ServiceLatency() - r.ProcessingLatency()
+}
+
+func (r *LatencyRecorder) StartTime() time.Time {
+	return r.times[StatementStarted].ToUTC()
+}
+
+func (r *LatencyRecorder) EndTime() time.Time {
+	return r.times[StatementEnd].ToUTC()
+}
+
+func RecordStatementPhase(r *LatencyRecorder, phase StatementPhase) {
+	if r != nil {
+		r.RecordPhase(phase, crtime.NowMono())
+	}
 }

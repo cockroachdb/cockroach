@@ -74,14 +74,15 @@ var vecToDatumConversionTmpls = map[types.Family]string{
 						%[1]s := %[3]s.NewDEncodedKey(tree.DEncodedKey(%[2]s))`,
 	types.JsonFamily: `
             // The following operation deliberately copies the input JSON
-            // bytes, since FromEncoding is lazy and keeps a handle on the bytes
-            // it is passed in.
+            // bytes, since FromEncodingInto is lazy and keeps a handle on the
+            // bytes it is passed in.
             _bytes, _err := json.EncodeJSON(nil, %[2]s)
             if _err != nil {
                 colexecerror.ExpectedError(_err)
             }
-            var _j json.JSON
-            _j, _err = json.FromEncoding(_bytes)
+            _j := &jsonScratch[0]
+            jsonScratch = jsonScratch[1:]
+            _err = json.FromEncodingInto(_bytes, _j)
             if _err != nil {
                 colexecerror.ExpectedError(_err)
             }

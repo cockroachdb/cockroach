@@ -99,6 +99,7 @@ go_library(
         "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/sem/tree/treewindow",
         "//pkg/sql/sem/volatility",
+        "//pkg/sql/sqlclustersettings",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/syntheticprivilege",
@@ -122,6 +123,7 @@ go_test(
     srcs = [
         "builder_test.go",
         "name_resolution_test.go",
+        "scalar_test.go",
         "statement_tree_test.go",
         "union_test.go",
     ],

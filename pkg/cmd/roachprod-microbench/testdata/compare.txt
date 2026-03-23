@@ -33,18 +33,18 @@ BenchmarkEntry pkg/server→SetupSpanForIncomingRPC/no_parent-8 +6886.35% [0.000
 BenchmarkEntry pkg/server→SetupSpanForIncomingRPC/traceInfo-8 +6916.60% [0.000001 0.000063] p=0.000 n=10 68.970457 70.040743 71.606694
 Package pkg/util
 Metric B/op
-BenchmarkEntry pkg/util/hlc→DecimalToHLC-8 ~ [0.000000 0.000000] p=1.000 n=10 0.000000 0.000000 0.000000
-BenchmarkEntry pkg/util/hlc→TimestampIsEmpty/all-8 ~ [0.000000 0.000000] p=1.000 n=10 0.000000 0.000000 0.000000
-BenchmarkEntry pkg/util/hlc→TimestampIsEmpty/empty-8 ~ [0.000000 0.000000] p=1.000 n=10 0.000000 0.000000 0.000000
-BenchmarkEntry pkg/util/hlc→TimestampIsEmpty/walltime-8 ~ [0.000000 0.000000] p=1.000 n=10 0.000000 0.000000 0.000000
+BenchmarkEntry pkg/util/hlc→DecimalToHLC-8 ~ [0.000000 0.000000] p=1.000 n=10  NaN  NaN  NaN
+BenchmarkEntry pkg/util/hlc→TimestampIsEmpty/all-8 ~ [0.000000 0.000000] p=1.000 n=10  NaN  NaN  NaN
+BenchmarkEntry pkg/util/hlc→TimestampIsEmpty/empty-8 ~ [0.000000 0.000000] p=1.000 n=10  NaN  NaN  NaN
+BenchmarkEntry pkg/util/hlc→TimestampIsEmpty/walltime-8 ~ [0.000000 0.000000] p=1.000 n=10  NaN  NaN  NaN
 BenchmarkEntry pkg/util/hlc→TimestampString-8 ~ [24.000000 24.000000] p=1.000 n=10 1.000000 1.000000 1.000000
 BenchmarkEntry pkg/util/hlc→TimestampStringSynthetic-8 ~ [24.000000 24.000000] p=1.000 n=10 1.000000 1.000000 1.000000
 BenchmarkEntry pkg/util/hlc→Update-8 ~ [6066.000000 6074.500000] p=0.971 n=10 0.893916 0.997651 1.119517
 Metric allocs/op
-BenchmarkEntry pkg/util/hlc→DecimalToHLC-8 ~ [0.000000 0.000000] p=1.000 n=10 0.000000 0.000000 0.000000
-BenchmarkEntry pkg/util/hlc→TimestampIsEmpty/all-8 ~ [0.000000 0.000000] p=1.000 n=10 0.000000 0.000000 0.000000
-BenchmarkEntry pkg/util/hlc→TimestampIsEmpty/empty-8 ~ [0.000000 0.000000] p=1.000 n=10 0.000000 0.000000 0.000000
-BenchmarkEntry pkg/util/hlc→TimestampIsEmpty/walltime-8 ~ [0.000000 0.000000] p=1.000 n=10 0.000000 0.000000 0.000000
+BenchmarkEntry pkg/util/hlc→DecimalToHLC-8 ~ [0.000000 0.000000] p=1.000 n=10  NaN  NaN  NaN
+BenchmarkEntry pkg/util/hlc→TimestampIsEmpty/all-8 ~ [0.000000 0.000000] p=1.000 n=10  NaN  NaN  NaN
+BenchmarkEntry pkg/util/hlc→TimestampIsEmpty/empty-8 ~ [0.000000 0.000000] p=1.000 n=10  NaN  NaN  NaN
+BenchmarkEntry pkg/util/hlc→TimestampIsEmpty/walltime-8 ~ [0.000000 0.000000] p=1.000 n=10  NaN  NaN  NaN
 BenchmarkEntry pkg/util/hlc→TimestampString-8 ~ [1.000000 1.000000] p=1.000 n=10 1.000000 1.000000 1.000000
 BenchmarkEntry pkg/util/hlc→TimestampStringSynthetic-8 ~ [1.000000 1.000000] p=1.000 n=10 1.000000 1.000000 1.000000
 BenchmarkEntry pkg/util/hlc→Update-8 ~ [47.000000 46.500000] p=0.926 n=10 0.957447 1.000000 1.055556

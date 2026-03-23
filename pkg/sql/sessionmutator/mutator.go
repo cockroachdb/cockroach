@@ -18,8 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
 
@@ -88,7 +90,7 @@ type SessionDataMutatorCallbacks struct {
 	// session variable is configured and the isolation level is automatically
 	// upgraded to a stronger one. It's also used when the isolation level is
 	// upgraded in BEGIN or SET TRANSACTION statements.
-	UpgradedIsolationLevel func(ctx context.Context, upgradedFrom tree.IsolationLevel, requiresNotice bool)
+	UpgradedIsolationLevel func(ctx context.Context, upgradedFrom tree.IsolationLevel)
 	// OnTempSchemaCreation is called when the temporary schema is set
 	// on the search path (the first and only time).
 	// It can be nil, in which case nothing triggers on execution.
@@ -102,6 +104,9 @@ type SessionDataMutatorCallbacks struct {
 	// needed because the stats writer needs to be notified of changes to the
 	// application name.
 	OnApplicationNameChange func(string)
+	// OnTCPKeepAliveSettingChange is called when any of the TCP keepalive session
+	// variables change. Zero values mean "use the cluster setting default."
+	OnTCPKeepAliveSettingChange func(idle, interval time.Duration, count int, userTimeout time.Duration)
 }
 
 // SessionDataMutatorIterator generates SessionDataMutators which allow
@@ -150,26 +155,55 @@ func (it *SessionDataMutatorIterator) SetSessionDefaultIntSize(size int32) {
 	})
 }
 
-// ApplyOnTopMutator applies the given function on the mutator for the top
-// element on the sessiondata Stack only.
+// ApplyOnTopMutator applies the given function on the top element of the
+// underlying stack (the transaction or session frame). If statement-level
+// session data is also active, the function is applied there too so the
+// current statement sees the change. This is used by SET LOCAL and
+// InternalSession.ModifySession.
 func (it *SessionDataMutatorIterator) ApplyOnTopMutator(
 	applyFunc func(m SessionDataMutator) error,
 ) error {
-	return applyFunc(it.Mutator(true /* applyCallbacks */, it.Sds.Top()))
+	elems := it.Sds.Elems()
+	stackTop := elems[len(elems)-1]
+	if err := applyFunc(it.Mutator(true /* applyCallbacks */, stackTop)); err != nil {
+		return err
+	}
+	if stmtSD := it.Sds.StmtLevel(); stmtSD != nil {
+		return applyFunc(it.Mutator(false /* applyCallbacks */, stmtSD))
+	}
+	return nil
+}
+
+// ApplyOnStmtScopedMutator applies the given function on the statement-level
+// session data only. Returns an error if no statement-level session data is
+// active.
+func (it *SessionDataMutatorIterator) ApplyOnStmtScopedMutator(
+	applyFunc func(m SessionDataMutator) error,
+) error {
+	stmtSD := it.Sds.StmtLevel()
+	if stmtSD == nil {
+		return errors.AssertionFailedf(
+			"ApplyOnStmtScopedMutator called without active statement-level session data")
+	}
+	return applyFunc(it.Mutator(false /* applyCallbacks */, stmtSD))
 }
 
 // ApplyOnEachMutator iterates over each mutator over all SessionData elements
-// in the stack and applies the given function to them.
+// in the stack and applies the given function to them. If statement-level
+// session data is active, the function is applied there too.
 // It is the equivalent of SET SESSION x = y.
 func (it *SessionDataMutatorIterator) ApplyOnEachMutator(applyFunc func(m SessionDataMutator)) {
 	elems := it.Sds.Elems()
 	for i, sd := range elems {
 		applyFunc(it.Mutator(i == 0, sd))
 	}
+	if stmtSD := it.Sds.StmtLevel(); stmtSD != nil {
+		applyFunc(it.Mutator(false /* applyCallbacks */, stmtSD))
+	}
 }
 
-// ApplyOnEachMutatorError is the same as ApplyOnEachMutator, but takes in a function
-// that can return an error, erroring if any of applications error.
+// ApplyOnEachMutatorError is the same as ApplyOnEachMutator, but takes in a
+// function that can return an error, erroring if any of applications error.
 func (it *SessionDataMutatorIterator) ApplyOnEachMutatorError(
 	applyFunc func(m SessionDataMutator) error,
 ) error {
@@ -178,6 +212,9 @@ func (it *SessionDataMutatorIterator) ApplyOnEachMutatorError(
 		if err := applyFunc(it.Mutator(i == 0, sd)); err != nil {
 			return err
 		}
+	}
+	if stmtSD := it.Sds.StmtLevel(); stmtSD != nil {
+		return applyFunc(it.Mutator(false /* applyCallbacks */, stmtSD))
 	}
 	return nil
 }
@@ -537,14 +574,6 @@ func (m *SessionDataMutator) SetAvoidFullTableScansInMutations(val bool) {
 
 func (m *SessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 	m.Data.AlterColumnTypeGeneralEnabled = val
-}
-
-func (m *SessionDataMutator) SetAllowViewWithSecurityInvokerClause(val bool) {
-	m.Data.AllowViewWithSecurityInvokerClause = val
-}
-
-func (m *SessionDataMutator) SetEnableSuperRegions(val bool) {
-	m.Data.EnableSuperRegions = val
 }
 
 func (m *SessionDataMutator) SetEnableOverrideAlterPrimaryRegionInSuperRegion(val bool) {
@@ -1031,10 +1060,6 @@ func (m *SessionDataMutator) SetOptimizerUseDeleteRangeFastPath(val bool) {
 	m.Data.OptimizerUseDeleteRangeFastPath = val
 }
 
-func (m *SessionDataMutator) SetAllowCreateTriggerFunctionWithArgvReferences(val bool) {
-	m.Data.AllowCreateTriggerFunctionWithArgvReferences = val
-}
-
 func (m *SessionDataMutator) SetCreateTableWithSchemaLocked(val bool) {
 	m.Data.CreateTableWithSchemaLocked = val
 }
@@ -1057,10 +1082,6 @@ func (m *SessionDataMutator) SetPropagateAdmissionHeaderToLeafTransactions(val b
 
 func (m *SessionDataMutator) SetOptimizerUseExistsFilterHoistRule(val bool) {
 	m.Data.OptimizerUseExistsFilterHoistRule = val
-}
-
-func (m *SessionDataMutator) SetEnableInspectCommand(val bool) {
-	m.Data.EnableInspectCommand = val
 }
 
 func (m *SessionDataMutator) SetInitialRetryBackoffForReadCommitted(val time.Duration) {
@@ -1109,4 +1130,71 @@ func (m *SessionDataMutator) SetDisableWaitForJobsNotice(val bool) {
 
 func (m *SessionDataMutator) SetCanaryStatsMode(val sessiondatapb.CanaryStatsMode) {
 	m.Data.CanaryStatsMode = val
+}
+
+func (m *SessionDataMutator) SetUseSwapMutations(val bool) {
+	m.Data.UseSwapMutations = val
+}
+
+func (m *SessionDataMutator) SetPreventUpdateSetColumnDrop(val bool) {
+	m.Data.PreventUpdateSetColumnDrop = val
+}
+
+func (m *SessionDataMutator) SetUseImprovedRoutineDepsTriggersAndComputedCols(val bool) {
+	m.Data.UseImprovedRoutineDepsTriggersAndComputedCols = val
+}
+
+func (m *SessionDataMutator) SetDistSQLPreventPartitioningSoftLimitedScans(val bool) {
+	m.Data.DistSQLPreventPartitioningSoftLimitedScans = val
+}
+
+func (m *SessionDataMutator) SetOptimizerInlineAnyUnnestSubquery(val bool) {
+	m.Data.OptimizerInlineAnyUnnestSubquery = val
+}
+
+func (m *SessionDataMutator) SetUseBackupsWithIDs(val bool) {
+	m.Data.UseBackupsWithIDs = val
+}
+
+func (m *SessionDataMutator) SetTcpKeepalivesIdle(val int32) {
+	m.Data.TcpKeepalivesIdle = val
+	m.notifyTCPKeepAliveChange()
+}
+
+func (m *SessionDataMutator) SetTcpKeepalivesInterval(val int32) {
+	m.Data.TcpKeepalivesInterval = val
+	m.notifyTCPKeepAliveChange()
+}
+
+func (m *SessionDataMutator) SetTcpKeepalivesCount(val int32) {
+	m.Data.TcpKeepalivesCount = val
+	m.notifyTCPKeepAliveChange()
+}
+
+func (m *SessionDataMutator) SetTcpUserTimeout(val int32) {
+	m.Data.TcpUserTimeout = val
+	m.notifyTCPKeepAliveChange()
+}
+
+func (m *SessionDataMutator) notifyTCPKeepAliveChange() {
+	if m.OnTCPKeepAliveSettingChange != nil {
+		m.OnTCPKeepAliveSettingChange(
+			time.Duration(m.Data.TcpKeepalivesIdle)*time.Second,
+			time.Duration(m.Data.TcpKeepalivesInterval)*time.Second,
+			int(m.Data.TcpKeepalivesCount),
+			time.Duration(m.Data.TcpUserTimeout)*time.Millisecond,
+		)
+	}
+}
+
+func (m *SessionDataMutator) SetOptimizerUseMinRowCountAntiJoinFix(val bool) {
+	m.Data.OptimizerUseMinRowCountAntiJoinFix = val
+}
+
+func (m *SessionDataMutator) SetStatsAsOf(val hlc.Timestamp) {
+	m.Data.StatsAsOf = val
+}
+
+func (m *SessionDataMutator) SetBufferedWritesImplicitTxnsEnabled(val bool) {
+	m.Data.BufferedWritesImplicitTxnsEnabled = val
 }

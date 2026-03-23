@@ -26,6 +26,9 @@ CREATE INDEX bad_idx ON geo_table USING GIST(geom) WITH (geometry_min_x=10, geom
 statement error pgcode 22023 geometry_max_y \(0\.000000\) must be greater than geometry_min_y \(10\.000000\)
 CREATE INDEX bad_idx ON geo_table USING GIST(geom) WITH (geometry_min_y=10, geometry_max_y=0)
 
+statement error pgcode 22023 error decoding "geometry_min_x": strconv.ParseFloat: parsing "invalid_val": invalid syntax
+CREATE INDEX bad_idx ON geo_table USING GIST(geom) WITH (geometry_min_x=invalid_val)
+
 statement ok
 CREATE INDEX geom_idx_1 ON geo_table USING GIST(geom) WITH (geometry_min_x=0, s2_max_level=15)
 

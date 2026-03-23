@@ -111,6 +111,12 @@ message IndexFetchSpec {
   // index ID. It is used to speed up the decoding process.
   optional uint32 key_prefix_length = 11 [(gogoproto.nullable) = false];
 
+  // Before v26.2, MaxFamilyID is the highest family ID in the table. In 26.2
+  // and later, MaxFamilyID is the highest family ID that is included in the
+  // index being scanned. It is used to quickly determine SQL row boundaries for
+  // tables with multiple families, which otherwise requires comparing against a
+  // key from the next SQL row, and can interfere with optimizations for row
+  // limits.
   optional uint32 max_family_id = 12 [(gogoproto.nullable) = false,
                                       (gogoproto.customname) = "MaxFamilyID",
                                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];

@@ -58,6 +58,7 @@ func parseUserfileURL(
 	}
 
 	conf.Provider = cloudpb.ExternalStorageProvider_userfile
+	conf.URI = uri.String()
 	conf.FileTableConfig.User = normUser
 	conf.FileTableConfig.QualifiedTableName = qualifiedTableName
 	conf.FileTableConfig.Path = uri.Path
@@ -77,6 +78,7 @@ type fileTableStorage struct {
 	ioConf   base.ExternalIODirConfig
 	prefix   string // relative filepath
 	settings *cluster.Settings
+	uri      string // original URI used to construct this storage
 }
 
 var _ cloud.ExternalStorage = &fileTableStorage{}
@@ -126,6 +128,7 @@ func makeFileTableStorage(
 		ioConf:   args.IOConf,
 		prefix:   cfg.Path,
 		settings: args.Settings,
+		uri:      dest.URI,
 	}, nil
 }
 
@@ -156,6 +159,7 @@ func MakeSQLConnFileTableStorage(
 		ioConf:   base.ExternalIODirConfig{},
 		prefix:   prefix,
 		settings: nil,
+		uri:      "", // CLI path doesn't have access to original URI
 	}, nil
 }
 
@@ -176,6 +180,7 @@ func (f *fileTableStorage) Conf() cloudpb.ExternalStorage {
 	return cloudpb.ExternalStorage{
 		Provider:        cloudpb.ExternalStorageProvider_userfile,
 		FileTableConfig: f.cfg,
+		URI:             f.uri,
 	}
 }
 
@@ -242,9 +247,10 @@ func (f *fileTableStorage) Writer(ctx context.Context, basename string) (io.Writ
 
 // List implements the ExternalStorage interface.
 func (f *fileTableStorage) List(
-	ctx context.Context, prefix, delim string, fn cloud.ListingFn,
+	ctx context.Context, prefix string, opts cloud.ListOptions, fn cloud.ListingFn,
 ) error {
 	dest := cloud.JoinPathPreservingTrailingSlash(f.prefix, prefix)
+	afterKey := opts.CanonicalAfterKey(f.prefix)
 
 	res, err := f.fs.ListFiles(ctx, dest)
 	if err != nil {
@@ -255,15 +261,21 @@ func (f *fileTableStorage) List(
 	var prevPrefix string
 	for _, f := range res {
 		f = strings.TrimPrefix(f, dest)
-		if delim != "" {
-			if i := strings.Index(f, delim); i >= 0 {
-				f = f[:i+len(delim)]
+		if opts.Delimiter != "" {
+			if i := strings.Index(f, opts.Delimiter); i >= 0 {
+				f = f[:i+len(opts.Delimiter)]
 			}
 			if f == prevPrefix {
 				continue
 			}
 			prevPrefix = f
 		}
+
+		// afterKey is a full key so we must compare against the full file key.
+		if dest+f <= afterKey {
+			continue
+		}
+
 		if err := fn(f); err != nil {
 			return err
 		}

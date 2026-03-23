@@ -33,7 +33,7 @@ func registerMultiStoreRemove(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:              "multi-store-remove",
 		Owner:             registry.OwnerStorage,
-		Cluster:           r.MakeClusterSpec(multiStoreNodes, spec.SSD(multiStoreStoresPerNode)),
+		Cluster:           r.MakeClusterSpec(multiStoreNodes, spec.Disks(multiStoreStoresPerNode)),
 		CompatibleClouds:  registry.OnlyGCE,
 		Suites:            registry.Suites(registry.Nightly),
 		Timeout:           30 * time.Minute,

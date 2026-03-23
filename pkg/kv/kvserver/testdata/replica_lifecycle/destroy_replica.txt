@@ -5,25 +5,29 @@ created descriptor: r1:{a-c} [(n1,s1):1, (n2,s2):2, (n3,s3):3, next=4, gen=0]
 create-replica range-id=1 initialized
 ----
 created replica: (n1,s1):1
+state engine:
 Put: 0,0 /Local/RangeID/1/r/RangeLease (0x01698972726c6c2d00): <empty>
 Put: 0,0 /Local/RangeID/1/r/RangeGCThreshold (0x016989726c67632d00): 0,0
 Put: 0,0 /Local/RangeID/1/r/RangeGCHint (0x016989727267636800): latest_range_delete_timestamp:<> gc_timestamp:<> gc_timestamp_next:<> 
 Put: 0,0 /Local/RangeID/1/r/RangeVersion (0x016989727276657200): 10.8-upgrading-step-007
 Put: 0,0 /Local/RangeID/1/r/RangeAppliedState (0x016989727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:142 sys_count:4 > raft_closed_timestamp:<> raft_applied_index_term:5 
 Put: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): replica_id:1 
+log engine:
 Put: 0,0 /Local/RangeID/1/u/RaftHardState (0x016989757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
 Put: 0,0 /Local/RangeID/1/u/RaftTruncatedState (0x016989757266747400): index:10 term:5 
 
 destroy-replica range-id=1
 ----
+state engine:
 Delete (Sized at 28): 0,0 /Local/RangeID/1/r/RangeGCThreshold (0x016989726c67632d00): 
 Delete (Sized at 43): 0,0 /Local/RangeID/1/r/RangeAppliedState (0x016989727261736b00): 
 Delete (Sized at 34): 0,0 /Local/RangeID/1/r/RangeGCHint (0x016989727267636800): 
 Delete (Sized at 44): 0,0 /Local/RangeID/1/r/RangeLease (0x01698972726c6c2d00): 
 Delete (Sized at 36): 0,0 /Local/RangeID/1/r/RangeVersion (0x016989727276657200): 
 Put: 0,0 /Local/RangeID/1/u/RangeTombstone (0x016989757266746200): next_replica_id:4 
-Delete (Sized at 38): 0,0 /Local/RangeID/1/u/RaftHardState (0x016989757266746800): 
 Delete: 0,0 /Local/RangeID/1/u/RaftReplicaID (0x016989757266747200): 
+log engine:
+Delete (Sized at 38): 0,0 /Local/RangeID/1/u/RaftHardState (0x016989757266746800): 
 Delete (Sized at 32): 0,0 /Local/RangeID/1/u/RaftTruncatedState (0x016989757266747400): 
 
 create-descriptor start=c end=f replicas=(1,2,3,4,5)
@@ -33,23 +37,27 @@ created descriptor: r2:{c-f} [(n1,s1):1, (n2,s2):2, (n3,s3):3, (n4,s4):4, (n5,s5
 create-replica range-id=2 initialized
 ----
 created replica: (n1,s1):1
+state engine:
 Put: 0,0 /Local/RangeID/2/r/RangeLease (0x01698a72726c6c2d00): <empty>
 Put: 0,0 /Local/RangeID/2/r/RangeGCThreshold (0x01698a726c67632d00): 0,0
 Put: 0,0 /Local/RangeID/2/r/RangeGCHint (0x01698a727267636800): latest_range_delete_timestamp:<> gc_timestamp:<> gc_timestamp_next:<> 
 Put: 0,0 /Local/RangeID/2/r/RangeVersion (0x01698a727276657200): 10.8-upgrading-step-007
 Put: 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:142 sys_count:4 > raft_closed_timestamp:<> raft_applied_index_term:5 
 Put: 0,0 /Local/RangeID/2/u/RaftReplicaID (0x01698a757266747200): replica_id:1 
+log engine:
 Put: 0,0 /Local/RangeID/2/u/RaftHardState (0x01698a757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
 Put: 0,0 /Local/RangeID/2/u/RaftTruncatedState (0x01698a757266747400): index:10 term:5 
 
 append-raft-entries range-id=2 num-entries=3
 ----
+log engine:
 Put: 0,0 /Local/RangeID/2/u/RaftLog/logIndex:11 (0x01698a757266746c000000000000000b00): Term:5 Index:11 Type:EntryNormal : EMPTY
 Put: 0,0 /Local/RangeID/2/u/RaftLog/logIndex:12 (0x01698a757266746c000000000000000c00): Term:5 Index:12 Type:EntryNormal : EMPTY
 Put: 0,0 /Local/RangeID/2/u/RaftLog/logIndex:13 (0x01698a757266746c000000000000000d00): Term:5 Index:13 Type:EntryNormal : EMPTY
 
 create-range-data range-id=2 num-user-keys=2 num-system-keys=3 num-lock-table-keys=4
 ----
+state engine:
 Put: 0.000000001,0 "c0" (0x633000000000000000000109): ""
 Put: 0.000000001,0 "c1" (0x633100000000000000000109): ""
 Put: 0.000000001,0 /Local/Range"c0"/Transaction/"6ba7b810-9dad-11d1-80b4-00c04fd430c8" (0x016b126330000174786e2d6ba7b8109dad11d180b400c04fd430c800000000000000000109): ""
@@ -62,18 +70,14 @@ Put: "c3"/Intent/00000000-0000-0000-0000-000000000000:
 
 destroy-replica range-id=2
 ----
+state engine:
 Delete (Sized at 28): 0,0 /Local/RangeID/2/r/RangeGCThreshold (0x01698a726c67632d00): 
 Delete (Sized at 43): 0,0 /Local/RangeID/2/r/RangeAppliedState (0x01698a727261736b00): 
 Delete (Sized at 34): 0,0 /Local/RangeID/2/r/RangeGCHint (0x01698a727267636800): 
 Delete (Sized at 44): 0,0 /Local/RangeID/2/r/RangeLease (0x01698a72726c6c2d00): 
 Delete (Sized at 36): 0,0 /Local/RangeID/2/r/RangeVersion (0x01698a727276657200): 
 Put: 0,0 /Local/RangeID/2/u/RangeTombstone (0x01698a757266746200): next_replica_id:6 
-Delete (Sized at 38): 0,0 /Local/RangeID/2/u/RaftHardState (0x01698a757266746800): 
-Delete (Sized at 42): 0,0 /Local/RangeID/2/u/RaftLog/logIndex:11 (0x01698a757266746c000000000000000b00): 
-Delete (Sized at 42): 0,0 /Local/RangeID/2/u/RaftLog/logIndex:12 (0x01698a757266746c000000000000000c00): 
-Delete (Sized at 42): 0,0 /Local/RangeID/2/u/RaftLog/logIndex:13 (0x01698a757266746c000000000000000d00): 
 Delete: 0,0 /Local/RangeID/2/u/RaftReplicaID (0x01698a757266747200): 
-Delete (Sized at 32): 0,0 /Local/RangeID/2/u/RaftTruncatedState (0x01698a757266747400): 
 Delete (Sized at 37): 0.000000001,0 /Local/Range"c0"/Transaction/"6ba7b810-9dad-11d1-80b4-00c04fd430c8" (0x016b126330000174786e2d6ba7b8109dad11d180b400c04fd430c800000000000000000109): 
 Delete (Sized at 37): 0.000000001,0 /Local/Range"c1"/Transaction/"6ba7b810-9dad-11d1-80b4-00c04fd430c8" (0x016b126331000174786e2d6ba7b8109dad11d180b400c04fd430c800000000000000000109): 
 Delete (Sized at 37): 0.000000001,0 /Local/Range"c2"/Transaction/"6ba7b810-9dad-11d1-80b4-00c04fd430c8" (0x016b126332000174786e2d6ba7b8109dad11d180b400c04fd430c800000000000000000109): 
@@ -83,3 +87,9 @@ Delete (Sized at 27): /Local/Lock"c2" 0300000000000000000000000000000000 (0x017a
 Delete (Sized at 27): /Local/Lock"c3" 0300000000000000000000000000000000 (0x017a6b126333000100030000000000000000000000000000000012): 
 Delete (Sized at 12): 0.000000001,0 "c0" (0x633000000000000000000109): 
 Delete (Sized at 12): 0.000000001,0 "c1" (0x633100000000000000000109): 
+log engine:
+Delete (Sized at 38): 0,0 /Local/RangeID/2/u/RaftHardState (0x01698a757266746800): 
+Delete (Sized at 42): 0,0 /Local/RangeID/2/u/RaftLog/logIndex:11 (0x01698a757266746c000000000000000b00): 
+Delete (Sized at 42): 0,0 /Local/RangeID/2/u/RaftLog/logIndex:12 (0x01698a757266746c000000000000000c00): 
+Delete (Sized at 42): 0,0 /Local/RangeID/2/u/RaftLog/logIndex:13 (0x01698a757266746c000000000000000d00): 
+Delete (Sized at 32): 0,0 /Local/RangeID/2/u/RaftTruncatedState (0x01698a757266747400): 

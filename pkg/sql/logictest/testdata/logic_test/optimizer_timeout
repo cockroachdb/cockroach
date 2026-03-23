@@ -1,4 +1,7 @@
 # LogicTest: !local-prepared
+
+skip under race
+
 statement ok
 CREATE TABLE table1
 (

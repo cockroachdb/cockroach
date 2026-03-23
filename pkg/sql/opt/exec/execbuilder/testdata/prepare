@@ -12,7 +12,6 @@ query T nosort
 EXECUTE change_index
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: b = 10
@@ -29,7 +28,6 @@ query T nosort
 EXECUTE change_index
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -43,7 +41,6 @@ query T nosort
 EXECUTE change_index
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: b = 10
@@ -64,7 +61,6 @@ query T nosort
 EXECUTE change_stats
 ----
 distribution: local
-vectorized: true
 ·
 • merge join
 │ equality: (a) = (c)
@@ -91,7 +87,6 @@ query T retry,nosort
 EXECUTE change_stats
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: cd@cd_pkey
@@ -114,27 +109,17 @@ EXPLAIN ANALYZE EXECUTE pklookup(1)
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: generic, reused
 rows decoded from KV: 1 (8 B, 2 KVs, 1 gRPC calls)
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • scan
   sql nodes: <hidden>
   kv nodes: <hidden>
   regions: <hidden>
-  actual row count: 1
   KV time: 0µs
   KV rows decoded: 1
-  KV pairs read: 2
-  KV bytes read: 8 B
-  KV gRPC calls: 1
-  estimated max memory allocated: 0 B
+  actual row count: 1
   estimated row count: 1
   table: ab@ab_pkey
   spans: [/1 - /1]
@@ -145,25 +130,275 @@ EXPLAIN ANALYZE EXECUTE pklookup(2)
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: generic, reused
-maximum memory usage: <hidden>
-DistSQL network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • scan
   sql nodes: <hidden>
   kv nodes: <hidden>
   regions: <hidden>
-  actual row count: 0
   KV time: 0µs
   KV rows decoded: 0
-  KV bytes read: 0 B
-  KV gRPC calls: 0
-  estimated max memory allocated: 0 B
+  actual row count: 0
   estimated row count: 1
   table: ab@ab_pkey
   spans: [/2 - /2]
+
+# Regression test for #161978. Identity computed columns (where the
+# computed expression is just another column) should work correctly with
+# generic plans and lookup joins.
+statement ok
+SET plan_cache_mode = force_generic_plan
+
+statement ok
+CREATE TABLE t161978 (
+  x INT NOT NULL,
+  y INT NOT NULL,
+  y_identity INT AS (y) STORED NOT NULL,
+  INDEX t_y (y_identity, x)
+)
+
+statement ok
+PREPARE p161978 AS SELECT t0.y
+FROM t161978@t_y t0
+WHERE t0.x = $1::INT AND y = $2::INT
+
+# This query was failing with "cannot map variable 2 to an indexed var" before
+# the fix. The issue was that identity column (y_identity) weren't properly
+# replaced with the placeholder `$2` when generating the projection.
+query T
+EXPLAIN ANALYZE EXECUTE p161978(1, 20)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+regions: <hidden>
+·
+• lookup join
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ KV time: 0µs
+│ KV rows decoded: 0
+│ execution time: 0µs
+│ actual row count: 0
+│ table: t161978@t161978_pkey
+│ equality: (rowid) = (rowid)
+│ equality cols are key
+│ pred: y = "$2"
+│
+└── • lookup join
+    │ sql nodes: <hidden>
+    │ kv nodes: <hidden>
+    │ regions: <hidden>
+    │ KV time: 0µs
+    │ KV rows decoded: 0
+    │ execution time: 0µs
+    │ actual row count: 0
+    │ table: t161978@t_y
+    │ equality: (y_identity_eq, $1) = (y_identity, x)
+    │
+    └── • render
+        │
+        └── • values
+              sql nodes: <hidden>
+              regions: <hidden>
+              execution time: 0µs
+              actual row count: 1
+              size: 2 columns, 1 row
+
+# Also test with a non-identity virtual column to ensure it still works.
+statement ok
+CREATE TABLE t161978_nonidentity (
+  x INT NOT NULL,
+  y INT NOT NULL,
+  y_notidentity INT AS (y + 13) VIRTUAL NOT NULL,
+  INDEX t_y (y_notidentity, x)
+)
+
+statement ok
+PREPARE p161978_nonidentity AS SELECT t0.y
+  FROM t161978_nonidentity@t_y t0
+  WHERE t0.x = $1::INT AND y = $2::INT
+
+query T
+EXPLAIN ANALYZE EXECUTE p161978_nonidentity(1, 20)
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: generic, re-optimized
+regions: <hidden>
+·
+• lookup join
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ KV time: 0µs
+│ KV rows decoded: 0
+│ execution time: 0µs
+│ actual row count: 0
+│ table: t161978_nonidentity@t161978_nonidentity_pkey
+│ equality: (rowid) = (rowid)
+│ equality cols are key
+│ pred: y = "$2"
+│
+└── • lookup join
+    │ sql nodes: <hidden>
+    │ kv nodes: <hidden>
+    │ regions: <hidden>
+    │ KV time: 0µs
+    │ KV rows decoded: 0
+    │ execution time: 0µs
+    │ actual row count: 0
+    │ table: t161978_nonidentity@t_y
+    │ equality: (y_notidentity_eq, $1) = (y_notidentity, x)
+    │
+    └── • render
+        │ execution time: 0µs
+        │ actual row count: 1
+        │
+        └── • values
+              sql nodes: <hidden>
+              regions: <hidden>
+              execution time: 0µs
+              actual row count: 1
+              size: 2 columns, 1 row
+
+statement ok
+RESET plan_cache_mode
+
+subtest prepare-enum-update
+
+statement ok
+CREATE TYPE enum132105 AS ENUM ('hi');
+
+statement ok
+PREPARE p132105_hi AS SELECT $1::enum132105 = 'hi';
+
+statement ok
+ALTER TYPE enum132105 ADD VALUE 'hello';
+
+query B
+EXECUTE p132105_hi('hi');
+----
+true
+
+statement ok
+ALTER TYPE enum132105 RENAME VALUE 'hi' to 'aloha';
+
+# Note, here our behavior differs from postgres -- pg would return true.
+statement error invalid input value for enum enum132105: "hi"
+EXECUTE p132105_hi('aloha');
+
+# Test if we change the value back.
+statement ok
+ALTER TYPE enum132105 RENAME VALUE 'aloha' to 'hi';
+
+statement error invalid input value for enum enum132105: "aloha"
+EXECUTE p132105_hi('aloha');
+
+query B
+EXECUTE p132105_hi('hi');
+----
+true
+
+statement ok
+PREPARE p132105_hello AS SELECT $1::enum132105 = 'hello';
+
+query B
+EXECUTE p132105_hello('hello');
+----
+true
+
+statement ok
+ALTER TYPE enum132105 DROP VALUE 'hello';
+
+statement error invalid input value for enum enum132105: "hello"
+EXECUTE p132105_hello('hello');
+
+# Test with implicit casting to udt.
+statement ok
+CREATE TABLE t132105 (enumcol enum132105);
+
+statement ok
+PREPARE p132105count AS SELECT count(*) FROM t132105 WHERE enumcol = 'hi';
+
+statement ok
+INSERT INTO t132105 VALUES ('hi'), ('hi')
+
+query I
+EXECUTE p132105count;
+----
+2
+
+statement ok
+ALTER TYPE enum132105 RENAME VALUE 'hi' to 'ciao';
+
+# Note that here our behavior is different from pg -- pg would return 2.
+statement error invalid input value for enum enum132105: "hi"
+EXECUTE p132105count;
+
+statement ok
+CREATE TABLE t132105arr (enumarrcol enum132105[]);
+
+statement ok
+PREPARE p132105arrcount AS SELECT count(*) FROM t132105arr WHERE enumarrcol = ARRAY[('ciao'::enum132105)];
+
+statement ok
+ALTER TYPE enum132105 ADD VALUE 'privet';
+
+statement ok
+EXECUTE p132105arrcount;
+
+statement ok
+ALTER TYPE enum132105 RENAME VALUE 'ciao' TO 'konnichiwa';
+
+# PG returns 0 here.
+statement error invalid input value for enum enum132105: "ciao"
+EXECUTE p132105arrcount;
+
+statement ok
+PREPARE p132105enum_range_null AS SELECT enum_range(NULL::enum132105);
+
+statement ok
+PREPARE p132105enum_range_datum AS SELECT enum_range('konnichiwa'::enum132105);
+
+query T
+EXECUTE p132105enum_range_null;
+----
+{konnichiwa,privet}
+
+query T
+EXECUTE p132105enum_range_datum;
+----
+{konnichiwa,privet}
+
+# If we alter the name of an irrelevant value in the enum type,
+# the EXECUTE will run successfully.
+statement ok
+ALTER TYPE enum132105 RENAME VALUE 'privet' TO '안녕하세요';
+
+query T
+EXECUTE p132105enum_range_null;
+----
+{konnichiwa,안녕하세요}
+
+query T
+EXECUTE p132105enum_range_datum;
+----
+{konnichiwa,안녕하세요}
+
+# If we alter the name of the relevant value ('konnichiwa'), the
+# EXECUTE for p132105enum_range_datum would fail.
+statement ok
+ALTER TYPE enum132105 RENAME VALUE 'konnichiwa' TO 'bonjour';
+
+query T
+EXECUTE p132105enum_range_null;
+----
+{bonjour,안녕하세요}
+
+statement error invalid input value for enum enum132105: "konnichiwa"
+EXECUTE p132105enum_range_datum;
+
+subtest end

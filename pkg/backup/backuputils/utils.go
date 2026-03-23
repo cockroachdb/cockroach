@@ -111,6 +111,19 @@ func EncodeDescendingTS(ts time.Time) string {
 	return hex.EncodeToString(buffer)
 }
 
+// DecodeDescendingTS decodes a time.Time encoded with EncodeDescendingTS.
+func DecodeDescendingTS(encoded string) (time.Time, error) {
+	buffer, err := hex.DecodeString(encoded)
+	if err != nil {
+		return time.Time{}, err
+	}
+	_, tsMillis, err := encoding.DecodeUvarintDescending(buffer)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.UnixMilli(int64(tsMillis)), nil
+}
+
 // AbsoluteBackupPathInCollectionURI returns the absolute path of a backup
 // assuming the root is the collection URI. Backup URI represents the URI that
 // points to the directory containing the backup manifest of the backup. Since

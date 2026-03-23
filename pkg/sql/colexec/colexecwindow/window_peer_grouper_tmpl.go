@@ -106,11 +106,14 @@ type _PEER_GROUPER_STRINGOp struct {
 
 var _ colexecop.Operator = &_PEER_GROUPER_STRINGOp{}
 
-func (p *_PEER_GROUPER_STRINGOp) Next() coldata.Batch {
-	b := p.Input.Next()
+func (p *_PEER_GROUPER_STRINGOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	b, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := b.Length()
 	if n == 0 {
-		return b
+		return b, nil
 	}
 	// {{if .HasPartition}}
 	partitionCol := b.ColVec(p.partitionColIdx).Bool()
@@ -179,7 +182,7 @@ func (p *_PEER_GROUPER_STRINGOp) Next() coldata.Batch {
 		// {{end}}
 		// {{end}}
 	}
-	return b
+	return b, nil
 }
 
 // {{end}}

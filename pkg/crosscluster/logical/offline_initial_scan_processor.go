@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -66,7 +68,7 @@ type offlineInitialScanProcessor struct {
 
 	checkpointCh chan offlineCheckpoint
 
-	rangeStatsCh chan *streampb.StreamEvent_RangeStats
+	rangeStatsCh chan *rangescanstatspb.RangeStats
 
 	rekey *backup.KeyRewriter
 
@@ -107,7 +109,7 @@ func newNewOfflineInitialScanProcessor(
 		processorID:  processorID,
 		stopCh:       make(chan struct{}),
 		checkpointCh: make(chan offlineCheckpoint),
-		rangeStatsCh: make(chan *streampb.StreamEvent_RangeStats),
+		rangeStatsCh: make(chan *rangescanstatspb.RangeStats),
 		errCh:        make(chan error, 1),
 		rekey:        rekeyer,
 		lastKeyAdded: roachpb.Key{},
@@ -235,7 +237,8 @@ func (o *offlineInitialScanProcessor) Start(ctx context.Context) {
 			if err := o.subscription.Err(); err != nil {
 				o.sendError(errors.Wrap(err, "subscription"))
 			}
-		}, "proc", fmt.Sprintf("%d", o.ProcessorID))
+		}, workloadid.ProfileTag, workloadid.WORKLOAD_NAME_LDR,
+			"proc", fmt.Sprintf("%d", o.ProcessorID))
 		return nil
 	})
 }

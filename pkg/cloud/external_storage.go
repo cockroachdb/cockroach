@@ -77,11 +77,9 @@ type ExternalStorage interface {
 	// List enumerates files within the supplied prefix, calling the passed
 	// function with the name of each file found, relative to the external storage
 	// destination's configured prefix. If the passed function returns a non-nil
-	// error, iteration is stopped it is returned. If delimiter is non-empty
-	// names which have the same prefix, prior to the delimiter, are grouped
-	// into a single result which is that prefix. The order that results are
+	// error, iteration is stopped, and it is returned. The order that results are
 	// passed to the callback is undefined.
-	List(ctx context.Context, prefix, delimiter string, fn ListingFn) error
+	List(ctx context.Context, prefix string, opts ListOptions, fn ListingFn) error
 
 	// Delete removes the named file from the store. If the file does not exist,
 	// Delete returns nil.
@@ -89,6 +87,45 @@ type ExternalStorage interface {
 
 	// Size returns the length of the named file in bytes.
 	Size(ctx context.Context, basename string) (int64, error)
+}
+
+type ListOptions struct {
+	// If a Delimiter is set, names which have the same prefix, prior to the
+	// Delimiter, are grouped into a single result which is that prefix.
+	Delimiter string
+
+	// When AfterKey is set, listing will only return results whose names are
+	// strictly lexicographically greater than AfterKey. AfterKey must be a full
+	// key relative to the external storage's base prefix. If a Delimiter is set,
+	// AfterKey filtering is applied after grouping.
+	//
+	// Example:
+	// ExternalStorage rooted at "gs://my-bucket/base/prefix/".
+	// To filter all results after "base/prefix/dir5", AfterKey should be set to
+	// "dir5".
+	//
+	// NB: Due to the fact that Azure does not support AfterKey semantics in
+	// its list API, we decided to handle all AfterKey filtering client-side
+	// across all external storage implementations. This gives us relatively
+	// comparable performance behaviors across all cloud providers, reducing our
+	// blind spots when it comes to testing and benchmarking.
+	//
+	// NB: If at some point Azure does add support for AfterKey, note that Cloud
+	// providers have different semantics for how AfterKey is applied
+	// (inclusive/exclusive, before/after delimiter grouping). This should be
+	// standardized across all implementations at that time.
+	AfterKey string
+}
+
+// CanonicalAfterKey returns the canonicalized AfterKey, given an external
+// storage base prefix. All cloud providers expect a full key to be provided as
+// an AfterKey, so we join the base prefix of the store and AfterKey here. If no
+// AfterKey is set, an empty string is returned.
+func (o ListOptions) CanonicalAfterKey(prefix string) string {
+	if o.AfterKey == "" {
+		return ""
+	}
+	return JoinPathPreservingTrailingSlash(prefix, o.AfterKey)
 }
 
 type ReadOptions struct {

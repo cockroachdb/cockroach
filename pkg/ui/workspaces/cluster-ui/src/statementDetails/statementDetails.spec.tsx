@@ -4,7 +4,6 @@
 // included in the /LICENSE file.
 
 import { render, screen, fireEvent } from "@testing-library/react";
-import { assert } from "chai";
 import React from "react";
 import { MemoryRouter as Router } from "react-router-dom";
 import { createSandbox } from "sinon";
@@ -90,19 +89,10 @@ describe("StatementDetails page", () => {
 
       // Expect calls to refresh page information on load and update events. Node
       // and liveness refreshes should not happen for tenants.
-      assert.equal(
-        refreshNodesClickSpy.callCount,
-        isTenant ? 0 : 3,
-        "refresh nodes",
-      );
-      assert.equal(
-        refreshNodesLivenessClickSpy.callCount,
-        isTenant ? 0 : 3,
-        "refresh liveness",
-      );
-      assert.isTrue(
-        refreshStatementDiagnosticsRequestsClickSpy.calledThrice,
-        "refresh diagnostics requests",
+      expect(refreshNodesClickSpy.callCount).toBe(isTenant ? 0 : 3);
+      expect(refreshNodesLivenessClickSpy.callCount).toBe(isTenant ? 0 : 3);
+      expect(refreshStatementDiagnosticsRequestsClickSpy.calledThrice).toBe(
+        true,
       );
     });
 

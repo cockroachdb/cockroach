@@ -8,13 +8,16 @@ package builtins_test
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -39,6 +42,7 @@ func TestFingerprint(t *testing.T) {
 	var mu syncutil.Mutex
 	var numExportResponses int
 	var numSSTsInExportResponses int
+	var sqlCodec atomic.Pointer[keys.SQLCodec]
 	srv, sqlDB, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
@@ -46,8 +50,11 @@ func TestFingerprint(t *testing.T) {
 					mu.Lock()
 					defer mu.Unlock()
 					for i, ru := range br.Responses {
-						if _, ok := ba.Requests[i].GetInner().(*kvpb.ExportRequest); ok {
+						if exportRequest, ok := ba.Requests[i].GetInner().(*kvpb.ExportRequest); ok {
 							exportResponse := ru.GetInner().(*kvpb.ExportResponse)
+							if lease.TestIsLeasingTxnExportRequest(sqlCodec.Load(), ba, exportRequest) {
+								return nil
+							}
 							numExportResponses++
 							numSSTsInExportResponses += len(exportResponse.Files)
 						}
@@ -59,6 +66,8 @@ func TestFingerprint(t *testing.T) {
 	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
+	codec := s.Codec()
+	sqlCodec.Store(&codec)
 
 	makeKey := func(k string) roachpb.Key {
 		return append(append(roachpb.Key(nil), s.Codec().TenantPrefix()...), roachpb.Key(k)...)
@@ -71,10 +80,10 @@ func TestFingerprint(t *testing.T) {
 		numSSTsInExportResponses = 0
 	}
 
-	returnPointAndRangeKeys := func(eng storage.Engine) ([]storage.MVCCKeyValue, []storage.MVCCRangeKey) {
+	returnPointAndRangeKeys := func(r storage.Reader) ([]storage.MVCCKeyValue, []storage.MVCCRangeKey) {
 		var rangeKeys []storage.MVCCRangeKey
 		var pointKeys []storage.MVCCKeyValue
-		for _, kvI := range storageutils.ScanKeySpan(t, eng, makeKey("a"), makeKey("z")) {
+		for _, kvI := range storageutils.ScanKeySpan(t, r, makeKey("a"), makeKey("z")) {
 			switch kv := kvI.(type) {
 			case storage.MVCCRangeKeyValue:
 				rangeKeys = append(rangeKeys, kv.RangeKey)
@@ -112,7 +121,7 @@ func TestFingerprint(t *testing.T) {
 
 	store, err := srv.GetStores().(*kvserver.Stores).GetStore(srv.GetFirstStoreID())
 	require.NoError(t, err)
-	eng := store.TODOEngine()
+	eng := store.StateEngine()
 
 	// Insert some point keys.
 	txn := db.NewTxn(ctx, "test-point-keys")

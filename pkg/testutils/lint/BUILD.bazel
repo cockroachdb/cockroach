@@ -41,7 +41,6 @@ go_test(
         "//pkg/internal/codeowners",
         "//pkg/sql/parser",
         "//pkg/sql/sem/builtins",
-        "//pkg/testutils/datapathutils",
         "//pkg/testutils/skip",
         "//pkg/util/envutil",
         "@com_github_cockroachdb_errors//:errors",

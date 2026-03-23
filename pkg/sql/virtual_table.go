@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // virtualTableGenerator is the function signature for the virtualTableNode
@@ -125,16 +126,7 @@ func setupGenerator(
 				// (#135760). This should be safe since we assume that the
 				// generator functions do not update shared state and do not
 				// manipulate locks.
-				defer func() {
-					if r := recover(); r != nil {
-						if ok, e := errorutil.ShouldCatch(r); ok {
-							retErr = e
-						} else {
-							// Panic object that is not an error - unexpected.
-							panic(r)
-						}
-					}
-				}()
+				defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 				return worker(ctx, funcRowPusher(addRow))
 			}()
 			// Notify that we are done sending rows.
@@ -271,7 +263,7 @@ func (v *vTableLookupJoinNode) startExec(params runParams) error {
 	v.run.keyCtx = constraint.KeyContext{Ctx: params.ctx, EvalCtx: params.EvalContext()}
 	if v.joinType == descpb.InnerJoin || v.joinType == descpb.LeftOuterJoin {
 		v.run.rows = rowcontainer.NewRowContainer(
-			params.p.Mon().MakeBoundAccount(),
+			params.p.ExecMon().MakeBoundAccount(),
 			colinfo.ColTypeInfoFromResCols(v.columns),
 		)
 	} else if v.joinType != descpb.LeftSemiJoin && v.joinType != descpb.LeftAntiJoin {
@@ -364,8 +356,17 @@ func (v *vTableLookupJoinNode) Next(params runParams) (bool, error) {
 func (v *vTableLookupJoinNode) pushRow(lookedUpRow ...tree.Datum) error {
 	// Reset our output row to just the contents of the input row.
 	v.run.row = v.run.row[:len(v.inputCols)]
+	// The tableoid system column ordinal is after all public columns + the
+	// dummy PK column.
+	tableoidOrd := len(v.vtableCols) + 1
 	// Append the looked up row to the right of the input row.
 	for i, ok := v.lookupCols.Next(0); ok; i, ok = v.lookupCols.Next(i + 1) {
+		if i == tableoidOrd {
+			// The tableoid system column is not part of the looked-up row.
+			// Produce it as a constant from the table descriptor.
+			v.run.row = append(v.run.row, tree.NewDOid(oid.Oid(v.table.GetID())))
+			continue
+		}
 		// Subtract 1 from the requested column position, to avoid the virtual
 		// table's fake primary key which won't be present in the row.
 		v.run.row = append(v.run.row, lookedUpRow[i-1])

@@ -10,6 +10,7 @@ import (
 	"context"
 	b64 "encoding/base64"
 	"encoding/binary"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -178,21 +179,7 @@ type planGistDecoder struct {
 func DecodePlanGistToRows(
 	ctx context.Context, evalCtx *eval.Context, gist string, catalog cat.Catalog,
 ) (_ []string, retErr error) {
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate internal errors without having
-			// to add error checks everywhere throughout the code. This is only
-			// possible because the code does not update shared state and does
-			// not manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				retErr = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
 	flags := Flags{HideValues: true, Deflake: DeflakeAll, OnlyShape: true}
 	ob := NewOutputBuilder(flags)
@@ -684,6 +671,12 @@ func (u *unknownTable) IsRowLevelSecurityForced() bool { return false }
 
 // Policies is part of the cat.Table interface.
 func (u *unknownTable) Policies() *cat.Policies { return nil }
+
+// CanaryAndStableStatsDiffer is part of the cat.Table interface.
+func (u *unknownTable) CanaryAndStableStatsDiffer() bool { return false }
+
+// StatsCanaryWindow is part of the cat.Table interface.
+func (u *unknownTable) StatsCanaryWindow() time.Duration { return 0 }
 
 var _ cat.Table = &unknownTable{}
 

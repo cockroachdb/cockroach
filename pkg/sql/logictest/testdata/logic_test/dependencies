@@ -17,29 +17,29 @@ CREATE TABLE test_kv(k INT PRIMARY KEY, v INT, w DECIMAL);
   CREATE TABLE test_uwi_parent(a INT UNIQUE WITHOUT INDEX);
   CREATE TABLE test_uwi_child(a INT REFERENCES test_uwi_parent(a));
 
-query ITITTBTB colnames
+query ITITTBTBT colnames
 SELECT * FROM crdb_internal.table_columns WHERE descriptor_name LIKE 'test_%' ORDER BY descriptor_id, column_id
 ----
-descriptor_id  descriptor_name  column_id  column_name  column_type                                                                                              nullable  default_expr    hidden
-106            test_kv          1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        false     NULL            false
-106            test_kv          2          v            family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        true      NULL            false
-106            test_kv          3          w            family:DecimalFamily width:0 precision:0 locale:"" visible_type:0 oid:1700 time_precision_is_set:false   true      NULL            false
-107            test_kvr1        1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        false     NULL            false
-108            test_kvr2        1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        true      NULL            false
-108            test_kvr2        2          v            family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        true      NULL            false
-108            test_kvr2        3          rowid        family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        false     unique_rowid()  true
-109            test_kvr3        1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        true      NULL            false
-109            test_kvr3        2          v            family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        true      NULL            false
-109            test_kvr3        3          rowid        family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        false     unique_rowid()  true
-110            test_kvi1        1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        false     NULL            false
-111            test_kvi2        1          k            family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        false     NULL            false
-111            test_kvi2        2          v            family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        true      NULL            false
-112            test_v1          1          v            family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        true      NULL            false
-113            test_v2          1          v            family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        true      NULL            false
-114            test_uwi_parent  1          a            family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        true      NULL            false
-114            test_uwi_parent  2          rowid        family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        false     unique_rowid()  true
-115            test_uwi_child   1          a            family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        true      NULL            false
-115            test_uwi_child   2          rowid        family:IntFamily width:64 precision:0 locale:"" visible_type:3 oid:20 time_precision_is_set:false        false     unique_rowid()  true
+descriptor_id  descriptor_name  column_id  column_name  column_type                                                                               nullable  default_expr    hidden  on_update_expr
+106            test_kv          1          k            family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        false     NULL            false   NULL
+106            test_kv          2          v            family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        true      NULL            false   NULL
+106            test_kv          3          w            family:DecimalFamily width:0 precision:0 locale:"" oid:1700 time_precision_is_set:false   true      NULL            false   NULL
+107            test_kvr1        1          k            family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        false     NULL            false   NULL
+108            test_kvr2        1          k            family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        true      NULL            false   NULL
+108            test_kvr2        2          v            family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        true      NULL            false   NULL
+108            test_kvr2        3          rowid        family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        false     unique_rowid()  true    NULL
+109            test_kvr3        1          k            family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        true      NULL            false   NULL
+109            test_kvr3        2          v            family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        true      NULL            false   NULL
+109            test_kvr3        3          rowid        family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        false     unique_rowid()  true    NULL
+110            test_kvi1        1          k            family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        false     NULL            false   NULL
+111            test_kvi2        1          k            family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        false     NULL            false   NULL
+111            test_kvi2        2          v            family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        true      NULL            false   NULL
+112            test_v1          1          v            family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        true      NULL            false   NULL
+113            test_v2          1          v            family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        true      NULL            false   NULL
+114            test_uwi_parent  1          a            family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        true      NULL            false   NULL
+114            test_uwi_parent  2          rowid        family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        false     unique_rowid()  true    NULL
+115            test_uwi_child   1          a            family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        true      NULL            false   NULL
+115            test_uwi_child   2          rowid        family:IntFamily width:64 precision:0 locale:"" oid:20 time_precision_is_set:false        false     unique_rowid()  true    NULL
 
 query ITITTBBBI colnames
   SELECT descriptor_id, descriptor_name, index_id, index_name, index_type, is_unique, is_inverted, is_sharded, shard_bucket_count
@@ -74,11 +74,11 @@ descriptor_id  descriptor_name  index_id  index_name            column_type  col
 106            test_kv          2         test_v_idx            key          2          v            ASC               false
 106            test_kv          4         test_v_idx2           extra        1          NULL         NULL              false
 106            test_kv          4         test_v_idx2           key          2          v            DESC              false
-106            test_kv          4         test_v_idx2           storing      3          NULL         NULL              false
+106            test_kv          4         test_v_idx2           storing      3          w            NULL              false
 106            test_kv          6         test_v_idx3           composite    3          NULL         NULL              false
 106            test_kv          6         test_v_idx3           extra        1          NULL         NULL              false
 106            test_kv          6         test_v_idx3           key          3          w            ASC               false
-106            test_kv          6         test_v_idx3           storing      2          NULL         NULL              false
+106            test_kv          6         test_v_idx3           storing      2          v            NULL              false
 107            test_kvr1        1         test_kvr1_pkey        key          1          k            ASC               false
 108            test_kvr2        1         test_kvr2_pkey        key          3          rowid        ASC               false
 108            test_kvr2        2         test_kvr2_v_key       extra        3          NULL         NULL              false
@@ -111,8 +111,8 @@ descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  de
 106            test_kv          NULL      107              fk                 NULL                   NULL               NULL
 106            test_kv          NULL      108              fk                 NULL                   NULL               NULL
 106            test_kv          NULL      109              fk                 NULL                   NULL               NULL
-106            test_kv          NULL      112              view               0                      NULL               Columns: [2]
-112            test_v1          NULL      113              view               0                      NULL               Columns: [1]
+106            test_kv          NULL      112              view               0                      NULL               Columns=[2]
+112            test_v1          NULL      113              view               0                      NULL               Columns=[1]
 114            test_uwi_parent  NULL      115              fk                 NULL                   NULL               NULL
 
 # Checks view dependencies (#17306)
@@ -130,7 +130,7 @@ query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'moretest_%' ORDER BY descriptor_id, index_id, dependedonby_type, dependedonby_id, dependedonby_index_id
 ----
 descriptor_id  descriptor_name  index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-116            moretest_t       NULL      117              view               0                      NULL               Columns: [2]
+116            moretest_t       NULL      117              view               0                      NULL               Columns=[2]
 
 # Check sequence dependencies.
 
@@ -150,4 +150,204 @@ query ITIITITT colnames
 SELECT * FROM crdb_internal.forward_dependencies WHERE descriptor_name LIKE 'blog_posts%'
 ----
 descriptor_id  descriptor_name    index_id  dependedonby_id  dependedonby_type  dependedonby_index_id  dependedonby_name  dependedonby_details
-118            blog_posts_id_seq  NULL      119              sequence           0                      NULL               Columns: [1]
+118            blog_posts_id_seq  NULL      119              sequence           0                      NULL               Columns=[1]
+
+# Check trigger dependencies.
+# Trigger dependencies require the declarative schema changer.
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TABLE trigger_source (id INT PRIMARY KEY, data TEXT)
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TABLE trigger_target (id INT PRIMARY KEY, data TEXT)
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE FUNCTION trigger_fn() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+DECLARE
+  cnt INT;
+BEGIN
+  SELECT count(*) INTO cnt FROM trigger_target;
+  RETURN NEW;
+END;
+$$
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TRIGGER tr AFTER INSERT ON trigger_source FOR EACH ROW EXECUTE FUNCTION trigger_fn()
+
+skipif config local-legacy-schema-changer
+query TTTT
+SELECT fd.descriptor_name, n.name, fd.dependedonby_type, fd.dependedonby_details
+FROM crdb_internal.forward_dependencies fd
+JOIN system.namespace n ON fd.dependedonby_id = n.id
+WHERE fd.descriptor_name = 'trigger_target'
+----
+trigger_target  trigger_source  trigger  Columns=[], TriggerID=1
+
+# Test that dropping a trigger removes only that trigger's backreferences,
+# even when another trigger on the same table references the same relation.
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TABLE trigger_dep_t1 (id INT PRIMARY KEY)
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TABLE trigger_dep_t2 (id INT PRIMARY KEY, a INt, b INT)
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE FUNCTION trigger_dep_f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+DECLARE
+  x INT;
+BEGIN
+  SELECT id - b INTO x FROM trigger_dep_t2 LIMIT 1;
+  RETURN NEW;
+END;
+$$
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE FUNCTION trigger_dep_f2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+DECLARE
+  x INT;
+BEGIN
+  SELECT id + b INTO x FROM trigger_dep_t2 LIMIT 1;
+  RETURN NEW;
+END;
+$$
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TRIGGER trigger_dep_tr1 AFTER INSERT ON trigger_dep_t1 FOR EACH ROW EXECUTE FUNCTION trigger_dep_f1()
+
+# After creating tr1, trigger_dep_t2 should have 1 backref.
+skipif config local-legacy-schema-changer
+query TTTT
+SELECT fd.descriptor_name, n.name, fd.dependedonby_type, fd.dependedonby_details
+FROM crdb_internal.forward_dependencies fd
+JOIN system.namespace n ON fd.dependedonby_id = n.id
+WHERE fd.descriptor_name = 'trigger_dep_t2'
+ORDER BY fd.dependedonby_details
+----
+trigger_dep_t2  trigger_dep_t1  trigger  Columns=[1 3], TriggerID=1
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TRIGGER trigger_dep_tr2 AFTER INSERT ON trigger_dep_t1 FOR EACH ROW EXECUTE FUNCTION trigger_dep_f2()
+
+# After creating tr2, trigger_dep_t2 should have 2 backrefs (one per trigger).
+skipif config local-legacy-schema-changer
+query TTTT
+SELECT fd.descriptor_name, n.name, fd.dependedonby_type, fd.dependedonby_details
+FROM crdb_internal.forward_dependencies fd
+JOIN system.namespace n ON fd.dependedonby_id = n.id
+WHERE fd.descriptor_name = 'trigger_dep_t2'
+ORDER BY fd.dependedonby_details
+----
+trigger_dep_t2  trigger_dep_t1  trigger  Columns=[1 3], TriggerID=1
+trigger_dep_t2  trigger_dep_t1  trigger  Columns=[1 3], TriggerID=2
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP TRIGGER trigger_dep_tr1 ON trigger_dep_t1
+
+# After dropping tr1, trigger_dep_t2 should have only 1 backref (from tr2).
+skipif config local-legacy-schema-changer
+query TTTT
+SELECT fd.descriptor_name, n.name, fd.dependedonby_type, fd.dependedonby_details
+FROM crdb_internal.forward_dependencies fd
+JOIN system.namespace n ON fd.dependedonby_id = n.id
+WHERE fd.descriptor_name = 'trigger_dep_t2'
+ORDER BY fd.dependedonby_details
+----
+trigger_dep_t2  trigger_dep_t1  trigger  Columns=[1 3], TriggerID=2
+
+# Regression test: dropping a column CASCADE should only remove the
+# backreference for the specific trigger that depends on that column, not all
+# trigger backreferences from the referenced table to the trigger's owner table.
+# This test runs in all configs. Trigger creation requires the declarative
+# schema changer, so we temporarily enable it, then restore the original setting
+# for the DROP COLUMN CASCADE (which exercises the legacy path under
+# local-legacy-schema-changer).
+
+let $use_decl_sc
+SHOW use_declarative_schema_changer
+
+statement ok
+SET use_declarative_schema_changer = 'on'
+
+statement ok
+CREATE TABLE col_cascade_t1 (id INT PRIMARY KEY)
+
+statement ok
+CREATE TABLE col_cascade_t2 (id INT PRIMARY KEY, a INT, b INT)
+
+# f1 references column a of col_cascade_t2.
+statement ok
+CREATE FUNCTION col_cascade_f1() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+DECLARE
+  x INT;
+BEGIN
+  SELECT a INTO x FROM col_cascade_t2 LIMIT 1;
+  RETURN NEW;
+END;
+$$
+
+# f2 references column b of col_cascade_t2.
+statement ok
+CREATE FUNCTION col_cascade_f2() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+DECLARE
+  x INT;
+BEGIN
+  SELECT b INTO x FROM col_cascade_t2 LIMIT 1;
+  RETURN NEW;
+END;
+$$
+
+statement ok
+CREATE TRIGGER col_cascade_tr1 AFTER INSERT ON col_cascade_t1 FOR EACH ROW EXECUTE FUNCTION col_cascade_f1()
+
+statement ok
+CREATE TRIGGER col_cascade_tr2 AFTER INSERT ON col_cascade_t1 FOR EACH ROW EXECUTE FUNCTION col_cascade_f2()
+
+# Both triggers should have backrefs from col_cascade_t2.
+query TTTT
+SELECT fd.descriptor_name, n.name, fd.dependedonby_type, fd.dependedonby_details
+FROM crdb_internal.forward_dependencies fd
+JOIN system.namespace n ON fd.dependedonby_id = n.id
+WHERE fd.descriptor_name = 'col_cascade_t2'
+ORDER BY fd.dependedonby_details
+----
+col_cascade_t2  col_cascade_t1  trigger  Columns=[2], TriggerID=1
+col_cascade_t2  col_cascade_t1  trigger  Columns=[3], TriggerID=2
+
+# Restore the original schema changer setting and unlock tables so the DROP
+# COLUMN CASCADE uses whichever schema changer the config dictates.
+statement ok
+SET use_declarative_schema_changer = $use_decl_sc
+
+statement ok
+ALTER TABLE col_cascade_t2 SET (schema_locked = false)
+
+statement ok
+ALTER TABLE col_cascade_t1 SET (schema_locked = false)
+
+# Drop column a CASCADE. This should drop only trigger col_cascade_tr1 (which
+# depends on column a), leaving col_cascade_tr2 intact.
+statement ok
+ALTER TABLE col_cascade_t2 DROP COLUMN a CASCADE
+
+# After dropping column a (and trigger col_cascade_tr1), col_cascade_t2 should
+# still have exactly 1 backref: from col_cascade_tr2 which depends on column b.
+query TTTT
+SELECT fd.descriptor_name, n.name, fd.dependedonby_type, fd.dependedonby_details
+FROM crdb_internal.forward_dependencies fd
+JOIN system.namespace n ON fd.dependedonby_id = n.id
+WHERE fd.descriptor_name = 'col_cascade_t2'
+ORDER BY fd.dependedonby_details
+----
+col_cascade_t2  col_cascade_t1  trigger  Columns=[3], TriggerID=2

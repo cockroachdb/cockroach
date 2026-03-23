@@ -32,7 +32,12 @@ func (np *cleanupNetworkPartition) Cleanup(
 // createNetworkPartition creates a network partition between two random nodes.
 func createNetworkPartialPartition(
 	ctx context.Context, o operation.Operation, c cluster.Cluster,
-) registry.OperationCleanup {
+) (cleanup registry.OperationCleanup) {
+	defer func() {
+		if r := recover(); r != nil {
+			o.Errorf("error during network partition: %v", r)
+		}
+	}()
 	nodeCount := c.Spec().NodeCount
 	if nodeCount <= 1 {
 		o.Fatal("not enough nodes to create a partition")
@@ -56,18 +61,31 @@ func createNetworkPartialPartition(
 	}
 	otherNodeIP := ips[0]
 	o.Status(fmt.Sprintf("creating a partition between nodes n%d and n%d", nodeID, otherNodeID))
-	// Block all input and output traffic between the two nodes.
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT  -p tcp -s %s -j DROP`, otherNodeIP))
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp -d %s -j DROP`, otherNodeIP))
 
-	return &cleanupNetworkPartition{nodeID: nodeID}
+	// Assign cleanup handler early, before adding iptables rules.
+	cleanup = &cleanupNetworkPartition{nodeID: nodeID}
+
+	// Block all input and output traffic between the two nodes.
+	if err = c.RunE(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT  -p tcp -s %s -j DROP`, otherNodeIP)); err != nil {
+		o.Fatal(err)
+	}
+	if err = c.RunE(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp -d %s -j DROP`, otherNodeIP)); err != nil {
+		o.Fatal(err)
+	}
+
+	return cleanup
 }
 
 // createNetworkFullPartition creates a network partition between a random node
 // and all other nodes.
 func createNetworkFullPartition(
 	ctx context.Context, o operation.Operation, c cluster.Cluster,
-) registry.OperationCleanup {
+) (cleanup registry.OperationCleanup) {
+	defer func() {
+		if r := recover(); r != nil {
+			o.Errorf("error during network partition: %v", r)
+		}
+	}()
 	nodeCount := c.Spec().NodeCount
 	if nodeCount <= 1 {
 		o.Fatal("not enough nodes to create a partition")
@@ -77,12 +95,22 @@ func createNetworkFullPartition(
 	// Drop bi-directional traffic between the node and all other nodes on the
 	// pgport.
 	o.Status(fmt.Sprintf("partition node n%d from the cluster", nodeID))
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT  -p tcp --sport {pgport:%d} -j DROP`, nodeID))
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --sport {pgport:%d} -j DROP`, nodeID))
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A INPUT  -p tcp --dport {pgport:%d} -j DROP`, nodeID))
-	c.Run(ctx, option.WithNodes(c.Node(nodeID)), fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --dport {pgport:%d} -j DROP`, nodeID))
 
-	return &cleanupNetworkPartition{nodeID: nodeID}
+	// Assign cleanup handler early, before adding iptables rules.
+	cleanup = &cleanupNetworkPartition{nodeID: nodeID}
+
+	for _, rule := range []string{
+		fmt.Sprintf(`sudo iptables -A INPUT  -p tcp --sport {pgport:%d} -j DROP`, nodeID),
+		fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --sport {pgport:%d} -j DROP`, nodeID),
+		fmt.Sprintf(`sudo iptables -A INPUT  -p tcp --dport {pgport:%d} -j DROP`, nodeID),
+		fmt.Sprintf(`sudo iptables -A OUTPUT -p tcp --dport {pgport:%d} -j DROP`, nodeID),
+	} {
+		if err := c.RunE(ctx, option.WithNodes(c.Node(nodeID)), rule); err != nil {
+			o.Fatal(err)
+		}
+	}
+
+	return cleanup
 }
 
 // registerNetworkPartition registers both the full and partial network

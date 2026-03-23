@@ -7,7 +7,6 @@ package aggmetric
 
 import (
 	"sync/atomic"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -20,8 +19,8 @@ import (
 // children, while its children are additionally exported to prometheus via the
 // PrometheusIterable interface.
 type AggCounter struct {
-	g metric.Counter
-	childSet
+	g *metric.Counter
+	*baseAggMetric
 }
 
 var _ metric.Iterable = (*AggCounter)(nil)
@@ -30,43 +29,15 @@ var _ metric.PrometheusExportable = (*AggCounter)(nil)
 
 // NewCounter constructs a new AggCounter.
 func NewCounter(metadata metric.Metadata, childLabels ...string) *AggCounter {
-	c := &AggCounter{g: *metric.NewCounter(metadata)}
+	counter := metric.NewCounter(metadata)
+	base := newBaseAggMetric(counter)
+	c := &AggCounter{g: counter, baseAggMetric: base}
 	c.initWithBTreeStorageType(childLabels)
 	return c
 }
 
-// GetName is part of the metric.Iterable interface.
-func (c *AggCounter) GetName(useStaticLabels bool) string { return c.g.GetName(useStaticLabels) }
-
-// GetHelp is part of the metric.Iterable interface.
-func (c *AggCounter) GetHelp() string { return c.g.GetHelp() }
-
-// GetMeasurement is part of the metric.Iterable interface.
-func (c *AggCounter) GetMeasurement() string { return c.g.GetMeasurement() }
-
-// GetUnit is part of the metric.Iterable interface.
-func (c *AggCounter) GetUnit() metric.Unit { return c.g.GetUnit() }
-
-// GetMetadata is part of the metric.Iterable interface.
-func (c *AggCounter) GetMetadata() metric.Metadata { return c.g.GetMetadata() }
-
 // Inspect is part of the metric.Iterable interface.
 func (c *AggCounter) Inspect(f func(interface{})) { f(c) }
-
-// GetType is part of the metric.PrometheusExportable interface.
-func (c *AggCounter) GetType() *io_prometheus_client.MetricType {
-	return c.g.GetType()
-}
-
-// GetLabels is part of the metric.PrometheusExportable interface.
-func (c *AggCounter) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
-	return c.g.GetLabels(useStaticLabels)
-}
-
-// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
-func (c *AggCounter) ToPrometheusMetric() *io_prometheus_client.Metric {
-	return c.g.ToPrometheusMetric()
-}
 
 // Count returns the aggregate count of all of its current and past children.
 func (c *AggCounter) Count() int64 {
@@ -84,7 +55,7 @@ func (c *AggCounter) AddChild(labelVals ...string) *Counter {
 	return child
 }
 
-// RemoveChild removes a Gauge from this AggGauge. This method panics if a Gauge
+// RemoveChild removes a Counter from this AggCounter. This method panics if a Counter
 // does not exist for this set of labelVals.
 func (g *AggCounter) RemoveChild(labelVals ...string) {
 	key := &Counter{labelValuesSlice: labelValuesSlice(labelVals)}
@@ -156,8 +127,8 @@ func (g *Counter) UpdateIfHigher(newValue int64) {
 // children, while its children are additionally exported to prometheus via the
 // PrometheusIterable interface.
 type AggCounterFloat64 struct {
-	g metric.CounterFloat64
-	childSet
+	g *metric.CounterFloat64
+	*baseAggMetric
 }
 
 var _ metric.Iterable = (*AggCounterFloat64)(nil)
@@ -166,43 +137,15 @@ var _ metric.PrometheusExportable = (*AggCounterFloat64)(nil)
 
 // NewCounterFloat64 constructs a new AggCounterFloat64.
 func NewCounterFloat64(metadata metric.Metadata, childLabels ...string) *AggCounterFloat64 {
-	c := &AggCounterFloat64{g: *metric.NewCounterFloat64(metadata)}
+	counterFloat64 := metric.NewCounterFloat64(metadata)
+	base := newBaseAggMetric(counterFloat64)
+	c := &AggCounterFloat64{g: counterFloat64, baseAggMetric: base}
 	c.initWithBTreeStorageType(childLabels)
 	return c
 }
 
-// GetName is part of the metric.Iterable interface.
-func (c *AggCounterFloat64) GetName(useStaticLabels bool) string { return c.g.GetName(useStaticLabels) }
-
-// GetHelp is part of the metric.Iterable interface.
-func (c *AggCounterFloat64) GetHelp() string { return c.g.GetHelp() }
-
-// GetMeasurement is part of the metric.Iterable interface.
-func (c *AggCounterFloat64) GetMeasurement() string { return c.g.GetMeasurement() }
-
-// GetUnit is part of the metric.Iterable interface.
-func (c *AggCounterFloat64) GetUnit() metric.Unit { return c.g.GetUnit() }
-
-// GetMetadata is part of the metric.Iterable interface.
-func (c *AggCounterFloat64) GetMetadata() metric.Metadata { return c.g.GetMetadata() }
-
 // Inspect is part of the metric.Iterable interface.
 func (c *AggCounterFloat64) Inspect(f func(interface{})) { f(c) }
-
-// GetType is part of the metric.PrometheusExportable interface.
-func (c *AggCounterFloat64) GetType() *io_prometheus_client.MetricType {
-	return c.g.GetType()
-}
-
-// GetLabels is part of the metric.PrometheusExportable interface.
-func (c *AggCounterFloat64) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
-	return c.g.GetLabels(useStaticLabels)
-}
-
-// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
-func (c *AggCounterFloat64) ToPrometheusMetric() *io_prometheus_client.Metric {
-	return c.g.ToPrometheusMetric()
-}
 
 // Count returns the aggregate count of all of its current and past children.
 func (c *AggCounterFloat64) Count() float64 {
@@ -277,7 +220,7 @@ func (g *CounterFloat64) UpdateIfHigher(newValue float64) {
 // a SQLCounter creates child metrics dynamically while AggCounter needs the
 // child creation up front.
 type SQLCounter struct {
-	g metric.Counter
+	g *metric.Counter
 	*SQLMetric
 }
 
@@ -287,51 +230,12 @@ var _ metric.PrometheusExportable = (*SQLCounter)(nil)
 
 // NewSQLCounter constructs a new SQLCounter.
 func NewSQLCounter(metadata metric.Metadata) *SQLCounter {
+	counter := metric.NewCounter(metadata)
 	c := &SQLCounter{
-		g: *metric.NewCounter(metadata),
+		g: counter,
 	}
-	c.SQLMetric = NewSQLMetric(metric.LabelConfigDisabled)
+	c.SQLMetric = NewSQLMetric(metric.LabelConfigDisabled, counter)
 	return c
-}
-
-// GetType is part of the metric.PrometheusExportable interface.
-func (c *SQLCounter) GetType() *io_prometheus_client.MetricType {
-	return c.g.GetType()
-}
-
-// GetLabels is part of the metric.PrometheusExportable interface.
-func (c *SQLCounter) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
-	return c.g.GetLabels(useStaticLabels)
-}
-
-// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
-func (c *SQLCounter) ToPrometheusMetric() *io_prometheus_client.Metric {
-	return c.g.ToPrometheusMetric()
-}
-
-// GetName is part of the metric.Iterable interface.
-func (c *SQLCounter) GetName(useStaticLabels bool) string {
-	return c.g.GetName(useStaticLabels)
-}
-
-// GetHelp is part of the metric.Iterable interface.
-func (c *SQLCounter) GetHelp() string {
-	return c.g.GetHelp()
-}
-
-// GetMeasurement is part of the metric.Iterable interface.
-func (c *SQLCounter) GetMeasurement() string {
-	return c.g.GetMeasurement()
-}
-
-// GetUnit is part of the metric.Iterable interface.
-func (c *SQLCounter) GetUnit() metric.Unit {
-	return c.g.GetUnit()
-}
-
-// GetMetadata is part of the metric.Iterable interface.
-func (c *SQLCounter) GetMetadata() metric.Metadata {
-	return c.g.GetMetadata()
 }
 
 // Inspect is part of the metric.Iterable interface.
@@ -356,7 +260,7 @@ func (c *SQLCounter) Count() int64 {
 func (c *SQLCounter) Inc(i int64, db, app string) {
 	c.g.Inc(i)
 
-	childMetric, isChildMetricEnabled := c.getChildByLabelConfig(c.createChildCounter, db, app)
+	childMetric, isChildMetricEnabled := c.getOrAddChildByLabelConfig(c.createChildCounter, db, app)
 	if !isChildMetricEnabled {
 		return
 	}
@@ -401,58 +305,31 @@ func (s *SQLChildCounter) Inc(i int64) {
 // allowing for automatic eviction of less frequently used child metrics.
 // This is useful when dealing with high cardinality metrics that might exceed resource limits.
 type HighCardinalityCounter struct {
-	g metric.Counter
-	childSet
+	g *metric.Counter
+	*baseAggMetric
 	labelSliceCache *metric.LabelSliceCache
+	opts            metric.HighCardinalityMetricOptions
 }
 
 var _ metric.Iterable = (*HighCardinalityCounter)(nil)
 var _ metric.PrometheusEvictable = (*HighCardinalityCounter)(nil)
 
 // NewHighCardinalityCounter constructs a new HighCardinalityCounter that uses cache storage
-// with eviction for child metrics.
+// with eviction for child metrics. The opts parameter contains the metadata and allows configuring
+// the maximum number of label combinations (MaxLabelValues). If opts has a zero value for
+// MaxLabelValues, defaults will be used.
 func NewHighCardinalityCounter(
-	metadata metric.Metadata, childLabels ...string,
+	metadata metric.Metadata, opts metric.HighCardinalityMetricOptions, childLabels []string,
 ) *HighCardinalityCounter {
-	c := &HighCardinalityCounter{g: *metric.NewCounter(metadata)}
-	c.initWithCacheStorageType(childLabels, metadata.Name)
+	counter := metric.NewCounter(metadata)
+	base := newBaseAggMetric(counter)
+	c := &HighCardinalityCounter{g: counter, baseAggMetric: base, opts: opts}
+	c.initWithCacheStorageType(childLabels)
 	return c
 }
 
-// GetName is part of the metric.Iterable interface.
-func (c *HighCardinalityCounter) GetName(useStaticLabels bool) string {
-	return c.g.GetName(useStaticLabels)
-}
-
-// GetHelp is part of the metric.Iterable interface.
-func (c *HighCardinalityCounter) GetHelp() string { return c.g.GetHelp() }
-
-// GetMeasurement is part of the metric.Iterable interface.
-func (c *HighCardinalityCounter) GetMeasurement() string { return c.g.GetMeasurement() }
-
-// GetUnit is part of the metric.Iterable interface.
-func (c *HighCardinalityCounter) GetUnit() metric.Unit { return c.g.GetUnit() }
-
-// GetMetadata is part of the metric.Iterable interface.
-func (c *HighCardinalityCounter) GetMetadata() metric.Metadata { return c.g.GetMetadata() }
-
 // Inspect is part of the metric.Iterable interface.
 func (c *HighCardinalityCounter) Inspect(f func(interface{})) { f(c) }
-
-// GetType is part of the metric.PrometheusExportable interface.
-func (c *HighCardinalityCounter) GetType() *io_prometheus_client.MetricType {
-	return c.g.GetType()
-}
-
-// GetLabels is part of the metric.PrometheusExportable interface.
-func (c *HighCardinalityCounter) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
-	return c.g.GetLabels(useStaticLabels)
-}
-
-// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
-func (c *HighCardinalityCounter) ToPrometheusMetric() *io_prometheus_client.Metric {
-	return c.g.ToPrometheusMetric()
-}
 
 // Count returns the aggregate count of all of its current and past children.
 func (c *HighCardinalityCounter) Count() int64 {
@@ -498,7 +375,7 @@ func (c *HighCardinalityCounter) GetOrAddChild(labelVals ...string) *HighCardina
 	}
 
 	// Create a LabelSliceCacheKey from the tenantID.
-	key := metric.LabelSliceCacheKey(metricKey(labelVals...))
+	key := metric.LabelSliceCacheKey(metricKey(labelVals))
 
 	child := c.getOrAddWithLabelSliceCache(c.GetMetadata().Name, c.createHighCardinalityChildCounter, c.labelSliceCache, labelVals...)
 
@@ -512,11 +389,12 @@ func (c *HighCardinalityCounter) GetOrAddChild(labelVals ...string) *HighCardina
 func (c *HighCardinalityCounter) createHighCardinalityChildCounter(
 	key uint64, cache *metric.LabelSliceCache,
 ) LabelSliceCachedChildMetric {
-	return &HighCardinalityChildCounter{
+	child := &HighCardinalityChildCounter{
 		LabelSliceCacheKey: metric.LabelSliceCacheKey(key),
 		LabelSliceCache:    cache,
-		createdAt:          timeutil.Now(),
 	}
+	child.updatedAt.Store(timeutil.Now().Unix())
+	return child
 }
 
 // HighCardinalityChildCounter is a child of a HighCardinalityCounter. When metrics are
@@ -526,11 +404,11 @@ type HighCardinalityChildCounter struct {
 	metric.LabelSliceCacheKey
 	value metric.Counter
 	*metric.LabelSliceCache
-	createdAt time.Time
+	updatedAt atomic.Int64
 }
 
-func (c *HighCardinalityChildCounter) CreatedAt() time.Time {
-	return c.createdAt
+func (c *HighCardinalityChildCounter) UpdatedAt() int64 {
+	return c.updatedAt.Load()
 }
 
 func (c *HighCardinalityChildCounter) DecrementLabelSliceCacheReference() {
@@ -562,4 +440,5 @@ func (c *HighCardinalityChildCounter) Value() int64 {
 // Inc increments the HighCardinalityChildCounter's value.
 func (c *HighCardinalityChildCounter) Inc(i int64) {
 	c.value.Inc(i)
+	c.updatedAt.Store(timeutil.Now().Unix())
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/taskpacer"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -654,7 +655,9 @@ func (s *Store) HandleRaftResponse(
 				// also mean that it is so far behind it no longer knows where any of the
 				// other replicas are (#23994). Add it to the replica GC queue to do a
 				// proper check.
-				s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityDefault)
+				if !s.TestingKnobs().DisableReplicaGCQueueAddOnRaftGroupDeleted {
+					s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityDefault)
+				}
 			case *kvpb.StoreNotFoundError:
 				log.KvExec.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",
 					resp.FromReplica.NodeID, resp.FromReplica.StoreID, resp.FromReplica, val)
@@ -820,8 +823,30 @@ func (s *Store) processRACv2RangeController(ctx context.Context, rangeID roachpb
 // down. Those instances should be rare, however, and we expect the newly live
 // node to eventually unquiesce the range.
 func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
-	ctx := context.TODO()
+	if fn := s.cfg.TestingKnobs.NodeIsLiveCallbackInvoked; fn != nil {
+		defer fn(l)
+	}
+
+	// NB: The liveness map is only used by epoch based leases currently.
+	// Technically, we could avoid this as well if we knew that no epoch based
+	// leases were in the system. However, to prevent surprises were this map to
+	// be used elsewhere in the future, we update it before the check below; this
+	// isn't a big deal, as the callback is expensive because of the iteration
+	// over all replicas on the store, not this update.
 	s.updateLivenessMap()
+
+	// If there are no epoch based leases in the system (leader leases are
+	// enabled and Raft fortification is enabled for all ranges), we do not need
+	// to attempt to unquiesce any replicas -- there can't be any. This allows
+	// us to eschew some expensive iteration, see
+	// https://github.com/cockroachdb/cockroach/issues/157089.
+	leaderLeasesEnabled := LeaderLeasesEnabled.Get(&s.ClusterSettings().SV)
+	fortificationFrac := RaftLeaderFortificationFractionEnabled.Get(&s.ClusterSettings().SV)
+	if leaderLeasesEnabled && fortificationFrac == 1.0 {
+		return
+	}
+
+	ctx := context.TODO()
 
 	s.mu.replicasByRangeID.Range(func(_ roachpb.RangeID, r *Replica) bool {
 		r.mu.RLock()
@@ -833,6 +858,28 @@ func (s *Store) nodeIsLiveCallback(l livenesspb.Liveness) {
 		}
 		return true
 	})
+
+	if fn := s.cfg.TestingKnobs.NodeIsLiveCallbackWorkDone; fn != nil {
+		fn(l)
+	}
+}
+
+// registerNodeIsLiveCallbackSettingsChange registers callbacks on the
+// LeaderLeasesEnabled and RaftLeaderFortificationFractionEnabled settings. When
+// these settings change such that we can no longer bypassing the expensive
+// nodeIsLiveCallback work, we invoke the callback for all live nodes to ensure
+// quiesced ranges are promptly unquiesced, if necessary.
+func (s *Store) registerNodeIsLiveCallbackSettingsChange(ctx context.Context) {
+	invokeCallbackForAllLiveNodes := func(ctx context.Context) {
+		for _, entry := range s.cfg.NodeLiveness.ScanNodeVitalityFromCache() {
+			if entry.IsLive(livenesspb.IsAliveNotification) {
+				s.nodeIsLiveCallback(entry.GetInternalLiveness())
+			}
+		}
+	}
+
+	LeaderLeasesEnabled.SetOnChange(&s.ClusterSettings().SV, invokeCallbackForAllLiveNodes)
+	RaftLeaderFortificationFractionEnabled.SetOnChange(&s.ClusterSettings().SV, invokeCallbackForAllLiveNodes)
 }
 
 // supportWithdrawnCallback is called every time the local store withdraws
@@ -920,12 +967,12 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 	defer timer.Stop()
 	// waitUntil is used to wait between different tick batches to pace the
 	// ticking process over the entire tick interval.
-	waitUntil := func(until time.Time) {
-		now := timeutil.Now()
-		if !now.Before(until) {
+	waitUntil := func(until crtime.Mono) {
+		wait := until.Sub(crtime.NowMono())
+		if wait <= 0 {
 			return
 		}
-		timer.Reset(until.Sub(now))
+		timer.Reset(wait)
 		<-timer.C
 	}
 
@@ -937,7 +984,7 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ticker.C:
-			now := timeutil.Now()
+			now := crtime.NowMono()
 			pacer.StartTask(now)
 			// Update the liveness map.
 			if s.cfg.NodeLiveness != nil {
@@ -968,7 +1015,7 @@ func (s *Store) raftTickLoop(ctx context.Context) {
 			// are ticked, which can lead to increased goroutine scheduling latency.
 			for startAt := now; len(rangeIDs) != 0; {
 				waitUntil(startAt)
-				todo, by := pacer.Pace(timeutil.Now(), len(rangeIDs))
+				todo, by := pacer.Pace(crtime.NowMono(), len(rangeIDs))
 				batch := s.scheduler.NewEnqueueBatch()
 				for _, id := range rangeIDs[:todo] {
 					batch.Add(id)
@@ -1135,6 +1182,11 @@ func (s *Store) updateCapacityGauges(ctx context.Context) error {
 	s.metrics.Capacity.Update(desc.Capacity.Capacity)
 	s.metrics.Available.Update(desc.Capacity.Available)
 	s.metrics.Used.Update(desc.Capacity.Used)
+
+	if du, err := s.TODOBothEngines().WALFailoverDiskUsage(); err == nil {
+		s.metrics.WALFailoverSecondaryDiskCapacity.Update(int64(du.TotalBytes))
+		s.metrics.WALFailoverSecondaryDiskAvailable.Update(int64(du.AvailBytes))
+	}
 
 	return nil
 }

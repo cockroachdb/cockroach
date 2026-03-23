@@ -517,10 +517,11 @@ func (m *stageExecStmtMap) GetInjectionCallback(t *testing.T, rewrite bool) exec
 }
 
 type CumulativeTestSpec struct {
-	Path         string
-	Rewrite      bool
-	Setup, Stmts []statements.Statement[tree.Statement]
-	stageExecMap *stageExecStmtMap
+	Path                     string
+	Rewrite                  bool
+	Setup, Stmts             []statements.Statement[tree.Statement]
+	stageExecMap             *stageExecStmtMap
+	SkipUnderSecondaryTenant bool
 }
 
 // cumulativeTest is a foundational helper for building tests over the
@@ -589,12 +590,15 @@ func cumulativeTest(
 			stmts, err := parser.Parse(d.Input)
 			require.NoError(t, err)
 			require.NotEmpty(t, stmts)
+			var skipUnderSecondaryTenant bool
+			d.MaybeScanArgs(t, "skip-under-secondary-tenant", &skipUnderSecondaryTenant)
 			tf(t, CumulativeTestSpec{
-				Path:         testCaseDir,
-				Rewrite:      rewrite,
-				Setup:        setup,
-				Stmts:        stmts,
-				stageExecMap: stageExecMap,
+				Path:                     testCaseDir,
+				Rewrite:                  rewrite,
+				Setup:                    setup,
+				Stmts:                    stmts,
+				stageExecMap:             stageExecMap,
+				SkipUnderSecondaryTenant: skipUnderSecondaryTenant,
 			})
 			hasSeenTestCmd = true
 
@@ -872,7 +876,8 @@ func withPostCommitPlanAfterSchemaChange(
 			}
 			return nil
 		},
-	}).Run(context.Background(), t, func(_ serverutils.TestServerInterface, db *gosql.DB) {
+	}).Run(context.Background(), t, func(s serverutils.TestServerInterface, db *gosql.DB) {
+		maybeSkipUnderSecondaryTenant(t, spec, s)
 		require.NoError(t, setupSchemaChange(ctx, t, spec, db))
 		knobEnabled.Swap(true)
 		require.NoError(t, executeSchemaChangeTxn(ctx, t, spec, db))
@@ -976,6 +981,7 @@ func areStmtsFullySupportedAtClusterVersion(
 ) (err error) {
 	ctx := context.Background()
 	factory.Run(ctx, t, func(s serverutils.TestServerInterface, db *gosql.DB) {
+		maybeSkipUnderSecondaryTenant(t, spec, s)
 		cv := s.ClusterSettings().Version
 		// Sieve 1: check whether the statements are even implemented and the schema
 		// changer mode.
@@ -1015,14 +1021,19 @@ func waitForSchemaChangesToFinish(t *testing.T, tdb *sqlutils.SQLRunner) {
 	)
 }
 
-func hasLatestSchemaChangeSucceededWithTimestamp(
-	t *testing.T, tdb *sqlutils.SQLRunner, startTime time.Time,
+// hasLatestSchemaChangeSucceededWithMaxJobID detects if the latest schema change
+// has changed. The function requires the last observed maximum job ID and takes
+// advantage of the increasing nature of the ID (since the upper bits encode
+// the current time). Note: We could have used `finished`, but it does not encode
+// enough precision.
+func hasLatestSchemaChangeSucceededWithMaxJobID(
+	t *testing.T, tdb *sqlutils.SQLRunner, maxJobID int64,
 ) (succeeded bool, jobExists bool) {
 	result := tdb.QueryStr(t, fmt.Sprintf(
-		`SELECT status FROM [SHOW JOBS] WHERE job_type IN ('%s') AND finished >= $1::timestamp ORDER BY finished DESC, job_id DESC LIMIT 1`,
+		`SELECT status FROM [SHOW JOBS] WHERE job_type IN ('%s') AND job_id > $1 ORDER BY finished DESC, job_id DESC LIMIT 1`,
 		jobspb.TypeNewSchemaChange,
 	),
-		startTime)
+		maxJobID)
 	return len(result) == 0 || result[0][0] == "succeeded", len(result) > 0
 }
 
@@ -1092,4 +1103,15 @@ func (pe PlanExplainer) GetExplain() string {
 		return "EXPLAIN (DDL) diagram not available: requested but never provided"
 	}
 	return explain
+}
+
+// maybeSkipUnderSecondaryTenant skips the test if the spec indicates it should
+// be skipped when running under a secondary tenant and the server is running as
+// a secondary tenant.
+func maybeSkipUnderSecondaryTenant(
+	t *testing.T, spec CumulativeTestSpec, s serverutils.TestServerInterface,
+) {
+	if spec.SkipUnderSecondaryTenant && !s.Codec().ForSystemTenant() {
+		skip.IgnoreLint(t, "test is skipped under secondary tenant")
+	}
 }

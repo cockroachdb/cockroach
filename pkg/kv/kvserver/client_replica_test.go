@@ -213,10 +213,10 @@ func TestLeaseholdersRejectClockUpdateWithJump(t *testing.T) {
 	// The clock did not advance and the final command was not executed.
 	ts3 := s.Clock().Now()
 	require.Zero(t, ts3.GoTime().Sub(ts2.GoTime()))
-	valRes, err := storage.MVCCGet(context.Background(), store.TODOEngine(), key, ts3,
+	valRes, err := storage.MVCCGet(context.Background(), store.StateEngine(), key, ts3,
 		storage.MVCCGetOptions{})
 	require.NoError(t, err)
-	require.Equal(t, incArgs.Increment*numCmds, mustGetInt(valRes.Value))
+	require.Equal(t, incArgs.Increment*numCmds, mustGetInt(valRes.Value.ToPointer()))
 }
 
 // TestTxnPutOutOfOrder tests a case where a put operation of an older
@@ -1251,7 +1251,7 @@ func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 		ba := &kvpb.BatchRequest{}
 		ba.RangeID = desc.RangeID
 		ba.Add(getArgs(key))
-		br, pErr := tc.GetFirstStoreFromServer(t, 1).Send(ctx, ba)
+		br, pErr := kvserver.ToSenderForTesting(tc.GetFirstStoreFromServer(t, 1)).Send(ctx, ba)
 		nonTxnRespC <- resp{br, pErr}
 	})
 
@@ -1290,7 +1290,7 @@ func TestNonTxnReadWithinUncertaintyIntervalAfterLeaseTransfer(t *testing.T) {
 	ba := &kvpb.BatchRequest{}
 	ba.RangeID = desc.RangeID
 	ba.Add(putArgs(key, []byte("val")))
-	br, pErr := tc.GetFirstStoreFromServer(t, 0).Send(ctx, ba)
+	br, pErr := kvserver.ToSenderForTesting(tc.GetFirstStoreFromServer(t, 0)).Send(ctx, ba)
 	require.Nil(t, pErr)
 	writeTs := br.Timestamp
 	require.True(t, nonTxnOrigTs.Less(writeTs), "nonTxnOrigTs: %v, writeTs: %v", nonTxnOrigTs, writeTs)
@@ -2589,7 +2589,7 @@ func TestConsistencyQueueDelaysProcessingNewRanges(t *testing.T) {
 		rngID := store.LookupReplica(roachpb.RKey(key)).RangeID
 		h := kvpb.Header{RangeID: rngID}
 		args := adminSplitArgs(key)
-		if _, pErr := kv.SendWrappedWith(ctx, store, h, args); pErr != nil {
+		if _, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store), h, args); pErr != nil {
 			return pErr.GoError()
 		}
 		return nil
@@ -2600,7 +2600,7 @@ func TestConsistencyQueueDelaysProcessingNewRanges(t *testing.T) {
 		rngID := store.LookupReplica(roachpb.RKey(key)).RangeID
 		h := kvpb.Header{RangeID: rngID}
 		args := adminMergeArgs(key)
-		if _, pErr := kv.SendWrappedWith(ctx, store, h, args); pErr != nil {
+		if _, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store), h, args); pErr != nil {
 			return pErr.GoError()
 		}
 		return nil
@@ -2744,7 +2744,7 @@ func TestLeaseInfoRequest(t *testing.T) {
 		},
 	}
 	reply, pErr := kv.SendWrappedWith(
-		context.Background(), s, kvpb.Header{
+		context.Background(), kvserver.ToSenderForTesting(s), kvpb.Header{
 			RangeID:         rangeDesc.RangeID,
 			ReadConsistency: kvpb.INCONSISTENT,
 		}, leaseInfoReq)
@@ -2870,7 +2870,7 @@ func TestRangeInfoAfterSplit(t *testing.T) {
 				},
 			}
 			ba.Add(gArgs)
-			br, pErr := store.Send(ctx, ba)
+			br, pErr := kvserver.ToSenderForTesting(store).Send(ctx, ba)
 			require.NoError(t, pErr.GoError())
 			descs := make([]roachpb.RangeDescriptor, len(br.RangeInfos))
 			for i, ri := range br.RangeInfos {
@@ -3051,7 +3051,7 @@ func TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable(t *testing.T) {
 		ba.RangeID = desc.RangeID
 		ba.Timestamp = repl.Clock().Now()
 		ba.Add(putArgs(key, []byte("foo")))
-		_, pErr := repl.Send(ctx, ba)
+		_, pErr := kvserver.ToSenderForTesting(repl).Send(ctx, ba)
 		return pErr, ctx.Err()
 	}
 
@@ -3121,6 +3121,12 @@ func TestLeaderlessWatcherErrorRefreshedOnUnavailabilityTransition(t *testing.T)
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					WallClock: manual,
+				},
+				Store: &kvserver.StoreTestingKnobs{
+					// Disable raft ticks from refreshing the leaderless watcher
+					// state, allowing the test full control over the leaderless
+					// watcher state.
+					DisableLeaderlessWatcherRefreshOnRaftTick: true,
 				},
 			},
 		},
@@ -3199,7 +3205,7 @@ func TestClearRange(t *testing.T) {
 		t.Helper()
 		start := prefix
 		end := prefix.PrefixEnd()
-		kvs, err := storage.Scan(context.Background(), store.TODOEngine(), start, end, 0)
+		kvs, err := storage.Scan(context.Background(), store.StateEngine(), start, end, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -3327,17 +3333,17 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 		// another write and truncate the Raft log on the two connected nodes. This
 		// ensures that when node 2 comes back up it will require a snapshot from
 		// Raft.
-		funcs := noopRaftHandlerFuncs()
-		funcs.dropReq = func(*kvserverpb.RaftMessageRequest) bool {
+		funcs := kvtestutils.NoopRaftHandlerFuncs()
+		funcs.DropReq = func(*kvserverpb.RaftMessageRequest) bool {
 			return true
 		}
-		funcs.snapErr = func(*kvserverpb.SnapshotRequest_Header) error {
+		funcs.SnapErr = func(*kvserverpb.SnapshotRequest_Header) error {
 			return errors.New("rejected")
 		}
-		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.StoreID(), &unreliableRaftHandler{
-			rangeID:                    repl0.GetRangeID(),
+		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.StoreID(), &kvtestutils.UnreliableRaftHandler{
+			RangeID:                    repl0.GetRangeID(),
 			IncomingRaftMessageHandler: store2,
-			unreliableRaftHandlerFuncs: funcs,
+			UnreliableRaftHandlerFuncs: funcs,
 		})
 
 		if _, pErr := kv.SendWrapped(ctx, store0.TestSender(), incC); pErr != nil {
@@ -3464,17 +3470,17 @@ func TestLeaseTransferRejectedIfTargetNeedsSnapshot(t *testing.T) {
 		// another write and truncate the Raft log on the two connected nodes. This
 		// ensures that when node 2 comes back up it will require a snapshot from
 		// Raft.
-		funcs := noopRaftHandlerFuncs()
-		funcs.dropReq = func(*kvserverpb.RaftMessageRequest) bool {
+		funcs := kvtestutils.NoopRaftHandlerFuncs()
+		funcs.DropReq = func(*kvserverpb.RaftMessageRequest) bool {
 			return true
 		}
-		funcs.snapErr = func(*kvserverpb.SnapshotRequest_Header) error {
+		funcs.SnapErr = func(*kvserverpb.SnapshotRequest_Header) error {
 			return errors.New("rejected")
 		}
-		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.StoreID(), &unreliableRaftHandler{
-			rangeID:                    repl0.GetRangeID(),
+		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.StoreID(), &kvtestutils.UnreliableRaftHandler{
+			RangeID:                    repl0.GetRangeID(),
 			IncomingRaftMessageHandler: store2,
-			unreliableRaftHandlerFuncs: funcs,
+			UnreliableRaftHandlerFuncs: funcs,
 		})
 
 		_, pErr = kv.SendWrapped(ctx, store0.TestSender(), incC)
@@ -3777,14 +3783,14 @@ func TestReplicaTombstone(t *testing.T) {
 				// This will lead to it applying the ChangeReplicasTrigger which removes
 				// it rather than receiving a ReplicaTooOldError.
 				store, _ := getFirstStoreReplica(t, tc.Server(1), key)
-				funcs := noopRaftHandlerFuncs()
-				funcs.dropResp = func(*kvserverpb.RaftMessageResponse) bool {
+				funcs := kvtestutils.NoopRaftHandlerFuncs()
+				funcs.DropResp = func(*kvserverpb.RaftMessageResponse) bool {
 					return true
 				}
-				tc.Servers[1].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
-					rangeID:                    desc.RangeID,
+				tc.Servers[1].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &kvtestutils.UnreliableRaftHandler{
+					RangeID:                    desc.RangeID,
 					IncomingRaftMessageHandler: store,
-					unreliableRaftHandlerFuncs: funcs,
+					UnreliableRaftHandlerFuncs: funcs,
 				})
 				tc.RemoveVotersOrFatal(t, key, tc.Target(1))
 				tombstone := waitForTombstone(t, store.StateEngine(), rangeID)
@@ -3825,8 +3831,8 @@ func TestReplicaTombstone(t *testing.T) {
 				// requests. It should destroy the local replica due to a
 				// ReplicaTooOldError.
 				sawTooOld := make(chan struct{}, 1)
-				raftFuncs := noopRaftHandlerFuncs()
-				raftFuncs.dropResp = func(resp *kvserverpb.RaftMessageResponse) bool {
+				raftFuncs := kvtestutils.NoopRaftHandlerFuncs()
+				raftFuncs.DropResp = func(resp *kvserverpb.RaftMessageResponse) bool {
 					if pErr, ok := resp.Union.GetValue().(*kvpb.Error); ok {
 						if _, isTooOld := pErr.GetDetail().(*kvpb.ReplicaTooOldError); isTooOld {
 							select {
@@ -3837,13 +3843,13 @@ func TestReplicaTombstone(t *testing.T) {
 					}
 					return false
 				}
-				raftFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
+				raftFuncs.DropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 					return req.ToReplica.StoreID == store.StoreID()
 				}
-				tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
-					rangeID:                    desc.RangeID,
+				tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &kvtestutils.UnreliableRaftHandler{
+					RangeID:                    desc.RangeID,
 					IncomingRaftMessageHandler: store,
-					unreliableRaftHandlerFuncs: raftFuncs,
+					UnreliableRaftHandlerFuncs: raftFuncs,
 				})
 
 				if leaseType == roachpb.LeaseLeader {
@@ -3893,8 +3899,8 @@ func TestReplicaTombstone(t *testing.T) {
 				// It will never find out it has been removed. We'll remove it
 				// with a manual replica GC.
 				store, _ := getFirstStoreReplica(t, tc.Server(2), key)
-				tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
-					rangeID:                    desc.RangeID,
+				tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &kvtestutils.UnreliableRaftHandler{
+					RangeID:                    desc.RangeID,
 					IncomingRaftMessageHandler: store,
 				})
 				tc.RemoveVotersOrFatal(t, key, tc.Target(2))
@@ -3935,8 +3941,8 @@ func TestReplicaTombstone(t *testing.T) {
 				rangeID := desc.RangeID
 				// Partition node 2 from all raft communication.
 				store, _ := getFirstStoreReplica(t, tc.Server(2), keyA)
-				tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
-					rangeID:                    desc.RangeID,
+				tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &kvtestutils.UnreliableRaftHandler{
+					RangeID:                    desc.RangeID,
 					IncomingRaftMessageHandler: store,
 				})
 
@@ -4019,14 +4025,14 @@ func TestReplicaTombstone(t *testing.T) {
 					waiter.blockSnapshot = true
 				}
 				setMinHeartbeat(repl.ReplicaID() + 1)
-				tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
-					rangeID:                    desc.RangeID,
+				tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &kvtestutils.UnreliableRaftHandler{
+					RangeID:                    desc.RangeID,
 					IncomingRaftMessageHandler: store,
-					unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-						dropResp: func(*kvserverpb.RaftMessageResponse) bool {
+					UnreliableRaftHandlerFuncs: kvtestutils.UnreliableRaftHandlerFuncs{
+						DropResp: func(*kvserverpb.RaftMessageResponse) bool {
 							return true
 						},
-						dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+						DropReq: func(req *kvserverpb.RaftMessageRequest) bool {
 							if leaseType == roachpb.LeaseLeader &&
 								req.Message.Type == raftpb.MsgFortifyLeader {
 								// In leader leases, the leader doesn't send heartbeats.
@@ -4037,11 +4043,11 @@ func TestReplicaTombstone(t *testing.T) {
 							}
 							return true
 						},
-						dropHB: func(hb *kvserverpb.RaftHeartbeat) bool {
+						DropHB: func(hb *kvserverpb.RaftHeartbeat) bool {
 							recordHeartbeatOrFortification(hb.ToReplicaID)
 							return false
 						},
-						snapErr: func(*kvserverpb.SnapshotRequest_Header) error {
+						SnapErr: func(*kvserverpb.SnapshotRequest_Header) error {
 							waitForSnapshot()
 							return errors.New("boom")
 						},
@@ -4134,17 +4140,17 @@ func TestReplicaTombstone(t *testing.T) {
 				store, repl := getFirstStoreReplica(t, tc.Server(2), key)
 				var partActive atomic.Value
 				partActive.Store(false)
-				raftFuncs := noopRaftHandlerFuncs()
-				raftFuncs.dropReq = func(req *kvserverpb.RaftMessageRequest) bool {
+				raftFuncs := kvtestutils.NoopRaftHandlerFuncs()
+				raftFuncs.DropReq = func(req *kvserverpb.RaftMessageRequest) bool {
 					return partActive.Load().(bool) && req.Message.Type == raftpb.MsgApp
 				}
-				tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &unreliableRaftHandler{
-					rangeID:                    lhsDesc.RangeID,
-					unreliableRaftHandlerFuncs: raftFuncs,
-					IncomingRaftMessageHandler: &unreliableRaftHandler{
-						rangeID:                    rhsDesc.RangeID,
+				tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store.StoreID(), &kvtestutils.UnreliableRaftHandler{
+					RangeID:                    lhsDesc.RangeID,
+					UnreliableRaftHandlerFuncs: raftFuncs,
+					IncomingRaftMessageHandler: &kvtestutils.UnreliableRaftHandler{
+						RangeID:                    rhsDesc.RangeID,
 						IncomingRaftMessageHandler: store,
-						unreliableRaftHandlerFuncs: raftFuncs,
+						UnreliableRaftHandlerFuncs: raftFuncs,
 					},
 				})
 				proposalFilter.Store(func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
@@ -5358,7 +5364,7 @@ func TestRangeMigration(t *testing.T) {
 		}
 
 		sl := kvstorage.MakeStateLoader(rangeID)
-		persistedV, err := sl.LoadVersion(ctx, store.TODOEngine())
+		persistedV, err := sl.LoadVersion(ctx, store.StateEngine())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -5859,218 +5865,10 @@ func TestOptimisticEvalWithConcurrentWriters(t *testing.T) {
 	workers.Wait()
 }
 
-// BenchmarkOptimisticEvalForLocks benchmarks optimistic evaluation when the
-// potentially conflicting lock is explicitly held for a duration of time.
-func BenchmarkOptimisticEvalForLocks(b *testing.B) {
-	defer log.Scope(b).Close(b)
-	ctx := context.Background()
-	args := base.TestServerArgs{}
-	s, _, db := serverutils.StartServer(b, args)
-	defer s.Stopper().Stop(ctx)
-
-	require.NoError(b, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-		defer func() {
-			b.Log(err)
-		}()
-		if err := txn.Put(ctx, "a", "a"); err != nil {
-			return err
-		}
-		if err := txn.Put(ctx, "b", "b"); err != nil {
-			return err
-		}
-		return txn.Commit(ctx)
-	}))
-	tup, err := db.Get(ctx, "a")
-	require.NoError(b, err)
-	require.NotNil(b, tup.Value)
-	tup, err = db.Get(ctx, "b")
-	require.NoError(b, err)
-	require.NotNil(b, tup.Value)
-
-	for _, realContention := range []bool{false, true} {
-		b.Run(fmt.Sprintf("real-contention=%t", realContention),
-			func(b *testing.B) {
-				lockStart := "b"
-				if realContention {
-					lockStart = "a"
-				}
-				finishWrites := make(chan struct{})
-				var writers sync.WaitGroup
-				for i := 0; i < 1; i++ {
-					writers.Add(1)
-					go func() {
-						for {
-							txn := db.NewTxn(ctx, "locking txn")
-							_, err = txn.ScanForUpdate(ctx, lockStart, "c", 0, kvpb.BestEffort)
-							require.NoError(b, err)
-							time.Sleep(5 * time.Millisecond)
-							// Normally, it would do a write here, but we don't bother.
-							require.NoError(b, txn.Commit(ctx))
-							select {
-							case _, recv := <-finishWrites:
-								if !recv {
-									writers.Done()
-									return
-								}
-							default:
-							}
-						}
-					}()
-				}
-				b.ResetTimer()
-				for i := 0; i < b.N; i++ {
-					_ = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-						_, err = txn.Scan(ctx, "a", "c", 1)
-						if err != nil {
-							panic(err)
-						}
-						err = txn.Commit(ctx)
-						if err != nil {
-							panic(err)
-						}
-						return err
-					})
-				}
-				b.StopTimer()
-				close(finishWrites)
-				writers.Wait()
-			})
-	}
-}
-
-// BenchmarkOptimisticEval benchmarks optimistic evaluation with
-//   - potentially conflicting latches held by 1PC transactions doing writes.
-//   - potentially conflicting latches or locks held by transactions doing
-//     writes.
-func BenchmarkOptimisticEval(b *testing.B) {
-	defer log.Scope(b).Close(b)
-	ctx := context.Background()
-	args := base.TestServerArgs{}
-
-	for _, latches := range []bool{false, true} {
-		conflictWith := "latches-and-locks"
-		if latches {
-			conflictWith = "latches"
-		}
-		b.Run(conflictWith, func(b *testing.B) {
-			for _, realContention := range []bool{false, true} {
-				b.Run(fmt.Sprintf("real-contention=%t", realContention), func(b *testing.B) {
-					for _, numWriters := range []int{1, 4} {
-						b.Run(fmt.Sprintf("num-writers=%d", numWriters), func(b *testing.B) {
-							// Since we are doing writes in the benchmark, start with a
-							// fresh server each time so that we start with a fresh engine
-							// without many versions for a key.
-							s, _, db := serverutils.StartServer(b, args)
-							defer s.Stopper().Stop(ctx)
-
-							require.NoError(b, db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-								if err := txn.Put(ctx, "a", "a"); err != nil {
-									return err
-								}
-								if err := txn.Put(ctx, "b", "b"); err != nil {
-									return err
-								}
-								return txn.Commit(ctx)
-							}))
-							tup, err := db.Get(ctx, "a")
-							require.NoError(b, err)
-							require.NotNil(b, tup.Value)
-							tup, err = db.Get(ctx, "b")
-							require.NoError(b, err)
-							require.NotNil(b, tup.Value)
-
-							writeKey := "b"
-							if realContention {
-								writeKey = "a"
-							}
-							finishWrites := make(chan struct{})
-							var writers sync.WaitGroup
-							for i := 0; i < numWriters; i++ {
-								writers.Add(1)
-								go func(shouldLatch bool) {
-									for {
-										if shouldLatch {
-											require.NoError(b, db.Put(ctx, writeKey, "foo"))
-										} else {
-											require.NoError(b, db.Txn(ctx,
-												func(ctx context.Context, txn *kv.Txn) (err error) {
-													if err := txn.Put(ctx, writeKey, "foo"); err != nil {
-														return err
-													}
-													return txn.Commit(ctx)
-												}))
-										}
-										select {
-										case _, recv := <-finishWrites:
-											if !recv {
-												writers.Done()
-												return
-											}
-										default:
-										}
-									}
-								}(latches)
-							}
-							b.ResetTimer()
-							for i := 0; i < b.N; i++ {
-								_ = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
-									_, err = txn.Scan(ctx, "a", "c", 1)
-									if err != nil {
-										panic(err)
-									}
-									err = txn.Commit(ctx)
-									if err != nil {
-										panic(err)
-									}
-									return err
-								})
-							}
-							b.StopTimer()
-							close(finishWrites)
-							writers.Wait()
-						})
-					}
-				})
-			}
-		})
-	}
-}
-
-// BenchmarkEmptyRebalance benchmarks the time it takes to add/remove replicas
-// of an empty range.
-func BenchmarkEmptyRebalance(b *testing.B) {
-	defer log.Scope(b).Close(b)
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(
-		b, 2, base.TestClusterArgs{ReplicationMode: base.ReplicationManual},
-	)
-	defer tc.Stopper().Stop(ctx)
-
-	scratchRange := tc.ScratchRange(b)
-
-	// Before actually starting the benchmark, we need to make sure that the raft
-	// group is able to add/remove voters. This is important because in leader
-	// leases, it takes a few seconds for store liveness heartbeats to start.
-	// We need store liveness heartbeats for two reasons: (1) By default,
-	// followers won't campaign unless they are supported by a quorum of peers,
-	// and (2) The leader won't be able to propose config changes unless the new
-	// config doesn't cause a regression in the LeadSupportUntil.
-	tc.AddVotersOrFatal(b, scratchRange, tc.Target(1))
-	tc.RemoveVotersOrFatal(b, scratchRange, tc.Target(1))
-
-	b.Run("add-remove", func(b *testing.B) {
-		b.ResetTimer()
-		for i := 0; i < b.N; i++ {
-			tc.AddVotersOrFatal(b, scratchRange, tc.Target(1))
-			tc.RemoveVotersOrFatal(b, scratchRange, tc.Target(1))
-		}
-		b.StopTimer()
-	})
-}
-
 func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "can cause uncooperative lease change under leader leases")
 
 	testutils.SetVModule(t, "cmd_lease=2")
 
@@ -6092,6 +5890,26 @@ func TestLeaseTransferReplicatesLocks(t *testing.T) {
 	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Settings: st,
+			RaftConfig: base.RaftConfig{
+				// Suppress timeout-based elections to prevent unexpected
+				// leadership changes (and thus uncooperative lease changes
+				// under leader leases) that would clear the lock table without
+				// exporting unreplicated locks.
+				RaftElectionTimeoutTicks: 1000000,
+			},
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					RaftTestingKnobs: &raft.TestingKnobs{
+						// Due to high RaftElectionTimeoutTicks, we only have
+						// one opportunity to campaign which should not be
+						// missed. Under leader leases, in a cold cluster, a
+						// campaign can fail due to missing store liveness
+						// support from the node's peers. Disallow this check to
+						// ensure that the campaign succeeds.
+						DisablePreCampaignStoreLivenessCheck: true,
+					},
+				},
+			},
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
@@ -6482,34 +6300,4 @@ func TestCommitTriggerFailuresDontCauseUnexpectedCommittedError(t *testing.T) {
 	// Removing the error injector should allow the split to succeed.
 	shouldInjectError.Store(false)
 	require.NoError(t, db.AdminSplit(ctx, scratchRKey("c"), hlc.MaxTimestamp))
-}
-
-// BenchmarkLeaderTickWithLeaderLeases benchmarks the performance of the replica
-// tick when the replica is the leader and running leader leases.
-func BenchmarkLeaderTickWithLeaderLeases(b *testing.B) {
-	defer leaktest.AfterTest(b)()
-	defer log.Scope(b).Close(b)
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	kvserver.OverrideDefaultLeaseType(ctx, &st.SV, roachpb.LeaseLeader)
-
-	// Create a cluster with one node to make sure that this is the leader.
-	cluster := testcluster.StartTestCluster(b, 1, base.TestClusterArgs{
-		ServerArgs: base.TestServerArgs{
-			Settings: st,
-		},
-	})
-	defer cluster.Stopper().Stop(ctx)
-
-	// Set up a replica to be ticked, and wait for the lease to get upgraded.
-	keyA := cluster.ScratchRange(b)
-	desc := cluster.LookupRangeOrFatal(b, keyA)
-	cluster.MaybeWaitForLeaseUpgrade(ctx, b, desc)
-	store := cluster.GetFirstStoreFromServer(b, 0)
-	repl := store.LookupReplica(desc.StartKey)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		store.ProcessTick(ctx, repl.RangeID)
-	}
 }

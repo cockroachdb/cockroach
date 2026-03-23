@@ -7,11 +7,11 @@ package importer
 
 import (
 	"context"
-	"math"
+	"fmt"
 	"math/rand"
-	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
@@ -20,16 +20,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkmerge"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
+	gogotypes "github.com/gogo/protobuf/types"
 )
 
 var replanThreshold = settings.RegisterFloatSetting(
@@ -51,6 +57,10 @@ var replanFrequency = settings.RegisterDurationSetting(
 // import job progress.
 const importProgressDebugName = `import_progress`
 
+// importSSTManifestsInfoKey is the job info key used to store SST manifests
+// produced during the map phase of distributed merge import.
+const importSSTManifestsInfoKey = "~import/sst-manifests.binpb"
+
 // distImport is used by IMPORT to run a DistSQL flow to ingest data by starting
 // reader processes on many nodes that each read and ingest their assigned files
 // and then send back a summary of what they ingested. The combined summary is
@@ -70,6 +80,33 @@ func distImport(
 ) (kvpb.BulkOpSummary, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "importer.distImport")
 	defer sp.Finish()
+
+	// When using distributed merge the processor will emit the SST's and their
+	// start and end keys.
+	details := job.Details().(jobspb.ImportDetails)
+	useDistributedMerge := details.UseDistributedMerge
+
+	// addStoragePrefix records a storage prefix before any SST is written to that
+	// location, ensuring cleanup can occur even if the job fails mid-import.
+	addStoragePrefix := func(ctx context.Context, prefix string) error {
+		return job.NoTxn().Update(ctx, func(
+			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		) error {
+			prog := md.Progress.GetImport()
+			if prog == nil {
+				return errors.New("import progress not found")
+			}
+			// Check for duplicates
+			for _, existing := range prog.SSTStoragePrefixes {
+				if existing == prefix {
+					return nil // Already recorded
+				}
+			}
+			prog.SSTStoragePrefixes = append(prog.SSTStoragePrefixes, prefix)
+			ju.UpdateProgress(md.Progress)
+			return nil
+		})
+	}
 
 	dsp := execCtx.DistSQLPlanner()
 	makePlan := func(ctx context.Context, dsp *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
@@ -108,13 +145,16 @@ func distImport(
 			corePlacement,
 			execinfrapb.PostProcessSpec{},
 			// The direct-ingest readers will emit a binary encoded BulkOpSummary.
-			[]*types.T{types.Bytes, types.Bytes},
+			importProcessorOutputTypes,
 			execinfrapb.Ordering{},
 			nil, /* finalizeLastStageCb */
 		)
-
-		p.PlanToStreamColMap = []int{0, 1}
-
+		// Map the output directly back.
+		colMap := make([]int, len(importProcessorOutputTypes))
+		for i := range colMap {
+			colMap[i] = i
+		}
+		p.PlanToStreamColMap = colMap
 		sql.FinalizePlan(ctx, planCtx, p)
 		return p, planCtx, nil
 	}
@@ -123,16 +163,6 @@ func distImport(
 	if err != nil {
 		return kvpb.BulkOpSummary{}, err
 	}
-
-	// accumulatedBulkSummary accumulates the BulkOpSummary returned from each
-	// processor in their progress updates. It is used to update the job progress.
-	accumulatedBulkSummary := struct {
-		syncutil.Mutex
-		kvpb.BulkOpSummary
-	}{}
-	accumulatedBulkSummary.Lock()
-	accumulatedBulkSummary.BulkOpSummary = getLastImportSummary(job)
-	accumulatedBulkSummary.Unlock()
 
 	importDetails := job.Progress().Details.(*jobspb.Progress_Import).Import
 	if importDetails.ReadProgress == nil {
@@ -157,53 +187,79 @@ func distImport(
 		}
 	}
 
-	rowProgress := make([]int64, len(from))
-	fractionProgress := make([]uint32, len(from))
+	checkpoint := newImportCheckpointTracker(
+		len(from), getLastImportSummary(job), nil, /* manifestBuf */
+	)
 
-	updateJobProgress := func() error {
-		return job.DebugNameNoTxn(importProgressDebugName).FractionProgressed(ctx, func(
-			ctx context.Context, details jobspb.ProgressDetails,
-		) float32 {
-			var overall float32
-			prog := details.(*jobspb.Progress_Import).Import
-			for i := range rowProgress {
-				prog.ResumePos[i] = atomic.LoadInt64(&rowProgress[i])
-			}
-			for i := range fractionProgress {
-				fileProgress := math.Float32frombits(atomic.LoadUint32(&fractionProgress[i]))
-				prog.ReadProgress[i] = fileProgress
-				overall += fileProgress
-			}
+	var res kvpb.BulkOpSummary
 
-			accumulatedBulkSummary.Lock()
-			prog.Summary = accumulatedBulkSummary.BulkOpSummary.DeepCopy()
-			accumulatedBulkSummary.Unlock()
-			return overall / float32(len(from))
-		},
-		)
+	// Restore SST metadata checkpointed from prior attempts. On the first
+	// attempt these are empty. On retries, they contain manifests from files
+	// written in previous attempts, ensuring already-written SSTs are not lost.
+	processorOutput := make([]bulksst.SSTFiles, 0)
+	var resumeManifests []jobspb.BulkSSTManifest
+	if useDistributedMerge {
+		if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(
+			ctx context.Context, txn isql.Txn,
+		) error {
+			data, err := jobs.ReadChunkedFileToJobInfo(
+				ctx, importSSTManifestsInfoKey, txn, job.ID(),
+			)
+			if err != nil {
+				return err
+			}
+			if len(data) > 0 {
+				var stored jobspb.BulkSSTManifests
+				if err := protoutil.Unmarshal(data, &stored); err != nil {
+					return errors.Wrap(err, "unmarshaling SST manifests from job info")
+				}
+				resumeManifests = stored.Manifests
+				processorOutput = append(
+					processorOutput, bulksst.ManifestsToSSTFiles(resumeManifests),
+				)
+			}
+			return nil
+		}); err != nil {
+			return kvpb.BulkOpSummary{}, err
+		}
+		checkpoint.manifestBuf = backfill.NewSSTManifestBuffer(resumeManifests)
 	}
 
-	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
+	metaFn := func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
 		if meta.BulkProcessorProgress != nil {
-			for i, v := range meta.BulkProcessorProgress.ResumePos {
-				atomic.StoreInt64(&rowProgress[i], v)
-			}
-			for i, v := range meta.BulkProcessorProgress.CompletedFraction {
-				atomic.StoreUint32(&fractionProgress[i], math.Float32bits(v))
+			// Decode map progress outside the lock since it doesn't touch
+			// shared state.
+			var manifests []jobspb.BulkSSTManifest
+			var mapProgress execinfrapb.BulkMapProgress
+			if gogotypes.Is(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress) {
+				if err := gogotypes.UnmarshalAny(&meta.BulkProcessorProgress.ProgressDetails, &mapProgress); err != nil {
+					return err
+				}
+				manifests = mapProgress.SSTManifests
 			}
 
-			accumulatedBulkSummary.Lock()
-			accumulatedBulkSummary.Add(meta.BulkProcessorProgress.BulkSummary)
-			accumulatedBulkSummary.Unlock()
+			checkpoint.RecordProcessorUpdate(meta.BulkProcessorProgress, manifests)
+
+			// Accumulate SST file info for the merge phase outside the
+			// tracker since it's only used after the flow completes.
+			if len(manifests) > 0 {
+				processorOutput = append(processorOutput, bulksst.ManifestsToSSTFiles(manifests))
+			}
+
+			// For distributed merge, record storage prefix for nodes that report progress.
+			if useDistributedMerge && meta.BulkProcessorProgress.NodeID != 0 {
+				prefix := fmt.Sprintf("nodelocal://%d/", meta.BulkProcessorProgress.NodeID)
+				if err := addStoragePrefix(ctx, prefix); err != nil {
+					return err
+				}
+			}
 
 			if testingKnobs.alwaysFlushJobProgress {
-				return updateJobProgress()
+				return checkpoint.Persist(ctx, job)
 			}
 		}
 		return nil
 	}
-
-	var res kvpb.BulkOpSummary
 	rowResultWriter := sql.NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		var counts kvpb.BulkOpSummary
 		if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
@@ -250,7 +306,7 @@ func distImport(
 			case <-done:
 				return ctx.Err()
 			case <-tick.C:
-				if err := updateJobProgress(); err != nil {
+				if err := checkpoint.Persist(ctx, job); err != nil {
 					return err
 				}
 
@@ -271,15 +327,61 @@ func distImport(
 		execCfg := execCtx.ExecCfg()
 		jobsprofiler.StorePlanDiagram(ctx, execCfg.DistSQLSrv.Stopper, p, execCfg.InternalDB, job.ID())
 
-		// Copy the eval.Context, as dsp.Run() might change it.
+		// Copy the evalCtx, as dsp.Run() might change it.
 		evalCtxCopy := planCtx.ExtendedEvalCtx.Context.Copy()
 		dsp.Run(ctx, planCtx, nil, p, recv, evalCtxCopy, testingKnobs.onSetupFinish)
-		return rowResultWriter.Err()
+		if err := rowResultWriter.Err(); err != nil {
+			return err
+		}
+		if !useDistributedMerge {
+			return nil
+		}
+
+		// TODO(jeffswenson): this isn't complete. We don't actually want to
+		// generate splits for each index. What we want to do is generate splits
+		// for each span config produced by the table that does not coalesce. For
+		// example, a single RBR index would get split points between each of the
+		// ranges.
+		//
+		// We should also consider making bulkingest tolerate ingesting an SST
+		// that has data for multiple ranges. At the very least that will handle
+		// the case where KV decides to run splits we were not expecting.
+		schemaSpans := tabledesc.NewBuilder(table.Desc).BuildImmutableTable().AllIndexSpans(execCfg.Codec)
+		inputSSTs, spans, err := bulksst.CombineFileInfo(processorOutput, schemaSpans)
+		if err != nil {
+			return err
+		}
+
+		writeTS := &hlc.Timestamp{WallTime: walltime}
+		_, err = bulkmerge.Merge(ctx, execCtx, inputSSTs, spans, func(instanceID base.SQLInstanceID) (string, error) {
+			// Record the storage prefix before any SSTs are written
+			prefix := fmt.Sprintf("nodelocal://%d/", instanceID)
+			if err := addStoragePrefix(ctx, prefix); err != nil {
+				return "", err
+			}
+			return prefix + bulkutil.NewDistMergePaths(job.ID()).MergePath(1), nil
+		}, bulkmerge.MergeOptions{
+			Iteration:         1,
+			MaxIterations:     1,
+			WriteTimestamp:    writeTS,
+			EnforceUniqueness: true,
+			MemoryMonitor:     execinfrapb.BulkMergeSpec_BULK_MONITOR,
+		})
+
+		return err
 	})
 
 	g.GoCtx(replanChecker)
 
 	if err := g.Wait(); err != nil {
+		return kvpb.BulkOpSummary{}, err
+	}
+
+	// Persist the final checkpoint so the job progress summary reflects
+	// all rows ingested in this distImport call. The periodic ticker may
+	// not have fired since the last batch completed, so without this
+	// explicit flush the summary could be stale.
+	if err := checkpoint.Persist(ctx, job); err != nil {
 		return kvpb.BulkOpSummary{}, err
 	}
 
@@ -309,6 +411,10 @@ func makeImportReaderSpecs(
 	inputSpecs := make([]*execinfrapb.ReadImportDataSpec, 0, numSQLInstances*procsPerNode)
 	progress := job.Progress()
 	importProgress := progress.GetImport()
+	var distributedMergeFilePrefix string
+	if details.UseDistributedMerge {
+		distributedMergeFilePrefix = bulkutil.NewDistMergePaths(job.ID()).MapPath()
+	}
 	for i, input := range from {
 		// Round robin assign CSV files to processors. Files 0 through len(specs)-1
 		// creates the spec. Future files just add themselves to the Uris.
@@ -323,12 +429,14 @@ func makeImportReaderSpecs(
 					JobID: job.ID(),
 					Slot:  int32(i),
 				},
-				WalltimeNanos:         walltime,
-				Uri:                   make(map[int32]string),
-				ResumePos:             make(map[int32]int64),
-				UserProto:             user.EncodeProto(),
-				DatabasePrimaryRegion: details.DatabasePrimaryRegion,
-				InitialSplits:         int32(initialSplitsPerProc),
+				WalltimeNanos:              walltime,
+				Uri:                        make(map[int32]string),
+				ResumePos:                  make(map[int32]int64),
+				UserProto:                  user.EncodeProto(),
+				DatabasePrimaryRegion:      details.DatabasePrimaryRegion,
+				InitialSplits:              int32(initialSplitsPerProc),
+				UseDistributedMerge:        details.UseDistributedMerge,
+				DistributedMergeFilePrefix: distributedMergeFilePrefix,
 			}
 			inputSpecs = append(inputSpecs, spec)
 		}

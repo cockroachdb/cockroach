@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
@@ -320,6 +319,8 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`^pkg/raft/.*`),
 			// Generated files for plpgsql.
 			stream.GrepNot(`sql/plpgsql/parser/plpgsqllexbase/.*.go`),
+			// Generated TypeScript types from OpenAPI schema.
+			stream.GrepNot(`db-console/src/api/api-types\.ts$`),
 		), func(filename string) {
 			file, err := os.Open(filepath.Join(crdbDir, filename))
 			if err != nil {
@@ -675,7 +676,6 @@ func TestLint(t *testing.T) {
 					// KMS requires AWS credentials from environment variables.
 					":!backup/backup_test.go",
 					":!ccl/changefeedccl/helpers_test.go",
-					":!ccl/cloudccl",
 					":!cloud",
 					":!ccl/workloadccl/fixture_test.go",
 					":!internal/reporoot/reporoot.go",
@@ -1091,6 +1091,7 @@ func TestLint(t *testing.T) {
 			":!util/syncutil/mutex_tracing.go",
 			":!util/timeutil/time.go",
 			":!util/timeutil/zoneinfo.go",
+			":!cmd/dev/**",
 			":!cmd/roachtest/tests/gorm_helpers.go",
 		)
 		if err != nil {
@@ -1275,6 +1276,7 @@ func TestLint(t *testing.T) {
 			":!server/server_obs_service.go",
 			":!server/testserver.go",
 			":!util/tracing/*_test.go",
+			":!cli/mt_http_test_directory.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_directory_svr.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_simple_directory_svr.go",
 			":!ccl/sqlproxyccl/tenantdirsvr/test_static_directory_svr.go",
@@ -1752,7 +1754,7 @@ func TestLint(t *testing.T) {
 			skip.IgnoreLint(t, "PKG specified")
 		}
 
-		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files", "*.go", ":!*/testdata/*", ":!*_generated.go", ":!roachprod/agents/opentelemetry/cockroachdb_metrics.go")
+		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files", "*.go", ":!*/testdata/*", ":!*_generated.go")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2013,74 +2015,6 @@ func TestLint(t *testing.T) {
 			}); err != nil {
 			t.Error(err)
 		}
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
-	// TODO(tamird): replace this with errcheck.NewChecker() when
-	// https://github.com/dominikh/go-tools/issues/57 is fixed.
-	t.Run("TestErrCheck", func(t *testing.T) {
-		skip.UnderShort(t)
-		if bazel.BuiltWithBazel() {
-			skip.IgnoreLint(t, "the errcheck tests are run during the bazel build")
-		}
-		excludesPath, err := filepath.Abs(datapathutils.TestDataPath(t, "errcheck_excludes.txt"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		// errcheck uses 2GB of ram (as of 2017-07-13), so don't parallelize it.
-		cmd, stderr, filter, err := dirCmd(
-			crdbDir,
-			"errcheck",
-			"-exclude",
-			excludesPath,
-			pkgScope,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("%s <- unchecked error", s)
-		}); err != nil {
-			t.Error(err)
-		}
-
-		if err := cmd.Wait(); err != nil {
-			if out := stderr.String(); len(out) > 0 {
-				t.Fatalf("err=%s, stderr=%s", err, out)
-			}
-		}
-	})
-
-	t.Run("TestReturnCheck", func(t *testing.T) {
-		skip.UnderShort(t)
-		if bazel.BuiltWithBazel() {
-			skip.IgnoreLint(t, "the returncheck tests are run during the bazel build")
-		}
-		// returncheck uses 2GB of ram (as of 2017-07-13), so don't parallelize it.
-		cmd, stderr, filter, err := dirCmd(crdbDir, "returncheck", pkgScope)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err := cmd.Start(); err != nil {
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("%s <- unchecked error", s)
-		}); err != nil {
-			t.Error(err)
-		}
-
 		if err := cmd.Wait(); err != nil {
 			if out := stderr.String(); len(out) > 0 {
 				t.Fatalf("err=%s, stderr=%s", err, out)
@@ -2576,134 +2510,6 @@ func TestLint(t *testing.T) {
 				t.Fatalf("err=%s, stderr=%s", err, out)
 			}
 		}
-	})
-
-	// RoachVet is expensive memory-wise and thus should not run with t.Parallel().
-	// RoachVet includes all of the passes of `go vet` plus first-party additions.
-	// See pkg/cmd/roachvet.
-	t.Run("TestRoachVet", func(t *testing.T) {
-		skip.UnderShort(t)
-		if bazel.BuiltWithBazel() {
-			skip.IgnoreLint(t, "the roachvet tests are run during the bazel build")
-		}
-		// The -printfuncs functionality is interesting and
-		// under-documented. It checks two things:
-		//
-		// - that functions that accept formatting specifiers are given
-		//   arguments of the proper type.
-		// - that functions that don't accept formatting specifiers
-		//   are not given any.
-		//
-		// Whether a function takes a format string or not is determined
-		// as follows: (comment taken from the source of `go vet`)
-		//
-		//    A function may be a Printf or Print wrapper if its last argument is ...interface{}.
-		//    If the next-to-last argument is a string, then this may be a Printf wrapper.
-		//    Otherwise it may be a Print wrapper.
-		// Note we retrieve the list of printfuncs from nogo_config.json.
-		analyzerFlags := nogoConfig["printf"].(map[string]any)
-		printfuncs := analyzerFlags["analyzer_flags"].(map[string]any)["funcs"].(string)
-		nakedGoroutineExceptions := `(` + strings.Join([]string{
-			`pkg/.*_test\.go`,
-			`pkg/acceptance/.*\.go`,
-			`pkg/cli/syncbench/.*\.go`,
-			`pkg/cli/systembench/.*\.go`,
-			`pkg/cmd/allocsim/.*\.go`,
-			`pkg/cmd/cmp-protocol/.*\.go`,
-			`pkg/cmd/cr2pg/.*\.go`,
-			`pkg/cmd/reduce/.*\.go`,
-			`pkg/cmd/roachprod-stress/.*\.go`,
-			`pkg/cmd/roachprod/.*\.go`,
-			`pkg/cmd/roachtest/.*\.go`,
-			`pkg/cmd/smithtest/.*\.go`,
-			`pkg/cmd/urlcheck/.*\.go`,
-			`pkg/cmd/zerosum/.*\.go`,
-			`pkg/testutils/.*\.go`,
-			`pkg/workload/.*\.go`,
-		}, "|") + `)`
-		filters := []stream.Filter{
-			// Ignore generated files.
-			stream.GrepNot(`pkg/.*\.pb\.go:`),
-			stream.GrepNot(`pkg/.*\.pb\.gw\.go:`),
-			stream.GrepNot(`pkg/.*\.[eo]g\.go:`),
-			stream.GrepNot(`pkg/.*_generated\.go:`),
-
-			// Ignore types that can change by system.
-			stream.GrepNot(`pkg/util/sysutil/sysutil_unix.go:`),
-
-			// Ignore jemalloc issues warnings.
-			stream.GrepNot(`In file included from.*(start|runtime)_jemalloc\.go`),
-			stream.GrepNot(`include/jemalloc/jemalloc\.h`),
-
-			// Allow shadowing for variables named err, pErr (proto-errors in kv) and
-			// ctx. For these variables, these names are very common and having too
-			// look for new names to avoid shadowing is too onerous or even
-			// counter-productive if it makes people use the wrong variable by
-			// mistake.
-			stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
-			stream.GrepNot(`declaration of "ctx" shadows`),
-
-			// This exception is for hash.go, which re-implements runtime.noescape
-			// for efficient hashing.
-			stream.GrepNot(`pkg/sql/colexec/colexechash/hash.go:[0-9:]+: possible misuse of unsafe.Pointer`),
-			stream.GrepNot(`^#`), // comment line
-			// kvpb's own error package takes ownership of error unwraps
-			// (by enforcing that errors can never been wrapped under a
-			// kvpb.Error, which is an inconvenient limitation but it is
-			// what it is). Once this code is simplified to use generalized
-			// error encode/decode, it can be dropped from the linter
-			// exception as well.
-			stream.GrepNot(`pkg/kv/kvpb/errors\.go:.*invalid direct cast on error object`),
-			// Cast in decode handler.
-			stream.GrepNot(`pkg/sql/pgwire/pgerror/constraint_name\.go:.*invalid direct cast on error object`),
-			// Cast in decode handler.
-			stream.GrepNot(`pkg/kv/kvclient/kvcoord/lock_spans_over_budget_error\.go:.*invalid direct cast on error object`),
-			// pgerror's pgcode logic uses its own custom cause recursion
-			// algorithm and thus cannot use errors.If() which mandates a
-			// different recursion order.
-			//
-			// It's a bit unfortunate that the entire file is added
-			// as an exception here, given that only one function
-			// really needs the linter. We could consider splitting
-			// that function to a different file to limit the scope
-			// of the exception.
-			stream.GrepNot(`pkg/sql/pgwire/pgerror/pgcode\.go:.*invalid direct cast on error object`),
-			// Cast in decode handler.
-			stream.GrepNot(`pkg/util/timeutil/timeout_error\.go:.*invalid direct cast on error object`),
-			// Direct error cast OK in this case for a low-dependency helper binary.
-			stream.GrepNot(`pkg/cmd/github-pull-request-make/main\.go:.*invalid direct cast on error object`),
-			// The logging package translates log.Dev.Fatal calls into errors.
-			// We can't use the regular exception mechanism via functions.go
-			// because addStructured takes its positional argument as []interface{},
-			// instead of ...interface{}.
-			stream.GrepNot(`pkg/util/log/channels\.go:\d+:\d+: logfDepth\(\): format argument is not a constant expression`),
-			stream.GrepNot(`pkg/util/log/channels\.go:\d+:\d+: logfDepthInternal\(\): format argument is not a constant expression`),
-			stream.GrepNot(`pkg/util/log/channels\.go:\d+:\d+: untypedVEventfDepth\(\): format argument is not a constant expression`),
-			// roachprod/logger is not collecting redactable logs so we don't care
-			// about printf hygiene there as much.
-			stream.GrepNot(`pkg/roachprod/logger/log\.go:.*format argument is not a constant expression`),
-			// We purposefully produce nil dereferences in this file to test crash conditions
-			stream.GrepNot(`pkg/util/log/logcrash/crash_reporting_test\.go:.*nil dereference in type assertion`),
-			// Temporarily copied code from google-cloud-go's retry predicate.
-			stream.GrepNot(`pkg/cloud/gcp/gcs_retry\.go:.*invalid direct cast on error object`),
-			// Spawning naked goroutines is ok when it's not as part of the main CRDB
-			// binary. This is for now - if we use #58164 to introduce more aggressive
-			// pooling, etc, then test code needs to adhere as well.
-			stream.GrepNot(nakedGoroutineExceptions + `:.*Use of go keyword not allowed`),
-			stream.GrepNot(nakedGoroutineExceptions + `:.*Illegal call to Group\.Go\(\)`),
-			// We purposefully dereference nil in this file to test panic handling
-			stream.GrepNot(`pkg/cmd/roachtest/roachtestutil/mixedversion/runner_test\.go:.*nil dereference`),
-		}
-
-		const vetTool = "roachvet"
-		vetToolPath, err := exec.LookPath(vetTool)
-		if err != nil {
-			t.Fatalf("failed to find %s: %s", vetTool, err)
-		}
-		vetCmd(t, crdbDir, "go",
-			[]string{"vet", "-vettool", vetToolPath, "-all", "-printf.funcs", printfuncs, pkgScope},
-			filters)
-
 	})
 
 	t.Run("CODEOWNERS", func(t *testing.T) {

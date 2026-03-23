@@ -40,6 +40,8 @@ import {
   transactionsServiceLatencyBarChart,
   transactionsContentionBarChart,
   transactionsCPUBarChart,
+  transactionsAdmissionWaitTimeBarChart,
+  transactionsKVCPUTimeBarChart,
   transactionsMaxMemUsageBarChart,
   transactionsNetworkBytesBarChart,
   transactionsRetryBarChart,
@@ -128,6 +130,14 @@ export function makeTransactionsColumns(
     sampledExecStatsBarChartOptions,
   );
   const cpuBar = transactionsCPUBarChart(
+    transactions,
+    sampledExecStatsBarChartOptions,
+  );
+  const kvCPUTimeBar = transactionsKVCPUTimeBarChart(
+    transactions,
+    defaultBarChartOptions, // kvCPUTime is always collected, it is not part of the sampled exec stats.
+  );
+  const admissionWaitTimeBar = transactionsAdmissionWaitTimeBarChart(
     transactions,
     sampledExecStatsBarChartOptions,
   );
@@ -238,6 +248,24 @@ export function makeTransactionsColumns(
       className: cx("statements-table__col-cpu"),
       sort: (item: TransactionInfo) =>
         FixLong(Number(item.stats_data.stats.exec_stats.cpu_sql_nanos?.mean)),
+    },
+    {
+      name: "admissionWaitTime",
+      title: statisticsTableTitles.admissionWaitTime(statType),
+      cell: admissionWaitTimeBar,
+      className: cx("statements-table__col-admission-wait-time"),
+      sort: (item: TransactionInfo) =>
+        FixLong(
+          Number(item.stats_data.stats.exec_stats.admission_wait_time?.mean),
+        ),
+    },
+    {
+      name: "kvCPUTime",
+      title: statisticsTableTitles.kvCPUTime(statType),
+      cell: kvCPUTimeBar,
+      className: cx("statements-table__col-kv-cpu-time"),
+      sort: (item: TransactionInfo) =>
+        FixLong(Number(item.stats_data.stats.kv_cpu_time_nanos?.mean)),
     },
     {
       name: "maxMemUsage",

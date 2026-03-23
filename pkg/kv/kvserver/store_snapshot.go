@@ -765,7 +765,6 @@ func SendEmptySnapshot(
 		State:              state,
 		RaftMessageRequest: req,
 		RangeSize:          ms.Total(),
-		RangeKeysInOrder:   true,
 	}
 
 	stream, err := mrc.RaftSnapshot(ctx)

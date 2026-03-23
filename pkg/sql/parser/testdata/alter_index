@@ -447,3 +447,67 @@ ALTER INDEX i VISIBILITY 0.00 -- normalized!
 ALTER INDEX i VISIBILITY 0.00 -- fully parenthesized
 ALTER INDEX i VISIBILITY 0.00 -- literals removed
 ALTER INDEX _ VISIBILITY 0.00 -- identifiers removed
+
+parse
+ALTER INDEX i SET (fillfactor = 70)
+----
+ALTER INDEX i SET ('fillfactor' = 70) -- normalized!
+ALTER INDEX i SET ('fillfactor' = (70)) -- fully parenthesized
+ALTER INDEX i SET ('fillfactor' = _) -- literals removed
+ALTER INDEX _ SET ('fillfactor' = 70) -- identifiers removed
+
+parse
+ALTER INDEX db.t@i SET (fillfactor = 70)
+----
+ALTER INDEX db.t@i SET ('fillfactor' = 70) -- normalized!
+ALTER INDEX db.t@i SET ('fillfactor' = (70)) -- fully parenthesized
+ALTER INDEX db.t@i SET ('fillfactor' = _) -- literals removed
+ALTER INDEX _._@_ SET ('fillfactor' = 70) -- identifiers removed
+
+parse
+ALTER INDEX t@i SET (fillfactor = 70, s2_max_level = 10)
+----
+ALTER INDEX t@i SET ('fillfactor' = 70, 's2_max_level' = 10) -- normalized!
+ALTER INDEX t@i SET ('fillfactor' = (70), 's2_max_level' = (10)) -- fully parenthesized
+ALTER INDEX t@i SET ('fillfactor' = _, 's2_max_level' = _) -- literals removed
+ALTER INDEX _@_ SET ('fillfactor' = 70, 's2_max_level' = 10) -- identifiers removed
+
+parse
+ALTER INDEX i RESET (fillfactor)
+----
+ALTER INDEX i RESET (fillfactor)
+ALTER INDEX i RESET (fillfactor) -- fully parenthesized
+ALTER INDEX i RESET (fillfactor) -- literals removed
+ALTER INDEX _ RESET (fillfactor) -- identifiers removed
+
+parse
+ALTER INDEX db.t@i RESET (fillfactor)
+----
+ALTER INDEX db.t@i RESET (fillfactor)
+ALTER INDEX db.t@i RESET (fillfactor) -- fully parenthesized
+ALTER INDEX db.t@i RESET (fillfactor) -- literals removed
+ALTER INDEX _._@_ RESET (fillfactor) -- identifiers removed
+
+parse
+ALTER INDEX t@i RESET (fillfactor, s2_max_level)
+----
+ALTER INDEX t@i RESET (fillfactor, s2_max_level)
+ALTER INDEX t@i RESET (fillfactor, s2_max_level) -- fully parenthesized
+ALTER INDEX t@i RESET (fillfactor, s2_max_level) -- literals removed
+ALTER INDEX _@_ RESET (fillfactor, s2_max_level) -- identifiers removed
+
+parse
+ALTER INDEX IF EXISTS i SET (fillfactor = 70)
+----
+ALTER INDEX IF EXISTS i SET ('fillfactor' = 70) -- normalized!
+ALTER INDEX IF EXISTS i SET ('fillfactor' = (70)) -- fully parenthesized
+ALTER INDEX IF EXISTS i SET ('fillfactor' = _) -- literals removed
+ALTER INDEX IF EXISTS _ SET ('fillfactor' = 70) -- identifiers removed
+
+parse
+ALTER INDEX IF EXISTS i RESET (fillfactor)
+----
+ALTER INDEX IF EXISTS i RESET (fillfactor)
+ALTER INDEX IF EXISTS i RESET (fillfactor) -- fully parenthesized
+ALTER INDEX IF EXISTS i RESET (fillfactor) -- literals removed
+ALTER INDEX IF EXISTS _ RESET (fillfactor) -- identifiers removed

@@ -747,12 +747,12 @@ DROP TABLE test_serial;
 
 subtest test_storage_params_validation
 
-statement error pq: invalid storage param "s2_max_level" on primary key
+statement error pq: index setting "s2_max_level" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
 CREATE TABLE t_bad_param (
   a INT PRIMARY KEY WITH (s2_max_level=20)
 );
 
-statement error pq: invalid storage param "s2_max_level" on primary key
+statement error pq: index setting "s2_max_level" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
 CREATE TABLE t_bad_param (
   a INT PRIMARY KEY USING HASH WITH (s2_max_level=20)
 );
@@ -772,13 +772,13 @@ CREATE TABLE t_bad_param (
   a INT PRIMARY KEY USING HASH WITH BUCKET_COUNT = NULL
 );
 
-statement error pq: invalid storage param "s2_max_level" on primary key
+statement error pq: index setting "s2_max_level" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
 CREATE TABLE t_bad_param (
   a INT NOT NULL,
   PRIMARY KEY (a) WITH (s2_max_level=20)
 );
 
-statement error pq: invalid storage param "s2_max_level" on primary key
+statement error pq: index setting "s2_max_level" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
 CREATE TABLE t_bad_param (
   a INT NOT NULL,
   PRIMARY KEY (a) USING HASH WITH (s2_max_level=20)
@@ -796,13 +796,13 @@ CREATE TABLE t_bad_param (
   PRIMARY KEY (a) USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5)
 );
 
-statement error pq: invalid storage param "s2_max_level" on primary key
+statement error pq: index setting "s2_max_level" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
 CREATE TABLE t_bad_param (
   a INT NOT NULL,
   CONSTRAINT t_bad_param_pkey PRIMARY KEY (a) WITH (s2_max_level=20)
 );
 
-statement error pq: invalid storage param "s2_max_level" on primary key
+statement error pq: index setting "s2_max_level" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
 CREATE TABLE t_bad_param (
   a INT NOT NULL,
   CONSTRAINT t_bad_param_pkey PRIMARY KEY (a) USING HASH WITH (s2_max_level=20)
@@ -820,13 +820,13 @@ CREATE TABLE t_bad_param (
   CONSTRAINT t_bad_param_pkey PRIMARY KEY (a) USING HASH WITH BUCKET_COUNT = 5 WITH (bucket_count=5)
 );
 
-statement error pq: invalid storage param "s2_max_level" on unique index
+statement error pq: index setting "s2_max_level" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
 CREATE TABLE t_bad_param (
   a INT,
   UNIQUE INDEX (a) WITH (s2_max_level=20)
 );
 
-statement error pq: invalid storage param "s2_max_level" on unique index
+statement error pq: index setting "s2_max_level" can only be set on GEOMETRY or GEOGRAPHY spatial indexes
 CREATE TABLE t_bad_param (
   a INT,
   UNIQUE INDEX (a) USING HASH WITH (s2_max_level=20)
@@ -1233,7 +1233,7 @@ CREATE TABLE create_table_index_elem_duplicate_storage_params_e (
 
 subtest end
 
-statement error pq: unimplemented: column col2 has type refcursor, which is not indexable\nHINT: You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/35730/dev
+statement error pq: unimplemented: column col2 has type refcursor, which is not indexable\nHINT: You have attempted to use a feature that is not yet implemented.\nSee: https://go.crdb.dev/issue-v/35730/v26.2
 CREATE TABLE not_indexable (COL1 INT PRIMARY KEY, COL2 REFCURSOR, COL3 REFCURSOR, INDEX (COL2, COL3))
 
 subtest region_lookup_param

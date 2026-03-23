@@ -110,7 +110,7 @@ func TestValidateSchemaChangerState(t *testing.T) {
 			expectedErrors: []string{
 				prefix + ` target 0 is targeting an invalid status UNKNOWN`,
 				prefix + ` unexpected statement 0 \(ALTER TABLE a RENAME TO b\)`,
-				prefix + ` missing statement for targets \(0\) / \(Namespace:\{DescID: 3, Name: foo, ReferencedDescID: 2\}\)`,
+				prefix + ` missing statement for targets \(0\) / \(Namespace:\{DescID: 3, Name: foo, ReferencedDescID: 2, IntValue: 2\}\)`,
 			},
 		},
 		{

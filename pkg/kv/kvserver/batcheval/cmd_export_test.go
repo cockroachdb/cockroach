@@ -36,10 +36,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/stretchr/testify/require"
@@ -498,7 +500,12 @@ func TestExportRequestWithCPULimitResumeSpans(t *testing.T) {
 	header := kvpb.Header{
 		ReturnElasticCPUResumeSpans: true,
 	}
-	_, err := kv.SendWrappedWith(ctx, kvDB.NonTransactionalSender(), header, req)
+	_, err := kv.SendWrappedWithAdmission(ctx, kvDB.NonTransactionalSender(), header, kvpb.AdmissionHeader{
+		Priority:                 int32(admissionpb.BulkNormalPri),
+		CreateTime:               timeutil.Now().UnixNano(),
+		Source:                   kvpb.AdmissionHeader_FROM_SQL,
+		NoMemoryReservedAtSource: true,
+	}, req)
 	require.NoError(t, err.GoError())
 }
 

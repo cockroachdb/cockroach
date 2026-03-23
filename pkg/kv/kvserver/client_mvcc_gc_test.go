@@ -132,7 +132,7 @@ func TestSystemSpanConfigProtectionPoliciesApplyAfterGC(t *testing.T) {
 		ptp := execCfg.ProtectedTimestampProvider
 		insqlDB := execCfg.InternalDB
 		recordID := uuid.MakeV4()
-		rec := jobsprotectedts.MakeRecord(recordID, int64(1), ts, nil, /* deprecatedSpans */
+		rec := jobsprotectedts.MakeRecord(recordID, int64(1), ts,
 			jobsprotectedts.Jobs, target)
 		require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			return ptp.WithTxn(txn).Protect(ctx, rec)

@@ -9,6 +9,7 @@ package disk
 
 import (
 	"bytes"
+	"context"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"unicode"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,10 +47,17 @@ import (
 //	13  time spent doing I/Os (ms)
 //	14  weighted time spent doing I/Os (ms)
 func parseDiskStats(
-	contents []byte, disks []*monitoredDisk, measuredAt time.Time,
+	contents []byte,
+	disks []*monitoredDisk,
+	measuredAt time.Time,
+	alternativeRecorder func(traceEvent),
 ) (countCollected int, err error) {
 	for lineNum := 0; len(contents) > 0; lineNum++ {
 		lineBytes, rest := splitLine(contents)
+		if len(lineBytes) == 0 {
+			log.Dev.Infof(context.Background(), "/proc/diskstats did not parse%s", string(contents))
+			return 0, errors.Errorf("/proc/diskstats did not parse")
+		}
 		line := unsafe.String(&lineBytes[0], len(lineBytes))
 		contents = rest
 
@@ -59,13 +68,13 @@ func parseDiskStats(
 			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		} else {
 			line = rest
-			deviceID.major = uint32(devMajor)
+			deviceID.Major = uint32(devMajor)
 		}
 		if devMinor, rest, err := mustParseUint(line, 32, "deviceID.minor"); err != nil {
 			return 0, errors.Wrapf(err, "/proc/diskstats:%d: %q", lineNum, err)
 		} else {
 			line = rest
-			deviceID.minor = uint32(devMinor)
+			deviceID.Minor = uint32(devMinor)
 		}
 		diskIdx := slices.IndexFunc(disks, func(d *monitoredDisk) bool {
 			return d.deviceID == deviceID
@@ -77,6 +86,7 @@ func parseDiskStats(
 		}
 
 		var stats Stats
+		stats.DeviceID = deviceID
 		var err error
 		stats.DeviceName, line = splitFieldDelim(line)
 		if stats.ReadsCount, line, err = mustParseUint(line, 64, "reads count"); err != nil {
@@ -149,11 +159,16 @@ func parseDiskStats(
 		} else if ok {
 			stats.FlushesDuration = time.Duration(millis) * time.Millisecond
 		}
-		disks[diskIdx].tracer.RecordEvent(traceEvent{
+		event := traceEvent{
 			time:  measuredAt,
 			stats: stats,
 			err:   nil,
-		})
+		}
+		if alternativeRecorder != nil {
+			alternativeRecorder(event)
+		} else {
+			disks[diskIdx].tracer.RecordEvent(event)
+		}
 		countCollected++
 	}
 	return countCollected, nil

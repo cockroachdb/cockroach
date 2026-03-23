@@ -30,6 +30,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/rand"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/schemachange"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/sqlsmith"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/sqlstats"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpccchecks"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpcds"

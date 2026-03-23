@@ -139,6 +139,11 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 	propagateHTTPDefaults(&c.HTTPDefaults, baseHTTPDefaults)
 	propagateOTLPDefaults(&c.OTLPDefaults, baseOTLPDefaults)
 
+	if !c.Redaction.Hashing.Enabled && c.Redaction.Hashing.Salt != "" {
+		fmt.Fprintln(&errBuf,
+			"redaction.hashing.salt requires redaction.hashing.enabled to be true")
+	}
+
 	// Normalize the directory.
 	if err := normalizeDir(&c.FileDefaults.Dir); err != nil {
 		fmt.Fprintf(&errBuf, "file-defaults: %v\n", err)

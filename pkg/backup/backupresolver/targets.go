@@ -6,11 +6,13 @@
 package backupresolver
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -674,35 +676,498 @@ func LoadAllDescs(
 	return allDescs, nil
 }
 
-// ResolveTargetsToDescriptors performs name resolution on a set of targets and
-// returns the resulting descriptors.
+// wildcardResult holds the resolved database, optional target schema, and
+// scope flag for an AllTablesSelector wildcard pattern.
+type wildcardResult struct {
+	db catalog.DatabaseDescriptor
+	// targetSchema is non-nil if the wildcard pattern has an explicit schema
+	// component, e.g. `db.schema.*`, `schema.*`, or bare `*`.
+	targetSchema catalog.SchemaDescriptor
+	// hasSchemaScope is true when the wildcard pattern is a 3-part name
+	// like my_db.my_schema.*, i.e. both catalog and schema are explicit.
+	//
+	// TODO(msbutler): we should remove this, and simply rely on targetSchema.
+	// Currently specifying `schema.*` will back up the whole parent database, if
+	// the currentDatabase is the actual parent of the schema,
+	// which is unexpected. If the currentDatabase is some other db,
+	// resolveWildcard will fail.
+	hasSchemaScope bool
+}
+
+// resolveWildcard determines the database, optional target schema, and schema
+// scope for an AllTablesSelector wildcard pattern.
 //
-// TODO(ajwerner): adopt the collection here.
-func ResolveTargetsToDescriptors(
+// TODO(msbutler): we should remove the hasSchemaScope flag, and simply rely on
+// targetSchema. See test cases for how this hasSchemaScope flag leads to
+// weirdness.
+func resolveWildcard(
+	ctx context.Context,
+	p *tree.AllTablesSelector,
+	r *simpleResolver,
+	currentDatabase string,
+	searchPath sessiondata.SearchPath,
+) (wildcardResult, error) {
+	if p.ExplicitSchema && !p.ExplicitCatalog {
+		// 2-part pattern like "db.*". The parser puts the first part in
+		// SchemaName, not CatalogName. Check if it's actually a database.
+		potentialDBName := p.ObjectNamePrefix.Schema()
+		maybeDB, err := r.col.ByName(r.txn).MaybeGet().Database(ctx, potentialDBName)
+		if err != nil {
+			return wildcardResult{}, err
+		}
+		if maybeDB != nil {
+			return wildcardResult{db: maybeDB}, nil
+		}
+	}
+
+	// Normal resolution: treat SchemaName as a schema name (or resolve
+	// bare "*" via the current database and search path).
+	found, prefix, err := resolver.ResolveObjectNamePrefix(
+		ctx, r, currentDatabase, searchPath, &p.ObjectNamePrefix,
+	)
+	if err != nil {
+		return wildcardResult{}, err
+	}
+	if !found {
+		return wildcardResult{}, sqlerrors.NewInvalidWildcardError(tree.ErrString(p))
+	}
+	return wildcardResult{
+		db:             prefix.Database,
+		targetSchema:   prefix.Schema,
+		hasSchemaScope: p.ExplicitSchema && p.ExplicitCatalog,
+	}, nil
+}
+
+// ResolveTargets performs name resolution on a set of targets and returns
+// the resulting descriptors using Collection APIs to avoid loading all
+// descriptors into memory.
+//
+// This implementation uses Collection methods to load only the necessary
+// descriptors, making it O(targets) instead of O(all_descriptors).
+//
+// Returns:
+//   - []catalog.Descriptor: result - qll resolved descriptors.
+//   - []descpb.ID: expandedDBs - database IDs where we used a wildcard expansion.
+//   - []catalog.DatabaseDescriptor: requestedDBs - explicitly requested DATABASE targets.
+//   - map[tree.TablePattern]catalog.Descriptor: descsByTablePattern - TABLE patterns to descriptors.
+func ResolveTargets(
 	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets *tree.BackupTargetList,
 ) (
-	[]catalog.Descriptor,
-	[]descpb.ID,
-	[]catalog.DatabaseDescriptor,
-	map[tree.TablePattern]catalog.Descriptor,
-	error,
+	result []catalog.Descriptor,
+	expandedDBs []descpb.ID,
+	requestedDBs []catalog.DatabaseDescriptor,
+	descsByTablePattern map[tree.TablePattern]catalog.Descriptor,
+	retErr error,
 ) {
-	allDescs, err := LoadAllDescs(ctx, p.ExecCfg(), endTime)
+	descsByTablePattern = make(map[tree.TablePattern]catalog.Descriptor)
+	seenDescs := make(map[descpb.ID]struct{})
+
+	// Helper to add descriptor if not already seen.
+	addDesc := func(desc catalog.Descriptor) {
+		if desc == nil {
+			return
+		}
+		if _, seen := seenDescs[desc.GetID()]; !seen {
+			result = append(result, desc)
+			seenDescs[desc.GetID()] = struct{}{}
+		}
+	}
+
+	err := sql.DescsTxn(ctx, p.ExecCfg(), func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		if err := txn.KV().SetFixedTimestamp(ctx, endTime); err != nil {
+			return err
+		}
+
+		currentDatabase := p.CurrentDatabase()
+		searchPath := p.CurrentSearchPath()
+
+		// Create a resolver for name resolution using Collection APIs.
+		r := &simpleResolver{col: col, txn: txn.KV()}
+
+		// Helper to get type descriptors referenced by a table.
+		getReferencedTypes := func(table catalog.TableDescriptor, db catalog.DatabaseDescriptor) error {
+			getTypeByID := func(id descpb.ID) (catalog.TypeDescriptor, error) {
+				typ, err := col.ByIDWithoutLeased(txn.KV()).Get().Type(ctx, id)
+				if err != nil {
+					return nil, err
+				}
+				return typ, nil
+			}
+
+			typeIDs, _, err := table.GetAllReferencedTypeIDs(db, getTypeByID)
+			if err != nil {
+				return err
+			}
+			for _, typeID := range typeIDs {
+				typ, err := col.ByIDWithoutLeased(txn.KV()).Get().Type(ctx, typeID)
+				if err != nil {
+					return err
+				}
+				addDesc(typ)
+			}
+			return nil
+		}
+
+		// Helper to get function descriptors referenced by a table.
+		getReferencedFunctions := func(table catalog.TableDescriptor) error {
+			fnIDs, err := table.GetAllReferencedFunctionIDs()
+			if err != nil {
+				return err
+			}
+			for _, fnID := range fnIDs.Ordered() {
+				fn, err := col.ByIDWithoutLeased(txn.KV()).Get().Function(ctx, fnID)
+				if err != nil {
+					return err
+				}
+				addDesc(fn)
+			}
+			return nil
+		}
+
+		// Helper to check if a schema should be skipped (dropped, virtual, or temporary).
+		shouldSkipSchema := func(schema catalog.SchemaDescriptor) bool {
+			if schema == nil {
+				return true
+			}
+			if schema.Dropped() {
+				return true
+			}
+			kind := schema.SchemaKind()
+			return kind == catalog.SchemaVirtual || kind == catalog.SchemaTemporary
+		}
+
+		// Helper to add schema descriptor.
+		addSchemaDesc := func(schemaID descpb.ID) error {
+			// Skip public schema placeholders.
+			if schemaID == keys.PublicSchemaIDForBackup || schemaID == keys.PublicSchemaID {
+				return nil
+			}
+			schema, err := col.ByIDWithoutLeased(txn.KV()).Get().Schema(ctx, schemaID)
+			if err != nil {
+				return err
+			}
+			if !shouldSkipSchema(schema) {
+				addDesc(schema)
+			}
+			return nil
+		}
+
+		// Process DATABASE targets.
+		for _, dbName := range targets.Databases {
+			db, err := col.ByName(txn.KV()).Get().Database(ctx, string(dbName))
+			if err != nil {
+				return err
+			}
+			if !db.Public() {
+				return sqlerrors.NewUndefinedDatabaseError(tree.ErrString(&dbName))
+			}
+			addDesc(db)
+
+			// Track completeDBs and requestedDBs for DATABASE targets.
+			expandedDBs = append(expandedDBs, db.GetID())
+			requestedDBs = append(requestedDBs, db)
+
+			// For database backup, get all objects in the database.
+			allInDB, err := col.GetAllInDatabase(ctx, txn.KV(), db)
+			if err != nil {
+				return err
+			}
+
+			err = allInDB.ForEachDescriptor(func(desc catalog.Descriptor) error {
+				// Skip virtual tables and temp tables.
+				if table, ok := desc.(catalog.TableDescriptor); ok {
+					if !(desc.Public() || desc.Offline()) {
+						return nil
+					}
+					if table.IsVirtualTable() || table.IsTemporary() {
+						return nil
+					}
+					if err := getReferencedTypes(table, db); err != nil {
+						return err
+					}
+					if err := getReferencedFunctions(table); err != nil {
+						return err
+					}
+					if err := addSchemaDesc(table.GetParentSchemaID()); err != nil {
+						return err
+					}
+					addDesc(table)
+					return nil
+				}
+
+				// For schemas, skip dropped, virtual, and temporary schemas.
+				// Include PUBLIC, OFFLINE, and ADD schemas.
+				if schema, ok := desc.(catalog.SchemaDescriptor); ok {
+					if !shouldSkipSchema(schema) {
+						addDesc(schema)
+					}
+					return nil
+				}
+
+				// For other descriptors (types, functions), apply standard filter.
+				if !(desc.Public() || desc.Offline()) {
+					return nil
+				}
+				addDesc(desc)
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+		}
+
+		// Process TABLE targets.
+		for _, origPattern := range targets.Tables.TablePatterns {
+			pattern, err := origPattern.NormalizeTablePattern()
+			if err != nil {
+				return err
+			}
+
+			switch p := pattern.(type) {
+			case *tree.TableName:
+				// Resolve individual table.
+				un := p.ToUnresolvedObjectName()
+
+				found, prefix, desc, err := resolver.ResolveExisting(
+					ctx, un, r, tree.ObjectLookupFlags{DesiredObjectKind: tree.TableObject}, currentDatabase, searchPath,
+				)
+				if err != nil {
+					return err
+				}
+				if !found {
+					return errors.Errorf("table %q does not exist", tree.ErrString(p))
+				}
+
+				table, ok := desc.(catalog.TableDescriptor)
+				if !ok {
+					return errors.Errorf("table %q does not exist", tree.ErrString(p))
+				}
+				if !table.Public() || table.IsTemporary() {
+					return errors.Errorf("table %q cannot be backed up", tree.ErrString(p))
+				}
+
+				// Add the table and its parent database.
+				addDesc(table)
+				addDesc(prefix.Database)
+
+				// Add the schema if it's user-defined.
+				if err := addSchemaDesc(table.GetParentSchemaID()); err != nil {
+					return err
+				}
+
+				// Add referenced types and functions.
+				if err := getReferencedTypes(table, prefix.Database); err != nil {
+					return err
+				}
+				if err := getReferencedFunctions(table); err != nil {
+					return err
+				}
+
+				// Track descsByTablePattern for TABLE patterns.
+				// Use the original pattern as the key, not the normalized one, to match
+				// the behavior of DescriptorsMatchingTargets.
+				descsByTablePattern[origPattern] = table
+
+			case *tree.AllTablesSelector:
+				res, err := resolveWildcard(ctx, p, r, currentDatabase, searchPath)
+				if err != nil {
+					return err
+				}
+				db := res.db
+				targetSchema := res.targetSchema
+				hasSchemaScope := res.hasSchemaScope
+
+				// Add the database.
+				addDesc(db)
+
+				// Track completeDBs for all wildcard patterns (db.*, db.schema.*, schema.*).
+				// This matches the behavior of DescriptorsMatchingTargets which always
+				// adds to ExpandedDB for any wildcard pattern.
+				expandedDBs = append(expandedDBs, db.GetID())
+
+				if hasSchemaScope && targetSchema != nil {
+					// Skip virtual and temporary schemas.
+					if shouldSkipSchema(targetSchema) {
+						return errors.Errorf("schema %q cannot be backed up", tree.ErrNameString(targetSchema.GetName()))
+					}
+
+					// Get all objects in the specific schema.
+					objects, err := col.GetAllObjectsInSchema(ctx, txn.KV(), db, targetSchema)
+					if err != nil {
+						return err
+					}
+
+					// Add the schema itself.
+					addDesc(targetSchema)
+
+					err = objects.ForEachDescriptor(func(desc catalog.Descriptor) error {
+						if !(desc.Public() || desc.Offline()) {
+							return nil
+						}
+						// Skip virtual tables and temp tables.
+						if table, ok := desc.(catalog.TableDescriptor); ok {
+							if table.IsVirtualTable() || table.IsTemporary() {
+								return nil
+							}
+							if err := getReferencedTypes(table, db); err != nil {
+								return err
+							}
+							if err := getReferencedFunctions(table); err != nil {
+								return err
+							}
+							addDesc(table)
+							return nil
+						}
+						// For non-table descriptors (types, functions), add them directly.
+						addDesc(desc)
+						return nil
+					})
+					if err != nil {
+						return err
+					}
+				} else {
+					// Get all objects in the database.
+					allInDB, err := col.GetAllInDatabase(ctx, txn.KV(), db)
+					if err != nil {
+						return err
+					}
+
+					err = allInDB.ForEachDescriptor(func(desc catalog.Descriptor) error {
+						// Skip virtual tables and temp tables.
+						if table, ok := desc.(catalog.TableDescriptor); ok {
+							if !(desc.Public() || desc.Offline()) {
+								return nil
+							}
+							if table.IsVirtualTable() || table.IsTemporary() {
+								return nil
+							}
+							if err := getReferencedTypes(table, db); err != nil {
+								return err
+							}
+							if err := getReferencedFunctions(table); err != nil {
+								return err
+							}
+							if err := addSchemaDesc(table.GetParentSchemaID()); err != nil {
+								return err
+							}
+							addDesc(table)
+							return nil
+						}
+						// For schemas, skip dropped, virtual, and temporary schemas.
+						// Include PUBLIC, OFFLINE, and ADD schemas.
+						if schema, ok := desc.(catalog.SchemaDescriptor); ok {
+							if !shouldSkipSchema(schema) {
+								addDesc(schema)
+							}
+							return nil
+						}
+						// For other descriptors (types, functions), apply standard filter.
+						if !(desc.Public() || desc.Offline()) {
+							return nil
+						}
+						addDesc(desc)
+						return nil
+					})
+					if err != nil {
+						return err
+					}
+				}
+
+			default:
+				return errors.Errorf("unknown pattern %T: %+v", pattern, pattern)
+			}
+		}
+
+		return nil
+	})
+
+	// Sort descriptors by ID to ensure consistent ordering for privilege checks
+	// and SHOW BACKUP output.
+	slices.SortFunc(result, func(a, b catalog.Descriptor) int {
+		return cmp.Compare(a.GetID(), b.GetID())
+	})
+
+	return result, expandedDBs, requestedDBs, descsByTablePattern, err
+}
+
+// simpleResolver implements the resolver interfaces needed for name resolution
+// using the Collection APIs.
+type simpleResolver struct {
+	col *descs.Collection
+	txn *kv.Txn
+}
+
+// LookupSchema implements the resolver.ObjectNameTargetResolver interface.
+func (r *simpleResolver) LookupSchema(
+	ctx context.Context, dbName, scName string,
+) (bool, catalog.ResolvedObjectPrefix, error) {
+	db, err := r.col.ByName(r.txn).MaybeGet().Database(ctx, dbName)
+	if err != nil || db == nil {
+		return false, catalog.ResolvedObjectPrefix{}, err
+	}
+
+	schema, err := r.col.ByName(r.txn).MaybeGet().Schema(ctx, db, scName)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return false, catalog.ResolvedObjectPrefix{}, err
 	}
 
-	var matched DescriptorsMatched
-	if matched, err = DescriptorsMatchingTargets(ctx,
-		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, *targets, endTime); err != nil {
-		return nil, nil, nil, nil, err
+	// Handle synthetic public schema.
+	if schema == nil && scName == catconstants.PublicSchemaName {
+		if !db.HasPublicSchemaWithDescriptor() {
+			schema = schemadesc.GetPublicSchema()
+		}
 	}
 
-	// This sorting was originally required to support interleaves.
-	// Now that these have been removed, sorting is not strictly-speaking
-	// necessary but has been preserved to maintain the output of SHOW BACKUPS
-	// that certain tests rely on.
-	sort.Slice(matched.Descs, func(i, j int) bool { return matched.Descs[i].GetID() < matched.Descs[j].GetID() })
+	if schema == nil {
+		return false, catalog.ResolvedObjectPrefix{}, nil
+	}
 
-	return matched.Descs, matched.ExpandedDB, matched.RequestedDBs, matched.DescsByTablePattern, nil
+	return true, catalog.ResolvedObjectPrefix{
+		Database: db,
+		Schema:   schema,
+	}, nil
+}
+
+// LookupObject implements the tree.ObjectNameExistingResolver interface.
+func (r *simpleResolver) LookupObject(
+	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
+) (bool, catalog.ResolvedObjectPrefix, catalog.Descriptor, error) {
+	if flags.DesiredObjectKind != tree.TableObject {
+		return false, catalog.ResolvedObjectPrefix{}, nil, errors.Newf("resolver can only lookup tables")
+	}
+
+	resolvedPrefix := catalog.ResolvedObjectPrefix{}
+
+	db, err := r.col.ByName(r.txn).MaybeGet().Database(ctx, dbName)
+	if err != nil || db == nil {
+		return false, resolvedPrefix, nil, err
+	}
+	resolvedPrefix.Database = db
+
+	schema, err := r.col.ByName(r.txn).MaybeGet().Schema(ctx, db, scName)
+	if err != nil {
+		return false, resolvedPrefix, nil, err
+	}
+
+	// Handle public schema.
+	if schema == nil && scName == catconstants.PublicSchemaName {
+		if !db.HasPublicSchemaWithDescriptor() {
+			schema = schemadesc.GetPublicSchema()
+		}
+	}
+
+	if schema == nil {
+		return false, resolvedPrefix, nil, nil
+	}
+	resolvedPrefix.Schema = schema
+
+	table, err := r.col.ByName(r.txn).MaybeGet().Table(ctx, db, schema, obName)
+	if err != nil {
+		return false, resolvedPrefix, nil, err
+	}
+	if table != nil {
+		return true, resolvedPrefix, table, nil
+	}
+
+	return false, resolvedPrefix, nil, nil
 }

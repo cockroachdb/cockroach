@@ -58,6 +58,7 @@ type SupportManager struct {
 }
 
 var _ Fabric = (*SupportManager)(nil)
+var _ SupportStatus = (*SupportManager)(nil)
 
 // NewSupportManager creates a new Store Liveness SupportManager. The main
 // goroutine that processes Store Liveness messages is initialized
@@ -115,21 +116,58 @@ var _ MessageHandler = (*SupportManager)(nil)
 // SupportFor implements the Fabric interface. It delegates the response to the
 // SupportManager's supporterStateHandler.
 func (sm *SupportManager) SupportFor(id slpb.StoreIdent) (slpb.Epoch, bool) {
-	ss := sm.supporterStateHandler.getSupportFor(id)
+	ss := sm.supporterStateHandler.getSupportFor(id).SupportState
 	// An empty expiration implies support has expired.
 	return ss.Epoch, !ss.Expiration.IsEmpty()
 }
 
+// SupportState implements the SupportStatus interface.
+func (sm *SupportManager) SupportState(id slpb.StoreIdent) (SupportState, hlc.ClockTimestamp) {
+	ss := sm.supporterStateHandler.getSupportFor(id)
+	return computeSupportState(ss)
+}
+
+// computeSupportState determines the SupportState and withdrawal timestamp from
+// a supportState. This is extracted as a standalone function for testability.
+//
+//	Expiration | lastSupportWithdrawnTime | Result
+//	-----------+--------------------------+-------------------------------------------------------
+//	empty      | empty                    | StateUnknown (never supported this store, or support
+//	           |                          | was withdrawn prior to restart)
+//	empty      | non-empty                | StateNotSupporting (withdrawn, timestamp known)
+//	non-empty  | empty                    | StateSupporting (not withdrawn or timestamp lost on
+//	           |                          | restart after re-establishment)
+//	non-empty  | non-empty                | StateSupporting (active, even if withdrawn previously)
+func computeSupportState(ss supportState) (SupportState, hlc.ClockTimestamp) {
+	// If we've never seen this store, return StateUnknown.
+	if ss.empty() {
+		return StateUnknown, hlc.ClockTimestamp{}
+	}
+	// If the expiration is non-empty, we're currently supporting the store.
+	if !ss.Expiration.IsEmpty() {
+		return StateSupporting, ss.lastSupportWithdrawnTime
+	}
+	// Expiration is empty, meaning support was withdrawn. But if we don't have
+	// a withdrawal timestamp, this is stale state from before a restart
+	// (lastSupportWithdrawnTime is not persisted). Return StateUnknown since we
+	// can't confirm the withdrawal is recent.
+	if ss.lastSupportWithdrawnTime.IsEmpty() {
+		return StateUnknown, hlc.ClockTimestamp{}
+	}
+	// Support was withdrawn and we have evidence of when.
+	return StateNotSupporting, ss.lastSupportWithdrawnTime
+}
+
 // InspectSupportFrom implements the InspectFabric interface.
-func (sm *SupportManager) InspectSupportFrom() slpb.SupportStatesPerStore {
-	supportStates := sm.requesterStateHandler.exportAllSupportFrom()
-	return slpb.SupportStatesPerStore{StoreID: sm.storeID, SupportStates: supportStates}
+func (sm *SupportManager) InspectSupportFrom() slpb.InspectSupportFromStatesPerStore {
+	supportFromStates := sm.requesterStateHandler.exportAllSupportFrom()
+	return slpb.InspectSupportFromStatesPerStore{StoreID: sm.storeID, SupportFromStates: supportFromStates}
 }
 
 // InspectSupportFor implements the InspectFabric interface.
-func (sm *SupportManager) InspectSupportFor() slpb.SupportStatesPerStore {
-	supportStates := sm.supporterStateHandler.exportAllSupportFor()
-	return slpb.SupportStatesPerStore{StoreID: sm.storeID, SupportStates: supportStates}
+func (sm *SupportManager) InspectSupportFor() slpb.InspectSupportForStatesPerStore {
+	supportForStates := sm.supporterStateHandler.exportAllSupportFor()
+	return slpb.InspectSupportForStatesPerStore{StoreID: sm.storeID, SupportForStates: supportForStates}
 }
 
 // SupportFrom implements the Fabric interface. It delegates the response to the
@@ -313,11 +351,14 @@ func (sm *SupportManager) sendHeartbeats(ctx context.Context) {
 	defer sm.requesterStateHandler.finishUpdate(rsfu)
 	livenessInterval := sm.options.SupportDuration
 	heartbeats := rsfu.getHeartbeatsToSend(sm.storeID, sm.clock.Now(), livenessInterval)
+	beforePersist := timeutil.Now()
 	if err := rsfu.write(ctx, sm.engine); err != nil {
 		log.KvExec.Warningf(ctx, "failed to write requester meta: %v", err)
 		sm.metrics.HeartbeatFailures.Inc(int64(len(heartbeats)))
 		return
 	}
+	persistDur := timeutil.Since(beforePersist)
+	sm.metrics.HeartbeatPersistDuration.RecordValue(persistDur.Nanoseconds())
 	sm.requesterStateHandler.checkInUpdate(rsfu)
 
 	// Send heartbeats to each remote store.
@@ -352,24 +393,28 @@ func (sm *SupportManager) withdrawSupport(ctx context.Context) {
 
 	batch := sm.engine.NewBatch()
 	defer batch.Close()
+	// NB: updating the support state involves a few writes under the hood, so we
+	// do them using a batch.
 	if err := ssfu.write(ctx, batch); err != nil {
 		log.KvExec.Warningf(ctx, "failed to write supporter meta and state: %v", err)
 		sm.metrics.SupportWithdrawFailures.Inc(int64(numWithdrawn))
 		return
 	}
+	beforePersist := timeutil.Now()
 	if err := batch.Commit(true /* sync */); err != nil {
 		log.KvExec.Warningf(ctx, "failed to commit supporter meta and state: %v", err)
 		sm.metrics.SupportWithdrawFailures.Inc(int64(numWithdrawn))
 		return
 	}
+	persistDur := timeutil.Since(beforePersist)
+	sm.metrics.SupportWithdrawPersistDuration.RecordValue(persistDur.Nanoseconds())
 	sm.supporterStateHandler.checkInUpdate(ssfu)
 	log.KvExec.Infof(ctx, "withdrew support from %d stores", numWithdrawn)
 	sm.metrics.SupportWithdrawSuccesses.Inc(int64(numWithdrawn))
 	if sm.withdrawalCallback != nil {
 		beforeProcess := timeutil.Now()
 		sm.withdrawalCallback(supportWithdrawnForStoreIDs)
-		afterProcess := timeutil.Now()
-		processDur := afterProcess.Sub(beforeProcess)
+		processDur := timeutil.Since(beforeProcess)
 		if processDur > minCallbackDurationToRecord {
 			sm.metrics.CallbacksProcessingDuration.RecordValue(processDur.Nanoseconds())
 		}
@@ -412,11 +457,14 @@ func (sm *SupportManager) handleMessages(ctx context.Context, msgs []*slpb.Messa
 		sm.metrics.MessageHandleFailures.Inc(int64(len(msgs)))
 		return
 	}
+	beforePersist := timeutil.Now()
 	if err := batch.Commit(true /* sync */); err != nil {
 		log.KvExec.Warningf(ctx, "failed to sync supporter and requester state: %v", err)
 		sm.metrics.MessageHandleFailures.Inc(int64(len(msgs)))
 		return
 	}
+	persistDur := timeutil.Since(beforePersist)
+	sm.metrics.MessageHandlePersistDuration.RecordValue(persistDur.Nanoseconds())
 	sm.requesterStateHandler.checkInUpdate(rsfu)
 	sm.supporterStateHandler.checkInUpdate(ssfu)
 	sm.metrics.MessageHandleSuccesses.Inc(int64(len(msgs)))

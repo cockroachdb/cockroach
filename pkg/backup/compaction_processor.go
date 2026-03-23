@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupsink"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -164,14 +163,6 @@ func (p *compactBackupsProcessor) runCompactBackups(ctx context.Context) error {
 	if !ok {
 		return errors.New("executor config is not of type sql.ExecutorConfig")
 	}
-	defaultConf, err := cloud.ExternalStorageConfFromURI(p.spec.DefaultURI, user)
-	if err != nil {
-		return errors.Wrapf(err, "export configuration")
-	}
-	defaultStore, err := execCfg.DistSQLSrv.ExternalStorage(ctx, defaultConf)
-	if err != nil {
-		return errors.Wrapf(err, "external storage")
-	}
 
 	compactChain, encryption, err := p.compactionChainFromSpec(ctx, execCfg, user)
 	if err != nil {
@@ -213,7 +204,25 @@ func (p *compactBackupsProcessor) runCompactBackups(ctx context.Context) error {
 			filter,
 			fsc,
 			entryCh,
+			false, /* useLink */
 		), "generate and send import spans")
+	}
+
+	destURI, destLocalityKV, err := selectLocalityMatchingURI(
+		ctx, p.spec.DefaultURI, p.spec.URIsByLocalityKV,
+		p.spec.StrictLocality,
+		p.FlowCtx.EvalCtx.Locality,
+	)
+	if err != nil {
+		return errors.Wrapf(err, "selecting locality matching uri")
+	}
+	destConf, err := cloud.ExternalStorageConfFromURI(destURI, user)
+	if err != nil {
+		return errors.Wrapf(err, "export configuration")
+	}
+	store, err := execCfg.DistSQLSrv.ExternalStorage(ctx, destConf)
+	if err != nil {
+		return errors.Wrapf(err, "external storage")
 	}
 
 	entryCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
@@ -224,7 +233,7 @@ func (p *compactBackupsProcessor) runCompactBackups(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			return p.processSpanEntries(
-				ctx, execCfg, entryCh, encryption, defaultStore,
+				ctx, execCfg, entryCh, encryption, store, destLocalityKV,
 			)
 		},
 	}
@@ -240,6 +249,7 @@ func (p *compactBackupsProcessor) processSpanEntries(
 	entryCh chan execinfrapb.RestoreSpanEntry,
 	encryption *jobspb.BackupEncryptionOptions,
 	store cloud.ExternalStorage,
+	destLocality string,
 ) (err error) {
 	var fileEncryption *kvpb.FileEncryptionOptions
 	if encryption != nil {
@@ -252,7 +262,7 @@ func (p *compactBackupsProcessor) processSpanEntries(
 		Settings:  &execCfg.Settings.SV,
 		ElideMode: p.spec.ElideMode,
 	}
-	sink, err := backupsink.MakeSSTSinkKeyWriter(sinkConf, store)
+	sink, err := backupsink.MakeSSTSinkKeyWriter(sinkConf, store, destLocality)
 	if err != nil {
 		return err
 	}
@@ -276,6 +286,25 @@ func (p *compactBackupsProcessor) processSpanEntries(
 			} else if !assigned {
 				continue
 			}
+
+			entryLocality, err := entryLocality(entry)
+			if err != nil {
+				return errors.Wrap(err, "finding entry locality")
+			}
+			if entryLocality != destLocality && p.spec.StrictLocality {
+				return errors.Newf(
+					"entry locality %s does not match destination locality %s in strict locality-aware compaction",
+					entryLocality, destLocality,
+				)
+			}
+			if backupKnobs, ok := p.FlowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
+				if backupKnobs.OnCompactionFileAccess != nil && *backupKnobs.OnCompactionFileAccess != nil {
+					if err := (*backupKnobs.OnCompactionFileAccess)(p.FlowCtx.EvalCtx.Locality, entryLocality); err != nil {
+						return err
+					}
+				}
+			}
+
 			sstIter, err := openSSTs(ctx, execCfg, entry, fileEncryption, p.spec.EndTime)
 			if err != nil {
 				return errors.Wrap(err, "opening SSTs")
@@ -359,27 +388,22 @@ func openSSTs(
 		}
 	}()
 
-	storeFiles := make([]storageccl.StoreFile, 0, len(entry.Files))
+	storeFiles := make([]storage.StoreFile, 0, len(entry.Files))
 	for idx := range entry.Files {
 		file := entry.Files[idx]
-		if file.HasRangeKeys {
-			// TODO (kev-cao): Come back and update this to range keys when
-			// SSTSinkKeyWriter has been updated to support range keys.
-			return mergedSST{}, errors.New("backup compactions does not support range keys")
-		}
 		dir, err := execCfg.DistSQLSrv.ExternalStorage(ctx, file.Dir)
 		if err != nil {
 			return mergedSST{}, err
 		}
 		dirs = append(dirs, dir)
-		storeFiles = append(storeFiles, storageccl.StoreFile{Store: dir, FilePath: file.Path})
+		storeFiles = append(storeFiles, storage.StoreFile{Store: dir, FilePath: file.Path})
 	}
 	iterOpts := storage.IterOptions{
-		KeyTypes:   storage.IterKeyTypePointsOnly,
+		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		LowerBound: keys.LocalMax,
 		UpperBound: keys.MaxKey,
 	}
-	iter, err := storageccl.ExternalSSTReader(ctx, storeFiles, encryptionOptions, iterOpts)
+	iter, err := storage.ExternalSSTReader(ctx, storeFiles, encryptionOptions, iterOpts)
 	if err != nil {
 		return mergedSST{}, err
 	}
@@ -449,6 +473,7 @@ func compactSpanEntry(
 		}
 	}
 	sink.AssumeNotMidRow()
+	sink.CompletedSpan()
 	return nil
 }
 

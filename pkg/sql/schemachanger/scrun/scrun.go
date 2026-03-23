@@ -205,10 +205,11 @@ func executeStage(
 			!pgerror.HasCandidateCode(err) {
 			err = p.DecorateErrorWithPlanDetails(err)
 		}
-		// Certain errors are aimed to be user consumable and should never be
-		// wrapped.
-		if userError := scerrors.UnwrapSchemaChangerUserError(err); userError != nil {
-			return userError
+		// User errors should be returned without additional wrapping to keep
+		// messages clean, but we preserve the SchemaChangerUserError wrapper
+		// so that IsPermanentSchemaChangeError can identify them as permanent.
+		if scerrors.HasSchemaChangerUserError(err) {
+			return err
 		}
 		return errors.Wrapf(err, "error executing %s", stage)
 	}

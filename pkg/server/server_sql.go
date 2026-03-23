@@ -44,6 +44,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmwriter"
+	clustermetricutils "github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/utils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -69,6 +71,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigsqlwatcher"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/auditlogging"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -171,6 +174,7 @@ type SQLServer struct {
 	closedSessionCache             *sql.ClosedSessionCache
 	jobRegistry                    *jobs.Registry
 	statsRefresher                 *stats.Refresher
+	clusterMetricsWriter           *cmwriter.Writer
 	temporaryObjectCleaner         *sql.TemporaryObjectCleaner
 	stmtDiagnosticsRegistry        *stmtdiagnostics.Registry
 	txnDiagnosticsRegistry         *stmtdiagnostics.TxnRegistry
@@ -311,6 +315,8 @@ type sqlServerArgs struct {
 	// Used by the span config reconciliation job.
 	spanConfigAccessor spanconfig.KVAccessor
 
+	spanConfigReporter spanconfig.Reporter
+
 	// Used by the Key Visualizer job.
 	keyVisServerAccessor *spanstatskvaccessor.SpanStatsKVAccessor
 
@@ -329,8 +335,9 @@ type sqlServerArgs struct {
 	db *kv.DB
 
 	// Various components want to register themselves with metrics.
-	registry    *metric.Registry
-	sysRegistry *metric.Registry
+	registry               *metric.Registry
+	sysRegistry            *metric.Registry
+	clusterMetricsRegistry metric.RegistryReader
 
 	// Recorder exposes metrics to the prometheus endpoint.
 	recorder *status.MetricsRecorder
@@ -410,6 +417,10 @@ type sqlServerArgs struct {
 	// admissionPacerFactory is used for elastic CPU control when performing
 	// CPU intensive operations, such as CDC event encoding/decoding.
 	admissionPacerFactory admission.PacerFactory
+
+	// sqlCPUProvider is used to report CPU usage and foreground (non-elastic)
+	// SQL CPU admission control.
+	sqlCPUProvider admission.SQLCPUProvider
 
 	// rangeDescIteratorFactory is used to construct iterators over range
 	// descriptors.
@@ -821,6 +832,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		ParentDiskMonitor: cfg.TempStorageConfig.Mon,
 		BackfillerMonitor: backfillMemoryMonitor,
 		BackupMonitor:     backupMemoryMonitor,
+		BulkMonitor:       bulkMemoryMonitor,
 		ChangefeedMonitor: changefeedMemoryMonitor,
 		BulkSenderLimiter: bulkSenderLimiter,
 
@@ -857,6 +869,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		TenantCostController:     cfg.costController,
 		RangeStatsFetcher:        rangeStatsFetcher,
 		AdmissionPacerFactory:    cfg.admissionPacerFactory,
+		SQLCPUProvider:           cfg.sqlCPUProvider,
 		ExecutorConfig:           execCfg,
 		RootSQLMemoryPoolSize:    cfg.MemoryPoolSize,
 		VecIndexManager:          vecIndexManager,
@@ -1153,6 +1166,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if tableMetadataKnobs := cfg.TestingKnobs.TableMetadata; tableMetadataKnobs != nil {
 		execCfg.TableMetadataKnobs = tableMetadataKnobs.(*tablemetadatacacheutil.TestingKnobs)
 	}
+	if clusterMetricsKnobs := cfg.TestingKnobs.ClusterMetricsKnobs; clusterMetricsKnobs != nil {
+		execCfg.ClusterMetricsKnobs = clusterMetricsKnobs.(*clustermetricutils.TestingKnobs)
+	}
 
 	// Set up internal memory metrics for use by internal SQL executors.
 	// Don't add them to the registry now because it will be added as part of pgServer metrics.
@@ -1201,6 +1217,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	*cfg.internalDB = *internalDB
 	execCfg.InternalDB = internalDB
 
+	// Set up the key decoder dependencies for contention logging. This allows
+	// contention events to include human-readable table and index information
+	// instead of raw encoded keys.
+	contentionRegistry.SetKeyDecoderDeps(internalDB, codec)
+
 	statsRefresher := stats.MakeRefresher(
 		cfg.AmbientCtx,
 		cfg.Settings,
@@ -1212,6 +1233,11 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	)
 	execCfg.StatsRefresher = statsRefresher
 	distSQLServer.ServerConfig.StatsRefresher = statsRefresher
+
+	// Create cluster metrics writer.
+	clusterMetricsWriter := cmwriter.NewWriter(internalDB, cfg.nodeIDContainer, cfg.Settings)
+	cfg.registry.AddMetricStruct(clusterMetricsWriter.Metrics())
+	execCfg.ClusterMetricsWriter = clusterMetricsWriter
 
 	execCfg.IndexBackfiller = sql.NewIndexBackfiller(execCfg)
 	execCfg.IndexSpanSplitter = sql.NewIndexSplitAndScatter(execCfg)
@@ -1277,7 +1303,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 				Dialer:           cfg.kvNodeDialer,
 				RangeDescScanner: rangedesc.NewScanner(cfg.db),
 				DB:               cfg.db,
-				Settings:         cfg.Settings,
+				UseDRPC:          cfg.UseDRPC,
 			})
 		} else {
 			c = upgradecluster.NewTenantCluster(
@@ -1285,7 +1311,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 					Dialer:         cfg.sqlInstanceDialer,
 					InstanceReader: cfg.sqlInstanceReader,
 					DB:             cfg.db,
-					Settings:       cfg.Settings,
+					UseDRPC:        cfg.UseDRPC,
 				})
 		}
 		systemDeps = upgrade.SystemDeps{
@@ -1345,6 +1371,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	execCfg.SpanConfigKVAccessor = cfg.spanConfigAccessor
 	execCfg.SpanConfigLimiter = spanConfig.limiter
 	execCfg.SpanConfigSplitter = spanConfig.splitter
+	execCfg.SpanConfigReporter = cfg.spanConfigReporter
 
 	var waitForInstanceReaderStarted func(context.Context) error
 	if cfg.sqlInstanceReader != nil {
@@ -1438,6 +1465,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		jobRegistry:                    jobRegistry,
 		sqlInstanceDialer:              cfg.sqlInstanceDialer,
 		statsRefresher:                 statsRefresher,
+		clusterMetricsWriter:           clusterMetricsWriter,
 		temporaryObjectCleaner:         temporaryObjectCleaner,
 		stmtDiagnosticsRegistry:        stmtDiagnosticsRegistry,
 		txnDiagnosticsRegistry:         txnDiagnosticsRegistry,
@@ -1653,6 +1681,7 @@ func (s *SQLServer) preStart(
 
 	s.execCfg.GCJobNotifier.Start(ctx)
 	s.temporaryObjectCleaner.Start(ctx, stopper)
+	s.startOrphanedBulkFileCleanup(ctx, stopper)
 	s.distSQLServer.Start()
 	s.pgServer.Start(ctx, stopper)
 
@@ -1768,13 +1797,15 @@ func (s *SQLServer) preStart(
 	// node. This also uses SQL.
 	s.leaseMgr.DeleteOrphanedLeases(ctx, orphanedLeasesTimeThresholdNanos, s.execCfg.Locality)
 
+	stmtdiagnostics.StartPolling(ctx, s.txnDiagnosticsRegistry, s.stmtDiagnosticsRegistry, stopper)
+
+	if err := s.execCfg.TableStatsCache.Start(ctx, s.execCfg.Codec, s.execCfg.RangeFeedFactory, s.execCfg.SystemTableIDResolver); err != nil {
+		return err
+	}
 	if err := s.statsRefresher.Start(ctx, stopper, stats.DefaultRefreshInterval); err != nil {
 		return err
 	}
-
-	stmtdiagnostics.StartPolling(ctx, s.txnDiagnosticsRegistry, s.stmtDiagnosticsRegistry, stopper)
-
-	if err := s.execCfg.TableStatsCache.Start(ctx, s.execCfg.Codec, s.execCfg.RangeFeedFactory); err != nil {
+	if err := s.clusterMetricsWriter.Start(ctx, stopper, &s.execCfg.Settings.SV); err != nil {
 		return err
 	}
 	if err = s.execCfg.StatementHintsCache.Start(ctx, s.execCfg.SystemTableIDResolver); err != nil {
@@ -1849,6 +1880,14 @@ func (s *SQLServer) startJobScheduler(ctx context.Context, knobs base.TestingKno
 		},
 		scheduledjobs.ProdJobSchedulerEnv,
 	)
+}
+
+func (s *SQLServer) startOrphanedBulkFileCleanup(ctx context.Context, stopper *stop.Stopper) {
+	_ = stopper.RunAsyncTask(ctx, "bulk-file-cleaner", func(ctx context.Context) {
+		if err := bulkutil.CleanupOrphanedFiles(ctx, s.distSQLServer.ExternalStorageFromURI, s.internalDB); err != nil {
+			log.Dev.Warningf(ctx, "bulk file cleanup encountered errors: %v", err)
+		}
+	})
 }
 
 // startCheckService verifies that the tenant has the right
@@ -2188,4 +2227,9 @@ func (s *SQLServer) PGServer() *pgwire.Server {
 // MetricsRegistry returns the application-level metrics registry.
 func (s *SQLServer) MetricsRegistry() *metric.Registry {
 	return s.metricsRegistry
+}
+
+// ClusterMetricsWriter returns the cluster metrics writer.
+func (s *SQLServer) ClusterMetricsWriter() *cmwriter.Writer {
+	return s.clusterMetricsWriter
 }

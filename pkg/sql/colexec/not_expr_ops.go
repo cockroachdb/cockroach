@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -52,11 +53,14 @@ func NewNotExprProjOp(
 	}
 }
 
-func (o *notExprProjOp) Next() coldata.Batch {
-	batch := o.Input.Next()
+func (o *notExprProjOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := o.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	inputVec, outputVec := batch.ColVec(o.inputIdx), batch.ColVec(o.outputIdx)
 	inputBools, inputNulls := inputVec.Bool(), inputVec.Nulls()
@@ -105,7 +109,7 @@ func (o *notExprProjOp) Next() coldata.Batch {
 		}
 
 	}
-	return batch
+	return batch, nil
 }
 
 // notExprSelOp is an Operator that selects all the values in the input vector
@@ -137,12 +141,15 @@ func NewNotExprSelOp(
 	}
 }
 
-func (o *notExprSelOp) Next() coldata.Batch {
+func (o *notExprSelOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := o.Input.Next()
+		batch, meta := o.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		n := batch.Length()
 		if n == 0 {
-			return batch
+			return batch, nil
 		}
 		inputVec, selectedValuesIdx := batch.ColVec(o.inputIdx), 0
 		inputNulls, inputBools := inputVec.Nulls(), inputVec.Bool()
@@ -193,7 +200,7 @@ func (o *notExprSelOp) Next() coldata.Batch {
 		}
 		if selectedValuesIdx > 0 {
 			batch.SetLength(selectedValuesIdx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -221,13 +228,16 @@ func newNotNullProjOp(
 	}
 }
 
-func (o *notNullProjOp) Next() coldata.Batch {
-	batch := o.Input.Next()
+func (o *notNullProjOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := o.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	outputNulls := batch.ColVec(o.outputIdx).Nulls()
 	outputNulls.SetNulls()
-	return batch
+	return batch, nil
 }

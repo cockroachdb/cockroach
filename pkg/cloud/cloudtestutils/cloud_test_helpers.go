@@ -399,81 +399,133 @@ func CheckListFilesCanonical(t *testing.T, info StoreInfo, canonical string) {
 	}
 
 	t.Run("List", func(t *testing.T) {
+		// NB: When using AfterKey in tests, pick keys such that they do not exist
+		// in the expected output to avoid tests flaking due to different cloud
+		// provider behaviors around AfterKey's inclusiveness.
 		for _, tc := range []struct {
-			name      string
-			uri       string
-			prefix    string
-			delimiter string
-			expected  []string
+			name     string
+			uri      string
+			prefix   string
+			opts     cloud.ListOptions
+			expected []string
 		}{
 			{
 				"root",
 				info.URI,
 				"",
-				"",
+				cloud.ListOptions{},
 				foreach(fileNames, func(s string) string { return "/" + s }),
 			},
 			{
 				"file-slash-numbers-slash",
 				info.URI,
 				"file/numbers/",
-				"",
+				cloud.ListOptions{},
 				[]string{"data1.csv", "data2.csv", "data3.csv"},
 			},
 			{
 				"root-slash",
 				info.URI,
 				"/",
-				"",
+				cloud.ListOptions{},
 				foreach(fileNames, func(s string) string { return s }),
 			},
 			{
 				"file",
 				info.URI,
 				"file",
-				"",
+				cloud.ListOptions{},
 				foreach(fileNames, func(s string) string { return strings.TrimPrefix(s, "file") }),
 			},
 			{
 				"file-slash",
 				info.URI,
 				"file/",
-				"",
+				cloud.ListOptions{},
 				foreach(fileNames, func(s string) string { return strings.TrimPrefix(s, "file/") }),
 			},
 			{
 				"slash-f",
 				info.URI,
 				"/f",
-				"",
+				cloud.ListOptions{},
 				foreach(fileNames, func(s string) string { return strings.TrimPrefix(s, "f") }),
 			},
 			{
 				"nothing",
 				info.URI,
 				"nothing",
-				"",
+				cloud.ListOptions{},
 				nil,
 			},
 			{
 				"delim-slash-file-slash",
 				info.URI,
 				"file/",
-				"/",
+				cloud.ListOptions{Delimiter: "/"},
 				[]string{"abc/", "letters/", "numbers/"},
 			},
 			{
 				"delim-data",
 				info.URI,
 				"",
-				"data",
+				cloud.ListOptions{Delimiter: "data"},
 				[]string{"/file/abc/A.csv", "/file/abc/B.csv", "/file/abc/C.csv", "/file/letters/data", "/file/numbers/data"},
+			},
+			{
+				"afterkey-no-prefix",
+				info.URI,
+				"",
+				cloud.ListOptions{AfterKey: "file/letters/dataB"},
+				[]string{"/file/letters/dataB.csv", "/file/letters/dataC.csv", "/file/numbers/data1.csv", "/file/numbers/data2.csv", "/file/numbers/data3.csv"},
+			},
+			{
+				"afterkey-with-prefix",
+				info.URI,
+				"file/letters/",
+				cloud.ListOptions{AfterKey: "file/letters/dataB"},
+				[]string{"dataB.csv", "dataC.csv"},
+			},
+			{
+				"afterkey-before-prefix",
+				info.URI,
+				"file/numbers/",
+				cloud.ListOptions{AfterKey: "file/abc/D"},
+				[]string{"data1.csv", "data2.csv", "data3.csv"},
+			},
+			{
+				"afterkey-after-prefix",
+				info.URI,
+				"file/abc/",
+				cloud.ListOptions{AfterKey: "file/z"},
+				nil,
+			},
+			{
+				"afterkey-excluded-from-results",
+				info.URI,
+				"file/abc/",
+				cloud.ListOptions{AfterKey: "file/abc/B.csv"},
+				[]string{"C.csv"},
+			},
+			{
+				"afterkey-with-delim",
+				info.URI,
+				"file/",
+				cloud.ListOptions{Delimiter: "/", AfterKey: "file/bar"},
+				[]string{"letters/", "numbers/"},
+			},
+			{
+				"afterkey-applied-after-delim-grouping",
+				info.URI,
+				"file/",
+				cloud.ListOptions{Delimiter: "/", AfterKey: "file/abc/B"},
+				[]string{"letters/", "numbers/"},
 			},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				s := storeFromURI(ctx, t, tc.uri, clientFactory, info.User, info.DB, testSettings)
 				var actual []string
-				require.NoError(t, s.List(ctx, tc.prefix, tc.delimiter, func(f string) error {
+				require.NoError(t, s.List(ctx, tc.prefix, tc.opts, func(f string) error {
 					actual = append(actual, f)
 					return nil
 				}))
@@ -584,7 +636,7 @@ func CheckNoPermission(t *testing.T, info StoreInfo) {
 	}
 	defer s.Close()
 
-	err = s.List(ctx, "", "", nil)
+	err = s.List(ctx, "", cloud.ListOptions{}, nil)
 	if err == nil {
 		t.Fatalf("expected error when listing %s with no permissions", info.URI)
 	}

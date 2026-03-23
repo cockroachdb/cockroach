@@ -244,7 +244,7 @@ func (s *Tenant) MakeProtectedTimestampRecordAndProtect(
 			recID, err := uuid.FromBytes([]byte(strings.Repeat(recordID, 16)))
 			require.NoError(s.t, err)
 			rec := jobsprotectedts.MakeRecord(recID, int64(jobID),
-				hlc.Timestamp{WallTime: int64(protectTS)}, nil, /* deprecatedSpans */
+				hlc.Timestamp{WallTime: int64(protectTS)},
 				jobsprotectedts.Jobs, target)
 			return s.ProtectedTimestampProvider().WithTxn(txn).Protect(ctx, rec)
 		}))

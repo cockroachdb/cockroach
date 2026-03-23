@@ -7,15 +7,18 @@ package backup
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -25,9 +28,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -41,6 +48,12 @@ import (
 // RestoreOptions struct.
 func TestRestoreResolveOptionsForJobDescription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	sc := tree.MakeSemaContext(nil /* resolver */)
+	s := cluster.MakeTestingClusterSettings()
+	exprEval := exprutil.MakeEvaluator(
+		"test", &sc, eval.NewTestingEvalContext(s),
+	)
 
 	// The input struct must have a non-zero value for every
 	// element of the struct.
@@ -64,9 +77,9 @@ func TestRestoreResolveOptionsForJobDescription(t *testing.T) {
 
 		IntoDB:               tree.NewDString("test expr"),
 		NewDBName:            tree.NewDString("test expr"),
-		IncrementalStorage:   []tree.Expr{tree.NewDString("http://example.com")},
 		DecryptionKMSURI:     []tree.Expr{tree.NewDString("http://example.com")},
 		EncryptionPassphrase: tree.NewDString("test expr"),
+		Grants:               true,
 	}
 
 	ensureAllStructFieldsSet := func(s tree.RestoreOptions, name string) {
@@ -85,14 +98,13 @@ func TestRestoreResolveOptionsForJobDescription(t *testing.T) {
 	ensureAllStructFieldsSet(input, "input")
 	output, err := resolveOptionsForRestoreJobDescription(
 		context.Background(),
+		exprEval,
 		input,
 		"into_db",
 		"newDBName",
-		[]string{"http://example.com"},
-		[]string{"http://example.com"})
+	)
 	require.NoError(t, err)
 	ensureAllStructFieldsSet(output, "output")
-
 }
 
 func TestBackupManifestVersionCompatibility(t *testing.T) {
@@ -308,7 +320,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 
 	t.Run("allocateDescriptorRewrite", func(t *testing.T) {
 		t.Run("succeeds on empty input", func(t *testing.T) {
-			rewrites, err := allocateDescriptorRewrites(
+			rewrites, _, err := allocateDescriptorRewrites(
 				ctx,
 				planner,
 				nil,
@@ -320,12 +332,13 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 				0,
 				tree.RestoreOptions{},
 				"",
-				"")
+				"",
+				false)
 			require.NoError(t, err)
 			require.Equal(t, jobspb.DescRewriteMap{}, rewrites)
 		})
 		t.Run("allocates into existing db", func(t *testing.T) {
-			rewrites, err := allocateDescriptorRewrites(
+			rewrites, _, err := allocateDescriptorRewrites(
 				ctx,
 				planner,
 				map[descpb.ID]*dbdesc.Mutable{
@@ -350,7 +363,8 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 				0,
 				tree.RestoreOptions{},
 				db2.GetName(),
-				"")
+				"",
+				false)
 			require.NoError(t, err)
 
 			// DB objects are not reallocated
@@ -383,7 +397,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 		})
 
 		t.Run("allocates into new db", func(t *testing.T) {
-			rewrites, err := allocateDescriptorRewrites(
+			rewrites, _, err := allocateDescriptorRewrites(
 				ctx,
 				planner,
 				map[descpb.ID]*dbdesc.Mutable{
@@ -410,7 +424,8 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 				0,
 				tree.RestoreOptions{},
 				"",
-				"db3")
+				"db3",
+				false)
 			require.NoError(t, err)
 
 			require.NoError(t, validateSelfIDs(rewrites, []catalog.Descriptor{
@@ -451,7 +466,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 		})
 
 		t.Run("allocates functions into new db", func(t *testing.T) {
-			rewrites, err := allocateDescriptorRewrites(
+			rewrites, _, err := allocateDescriptorRewrites(
 				ctx,
 				planner,
 				map[descpb.ID]*dbdesc.Mutable{
@@ -468,7 +483,8 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 				0,
 				tree.RestoreOptions{},
 				"",
-				"db3")
+				"db3",
+				false)
 
 			require.NoError(t, err)
 
@@ -495,7 +511,7 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 			// Get a new plan state after dropping the DB.
 			setupPlanner()
 
-			rewrites, err := allocateDescriptorRewrites(
+			rewrites, _, err := allocateDescriptorRewrites(
 				ctx,
 				planner,
 				map[descpb.ID]*dbdesc.Mutable{
@@ -525,7 +541,8 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 				0,
 				tree.RestoreOptions{},
 				"",
-				"")
+				"",
+				false)
 			require.NoError(t, err)
 
 			// DB objects are reallocated
@@ -564,5 +581,360 @@ func TestAllocateDescriptorRewrites(t *testing.T) {
 				)
 			}
 		})
+		t.Run("allocates system descriptors with setupTempDB", func(t *testing.T) {
+			namespaceTable := systemschema.NamespaceTable.
+				NewBuilder().BuildExistingMutable().(*tabledesc.Mutable)
+			usersTable := systemschema.UsersTable.
+				NewBuilder().BuildExistingMutable().(*tabledesc.Mutable)
+
+			rewrites, tempSysDBID, err := allocateDescriptorRewrites(
+				ctx,
+				planner,
+				nil,
+				nil,
+				map[descpb.ID]*tabledesc.Mutable{
+					namespaceTable.GetID(): namespaceTable,
+					usersTable.GetID():     usersTable,
+				},
+				nil,
+				nil,
+				nil,
+				0,
+				tree.RestoreOptions{},
+				"",
+				"",
+				true,
+			)
+
+			require.NoError(t, err)
+			require.NotEqual(t, descpb.InvalidID, tempSysDBID,
+				"tempSysDBID should be allocated when setupTempDB=true")
+			require.Len(t, rewrites, 2, "should have rewrites for both system tables")
+
+			for _, table := range []*tabledesc.Mutable{namespaceTable, usersTable} {
+				rewrite, ok := rewrites[table.GetID()]
+				require.True(t, ok, "no rewrite found for system table %s", table.GetName())
+
+				require.Equal(t, tempSysDBID, rewrite.ParentID,
+					"system table %s should have tempSysDBID as parent", table.GetName())
+
+				require.Equal(t, descpb.ID(keys.PublicSchemaIDForBackup), rewrite.ParentSchemaID,
+					"system table %s should have public schema as parent schema", table.GetName())
+
+				require.NotEqual(t, descpb.InvalidID, rewrite.ID,
+					"system table %s should be assigned new ID", table.GetName())
+				require.NotEqual(t, table.GetID(), rewrite.ID,
+					"system table %s should be assigned new ID different from original", table.GetName())
+			}
+		})
 	})
+}
+
+func TestRestoreWithBackupIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, sqlDB, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(
+		t, singleNode, backuptestutils.WithInitFunc(InitManualReplication),
+	)
+	defer cleanupFn()
+
+	const classicColl = "nodelocal://1/classic"
+	const rhColl = "nodelocal://1/revision_history"
+	// Maps collection URIs to the backup IDs within them. Backup IDs are sorted
+	// in chronological order from oldest to newest.
+	var backupIDsByColl = make(map[string][]string)
+	// Maps collection URIs to the full backup subdirectory names within them.
+	// Subdirs are sorted in chronological order from oldest to newest.
+	var backupSubdirsByColl = make(map[string][]string)
+
+	// Timestamps for specific points in time during backup creation. See comment
+	// below for details.
+	classicTimes := make([]string, 4)
+	rhTimes := make([]string, 6)
+
+	// Create a set of backups to use for this test. There exist three chains
+	// spread across two collections:
+	//
+	// Collection 1
+	// 1. Classic backup chain with incrementals
+	//		a. Full backup @ t0 (0 rows)
+	//		b. Incremental backup @ t1 (1 row)
+	//		c. Incremental backup @ t2 (2 rows)
+	//		d. Incremental backup @ t3 (3 rows)
+	// 2. Single classic full backup whose end time is before the first chain's
+	// last incremental.
+	//		a. Full backup @ t2 (2 rows)
+	//
+	// Collection 2
+	// 1. Revision history backup chain
+	//		a. Full backup @ t2
+	//				i.   t0 (0 rows)
+	//				ii.  t1 (1 row)
+	//				iii. t2 (2 rows)
+	//		b. Incremental backup @ t4
+	//				i.   t3 (3 row)
+	//				ii.  t4 (4 rows)
+	{
+		// Collection 1
+		sqlDB.Exec(t, "SET SESSION use_backups_with_ids = true")
+		sqlDB.Exec(t, "CREATE TABLE foo (i INT)")
+		sqlDB.QueryRow(t, "SELECT now()").Scan(&classicTimes[0])
+		sqlDB.Exec(
+			t, "BACKUP TABLE foo INTO $1 AS OF SYSTEM TIME $2::STRING",
+			classicColl, classicTimes[0],
+		)
+
+		sqlDB.Exec(t, "INSERT INTO foo VALUES (1)")
+		sqlDB.QueryRow(t, "SELECT now()").Scan(&classicTimes[1])
+		sqlDB.Exec(
+			t, "BACKUP TABLE foo INTO LATEST IN $1 AS OF SYSTEM TIME $2::STRING",
+			classicColl, classicTimes[1],
+		)
+
+		sqlDB.Exec(t, "INSERT INTO foo VALUES (2)")
+		sqlDB.QueryRow(t, "SELECT now()").Scan(&classicTimes[2])
+		sqlDB.Exec(
+			t, "BACKUP TABLE foo INTO LATEST IN $1 AS OF SYSTEM TIME $2::STRING",
+			classicColl, classicTimes[2],
+		)
+
+		sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.write_first_checkpoint'`)
+		var fullJobID jobspb.JobID
+		sqlDB.QueryRow(
+			t, "BACKUP TABLE FOO INTO $1 AS OF SYSTEM TIME $2::STRING WITH detached",
+			classicColl, classicTimes[2],
+		).Scan(&fullJobID)
+		jobutils.WaitForJobToPause(t, sqlDB, fullJobID)
+		sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+
+		sqlDB.Exec(t, "INSERT INTO foo VALUES (3)")
+		sqlDB.QueryRow(t, "SELECT now()").Scan(&classicTimes[3])
+		sqlDB.Exec(
+			t, "BACKUP TABLE foo INTO LATEST IN $1 AS OF SYSTEM TIME $2::STRING",
+			classicColl, classicTimes[3],
+		)
+
+		sqlDB.Exec(t, "RESUME JOB $1", fullJobID)
+		jobutils.WaitForJobToSucceed(t, sqlDB, fullJobID)
+
+		// Collection 2
+		sqlDB.Exec(t, "CREATE TABLE bar (i INT)")
+
+		sqlDB.QueryRow(t, "SELECT now()").Scan(&rhTimes[0])
+		sqlDB.Exec(t, "INSERT INTO bar VALUES (1)")
+		sqlDB.QueryRow(t, "SELECT now()").Scan(&rhTimes[1])
+		sqlDB.Exec(t, "INSERT INTO bar VALUES (2)")
+		sqlDB.QueryRow(t, "SELECT now()").Scan(&rhTimes[2])
+		sqlDB.Exec(
+			t, "BACKUP TABLE bar INTO $1 AS OF SYSTEM TIME $2::STRING WITH revision_history",
+			rhColl, rhTimes[2],
+		)
+
+		sqlDB.Exec(t, "INSERT INTO bar VALUES (3)")
+		sqlDB.QueryRow(t, "SELECT now()").Scan(&rhTimes[3])
+		sqlDB.Exec(t, "INSERT INTO bar VALUES (4)")
+		sqlDB.QueryRow(t, "SELECT now()").Scan(&rhTimes[4])
+		sqlDB.Exec(
+			t, "BACKUP TABLE bar INTO LATEST IN $1 AS OF SYSTEM TIME $2::STRING WITH revision_history",
+			rhColl, rhTimes[4],
+		)
+
+		sqlDB.QueryRow(t, "SELECT now()").Scan(&rhTimes[5]) // Out of revision-history bounds time
+
+		// Collect IDs from both collections. We append in reverse order just to
+		// make testing easier so that we start from the full backup and go forward
+		// in time.
+		for _, coll := range []string{classicColl, rhColl} {
+			var ids []string
+			rows := sqlDB.Query(t, fmt.Sprintf("SHOW BACKUPS IN '%s'", coll))
+			for rows.Next() {
+				var id string
+				var unused any
+				require.NoError(t, rows.Scan(&id, &unused, &unused))
+				ids = append([]string{id}, ids...)
+			}
+			backupIDsByColl[coll] = ids
+		}
+
+		// Collect subdirs from both collections.
+		sqlDB.Exec(t, "SET SESSION use_backups_with_ids = false")
+		for _, coll := range []string{classicColl, rhColl} {
+			var subdirs []string
+			rows := sqlDB.Query(t, fmt.Sprintf("SHOW BACKUPS IN '%s'", coll))
+			for rows.Next() {
+				var subdir string
+				require.NoError(t, rows.Scan(&subdir))
+				subdirs = append(subdirs, subdir)
+			}
+			backupSubdirsByColl[coll] = subdirs
+		}
+		sqlDB.Exec(t, "SET SESSION use_backups_with_ids = true")
+	}
+
+	testcases := []struct {
+		name         string
+		collection   string
+		token        string
+		aost         string
+		expectedRows int
+		expectedErr  string
+		disableIDs   bool
+	}{
+		{
+			name:         "non-RH restore with ids/full backup",
+			collection:   classicColl,
+			token:        backupIDsByColl[classicColl][0],
+			expectedRows: 0,
+		},
+		{
+			name:         "non-RH restore with ids/non-latest incremental",
+			collection:   classicColl,
+			token:        backupIDsByColl[classicColl][2],
+			expectedRows: 2,
+		},
+		{
+			name:         "non-RH restore with ids/latest incremental",
+			collection:   classicColl,
+			token:        backupIDsByColl[classicColl][4],
+			expectedRows: 3,
+		},
+		{
+			name:         "non-RH restore from latest",
+			collection:   classicColl,
+			token:        "LATEST",
+			expectedRows: 3,
+		},
+		{
+			name:         "legacy/non-RH restore from latest",
+			collection:   classicColl,
+			token:        "LATEST",
+			expectedRows: 2,
+			disableIDs:   true,
+		},
+		{
+			name:         "legacy/non-RH restore from non-latest subdir",
+			collection:   classicColl,
+			token:        backupSubdirsByColl[classicColl][0],
+			expectedRows: 3,
+			disableIDs:   true,
+		},
+		{
+			name:         "RH restore with ids/time before full backup",
+			collection:   rhColl,
+			token:        backupIDsByColl[rhColl][0],
+			aost:         rhTimes[1],
+			expectedRows: 1,
+		},
+		{
+			name:         "RH restore with ids/time before incremental backup",
+			collection:   rhColl,
+			token:        backupIDsByColl[rhColl][1],
+			aost:         rhTimes[3],
+			expectedRows: 3,
+		},
+		{
+			name:         "RH restore before LATEST",
+			collection:   rhColl,
+			token:        "LATEST",
+			aost:         rhTimes[3],
+			expectedRows: 3,
+		},
+		{
+			name:         "legacy/RH restore before incremental backup",
+			collection:   rhColl,
+			token:        backupSubdirsByColl[rhColl][0],
+			aost:         rhTimes[3],
+			expectedRows: 3,
+			disableIDs:   true,
+		},
+		{
+			name:         "legacy/RH restore before LATEST",
+			collection:   rhColl,
+			token:        "LATEST",
+			aost:         rhTimes[3],
+			expectedRows: 3,
+			disableIDs:   true,
+		},
+		{
+			name:        "error/RH restore with time out of bounds of chain",
+			collection:  rhColl,
+			token:       backupIDsByColl[rhColl][1],
+			aost:        rhTimes[5],
+			expectedErr: "does not cover the specified AS OF SYSTEM TIME",
+		},
+		{
+			name:        "error/RH restore with time out of bounds of specified backup",
+			collection:  rhColl,
+			token:       backupIDsByColl[rhColl][1],
+			aost:        rhTimes[1],
+			expectedErr: "does not cover the specified AS OF SYSTEM TIME",
+		},
+		{
+			name:        "error/RH restore from non-RH backup",
+			collection:  classicColl,
+			token:       backupIDsByColl[classicColl][0],
+			aost:        classicTimes[2],
+			expectedErr: "not a revision history backup and cannot be used for AS OF SYSTEM TIME restores",
+		},
+		{
+			name:         "legacy/restore works on subdir",
+			collection:   classicColl,
+			token:        backupSubdirsByColl[classicColl][0],
+			expectedRows: 3,
+		},
+		{
+			name:         "legacy/LATEST resolves to legacy path",
+			collection:   classicColl,
+			token:        "LATEST",
+			expectedRows: 2,
+			disableIDs:   true,
+		},
+		{
+			name:         "legacy/AOST restore works on subdir",
+			collection:   classicColl,
+			token:        backupSubdirsByColl[classicColl][0],
+			aost:         classicTimes[2],
+			expectedRows: 2,
+		},
+		{
+			name:         "legacy/AOST restore works on LATEST",
+			collection:   classicColl,
+			token:        "LATEST",
+			aost:         classicTimes[2],
+			expectedRows: 2,
+			disableIDs:   true,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.disableIDs {
+				sqlDB.Exec(t, "SET SESSION use_backups_with_ids = false")
+				defer sqlDB.Exec(t, "SET SESSION use_backups_with_ids = true")
+			}
+			sqlDB.Exec(t, "DROP TABLE IF EXISTS foo")
+			sqlDB.Exec(t, "DROP TABLE IF EXISTS bar")
+
+			var table string
+			if tc.collection == classicColl {
+				table = "foo"
+			} else {
+				table = "bar"
+			}
+			sqlQuery := fmt.Sprintf("RESTORE TABLE %s FROM '%s' IN '%s'", table, tc.token, tc.collection)
+			if tc.aost != "" {
+				sqlQuery += fmt.Sprintf(" AS OF SYSTEM TIME '%s'", tc.aost)
+			}
+
+			if tc.expectedErr == "" {
+				sqlDB.Exec(t, sqlQuery)
+				var rowCount int
+				sqlDB.QueryRow(t, fmt.Sprintf("SELECT count(*) FROM %s", table)).Scan(&rowCount)
+				require.Equal(t, tc.expectedRows, rowCount)
+			} else {
+				sqlDB.ExpectErr(t, tc.expectedErr, sqlQuery)
+			}
+		})
+	}
 }

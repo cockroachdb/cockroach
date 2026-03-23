@@ -163,9 +163,6 @@ func makeInspectAdmissionControlTest(
 				t.Status("running " + description)
 				tickHistogram(histogramName)
 				startTime := timeutil.Now()
-				if _, err := db.ExecContext(ctx, "SET enable_inspect_command = true"); err != nil {
-					t.Fatal(err)
-				}
 				if _, err := db.ExecContext(ctx, "INSPECT TABLE bulkingest.bulkingest"); err != nil {
 					t.Fatal(err)
 				}

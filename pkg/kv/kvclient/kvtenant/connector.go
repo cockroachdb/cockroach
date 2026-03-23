@@ -28,14 +28,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -53,10 +50,6 @@ import (
 	"google.golang.org/grpc/status"
 	"storj.io/drpc"
 )
-
-func init() {
-	Factory = connectorFactory{}
-}
 
 // Connector mediates the communication of cluster-wide state to sandboxed
 // SQL-only tenant servers through a restricted interface. A Connector is
@@ -291,22 +284,14 @@ func NewConnector(cfg ConnectorConfig, addrs []string) Connector {
 	return c
 }
 
-// connectorFactory implements kvtenant.ConnectorFactory.
+// connectorFactory implements ConnectorFactory.
 type connectorFactory struct{}
 
-// NewConnector creates a new loopback only tenant connector with the given
-// configuration. A loopback address is required, and an error is returned if
-// one is not provided. If any remote addresses are provided, an error is
-// returned.
+// NewConnector creates a new tenant connector with the given configuration.
 func (connectorFactory) NewConnector(
 	cfg ConnectorConfig, addressConfig KVAddressConfig,
 ) (Connector, error) {
-	if addressConfig.LoopbackAddress == "" || len(addressConfig.RemoteAddresses) > 0 {
-		return nil, pgerror.WithCandidateCode(
-			errors.New(`tenant connector with remote KV addresses requires a CCL binary`),
-			pgcode.CCLRequired)
-	}
-	return NewConnector(cfg, []string{addressConfig.LoopbackAddress}), nil
+	return NewConnector(cfg, CombineKVAddresses(addressConfig)), nil
 }
 
 // WaitForStart waits until the connector has started.
@@ -979,7 +964,7 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 		// Try each address on each retry iteration (in random order).
 		for _, i := range rand.Perm(len(c.addrs)) {
 			addr := c.addrs[i]
-			if !rpcbase.DRPCEnabled(ctx, c.rpcContext.Settings) {
+			if !c.rpcContext.UseDRPC {
 				conn, err := c.dialAddr(ctx, addr)
 				if err != nil {
 					log.Dev.Warningf(ctx, "error dialing tenant KV address %s: %v", addr, err)

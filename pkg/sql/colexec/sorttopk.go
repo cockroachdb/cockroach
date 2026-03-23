@@ -99,7 +99,8 @@ type topKSorter struct {
 	hasPartialOrder bool
 	// state is the current state of the sort.
 	state topKSortState
-	// inputBatch is the last read batch from the input.
+	// inputBatch is the last read batch from the input. Can be nil if metadata
+	// was emitted last.
 	inputBatch coldata.Batch
 	// firstUnprocessedTupleIdx indicates the index of the first tuple in
 	// inputBatch that hasn't been processed yet.
@@ -111,6 +112,9 @@ type topKSorter struct {
 	// heap is a max heap which stores indices into topK.
 	heap   []int
 	heaper heap.Interface
+	// heapInitalized, if set, indicates that we've fetched enough batches from
+	// the input to initialize the max heap over the topK batch.
+	heapInitialized bool
 	// sel is a selection vector which specifies an ordering on topK.
 	sel []int
 	// emitted is the count of rows which have been emitted so far.
@@ -128,6 +132,8 @@ type topKSorter struct {
 	orderState struct {
 		// group stores the group number associated with each entry in topK.
 		group []int
+		// groupId is the most recently found groupId.
+		groupId int
 		// distincter is an operator that groups an input batch by its partially
 		// ordered column values.
 		distincterInput *colexecop.FeedOperator
@@ -155,11 +161,14 @@ func (t *topKSorter) Init(ctx context.Context) {
 	t.cancelChecker.Init(t.Ctx)
 }
 
-func (t *topKSorter) Next() coldata.Batch {
+func (t *topKSorter) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
 		switch t.state {
 		case topKSortSpooling:
-			t.spool()
+			meta := t.spool()
+			if meta != nil {
+				return nil, meta
+			}
 			t.state = topKSortEmitting
 		case topKSortEmitting:
 			output := t.emit()
@@ -167,13 +176,13 @@ func (t *topKSorter) Next() coldata.Batch {
 				t.state = topKSortDone
 				continue
 			}
-			return output
+			return output, nil
 		case topKSortDone:
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("invalid sort state %v", t.state))
 			// This code is unreachable, but the compiler cannot infer that.
-			return nil
+			return nil, nil
 		}
 	}
 }
@@ -185,12 +194,14 @@ func (t *topKSorter) Reset(ctx context.Context) {
 	t.state = topKSortSpooling
 	t.firstUnprocessedTupleIdx = 0
 	t.topK.ResetInternalBatch()
+	t.heapInitialized = false
 	t.emitted = 0
 	t.exportedFromTopK = 0
 	t.exportedFromBatch = 0
 	t.exportComplete = false
 	if t.hasPartialOrder {
 		t.orderState.distincter.(colexecop.Resetter).Reset(t.Ctx)
+		t.orderState.groupId = 0
 	}
 }
 

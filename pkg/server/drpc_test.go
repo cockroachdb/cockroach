@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -41,9 +40,9 @@ func TestDRPCBatchServer(t *testing.T) {
 	testutils.RunTrueAndFalse(t, "insecure", func(t *testing.T, insecure bool) {
 		args := base.TestClusterArgs{}
 		args.ServerArgs.Insecure = insecure
+		args.ServerArgs.DefaultDRPCOption = base.TestDRPCEnabled
 		args.ReplicationMode = base.ReplicationManual
 		args.ServerArgs.Settings = cluster.MakeClusterSettings()
-		rpcbase.ExperimentalDRPCEnabled.Override(ctx, &args.ServerArgs.Settings.SV, true)
 		c := testcluster.StartTestCluster(t, numNodes, args)
 		defer c.Stopper().Stop(ctx)
 
@@ -99,7 +98,7 @@ func TestStreamContextCancel(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	rpcbase.ExperimentalDRPCEnabled.Override(ctx, &args.ServerArgs.Settings.SV, true)
+	args.ServerArgs.DefaultDRPCOption = base.TestDRPCEnabled
 	c := testcluster.StartTestCluster(t, numNodes, args)
 	defer c.Stopper().Stop(ctx)
 
@@ -177,8 +176,7 @@ func TestDefaultDRPCOption(t *testing.T) {
 		s := serverutils.StartServerOnly(t, base.TestServerArgs{DefaultDRPCOption: opt})
 		defer s.Stopper().Stop(context.Background())
 
-		var enabled bool
-		sqlutils.MakeSQLRunner(s.SQLConn(t)).QueryRow(t, "SHOW CLUSTER SETTING rpc.experimental_drpc.enabled").Scan(&enabled)
+		enabled := s.RPCContext().UseDRPC
 		require.Equal(t, option, enabled)
 	})
 }
@@ -225,7 +223,6 @@ func TestDialDRPC_InterceptorsAreSet(t *testing.T) {
 		},
 	}
 
-	rpcbase.ExperimentalDRPCEnabled.Override(ctx, &args.ServerArgs.Settings.SV, true)
 	c := testcluster.StartTestCluster(t, numNodes, args)
 	defer c.Stopper().Stop(ctx)
 	rpcAddr := c.Server(0).RPCAddr()

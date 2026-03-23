@@ -6,7 +6,6 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl",
     visibility = ["//visibility:public"],
     deps = [
-        "//pkg/ccl/utilccl",
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/catalog/catpb",
@@ -49,7 +48,6 @@ go_test(
         "//pkg/base",
         "//pkg/ccl",
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
-        "//pkg/ccl/partitionccl",
         "//pkg/ccl/testutilsccl",
         "//pkg/clusterversion",
         "//pkg/jobs",

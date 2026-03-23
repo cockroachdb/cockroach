@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptstorage"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
@@ -65,6 +64,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -228,9 +230,8 @@ CREATE TABLE t.test (k INT);
 		kvDB, s.Codec(), "t", "test")
 	for i := range tableDesc.Columns {
 		if tableDesc.Columns[i].Name == "k" {
-			tableDesc.Columns[i].Type.InternalType.Oid = 0         // Pre-2.1 types don't have an OID.
-			tableDesc.Columns[i].Type.InternalType.VisibleType = 4 // Pre-2.1 BIT.
-			tableDesc.Columns[i].Type.InternalType.Width = 12      // Arbitrary non-std INT size.
+			tableDesc.Columns[i].Type.InternalType.Oid = 0    // Pre-2.1 types don't have an OID.
+			tableDesc.Columns[i].Type.InternalType.Width = 12 // Arbitrary non-std INT size.
 			break
 		}
 	}
@@ -829,6 +830,89 @@ func TestIsAtLeastVersion(t *testing.T) {
 	}
 }
 
+// TestContentionLoggingIntegration verifies that structured contention event
+// logs (AggregatedContentionInfo on SQL_EXEC channel) contain decoded key
+// information including table/index/database/schema names and key column
+// details.
+func TestContentionLoggingIntegration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Set up log spy to capture AggregatedContentionInfo events.
+	spy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_SQL_EXEC},
+		[]string{"aggregated_contention_info"},
+		func(entry logpb.Entry) (eventpb.AggregatedContentionInfo, error) {
+			return logtestutils.FromLogEntry[eventpb.AggregatedContentionInfo](entry)
+		},
+		func(_ logpb.Entry, e eventpb.AggregatedContentionInfo) bool {
+			return e.TableName == "t_contention_log_test"
+		},
+	)
+	cleanup := log.InterceptWith(ctx, spy)
+	defer cleanup()
+
+	// log.InterceptWith only captures logs in the current process, so we
+	// need to prevent external process virtual cluster injection.
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			KVClient: &kvcoord.ClientTestingKnobs{
+				DisableTxnAnchorKeyRandomization: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.contention.event_store.resolution_interval = '100ms'`)
+	sqlDB.Exec(t, `CREATE TABLE t_contention_log_test (id STRING PRIMARY KEY, s STRING)`)
+
+	causeContention(t, conn, "t_contention_log_test", "insert1", "update1")
+
+	registry := s.ExecutorConfig().(sql.ExecutorConfig).ContentionRegistry
+	testutils.SucceedsSoon(t, func() error {
+		if err := registry.FlushEventsForTest(ctx); err != nil {
+			return err
+		}
+		events := spy.GetLogs(logpb.Channel_SQL_EXEC)
+		if len(events) == 0 {
+			return errors.New("no contention log events captured yet")
+		}
+		return nil
+	})
+
+	events := spy.GetLogs(logpb.Channel_SQL_EXEC)
+	require.NotEmpty(t, events)
+	for _, e := range events {
+		require.Equal(t, "defaultdb", e.DatabaseName,
+			"expected DatabaseName=defaultdb, got %s", e.DatabaseName)
+		require.Equal(t, "public", e.SchemaName,
+			"expected SchemaName=public, got %s", e.SchemaName)
+		require.Equal(t, "t_contention_log_test", e.TableName,
+			"expected TableName=t_contention_log_test, got %s", e.TableName)
+		require.Equal(t, "t_contention_log_test_pkey", e.IndexName,
+			"expected IndexName=t_contention_log_test_pkey, got %s", e.IndexName)
+		require.NotZero(t, e.TableId, "expected non-zero TableId")
+		require.Equal(t, uint32(1), e.IndexId,
+			"expected IndexId=1 (primary index), got %d", e.IndexId)
+		require.NotEmpty(t, e.KeyColumnNames, "expected non-empty KeyColumnNames")
+		require.Equal(t, len(e.KeyColumnNames), len(e.KeyColumnTypes),
+			"KeyColumnNames and KeyColumnTypes should have same length")
+		require.Equal(t, len(e.KeyColumnNames), len(e.KeyColumnValues),
+			"KeyColumnNames and KeyColumnValues should have same length")
+		require.Equal(t, "id", e.KeyColumnNames[0],
+			"expected first key column name to be 'id', got %s", e.KeyColumnNames[0])
+		require.Equal(t, "STRING", e.KeyColumnTypes[0],
+			"expected first key column type to be 'STRING', got %s", e.KeyColumnTypes[0])
+		require.NotEmpty(t, e.KeyColumnValues[0],
+			"expected non-empty key column value")
+	}
+}
+
 func TestTxnContentionEventsTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -857,8 +941,11 @@ func TestTxnContentionEventsTableWithRangeDescriptor(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
+	// This test requires system tenant because it tests contention event
+	// handling for range descriptor keys, which are KV-internal keys that
+	// secondary tenants never interact with.
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(156145),
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
@@ -1570,47 +1657,6 @@ func scanRecord(
 	return systemRowData, virtualRowData
 }
 
-func TestVirtualPTSTableDeprecated(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx2 := context.Background()
-
-	var testServerArgs base.TestServerArgs
-	ptsKnobs := &protectedts.TestingKnobs{}
-	ptsKnobs.DisableProtectedTimestampForMultiTenant = true
-	testServerArgs.Knobs.ProtectedTS = ptsKnobs
-	srv, conn, _ := serverutils.StartServer(t, testServerArgs)
-	defer srv.Stopper().Stop(ctx2)
-	s := srv.ApplicationLayer()
-
-	sqlDB := sqlutils.MakeSQLRunner(conn)
-	internalDB := s.InternalDB().(isql.DB)
-	ptm := ptstorage.New(s.ClusterSettings(), ptsKnobs)
-
-	t.Run("nil-targets", func(t *testing.T) {
-		rec := &ptpb.Record{
-			ID:        uuid.MakeV4().GetBytes(),
-			Timestamp: s.Clock().Now(),
-			Mode:      ptpb.PROTECT_AFTER,
-			DeprecatedSpans: []roachpb.Span{
-				{
-					Key:    s.Codec().TablePrefix(42),
-					EndKey: s.Codec().TablePrefix(42).PrefixEnd(),
-				},
-			},
-			MetaType: "foo",
-		}
-
-		protect(t, ctx2, internalDB, ptm, rec)
-		_, virtualRow := scanRecord(t, sqlDB, rec.ID)
-		require.Equal(t, []byte(nil), virtualRow.decodedMeta)
-		require.Equal(t, []byte(nil), virtualRow.internalMeta)
-		require.Equal(t, []byte(nil), virtualRow.decodedTargets)
-		require.Equal(t, -1, virtualRow.numRanges)
-	})
-}
-
 // TestVirtualPTSTable asserts the behavior of
 // crdb_internal.kv_protected_ts_records, which includes showing records from
 // the underlying system table and decoding them.
@@ -1671,7 +1717,6 @@ func TestVirtualPTSTable(t *testing.T) {
 			uuid.MakeV4(),
 			int64(job.ID()),
 			s.Clock().Now(),
-			[]roachpb.Span{},
 			jobsprotectedts.Jobs,
 			tableTargets(),
 		)
@@ -1715,7 +1760,6 @@ func TestVirtualPTSTable(t *testing.T) {
 			uuid.MakeV4(),
 			int64(sj.ScheduleID()),
 			s.Clock().Now(),
-			[]roachpb.Span{},
 			jobsprotectedts.Schedules,
 			tableTargets(),
 		)
@@ -1832,5 +1876,51 @@ func TestMVCCValueHeaderSystemColumns(t *testing.T) {
 				sqlDB.CheckQueryResults(t, q, exp)
 			})
 		})
+	}
+}
+
+// TestSupportedCRDBInternalTablesNotChanged verifies that the
+// SupportedCRDBInternalTables map has not changed from its expected values.
+// This test ensures no tables are inadvertently added to this locked list.
+func TestSupportedCRDBInternalTablesNotChanged(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Hardcoded expected values for SupportedCRDBInternalTables
+	// IMPORTANT: This list is LOCKED and should NOT be modified.
+	// New tables should be added to information_schema instead.
+	expectedTables := map[string]struct{}{
+		`cluster_contended_indexes`:     {},
+		`cluster_contended_keys`:        {},
+		`cluster_contended_tables`:      {},
+		`cluster_contention_events`:     {},
+		`cluster_locks`:                 {},
+		`cluster_queries`:               {},
+		`cluster_sessions`:              {},
+		`cluster_transactions`:          {},
+		`index_usage_statistics`:        {},
+		`statement_statistics`:          {},
+		`transaction_contention_events`: {},
+		`transaction_statistics`:        {},
+		`zones`:                         {},
+	}
+
+	// Check that the actual map matches the expected map
+	if len(sql.SupportedCRDBInternalTables) != len(expectedTables) {
+		t.Fatalf("FAILURE: SupportedCRDBInternalTables has been modified!\n"+
+			"This list is LOCKED and should NOT be changed.\n"+
+			"New crdb_internal tables should be added to information_schema instead.\n"+
+			"Expected %d tables, but found %d tables.\n"+
+			"See: https://docs.google.com/document/d/1STbb8bljTzK_jXRIJrxtijWsPhGErdH1vZdunzPwXvs/edit",
+			len(expectedTables), len(sql.SupportedCRDBInternalTables))
+	}
+
+	// Check each expected table is present
+	for table := range expectedTables {
+		if _, ok := sql.SupportedCRDBInternalTables[table]; !ok {
+			t.Fatalf("FAILURE: SupportedCRDBInternalTables has been modified!\n" +
+				"This list is LOCKED and should NOT be changed.\n" +
+				"New crdb_internal tables should be added to information_schema instead.\n" +
+				"See: https://docs.google.com/document/d/1STbb8bljTzK_jXRIJrxtijWsPhGErdH1vZdunzPwXvs/edit")
+		}
 	}
 }

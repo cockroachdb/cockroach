@@ -15,7 +15,7 @@ SELECT l.k, l.v, r.k, r.v FROM (SELECT * FROM distsql_mj_test ORDER BY k, v) l I
 0  1  0  1
 2  4  2  4
 
-statement ok
+statement count 4
 DELETE FROM distsql_mj_test WHERE TRUE;
 
 statement ok
@@ -26,7 +26,7 @@ query IIII rowsort
 SELECT l.k, l.v, r.k, r.v FROM (SELECT * FROM distsql_mj_test ORDER BY k, v) l INNER JOIN (SELECT * FROM distsql_mj_test ORDER BY k, v) r ON l.k = r.k AND l.v = r.v
 ----
 
-statement ok
+statement count 3
 DELETE FROM distsql_mj_test WHERE TRUE;
 
 statement ok

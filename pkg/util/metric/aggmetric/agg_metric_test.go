@@ -395,7 +395,7 @@ func TestMetricKey(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.expectedHashValue, metricKey(tc.labelValues...))
+			require.Equal(t, tc.expectedHashValue, metricKey(tc.labelValues))
 		})
 	}
 }

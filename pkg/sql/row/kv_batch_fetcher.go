@@ -49,10 +49,11 @@ func getKVBatchSize(forceProductionKVBatchSize bool) rowinfra.KeyLimit {
 	return defaultKVBatchSize
 }
 
-var defaultKVBatchSize = rowinfra.KeyLimit(metamorphic.ConstantWithTestValue(
+var defaultKVBatchSize = rowinfra.KeyLimit(metamorphic.ConstantWithTestRange(
 	"kv-batch-size",
 	int(rowinfra.ProductionKVBatchSize), /* defaultValue */
-	1,                                   /* metamorphicValue */
+	1,                                   /* min */
+	100,                                 /* max */
 ))
 
 // elasticCPUDurationPerLowPriReadResponse controls how many CPU tokens are allotted
@@ -215,6 +216,8 @@ type txnKVFetcher struct {
 	requestAdmissionHeader kvpb.AdmissionHeader
 	responseAdmissionQ     *admission.WorkQueue
 	admissionPacer         *admission.Pacer
+	// workloadID is the statement fingerprint ID or job ID for ASH sampling.
+	workloadID uint64
 }
 
 var _ KVBatchFetcher = &txnKVFetcher{}
@@ -270,10 +273,13 @@ func (f *txnKVFetcher) getBatchKeyLimitForIdx(batchIdx int) rowinfra.KeyLimit {
 }
 
 func makeSendFunc(
-	txn *kv.Txn, ext *fetchpb.IndexFetchSpec_ExternalRowData, batchRequestsIssued *int64,
+	txn *kv.Txn,
+	ext *fetchpb.IndexFetchSpec_ExternalRowData,
+	batchRequestsIssued *int64,
+	kvCPUTime *int64,
 ) sendFunc {
 	if ext != nil {
-		return makeExternalSpanSendFunc(ext, txn.DB(), batchRequestsIssued)
+		return makeExternalSpanSendFunc(ext, txn.DB(), batchRequestsIssued, kvCPUTime)
 	}
 	return func(
 		ctx context.Context,
@@ -284,6 +290,9 @@ func makeSendFunc(
 		if err != nil {
 			return nil, err.GoError()
 		}
+		if res.CPUTime > 0 {
+			atomic.AddInt64(kvCPUTime, res.CPUTime)
+		}
 		// Note that in some code paths there is no concurrency when using the
 		// sendFunc, but we choose to unconditionally use atomics here since its
 		// overhead should be negligible in the grand scheme of things anyway.
@@ -293,49 +302,74 @@ func makeSendFunc(
 }
 
 func makeExternalSpanSendFunc(
-	ext *fetchpb.IndexFetchSpec_ExternalRowData, db *kv.DB, batchRequestsIssued *int64,
+	ext *fetchpb.IndexFetchSpec_ExternalRowData,
+	db *kv.DB,
+	batchRequestsIssued *int64,
+	kvCPUTime *int64,
 ) sendFunc {
-	return func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+	// Use a background context for the txn lifetime since it outlives any
+	// single request context.
+	bgCtx := context.Background()
+
+	// Lazily create a single read-only transaction with a fixed timestamp for
+	// all batch requests. The txn is initialized on the first batch request so
+	// that we can use the priority from that batch's AdmissionHeader. A
+	// read-only txn at a fixed timestamp is safe to reuse. The txn does not need
+	// explicit cleanup via Commit or Rollback — read-only transactions hold no
+	// server-side resources (no transaction record, no intents), so they can
+	// simply be garbage collected.
+	var txn *kv.Txn
+
+	nodeID, _ := db.Context().NodeID.OptionalNodeID()
+
+	sf := func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+		if txn == nil {
+			txn = kv.NewTxnWithAdmissionControl(
+				bgCtx, db, nodeID,
+				kvpb.AdmissionHeader_FROM_SQL,
+				admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
+			)
+			if err := txn.SetFixedTimestamp(bgCtx, ext.AsOf); err != nil {
+				return nil, err
+			}
+		}
+
 		for _, req := range ba.Requests {
-			// We only allow external row data for a few known types of request.
 			switch r := req.GetInner().(type) {
 			case *kvpb.GetRequest:
 			case *kvpb.ScanRequest:
 			case *kvpb.ReverseScanRequest:
 			default:
-				return nil, errors.AssertionFailedf("request type %T unsupported for external row data", r)
+				return nil, errors.AssertionFailedf(
+					"request type %T unsupported for external row data", r,
+				)
 			}
 		}
-		log.VEventf(ctx, 2, "kv external fetcher: sending a batch with %d requests", len(ba.Requests))
 
-		// Open a new transaction with fixed timestamp set to the external
-		// timestamp. We must do this with txn.Send rather than using
-		// db.NonTransactionalSender to get the 1-to-1 request-response guarantee
-		// required by txnKVFetcher.
-		// TODO(michae2): Explore whether we should keep this transaction open for
-		// the duration of the surrounding transaction.
-		var res *kvpb.BatchResponse
-		err := db.TxnWithAdmissionControl(
-			ctx, ba.AdmissionHeader.Source, admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
-			kv.SteppingDisabled,
-			func(ctx context.Context, txn *kv.Txn) error {
-				if err := txn.SetFixedTimestamp(ctx, ext.AsOf); err != nil {
-					return err
-				}
-				var err *kvpb.Error
-				res, err = txn.Send(ctx, ba)
-				if err != nil {
-					return err.GoError()
-				}
-				return nil
-			})
+		if log.V(2) {
+			log.VEventf(
+				ctx, 2,
+				"kv external fetcher: sending a batch with %d requests",
+				len(ba.Requests),
+			)
+		}
 
-		// Note that in some code paths there is no concurrency when using the
-		// sendFunc, but we choose to unconditionally use atomics here since its
-		// overhead should be negligible in the grand scheme of things anyway.
+		res, pErr := txn.Send(ctx, ba)
+		// Note that in some code paths there is no concurrency when using
+		// the sendFunc, but we choose to unconditionally use atomics here
+		// since its overhead should be negligible in the grand scheme of
+		// things anyway.
 		atomic.AddInt64(batchRequestsIssued, 1)
-		return res, err
+		if pErr != nil {
+			return nil, pErr.GoError()
+		}
+		if res.CPUTime > 0 {
+			atomic.AddInt64(kvCPUTime, res.CPUTime)
+		}
+		return res, nil
 	}
+
+	return sf
 }
 
 type newTxnKVFetcherArgs struct {
@@ -350,7 +384,9 @@ type newTxnKVFetcherArgs struct {
 	forceProductionKVBatchSize bool
 	kvPairsRead                *int64
 	batchRequestsIssued        *int64
+	kvCPUTime                  *int64
 	rawMVCCValues              bool
+	workloadID                 uint64
 
 	admission struct { // groups AC-related fields
 		requestHeader  kvpb.AdmissionHeader
@@ -381,6 +417,7 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		forceProductionKVBatchSize: args.forceProductionKVBatchSize,
 		requestAdmissionHeader:     args.admission.requestHeader,
 		responseAdmissionQ:         args.admission.responseQ,
+		workloadID:                 args.workloadID,
 	}
 
 	f.maybeInitAdmissionPacer(
@@ -388,7 +425,7 @@ func newTxnKVFetcherInternal(args newTxnKVFetcherArgs) *txnKVFetcher {
 		args.admission.pacerFactory,
 		args.admission.settingsValues,
 	)
-	f.kvBatchMetrics.init(args.kvPairsRead, args.batchRequestsIssued)
+	f.kvBatchMetrics.init(args.kvPairsRead, args.batchRequestsIssued, args.kvCPUTime)
 	return f
 }
 
@@ -416,7 +453,7 @@ func (f *txnKVFetcher) maybeInitAdmissionPacer(
 	}
 	admissionPri := admissionpb.WorkPriority(admissionHeader.Priority)
 	if internalLowPriReadElasticControlEnabled.Get(sv) &&
-		admissionPri < admissionpb.UserLowPri {
+		admissionPri <= admissionpb.BulkNormalPri {
 
 		f.admissionPacer = pacerFactory.NewPacer(
 			elasticCPUDurationPerLowPriReadResponse.Get(sv),
@@ -429,6 +466,7 @@ func (f *txnKVFetcher) maybeInitAdmissionPacer(
 				TenantID:   roachpb.SystemTenantID,
 				Priority:   admissionPri,
 				CreateTime: admissionHeader.CreateTime,
+				WorkloadID: f.workloadID,
 			})
 	}
 }
@@ -759,6 +797,7 @@ func (f *txnKVFetcher) maybeAdmitBatchResponse(ctx context.Context, br *kvpb.Bat
 			TenantID:   roachpb.SystemTenantID,
 			Priority:   admissionpb.WorkPriority(f.requestAdmissionHeader.Priority),
 			CreateTime: f.requestAdmissionHeader.CreateTime,
+			WorkloadID: f.workloadID,
 		}
 		if _, err := f.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
 			return err
@@ -1069,12 +1108,14 @@ type kvBatchMetrics struct {
 		bytesRead           int64
 		kvPairsRead         *int64
 		batchRequestsIssued *int64
+		kvCPUTime           *int64
 	}
 }
 
-func (h *kvBatchMetrics) init(kvPairsRead, batchRequestsIssued *int64) {
+func (h *kvBatchMetrics) init(kvPairsRead, batchRequestsIssued, kvCPUTime *int64) {
 	h.atomics.kvPairsRead = kvPairsRead
 	h.atomics.batchRequestsIssued = batchRequestsIssued
+	h.atomics.kvCPUTime = kvCPUTime
 }
 
 // Record records metrics for the given batch response. It should be called
@@ -1116,4 +1157,12 @@ func (h *kvBatchMetrics) GetBatchRequestsIssued() int64 {
 		return 0
 	}
 	return atomic.LoadInt64(h.atomics.batchRequestsIssued)
+}
+
+// GetKVCPUTime implements the KVBatchFetcher interface.
+func (h *kvBatchMetrics) GetKVCPUTime() int64 {
+	if h == nil || h.atomics.kvCPUTime == nil {
+		return 0
+	}
+	return atomic.LoadInt64(h.atomics.kvCPUTime)
 }

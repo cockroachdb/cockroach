@@ -24,6 +24,14 @@
             "_test\\.go$": "tests"
         }
     },
+    "benchdoc": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers"
+        },
+        "only_files": {
+            "_test\\.go$": "only run on test files"
+        }
+    },
     "deepequalerrors": {
         "exclude_files": {
             "external/": "exclude all third-party code for all analyzers",

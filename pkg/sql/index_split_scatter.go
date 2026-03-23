@@ -70,7 +70,7 @@ func (is *indexSplitAndScatter) getSplitPointsWithStats(
 		return nil, nil
 	}
 	// Fetch the current statistics for this table.
-	tableStats, err := is.statsCache.GetTableStats(ctx, table, nil)
+	tableStats, err := is.statsCache.GetFreshTableStats(ctx, table, nil /* typeResolver */)
 	if err != nil {
 		return nil, err
 	}
@@ -214,6 +214,9 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 	const backfillSplitExpiration = time.Hour
 	tableID := table.GetID()
 	preservedSplitsMultiple := int(PreservedSplitCountMultiple.Get(is.sv))
+	if preservedSplitsMultiple == 0 {
+		return nil
+	}
 	nNodes := is.nodeDescs.GetNodeDescriptorCount()
 	nSplits := preservedSplitsMultiple * nNodes
 	var copySplitsFromIndexID descpb.IndexID

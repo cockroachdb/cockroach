@@ -88,6 +88,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 			Settings:          st,
 			SQLInstanceDialer: instanceDialer,
 			Stopper:           outboxStopper,
+			RPCContext:        rpcContext,
 		},
 		NodeID: base.TestingIDContainer,
 	}

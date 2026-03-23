@@ -122,6 +122,7 @@ func GetTxnStats(t *testing.T, conn *sqlutils.SQLRunner, appName string, dbName 
 SELECT 
 	encode(fingerprint_id, 'hex') AS txn_fingerprint_id,
 	metadata->'stmtFingerprintIDs' AS statement_fingerprint_ids,
+  statistics -> 'statistics'->> 'cnt' AS count,
 	(statistics -> 'statistics' -> 'commitLat' -> 'mean')::FLOAT > 0 AS commit_lat_not_zero,
 	(statistics -> 'statistics' -> 'svcLat' -> 'mean')::FLOAT > 0 AS svc_lat_not_zero
 FROM crdb_internal.transaction_statistics ts

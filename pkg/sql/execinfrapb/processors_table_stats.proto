@@ -190,4 +190,7 @@ message SampleAggregatorSpec {
   // The number of indexes that have been scanned so far. Used for progress
   // reporting.
   optional uint64 cur_index = 13 [(gogoproto.nullable) = false];
+
+  // If true, meaning we will delay the deletion of existing stats.
+  optional bool canary_stats_enabled = 14 [(gogoproto.nullable) = false];
 }

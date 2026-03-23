@@ -49,7 +49,7 @@ func loadSchedules(
 	}
 
 	execCfg := p.ExecCfg()
-	env := sql.JobSchedulerEnv(execCfg.JobsKnobs())
+	env := jobs.JobSchedulerEnv(execCfg.JobsKnobs())
 	schedules := jobs.ScheduledJobTxn(p.InternalSQLTxn())
 	schedule, err := schedules.Load(ctx, env, scheduleID)
 	if err != nil {
@@ -239,11 +239,7 @@ func emitAlteredSchedule(
 	if err != nil {
 		return err
 	}
-	incDests, err := exprEval.StringArray(ctx, tree.Exprs(stmt.Options.IncrementalStorage))
-	if err != nil {
-		return err
-	}
-	if err := emitSchedule(job, stmt, to, kmsURIs, incDests, resultsCh); err != nil {
+	if err := emitSchedule(job, stmt, to, kmsURIs, resultsCh); err != nil {
 		return err
 	}
 	return nil
@@ -336,13 +332,31 @@ func processScheduleOptions(
 
 func processOptions(spec *alterBackupScheduleSpec, s scheduleDetails) error {
 	opts := spec.backupOptions
+
+	// Revision history only applies to incremental backups. If the user is
+	// trying to enable it but there's no incremental schedule, that's an error.
+	if opts.CaptureRevisionHistory != nil {
+		if v, ok := opts.CaptureRevisionHistory.(*tree.DBool); ok && bool(*v) {
+			if s.incStmt == nil {
+				return errors.Newf("revision_history is not supported for schedules with FULL BACKUP ALWAYS; " +
+					"revision history requires incremental backups")
+			}
+		}
+	}
+
+	// For the full backup statement, apply all options.
 	fullOpts := &s.fullStmt.Options
 	if err := processOptionsForArgs(opts, fullOpts); err != nil {
 		return err
 	}
+	// Clear revision_history from the full backup since it only applies to
+	// incremental backups.
+	fullOpts.CaptureRevisionHistory = nil
+
 	if s.incStmt == nil {
 		return nil
 	}
+	// For the incremental backup statement, apply all options including revision_history.
 	incOpts := &s.incStmt.Options
 	if err := processOptionsForArgs(opts, incOpts); err != nil {
 		return err
@@ -383,13 +397,6 @@ func processOptionsForArgs(inOpts tree.BackupOptions, outOpts *tree.BackupOption
 			outOpts.EncryptionKMSURI = nil
 		} else {
 			outOpts.EncryptionKMSURI = inOpts.EncryptionKMSURI
-		}
-	}
-	if inOpts.IncrementalStorage != nil {
-		if tree.AsStringWithFlags(&inOpts.IncrementalStorage, tree.FmtBareStrings) == "" {
-			outOpts.IncrementalStorage = nil
-		} else {
-			outOpts.IncrementalStorage = inOpts.IncrementalStorage
 		}
 	}
 	if inOpts.UpdatesClusterMonitoringMetrics != nil {
@@ -434,7 +441,7 @@ func processFullBackupRecurrence(
 		return s, nil
 	}
 
-	env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
+	env := jobs.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
 	scheduledJobs := jobs.ScheduledJobTxn(p.InternalSQLTxn())
 	if fullBackupAlways {
 		if s.incJob == nil {
@@ -535,7 +542,7 @@ func validateFullIncrementalFrequencies(p sql.PlanHookState, s scheduleDetails) 
 	if s.incJob == nil {
 		return nil
 	}
-	env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
+	env := jobs.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
 	now := env.Now()
 
 	fullFreq, err := frequencyFromCron(now, s.fullJob.ScheduleExpr())
@@ -594,7 +601,7 @@ func processInto(p sql.PlanHookState, spec *alterBackupScheduleSpec, s scheduleD
 	// so we can unpause incrementals. This mirrors the behavior of
 	// CREATE SCHEDULE FOR BACKUP.
 	if !incPaused {
-		env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
+		env := jobs.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
 		s.fullJob.SetNextRun(env.Now())
 	}
 
@@ -608,7 +615,7 @@ func processNextRunNow(
 		return nil
 	}
 
-	env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
+	env := jobs.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
 
 	// Trigger the full schedule, unless there is an inc schedule and the user did
 	// not explicitly specify the full.

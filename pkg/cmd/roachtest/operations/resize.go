@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations/helpers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/errors"
 )
 
@@ -45,7 +46,7 @@ func (cl *cleanupResize) Cleanup(ctx context.Context, o operation.Operation, c c
 // duration, then drains and decommissions the new nodes.
 func resizeCluster(
 	ctx context.Context, o operation.Operation, c cluster.Cluster, growCount int,
-) *cleanupResize {
+) (cl *cleanupResize) {
 	// Create a temporary directory to store the required files for this operation.
 	tmpDir, err := os.MkdirTemp("", "")
 	if err != nil {
@@ -69,10 +70,21 @@ func resizeCluster(
 
 	// Grow the cluster, but keep track of the original cluster size.
 	origClusterSize := c.Spec().NodeCount
+
+	// Assign cleanup handler BEFORE Grow(), so it's returned even if Grow() fails.
+	// The cleanup uses Shrink() which is safe to call even if Grow() failed partway through.
+	cl = &cleanupResize{growCount: growCount, origClusterSize: origClusterSize}
+	defer func() {
+		if r := recover(); r != nil {
+			o.Errorf("error during resize: %v", r)
+		}
+	}()
+
 	err = dynamicCluster.Grow(ctx, o.L(), growCount)
 	if err != nil {
 		o.Fatal(err)
 	}
+
 	// Grow command generate new certificates, update certificate on workload cluster.
 	if wc := o.WorkloadCluster(); wc != nil {
 		_ = c.Get(ctx, o.L(), "certs", path.Join(tmpDir, "certs"), c.Node(1))
@@ -87,9 +99,13 @@ func resizeCluster(
 	// Start the new nodes.
 	startOpts := o.StartOpts()
 	startOpts.RoachprodOpts.IsRestart = false
+	// If running from workload cluster, certs are already updated above (lines 89-92).
+	if o.WorkloadCluster() == nil {
+		startOpts.RoachprodOpts.SkipWaitForSQL = true
+	}
 	c.Start(ctx, o.L(), startOpts, o.ClusterSettings(), newNodes)
 
-	return &cleanupResize{growCount: growCount, origClusterSize: origClusterSize}
+	return cl
 }
 
 func registerResize(r registry.Registry) {
@@ -97,7 +113,7 @@ func registerResize(r registry.Registry) {
 		Name:               "resize/grow=3",
 		Owner:              registry.OwnerStorage,
 		Timeout:            30 * time.Minute,
-		CompatibleClouds:   registry.OnlyGCE,
+		CompatibleClouds:   registry.Clouds(spec.GCE, spec.AWS),
 		CanRunConcurrently: registry.OperationCannotRunConcurrentlyWithItself,
 		Dependencies:       []registry.OperationDependency{registry.OperationRequiresNodes},
 		Run: func(ctx context.Context, o operation.Operation, c cluster.Cluster) registry.OperationCleanup {

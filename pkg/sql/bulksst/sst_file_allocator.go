@@ -30,7 +30,7 @@ type FileAllocator interface {
 	AddFile(ctx context.Context) (objstorage.Writable, string, error)
 
 	// CommitFile records metadata for a successfully written SST file.
-	CommitFile(uri string, span roachpb.Span, rowSample roachpb.Key, fileSize uint64)
+	CommitFile(uri string, span roachpb.Span, rowSample roachpb.Key, fileSize uint64, keyCount uint64)
 
 	// GetFileList gets all the files created by this file allocator.
 	GetFileList() *SSTFiles
@@ -50,13 +50,15 @@ func (f *fileAllocatorBase) GetFileList() *SSTFiles {
 
 // addFile helps track metadata for created SST files.
 func (f *fileAllocatorBase) addFile(
-	uri string, span roachpb.Span, rowSample roachpb.Key, fileSize uint64,
+	uri string, span roachpb.Span, rowSample roachpb.Key, fileSize uint64, keyCount uint64,
 ) {
 	f.fileInfo.SST = append(f.fileInfo.SST, &SSTFileInfo{
-		URI:      uri,
-		StartKey: span.Key,
-		EndKey:   span.EndKey,
-		FileSize: fileSize,
+		URI:       uri,
+		StartKey:  span.Key,
+		EndKey:    span.EndKey,
+		FileSize:  fileSize,
+		RowSample: rowSample,
+		KeyCount:  keyCount,
 	})
 	f.fileInfo.TotalSize += fileSize
 	f.recordRowSample(rowSample)
@@ -116,7 +118,7 @@ func (e *ExternalFileAllocator) AddFile(ctx context.Context) (objstorage.Writabl
 
 // CommitFile records metadata for a successfully written SST file.
 func (e *ExternalFileAllocator) CommitFile(
-	uri string, span roachpb.Span, rowSample roachpb.Key, fileSize uint64,
+	uri string, span roachpb.Span, rowSample roachpb.Key, fileSize uint64, keyCount uint64,
 ) {
-	e.fileAllocatorBase.addFile(uri, span, rowSample, fileSize)
+	e.fileAllocatorBase.addFile(uri, span, rowSample, fileSize, keyCount)
 }

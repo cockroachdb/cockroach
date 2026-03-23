@@ -233,6 +233,11 @@ func (ep *DummyEvalPlanner) UnsafeDeleteComment(ctx context.Context, objectID in
 	return errors.WithStack(errEvalPlanner)
 }
 
+// ResetLeaseTimestamp is part of the Planner interface.
+func (ep *DummyEvalPlanner) ResetLeaseTimestamp(ctx context.Context) {
+	panic(errors.WithStack(errEvalPlanner))
+}
+
 // UserHasAdminRole is part of the Planner interface.
 func (ep *DummyEvalPlanner) UserHasAdminRole(
 	ctx context.Context, user username.SQLUsername,
@@ -322,8 +327,15 @@ func (*DummyEvalPlanner) RepairTTLScheduledJobForTable(ctx context.Context, tabl
 	return errors.WithStack(errEvalPlanner)
 }
 
-// Mon is part of the eval.Planner interface.
-func (ep *DummyEvalPlanner) Mon() *mon.BytesMonitor {
+// TxnMon is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) TxnMon() *mon.BytesMonitor {
+	// DummyEvalPlanner is only used for remote flows during the execution, so
+	// it doesn't really have a txn-bound monitor.
+	return nil
+}
+
+// ExecMon is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) ExecMon() *mon.BytesMonitor {
 	return ep.Monitor
 }
 
@@ -598,9 +610,48 @@ func (ep *DummyEvalPlanner) ProcessVectorIndexFixups(
 
 // InsertStatementHint is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) InsertStatementHint(
-	ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion,
+	ctx context.Context,
+	statementFingerprint string,
+	hint hintpb.StatementHintUnion,
+	optDatabase string,
 ) (int64, error) {
 	return 0, nil
+}
+
+// DeleteStatementHint is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) DeleteStatementHint(
+	ctx context.Context, rowID int64, statementFingerprint string,
+) ([]int64, []string, [][]byte, error) {
+	return nil, nil, nil, nil
+}
+
+// SetStatementHintEnabled is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) SetStatementHintEnabled(
+	ctx context.Context, rowID int64, statementFingerprint string, enabled bool,
+) (int64, error) {
+	return 0, nil
+}
+
+// ValidateSessionVariableHint is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) ValidateSessionVariableHint(
+	ctx context.Context, varName, varValue string, safeUpdates bool,
+) error {
+	return nil
+}
+
+// UsingHintInjection is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) UsingHintInjection() bool {
+	return false
+}
+
+// GetHintIDs is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) GetHintIDs() []int64 {
+	return nil
+}
+
+// LogEvent is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) LogEvent(ctx context.Context, event interface{}) error {
+	return nil
 }
 
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.

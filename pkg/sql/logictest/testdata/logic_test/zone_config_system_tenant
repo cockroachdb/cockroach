@@ -1,4 +1,4 @@
-# LogicTest: default-configs !3node-tenant-default-configs !local-prepared local-leased-descriptors
+# LogicTest: default-configs !3node-tenant-default-configs
 # Zone config logic tests that are only meant to work for the system tenant.
 
 # Verify that the timeseries range has a zone config after bootstrap. It should
@@ -25,11 +25,6 @@ ALTER TABLE t CONFIGURE ZONE USING num_replicas = 3;
 
 statement ok
 CREATE TABLE a(id INT PRIMARY KEY)
-
-# Check that global_reads cannot be set without a CCL binary and enterprise license.
-skipif config enterprise-configs
-statement error OSS binaries do not include enterprise features
-ALTER TABLE a CONFIGURE ZONE USING global_reads = true
 
 query IT
 SELECT zone_id, target FROM crdb_internal.zones ORDER BY 1

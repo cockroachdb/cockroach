@@ -80,6 +80,7 @@ func TestRandStep(t *testing.T) {
 	n := nodes{
 		running: map[int]struct{}{1: {}, 2: {}, 3: {}},
 		stopped: make(map[int]struct{}),
+		crashed: make(map[int]struct{}),
 	}
 	g, err := MakeGenerator(config, getReplicasFn, 0, &n)
 	require.NoError(t, err)
@@ -424,6 +425,8 @@ func TestRandStep(t *testing.T) {
 			switch o.Type {
 			case ChangeSettingType_SetLeaseType:
 				counts.ChangeSetting.SetLeaseType++
+			case ChangeSettingType_ToggleVirtualIntentResolution:
+				counts.ChangeSetting.ToggleVirtualIntentResolution++
 			}
 		case *ChangeZoneOperation:
 			switch o.Type {
@@ -444,6 +447,13 @@ func TestRandStep(t *testing.T) {
 			n.mu.Lock()
 			n.running[int(o.NodeId)] = struct{}{}
 			n.mu.Unlock()
+		case *CrashNodeOperation:
+			counts.Fault.CrashNode++
+			n.mu.Lock()
+			n.crashed[int(o.NodeId)] = struct{}{}
+			n.mu.Unlock()
+		case *MvccGCOperation:
+			counts.MvccGC.MvccGC++
 		default:
 			t.Fatalf("%T", o)
 		}

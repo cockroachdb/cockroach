@@ -15,7 +15,7 @@ import { trustIcon } from "src/util/trust";
 
 import mapPinIcon from "!!raw-loader!assets/mapPin.svg";
 
-import "./breadcrumbs.styl";
+import "./breadcrumbs.scss";
 
 interface BreadcrumbsProps {
   tiers: LocalityTier[];

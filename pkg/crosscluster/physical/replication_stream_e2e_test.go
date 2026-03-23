@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -49,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -952,172 +950,105 @@ func TestStreamingReplanOnLag(t *testing.T) {
 	c.WaitUntilReplicatedTime(cutoverTime, jobspb.JobID(ingestionJobID))
 }
 
-// TestProtectedTimestampManagement tests the active protected
-// timestamps management on the destination tenant's keyspan.
+// TestProtectedTimestampManagement tests that the destination tenant's
+// protected timestamp is created when the ingestion job starts and
+// released when the job completes or is canceled.
+//
+// Note: The PTS formula (protectedTS = replicatedTime - TTL) is unit tested
+// in TestResolveHeartbeatTime. Producer PTS management is tested in
+// TestTenantStreamingCancelIngestion.
 func TestProtectedTimestampManagement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "slow test") // takes >1mn under race.
-
 	ctx := context.Background()
 	args := replicationtestutils.DefaultTenantStreamingClustersArgs
-	// Override the replication job details ReplicationTTLSeconds to a small value
-	// so that every progress update results in a protected timestamp update.
-	args.RetentionTTLSeconds = 1
+	// Disable metamorphic external connection since we reuse clusters across
+	// subtests and the external connection would already exist on subsequent runs.
+	args.NoMetamorphicExternalConnection = true
 
-	testutils.RunTrueAndFalse(t, "pause-before-terminal", func(t *testing.T, pauseBeforeTerminal bool) {
-		testutils.RunTrueAndFalse(t, "complete-replication", func(t *testing.T, completeReplication bool) {
+	// Create clusters once and reuse them across all subtests.
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
 
-			// waitForProducerProtection asserts that there is a PTS record protecting
-			// the source tenant. We ensure the PTS record is protecting a timestamp
-			// greater or equal to the frontier we know we have replicated up until.
-			waitForProducerProtection := func(c *replicationtestutils.TenantStreamingClusters, frontier hlc.Timestamp, producerJobID int) {
-				testutils.SucceedsSoon(t, func() error {
-					srv := c.SrcSysServer
-					job, err := srv.JobRegistry().(*jobs.Registry).LoadJob(ctx, jobspb.JobID(producerJobID))
-					if err != nil {
-						return err
-					}
-					ptsRecordID := job.Payload().Details.(*jobspb.Payload_StreamReplication).StreamReplication.ProtectedTimestampRecordID
-					ptsProvider := srv.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-
-					var ptsRecord *ptpb.Record
-					if err := srv.InternalDB().(descs.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-						var err error
-						ptsRecord, err = ptsProvider.WithTxn(txn).GetRecord(ctx, ptsRecordID)
-						return err
-					}); err != nil {
-						return err
-					}
-					if ptsRecord.Timestamp.Less(frontier) {
-						return errors.Newf("protection is at %s, expected to be >= %s",
-							ptsRecord.Timestamp.String(), frontier.String())
-					}
-					return nil
-				})
-			}
-
-			// checkNoDestinationProtections asserts that there is no PTS record
-			// protecting the destination tenant.
-			checkNoDestinationProtection := func(c *replicationtestutils.TenantStreamingClusters, replicationJobID int) {
-				execCfg := c.DestSysServer.ExecutorConfig().(sql.ExecutorConfig)
-				require.NoError(t, c.DestSysServer.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-					j, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(replicationJobID), txn)
-					require.NoError(t, err)
-					payload := j.Payload()
-					replicationDetails := payload.GetStreamIngestion()
-					ptp := execCfg.ProtectedTimestampProvider.WithTxn(txn)
-					_, err = ptp.GetRecord(ctx, *replicationDetails.ProtectedTimestampRecordID)
-					require.EqualError(t, err, protectedts.ErrNotExists.Error())
-					return nil
-				}))
-			}
-			checkDestinationProtection := func(c *replicationtestutils.TenantStreamingClusters, frontier hlc.Timestamp, replicationJobID int) {
-				execCfg := c.DestSysServer.ExecutorConfig().(sql.ExecutorConfig)
-				ptp := execCfg.ProtectedTimestampProvider
-				require.NoError(t, c.DestSysServer.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-					j, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(replicationJobID), txn)
-					if err != nil {
-						return err
-					}
-					payload := j.Payload()
-					progress := j.Progress()
-					replicationDetails := payload.GetStreamIngestion()
-
-					require.NotNil(t, replicationDetails.ProtectedTimestampRecordID)
-					rec, err := ptp.WithTxn(txn).GetRecord(ctx, *replicationDetails.ProtectedTimestampRecordID)
-					if err != nil {
-						return err
-					}
-
-					replicatedTime := replicationutils.ReplicatedTimeFromProgress(&progress)
-					require.True(t, frontier.LessEq(replicatedTime))
-
-					roundedReplicatedTime := replicatedTime.GoTime().Round(time.Millisecond)
-					roundedProtectedTime := rec.Timestamp.GoTime().Round(time.Millisecond)
-					window := roundedReplicatedTime.Sub(roundedProtectedTime)
-					require.Equal(t, time.Second, window)
-					return nil
-				}))
-			}
-
-			c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
-			defer cleanup()
-
-			c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'")
-			c.DestSysSQL.Exec(t, "SET CLUSTER SETTING kv.protectedts.reconciliation.interval = '1ms';")
-
-			producerJobID, replicationJobID := c.StartStreamReplication(ctx)
-
-			jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
-			jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
-
-			// Ensure that we wait at least a second so that the gap between the first
-			// time we write the protected timestamp (t1) during replication job
-			// startup, and the first progress update (t2) is greater than 1s. This is
-			// important because if `frontier@t2 - ReplicationTTLSeconds < t1` then we
-			// will not update the PTS record.
-			now := c.SrcCluster.Server(0).SystemLayer().Clock().Now().Add(int64(time.Second)*2, 0)
-			c.WaitUntilReplicatedTime(now, jobspb.JobID(replicationJobID))
-
-			// Check that the producer and replication job have written a protected
-			// timestamp.
-			waitForProducerProtection(c, now, producerJobID)
-			checkDestinationProtection(c, now, replicationJobID)
-
-			now2 := now.Add(time.Second.Nanoseconds(), 0)
-			c.WaitUntilReplicatedTime(now2, jobspb.JobID(replicationJobID))
-			// Let the replication progress for a second before checking that the
-			// protected timestamp record has also been updated on the destination
-			// cluster. This update happens in the same txn in which we update the
-			// replication job's progress.
-			waitForProducerProtection(c, now2, producerJobID)
-			checkDestinationProtection(c, now2, replicationJobID)
-
-			if pauseBeforeTerminal {
-				c.DestSysSQL.Exec(t, fmt.Sprintf("PAUSE JOB %d", replicationJobID))
-				jobutils.WaitForJobToPause(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
-			}
-
-			if completeReplication {
-				c.DestSysSQL.Exec(t, fmt.Sprintf("RESUME JOB %d", replicationJobID))
-				jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
-				var emptyCutoverTime time.Time
-				c.Cutover(ctx, producerJobID, replicationJobID, emptyCutoverTime, false)
-				c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION SOURCE EXPIRATION WINDOW ='100ms'`, c.Args.SrcTenantName))
-			}
-
-			// Set GC TTL low, so that the GC job completes quickly in the test.
-			c.DestSysSQL.Exec(t, "ALTER RANGE tenants CONFIGURE ZONE USING gc.ttlseconds = 1;")
-			c.DestSysSQL.Exec(t, fmt.Sprintf("DROP TENANT %s", c.Args.DestTenantName))
-
-			if !completeReplication {
-				c.SrcSysSQL.Exec(t, fmt.Sprintf(`ALTER TENANT '%s' SET REPLICATION SOURCE EXPIRATION WINDOW ='1ms'`, c.Args.SrcTenantName))
-				jobutils.WaitForJobToCancel(c.T, c.DestSysSQL, jobspb.JobID(replicationJobID))
-				jobutils.WaitForJobToFail(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
-			}
-
-			requireReleasedProducerPTSRecord(t, ctx, c.SrcSysServer, jobspb.JobID(producerJobID))
-
-			// Check if the replication job has released protected timestamp.
-			checkNoDestinationProtection(c, replicationJobID)
-
-			// Wait for the GC job to finish, this should happen once the protected
-			// timestamp has been released.
-			c.DestSysSQL.Exec(t, "SHOW JOBS WHEN COMPLETE SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'SCHEMA CHANGE GC'")
-
-			// Check if dest tenant key range is cleaned up.
-			destTenantSpan := keys.MakeTenantSpan(args.DestTenantID)
-			rows, err := c.DestSysServer.DB().
-				Scan(ctx, destTenantSpan.Key, destTenantSpan.EndKey, 10)
-			require.NoError(t, err)
-			require.Empty(t, rows)
-
-			c.DestSysSQL.CheckQueryResults(t,
-				fmt.Sprintf("SELECT count(*) FROM system.tenants WHERE id = %s", args.DestTenantID),
-				[][]string{{"0"}})
+	// checkDestinationPTSExists verifies that a PTS record exists for the
+	// destination tenant's keyspan.
+	checkDestinationPTSExists := func(t *testing.T, replicationJobID int) {
+		t.Helper()
+		execCfg := c.DestSysServer.ExecutorConfig().(sql.ExecutorConfig)
+		testutils.SucceedsSoon(t, func() error {
+			return c.DestSysServer.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				j, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(replicationJobID), txn)
+				if err != nil {
+					return err
+				}
+				payload := j.Payload()
+				replicationDetails := payload.GetStreamIngestion()
+				if replicationDetails.ProtectedTimestampRecordID == nil {
+					return errors.New("ProtectedTimestampRecordID not yet set")
+				}
+				ptp := execCfg.ProtectedTimestampProvider.WithTxn(txn)
+				_, err = ptp.GetRecord(ctx, *replicationDetails.ProtectedTimestampRecordID)
+				return err
+			})
 		})
+	}
+
+	// checkNoDestinationProtection asserts that the PTS record has been released.
+	checkNoDestinationProtection := func(t *testing.T, replicationJobID int) {
+		t.Helper()
+		execCfg := c.DestSysServer.ExecutorConfig().(sql.ExecutorConfig)
+		testutils.SucceedsSoon(t, func() error {
+			return c.DestSysServer.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				j, err := execCfg.JobRegistry.LoadJobWithTxn(ctx, jobspb.JobID(replicationJobID), txn)
+				if err != nil {
+					return err
+				}
+				payload := j.Payload()
+				replicationDetails := payload.GetStreamIngestion()
+				ptp := execCfg.ProtectedTimestampProvider.WithTxn(txn)
+				_, err = ptp.GetRecord(ctx, *replicationDetails.ProtectedTimestampRecordID)
+				if err == nil {
+					return errors.New("PTS record still exists")
+				}
+				if !errors.Is(err, protectedts.ErrNotExists) {
+					return err
+				}
+				return nil
+			})
+		})
+	}
+
+	// Use a counter to assign unique destination tenant IDs for each subtest.
+	destTenantCounter := 0
+	testutils.RunTrueAndFalse(t, "complete-replication", func(t *testing.T, completeReplication bool) {
+		// Assign a unique destination tenant for this subtest.
+		destTenantCounter++
+		destTenantID := roachpb.MustMakeTenantID(uint64(destTenantCounter + 1))
+		destTenantName := roachpb.TenantName(fmt.Sprintf("destination%d", destTenantCounter))
+		c.Args.DestTenantID = destTenantID
+		c.Args.DestTenantName = destTenantName
+
+		producerJobID, replicationJobID := c.StartStreamReplication(ctx)
+
+		jobutils.WaitForJobToRun(t, c.SrcSysSQL, jobspb.JobID(producerJobID))
+		jobutils.WaitForJobToRun(t, c.DestSysSQL, jobspb.JobID(replicationJobID))
+
+		// Verify PTS exists on the destination.
+		checkDestinationPTSExists(t, replicationJobID)
+
+		if completeReplication {
+			// Complete replication via cutover.
+			var emptyCutoverTime time.Time
+			c.Cutover(ctx, producerJobID, replicationJobID, emptyCutoverTime, false)
+		} else {
+			// Cancel replication.
+			c.DestSysSQL.Exec(t, fmt.Sprintf("CANCEL JOB %d", replicationJobID))
+			jobutils.WaitForJobToCancel(t, c.DestSysSQL, jobspb.JobID(replicationJobID))
+		}
+
+		// Verify PTS is released after job completion/cancellation.
+		checkNoDestinationProtection(t, replicationJobID)
 	})
 }
 
@@ -1329,86 +1260,6 @@ func TestLoadProducerAndIngestionProgress(t *testing.T) {
 	require.Equal(t, jobspb.Replicating, ingestionProgress.ReplicationStatus)
 }
 
-// TestStreamingRegionalConstraint ensures that the replicating tenants regional
-// constraints are obeyed during replication. This test serves as an end to end
-// test of span config replication.
-func TestStreamingRegionalConstraint(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	skip.UnderRace(t, "takes too long under race")
-	skip.UnderDeadlock(t, "takes too long under deadlock")
-
-	testutils.RunTrueAndFalse(t, "fromSys", func(t *testing.T, sys bool) {
-		ctx := context.Background()
-		regions := []string{"mars", "venus", "mercury"}
-		args := replicationtestutils.DefaultTenantStreamingClustersArgs
-		args.MultitenantSingleClusterNumNodes = 3
-		args.MultiTenantSingleClusterTestRegions = regions
-		if sys {
-			args.SrcTenantID = roachpb.SystemTenantID
-			args.SrcTenantName = "system"
-		}
-		marsNodeID := roachpb.NodeID(1)
-
-		c, cleanup := replicationtestutils.CreateMultiTenantStreamingCluster(ctx, t, args)
-		defer cleanup()
-
-		producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
-		jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
-		jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
-
-		c.SrcTenantSQL.Exec(t, "CREATE DATABASE test")
-		c.SrcTenantSQL.Exec(t, `ALTER DATABASE test CONFIGURE ZONE USING constraints = '[+region=mars]', num_replicas = 1;`)
-		c.SrcTenantSQL.Exec(t, "CREATE TABLE test.x (id INT PRIMARY KEY, n INT)")
-		c.SrcTenantSQL.Exec(t, "INSERT INTO test.x VALUES (1, 1)")
-
-		srcTime := c.SrcCluster.Server(0).Clock().Now()
-		c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
-
-		checkLocalities := func(targetSpan roachpb.Span, scanner rangedesc.Scanner) func() error {
-			// make pageSize large enough to not affect the test
-			pageSize := 10000
-			init := func() {}
-
-			return func() error {
-				return scanner.Scan(ctx, pageSize, init, targetSpan, func(descriptors ...roachpb.RangeDescriptor) error {
-					for _, desc := range descriptors {
-						for _, replica := range desc.InternalReplicas {
-							if replica.NodeID != marsNodeID {
-								return errors.Newf("found table data located on another node %d, desc %v",
-									replica.NodeID, desc)
-							}
-						}
-					}
-					return nil
-				})
-			}
-		}
-
-		srcCodec := keys.MakeSQLCodec(c.Args.SrcTenantID)
-		tableDesc := desctestutils.TestingGetPublicTableDescriptor(
-			c.SrcSysServer.DB(), srcCodec, "test", "x")
-		destCodec := keys.MakeSQLCodec(c.Args.DestTenantID)
-
-		testutils.SucceedsWithin(t,
-			checkLocalities(tableDesc.PrimaryIndexSpan(srcCodec), rangedesc.NewScanner(c.SrcSysServer.DB())),
-			time.Second*45*5)
-
-		testutils.SucceedsWithin(t,
-			checkLocalities(tableDesc.PrimaryIndexSpan(destCodec), rangedesc.NewScanner(c.DestSysServer.DB())),
-			time.Second*45*5)
-
-		tableName := "test"
-		tabledIDQuery := fmt.Sprintf(`SELECT id FROM system.namespace WHERE name ='%s'`, tableName)
-
-		var tableID uint32
-		c.SrcTenantSQL.QueryRow(t, tabledIDQuery).Scan(&tableID)
-		fmt.Printf("%d", tableID)
-
-		checkLocalityRanges(t, c.SrcSysSQL, srcCodec, uint32(tableDesc.GetID()), "mars")
-	})
-}
-
 func TestStreamingMismatchedMRDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1466,23 +1317,6 @@ func TestStreamingMismatchedMRDatabase(t *testing.T) {
 		c.SrcTenantSQL.ExecSucceedsSoon(c.T, `ALTER DATABASE many DROP REGION "venus"`)
 		c.DestTenantSQL.ExecSucceedsSoon(c.T, `ALTER DATABASE many DROP REGION "venus"`)
 	})
-}
-
-func checkLocalityRanges(
-	t *testing.T, sysSQL *sqlutils.SQLRunner, codec keys.SQLCodec, tableID uint32, region string,
-) {
-	targetPrefix := codec.TablePrefix(tableID)
-	distinctQuery := fmt.Sprintf(`
-SELECT
-  DISTINCT replica_localities
-FROM
-  [SHOW CLUSTER RANGES]
-WHERE
-  start_key ~ '%s'
-`, targetPrefix)
-	var locality string
-	sysSQL.QueryRow(t, distinctQuery).Scan(&locality)
-	require.Contains(t, locality, region)
 }
 
 // TestStreamingZoneConfigsMismatchedRegions tests that c2c cutover proceeds

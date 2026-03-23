@@ -17,7 +17,7 @@ environment:
   # variables used by tpcc_run_multiregion.sh
   NUM_REGIONS: 3
   NODES_PER_REGION: 5
-  REGIONS: us-central1,us-east5,us-east1
+  REGIONS: us-central1,us-east4,us-east1
   TPCC_WAREHOUSES: 10000
   TPCC_ACTIVE_WAREHOUSES: 7000
   DB_NAME: cct_tpcc
@@ -55,7 +55,7 @@ targets:
           clouds: gce
           gce-managed: true
           gce-enable-multiple-stores: true
-          gce-zones: "us-central1-a:2,us-central1-b:2,us-central1-c:1,us-east5-a:2,us-east5-b:2,us-east5-c:1,us-east1-b:2,us-east1-c:2,us-east1-d:1"
+          gce-zones: "us-central1-a:2,us-central1-b:2,us-central1-c:1,us-east4-a:2,us-east4-b:2,us-east4-c:1,us-east1-b:2,us-east1-c:2,us-east1-d:1"
           nodes: $CLUSTER_NODES
           gce-machine-type: n2-standard-16
           local-ssd: true
@@ -147,7 +147,7 @@ targets:
           - $WORKLOAD_CLUSTER
         flags:
           clouds: gce
-          gce-zones: "us-central1-a,us-east5-a,us-east1-b"
+          gce-zones: "us-central1-a,us-east4-a,us-east1-b"
           nodes: $NUM_REGIONS
           gce-machine-type: n2d-standard-4
           os-volume-size: 100
@@ -261,7 +261,7 @@ targets:
           - -e
           - |
             BACKUP INTO ('gs://$BUCKET_US_CENTRAL1/$CLUSTER?AUTH=implicit&COCKROACH_LOCALITY=default',
-                            'gs://$BUCKET_US_EAST_5/$CLUSTER?AUTH=implicit&COCKROACH_LOCALITY=region%3Dus-east5',
+                            'gs://$BUCKET_US_EAST_5/$CLUSTER?AUTH=implicit&COCKROACH_LOCALITY=region%3Dus-east4',
                             'gs://$BUCKET_US_EAST_1/$CLUSTER?AUTH=implicit&COCKROACH_LOCALITY=region%3Dus-east1')
             WITH OPTIONS (revision_history = true, detached)
         wait_after: 1500

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexectestutils"
@@ -341,7 +342,7 @@ func TestOutboxInbox(t *testing.T) {
 				// Note that it is ok that we call Init on every iteration - it
 				// is a noop every time except for the first one.
 				inbox.Init(readerCtx)
-				outputBatch = inbox.Next()
+				outputBatch = colexecop.NextNoMeta(inbox)
 			}); err != nil {
 				readerErr = err
 				break
@@ -392,8 +393,8 @@ func TestOutboxInbox(t *testing.T) {
 			// If no cancellation happened, the output can be fully verified
 			// against the input.
 			for batchNum := 0; ; batchNum++ {
-				outputBatch := outputBatches.Next()
-				inputBatch := inputBatches.Next()
+				outputBatch := colexecop.NextNoMeta(outputBatches)
+				inputBatch := colexecop.NextNoMeta(inputBatches)
 				require.Equal(t, outputBatch.Length(), inputBatch.Length())
 				if outputBatch.Length() == 0 {
 					break
@@ -617,12 +618,16 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			// from being finished when it receives a DrainRequest.
 			numBatches: math.MaxInt64,
 			test: func(ctx context.Context, inbox *Inbox) []execinfrapb.ProducerMetadata {
+				var streamingMeta []execinfrapb.ProducerMetadata
 				// Simulate the inbox flow calling Next an arbitrary amount of times
 				// (including none).
 				for i := 0; i < numNextsBeforeDrain; i++ {
-					inbox.Next()
+					_, meta := inbox.Next()
+					if meta != nil {
+						streamingMeta = append(streamingMeta, *meta)
+					}
 				}
-				return inbox.DrainMeta()
+				return append(streamingMeta, inbox.DrainMeta()...)
 			},
 		},
 		{
@@ -631,13 +636,18 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 			name:       "AfterSuccessfulCompletion",
 			numBatches: 4,
 			test: func(ctx context.Context, inbox *Inbox) []execinfrapb.ProducerMetadata {
+				var streamingMeta []execinfrapb.ProducerMetadata
 				for {
-					b := inbox.Next()
+					b, meta := inbox.Next()
+					if meta != nil {
+						streamingMeta = append(streamingMeta, *meta)
+						continue
+					}
 					if b.Length() == 0 {
 						break
 					}
 				}
-				return inbox.DrainMeta()
+				return append(streamingMeta, inbox.DrainMeta()...)
 			},
 		},
 		{
@@ -662,7 +672,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 				for {
 					var b coldata.Batch
 					if err := colexecerror.CatchVectorizedRuntimeError(func() {
-						b = inbox.Next()
+						b = colexecop.NextNoMeta(inbox)
 					}); err != nil {
 						return []execinfrapb.ProducerMetadata{{Err: err}}
 					}
@@ -825,7 +835,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 	b.SetBytes(8 * int64(coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		inbox.Next()
+		colexecop.NextNoMeta(inbox)
 	}
 	b.StopTimer()
 
@@ -870,7 +880,8 @@ func TestOutboxStreamIDPropagation(t *testing.T) {
 		&execinfra.FlowCtx{
 			Gateway: false,
 			Cfg: &execinfra.ServerConfig{
-				Settings: cluster.MakeTestingClusterSettings(),
+				Settings:   cluster.MakeTestingClusterSettings(),
+				RPCContext: &rpc.Context{ContextOptions: rpc.ContextOptions{}},
 			},
 		},
 		0, /* processorID */
@@ -921,7 +932,7 @@ func TestInboxCtxStreamIDTagging(t *testing.T) {
 			// CtxTaggedInNext verifies that Next adds StreamID to the Context in maybeInit.
 			name: "CtxTaggedInNext",
 			test: func(inbox *Inbox) {
-				inbox.Next()
+				colexecop.NextNoMeta(inbox)
 			},
 		},
 		{

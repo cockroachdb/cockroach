@@ -1,0 +1,127 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "BFF API for the CockroachDB DB Console",
+        "title": "DB Console API",
+        "contact": {},
+        "version": "1.0.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/api/v2/dbconsole",
+    "paths": {
+        "/nodes": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Returns status information for all nodes in the cluster.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Cluster"
+                ],
+                "summary": "Get cluster nodes",
+                "responses": {
+                    "200": {
+                        "description": "Node list",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.NodesResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal error",
+                        "schema": {
+                            "$ref": "#/definitions/dbconsole.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "dbconsole.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "description": "Error is the error message.",
+                    "type": "string"
+                }
+            }
+        },
+        "dbconsole.NodeInfo": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "description": "Address is the RPC address of the node.",
+                    "type": "string",
+                    "example": "localhost:26257"
+                },
+                "build_tag": {
+                    "description": "BuildTag is the build version tag of the node.",
+                    "type": "string",
+                    "example": "v24.1.0"
+                },
+                "liveness_status": {
+                    "description": "LivenessStatus is the liveness status of the node.",
+                    "type": "string",
+                    "example": "LIVE"
+                },
+                "locality": {
+                    "description": "Locality contains the locality information for the node.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "node_id": {
+                    "description": "NodeID is the unique identifier for the node.",
+                    "type": "integer",
+                    "example": 1
+                },
+                "num_cpus": {
+                    "description": "NumCpus is the number of logical CPUs.",
+                    "type": "integer"
+                },
+                "sql_address": {
+                    "description": "SQLAddress is the SQL address of the node.",
+                    "type": "string",
+                    "example": "localhost:26257"
+                },
+                "started_at": {
+                    "description": "StartedAt is the unix timestamp when the node was started.",
+                    "type": "integer"
+                },
+                "total_system_memory": {
+                    "description": "TotalSystemMemory is the total RAM available to the system in bytes.",
+                    "type": "integer"
+                },
+                "updated_at": {
+                    "description": "UpdatedAt is the unix timestamp when the node status was last updated.",
+                    "type": "integer"
+                }
+            }
+        },
+        "dbconsole.NodesResponse": {
+            "type": "object",
+            "properties": {
+                "nodes": {
+                    "description": "Nodes contains status information for all nodes in the cluster.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/dbconsole.NodeInfo"
+                    }
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "ApiKeyAuth": {
+            "type": "apiKey",
+            "name": "X-Cockroach-API-Session",
+            "in": "header"
+        }
+    }
+}

@@ -93,21 +93,21 @@ func (o *OverrideStorePool) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (o *OverrideStorePool) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Print(o.sp.statusString(o.overrideNodeLivenessFn))
+	w.Print(o.sp.statusString(o.overrideNodeLivenessFn, o.sp.StoreLivenessFn))
 }
 
 // IsStoreReadyForRoutineReplicaTransfer implements the AllocatorStorePool interface.
 func (o *OverrideStorePool) IsStoreReadyForRoutineReplicaTransfer(
 	ctx context.Context, targetStoreID roachpb.StoreID,
 ) bool {
-	return o.sp.isStoreReadyForRoutineReplicaTransferInternal(ctx, targetStoreID, o.overrideNodeLivenessFn)
+	return o.sp.isStoreReadyForRoutineReplicaTransferInternal(ctx, targetStoreID, o.overrideNodeLivenessFn, o.sp.StoreLivenessFn)
 }
 
 // DecommissioningReplicas implements the AllocatorStorePool interface.
 func (o *OverrideStorePool) DecommissioningReplicas(
 	repls []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
-	return o.sp.decommissioningReplicasWithLiveness(repls, o.overrideNodeLivenessFn)
+	return o.sp.decommissioningReplicasWithLiveness(repls, o.overrideNodeLivenessFn, o.sp.StoreLivenessFn)
 }
 
 // GetStoreList implements the AllocatorStorePool interface.
@@ -119,14 +119,14 @@ func (o *OverrideStorePool) GetStoreList(
 		storeIDs = append(storeIDs, storeID)
 		return true
 	})
-	return o.sp.getStoreListFromIDs(storeIDs, o.overrideNodeLivenessFn, filter)
+	return o.sp.getStoreListFromIDs(storeIDs, o.overrideNodeLivenessFn, o.sp.StoreLivenessFn, filter)
 }
 
 // GetStoreListFromIDs implements the AllocatorStorePool interface.
 func (o *OverrideStorePool) GetStoreListFromIDs(
 	storeIDs roachpb.StoreIDSlice, filter StoreFilter,
 ) (StoreList, int, ThrottledStoreReasons) {
-	return o.sp.getStoreListFromIDs(storeIDs, o.overrideNodeLivenessFn, filter)
+	return o.sp.getStoreListFromIDs(storeIDs, o.overrideNodeLivenessFn, o.sp.StoreLivenessFn, filter)
 }
 
 // GetStoreListForTargets implements the AllocatorStorePool interface.
@@ -138,14 +138,14 @@ func (o *OverrideStorePool) GetStoreListForTargets(
 		storeIDs = append(storeIDs, tgt.StoreID)
 	}
 
-	return o.sp.getStoreListFromIDs(storeIDs, o.overrideNodeLivenessFn, filter)
+	return o.sp.getStoreListFromIDs(storeIDs, o.overrideNodeLivenessFn, o.sp.StoreLivenessFn, filter)
 }
 
 // LiveAndDeadReplicas implements the AllocatorStorePool interface.
 func (o *OverrideStorePool) LiveAndDeadReplicas(
 	repls []roachpb.ReplicaDescriptor, includeSuspectAndDrainingStores bool,
 ) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor) {
-	return o.sp.liveAndDeadReplicasWithLiveness(repls, o.overrideNodeLivenessFn, includeSuspectAndDrainingStores)
+	return o.sp.liveAndDeadReplicasWithLiveness(repls, o.overrideNodeLivenessFn, o.sp.StoreLivenessFn, includeSuspectAndDrainingStores)
 }
 
 // ClusterNodeCount implements the AllocatorStorePool interface.

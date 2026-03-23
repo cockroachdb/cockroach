@@ -7,6 +7,8 @@ package multiregionccl_test
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,12 +16,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -260,4 +264,508 @@ func TestReplicaClosedTSPolicyWithPolicyRefresher(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// TestSuperRegionConstraintConformance is a regression test for #108127. It
+// verifies that REGIONAL BY ROW and REGIONAL BY TABLE tables in a database
+// with super regions and SURVIVE REGION FAILURE eventually reach full
+// constraint conformance.
+func TestSuperRegionConstraintConformance(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+	skip.UnderDuress(t)
+
+	// The topology uses 5 regions across 10 nodes (2 per region):
+	//
+	//   - Super region "americas": {us-east-1, us-central-1, us-west-1} — a
+	//     non-primary super region, exercising the AddConstraintsForSuperRegion
+	//     code path where the primary region lives outside the super region.
+	//   - Primary region: {ap-southeast-1} — outside any super region, which
+	//     also ensures RBR partitions and RBT tables homing here get normal
+	//     inherited constraints rather than super-region-confined ones.
+	//   - Secondary region: {eu-west-1} — outside any super region, used to
+	//     verify that super-region-confined partitions do not leak this region
+	//     into their lease_preferences (#164422).
+	//
+	// With exactly 3 regions per super region + SURVIVE REGION FAILURE, we get
+	// 5 voters and 0 non-voters — the tightest possible constraint configuration
+	// where every replica is doubly constrained. This is the specific scenario
+	// that triggered the original bug.
+	regionNames := []string{
+		"ap-southeast-1",                         // primary (standalone)
+		"us-east-1", "us-central-1", "us-west-1", // super region "americas"
+		"eu-west-1", // secondary region (standalone)
+	}
+	tc, sqlDB, cleanup :=
+		multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(
+			t,
+			regionNames,
+			2, /* serversPerRegion */
+			base.TestingKnobs{},
+		)
+	defer cleanup()
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Speed up replication reporting and closed timestamps.
+	tdb.Exec(t, "SET CLUSTER SETTING kv.replication_reports.interval = '1ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'")
+	tdb.Exec(t, "SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms'")
+
+	// Setup MR database with all 5 regions.
+	tdb.Exec(t, `CREATE DATABASE testdb PRIMARY REGION "ap-southeast-1"
+		REGIONS "us-east-1", "us-central-1", "us-west-1", "eu-west-1"`)
+	tdb.Exec(t, `ALTER DATABASE testdb ADD SUPER REGION "americas"
+		VALUES "us-east-1", "us-central-1", "us-west-1"`)
+	tdb.Exec(t, `ALTER DATABASE testdb SET SECONDARY REGION "eu-west-1"`) // Set a secondary outside the super region.
+	tdb.Exec(t, `ALTER DATABASE testdb SURVIVE REGION FAILURE`)
+
+	// Create a REGIONAL BY ROW table with rows in all 5 regions, exercising
+	// every partition's subzone config — both super-region-confined and normal.
+	tdb.Exec(t,
+		`CREATE TABLE testdb.rbr(k INT PRIMARY KEY, v INT)
+		 LOCALITY REGIONAL BY ROW`)
+	tdb.Exec(t, `INSERT INTO testdb.rbr(crdb_region, k, v) VALUES
+		('us-east-1', 1, 10), ('us-central-1', 2, 20), ('us-west-1', 3, 30),
+		('ap-southeast-1', 4, 40), ('eu-west-1', 5, 50)`)
+
+	// RBT in a super region (non-primary). Tests AddConstraintsForSuperRegion
+	// at the table level.
+	tdb.Exec(t,
+		`CREATE TABLE testdb.rbt_sr(k INT PRIMARY KEY, v INT)
+		 LOCALITY REGIONAL BY TABLE IN "us-east-1"`)
+	tdb.Exec(t, `INSERT INTO testdb.rbt_sr(k, v) VALUES (1, 10)`)
+
+	// RBT in the primary region (outside any super region). Tests that
+	// table-level constraints work correctly without super region confinement.
+	tdb.Exec(t,
+		`CREATE TABLE testdb.rbt_standalone(k INT PRIMARY KEY, v INT)
+		 LOCALITY REGIONAL BY TABLE IN "ap-southeast-1"`)
+	tdb.Exec(t, `INSERT INTO testdb.rbt_standalone(k, v) VALUES (1, 10)`)
+
+	// Look up zone_ids for all 3 tables.
+	var rbrZoneID, rbtSRZoneID, rbtStandaloneZoneID int
+	tdb.QueryRow(t, "SELECT zone_id FROM crdb_internal.zones WHERE table_name = 'rbr'").Scan(&rbrZoneID)
+	tdb.QueryRow(t, "SELECT zone_id FROM crdb_internal.zones WHERE table_name = 'rbt_sr'").Scan(&rbtSRZoneID)
+	tdb.QueryRow(t, "SELECT zone_id FROM crdb_internal.zones WHERE table_name = 'rbt_standalone'").Scan(&rbtStandaloneZoneID)
+	zoneIDs := []int{rbrZoneID, rbtSRZoneID, rbtStandaloneZoneID}
+
+	// Verify that zone configs themselves have the expected constraints, so
+	// the conformance check below cannot pass vacuously due to misconfigured
+	// zones.
+	verifyZoneConfig := func(query string, expectedFragments []string) {
+		t.Helper()
+		var target, rawSQL string
+		tdb.QueryRow(t, query).Scan(&target, &rawSQL)
+		for _, frag := range expectedFragments {
+			require.Contains(t, rawSQL, frag,
+				"zone config for %s missing expected fragment", target)
+		}
+	}
+	// RBT in super region: all replicas confined to americas super region.
+	// The secondary region (eu-west-1) must NOT appear in lease_preferences
+	// because no replica can exist outside the super region.
+	verifyZoneConfig(
+		`SHOW ZONE CONFIGURATION FOR TABLE testdb.rbt_sr`,
+		[]string{
+			"voter_constraints", "us-east-1",
+			"constraints", "us-central-1", "us-west-1",
+			"lease_preferences = '[[+region=us-east-1]]'",
+		},
+	)
+	// RBT in primary region (standalone): voters in ap-southeast-1, no super
+	// region confinement. The secondary region correctly appears here.
+	verifyZoneConfig(
+		`SHOW ZONE CONFIGURATION FOR TABLE testdb.rbt_standalone`,
+		[]string{
+			"voter_constraints", "ap-southeast-1",
+			"lease_preferences = '[[+region=ap-southeast-1], [+region=eu-west-1]]'",
+		},
+	)
+	// RBR partitions inside the super region. The secondary region
+	// (eu-west-1) must NOT appear in lease_preferences because no replica
+	// can exist outside the super region (#164422). The exact
+	// lease_preferences assertion ensures only the partition's own region
+	// is listed.
+	for _, region := range []string{"us-east-1", "us-central-1", "us-west-1"} {
+		verifyZoneConfig(
+			fmt.Sprintf(
+				`SHOW ZONE CONFIGURATION FOR PARTITION "%s" OF TABLE testdb.rbr`,
+				region),
+			[]string{
+				"voter_constraints", region,
+				"constraints", "us-east-1", "us-central-1", "us-west-1",
+				fmt.Sprintf(
+					"lease_preferences = '[[+region=%s]]'", region),
+			},
+		)
+	}
+	// RBR partition outside any super region. The secondary region
+	// (eu-west-1) correctly appears in lease_preferences here because this
+	// partition is not confined to a super region.
+	verifyZoneConfig(
+		`SHOW ZONE CONFIGURATION FOR PARTITION "ap-southeast-1" OF TABLE testdb.rbr`,
+		[]string{
+			"voter_constraints", "ap-southeast-1",
+			"lease_preferences = '[[+region=ap-southeast-1], [+region=eu-west-1]]'",
+		},
+	)
+	// RBR partition for the secondary region itself, outside any super
+	// region. The secondary region is the partition's own region so
+	// lease_preferences list it once.
+	verifyZoneConfig(
+		`SHOW ZONE CONFIGURATION FOR PARTITION "eu-west-1" OF TABLE testdb.rbr`,
+		[]string{
+			"voter_constraints", "eu-west-1",
+			"lease_preferences = '[[+region=eu-west-1]]'",
+		},
+	)
+
+	forceProcess := func() error {
+		for i := 0; i < tc.NumServers(); i++ {
+			if err := tc.Server(i).GetStores().(*kvserver.Stores).VisitStores(
+				func(s *kvserver.Store) error {
+					return s.ForceReplicationScanAndProcess()
+				},
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// First, wait for the constraint stats report to have been generated for
+	// all zones. Without this gate the subsequent zero-violations check could
+	// pass vacuously before the report has ever run.
+	testutils.SucceedsSoon(t, func() error {
+		if err := forceProcess(); err != nil {
+			return err
+		}
+		for _, zid := range zoneIDs {
+			var count int
+			if err := sqlDB.QueryRow(
+				`SELECT count(*) FROM system.replication_constraint_stats
+				  WHERE zone_id = $1`, zid,
+			).Scan(&count); err != nil {
+				return err
+			}
+			if count == 0 {
+				return fmt.Errorf(
+					"constraint stats report not yet generated for zone %d", zid)
+			}
+		}
+		return nil
+	})
+
+	// Now verify that every reported constraint has zero violating ranges for
+	// all locality types.
+	testutils.SucceedsSoon(t, func() error {
+		if err := forceProcess(); err != nil {
+			return err
+		}
+		checkZone := func(zid int) error {
+			rows, err := sqlDB.Query(
+				`SELECT subzone_id, type, config, violating_ranges
+				   FROM system.replication_constraint_stats
+				  WHERE zone_id = $1 AND violating_ranges > 0`,
+				zid,
+			)
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+
+			var violations []string
+			for rows.Next() {
+				var subzoneID, count int
+				var cType, config string
+				if err := rows.Scan(
+					&subzoneID, &cType, &config, &count,
+				); err != nil {
+					return err
+				}
+				violations = append(violations, fmt.Sprintf(
+					"subzone %d: %s %q: %d violating ranges",
+					subzoneID, cType, config, count))
+			}
+			if err := rows.Err(); err != nil {
+				return err
+			}
+			if len(violations) > 0 {
+				return fmt.Errorf(
+					"constraint violations for zone %d:\n  %s",
+					zid, strings.Join(violations, "\n  "))
+			}
+			return nil
+		}
+		for _, zid := range zoneIDs {
+			if err := checkZone(zid); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// TestSuperRegionConstraintConformanceZoneSurvival verifies that REGIONAL BY
+// ROW and REGIONAL BY TABLE tables in a database with super regions and
+// SURVIVE ZONE FAILURE eventually reach full constraint conformance.
+func TestSuperRegionConstraintConformanceZoneSurvival(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+	skip.UnderDuress(t)
+	// The topology uses 4 regions across 8 nodes (2 per region):
+	//
+	//   - Super region "americas": {us-east-1, us-central-1, us-west-1}
+	//   - Primary region: {ap-southeast-1} — outside any super region.
+	//
+	// With 3 regions per super region + SURVIVE ZONE FAILURE, each
+	// super-region-confined table/partition gets 3 voters (all in the home
+	// region) and 2 non-voters spread across the other two regions.
+	//
+	// Zone survival pins all 3 voters to the home region via
+	// voter_constraints, so we need at least 3 stores (nodes) per region to
+	// place them.
+	regionNames := []string{
+		"ap-southeast-1",
+		"us-east-1", "us-central-1", "us-west-1",
+	}
+	tc, sqlDB, cleanup :=
+		multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(
+			t,
+			regionNames,
+			3, /* serversPerRegion */
+			base.TestingKnobs{},
+		)
+	defer cleanup()
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Speed up replication reporting and closed timestamps.
+	tdb.Exec(t, "SET CLUSTER SETTING kv.replication_reports.interval = '1ms'")
+	tdb.Exec(t,
+		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'")
+	tdb.Exec(t,
+		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms'")
+	tdb.Exec(t,
+		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms'")
+
+	// Setup MR database with zone survival.
+	tdb.Exec(t, `CREATE DATABASE testdb PRIMARY REGION "ap-southeast-1"
+		REGIONS "us-east-1", "us-central-1", "us-west-1"`)
+	tdb.Exec(t, `ALTER DATABASE testdb ADD SUPER REGION "americas"
+		VALUES "us-east-1", "us-central-1", "us-west-1"`)
+	tdb.Exec(t, `ALTER DATABASE testdb SURVIVE ZONE FAILURE`)
+
+	// REGIONAL BY ROW table with rows in all 4 regions.
+	tdb.Exec(t,
+		`CREATE TABLE testdb.rbr(k INT PRIMARY KEY, v INT)
+		 LOCALITY REGIONAL BY ROW`)
+	tdb.Exec(t, `INSERT INTO testdb.rbr(crdb_region, k, v) VALUES
+		('us-east-1', 1, 10), ('us-central-1', 2, 20), ('us-west-1', 3, 30),
+		('ap-southeast-1', 4, 40)`)
+
+	// RBT in a super region (non-primary).
+	tdb.Exec(t,
+		`CREATE TABLE testdb.rbt_sr(k INT PRIMARY KEY, v INT)
+		 LOCALITY REGIONAL BY TABLE IN "us-east-1"`)
+	tdb.Exec(t, `INSERT INTO testdb.rbt_sr(k, v) VALUES (1, 10)`)
+
+	// Look up zone_ids for both tables.
+	var rbrZoneID, rbtSRZoneID int
+	tdb.QueryRow(t,
+		"SELECT zone_id FROM crdb_internal.zones WHERE table_name = 'rbr'",
+	).Scan(&rbrZoneID)
+	tdb.QueryRow(t,
+		"SELECT zone_id FROM crdb_internal.zones WHERE table_name = 'rbt_sr'",
+	).Scan(&rbtSRZoneID)
+	zoneIDs := []int{rbrZoneID, rbtSRZoneID}
+
+	// Verify zone configs have the expected structure.
+	verifyZoneConfig := func(query string, expectedFragments []string) {
+		t.Helper()
+		var target, rawSQL string
+		tdb.QueryRow(t, query).Scan(&target, &rawSQL)
+		for _, frag := range expectedFragments {
+			require.Contains(t, rawSQL, frag,
+				"zone config for %s missing expected fragment", target)
+		}
+	}
+	// RBT in super region: voters pinned to home, replicas confined to
+	// americas.
+	verifyZoneConfig(
+		`SHOW ZONE CONFIGURATION FOR TABLE testdb.rbt_sr`,
+		[]string{
+			"voter_constraints", "us-east-1",
+			"constraints", "us-east-1",
+		},
+	)
+	// RBR partitions inside the super region: voters pinned to partition
+	// region, replicas confined to americas.
+	for _, region := range []string{
+		"us-east-1", "us-central-1", "us-west-1",
+	} {
+		verifyZoneConfig(
+			fmt.Sprintf(
+				`SHOW ZONE CONFIGURATION FOR PARTITION "%s" OF TABLE testdb.rbr`,
+				region),
+			[]string{
+				"voter_constraints", region,
+				"constraints",
+			},
+		)
+	}
+
+	forceProcess := func() error {
+		for i := 0; i < tc.NumServers(); i++ {
+			if err := tc.Server(i).GetStores().(*kvserver.Stores).VisitStores(
+				func(s *kvserver.Store) error {
+					return s.ForceReplicationScanAndProcess()
+				},
+			); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Wait for constraint stats report to be generated for all zones.
+	testutils.SucceedsSoon(t, func() error {
+		if err := forceProcess(); err != nil {
+			return err
+		}
+		for _, zid := range zoneIDs {
+			var count int
+			if err := sqlDB.QueryRow(
+				`SELECT count(*) FROM system.replication_constraint_stats
+				  WHERE zone_id = $1`, zid,
+			).Scan(&count); err != nil {
+				return err
+			}
+			if count == 0 {
+				return fmt.Errorf(
+					"constraint stats report not yet generated for zone %d", zid)
+			}
+		}
+		return nil
+	})
+
+	// Verify that every reported constraint has zero violating ranges.
+	testutils.SucceedsSoon(t, func() error {
+		if err := forceProcess(); err != nil {
+			return err
+		}
+		checkZone := func(zid int) error {
+			rows, err := sqlDB.Query(
+				`SELECT subzone_id, type, config, violating_ranges
+				   FROM system.replication_constraint_stats
+				  WHERE zone_id = $1 AND violating_ranges > 0`,
+				zid,
+			)
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+
+			var violations []string
+			for rows.Next() {
+				var subzoneID, count int
+				var cType, config string
+				if err := rows.Scan(
+					&subzoneID, &cType, &config, &count,
+				); err != nil {
+					return err
+				}
+				violations = append(violations, fmt.Sprintf(
+					"subzone %d: %s %q: %d violating ranges",
+					subzoneID, cType, config, count))
+			}
+			if err := rows.Err(); err != nil {
+				return err
+			}
+			if len(violations) > 0 {
+				return fmt.Errorf(
+					"constraint violations for zone %d:\n  %s",
+					zid, strings.Join(violations, "\n  "))
+			}
+			return nil
+		}
+		for _, zid := range zoneIDs {
+			if err := checkZone(zid); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// TestSuperRegionWithNumReplicasExtension verifies that creating an RBR table
+// with super regions succeeds when the user has set num_replicas via a zone
+// config extension to a value lower than the default.
+func TestSuperRegionWithNumReplicasExtension(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderShort(t)
+	skip.UnderDuress(t)
+
+	regionNames := []string{
+		"us-east-1", "us-east-2", "eu-west-1",
+	}
+	_, sqlDB, cleanup :=
+		multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(
+			t,
+			regionNames,
+			3, /* serversPerRegion */
+			base.TestingKnobs{},
+		)
+	defer cleanup()
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create a 3-region database with zone survival (default).
+	tdb.Exec(t, `CREATE DATABASE testdb PRIMARY REGION "us-east-1"
+		REGIONS "us-east-2", "eu-west-1"`)
+
+	// Set num_replicas = 3 via Regional zone config extension.
+	tdb.Exec(t, `ALTER DATABASE testdb ALTER LOCALITY REGIONAL
+		CONFIGURE ZONE USING num_replicas = 3`)
+
+	// Create super regions.
+	tdb.Exec(t, `ALTER DATABASE testdb ADD SUPER REGION "us"
+		VALUES "us-east-1", "us-east-2"`)
+	tdb.Exec(t, `ALTER DATABASE testdb ADD SUPER REGION "eu"
+		VALUES "eu-west-1"`)
+
+	// Create an RBR table — this previously failed with:
+	// "the number of replicas specified in constraints (4) cannot be greater
+	// than the number of replicas configured for the zone (3)"
+	tdb.Exec(t, `CREATE TABLE testdb.rbr(k INT PRIMARY KEY, v INT)
+		LOCALITY REGIONAL BY ROW`)
+
+	// Insert rows into each region and verify they work.
+	tdb.Exec(t, `INSERT INTO testdb.rbr(crdb_region, k, v) VALUES
+		('us-east-1', 1, 10), ('us-east-2', 2, 20), ('eu-west-1', 3, 30)`)
+
+	var count int
+	tdb.QueryRow(t, `SELECT count(*) FROM testdb.rbr`).Scan(&count)
+	require.Equal(t, 3, count)
+
+	// Verify zone configs show correct constraints — constraints total
+	// should not exceed num_replicas.
+	for _, region := range []string{"us-east-1", "us-east-2"} {
+		var target, rawSQL string
+		tdb.QueryRow(t, fmt.Sprintf(
+			`SHOW ZONE CONFIGURATION FOR PARTITION "%s" OF TABLE testdb.rbr`,
+			region)).Scan(&target, &rawSQL)
+		require.Contains(t, rawSQL, "num_replicas = 3",
+			"partition %s should have num_replicas = 3", region)
+		require.Contains(t, rawSQL, region,
+			"partition %s should reference its home region in constraints", region)
+	}
 }

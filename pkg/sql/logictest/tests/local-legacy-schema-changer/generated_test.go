@@ -44,13 +44,9 @@ func init() {
 func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithTenantOption(base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124)))
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124),
-	)()
-
 	os.Exit(m.Run())
 }
 
@@ -150,11 +146,25 @@ func TestLogic_alter_default_privileges_with_grant_option(
 	runLogicTest(t, "alter_default_privileges_with_grant_option")
 }
 
+func TestLogic_alter_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_index")
+}
+
 func TestLogic_alter_primary_key(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_primary_key")
+}
+
+func TestLogic_alter_primary_key_regressions(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_primary_key_regressions")
 }
 
 func TestLogic_alter_role(
@@ -311,11 +321,11 @@ func TestLogic_bytes(
 	runLogicTest(t, "bytes")
 }
 
-func TestLogic_canary_stats(
+func TestLogic_canary_stats_deletion(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "canary_stats")
+	runLogicTest(t, "canary_stats_deletion")
 }
 
 func TestLogic_cascade(
@@ -463,6 +473,13 @@ func TestLogic_crdb_internal(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "crdb_internal")
+}
+
+func TestLogic_crdb_internal_decode_key(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "crdb_internal_decode_key")
 }
 
 func TestLogic_crdb_internal_default_privileges(
@@ -1389,13 +1406,6 @@ func TestLogic_partial_txn_commit(
 	runLogicTest(t, "partial_txn_commit")
 }
 
-func TestLogic_partitioning(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "partitioning")
-}
-
 func TestLogic_pg_builtins(
 	t *testing.T,
 ) {
@@ -2003,6 +2013,13 @@ func TestLogic_show_inspect_errors(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_inspect_errors")
+}
+
+func TestLogic_show_statement_hints(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_statement_hints")
 }
 
 func TestLogic_show_tenant_fingerprints(

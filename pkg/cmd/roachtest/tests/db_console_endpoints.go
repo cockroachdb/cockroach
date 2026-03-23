@@ -175,23 +175,23 @@ func testEndpoints(
 			for nodeID := 1; nodeID <= len(idMap); nodeID++ {
 				baseURL := urlMap[nodeID]
 				// Test with "local".
-				if err := testEndpoint(ctx, client, baseURL, ep, "local", ep.getVerifyResponse(), l, multiVersionTest); err != nil {
+				if err := testEndpoint(ctx, c, client, baseURL, ep, "local", ep.getVerifyResponse(), l, multiVersionTest); err != nil {
 					return errors.Wrapf(err, "failed testing endpoint %s with local", ep.URL)
 				}
 				// Test with own node ID.
-				if err := testEndpoint(ctx, client, baseURL, ep, idMap[nodeID].String(), ep.getVerifyResponse(), l, multiVersionTest); err != nil {
+				if err := testEndpoint(ctx, c, client, baseURL, ep, idMap[nodeID].String(), ep.getVerifyResponse(), l, multiVersionTest); err != nil {
 					return errors.Wrapf(err, "failed testing endpoint %s with own node ID", ep.URL)
 				}
 				// Test with another node ID.
 				otherNodeID := (nodeID % len(idMap)) + 1
-				if err := testEndpoint(ctx, client, baseURL, ep, idMap[otherNodeID].String(), ep.getVerifyResponse(), l, multiVersionTest); err != nil {
+				if err := testEndpoint(ctx, c, client, baseURL, ep, idMap[otherNodeID].String(), ep.getVerifyResponse(), l, multiVersionTest); err != nil {
 					return errors.Wrapf(err, "failed testing endpoint %s with other node ID", ep.URL)
 				}
 			}
 		} else {
 			// For endpoints without node IDs, test on each node.
 			for nodeID := 1; nodeID <= len(idMap); nodeID++ {
-				if err := testEndpoint(ctx, client, urlMap[nodeID], ep, "", ep.getVerifyResponse(), l, multiVersionTest); err != nil {
+				if err := testEndpoint(ctx, c, client, urlMap[nodeID], ep, "", ep.getVerifyResponse(), l, multiVersionTest); err != nil {
 					return errors.Wrapf(err, "failed testing endpoint %s", ep.URL)
 				}
 			}
@@ -203,6 +203,7 @@ func testEndpoints(
 
 func testEndpoint(
 	ctx context.Context,
+	c cluster.Cluster,
 	client *roachtestutil.RoachtestHTTPClient,
 	baseURL string,
 	ep endpoint,
@@ -241,6 +242,32 @@ func testEndpoint(
 				l.Printf("%v returned %v in multiversion testing mode", fullURL, resp.StatusCode)
 				return nil
 			}
+		}
+
+		// Debug logging for 404 errors with database metadata to help diagnose stale/incorrect IDs.
+		if ep.URL == "/api/v2/database_metadata/{database_id}/" && resp.StatusCode == http.StatusNotFound {
+			body, _ := io.ReadAll(resp.Body)
+			l.Printf("DEBUG 404: url=%s, databaseID=%d, tableID=%d, fingerprintID=%d, body=%s",
+				fullURL, databaseID, tableID, fingerprintID, body)
+			// Run a debug query to show namespace state.
+			if conn, connErr := c.ConnE(ctx, l, 1); connErr == nil {
+				defer conn.Close()
+				rows, queryErr := conn.QueryContext(ctx,
+					`SELECT id, "parentID", "parentSchemaID", name FROM system.namespace
+					 WHERE name IN ('tpcc', 'warehouse') ORDER BY name, id`)
+				if queryErr == nil {
+					defer rows.Close()
+					l.Printf("DEBUG 404: namespace entries for 'tpcc' and 'warehouse':")
+					for rows.Next() {
+						var id, parentID, parentSchemaID uint64
+						var name string
+						if scanErr := rows.Scan(&id, &parentID, &parentSchemaID, &name); scanErr == nil {
+							l.Printf("  name=%s id=%d parentID=%d parentSchemaID=%d", name, id, parentID, parentSchemaID)
+						}
+					}
+				}
+			}
+			return errors.Newf("unexpected status code: %d, body: %s", resp.StatusCode, body)
 		}
 
 		err = verifyResponse(resp)

@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil"
 	"go.opentelemetry.io/otel/attribute"
@@ -18,21 +19,27 @@ import (
 	"storj.io/drpc"
 	"storj.io/drpc/drpcclient"
 	"storj.io/drpc/drpcerr"
-	"storj.io/drpc/drpcmetadata"
 	"storj.io/drpc/drpcmux"
 )
+
+// drpcRequestKey is a context key type used to mark a request as coming via DRPC.
+type drpcRequestKey struct{}
+
+// IsDRPCRequest returns true if the context indicates this request came via DRPC.
+func IsDRPCRequest(ctx context.Context) bool {
+	return ctx.Value(drpcRequestKey{}) != nil
+}
 
 // ExtractSpanMetaFromDRPCCtx retrieves trace context (as a SpanMeta) that has
 // been propagated through DRPC metadata in the context.
 func ExtractSpanMetaFromDRPCCtx(
 	ctx context.Context, tracer *tracing.Tracer,
 ) (tracing.SpanMeta, error) {
-	md, ok := drpcmetadata.Get(ctx)
+	md, ok := grpcutil.FastFromIncomingContext(ctx)
 	if !ok {
-		// No metadata in the context, so no span information.
 		return tracing.SpanMeta{}, nil
 	}
-	return tracer.ExtractMetaFrom(tracing.MapCarrier{Map: md})
+	return tracer.ExtractMetaFrom(tracing.MetadataCarrier{MD: md})
 }
 
 // ServerInterceptor returns a drpcmux.UnaryServerInterceptor for tracing.
@@ -46,6 +53,7 @@ func ServerInterceptor(tracer *tracing.Tracer) drpcmux.UnaryServerInterceptor {
 		rpc string,
 		handler drpcmux.UnaryHandler,
 	) (interface{}, error) {
+		ctx = context.WithValue(ctx, drpcRequestKey{}, struct{}{})
 		if tracingutil.MethodExcludedFromTracing(rpc) {
 			return handler(ctx, req)
 		}
@@ -84,6 +92,10 @@ func StreamServerInterceptor(tracer *tracing.Tracer) drpcmux.StreamServerInterce
 		rpc string,
 		handler drpcmux.StreamHandler,
 	) (interface{}, error) {
+		stream = &tracingServerStream{
+			Stream: stream,
+			ctx:    context.WithValue(stream.Context(), drpcRequestKey{}, struct{}{}),
+		}
 		if tracingutil.MethodExcludedFromTracing(rpc) {
 			return handler(stream)
 		}
@@ -156,7 +168,7 @@ func ClientInterceptor(
 		defer clientSpan.Finish()
 
 		if !tracingutil.MethodExcludedFromTracing(rpc) {
-			ctx = tracingutil.InjectDRPCSpanMeta(ctx, tracer, clientSpan)
+			ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
 		}
 
 		if invoker != nil {
@@ -199,7 +211,7 @@ func StreamClientInterceptor(
 		init(clientSpan)
 
 		if !tracingutil.MethodExcludedFromTracing(rpc) {
-			ctx = tracingutil.InjectDRPCSpanMeta(ctx, tracer, clientSpan)
+			ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
 		}
 
 		str, err := streamer(ctx, rpc, enc, cc)

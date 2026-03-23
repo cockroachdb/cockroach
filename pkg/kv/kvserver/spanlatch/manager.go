@@ -8,13 +8,15 @@ package spanlatch
 import (
 	"context"
 	"math"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -71,6 +73,11 @@ type Manager struct {
 
 	// clock is used to provide predictable timestamps for testing.
 	clock *hlc.Clock
+
+	// slowLatchRequestThresholdOverride, when set to a nonzero value smaller
+	// than kv.concurrency.slow_latch_request_duration, overrides that setting
+	// as the threshold in seconds for considering a latch request to be slow.
+	slowLatchRequestThresholdOverride atomic.Int64
 }
 
 // scopedManager is a latch manager scoped to either local or global keys.
@@ -498,6 +505,21 @@ func ignoreNothing(ts, other hlc.Timestamp) bool { return false }
 // wait waits for all interfering latches in the provided snapshot to complete
 // before returning.
 func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
+	tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+	var info ash.WorkloadInfo
+	if lg.ba != nil {
+		info = ash.WorkloadInfo{
+			WorkloadID:    lg.ba.WorkloadID,
+			AppNameID:     lg.ba.AppNameID,
+			GatewayNodeID: lg.ba.GatewayNodeID,
+			WorkloadType:  workloadid.WorkloadType(lg.ba.WorkloadType),
+		}
+	}
+	cleanup := ash.SetWorkState(
+		tenantID, info,
+		ash.WorkLock, "LatchWait")
+	defer cleanup()
+
 	var timer timeutil.Timer
 	defer timer.Stop()
 
@@ -585,7 +607,9 @@ func (m *Manager) waitForSignal(
 	}
 	log.Eventf(ctx, "waiting to acquire %s latch %s, held by %s latch %s", waitType, wait, heldType, held)
 	poisonCh := held.g.poison.signalChan()
-	t.Reset(base.SlowRequestThreshold)
+
+	slowThreshold := m.slowLatchRequestThreshold()
+	t.Reset(slowThreshold)
 	for {
 		select {
 		case <-held.g.done.signalChan():
@@ -608,7 +632,7 @@ func (m *Manager) waitForSignal(
 			}
 		case <-t.C:
 			log.KvExec.Warningf(ctx, "have been waiting %s to acquire %s latch %s, held by %s latch %s",
-				base.SlowRequestThreshold, waitType, wait, heldType, held)
+				slowThreshold, waitType, wait, heldType, held)
 			if m.slowReqs != nil {
 				m.slowReqs.Inc(1)
 				defer m.slowReqs.Dec(1) //nolint:deferloop
@@ -707,6 +731,28 @@ func (m *Manager) longLatchHoldThreshold() time.Duration {
 		return math.MaxInt64 // disable
 	}
 	return LongLatchHoldThreshold.Get(&m.settings.SV)
+}
+
+// slowLatchRequestThreshold returns the threshold for logging slow latch requests.
+func (m *Manager) slowLatchRequestThreshold() time.Duration {
+	threshold := time.Duration(math.MaxInt64)
+	if m.settings != nil {
+		threshold = SlowLatchRequestThreshold.Get(&m.settings.SV)
+	}
+
+	thresholdOverride := time.Duration(m.slowLatchRequestThresholdOverride.Load()) * time.Second
+	if thresholdOverride != 0 && thresholdOverride < threshold {
+		threshold = thresholdOverride
+	}
+
+	return threshold
+}
+
+// SetSlowLatchRequestThresholdOverride sets an override for the slow latch
+// request threshold. The override only applies if non-zero and smaller than the
+// cluster setting kv.concurrency.slow_latch_request_duration.
+func (m *Manager) SetSlowLatchRequestThresholdOverride(thresholdSeconds int64) {
+	m.slowLatchRequestThresholdOverride.Store(thresholdSeconds)
 }
 
 // Metrics holds information about the state of a Manager.

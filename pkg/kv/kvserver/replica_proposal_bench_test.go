@@ -88,7 +88,7 @@ func runBenchmarkReplicaProposal(b *testing.B, bytes int64, withFollower bool) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		ba.Timestamp = repl.Clock().Now()
-		_, pErr := repl.Send(ctx, &ba)
+		_, pErr := kvserver.ToSenderForTesting(repl).Send(ctx, &ba)
 		if err := pErr.GoError(); err != nil {
 			b.Fatal(err)
 		}

@@ -349,7 +349,8 @@ NodeStatus records the most recent values of metrics for a node.
 | latencies | [NodeStatus.LatenciesEntry](#cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.NodeStatus.LatenciesEntry) | repeated | latencies is a map of nodeIDs to nanoseconds which is the latency between this node and the other node.<br><br>NOTE: this is deprecated and is only set if the min supported       cluster version is >= VersionRPCNetworkStats. | [reserved](#support-status) |
 | activity | [NodeStatus.ActivityEntry](#cockroach.server.serverpb.NodesResponse-cockroach.server.status.statuspb.NodeStatus.ActivityEntry) | repeated | activity is a map of nodeIDs to network statistics from this node to other nodes. | [reserved](#support-status) |
 | total_system_memory | [int64](#cockroach.server.serverpb.NodesResponse-int64) |  | total_system_memory is the total RAM available to the system (or, if detected, the memory available to the cgroup this process is in) in bytes. | [alpha](#support-status) |
-| num_cpus | [int32](#cockroach.server.serverpb.NodesResponse-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. Note that this does not report the number of CPUs actually used by `cockroach`; this parameter is controlled separately. | [alpha](#support-status) |
+| num_cpus | [int32](#cockroach.server.serverpb.NodesResponse-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. This reflects the physical CPU count and does not account for container/cgroup limits. See num_vcpus for container-aware CPU allocation. | [alpha](#support-status) |
+| num_vcpus | [double](#cockroach.server.serverpb.NodesResponse-double) |  | num_vcpus is the number of vCPUs allocated to the process by the container orchestrator (e.g., Kubernetes, Docker) based on cgroup CPU quota/period. This represents the platform CPU allocation and is independent of GOMAXPROCS runtime tuning. Falls back to num_cpus if no container limits are configured. Supports fractional values (e.g., 1.5 for Kubernetes CPU limits like "1500m"). | [alpha](#support-status) |
 
 
 
@@ -501,7 +502,8 @@ NodeStatus records the most recent values of metrics for a node.
 | latencies | [NodeStatus.LatenciesEntry](#cockroach.server.status.statuspb.NodeStatus-cockroach.server.status.statuspb.NodeStatus.LatenciesEntry) | repeated | latencies is a map of nodeIDs to nanoseconds which is the latency between this node and the other node.<br><br>NOTE: this is deprecated and is only set if the min supported       cluster version is >= VersionRPCNetworkStats. | [reserved](#support-status) |
 | activity | [NodeStatus.ActivityEntry](#cockroach.server.status.statuspb.NodeStatus-cockroach.server.status.statuspb.NodeStatus.ActivityEntry) | repeated | activity is a map of nodeIDs to network statistics from this node to other nodes. | [reserved](#support-status) |
 | total_system_memory | [int64](#cockroach.server.status.statuspb.NodeStatus-int64) |  | total_system_memory is the total RAM available to the system (or, if detected, the memory available to the cgroup this process is in) in bytes. | [alpha](#support-status) |
-| num_cpus | [int32](#cockroach.server.status.statuspb.NodeStatus-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. Note that this does not report the number of CPUs actually used by `cockroach`; this parameter is controlled separately. | [alpha](#support-status) |
+| num_cpus | [int32](#cockroach.server.status.statuspb.NodeStatus-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. This reflects the physical CPU count and does not account for container/cgroup limits. See num_vcpus for container-aware CPU allocation. | [alpha](#support-status) |
+| num_vcpus | [double](#cockroach.server.status.statuspb.NodeStatus-double) |  | num_vcpus is the number of vCPUs allocated to the process by the container orchestrator (e.g., Kubernetes, Docker) based on cgroup CPU quota/period. This represents the platform CPU allocation and is independent of GOMAXPROCS runtime tuning. Falls back to num_cpus if no container limits are configured. Supports fractional values (e.g., 1.5 for Kubernetes CPU limits like "1500m"). | [alpha](#support-status) |
 
 
 
@@ -656,6 +658,7 @@ NodeStatus records the most recent values of metrics for a node.
 | activity | [NodeResponse.ActivityEntry](#cockroach.server.serverpb.NodesResponseExternal-cockroach.server.serverpb.NodeResponse.ActivityEntry) | repeated | activity is a map of nodeIDs to network statistics from this node to other nodes. | [reserved](#support-status) |
 | total_system_memory | [int64](#cockroach.server.serverpb.NodesResponseExternal-int64) |  | total_system_memory is the total RAM available to the system (or, if detected, the memory available to the cgroup this process is in) in bytes. | [alpha](#support-status) |
 | num_cpus | [int32](#cockroach.server.serverpb.NodesResponseExternal-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. Note that this does not report the number of CPUs actually used by `cockroach`; this parameter is controlled separately. | [alpha](#support-status) |
+| num_vcpus | [double](#cockroach.server.serverpb.NodesResponseExternal-double) |  | num_vcpus is the number of provisioned vCPUs as reported by cgroups or the operating system. | [reserved](#support-status) |
 
 
 
@@ -914,6 +917,7 @@ NodeStatus records the most recent values of metrics for a node.
 | activity | [NodeResponse.ActivityEntry](#cockroach.server.serverpb.NodeResponse-cockroach.server.serverpb.NodeResponse.ActivityEntry) | repeated | activity is a map of nodeIDs to network statistics from this node to other nodes. | [reserved](#support-status) |
 | total_system_memory | [int64](#cockroach.server.serverpb.NodeResponse-int64) |  | total_system_memory is the total RAM available to the system (or, if detected, the memory available to the cgroup this process is in) in bytes. | [alpha](#support-status) |
 | num_cpus | [int32](#cockroach.server.serverpb.NodeResponse-int32) |  | num_cpus is the number of logical CPUs as reported by the operating system on the host where the `cockroach` process is running. Note that this does not report the number of CPUs actually used by `cockroach`; this parameter is controlled separately. | [alpha](#support-status) |
+| num_vcpus | [double](#cockroach.server.serverpb.NodeResponse-double) |  | num_vcpus is the number of provisioned vCPUs as reported by cgroups or the operating system. | [reserved](#support-status) |
 
 
 
@@ -1483,6 +1487,7 @@ Support status: [reserved](#support-status)
 | limit | [int32](#cockroach.server.serverpb.RangesRequest-int32) |  | The pagination limit to use, if set. NB: Pagination is based on ascending RangeID. | [reserved](#support-status) |
 | offset | [int32](#cockroach.server.serverpb.RangesRequest-int32) |  | The pagination offset to use, if set. NB: Pagination is based on ascending RangeID. | [reserved](#support-status) |
 | redact | [bool](#cockroach.server.serverpb.RangesRequest-bool) |  | redact, if true, requests redaction of sensitive data away from the API response. | [reserved](#support-status) |
+| problems_only | [bool](#cockroach.server.serverpb.RangesRequest-bool) |  | If `problems_only is true, will return response with only `problems` field populated. | [reserved](#support-status) |
 
 
 
@@ -2544,6 +2549,230 @@ An error wrapper object for ListSessionsResponse.
 
 
 
+## ListActiveSessionHistory
+
+
+
+ListActiveSessionHistory retrieves ASH samples across the cluster.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+Request object for ListActiveSessionHistory and
+ListLocalActiveSessionHistory.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| per_node_limit | [int32](#cockroach.server.serverpb.ListActiveSessionHistoryRequest-int32) |  | Maximum number of ASH samples to return per node during fan-out. ListActiveSessionHistory defaults this to the cluster setting obs.ash.response_limit when zero; ListLocalActiveSessionHistory applies it as-is (zero means unlimited). | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+Response object for ListActiveSessionHistory and
+ListLocalActiveSessionHistory.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| samples | [ASHSample](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.ASHSample) | repeated | ASH samples collected from nodes. | [reserved](#support-status) |
+| errors | [ListActiveSessionHistoryError](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.ListActiveSessionHistoryError) | repeated | Any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.ASHSample"></a>
+#### ASHSample
+
+ASHSample represents a single active session history sample.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| sample_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-google.protobuf.Timestamp) |  | SampleTime is when this sample was taken. | [reserved](#support-status) |
+| node_id | [int32](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-int32) |  | NodeID is the node where this sample was captured. | [reserved](#support-status) |
+| workload_id | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | WorkloadID identifies the workload (e.g., statement fingerprint). | [reserved](#support-status) |
+| work_event_type | [WorkEventType](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.WorkEventType) |  | WorkEventType categorizes the work by resource type (e.g., CPU, NETWORK, LOCK). | [reserved](#support-status) |
+| work_event | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | WorkEvent is a more specific identifier for the work (e.g., "DistSenderLocal"). | [reserved](#support-status) |
+| goroutine_id | [int64](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-int64) |  | GoroutineID is the ID of the goroutine that was sampled. | [reserved](#support-status) |
+| tenant_id | [cockroach.roachpb.TenantID](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.roachpb.TenantID) |  | TenantID identifies which tenant this sample belongs to. | [reserved](#support-status) |
+| app_name | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | AppName is the application name string. Set when the sample corresponds to SQL execution. | [reserved](#support-status) |
+| workload_type | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | WorkloadType distinguishes the kind of workload (e.g., "STATEMENT", "JOB", "SYSTEM", "UNKNOWN"). | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.ListActiveSessionHistoryError"></a>
+#### ListActiveSessionHistoryError
+
+An error wrapper for ListActiveSessionHistory fan-out.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [int32](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-int32) |  | ID of node that was being contacted when this error occurred. | [reserved](#support-status) |
+| message | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | Error message. | [reserved](#support-status) |
+
+
+
+
+
+
+## ListLocalActiveSessionHistory
+
+
+
+ListLocalActiveSessionHistory retrieves ASH samples on this node.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+Request object for ListActiveSessionHistory and
+ListLocalActiveSessionHistory.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| per_node_limit | [int32](#cockroach.server.serverpb.ListActiveSessionHistoryRequest-int32) |  | Maximum number of ASH samples to return per node during fan-out. ListActiveSessionHistory defaults this to the cluster setting obs.ash.response_limit when zero; ListLocalActiveSessionHistory applies it as-is (zero means unlimited). | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+Response object for ListActiveSessionHistory and
+ListLocalActiveSessionHistory.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| samples | [ASHSample](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.ASHSample) | repeated | ASH samples collected from nodes. | [reserved](#support-status) |
+| errors | [ListActiveSessionHistoryError](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.ListActiveSessionHistoryError) | repeated | Any errors that occurred during fan-out calls to other nodes. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.ASHSample"></a>
+#### ASHSample
+
+ASHSample represents a single active session history sample.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| sample_time | [google.protobuf.Timestamp](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-google.protobuf.Timestamp) |  | SampleTime is when this sample was taken. | [reserved](#support-status) |
+| node_id | [int32](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-int32) |  | NodeID is the node where this sample was captured. | [reserved](#support-status) |
+| workload_id | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | WorkloadID identifies the workload (e.g., statement fingerprint). | [reserved](#support-status) |
+| work_event_type | [WorkEventType](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.WorkEventType) |  | WorkEventType categorizes the work by resource type (e.g., CPU, NETWORK, LOCK). | [reserved](#support-status) |
+| work_event | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | WorkEvent is a more specific identifier for the work (e.g., "DistSenderLocal"). | [reserved](#support-status) |
+| goroutine_id | [int64](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-int64) |  | GoroutineID is the ID of the goroutine that was sampled. | [reserved](#support-status) |
+| tenant_id | [cockroach.roachpb.TenantID](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.roachpb.TenantID) |  | TenantID identifies which tenant this sample belongs to. | [reserved](#support-status) |
+| app_name | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | AppName is the application name string. Set when the sample corresponds to SQL execution. | [reserved](#support-status) |
+| workload_type | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | WorkloadType distinguishes the kind of workload (e.g., "STATEMENT", "JOB", "SYSTEM", "UNKNOWN"). | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.ListActiveSessionHistoryResponse-cockroach.server.serverpb.ListActiveSessionHistoryError"></a>
+#### ListActiveSessionHistoryError
+
+An error wrapper for ListActiveSessionHistory fan-out.
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| node_id | [int32](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-int32) |  | ID of node that was being contacted when this error occurred. | [reserved](#support-status) |
+| message | [string](#cockroach.server.serverpb.ListActiveSessionHistoryResponse-string) |  | Error message. | [reserved](#support-status) |
+
+
+
+
+
+
+## AppNameMappings
+
+
+
+AppNameMappings retrieves app name ID to string mappings from
+this node's local cache for the requested IDs.
+
+Support status: [reserved](#support-status)
+
+#### Request Parameters
+
+
+
+
+Request object for retrieving app name ID to string mappings from
+a node's local cache.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| ids | [uint64](#cockroach.server.serverpb.AppNameMappingsRequest-uint64) | repeated | ids is the set of app name IDs to resolve. Only mappings for these IDs are returned in the response. | [reserved](#support-status) |
+
+
+
+
+
+
+
+#### Response Parameters
+
+
+
+
+Response object for AppNameMappings.
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| mappings | [AppNameMappingsResponse.MappingsEntry](#cockroach.server.serverpb.AppNameMappingsResponse-cockroach.server.serverpb.AppNameMappingsResponse.MappingsEntry) | repeated | mappings is a map from app name ID to the original app name string. | [reserved](#support-status) |
+
+
+
+
+
+
+<a name="cockroach.server.serverpb.AppNameMappingsResponse-cockroach.server.serverpb.AppNameMappingsResponse.MappingsEntry"></a>
+#### AppNameMappingsResponse.MappingsEntry
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| key | [uint64](#cockroach.server.serverpb.AppNameMappingsResponse-uint64) |  |  |  |
+| value | [string](#cockroach.server.serverpb.AppNameMappingsResponse-string) |  |  |  |
+
+
+
+
+
+
 ## CancelQuery
 
 `POST /_status/cancel_query/{node_id}`
@@ -3359,6 +3588,7 @@ Support status: [reserved](#support-status)
 | node_id | [string](#cockroach.server.serverpb.LogFileRequest-string) |  | node_id is a string so that "local" can be used to specify that no forwarding is necessary. | [reserved](#support-status) |
 | file | [string](#cockroach.server.serverpb.LogFileRequest-string) |  | file is the name of the log file to retrieve. Note that it must not be prefixed by a directory name. The full path to the file is computed by the server based on the base name and the logging configuration. | [reserved](#support-status) |
 | redact | [bool](#cockroach.server.serverpb.LogFileRequest-bool) |  | redact, if true, requests redaction of sensitive data away from the retrieved log entries. Only admin users can send a request with redact = false. | [reserved](#support-status) |
+| exclude_severities | [cockroach.util.log.Severity](#cockroach.server.serverpb.LogFileRequest-cockroach.util.log.Severity) | repeated | exclude_severities, if non-empty, causes log entries with the given severities to be filtered out of the response. | [reserved](#support-status) |
 
 
 
@@ -4431,6 +4661,7 @@ StatementDetailsRequest requests the details of a Statement, based on its keys.
 | statement_statistics_per_aggregated_ts | [StatementDetailsResponse.CollectedStatementGroupedByAggregatedTs](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatementDetailsResponse.CollectedStatementGroupedByAggregatedTs) | repeated | statement_statistics_per_aggregated_ts returns the same statement from above, but with its statistics separated by the aggregated timestamp. | [reserved](#support-status) |
 | statement_statistics_per_plan_hash | [StatementDetailsResponse.CollectedStatementGroupedByPlanHash](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatementDetailsResponse.CollectedStatementGroupedByPlanHash) | repeated | statement_statistics_per_plan_hash returns the same statement from above, but with its statistics separated by the plan hash. | [reserved](#support-status) |
 | internal_app_name_prefix | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  | If set and non-empty, indicates the prefix to application_name used for statements/queries issued internally by CockroachDB. | [reserved](#support-status) |
+| statement_statistics_per_aggregated_ts_and_plan_hash | [StatementDetailsResponse.StatementPlanDistribution](#cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatementDetailsResponse.StatementPlanDistribution) | repeated | statement_statistics_per_aggregated_ts_and_plan_hash returns execution counts grouped by both aggregated timestamp and plan hash for visualizing plan distribution over time. | [reserved](#support-status) |
 
 
 
@@ -4481,6 +4712,24 @@ StatementDetailsRequest requests the details of a Statement, based on its keys.
 | explain_plan | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  |  | [reserved](#support-status) |
 | plan_hash | [uint64](#cockroach.server.serverpb.StatementDetailsResponse-uint64) |  |  | [reserved](#support-status) |
 | index_recommendations | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) | repeated |  | [reserved](#support-status) |
+
+
+
+
+
+<a name="cockroach.server.serverpb.StatementDetailsResponse-cockroach.server.serverpb.StatementDetailsResponse.StatementPlanDistribution"></a>
+#### StatementDetailsResponse.StatementPlanDistribution
+
+
+
+| Field | Type | Label | Description | Support status |
+| ----- | ---- | ----- | ----------- | -------------- |
+| execution_count | [int64](#cockroach.server.serverpb.StatementDetailsResponse-int64) |  |  | [reserved](#support-status) |
+| aggregated_ts | [google.protobuf.Timestamp](#cockroach.server.serverpb.StatementDetailsResponse-google.protobuf.Timestamp) |  |  | [reserved](#support-status) |
+| plan_hash | [uint64](#cockroach.server.serverpb.StatementDetailsResponse-uint64) |  |  | [reserved](#support-status) |
+| plan_gist | [string](#cockroach.server.serverpb.StatementDetailsResponse-string) |  |  | [reserved](#support-status) |
+| canary_execution_count | [int64](#cockroach.server.serverpb.StatementDetailsResponse-int64) |  | canary_execution_count is the number of executions that used canary (newest) table statistics during the canary experiment. | [reserved](#support-status) |
+| stable_execution_count | [int64](#cockroach.server.serverpb.StatementDetailsResponse-int64) |  | stable_execution_count is the number of executions that used stable (second-newest) table statistics while the canary experiment was active. This is tracked explicitly rather than derived from execution_count - canary_execution_count, because executions where the canary experiment is off should not count as stable. | [reserved](#support-status) |
 
 
 

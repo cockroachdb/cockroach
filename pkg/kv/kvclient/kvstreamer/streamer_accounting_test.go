@@ -100,9 +100,11 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 			math.MaxInt64,
 			&acc,
 			nil, /* kvPairsRead */
+			nil, /* kvCPUTime */
 			lock.None,
 			lock.Unreplicated,
 			reverse,
+			0, /* workloadID */
 		)
 		s.Init(OutOfOrder, Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
 		return s

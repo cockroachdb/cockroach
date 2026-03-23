@@ -4,17 +4,30 @@ query T
 EXPLAIN SELECT * FROM pg_catalog.pg_class WHERE oid = 50
 ----
 distribution: local
-vectorized: true
 ·
 • virtual table
   table: pg_class@pg_class_oid_idx
   spans: [/50 - /50]
 
+# The @primary hint forces a full scan, preventing the optimizer from using
+# the virtual index. This is useful when the virtual index is incomplete and
+# lookups with certain OIDs (e.g. hashed index OIDs) fall back to a full
+# scan anyway, making the optimizer's O(1) cost estimate incorrect.
+query T
+EXPLAIN SELECT * FROM pg_catalog.pg_class@primary WHERE oid = 50
+----
+distribution: local
+·
+• filter
+│ filter: oid = 50
+│
+└── • virtual table
+      table: pg_class@primary
+
 query T
 EXPLAIN SELECT * FROM pg_catalog.pg_class WHERE relname = 'blah'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: relname = 'blah'
@@ -29,7 +42,6 @@ query T
 EXPLAIN SELECT * FROM information_schema.tables WHERE table_name = 'blah'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: table_name = 'blah'
@@ -44,7 +56,6 @@ query T
 EXPLAIN SELECT * FROM information_schema.tables WHERE table_name > 'blah' ORDER BY table_name
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +table_name
@@ -61,7 +72,6 @@ query T
 EXPLAIN SELECT * FROM information_schema.tables WHERE table_name = 'blah' AND table_type = 'foo'
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: (table_name = 'blah') AND (table_type = 'foo')
@@ -75,7 +85,6 @@ query T
 EXPLAIN SELECT * FROM pg_constraint INNER LOOKUP JOIN pg_class on conrelid=pg_class.oid
 ----
 distribution: local
-vectorized: true
 ·
 • virtual table lookup join
 │ table: pg_class@pg_class_oid_idx
@@ -88,7 +97,6 @@ query T
 EXPLAIN SELECT * FROM pg_constraint LEFT LOOKUP JOIN pg_class on conrelid=pg_class.oid
 ----
 distribution: local
-vectorized: true
 ·
 • virtual table lookup join (left outer)
 │ table: pg_class@pg_class_oid_idx
@@ -128,7 +136,6 @@ ORDER BY
         c.conname
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +conname
@@ -143,12 +150,12 @@ vectorized: true
         └── • virtual table lookup join
             │ table: pg_attribute@pg_attribute_attrelid_idx
             │ equality: (oid) = (attrelid)
-            │ pred: column158 = attnum
+            │ pred: column163 = attnum
             │
             └── • render
                 │
                 └── • hash join
-                    │ equality: (attrelid, attnum) = (oid, column130)
+                    │ equality: (attrelid, attnum) = (oid, column134)
                     │
                     ├── • filter
                     │   │ filter: attrelid = 'b'::REGCLASS
@@ -183,7 +190,6 @@ query T
 EXPLAIN SELECT * FROM pg_catalog.pg_class WHERE oid = 50 LIMIT 1
 ----
 distribution: local
-vectorized: true
 ·
 • virtual table
   table: pg_class@pg_class_oid_idx
@@ -199,7 +205,6 @@ query T
 EXPLAIN SHOW GRANTS ON DATABASE t
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -246,7 +251,6 @@ query T
 EXPLAIN SELECT * FROM crdb_internal.tables WHERE database_name = 'foo';
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: database_name = 'foo'
@@ -258,7 +262,6 @@ query T
 EXPLAIN SELECT * FROM crdb_internal.tables WHERE parent_id = 1;
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: parent_id = 1
@@ -271,7 +274,6 @@ query T
 EXPLAIN SELECT * FROM crdb_internal.tables WHERE database_name = 'foo' AND drop_time IS NULL;
 ----
 distribution: local
-vectorized: true
 ·
 • virtual table
   table: tables@tables_database_name_idx (partial index)
@@ -281,7 +283,6 @@ query T
 EXPLAIN SELECT * FROM crdb_internal.tables WHERE parent_id = 1 AND drop_time IS NULL;
 ----
 distribution: local
-vectorized: true
 ·
 • virtual table
   table: tables@tables_parent_id_idx (partial index)
@@ -379,7 +380,6 @@ WHERE
     AND a.atttypid IN (SELECT oid FROM pg_type WHERE typname = ANY (ARRAY['int8']));
 ----
 distribution: local
-vectorized: true
 ·
 • virtual table lookup join
 │ table: pg_class@pg_class_oid_idx
@@ -410,7 +410,6 @@ WHERE
     AND NOT EXISTS(SELECT 1 FROM pg_type WHERE typname = ANY (ARRAY['typefoo']) AND a.atttypid = oid);
 ----
 distribution: local
-vectorized: true
 ·
 • virtual table lookup join
 │ table: pg_class@pg_class_oid_idx
@@ -444,7 +443,6 @@ WHERE
     AND t.typname LIKE 'myt%';
 ----
 distribution: local
-vectorized: true
 ·
 • virtual table lookup join (anti)
 │ table: pg_type@pg_type_oid_idx
@@ -469,7 +467,6 @@ WHERE
     AND t.typname LIKE 'myt%';
 ----
 distribution: local
-vectorized: true
 ·
 • virtual table lookup join (semi)
 │ table: pg_type@pg_type_oid_idx
@@ -495,7 +492,6 @@ ORDER BY
 	database_name
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +datname
@@ -517,7 +513,6 @@ EXPLAIN SELECT i.relname, ix.indisprimary FROM pg_class AS t, pg_class AS i, pg_
         WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND t.relkind = 'r';
 ----
 distribution: local
-vectorized: true
 ·
 • hash join
 │ equality: (oid) = (indexrelid)
@@ -525,17 +520,17 @@ vectorized: true
 ├── • virtual table
 │     table: pg_class@primary
 │
-└── • hash join
+└── • merge join
     │ equality: (indrelid) = (oid)
     │
     ├── • virtual table
-    │     table: pg_index@primary
+    │     table: pg_index@pg_index_indrelid_idx
     │
     └── • filter
         │ filter: relkind = 'r'
         │
         └── • virtual table
-              table: pg_class@primary
+              table: pg_class@pg_class_oid_idx
 
 statement ok
 RESET disallow_full_table_scans;

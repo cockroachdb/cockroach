@@ -2511,44 +2511,38 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── select
-      ├── columns: c:1!null d:2!null array_agg:9!null
+      ├── columns: c:1!null d:2!null x:5 array_agg:10
       ├── key: (1)
-      ├── fd: ()-->(9), (1)-->(2)
-      ├── project
-      │    ├── columns: array_agg:9 c:1!null d:2!null
+      ├── fd: (1)-->(2,5,10)
+      ├── group-by (hash)
+      │    ├── columns: c:1!null d:2!null x:5 array_agg:10
+      │    ├── grouping columns: c:1!null
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2,9)
-      │    ├── group-by (hash)
-      │    │    ├── columns: c:1!null d:2!null x:5 array_agg:10
-      │    │    ├── grouping columns: c:1!null
+      │    ├── fd: (1)-->(2,5,10)
+      │    ├── left-join (hash)
+      │    │    ├── columns: c:1!null d:2!null x:5 y:6
+      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2,5,10)
-      │    │    ├── left-join (hash)
-      │    │    │    ├── columns: c:1!null d:2!null x:5 y:6
-      │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+      │    │    ├── fd: (1)-->(2,5,6), (5)-->(6)
+      │    │    ├── scan cd
+      │    │    │    ├── columns: c:1!null d:2!null
       │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2,5,6), (5)-->(6)
-      │    │    │    ├── scan cd
-      │    │    │    │    ├── columns: c:1!null d:2!null
-      │    │    │    │    ├── key: (1)
-      │    │    │    │    └── fd: (1)-->(2)
-      │    │    │    ├── scan xy
-      │    │    │    │    ├── columns: x:5!null y:6
-      │    │    │    │    ├── key: (5)
-      │    │    │    │    └── fd: (5)-->(6)
-      │    │    │    └── filters
-      │    │    │         └── c:1 = x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
-      │    │    └── aggregations
-      │    │         ├── array-agg [as=array_agg:10, outer=(6)]
-      │    │         │    └── y:6
-      │    │         ├── const-agg [as=d:2, outer=(2)]
-      │    │         │    └── d:2
-      │    │         └── any-not-null-agg [as=x:5, outer=(5)]
-      │    │              └── x:5
-      │    └── projections
-      │         └── CASE WHEN x:5 IS NOT NULL THEN array_agg:10 ELSE CAST(NULL AS INT8[]) END [as=array_agg:9, outer=(5,10)]
+      │    │    │    └── fd: (1)-->(2)
+      │    │    ├── scan xy
+      │    │    │    ├── columns: x:5!null y:6
+      │    │    │    ├── key: (5)
+      │    │    │    └── fd: (5)-->(6)
+      │    │    └── filters
+      │    │         └── c:1 = x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      │    └── aggregations
+      │         ├── array-agg [as=array_agg:10, outer=(6)]
+      │         │    └── y:6
+      │         ├── const-agg [as=d:2, outer=(2)]
+      │         │    └── d:2
+      │         └── any-not-null-agg [as=x:5, outer=(5)]
+      │              └── x:5
       └── filters
-           └── array_agg:9 = ARRAY[] [outer=(9), constraints=(/9: [/ARRAY[] - /ARRAY[]]; tight), fd=()-->(9)]
+           └── CASE WHEN x:5 IS NOT NULL THEN array_agg:10 ELSE CAST(NULL AS INT8[]) END = ARRAY[] [outer=(5,10)]
 
 norm expect=TryDecorrelateScalarGroupBy
 SELECT * FROM a WHERE 'foo'=(SELECT concat_agg(y::string) FROM xy WHERE x=k)
@@ -2559,62 +2553,55 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
-      ├── columns: k:1!null i:2 f:3 s:4 j:5 concat_agg:13!null
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 canary:14 concat_agg:15
       ├── immutable
       ├── key: (1)
-      ├── fd: ()-->(13), (1)-->(2-5)
-      ├── project
-      │    ├── columns: concat_agg:13 k:1!null i:2 f:3 s:4 j:5
+      ├── fd: (1)-->(2-5,14,15)
+      ├── group-by (hash)
+      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 canary:14 concat_agg:15
+      │    ├── grouping columns: k:1!null
       │    ├── immutable
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5,13)
-      │    ├── group-by (hash)
-      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 canary:14 concat_agg:15
-      │    │    ├── grouping columns: k:1!null
+      │    ├── fd: (1)-->(2-5,14,15)
+      │    ├── left-join (hash)
+      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 column12:12 canary:14
+      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    │    ├── immutable
       │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2-5,14,15)
-      │    │    ├── left-join (hash)
-      │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 column12:12 canary:14
-      │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
-      │    │    │    ├── immutable
+      │    │    ├── fd: (1)-->(2-5,8,12,14), (8)-->(12)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2-5,8,12,14), (8)-->(12)
-      │    │    │    ├── scan a
-      │    │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
-      │    │    │    │    ├── key: (1)
-      │    │    │    │    └── fd: (1)-->(2-5)
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: canary:14!null column12:12 x:8!null
-      │    │    │    │    ├── immutable
+      │    │    │    └── fd: (1)-->(2-5)
+      │    │    ├── project
+      │    │    │    ├── columns: canary:14!null column12:12 x:8!null
+      │    │    │    ├── immutable
+      │    │    │    ├── key: (8)
+      │    │    │    ├── fd: ()-->(14), (8)-->(12)
+      │    │    │    ├── scan xy
+      │    │    │    │    ├── columns: x:8!null y:9
       │    │    │    │    ├── key: (8)
-      │    │    │    │    ├── fd: ()-->(14), (8)-->(12)
-      │    │    │    │    ├── scan xy
-      │    │    │    │    │    ├── columns: x:8!null y:9
-      │    │    │    │    │    ├── key: (8)
-      │    │    │    │    │    └── fd: (8)-->(9)
-      │    │    │    │    └── projections
-      │    │    │    │         ├── true [as=canary:14]
-      │    │    │    │         └── y:9::STRING [as=column12:12, outer=(9), immutable]
-      │    │    │    └── filters
-      │    │    │         └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      │    │    └── aggregations
-      │    │         ├── concat-agg [as=concat_agg:15, outer=(12)]
-      │    │         │    └── column12:12
-      │    │         ├── const-agg [as=i:2, outer=(2)]
-      │    │         │    └── i:2
-      │    │         ├── const-agg [as=f:3, outer=(3)]
-      │    │         │    └── f:3
-      │    │         ├── const-agg [as=s:4, outer=(4)]
-      │    │         │    └── s:4
-      │    │         ├── const-agg [as=j:5, outer=(5)]
-      │    │         │    └── j:5
-      │    │         └── any-not-null-agg [as=canary:14, outer=(14)]
-      │    │              └── canary:14
-      │    └── projections
-      │         └── CASE WHEN canary:14 IS NOT NULL THEN concat_agg:15 ELSE CAST(NULL AS STRING) END [as=concat_agg:13, outer=(14,15)]
+      │    │    │    │    └── fd: (8)-->(9)
+      │    │    │    └── projections
+      │    │    │         ├── true [as=canary:14]
+      │    │    │         └── y:9::STRING [as=column12:12, outer=(9), immutable]
+      │    │    └── filters
+      │    │         └── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      │    └── aggregations
+      │         ├── concat-agg [as=concat_agg:15, outer=(12)]
+      │         │    └── column12:12
+      │         ├── const-agg [as=i:2, outer=(2)]
+      │         │    └── i:2
+      │         ├── const-agg [as=f:3, outer=(3)]
+      │         │    └── f:3
+      │         ├── const-agg [as=s:4, outer=(4)]
+      │         │    └── s:4
+      │         ├── const-agg [as=j:5, outer=(5)]
+      │         │    └── j:5
+      │         └── any-not-null-agg [as=canary:14, outer=(14)]
+      │              └── canary:14
       └── filters
-           └── concat_agg:13 = 'foo' [outer=(13), constraints=(/13: [/'foo' - /'foo']; tight), fd=()-->(13)]
+           └── CASE WHEN canary:14 IS NOT NULL THEN concat_agg:15 ELSE CAST(NULL AS STRING) END = 'foo' [outer=(14,15)]
 
 # With a multi-argument aggregate.
 norm expect=TryDecorrelateScalarGroupBy
@@ -4489,55 +4476,49 @@ project
  ├── key: (1)
  ├── fd: (1)-->(2-5)
  └── select
-      ├── columns: k:1!null i:2 f:3 s:4 j:5 case:14
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 bool_or:13
       ├── key: (1)
-      ├── fd: ()-->(14), (1)-->(2-5)
-      ├── project
-      │    ├── columns: case:14 k:1!null i:2 f:3 s:4 j:5
+      ├── fd: (1)-->(2-5,13)
+      ├── group-by (hash)
+      │    ├── columns: k:1!null i:2 f:3 s:4 j:5 bool_or:13
+      │    ├── grouping columns: k:1!null
       │    ├── key: (1)
-      │    ├── fd: (1)-->(2-5,14)
-      │    ├── group-by (hash)
-      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 bool_or:13
-      │    │    ├── grouping columns: k:1!null
+      │    ├── fd: (1)-->(2-5,13)
+      │    ├── left-join (hash)
+      │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 y:9 notnull:12
+      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
       │    │    ├── key: (1)
-      │    │    ├── fd: (1)-->(2-5,13)
-      │    │    ├── left-join (hash)
-      │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5 x:8 y:9 notnull:12
-      │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+      │    │    ├── fd: (1)-->(2-5,8,9,12), (8)-->(9), (9)~~>(12)
+      │    │    ├── scan a
+      │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
       │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2-5,8,9,12), (8)-->(9), (9)~~>(12)
-      │    │    │    ├── scan a
-      │    │    │    │    ├── columns: k:1!null i:2 f:3 s:4 j:5
-      │    │    │    │    ├── key: (1)
-      │    │    │    │    └── fd: (1)-->(2-5)
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: notnull:12!null x:8!null y:9
+      │    │    │    └── fd: (1)-->(2-5)
+      │    │    ├── project
+      │    │    │    ├── columns: notnull:12!null x:8!null y:9
+      │    │    │    ├── key: (8)
+      │    │    │    ├── fd: (8)-->(9), (9)-->(12)
+      │    │    │    ├── scan xy
+      │    │    │    │    ├── columns: x:8!null y:9
       │    │    │    │    ├── key: (8)
-      │    │    │    │    ├── fd: (8)-->(9), (9)-->(12)
-      │    │    │    │    ├── scan xy
-      │    │    │    │    │    ├── columns: x:8!null y:9
-      │    │    │    │    │    ├── key: (8)
-      │    │    │    │    │    └── fd: (8)-->(9)
-      │    │    │    │    └── projections
-      │    │    │    │         └── y:9 IS NOT NULL [as=notnull:12, outer=(9)]
-      │    │    │    └── filters
-      │    │    │         ├── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      │    │    │         └── (i:2 = y:9) IS NOT false [outer=(2,9)]
-      │    │    └── aggregations
-      │    │         ├── bool-or [as=bool_or:13, outer=(12)]
-      │    │         │    └── notnull:12
-      │    │         ├── const-agg [as=i:2, outer=(2)]
-      │    │         │    └── i:2
-      │    │         ├── const-agg [as=f:3, outer=(3)]
-      │    │         │    └── f:3
-      │    │         ├── const-agg [as=s:4, outer=(4)]
-      │    │         │    └── s:4
-      │    │         └── const-agg [as=j:5, outer=(5)]
-      │    │              └── j:5
-      │    └── projections
-      │         └── CASE WHEN bool_or:13 AND (i:2 IS NOT NULL) THEN true WHEN bool_or:13 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:14, outer=(2,13)]
+      │    │    │    │    └── fd: (8)-->(9)
+      │    │    │    └── projections
+      │    │    │         └── y:9 IS NOT NULL [as=notnull:12, outer=(9)]
+      │    │    └── filters
+      │    │         ├── x:8 = k:1 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+      │    │         └── (i:2 = y:9) IS NOT false [outer=(2,9)]
+      │    └── aggregations
+      │         ├── bool-or [as=bool_or:13, outer=(12)]
+      │         │    └── notnull:12
+      │         ├── const-agg [as=i:2, outer=(2)]
+      │         │    └── i:2
+      │         ├── const-agg [as=f:3, outer=(3)]
+      │         │    └── f:3
+      │         ├── const-agg [as=s:4, outer=(4)]
+      │         │    └── s:4
+      │         └── const-agg [as=j:5, outer=(5)]
+      │              └── j:5
       └── filters
-           └── case:14 IS NULL [outer=(14), constraints=(/14: [/NULL - /NULL]; tight), fd=()-->(14)]
+           └── CASE WHEN bool_or:13 AND (i:2 IS NOT NULL) THEN true WHEN bool_or:13 IS NULL THEN false ELSE CAST(NULL AS BOOL) END IS NULL [outer=(2,13)]
 
 # Any with tuple comparison should use IS NOT NULL (i.e., IsTupleNotNull
 # expression) instead of IS DISTINCT FROM NULL.
@@ -5689,59 +5670,55 @@ SELECT j, y FROM a INNER JOIN xy ON x IN (SELECT v FROM uv WHERE u=y AND v=i) OR
 project
  ├── columns: j:5 y:9
  └── select
-      ├── columns: j:5 x:8!null y:9 case:18
-      ├── fd: (8)-->(9)
-      ├── project
-      │    ├── columns: case:18 j:5 x:8!null y:9
-      │    ├── fd: (8)-->(9)
-      │    ├── group-by (hash)
-      │    │    ├── columns: k:1!null j:5 x:8!null y:9 bool_or:17
-      │    │    ├── grouping columns: k:1!null x:8!null
+      ├── columns: k:1!null j:5 x:8!null y:9 bool_or:17
+      ├── key: (1,8)
+      ├── fd: (1)-->(5), (8)-->(9), (1,8)-->(5,9,17)
+      ├── group-by (hash)
+      │    ├── columns: k:1!null j:5 x:8!null y:9 bool_or:17
+      │    ├── grouping columns: k:1!null x:8!null
+      │    ├── key: (1,8)
+      │    ├── fd: (1)-->(5), (8)-->(9), (1,8)-->(5,9,17)
+      │    ├── left-join (hash)
+      │    │    ├── columns: k:1!null i:2 j:5 x:8!null y:9 u:12 v:13 notnull:16
+      │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
       │    │    ├── key: (1,8)
-      │    │    ├── fd: (1)-->(5), (8)-->(9), (1,8)-->(5,9,17)
-      │    │    ├── left-join (hash)
-      │    │    │    ├── columns: k:1!null i:2 j:5 x:8!null y:9 u:12 v:13 notnull:16
-      │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
+      │    │    ├── fd: (1)-->(2,5), (8)-->(9), (12)-->(13), (13)~~>(16), (1,8)-->(12,13,16)
+      │    │    ├── inner-join (cross)
+      │    │    │    ├── columns: k:1!null i:2 j:5 x:8!null y:9
       │    │    │    ├── key: (1,8)
-      │    │    │    ├── fd: (1)-->(2,5), (8)-->(9), (12)-->(13), (13)~~>(16), (1,8)-->(12,13,16)
-      │    │    │    ├── inner-join (cross)
-      │    │    │    │    ├── columns: k:1!null i:2 j:5 x:8!null y:9
-      │    │    │    │    ├── key: (1,8)
-      │    │    │    │    ├── fd: (1)-->(2,5), (8)-->(9)
-      │    │    │    │    ├── scan a
-      │    │    │    │    │    ├── columns: k:1!null i:2 j:5
-      │    │    │    │    │    ├── key: (1)
-      │    │    │    │    │    └── fd: (1)-->(2,5)
-      │    │    │    │    ├── scan xy
-      │    │    │    │    │    ├── columns: x:8!null y:9
-      │    │    │    │    │    ├── key: (8)
-      │    │    │    │    │    └── fd: (8)-->(9)
-      │    │    │    │    └── filters (true)
-      │    │    │    ├── project
-      │    │    │    │    ├── columns: notnull:16!null u:12!null v:13
+      │    │    │    ├── fd: (1)-->(2,5), (8)-->(9)
+      │    │    │    ├── scan a
+      │    │    │    │    ├── columns: k:1!null i:2 j:5
+      │    │    │    │    ├── key: (1)
+      │    │    │    │    └── fd: (1)-->(2,5)
+      │    │    │    ├── scan xy
+      │    │    │    │    ├── columns: x:8!null y:9
+      │    │    │    │    ├── key: (8)
+      │    │    │    │    └── fd: (8)-->(9)
+      │    │    │    └── filters (true)
+      │    │    ├── project
+      │    │    │    ├── columns: notnull:16!null u:12!null v:13
+      │    │    │    ├── key: (12)
+      │    │    │    ├── fd: (12)-->(13), (13)-->(16)
+      │    │    │    ├── scan uv
+      │    │    │    │    ├── columns: u:12!null v:13
       │    │    │    │    ├── key: (12)
-      │    │    │    │    ├── fd: (12)-->(13), (13)-->(16)
-      │    │    │    │    ├── scan uv
-      │    │    │    │    │    ├── columns: u:12!null v:13
-      │    │    │    │    │    ├── key: (12)
-      │    │    │    │    │    └── fd: (12)-->(13)
-      │    │    │    │    └── projections
-      │    │    │    │         └── v:13 IS NOT NULL [as=notnull:16, outer=(13)]
-      │    │    │    └── filters
-      │    │    │         ├── u:12 = y:9 [outer=(9,12), constraints=(/9: (/NULL - ]; /12: (/NULL - ]), fd=(9)==(12), (12)==(9)]
-      │    │    │         ├── v:13 = i:2 [outer=(2,13), constraints=(/2: (/NULL - ]; /13: (/NULL - ]), fd=(2)==(13), (13)==(2)]
-      │    │    │         └── (x:8 = v:13) IS NOT false [outer=(8,13)]
-      │    │    └── aggregations
-      │    │         ├── bool-or [as=bool_or:17, outer=(16)]
-      │    │         │    └── notnull:16
-      │    │         ├── const-agg [as=y:9, outer=(9)]
-      │    │         │    └── y:9
-      │    │         └── const-agg [as=j:5, outer=(5)]
-      │    │              └── j:5
-      │    └── projections
-      │         └── CASE WHEN bool_or:17 AND (x:8 IS NOT NULL) THEN true WHEN bool_or:17 IS NULL THEN false ELSE CAST(NULL AS BOOL) END [as=case:18, outer=(8,17)]
+      │    │    │    │    └── fd: (12)-->(13)
+      │    │    │    └── projections
+      │    │    │         └── v:13 IS NOT NULL [as=notnull:16, outer=(13)]
+      │    │    └── filters
+      │    │         ├── u:12 = y:9 [outer=(9,12), constraints=(/9: (/NULL - ]; /12: (/NULL - ]), fd=(9)==(12), (12)==(9)]
+      │    │         ├── v:13 = i:2 [outer=(2,13), constraints=(/2: (/NULL - ]; /13: (/NULL - ]), fd=(2)==(13), (13)==(2)]
+      │    │         └── (x:8 = v:13) IS NOT false [outer=(8,13)]
+      │    └── aggregations
+      │         ├── bool-or [as=bool_or:17, outer=(16)]
+      │         │    └── notnull:16
+      │         ├── const-agg [as=y:9, outer=(9)]
+      │         │    └── y:9
+      │         └── const-agg [as=j:5, outer=(5)]
+      │              └── j:5
       └── filters
-           └── case:18 OR (x:8 IS NULL) [outer=(8,18)]
+           └── CASE WHEN bool_or:17 AND (x:8 IS NOT NULL) THEN true WHEN bool_or:17 IS NULL THEN false ELSE CAST(NULL AS BOOL) END OR (x:8 IS NULL) [outer=(8,17)]
 
 # Regression test for #130398. Do not include columns from the RHS of the
 # semi-join when constructin the Project expression. The opt directive is used

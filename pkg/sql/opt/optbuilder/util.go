@@ -6,6 +6,8 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -474,23 +476,27 @@ func resolveTemporaryStatus(name tree.ObjectNamePrefix, persistence tree.Persist
 
 // resolveSchemaForCreateTable is the same as resolveSchemaForCreate but
 // specific for tables.
-func (b *Builder) resolveSchemaForCreateTable(name *tree.TableName) (cat.Schema, cat.SchemaName) {
-	return b.resolveSchemaForCreate(&name.ObjectNamePrefix, name)
+func (b *Builder) resolveSchemaForCreateTable(
+	name *tree.TableName, isTemporaryObject bool,
+) (cat.Schema, cat.SchemaName) {
+	return b.resolveSchemaForCreate(&name.ObjectNamePrefix, name, isTemporaryObject)
 }
 
 // resolveSchemaForCreateFunction is the same as resolveSchemaForCreate but
 // specific for functions.
 func (b *Builder) resolveSchemaForCreateFunction(
-	name *tree.RoutineName,
+	name *tree.RoutineName, isTemporaryObject bool,
 ) (cat.Schema, cat.SchemaName) {
-	return b.resolveSchemaForCreate(&name.ObjectNamePrefix, name)
+	return b.resolveSchemaForCreate(&name.ObjectNamePrefix, name, isTemporaryObject)
 }
 
 // resolveSchemaForCreate returns the schema that will contain a newly created
 // catalog object with the given name. If the current user does not have the
 // CREATE privilege, then resolveSchemaForCreate raises an error.
+// For temporary objects after V26_2, the TEMPORARY privilege on the database is
+// checked instead of the CREATE privilege on the schema.
 func (b *Builder) resolveSchemaForCreate(
-	prefix *tree.ObjectNamePrefix, name tree.NodeFormatter,
+	prefix *tree.ObjectNamePrefix, name tree.NodeFormatter, isTemporaryObject bool,
 ) (cat.Schema, cat.SchemaName) {
 	flags := cat.Flags{AvoidDescriptorCaches: true}
 	sch, resName, err := b.catalog.ResolveSchema(b.ctx, flags, prefix)
@@ -509,8 +515,17 @@ func (b *Builder) resolveSchemaForCreate(
 		panic(err)
 	}
 
-	if err := b.catalog.CheckPrivilege(b.ctx, sch, b.catalog.GetCurrentUser(), privilege.CREATE); err != nil {
-		panic(err)
+	if isTemporaryObject && b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V26_2) {
+		// After V26_2, check the TEMPORARY privilege on the database instead of
+		// the CREATE privilege on the schema. sch is a cat.Schema that has a
+		// reference to the database descriptor.
+		if err := b.catalog.CheckPrivilege(b.ctx, sch, b.catalog.GetCurrentUser(), privilege.TEMPORARY); err != nil {
+			panic(err)
+		}
+	} else {
+		if err := b.catalog.CheckPrivilege(b.ctx, sch, b.catalog.GetCurrentUser(), privilege.CREATE); err != nil {
+			panic(err)
+		}
 	}
 
 	return sch, resName
@@ -652,13 +667,17 @@ func (b *Builder) resolveTableRef(ref *tree.TableRef, priv privilege.Kind) cat.T
 
 // resolveDataSource returns the data source in the catalog with the given name,
 // along with the table's MDDepName and data source name. If the name does not
-// resolve to a table, or if the current user does not have the given privilege,
-// then resolveDataSource raises an error.
+// resolve to a table, or if the current user does not have any of the given
+// privileges, then resolveDataSource raises an error.
+//
+// When multiple privileges are provided, they are checked in order and the
+// first one the user holds is used. If none are held, the error from the first
+// privilege check is raised.
 //
 // If the b.qualifyDataSourceNamesInAST flag is set, tn is updated to contain
 // the fully qualified name.
 func (b *Builder) resolveDataSource(
-	tn *tree.TableName, priv privilege.Kind,
+	tn *tree.TableName, privs ...privilege.Kind,
 ) (cat.DataSource, opt.MDDepName, cat.DataSourceName) {
 	var flags cat.Flags
 	if b.insideViewDef || b.insideFuncDef || b.insideTriggerDef {
@@ -671,7 +690,7 @@ func (b *Builder) resolveDataSource(
 		panic(err)
 	}
 	depName := opt.DepByName(tn)
-	b.checkPrivilege(depName, ds, priv)
+	b.checkPrivilege(depName, ds, privs...)
 
 	if b.qualifyDataSourceNamesInAST {
 		*tn = resName
@@ -683,10 +702,14 @@ func (b *Builder) resolveDataSource(
 
 // resolveDataSourceFromRef returns the data source in the catalog that matches
 // the given TableRef spec, along with the table's MDDepName. If no data source
-// matches, or if the current user does not have the given privilege, then
-// resolveDataSourceFromRef raises an error.
+// matches, or if the current user does not have any of the given privileges,
+// then resolveDataSourceFromRef raises an error.
+//
+// When multiple privileges are provided, they are checked in order and the
+// first one the user holds is used. If none are held, the error from the first
+// privilege check is raised.
 func (b *Builder) resolveDataSourceRef(
-	ref *tree.TableRef, priv privilege.Kind,
+	ref *tree.TableRef, privs ...privilege.Kind,
 ) (cat.DataSource, opt.MDDepName) {
 	var flags cat.Flags
 	if b.insideViewDef || b.insideFuncDef || b.insideTriggerDef {
@@ -698,36 +721,73 @@ func (b *Builder) resolveDataSourceRef(
 		panic(pgerror.Wrapf(err, pgcode.UndefinedObject, "%s", tree.ErrString(ref)))
 	}
 	depName := opt.DepByID(cat.StableID(ref.TableID))
-	b.checkPrivilege(depName, ds, priv)
+	b.checkPrivilege(depName, ds, privs...)
 	return ds, depName
 }
 
-// checkPrivilege ensures that the current user has the privilege needed to
-// access the given object in the catalog. If not, then checkPrivilege raises an
-// error. It also adds the object and it's original unresolved name as a
-// dependency to the metadata, so that the privileges can be re-checked on reuse
-// of the memo.
-func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, priv privilege.Kind) {
-	if !(priv == privilege.SELECT && b.skipSelectPrivilegeChecks) {
-		err := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser, priv)
-		if err != nil {
+// checkPrivilege ensures that the checkPrivilegeUser has at least one of the given
+// privileges on the given object in the catalog. If not, then checkPrivilege
+// raises an error. It also adds the object and its original unresolved name as
+// a dependency to the metadata, so that the privileges can be re-checked on
+// reuse of the memo.
+//
+// When multiple privileges are provided, they are tried in order and the first
+// one the user holds is used. If none are held, the error from the first
+// privilege check is raised.
+func (b *Builder) checkPrivilege(name opt.MDDepName, ds cat.DataSource, privs ...privilege.Kind) {
+	priv := privs[0]
+	if priv == privilege.SELECT && b.skipSelectPrivilegeChecks {
+		// The check is skipped, so don't recheck when dependencies are checked.
+		b.factory.Metadata().AddDependency(name, ds, 0, b.privilegeDependencyUser())
+		return
+	}
+
+	if len(privs) == 1 {
+		if err := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser(), priv); err != nil {
 			panic(err)
 		}
 	} else {
-		// The check is skipped, so don't recheck when dependencies are checked.
-		priv = 0
+		// Try each privilege in order. Use the first one the user holds.
+		var firstErr error
+		for _, p := range privs {
+			if err := b.catalog.CheckPrivilege(b.ctx, ds, b.checkPrivilegeUser(), p); err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			priv = p
+			firstErr = nil
+			break
+		}
+		if firstErr != nil {
+			panic(firstErr)
+		}
 	}
 
 	// Add dependency on this object to the metadata, so that the metadata can be
 	// cached and later checked for freshness.
-	b.factory.Metadata().AddDependency(name, ds, priv)
+	depUser := b.privilegeDependencyUser()
+	b.factory.Metadata().AddDependency(name, ds, priv, depUser)
 
 	// If we're building within a builtin context (unsafe checks disabled),
 	// mark this dependency as coming from a builtin so it can bypass unsafe
 	// checks during memo staleness checking.
 	if b.skipUnsafeInternalsCheck {
-		b.factory.Metadata().AddDependency(name, ds, privilege.BUILTIN_UNSAFE_ALLOWED)
+		b.factory.Metadata().AddDependency(name, ds, privilege.BUILTIN_UNSAFE_ALLOWED, depUser)
 	}
+}
+
+// privilegeDependencyUser returns the user to store in privilege dependency
+// keys. When in a definer context (SECURITY DEFINER view or routine), it
+// returns the definer's username so re-validation checks the definer. Otherwise
+// it returns an empty username, signaling that re-validation should use the
+// current session user. This avoids memo invalidation on SET ROLE.
+func (b *Builder) privilegeDependencyUser() username.SQLUsername {
+	if b.dataSourcePrivilegeUserOverride.Undefined() {
+		return username.SQLUsername{}
+	}
+	return b.dataSourcePrivilegeUserOverride
 }
 
 // resolveNumericColumnRefs converts a list of tree.ColumnIDs from a
@@ -882,7 +942,8 @@ func (b *Builder) appendOrdinaryColumnsFromTable(
 			visibility: columnVisibility(tabCol.Visibility()),
 		})
 	}
-	if b.trackSchemaDeps && b.evalCtx.SessionData().UseImprovedRoutineDependencyTracking {
+	if !tab.IsVirtualTable() && b.trackSchemaDeps &&
+		b.evalCtx.SessionData().UseImprovedRoutineDependencyTracking {
 		dep := opt.SchemaDep{DataSource: tab}
 		for i, n := 0, tab.ColumnCount(); i < n; i++ {
 			if tab.Column(i).Kind() != cat.Ordinary {

@@ -74,6 +74,24 @@ func TestSetsSchedule(t *testing.T) {
 	require.True(t, loaded.NextRun().Equal(expectedNextRun))
 }
 
+func TestSetScheduleNoop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	h, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	j := h.newScheduledJob(t, "test_job", "test sql")
+
+	require.NoError(t, j.SetScheduleAndNextRun("*/5 * * * *"))
+	initial := j.rec.NextRun
+	require.False(t, initial.IsZero())
+
+	h.env.SetTime(initial.Add(time.Minute * 5))
+
+	require.NoError(t, j.SetScheduleAndNextRun("*/5 * * * *"))
+	require.Equal(t, initial, j.rec.NextRun)
+}
+
 func TestCreateOneOffJob(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

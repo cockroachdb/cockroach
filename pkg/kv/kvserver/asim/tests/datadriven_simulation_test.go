@@ -62,10 +62,15 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //
 //   - "gen_cluster" [nodes=<int>] [stores_per_node=<int>]
 //     [store_byte_capacity_gib=<int>] [node_cpu_cores=<float>]
+//     [cpu_overhead_multiplier=<float>] [space_amplification=<float>]
+//     [reserved_disk_gib=<int>]
 //     Initialize the cluster generator parameters. On the next call to eval,
 //     the cluster generator is called to create the initial state used in the
 //     simulation. The default values are: nodes=3 stores_per_node=1
-//     store_byte_capacity_gib=256, node_cpu_cores=8.0.
+//     store_byte_capacity_gib=256, node_cpu_cores=8.0,
+//     cpu_overhead_multiplier=1.0 (ratio of OS CPU to tracked CPU),
+//     space_amplification=1.25 (Used/LogicalBytes ratio),
+//     reserved_disk_gib=0 (filesystem reserved blocks).
 //
 //   - "load_cluster": config=<name>
 //     Load a defined cluster configuration to be the generated cluster in the
@@ -89,11 +94,13 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     an extra line should follow with the replica placement. A example of
 //     the replica placement is: {s1:*,s2,s3:NON_VOTER}:1 {s4:*,s5,s6}:1.
 //
-//   - set_liveness node=<int> liveness=(livenesspb.NodeLivenessStatus) [delay=<duration>]
-//     status=(dead|decommisssioning|draining|unavailable)
-//     Set the liveness status of the node with ID NodeID. This applies at the
-//     start of the simulation or with some delay after the simulation starts,
-//     if specified.
+//   - set_status store=<int> [delay=<duration>] liveness=(live|unavailable|dead)
+//   - set_status node=<int> [delay=<duration>] [liveness=(live|unavailable|dead)]
+//     [membership=(active|decommissioning|decommissioned)] [draining=<bool>]
+//     Set status signals for stores or nodes. The store= form sets liveness for
+//     a single store. The node= form can set liveness for all stores on a node
+//     and/or set membership/draining (which are per-node). Defaults for node=:
+//     membership=active, draining=false.
 //
 //   - set_locality node=<int> [delay=<duration] locality=string
 //     Sets the locality of the node with ID NodeID. This applies at the start
@@ -117,13 +124,18 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //
 //   - "assertion" type=<string> [stat=<string>] [ticks=<int>]
 //     [(exact_bound|upper_bound|lower_bound)=<float>] [store=<int>]
-//     [(under|over|unavailable|violating)=<int>]
+//     [(under|over|unavailable|violating)=<int>] [issue=<url>]
 //     Add an assertion to the list of assertions that run against each sample
 //     on subsequent calls to eval. When every assertion holds during eval, OK
 //     is printed, otherwise the reason the assertion(s) failed is printed.
 //     type=balance,steady,stat assertions look at the last 'ticks' duration of
 //     the simulation run. type=conformance assertions look at the end of the
 //     evaluation.
+//
+//     When issue=<url> is provided, the assertion is expected to fail (tracked
+//     by the referenced issue). If the assertion stops failing, the test errors
+//     out so the annotation can be cleaned up. Conversely, a failing assertion
+//     without an issue= annotation causes a test error.
 //
 //     For type=balance assertions, the max stat (e.g. stat=qps) value of each
 //     store is taken and divided by the mean store stat value. If the max/mean
@@ -201,7 +213,17 @@ func TestDataDriven(t *testing.T) {
 			var rangeGen gen.MultiRanges
 			settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
 			var events []scheduled.ScheduledEvent
-			assertions := []assertion.SimulationAssertion{}
+			type trackedAssertion struct {
+				assertion.SimulationAssertion
+				// When non-empty, the assertion is expected to fail and the URL
+				// points at a tracking issue (GitHub, Jira, etc). If the assertion
+				// stops failing, the test errors out so the annotation can be
+				// cleaned up. If it is empty and the assertion fails, the test
+				// also errors out, prompting the author to either fix the problem
+				// or add a tracking issue.
+				issue string
+			}
+			assertions := []trackedAssertion{}
 			// TODO(tbg): make it unnecessary to hold on to a per-file
 			// history of runs by removing commands that reference a specific
 			// runs. Instead, all run-specific data should become a generated
@@ -346,12 +368,18 @@ func TestDataDriven(t *testing.T) {
 					var region []string
 					var nodesPerRegion []int
 					var storeByteCapacityGiB int64 = 256
+					var cpuOverheadMultiplier float64
+					var spaceAmplification float64
+					var reservedDiskGiB int64
 					scanIfExists(t, d, "nodes", &nodes)
 					scanIfExists(t, d, "stores_per_node", &storesPerNode)
 					scanIfExists(t, d, "store_byte_capacity_gib", &storeByteCapacityGiB)
 					scanIfExists(t, d, "region", &region)
 					scanIfExists(t, d, "nodes_per_region", &nodesPerRegion)
 					scanIfExists(t, d, "node_cpu_cores", &nodeCPUCores)
+					scanIfExists(t, d, "cpu_overhead_multiplier", &cpuOverheadMultiplier)
+					scanIfExists(t, d, "space_amplification", &spaceAmplification)
+					scanIfExists(t, d, "reserved_disk_gib", &reservedDiskGiB)
 
 					var buf strings.Builder
 					require.NotEmpty(t, nodeCPUCores)
@@ -378,6 +406,11 @@ func TestDataDriven(t *testing.T) {
 						Region:              region,
 						NodesPerRegion:      nodesPerRegion,
 						NodeCPURateCapacity: state.NodeCPUCores(nodeCPUCores).ToRateCapacityNanos(),
+						NodePhysical: state.NodePhysicalCharacteristics{
+							CPUOverheadMultiplier: cpuOverheadMultiplier,
+							SpaceAmplification:    spaceAmplification,
+							ReservedDiskBytes:     reservedDiskGiB << 30,
+						},
 					}
 					return buf.String()
 				case "load_cluster":
@@ -423,20 +456,100 @@ func TestDataDriven(t *testing.T) {
 						})
 					}
 					return ""
-				case "set_liveness":
-					var nodeID int
+				case "set_status":
+					var storeID, nodeID int
 					var delay time.Duration
-					livenessStatus := livenesspb.NodeLivenessStatus_LIVE
-					scanMustExist(t, d, "node", &nodeID)
-					scanMustExist(t, d, "liveness", &livenessStatus)
+					var livenessStr string
+
 					scanIfExists(t, d, "delay", &delay)
-					events = append(events, scheduled.ScheduledEvent{
-						At: settingsGen.Settings.StartTime.Add(delay),
-						TargetEvent: event.SetNodeLivenessEvent{
-							NodeId:         state.NodeID(nodeID),
-							LivenessStatus: livenessStatus,
-						},
-					})
+
+					// Check if this is a store-level or node-level command.
+					if scanIfExists(t, d, "store", &storeID) {
+						// Store-level: only liveness is valid.
+						liveness := state.LivenessLive
+						if scanIfExists(t, d, "liveness", &livenessStr) {
+							switch livenessStr {
+							case "live":
+								liveness = state.LivenessLive
+							case "unavailable":
+								liveness = state.LivenessUnavailable
+							case "dead":
+								liveness = state.LivenessDead
+							default:
+								t.Fatalf("unknown liveness value: %s", livenessStr)
+							}
+						}
+						events = append(events, scheduled.ScheduledEvent{
+							At: settingsGen.Settings.StartTime.Add(delay),
+							TargetEvent: event.SetStoreStatusEvent{
+								StoreID: state.StoreID(storeID),
+								Status:  state.StoreStatus{Liveness: liveness},
+							},
+						})
+					} else if scanIfExists(t, d, "node", &nodeID) {
+						// Node-level: can set liveness (for all stores) and/or membership/draining.
+						var hasLiveness bool
+						liveness := state.LivenessLive
+						if scanIfExists(t, d, "liveness", &livenessStr) {
+							hasLiveness = true
+							switch livenessStr {
+							case "live":
+								liveness = state.LivenessLive
+							case "unavailable":
+								liveness = state.LivenessUnavailable
+							case "dead":
+								liveness = state.LivenessDead
+							default:
+								t.Fatalf("unknown liveness value: %s", livenessStr)
+							}
+						}
+
+						// If liveness was specified, add a SetNodeLivenessEvent.
+						// See SetNodeLivenessEvent for why we can't expand to individual
+						// store events here.
+						if hasLiveness {
+							events = append(events, scheduled.ScheduledEvent{
+								At: settingsGen.Settings.StartTime.Add(delay),
+								TargetEvent: event.SetNodeLivenessEvent{
+									NodeID:   state.NodeID(nodeID),
+									Liveness: liveness,
+								},
+							})
+						}
+
+						// If membership or draining was specified, add a SetNodeStatusEvent.
+						var membershipStr string
+						var membership livenesspb.MembershipStatus
+						var draining bool
+						hasMembership := scanIfExists(t, d, "membership", &membershipStr)
+						if hasMembership {
+							switch membershipStr {
+							case "active":
+								membership = livenesspb.MembershipStatus_ACTIVE
+							case "decommissioning":
+								membership = livenesspb.MembershipStatus_DECOMMISSIONING
+							case "decommissioned":
+								membership = livenesspb.MembershipStatus_DECOMMISSIONED
+							default:
+								t.Fatalf("unknown membership value: %s", membershipStr)
+							}
+						}
+						hasDraining := scanIfExists(t, d, "draining", &draining)
+						if hasMembership || hasDraining {
+							events = append(events, scheduled.ScheduledEvent{
+								At: settingsGen.Settings.StartTime.Add(delay),
+								TargetEvent: event.SetNodeStatusEvent{
+									NodeID: state.NodeID(nodeID),
+									Status: state.NodeStatus{
+										Membership: membership,
+										Draining:   draining,
+									},
+								},
+							})
+						}
+					} else {
+						t.Fatalf("set_status requires either store=<int> or node=<int>")
+					}
 					return ""
 				case "set_locality":
 					var nodeID int
@@ -552,6 +665,16 @@ func TestDataDriven(t *testing.T) {
 					// the first LBRebalancingMode configuration since this string is only
 					// generated for once at the start.
 					var stateStrForOnce string
+					// TODO(tbg): there's tension between having subtests per
+					// config (for filtering and individual failure reporting),
+					// running them concurrently (for speed), and combining
+					// their output into a single testdata file.  Parallel
+					// subtests don't start until the parent yields, which
+					// deadlocks if we block waiting for results to combine. A
+					// clean-ish fix is to split each config into its own
+					// testdata file, sharing common setup via an `include`
+					// directive (see TestClusterState for an example).
+					assertionEverFailed := make([]bool, len(assertions))
 					for _, mv := range cfgs {
 						t.Run(mv, func(t *testing.T) {
 							ctx := logtags.AddTag(context.Background(), "name", name+"/"+mv)
@@ -602,8 +725,9 @@ func TestDataDriven(t *testing.T) {
 								h := simulator.History()
 								run.hs = append(run.hs, h)
 
-								for _, stmt := range assertions {
+								for i, stmt := range assertions {
 									if holds, reason := stmt.Assert(ctx, h); !holds {
+										assertionEverFailed[i] = true
 										assertionFailures = append(assertionFailures, reason)
 									}
 								}
@@ -612,6 +736,7 @@ func TestDataDriven(t *testing.T) {
 
 							runs = append(runs, run)
 
+							_, _ = fmt.Fprintf(&buf, "%s:\n", mv)
 							// Generate artifacts. Hash artifact input data to ensure they are
 							// up to date.
 							hasher := fnv.New64a()
@@ -624,7 +749,7 @@ func TestDataDriven(t *testing.T) {
 
 							// For each sample that had at least one failing assertion,
 							// report the sample and every failing assertion.
-							_, _ = fmt.Fprintf(&buf, "artifacts[%s]: %x\n", mv, artifactsHash)
+							_, _ = fmt.Fprintf(&buf, "hash: %x\n", artifactsHash)
 							for sample, failString := range sampleAssertFailures {
 								if failString != "" {
 									_, _ = fmt.Fprintf(&buf, "failed assertion sample %d\n%s\n",
@@ -633,6 +758,18 @@ func TestDataDriven(t *testing.T) {
 							}
 							_, _ = fmt.Fprint(&buf, "==========================\n")
 						})
+					}
+					for i, a := range assertions {
+						if a.issue != "" && !assertionEverFailed[i] {
+							t.Errorf("assertion %q has issue=%s but did not fail in any "+
+								"config; the issue may be resolved, consider removing "+
+								"the annotation", a.SimulationAssertion, a.issue)
+						}
+						if a.issue == "" && assertionEverFailed[i] {
+							t.Errorf("assertion %q failed without a tracking issue; "+
+								"add issue=<url> or fix the underlying problem",
+								a.SimulationAssertion)
+						}
 					}
 					writeStateStrToFile(t, filepath.Join(plotDir, fmt.Sprintf("%s_setup.txt", name)), stateStrForOnce, rewrite)
 					if full {
@@ -644,19 +781,22 @@ func TestDataDriven(t *testing.T) {
 					var stat string
 					var typ string
 					var ticks int
+					var issue string
 					scanMustExist(t, d, "type", &typ)
+					scanIfExists(t, d, "issue", &issue)
 
 					var buf strings.Builder
+					var a assertion.SimulationAssertion
 					switch typ {
 					case "balance":
 						scanMustExist(t, d, "stat", &stat)
 						scanMustExist(t, d, "ticks", &ticks)
 						threshold := scanThreshold(t, d)
-						assertions = append(assertions, assertion.BalanceAssertion{
+						a = assertion.BalanceAssertion{
 							Ticks:     ticks,
 							Stat:      stat,
 							Threshold: threshold,
-						})
+						}
 						_, _ = fmt.Fprintf(&buf, "asserting: max_{stores}(%s)/mean_{stores}(%s) %s %.2f at each of last %d ticks",
 							stat, stat, threshold.ThresholdType, threshold.Value, ticks)
 						// ^-- the max and mean are taken over the stores (with the tick fixed).
@@ -664,11 +804,11 @@ func TestDataDriven(t *testing.T) {
 						scanMustExist(t, d, "stat", &stat)
 						scanMustExist(t, d, "ticks", &ticks)
 						threshold := scanThreshold(t, d)
-						assertions = append(assertions, assertion.SteadyStateAssertion{
+						a = assertion.SteadyStateAssertion{
 							Ticks:     ticks,
 							Stat:      stat,
 							Threshold: threshold,
-						})
+						}
 						_, _ = fmt.Fprintf(&buf, "asserting: |%s(t)/mean_{T}(%s) - 1| %s %.2f ∀ t∈T and each store ("+
 							"T=last %d ticks)",
 							stat, stat, threshold.ThresholdType, threshold.Value, ticks)
@@ -680,12 +820,12 @@ func TestDataDriven(t *testing.T) {
 						scanMustExist(t, d, "stat", &stat)
 						scanMustExist(t, d, "ticks", &ticks)
 						scanMustExist(t, d, "stores", &stores)
-						assertions = append(assertions, assertion.StoreStatAssertion{
+						a = assertion.StoreStatAssertion{
 							Ticks:     ticks,
 							Stat:      stat,
 							Threshold: scanThreshold(t, d),
 							Stores:    stores,
-						})
+						}
 					case "conformance":
 						var under, over, unavailable, violating, leaseViolating, leaseLessPref int
 						under = assertion.ConformanceAssertionSentinel
@@ -700,17 +840,21 @@ func TestDataDriven(t *testing.T) {
 						scanIfExists(t, d, "violating", &violating)
 						scanIfExists(t, d, "lease-violating", &leaseViolating)
 						scanIfExists(t, d, "lease-less-preferred", &leaseLessPref)
-						assertions = append(assertions, assertion.ConformanceAssertion{
+						a = assertion.ConformanceAssertion{
 							Underreplicated:           under,
 							Overreplicated:            over,
 							ViolatingConstraints:      violating,
 							Unavailable:               unavailable,
 							ViolatingLeasePreferences: leaseViolating,
 							LessPreferredLeases:       leaseLessPref,
-						})
+						}
 					default:
 						panic("unknown assertion: " + typ)
 					}
+					assertions = append(assertions, trackedAssertion{
+						SimulationAssertion: a,
+						issue:               issue,
+					})
 					return buf.String()
 				case "setting":
 					// NB: delay could be supported for the below settings,

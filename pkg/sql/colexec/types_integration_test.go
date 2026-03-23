@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -139,8 +140,8 @@ func newArrowTestOperator(
 	}
 }
 
-func (a *arrowTestOperator) Next() coldata.Batch {
-	batchIn := a.Input.Next()
+func (a *arrowTestOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batchIn := colexecop.NextNoMeta(a.Input)
 	// Note that we don't need to handle zero-length batches in a special way.
 	var buf bytes.Buffer
 	arrowDataIn, err := a.c.BatchToArrow(a.Ctx, batchIn)
@@ -160,5 +161,5 @@ func (a *arrowTestOperator) Next() coldata.Batch {
 	if err := a.c.ArrowToBatch(arrowDataOut, batchLength, batchOut); err != nil {
 		colexecerror.InternalError(err)
 	}
-	return batchOut
+	return batchOut, nil
 }

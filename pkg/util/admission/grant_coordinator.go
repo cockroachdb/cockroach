@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -25,7 +24,7 @@ import (
 // {regular,elastic} work, and a StoreGrantCoordinators that allows for
 // per-store GrantCoordinators for KVWork that involves writes.
 type GrantCoordinators struct {
-	RegularCPU *GrantCoordinator
+	RegularCPU *CPUGrantCoordinators
 	ElasticCPU *ElasticCPUGrantCoordinator
 	Stores     *StoreGrantCoordinators
 }
@@ -111,6 +110,7 @@ type Options struct {
 	MaxCPUSlots                   int
 	SQLKVResponseBurstTokens      int64
 	SQLSQLResponseBurstTokens     int64
+	CPUMetricsProvider            CPUMetricsProvider
 	TestingDisableSkipEnforcement bool
 	// Only non-nil for tests.
 	makeRequesterFunc      makeRequesterFunc
@@ -184,10 +184,36 @@ func NewGrantCoordinators(
 		knobs = &TestingKnobs{}
 	}
 
+	slotsCoord := makeRegularGrantCoordinator(ambientCtx, opts, st, metrics, registry, knobs)
+	cpuTimeTokenCoord := makeCPUTimeTokenGrantCoordinator(ambientCtx, opts, st, registry, knobs)
+
+	// CPU time token AC currently only supports Serverless. In Serverless,
+	// SQL pods do not run admission control, and the vast majority of work
+	// on a KV pod is KVWork. So, for now, we allow all SQLKVResponseWork &
+	// SQLSQLResponseWork to bypass AC.
+	if !knobs.DisableCPUTimeTokenSQLBypass {
+		sqlKVWorkQueue := slotsCoord.GetWorkQueue(SQLKVResponseWork)
+		sqlSQLWorkQueue := slotsCoord.GetWorkQueue(SQLSQLResponseWork)
+		setLatestOverride := func() {
+			override := cpuTimeTokenACIsEnabled(&st.SV)
+			sqlKVWorkQueue.SetOverrideAllToBypassAdmission(override)
+			sqlSQLWorkQueue.SetOverrideAllToBypassAdmission(override)
+		}
+		cpuTimeTokenACEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
+			setLatestOverride()
+		})
+		// Initialize.
+		setLatestOverride()
+	}
+
 	return GrantCoordinators{
-		Stores:     makeStoresGrantCoordinators(ambientCtx, opts, st, onLogEntryAdmitted, knobs),
-		RegularCPU: makeRegularGrantCoordinator(ambientCtx, opts, st, metrics, registry, knobs),
-		ElasticCPU: makeElasticCPUGrantCoordinator(ambientCtx, st, registry),
+		Stores: makeStoresGrantCoordinators(ambientCtx, opts, st, onLogEntryAdmitted, knobs),
+		RegularCPU: &CPUGrantCoordinators{
+			st:           st,
+			slotsCoord:   slotsCoord,
+			cpuTimeCoord: cpuTimeTokenCoord,
+		},
+		ElasticCPU: makeElasticCPUGrantCoordinator(ambientCtx, st, registry, knobs),
 	}
 }
 
@@ -236,8 +262,10 @@ func makeRegularGrantCoordinator(
 	}
 
 	kvSlotAdjuster.granter = kvg
-	wqMetrics := makeWorkQueueMetrics(KVWork.String(), registry, admissionpb.NormalPri, admissionpb.LockingNormalPri)
-	req := makeRequester(ambientCtx, KVWork, kvg, st, wqMetrics, makeWorkQueueOptions(KVWork))
+	wqMetrics := makeWorkQueueMetrics(KVWork.String(), registry)
+	kvOpts := makeWorkQueueOptions(KVWork)
+	kvOpts.knobs = knobs.observeOnlyKnobs()
+	req := makeRequester(ambientCtx, KVWork, kvg, st, wqMetrics, kvOpts)
 	coord.queues[KVWork] = req
 	kvg.requester = req
 	coord.granters[KVWork] = kvg
@@ -249,9 +277,10 @@ func makeRegularGrantCoordinator(
 		maxBurstTokens:       opts.SQLKVResponseBurstTokens,
 		cpuOverload:          kvSlotAdjuster,
 	}
-	wqMetrics = makeWorkQueueMetrics(SQLKVResponseWork.String(), registry, admissionpb.NormalPri, admissionpb.LockingNormalPri)
-	req = makeRequester(
-		ambientCtx, SQLKVResponseWork, tg, st, wqMetrics, makeWorkQueueOptions(SQLKVResponseWork))
+	wqMetrics = makeWorkQueueMetrics(SQLKVResponseWork.String(), registry)
+	sqlKVOpts := makeWorkQueueOptions(SQLKVResponseWork)
+	sqlKVOpts.knobs = knobs.observeOnlyKnobs()
+	req = makeRequester(ambientCtx, SQLKVResponseWork, tg, st, wqMetrics, sqlKVOpts)
 	coord.queues[SQLKVResponseWork] = req
 	tg.requester = req
 	coord.granters[SQLKVResponseWork] = tg
@@ -263,9 +292,10 @@ func makeRegularGrantCoordinator(
 		maxBurstTokens:       opts.SQLSQLResponseBurstTokens,
 		cpuOverload:          kvSlotAdjuster,
 	}
-	wqMetrics = makeWorkQueueMetrics(SQLSQLResponseWork.String(), registry, admissionpb.NormalPri, admissionpb.LockingNormalPri)
-	req = makeRequester(ambientCtx,
-		SQLSQLResponseWork, tg, st, wqMetrics, makeWorkQueueOptions(SQLSQLResponseWork))
+	wqMetrics = makeWorkQueueMetrics(SQLSQLResponseWork.String(), registry)
+	sqlSQLOpts := makeWorkQueueOptions(SQLSQLResponseWork)
+	sqlSQLOpts.knobs = knobs.observeOnlyKnobs()
+	req = makeRequester(ambientCtx, SQLSQLResponseWork, tg, st, wqMetrics, sqlSQLOpts)
 	coord.queues[SQLSQLResponseWork] = req
 	tg.requester = req
 	coord.granters[SQLSQLResponseWork] = tg

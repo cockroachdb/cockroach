@@ -866,6 +866,39 @@ func TestLocalityAdvAddrFlag(t *testing.T) {
 	}
 }
 
+func TestCertSANFlags(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Avoid leaking configuration changes after the tests end.
+	defer initCLIDefaults()
+
+	f := startCmd.Flags()
+	testData := []struct {
+		args []string
+	}{
+		{[]string{"start", "--root-cert-san", "DNS=example.com"}},
+		{[]string{"start", "--node-cert-san", "DNS=node.example.com"}},
+		{[]string{"start", "--root-cert-san", "URI=spiffe://example.org/root"}},
+		{[]string{"start", "--node-cert-san", "IP=192.168.1.1"}},
+		{[]string{"start", "--root-cert-san", "DNS=example.com,URI=spiffe://example.org"}},
+		{[]string{"start", "--root-cert-san", "DNS=example.com", "--node-cert-san", "DNS=node.example.com"}},
+		{[]string{"start", "--root-cert-san", "DNS=*.example.com,IP=192.168.1.1,URI=spiffe://example.org/service"}},
+	}
+
+	for _, td := range testData {
+		t.Run(strings.Join(td.args, " "), func(t *testing.T) {
+			initCLIDefaults()
+			if err := f.Parse(td.args); err != nil {
+				t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
+			}
+			if err := extraServerFlagInit(startCmd); err != nil {
+				t.Fatalf("extraServerFlagInit() got unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestLocalityFileFlag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1331,10 +1364,10 @@ Available Commands:
   debug             debugging commands
   sqlfmt            format SQL statements
   workload          generators for data and query loads
-  encode-uri        encode a CRDB connection URL
   help              Help about any command
 
 Flags:
+      --enterprise-require-fips-ready      abort if FIPS readiness checks fail
   -h, --help                               help for cockroach
       --log <string>                       
                                             Logging configuration, expressed using YAML syntax. For example, you can
@@ -1888,4 +1921,81 @@ func TestWALFailoverWrapperRoundtrip(t *testing.T) {
 		}
 		return buf.String()
 	})
+}
+
+// TestUseNewRPC verifies that the --use-new-rpc flag is properly configured
+// on all commands that support DRPC for inter-node communication.
+func TestUseNewRPC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Avoid leaking configuration changes after the test ends.
+	defer initCLIDefaults()
+
+	// List of all commands that should have the --use-new-rpc flag.
+	// These commands were modified to support DRPC for inter-node communication.
+	testCommands := []*cobra.Command{
+		initCmd,       // init
+		genHAProxyCmd, // gen haproxy
+		demoCmd,       // demo
+
+		// debug commands
+		debugGossipValuesCmd,
+		debugTimeSeriesDumpCmd,
+		debugZipCmd,
+		debugListFilesCmd,
+		debugSendKVBatchCmd,
+		debugResetQuorumCmd,
+		debugRecoverCollectInfoCmd,
+		debugRecoverPlanCmd,
+		debugRecoverExecuteCmd,
+		debugRecoverVerifyCmd,
+
+		// node commands
+		decommissionNodeCmd,
+		recommissionNodeCmd,
+		drainNodeCmd,
+	}
+
+	testCases := []struct {
+		name        string
+		args        []string
+		expectedVal bool
+	}{
+		{"default", []string{}, false},
+		{"enabled", []string{"--use-new-rpc"}, true},
+		{"explicitly_enabled", []string{"--use-new-rpc=true"}, true},
+		{"explicitly_disabled", []string{"--use-new-rpc=false"}, false},
+	}
+
+	for _, cmd := range testCommands {
+		cmdName := cmd.Use
+		t.Run(cmdName, func(t *testing.T) {
+			for _, tc := range testCases {
+				t.Run(tc.name, func(t *testing.T) {
+					// Reset to defaults before each test
+					initCLIDefaults()
+
+					f := cmd.Flags()
+					if err := f.Parse(tc.args); err != nil {
+						t.Fatal(err)
+					}
+
+					// Verify the flag exists
+					flag := f.Lookup(cliflags.UseNewRPC.Name)
+					if flag == nil {
+						t.Fatalf("command %s is missing --%s flag", cmdName, cliflags.UseNewRPC.Name)
+					}
+
+					// Verify the flag is hidden
+					require.True(t, flag.Hidden, "flag --%s should be hidden on command %s", cliflags.UseNewRPC.Name, cmdName)
+
+					// Verify the flag has the correct value
+					if baseCfg.UseDRPC != tc.expectedVal {
+						t.Errorf("command %s: expected --%s=%v, but got %v", cmdName, cliflags.UseNewRPC.Name, tc.expectedVal, baseCfg.UseDRPC)
+					}
+				})
+			}
+		})
+	}
 }

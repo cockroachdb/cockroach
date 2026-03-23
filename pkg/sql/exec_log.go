@@ -404,7 +404,7 @@ func (p *planner) maybeLogStatementInternal(
 			KvTimeNanos:              queryLevelStats.KVTime.Nanoseconds(),
 			KvGrpcCalls:              queryLevelStats.KVBatchRequestsIssued,
 			NetworkMessages:          queryLevelStats.DistSQLNetworkMessages,
-			CpuTimeNanos:             queryLevelStats.CPUTime.Nanoseconds(),
+			CpuTimeNanos:             queryLevelStats.SQLCPUTime.Nanoseconds(),
 			IndexRecommendations:     indexRecs,
 			// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of
 			// converting to strings.
@@ -506,7 +506,7 @@ func (p *planner) logTransaction(
 			ContentionTime:  int64(txnStats.ExecStats.ContentionTime.Seconds()),
 			NetworkMessages: txnStats.ExecStats.DistSQLNetworkMessages,
 			MaxDiskUsage:    txnStats.ExecStats.MaxDiskUsage,
-			CPUSQLNanos:     txnStats.ExecStats.CPUTime.Nanoseconds(),
+			CPUSQLNanos:     txnStats.ExecStats.SQLCPUTime.Nanoseconds(),
 			MVCCIteratorStats: eventpb.MVCCIteratorStats{
 				StepCount:                      txnStats.ExecStats.MvccSteps,
 				StepCountInternal:              txnStats.ExecStats.MvccStepsInternal,

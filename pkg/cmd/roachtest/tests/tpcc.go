@@ -247,6 +247,10 @@ type tpccOptions struct {
 	// DisableHistogram will determine if the histogram argument should
 	// be passed in.
 	DisableHistogram bool
+	// InitNodes specifies which nodes to use for the init step. If nil,
+	// defaults to node 1 only. Set this to distribute table creation
+	// across multiple nodes for large schema workloads.
+	InitNodes option.NodeListOption
 }
 
 func (t tpccOptions) getWorkloadCmd() string {
@@ -348,11 +352,15 @@ func setupTPCC(
 		case usingInit:
 			l.Printf("initializing tables" + estimatedSetupTimeStr)
 			extraArgs := opts.ExtraSetupArgs
+			initNodes := opts.InitNodes
+			if len(initNodes) == 0 {
+				initNodes = c.Node(1)
+			}
 			cmd := roachtestutil.NewCommand("%s workload init %s", test.DefaultCockroachPath, opts.getWorkloadCmd()).
 				MaybeFlag(opts.DB != "", "db", opts.DB).
 				Flag("warehouses", opts.Warehouses).
 				Arg("%s", extraArgs).
-				Arg("%s", "{pgurl:1}")
+				Arg("{pgurl%s}", initNodes)
 
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd.String())
 		default:
@@ -1072,7 +1080,9 @@ func registerTPCC(r registry.Registry) {
 	})
 
 	r.Add(registry.TestSpec{
-		Name:             "weekly/tpcc/headroom",
+		Name: "weekly/tpcc/headroom",
+		// TODO: #141792
+		Skip:             "add back when #141792 is implemented (--tolerate-retry-error)",
 		Owner:            registry.OwnerTestEng,
 		Benchmark:        true,
 		CompatibleClouds: registry.AllExceptAWS,
@@ -1755,14 +1765,14 @@ func registerTPCC(r registry.Registry) {
 		Nodes: 3,
 		CPUs:  16,
 
-		LoadWarehousesGCE:   5500,
-		LoadWarehousesAWS:   5500,
-		LoadWarehousesAzure: 5500,
-		LoadWarehousesIBM:   5500,
-		EstimatedMaxGCE:     4500,
-		EstimatedMaxAWS:     4500,
-		EstimatedMaxAzure:   4500,
-		EstimatedMaxIBM:     4500,
+		LoadWarehousesGCE:   7000,
+		LoadWarehousesAWS:   7000,
+		LoadWarehousesAzure: 7000,
+		LoadWarehousesIBM:   7000,
+		EstimatedMaxGCE:     6000,
+		EstimatedMaxAWS:     6000,
+		EstimatedMaxAzure:   6000,
+		EstimatedMaxIBM:     6000,
 		EncryptionEnabled:   true,
 		Clouds:              registry.AllClouds,
 		Suites:              registry.Suites(registry.Nightly),
@@ -2300,13 +2310,11 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 	precision := int(math.Max(1.0, float64(b.LoadWarehouses(c.Cloud())/200)))
 	initStepSize := precision
 
-	// Create a temp directory to store the local copy of results from the
-	// workloads.
-	resultsDir, err := os.MkdirTemp("", "roachtest-tpcc")
+	// Store intermediate histograms in artifacts for post-mortem
+	resultsDir, err := makeArtifactsSubDir(t, "tpcc-line-search-histograms")
 	if err != nil {
-		t.Fatal(errors.Wrap(err, "failed to create temp dir"))
+		t.Fatal(errors.Wrap(err, "failed to create dir for line search artifacts"))
 	}
-	defer func() { _ = os.RemoveAll(resultsDir) }()
 
 	restart := func(ctx context.Context) {
 		c.Stop(ctx, t.L(), option.DefaultStopOpts(), roachNodes)
@@ -2401,7 +2409,9 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 					return errors.Wrapf(err, "error running tpcc load generator")
 				}
 
-				roachtestHistogramsPath := filepath.Join(resultsDir, fmt.Sprintf("%d.%d-stats.json", warehouses, groupIdx))
+				// NOTE: the filename stats.json has special handling in artifacts collection
+				roachtestHistogramsPath := filepath.Join(resultsDir,
+					fmt.Sprintf("iter%d_warehouse%d.%d-stats.json", iteration, warehouses, groupIdx))
 				if err := c.Get(
 					ctx, t.L(), histogramsPath, roachtestHistogramsPath, group.LoadNodes,
 				); err != nil {
@@ -2414,6 +2424,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				if err != nil {
 					// If we got this far, and can't decode data, it's not a case of
 					// overload but something that deserves failing the whole test.
+					t.L().Printf("Failed to decode histograms from %s", roachtestHistogramsPath)
 					t.Fatal(err)
 				}
 				// This roachtest uses the stats.json emitted from hdr histogram to compute Tpmc and show it in the run log
@@ -2505,7 +2516,18 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		ttycolor.Stdout(ttycolor.Green)
 		t.L().Printf("------\nMAX WAREHOUSES = %d\n------\n\n", res)
 		ttycolor.Stdout(ttycolor.Reset)
+		// Since the run passed, we don't need keep the intermediate histograms
+		_ = os.RemoveAll(resultsDir)
 	}
+}
+
+// makeArtifactsSubDir creates a subdirectory within the artifacts directory of a test
+func makeArtifactsSubDir(t test.Test, dirname string) (string, error) {
+	dir := filepath.Join(t.ArtifactsDir(), dirname)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return dir, err
+	}
+	return dir, nil
 }
 
 // makeWorkloadScrapeNodes creates a ScrapeNode for every workloadInstance.
@@ -2794,13 +2816,11 @@ func runTPCCPublished(
 		})
 	}
 
-	// Create a temp directory to store the local copy of results from the
-	// workloads.
-	resultsDir, err := os.MkdirTemp("", "roachtest-published-tpcc")
+	// Store intermediate histograms in artifacts for post-mortem
+	resultsDir, err := makeArtifactsSubDir(t, "tpcc-published-line-search-histograms")
 	if err != nil {
-		t.Fatal(errors.Wrap(err, "failed to create temp dir"))
+		t.Fatal(errors.Wrap(err, "failed to create dir for line search artifacts"))
 	}
-	defer func() { _ = os.RemoveAll(resultsDir) }()
 
 	restart := func(ctx context.Context) {
 		c.Stop(ctx, t.L(), option.DefaultStopOpts(), crdbNodes)
@@ -2863,7 +2883,9 @@ func runTPCCPublished(
 					// count.
 					return errors.Wrapf(err, "error running tpcc load generator")
 				}
-				roachtestHistogramsPath := filepath.Join(resultsDir, fmt.Sprintf("%d.%d-stats.json", warehouses, wIdx))
+				// NOTE: the filename stats.json has special handling in artifacts collection
+				roachtestHistogramsPath := filepath.Join(resultsDir,
+					fmt.Sprintf("iter%d_warehouse%d.%d-stats.json", iteration, warehouses, wIdx))
 				if err := c.Get(
 					ctx, t.L(), histogramsPath, roachtestHistogramsPath, c.Node(w.node),
 				); err != nil {
@@ -2876,6 +2898,7 @@ func runTPCCPublished(
 				if err != nil {
 					// If we got this far, and can't decode data, it's not a case of
 					// overload but something that deserves failing the whole test.
+					t.L().Printf("Failed to decode histograms from %s", roachtestHistogramsPath)
 					t.Fatal(err)
 				}
 				result := tpcc.NewResultWithSnapshots(warehouses, 0, snapshots)
@@ -2937,5 +2960,7 @@ func runTPCCPublished(
 		ttycolor.Stdout(ttycolor.Green)
 		t.L().Printf("------\nRUN PASSED with MAX WAREHOUSES = %d\n------\n\n", res)
 		ttycolor.Stdout(ttycolor.Reset)
+		// Since the run passed, we don't need keep the intermediate histograms
+		_ = os.RemoveAll(resultsDir)
 	}
 }

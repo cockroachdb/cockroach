@@ -115,7 +115,7 @@ func newTestVectorizedInternalPanicEmitter(input colexecop.Operator) colexecop.O
 }
 
 // Next is part of colexecop.Operator interface.
-func (e *testVectorizedInternalPanicEmitter) Next() coldata.Batch {
+func (e *testVectorizedInternalPanicEmitter) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if !e.emitBatch {
 		e.emitBatch = true
 		colexecerror.InternalError(errors.AssertionFailedf(""))
@@ -143,7 +143,7 @@ func newTestNonVectorizedPanicEmitter(input colexecop.Operator) colexecop.Operat
 }
 
 // Next is part of colexecop.Operator interface.
-func (e *testNonVectorizedPanicEmitter) Next() coldata.Batch {
+func (e *testNonVectorizedPanicEmitter) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if !e.emitBatch {
 		e.emitBatch = true
 		colexecerror.NonCatchablePanic("")

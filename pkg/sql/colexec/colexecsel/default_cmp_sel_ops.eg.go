@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -26,12 +27,15 @@ type defaultCmpSelOp struct {
 var _ colexecop.Operator = &defaultCmpSelOp{}
 var _ execreleasable.Releasable = &defaultCmpSelOp{}
 
-func (d *defaultCmpSelOp) Next() coldata.Batch {
+func (d *defaultCmpSelOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := d.Input.Next()
+		batch, meta := d.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		n := batch.Length()
 		if n == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 		d.toDatumConverter.ConvertBatchAndDeselect(batch)
 		leftColumn := d.toDatumConverter.GetDatumColumn(d.col1Idx)
@@ -63,7 +67,7 @@ func (d *defaultCmpSelOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -83,12 +87,15 @@ type defaultCmpConstSelOp struct {
 var _ colexecop.Operator = &defaultCmpConstSelOp{}
 var _ execreleasable.Releasable = &defaultCmpConstSelOp{}
 
-func (d *defaultCmpConstSelOp) Next() coldata.Batch {
+func (d *defaultCmpConstSelOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := d.Input.Next()
+		batch, meta := d.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		n := batch.Length()
 		if n == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 		d.toDatumConverter.ConvertBatchAndDeselect(batch)
 		leftColumn := d.toDatumConverter.GetDatumColumn(d.colIdx)
@@ -118,7 +125,7 @@ func (d *defaultCmpConstSelOp) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }

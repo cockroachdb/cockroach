@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "sessionmutator",
@@ -13,8 +13,22 @@ go_library(
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
         "//pkg/util/duration",
+        "//pkg/util/hlc",
         "//pkg/util/timeutil",
         "//pkg/util/timeutil/pgdate",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "sessionmutator_test",
+    srcs = ["mutator_test.go"],
+    embed = [":sessionmutator"],
+    deps = [
+        "//pkg/settings/cluster",
+        "//pkg/sql/sessiondata",
+        "//pkg/sql/sessiondatapb",
+        "@com_github_stretchr_testify//require",
     ],
 )

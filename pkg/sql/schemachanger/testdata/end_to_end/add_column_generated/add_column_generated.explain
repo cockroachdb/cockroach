@@ -10,12 +10,12 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 27 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC        Sequence:{DescID: 107 (tbl_serial_id_seq+)}
- │         │    ├── ABSENT → PUBLIC        Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 104 (db)}
+ │         │    ├── ABSENT → PUBLIC        Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 104 (db), IntValue: 105}
  │         │    ├── ABSENT → PUBLIC        SchemaChild:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 105 (public)}
  │         │    ├── ABSENT → PUBLIC        TableData:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 104 (db)}
- │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "INCREMENT"}
- │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "MINVALUE"}
- │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "START"}
+ │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "INCREMENT", Value: "32"}
+ │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "MINVALUE", Value: "0"}
+ │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "START", Value: "0"}
  │         │    ├── ABSENT → PUBLIC        Column:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 107 (tbl_serial_id_seq+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC        ColumnNotNull:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+), IndexID: 0}
@@ -31,7 +31,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 106 (tbl), Name: "serial_id", ColumnID: 2 (serial_id+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (serial_id+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), ReferencedSequenceIDs: [107 (tbl_serial_id_seq+)], Expr: nextval(107:::REGCLASS)}
- │         │    ├── ABSENT → PUBLIC        ColumnGeneratedAsIdentity:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), GeneratedAsIdentityType: GENERATED_BY_DEFAULT, Value: " INCREMENT 32 MINVALUE 0 START 0"}
+ │         │    ├── ABSENT → PUBLIC        ColumnGeneratedAsIdentity:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), Value: " INCREMENT 32 MINVALUE 0 START 0", GeneratedAsIdentityType: GENERATED_BY_DEFAULT}
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey-)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey+)}
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+)}
@@ -88,12 +88,12 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 27 elements transitioning toward PUBLIC
  │    │    │    ├── PUBLIC        → ABSENT Sequence:{DescID: 107 (tbl_serial_id_seq+)}
- │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 104 (db)}
+ │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 104 (db), IntValue: 105}
  │    │    │    ├── PUBLIC        → ABSENT SchemaChild:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 105 (public)}
  │    │    │    ├── PUBLIC        → ABSENT TableData:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 104 (db)}
- │    │    │    ├── PUBLIC        → ABSENT SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "INCREMENT"}
- │    │    │    ├── PUBLIC        → ABSENT SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "MINVALUE"}
- │    │    │    ├── PUBLIC        → ABSENT SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "START"}
+ │    │    │    ├── PUBLIC        → ABSENT SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "INCREMENT", Value: "32"}
+ │    │    │    ├── PUBLIC        → ABSENT SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "MINVALUE", Value: "0"}
+ │    │    │    ├── PUBLIC        → ABSENT SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "START", Value: "0"}
  │    │    │    ├── PUBLIC        → ABSENT Column:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 107 (tbl_serial_id_seq+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
  │    │    │    ├── PUBLIC        → ABSENT ColumnNotNull:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+), IndexID: 0}
@@ -109,7 +109,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │    │    ├── PUBLIC        → ABSENT ColumnName:{DescID: 106 (tbl), Name: "serial_id", ColumnID: 2 (serial_id+)}
  │    │    │    ├── PUBLIC        → ABSENT ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (serial_id+), TypeName: "INT8"}
  │    │    │    ├── PUBLIC        → ABSENT ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), ReferencedSequenceIDs: [107 (tbl_serial_id_seq+)], Expr: nextval(107:::REGCLASS)}
- │    │    │    ├── PUBLIC        → ABSENT ColumnGeneratedAsIdentity:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), GeneratedAsIdentityType: GENERATED_BY_DEFAULT, Value: " INCREMENT 32 MINVALUE 0 START 0"}
+ │    │    │    ├── PUBLIC        → ABSENT ColumnGeneratedAsIdentity:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), Value: " INCREMENT 32 MINVALUE 0 START 0", GeneratedAsIdentityType: GENERATED_BY_DEFAULT}
  │    │    │    ├── BACKFILL_ONLY → ABSENT PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey-)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+)}
@@ -125,12 +125,12 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 27 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC        Sequence:{DescID: 107 (tbl_serial_id_seq+)}
- │         │    ├── ABSENT → PUBLIC        Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 104 (db)}
+ │         │    ├── ABSENT → PUBLIC        Namespace:{DescID: 107 (tbl_serial_id_seq+), Name: "tbl_serial_id_seq", ReferencedDescID: 104 (db), IntValue: 105}
  │         │    ├── ABSENT → PUBLIC        SchemaChild:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 105 (public)}
  │         │    ├── ABSENT → PUBLIC        TableData:{DescID: 107 (tbl_serial_id_seq+), ReferencedDescID: 104 (db)}
- │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "INCREMENT"}
- │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "MINVALUE"}
- │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "START"}
+ │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "INCREMENT", Value: "32"}
+ │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "MINVALUE", Value: "0"}
+ │         │    ├── ABSENT → PUBLIC        SequenceOption:{DescID: 107 (tbl_serial_id_seq+), Name: "START", Value: "0"}
  │         │    ├── ABSENT → PUBLIC        Column:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 107 (tbl_serial_id_seq+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC        ColumnNotNull:{DescID: 107 (tbl_serial_id_seq+), ColumnID: 1 (value+), IndexID: 0}
@@ -146,7 +146,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         │    ├── ABSENT → PUBLIC        ColumnName:{DescID: 106 (tbl), Name: "serial_id", ColumnID: 2 (serial_id+)}
  │         │    ├── ABSENT → PUBLIC        ColumnType:{DescID: 106 (tbl), ColumnFamilyID: 0 (primary), ColumnID: 2 (serial_id+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC        ColumnDefaultExpression:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), ReferencedSequenceIDs: [107 (tbl_serial_id_seq+)], Expr: nextval(107:::REGCLASS)}
- │         │    ├── ABSENT → PUBLIC        ColumnGeneratedAsIdentity:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), GeneratedAsIdentityType: GENERATED_BY_DEFAULT, Value: " INCREMENT 32 MINVALUE 0 START 0"}
+ │         │    ├── ABSENT → PUBLIC        ColumnGeneratedAsIdentity:{DescID: 106 (tbl), ColumnID: 2 (serial_id+), Value: " INCREMENT 32 MINVALUE 0 START 0", GeneratedAsIdentityType: GENERATED_BY_DEFAULT}
  │         │    ├── ABSENT → BACKFILL_ONLY PrimaryIndex:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+), ConstraintID: 2, TemporaryIndexID: 3, SourceIndexID: 1 (tbl_pkey-)}
  │         │    ├── ABSENT → PUBLIC        IndexColumn:{DescID: 106 (tbl), ColumnID: 1 (i), IndexID: 2 (tbl_pkey+)}
  │         │    ├── ABSENT → PUBLIC        IndexData:{DescID: 106 (tbl), IndexID: 2 (tbl_pkey+)}

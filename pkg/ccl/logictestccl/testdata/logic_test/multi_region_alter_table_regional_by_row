@@ -3,6 +3,14 @@
 # This file contains a regression test for ALTER TABLE ... REGIONAL BY ROW
 # that exercises writes which are concurrent with the index backfill of the
 # new primary index.
+# This test is only for the legacy schema changer that supports the 
+# indexbackfill.before_flow pause point. For the declarative schema changer,
+# a similar test is included in the end-to-end tests.
+let $schema_changer_state
+SELECT value FROM information_schema.session_variables where variable='use_declarative_schema_changer'
+
+statement ok
+SET use_declarative_schema_changer = off;
 
 statement ok
 CREATE DATABASE region_test_db PRIMARY REGION "ap-southeast-2" SURVIVE ZONE FAILURE;
@@ -86,3 +94,6 @@ SELECT * FROM t
 1
 2
 3
+
+statement ok
+SET use_declarative_schema_changer = $schema_changer_state

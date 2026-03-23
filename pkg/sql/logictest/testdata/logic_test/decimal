@@ -1,4 +1,3 @@
-# LogicTest: !local-prepared
 
 # The following tests have results equivalent to Postgres (differences
 # in string representation and number of decimals returned, but otherwise
@@ -649,3 +648,8 @@ query R
 SELECT 0::DECIMAL / 'infinity'::DECIMAL;
 ----
 0
+
+# Regression test for the apd library not handling an invalid input gracefully
+# (#165529).
+statement error could not parse ".-400000000000000000000000000000000000000" as type decimal: parse mantissa: -400000000000000000000000000000000000000
+SELECT '.-400000000000000000000000000000000000000'::DECIMAL;

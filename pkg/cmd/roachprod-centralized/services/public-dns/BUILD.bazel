@@ -1,0 +1,20 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "public-dns",
+    srcs = ["public_dns.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/services/public-dns",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/tasks",
+        "//pkg/cmd/roachprod-centralized/services/clusters/types",
+        "//pkg/cmd/roachprod-centralized/services/dns/registry",
+        "//pkg/cmd/roachprod-centralized/services/public-dns/tasks",
+        "//pkg/cmd/roachprod-centralized/services/public-dns/types",
+        "//pkg/cmd/roachprod-centralized/services/tasks/types",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/roachprod/logger",
+        "//pkg/roachprod/vm",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)

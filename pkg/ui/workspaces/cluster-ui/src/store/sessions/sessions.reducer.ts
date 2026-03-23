@@ -7,7 +7,9 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import moment, { Moment } from "moment-timezone";
 
-import { DOMAIN_NAME, noopReducer } from "../utils";
+import { SessionsRequest } from "src/api/sessionsApi";
+
+import { DOMAIN_NAME } from "../utils";
 
 type SessionsResponse = cockroach.server.serverpb.ListSessionsResponse;
 
@@ -42,9 +44,15 @@ const sessionsSlice = createSlice({
     invalidated: state => {
       state.valid = false;
     },
-    // Define actions that don't change state
-    refresh: noopReducer,
-    request: noopReducer,
+    // Define actions with optional payload using prepare callback
+    refresh: {
+      reducer: () => {},
+      prepare: (payload?: SessionsRequest) => ({ payload }),
+    },
+    request: {
+      reducer: () => {},
+      prepare: (payload?: SessionsRequest) => ({ payload }),
+    },
   },
 });
 

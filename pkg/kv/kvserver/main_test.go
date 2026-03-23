@@ -26,17 +26,10 @@ func init() {
 
 func TestMain(m *testing.M) {
 	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
-	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithDRPCOption(base.TestDRPCEnabledRandomly),
 		// All the tests in this package are specific to the storage layer.
-		base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
-	)()
-
-	defer serverutils.TestingGlobalDRPCOption(
-		base.TestDRPCEnabledRandomly,
-	)()
-
+		serverutils.WithTenantOption(base.TestIsSpecificToStorageLayerAndNeedsASystemTenant))
+	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
 	os.Exit(m.Run())
 }

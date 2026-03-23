@@ -78,6 +78,89 @@ func ConvertLikeToRegexp(
 	return re, nil
 }
 
+// CollapseLikeWildcards collapses repeated "%" wildcards in the given pattern
+// string, returning the collapsed string. Wildcards escaped with a backslash
+// "\" are not collapsed.
+func CollapseLikeWildcards(pattern string) string {
+	// NOTE: It is safe to iterate byte-wise forward and backward because no
+	// multibyte UTF-8 characters contain ASCII bytes.
+
+	// Trim leading and trailing repeated "%" wildcards first.
+	start := 0
+	for start < len(pattern) && pattern[start] == '%' {
+		start++
+	}
+	if start > 1 {
+		pattern = pattern[start-1:]
+	}
+
+	end := len(pattern)
+	for end > 0 && pattern[end-1] == '%' {
+		end--
+	}
+	// An odd number of preceding backslashes means that the first "%" is
+	// escaped.
+	escapeCount := 0
+	for i := end - 1; i >= 0 && pattern[i] == '\\'; i-- {
+		escapeCount++
+	}
+	if escaped := escapeCount&1 == 1; escaped {
+		end++
+	}
+	if end < len(pattern) {
+		pattern = pattern[:end+1]
+	}
+
+	// Next, we successively find sections without repeated "%" and copy them
+	// into sb. start and end form the bounds of the current section, with end
+	// being exclusive.
+	var sb strings.Builder
+	start = 0
+	end = 0
+	if end < len(pattern) && pattern[end] == '%' {
+		// Skip over the first character if it matches "%".
+		end = 1
+	}
+	for start < len(pattern) {
+		// Advance end to the next unescaped '%'.
+		escaped := false
+		for end < len(pattern) && (pattern[end] != '%' || escaped) {
+			escaped = pattern[end] == '\\' && !escaped
+			end++
+		}
+
+		// Increment end to include the "%" wildcard at the end of the section,
+		// if there is one.
+		if end < len(pattern) {
+			end++
+		}
+
+		// If the entire pattern, after trimming the prefix and suffix, is
+		// without duplicate '%', return it as-is.
+		if end == len(pattern) && start == 0 {
+			return pattern
+		}
+
+		if sb.Cap() == 0 {
+			sb.Grow(len(pattern))
+		}
+		sb.WriteString(pattern[start:end])
+
+		// Find the start of the next section, skipping over duplicate "%"
+		// wildcards.
+		start = end
+		for start < len(pattern) {
+			if pattern[start] != '%' {
+				break
+			}
+			start++
+		}
+		end = start
+	}
+
+	return sb.String()
+}
+
 func matchLike(ctx *Context, left, right tree.Datum, caseInsensitive bool) (tree.Datum, error) {
 	if left == tree.DNull || right == tree.DNull {
 		return tree.DNull, nil

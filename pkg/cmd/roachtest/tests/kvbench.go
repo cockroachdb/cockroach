@@ -63,7 +63,13 @@ func registerKVBenchSpec(r registry.Registry, b kvBenchSpec) {
 	if b.NumShards > 0 {
 		nameParts = append(nameParts, fmt.Sprintf("shards=%d", b.NumShards))
 	}
-	opts := []spec.Option{spec.CPU(b.CPUs), spec.WorkloadNode(), spec.WorkloadNodeCPU(b.CPUs)}
+	opts := []spec.Option{
+		spec.CPU(b.CPUs),
+		spec.WorkloadNode(),
+		spec.WorkloadNodeCPU(b.CPUs),
+		spec.RandomizeVolumeType(),
+		spec.RandomlyUseXfs(),
+	}
 	switch b.KeyDistribution {
 	case sequential:
 		nameParts = append(nameParts, "sequential")

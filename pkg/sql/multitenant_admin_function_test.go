@@ -347,15 +347,24 @@ func (tc testCase) runTest(
 		fn()
 	}
 
-	execQueries(testCluster, systemDB, "system", tc.system)
+	// Re-enable queues before each execQueries call so that queues
+	// disabled by a prior tenant's run don't block replication.
+	runExecQueries := func(db *gosql.DB, tenant string, tExp tenantExpected) {
+		testCluster.ToggleReplicateQueues(true)
+		testCluster.ToggleSplitQueues(true)
+		testCluster.ToggleLeaseQueues(true)
+		execQueries(testCluster, db, tenant, tExp)
+	}
+
+	runExecQueries(systemDB, "system", tc.system)
 	if tc.secondary.isSet() {
-		execQueries(testCluster, secondaryDB, "secondary", tc.secondary)
+		runExecQueries(secondaryDB, "secondary", tc.secondary)
 	}
 	if tc.secondaryWithoutClusterSetting.isSet() {
-		execQueries(testCluster, secondaryWithoutClusterSettingDB, "secondary_without_cluster_setting", tc.secondaryWithoutClusterSetting)
+		runExecQueries(secondaryWithoutClusterSettingDB, "secondary_without_cluster_setting", tc.secondaryWithoutClusterSetting)
 	}
 	if tc.secondaryWithoutCapability.isSet() {
-		execQueries(testCluster, secondaryWithoutCapabilityDB, "secondary_without_capability", tc.secondaryWithoutCapability)
+		runExecQueries(secondaryWithoutCapabilityDB, "secondary_without_capability", tc.secondaryWithoutCapability)
 	}
 }
 
@@ -934,6 +943,27 @@ func TestRelocateNonVoters(t *testing.T) {
 					require.NoErrorf(t, err, message)
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
+					testutils.SucceedsSoon(t, func() error {
+						// Check for learners before disabling the replicate queues to
+						// allow cleanup of learners
+						rows, err := db.QueryContext(ctx,
+							`SELECT learner_replicas FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS]`)
+						if err != nil {
+							return err
+						}
+						defer rows.Close()
+						if rows.Next() {
+							var learners string
+							err = rows.Scan(&learners)
+							if err != nil {
+								return err
+							}
+							if learners != "{}" && learners != "" {
+								return errors.Newf("waiting for LEARNER replicas: %s", learners)
+							}
+						}
+						return nil
+					})
 					testCluster.ToggleLeaseQueues(false)
 					testCluster.ToggleReplicateQueues(false)
 					testCluster.ToggleSplitQueues(false)

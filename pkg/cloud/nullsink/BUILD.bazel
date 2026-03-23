@@ -22,7 +22,6 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/cloud",
-        "//pkg/cloud/cloudpb",
         "//pkg/security/username",
         "//pkg/util/leaktest",
         "@com_github_cockroachdb_errors//:errors",

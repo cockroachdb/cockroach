@@ -644,11 +644,7 @@ message LocalOnlySessionData {
   // OptimizerUseDeleteRangeFastPath, when true, indicates that the optimizer
   // should try to use the delete range fast-path when possible.
   bool optimizer_use_delete_range_fast_path = 164;
-  // AllowCreateTriggerFunctionWithArgvReferences, when true, allows triggers to
-  // be created with trigger functions that use the TG_ARGV parameter even
-  // though it currently doesn't have Postgres-compatible 0-based indexing
-  // behavior.
-  bool allow_create_trigger_function_with_argv_references = 165;
+  reserved 165;
   // CreateTableWithSchemaLocked, when true will create tables as schema_locked
   // by default.
   bool create_table_with_schema_locked = 166;
@@ -686,8 +682,7 @@ message LocalOnlySessionData {
   // procedure is executed via a portal in the extended wire protocol.
   bool use_proc_txn_control_extended_protocol_fix = 175;
   reserved 176;
-  // AllowViewWithSecurityInvokerClause indicates whether security invoker for views is enabled
-  bool allow_view_with_security_invoker_clause = 177;
+  reserved 177;
   // VectorSearchRerankMultiplier controls how many of the initial search results
   // can be reranked using exact distance calculations with the original
   // full-size vectors. It acts as a multiplier on a base limit derived from the
@@ -737,8 +732,7 @@ message LocalOnlySessionData {
   // HoistJoinProjectLeft normalization rule hoists more kinds of projections
   // above joins.
   bool optimizer_use_improved_hoist_join_project = 186;
-  // EnableInspectCommand controls use of the INSPECT command.
-  bool enable_inspect_command = 187;
+  reserved 187;
   // RowSecurity controls whether row-level security is enabled.
   bool row_security = 188;
   // OptimizerClampLowHistogramSelectivity, when true, causes the optimizer to
@@ -759,6 +753,60 @@ message LocalOnlySessionData {
   // canary statistics (mode == on), stable statistics (mode == off), or
   // let the system decide based on random selection (mode == auto).
   int64 canary_stats_mode = 193 [(gogoproto.casttype) = "CanaryStatsMode"];
+  // UseSwapMutations, when true, enables use of the update swap and delete swap
+  // operators.
+  bool use_swap_mutations = 194;
+  // PreventUpdateSetColumnDrop, when true, enables a fix to ensure that columns
+  // referenced only as target columns in an UPDATE statement within a routine
+  // are correctly tracked, preventing a drop that breaks the routine.
+  bool prevent_update_set_column_drop = 195;
+  // UseImprovedRoutineDepsTriggersAndComputedCols, when true, enables improved
+  // dependency tracking for routines that perform mutations involving BEFORE
+  // triggers or computed columns. The fix applies at routine creation time and
+  // prevents unnecessary column dependencies from being recorded.
+  bool use_improved_routine_deps_triggers_and_computed_cols = 196;
+  // DistSQLPreventPartitioningSoftLimitedScans, when true, prevents the distsql
+  // physical planner from partitioning scans with soft limits into multiple
+  // TableReaders. When true, this matches the behavior for hard limits.
+  bool distsql_prevent_partitioning_soft_limited_scans = 197 [(gogoproto.customname) = "DistSQLPreventPartitioningSoftLimitedScans"];
+  // OptimizerInlineAnyUnnestSubquery, when true, enables the InlineAnyProjectSet
+  // normalization rule that inlines unnest subqueries in ANY comparisons.
+  bool optimizer_inline_any_unnest_subquery = 198;
+  // TcpKeepalivesIdle is the time (in seconds) with no network activity before
+  // sending a TCP keepalive probe. 0 means use the cluster setting default.
+  // Corresponds to PostgreSQL's tcp_keepalives_idle.
+  int32 tcp_keepalives_idle = 199;
+  // TcpKeepalivesInterval is the time (in seconds) between TCP keepalive
+  // retransmissions. 0 means use the cluster setting default.
+  // Corresponds to PostgreSQL's tcp_keepalives_interval.
+  int32 tcp_keepalives_interval = 200;
+  // TcpKeepalivesCount is the maximum number of TCP keepalive probes before
+  // the connection is dropped. 0 means use the cluster setting default.
+  // Corresponds to PostgreSQL's tcp_keepalives_count.
+  int32 tcp_keepalives_count = 201;
+  // TcpUserTimeout is the maximum time (in milliseconds) that transmitted data
+  // may remain unacknowledged before the connection is dropped. 0 means use the
+  // cluster setting default. Corresponds to PostgreSQL's tcp_user_timeout.
+  int32 tcp_user_timeout = 202;
+  // OptimizerUseMinRowCountAntiJoinFix, when true, causes the
+  // optimizer_min_row_count setting to be applied correctly to anti-joins.
+  bool optimizer_use_min_row_count_anti_join_fix = 203;
+  // StatsAsOf is an optional timestamp that, when set, causes
+  // statistics selection to be based on the age gap between the stats
+  // creation timestamp and the StatsAsOf timestamp, rather than the
+  // current time. This is primarily intended for debugging, testing,
+  // and historical analysis. Should not be used in production
+  // environments.
+  // Note the time-traveling only takes effect if the timestamp is later
+  // than or equal to the latest full stats in the stable stats cache --
+  // we don't support traveling way too back in the history at this
+  // moment. If the asOf timestamp is earlier than the latest full stats
+  // in the stable stats cache, a trace message would be logged, and
+  // still the whole stable stats cache will be used for planning.
+  util.hlc.Timestamp stats_as_of = 204 [(gogoproto.nullable) = false];
+  // BufferedWritesImplicitTxnsEnabled, if set, will make it so that the
+  // buffered writes feature is used for implicit txns.
+  bool buffered_writes_implicit_txns_enabled = 205;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

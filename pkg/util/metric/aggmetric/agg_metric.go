@@ -10,28 +10,24 @@ package aggmetric
 
 import (
 	"context"
-	"hash/fnv"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/google/btree"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 )
 
-var delimiter = []byte{'_'}
-
 const (
-	dbLabel                   = "database"
-	appLabel                  = "application_name"
-	cacheSize                 = 5000
-	retentionTimeTillEviction = 20 * time.Second
+	dbLabel  = "database"
+	appLabel = "application_name"
+	// defaultCacheSize is the default maximum number of distinct label value combinations
+	// before eviction starts in high cardinality metrics.
+	defaultCacheSize = 5000
 )
 
 // This is a no-op context used during logging.
@@ -40,6 +36,13 @@ var noOpCtx = context.TODO()
 // Builder is used to ease constructing metrics with the same labels.
 type Builder struct {
 	labels []string
+}
+
+// parentMetric is an interface that agg metric parent types must satisfy. It
+// is used to allow child metrics to update the parent metric when they are updated.
+type parentMetric interface {
+	metric.Iterable
+	metric.PrometheusExportable
 }
 
 // MakeBuilder makes a new Builder.
@@ -52,9 +55,11 @@ func (b Builder) Gauge(metadata metric.Metadata) *AggGauge {
 	return NewGauge(metadata, b.labels...)
 }
 
-// FunctionalGauge constructs a new AggGauge with the Builder's labels who's
-// value is determined when asked for.
-func (b Builder) FunctionalGauge(metadata metric.Metadata, f func(cvs []int64) int64) *AggGauge {
+// FunctionalGauge constructs a new AggFunctionalGauge with the Builder's
+// labels whose value is determined when asked for.
+func (b Builder) FunctionalGauge(
+	metadata metric.Metadata, f func(cvs []int64) int64,
+) *AggFunctionalGauge {
 	return NewFunctionalGauge(metadata, f, b.labels...)
 }
 
@@ -106,37 +111,11 @@ func (cs *childSet) initWithBTreeStorageType(labels []string) {
 	}
 }
 
-func (cs *childSet) initWithCacheStorageType(labels []string, metricName string) {
+func (cs *childSet) initWithCacheStorageType(labels []string) {
 	cs.labels = labels
-
 	cs.mu.children = &UnorderedCacheWrapper{
 		cache: cache.NewUnorderedCache(cache.Config{
-			Policy: cache.CacheLRU,
-			ShouldEvict: func(size int, key, value any) bool {
-				if childMetric, ok := value.(ChildMetric); ok {
-					// Check if the child metric has exceeded 20 seconds and cache size is greater than 5000
-					if labelSliceCachedChildMetric, ok := childMetric.(LabelSliceCachedChildMetric); ok {
-						currentTime := timeutil.Now()
-						age := currentTime.Sub(labelSliceCachedChildMetric.CreatedAt())
-						return size > cacheSize && age > retentionTimeTillEviction
-					}
-				}
-				return size > cacheSize
-			},
-			OnEvictedEntry: func(entry *cache.Entry) {
-				if childMetric, ok := entry.Value.(ChildMetric); ok {
-					labelValues := childMetric.labelValues()
-
-					// log metric name and label values of evicted entry
-					log.Dev.Infof(noOpCtx, "evicted child of metric %s with label values: %s\n",
-						redact.SafeString(metricName), redact.SafeString(strings.Join(labelValues, ",")))
-
-					// Invoke DecrementAndDeleteIfZero from ChildMetric which relies on LabelSliceCache
-					if boundedChild, ok := childMetric.(LabelSliceCachedChildMetric); ok {
-						boundedChild.DecrementLabelSliceCacheReference()
-					}
-				}
-			},
+			Policy: cache.CacheNone,
 		}),
 	}
 }
@@ -144,9 +123,8 @@ func (cs *childSet) initWithCacheStorageType(labels []string, metricName string)
 func getCacheStorage() *cache.UnorderedCache {
 	cacheStorage := cache.NewUnorderedCache(cache.Config{
 		Policy: cache.CacheLRU,
-		//TODO (aa-joshi) : make cacheSize configurable in the future
 		ShouldEvict: func(size int, key, value interface{}) bool {
-			return size > cacheSize
+			return size > defaultCacheSize
 		},
 	})
 	return cacheStorage
@@ -228,7 +206,7 @@ func (cs *childSet) getOrAddWithLabelSliceCache(
 	defer cs.mu.Unlock()
 
 	// Create a LabelSliceCacheKey from the label.
-	key := metricKey(labelVals...)
+	key := metricKey(labelVals)
 
 	// Check if the child already exists
 	if child, ok := cs.mu.children.GetValue(key); ok {
@@ -262,7 +240,7 @@ func (cs *childSet) EachWithLabels(
 		childLabels := make([]*io_prometheus_client.LabelPair, 0, len(labels)+len(cs.labels))
 		childLabels = append(childLabels, labels...)
 		lvs := cm.labelValues()
-		key := metricKey(lvs...)
+		key := metricKey(lvs)
 		labelValueCacheValues, _ := labelCache.Get(metric.LabelSliceCacheKey(key))
 		for i := range cs.labels {
 			childLabels = append(childLabels, &io_prometheus_client.LabelPair{
@@ -287,20 +265,66 @@ func (cs *childSet) clear() {
 }
 
 type SQLMetric struct {
-	mu struct {
+	parent parentMetric
+	mu     struct {
 		labelConfig metric.LabelConfig
 		syncutil.Mutex
 		children ChildrenStorage
 	}
 }
 
-func NewSQLMetric(labelConfig metric.LabelConfig) *SQLMetric {
-	sm := &SQLMetric{}
+var _ metric.PrometheusIterable = (*SQLMetric)(nil)
+var _ metric.PrometheusExportable = (*SQLMetric)(nil)
+
+func NewSQLMetric(labelConfig metric.LabelConfig, parent parentMetric) *SQLMetric {
+	sm := &SQLMetric{
+		parent: parent,
+	}
 	sm.mu.labelConfig = labelConfig
 	sm.mu.children = &UnorderedCacheWrapper{
 		cache: getCacheStorage(),
 	}
 	return sm
+}
+
+// GetType is part of the metric.PrometheusExportable interface.
+func (sm *SQLMetric) GetType() *io_prometheus_client.MetricType {
+	return sm.parent.GetType()
+}
+
+// GetLabels is part of the metric.PrometheusExportable interface.
+func (sm *SQLMetric) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
+	return sm.parent.GetLabels(useStaticLabels)
+}
+
+// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
+func (sm *SQLMetric) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return sm.parent.ToPrometheusMetric()
+}
+
+// GetName is part of the metric.Iterable interface.
+func (sm *SQLMetric) GetName(useStaticLabels bool) string {
+	return sm.parent.GetName(useStaticLabels)
+}
+
+// GetHelp is part of the metric.Iterable interface.
+func (sm *SQLMetric) GetHelp() string {
+	return sm.parent.GetHelp()
+}
+
+// GetMeasurement is part of the metric.Iterable interface.
+func (sm *SQLMetric) GetMeasurement() string {
+	return sm.parent.GetMeasurement()
+}
+
+// GetUnit is part of the metric.Iterable interface.
+func (sm *SQLMetric) GetUnit() metric.Unit {
+	return sm.parent.GetUnit()
+}
+
+// GetMetadata is part of the metric.Iterable interface.
+func (sm *SQLMetric) GetMetadata() metric.Metadata {
+	return sm.parent.GetMetadata()
 }
 
 func (sm *SQLMetric) Each(
@@ -344,38 +368,13 @@ func (sm *SQLMetric) Each(
 	})
 }
 
-func (sm *SQLMetric) get(labelVals ...string) (ChildMetric, bool) {
-	return sm.mu.children.Get(labelVals...)
-}
-
-func (sm *SQLMetric) add(metric ChildMetric) {
-	sm.mu.children.Add(metric)
-}
-
 type createChildMetricFunc func(labelValues labelValuesSlice) ChildMetric
 
-// getOrAddChildLocked returns the child metric for the given label values. If the child
-// doesn't exist, it creates a new one and adds it to the collection.
-// REQUIRES: sm.mu is locked.
-func (sm *SQLMetric) getOrAddChildLocked(
-	f createChildMetricFunc, labelValues ...string,
-) ChildMetric {
-	// If the child already exists, return it.
-	if child, ok := sm.get(labelValues...); ok {
-		return child
-	}
-
-	child := f(labelValues)
-
-	sm.add(child)
-	return child
-}
-
-// getChildByLabelConfig returns the child metric based on the label configuration.
+// getOrAddChildByLabelConfig returns the child metric based on the label configuration.
 // It returns the child metric and a boolean indicating if the child was found.
 // If the label configuration is either LabelConfigDisabled or unrecognised, it returns
 // ChildMetric as nil and false.
-func (sm *SQLMetric) getChildByLabelConfig(
+func (sm *SQLMetric) getOrAddChildByLabelConfig(
 	f createChildMetricFunc, db string, app string,
 ) (ChildMetric, bool) {
 	// We should acquire the lock before evaluating the label configuration
@@ -384,22 +383,44 @@ func (sm *SQLMetric) getChildByLabelConfig(
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	var childMetric ChildMetric
+	// The hash key computation and child creation are intentionally split into
+	// two separate switches on labelConfig. The key computation uses an inline
+	// FNV-64a hash that only needs the raw label strings, while child creation
+	// needs to allocate a labelValuesSlice. By computing the key first and
+	// checking the children map, we avoid the labelValuesSlice allocation
+	// entirely on the fast path (child already exists).
+	var key uint64
 	switch sm.mu.labelConfig {
 	case metric.LabelConfigDisabled:
 		return nil, false
 	case metric.LabelConfigDB:
-		childMetric = sm.getOrAddChildLocked(f, db)
-		return childMetric, true
+		key = hashLabel(fnvBase, db)
 	case metric.LabelConfigApp:
-		childMetric = sm.getOrAddChildLocked(f, app)
-		return childMetric, true
+		key = hashLabel(fnvBase, app)
 	case metric.LabelConfigAppAndDB:
-		childMetric = sm.getOrAddChildLocked(f, db, app)
-		return childMetric, true
+		key = hashLabel(hashLabel(fnvBase, db), app)
 	default:
 		return nil, false
 	}
+
+	// Return existing child.
+	if child, ok := sm.mu.children.GetValue(key); ok {
+		return child, true
+	}
+
+	// Create a new child.
+	var child ChildMetric
+	switch sm.mu.labelConfig {
+	case metric.LabelConfigDB:
+		child = f(labelValuesSlice{db})
+	case metric.LabelConfigApp:
+		child = f(labelValuesSlice{app})
+	case metric.LabelConfigAppAndDB:
+		child = f(labelValuesSlice{db, app})
+	}
+
+	_ = sm.mu.children.AddKey(key, child)
+	return child, true
 }
 
 // ReinitialiseChildMetrics clears the child metrics and
@@ -431,7 +452,7 @@ type ChildMetric interface {
 // reducing memory usage and improving performance in scenarios with many similar metrics.
 type LabelSliceCachedChildMetric interface {
 	ChildMetric
-	CreatedAt() time.Time
+	UpdatedAt() int64
 	DecrementLabelSliceCacheReference()
 }
 
@@ -443,13 +464,32 @@ type labelValuesSlice []string
 
 func (lv *labelValuesSlice) labelValues() []string { return []string(*lv) }
 
-func metricKey(labels ...string) uint64 {
-	hash := fnv.New64a()
-	for _, label := range labels {
-		_, _ = hash.Write([]byte(label))
-		_, _ = hash.Write(delimiter)
+// FNV-64a constants.
+const (
+	fnvBase  = uint64(14695981039346656037)
+	fnvPrime = uint64(1099511628211)
+)
+
+// hashLabel hashes a single label string followed by the delimiter into the
+// running FNV-64a hash state.
+func hashLabel(h uint64, s string) uint64 {
+	for i := 0; i < len(s); i++ {
+		h ^= uint64(s[i])
+		h *= fnvPrime
 	}
-	return hash.Sum64()
+	// Delimiter '_' between labels.
+	h ^= uint64('_')
+	h *= fnvPrime
+	return h
+}
+
+// metricKey computes an FNV-64a hash over the given label values.
+func metricKey(labels []string) uint64 {
+	h := fnvBase
+	for _, label := range labels {
+		h = hashLabel(h, label)
+	}
+	return h
 }
 
 type ChildrenStorage interface {
@@ -487,7 +527,7 @@ func (ucw *UnorderedCacheWrapper) AddKey(key uint64, metric ChildMetric) error {
 }
 
 func (ucw *UnorderedCacheWrapper) Get(labelVals ...string) (ChildMetric, bool) {
-	hashKey := metricKey(labelVals...)
+	hashKey := metricKey(labelVals)
 	value, ok := ucw.cache.Get(hashKey)
 	if !ok {
 		return nil, false
@@ -497,7 +537,7 @@ func (ucw *UnorderedCacheWrapper) Get(labelVals ...string) (ChildMetric, bool) {
 
 func (ucw *UnorderedCacheWrapper) Add(metric ChildMetric) {
 	labelValues := metric.labelValues()
-	hashKey := metricKey(labelValues...)
+	hashKey := metricKey(labelValues)
 	if _, ok := ucw.cache.Get(hashKey); ok {
 		panic(errors.AssertionFailedf("child %v already exists", metric.labelValues()))
 	}
@@ -505,7 +545,7 @@ func (ucw *UnorderedCacheWrapper) Add(metric ChildMetric) {
 }
 
 func (ucw *UnorderedCacheWrapper) Del(metric ChildMetric) {
-	hashKey := metricKey(metric.labelValues()...)
+	hashKey := metricKey(metric.labelValues())
 	if _, ok := ucw.cache.Get(hashKey); ok {
 		ucw.cache.Del(hashKey)
 	}
@@ -569,3 +609,64 @@ func (b BtreeWrapper) ForEach(f func(metric ChildMetric)) {
 func (b BtreeWrapper) Clear() {
 	b.tree.Clear(false)
 }
+
+// baseAggMetric provides the shared implementation for aggregate metric types.
+// It delegates Iterable and PrometheusExportable methods to the parent metric,
+// which tracks the aggregate value, and manages per-label child metrics via
+// the embedded childSet.
+// Note: This struct does not fully implement metric.Iterable because it doesn't
+// implement the metric.Iterable Inspect method, which is expected to be
+// implemented by the concrete aggregate metric types that embed baseAggMetric.
+type baseAggMetric struct {
+	parent parentMetric
+	childSet
+}
+
+func newBaseAggMetric(parent parentMetric) *baseAggMetric {
+	return &baseAggMetric{
+		parent: parent,
+	}
+}
+
+// GetType is part of the metric.PrometheusExportable interface.
+func (b *baseAggMetric) GetType() *io_prometheus_client.MetricType {
+	return b.parent.GetType()
+}
+
+// GetLabels is part of the metric.PrometheusExportable interface.
+func (b *baseAggMetric) GetLabels(useStaticLabels bool) []*io_prometheus_client.LabelPair {
+	return b.parent.GetLabels(useStaticLabels)
+}
+
+// ToPrometheusMetric is part of the metric.PrometheusExportable interface.
+func (b *baseAggMetric) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return b.parent.ToPrometheusMetric()
+}
+
+// GetName is part of the metric.Iterable interface.
+func (b *baseAggMetric) GetName(useStaticLabels bool) string {
+	return b.parent.GetName(useStaticLabels)
+}
+
+// GetHelp is part of the metric.Iterable interface.
+func (b *baseAggMetric) GetHelp() string {
+	return b.parent.GetHelp()
+}
+
+// GetMeasurement is part of the metric.Iterable interface.
+func (b *baseAggMetric) GetMeasurement() string {
+	return b.parent.GetMeasurement()
+}
+
+// GetUnit is part of the metric.Iterable interface.
+func (b *baseAggMetric) GetUnit() metric.Unit {
+	return b.parent.GetUnit()
+}
+
+// GetMetadata is part of the metric.Iterable interface.
+func (b *baseAggMetric) GetMetadata() metric.Metadata {
+	return b.parent.GetMetadata()
+}
+
+var _ metric.PrometheusIterable = (*baseAggMetric)(nil)
+var _ metric.PrometheusExportable = (*baseAggMetric)(nil)

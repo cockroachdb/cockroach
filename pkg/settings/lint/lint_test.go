@@ -165,7 +165,13 @@ func TestLintClusterSettingNames(t *testing.T) {
 				}
 			}
 
-			if strings.Contains(settingName, "unsafe") && !setting.IsUnsafe() {
+			// Exception list for settings that contain "unsafe" in the name but should
+			// not require the unsafe interlock. These are legacy settings that cannot
+			// be renamed.
+			unsafeNameExceptions := map[string]bool{
+				"sql.override.allow_unsafe_internals.enabled": true,
+			}
+			if strings.Contains(settingName, "unsafe") && !setting.IsUnsafe() && !unsafeNameExceptions[settingName] {
 				return errors.Errorf("%s: setting name contains \"unsafe\" but is not marked unsafe (hint: use option settings.WithUnsafe)", settingName)
 			}
 			if setting.IsUnsafe() && !strings.Contains(settingName, "unsafe") {

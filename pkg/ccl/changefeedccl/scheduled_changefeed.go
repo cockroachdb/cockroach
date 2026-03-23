@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -336,15 +335,6 @@ func makeScheduledChangefeedSpec(
 		spec.recurrence = &rec
 	}
 
-	enterpriseCheckErr := utilccl.CheckEnterpriseEnabled(
-		p.ExecCfg().Settings,
-		opName)
-
-	if !(enterpriseCheckErr == nil) {
-		// Cannot use SCHEDULED CHANGEFEED w/out enterprise license.
-		return nil, enterpriseCheckErr
-	}
-
 	spec.scheduleOpts, err = exprEval.KVOptions(
 		ctx, schedule.ScheduleOptions, expectValues,
 	)
@@ -560,7 +550,7 @@ func doCreateChangefeedSchedule(
 	resultsCh chan<- tree.Datums,
 ) error {
 
-	env := sql.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
+	env := jobs.JobSchedulerEnv(p.ExecCfg().JobsKnobs())
 
 	if knobs, ok := p.ExecCfg().DistSQLSrv.TestingKnobs.JobsTestingKnobs.(*jobs.TestingKnobs); ok {
 		if knobs.JobSchedulerEnv != nil {

@@ -140,7 +140,7 @@ func (e *externalStorageWrapper) CreateObject(objName string) (io.WriteCloser, e
 // List implements the remote.Storage interface.
 func (e *externalStorageWrapper) List(prefix, delimiter string) ([]string, error) {
 	var directoryList []string
-	err := e.es.List(e.ctx, prefix, delimiter, func(s string) error {
+	err := e.es.List(e.ctx, prefix, cloud.ListOptions{Delimiter: delimiter}, func(s string) error {
 		directoryList = append(directoryList, s)
 		return nil
 	})

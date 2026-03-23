@@ -39,7 +39,7 @@ func (n *discardNode) startExec(params runParams) error {
 		}
 
 		// SET SESSION AUTHORIZATION DEFAULT
-		if err := params.p.setRole(params.ctx, false /* local */, params.p.SessionData().SessionUser()); err != nil {
+		if err := params.p.setRole(params.ctx, setScopeSession, params.p.SessionData().SessionUser()); err != nil {
 			return err
 		}
 

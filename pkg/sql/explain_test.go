@@ -686,7 +686,10 @@ func TestExplainAnalyzeBufferedWrites(t *testing.T) {
 			infoPrinted: false,
 		},
 		{ // enabled
-			setup:       []string{`SET kv_transaction_buffered_writes_enabled = true;`},
+			setup: []string{
+				`SET kv_transaction_buffered_writes_enabled = true;`,
+				`SET buffered_writes_implicit_txns_enabled = true;`,
+			},
 			query:       `INSERT INTO t VALUES (1), (2)`,
 			infoPrinted: true,
 		},
@@ -699,6 +702,7 @@ func TestExplainAnalyzeBufferedWrites(t *testing.T) {
 		{
 			setup: []string{
 				`SET kv_transaction_buffered_writes_enabled = true;`,
+				`SET buffered_writes_implicit_txns_enabled = true;`,
 				`SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '1B';`,
 			},
 			cleanup:     `RESET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size;`,
@@ -706,7 +710,10 @@ func TestExplainAnalyzeBufferedWrites(t *testing.T) {
 			infoPrinted: true,
 		},
 		{ // read-only implicit
-			setup:       []string{`SET kv_transaction_buffered_writes_enabled = true;`},
+			setup: []string{
+				`SET kv_transaction_buffered_writes_enabled = true;`,
+				`SET buffered_writes_implicit_txns_enabled = true;`,
+			},
 			query:       `SELECT * FROM t`,
 			infoPrinted: false,
 		},
@@ -724,7 +731,7 @@ func TestExplainAnalyzeBufferedWrites(t *testing.T) {
 			_, err = conn.ExecContext(ctx, stmt)
 			require.NoError(t, err)
 		}
-		result, err := conn.QueryContext(ctx, "EXPLAIN ANALYZE "+tc.query)
+		result, err := conn.QueryContext(ctx, "EXPLAIN ANALYZE (VERBOSE) "+tc.query)
 		require.NoError(t, err)
 		rows, err := sqlutils.RowsToStrMatrix(result)
 		require.NoError(t, err)

@@ -413,9 +413,7 @@ CREATE FUNCTION f() RETURNS TABLE (x INT, y INT) LANGUAGE PLpgSQL AS $$
   END
 $$;
 
-# TODO(144013): we should be able to use nosort here, but the ordering is
-# dropped.
-query T rowsort
+query T nosort
 SELECT f();
 ----
 (1,2)
@@ -431,6 +429,22 @@ SELECT * FROM f();
 
 statement ok
 DROP FUNCTION f;
+
+# Test that ordering is preserved with array_agg
+statement ok
+CREATE FUNCTION f_agg() RETURNS TABLE (x INT, y INT) LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN QUERY SELECT * FROM xy ORDER BY xy.x DESC;
+  END
+$$;
+
+query T
+SELECT array_agg(f) FROM f_agg() AS f;
+----
+{"(5,6)","(3,4)","(1,2)"}
+
+statement ok
+DROP FUNCTION f_agg;
 
 subtest end
 

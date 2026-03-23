@@ -231,20 +231,21 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 			ldrConfig: ldrConfig{
 				createTables: true,
 			},
-			run: TestLDRConflict,
+			requiresDeprecatedWorkload: true,
+			run:                        TestLDRConflict,
 		},
 	}
 
 	for _, sp := range specs {
 		r.Add(registry.TestSpec{
 			Name:                       sp.name,
-			Owner:                      registry.OwnerDisasterRecovery,
+			Owner:                      registry.OwnerCDC,
 			Timeout:                    60 * time.Minute,
 			CompatibleClouds:           registry.OnlyGCE,
 			Suites:                     registry.Suites(registry.Nightly),
 			Cluster:                    sp.clusterSpec.ToSpec(r),
 			Leases:                     registry.MetamorphicLeases,
-			RequiresDeprecatedWorkload: true, // TODO(jeffswenson): require this only for conflict test.
+			RequiresDeprecatedWorkload: sp.requiresDeprecatedWorkload,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				rng, seed := randutil.NewPseudoRand()
 				t.L().Printf("random seed is %d", seed)
@@ -490,15 +491,15 @@ func TestLDRCreateTablesTPCC(
 	// - 15 mins of steady state. If the above scans take too long, the latency
 	// verifier may trip.
 	duration := 30 * time.Minute
-	warehouses := 1000
+	schemaWarehouses, workloadWarehouses := 1000, 500
 	if c.IsLocal() {
 		duration = 3 * time.Minute
-		warehouses = 10
+		schemaWarehouses, workloadWarehouses = 10, 10
 	}
 
 	workload := LDRWorkload{
 		workload: replicateTPCC{
-			warehouses:     warehouses,
+			warehouses:     workloadWarehouses,
 			duration:       duration,
 			repairOrderIDs: true,
 		},
@@ -511,7 +512,7 @@ func TestLDRCreateTablesTPCC(
 	setup.right.sysSQL.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.low_admission_priority.enabled = false")
 	c.Run(ctx,
 		option.WithNodes(setup.workloadNode),
-		fmt.Sprintf("./cockroach workload init tpcc --warehouses=%d --fks=false {pgurl:%d:system}", warehouses, setup.left.nodes[0]))
+		fmt.Sprintf("./cockroach workload init tpcc --warehouses=%d --fks=false {pgurl:%d:system}", schemaWarehouses, setup.left.nodes[0]))
 
 	workloadDoneCh := make(chan struct{})
 	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
@@ -779,10 +780,11 @@ func getLogicalDataReplicationJobInfo(db *gosql.DB, jobID int) (jobInfo, error) 
 }
 
 type ldrTestSpec struct {
-	name        string
-	clusterSpec multiClusterSpec
-	run         func(context.Context, test.Test, cluster.Cluster, multiClusterSetup, ldrConfig)
-	ldrConfig   ldrConfig
+	name                       string
+	clusterSpec                multiClusterSpec
+	run                        func(context.Context, test.Test, cluster.Cluster, multiClusterSetup, ldrConfig)
+	ldrConfig                  ldrConfig
+	requiresDeprecatedWorkload bool
 }
 
 type mode int

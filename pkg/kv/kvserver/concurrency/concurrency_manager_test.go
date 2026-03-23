@@ -58,7 +58,7 @@ import (
 //
 // The input files use the following DSL:
 //
-// new-txn      name=<txn-name> ts=<int>[,<int>] [epoch=<int>] [iso=<level>] [priority=<priority>] [uncertainty-limit=<int>[,<int>]]
+// new-txn      name=<txn-name> ts=<int>[,<int>] [epoch=<int>] [iso=<level>] [priority=<priority>] [uncertainty-limit=<int>[,<int>]] [observed-ts=<nodeID>@<ts>]
 // new-request name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority=<priority>] [inconsistent] [wait-policy=<policy>] [lock-timeout]
 // [deadlock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
 //
@@ -90,7 +90,9 @@ import (
 // debug-advance-clock       ts=<secs>
 // debug-set-discovered-locks-threshold-to-consult-txn-status-cache n=<count>
 // debug-set-batch-pushed-lock-resolution-enabled ok=<enabled>
+// debug-set-push-using-cached-clock-observation-enabled ok=<enabled>
 // debug-set-max-locks n=<count>
+// debug-set-virtual-intent-resolution-enabled ok=<enabled>
 // reset [namespace|force]
 func TestConcurrencyManagerBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -99,6 +101,10 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "concurrency_manager"), func(t *testing.T, path string) {
 		c := newCluster()
 		c.enableTxnPushes()
+		// Keep virtualized intent resolution off, unless tests enable it
+		// explicitly. When it becomes on by default, there will be some test churn
+		// in these data-driven tests.
+		c.setVirtualIntentResolutionEnabled(false)
 		m := concurrency.NewManager(c.makeConfig())
 		m.OnRangeLeaseUpdated(1, true /* isLeaseholder */) // enable
 		c.m = m
@@ -135,6 +141,23 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					},
 					ReadTimestamp:          ts,
 					GlobalUncertaintyLimit: uncertaintyLimit,
+				}
+				// Add observed timestamp if specified. Format: "nodeID@ts"
+				if d.HasArg("observed-ts") {
+					obsStr := dd.ScanArg[string](t, d, "observed-ts")
+					parts := strings.Split(obsStr, "@")
+					nodeID, err := strconv.Atoi(parts[0])
+					if err != nil {
+						d.Fatalf(t, "invalid node ID in observed-ts: %s", obsStr)
+					}
+					obsTs, err := hlc.ParseTimestamp(parts[1])
+					if err != nil {
+						d.Fatalf(t, "invalid timestamp in observed-ts: %s", obsStr)
+					}
+					txn.UpdateObservedTimestamp(
+						roachpb.NodeID(nodeID),
+						obsTs.UnsafeToClockTimestamp(),
+					)
 				}
 				c.registerTxn(txnName, txn)
 				return ""
@@ -331,12 +354,11 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					lcErr := &kvpb.LockConflictError{Locks: locks}
 					guard, err := m.HandleLockConflictError(ctx, prev, leaseSeq, lcErr)
 					if err != nil {
-						log.Eventf(ctx, "handled %v, returned error: %v", lcErr, err)
+						log.Eventf(ctx, "returned error: %v", err)
 						c.mu.Lock()
 						delete(c.guardsByReqName, reqName)
 						c.mu.Unlock()
 					} else {
-						log.Eventf(ctx, "handled %v, released latches", lcErr)
 						c.mu.Lock()
 						c.guardsByReqName[reqName] = guard
 						c.mu.Unlock()
@@ -351,7 +373,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 				reqs, _ := scanRequests(t, d, c)
-				latchSpans, lockSpans := c.collectSpans(t, g.Req.Txn, g.Req.Timestamp, g.Req.WaitPolicy, reqs)
+				latchSpans, lockSpans := c.collectSpans(t, g.Req().Txn, g.Req().Timestamp, g.Req().WaitPolicy, reqs)
 				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(latchSpans, lockSpans))
 
 			case "is-key-locked-by-conflicting-txn":
@@ -382,7 +404,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
-				txn := guard.Req.Txn
+				txn := guard.Req().Txn
 
 				key := dd.ScanArg[string](t, d, "key")
 				seqNum := dd.ScanArgOr[enginepb.TxnSeq](t, d, "seq", 0)
@@ -409,7 +431,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				// Confirm that the request has a corresponding write request.
 				found := false
-				for _, ru := range guard.Req.Requests {
+				for _, ru := range guard.Req().Requests {
 					req := ru.GetInner()
 					keySpan := roachpb.Span{Key: roachpb.Key(key)}
 					if kvpb.IsLocking(req) &&
@@ -427,7 +449,6 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				txnAcquire.Sequence = seqNum
 
 				mon.runSync("acquire lock", func(ctx context.Context) {
-					log.Eventf(ctx, "txn %s @ %s", txn.Short(), key)
 					acq := roachpb.MakeLockAcquisition(txnAcquire.TxnMeta, roachpb.Key(key), dur, str, nil)
 					m.OnLockAcquired(ctx, &acq)
 				})
@@ -456,7 +477,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				// Confirm that the request has a corresponding ResolveIntent.
 				found := false
-				for _, ru := range guard.Req.Requests {
+				for _, ru := range guard.Req().Requests {
 					if riReq := ru.GetResolveIntent(); riReq != nil &&
 						riReq.IntentTxn.ID == txn.ID &&
 						riReq.Key.Equal(roachpb.Key(key)) &&
@@ -589,6 +610,16 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				c.setBatchPushedLockResolutionEnabled(ok)
 				return ""
 
+			case "debug-set-push-using-cached-clock-observation-enabled":
+				ok := dd.ScanArg[bool](t, d, "ok")
+				c.setPushUsingCachedClockObservationEnabled(ok)
+				return ""
+
+			case "debug-set-virtual-intent-resolution-enabled":
+				ok := dd.ScanArg[bool](t, d, "ok")
+				c.setVirtualIntentResolutionEnabled(ok)
+				return ""
+
 			case "debug-set-max-locks":
 				n := dd.ScanArg[int64](t, d, "n")
 				m.SetMaxLockTableSize(n)
@@ -658,7 +689,7 @@ type cluster struct {
 
 	// Request state. Cleared on reset.
 	mu              syncutil.Mutex
-	guardsByReqName map[string]*concurrency.Guard
+	guardsByReqName map[string]concurrency.Guard
 	txnRecords      map[uuid.UUID]*txnRecord
 	txnPushes       map[uuid.UUID]*txnPush
 }
@@ -682,9 +713,11 @@ func newCluster() *cluster {
 }
 
 func newClusterWithSettings(st *clustersettings.Settings) *cluster {
-	// Set the latch manager's long latch threshold to infinity to disable
-	// logging, which could cause a test to erroneously fail.
+	// Set the latch manager's long latch hold and slow latch request thresholds
+	// to infinity to disable logging, which could cause a test to erroneously
+	// fail when wall-clock time exceeds the threshold.
 	spanlatch.LongLatchHoldThreshold.Override(context.Background(), &st.SV, math.MaxInt64)
+	spanlatch.SlowLatchRequestThreshold.Override(context.Background(), &st.SV, math.MaxInt64)
 	concurrency.UnreplicatedLockReliabilitySplit.Override(context.Background(), &st.SV, true)
 	concurrency.UnreplicatedLockReliabilityMerge.Override(context.Background(), &st.SV, true)
 	concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(context.Background(), &st.SV, true)
@@ -698,7 +731,7 @@ func newClusterWithSettings(st *clustersettings.Settings) *cluster {
 
 		txnsByName:      make(map[string]*roachpb.Transaction),
 		requestsByName:  make(map[string]concurrency.Request),
-		guardsByReqName: make(map[string]*concurrency.Guard),
+		guardsByReqName: make(map[string]concurrency.Guard),
 		txnRecords:      make(map[uuid.UUID]*txnRecord),
 		txnPushes:       make(map[uuid.UUID]*txnPush),
 	}
@@ -715,6 +748,8 @@ func (c *cluster) makeConfig() concurrency.Config {
 		TxnWaitMetrics:                    txnwait.NewMetrics(time.Minute),
 		LocksShedDueToMemoryLimit:         m.LocksShedDueToMemoryLimit,
 		NumLockShedDueToMemoryLimitEvents: m.NumLockShedDueToMemoryLimitEvents,
+		VirtualResolveCondenseCount:       m.VirtualResolveCondenseCount,
+		VirtualResolveDisabledCount:       m.VirtualResolveDisabledCount,
 	}
 }
 
@@ -989,6 +1024,14 @@ func (c *cluster) setDiscoveredLocksThresholdToConsultTxnStatusCache(n int) {
 
 func (c *cluster) setBatchPushedLockResolutionEnabled(ok bool) {
 	concurrency.BatchPushedLockResolution.Override(context.Background(), &c.st.SV, ok)
+}
+
+func (c *cluster) setPushUsingCachedClockObservationEnabled(ok bool) {
+	concurrency.PushUsingCachedClockObservation.Override(context.Background(), &c.st.SV, ok)
+}
+
+func (c *cluster) setVirtualIntentResolutionEnabled(ok bool) {
+	concurrency.VirtualIntentResolution.Override(context.Background(), &c.st.SV, ok)
 }
 
 // reset clears all request state in the cluster. This avoids portions of tests

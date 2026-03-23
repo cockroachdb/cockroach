@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -103,13 +104,6 @@ var ingestSplitEvent = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"physical_replication.consumer.ingest_split_event.enabled",
 	"whether to ingest split events",
-	false,
-)
-
-var compress = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"physical_replication.consumer.stream_compression.enabled",
-	"enables requesting a compressed stream from the producer when resumed",
 	true,
 )
 
@@ -285,6 +279,9 @@ type streamIngestionProcessor struct {
 	// metrics are monitoring all running ingestion jobs.
 	metrics *Metrics
 
+	// debugStatus tracks the current state for debugging/observability.
+	debugStatus streampb.DebugPhysicalConsumerStatusHolder
+
 	logBufferEvery log.EveryN
 
 	// Aggregator that aggregates StructuredEvents emitted in the
@@ -293,7 +290,7 @@ type streamIngestionProcessor struct {
 	aggTimer timeutil.Timer
 
 	// Pipelines to report range stats down to frontier processor.
-	rangeStatsCh chan *streampb.StreamEvent_RangeStats
+	rangeStatsCh chan *rangescanstatspb.RangeStats
 }
 
 // PartitionEvent augments a normal event with the partition it came from.
@@ -350,7 +347,7 @@ func newStreamIngestionDataProcessor(
 		flushCh:          make(chan flushableBuffer),
 		checkpointCh:     make(chan *jobspb.ResolvedSpans),
 		errCh:            make(chan error, 1),
-		rangeStatsCh:     make(chan *streampb.StreamEvent_RangeStats),
+		rangeStatsCh:     make(chan *rangescanstatspb.RangeStats),
 		rekeyer:          rekeyer,
 		rewriteToDiffKey: spec.TenantRekey.NewID != spec.TenantRekey.OldID,
 		logBufferEvery:   log.Every(30 * time.Second),
@@ -414,6 +411,10 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 
 	sip.metrics = sip.FlowCtx.Cfg.JobRegistry.MetricsStruct().StreamIngest.(*Metrics)
 
+	// Initialize and register debug status for observability.
+	sip.debugStatus.Setup(streampb.StreamID(sip.spec.StreamID), sip.ProcessorID)
+	streampb.RegisterPhysicalConsumerStatus(&sip.debugStatus)
+
 	st := sip.FlowCtx.Cfg.Settings
 	db := sip.FlowCtx.Cfg.DB
 	rc := sip.FlowCtx.Cfg.RangeCache
@@ -455,7 +456,7 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		} else {
 			streamClient, err = streamclient.NewStreamClient(ctx, uri, db,
 				streamclient.WithStreamID(streampb.StreamID(sip.spec.StreamID)),
-				streamclient.WithCompression(compress.Get(&st.SV)))
+				streamclient.WithCompression(true))
 			if err != nil {
 
 				sip.MoveToDrainingAndLogError(errors.Wrapf(err, "creating client for partition spec %q from %q", token, uri.Redacted()))
@@ -584,6 +585,7 @@ func (sip *streamIngestionProcessor) close() {
 	}
 
 	defer sip.frontier.Release()
+	defer streampb.UnregisterPhysicalConsumerStatus(&sip.debugStatus)
 
 	// Stop the partition client, mergedSubscription, and
 	// cutoverPoller. All other goroutines should exit based on
@@ -695,8 +697,13 @@ func (sip *streamIngestionProcessor) onFlushUpdateMetricUpdate(batchSummary kvpb
 // partition.
 func (sip *streamIngestionProcessor) consumeEvents(ctx context.Context) error {
 	for {
+		sip.debugStatus.Receiving()
+		receiveStart := timeutil.Now()
 		select {
 		case event, ok := <-sip.mergedSubscription.Events():
+			waitNanos := timeutil.Since(receiveStart).Nanoseconds()
+			sip.metrics.ReceiveWaitNanos.Inc(waitNanos)
+			sip.debugStatus.ReceivedEvent(waitNanos)
 			if !ok {
 				// eventCh is closed, flush and exit.
 				if err := sip.flush(); err != nil {
@@ -725,7 +732,6 @@ func (sip *streamIngestionProcessor) consumeEvents(ctx context.Context) error {
 			}
 		}
 	}
-
 }
 
 func (sip *streamIngestionProcessor) handleEvent(event PartitionEvent) error {
@@ -1260,7 +1266,7 @@ func splitRangeKeySSTAtKey(
 			// NB: We don't call Next() here because the
 			// split key is exclusive already.
 			last = append(last[:0], rangeKeys.Bounds.EndKey...)
-			for _, rk := range rangeKeys.AsRangeKeys() {
+			for rk := range rangeKeys.All() {
 				if err := writer.PutRawMVCCRangeKey(rk, []byte{}); err != nil {
 					return nil, nil, err
 				}
@@ -1295,7 +1301,7 @@ func splitRangeKeySSTAtKey(
 		}
 		last = append(last[:0], rangeKeys.Bounds.EndKey...)
 		last.Next()
-		for _, rk := range rangeKeys.AsRangeKeys() {
+		for rk := range rangeKeys.All() {
 			if err := writer.PutRawMVCCRangeKey(rk, []byte{}); err != nil {
 				return nil, nil, err
 			}
@@ -1330,11 +1336,16 @@ func (sip *streamIngestionProcessor) flush() error {
 		}
 	}
 
+	sip.debugStatus.WaitingForFlush()
+	flushWaitStart := timeutil.Now()
 	select {
 	case sip.flushCh <- flushableBuffer{
 		buffer:     bufferToFlush,
 		checkpoint: checkpoint,
 	}:
+		waitNanos := timeutil.Since(flushWaitStart).Nanoseconds()
+		sip.metrics.FlushWaitNanos.Inc(waitNanos)
+		sip.debugStatus.FlushEnqueued(waitNanos)
 		sip.lastFlushTime = timeutil.Now()
 		return nil
 	case <-sip.stopCh:

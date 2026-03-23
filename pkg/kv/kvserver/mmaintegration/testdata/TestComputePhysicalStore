@@ -1,0 +1,280 @@
+# Each "compute" command builds a StoreDescriptor from the given args and runs
+# computePhysicalStore, printing load/capacity/amplification for each dimension
+# plus the public ComputeAmplificationFactors output.
+#
+# CPU args are in cores (1 core = 1e9 ns/s).
+# Disk args are in GiB.
+# Write bandwidth is in bytes/s.
+
+# -------------------------------------------------------------------
+# Zero-value descriptor: all inputs are zero.
+# CPU: NumStores=0 treated as 1. storesCPU=0 so ampFactor defaults to
+# cap (3). No MMA load, all nodeUsage (0) is immovable. load=0, cap=0
+# (floored to minCapacity by the defer).
+# Disk: LogicalBytes=0 and Used=0, so amp defaults to 1.
+# WriteBandwidth: always amp=1, capacity=unknown.
+# -------------------------------------------------------------------
+compute num-stores=0 stores-cpu=0 node-cpu-usage=0 node-cpu-capacity=0 logical-gib=0 used-gib=0 available-gib=0 write-bytes-per-sec=0
+----
+cpu:             load=0.00 cores  capacity=0.00 cores  amp=3.0000
+disk:            load=0.00 B  capacity=1.00 B  amp=1.0000
+write-bandwidth: load=0.00 B/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=3.0000, disk=1.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Single store, normal case.
+# Node uses 4 cores out of 16, with 2 cores of direct store CPU.
+# Disk: 40GiB logical, 80GiB physical used, 20GiB available (2x space amp).
+# WriteBandwidth: 50MB/s.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=2 node-cpu-usage=4 node-cpu-capacity=16 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=50000000
+----
+cpu:             load=4.00 cores  capacity=16.00 cores  amp=2.0000
+disk:            load=80.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=47.68 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=2.0000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Single store, zero stores-cpu (no tracked replica CPU).
+# CPU amplification defaults to the cap (maxCPUAmplification = 3).
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=0 node-cpu-usage=4 node-cpu-capacity=16 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
+----
+cpu:             load=4.00 cores  capacity=16.00 cores  amp=3.0000
+disk:            load=80.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=3.0000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Single store, stores CPU exceeds node CPU (measurement lag).
+# implicitMult = 4/8 = 0.5, clamped to floor of 1.
+# mmaLoad = 8*1 = 8 > nodeUsage=4, so immovable=0.
+# load = 8*1 = 8 (overshoots nodeUsage; see ampFactor=1 comment in code).
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=8 node-cpu-usage=4 node-cpu-capacity=16 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
+----
+cpu:             load=8.00 cores  capacity=16.00 cores  amp=1.0000
+disk:            load=80.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=1.0000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Single store, huge implicit multiplier (clamped to cap).
+# implicitMult = 10/1 = 10, clamped to maxCPUAmplification (3).
+# mmaLoad = 1*3 = 3, immovable = 10-3 = 7.
+# load = 1*3 + 7/1 = 10.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=1 node-cpu-usage=10 node-cpu-capacity=16 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
+----
+cpu:             load=10.00 cores  capacity=16.00 cores  amp=3.0000
+disk:            load=80.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=3.0000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Multi-store: 4 stores on the node.
+# implicitMult = 8/4 = 2 (unclamped). mmaLoad = 4*2 = 8 = nodeUsage,
+# so immovable=0. Each store gets storesCPU/4 * 2 = 2 cores load.
+# -------------------------------------------------------------------
+compute num-stores=4 stores-cpu=4 node-cpu-usage=8 node-cpu-capacity=16 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
+----
+cpu:             load=2.00 cores  capacity=4.00 cores  amp=2.0000
+disk:            load=80.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=2.0000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Disk: compression causes space amplification < 1.
+# 100GiB logical but only 50GiB physical used. amp = 50/100 = 0.5.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=2 node-cpu-usage=4 node-cpu-capacity=16 logical-gib=100 used-gib=50 available-gib=50 write-bytes-per-sec=10000000
+----
+cpu:             load=4.00 cores  capacity=16.00 cores  amp=2.0000
+disk:            load=50.00 GiB  capacity=100.00 GiB  amp=0.5000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=2.0000, disk=0.5000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Empty/new store: LogicalBytes=0, Used=0.
+# Disk amp defaults to 1. capacity = 0 + available.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=2 node-cpu-usage=4 node-cpu-capacity=16 logical-gib=0 used-gib=0 available-gib=100 write-bytes-per-sec=0
+----
+cpu:             load=4.00 cores  capacity=16.00 cores  amp=2.0000
+disk:            load=0.00 B  capacity=100.00 GiB  amp=1.0000
+write-bandwidth: load=0.00 B/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=2.0000, disk=1.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# CPU capacity not yet populated (NodeCPURateCapacity=0, early startup).
+# Falls back to assuming 50% utilization: capacity = load * 2.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=2 node-cpu-usage=4 node-cpu-capacity=0 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
+----
+cpu:             load=4.00 cores  capacity=8.00 cores  amp=2.0000
+disk:            load=80.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=2.0000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Per-store CPUPerSecond: store reports 3 cores of direct CPU on a node
+# with 4 stores totaling 8 cores of store CPU, 12 cores node usage, 16 cap.
+# ampFactor = 12/8 = 1.5. mmaLoad = 8*1.5 = 12 = nodeUsage, immovable=0.
+# This store's load = 3*1.5 = 4.5, capacity = 16/4 = 4.
+# -------------------------------------------------------------------
+compute num-stores=4 stores-cpu=8 node-cpu-usage=12 node-cpu-capacity=16 store-cpu-per-second=3 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
+----
+cpu:             load=4.50 cores  capacity=4.00 cores  amp=1.5000
+disk:            load=80.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=1.5000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Per-store CPUPerSecond, ampFactor unclamped: 4 stores, 4 cores total store
+# CPU, 10 cores node usage, 16 cap. ampFactor = min(10/4, 3) = 2.5.
+# mmaLoad = 4*2.5 = 10 = nodeUsage, immovable=0.
+# This hot store reports 3 of the 4 store cores.
+# load = 3*2.5 = 7.5, capacity = 16/4 = 4.
+# -------------------------------------------------------------------
+compute num-stores=4 stores-cpu=4 node-cpu-usage=10 node-cpu-capacity=16 store-cpu-per-second=3 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
+----
+cpu:             load=7.50 cores  capacity=4.00 cores  amp=2.5000
+disk:            load=80.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=2.5000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# Per-store CPUPerSecond with immovable CPU exceeding cap: 1 store,
+# 1 core store CPU, 10 cores node usage, 16 cap.
+# ampFactor = min(10/1, 3) = 3. mmaLoad = 1*3 = 3, immovable = 7.
+# store reports 1 core. load = 1*3 + 7/1 = 10, capacity = 16.
+# Same as the even-split case since numStores=1 and storeCPU=storesCPU.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=1 node-cpu-usage=10 node-cpu-capacity=16 store-cpu-per-second=1 logical-gib=40 used-gib=80 available-gib=20 write-bytes-per-sec=10000000
+----
+cpu:             load=10.00 cores  capacity=16.00 cores  amp=3.0000
+disk:            load=80.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=3.0000, disk=2.0000, write-bw=1.0000]
+
+# ===================================================================
+# SQL-aware model tests.
+# When sql-gateway-cpu and/or sql-dist-cpu are provided, the model
+# computes a uniform overhead multiplier k over all tracked sources
+# (storesCPU + sqlDistCPU + sqlGatewayCPU), then folds distSQL into
+# ampFactor and treats gateway SQL as immovable.
+# ===================================================================
+
+# -------------------------------------------------------------------
+# SQL-aware basic: unclamped k.
+# 1 store, storesCPU=2, nodeUsage=6, nodeCap=16.
+# sqlGatewayCPU=1, sqlDistCPU=1. moveableCPU = 3, totalTracked = 4.
+# k = 6/4 = 1.5. ampFactor = (1 + 1/2) * 1.5 = 2.25.
+# immovable = max(0, 6 - 3*1.5) = 1.5.
+# load = 2*2.25 + 1.5/1 = 6, capacity = 16.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=2 node-cpu-usage=6 node-cpu-capacity=16 sql-gateway-cpu=1 sql-dist-cpu=1 logical-gib=10 used-gib=20 available-gib=80 write-bytes-per-sec=10000000
+----
+cpu:             load=6.00 cores  capacity=16.00 cores  amp=2.2500
+disk:            load=20.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=2.2500, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# SQL-aware gateway-heavy: gateway dominates, k unclamped.
+# 1 store, storesCPU=2, nodeUsage=9, nodeCap=16.
+# sqlGatewayCPU=3, sqlDistCPU=1. moveableCPU = 3, totalTracked = 6.
+# k = 9/6 = 1.5. ampFactor = 1.5 * 1.5 = 2.25.
+# immovable = max(0, 9 - 3*1.5) = 4.5.
+# load = 2*2.25 + 4.5/1 = 9, capacity = 16.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=2 node-cpu-usage=9 node-cpu-capacity=16 sql-gateway-cpu=3 sql-dist-cpu=1 logical-gib=10 used-gib=20 available-gib=80 write-bytes-per-sec=10000000
+----
+cpu:             load=9.00 cores  capacity=16.00 cores  amp=2.2500
+disk:            load=20.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=2.2500, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# SQL-aware high distSQL: distSQL is 1.5x KV, k unclamped.
+# 1 store, storesCPU=2, nodeUsage=12, nodeCap=16.
+# sqlGatewayCPU=1, sqlDistCPU=3. moveableCPU = 5, totalTracked = 6.
+# k = max(1, min(12/6, 3)) = 2. ampFactor = 2.5*2 = 5.
+# immovable = max(0, 12 - 5*2) = 2.
+# load = 2*5 + 2/1 = 12, capacity = 16.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=2 node-cpu-usage=12 node-cpu-capacity=16 sql-gateway-cpu=1 sql-dist-cpu=3 logical-gib=10 used-gib=20 available-gib=80 write-bytes-per-sec=10000000
+----
+cpu:             load=12.00 cores  capacity=16.00 cores  amp=5.0000
+disk:            load=20.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=5.0000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# SQL-aware k clamped at cap: extreme overhead.
+# 1 store, storesCPU=1, nodeUsage=15, nodeCap=16.
+# sqlGatewayCPU=1, sqlDistCPU=1. moveableCPU = 2, totalTracked = 3.
+# k = max(1, min(15/3, 3)) = 3. ampFactor = 2*3 = 6.
+# immovable = max(0, 15 - 2*3) = 9.
+# load = 1*6 + 9/1 = 15, capacity = 16.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=1 node-cpu-usage=15 node-cpu-capacity=16 sql-gateway-cpu=1 sql-dist-cpu=1 logical-gib=10 used-gib=20 available-gib=80 write-bytes-per-sec=10000000
+----
+cpu:             load=15.00 cores  capacity=16.00 cores  amp=6.0000
+disk:            load=20.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=6.0000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# SQL-aware multi-store: 4 stores, even split.
+# storesCPU=4, nodeUsage=10, nodeCap=16.
+# sqlGatewayCPU=2, sqlDistCPU=2. moveableCPU = 6, totalTracked = 8.
+# k = 10/8 = 1.25. ampFactor = (1 + 2/4) * 1.25 = 1.875.
+# immovable = max(0, 10 - 6*1.25) = 2.5.
+# storeCPU = 4/4 = 1. load = 1*1.875 + 2.5/4 = 2.5, capacity = 4.
+# -------------------------------------------------------------------
+compute num-stores=4 stores-cpu=4 node-cpu-usage=10 node-cpu-capacity=16 sql-gateway-cpu=2 sql-dist-cpu=2 logical-gib=10 used-gib=20 available-gib=80 write-bytes-per-sec=10000000
+----
+cpu:             load=2.50 cores  capacity=4.00 cores  amp=1.8750
+disk:            load=20.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=1.8750, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# SQL-aware with store-cpu-per-second: hot store on a 4-store node.
+# Same node as above, but this store reports 3 of the 4 KV cores.
+# load = 3*1.875 + 2.5/4 = 6.25, capacity = 4.
+# -------------------------------------------------------------------
+compute num-stores=4 stores-cpu=4 node-cpu-usage=10 node-cpu-capacity=16 store-cpu-per-second=3 sql-gateway-cpu=2 sql-dist-cpu=2 logical-gib=10 used-gib=20 available-gib=80 write-bytes-per-sec=10000000
+----
+cpu:             load=6.25 cores  capacity=4.00 cores  amp=1.8750
+disk:            load=20.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=1.8750, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# SQL-aware zero storesCPU: no KV work, all gateway SQL.
+# Falls to storesCPU<=0 branch: ampFactor=cap(3), immovable=nodeUsage.
+# storeCPU=0, load = 0*3 + 5/1 = 5, capacity = 16.
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=0 node-cpu-usage=5 node-cpu-capacity=16 sql-gateway-cpu=3 sql-dist-cpu=0 logical-gib=10 used-gib=20 available-gib=80 write-bytes-per-sec=10000000
+----
+cpu:             load=5.00 cores  capacity=16.00 cores  amp=3.0000
+disk:            load=20.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=3.0000, disk=2.0000, write-bw=1.0000]
+
+# -------------------------------------------------------------------
+# SQL-aware k clamped at 1 (measurement lag): tracked CPU > nodeUsage.
+# 1 store, storesCPU=4, nodeUsage=3, nodeCap=16.
+# sqlGatewayCPU=1, sqlDistCPU=1. moveableCPU = 5, totalTracked = 6.
+# k = max(1, min(3/6, 3)) = 1. ampFactor = 1.25*1 = 1.25.
+# immovable = max(0, 3 - 5*1) = 0.
+# load = 4*1.25 + 0 = 5 (overshoots nodeUsage; transient, conservative).
+# -------------------------------------------------------------------
+compute num-stores=1 stores-cpu=4 node-cpu-usage=3 node-cpu-capacity=16 sql-gateway-cpu=1 sql-dist-cpu=1 logical-gib=10 used-gib=20 available-gib=80 write-bytes-per-sec=10000000
+----
+cpu:             load=5.00 cores  capacity=16.00 cores  amp=1.2500
+disk:            load=20.00 GiB  capacity=100.00 GiB  amp=2.0000
+write-bandwidth: load=9.54 MiB/s  capacity=unknown  amp=1.0000
+amplification-factors: [cpu=1.2500, disk=2.0000, write-bw=1.0000]

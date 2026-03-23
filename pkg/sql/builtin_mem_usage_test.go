@@ -53,16 +53,17 @@ func TestAggregatesMonitorMemory(t *testing.T) {
 					if !block {
 						return nil
 					}
-					var seenMeta bool
+					var seenBytesRead bool
 					return func(row rowenc.EncDatumRow, batch coldata.Batch, meta *execinfrapb.ProducerMetadata) (rowenc.EncDatumRow, coldata.Batch, *execinfrapb.ProducerMetadata) {
-						if meta != nil && !seenMeta {
-							// If this is the first metadata object, then we
-							// know that the test query is almost done
-							// executing, so unblock the main goroutine and then
-							// wait for that goroutine to signal us to proceed.
+						if meta != nil && meta.Metrics != nil && meta.Metrics.BytesRead != 0 && !seenBytesRead {
+							// If this is the first metrics metadata with
+							// BytesRead set, then we know that the test query
+							// is almost done executing, so unblock the main
+							// goroutine and then wait for that goroutine to
+							// signal us to proceed.
 							blockMainCh <- struct{}{}
 							<-blockWorkerCh
-							seenMeta = true
+							seenBytesRead = true
 						}
 						return row, batch, meta
 					}

@@ -19,6 +19,7 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/kv",
+        "//pkg/obs/ash",
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/rpcbase",
@@ -78,9 +79,12 @@ go_test(
         "utils_test.go",
     ],
     embed = [":flowinfra"],
+    exec_properties = select({
+        "//build/toolchains:is_heavy": {"test.Pool": "large"},
+        "//conditions:default": {"test.Pool": "default"},
+    }),
     deps = [
         "//pkg/base",
-        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",

@@ -674,6 +674,38 @@ SELECT to_char(d1, 'YYYYTH YYYYth Jth')
 0029TH 0029th 1731873rd
 -0033RD -0033rd 1708823rd
 
+# ISO week format specifiers (IW, IYYY, IYY, IY, I) should work with intervals.
+query T
+SELECT to_char(d1, 'IYYY IYY IY I IW')
+   FROM intvl_tbl ORDER BY id
+----
+0029 029 29 9 32
+-0034 -034 -34 -4 26
+
+# RM (Roman month) with negative intervals. Reset intervalstyle first since
+# it was changed earlier in the test file and affects how interval literals
+# are parsed.
+statement ok
+SET intervalstyle = DEFAULT
+
+query T
+SELECT to_char('-1 month 1 day'::interval, 'FMRM')
+----
+XII
+
+query T
+SELECT to_char('-28 years 1 months'::interval, 'RM')
+----
+II
+
+query T
+SELECT to_char('-45 years 8 months'::interval, 'RM')
+----
+IX
+
+statement ok
+SET intervalstyle = 'sql_standard'
+
 # Test intervalstyle being respected in pg_indexes.
 
 statement ok

@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -50,11 +51,14 @@ type tupleProjOp struct {
 var _ colexecop.Operator = &tupleProjOp{}
 var _ execreleasable.Releasable = &tupleProjOp{}
 
-func (t *tupleProjOp) Next() coldata.Batch {
-	batch := t.Input.Next()
+func (t *tupleProjOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := t.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	t.converter.ConvertBatchAndDeselect(batch)
 	projVec := batch.ColVec(t.outputIdx)
@@ -82,7 +86,7 @@ func (t *tupleProjOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 func (t *tupleProjOp) projectInto(tuple *tree.DTuple, convertedIdx int) tree.Datum {

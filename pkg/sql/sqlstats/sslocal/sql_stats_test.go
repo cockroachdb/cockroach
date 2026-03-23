@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -461,7 +462,7 @@ func TestExplicitTxnFingerprintAccounting(t *testing.T) {
 		nil, /* knobs */
 	)
 
-	ingester := sslocal.NewSQLStatsIngester(st, nil /* knobs */, sslocal.NewIngesterMetrics(), sqlStats)
+	ingester := sslocal.NewSQLStatsIngester(st, nil /* knobs */, sslocal.NewIngesterMetrics(), nil /* parentMon */, sqlStats)
 	ingester.Start(ctx, stopper)
 
 	appStats := sqlStats.GetApplicationStats("" /* appName */)
@@ -586,7 +587,7 @@ func TestAssociatingStmtStatsWithTxnFingerprint(t *testing.T) {
 			nil,
 			nil,
 		)
-		ingester := sslocal.NewSQLStatsIngester(st, nil /* knobs */, sslocal.NewIngesterMetrics(), sqlStats)
+		ingester := sslocal.NewSQLStatsIngester(st, nil /* knobs */, sslocal.NewIngesterMetrics(), nil /* parentMon */, sqlStats)
 		appStats := sqlStats.GetApplicationStats("" /* appName */)
 		statsCollector := sslocal.NewStatsCollector(
 			st,
@@ -1640,6 +1641,7 @@ FROM crdb_internal.statement_statistics WHERE app_name = $1`, appName)
 func TestSQLStatsDiscardStatsOnFingerprintLimit(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t)
 
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
@@ -1779,10 +1781,10 @@ func TestSQLStatsDiscardStatsOnFingerprintLimit(t *testing.T) {
 					sqlstatstestutil.StatementFilter{AllowInternal: true})
 			}
 			if tc.txnLimit == 0 {
-				sqlstatstestutil.WaitForTransactionEntriesAtLeast(t, utilConn, tc.minTxns,
-					sqlstatstestutil.TransactionFilter{AllowInternal: true})
+				sqlstatstestutil.WaitForTransactionEntriesAtLeast(t, utilConn, tc.minTxns)
 			} else {
-				sqlstatstestutil.WaitForTransactionEntriesEqual(t, utilConn, tc.txnLimit-1)
+				sqlstatstestutil.WaitForTransactionEntriesEqual(t, utilConn, tc.txnLimit-1,
+					sqlstatstestutil.TransactionFilter{AllowInternal: true})
 			}
 			testutils.SucceedsSoon(t, func() error {
 				if discardedMetric.Count() < int64(tc.totalSkipped) {

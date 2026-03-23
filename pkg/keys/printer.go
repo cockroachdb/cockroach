@@ -143,7 +143,6 @@ var constSubKeyDict = []struct {
 }{
 	{"/storeIdent", localStoreIdentSuffix},
 	{"/gossipBootstrap", localStoreGossipSuffix},
-	{"/clusterVersion", localStoreClusterVersionSuffix},
 	{"/nodeTombstone", localStoreNodeTombstoneSuffix},
 	{"/cachedSettings", localStoreCachedSettingsSuffix},
 	{"/wag", localStoreWAGNodeSuffix},

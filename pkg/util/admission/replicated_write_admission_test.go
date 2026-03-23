@@ -90,7 +90,7 @@ func TestReplicatedWriteAdmission(t *testing.T) {
 				elasticMetrics := makeWorkQueueMetrics("elastic", registry)
 				workQueueMetrics := [admissionpb.NumWorkClasses]*WorkQueueMetrics{regMetrics, elasticMetrics}
 				opts := makeWorkQueueOptions(KVWork)
-				opts.usesTokens = true
+				opts.mode = usesTokens
 				opts.timeSource = timeutil.NewManualTime(tzero)
 				opts.disableEpochClosingGoroutine = true
 				knobs := &TestingKnobs{

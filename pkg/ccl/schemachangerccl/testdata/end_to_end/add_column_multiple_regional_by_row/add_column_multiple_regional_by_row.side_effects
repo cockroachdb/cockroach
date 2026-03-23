@@ -62,7 +62,7 @@ write *eventpb.AlterTable to event log:
     tag: ALTER TABLE
     user: root
   tableName: multiregion_db.public.table_regional_by_row
-## StatementPhase stage 1 of 1 with 35 MutationType ops
+## StatementPhase stage 1 of 1 with 38 MutationType ops
 upsert descriptor #108
   ...
          oid: 20
@@ -323,12 +323,13 @@ upsert descriptor #108
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
+upsert zone config for #108
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 40 MutationType ops
+## PreCommitPhase stage 2 of 2 with 43 MutationType ops
 upsert descriptor #108
   ...
          oid: 20
@@ -625,6 +626,7 @@ upsert descriptor #108
      unexposedParentSchemaId: 105
   -  version: "1"
   +  version: "2"
+upsert zone config for #108
 persist all catalog changes to storage
 create job #1 (non-cancelable: false): "ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUMN v, ADD COLUMN j INT8 UNIQUE DEFAULT unique_rowid(), DROP COLUMN m, ADD COLUMN l INT8 UNIQUE DEFAULT unique_rowid()"
   descriptor IDs: [108]

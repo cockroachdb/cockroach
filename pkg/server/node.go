@@ -74,6 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/drpcinterceptor"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
@@ -112,6 +113,7 @@ understanding the health of the KV layer.
 `,
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaExecSuccess = metric.Metadata{
 		Name: "exec.success",
@@ -467,11 +469,9 @@ func GetBootstrapSchemaForTest(
 // written, since epoch-based leases cannot be granted until then. All other
 // engines are initialized with their StoreIdent.
 func bootstrapCluster(
-	ctx context.Context, engines []storage.Engine, initCfg initServerCfg,
+	ctx context.Context, engines Engines, initCfg initServerCfg,
 ) (*initState, error) {
-	// We expect all the stores to be empty at this point, except for
-	// the store cluster version key. Assert so.
-	//
+	// We expect all the stores to be empty at this point.
 	// TODO(jackson): Eventually we should be able to avoid opening the
 	// engines altogether until here.
 	if err := assertEnginesEmpty(engines); err != nil {
@@ -480,7 +480,7 @@ func bootstrapCluster(
 
 	// We use our binary version to bootstrap the cluster.
 	bootstrapVersion := clusterversion.ClusterVersion{Version: initCfg.latestVersion}
-	if err := kvstorage.WriteClusterVersionToEngines(ctx, engines, bootstrapVersion); err != nil {
+	if err := kvstorage.WriteClusterVersionToEngines(engines, bootstrapVersion); err != nil {
 		return nil, err
 	}
 
@@ -567,7 +567,6 @@ func NewNode(
 	txnMetrics kvcoord.TxnMetrics,
 	stores *kvserver.Stores,
 	clusterID *base.ClusterIDContainer,
-	kvAdmissionQ *admission.WorkQueue,
 	elasticCPUGrantCoord *admission.ElasticCPUGrantCoordinator,
 	storeGrantCoords *admission.StoreGrantCoordinators,
 	tenantUsage multitenant.TenantUsageServer,
@@ -860,18 +859,27 @@ func (n *Node) SetHLCUpperBound(ctx context.Context, hlcUpperBound int64) error 
 }
 
 func (n *Node) addStore(ctx context.Context, store *kvserver.Store) {
-	cv := store.TODOEngine().MinVersion()
-	if cv == (roachpb.Version{}) {
+	// NB: both engines have the same MinVersion, check any.
+	if cv := store.StateEngine().MinVersion(); cv == (roachpb.Version{}) {
 		// The store should have had a version written to it during the store
 		// initialization process.
 		log.Dev.Fatal(ctx, "attempting to add a store without a version")
 	}
-	store.TODOEngine().RegisterDiskSlowCallback(func(info pebble.DiskSlowInfo) {
-		n.onStoreDiskSlow(n.AnnotateCtx(context.Background()), store.StoreID(), info)
-	})
-	store.TODOEngine().RegisterLowDiskSpaceCallback(func(info pebble.LowDiskSpaceInfo) {
-		n.onLowDiskSpace(n.AnnotateCtx(context.Background()), store.StoreID(), info)
-	})
+
+	// Register all storage engines for disk slow and low disk space callbacks.
+	register := func(eng storage.Engine) {
+		eng.RegisterDiskSlowCallback(func(info pebble.DiskSlowInfo) {
+			n.onStoreDiskSlow(n.AnnotateCtx(context.Background()), store.StoreID(), info)
+		})
+		eng.RegisterLowDiskSpaceCallback(func(info pebble.LowDiskSpaceInfo) {
+			n.onLowDiskSpace(n.AnnotateCtx(context.Background()), store.StoreID(), info)
+		})
+	}
+	register(store.StateEngine())
+	if store.EnginesSeparated() {
+		register(store.LogEngine())
+	}
+
 	n.stores.AddStore(store)
 	n.recorder.AddStore(store)
 }
@@ -914,7 +922,7 @@ func (n *Node) onStoreDiskSlow(
 		// logStructuredEvent does an async write to system.eventlog, however it could
 		// do a synchronous log write to the node logger, so we call it within this async
 		// task as opposed to outside it.
-		n.logStructuredEvent(ctx, logpb.EventPayload(ev))
+		n.logStructuredEventWithSeverity(ctx, logpb.EventPayload(ev), severity.WARNING)
 
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
@@ -962,7 +970,7 @@ func (n *Node) onLowDiskSpace(
 		TotalBytes:       info.TotalBytes,
 	}
 	ev.CommonDetails().Timestamp = timeutil.Now().UnixNano()
-	n.logStructuredEvent(ctx, logpb.EventPayload(ev))
+	n.logStructuredEventWithSeverity(ctx, logpb.EventPayload(ev), severity.WARNING)
 }
 
 // validateStores iterates over all stores, verifying they agree on node ID.
@@ -983,7 +991,7 @@ func (n *Node) validateStores(ctx context.Context) error {
 // cluster and node ID have been established for this node. Store IDs are
 // allocated via a sequence id generator stored at a system key per node. The
 // new stores are added to n.stores.
-func (n *Node) initializeAdditionalStores(ctx context.Context, engines []storage.Engine) error {
+func (n *Node) initializeAdditionalStores(ctx context.Context, engines []kvstorage.Engines) error {
 	if n.clusterID.Get() == uuid.Nil {
 		return errors.New("missing cluster ID during initialization of additional store")
 	}
@@ -1219,12 +1227,18 @@ func (n *Node) computeMetricsPeriodically(
 			} else {
 				storeToMetrics[store].FlushWriteThroughput = newMetrics.Flush.WriteThroughput
 			}
-			if err := newMetrics.LogWriter.FsyncLatency.Write(&storeToMetrics[store].WALFsyncLatency); err != nil {
+			if err := newMetrics.Metrics.WALMetrics.PrimaryFileOpLatency.Write(&storeToMetrics[store].WALFsyncLatency); err != nil {
 				return err
 			}
 			if newMetrics.WAL.Failover.FailoverWriteAndSyncLatency != nil {
 				if err := newMetrics.WAL.Failover.FailoverWriteAndSyncLatency.Write(
 					&storeToMetrics[store].WALFailoverWriteAndSyncLatency); err != nil {
+					return err
+				}
+			}
+			if newMetrics.Metrics.WALMetrics.SecondaryFileOpLatency != nil {
+				if err := newMetrics.Metrics.WALMetrics.SecondaryFileOpLatency.Write(
+					&storeToMetrics[store].WALSecondaryFileOpLatency); err != nil {
 					return err
 				}
 			}
@@ -1250,8 +1264,10 @@ func (n *Node) UpdateIOThreshold(id roachpb.StoreID, threshold *admissionpb.IOTh
 // diskStatsMap encapsulates all the logic for populating DiskStats for
 // admission.StoreMetrics.
 type diskStatsMap struct {
-	provisionedRate map[roachpb.StoreID]storageconfig.ProvisionedRate
-	diskMonitors    map[roachpb.StoreID]kvserver.DiskStatsMonitor
+	mm                monitorManagerInterface
+	provisionedRate   map[roachpb.StoreID]storageconfig.ProvisionedRate
+	diskMonitors      map[roachpb.StoreID]kvserver.DiskStatsMonitor
+	deviceIDToStoreID map[disk.DeviceID]roachpb.StoreID
 }
 
 func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
@@ -1267,18 +1283,52 @@ func (dsm *diskStatsMap) tryPopulateAdmissionDiskStats(
 			return map[roachpb.StoreID]admission.DiskStats{}, err
 		}
 
-		provisionedBandwidth := clusterProvisionedBandwidth
-		spec, ok := dsm.provisionedRate[id]
-		if ok && spec.ProvisionedBandwidth > 0 {
-			provisionedBandwidth = spec.ProvisionedBandwidth
-		}
 		stats[id] = admission.DiskStats{
-			ProvisionedBandwidth: provisionedBandwidth,
 			BytesRead:            uint64(cumulativeStats.BytesRead()),
 			BytesWritten:         uint64(cumulativeStats.BytesWritten()),
+			ProvisionedBandwidth: dsm.provisionedBandwidth(clusterProvisionedBandwidth, id),
 		}
 	}
 	return stats, nil
+}
+
+// collectInstantaneous collects the instantaneous disk stats and populates the
+// result into buf.Stats.
+func (dsm *diskStatsMap) collectInstantaneous(
+	buf *admission.DiskMetricsBuf, clusterProvisionedBandwidth int64,
+) (err error) {
+	buf.Raw, buf.Scratch, err = dsm.mm.CollectInstantaneous(buf.Raw, buf.Scratch)
+	if err != nil {
+		return err
+	}
+
+	buf.Stats = buf.Stats[:0]
+	for _, stat := range buf.Raw {
+		storeID, ok := dsm.deviceIDToStoreID[stat.DeviceID]
+		if !ok {
+			log.Dev.Warningf(context.Background(), "unknown device ID %v in disk stats", stat.DeviceID)
+		}
+		buf.Stats = append(buf.Stats, admission.StoreIDAndStats{
+			StoreID: storeID,
+			Stats: admission.DiskStats{
+				BytesRead:            uint64(stat.BytesRead()),
+				BytesWritten:         uint64(stat.BytesWritten()),
+				ProvisionedBandwidth: dsm.provisionedBandwidth(clusterProvisionedBandwidth, storeID),
+			},
+		})
+	}
+	return nil
+}
+
+// provisionedBandwidthForStore returns the provisioned bandwidth for a store.
+func (dsm *diskStatsMap) provisionedBandwidth(
+	clusterProvisionedBandwidth int64, storeID roachpb.StoreID,
+) int64 {
+	spec, ok := dsm.provisionedRate[storeID]
+	if ok && spec.ProvisionedBandwidth > 0 {
+		return spec.ProvisionedBandwidth
+	}
+	return clusterProvisionedBandwidth
 }
 
 func (dsm *diskStatsMap) empty() bool {
@@ -1288,20 +1338,23 @@ func (dsm *diskStatsMap) empty() bool {
 // monitorManagerInterface abstracts disk.MonitorManager for testing purposes.
 type monitorManagerInterface interface {
 	Monitor(string) (kvserver.DiskStatsMonitor, error)
+	CollectInstantaneous(statsBuf []disk.Stats, byteBuf []byte) ([]disk.Stats, []byte, error)
 }
 
 func (dsm *diskStatsMap) initDiskStatsMap(
-	specs []base.StoreSpec, engines []storage.Engine, diskManager monitorManagerInterface,
+	specs []base.StoreSpec, engines []kvstorage.Engines, diskManager monitorManagerInterface,
 ) error {
 	*dsm = diskStatsMap{
-		provisionedRate: make(map[roachpb.StoreID]storageconfig.ProvisionedRate),
-		diskMonitors:    make(map[roachpb.StoreID]kvserver.DiskStatsMonitor),
+		mm:                diskManager,
+		provisionedRate:   make(map[roachpb.StoreID]storageconfig.ProvisionedRate),
+		diskMonitors:      make(map[roachpb.StoreID]kvserver.DiskStatsMonitor),
+		deviceIDToStoreID: make(map[disk.DeviceID]roachpb.StoreID),
 	}
 	for i := range engines {
 		if specs[i].Path == "" || specs[i].InMemory {
 			continue
 		}
-		id, err := kvstorage.ReadStoreIdent(context.Background(), engines[i])
+		id, err := kvstorage.ReadStoreIdent(context.Background(), engines[i].LogEngine())
 		if err != nil {
 			return err
 		}
@@ -1311,6 +1364,7 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 		}
 		dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRate
 		dsm.diskMonitors[id.StoreID] = monitor
+		dsm.deviceIDToStoreID[monitor.DeviceID()] = id.StoreID
 	}
 	return nil
 }
@@ -1323,13 +1377,22 @@ func (dsm *diskStatsMap) closeDiskMonitors() {
 
 type diskMonitorManager disk.MonitorManager
 
+var _ monitorManagerInterface = &diskMonitorManager{}
+
 // Monitor wraps disk.MonitorManager to satisfy monitorManagerInterface.
 func (mm *diskMonitorManager) Monitor(path string) (kvserver.DiskStatsMonitor, error) {
 	return (*disk.MonitorManager)(mm).Monitor(path)
 }
 
+// CollectInstantaneous wraps disk.MonitorManager to satisfy monitorManagerInterface.
+func (mm *diskMonitorManager) CollectInstantaneous(
+	statsBuf []disk.Stats, byteBuf []byte,
+) ([]disk.Stats, []byte, error) {
+	return (*disk.MonitorManager)(mm).CollectInstantaneous(statsBuf, byteBuf)
+}
+
 func (n *Node) registerEnginesForDiskStatsMap(
-	specs []base.StoreSpec, engines []storage.Engine, diskManager *diskMonitorManager,
+	specs []base.StoreSpec, engines []kvstorage.Engines, diskManager *diskMonitorManager,
 ) (admission.PebbleMetricsProvider, error) {
 	pmp := &nodePebbleMetricsProvider{n: n}
 	if err := pmp.diskStatsMap.initDiskStatsMap(specs, engines, diskManager); err != nil {
@@ -1350,6 +1413,8 @@ type nodePebbleMetricsProvider struct {
 	diskStatsMap diskStatsMap
 }
 
+var _ admission.PebbleMetricsProvider = &nodePebbleMetricsProvider{}
+
 // GetPebbleMetrics implements admission.PebbleMetricsProvider.
 func (pmp *nodePebbleMetricsProvider) GetPebbleMetrics() []admission.StoreMetrics {
 	clusterProvisionedBandwidth := kvadmission.ProvisionedBandwidth.Get(
@@ -1361,7 +1426,7 @@ func (pmp *nodePebbleMetricsProvider) GetPebbleMetrics() []admission.StoreMetric
 	}
 	var metrics []admission.StoreMetrics
 	_ = pmp.n.stores.VisitStores(func(store *kvserver.Store) error {
-		eng := store.TODOEngine()
+		eng := store.TODOBothEngines()
 		m := eng.GetMetrics()
 		opts := eng.GetPebbleOptions()
 		memTableSizeForStopWrites := opts.MemTableSize * uint64(opts.MemTableStopWritesThreshold)
@@ -1381,6 +1446,14 @@ func (pmp *nodePebbleMetricsProvider) GetPebbleMetrics() []admission.StoreMetric
 		return nil
 	})
 	return metrics
+}
+
+// GetDiskStats collects the instantaneous disk stats and populates the
+// result into buf.Stats. It implements admission.PebbleMetricsProvider.
+func (pmp *nodePebbleMetricsProvider) GetDiskStats(buf *admission.DiskMetricsBuf) error {
+	clusterProvisionedBandwidth := kvadmission.ProvisionedBandwidth.Get(
+		&pmp.n.storeCfg.Settings.SV)
+	return pmp.diskStatsMap.collectInstantaneous(buf, clusterProvisionedBandwidth)
 }
 
 // Close implements admission.PebbleMetricsProvider.
@@ -1560,9 +1633,15 @@ func (n *Node) recordJoinEvent(ctx context.Context) {
 }
 
 func (n *Node) logStructuredEvent(ctx context.Context, event logpb.EventPayload) {
+	n.logStructuredEventWithSeverity(ctx, event, severity.INFO)
+}
+
+func (n *Node) logStructuredEventWithSeverity(
+	ctx context.Context, event logpb.EventPayload, sev logpb.Severity,
+) {
 	// Ensure that the event goes to log files even if LogRangeAndNodeEvents is
 	// disabled (which means skip the system.eventlog _table_).
-	log.StructuredEvent(ctx, severity.INFO, event)
+	log.StructuredEvent(ctx, sev, event)
 
 	if !n.storeCfg.LogRangeAndNodeEvents {
 		return
@@ -1634,7 +1713,12 @@ func (n *Node) batchInternal(
 	if err != nil {
 		return nil, err
 	}
+	// AnnotateCtx embeds ElasticCPUWorkHandle in the context for use deep in
+	// the storage layer (e.g., mvccExportToWriter).
 	ctx = handle.AnnotateCtx(ctx)
+	// AdmissionInfo is passed explicitly through the call chain to evalAndPropose
+	// for replication flow control.
+	admissionInfo := handle.AdmissionInfo()
 
 	var writeBytes *kvadmission.StoreWriteBytes
 	defer func() {
@@ -1659,7 +1743,7 @@ func (n *Node) batchInternal(
 		originalRequest = args.ShallowCopy()
 	}
 	var pErr *kvpb.Error
-	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, args)
+	br, writeBytes, pErr = n.stores.SendWithWriteBytes(ctx, args, admissionInfo)
 	if pErr != nil {
 		if originalRequest != nil {
 			if proxyResponse := n.maybeProxyRequest(ctx, originalRequest, pErr); proxyResponse != nil {
@@ -2007,12 +2091,20 @@ func setupSpanForIncomingRPC(
 ) (context.Context, spanForRequest) {
 	var newSpan *tracing.Span
 	remoteParent := !ba.TraceInfo.Empty()
+	// DRPC server interceptors inject the method name into the context
+	// because DRPC uses different method names (/cockroach.roachpb.KVBatch/Batch).
+	// For gRPC and local requests, we fall back to tracingutil.BatchMethodName
+	// (/cockroach.roachpb.Internal/Batch), so gRPC interceptors don't need to inject it.
+	methodName := tracingutil.BatchMethodName
+	if drpcinterceptor.IsDRPCRequest(ctx) {
+		methodName = tracingutil.KVBatchMethodName
+	}
 	if !remoteParent {
 		// This is either a local request which circumvented gRPC, or a remote
 		// request that didn't specify tracing information. We make a child span
 		// if the incoming request would like to be traced.
 		ctx, newSpan = tracing.ChildSpan(ctx,
-			tracingutil.BatchMethodName, tracing.WithServerSpanKind)
+			methodName, tracing.WithServerSpanKind)
 	} else {
 		// Non-local call. Tracing information comes from the request proto.
 
@@ -2024,7 +2116,7 @@ func setupSpanForIncomingRPC(
 		}
 
 		ctx, newSpan = tr.StartSpanCtx(
-			ctx, tracingutil.BatchMethodName,
+			ctx, methodName,
 			tracing.WithRemoteParentFromTraceInfo(ba.TraceInfo),
 			tracing.WithServerSpanKind)
 	}

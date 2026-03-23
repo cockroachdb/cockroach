@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/followerreads"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
@@ -38,10 +39,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiinternal"
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
@@ -76,6 +78,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/schedulerlatency"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/goexectrace"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -108,8 +111,9 @@ type SQLServerWrapper struct {
 	// Metric registries.
 	// See the explanatory comments in server.go and status/recorder.go
 	// for details.
-	registry    *metric.Registry
-	sysRegistry *metric.Registry
+	registry               *metric.Registry
+	sysRegistry            *metric.Registry
+	clusterMetricsRegistry metric.RegistryReader
 
 	recorder *status.MetricsRecorder
 	runtime  *status.RuntimeStatSampler
@@ -220,7 +224,9 @@ func NewSeparateProcessTenantServer(
 	}
 	// TODO(irfansharif): hook up NewGrantCoordinatorSQL.
 	var noopElasticCPUGrantCoord *admission.ElasticCPUGrantCoordinator = nil
-	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, mtinfopb.ServiceModeExternal, noopElasticCPUGrantCoord)
+	return newTenantServer(
+		ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, mtinfopb.ServiceModeExternal,
+		noopElasticCPUGrantCoord, admission.NewSQLCPUProvider())
 }
 
 // newSharedProcessTenantServer creates a tenant-specific, SQL-only
@@ -236,6 +242,7 @@ func newSharedProcessTenantServer(
 	sqlCfg SQLConfig,
 	tenantNameContainer *roachpb.TenantNameContainer,
 	elastic admission.PacerFactory,
+	sqlCPUProvider admission.SQLCPUProvider,
 ) (*SQLServerWrapper, error) {
 	if baseCfg.IDContainer.Get() == 0 {
 		return nil, errors.AssertionFailedf("programming error: NewSharedProcessTenantServer called before NodeID was assigned.")
@@ -259,7 +266,9 @@ func newSharedProcessTenantServer(
 			return spanconfiglimiter.NoopLimiter{}
 		},
 	}
-	return newTenantServer(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, mtinfopb.ServiceModeShared, elastic)
+	return newTenantServer(
+		ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, mtinfopb.ServiceModeShared, elastic,
+		sqlCPUProvider)
 }
 
 // newTenantServer constructs a SQLServerWrapper.
@@ -274,6 +283,7 @@ func newTenantServer(
 	deps tenantServerDeps,
 	serviceMode mtinfopb.TenantServiceMode,
 	elastic admission.PacerFactory,
+	sqlCPUProvider admission.SQLCPUProvider,
 ) (*SQLServerWrapper, error) {
 	// TODO(knz): Make the license application a per-server thing
 	// instead of a global thing.
@@ -321,7 +331,8 @@ func newTenantServer(
 	// then rely on some mechanism to retrieve the ID from the name to
 	// initialize the rest of the server.
 	baseCfg.idProvider.SetTenantID(sqlCfg.TenantID)
-	args, err := makeTenantSQLServerArgs(ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, serviceMode, elastic)
+	args, err := makeTenantSQLServerArgs(
+		ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, serviceMode, elastic, sqlCPUProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -438,6 +449,9 @@ func newTenantServer(
 	// Instantiate the migration API server.
 	tms := newTenantMigrationServer(sqlServer)
 	serverpb.RegisterMigrationServer(args.grpc.Server, tms)
+	if err := serverpb.DRPCRegisterMigration(args.drpc.DRPCServer, tms); err != nil {
+		return nil, err
+	}
 	sqlServer.migrationServer = tms // only for testing via testTenant
 
 	// Tell the authz server how to connect to SQL.
@@ -485,7 +499,7 @@ func newTenantServer(
 		gw.RegisterService(args.grpc.Server)
 	}
 
-	for _, s := range []drpcServiceRegistrar{sAdmin, sStatus, sAuth, args.tenantTimeSeriesServer} {
+	for _, s := range []drpcServiceRegistrar{sAdmin, sStatus, args.tenantTimeSeriesServer} {
 		if err := s.RegisterDRPCService(args.drpc); err != nil {
 			return nil, err
 		}
@@ -503,6 +517,10 @@ func newTenantServer(
 		processCapAuthz = lsi.SameProcessCapabilityAuthorizer
 	}
 
+	// Create the callback for embedding metadata in Go execution traces,
+	// used by the debug server's trace endpoint.
+	logMetadata := goexectrace.NewLogMetadataFn(baseCfg.IDContainer)
+
 	// Create the debug API server.
 	debugServer := debug.NewServer(
 		baseCfg.AmbientCtx,
@@ -511,6 +529,7 @@ func newTenantServer(
 		sqlServer.execCfg.SQLStatusServer,
 		sqlCfg.TenantID,
 		processCapAuthz,
+		logMetadata,
 	)
 
 	return &SQLServerWrapper{
@@ -519,14 +538,15 @@ func newTenantServer(
 		clock:      args.clock,
 		rpcContext: args.rpcContext,
 
-		grpc:         args.grpc,
-		drpc:         args.drpc,
-		kvNodeDialer: args.kvNodeDialer,
-		db:           args.db,
-		registry:     args.registry,
-		sysRegistry:  args.sysRegistry,
-		recorder:     args.recorder,
-		runtime:      args.runtime,
+		grpc:                   args.grpc,
+		drpc:                   args.drpc,
+		kvNodeDialer:           args.kvNodeDialer,
+		db:                     args.db,
+		registry:               args.registry,
+		sysRegistry:            args.sysRegistry,
+		clusterMetricsRegistry: args.clusterMetricsRegistry,
+		recorder:               args.recorder,
+		runtime:                args.runtime,
 
 		http:            sHTTP,
 		adminAuthzCheck: adminAuthzCheck,
@@ -750,7 +770,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	s.recorder.AddNode(
 		metric.NewRegistry(), // node registry -- unused here
 		s.registry,
-		logRegistry, s.sysRegistry,
+		logRegistry, s.sysRegistry, s.clusterMetricsRegistry,
 		roachpb.NodeDescriptor{
 			NodeID: s.rpcContext.NodeID.Get(),
 		},
@@ -761,7 +781,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	)
 	// If there's a higher-level recorder, we link our metrics registry to it.
 	if s.sqlCfg.NodeMetricsRecorder != nil {
-		s.sqlCfg.NodeMetricsRecorder.AddTenantRegistry(s.sqlCfg.TenantID, s.registry)
+		s.sqlCfg.NodeMetricsRecorder.AddTenantRegistry(s.sqlCfg.TenantID, metric.NewTenantRegistries(s.registry, s.clusterMetricsRegistry))
 		s.stopper.AddCloser(stop.CloserFn(func() {
 			s.sqlCfg.NodeMetricsRecorder.RemoveTenantRegistry(s.sqlCfg.TenantID)
 		}))
@@ -780,13 +800,19 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	}
 	if !s.sqlServer.cfg.DisableRuntimeStatsMonitor {
 		// Begin recording runtime statistics.
+		goroutineDumper, err := maybeNewGoroutineDumper(workersCtx, s.sqlServer.cfg.GoroutineDumpDirName, s.ClusterSettings())
+		if err != nil {
+			return err
+		}
 		if err := startSampleEnvironment(workersCtx,
 			s.sqlServer.cfg,
 			0, /* pebbleCacheSize */
 			s.stopper,
 			s.runtime,
+			goroutineDumper,
 			s.tenantStatus.sessionRegistry,
 			s.sqlServer.execCfg.RootMemoryMonitor,
+			goexectrace.NewLogMetadataFn(s.cfg.IDContainer),
 		); err != nil {
 			return err
 		}
@@ -796,6 +822,27 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// initialized.
 	s.grpc.setMode(modeOperational)
 	s.drpc.setMode(modeOperational)
+
+	// Initialize the external storage builders configuration params now that the
+	// engines have been created. The object can be used to create ExternalStorage
+	// objects hereafter.
+	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
+	ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
+	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
+	s.externalStorageBuilder.init(
+		s.cfg.EarlyBootExternalStorageAccessor,
+		s.cfg.ExternalIODirConfig,
+		s.sqlServer.cfg.Settings,
+		s.sqlServer.sqlIDContainer,
+		s.kvNodeDialer,
+		s.sqlServer.cfg.TestingKnobs,
+		false, /* allowLocalFastpath */
+		s.sqlServer.execCfg.InternalDB.
+			CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
+		s.costController,
+		s.registry,
+		s.cfg.ExternalIODir,
+	)
 
 	// Report server listen addresses to logs.
 	log.Ops.Infof(ctx, "starting %s server at %s (use: %s)",
@@ -824,12 +871,50 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		return err
 	}
 
+	// Initialize the process-global ASH sampler. For standalone SQL pods
+	// this is the first (and only) initialization point. For
+	// shared-process secondary tenants, the sampler was already
+	// initialized by topLevelServer.PreStart in server.go, so
+	// InitGlobalSampler is a no-op. We only set the resolver when we
+	// actually created the sampler (standalone SQL pod), since the
+	// app name cache is process-global and the system tenant's resolver
+	// (set in server.go) is sufficient for shared-process tenants.
+	initialized, err := ash.InitGlobalSampler(
+		ctx,
+		roachpb.NodeID(s.sqlServer.SQLInstanceID()),
+		s.ClusterSettings(),
+		s.stopper,
+	)
+	if err != nil {
+		return err
+	}
+	if m := ash.GlobalSamplerMetrics(); m != nil {
+		s.sysRegistry.AddMetricStruct(m)
+	}
+	if initialized {
+		ash.SetGlobalAppNameResolver(func(
+			ctx context.Context, nodeID roachpb.NodeID, ids []uint64,
+		) (map[uint64]string, error) {
+			client, err := s.tenantStatus.dialNode(ctx, nodeID)
+			if err != nil {
+				return nil, err
+			}
+			resp, err := client.AppNameMappings(ctx, &serverpb.AppNameMappingsRequest{Ids: ids})
+			if err != nil {
+				return nil, err
+			}
+			return resp.Mappings, nil
+		})
+	}
+
 	var apiInternalServer http.Handler
-	if rpcbase.TODODRPC && rpcbase.DRPCEnabled(ctx, s.cfg.Settings) {
+	var drpcEnabled = false
+	if s.cfg.UseDRPC {
+		drpcEnabled = true
 		// Pass our own instance ID to connect to local RPC servers
 		apiInternalServer, err = apiinternal.NewAPIInternalServer(ctx,
 			s.sqlServer.sqlInstanceDialer,
-			roachpb.NodeID(s.sqlServer.SQLInstanceID()), s.cfg.Settings)
+			roachpb.NodeID(s.sqlServer.SQLInstanceID()), s.cfg.UseDRPC)
 		if err != nil {
 			return err
 		}
@@ -850,7 +935,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		s.adminAuthzCheck,            /* adminAuthzCheck */
 		s.recorder,                   /* metricSource */
 		s.runtime,                    /* runtimeStatsSampler */
-		gwMux,                        /* unauthenticatedGWMux */
 		apiInternalServer,            /* unauthenticatedAPIInternalServer */
 		s.debug,                      /* handleDebugUnauthenticated */
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -868,6 +952,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 				s.sqlServer.serviceMode == mtinfopb.ServiceModeShared,
 			DisableKvLevelAdvancedDebug: s.sqlServer.serviceMode != mtinfopb.ServiceModeShared,
 		},
+		drpcEnabled,
 	); err != nil {
 		return err
 	}
@@ -876,27 +961,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	if err := startSystemLogsGC(workersCtx, s.sqlServer); err != nil {
 		return err
 	}
-
-	// Initialize the external storage builders configuration params now that the
-	// engines have been created. The object can be used to create ExternalStorage
-	// objects hereafter.
-	ieMon := sql.MakeInternalExecutorMemMonitor(sql.MemoryMetrics{}, s.ClusterSettings())
-	ieMon.StartNoReserved(ctx, s.PGServer().SQLServer.GetBytesMonitor())
-	s.stopper.AddCloser(stop.CloserFn(func() { ieMon.Stop(ctx) }))
-	s.externalStorageBuilder.init(
-		s.cfg.EarlyBootExternalStorageAccessor,
-		s.cfg.ExternalIODirConfig,
-		s.sqlServer.cfg.Settings,
-		s.sqlServer.sqlIDContainer,
-		s.kvNodeDialer,
-		s.sqlServer.cfg.TestingKnobs,
-		false, /* allowLocalFastpath */
-		s.sqlServer.execCfg.InternalDB.
-			CloneWithMemoryMonitor(sql.MemoryMetrics{}, ieMon),
-		s.costController,
-		s.registry,
-		s.cfg.ExternalIODir,
-	)
 
 	// Start the job scheduler now that the SQL Server and
 	// external storage is initialized.
@@ -1116,6 +1180,7 @@ func makeTenantSQLServerArgs(
 	deps tenantServerDeps,
 	serviceMode mtinfopb.TenantServiceMode,
 	elastic admission.PacerFactory,
+	sqlCPUProvider admission.SQLCPUProvider,
 ) (sqlServerArgs, error) {
 	st := baseCfg.Settings
 
@@ -1133,6 +1198,7 @@ func makeTenantSQLServerArgs(
 	}
 
 	registry := metric.NewRegistry()
+	clusterMetricRegistry := clustermetrics.NewRegistryReader()
 	ruleRegistry := metric.NewRuleRegistry()
 	promRuleExporter := metric.NewPrometheusRuleExporter(ruleRegistry)
 
@@ -1243,6 +1309,7 @@ func makeTenantSQLServerArgs(
 		Locality:          baseCfg.Locality,
 		KVInterceptor:     costController,
 		TestingKnobs:      dsKnobs,
+		CanSendToFollower: followerreads.CanSendToFollower,
 	}
 	ds := kvcoord.NewDistSender(dsCfg)
 	registry.AddMetricStruct(ds.Metrics())
@@ -1272,6 +1339,7 @@ func makeTenantSQLServerArgs(
 	dbCtx.NodeID = deps.instanceIDContainer
 	db := kv.NewDBWithContext(baseCfg.AmbientCtx, tcsFactory, clock, dbCtx)
 	db.AdmissionPacerFactory = elastic
+	db.SQLCPUProvider = sqlCPUProvider
 	rangeFeedKnobs, _ := baseCfg.TestingKnobs.RangeFeed.(*rangefeed.TestingKnobs)
 	rangeFeedFactory, err := rangefeed.NewFactory(stopper, db, st, rangeFeedKnobs)
 	if err != nil {
@@ -1386,11 +1454,13 @@ func makeTenantSQLServerArgs(
 		nodeDescs:                tenantConnect,
 		systemConfigWatcher:      systemConfigWatcher,
 		spanConfigAccessor:       tenantConnect,
+		spanConfigReporter:       tenantConnect,
 		kvNodeDialer:             kvNodeDialer,
 		distSender:               ds,
 		db:                       db,
 		registry:                 registry,
 		sysRegistry:              sysRegistry,
+		clusterMetricsRegistry:   clusterMetricRegistry,
 		recorder:                 recorder,
 		sessionRegistry:          sessionRegistry,
 		remoteFlowRunner:         remoteFlowRunner,
@@ -1406,6 +1476,7 @@ func makeTenantSQLServerArgs(
 		drpc:                     drpcServer,
 		externalStorageBuilder:   esb,
 		admissionPacerFactory:    elastic,
+		sqlCPUProvider:           sqlCPUProvider,
 		rangeDescIteratorFactory: tenantConnect,
 		tenantTimeSeriesServer:   sTS,
 		tenantCapabilitiesReader: sql.EmptySystemTenantOnly[tenantcapabilities.Reader](),

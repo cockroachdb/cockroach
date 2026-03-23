@@ -190,7 +190,7 @@ func (m mvccGetOp) run(ctx context.Context) string {
 	if err != nil {
 		return fmt.Sprintf("error: %s", err)
 	}
-	return fmt.Sprintf("val = %v, intent = %v", res.Value, res.Intent)
+	return fmt.Sprintf("val = %v, intent = %v", res.Value.ToPointer(), res.Intent)
 }
 
 type mvccPutOp struct {

@@ -42,6 +42,7 @@ then
   PASSWORD_UNSET=1
   echo Connect as root to the host cluster and create tenant
   COCKROACH_CA_KEY=$BASE/client/ca.key COCKROACH_CERTS_DIR=$BASE/client $COCKROACH sql --host="$KV_ADDR"  -e "
+    SET allow_unsafe_internals = true;
     SELECT CASE WHEN NOT EXISTS(SELECT * FROM system.tenants WHERE id = $TENANT_ID)
     THEN crdb_internal.create_tenant($TENANT_ID)
     END" > /dev/null

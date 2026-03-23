@@ -109,6 +109,7 @@ go_library(
         "stores_store_liveness.go",
         "testing_knobs.go",
         "ts_maintenance_queue.go",
+        ":gen-raftleadertransferoutcome-stringer",  # keep
         ":gen-refreshraftreason-stringer",  # keep
     ],
     embed = [":kvserver_go_proto"],
@@ -161,6 +162,8 @@ go_library(
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/kvstorage",
         "//pkg/kv/kvserver/kvstorage/snaprecv",
+        "//pkg/kv/kvserver/kvstorage/wag",
+        "//pkg/kv/kvserver/kvstorage/wag/wagpb",
         "//pkg/kv/kvserver/leases",
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
@@ -191,6 +194,8 @@ go_library(
         "//pkg/multitenant",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
         "//pkg/multitenant/tenantcostmodel",
+        "//pkg/obs/ash",
+        "//pkg/obs/workloadid",
         "//pkg/raft",
         "//pkg/raft/raftlogger",
         "//pkg/raft/raftpb",
@@ -299,6 +304,7 @@ go_test(
         "client_rangefeed_test.go",
         "client_relocate_range_test.go",
         "client_replica_backpressure_test.go",
+        "client_replica_bench_test.go",
         "client_replica_circuit_breaker_test.go",
         "client_replica_gc_test.go",
         "client_replica_raft_overload_test.go",
@@ -318,6 +324,7 @@ go_test(
         "gossip_test.go",
         "helpers_test.go",
         "intent_resolver_integration_test.go",
+        "kv_snapshot_strategy_test.go",
         "lease_history_test.go",
         "lease_queue_test.go",
         "main_test.go",
@@ -364,6 +371,7 @@ go_test(
         "replica_rangefeed_lag_observer_test.go",
         "replica_rangefeed_test.go",
         "replica_rankings_test.go",
+        "replica_read_test.go",
         "replica_sideload_test.go",
         "replica_split_load_test.go",
         "replica_store_liveness_test.go",
@@ -390,6 +398,7 @@ go_test(
         "store_test.go",
         "stores_test.go",
         "testutils_test.go",
+        "trace_collection_test.go",
         "ts_maintenance_queue_test.go",
         "txn_recovery_integration_test.go",
         "txn_wait_queue_test.go",
@@ -449,6 +458,9 @@ go_test(
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvserver/kvstorage",
+        "//pkg/kv/kvserver/kvstorage/snaprecv",
+        "//pkg/kv/kvserver/kvstorage/wag",
+        "//pkg/kv/kvserver/kvstorage/wag/wagpb",
         "//pkg/kv/kvserver/leases",
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvserver/liveness/livenesspb",
@@ -582,12 +594,15 @@ go_test(
         "@com_github_raduberinde_btreemap//:btreemap",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@io_storj_drpc//:drpc",
+        "@io_storj_drpc//drpcclient",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//metadata",
         "@org_golang_x_exp//maps",
         "@org_golang_x_exp//slices",
         "@org_golang_x_sync//errgroup",
         "@org_golang_x_sync//syncmap",
+        "@org_golang_x_time//rate",
     ],
 )
 
@@ -624,6 +639,12 @@ go_proto_library(
         "//pkg/util/uuid",  # keep
         "@com_github_gogo_protobuf//gogoproto",
     ],
+)
+
+stringer(
+    name = "gen-raftleadertransferoutcome-stringer",
+    src = "replica_raft.go",
+    typ = "raftLeaderTransferOutcome",
 )
 
 stringer(

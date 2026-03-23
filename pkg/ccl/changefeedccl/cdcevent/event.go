@@ -39,6 +39,20 @@ import (
 
 const virtualColOrd = 1<<31 - 1
 
+// DecodeStatus indicates the outcome of decoding a KV.
+type DecodeStatus int
+
+const (
+	// DecodeOK indicates the KV was successfully decoded into a Row.
+	DecodeOK DecodeStatus = iota
+	// DecodeSkipUnwatchedFamily indicates the KV is from an unwatched column
+	// family and the event should be silently skipped.
+	DecodeSkipUnwatchedFamily
+	// DecodeSkipTableOffline indicates the KV is from an offline table and
+	// the event should be silently skipped.
+	DecodeSkipTableOffline
+)
+
 // Metadata describes event metadata.
 type Metadata struct {
 	TableID          descpb.ID                // Table ID.
@@ -53,7 +67,10 @@ type Metadata struct {
 // Decoder is an interface for decoding KVs into cdc event row.
 type Decoder interface {
 	// DecodeKV decodes specified key value to Row.
-	DecodeKV(ctx context.Context, kv roachpb.KeyValue, rt RowType, schemaTS hlc.Timestamp, keyOnly bool) (Row, error)
+	// Returns (row, DecodeOK, nil) on success.
+	// Returns (Row{}, DecodeSkip*, nil) when the event should be skipped.
+	// Returns (Row{}, DecodeOK, err) on actual errors.
+	DecodeKV(ctx context.Context, kv roachpb.KeyValue, rt RowType, schemaTS hlc.Timestamp, keyOnly bool) (Row, DecodeStatus, error)
 }
 
 // Row holds a row corresponding to an event.
@@ -490,6 +507,12 @@ type eventDescriptorFactory func(
 	schemaTS hlc.Timestamp,
 ) (*EventDescriptor, error)
 
+// DecoderOptions are options for the event decoder.
+type DecoderOptions struct {
+	// SkipOffline is true if the decoder should skip events from offline tables.
+	SkipOffline bool
+}
+
 type eventDecoder struct {
 	// Cached allocations for *row.Fetcher
 	rfCache *rowFetcherCache
@@ -508,6 +531,9 @@ type eventDecoder struct {
 	desc     catalog.TableDescriptor        // Current descriptor
 	family   *descpb.ColumnFamilyDescriptor // Current family
 	schemaTS hlc.Timestamp                  // Schema timestamp.
+
+	// skipOfflineEvents is true if the decoder should skip events from offline tables.
+	skipOfflineEvents bool
 }
 
 func getEventDescriptorCached(
@@ -547,6 +573,7 @@ func NewEventDecoder(
 	targets changefeedbase.Targets,
 	includeVirtual bool,
 	keyOnly bool,
+	opts DecoderOptions,
 ) (Decoder, error) {
 	rfCache, err := newRowFetcherCache(
 		ctx,
@@ -560,13 +587,17 @@ func NewEventDecoder(
 	if err != nil {
 		return nil, err
 	}
+	return NewEventDecoderWithCache(ctx, rfCache, includeVirtual, keyOnly, opts), nil
 
-	return NewEventDecoderWithCache(ctx, rfCache, includeVirtual, keyOnly), nil
 }
 
 // NewEventDecoderWithCache returns key value decoder.
 func NewEventDecoderWithCache(
-	ctx context.Context, rfCache *rowFetcherCache, includeVirtual bool, keyOnly bool,
+	ctx context.Context,
+	rfCache *rowFetcherCache,
+	includeVirtual bool,
+	keyOnly bool,
+	opts DecoderOptions,
 ) Decoder {
 	eventDescriptorCache := cache.NewUnorderedCache(DefaultCacheConfig)
 	getEventDescriptor := func(
@@ -580,6 +611,7 @@ func NewEventDecoderWithCache(
 	return &eventDecoder{
 		getEventDescriptor: getEventDescriptor,
 		rfCache:            rfCache,
+		skipOfflineEvents:  opts.SkipOffline,
 	}
 }
 
@@ -594,15 +626,14 @@ const (
 // DecodeKV decodes key value at specified schema timestamp.
 func (d *eventDecoder) DecodeKV(
 	ctx context.Context, kv roachpb.KeyValue, rt RowType, schemaTS hlc.Timestamp, keyOnly bool,
-) (Row, error) {
-	r, err := d.decodeKV(ctx, kv, rt, schemaTS, keyOnly)
+) (Row, DecodeStatus, error) {
+	r, status, err := d.decodeKV(ctx, kv, rt, schemaTS, keyOnly)
 	if err == nil {
-		return r, nil
+		return r, status, nil
 	}
-	// Unwatched family errors aren't terminal so return early and let caller
-	// decide what to do with it.
-	if errors.Is(err, ErrUnwatchedFamily) {
-		return Row{}, err
+	// Skip conditions are signaled via status, not errors.
+	if status != DecodeOK {
+		return Row{}, status, nil
 	}
 
 	// Failure to decode roachpb.KeyValue we received from rangefeed is pretty bad.
@@ -618,31 +649,35 @@ func (d *eventDecoder) DecodeKV(
 		"error decoding key %s@%s (hex_kv: %x)",
 		keys.PrettyPrint(nil, kv.Key), kv.Value.Timestamp, kvBytes))
 	log.Changefeed.Errorf(ctx, "terminal error decoding KV: %v", err)
-	return Row{}, err
+	return Row{}, DecodeOK, err
 }
 
 // decodeKV decodes key value at specified schema timestamp.
 func (d *eventDecoder) decodeKV(
 	ctx context.Context, kv roachpb.KeyValue, rt RowType, schemaTS hlc.Timestamp, keyOnly bool,
-) (Row, error) {
-	if err := d.initForKey(ctx, kv.Key, schemaTS, keyOnly); err != nil {
-		return Row{}, err
+) (Row, DecodeStatus, error) {
+	status, err := d.initForKey(ctx, kv.Key, schemaTS, keyOnly)
+	if err != nil {
+		return Row{}, DecodeOK, err
+	}
+	if status != DecodeOK {
+		return Row{}, status, nil
 	}
 
 	d.kvProvider.KVs = d.kvProvider.KVs[:0]
 	d.kvProvider.KVs = append(d.kvProvider.KVs, kv)
 	if err := d.fetcher.ConsumeKVProvider(ctx, &d.kvProvider); err != nil {
-		return Row{}, err
+		return Row{}, DecodeOK, err
 	}
 
 	datums, isDeleted, err := d.nextRow(ctx, rt == PrevRow)
 	if err != nil {
-		return Row{}, err
+		return Row{}, DecodeOK, err
 	}
 
 	ed, err := d.getEventDescriptor(d.desc, d.family, schemaTS)
 	if err != nil {
-		return Row{}, err
+		return Row{}, DecodeOK, err
 	}
 
 	return Row{
@@ -651,29 +686,36 @@ func (d *eventDecoder) decodeKV(
 		datums:          datums,
 		deleted:         isDeleted,
 		alloc:           &d.alloc,
-	}, nil
+	}, DecodeOK, nil
 }
 
 // initForKey initializes decoder state to prepare it to decode
 // key/value at specified timestamp.
 func (d *eventDecoder) initForKey(
 	ctx context.Context, key roachpb.Key, schemaTS hlc.Timestamp, keyOnly bool,
-) error {
+) (DecodeStatus, error) {
 	desc, familyID, err := d.rfCache.tableDescForKey(ctx, key, schemaTS)
 	if err != nil {
-		return err
+		return DecodeOK, err
 	}
 
-	fetcher, family, err := d.rfCache.RowFetcherForColumnFamily(desc, familyID, systemColumns, keyOnly)
+	fetcher, family, status, err := d.rfCache.RowFetcherForColumnFamily(desc, familyID, systemColumns, keyOnly)
 	if err != nil {
-		return err
+		return DecodeOK, err
+	}
+	if status != DecodeOK {
+		return status, nil
 	}
 
 	d.schemaTS = schemaTS
 	d.desc = desc
 	d.family = family
 	d.fetcher.Fetcher = fetcher
-	return nil
+
+	if d.skipOfflineEvents && desc.Offline() {
+		return DecodeSkipTableOffline, nil
+	}
+	return DecodeOK, nil
 }
 
 // systemColumns is a list of system columns we add to the fetcher spec.

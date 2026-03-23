@@ -9,14 +9,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
+// DropTrigger builds the schema change for a DROP TRIGGER command.
+// NOTE: CASCADE is accepted for PostgreSQL compatibility. Since triggers
+// don't have dependents that would need cascading, CASCADE behaves
+// identically to a non-cascade drop (or RESTRICT).
 func DropTrigger(b BuildCtx, n *tree.DropTrigger) {
 	noticeSender := b.EvalCtx().ClientNoticeSender
-	if n.DropBehavior == tree.DropCascade {
-		panic(unimplemented.NewWithIssue(128151, "cascade dropping triggers"))
-	}
 
 	// NOTE: DROP TRIGGER requires the user to have ownership of the table.
 	tableElems := b.ResolveTable(n.Table, ResolveParams{

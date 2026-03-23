@@ -439,26 +439,26 @@ type testGranterWithIOTokens struct {
 
 var _ granterWithIOTokens = &testGranterWithIOTokens{}
 
-func (g *testGranterWithIOTokens) setAvailableTokens(
+func (g *testGranterWithIOTokens) addAvailableTokens(
 	ioTokens int64,
 	elasticIOTokens int64,
-	elasticDiskBandwidthTokens int64,
-	elasticReadBandwidthTokens int64,
+	diskWriteTokens int64,
+	diskReadTokens int64,
 	maxIOTokens int64,
 	maxElasticIOTokens int64,
-	maxElasticDiskBandwidthTokens int64,
+	maxDiskWriteTokens int64,
 	lastTick bool,
 ) (tokensUsed int64, tokensUsedByElasticWork int64) {
-	fmt.Fprintf(&g.buf, "setAvailableTokens: io-tokens=%s(elastic %s) "+
-		"elastic-disk-bw-tokens=%s read-bw-tokens=%s "+
-		"max-byte-tokens=%s(elastic %s) max-disk-bw-tokens=%s lastTick=%t",
+	fmt.Fprintf(&g.buf, "addAvailableTokens: io-tokens=%s(elastic %s) "+
+		"disk-write-bw-tokens=%s disk-read-bw-tokens=%s "+
+		"max-io-tokens=%s(elastic %s) max-disk-write-tokens=%s lastTick=%t",
 		tokensForTokenTickDurationToString(ioTokens),
 		tokensForTokenTickDurationToString(elasticIOTokens),
-		tokensForTokenTickDurationToString(elasticDiskBandwidthTokens),
-		tokensForTokenTickDurationToString(elasticReadBandwidthTokens),
+		tokensForTokenTickDurationToString(diskWriteTokens),
+		tokensForTokenTickDurationToString(diskReadTokens),
 		tokensForTokenTickDurationToString(maxIOTokens),
 		tokensForTokenTickDurationToString(maxElasticIOTokens),
-		tokensForTokenTickDurationToString(maxElasticDiskBandwidthTokens),
+		tokensForTokenTickDurationToString(maxDiskWriteTokens),
 		lastTick,
 	)
 	if g.allTokensUsed {
@@ -469,8 +469,10 @@ func (g *testGranterWithIOTokens) setAvailableTokens(
 
 func (g *testGranterWithIOTokens) getDiskTokensUsedAndReset() (
 	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
+	_ diskErrorStats,
+	remainingDiskWriteTokens int64,
 ) {
-	return g.diskBandwidthTokensUsed
+	return g.diskBandwidthTokensUsed, diskErrorStats{}, 0
 }
 
 func (g *testGranterWithIOTokens) setLinearModels(
@@ -490,6 +492,10 @@ func (g *testGranterWithIOTokens) setLinearModels(
 	fmt.Fprintf(&g.buf, "\n")
 }
 
+func (g *testGranterWithIOTokens) hasExhaustedDiskTokens() bool {
+	return false
+}
+
 func tokensForTokenTickDurationToString(tokens int64) string {
 	if tokens >= unlimitedTokens/loadedDuration.ticksInAdjustmentInterval() {
 		return "unlimited"
@@ -505,11 +511,11 @@ type testGranterNonNegativeTokens struct {
 
 var _ granterWithIOTokens = &testGranterNonNegativeTokens{}
 
-func (g *testGranterNonNegativeTokens) setAvailableTokens(
+func (g *testGranterNonNegativeTokens) addAvailableTokens(
 	ioTokens int64,
 	elasticIOTokens int64,
-	elasticDiskBandwidthTokens int64,
-	elasticDiskReadBandwidthTokens int64,
+	diskWriteTokens int64,
+	diskReadTokens int64,
 	_ int64,
 	_ int64,
 	_ int64,
@@ -517,15 +523,17 @@ func (g *testGranterNonNegativeTokens) setAvailableTokens(
 ) (tokensUsed int64, tokensUsedByElasticWork int64) {
 	require.LessOrEqual(g.t, int64(0), ioTokens)
 	require.LessOrEqual(g.t, int64(0), elasticIOTokens)
-	require.LessOrEqual(g.t, int64(0), elasticDiskBandwidthTokens)
-	require.LessOrEqual(g.t, int64(0), elasticDiskReadBandwidthTokens)
+	require.LessOrEqual(g.t, int64(0), diskWriteTokens)
+	require.LessOrEqual(g.t, int64(0), diskReadTokens)
 	return 0, 0
 }
 
 func (g *testGranterNonNegativeTokens) getDiskTokensUsedAndReset() (
 	usedTokens [admissionpb.NumStoreWorkTypes]diskTokens,
+	_ diskErrorStats,
+	remainingDiskWriteTokens int64,
 ) {
-	return [admissionpb.NumStoreWorkTypes]diskTokens{}
+	return [admissionpb.NumStoreWorkTypes]diskTokens{}, diskErrorStats{}, 0
 }
 
 func (g *testGranterNonNegativeTokens) setLinearModels(
@@ -542,6 +550,10 @@ func (g *testGranterNonNegativeTokens) setLinearModels(
 	require.LessOrEqual(g.t, int64(0), ingestLM.constant)
 	require.LessOrEqual(g.t, 1.0, writeAmpLM.multiplier)
 	require.LessOrEqual(g.t, int64(0), writeAmpLM.constant)
+}
+
+func (g *testGranterNonNegativeTokens) hasExhaustedDiskTokens() bool {
+	return false
 }
 
 // Tests if the tokenAllocationTicker produces correct adjustment interval
@@ -584,36 +596,6 @@ func TestTokenAllocationTickerAdjustmentCalculation(t *testing.T) {
 		}
 		time.Sleep(1 * time.Millisecond)
 	}
-}
-
-func TestTokenAllocationTickerErrorAdjustmentThreshold(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ticker := tokenAllocationTicker{}
-	defer ticker.stop()
-	ticker.adjustmentStart(false /* loaded */)
-
-	// Knowing we are using unloaded duration. The first iteration will have 60 ticks.
-	require.False(t, ticker.shouldAdjustForError(60 /* remainingTicks */, false /* loaded */))
-	// Verify that we correctly reset the lastErrorAdjustmentTick value.
-	require.Equal(t, uint64(60), ticker.lastErrorAdjustmentTick)
-
-	// We should not do error adjustment unless 1s has passed. i.e. 4 ticks.
-	require.False(t, ticker.shouldAdjustForError(58 /* remainingTicks */, false /* loaded */))
-	require.True(t, ticker.shouldAdjustForError(56 /* remainingTicks */, false /* loaded */))
-	require.Equal(t, uint64(56), ticker.lastErrorAdjustmentTick)
-
-	// We should adjust for error on the last tick.
-	require.True(t, ticker.shouldAdjustForError(0 /* remainingTicks */, false /* loaded */))
-
-	// Re-run the above with loaded system. Now the error adjustment threshold is every 1000 ticks.
-	require.False(t, ticker.shouldAdjustForError(15000 /* remainingTicks */, true /* loaded */))
-	require.Equal(t, uint64(15000), ticker.lastErrorAdjustmentTick)
-	require.False(t, ticker.shouldAdjustForError(14001 /* remainingTicks */, true /* loaded */))
-	require.True(t, ticker.shouldAdjustForError(14000 /* remainingTicks */, true /* loaded */))
-	require.Equal(t, uint64(14000), ticker.lastErrorAdjustmentTick)
-	require.True(t, ticker.shouldAdjustForError(0 /* remainingTicks */, true /* loaded */))
 }
 
 func TestTokenAllocationTicker(t *testing.T) {

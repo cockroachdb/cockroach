@@ -42,8 +42,7 @@ func installSessionsFileSink(sc *TestLogScope, t *testing.T) func() {
 	}
 
 	// Apply the configuration.
-	TestingResetActive()
-	cleanup, err := ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+	cleanup, err := ApplyConfigForReconfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 	if err != nil {
 		t.Fatal(err)
 	}

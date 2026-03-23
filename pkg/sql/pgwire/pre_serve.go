@@ -242,6 +242,28 @@ func (s *PreServeConnHandler) sendErr(
 	return err
 }
 
+// sendNegotiateProtocolVersion sends a NegotiateProtocolVersion message to the
+// client to indicate that the latest protocol version supported by the server.
+// The unrecognizedOptions parameter lists any protocol options that were not
+// recognized by the server.
+//
+// See: https://www.postgresql.org/docs/current/protocol-message-formats.html
+func (s *PreServeConnHandler) sendNegotiateProtocolVersion(
+	conn net.Conn, unrecognizedOptions []string,
+) error {
+	w := newWriteBuffer(s.tenantIndependentMetrics.PreServeBytesOutCount.Inc)
+	w.initMsg(pgwirebase.ServerMsgNegotiateProtocolVersion)
+	// Newest protocol version supported by the server.
+	w.putInt32(version30)
+	// Number of unrecognized protocol options.
+	w.putInt32(int32(len(unrecognizedOptions)))
+	// List of unrecognized protocol options.
+	for _, opt := range unrecognizedOptions {
+		w.writeTerminatedString(opt)
+	}
+	return w.finishMsg(conn)
+}
+
 // tenantIndependentClientParameters encapsulates the session
 // parameters provided to the client, prior to any tenant-specific
 // configuration adjustements.
@@ -375,6 +397,7 @@ func (s *PreServeConnHandler) PreServe(
 	}
 
 	// What does the client want to do?
+	needsNegotiation := false
 	switch version {
 	case version30:
 		// Normal SQL connection. Proceed normally below.
@@ -395,10 +418,20 @@ func (s *PreServeConnHandler) PreServe(
 		}
 
 	default:
-		// We don't know this protocol.
-		err := pgerror.Newf(pgcode.ProtocolViolation, "unknown protocol version %d", version)
-		err = errors.WithTelemetry(err, fmt.Sprintf("protocol-version-%d", version))
-		return conn, st, s.sendErr(ctx, s.st, conn, err)
+		// Check if this is a version 3.x request with a higher minor version.
+		// If so, we can negotiate down to version 3.0 by sending a
+		// NegotiateProtocolVersion message after parsing parameters to include
+		// any unrecognized protocol options.
+		requestedMajor := version >> 16
+		requestedMinor := version & 0xFFFF
+		if requestedMajor == versionMajor && requestedMinor > versionSupportedMinor {
+			needsNegotiation = true
+		} else {
+			// We don't know this protocol.
+			err := pgerror.Newf(pgcode.ProtocolViolation, "unknown protocol version %d", version)
+			err = errors.WithTelemetry(err, fmt.Sprintf("protocol-version-%d", version))
+			return conn, st, s.sendErr(ctx, s.st, conn, err)
+		}
 	}
 
 	// Reserve some memory for this connection using the server's monitor. This
@@ -413,12 +446,25 @@ func (s *PreServeConnHandler) PreServe(
 	}
 
 	// Load the client-provided session parameters.
-	st.clientParameters, err = parseClientProvidedSessionParameters(
+	var unrecognizedOptions []string
+	st.clientParameters, unrecognizedOptions, err = parseClientProvidedSessionParameters(
 		ctx, &buf, conn.RemoteAddr(), s.trustClientProvidedRemoteAddr.Load(), s.acceptTenantName, s.acceptSystemIdentityOption.Load())
 	if err != nil {
 		st.Reserved.Clear(ctx)
 		return conn, st, s.sendErr(ctx, s.st, conn, err)
 	}
+
+	// If the client requested a higher minor protocol version than we support,
+	// send a NegotiateProtocolVersion message. Also send if there were any
+	// unrecognized protocol options (parameters starting with "_pq_." are
+	// reserved for protocol extensions).
+	if needsNegotiation || len(unrecognizedOptions) > 0 {
+		if err := s.sendNegotiateProtocolVersion(conn, unrecognizedOptions); err != nil {
+			st.Reserved.Clear(ctx)
+			return conn, st, err
+		}
+	}
+
 	st.clientParameters.IsSSL = st.ConnType == hba.ConnHostSSL
 
 	st.State = PreServeReady

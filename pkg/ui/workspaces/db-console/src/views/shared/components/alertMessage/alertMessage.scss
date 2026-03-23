@@ -1,0 +1,47 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import 'src/components/core/index.scss';
+
+.alert-massage {
+  max-width: 470px;
+  min-height: 50px;
+  font-size: $font-size--small;
+
+
+
+  margin: 0 0 0 auto !important;
+  border-radius: 3px;
+  box-shadow: 0 0 10px 0 rgba(71, 88, 114, 0.47);
+  background-color: $colors--white;
+  border-color: $colors--white;
+
+  .alert-massage__icon {
+    font-size: 20px;
+    align-self: baseline;
+    margin-top: 8px;
+    margin-inline-start: 4px;
+    margin-inline-end: 12px;
+  }
+
+  .crdb-ant-alert-message {
+    @extend %text--body-strong;
+    color: $colors--neutral-8;
+  }
+
+  .crdb-ant-alert-close-icon {
+    font-weight: $font-weight--extra-bold;
+    align-self: start;
+    margin-top: 8px;
+    .anticon.anticon-close {
+      color: $colors--neutral-7;
+    }
+  }
+}
+
+
+.crdb-ant-alert-success .alert-massage__icon {
+  color: $colors--primary-green-3;
+}

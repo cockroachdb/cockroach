@@ -46,7 +46,7 @@ func makeExternalConnectionSink(
 	// Replace the external connection URI in the `feedCfg` with the URI of the
 	// underlying resource.
 	feedCfg.SinkURI = uri
-	return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets)
+	return getSink(ctx, serverCfg, feedCfg, timestampOracle, user, jobID, m, targets, false /* initialValidation */)
 }
 
 func validateExternalConnectionSinkURI(
@@ -78,7 +78,7 @@ func validateExternalConnectionSinkURI(
 	// TODO(adityamaru): When we add `CREATE EXTERNAL CONNECTION ... WITH` support
 	// to accept JSONConfig we should validate that here too.
 	s, err := getSink(ctx, serverCfg, jobspb.ChangefeedDetails{SinkURI: uri}, nil, env.Username,
-		jobspb.JobID(0), (*sliMetrics)(nil), changefeedbase.Targets{})
+		jobspb.JobID(0), (*sliMetrics)(nil), changefeedbase.Targets{}, true /* initialValidation */)
 	if err != nil {
 		return errors.Wrap(err, "invalid changefeed sink URI")
 	}

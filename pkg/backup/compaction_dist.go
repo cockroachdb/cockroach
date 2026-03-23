@@ -7,6 +7,8 @@ package backup
 
 import (
 	"context"
+	"net/url"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupinfo"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
@@ -14,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
+	"github.com/cockroachdb/cockroach/pkg/kv/followerreads"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -28,11 +31,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// runCompactionPlan creates and runs a distsql plan to compact the spans
-// in the backup chain that need to be compacted. It sends updates from the
-// BulkProcessor to the provided progress channel. It is the caller's
-// responsibility to close the progress channel.
-func runCompactionPlan(
+// createCompactionPlan creates an un-finalized physical plan that will
+// distribute spans from a generator across the cluster for compaction.
+func createCompactionPlan(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
 	jobID jobspb.JobID,
@@ -41,8 +42,7 @@ func runCompactionPlan(
 	manifest *backuppb.BackupManifest,
 	defaultStore cloud.ExternalStorage,
 	kmsEnv cloud.KMSEnv,
-	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
-) error {
+) (compactionPlan, error) {
 	log.Dev.Infof(
 		ctx, "planning compaction of %d backups: %s",
 		len(compactChain.chainToCompact),
@@ -54,13 +54,13 @@ func runCompactionPlan(
 		compactChain.compactedLocalityInfo, execCtx.User(),
 	)
 	if err != nil {
-		return err
+		return compactionPlan{}, err
 	}
 	introducedSpanFrontier, err := createIntroducedSpanFrontier(
 		compactChain.backupChain, manifest.EndTime,
 	)
 	if err != nil {
-		return err
+		return compactionPlan{}, err
 	}
 	defer introducedSpanFrontier.Release()
 	targetSize := targetRestoreSpanSize.Get(&execCtx.ExecCfg().Settings.SV)
@@ -74,14 +74,14 @@ func runCompactionPlan(
 		maxFiles,
 	)
 	if err != nil {
-		return err
+		return compactionPlan{}, err
 	}
 
 	spansToCompact, err := getSpansToCompact(
 		ctx, execCtx, manifest, compactChain.chainToCompact, details, defaultStore, kmsEnv,
 	)
 	if err != nil {
-		return err
+		return compactionPlan{}, err
 	}
 	genSpan := func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error {
 		return errors.Wrap(generateAndSendImportSpans(
@@ -93,16 +93,79 @@ func runCompactionPlan(
 			filter,
 			fsc,
 			spanCh,
+			false, /* useLink */
 		), "generateAndSendImportSpans")
 	}
 	dsp := execCtx.DistSQLPlanner()
-	plan, planCtx, err := createCompactionPlan(
-		ctx, execCtx, jobID, details, manifest, dsp, genSpan, spansToCompact, targetSize, maxFiles,
+	evalCtx := execCtx.ExtendedEvalContext()
+	oracle := physicalplan.DefaultReplicaChooser
+
+	locFilter := sql.SingleLocalityFilter(details.ExecutionLocality)
+	if useBulkOracle.Get(&evalCtx.Settings.SV) {
+		var err error
+		oracle, err = followerreads.NewLocalityFilteringBulkOracle(
+			dsp.ReplicaOracleConfig(evalCtx.Locality),
+			locFilter,
+		)
+		if err != nil {
+			return compactionPlan{}, errors.Wrap(err, "failed to create locality filtering bulk oracle")
+		}
+	}
+
+	planCtx, instanceIDs, err := dsp.SetupAllNodesPlanningWithOracle(
+		ctx, evalCtx, execCtx.ExecCfg(),
+		oracle, locFilter, sql.NoStrictLocalityFiltering,
 	)
 	if err != nil {
-		return errors.Wrap(err, "creating compaction plan")
+		return compactionPlan{}, errors.Wrap(err, "setting up node planning")
 	}
-	sql.FinalizePlan(ctx, planCtx, plan)
+	instanceLocalities := make([]roachpb.Locality, len(instanceIDs))
+	for i, id := range instanceIDs {
+		sqlInstanceInfo, err := dsp.GetSQLInstanceInfo(ctx, id)
+		if err != nil {
+			return compactionPlan{}, errors.Wrap(err, "getting instance info")
+		}
+		instanceLocalities[i] = sqlInstanceInfo.Locality
+	}
+	localitySets, err := buildLocalitySets(
+		ctx, instanceIDs, instanceLocalities, details.StrictLocalityFiltering, genSpan,
+	)
+	if err != nil {
+		return compactionPlan{}, errors.Wrap(err, "building locality sets")
+	}
+	corePlacements, err := createCompactionCorePlacements(
+		ctx, jobID, execCtx.User(), details, manifest.ElidedPrefix, genSpan,
+		spansToCompact, instanceIDs, localitySets, targetSize, maxFiles,
+	)
+	if err != nil {
+		return compactionPlan{}, errors.Wrap(err, "creating core placements")
+	}
+
+	plan := planCtx.NewPhysicalPlan()
+	plan.AddNoInputStage(
+		corePlacements,
+		execinfrapb.PostProcessSpec{},
+		[]*types.T{},
+		execinfrapb.Ordering{},
+		nil, /* finalizeLastStageCb */
+	)
+	return compactionPlan{plan: plan, planCtx: planCtx, localitySets: localitySets}, nil
+}
+
+type compactionPlan struct {
+	plan         *sql.PhysicalPlan
+	planCtx      *sql.PlanningCtx
+	localitySets map[string]*localitySet
+}
+
+func runCompactionPlan(
+	ctx context.Context,
+	execCtx sql.JobExecContext,
+	jobID jobspb.JobID,
+	compactionPlan compactionPlan,
+	progCh chan *execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
+) error {
+	sql.FinalizePlan(ctx, compactionPlan.planCtx, compactionPlan.plan)
 
 	metaFn := func(_ context.Context, meta *execinfrapb.ProducerMetadata) error {
 		if meta.BulkProcessorProgress != nil {
@@ -125,72 +188,88 @@ func runCompactionPlan(
 	defer recv.Release()
 
 	jobsprofiler.StorePlanDiagram(
-		ctx, execCtx.ExecCfg().DistSQLSrv.Stopper, plan, execCtx.ExecCfg().InternalDB, jobID,
+		ctx, execCtx.ExecCfg().DistSQLSrv.Stopper,
+		compactionPlan.plan, execCtx.ExecCfg().InternalDB, jobID,
 	)
 
 	evalCtxCopy := execCtx.ExtendedEvalContext().Copy()
-	dsp.Run(ctx, planCtx, nil /* txn */, plan, recv, evalCtxCopy, nil /* finishedSetupFn */)
+	execCtx.DistSQLPlanner().Run(
+		ctx, compactionPlan.planCtx,
+		nil /* txn */, compactionPlan.plan, recv, evalCtxCopy, nil, /* finishedSetupFn */
+	)
 	return rowResultWriter.Err()
 }
 
-// createCompactionPlan creates an un-finalized physical plan that will
-// distribute spans from a generator across the cluster for compaction.
-func createCompactionPlan(
-	ctx context.Context,
-	execCtx sql.JobExecContext,
-	jobID jobspb.JobID,
-	details jobspb.BackupDetails,
-	manifest *backuppb.BackupManifest,
-	dsp *sql.DistSQLPlanner,
-	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
-	spansToCompact roachpb.Spans,
-	targetSize int64,
-	maxFiles int64,
-) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
-	numEntries, err := countRestoreSpanEntries(ctx, genSpan)
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "counting number of restore span entries")
-	}
+type localitySet struct {
+	instanceIDs  []base.SQLInstanceID
+	totalEntries int
 
-	// TODO (kev-cao): Add support for execution locality.
-	planCtx, sqlInstanceIDs, err := dsp.SetupAllNodesPlanningWithOracle(
-		ctx, execCtx.ExtendedEvalContext(), execCtx.ExecCfg(),
-		physicalplan.DefaultReplicaChooser, roachpb.Locality{},
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	plan := planCtx.NewPhysicalPlan()
-	corePlacements, err := createCompactionCorePlacements(
-		ctx, jobID, execCtx.User(), details, manifest.ElidedPrefix, genSpan,
-		spansToCompact, sqlInstanceIDs, targetSize, maxFiles, numEntries,
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-	plan.AddNoInputStage(
-		corePlacements,
-		execinfrapb.PostProcessSpec{},
-		[]*types.T{},
-		execinfrapb.Ordering{},
-		nil, /* finalizeLastStageCb */
-	)
-	return plan, planCtx, nil
+	currInstanceIdx  int
+	currEntriesAdded int
 }
 
-// countRestoreSpanEntries counts the number of restore span entries that will be
-// be delivered by the given generator.
-func countRestoreSpanEntries(
+// maybeUpdateTargetInstance increments currInstanceIdx if currEntriesAdded equals the target
+// number of entries for the current instance.
+func (set *localitySet) maybeUpdateTargetInstance() {
+	var targetNumEntries int
+	numEntriesPerNode := set.totalEntries / len(set.instanceIDs)
+	leftoverEntries := set.totalEntries % len(set.instanceIDs)
+	if set.currInstanceIdx < leftoverEntries {
+		// This more evenly distributes the leftover entries across the nodes
+		// after doing integer division to assign the entries to the nodes.
+		targetNumEntries = numEntriesPerNode + 1
+	} else {
+		targetNumEntries = numEntriesPerNode
+	}
+	if set.currEntriesAdded == targetNumEntries {
+		set.currInstanceIdx++
+		set.currEntriesAdded = 0
+	}
+}
+
+// buildLocalitySets does a dry run of genSpan in order to build a locality to localitySet mapping
+// which contains the available nodes and number of expected entries per locality.
+//
+// In a non locality-aware compaction, the returned map will contain a single entry
+// keyed by "default" which is assigned all availble nodes and all entries.
+//
+// In a locality-aware compaction, the localitySet keyed by "default" will contain nodes which
+// don't match one of the locality-specific uris, and is assigned entries from the default URI.
+// If there is no data in the default URI to compact, the default set will not be in the returned map.
+//
+// If any of our sets (including the default set) has a locality which does not match any
+// available nodes, this function has two behaviors, depending on whether strict is set.
+// If strict is true, this function will return an error. If strict is false, we fall back to
+// assigning all available nodes. In that case, compactions may output data to a different URI
+// than they recieved it from. This is an edge case that would occur if the cluster topology has
+// changed between backup time and compaction time such that all nodes matching one of our URIs
+// become unavailable (for example, a region going down).
+func buildLocalitySets(
 	ctx context.Context,
+	instanceIDs []base.SQLInstanceID,
+	instanceLocalities []roachpb.Locality,
+	strict bool,
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
-) (int, error) {
+) (map[string]*localitySet, error) {
+	localitySets := make(map[string]*localitySet)
+
 	countSpansCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
-	var numImportSpans int
 	countTasks := []func(ctx context.Context) error{
 		func(ctx context.Context) error {
-			for range countSpansCh {
-				numImportSpans++
+			for entry := range countSpansCh {
+				locality, err := entryLocality(entry)
+				if err != nil {
+					return err
+				}
+				if locality == "" {
+					locality = "default"
+				}
+
+				if set, ok := localitySets[locality]; ok {
+					set.totalEntries += 1
+				} else {
+					localitySets[locality] = &localitySet{totalEntries: 1}
+				}
 			}
 			return nil
 		},
@@ -200,13 +279,60 @@ func countRestoreSpanEntries(
 		},
 	}
 	if err := ctxgroup.GoAndWait(ctx, countTasks...); err != nil {
-		return 0, errors.Wrapf(err, "counting number of spans to compact")
+		return nil, errors.Wrapf(err, "counting number of spans to compact")
 	}
-	return numImportSpans, nil
+
+	for i, id := range instanceIDs {
+		instanceLocality := instanceLocalities[i]
+		matched := false
+		for tierStr, set := range localitySets {
+			if tierStr == "default" {
+				continue
+			}
+
+			tier := roachpb.Tier{}
+			if err := tier.FromString(tierStr); err != nil {
+				return nil, errors.Wrap(err, "failed to parse locality set tier")
+			}
+			setLocality := roachpb.Locality{Tiers: []roachpb.Tier{tier}}
+
+			if ok, _ := instanceLocality.Matches(setLocality); ok {
+				set.instanceIDs = append(set.instanceIDs, id)
+				matched = true
+				break
+			}
+		}
+
+		if !matched {
+			// The instance does not match any of our filters, and should be assigned to the default set.
+			if set, ok := localitySets["default"]; ok {
+				set.instanceIDs = append(set.instanceIDs, id)
+			} else {
+				localitySets["default"] = &localitySet{instanceIDs: []base.SQLInstanceID{id}}
+			}
+		}
+	}
+
+	for setLocality, set := range localitySets {
+		if len(set.instanceIDs) == 0 {
+			if strict {
+				return nil, errors.Newf(
+					"no nodes available for processing data from locality %s in strict locality-aware compaction",
+					setLocality,
+				)
+			}
+			// In a non-strict setting, if we don't have any nodes available that match the locality
+			// filter, we just evenly distribute the work across all available nodes.
+			set.instanceIDs = instanceIDs
+		}
+		slices.Sort(set.instanceIDs)
+	}
+
+	return localitySets, nil
 }
 
-// createCompactionCorePlacements takes spans from a generator and evenly
-// distributes them across nodes in the cluster, returning the core placements
+// createCompactionCorePlacements takes spans from a generator and, per localitySet, evenly
+// distributes matching spans across nodes in the set, returning the core placements
 // reflecting that distribution.
 func createCompactionCorePlacements(
 	ctx context.Context,
@@ -217,27 +343,13 @@ func createCompactionCorePlacements(
 	genSpan func(ctx context.Context, spanCh chan execinfrapb.RestoreSpanEntry) error,
 	spansToCompact roachpb.Spans,
 	sqlInstanceIDs []base.SQLInstanceID,
+	localitySets map[string]*localitySet,
 	targetSize int64,
 	maxFiles int64,
-	numEntries int,
 ) ([]physicalplan.ProcessorCorePlacement, error) {
-	numNodes := len(sqlInstanceIDs)
-	corePlacements := make([]physicalplan.ProcessorCorePlacement, numNodes)
-	for i := range corePlacements {
-		corePlacements[i].SQLInstanceID = sqlInstanceIDs[i]
-		corePlacements[i].Core.CompactBackups = &execinfrapb.CompactBackupsSpec{
-			JobID:       int64(jobID),
-			DefaultURI:  details.URI,
-			Destination: details.Destination,
-			Encryption:  details.EncryptionOptions,
-			StartTime:   details.StartTime,
-			EndTime:     details.EndTime,
-			ElideMode:   elideMode,
-			UserProto:   user.EncodeProto(),
-			Spans:       spansToCompact,
-			TargetSize:  targetSize,
-			MaxFiles:    maxFiles,
-		}
+	instanceEntries := make(map[base.SQLInstanceID]*roachpb.SpanGroup)
+	for _, id := range sqlInstanceIDs {
+		instanceEntries[id] = &roachpb.SpanGroup{}
 	}
 
 	spanEntryCh := make(chan execinfrapb.RestoreSpanEntry, 1000)
@@ -247,43 +359,69 @@ func createCompactionCorePlacements(
 		return genSpan(ctx, spanEntryCh)
 	})
 	tasks = append(tasks, func(ctx context.Context) error {
-		numEntriesPerNode := numEntries / numNodes
-		leftoverEntries := numEntries % numNodes
-		getTargetNumEntries := func(nodeIdx int) int {
-			if nodeIdx < leftoverEntries {
-				// This more evenly distributes the leftover entries across the nodes
-				// after doing integer division to assign the entries to the nodes.
-				return numEntriesPerNode + 1
-			}
-			return numEntriesPerNode
-		}
-		currNode := 0
-		entriesAdded := 0
-		currEntries := roachpb.SpanGroup{}
-		targetNumEntries := getTargetNumEntries(currNode)
-
 		for entry := range spanEntryCh {
-			currEntries.Add(entry.Span)
-			entriesAdded++
-			if entriesAdded == targetNumEntries {
-				corePlacements[currNode].SQLInstanceID = sqlInstanceIDs[currNode]
-				corePlacements[currNode].Core.CompactBackups.AssignedSpans = currEntries.Slice()
+			entryLocality, err := entryLocality(entry)
+			if err != nil {
+				return err
+			}
+			if entryLocality == "" {
+				entryLocality = "default"
+			}
 
-				currNode++
-				targetNumEntries = getTargetNumEntries(currNode)
-				currEntries.Clear()
-				entriesAdded = 0
+			set, ok := localitySets[entryLocality]
+			if !ok {
+				return errors.AssertionFailedf("no locality set for entry with locality %s", entryLocality)
 			}
-			if currNode == numNodes {
-				return nil
-			}
+
+			instanceID := set.instanceIDs[set.currInstanceIdx]
+			instanceEntries[instanceID].Add(entry.Span)
+			set.currEntriesAdded++
+			set.maybeUpdateTargetInstance()
 		}
 		return nil
 	})
 	if err := ctxgroup.GoAndWait(ctx, tasks...); err != nil {
 		return nil, errors.Wrapf(err, "distributing span entries to processors")
 	}
+
+	corePlacements := make([]physicalplan.ProcessorCorePlacement, 0, len(sqlInstanceIDs))
+	for id, entries := range instanceEntries {
+		corePlacements = append(corePlacements, physicalplan.ProcessorCorePlacement{
+			SQLInstanceID: id,
+			Core: execinfrapb.ProcessorCoreUnion{
+				CompactBackups: &execinfrapb.CompactBackupsSpec{
+					JobID:            int64(jobID),
+					DefaultURI:       details.URI,
+					Destination:      details.Destination,
+					Encryption:       details.EncryptionOptions,
+					StartTime:        details.StartTime,
+					EndTime:          details.EndTime,
+					ElideMode:        elideMode,
+					UserProto:        user.EncodeProto(),
+					Spans:            spansToCompact,
+					TargetSize:       targetSize,
+					MaxFiles:         maxFiles,
+					URIsByLocalityKV: details.URIsByLocalityKV,
+					StrictLocality:   details.StrictLocalityFiltering,
+					AssignedSpans:    entries.Slice(),
+				}}})
+	}
+
 	return corePlacements, nil
+}
+
+// entryLocality returns the locality filter string attached to the URI of the most recent file in
+// the entry. If the URI does not have a locality filter attached to it, it will return an empty string.
+func entryLocality(entry execinfrapb.RestoreSpanEntry) (string, error) {
+	if len(entry.Files) == 0 {
+		return "", errors.AssertionFailedf("restore span entry has no files")
+	}
+	// Note that the last file in entry.Files will be the most recent.
+	uri, err := url.Parse(entry.Files[len(entry.Files)-1].Dir.URI)
+	if err != nil {
+		return "", err
+	}
+	return uri.Query().Get("COCKROACH_LOCALITY"), nil
 }
 
 // getSpansToCompact returns all remaining spans the backup manifest that

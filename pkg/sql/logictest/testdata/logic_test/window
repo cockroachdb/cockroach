@@ -1985,7 +1985,7 @@ INSERT INTO kv VALUES (12, -1, DEFAULT, DEFAULT, DEFAULT, DEFAULT)
 query error argument of nth_value\(\) must be greater than zero
 SELECT k, nth_value(v, v) OVER () FROM kv ORDER BY 1
 
-statement ok
+statement count 1
 DELETE FROM kv WHERE k = 12
 
 query error FILTER specified but rank\(\) is not an aggregate function
@@ -4397,3 +4397,11 @@ NULL  4  4
 
 statement ok
 RESET null_ordered_last
+
+# Regression test for #165754 - st_asmvt cannot be used as a window function
+# (which matches postgres).
+statement ok
+CREATE TABLE t165754 (geom GEOMETRY)
+
+query error pgcode 0A000 aggregate function st_asmvt does not support use as a window function
+SELECT st_asmvt(t165754) OVER () FROM t165754

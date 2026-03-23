@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "gcedb",
+    srcs = ["gcedb.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce/gcedb",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "gcedb_test",
+    srcs = ["gcedb_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":gcedb"],
+    deps = ["@com_github_cockroachdb_datadriven//:datadriven"],
+)

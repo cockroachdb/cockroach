@@ -191,7 +191,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 	skip.UnderDeadlock(t, "timing-sensitive test")
 	//skip.UnderStress(t, "memory-hungry test")
 
-	prefix := roachpb.Key([]byte("key\x00"))
+	prefix := roachpb.Key("key\x00")
 
 	testutils.RunTrueAndFalse(t, "ForceSyncIntentResolution", func(t *testing.T, forceSync bool) {
 		// abortHeartbeats is used to abort txn heartbeats, returning
@@ -355,7 +355,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 				started            = timeutil.Now()
 			)
 			for {
-				result, err := storage.MVCCScan(ctx, store.TODOEngine(), prefix, prefix.PrefixEnd(),
+				result, err := storage.MVCCScan(ctx, store.StateEngine(), prefix, prefix.PrefixEnd(),
 					hlc.MaxTimestamp, storage.MVCCScanOptions{Inconsistent: true})
 				require.NoError(t, err)
 				intentCount := len(result.Intents)
@@ -388,7 +388,7 @@ func TestReliableIntentCleanup(t *testing.T) {
 			var txnEntry roachpb.Transaction
 			if !assert.Eventually(t, func() bool {
 				key := keys.TransactionKey(txnKey, txnID)
-				ok, err := storage.MVCCGetProto(ctx, store.TODOEngine(), key, hlc.MaxTimestamp, &txnEntry,
+				ok, err := storage.MVCCGetProto(ctx, store.StateEngine(), key, hlc.MaxTimestamp, &txnEntry,
 					storage.MVCCGetOptions{})
 				require.NoError(t, err)
 				return !ok

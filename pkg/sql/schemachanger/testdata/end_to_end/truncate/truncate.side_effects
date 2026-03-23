@@ -18,7 +18,7 @@ write *eventpb.TruncateTable to event log:
     tag: TRUNCATE
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 21 MutationType ops
+## StatementPhase stage 1 of 1 with 22 MutationType ops
 upsert descriptor #104
   ...
      id: 104
@@ -117,7 +117,9 @@ upsert descriptor #104
        interleave: {}
        keyColumnDirections:
   ...
-     schemaLocked: true
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -126,7 +128,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 26 MutationType ops
+## PreCommitPhase stage 2 of 2 with 27 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -257,7 +259,9 @@ upsert descriptor #104
        interleave: {}
        keyColumnDirections:
   ...
-     schemaLocked: true
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -272,7 +276,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 2 with 9 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 3 with 9 MutationType ops
 upsert descriptor #104
   ...
          version: 4
@@ -296,48 +300,16 @@ upsert descriptor #104
      name: t
      nextColumnId: 3
   ...
-     schemaLocked: true
+       time: {}
      unexposedParentSchemaId: 101
   -  version: "2"
   +  version: "3"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (4 operations) — PostCommitNonRevertible phase (stage 2 of 2)."
+update progress of schema change job #1: "Pending: Updating schema metadata (4 operations) — PostCommitNonRevertible phase (stage 2 of 3)."
 commit transaction #3
 begin transaction #4
-## PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 3 with 6 MutationType ops
 upsert descriptor #104
-  ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    currentStatuses: <redacted>
-  -    jobId: "1"
-  -    nameMapping:
-  -      columns:
-  -        "1": i
-  -        "2": j
-  -        "4294967292": crdb_internal_origin_timestamp
-  -        "4294967293": crdb_internal_origin_id
-  -        "4294967294": tableoid
-  -        "4294967295": crdb_internal_mvcc_timestamp
-  -      families:
-  -        "0": primary
-  -      id: 104
-  -      indexes:
-  -        "3": t_pkey
-  -        "4": t_j_key
-  -      name: t
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: TRUNCATE TABLE ‹defaultdb›.‹public›.‹t›
-  -        statement: TRUNCATE TABLE t
-  -        statementTag: TRUNCATE
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
-     families:
-     - columnIds:
   ...
        version: 4
      modificationTime: {}
@@ -397,19 +369,64 @@ upsert descriptor #104
      name: t
      nextColumnId: 3
   ...
-     schemaLocked: true
+       time: {}
      unexposedParentSchemaId: 101
   -  version: "3"
   +  version: "4"
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for TRUNCATE TABLE defaultdb.public.t"
   descriptor IDs: [104]
+update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommitNonRevertible phase (stage 3 of 3)."
+commit transaction #4
+notified job registry to adopt jobs: [2]
+begin transaction #5
+## PostCommitNonRevertiblePhase stage 3 of 3 with 3 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": j
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "3": t_pkey
+  -        "4": t_j_key
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: TRUNCATE TABLE ‹defaultdb›.‹public›.‹t›
+  -        statement: TRUNCATE TABLE t
+  -        statementTag: TRUNCATE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "4"
+  +  version: "5"
+persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 104
-commit transaction #4
-notified job registry to adopt jobs: [2]
+commit transaction #5
 # end PostCommitPhase

@@ -5,6 +5,8 @@ services:
     image: us-east1-docker.pkg.dev/crl-docker-sync/docker-io/library/ubuntu:xenial-20170214
     user: ${UID}:${GID}
     command: /cockroach/cockroach start-single-node --insecure --store=/cockroach/store --spatial-libs=/cockroach/lib --listen-addr cockroach1
+    environment:
+      - COCKROACH_OVERRIDE_ALLOW_UNSAFE_INTERNALS=true
     volumes:
       - "${COCKROACH_PATH}:/cockroach/cockroach"
       - "${LIBGEOS_DIR_PATH}:/cockroach/lib"
@@ -16,6 +18,8 @@ services:
     # See https://cockroachlabs.atlassian.net/wiki/spaces/devinf/pages/3462594561/Docker+image+sync for the details.
     image: us-east1-docker.pkg.dev/crl-docker-sync/docker-io/library/ubuntu:xenial-20170214
     user: ${UID}:${GID}
+    environment:
+      - COCKROACH_OVERRIDE_ALLOW_UNSAFE_INTERNALS=true
     command: /cockroach/cockroach start-single-node --insecure --store=/cockroach/store --spatial-libs=/cockroach/lib --listen-addr cockroach2
     volumes:
       - "${COCKROACH_PATH}:/cockroach/cockroach"

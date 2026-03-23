@@ -7,6 +7,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"time"
 
@@ -15,13 +16,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 func registerClearRange(r registry.Registry) {
 	for _, checks := range []bool{true, false} {
-		checks := checks
 		r.Add(registry.TestSpec{
 			Name:  fmt.Sprintf(`clearrange/checks=%t`, checks),
 			Owner: registry.OwnerStorage,
@@ -33,39 +36,86 @@ func registerClearRange(r registry.Registry) {
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				runClearRange(ctx, t, c, checks)
+				opts := clearRangeOptions{
+					BigBankPayloadBytes: 10240,
+					BigBankRows:         65104166,
+					KVBlockBytes:        1,
+					NodesInitial:        c.Range(1, 10),
+					WorkloadConcurrency: 32,
+					WorkloadDuration:    time.Hour,
+				}
+				if checks {
+					// Run with an env var that runs a synchronous consistency
+					// check after each rebalance and merge.  This slows down
+					// merges, so it might hide some races.
+					//
+					// NB: the below invocation was found to actually make it to
+					// the server at the time of writing.
+					opts.Env = append(opts.Env, "COCKROACH_CONSISTENCY_AGGRESSIVE=true")
+				}
+				runClearRange(ctx, t, c, opts)
 			},
 		})
 	}
-	// Using a separate clearrange test on zfs instead of randomly
-	// using the same test, cause the Timeout might be different,
-	// and may need to be tweaked.
 	r.Add(registry.TestSpec{
-		Name:  `clearrange/zfs/checks=true`,
+		Name:  `clearrange/dense`,
 		Owner: registry.OwnerStorage,
-		// 5h for import, 120 for the test. The import should take closer
-		// to <3:30h but it varies.
-		Timeout:           5*time.Hour + 120*time.Minute,
-		Cluster:           r.MakeClusterSpec(10, spec.CPU(16), spec.SetFileSystem(spec.Zfs)),
-		CompatibleClouds:  registry.OnlyGCE,
-		Suites:            registry.Suites(registry.Nightly),
-		EncryptionSupport: registry.EncryptionMetamorphic,
-		Leases:            registry.MetamorphicLeases,
+		// 12h for import, 4h for the test.
+		Timeout:          12*time.Hour + 4*time.Hour,
+		Cluster:          r.MakeClusterSpec(6, spec.CPU(32), spec.VolumeSize(12000)),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Weekly),
+		Leases:           registry.LeaderLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runClearRange(ctx, t, c, true /* checks */)
+			runClearRange(ctx, t, c, clearRangeOptions{
+				// Experimentally, this big bank IMPORT results in about ~4.75
+				// TiB usage on each of the 5 initial nodes.
+				BigBankPayloadBytes: 20480,
+				BigBankRows:         400_000_000,
+				KVBlockBytes:        1024,
+				// We initially use only the first 5 nodes during the IMPORT.
+				// After the IMPORT, the test will start the cluster with all
+				// nodes, and n6 will join the cluster.
+				//
+				// This is done to exercise rebalancing. Rebalancing will result
+				// in replica removals on the original 5 nodes, and the disk
+				// space corresponding to those replicas should be reclaimed.
+				// This isn't yet part of the test's assertions.
+				NodesInitial:        c.Range(1, 5),
+				WorkloadConcurrency: 64,
+				WorkloadDuration:    2 * time.Hour,
+			})
 		},
 	})
 }
 
-func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressiveChecks bool) {
+type clearRangeOptions struct {
+	Env                 []string
+	BigBankRows         int
+	BigBankPayloadBytes int
+	KVBlockBytes        int
+	NodesInitial        option.NodeListOption
+	WorkloadConcurrency int
+	WorkloadDuration    time.Duration
+}
+
+func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, opts clearRangeOptions) {
 	t.Status("restoring fixture")
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+	settings := install.MakeClusterSettings()
+	settings.ClusterSettings["kv.snapshot_rebalance.max_rate"] = "512MiB"
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, opts.NodesInitial)
 	m := c.NewDeprecatedMonitor(ctx)
 	m.Go(func(ctx context.Context) error {
-		// NB: on a 10 node cluster, this should take well below 3h.
+		// NB: The bank table imports data sequentially, enabling this import to
+		// run in a reasonable amount of time despite importing a large volume
+		// of data.
 		tBegin := timeutil.Now()
 		c.Run(ctx, option.WithNodes(c.Node(1)), "./cockroach", "workload", "fixtures", "import", "bank",
-			"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank", "{pgurl:1}")
+			"--import-concurrency-limit=48",
+			"--ranges=10", "--seed=4", "--db=bigbank",
+			fmt.Sprintf("--payload-bytes=%d", opts.BigBankPayloadBytes),
+			fmt.Sprintf("--rows=%d", opts.BigBankRows),
+			"{pgurl:1}")
 		t.L().Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
 		return nil
 	})
@@ -73,15 +123,7 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 	c.Stop(ctx, t.L(), option.DefaultStopOpts())
 	t.Status()
 
-	settings := install.MakeClusterSettings()
-	if aggressiveChecks {
-		// Run with an env var that runs a synchronous consistency check after each rebalance and merge.
-		// This slows down merges, so it might hide some races.
-		//
-		// NB: the below invocation was found to actually make it to the server at the time of writing.
-		settings.Env = append(settings.Env, "COCKROACH_CONSISTENCY_AGGRESSIVE=true")
-	}
-
+	settings.Env = append(settings.Env, opts.Env...)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
 	m = c.NewDeprecatedMonitor(ctx)
 
@@ -96,40 +138,32 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 	// https://github.com/cockroachdb/cockroach/issues/34897#issuecomment-465089057
 	c.Run(ctx, option.WithNodes(c.Node(1)), `COCKROACH_CONNECT_TIMEOUT=120 ./cockroach sql --url={pgurl:1} -e "DROP DATABASE IF EXISTS tinybank"`)
 	c.Run(ctx, option.WithNodes(c.Node(1)), "./cockroach", "workload", "fixtures", "import", "bank", "--db=tinybank",
-		"--payload-bytes=100", "--ranges=10", "--rows=800", "--seed=1", "{pgurl:1}")
+		"--payload-bytes=100", "--rows=800", "--seed=1", "--ranges=1", "{pgurl:1}")
 
 	t.Status()
 
-	// Set up a convenience function that we can call to learn the number of
-	// ranges for the bigbank.bank table (even after it's been dropped).
-	numBankRanges := func() func() int {
-		conn := c.Conn(ctx, t.L(), 1)
-		defer conn.Close()
-
-		var startHex string
-		if err := conn.QueryRow(
-			`SELECT to_hex(raw_start_key)
-FROM [SHOW RANGES FROM TABLE bigbank.bank WITH KEYS]
-ORDER BY raw_start_key ASC LIMIT 1`,
-		).Scan(&startHex); err != nil {
-			t.Fatal(err)
-		}
-		return func() int {
-			conn := c.Conn(ctx, t.L(), 1)
-			defer conn.Close()
-			var n int
-			if err := conn.QueryRow(
-				`SELECT count(*) FROM crdb_internal.ranges_no_leases WHERE substr(to_hex(start_key), 1, length($1::string)) = $1`, startHex,
-			).Scan(&n); err != nil {
-				t.Fatal(err)
-			}
-			return n
-		}
-	}()
+	bigBankSpan, err := getKeyspanForTable(ctx, t, c, 1, "bigbank.bank")
+	require.NoError(t, err)
+	t.L().Printf("bigbank DB ID: %s (%x - %x)", bigBankSpan, bigBankSpan.Key, bigBankSpan.EndKey)
+	getBigBankStats := func() spanStats {
+		stats := getSpanStats(ctx, t, c, 1, bigBankSpan)
+		t.L().Printf("bigbank: %d ranges, %s disk, %s live, %s total",
+			stats.rangeCount,
+			humanizeutil.IBytes(stats.approximateDiskBytes),
+			humanizeutil.IBytes(stats.liveBytes),
+			humanizeutil.IBytes(stats.totalBytes))
+		return stats
+	}
 
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, option.WithNodes(c.Node(1)), `./cockroach workload init kv {pgurl:1}`)
-		c.Run(ctx, option.WithNodes(c.All()), fmt.Sprintf(`./cockroach workload run kv --concurrency=32 --duration=1h --tolerate-errors {pgurl%s}`, c.All()))
+		c.Run(ctx, option.WithNodes(c.All()), `./cockroach`, `workload`, `run`, `kv`,
+			`--tolerate-errors`,
+			fmt.Sprintf(`--concurrency=%d`, opts.WorkloadConcurrency),
+			fmt.Sprintf(`--duration=%s`, opts.WorkloadDuration.String()),
+			fmt.Sprintf(`--min-block-bytes=%d`, opts.KVBlockBytes),
+			fmt.Sprintf(`--max-block-bytes=%d`, opts.KVBlockBytes),
+			fmt.Sprintf(`{pgurl%s}`, c.All()))
 		return nil
 	})
 	m.Go(func(ctx context.Context) error {
@@ -145,6 +179,10 @@ ORDER BY raw_start_key ASC LIMIT 1`,
 			return err
 		}
 
+		// Collect the stats before dropping the table. getBigBanksStats will
+		// print them out.
+		_ = getBigBankStats()
+
 		t.WorkerStatus("dropping table")
 		defer t.WorkerStatus()
 
@@ -154,26 +192,39 @@ ORDER BY raw_start_key ASC LIMIT 1`,
 			return err
 		}
 
-		t.WorkerStatus("computing number of ranges")
-		initialBankRanges := numBankRanges()
+		t.WorkerStatus("computing span stats")
+		preDropBankStats := getBigBankStats()
 
 		t.WorkerStatus("dropping bank table")
 		if _, err := conn.ExecContext(ctx, `DROP TABLE bigbank.bank`); err != nil {
 			return err
 		}
 
-		// Spend some time reading data with a timeout to make sure the
-		// DROP above didn't brick the cluster. At the time of writing,
-		// clearing all of the table data takes ~6min, so we want to run
-		// for at least a multiple of that duration.
-		const minDuration = 45 * time.Minute
-		deadline := timeutil.Now().Add(minDuration)
-		curBankRanges := numBankRanges()
-		t.WorkerStatus("waiting for ~", curBankRanges, " merges to complete (and for at least ", minDuration, " to pass)")
-		for timeutil.Now().Before(deadline) || curBankRanges > 1 {
-			after := time.After(5 * time.Minute)
-			curBankRanges = numBankRanges() // this call takes minutes, unfortunately
-			t.WorkerProgress(1 - float64(curBankRanges)/float64(initialBankRanges))
+		curBankStats := getBigBankStats()
+		progressFn := func() float64 {
+			// Compute progress as a float [0, 1.0].
+			//
+			// We compute the progress in terms of the number of ranges and the
+			// amount of disk space, relative to the stats we computed
+			// immediately after dropping the table. That is:
+			//
+			//    1 - (current / initial)
+			//
+			// The range count progress subtracts 1 from each count to account
+			// for the expectation that one range will always remain.
+			//
+			// We compute the overall progress as the minimum of the two metrics'
+			// progress.
+			mergeProgress := 1 - (float64(curBankStats.rangeCount-1) /
+				float64(preDropBankStats.rangeCount-1))
+			diskProgress := 1 - (float64(curBankStats.approximateDiskBytes) /
+				float64(preDropBankStats.approximateDiskBytes))
+			return max(0, min(mergeProgress, diskProgress))
+		}
+		// Terminate when progress is 0.975 or greater. That is, we've reclaimed
+		// 97.5% of the disk space and merged 97.5% of the ranges.
+		for progress := progressFn(); progress < 0.975; progress = progressFn() {
+			t.WorkerProgress(progress)
 
 			var count int
 			// NB: context cancellation in QueryRowContext does not work as expected.
@@ -186,16 +237,73 @@ ORDER BY raw_start_key ASC LIMIT 1`,
 				return err
 			}
 
-			t.WorkerStatus("waiting for ~", curBankRanges, " merges to complete (and for at least ", timeutil.Until(deadline), " to pass)")
+			t.WorkerStatus("progress ", progress, " (", curBankStats.rangeCount, " ranges, ",
+				humanizeutil.IBytes(curBankStats.approximateDiskBytes), " disk usage)")
 			select {
-			case <-after:
+			case <-time.After(time.Minute):
 			case <-ctx.Done():
 				return ctx.Err()
 			}
+			curBankStats = getBigBankStats()
 		}
-		// TODO(tschottdorf): verify that disk space usage drops below to <some small amount>, but that
-		// may not actually happen (see https://github.com/cockroachdb/cockroach/issues/29290).
+		t.WorkerStatus("reclamation condition met")
 		return nil
 	})
 	m.Wait()
+}
+
+func getKeyspanForTable(
+	ctx context.Context, t test.Test, c cluster.Cluster, n int, tbl string,
+) (roachpb.Span, error) {
+	conn := c.Conn(ctx, t.L(), n)
+	defer conn.Close()
+	var startKey, endKey roachpb.Key
+	err := conn.QueryRow(`SELECT `+
+		`crdb_internal.table_span($1::regclass::oid::int)[1] AS start_key, `+
+		`crdb_internal.table_span($1::regclass::oid::int)[2] AS end_key`,
+		tbl).Scan(&startKey, &endKey)
+	return roachpb.Span{
+		Key:    startKey,
+		EndKey: endKey,
+	}, err
+}
+
+type spanStats struct {
+	rangeCount           int
+	approximateDiskBytes int64
+	liveBytes            int64
+	totalBytes           int64
+}
+
+func getSpanStats(
+	ctx context.Context, t test.Test, c cluster.Cluster, n int, span roachpb.Span,
+) spanStats {
+	conn := c.Conn(ctx, t.L(), n)
+	defer conn.Close()
+
+	var stats spanStats
+	var rangeCount, approximateDiskBytes, liveBytes, totalBytes gosql.NullInt64
+	err := conn.QueryRow(
+		`SELECT `+
+			`(stats->'range_count')::int AS range_count, `+
+			`(stats->'approximate_disk_bytes')::int AS approximate_disk_bytes, `+
+			`(stats->'approximate_total_stats'->'live_bytes')::int AS live_bytes, `+
+			`(stats->'approximate_total_stats'->'key_bytes')::int + (stats->'approximate_total_stats'->'val_bytes')::int AS total_bytes `+
+			`FROM crdb_internal.tenant_span_stats(ARRAY(SELECT($1::bytes, $2::bytes)))`,
+		span.Key, span.EndKey).
+		Scan(
+			&rangeCount,
+			&approximateDiskBytes,
+			&liveBytes,
+			&totalBytes,
+		)
+	require.NoError(t, err)
+	// NULLs are returned when the span no longer has any ranges (e.g.,
+	// after a table is fully dropped and GC'd). Treat as zeros — the
+	// caller's progress check will see this as fully reclaimed.
+	stats.rangeCount = int(rangeCount.Int64)
+	stats.approximateDiskBytes = approximateDiskBytes.Int64
+	stats.liveBytes = liveBytes.Int64
+	stats.totalBytes = totalBytes.Int64
+	return stats
 }

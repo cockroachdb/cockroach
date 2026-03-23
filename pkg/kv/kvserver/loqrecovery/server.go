@@ -77,7 +77,7 @@ type Server struct {
 	decommissionFn     func(context.Context, roachpb.NodeID) error
 
 	metadataQueryTimeout time.Duration
-	forwardReplicaFilter func(*serverpb.RecoveryCollectLocalReplicaInfoResponse) error
+	maybeInjectError     func(*serverpb.RecoveryCollectLocalReplicaInfoResponse) error
 }
 
 func NewServer(
@@ -95,12 +95,12 @@ func NewServer(
 	// effort operations where cluster info collection as an operation succeeds
 	// even if some parts of it time out.
 	metadataQueryTimeout := 1 * time.Minute
-	var forwardReplicaFilter func(*serverpb.RecoveryCollectLocalReplicaInfoResponse) error
+	var maybeInjectError func(*serverpb.RecoveryCollectLocalReplicaInfoResponse) error
 	if rk, ok := knobs.(*TestingKnobs); ok {
 		if rk.MetadataScanTimeout > 0 {
 			metadataQueryTimeout = rk.MetadataScanTimeout
 		}
-		forwardReplicaFilter = rk.ForwardReplicaFilter
+		maybeInjectError = rk.MaybeInjectError
 	}
 	return &Server{
 		nodeIDContainer:      nodeIDContainer,
@@ -112,7 +112,7 @@ func NewServer(
 		planStore:            planStore,
 		decommissionFn:       decommission,
 		metadataQueryTimeout: metadataQueryTimeout,
-		forwardReplicaFilter: forwardReplicaFilter,
+		maybeInjectError:     maybeInjectError,
 	}
 }
 
@@ -136,10 +136,9 @@ func (s Server) ServeLocalReplicas(
 		g.Go(func() error {
 			// TODO(sep-raft-log): when raft and state machine engines are separate,
 			// we need two snapshots here. This path is online, so we should make sure
-			// these snapshots are consistent (in particular, the LogID must match
-			// across the two), or make sure that LogID mismatch is handled in
-			// visitStoreReplicas.
-			reader := s.TODOEngine().NewSnapshot()
+			// these snapshots are consistent, or visitStoreReplicas handles the
+			// asynchronous snapshots well.
+			reader := s.TODOBothEngines().NewSnapshot()
 			defer reader.Close()
 			return visitStoreReplicas(ctx, reader, reader, s.StoreID(), s.NodeID(),
 				func(info loqrecoverypb.ReplicaInfo) error {
@@ -221,13 +220,13 @@ func (s Server) ServeClusterReplicas(
 		fanOutConnectionRetryOptions,
 		req.MaxConcurrency,
 		allNodes,
-		serveClusterReplicasParallelFn(ctx, syncOutStream, s.forwardReplicaFilter, &replicas, &nodes))
+		serveClusterReplicasParallelFn(ctx, syncOutStream, s.maybeInjectError, &replicas, &nodes))
 }
 
 func serveClusterReplicasParallelFn(
 	ctx context.Context,
 	outStream *threadSafeStream[*serverpb.RecoveryCollectReplicaInfoResponse],
-	forwardReplicaFilter func(*serverpb.RecoveryCollectLocalReplicaInfoResponse) error,
+	maybeInjectError func(*serverpb.RecoveryCollectLocalReplicaInfoResponse) error,
 	replicas, nodes *atomic.Int64,
 ) visitNodeAdminFn {
 	return func(nodeID roachpb.NodeID, client serverpb.RPCAdminClient) error {
@@ -244,8 +243,8 @@ func serveClusterReplicasParallelFn(
 			if err == io.EOF {
 				break
 			}
-			if forwardReplicaFilter != nil {
-				err = forwardReplicaFilter(r)
+			if err == nil && maybeInjectError != nil {
+				err = maybeInjectError(r)
 			}
 			if err != nil {
 				// Some replicas were already sent back, need to notify client of stream
@@ -479,7 +478,7 @@ func (s Server) NodeStatus(
 		status.PendingPlanID = &plan.PlanID
 	}
 	err = s.stores.VisitStores(func(s *kvserver.Store) error {
-		r, ok, err := readNodeRecoveryStatusInfo(ctx, s.TODOEngine())
+		r, ok, err := readNodeRecoveryStatusInfo(ctx, s.LogEngine())
 		if err != nil {
 			return err
 		}

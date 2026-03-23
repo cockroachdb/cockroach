@@ -130,6 +130,12 @@ SELECT database_name FROM [SHOW DATABASES] WHERE database_name = 'b2';
 ----
 
 
+# Verify that crdb_internal_* databases are not present in the restored cluster
+query-sql
+SELECT database_name FROM [SHOW DATABASES] WHERE database_name LIKE 'crdb_internal%';
+----
+
+
 # Ensure restored cluster contains the restored database as of latest time
 new-cluster name=s3 share-io-dir=s1 allow-implicit-access
 ----
@@ -144,6 +150,12 @@ query-sql
 SELECT database_name FROM [SHOW DATABASES] WHERE database_name = 'b2';
 ----
 b2
+
+
+# Verify that crdb_internal_* databases are not present in the restored cluster
+query-sql
+SELECT database_name FROM [SHOW DATABASES] WHERE database_name LIKE 'crdb_internal%';
+----
 
 
 query-sql
@@ -260,6 +272,12 @@ query-sql
 SELECT schema_name FROM [SHOW SCHEMAS FROM d_aost] WHERE schema_name='me';
 ----
 
+
+# Verify that crdb_internal_* databases are not present in the restored cluster
+query-sql
+SELECT database_name FROM [SHOW DATABASES] WHERE database_name LIKE 'crdb_internal%';
+----
+
 # Restore AOST completed in-progress restore, implying baz is online.
 exec-sql
 RESTORE DATABASE d FROM LATEST IN 'nodelocal://1/database/' with new_db_name = d_latest
@@ -270,6 +288,12 @@ query-sql
 SELECT schema_name, table_name, type FROM [SHOW TABLES FROM d_latest];
 ----
 me baz table
+
+
+# Verify that crdb_internal_* databases are not present in the restored cluster
+query-sql
+SELECT database_name FROM [SHOW DATABASES] WHERE database_name LIKE 'crdb_internal%';
+----
 
 ###################
 # Case 3: same as case 2, except the table restore restores into an existing
@@ -347,6 +371,12 @@ SELECT schema_name FROM [SHOW SCHEMAS FROM d_aost] WHERE schema_name='me';
 me
 
 
+# Verify that crdb_internal_* databases are not present in the restored cluster
+query-sql
+SELECT database_name FROM [SHOW DATABASES] WHERE database_name LIKE 'crdb_internal%';
+----
+
+
 exec-sql
 RESTORE DATABASE d_with_schema FROM LATEST IN 'nodelocal://1/database/' with new_db_name = d_latest
 ----
@@ -357,6 +387,12 @@ SELECT schema_name, table_name, type FROM [SHOW TABLES FROM d_latest];
 ----
 me bar table
 me baz table
+
+
+# Verify that crdb_internal_* databases are not present in the restored cluster
+query-sql
+SELECT database_name FROM [SHOW DATABASES] WHERE database_name LIKE 'crdb_internal%';
+----
 
 
 ###################
@@ -427,6 +463,12 @@ SELECT schema_name FROM [SHOW SCHEMAS FROM d_aost] WHERE schema_name='me';
 ----
 
 
+# Verify that crdb_internal_* databases are not present in the restored cluster
+query-sql
+SELECT database_name FROM [SHOW DATABASES] WHERE database_name LIKE 'crdb_internal%';
+----
+
+
 exec-sql
 RESTORE TABLE d.* FROM LATEST IN 'nodelocal://1/table/' with into_db = d_latest
 ----
@@ -442,3 +484,9 @@ query-sql
 SELECT schema_name, table_name, type FROM [SHOW TABLES FROM d_latest];
 ----
 me baz table
+
+
+# Verify that crdb_internal_* databases are not present in the restored cluster
+query-sql
+SELECT database_name FROM [SHOW DATABASES] WHERE database_name LIKE 'crdb_internal%';
+----

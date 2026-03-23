@@ -18,10 +18,10 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
-	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV1"
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -45,9 +45,9 @@ type ddEventType int
 
 const (
 	eventOpStarted ddEventType = iota
-	eventOpRan
-	eventOpFinishedCleanup
-	eventOpError
+	eventOpCompleted
+	eventCleanupCompleted
+	eventDepCheckFailed
 )
 
 // runTests is the main function for the run and bench commands.
@@ -226,7 +226,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	// ctx above might be canceled in case a signal was received. If that's
 	// the case, we're running under a 5s timeout until the CtrlC() goroutine
 	// kills the process.
-	l.PrintfCtx(ctx, "runTests destroying all clusters")
+	l.PrintfCtx(ctx, "runTests destroying all unsaved clusters")
 	cr.destroyAllClusters(context.Background(), l)
 
 	if roachtestflags.TeamCity {
@@ -344,7 +344,7 @@ func initRunFlagsBinariesAndLibraries(cmd *cobra.Command) error {
 func CtrlC(ctx context.Context, l *logger.Logger, cancel func(), cr *clusterRegistry) {
 	// Shut down test clusters when interrupted (for example CTRL-C).
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
 	go func() {
 		select {
 		case <-sig:
@@ -355,12 +355,18 @@ func CtrlC(ctx context.Context, l *logger.Logger, cancel func(), cr *clusterRegi
 			"Signaled received. Canceling workers and waiting up to 5s for them.")
 		// Signal runner.Run() to stop.
 		cancel()
-		<-time.After(5 * time.Second)
 		if cr == nil {
-			shout(ctx, l, os.Stderr, "5s elapsed. No clusters registered; nothing to destroy.")
+			// Operation mode: no clusters to destroy, but operations may need
+			// time to run cleanup (e.g., DROP INDEX, restore license). Wait up
+			// to 2 minutes for workers to finish before force-exiting.
+			shout(ctx, l, os.Stderr,
+				"Signal received in operation mode. Waiting up to 2m for cleanup to finish.")
+			<-time.After(2 * time.Minute)
+			shout(ctx, l, os.Stderr, "2m elapsed. Force exiting.")
 			l.Printf("all stacks:\n\n%s\n", allstacks.Get())
 			os.Exit(2)
 		}
+		<-time.After(5 * time.Second)
 		shout(ctx, l, os.Stderr, "5s elapsed. Will brutally destroy all clusters.")
 		// Make sure there are no leftover clusters.
 		destroyCh := make(chan struct{})
@@ -425,61 +431,6 @@ func redirectCRDBLogger(ctx context.Context, path string) *logger.Logger {
 	}
 	shout(ctx, l, os.Stdout, "fallback runner logs in: %s", path)
 	return l
-}
-
-// maybeEmitDatadogEvent sends an event to Datadog if the passed in ctx has the
-// necessary values to communicate with Datadog.
-func maybeEmitDatadogEvent(
-	ctx context.Context,
-	datadogEventsAPI *datadogV1.EventsApi,
-	opSpec *registry.OperationSpec,
-	clusterName string,
-	eventType ddEventType,
-	operationID uint64,
-	datadogTags []string,
-) {
-	// The passed in context is not configured to communicate with Datadog.
-	_, hasAPIKeys := ctx.Value(datadog.ContextAPIKeys).(map[string]datadog.APIKey)
-	_, hasServerVariables := ctx.Value(datadog.ContextServerVariables).(map[string]string)
-	if !hasAPIKeys || !hasServerVariables {
-		return
-	}
-
-	status := "started"
-	alertType := datadogV1.EVENTALERTTYPE_INFO
-
-	switch eventType {
-	case eventOpStarted:
-		status = "started"
-		alertType = datadogV1.EVENTALERTTYPE_INFO
-	case eventOpRan:
-		status = "finished running; waiting for cleanup"
-		alertType = datadogV1.EVENTALERTTYPE_SUCCESS
-	case eventOpFinishedCleanup:
-		status = "cleaned up its state"
-		alertType = datadogV1.EVENTALERTTYPE_INFO
-	case eventOpError:
-		status = "ran with an error"
-		alertType = datadogV1.EVENTALERTTYPE_ERROR
-	}
-
-	title := fmt.Sprintf("op %s %s", opSpec.Name, status)
-	hostname, _ := os.Hostname()
-
-	// We're within a best effort function so we ignore return values.
-	_, _, _ = datadogEventsAPI.CreateEvent(ctx, datadogV1.EventCreateRequest{
-		AggregationKey: datadog.PtrString(fmt.Sprintf("operation-%d", operationID)),
-		AlertType:      &alertType,
-		DateHappened:   datadog.PtrInt64(timeutil.Now().Unix()),
-		Host:           &hostname,
-		SourceTypeName: datadog.PtrString("roachtest"),
-		Tags: append(datadogTags,
-			fmt.Sprintf("operation-name:%s", opSpec.Name),
-			fmt.Sprintf("operation-status:%s", status),
-		),
-		Text:  fmt.Sprintf("cluster: %s\n", clusterName),
-		Title: title,
-	})
 }
 
 // newDatadogContext adds values to the passed in ctx to configure it to

@@ -224,6 +224,8 @@ type cFetcherArgs struct {
 
 	// tenantID is required in some places for AC/bookkeeping.
 	tenantID roachpb.TenantID
+	// workloadID is used for ASH sampling.
+	workloadID uint64
 }
 
 // noOutputColumn is a sentinel value to denote that a system column is not
@@ -271,16 +273,17 @@ type cFetcher struct {
 	// stableKVs indicates whether the KVs returned by nextKVer are stable (i.e.
 	// are not invalidated) across NextKV() calls.
 	stableKVs bool
-	// bytesRead, kvPairsRead, and batchRequestsIssued store the total number of
-	// bytes read, key-values pairs read, and of BatchRequests issued,
-	// respectively, by this cFetcher throughout its lifetime in case when the
-	// underlying row.KVFetcher has already been closed and nil-ed out.
+	// bytesRead, kvPairsRead, kvCPUTime, and batchRequestsIssued store the total number of
+	// bytes read, key-values pairs read, CPU time reported by KV BatchResponses, and of
+	// BatchRequests issued, respectively, by this cFetcher throughout its lifetime in
+	// case when the underlying row.KVFetcher has already been closed and nil-ed out.
 	//
 	// The fields should not be accessed directly by the users of the cFetcher -
-	// getBytesRead(), getKVPairsRead(), and getBatchRequestsIssued() should be
+	// getBytesRead(), getKVPairsRead(), getKVCpuTime(), and getBatchRequestsIssued() should be
 	// used instead.
 	bytesRead           int64
 	kvPairsRead         int64
+	kvCPUTime           int64
 	batchRequestsIssued int64
 	// cpuStopWatch tracks the CPU time spent by this cFetcher while fulfilling KV
 	// requests *in the current goroutine*.
@@ -565,7 +568,10 @@ func (cf *cFetcher) Init(
 			cf.pacer = cf.txn.DB().AdmissionPacerFactory.NewPacer(
 				50*time.Millisecond, // Request a realistic per-batch amount.
 				admission.WorkInfo{
-					TenantID: cf.tenantID, Priority: pri, CreateTime: timeutil.Now().UnixNano(),
+					TenantID:   cf.tenantID,
+					Priority:   pri,
+					CreateTime: timeutil.Now().UnixNano(),
+					WorkloadID: cf.workloadID,
 				},
 			)
 		}
@@ -1439,8 +1445,12 @@ func (cf *cFetcher) finalizeBatch() {
 // getCurrentColumnFamilyID returns the column family id of the key in
 // cf.machine.nextKV.Key.
 func (cf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
-	// If the table only has 1 column family, and its ID is 0, we know that the
+	// If the index only has 1 column family, and its ID is 0, we know that the
 	// key has to be the 0th column family.
+	// TODO(drewk): once we know all nodes are at least 26.2, we can perform this
+	// optimization whenever cf.table.spec.MaxKeysPerRow == 1, since at that point
+	// MaxFamilyID is always for the just index being scanned, not the whole
+	// table.
 	if cf.table.spec.MaxFamilyID == 0 {
 		return 0, nil
 	}
@@ -1484,6 +1494,15 @@ func (cf *cFetcher) getKVPairsRead() int64 {
 	return cf.kvPairsRead
 }
 
+// getKVCPUTime returns the CPU time as reported by KV BatchResponses processed
+// by the cFetcher throughout its lifetime so far.
+func (cf *cFetcher) getKVCPUTime() int64 {
+	if cf.fetcher != nil {
+		return cf.fetcher.GetKVCPUTime()
+	}
+	return cf.kvCPUTime
+}
+
 // getBatchRequestsIssued returns the number of BatchRequests issued by the
 // cFetcher throughout its lifetime so far.
 func (cf *cFetcher) getBatchRequestsIssued() int64 {
@@ -1522,6 +1541,7 @@ func (cf *cFetcher) Close(ctx context.Context) {
 		if cf.fetcher != nil {
 			cf.bytesRead = cf.fetcher.GetBytesRead()
 			cf.kvPairsRead = cf.fetcher.GetKVPairsRead()
+			cf.kvCPUTime = cf.fetcher.GetKVCPUTime()
 			cf.batchRequestsIssued = cf.fetcher.GetBatchRequestsIssued()
 			cf.fetcher.Close(ctx)
 			cf.fetcher = nil

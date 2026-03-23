@@ -91,7 +91,7 @@ func TestProtectedTimestamps(t *testing.T) {
 			require.NoError(t, err)
 		}
 	}
-	const processedPattern = `(?s)shouldQueue=true.*processing replica.*GC score after GC`
+	const processedPattern = `(?s)shouldQueue=true.*GC processing.*GC complete`
 	processedRegexp := regexp.MustCompile(processedPattern)
 
 	waitForTableSplit := func() {
@@ -158,7 +158,7 @@ ORDER BY raw_start_key ASC LIMIT 1`)
 		})
 	}
 
-	thresholdRE := regexp.MustCompile(`(?s).*Threshold:(?P<threshold>[^\s]*)`)
+	thresholdRE := regexp.MustCompile(`(?s).*Threshold=(?P<threshold>[^\s]*)`)
 	thresholdFromTrace := func(trace tracingpb.Recording) hlc.Timestamp {
 		threshStr := string(thresholdRE.ExpandString(nil, "$threshold",
 			trace.String(), thresholdRE.FindStringSubmatchIndex(trace.String())))

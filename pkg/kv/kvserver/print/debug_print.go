@@ -239,7 +239,7 @@ func DecodeWriteBatch(writeBatch []byte) (string, error) {
 	// pebble.KeyKindDeleteSized is the most recent key kind, ensuring that
 	// compilation will fail if it's not. Unfortunately, this doesn't protect
 	// against reusing a currently unused RocksDB key kind.
-	const _ = uint(pebble.InternalKeyKindSyntheticKey - pebble.InternalKeyKindMax)
+	const _ = uint(pebble.InternalKeyKindIngestSSTWithBlobs - pebble.InternalKeyKindMax)
 
 	if writeBatch == nil {
 		return "<nil>\n", nil
@@ -479,14 +479,12 @@ func tryWAGKey(kv storage.MVCCKeyValue) (string, error) {
 		return "", err
 	}
 
-	str := fmt.Appendf(nil, "%v %s", node.Type, node.Addr)
-	if c, d := node.Create, node.Destroy; c != 0 || len(d) != 0 {
-		if c != 0 {
-			str = fmt.Appendf(str, " create:%d", c)
+	var str []byte
+	for i, e := range node.Events {
+		if i > 0 {
+			str = append(str, ' ')
 		}
-		if len(d) != 0 {
-			str = fmt.Appendf(str, " destroy:%v", d)
-		}
+		str = fmt.Appendf(str, "%s", e)
 	}
 
 	if b := node.Mutation.Batch; len(b) > 0 {

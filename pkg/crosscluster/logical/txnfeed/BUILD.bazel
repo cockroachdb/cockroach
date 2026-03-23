@@ -1,0 +1,45 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "txnfeed",
+    srcs = [
+        "merge_feed.go",
+        "merge_heap.go",
+        "ordered_feed.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnfeed",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/crosscluster",
+        "//pkg/crosscluster/streamclient",
+        "//pkg/jobs/jobspb",
+        "//pkg/repstream/streampb",
+        "//pkg/roachpb",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/hlc",
+        "//pkg/util/span",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "txnfeed_test",
+    srcs = [
+        "merge_feed_bench_test.go",
+        "merge_feed_test.go",
+        "ordered_feed_test.go",
+    ],
+    embed = [":txnfeed"],
+    deps = [
+        "//pkg/crosscluster",
+        "//pkg/crosscluster/streamclient",
+        "//pkg/jobs/jobspb",
+        "//pkg/repstream/streampb",
+        "//pkg/roachpb",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/hlc",
+        "//pkg/util/span",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -137,3 +137,182 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"text":"1"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Regression test for #158771: JDBC driver throws NoSuchElementException
+# when calling a procedure that contains a COMMIT statement.
+#
+# The issue occurs when using the extended protocol
+# (Parse/Bind/Describe/Execute/Sync) to call a procedure that commits
+# the transaction internally. The JDBC driver expects specific message
+# sequences when calling or describing a portal bound to such
+# procedures:
+# - NoData message if the procedure has no output parameters
+# - Single RowDescription message if the procedure has output parameters
+#
+# Prior to this fix, CockroachDB incorrectly emitted RowDescription
+# messages regardless of output parameters and sent additional
+# RowDescription messages for each COMMIT statement in the procedure
+# body. This behavior differed from PostgreSQL and caused JDBC driver
+# failures. This fix ensures CockroachDB follows the same protocol
+# semantics as PostgreSQL.
+subtest 158771
+
+# Create 2 procedure:
+# proc_commit() is a simple procedure with a COMMIT after the INSERT.
+# proc_commit_output() has 2 output parameters and several COMMITs in the body.
+send
+Query {"String": "DROP TABLE IF EXISTS t_158771"}
+Query {"String": "CREATE TABLE t_158771 (a INT4, b INT4, c INT4)"}
+Query {"String": "CREATE OR REPLACE PROCEDURE proc_commit() LANGUAGE plpgsql AS $$ BEGIN INSERT INTO t_158771 (a, b, c) VALUES (1, NULL, NULL); COMMIT; END; $$"}
+Query {"String": "CREATE OR REPLACE PROCEDURE proc_commit_output(OUT val INT, OUT val1 INT) LANGUAGE plpgsql AS $$ BEGIN INSERT INTO t_158771 (a, b, c) VALUES (1, NULL, NULL); val = 1; val1 = 2; COMMIT; COMMIT; COMMIT; END; $$"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE PROCEDURE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE PROCEDURE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Test 1: Call procedure using simple protocol.
+send
+Query {"String": "CALL proc_commit()"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CALL proc_commit_output(NULL, NULL)"}
+----
+
+until ignore_table_oids ignore_type_oids ignore_data_type_sizes
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"val","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":0,"DataTypeSize":0,"TypeModifier":-1,"Format":0},{"Name":"val1","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":0,"DataTypeSize":0,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"2"}]}
+{"Type":"CommandComplete","CommandTag":"CALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify the insert worked.
+send
+Query {"String": "SELECT * FROM t_158771"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"1"},null,null]}
+{"Type":"DataRow","Values":[{"text":"1"},null,null]}
+{"Type":"CommandComplete","CommandTag":"SELECT 2"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Test 2: Call procedure using extended protocol with Describe (JDBC pattern)
+send
+Parse {"Name": "s1", "Query": "CALL proc_commit()"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s1"}
+Describe {"ObjectType": "P", "Name": "p1"}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"NoData"}
+{"Type":"CommandComplete","CommandTag":"CALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "s2", "Query": "CALL proc_commit_output(NULL, NULL)"}
+Bind {"DestinationPortal": "p2", "PreparedStatement": "s2"}
+Describe {"ObjectType": "P", "Name": "p2"}
+Execute {"Portal": "p2"}
+Sync
+----
+
+until ignore_table_oids ignore_type_oids ignore_data_type_sizes
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"RowDescription","Fields":[{"Name":"val","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":0,"DataTypeSize":0,"TypeModifier":-1,"Format":0},{"Name":"val1","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":0,"DataTypeSize":0,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"2"}]}
+{"Type":"CommandComplete","CommandTag":"CALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE OR REPLACE PROCEDURE proc_commit2(OUT val INT, OUT val1 INT) LANGUAGE plpgsql AS $$ BEGIN INSERT INTO t_158771 (a, b, c) VALUES (1, NULL, NULL); COMMIT; END; $$"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE PROCEDURE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "s3", "Query": "CALL proc_commit2(NULL, NULL)"}
+Bind {"DestinationPortal": "p3", "PreparedStatement": "s3"}
+Describe {"ObjectType": "P", "Name": "p3"}
+Execute {"Portal": "p3"}
+Sync
+----
+
+until ignore_table_oids ignore_type_oids ignore_data_type_sizes
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"RowDescription","Fields":[{"Name":"val","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":0,"DataTypeSize":0,"TypeModifier":-1,"Format":0},{"Name":"val1","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":0,"DataTypeSize":0,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[null,null]}
+{"Type":"CommandComplete","CommandTag":"CALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Test 3: Extended protocol without Describe (simpler pattern)
+send
+Parse {"Name": "s4", "Query": "CALL proc_commit()"}
+Bind {"DestinationPortal": "p4", "PreparedStatement": "s4"}
+Execute {"Portal": "p4"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"CALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify final result after the 6 call of SPs, with each inserting one row.
+send
+Query {"String": "SELECT * FROM t_158771"}
+----
+
+until ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"1"},null,null]}
+{"Type":"DataRow","Values":[{"text":"1"},null,null]}
+{"Type":"DataRow","Values":[{"text":"1"},null,null]}
+{"Type":"DataRow","Values":[{"text":"1"},null,null]}
+{"Type":"DataRow","Values":[{"text":"1"},null,null]}
+{"Type":"DataRow","Values":[{"text":"1"},null,null]}
+{"Type":"CommandComplete","CommandTag":"SELECT 6"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+subtest end

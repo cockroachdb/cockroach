@@ -19,7 +19,7 @@ import { useSelector } from "react-redux";
 
 import { selectDatabases } from "../statements/statementsPage";
 
-import styles from "./hotRanges.module.styl";
+import styles from "./hotRanges.module.scss";
 import { Filters } from "./useFilters";
 
 const cx = classNames.bind(styles);
@@ -47,7 +47,9 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
 
   // The below setters are used for the various filters.
   const setStore = (store_id: string) => mergeFilters({ store_id });
-  const setDatabases = (databaseOptions: FilterCheckboxOptionItem[]) => {
+  const setDatabases = (
+    databaseOptions: readonly FilterCheckboxOptionItem[],
+  ) => {
     const databases = databaseOptions.map(
       (o: FilterCheckboxOptionItem) => o.value,
     );

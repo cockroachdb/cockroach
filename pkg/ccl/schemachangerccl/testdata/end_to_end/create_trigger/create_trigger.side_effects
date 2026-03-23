@@ -32,6 +32,7 @@ upsert descriptor #104
        wallTime: "1640995200000000000"
   +  dependedOnBy:
   +  - id: 104
+  +    triggerId: 1
      families:
      - columnIds:
   ...
@@ -125,6 +126,7 @@ upsert descriptor #104
   +    targets: <redacted>
   +  dependedOnBy:
   +  - id: 104
+  +    triggerId: 1
      families:
      - columnIds:
   ...

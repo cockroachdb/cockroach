@@ -239,10 +239,10 @@ guard-state r=req1
 ----
 new: state=doneWaiting
 Intents to resolve:
- key="a" txn=00000000 status=ABORTED
- key="b" txn=00000000 status=ABORTED
- key="d" txn=00000000 status=COMMITTED
- key="e" txn=00000000 status=COMMITTED
+ key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=10.000000000,1 status=ABORTED
+ key="b" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=10.000000000,1 status=ABORTED
+ key="d" txn=00000000-0000-0000-0000-000000000003 epoch=0 ts=11.000000000,1 status=COMMITTED
+ key="e" txn=00000000-0000-0000-0000-000000000003 epoch=0 ts=11.000000000,1 status=COMMITTED
 
 print
 ----
@@ -352,8 +352,8 @@ guard-state r=req3
 ----
 new: state=doneWaiting
 Intents to resolve:
- key="a" txn=00000000 status=ABORTED
- key="c" txn=00000000 status=ABORTED
+ key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=ABORTED
+ key="c" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=ABORTED
 
 print
 ----
@@ -476,7 +476,7 @@ guard-state r=req5
 ----
 new: state=doneWaiting
 Intents to resolve:
- key="b" txn=00000000 status=ABORTED
+ key="b" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=ABORTED
 
 print
 ----
@@ -571,8 +571,8 @@ guard-state r=req8
 ----
 new: state=doneWaiting
 Intents to resolve:
- key="a" txn=00000000 status=ABORTED
- key="b" txn=00000000 status=ABORTED
+ key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=ABORTED
+ key="b" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=11.000000000,1 status=ABORTED
 
 guard-state r=req7
 ----
@@ -685,8 +685,8 @@ guard-state r=req10
 ----
 new: state=doneWaiting
 Intents to resolve:
- key="a" txn=00000000 status=ABORTED
- key="b" txn=00000000 status=ABORTED
+ key="a" txn=00000000-0000-0000-0000-000000000003 epoch=0 ts=12.000000000,1 status=ABORTED
+ key="b" txn=00000000-0000-0000-0000-000000000003 epoch=0 ts=12.000000000,1 status=ABORTED
 
 pushed-txn-updated txn=txn4 status=aborted
 ----
@@ -701,7 +701,7 @@ guard-state r=req9
 ----
 new: state=doneWaiting
 Intents to resolve:
- key="d" txn=00000000 status=ABORTED
+ key="d" txn=00000000-0000-0000-0000-000000000004 epoch=0 ts=11.000000000,1 status=ABORTED
 
 print
 ----
@@ -744,7 +744,7 @@ guard-state r=req11
 ----
 new: state=doneWaiting
 Intents to resolve:
- key="a" txn=00000000 status=ABORTED
+ key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=12.000000000,1 status=ABORTED
 
 dequeue r=req11
 ----
@@ -787,7 +787,7 @@ guard-state r=req12
 ----
 new: state=doneWaiting
 Intents to resolve:
- key="a" txn=00000000 status=ABORTED
+ key="a" txn=00000000-0000-0000-0000-000000000002 epoch=0 ts=12.000000000,1 status=ABORTED
 
 dequeue r=req12
 ----

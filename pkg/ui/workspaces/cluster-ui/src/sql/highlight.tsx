@@ -6,7 +6,7 @@
 import classNames from "classnames/bind";
 import hljs from "highlight.js/lib/core";
 import sqlLangSyntax from "highlight.js/lib/languages/pgsql";
-import React from "react";
+import React, { useRef, useEffect, memo } from "react";
 
 import { SqlBoxProps } from "./box";
 import styles from "./sqlhighlight.module.scss";
@@ -18,23 +18,17 @@ hljs.configure({
   tabReplace: "  ",
 });
 
-export class Highlight extends React.Component<SqlBoxProps> {
-  preNode: React.RefObject<HTMLPreElement> = React.createRef();
+function HighlightInternal({ value, zone }: SqlBoxProps): React.ReactElement {
+  const preNode = useRef<HTMLSpanElement>(null);
 
-  shouldComponentUpdate(newProps: SqlBoxProps): boolean {
-    return newProps.value !== this.props.value;
-  }
+  // Apply syntax highlighting when the value changes
+  useEffect(() => {
+    if (preNode.current) {
+      hljs.highlightBlock(preNode.current);
+    }
+  }, [value]);
 
-  componentDidMount(): void {
-    hljs.highlightBlock(this.preNode.current);
-  }
-
-  componentDidUpdate(): void {
-    hljs.highlightBlock(this.preNode.current);
-  }
-
-  renderZone = (): React.ReactElement => {
-    const { zone } = this.props;
+  const renderZone = (): React.ReactElement => {
     const zoneConfig = zone.zone_config;
     return (
       <span className={cx("sql-highlight", "hljs")}>
@@ -69,20 +63,23 @@ export class Highlight extends React.Component<SqlBoxProps> {
     );
   };
 
-  render(): React.ReactElement {
-    const { value, zone } = this.props;
-    return (
-      <>
-        <span className={cx("sql-highlight")} ref={this.preNode}>
-          {value}
-        </span>
-        {zone && (
-          <>
-            <div className={cx("highlight-divider")} />
-            {this.renderZone()}
-          </>
-        )}
-      </>
-    );
-  }
+  return (
+    <>
+      <span className={cx("sql-highlight")} ref={preNode}>
+        {value}
+      </span>
+      {zone && (
+        <>
+          <div className={cx("highlight-divider")} />
+          {renderZone()}
+        </>
+      )}
+    </>
+  );
 }
+
+// Wrap with memo to replicate shouldComponentUpdate behavior:
+// only re-render when value changes
+export const Highlight = memo(HighlightInternal, (prevProps, nextProps) => {
+  return prevProps.value === nextProps.value;
+});

@@ -187,6 +187,7 @@ WHERE stat->>'name' = '__merged__';
         "b"
     ],
     "created_at": "1988-08-08 00:00:00",
+    "delay_delete": false,
     "distinct_count": 12,
     "histo_buckets": [
         {
@@ -313,6 +314,7 @@ WHERE stat->>'name' = '__forecast__';
         "b"
     ],
     "created_at": "1988-08-10 00:00:00",
+    "delay_delete": false,
     "distinct_count": 18,
     "histo_buckets": [
         {
@@ -521,6 +523,7 @@ WHERE stat->>'name' = '__merged__';
         "h"
     ],
     "created_at": "2022-12-07 17:46:22.436487",
+    "delay_delete": false,
     "distinct_count": 4,
     "histo_buckets": [
         {
@@ -675,6 +678,7 @@ WHERE stat->>'name' = '__merged__';
         "i"
     ],
     "created_at": "2022-12-07 19:57:07.781368",
+    "delay_delete": false,
     "distinct_count": 9,
     "histo_buckets": [
         {
@@ -1026,6 +1030,7 @@ WHERE stat->>'name' = '__merged__' ORDER BY stat->>'created_at';
         "b"
     ],
     "created_at": "2022-12-13 15:22:21.988179",
+    "delay_delete": false,
     "distinct_count": 57,
     "histo_buckets": [
         {
@@ -1125,6 +1130,7 @@ WHERE stat->>'name' = '__merged__' ORDER BY stat->>'created_at';
         "a"
     ],
     "created_at": "2022-12-14 15:22:21.988179",
+    "delay_delete": false,
     "distinct_count": 53,
     "histo_buckets": [
         {
@@ -1372,7 +1378,7 @@ RESET CLUSTER SETTING sql.stats.histogram_samples.count
 statement ok
 SET optimizer_use_merged_partial_statistics = off
 
-statement ok
+statement count 5
 DELETE FROM ka
 
 statement ok
@@ -1401,7 +1407,6 @@ query T
 EXPLAIN SELECT * FROM ka WHERE a > 5
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 4 (40% of the table; stats collected <hidden> ago)
@@ -1412,7 +1417,6 @@ query T
 EXPLAIN SELECT * FROM ka WHERE a = 10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -1426,7 +1430,6 @@ query T
 EXPLAIN SELECT * FROM ka WHERE a > 5
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 5 (45% of the table; stats collected <hidden> ago)
@@ -1437,7 +1440,6 @@ query T
 EXPLAIN SELECT * FROM ka WHERE a = 10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1 (9.1% of the table; stats collected <hidden> ago)
@@ -1454,7 +1456,7 @@ statement ok
 GRANT node TO root;
 
 # Keep only partial stats on the target table.
-statement ok
+statement count 1
 DELETE FROM system.table_statistics WHERE name NOT LIKE '%partial%' AND "tableID" = 'ka'::REGCLASS::OID;
 
 query TT
@@ -1470,7 +1472,6 @@ query T
 EXPLAIN SELECT * FROM ka WHERE a = 10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -1548,6 +1549,7 @@ WHERE stat->>'name' = '__merged__';
         "b"
     ],
     "created_at": "2000-01-02 00:00:00",
+    "delay_delete": false,
     "distinct_count": 6,
     "histo_buckets": [
         {

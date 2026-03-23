@@ -12,12 +12,11 @@ import long from "long";
 import React, { useState } from "react";
 
 import {
-  CollectExecutionDetailsRequest,
-  CollectExecutionDetailsResponse,
+  collectExecutionDetails,
+  getExecutionDetailFile,
   GetJobProfilerExecutionDetailRequest,
   GetJobProfilerExecutionDetailResponse,
-  ListJobProfilerExecutionDetailsRequest,
-  ListJobProfilerExecutionDetailsResponse,
+  listExecutionDetailFiles,
 } from "src/api/jobProfilerApi";
 import { DownloadFile, DownloadFileRef } from "src/downloadFile";
 import { EmptyTable } from "src/empty";
@@ -36,26 +35,14 @@ const cx = classnames.bind(styles);
 
 export interface JobProfilerViewProps {
   jobID: long;
-  onFetchExecutionDetailFiles: (
-    req: ListJobProfilerExecutionDetailsRequest,
-  ) => Promise<ListJobProfilerExecutionDetailsResponse>;
-  onCollectExecutionDetails: (
-    req: CollectExecutionDetailsRequest,
-  ) => Promise<CollectExecutionDetailsResponse>;
-  onDownloadExecutionFile: (
-    req: GetJobProfilerExecutionDetailRequest,
-  ) => Promise<GetJobProfilerExecutionDetailResponse>;
 }
 
 export function JobProfilerView({
   jobID,
-  onFetchExecutionDetailFiles,
-  onCollectExecutionDetails,
-  onDownloadExecutionFile,
 }: JobProfilerViewProps): React.ReactElement {
   const { data: detailFiles, mutate: refreshFiles } = useSwrWithClusterId(
     { name: "jobProfilerExecutionFiles", jobID },
-    () => onFetchExecutionDetailFiles({ job_id: jobID }),
+    () => listExecutionDetailFiles({ job_id: jobID }),
     {
       refreshInterval: 10 * 1000, // 10s polling interval
     },
@@ -63,14 +50,14 @@ export function JobProfilerView({
   const { trigger } = useSwrMutationWithClusterId(
     { name: "collectExecutionDetails", jobID },
     async () => {
-      const resp = await onCollectExecutionDetails({ job_id: jobID });
+      const resp = await collectExecutionDetails({ job_id: jobID });
       if (resp.req_resp) {
         refreshFiles();
       }
     },
   );
 
-  const columns = makeJobProfilerViewColumns(jobID, onDownloadExecutionFile);
+  const columns = makeJobProfilerViewColumns(jobID, getExecutionDetailFile);
   const [sortSetting, setSortSetting] = useState<SortSetting>({
     ascending: true,
     columnTitle: "executionDetailFiles",
@@ -161,22 +148,32 @@ function makeJobProfilerViewColumns(
               size="small"
               intent="tertiary"
               className={cx("view-execution-detail-button")}
-              onClick={() => {
-                const req =
-                  new cockroach.server.serverpb.GetJobProfilerExecutionDetailRequest(
-                    {
-                      job_id: jobID,
-                      filename: executionDetailFile,
-                    },
-                  );
-                onDownloadExecutionFileClicked(req).then(resp => {
+              onClick={async () => {
+                // Open the window synchronously to avoid popup blockers.
+                // Async calls to window.open() are blocked by most browsers.
+                const newWindow = window.open("", "_blank");
+                try {
+                  const req =
+                    new cockroach.server.serverpb.GetJobProfilerExecutionDetailRequest(
+                      {
+                        job_id: jobID,
+                        filename: executionDetailFile,
+                      },
+                    );
+                  const resp = await onDownloadExecutionFileClicked(req);
                   const type = getContentTypeForFile(executionDetailFile);
-                  const executionFileBytes = new Blob([resp?.data], {
+                  const blob = new Blob([resp?.data], {
                     type: type,
                   });
-                  const url = URL.createObjectURL(executionFileBytes);
-                  window.open(url, "_blank");
-                });
+                  const url = URL.createObjectURL(blob);
+                  if (newWindow) {
+                    newWindow.location.href = url;
+                  }
+                } catch {
+                  if (newWindow) {
+                    newWindow.close();
+                  }
+                }
               }}
             >
               <Icon iconName="Open" />

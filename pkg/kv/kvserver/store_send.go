@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -20,9 +21,28 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Send fetches a range based on the header's replica, assembles method, args &
-// reply into a Raft Cmd struct and executes the command using the fetched
-// range.
+// SenderWithWriteBytes is implemented by Store, Stores, and Replica. It
+// extends the kv.Sender.Send signature with an additional StoreWriteBytes
+// return value for admission control integration.
+type SenderWithWriteBytes interface {
+	SendWithWriteBytes(
+		ctx context.Context, ba *kvpb.BatchRequest, admissionInfo kvadmission.AdmissionInfo,
+	) (*kvpb.BatchResponse, *kvadmission.StoreWriteBytes, *kvpb.Error)
+}
+
+// ToSenderForTesting wraps a SenderWithWriteBytes as a kv.Sender. It releases
+// the StoreWriteBytes after each call.
+func ToSenderForTesting(swb SenderWithWriteBytes) kv.Sender {
+	return kv.SenderFunc(func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		br, writeBytes, pErr := swb.SendWithWriteBytes(ctx, ba, kvadmission.AdmissionInfo{})
+		writeBytes.Release()
+		return br, pErr
+	})
+}
+
+// SendWithWriteBytes fetches a range based on the header's replica, assembles
+// method, args & reply into a Raft Cmd struct and executes the command using
+// the fetched range.
 //
 // An incoming request may be transactional or not. If it is not transactional,
 // the timestamp at which it executes may be higher than that optionally
@@ -38,19 +58,8 @@ import (
 // instance due to the timestamp cache or finding a committed value in the path
 // of one of its writes), the response will have a transaction set which should
 // be used to update the client transaction object.
-func (s *Store) Send(
-	ctx context.Context, ba *kvpb.BatchRequest,
-) (br *kvpb.BatchResponse, pErr *kvpb.Error) {
-	var writeBytes *kvadmission.StoreWriteBytes
-	br, writeBytes, pErr = s.SendWithWriteBytes(ctx, ba)
-	writeBytes.Release()
-	return br, pErr
-}
-
-// SendWithWriteBytes is the implementation of Send with an additional
-// *StoreWriteBytes return value.
 func (s *Store) SendWithWriteBytes(
-	ctx context.Context, ba *kvpb.BatchRequest,
+	ctx context.Context, ba *kvpb.BatchRequest, admissionInfo kvadmission.AdmissionInfo,
 ) (br *kvpb.BatchResponse, writeBytes *kvadmission.StoreWriteBytes, pErr *kvpb.Error) {
 	// Attach any log tags from the store to the context (which normally
 	// comes from gRPC).
@@ -185,7 +194,7 @@ func (s *Store) SendWithWriteBytes(
 			})
 		}
 
-		br, writeBytes, pErr = repl.SendWithWriteBytes(ctx, ba)
+		br, writeBytes, pErr = repl.SendWithWriteBytes(ctx, ba, admissionInfo)
 		if pErr == nil {
 			// If any retries occurred, we should include the RangeInfos accumulated
 			// and pass these to the client, to invalidate their cache. This is
@@ -434,7 +443,10 @@ func (s *Store) executeServerSideBoundedStalenessNegotiation(
 		})
 	}
 
-	br, pErr := s.Send(ctx, queryResBa)
+	// Pass empty AdmissionInfo since this is an internal request that bypasses
+	// admission control.
+	br, writeBytes, pErr := s.SendWithWriteBytes(ctx, queryResBa, kvadmission.AdmissionInfo{})
+	writeBytes.Release()
 	if pErr != nil {
 		return ba, pErr
 	}

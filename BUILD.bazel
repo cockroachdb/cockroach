@@ -213,5 +213,6 @@ nogo(
         "//pkg/testutils/lint/passes/shadow",
         "//pkg/testutils/lint/passes/unconvert",
         "//pkg/testutils/lint/passes/roachtest",
+        "//pkg/testutils/lint/passes/benchdoc",
     ],
 )

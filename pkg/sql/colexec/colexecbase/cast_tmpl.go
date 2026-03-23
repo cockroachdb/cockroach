@@ -28,7 +28,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -52,6 +54,7 @@ var (
 	_ = lex.DecodeRawBytesToByteArrayAuto
 	_ = uuid.FromBytes
 	_ = oid.T_name
+	_ = oidext.T_aclitem
 	_ = util.TruncateString
 	_ = pgcode.Syntax
 	_ = pgdate.ParseTimestamp
@@ -273,11 +276,14 @@ type castOpNullAny struct {
 
 var _ colexecop.ClosableOperator = &castOpNullAny{}
 
-func (c *castOpNullAny) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castOpNullAny) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(c.colIdx)
 	projVec := batch.ColVec(c.outputIdx)
@@ -301,7 +307,7 @@ func (c *castOpNullAny) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 // castIdentityOp is a special cast operator for the case when "from" and "to"
@@ -334,11 +340,14 @@ func init() {
 	}
 }
 
-func (c *castIdentityOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castIdentityOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	projVec := batch.ColVec(c.outputIdx)
 	c.allocator.PerformOperation([]*coldata.Vec{projVec}, func() {
@@ -356,7 +365,7 @@ func (c *castIdentityOp) Next() coldata.Batch {
 			})
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 // castBPCharIdentityOp is a specialization of castIdentityOp which handles
@@ -367,11 +376,14 @@ type castBPCharIdentityOp struct {
 
 var _ colexecop.ClosableOperator = &castBPCharIdentityOp{}
 
-func (c *castBPCharIdentityOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castBPCharIdentityOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, meta
 	}
 	inputVec := batch.ColVec(c.colIdx)
 	inputCol := inputVec.Bytes()
@@ -400,7 +412,7 @@ func (c *castBPCharIdentityOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 type castNativeToDatumOp struct {
@@ -412,11 +424,14 @@ type castNativeToDatumOp struct {
 
 var _ colexecop.ClosableOperator = &castNativeToDatumOp{}
 
-func (c *castNativeToDatumOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *castNativeToDatumOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, meta
 	}
 	inputVec := batch.ColVec(c.colIdx)
 	outputVec := batch.ColVec(c.outputIdx)
@@ -458,7 +473,7 @@ func (c *castNativeToDatumOp) Next() coldata.Batch {
 			}
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 // setNativeToDatumCast performs the cast of the converted datum in
@@ -507,11 +522,14 @@ type cast_NAMEOp struct {
 var _ colexecop.ResettableOperator = &cast_NAMEOp{}
 var _ colexecop.ClosableOperator = &cast_NAMEOp{}
 
-func (c *cast_NAMEOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c *cast_NAMEOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	sel := batch.Selection()
 	inputVec := batch.ColVec(c.colIdx)
@@ -552,7 +570,7 @@ func (c *cast_NAMEOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 // {{end}}

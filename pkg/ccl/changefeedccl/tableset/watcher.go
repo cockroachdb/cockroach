@@ -172,7 +172,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 		StatementTimeName: changefeedbase.StatementTimeName(systemschema.NamespaceTable.GetName()),
 		Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
 	})
-	dec, err := cdcevent.NewEventDecoder(ctx, w.execCfg, cfTargets, false, false)
+	dec, err := cdcevent.NewEventDecoder(ctx, w.execCfg, cfTargets, false, false, cdcevent.DecoderOptions{})
 	if err != nil {
 		return err
 	}
@@ -493,9 +493,12 @@ func (w *Watcher) kvToTable(
 		log.Changefeed.Infof(ctx, "kvToTable: %s, %s", kv.Key, kv.Value.Timestamp)
 	}
 
-	row, err := dec.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
+	row, status, err := dec.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
 	if err != nil {
 		return Table{}, err
+	}
+	if status != cdcevent.DecodeOK {
+		return Table{}, errors.Newf("unexpected decode status: %v", status)
 	}
 
 	var tableID descpb.ID

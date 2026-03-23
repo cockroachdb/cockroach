@@ -133,6 +133,10 @@ func (c *cachedCatalogReader) IsDescIDKnownToNotExist(id, maybeParentID descpb.I
 		return false
 	}
 	if c.hasScanAll {
+		// Temp schemas have namespace entries but no descriptors.
+		if c.cache.LookupNamespaceEntryByID(id) != nil {
+			return false
+		}
 		return true
 	}
 	if c.byIDState[maybeParentID].hasScanNamespaceForDatabaseEntries {
@@ -249,6 +253,14 @@ func (c *cachedCatalogReader) ScanDescriptorsInSpans(
 	// TODO (brian.dillmann@): explore caching these calls.
 	// https://github.com/cockroachdb/cockroach/issues/134666
 	return c.cr.ScanDescriptorsInSpans(ctx, txn, spans)
+}
+
+// ScanAllTableIDsInDatabase is part of the CatalogReader interface.
+func (c *cachedCatalogReader) ScanAllTableIDsInDatabase(
+	ctx context.Context, txn *kv.Txn, parentDBID descpb.ID,
+) ([]descpb.ID, error) {
+	// Delegate to the underlying reader; this specialized query is not cached.
+	return c.cr.ScanAllTableIDsInDatabase(ctx, txn, parentDBID)
 }
 
 // ScanNamespaceForDatabases is part of the CatalogReader interface.

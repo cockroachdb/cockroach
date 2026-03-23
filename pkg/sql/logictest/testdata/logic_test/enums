@@ -492,7 +492,7 @@ FROM
 WHERE
   descriptor_name = 'enum_array' AND column_name = 'x'
 ----
-x  family:ArrayFamily width:0 precision:0 locale:"" visible_type:0 oid:100118 array_contents:<family: EnumFamily width: 0 precision: 0 locale: "" visible_type: 0 oid: 100117 time_precision_is_set: false udt_metadata: <   array_type_oid: 100118 > > time_precision_is_set:false
+x  family:ArrayFamily width:0 precision:0 locale:"" oid:100118 array_contents:<family: EnumFamily width: 0 precision: 0 locale: "" oid: 100117 time_precision_is_set: false udt_metadata: <   array_type_oid: 100118 > > time_precision_is_set:false
 
 # Test tables using enums in DEFAULT expressions.
 statement ok
@@ -1479,7 +1479,6 @@ CREATE TABLE table_ifne (x INT)
 statement ok
 CREATE TYPE IF NOT EXISTS table_ifne AS ENUM ('hi')
 
-
 subtest enum_array_cast
 
 statement ok
@@ -1539,7 +1538,6 @@ query T
 SELECT * from arr_t5
 ----
 {a,b}
-
 
 # Test that if an enum value is being used by a default expression
 # or computed column, we disallow dropping it.
@@ -1627,7 +1625,6 @@ ALTER TYPE computed_abc2 DROP VALUE 'a'
 
 statement error could not remove enum value "b" as it is being used in a computed column of "t7"
 ALTER TYPE computed_abc2 DROP VALUE 'b'
-
 
 # Test that types used in arrays can be renamed.
 subtest rename_type_in_array
@@ -1921,7 +1918,6 @@ USE "DB➕➕"
 statement ok
 CREATE SCHEMA "➖➖"
 
-
 statement ok
 CREATE TABLE t (i INT PRIMARY KEY);
 CREATE TYPE "➖➖"."MixedCase" AS ENUM ('mixed', 'Case');
@@ -1944,7 +1940,6 @@ CREATE TABLE public.t (
   CONSTRAINT t_pkey PRIMARY KEY (i ASC)
 );
 
-
 skipif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
@@ -1955,7 +1950,6 @@ CREATE TABLE public.t (
   🙏 public."Emoji 😉" NULL DEFAULT e'\U0001F60A':::public."Emoji 😉" ON UPDATE e'\U0001F614':::public."Emoji 😉",
   CONSTRAINT t_pkey PRIMARY KEY (i ASC)
 ) WITH (schema_locked = true);
-
 
 # Ensure that there's a database qualification on the enum type in
 # SHOW CREATE TABLE.
@@ -2037,6 +2031,7 @@ WHERE stat->>'columns' = '["a"]'
     "columns": [
         "a"
     ],
+    "delay_delete": false,
     "distinct_count": 3,
     "histo_buckets": [
         {
@@ -2061,7 +2056,7 @@ WHERE stat->>'columns' = '["a"]'
 
 # Now drop the enum value that is the first bucket in the 2-bucket histogram.
 
-statement ok
+statement count 2
 DELETE FROM t154461 WHERE a = 'e'
 
 statement ok
@@ -2095,6 +2090,7 @@ WHERE stat->>'columns' = '["a"]'
     "columns": [
         "a"
     ],
+    "delay_delete": false,
     "distinct_count": 2,
     "histo_buckets": [
         {
@@ -2116,3 +2112,35 @@ WHERE stat->>'columns' = '["a"]'
     "null_count": 0,
     "row_count": 5
 }
+
+# Regression test for #158154. Don't add transitive column dependencies to
+# routines that build check constraints for enum columns.
+subtest regression_158154
+
+statement ok
+CREATE TYPE typ158154 AS ENUM ('foo', 'bar');
+
+statement ok
+CREATE TABLE t158154 (a INT, b typ158154);
+
+statement ok
+CREATE PROCEDURE p158154() LANGUAGE SQL AS $$
+  INSERT INTO t158154 (a) VALUES (1);
+  UPDATE t158154 SET a = a + 1;
+$$;
+
+statement ok
+CALL p158154();
+
+statement ok
+ALTER TABLE t158154 DROP COLUMN b;
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP PROCEDURE p158154;
+DROP TABLE t158154;
+DROP TYPE typ158154;
+
+subtest end

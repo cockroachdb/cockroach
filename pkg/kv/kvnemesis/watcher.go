@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -37,11 +38,16 @@ type Watcher struct {
 		syncutil.Mutex
 		kvs             *Engine
 		frontier        span.Frontier
+		lastPtsUpdated  time.Time
 		frontierWaiters map[hlc.Timestamp][]chan error
 	}
 	cancel func()
 	g      ctxgroup.Group
 }
+
+// ptsUpdateInterval is the minimum interval after which protected timestamp
+// is advanced.
+const ptsUpdateInterval = 1 * time.Second
 
 // Watch starts a new Watcher over the given span of kvs. See Watcher.
 func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (*Watcher, error) {
@@ -50,6 +56,8 @@ func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (
 	}
 	firstDB := dbs[0]
 
+	startTs := firstDB.Clock().Now()
+
 	w := &Watcher{
 		env: env,
 	}
@@ -57,7 +65,7 @@ func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (
 	if w.mu.kvs, err = MakeEngine(); err != nil {
 		return nil, err
 	}
-	w.mu.frontier, err = span.MakeFrontier(dataSpan)
+	w.mu.frontier, err = span.MakeFrontierAt(startTs, dataSpan)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +79,13 @@ func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (
 		dss[i] = sender.(*kv.CrossRangeTxnWrapperSender).Wrapped().(*kvcoord.DistSender)
 	}
 
-	startTs := firstDB.Clock().Now()
+	// Create a cluster-level protection timestamp at the rangefeed's start
+	// timestamp.
+	w.mu.lastPtsUpdated = startTs.GoTime()
+	if err := env.PtsController.Start(ctx, startTs); err != nil {
+		return nil, err
+	}
+
 	eventC := make(chan kvcoord.RangeFeedMessage, 128)
 	w.g.GoCtx(func(ctx context.Context) error {
 		ts := startTs
@@ -95,7 +109,7 @@ func Watch(ctx context.Context, env *Env, dbs []*kv.DB, dataSpan roachpb.Span) (
 
 	// Make sure the RangeFeed has started up, else we might lose some events.
 	if err := w.WaitForFrontier(ctx, startTs); err != nil {
-		_ = w.Finish()
+		_ = w.Finish(ctx)
 		return nil, err
 	}
 
@@ -113,7 +127,7 @@ func isRetryableRangeFeedErr(err error) bool {
 
 // Finish tears down the Watcher and returns all the kvs it has ingested. It may
 // be called multiple times, though not concurrently.
-func (w *Watcher) Finish() *Engine {
+func (w *Watcher) Finish(ctx context.Context) *Engine {
 	if w.cancel == nil {
 		// Finish was already called.
 		return w.mu.kvs
@@ -124,6 +138,11 @@ func (w *Watcher) Finish() *Engine {
 	w.cancel = nil
 	// Only WaitForFrontier cares about errors.
 	_ = w.g.Wait()
+
+	if err := w.env.PtsController.Finish(ctx); err != nil {
+		log.Dev.Warningf(ctx, "failed to finalize rangefeed protected timestamp: %v", err)
+	}
+
 	return w.mu.kvs
 }
 
@@ -262,17 +281,37 @@ func (w *Watcher) handleValueLocked(
 func (w *Watcher) handleCheckpoint(
 	ctx context.Context, span roachpb.Span, resolvedTS hlc.Timestamp,
 ) error {
+	// Whether PTS should be advanced and to what.
+	var advancePts bool
+	var frontier hlc.Timestamp
 	w.mu.Lock()
-	defer w.mu.Unlock()
+	defer func() {
+		w.mu.Unlock()
+
+		// Perform the PTS advance after unlocking the mutex since this is an
+		// expensive blocking operation.
+		if advancePts {
+			if err := w.env.PtsController.Advance(ctx, frontier); err != nil {
+				log.Dev.Warningf(ctx, "failed to advance rangefeed protected timestamp to %s: %v", frontier, err)
+			}
+		}
+	}()
 
 	frontierAdvanced, err := w.mu.frontier.Forward(span, resolvedTS)
 	if err != nil {
 		return errors.Wrapf(err, "unexpected frontier error advancing to %s@%s", span, resolvedTS)
 	}
 	if frontierAdvanced {
-		frontier := w.mu.frontier.Frontier()
+		frontier = w.mu.frontier.Frontier()
 		log.Dev.Infof(ctx, `watcher reached frontier %s lagging by %s`,
 			frontier, timeutil.Since(frontier.GoTime()))
+
+		// Check whether enough time has passed for us to advance the PTS.
+		if current := frontier.GoTime(); current.Sub(w.mu.lastPtsUpdated) > ptsUpdateInterval {
+			w.mu.lastPtsUpdated = current
+			advancePts = true
+		}
+
 		for ts, chs := range w.mu.frontierWaiters {
 			if frontier.Less(ts) {
 				continue

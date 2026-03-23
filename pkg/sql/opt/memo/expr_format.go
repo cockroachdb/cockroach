@@ -166,9 +166,13 @@ type ExprFmtCtx struct {
 	// with the session variable `save_tables_prefix` set to the same value.
 	nameGen *ExprNameGenerator
 
-	// seenUDFs is used to ensure that formatting of recursive UDFs does not
-	// infinitely recurse.
+	// seenUDFs is used to ensure that formatting of repetitive UDF calls does
+	// not grow the output exponentially.
 	seenUDFs map[*UDFDefinition]struct{}
+
+	// withinUDFs is used to track within invocations of which UDFs we are when
+	// formatting.
+	withinUDFs map[*UDFDefinition]struct{}
 
 	// tailCalls allows for quick lookup of all the routines in tail-call position
 	// when the last body statement of a routine is formatted.
@@ -214,6 +218,7 @@ func MakeExprFmtCtxBuffer(
 		Catalog:          catalog,
 		nameGen:          nameGen,
 		seenUDFs:         make(map[*UDFDefinition]struct{}),
+		withinUDFs:       make(map[*UDFDefinition]struct{}),
 	}
 }
 
@@ -1067,9 +1072,10 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 ) {
 	formatUDFDefinition := func(def *UDFDefinition, tp treeprinter.Node) {
 		if _, seen := f.seenUDFs[def]; !seen {
-			// Ensure that the definition of the UDF is not printed out again if it
-			// is recursively called.
+			// Ensure that the definition of the UDF is not printed out again if
+			// it has already been seen.
 			f.seenUDFs[def] = struct{}{}
+			f.withinUDFs[def] = struct{}{}
 			if len(def.Params) > 0 {
 				f.formatColList(tp, "params:", def.Params, opt.ColSet{} /* notNullCols */)
 			}
@@ -1098,9 +1104,11 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 				f.formatExpr(def.Body[i], stmtNode)
 				f.tailCalls = prevTailCalls
 			}
-			delete(f.seenUDFs, def)
-		} else {
+			delete(f.withinUDFs, def)
+		} else if _, recursive := f.withinUDFs[def]; recursive {
 			tp.Child("recursive-call")
+		} else {
+			tp.Child("repetitive-call")
 		}
 		if def.ExceptionBlock != nil {
 			n := tp.Child("exception-handler")
@@ -1918,6 +1926,9 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		fmt.Fprintf(f.Buffer, " %s", seq.Name())
 
 	case *MutationPrivate:
+		if t.Swap {
+			fmt.Fprint(f.Buffer, " (swap)")
+		}
 		f.formatIndex(t.Table, cat.PrimaryIndex, false /* reverse */)
 
 	case *LockPrivate:

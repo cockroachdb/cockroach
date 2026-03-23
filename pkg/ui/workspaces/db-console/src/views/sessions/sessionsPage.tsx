@@ -4,14 +4,17 @@
 // included in the /LICENSE file.
 
 import {
-  defaultFilters,
+  defaultFiltersForSessionsPage,
   Filters,
   SessionsPage,
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
+import { Action } from "redux";
+import { ThunkDispatch } from "redux-thunk";
 import { createSelector } from "reselect";
 
+import * as protos from "src/js/protos";
 import { CachedDataReducerState, refreshSessions } from "src/redux/apiReducers";
 import { LocalSetting } from "src/redux/localsettings";
 import {
@@ -21,6 +24,8 @@ import {
 import { AdminUIState } from "src/redux/state";
 import { SessionsResponseMessage } from "src/util/api";
 import { Pick } from "src/util/pick";
+
+const SessionsRequest = protos.cockroach.server.serverpb.ListSessionsRequest;
 
 type SessionsState = Pick<AdminUIState, "cachedData", "sessions">;
 
@@ -77,8 +82,13 @@ export const sessionColumnsLocalSetting = new LocalSetting(
 export const filtersLocalSetting = new LocalSetting<AdminUIState, Filters>(
   "filters/SessionsPage",
   (state: AdminUIState) => state.localSettings,
-  defaultFilters,
+  defaultFiltersForSessionsPage,
 );
+
+// Interface matching cluster-ui's SessionsRequest
+interface ClusterUiSessionsRequest {
+  excludeClosedSessions?: boolean;
+}
 
 const SessionsPageConnected = withRouter(
   connect(
@@ -90,8 +100,13 @@ const SessionsPageConnected = withRouter(
       sessionsError: state.cachedData.sessions.lastError,
       sortSetting: sortSettingLocalSetting.selector(state),
     }),
-    {
-      refreshSessions,
+    (dispatch: ThunkDispatch<AdminUIState, unknown, Action>) => ({
+      refreshSessions: (req?: ClusterUiSessionsRequest) => {
+        const protoReq = new SessionsRequest({
+          exclude_closed_sessions: req?.excludeClosedSessions,
+        });
+        dispatch(refreshSessions(protoReq));
+      },
       cancelSession: terminateSessionAction,
       cancelQuery: terminateQueryAction,
       onSortingChange: (
@@ -99,16 +114,21 @@ const SessionsPageConnected = withRouter(
         columnName: string,
         ascending: boolean,
       ) =>
-        sortSettingLocalSetting.set({
-          ascending: ascending,
-          columnTitle: columnName,
-        }),
-      onColumnsChange: (value: string[]) =>
-        sessionColumnsLocalSetting.set(
-          value.length === 0 ? " " : value.join(","),
+        dispatch(
+          sortSettingLocalSetting.set({
+            ascending: ascending,
+            columnTitle: columnName,
+          }),
         ),
-      onFilterChange: (filters: Filters) => filtersLocalSetting.set(filters),
-    },
+      onColumnsChange: (value: string[]) =>
+        dispatch(
+          sessionColumnsLocalSetting.set(
+            value.length === 0 ? " " : value.join(","),
+          ),
+        ),
+      onFilterChange: (filters: Filters) =>
+        dispatch(filtersLocalSetting.set(filters)),
+    }),
   )(SessionsPage),
 );
 

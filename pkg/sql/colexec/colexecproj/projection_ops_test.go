@@ -190,7 +190,7 @@ func TestRandomComparisons(t *testing.T) {
 			require.NoError(t, err)
 			op.Init(ctx)
 			var idx int
-			for batch := op.Next(); batch.Length() > 0; batch = op.Next() {
+			for batch := colexecop.NextNoMeta(op); batch.Length() > 0; batch = colexecop.NextNoMeta(op) {
 				for i := 0; i < batch.Length(); i++ {
 					absIdx := idx + i
 					assert.Equal(t, expected[absIdx], batch.ColVec(2).Bool()[i],
@@ -282,7 +282,7 @@ func benchmarkProjOp(
 	b.Run(name, func(b *testing.B) {
 		b.SetBytes(int64(len(inputTypes) * 8 * coldata.BatchSize()))
 		for i := 0; i < b.N; i++ {
-			op.Next()
+			colexecop.NextNoMeta(op)
 		}
 	})
 }

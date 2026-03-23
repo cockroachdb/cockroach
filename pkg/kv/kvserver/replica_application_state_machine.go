@@ -149,7 +149,8 @@ func (sm *replicaStateMachine) NewBatch() apply.Batch {
 	// TODO(#144627): most commands do not need to read. Use NewWriteBatch because
 	// it is more efficient. If there are exceptions, sparingly use NewReader or
 	// NewBatch (if it needs to read its own writes, which is unlikely).
-	b.batch = r.store.TODOEngine().NewBatch()
+	b.batch = r.store.batchFactory.NewBatch()
+
 	r.mu.RLock()
 	b.state = r.shMu.state
 	b.truncState = r.asLogStorage().shMu.trunc

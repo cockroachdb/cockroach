@@ -25,15 +25,43 @@ func TestClustersCompatible(t *testing.T) {
 	t.Run("spec has different GCE spec with cloud as GCE", func(t *testing.T) {
 		s1 := ClusterSpec{NodeCount: 5}
 		s2 := ClusterSpec{NodeCount: 5}
-		s1.GCE.VolumeType = "mock_volume1"
-		s2.GCE.VolumeType = "mock_volume2"
+		s1.VolumeType = "mock_volume1"
+		s2.VolumeType = "mock_volume2"
 		require.False(t, ClustersCompatible(s1, s2, GCE))
 	})
 	t.Run("spec has different GCE spec with cloud as AWS", func(t *testing.T) {
 		s1 := ClusterSpec{NodeCount: 5}
 		s2 := ClusterSpec{NodeCount: 5}
-		s1.GCE.VolumeType = "mock_volume1"
-		s2.GCE.VolumeType = "mock_volume2"
+		s1.VolumeType = "mock_volume1"
+		s2.VolumeType = "mock_volume2"
+		require.False(t, ClustersCompatible(s1, s2, AWS))
+	})
+	t.Run("spec has different spec with cloud as AWS", func(t *testing.T) {
+		s1 := ClusterSpec{NodeCount: 5}
+		s2 := ClusterSpec{NodeCount: 5}
+		s1.GCE.MinCPUPlatform = "mock_platform1"
+		s2.GCE.MinCPUPlatform = "mock_platform2"
 		require.True(t, ClustersCompatible(s1, s2, AWS))
+	})
+}
+
+func TestClustersRetainClearedInfo(t *testing.T) {
+	// Adding a test in case we switch the ClustersCompatible signature to take
+	// pointers to ClusterSpec in the future.
+	t.Run("original structs are not modified", func(t *testing.T) {
+		s1 := ClusterSpec{
+			NodeCount:              5,
+			ExposedMetamorphicInfo: map[string]string{"VolumeType": "io2"},
+		}
+		s2 := ClusterSpec{
+			NodeCount:              5,
+			ExposedMetamorphicInfo: map[string]string{"VolumeType": "gp3"},
+		}
+
+		ClustersCompatible(s1, s2, GCE)
+
+		// Original data should still be there
+		require.Equal(t, "io2", s1.ExposedMetamorphicInfo["VolumeType"])
+		require.Equal(t, "gp3", s2.ExposedMetamorphicInfo["VolumeType"])
 	})
 }

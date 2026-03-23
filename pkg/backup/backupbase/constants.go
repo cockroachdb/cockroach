@@ -5,6 +5,8 @@
 
 package backupbase
 
+import "time"
+
 // TODO(adityamaru): Move constants to relevant backup packages.
 const (
 	// LatestFileName is the name of a file in the collection which contains the
@@ -63,13 +65,15 @@ const (
 
 	// BackupIndexDirectoryName is the path from the root of the backup collection
 	// to the directory containing the index files for the backup collection.
-	BackupIndexDirectoryPath = "index/"
-
-	// BackupIndexFlattenedSubdir is the format used for the top-level
-	// subdirectories within the index directory.
-	BackupIndexFlattenedSubdir = "2006-01-02-150405.00"
+	BackupIndexDirectoryPath = backupMetadataDirectory + "/index/"
 
 	// BackupIndexFilenameTimestampFormat is the format used for the human
 	// readable start and end times in the index file names.
+	// NB: If this is for whatever reason updated, make sure to update the
+	// granularity specified by BackupIndexFilenameTimestampGranularity.
 	BackupIndexFilenameTimestampFormat = "20060102-150405.00"
+
+	// BackupIndexFilenameTimestampGranularity represents the granularity of the
+	// times encoded in the backup index filenames.
+	BackupIndexFilenameTSGranularity = 10 * time.Millisecond
 )

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 // CatalogReader queries the system tables containing catalog data.
@@ -104,6 +105,15 @@ type CatalogReader interface {
 	GetByNames(
 		ctx context.Context, txn *kv.Txn, nameInfos []descpb.NameInfo,
 	) (nstree.Catalog, error)
+
+	// ScanAllTableIDsInDatabase scans all descriptors and returns the IDs of
+	// tables whose parent_id matches the given database ID. This uses
+	// lightweight proto parsing to extract the parent_id without full
+	// unmarshaling, making it efficient for finding all tables in a specific
+	// database, including dropped tables that don't have namespace entries.
+	ScanAllTableIDsInDatabase(
+		ctx context.Context, txn *kv.Txn, parentDBID descpb.ID,
+	) ([]descpb.ID, error)
 }
 
 // NewUncachedCatalogReader is the constructor for the default
@@ -214,6 +224,63 @@ func (cr catalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.Catalo
 		return nstree.Catalog{}, err
 	}
 	return mc.Catalog, nil
+}
+
+// ScanAllTableIDsInDatabase is part of the CatalogReader interface.
+func (cr catalogReader) ScanAllTableIDsInDatabase(
+	ctx context.Context, txn *kv.Txn, parentDBID descpb.ID,
+) ([]descpb.ID, error) {
+	if txn == nil {
+		return nil, errors.AssertionFailedf("nil txn for catalog query")
+	}
+
+	// Scan only the descriptor table (not namespace/comments/zones).
+	b := txn.NewBatch()
+	scan(ctx, b, catalogkeys.MakeAllDescsMetadataKey(cr.codec))
+	if err := txn.Run(ctx, b); err != nil {
+		return nil, err
+	}
+
+	var ids []descpb.ID
+	for _, result := range b.Results {
+		if result.Err != nil {
+			return nil, result.Err
+		}
+		for _, row := range result.Rows {
+			// Extract parent ID from raw bytes without full unmarshaling.
+			descBytes, err := row.Value.GetBytes()
+			if err != nil {
+				return nil, err
+			}
+
+			parentID, isTable, err := descpb.ExtractParentDatabaseID(descBytes)
+			if err != nil {
+				// Log and skip malformed descriptors rather than failing entirely.
+				// If a descriptor is corrupted to the point where we can't extract
+				// the parent database ID or descriptor type, it's unusable and we
+				// won't be able to apply span configs to it anyway. One corrupted
+				// descriptor shouldn't prevent computing span configs for all other
+				// tables. Descriptor corruption is detected separately via
+				// crdb_internal.invalid_objects and telemetry.
+				log.Dev.Warningf(ctx, "failed to extract parent ID from descriptor: %v", err)
+				continue
+			}
+
+			// Skip non-tables and tables with non-matching parent IDs.
+			if !isTable || parentID != parentDBID {
+				continue
+			}
+
+			// Extract the descriptor ID from the key.
+			u32ID, err := cr.codec.DecodeDescMetadataID(row.Key)
+			if err != nil {
+				return nil, err
+			}
+			ids = append(ids, descpb.ID(u32ID))
+		}
+	}
+
+	return ids, nil
 }
 
 // getDescriptorIDFromExclusiveKey translates an exclusive upper bound roach key

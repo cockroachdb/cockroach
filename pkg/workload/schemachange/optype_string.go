@@ -44,29 +44,33 @@ func _() {
 	_ = x[alterTableRenameColumn-28]
 	_ = x[alterTableSetColumnDefault-29]
 	_ = x[alterTableSetColumnNotNull-30]
-	_ = x[alterTypeDropValue-31]
-	_ = x[createTypeEnum-32]
-	_ = x[createTypeComposite-33]
-	_ = x[createIndex-34]
-	_ = x[createPolicy-35]
-	_ = x[createSchema-36]
-	_ = x[createSequence-37]
-	_ = x[createTable-38]
-	_ = x[createTableAs-39]
-	_ = x[createView-40]
-	_ = x[createFunction-41]
-	_ = x[createTrigger-42]
-	_ = x[commentOn-43]
-	_ = x[dropFunction-44]
-	_ = x[dropIndex-45]
-	_ = x[dropPolicy-46]
-	_ = x[dropSchema-47]
-	_ = x[dropSequence-48]
-	_ = x[dropTable-49]
-	_ = x[dropTrigger-50]
-	_ = x[dropView-51]
-	_ = x[truncateTable-52]
-	_ = x[inspect-53]
+	_ = x[alterTableSetStorageParams-31]
+	_ = x[alterTableResetStorageParams-32]
+	_ = x[alterViewSetViewOption-33]
+	_ = x[alterViewResetViewOption-34]
+	_ = x[alterTypeDropValue-35]
+	_ = x[createTypeEnum-36]
+	_ = x[createTypeComposite-37]
+	_ = x[createIndex-38]
+	_ = x[createPolicy-39]
+	_ = x[createSchema-40]
+	_ = x[createSequence-41]
+	_ = x[createTable-42]
+	_ = x[createTableAs-43]
+	_ = x[createView-44]
+	_ = x[createFunction-45]
+	_ = x[createTrigger-46]
+	_ = x[commentOn-47]
+	_ = x[dropFunction-48]
+	_ = x[dropIndex-49]
+	_ = x[dropPolicy-50]
+	_ = x[dropSchema-51]
+	_ = x[dropSequence-52]
+	_ = x[dropTable-53]
+	_ = x[dropTrigger-54]
+	_ = x[dropView-55]
+	_ = x[truncateTable-56]
+	_ = x[inspect-57]
 }
 
 func (i opType) String() string {
@@ -133,6 +137,14 @@ func (i opType) String() string {
 		return "alterTableSetColumnDefault"
 	case alterTableSetColumnNotNull:
 		return "alterTableSetColumnNotNull"
+	case alterTableSetStorageParams:
+		return "alterTableSetStorageParams"
+	case alterTableResetStorageParams:
+		return "alterTableResetStorageParams"
+	case alterViewSetViewOption:
+		return "alterViewSetViewOption"
+	case alterViewResetViewOption:
+		return "alterViewResetViewOption"
 	case alterTypeDropValue:
 		return "alterTypeDropValue"
 	case createTypeEnum:

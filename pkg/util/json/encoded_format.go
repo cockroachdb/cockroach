@@ -13,7 +13,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func (j *jsonEncoded) Format(buf *bytes.Buffer) {
+func (j *JSONEncoded) Format(buf *bytes.Buffer) {
 	// We don't know exactly how big the JSON string will be when decoded and
 	// formatted, but we can make a reasonable guess based on the size of the
 	// encoded data. This can avoid some buffer reallocations in the common case.
@@ -26,7 +26,7 @@ func (j *jsonEncoded) Format(buf *bytes.Buffer) {
 	}
 }
 
-func (j *jsonEncoded) format(buf *bytes.Buffer) error {
+func (j *JSONEncoded) format(buf *bytes.Buffer) error {
 	switch j.typ {
 	case NumberJSONType:
 		_, d, err := decodeJSONNumber(j.value)

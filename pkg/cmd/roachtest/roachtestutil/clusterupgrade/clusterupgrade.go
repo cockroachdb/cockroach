@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/version"
@@ -209,6 +211,43 @@ func ClusterVersion(ctx context.Context, l *logger.Logger, db *gosql.DB) (roachp
 	}
 
 	return roachpb.ParseVersion(sv)
+}
+
+// ClusterVersionFromKV returns the cluster version stored in the KV layer
+// (system.settings table) without waiting for local version synchronization.
+// This is useful during mid-upgrade states when SHOW CLUSTER SETTING version
+// would block waiting for the upgrade to complete on all nodes.
+// See GitHub issue #160516
+func ClusterVersionFromKV(
+	ctx context.Context, l *logger.Logger, db *gosql.DB,
+) (roachpb.Version, error) {
+	zero := roachpb.Version{}
+	var encodedVal string
+	// Query the raw encoded value from system.settings
+	rows, err := roachtestutil.QueryWithRetry(
+		ctx, l, db, roachtestutil.ClusterSettingRetryOpts,
+		`SELECT value FROM system.settings WHERE name = 'version'`,
+	)
+	if err != nil {
+		return zero, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		return zero, fmt.Errorf("no version found in system.settings")
+	}
+
+	if err := rows.Scan(&encodedVal); err != nil {
+		return zero, err
+	}
+
+	// Decode the protobuf-encoded ClusterVersion
+	var cv clusterversion.ClusterVersion
+	if err := protoutil.Unmarshal([]byte(encodedVal), &cv); err != nil {
+		return zero, fmt.Errorf("failed to decode cluster version: %w", err)
+	}
+
+	return cv.Version, nil
 }
 
 // UploadCockroach stages the cockroach binary in the nodes.

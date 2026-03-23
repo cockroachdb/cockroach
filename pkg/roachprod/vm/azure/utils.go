@@ -16,65 +16,71 @@ import (
 )
 
 // Startup script used to find/format/mount all local or attached disks.
-// Each disk is mounted as /data<disknum>, and, in addition, a symlink
-// created from /mnt/data<disknum> to the mount point.
+// Each disk is mounted at /mnt/data<disknum>.
 // azureStartupArgs specifies template arguments for the setup template.
+// We define a local type in case we need to add more provider-specific params in
+// the future.
 type azureStartupArgs struct {
 	vm.StartupArgs
-	AttachedDiskLun    *int // Use attached disk, with specified LUN; Use local ssd if nil.
-	DiskControllerNVMe bool // Interface data disk via NVMe
-	BootDiskOnly       bool
 }
 
 const azureStartupTemplate = `#!/bin/bash
 
 # Script for setting up a Azure machine for roachprod use.
 
-function setup_disks() {
-{{ if .BootDiskOnly }}
-	mkdir -p /mnt/data1 && chmod 777 /mnt/data1
-	echo "VM has no disk attached other than the boot disk."
-	return 0
-{{ end }}
-
-mount_opts="defaults"
-
-	devices=()
-{{if .DiskControllerNVMe}}
-	# Setup nvme network storage, need to remove nvme OS disk from the device list.
-	devices=($(realpath -qe /dev/disk/by-id/nvme-* | grep -v "nvme0n1" | sort -u))
-{{else if .AttachedDiskLun}}
-	# Setup network attached storage
-	devices=("/dev/disk/azure/scsi1/lun{{.AttachedDiskLun}}")
-{{end}}
-
-	if (( ${#devices[@]} == 0 ));
-	then
-		# Use /mnt directly.
-		echo "No attached or NVME disks found, creating /mnt/data1"
-		mkdir -p /mnt/data1
-		chown {{.SharedUser}} /mnt/data1
-		else
-		for d in "${!devices[@]}"; do
-			disk=${devices[$d]}
-			mount="/data$((d+1))"
-			sudo mkdir -p "${mount}"
-			sudo mkfs.ext4 -F "${disk}"
-			sudo mount -o "${mount_opts}" "${disk}" "${mount}"
-			echo "${disk} ${mount} ext4 ${mount_opts} 1 1" | sudo tee -a /etc/fstab
-			ln -s "${mount}" "/mnt/$(basename $mount)"
-			tune2fs -m 0 ${disk}
-		done
-		chown {{.SharedUser}} /data*
-	fi
-	sudo touch {{ .DisksInitializedFile }}
-}
-
 {{ template "head_utils" . }}
 {{ template "apt_packages" . }}
 
-# Initialize disks.
-setup_disks
+# Provider specific disk logic
+function detect_disks() {
+	# Azure-specific disk detection - returns list of available disks
+	local local_or_network=()
+	local disks=()
+
+	# First, try to find NVMe disks (excluding boot disk nvme0n1)
+	if [ "$(ls /dev/disk/by-id/nvme-* 2>/dev/null | wc -l)" -gt "0" ]; then
+		local_or_network=($(realpath -qe /dev/disk/by-id/nvme-* | grep -v "nvme0n1" | sort -u))
+		if [ "${#local_or_network[@]}" -gt "0" ]; then
+			echo "Using NVMe disks: ${local_or_network[@]}" >&2
+		fi
+	fi
+
+	# If no NVMe disks found, try SCSI attached storage
+	if [ "${#local_or_network[@]}" -eq "0" ] && [ "$(ls /dev/disk/azure/scsi1/lun* 2>/dev/null | wc -l)" -gt "0" ]; then
+		local_or_network=($(ls /dev/disk/azure/scsi1/lun*))
+		echo "Using SCSI disks: ${local_or_network[@]}" >&2
+	fi
+
+	for l in ${local_or_network[@]}; do
+		d=$(readlink -f $l)
+		mounted="no"
+{{ if eq .Filesystem "zfs" }}
+		# Check if the disk is already part of a zpool or mounted; skip if so.
+		if (zpool list -v -P | grep -q ${d}) || (mount | grep -q ${d}); then
+			mounted="yes"
+		fi
+{{ else }}
+		# Skip already mounted disks.
+		if mount | grep -q ${d}; then
+			mounted="yes"
+		fi
+{{ end }}
+		if [ "$mounted" == "no" ]; then
+			disks+=("${d}")
+			echo "Disk ${d} not mounted, need to mount..." >&2
+		else
+			echo "Disk ${d} already mounted, skipping..." >&2
+		fi
+	done
+
+	# Return disks array by printing each element (only if non-empty)
+	if [ "${#disks[@]}" -gt 0 ]; then
+		printf '%s\n' "${disks[@]}"
+	fi
+}
+
+# Common disk setup logic that calls the above detect_disks function
+{{ template "setup_disks_utils" . }}
 
 # Disable Hyper-V Time Synchronization device
 # See https://www.cockroachlabs.com/docs/stable/deploy-cockroachdb-on-microsoft-azure#step-3-synchronize-clocks

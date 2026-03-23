@@ -44,13 +44,9 @@ func init() {
 func TestMain(m *testing.M) {
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithTenantOption(base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124)))
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124),
-	)()
-
 	os.Exit(m.Run())
 }
 
@@ -164,11 +160,25 @@ func TestLogic_alter_external_connection(
 	runLogicTest(t, "alter_external_connection")
 }
 
+func TestLogic_alter_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_index")
+}
+
 func TestLogic_alter_primary_key(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_primary_key")
+}
+
+func TestLogic_alter_primary_key_regressions(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_primary_key_regressions")
 }
 
 func TestLogic_alter_role(
@@ -325,11 +335,11 @@ func TestLogic_bytes(
 	runLogicTest(t, "bytes")
 }
 
-func TestLogic_canary_stats(
+func TestLogic_canary_stats_deletion(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "canary_stats")
+	runLogicTest(t, "canary_stats_deletion")
 }
 
 func TestLogic_cascade(
@@ -507,6 +517,13 @@ func TestLogic_crdb_internal_catalog(
 	runLogicTest(t, "crdb_internal_catalog")
 }
 
+func TestLogic_crdb_internal_decode_key(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "crdb_internal_decode_key")
+}
+
 func TestLogic_crdb_internal_default_privileges(
 	t *testing.T,
 ) {
@@ -589,6 +606,13 @@ func TestLogic_datetime(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "datetime")
+}
+
+func TestLogic_datetime_parsing(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "datetime_parsing")
 }
 
 func TestLogic_decimal(
@@ -1102,6 +1126,13 @@ func TestLogic_guardrails(
 	runLogicTest(t, "guardrails")
 }
 
+func TestLogic_hash_index_shard_columns(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "hash_index_shard_columns")
+}
+
 func TestLogic_hash_join(
 	t *testing.T,
 ) {
@@ -1480,6 +1511,13 @@ func TestLogic_notice(
 	runLogicTest(t, "notice")
 }
 
+func TestLogic_numeric_formatting(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "numeric_formatting")
+}
+
 func TestLogic_numeric_references(
 	t *testing.T,
 ) {
@@ -1576,13 +1614,6 @@ func TestLogic_partial_txn_commit(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "partial_txn_commit")
-}
-
-func TestLogic_partitioning(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "partitioning")
 }
 
 func TestLogic_pg_builtins(
@@ -1758,6 +1789,13 @@ func TestLogic_propagate_input_ordering(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "propagate_input_ordering")
+}
+
+func TestLogic_push_stats(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "push_stats")
 }
 
 func TestLogic_rand_ident(
@@ -1996,6 +2034,13 @@ func TestLogic_secondary_index_column_families(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "secondary_index_column_families")
+}
+
+func TestLogic_security_invoker_view(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "security_invoker_view")
 }
 
 func TestLogic_select(
@@ -2257,6 +2302,13 @@ func TestLogic_show_source(
 	runLogicTest(t, "show_source")
 }
 
+func TestLogic_show_statement_hints(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_statement_hints")
+}
+
 func TestLogic_show_tables(
 	t *testing.T,
 ) {
@@ -2418,6 +2470,13 @@ func TestLogic_subquery_correlated(
 	runLogicTest(t, "subquery_correlated")
 }
 
+func TestLogic_swap_mutation(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "swap_mutation")
+}
+
 func TestLogic_synthetic_privileges(
 	t *testing.T,
 ) {
@@ -2530,13 +2589,6 @@ func TestLogic_truncate(
 	runLogicTest(t, "truncate")
 }
 
-func TestLogic_truncate_with_concurrent_mutation(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "truncate_with_concurrent_mutation")
-}
-
 func TestLogic_tsvector(
 	t *testing.T,
 ) {
@@ -2577,6 +2629,13 @@ func TestLogic_txn_as_of(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "txn_as_of")
+}
+
+func TestLogic_txn_chain(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "txn_chain")
 }
 
 func TestLogic_txn_retry(
@@ -2948,6 +3007,13 @@ func TestLogic_views(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "views")
+}
+
+func TestLogic_views_definer_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "views_definer_privileges")
 }
 
 func TestLogic_virtual_columns(

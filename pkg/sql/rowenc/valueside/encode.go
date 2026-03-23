@@ -108,10 +108,7 @@ func EncodeWithScratch(
 		}
 		return encoding.EncodeTSVectorValue(appendTo, uint32(colID), scratch), scratch, nil
 	case *tree.DPGVector:
-		scratch, err = vector.Encode(scratch[:0], t.T)
-		if err != nil {
-			return nil, nil, err
-		}
+		scratch = vector.Encode(scratch[:0], t.T)
 		return encoding.EncodePGVectorValue(appendTo, uint32(colID), scratch), scratch, nil
 	case *tree.DArray:
 		scratch, err = encodeArray(t, scratch[:0])

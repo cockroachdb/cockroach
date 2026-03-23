@@ -114,7 +114,7 @@ func TestRaftLogQueue(t *testing.T) {
 				tc.GetFirstStoreFromServer(t, i).MustForceRaftLogScanAndProcess()
 			}
 			// Flush the engine to advance durability, which triggers truncation.
-			require.NoError(t, raftLeaderRepl.Store().TODOEngine().Flush())
+			require.NoError(t, raftLeaderRepl.Store().StateEngine().Flush())
 			// Ensure that compacted index has increased indicating that the log
 			// truncation has occurred.
 			afterTruncationIndex = raftLeaderRepl.GetCompactedIndex()
@@ -180,6 +180,12 @@ func TestRaftTracing(t *testing.T) {
 		// Set to have 3 voters.
 		tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
 		tc.WaitForVotersOrFatal(t, key, tc.Targets(1, 2)...)
+
+		// Exclude the possibility that the lease upgrade races with the writes
+		// below. A lease request can combine with a write request in one committed
+		// batch and prevent the early ack of the write at apply time, which we
+		// expect to find in the trace. See #165793 for the flake this fixes.
+		tc.MaybeWaitForLeaseUpgrade(context.Background(), t, tc.LookupRangeOrFatal(t, key))
 
 		for i := 0; i < 100; i++ {
 			var finish func() tracingpb.Recording

@@ -49,7 +49,7 @@ debug-supporter-state
 meta:
 {MaxWithdrawn:201.000000000,0}
 support for:
-{Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:0,0}
+{Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:0,0} lastSupportWithdrawnTime:201.000000000,0
 
 debug-metrics
 ----

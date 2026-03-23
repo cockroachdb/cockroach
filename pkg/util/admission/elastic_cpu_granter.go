@@ -8,6 +8,7 @@ package admission
 import (
 	"context"
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -212,7 +213,7 @@ func (e *elasticCPUGranter) setUtilizationLimit(utilizationLimit float64) {
 		e.mu.tb.EnsureLowerBound(0)
 		e.mu.tbLastReset = now
 	}
-	e.metrics.NanosExhaustedDuration.Update(e.mu.tb.Exhausted().Microseconds())
+	e.metrics.NanosExhaustedDuration.Update(e.mu.tb.Exhausted().Nanoseconds())
 	e.metrics.AvailableNanos.Update(int64(e.mu.tb.Available()))
 
 	e.metrics.UtilizationLimit.Update(utilizationLimit)
@@ -250,14 +251,31 @@ func (e *elasticCPUGranter) computeUtilizationMetric() {
 	currentCumAcquiredNanos := e.metrics.AcquiredNanos.Count()
 	currentCumUsedNanos := currentCumAcquiredNanos - currentCumReturnedNanos
 
+	intervalUsedFracFunc := func(used int64) float64 {
+		return float64(used) /
+			(float64(e.metrics.MaxAvailableNanos.Count()) * elasticCPUUtilizationMetricInterval.Seconds())
+	}
 	if e.metrics.lastCumUsedNanos != 0 {
 		intervalUsedNanos := currentCumUsedNanos - e.metrics.lastCumUsedNanos
-		intervalUsedPercent := float64(intervalUsedNanos) /
-			(float64(e.metrics.MaxAvailableNanos.Count()) * elasticCPUUtilizationMetricInterval.Seconds())
-		e.metrics.Utilization.Update(intervalUsedPercent)
-		e.metrics.lastCumUsedNanos = currentCumUsedNanos
+		intervalUsedFrac := intervalUsedFracFunc(intervalUsedNanos)
+		e.metrics.Utilization.Update(intervalUsedFrac)
 	}
 	e.metrics.lastCumUsedNanos = currentCumUsedNanos
+
+	// Compute the utilization of work that bypassed admission.
+	curBypassedNanos := e.metrics.bypassedAdmissionCumNanos.Load()
+	if e.metrics.lastBypassedAdmissionCumNanos != 0 {
+		intervalBypassedNanos := curBypassedNanos - e.metrics.lastBypassedAdmissionCumNanos
+		intervalBypassedFrac := intervalUsedFracFunc(intervalBypassedNanos)
+		e.metrics.BypassedAdmissionUtilization.Update(intervalBypassedFrac)
+	}
+	e.metrics.lastBypassedAdmissionCumNanos = curBypassedNanos
+}
+
+// RecordYieldDelay records a yield delay duration in the metrics. Called by
+// ElasticCPUWorkHandle when runtime.Yield causes a delay.
+func (e *elasticCPUGranter) RecordYieldDelay(d time.Duration) {
+	e.metrics.YieldDelayNanos.Inc(d.Nanoseconds())
 }
 
 // TODO(irfansharif): Provide separate enums for different elastic CPU token
@@ -296,10 +314,15 @@ var ( // granter-side metrics (some of these have parallels on the requester sid
 	}
 
 	elasticCPUNanosExhaustedDuration = metric.Metadata{
-		Name:        "admission.elastic_cpu.nanos_exhausted_duration",
-		Help:        "Total duration when elastic CPU nanoseconds were exhausted, in micros",
-		Measurement: "Microseconds",
-		Unit:        metric.Unit_COUNT,
+		Name: "admission.elastic_cpu.nanos_exhausted_duration",
+		Help: "Total duration when elastic CPU tokens (tokens measured in nanoseconds) " +
+			"were exhausted, as observed by the token granter (not waiters). This is reported in " +
+			"nanoseconds from 26.1 onwards, and was microseconds before that.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_OVERLOAD,
+		HowToUse:    "This metric indicates when elastic CPU tokens are exhausted. Extended periods of elastic CPU token exhaustion may indicate high CPU utilization affecting elastic workloads.",
 	}
 
 	elasticCPUOverLimitDurations = metric.Metadata{
@@ -323,11 +346,25 @@ var ( // granter-side metrics (some of these have parallels on the requester sid
 		Unit:        metric.Unit_PERCENT,
 	}
 
+	elasticCPUGranterBypassedUtilization = metric.Metadata{
+		Name:        "admission.elastic_cpu_bypassed.utilization",
+		Help:        "CPU utilization by elastic work that bypassed admission",
+		Measurement: "CPU Time",
+		Unit:        metric.Unit_PERCENT,
+	}
+
 	elasticCPUGranterUtilizationLimit = metric.Metadata{
 		Name:        "admission.elastic_cpu.utilization_limit",
 		Help:        "Utilization limit set for the elastic CPU work",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_PERCENT,
+	}
+
+	elasticCPUYieldDelayNanos = metric.Metadata{
+		Name:        "admission.elastic_cpu.yield_delay_nanos",
+		Help:        "Total nanoseconds goroutines were delayed by runtime.Yield",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 )
 
@@ -340,12 +377,19 @@ type elasticCPUGranterMetrics struct {
 	MaxAvailableNanos      *metric.Counter
 	AvailableNanos         *metric.Gauge
 	UtilizationLimit       *metric.GaugeFloat64
-	NanosExhaustedDuration *metric.Gauge
+	NanosExhaustedDuration *metric.Counter
 	OverLimitDuration      metric.IHistogram
+	YieldDelayNanos        *metric.Counter
 
-	Utilization      *metric.GaugeFloat64 // updated every elasticCPUUtilizationMetricInterval, using fields below
+	Utilization                  *metric.GaugeFloat64 // updated every elasticCPUUtilizationMetricInterval, using fields below
+	BypassedAdmissionUtilization *metric.GaugeFloat64
+
 	everyInterval    util.EveryN[crtime.Mono]
 	lastCumUsedNanos int64
+
+	// Used for computing BypassedAdmissionUtilization.
+	bypassedAdmissionCumNanos     atomic.Int64
+	lastBypassedAdmissionCumNanos int64
 }
 
 const elasticCPUUtilizationMetricInterval = 10 * time.Second
@@ -357,16 +401,18 @@ func makeElasticCPUGranterMetrics() *elasticCPUGranterMetrics {
 		PreWorkNanos:           metric.NewCounter(elasticCPUPreWorkNanos),
 		MaxAvailableNanos:      metric.NewCounter(elasticCPUMaxAvailableNanos),
 		AvailableNanos:         metric.NewGauge(elasticCPUAvailableNanos),
-		NanosExhaustedDuration: metric.NewGauge(elasticCPUNanosExhaustedDuration),
+		NanosExhaustedDuration: metric.NewCounter(elasticCPUNanosExhaustedDuration),
 		OverLimitDuration: metric.NewHistogram(metric.HistogramOptions{
 			Mode:         metric.HistogramModePrometheus,
 			Metadata:     elasticCPUOverLimitDurations,
 			Duration:     base.DefaultHistogramWindowInterval(),
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
-		Utilization:      metric.NewGaugeFloat64(elasticCPUGranterUtilization),
-		UtilizationLimit: metric.NewGaugeFloat64(elasticCPUGranterUtilizationLimit),
-		everyInterval:    util.EveryMono(elasticCPUUtilizationMetricInterval),
+		YieldDelayNanos:              metric.NewCounter(elasticCPUYieldDelayNanos),
+		Utilization:                  metric.NewGaugeFloat64(elasticCPUGranterUtilization),
+		BypassedAdmissionUtilization: metric.NewGaugeFloat64(elasticCPUGranterBypassedUtilization),
+		UtilizationLimit:             metric.NewGaugeFloat64(elasticCPUGranterUtilizationLimit),
+		everyInterval:                util.EveryMono(elasticCPUUtilizationMetricInterval),
 	}
 
 	metrics.MaxAvailableNanos.Inc(int64(runtime.GOMAXPROCS(0)) * time.Second.Nanoseconds())

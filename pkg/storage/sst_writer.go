@@ -325,7 +325,7 @@ func (fw *SSTWriter) PutInternalPointKey(key *pebble.InternalKey, value []byte) 
 		return errors.New("cannot decode engine key")
 	}
 	fw.DataSize += int64(len(ek.Key)) + int64(len(value))
-	return fw.fw.Raw().Add(*key, value, false /* forceObsolete */)
+	return fw.fw.Raw().Add(*key, value, false /* forceObsolete */, sstable.KVMeta{})
 }
 
 // clearRange clears all point keys in the given range by dropping a Pebble
@@ -549,6 +549,9 @@ func (f *MemObject) Write(p []byte) error {
 	_, err := f.Buffer.Write(p)
 	return err
 }
+
+// StartMetadataPortion is part of the objstorage.Writable interface.
+func (*MemObject) StartMetadataPortion() error { return nil }
 
 // Finish is part of the objstorage.Writable interface.
 func (*MemObject) Finish() error {

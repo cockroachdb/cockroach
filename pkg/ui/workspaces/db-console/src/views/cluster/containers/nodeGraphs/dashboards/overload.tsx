@@ -46,9 +46,9 @@ export default function (props: GraphDashboardProps) {
       sources={nodeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
-      tooltip={`Relative time the node had exhausted slots for foreground (regular) CPU work per second of wall time, measured in microseconds/second. Increased slot exhausted duration indicates CPU resource exhaustion.`}
+      tooltip={`Relative time the node had exhausted slots for foreground (regular) CPU work per second of wall time. Increased slot exhausted duration indicates CPU resource exhaustion. This is measured in nanoseconds/second from 26.1 onwards, and was microseconds/second before that.`}
     >
-      <Axis label="Duration (micros/sec)">
+      <Axis units={AxisUnits.DurationMillis} label="Duration/sec">
         {nodeIDs.map(nid => (
           <Metric
             key={nid}
@@ -66,9 +66,9 @@ export default function (props: GraphDashboardProps) {
       sources={storeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
-      tooltip={`Relative time the store had exhausted foreground (regular) IO tokens for all IO-bound work per second of wall time, measured in microseconds/second. Increased IO token exhausted duration indicates IO resource exhaustion.`}
+      tooltip={`Relative time the store had exhausted foreground (regular) IO tokens for all IO-bound work per second of wall time. Increased IO token exhausted duration indicates IO resource exhaustion. This is measured in nanoseconds/second from 26.1 onwards, and was microseconds/second before that.`}
     >
-      <Axis label="Duration (micros/sec)">
+      <Axis units={AxisUnits.DurationMillis} label="Duration/sec">
         {storeMetrics(
           {
             name: "cr.store.admission.granter.io_tokens_exhausted_duration.kv",
@@ -87,9 +87,9 @@ export default function (props: GraphDashboardProps) {
       sources={storeSources}
       tenantSource={tenantSource}
       showMetricsInTooltip={true}
-      tooltip={`Relative time the store had exhausted background (elastic) IO tokens for all IO-bound work per second of wall time, measured in microseconds/second. Increased IO token exhausted duration indicates IO resource exhaustion.`}
+      tooltip={`Relative time the store had exhausted background (elastic) IO tokens for all IO-bound work per second of wall time. Increased IO token exhausted duration indicates IO resource exhaustion. This is measured in nanoseconds/second from 26.1 onwards, and was microseconds/second before that.`}
     >
-      <Axis label="Duration (micros/sec)">
+      <Axis units={AxisUnits.DurationMillis} label="Duration/sec">
         {storeMetrics(
           {
             name: "cr.store.admission.granter.elastic_io_tokens_exhausted_duration.kv",
@@ -126,14 +126,34 @@ export default function (props: GraphDashboardProps) {
       title="Elastic CPU Tokens Exhausted Duration Per Second"
       sources={nodeSources}
       tenantSource={tenantSource}
-      tooltip={`Relative time the node had exhausted tokens for background (elastic) CPU work per second of wall time, measured in microseconds/second. Increased token exhausted duration indicates CPU resource exhaustion, specifically for background (elastic) work.`}
+      tooltip={`Relative time the node had exhausted tokens for background (elastic) CPU work per second of wall time. Increased token exhausted duration indicates CPU resource exhaustion, specifically for background (elastic) work. This is measured in nanoseconds/second from 26.1 onwards, and was microseconds/second before that.`}
       showMetricsInTooltip={true}
     >
-      <Axis label="Duration (micros/sec)">
+      <Axis units={AxisUnits.DurationMillis} label="Duration/sec">
         {nodeIDs.map(nid => (
           <Metric
             key={nid}
             name="cr.node.admission.elastic_cpu.nanos_exhausted_duration"
+            title={nodeDisplayName(nodeDisplayNameByID, nid)}
+            sources={[nid]}
+            nonNegativeRate
+          />
+        ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Elastic CPU Yield Delay Per Second"
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      tooltip={`Total time goroutines were delayed by runtime.Yield per second of wall time. This shows how much elastic CPU work was paused by cooperative scheduling.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis units={AxisUnits.Duration} label="Delay Duration">
+        {nodeIDs.map(nid => (
+          <Metric
+            key={nid}
+            name="cr.node.admission.elastic_cpu.yield_delay_nanos"
             title={nodeDisplayName(nodeDisplayNameByID, nid)}
             sources={[nid]}
             nonNegativeRate

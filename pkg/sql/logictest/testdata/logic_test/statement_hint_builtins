@@ -1,5 +1,22 @@
-# LogicTest: !local-mixed-25.3 !local-prepared
+# LogicTest: !local-prepared
 # cluster-opt: disable-mvcc-range-tombstones-for-point-deletes
+# knob-opt: sync-event-log
+
+# TODO(michae2): move explain tests into execbuilder
+
+# Speed up the rangefeed.
+user host-cluster-root
+
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '50ms';
+
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '50ms';
+
+statement ok
+SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '50ms';
+
+user root
 
 statement ok
 CREATE TABLE xy (x INT PRIMARY KEY, y INT, INDEX (y));
@@ -7,13 +24,19 @@ CREATE TABLE xy (x INT PRIMARY KEY, y INT, INDEX (y));
 statement ok
 CREATE TABLE ab (a INT PRIMARY KEY, b INT, INDEX (b));
 
+statement ok
+INSERT INTO xy VALUES (10, 10)
+
+statement ok
+INSERT INTO ab VALUES (10, 10)
+
 query I
 SELECT count(*) FROM system.statement_hints;
 ----
 0
 
 let $hint1
-SELECT crdb_internal.inject_hint(
+SELECT information_schema.crdb_rewrite_inline_hints(
   'SELECT * FROM xy WHERE y = 10',
   'SELECT * FROM xy@primary WHERE y = 10'
 );
@@ -22,10 +45,17 @@ SELECT crdb_internal.inject_hint(
 query T
 SELECT fingerprint FROM system.statement_hints WHERE row_id = $hint1;
 ----
-SELECT * FROM xy WHERE y = 10
+SELECT * FROM xy WHERE y = _
+
+# Verify that hint_type and enabled columns are set correctly.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TB
+SELECT hint_type, enabled FROM system.statement_hints WHERE row_id = $hint1;
+----
+REWRITE INLINE HINTS  true
 
 let $hint2
-SELECT crdb_internal.inject_hint(
+SELECT information_schema.crdb_rewrite_inline_hints(
   'SELECT * FROM xy WHERE y = 10',
   'SELECT * FROM xy@xy_y_idx WHERE y = 10'
 );
@@ -34,10 +64,10 @@ SELECT crdb_internal.inject_hint(
 query T
 SELECT fingerprint FROM system.statement_hints WHERE row_id = $hint2;
 ----
-SELECT * FROM xy WHERE y = 10
+SELECT * FROM xy WHERE y = _
 
 let $hint3
-SELECT crdb_internal.inject_hint(
+SELECT information_schema.crdb_rewrite_inline_hints(
   'SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b',
   'SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b'
 );
@@ -54,7 +84,7 @@ SELECT count(*) FROM system.statement_hints;
 3
 
 query I
-SELECT count(*) FROM system.statement_hints WHERE fingerprint = 'SELECT * FROM xy WHERE y = 10';
+SELECT count(*) FROM system.statement_hints WHERE fingerprint = 'SELECT * FROM xy WHERE y = _';
 ----
 2
 
@@ -63,7 +93,46 @@ SELECT count(*) FROM system.statement_hints WHERE fingerprint = 'SELECT * FROM x
 ----
 1
 
-statement ok
+# Verify that rewrite_inline_hints events were logged.
+
+query I
+SELECT count(*) FROM system.eventlog WHERE "eventType" = 'rewrite_inline_hints';
+----
+3
+
+query ITT
+SELECT "reportingID",
+       info::JSONB->>'StatementFingerprint',
+       info::JSONB->>'DonorSQL'
+FROM system.eventlog
+WHERE "eventType" = 'rewrite_inline_hints'
+ORDER BY "timestamp"
+----
+1  SELECT * FROM xy WHERE y = _                   SELECT * FROM xy@primary WHERE y = _
+1  SELECT * FROM xy WHERE y = _                   SELECT * FROM xy@xy_y_idx WHERE y = _
+1  SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b  SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b
+
+# Verify that the HintID in the event matches the returned hint ID.
+query B
+SELECT (info::JSONB->>'HintID')::INT = $hint1
+FROM system.eventlog
+WHERE "eventType" = 'rewrite_inline_hints'
+  AND info::JSONB->>'StatementFingerprint' = 'SELECT * FROM xy WHERE y = _'
+ORDER BY "timestamp"
+LIMIT 1
+----
+true
+
+# Verify the full event structure (excluding non-deterministic fields).
+query IT
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'TxnReadTimestamp' - 'HintID'
+FROM system.eventlog
+WHERE "eventType" = 'rewrite_inline_hints'
+  AND info::JSONB->>'StatementFingerprint' = 'SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b'
+----
+1  {"DonorSQL": "SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b", "EventType": "rewrite_inline_hints", "Statement": "SELECT information_schema.crdb_rewrite_inline_hints('SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b', 'SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b')", "StatementFingerprint": "SELECT * FROM xy INNER JOIN ab ON xy.x = ab.b", "Tag": "SELECT", "User": "root"}
+
+statement count 3
 DELETE FROM system.statement_hints WHERE true;
 
 query I
@@ -76,7 +145,7 @@ statement ok
 BEGIN;
 
 let $hint4
-SELECT crdb_internal.inject_hint(
+SELECT information_schema.crdb_rewrite_inline_hints(
   'SELECT * FROM xy WHERE y = 10',
   'SELECT * FROM xy@{NO_FULL_SCAN} WHERE y = 10'
 );
@@ -84,7 +153,15 @@ SELECT crdb_internal.inject_hint(
 query T
 SELECT fingerprint FROM system.statement_hints WHERE row_id = $hint4;
 ----
-SELECT * FROM xy WHERE y = 10
+SELECT * FROM xy WHERE y = _
+
+# Verify the event was logged within the transaction.
+query I
+SELECT count(*) FROM system.eventlog
+WHERE "eventType" = 'rewrite_inline_hints'
+  AND (info::JSONB->>'HintID')::INT = $hint4;
+----
+1
 
 statement ok
 ROLLBACK;
@@ -94,10 +171,18 @@ SELECT count(*) FROM system.statement_hints;
 ----
 0
 
+# Verify the event log entry was also rolled back.
+query I
+SELECT count(*) FROM system.eventlog
+WHERE "eventType" = 'rewrite_inline_hints'
+  AND (info::JSONB->>'HintID')::INT = $hint4;
+----
+0
+
 # Test that hints are loaded for matching statements.
 
 statement ok
-SELECT crdb_internal.inject_hint(
+SELECT information_schema.crdb_rewrite_inline_hints(
   'SELECT * FROM xy WHERE x > y',
   'SELECT * FROM xy WHERE x > y'
 )
@@ -161,7 +246,7 @@ WHERE feature_name = 'sql.session.statement-hints'
 ----
 6
 
-statement ok
+statement count 1
 DELETE FROM system.statement_hints WHERE true
 
 statement ok
@@ -179,3 +264,560 @@ FROM crdb_internal.feature_usage
 WHERE feature_name = 'sql.session.statement-hints'
 ----
 6
+
+statement ok
+DEALLOCATE ALL
+
+# Testcases for inline hint rewriting.
+
+statement ok
+CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT, INDEX (b))
+
+# Test basic validation when calling information_schema.crdb_rewrite_inline_hints.
+
+statement error could not parse statement fingerprint: at or near "foo": syntax error
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'foo',
+  'SELECT a FROM ab'
+)
+
+statement error could not parse hint donor statement: at or near "foo": syntax error
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT a FROM ab',
+  'foo'
+)
+
+statement error statement does not match hint donor statement: SELECT a FROM ab vs SELECT b FROM ab
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT a FROM ab',
+  'SELECT b FROM ab'
+)
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT a FROM ab WHERE b = 5',
+  'SELECT a FROM ab WHERE b = $1'
+)
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT a FROM ab WHERE b = 5',
+  'SELECT a FROM ab WHERE b = _'
+)
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT b FROM ab WHERE a = $1',
+  'SELECT b FROM ab WHERE a = _'
+)
+
+# Transaction control statements cannot be used as hint targets.
+
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_rewrite_inline_hints('BEGIN', 'BEGIN')
+
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_rewrite_inline_hints('COMMIT', 'COMMIT')
+
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_rewrite_inline_hints('ROLLBACK', 'ROLLBACK')
+
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_rewrite_inline_hints('SAVEPOINT s', 'SAVEPOINT s')
+
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_rewrite_inline_hints('RELEASE SAVEPOINT s', 'RELEASE SAVEPOINT s')
+
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_rewrite_inline_hints('ROLLBACK TO SAVEPOINT s', 'ROLLBACK TO SAVEPOINT s')
+
+subtest delete_hints
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+
+statement ok
+CREATE INDEX ab_b ON ab (b)
+
+let $id
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT b FROM ab WHERE b = $1',
+  'SELECT b FROM ab@b WHERE b = _'
+)
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+SELECT b FROM ab WHERE b = _  |  SELECT b FROM ab@b WHERE b = _
+
+# Delete by row id.
+statement ok
+SELECT information_schema.crdb_delete_statement_hints($id)
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+
+statement ok
+CREATE INDEX xy_yx ON xy (y, x);
+
+statement ok
+CREATE INDEX xy_y ON xy (y);
+
+# Make some hints bound to the same fingerprint.
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@primary WHERE y = 10'
+);
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@xy_yx WHERE y = 10'
+);
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@xy_y WHERE y = 10'
+);
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@primary WHERE y = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_yx WHERE y = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_y WHERE y = _
+
+# Test with more complicated embedded query.
+query I
+SELECT information_schema.crdb_delete_statement_hints(row_id)
+FROM [SHOW STATEMENT HINTS FOR 'SELECT * FROM xy WHERE y = 10' WITH DETAILS]
+WHERE details->>'donorSql' LIKE '%xy@primary%';
+----
+1
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_yx WHERE y = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_y WHERE y = _
+
+# Delete by fingerprinted fingerprint.
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM xy WHERE y = _');
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+
+# Now test with non-fingerprinted inputs (constants instead of _).
+# The delete builtins should normalize them to fingerprints before matching.
+
+# Add hints back for xy.
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@primary WHERE y = 10'
+);
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@xy_yx WHERE y = 10'
+);
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@xy_y WHERE y = 10'
+);
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@primary WHERE y = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_yx WHERE y = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@xy_y WHERE y = _
+
+# Delete by non-fingerprinted fingerprint.
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM xy WHERE y = 81');
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+
+# Test the event log.
+query TT
+SELECT info::JSONB->>'StatementFingerprint',
+       info::JSONB->>'DonorSql'
+FROM system.eventlog
+WHERE "eventType" = 'delete_rewrite_inline_hints'
+ORDER BY "timestamp" DESC
+LIMIT 1
+----
+SELECT * FROM xy WHERE y = _  SELECT * FROM xy@xy_y WHERE y = _
+
+# Test delete within an explicit txn.
+statement ok
+BEGIN;
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@primary WHERE y = 10'
+);
+
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT x FROM xy WHERE y = 10',
+  'SELECT x FROM xy@primary WHERE y = 10'
+);
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@primary WHERE y = _
+SELECT x FROM xy WHERE y = _  |  SELECT x FROM xy@primary WHERE y = _
+
+statement ok
+SAVEPOINT s1
+
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM xy WHERE y = 10');
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+SELECT x FROM xy WHERE y = _  |  SELECT x FROM xy@primary WHERE y = _
+
+statement ok
+ROLLBACK TO s1
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+SELECT * FROM xy WHERE y = _  |  SELECT * FROM xy@primary WHERE y = _
+SELECT x FROM xy WHERE y = _  |  SELECT x FROM xy@primary WHERE y = _
+
+statement ok
+ROLLBACK
+
+query TTT
+SELECT fingerprint, '|', crdb_internal.pb_to_json('hintpb.StatementHintUnion', hint)->'injectHints'->>'donorSql' AS donor_sql FROM system.statement_hints ORDER BY "created_at";
+----
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
+SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
+
+subtest end
+
+# ---- Session setting hints ----
+
+subtest session_setting_hints
+
+# Basic creation of a session setting hint.
+skipif config local-mixed-25.4 local-mixed-26.1
+let $sh1
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE x = 1',
+  'reorder_joins_limit',
+  '4'
+);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query T
+SELECT fingerprint FROM system.statement_hints WHERE row_id = $sh1;
+----
+SELECT * FROM xy WHERE x = _
+
+# Verify hint_type is set correctly.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TB
+SELECT hint_type, enabled FROM system.statement_hints WHERE row_id = $sh1;
+----
+SET VARIABLE  true
+
+# Multiple session setting hints for the same fingerprint.
+skipif config local-mixed-25.4 local-mixed-26.1
+let $sh2
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE x = 1',
+  'distsql',
+  'off'
+);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT count(*) FROM system.statement_hints
+WHERE fingerprint = 'SELECT * FROM xy WHERE x = _';
+----
+2
+
+# Unknown variable should fail.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error unrecognized session variable: "nonexistent_var"
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE x = 1',
+  'nonexistent_var',
+  'value'
+);
+
+# Invalid value should be rejected at creation time.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error invalid value for session variable "reorder_joins_limit"
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE x = 1',
+  'reorder_joins_limit',
+  'not_a_number'
+);
+
+# Read-only variable should be rejected.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error session variable "crdb_version" is read-only and cannot be set in a statement hint
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE x = 1',
+  'crdb_version',
+  'v99.0'
+);
+
+# Transaction control statements cannot be used as hint targets.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_set_session_variable_hint('BEGIN', 'distsql', 'off')
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_set_session_variable_hint('COMMIT', 'distsql', 'off')
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_set_session_variable_hint('ROLLBACK', 'distsql', 'off')
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_set_session_variable_hint('SAVEPOINT s', 'distsql', 'off')
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_set_session_variable_hint('RELEASE SAVEPOINT s', 'distsql', 'off')
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error transaction control statements cannot be used as hint targets
+SELECT information_schema.crdb_set_session_variable_hint('ROLLBACK TO SAVEPOINT s', 'distsql', 'off')
+
+# Verify that set_session_variable_hint events were logged.
+skipif config local-mixed-25.4 local-mixed-26.1
+query ITT
+SELECT "reportingID",
+       info::JSONB->>'StatementFingerprint',
+       info::JSONB->>'VariableName'
+FROM system.eventlog
+WHERE "eventType" = 'set_session_variable_hint'
+ORDER BY "timestamp"
+----
+1  SELECT * FROM xy WHERE x = _  reorder_joins_limit
+1  SELECT * FROM xy WHERE x = _  distsql
+
+# Verify the HintID matches the returned hint ID.
+skipif config local-mixed-25.4 local-mixed-26.1
+query B
+SELECT (info::JSONB->>'HintID')::INT = $sh1
+FROM system.eventlog
+WHERE "eventType" = 'set_session_variable_hint'
+ORDER BY "timestamp"
+LIMIT 1
+----
+true
+
+# Test the 4-arg overload with database and verify the event includes it.
+skipif config local-mixed-25.4 local-mixed-26.1
+let $sh3
+SELECT information_schema.crdb_set_session_variable_hint(
+  'SELECT * FROM xy WHERE x = 1',
+  'vectorize',
+  'off',
+  'mydb'
+);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT
+SELECT info::JSONB->>'VariableName',
+       info::JSONB->>'Database'
+FROM system.eventlog
+WHERE "eventType" = 'set_session_variable_hint'
+  AND (info::JSONB->>'HintID')::INT = $sh3
+----
+vectorize  mydb
+
+# Verify the 3-arg overload does not include a Database field.
+skipif config local-mixed-25.4 local-mixed-26.1
+query TT
+SELECT info::JSONB->>'VariableName',
+       COALESCE(info::JSONB->>'Database', 'NULL')
+FROM system.eventlog
+WHERE "eventType" = 'set_session_variable_hint'
+  AND (info::JSONB->>'HintID')::INT = $sh1
+----
+reorder_joins_limit  NULL
+
+skipif config local-mixed-25.4 local-mixed-26.1
+subtest end
+
+# Clean up all hints (rewrite inline + session setting) for other tests.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement count 6
+DELETE FROM system.statement_hints WHERE true
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT crdb_internal.await_statement_hints_cache()
+
+subtest enable_disable_hints
+
+# Insert a hint and capture its row_id.
+skipif config local-mixed-25.4 local-mixed-26.1
+let $h1
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@primary WHERE y = 10'
+);
+
+# Verify it starts enabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+query B
+SELECT enabled FROM system.statement_hints WHERE row_id = $h1;
+----
+true
+
+# Disable by row ID.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT information_schema.crdb_enable_statement_hints(false, $h1);
+----
+1
+
+# Verify it is now disabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+query B
+SELECT enabled FROM system.statement_hints WHERE row_id = $h1;
+----
+false
+
+# Re-enable by row ID.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT information_schema.crdb_enable_statement_hints(true, $h1);
+----
+1
+
+# Verify it is now enabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+query B
+SELECT enabled FROM system.statement_hints WHERE row_id = $h1;
+----
+true
+
+# Insert another hint for the same fingerprint.
+skipif config local-mixed-25.4 local-mixed-26.1
+let $h2
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@xy_y_idx WHERE y = 10'
+);
+
+# Disable by fingerprint (should affect both hints).
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT information_schema.crdb_enable_statement_hints(false, 'SELECT * FROM xy WHERE y = 10');
+----
+2
+
+# Verify both are disabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+query B rowsort
+SELECT enabled FROM system.statement_hints WHERE row_id IN ($h1, $h2);
+----
+false
+false
+
+# Re-enable by fingerprint.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT information_schema.crdb_enable_statement_hints(true, 'SELECT * FROM xy WHERE y = _');
+----
+2
+
+# Verify both are enabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+query B rowsort
+SELECT enabled FROM system.statement_hints WHERE row_id IN ($h1, $h2);
+----
+true
+true
+
+# Disable a non-existent hint returns 0.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT information_schema.crdb_enable_statement_hints(false, 999999);
+----
+0
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT information_schema.crdb_enable_statement_hints(false, 'SELECT nonexistent FROM nowhere');
+----
+0
+
+# Test privilege check: non-admin gets permission error.
+skipif config local-mixed-25.4 local-mixed-26.1
+user testuser
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error user testuser does not have REPAIRCLUSTER system privilege
+SELECT information_schema.crdb_enable_statement_hints(false, $h1);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error user testuser does not have REPAIRCLUSTER system privilege
+SELECT information_schema.crdb_enable_statement_hints(true, $h1);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+user root
+
+subtest end

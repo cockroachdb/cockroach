@@ -51,9 +51,10 @@ type Materializer struct {
 	// row is the memory used for the output row.
 	row rowenc.EncDatumRow
 
-	// outputRow stores the returned results of next() to be passed through an
-	// adapter.
+	// outputRow and meta store the returned results of next() to be passed
+	// through an adapter.
 	outputRow rowenc.EncDatumRow
+	meta      *execinfrapb.ProducerMetadata
 }
 
 // drainHelper is a utility struct that wraps MetadataSources in a RowSource
@@ -240,12 +241,16 @@ func (m *Materializer) Start(ctx context.Context) {
 // next is the logic of Next() extracted in a separate method to be used by an
 // adapter to be able to wrap the latter with a catcher. nil is returned when a
 // zero-length batch is encountered.
-func (m *Materializer) next() rowenc.EncDatumRow {
+func (m *Materializer) next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
 	if m.batch == nil || m.curIdx >= m.batch.Length() {
 		// Get a fresh batch.
-		m.batch = m.input.Next()
+		var meta *execinfrapb.ProducerMetadata
+		m.batch, meta = m.input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if m.batch.Length() == 0 {
-			return nil
+			return nil, nil
 		}
 		m.curIdx = 0
 		m.converter.ConvertBatchAndDeselect(m.batch)
@@ -261,14 +266,14 @@ func (m *Materializer) next() rowenc.EncDatumRow {
 	// Note that there is no post-processing to be done in the
 	// materializer, so we do not use ProcessRowHelper and emit the row
 	// directly.
-	return m.row
+	return m.row, nil
 }
 
 // nextAdapter calls next() and saves the returned results in m. For internal
 // use only. The purpose of having this function is to not create an anonymous
 // function on every call to Next().
 func (m *Materializer) nextAdapter() {
-	m.outputRow = m.next()
+	m.outputRow, m.meta = m.next()
 }
 
 // Next is part of the execinfra.RowSource interface.
@@ -277,6 +282,9 @@ func (m *Materializer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata
 		if err := colexecerror.CatchVectorizedRuntimeError(m.nextAdapter); err != nil {
 			m.MoveToDraining(err)
 			continue
+		}
+		if m.meta != nil {
+			return nil, m.meta
 		}
 		if m.outputRow == nil {
 			// Zero-length batch was encountered, move to draining.

@@ -21,6 +21,7 @@ go_test(
     name = "kvclient_test",
     srcs = ["main_test.go"],
     deps = [
+        "//pkg/base",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",

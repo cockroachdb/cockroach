@@ -63,6 +63,7 @@ go_test(
     name = "security_test",
     size = "medium",
     srcs = [
+        "auth_internal_test.go",
         "auth_test.go",
         "certificate_loader_test.go",
         "certificate_manager_test.go",
@@ -94,6 +95,7 @@ go_test(
         "//pkg/server",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/util/envutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",

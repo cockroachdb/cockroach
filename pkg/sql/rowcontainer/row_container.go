@@ -180,7 +180,7 @@ var _ IndexedRowContainer = &MemRowContainer{}
 func (mc *MemRowContainer) Init(
 	ordering colinfo.ColumnOrdering, types []*types.T, evalCtx *eval.Context,
 ) {
-	mc.InitWithMon(ordering, types, evalCtx, evalCtx.Planner.Mon())
+	mc.InitWithMon(ordering, types, evalCtx, evalCtx.Planner.ExecMon())
 }
 
 // InitWithMon initializes the MemRowContainer with an explicit monitor. Only

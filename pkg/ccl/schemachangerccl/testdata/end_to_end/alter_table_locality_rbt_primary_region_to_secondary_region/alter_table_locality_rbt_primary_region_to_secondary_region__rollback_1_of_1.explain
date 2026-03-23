@@ -1,0 +1,37 @@
+/* setup */
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+CREATE TABLE multiregion_db.public.t (  
+  pk INT PRIMARY KEY,
+  i INT NOT NULL,
+  j STRING,
+  INDEX(i)
+) LOCALITY REGIONAL BY TABLE;
+
+/* test */
+ALTER TABLE multiregion_db.t SET LOCALITY REGIONAL BY TABLE IN "us-east2";
+EXPLAIN (DDL) rollback at post-commit stage 1 of 1;
+----
+Schema change plan for rolling back ALTER TABLE multiregion_db.t SET LOCALITY REGIONAL BY TABLE IN "us-east2";
+ └── PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 1 element transitioning toward PUBLIC
+      │    │    └── ABSENT → PUBLIC TableLocalityPrimaryRegion:{DescID: 108 (t)}
+      │    ├── 2 elements transitioning toward ABSENT
+      │    │    ├── PUBLIC → ABSENT TableLocalitySecondaryRegion:{DescID: 108 (t), ReferencedDescID: 106 (crdb_internal_region), Value: us-east2}
+      │    │    └── PUBLIC → ABSENT TableZoneConfig:{DescID: 108 (t), SeqNum: 1}
+      │    └── 7 Mutation operations
+      │         ├── UnsetTableLocality {"TableID":108}
+      │         ├── RemoveBackReferenceInTypes {"BackReferencedDescriptorID":108}
+      │         ├── DiscardTableZoneConfig {"TableID":108}
+      │         ├── SetTableLocalityPrimaryRegion {"TableID":108}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 108 (t)}
+           └── 4 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":108}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":108}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

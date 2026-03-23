@@ -53,15 +53,6 @@ BACKUP TABLE _ INTO LATEST IN '*****' -- identifiers removed
 BACKUP TABLE foo INTO LATEST IN 'bar' -- passwords exposed
 
 parse
-BACKUP TABLE foo INTO LATEST IN 'bar' WITH incremental_location = 'baz'
-----
-BACKUP TABLE foo INTO LATEST IN '*****' WITH OPTIONS (incremental_location = '*****') -- normalized!
-BACKUP TABLE (foo) INTO LATEST IN ('*****') WITH OPTIONS (incremental_location = ('*****')) -- fully parenthesized
-BACKUP TABLE foo INTO LATEST IN '_' WITH OPTIONS (incremental_location = '_') -- literals removed
-BACKUP TABLE _ INTO LATEST IN '*****' WITH OPTIONS (incremental_location = '*****') -- identifiers removed
-BACKUP TABLE foo INTO LATEST IN 'bar' WITH OPTIONS (incremental_location = 'baz') -- passwords exposed
-
-parse
 BACKUP TABLE foo INTO 'subdir' IN 'bar'
 ----
 BACKUP TABLE foo INTO 'subdir' IN '*****' -- normalized!
@@ -124,24 +115,6 @@ SHOW BACKUP 'latest' IN '*****' WITH OPTIONS (check_files, encryption_passphrase
 SHOW BACKUP 'latest' IN 'bar' WITH OPTIONS (check_files, encryption_passphrase = 'secret') -- passwords exposed
 
 parse
-SHOW BACKUP FROM LATEST IN 'bar' WITH incremental_location = 'baz', skip size
-----
-SHOW BACKUP FROM 'latest' IN '*****' WITH OPTIONS (incremental_location = '*****', skip size) -- normalized!
-SHOW BACKUP FROM ('latest') IN ('*****') WITH OPTIONS (incremental_location = ('*****'), skip size) -- fully parenthesized
-SHOW BACKUP FROM '_' IN '_' WITH OPTIONS (incremental_location = '_', skip size) -- literals removed
-SHOW BACKUP FROM 'latest' IN '*****' WITH OPTIONS (incremental_location = '*****', skip size) -- identifiers removed
-SHOW BACKUP FROM 'latest' IN 'bar' WITH OPTIONS (incremental_location = 'baz', skip size) -- passwords exposed
-
-parse
-SHOW BACKUP FROM LATEST IN ('bar','bar1') WITH KMS = ('foo', 'bar'), incremental_location=('hi','hello')
-----
-SHOW BACKUP FROM 'latest' IN ('*****', '*****') WITH OPTIONS (incremental_location = ('*****', '*****'), kms = ('*****', '*****')) -- normalized!
-SHOW BACKUP FROM ('latest') IN (('*****'), ('*****')) WITH OPTIONS (incremental_location = (('*****'), ('*****')), kms = (('*****'), ('*****'))) -- fully parenthesized
-SHOW BACKUP FROM '_' IN ('_', '_') WITH OPTIONS (incremental_location = ('_', '_'), kms = ('_', '_')) -- literals removed
-SHOW BACKUP FROM 'latest' IN ('*****', '*****') WITH OPTIONS (incremental_location = ('*****', '*****'), kms = ('*****', '*****')) -- identifiers removed
-SHOW BACKUP FROM 'latest' IN ('bar', 'bar1') WITH OPTIONS (incremental_location = ('hi', 'hello'), kms = ('foo', 'bar')) -- passwords exposed
-
-parse
 SHOW BACKUPS IN 'bar'
 ----
 SHOW BACKUPS IN '*****' -- normalized!
@@ -149,15 +122,6 @@ SHOW BACKUPS IN ('*****') -- fully parenthesized
 SHOW BACKUPS IN '_' -- literals removed
 SHOW BACKUPS IN '*****' -- identifiers removed
 SHOW BACKUPS IN 'bar' -- passwords exposed
-
-parse
-SHOW BACKUPS IN 'bar' WITH index
-----
-SHOW BACKUPS IN '*****' WITH OPTIONS (index) -- normalized!
-SHOW BACKUPS IN ('*****') WITH OPTIONS (index) -- fully parenthesized
-SHOW BACKUPS IN '_' WITH OPTIONS (index) -- literals removed
-SHOW BACKUPS IN '*****' WITH OPTIONS (index) -- identifiers removed
-SHOW BACKUPS IN 'bar' WITH OPTIONS (index) -- passwords exposed
 
 parse
 SHOW BACKUPS IN $1
@@ -168,12 +132,90 @@ SHOW BACKUPS IN $1 -- literals removed
 SHOW BACKUPS IN $1 -- identifiers removed
 
 parse
-SHOW BACKUPS IN $1 WITH index
+SHOW BACKUPS IN 'bar' NEWER THAN '1'
 ----
-SHOW BACKUPS IN $1 WITH OPTIONS (index) -- normalized!
-SHOW BACKUPS IN ($1) WITH OPTIONS (index) -- fully parenthesized
-SHOW BACKUPS IN $1 WITH OPTIONS (index) -- literals removed
-SHOW BACKUPS IN $1 WITH OPTIONS (index) -- identifiers removed
+SHOW BACKUPS IN '*****' NEWER THAN '1' -- normalized!
+SHOW BACKUPS IN ('*****') NEWER THAN ('1') -- fully parenthesized
+SHOW BACKUPS IN '_' NEWER THAN '_' -- literals removed
+SHOW BACKUPS IN '*****' NEWER THAN '1' -- identifiers removed
+SHOW BACKUPS IN 'bar' NEWER THAN '1' -- passwords exposed
+
+parse
+SHOW BACKUPS IN 'bar' OLDER THAN '1'
+----
+SHOW BACKUPS IN '*****' OLDER THAN '1' -- normalized!
+SHOW BACKUPS IN ('*****') OLDER THAN ('1') -- fully parenthesized
+SHOW BACKUPS IN '_' OLDER THAN '_' -- literals removed
+SHOW BACKUPS IN '*****' OLDER THAN '1' -- identifiers removed
+SHOW BACKUPS IN 'bar' OLDER THAN '1' -- passwords exposed
+
+parse
+SHOW BACKUPS IN 'bar' NEWER THAN '1' OLDER THAN '2'
+----
+SHOW BACKUPS IN '*****' NEWER THAN '1' OLDER THAN '2' -- normalized!
+SHOW BACKUPS IN ('*****') NEWER THAN ('1') OLDER THAN ('2') -- fully parenthesized
+SHOW BACKUPS IN '_' NEWER THAN '_' OLDER THAN '_' -- literals removed
+SHOW BACKUPS IN '*****' NEWER THAN '1' OLDER THAN '2' -- identifiers removed
+SHOW BACKUPS IN 'bar' NEWER THAN '1' OLDER THAN '2' -- passwords exposed
+
+parse
+SHOW BACKUPS IN 'bar' OLDER THAN '2' NEWER THAN '1'
+----
+SHOW BACKUPS IN '*****' NEWER THAN '1' OLDER THAN '2' -- normalized!
+SHOW BACKUPS IN ('*****') NEWER THAN ('1') OLDER THAN ('2') -- fully parenthesized
+SHOW BACKUPS IN '_' NEWER THAN '_' OLDER THAN '_' -- literals removed
+SHOW BACKUPS IN '*****' NEWER THAN '1' OLDER THAN '2' -- identifiers removed
+SHOW BACKUPS IN 'bar' NEWER THAN '1' OLDER THAN '2' -- passwords exposed
+
+parse
+SHOW BACKUPS IN $1 NEWER THAN $2 OLDER THAN $3
+----
+SHOW BACKUPS IN $1 NEWER THAN $2 OLDER THAN $3
+SHOW BACKUPS IN ($1) NEWER THAN ($2) OLDER THAN ($3) -- fully parenthesized
+SHOW BACKUPS IN $1 NEWER THAN $1 OLDER THAN $1 -- literals removed
+SHOW BACKUPS IN $1 NEWER THAN $2 OLDER THAN $3 -- identifiers removed
+
+parse
+SHOW BACKUPS IN $1 OLDER THAN $2 NEWER THAN $3
+----
+SHOW BACKUPS IN $1 NEWER THAN $3 OLDER THAN $2 -- normalized!
+SHOW BACKUPS IN ($1) NEWER THAN ($3) OLDER THAN ($2) -- fully parenthesized
+SHOW BACKUPS IN $1 NEWER THAN $1 OLDER THAN $1 -- literals removed
+SHOW BACKUPS IN $1 NEWER THAN $3 OLDER THAN $2 -- identifiers removed
+
+parse
+SHOW BACKUPS IN 'bar' WITH REVISION START TIME
+----
+SHOW BACKUPS IN '*****' WITH OPTIONS (REVISION START TIME) -- normalized!
+SHOW BACKUPS IN ('*****') WITH OPTIONS (REVISION START TIME) -- fully parenthesized
+SHOW BACKUPS IN '_' WITH OPTIONS (REVISION START TIME) -- literals removed
+SHOW BACKUPS IN '*****' WITH OPTIONS (REVISION START TIME) -- identifiers removed
+SHOW BACKUPS IN 'bar' WITH OPTIONS (REVISION START TIME) -- passwords exposed
+
+parse
+SHOW BACKUPS IN $1 WITH REVISION START TIME
+----
+SHOW BACKUPS IN $1 WITH OPTIONS (REVISION START TIME) -- normalized!
+SHOW BACKUPS IN ($1) WITH OPTIONS (REVISION START TIME) -- fully parenthesized
+SHOW BACKUPS IN $1 WITH OPTIONS (REVISION START TIME) -- literals removed
+SHOW BACKUPS IN $1 WITH OPTIONS (REVISION START TIME) -- identifiers removed
+
+parse
+SHOW BACKUPS IN 'bar' NEWER THAN '1' OLDER THAN '2' WITH REVISION START TIME
+----
+SHOW BACKUPS IN '*****' NEWER THAN '1' OLDER THAN '2' WITH OPTIONS (REVISION START TIME) -- normalized!
+SHOW BACKUPS IN ('*****') NEWER THAN ('1') OLDER THAN ('2') WITH OPTIONS (REVISION START TIME) -- fully parenthesized
+SHOW BACKUPS IN '_' NEWER THAN '_' OLDER THAN '_' WITH OPTIONS (REVISION START TIME) -- literals removed
+SHOW BACKUPS IN '*****' NEWER THAN '1' OLDER THAN '2' WITH OPTIONS (REVISION START TIME) -- identifiers removed
+SHOW BACKUPS IN 'bar' NEWER THAN '1' OLDER THAN '2' WITH OPTIONS (REVISION START TIME) -- passwords exposed
+
+parse
+SHOW BACKUPS IN $1 NEWER THAN $2 OLDER THAN $3 WITH REVISION START TIME
+----
+SHOW BACKUPS IN $1 NEWER THAN $2 OLDER THAN $3 WITH OPTIONS (REVISION START TIME) -- normalized!
+SHOW BACKUPS IN ($1) NEWER THAN ($2) OLDER THAN ($3) WITH OPTIONS (REVISION START TIME) -- fully parenthesized
+SHOW BACKUPS IN $1 NEWER THAN $1 OLDER THAN $1 WITH OPTIONS (REVISION START TIME) -- literals removed
+SHOW BACKUPS IN $1 NEWER THAN $2 OLDER THAN $3 WITH OPTIONS (REVISION START TIME) -- identifiers removed
 
 parse
 SHOW BACKUP 'foo' IN 'bar'
@@ -220,13 +262,13 @@ SHOW BACKUP SCHEMAS FROM 'foo' IN '*****' -- identifiers removed
 SHOW BACKUP SCHEMAS FROM 'foo' IN 'bar' -- passwords exposed
 
 parse
-SHOW BACKUP $1 IN $2 WITH ENCRYPTION_PASSPHRASE = 'secret', ENCRYPTION_INFO_DIR = 'long_live_backupper'
+SHOW BACKUP $1 IN $2 WITH ENCRYPTION_PASSPHRASE = 'secret'
 ----
-SHOW BACKUP $1 IN $2 WITH OPTIONS (encryption_passphrase = '*****', encryption_info_dir = 'long_live_backupper') -- normalized!
-SHOW BACKUP ($1) IN ($2) WITH OPTIONS (encryption_passphrase = '*****', encryption_info_dir = ('long_live_backupper')) -- fully parenthesized
-SHOW BACKUP $1 IN $1 WITH OPTIONS (encryption_passphrase = '*****', encryption_info_dir = '_') -- literals removed
-SHOW BACKUP $1 IN $2 WITH OPTIONS (encryption_passphrase = '*****', encryption_info_dir = 'long_live_backupper') -- identifiers removed
-SHOW BACKUP $1 IN $2 WITH OPTIONS (encryption_passphrase = 'secret', encryption_info_dir = 'long_live_backupper') -- passwords exposed
+SHOW BACKUP $1 IN $2 WITH OPTIONS (encryption_passphrase = '*****') -- normalized!
+SHOW BACKUP ($1) IN ($2) WITH OPTIONS (encryption_passphrase = '*****') -- fully parenthesized
+SHOW BACKUP $1 IN $1 WITH OPTIONS (encryption_passphrase = '*****') -- literals removed
+SHOW BACKUP $1 IN $2 WITH OPTIONS (encryption_passphrase = '*****') -- identifiers removed
+SHOW BACKUP $1 IN $2 WITH OPTIONS (encryption_passphrase = 'secret') -- passwords exposed
 
 parse
 BACKUP TABLE foo INTO 'bar' IN 'baz' AS OF SYSTEM TIME '1'
@@ -327,13 +369,13 @@ BACKUP DATABASE foo INTO '_' IN ($1, $1) -- literals removed
 BACKUP DATABASE _ INTO 'baz' IN ($1, $2) -- identifiers removed
 
 parse
-BACKUP foo INTO 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', revision_history, execution locality = 'a=b'
+BACKUP foo INTO 'bar' WITH ENCRYPTION_PASSPHRASE = 'secret', revision_history, execution locality = 'a=b', strict storage locality
 ----
-BACKUP TABLE foo INTO '*****' WITH OPTIONS (revision_history = true, encryption_passphrase = '*****', execution locality = 'a=b') -- normalized!
-BACKUP TABLE (foo) INTO ('*****') WITH OPTIONS (revision_history = (true), encryption_passphrase = '*****', execution locality = ('a=b')) -- fully parenthesized
-BACKUP TABLE foo INTO '_' WITH OPTIONS (revision_history = _, encryption_passphrase = '*****', execution locality = '_') -- literals removed
-BACKUP TABLE _ INTO '*****' WITH OPTIONS (revision_history = true, encryption_passphrase = '*****', execution locality = 'a=b') -- identifiers removed
-BACKUP TABLE foo INTO 'bar' WITH OPTIONS (revision_history = true, encryption_passphrase = 'secret', execution locality = 'a=b') -- passwords exposed
+BACKUP TABLE foo INTO '*****' WITH OPTIONS (revision_history = true, encryption_passphrase = '*****', execution locality = 'a=b', strict storage locality) -- normalized!
+BACKUP TABLE (foo) INTO ('*****') WITH OPTIONS (revision_history = (true), encryption_passphrase = '*****', execution locality = ('a=b'), strict storage locality) -- fully parenthesized
+BACKUP TABLE foo INTO '_' WITH OPTIONS (revision_history = _, encryption_passphrase = '*****', execution locality = '_', strict storage locality) -- literals removed
+BACKUP TABLE _ INTO '*****' WITH OPTIONS (revision_history = true, encryption_passphrase = '*****', execution locality = 'a=b', strict storage locality) -- identifiers removed
+BACKUP TABLE foo INTO 'bar' WITH OPTIONS (revision_history = true, encryption_passphrase = 'secret', execution locality = 'a=b', strict storage locality) -- passwords exposed
 
 parse
 BACKUP foo INTO 'bar' WITH KMS = ('foo', 'bar'), revision_history
@@ -398,24 +440,6 @@ RESTORE TABLE foo FROM $2 IN $1
 RESTORE TABLE (foo) FROM ($2) IN ($1) -- fully parenthesized
 RESTORE TABLE foo FROM $1 IN $1 -- literals removed
 RESTORE TABLE _ FROM $2 IN $1 -- identifiers removed
-
-parse
-RESTORE TABLE foo FROM $1 IN $2 WITH incremental_location = 'bar'
-----
-RESTORE TABLE foo FROM $1 IN $2 WITH OPTIONS (incremental_location = '*****') -- normalized!
-RESTORE TABLE (foo) FROM ($1) IN ($2) WITH OPTIONS (incremental_location = ('*****')) -- fully parenthesized
-RESTORE TABLE foo FROM $1 IN $1 WITH OPTIONS (incremental_location = '_') -- literals removed
-RESTORE TABLE _ FROM $1 IN $2 WITH OPTIONS (incremental_location = '*****') -- identifiers removed
-RESTORE TABLE foo FROM $1 IN $2 WITH OPTIONS (incremental_location = 'bar') -- passwords exposed
-
-parse
-RESTORE foo FROM $1 IN $2 WITH incremental_location = 'bar'
-----
-RESTORE TABLE foo FROM $1 IN $2 WITH OPTIONS (incremental_location = '*****') -- normalized!
-RESTORE TABLE (foo) FROM ($1) IN ($2) WITH OPTIONS (incremental_location = ('*****')) -- fully parenthesized
-RESTORE TABLE foo FROM $1 IN $1 WITH OPTIONS (incremental_location = '_') -- literals removed
-RESTORE TABLE _ FROM $1 IN $2 WITH OPTIONS (incremental_location = '*****') -- identifiers removed
-RESTORE TABLE foo FROM $1 IN $2 WITH OPTIONS (incremental_location = 'bar') -- passwords exposed
 
 parse
 RESTORE TABLE foo FROM 'abc' IN ($1, $2, 'bar')
@@ -546,13 +570,13 @@ RESTORE DATABASE _ FROM 'latest' IN '*****' WITH OPTIONS (experimental copy) -- 
 RESTORE DATABASE foo FROM 'latest' IN 'bar' WITH OPTIONS (experimental copy) -- passwords exposed
 
 parse
-RESTORE DATABASE foo FROM LATEST IN 'bar' WITH incremental_location = 'baz'
+RESTORE DATABASE foo FROM LATEST IN 'bar' WITH GRANTS
 ----
-RESTORE DATABASE foo FROM 'latest' IN '*****' WITH OPTIONS (incremental_location = '*****') -- normalized!
-RESTORE DATABASE foo FROM ('latest') IN ('*****') WITH OPTIONS (incremental_location = ('*****')) -- fully parenthesized
-RESTORE DATABASE foo FROM '_' IN '_' WITH OPTIONS (incremental_location = '_') -- literals removed
-RESTORE DATABASE _ FROM 'latest' IN '*****' WITH OPTIONS (incremental_location = '*****') -- identifiers removed
-RESTORE DATABASE foo FROM 'latest' IN 'bar' WITH OPTIONS (incremental_location = 'baz') -- passwords exposed
+RESTORE DATABASE foo FROM 'latest' IN '*****' WITH OPTIONS (grants) -- normalized!
+RESTORE DATABASE foo FROM ('latest') IN ('*****') WITH OPTIONS (grants) -- fully parenthesized
+RESTORE DATABASE foo FROM '_' IN '_' WITH OPTIONS (grants) -- literals removed
+RESTORE DATABASE _ FROM 'latest' IN '*****' WITH OPTIONS (grants) -- identifiers removed
+RESTORE DATABASE foo FROM 'latest' IN 'bar' WITH OPTIONS (grants) -- passwords exposed
 
 parse
 RESTORE DATABASE foo, baz FROM LATEST IN 'bar' AS OF SYSTEM TIME '1'

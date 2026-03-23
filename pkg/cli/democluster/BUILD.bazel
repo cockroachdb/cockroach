@@ -20,6 +20,7 @@ go_library(
         "//pkg/cli/clierror",
         "//pkg/cli/cliflags",
         "//pkg/cli/democluster/api",
+        "//pkg/cloud/nodelocal",
         "//pkg/jobs",
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/multitenant",
@@ -69,7 +70,6 @@ go_test(
     shard_count = 16,
     deps = [
         "//pkg/base",
-        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/cli/clisqlclient",
         "//pkg/cli/clisqlexec",
         "//pkg/multitenant/tenantcapabilitiespb",

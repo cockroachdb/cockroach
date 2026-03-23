@@ -2,10 +2,16 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "goexectrace",
-    srcs = ["simple_flight_recorder.go"],
+    srcs = [
+        "exectrace_meta.go",
+        "simple_flight_recorder.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/goexectrace",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/base",
+        "//pkg/build",
+        "//pkg/roachpb",
         "//pkg/server/dumpstore",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -28,5 +34,6 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/stop",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//trace",
     ],
 )

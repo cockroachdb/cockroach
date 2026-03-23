@@ -1,0 +1,30 @@
+# LogicTest: local-mixed-25.4
+
+subtest index_backfill
+
+statement ok
+CREATE TABLE dist_merge_idx (a INT NOT NULL PRIMARY KEY, b INT NOT NULL, c INT NOT NULL UNIQUE)
+
+statement ok
+INSERT INTO dist_merge_idx VALUES (1,1,1), (2,2,2), (3,3,3)
+
+let $index_backfill_dist_merge_mode
+SHOW CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode;
+
+statement ok
+SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = enabled
+
+statement error pq: .*distributed merge requires cluster version 26.*
+CREATE INDEX dist_merge_idx_idx ON dist_merge_idx (b)
+
+# Try an operation that is implemented in the declarative schema changer.
+statement error pq: .*distributed merge requires cluster version 26.*
+ALTER TABLE dist_merge_idx ALTER PRIMARY KEY USING COLUMNS (b)
+
+statement ok
+SET CLUSTER SETTING bulkio.index_backfill.distributed_merge.mode = '$index_backfill_dist_merge_mode';
+
+statement ok
+DROP TABLE dist_merge_idx
+
+subtest end

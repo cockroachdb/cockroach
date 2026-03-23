@@ -450,37 +450,67 @@ init-store-grant-coordinator
 GrantCoordinator:
  io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912930, disk-read-tokens-deducted: 0
 
-# Tokens already deducted is 0. Any writes that occur will be considered error.
-adjust-disk-error actual-write-bytes=10 actual-read-bytes=10
+# Tokens already deducted is 0. Any writes or reads that occur will be
+# considered error. The full cumulative error is applied: 150 + 150 = 300
+# tokens are deducted from disk-write-tokens-avail.
+adjust-disk-error actual-write-bytes=150 actual-read-bytes=150
 ----
 GrantCoordinator:
- io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912910, disk-read-tokens-deducted: 0
+ io-avail: 153722867280912930(153722867280912930), disk-write-tokens-avail: 153722867280912630, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=150, read=150), abs-error(write=150, read=150)
 
-set-tokens io-tokens=50 disk-write-tokens=70 disk-read-tokens=20 tick-interval=250
+set-tokens io-tokens=750 disk-write-tokens=1050 disk-read-tokens=300 tick-interval=250
 ----
 GrantCoordinator:
- io-avail: 50(50), disk-write-tokens-avail: 70, disk-read-tokens-deducted: 20
+ io-avail: 750(750), disk-write-tokens-avail: 1050, disk-read-tokens-deducted: 300 disk-tokens-error: cum-error(write=150, read=150), abs-error(write=150, read=150)
 
-# Tokens already deducted is 0. Any writes that occur will be considered error.
-# We accounted for 20B of reads, so reads in excess of that will be error. The
-# delta writes since last error adjustment is 10B, while delta reads since last
-# adjustment is 40B. Hence, error = writeErr + readErr = (10-0) + (40-20) = 30.
-# We expect 70-30=40 tokens available.
-adjust-disk-error actual-write-bytes=20 actual-read-bytes=50
+# Tokens already deducted for writes is 0. Any writes that occur will be
+# considered error. We assumed 300B of read tokens, so reads in excess of that
+# will be error. The delta writes since last error adjustment is 150B, while
+# delta reads since last adjustment is 600B. Hence, error observed = writeErr
+# + readErr = (150-0) + (600-300) = 150 + 300 = 450. The full cumulative
+# unaccounted error is applied, so 450 tokens are deducted from
+# disk-write-tokens-avail.
+adjust-disk-error actual-write-bytes=300 actual-read-bytes=750
 ----
 GrantCoordinator:
- io-avail: 50(50), disk-write-tokens-avail: 40, disk-read-tokens-deducted: 0
+ io-avail: 750(750), disk-write-tokens-avail: 600, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=300, read=450), abs-error(write=300, read=450)
 
-try-get work=regular v=10
+try-get work=regular v=150
 ----
-kv-regular: tryGet(10) returned true
+kv-regular: tryGet(150) returned true
 GrantCoordinator:
- io-avail: 40(40), disk-write-tokens-avail: 30, disk-read-tokens-deducted: 0
+ io-avail: 600(600), disk-write-tokens-avail: 450, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=300, read=450), abs-error(write=300, read=450)
 
-# +20B writes and +5B reads since last error accounting. Since we already
-# deducted 10B of write tokens during admission, the error here is 10B. We
-# exhausted the read token bucket already, so we will deduct directly this time.
-adjust-disk-error actual-write-bytes=40 actual-read-bytes=55
+# +300B writes and +75B reads since last error accounting. Since we already
+# deducted 150B of write tokens during admission, the observed write error
+# here is 150B. We exhausted the read token bucket already, so the observed
+# read error is 75B. The full unaccounted error is applied: 150 + 75 = 225
+# tokens are deducted from disk-write-tokens-avail.
+adjust-disk-error actual-write-bytes=600 actual-read-bytes=825
 ----
 GrantCoordinator:
- io-avail: 40(40), disk-write-tokens-avail: 15, disk-read-tokens-deducted: 0
+ io-avail: 600(600), disk-write-tokens-avail: 225, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=450, read=525), abs-error(write=450, read=525)
+
+set-tokens io-tokens=750 disk-write-tokens=1050 disk-read-tokens=300 tick-interval=250
+----
+GrantCoordinator:
+ io-avail: 750(750), disk-write-tokens-avail: 1050, disk-read-tokens-deducted: 300 disk-tokens-error: cum-error(write=450, read=525), abs-error(write=450, read=525)
+
+# With this deduction we have seen 300B of write tokens. Additionally, the
+# preceding set-tokens call has resulted in 300B of read tokens.
+try-get work=regular v=300
+----
+kv-regular: tryGet(300) returned true
+GrantCoordinator:
+ io-avail: 450(450), disk-write-tokens-avail: 750, disk-read-tokens-deducted: 300 disk-tokens-error: cum-error(write=450, read=525), abs-error(write=450, read=525)
+
+# The observed delta in actual disk writes is 75 (675-600), and actual disk
+# reads is 150 (975-825). But the token deduction is 300B for writes and 300B
+# for reads. Hence, the error is negative, which reduces the cum-error values,
+# while increasing the abs-error. The full unaccounted error is applied:
+# write error = -225, read error = -150, so -375 total (i.e., 375 tokens are
+# returned to disk-write-tokens-avail).
+adjust-disk-error actual-write-bytes=675 actual-read-bytes=975
+----
+GrantCoordinator:
+ io-avail: 450(450), disk-write-tokens-avail: 1125, disk-read-tokens-deducted: 0 disk-tokens-error: cum-error(write=225, read=375), abs-error(write=675, read=675)

@@ -38,7 +38,15 @@ func Do(args []string, name string, out interface{}) error {
 	pf.ParseErrorsWhitelist = pflag.ParseErrorsWhitelist{UnknownFlags: true}
 	args = append([]string(nil), args...)
 	for i, arg := range args {
-		if !strings.HasPrefix(arg, "-") {
+		if !strings.HasPrefix(arg, "-") || len(arg) == 1 {
+			// NB: `-` does not get transformed into `--` because consider that
+			// it's a valid string value, for example `-test.run -`. Unfortunately,
+			// `-asd` is also a valid string value. At this level, we really can't
+			// tell - we'd need to see the flag definitions. But at least we're not
+			// accidentally converting `-` into `--` which would instruct pflag
+			// parsing to stop looking for flags after this argument, which could
+			// lead to it missing the flag we're looking for.
+			// See TestRegressionSingleDashStringValue.
 			continue
 		}
 

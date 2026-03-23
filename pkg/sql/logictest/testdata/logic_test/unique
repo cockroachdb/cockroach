@@ -1,6 +1,6 @@
 # LogicTest: !weak-iso-level-configs
 # READ COMMITTED and REPEATABLE READ do not work with UNIQUE WITHOUT INDEX
-# constraints. See https://github.com/cockroachdb/cockroach/issues/110873.
+# constraints. See https://github.com/cockroachdb/cockroach/issues/126592.
 
 statement ok
 SET experimental_enable_unique_without_index_constraints = true
@@ -772,8 +772,10 @@ k  a  b
 # On conflict do update with a partial unique constraint.
 
 # Clear the table and insert new rows.
-statement ok
+statement count 12
 DELETE FROM uniq_partial;
+
+statement ok
 INSERT INTO uniq_partial VALUES (1, 1), (2, 2), (1, -1)
 
 # Insert non-conflicting rows.
@@ -867,7 +869,7 @@ statement ok
 UPDATE uniq_fk_child SET d = NULL WHERE a = 2
 
 # Now this should succeed and set e to NULL due to ON DELETE SET NULL.
-statement ok
+statement count 1
 DELETE FROM uniq_fk_parent WHERE a = 2
 
 query IIIII colnames,rowsort

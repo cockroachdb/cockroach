@@ -8,6 +8,7 @@ package backupinfo
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"path"
 	"slices"
@@ -23,10 +24,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -54,6 +62,7 @@ func WriteBackupIndexMetadata(
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	details jobspb.BackupDetails,
 	revisionStartTS hlc.Timestamp,
+	kmsEnv cloud.KMSEnv,
 ) error {
 	indexStore, err := makeExternalStorageFromURI(
 		ctx, details.CollectionURI, user,
@@ -63,8 +72,10 @@ func WriteBackupIndexMetadata(
 	}
 	defer indexStore.Close()
 
+	mem := execCfg.RootMemoryMonitor.MakeBoundAccount()
+	defer mem.Close(ctx)
 	if shouldWrite, err := shouldWriteIndex(
-		ctx, execCfg, indexStore, details,
+		ctx, &mem, execCfg, indexStore, kmsEnv, details,
 	); !shouldWrite {
 		return err
 	}
@@ -116,18 +127,41 @@ func WriteBackupIndexMetadata(
 
 // IndexExists checks if for a given full backup subdirectory there exists a
 // corresponding index in the backup collection. This is used to determine when
-// we should use the index or the legacy path.
-//
-// This works under the assumption that we only ever write an index iff:
-//  1. For an incremental backup, an index exists for its full backup.
-//  2. The backup was taken on a v25.4+ cluster.
+// we should use the index or the legacy path. To simplify the logic, we assume
+// that any chain that was written on a finalized 26.1+ cluster contains an
+// index. Otherwise, we assume there is no index.
 //
 // The store should be rooted at the default collection URI (the one that
-// contains the `index/` directory).
+// contains the `metadata/` directory).
 //
-// TODO (kev-cao): v25.4+ backups will always contain an index file. In other
-// words, we can remove these checks in v26.2+.
-func IndexExists(ctx context.Context, store cloud.ExternalStorage, subdir string) (bool, error) {
+// TODO (kev-cao): We can remove this check in 26.4 as all 26.2 clusters will be
+// considered to have indexes, and 26.4 clusters officially only support
+// restoring from 26.2+ backups.
+func IndexExists(
+	ctx context.Context,
+	mem *mon.BoundAccount,
+	store cloud.ExternalStorage,
+	subdir string,
+	enc *jobspb.BackupEncryptionOptions,
+	kmsEnv cloud.KMSEnv,
+) (bool, error) {
+	// Due to the change in backup index paths in v26.1, in a 25.4+26.1/2
+	// mixed-version cluster, it is possible to write to the 26.1+ index path for
+	// a full backup, downgrade the cluster, and then write to the 25.4 path for
+	// an incremental backup. As a result, the at-most one check for an index is
+	// insufficient in this state, so we instead check that the cluster version
+	// recorded for the full backup was at least a 26.1 cluster and avoid the
+	// mixed-version state entirely.
+	fullManifestPath := path.Join(subdir, backupbase.BackupMetadataName)
+	manifest, memSize, err := ReadBackupManifest(ctx, mem, store, fullManifestPath, enc, kmsEnv)
+	defer mem.Shrink(ctx, memSize)
+	if err != nil {
+		return false, errors.Wrapf(err, "reading backup manifest")
+	}
+	if !manifest.ClusterVersion.AtLeast(clusterversion.V26_1.Version()) {
+		return false, nil
+	}
+
 	var indexExists bool
 	indexDir, err := indexSubdir(subdir)
 	if err != nil {
@@ -136,7 +170,7 @@ func IndexExists(ctx context.Context, store cloud.ExternalStorage, subdir string
 	if err := store.List(
 		ctx,
 		indexDir,
-		"/",
+		cloud.ListOptions{Delimiter: "/"},
 		func(file string) error {
 			indexExists = true
 			// Because we delimit on `/` and the index subdir does not contain a
@@ -152,7 +186,7 @@ func IndexExists(ctx context.Context, store cloud.ExternalStorage, subdir string
 
 // ListIndexes lists all the index files for a backup chain rooted by the full
 // backup indicated by the subdir. The store should be rooted at the default
-// collection URI (the one that contains the `index/` directory). It returns
+// collection URI (the one that contains the `metadata/` directory). It returns
 // the basenames of the listed index files. It assumes that the subdir is
 // resolved and not `LATEST`.
 //
@@ -162,7 +196,11 @@ func IndexExists(ctx context.Context, store cloud.ExternalStorage, subdir string
 func ListIndexes(
 	ctx context.Context, store cloud.ExternalStorage, subdir string,
 ) ([]string, error) {
-	var indexBasenames []string
+	type indexTimes struct {
+		file       string
+		start, end time.Time
+	}
+	var indexes []indexTimes
 	indexDir, err := indexSubdir(subdir)
 	if err != nil {
 		return nil, err
@@ -170,59 +208,314 @@ func ListIndexes(
 	if err := store.List(
 		ctx,
 		indexDir+"/",
-		"",
+		cloud.ListOptions{},
 		func(file string) error {
-			indexBasenames = append(indexBasenames, path.Base(file))
+			// We assert that if a file ends with .pb in the index, it should be a
+			// parsable index file. Otherwise, we ignore it. This circumvents any temp
+			// files that may be created by the external storage implementation.
+			if !strings.HasSuffix(file, ".pb") {
+				log.Dev.Warningf(ctx, "unexpected file %s in index directory", file)
+				return nil
+			}
+
+			base := path.Base(file)
+			i := indexTimes{
+				file: base,
+			}
+			i.start, i.end, err = parseIndexBasename(base)
+			if err != nil {
+				return err
+			}
+			indexes = append(indexes, i)
 			return nil
 		},
 	); err != nil {
 		return nil, errors.Wrapf(err, "listing indexes in %s", subdir)
 	}
 
-	timeMemo := make(map[string][2]time.Time)
-	indexTimesFromFile := func(basename string) (time.Time, time.Time, error) {
-		if times, ok := timeMemo[basename]; ok {
-			return times[0], times[1], nil
-		}
-		start, end, err := parseIndexFilename(basename)
-		if err != nil {
-			return time.Time{}, time.Time{}, err
-		}
-		timeMemo[basename] = [2]time.Time{start, end}
-		return start, end, nil
-	}
-	var sortErr error
-	slices.SortFunc(indexBasenames, func(a, b string) int {
-		aStart, aEnd, err := indexTimesFromFile(a)
-		if err != nil {
-			sortErr = err
-		}
-		bStart, bEnd, err := indexTimesFromFile(b)
-		if err != nil {
-			sortErr = err
-		}
-		if aEnd.Before(bEnd) {
+	slices.SortFunc(indexes, func(a, b indexTimes) int {
+		if a.end.Before(b.end) {
 			return -1
-		} else if aEnd.After(bEnd) {
+		} else if a.end.After(b.end) {
 			return 1
 		}
 		// End times are equal, so break tie with start time.
-		if aStart.Before(bStart) {
+		if a.start.Before(b.start) {
 			return -1
 		} else {
 			return 1
 		}
 	})
-	if sortErr != nil {
-		return nil, errors.Wrapf(sortErr, "sorting index filenames")
+
+	return util.Map(indexes, func(i indexTimes) string {
+		return i.file
+	}), nil
+}
+
+// RestorableBackup represents a row in the `SHOW BACKUPS` output
+type RestorableBackup struct {
+	ID string
+	// EndTime is the exact end time of the backup if .OpenedIndex() is true.
+	// Otherwise, it will only be as precise as backup end times encoded in the
+	// index filename, e.g. tens of milliseconds.
+	EndTime hlc.Timestamp
+
+	// The following fields are only set if `SHOW BACKUPS` was ran with WITH
+	// REVISION START TIME.
+	openedIndex       bool
+	mvccFilter        backuppb.MVCCFilter
+	revisionStartTime hlc.Timestamp
+}
+
+// OpenedIndex returns whether the backup index was opened to populate additional
+// metadata about the backup.
+func (b RestorableBackup) OpenedIndex() bool {
+	return b.openedIndex
+}
+
+// RevisionStartTime returns the revision start time of the backup. You must
+// call .OpenedIndex() first to ensure that the index was opened; otherwise, this
+// method will panic.
+func (b RestorableBackup) RevisionStartTime(
+	ctx context.Context, sv *settings.Values,
+) hlc.Timestamp {
+	if !b.openedIndex {
+		logcrash.ReportOrPanic(
+			ctx, sv, "backup index was not opened; cannot retrieve revision start time",
+		)
+	}
+	return b.revisionStartTime
+}
+
+// MVCCFilter returns the MVCC filter used for the backup. You must call
+// .OpenedIndex() first to ensure that the index was opened; otherwise, this
+// method will panic.
+func (b RestorableBackup) MVCCFilter(ctx context.Context, sv *settings.Values) backuppb.MVCCFilter {
+	if !b.openedIndex {
+		logcrash.ReportOrPanic(
+			ctx, sv, "backup index was not opened; cannot retrieve MVCC filter",
+		)
+	}
+	return b.mvccFilter
+}
+
+// ListRestorableBackups lists all restorable backups from the backup index
+// within the specified time interval (inclusive at both ends). The store should
+// be rooted at the default collection URI (the one that contains the
+// `metadata/` directory). A maxCount of 0 indicates no limit on the number
+// of backups to return, otherwise, if the number of backups found exceeds
+// maxCount, iteration will stop early and the boolean return value will be
+// set to true. If withRevStartTime is true, the index files will be opened to
+// populate revision history metadata about the backup as well as fetch the
+// exact end time of the backup.
+//
+// NB: Duplicate end times within a chain are elided, as IDs only identify
+// unique end times within a chain. For the purposes of determining which
+// backup's metadata we use to populate the fields, we always pick the backup
+// with the newest start time among those with the same end time. Also note that
+// elision of the duplicate end times only applies within a chain; if two
+// different chains happen to have backups that end at the same time, both will
+// be included in the results.
+//
+// NB: Filtering is applied to backup end times truncated to tens of
+// milliseconds. As such, it is possible that a backup with an end time slightly
+// ahead of `before` may be included in the results.
+func ListRestorableBackups(
+	ctx context.Context,
+	store cloud.ExternalStorage,
+	newerThan, olderThan time.Time,
+	maxCount uint,
+	withRevStartTime bool,
+) ([]RestorableBackup, bool, error) {
+	ctx, trace := tracing.ChildSpan(ctx, "backupinfo.ListRestorableBackups")
+	defer trace.Finish()
+
+	var filteredIdxs []parsedIndex
+	var exceededMax bool
+	if err := listIndexesWithinRange(
+		ctx, store, newerThan, olderThan,
+		func(index parsedIndex) error {
+			if len(filteredIdxs) > 0 {
+				lastIdx := len(filteredIdxs) - 1
+				// Elide duplicate end times within a chain. Because indexes are fetched
+				// in descending order with ties broken by ascending start time, keeping
+				// the last one ensures that we keep the non-compacted backup.
+				if filteredIdxs[lastIdx].end.Equal(index.end) &&
+					filteredIdxs[lastIdx].fullEnd.Equal(index.fullEnd) {
+					if buildutil.CrdbTestBuild {
+						// Sanity check that start times are in ascending order for indexes
+						// with the same end time.
+						if index.start.Before(filteredIdxs[lastIdx].start) {
+							return errors.Newf(
+								"expected index start times to be in ascending order: %s vs %s",
+								index.start, filteredIdxs[lastIdx].start,
+							)
+						}
+					}
+					filteredIdxs[lastIdx] = index
+					return nil
+				}
+			}
+			filteredIdxs = append(filteredIdxs, index)
+			if maxCount > 0 && uint(len(filteredIdxs)) > maxCount {
+				exceededMax = true
+				return cloud.ErrListingDone
+			}
+			return nil
+		},
+	); err != nil {
+		return nil, false, err
+	}
+	if exceededMax {
+		filteredIdxs = filteredIdxs[:maxCount]
 	}
 
-	return indexBasenames, nil
+	if withRevStartTime {
+		var readTrace *tracing.Span
+		ctx, readTrace = tracing.ChildSpan(ctx, "backupinfo.ReadIndexFiles")
+		defer readTrace.Finish()
+	}
+
+	backups, err := util.MapE(filteredIdxs, func(index parsedIndex) (RestorableBackup, error) {
+		backupID, err := encodeBackupID(index.fullEnd, index.end)
+		if err != nil {
+			return RestorableBackup{}, err
+		}
+		if !withRevStartTime {
+			return RestorableBackup{
+				ID:      backupID,
+				EndTime: hlc.Timestamp{WallTime: index.end.UnixNano()},
+			}, nil
+		}
+
+		idxMeta, err := readIndexFile(ctx, store, index.filePath)
+		if err != nil {
+			return RestorableBackup{}, err
+		}
+		return RestorableBackup{
+			ID:                backupID,
+			EndTime:           idxMeta.EndTime,
+			openedIndex:       true,
+			mvccFilter:        idxMeta.MVCCFilter,
+			revisionStartTime: idxMeta.RevisionStartTime,
+		}, nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	return backups, exceededMax, nil
+}
+
+type parsedIndex struct {
+	filePath            string // path to the index relative to the backup collection root
+	fullEnd, start, end time.Time
+}
+
+// listIndexesWithinRange lists all index files whose end time falls within the
+// specified time interval (inclusive at both ends). The store should be rooted
+// at the default collection URI (the one that contains the `metadata/`
+// directory). The indexes are passed to the callback in descending end time
+// order, with ties broken by ascending start time order. To stop iteration
+// early, the callback can return cloud.ErrListingDone. Any other returned error
+// by the callback will be propagated back to the caller.
+//
+// NB: Filtering is applied to backup end times truncated to tens of
+// milliseconds.
+//
+// NB: The returned index times are only as precise as the timestamps encoded in
+// the index filenames.
+func listIndexesWithinRange(
+	ctx context.Context,
+	store cloud.ExternalStorage,
+	newerThan, olderThan time.Time,
+	cb func(parsedIndex) error,
+) error {
+	// First, find the full backup end time prefix we begin listing from. Since
+	// full backup end times are stored in descending order in the index, we add
+	// the maximum granularity of the timestamp encoding to ensure an inclusive
+	// start.
+	maxEndTime := olderThan.Add(backupbase.BackupIndexFilenameTSGranularity)
+	maxEndTimeSubdir, err := endTimeToIndexSubdir(maxEndTime)
+	if err != nil {
+		return err
+	}
+
+	// We don't immediately emit an index when we see it; instead, we hold onto
+	// it until the next index is seen. This is because we may need to swap with
+	// the next index in order to maintain descending end tinme order. This occurs
+	// when incremental backups are created and appended to the previous chain
+	// while the full backup for a new chain is still being run. Note that this
+	// swapping of the last two seen indexes only maintains a sorted order due to
+	// the way the backup index is sorted and the invariant that the existence of
+	// an incremental backup in a chain ensures that no backup in an older chain
+	// can have an end time greater than or equal to the incremental's end time.
+	var pendingEmit parsedIndex
+	err = store.List(
+		ctx,
+		backupbase.BackupIndexDirectoryPath+"/",
+		cloud.ListOptions{AfterKey: maxEndTimeSubdir},
+		func(file string) error {
+			if !strings.HasSuffix(file, ".pb") {
+				return nil
+			}
+			full, start, end, err := parseTimesFromIndexFilepath(file)
+			if err != nil {
+				return err
+			}
+			// Once we see an *incremental* backup with an end time before `after`, we
+			// can stop iterating as we have found all backups within the time range.
+			if !start.IsZero() && end.Before(newerThan) {
+				return cloud.ErrListingDone
+			}
+			if end.After(olderThan) || end.Before(newerThan) {
+				return nil
+			}
+			nextEntry := parsedIndex{
+				filePath: path.Join(backupbase.BackupIndexDirectoryPath, file),
+				fullEnd:  full,
+				start:    start,
+				end:      end,
+			}
+			if pendingEmit == (parsedIndex{}) {
+				pendingEmit = nextEntry
+				return nil
+			}
+			if !nextEntry.end.After(pendingEmit.end) {
+				// The pending emit has an end time less than or equal to the new entry,
+				// so we can guarantee that the pending emit is the next index to be
+				// flushed.
+				if err := cb(pendingEmit); err != nil {
+					return err
+				}
+				pendingEmit = nextEntry
+			} else {
+				// This new entry does have an end time newer than the last index, so we
+				// need to emit this one first and continue holding onto that previous
+				// index.
+				if err := cb(nextEntry); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
+	)
+	if err != nil && !errors.Is(err, cloud.ErrListingDone) {
+		return err
+	}
+
+	// Loop has ended, we can flush any pending index.
+	if pendingEmit != (parsedIndex{}) {
+		if err := cb(pendingEmit); err != nil && !errors.Is(err, cloud.ErrListingDone) {
+			return err
+		}
+	}
+	return nil
 }
 
 // GetBackupTreeIndexMetadata concurrently retrieves the index metadata for all
 // backups within the specified subdir. The store should be rooted at the
-// collection URI that contains the `index/` directory. Indexes are returned in
+// collection URI that contains the `metadata/` directory. Indexes are returned in
 // ascending end time order, with ties broken by ascending start time order.
 func GetBackupTreeIndexMetadata(
 	ctx context.Context, store cloud.ExternalStorage, subdir string,
@@ -240,22 +533,10 @@ func GetBackupTreeIndexMetadata(
 			if err != nil {
 				return err
 			}
-			reader, _, err := store.ReadFile(
-				ctx, path.Join(indexDir, basename), cloud.ReadOptions{},
-			)
+			indexFilePath := path.Join(indexDir, basename)
+			index, err := readIndexFile(ctx, store, indexFilePath)
 			if err != nil {
-				return errors.Wrapf(err, "reading index file %s", basename)
-			}
-			defer reader.Close(ctx)
-
-			bytes, err := ioctx.ReadAll(ctx, reader)
-			if err != nil {
-				return errors.Wrapf(err, "reading index file %s", basename)
-			}
-
-			index := backuppb.BackupIndexMetadata{}
-			if err := protoutil.Unmarshal(bytes, &index); err != nil {
-				return errors.Wrapf(err, "unmarshalling index file %s", basename)
+				return err
 			}
 			indexes[i] = index
 			return nil
@@ -269,6 +550,126 @@ func GetBackupTreeIndexMetadata(
 	return indexes, nil
 }
 
+// FindLatestBackup finds the index of the latest backup taken in the
+// collection. This backup does not necessarily belong to the latest chain
+// (incrementals from an older chain may be taken during a full backup).
+// The provided store must be rooted at the default collection URI (the one that
+// contains the `metadata/` directory). The ID of the discovered backup is also
+// returned.
+//
+// NB: If a full and incremental have the same end time, the latest chain (i.e.
+// the full) is chosen. If there are multiple incrementals within the same chain
+// that share the same end time, the incremental with the latest start time is
+// chosen. This ensures that the latest backup we pick is always the same backup
+// as what would be shown by ListRestorableBackups.
+func FindLatestBackup(
+	ctx context.Context, store cloud.ExternalStorage,
+) (backuppb.BackupIndexMetadata, string, error) {
+	var latestIdxFilepath string
+	var latestEnd time.Time
+	var lastSeenFullEnd time.Time
+	if err := store.List(
+		ctx,
+		backupbase.BackupIndexDirectoryPath,
+		cloud.ListOptions{},
+		func(file string) error {
+			fullEnd, _, endTime, err := parseTimesFromIndexFilepath(file)
+			if err != nil {
+				return err
+			}
+			if endTime.Before(latestEnd) {
+				// The moment we see an end time before the latest we've seen, we know
+				// that we found the latest backup in the previous iteration.
+				return cloud.ErrListingDone
+			} else if endTime.Equal(latestEnd) && !fullEnd.Equal(lastSeenFullEnd) {
+				// If the end time is equal, but the full end time has changed, we know
+				// that we have found the latest end time, and we should pick the newer
+				// chain.
+				return cloud.ErrListingDone
+			}
+			// Otherwise, we have either found a new latest end time, or we have
+			// found an incremental backup with the same end time as the latest and
+			// we always choose the latest start time to break ties, so we update.
+			latestEnd = endTime
+			latestIdxFilepath = path.Join(
+				backupbase.BackupIndexDirectoryPath, file,
+			)
+			lastSeenFullEnd = fullEnd
+			return nil
+		},
+	); err != nil && !errors.Is(err, cloud.ErrListingDone) {
+		return backuppb.BackupIndexMetadata{}, "", err
+	}
+	if latestIdxFilepath == "" {
+		return backuppb.BackupIndexMetadata{}, "", errors.Newf("no backups found in collection")
+	}
+
+	index, err := readIndexFile(ctx, store, latestIdxFilepath)
+	if err != nil {
+		return backuppb.BackupIndexMetadata{}, "", err
+	}
+	backupID, err := encodeBackupID(lastSeenFullEnd, latestEnd)
+	if err != nil {
+		return backuppb.BackupIndexMetadata{}, "", err
+	}
+	return index, backupID, nil
+}
+
+// ResolveBackupIDtoIndex takes a backup ID and resolves it to the corresponding
+// backup index. The store should be rooted at the default collection URI
+// (the one that contains the `metadata/` directory).
+//
+// NB: If there are multiple backups with the same end time (i.e. compacted
+// backups), the backup with the *latest* start time is chosen. This ensures
+// that the backup we choose is the same one we encoded in ListRestorableBackups.
+func ResolveBackupIDtoIndex(
+	ctx context.Context, store cloud.ExternalStorage, backupID string,
+) (backuppb.BackupIndexMetadata, error) {
+	fullEnd, backupEnd, err := DecodeBackupID(backupID)
+	if err != nil {
+		return backuppb.BackupIndexMetadata{}, err
+	}
+	indexSubdir, err := endTimeToIndexSubdir(fullEnd)
+	if err != nil {
+		return backuppb.BackupIndexMetadata{}, err
+	}
+
+	var matchingIdxFile string
+	if err := store.List(
+		ctx,
+		indexSubdir+"/",
+		cloud.ListOptions{},
+		func(file string) error {
+			_, end, err := parseIndexBasename(file)
+			if err != nil {
+				return err
+			}
+			if end.Equal(backupEnd) {
+				matchingIdxFile = path.Join(indexSubdir, file)
+			} else if end.Before(backupEnd) {
+				// By choosing to only stop listing after we see a backup OLDER than the
+				// end time encoded in the ID, we ensure that if there are multiple
+				// backups with the same end time, we pick the one with the latest start
+				// time as indexes are sorted with ascending start time breaking ties.
+				return cloud.ErrListingDone
+			}
+			return nil
+		},
+	); err != nil && !errors.Is(err, cloud.ErrListingDone) {
+		return backuppb.BackupIndexMetadata{}, errors.Wrapf(err, "listing index subdir %s", indexSubdir)
+	}
+	if matchingIdxFile == "" {
+		return backuppb.BackupIndexMetadata{}, errors.Newf(
+			"backup with ID %s not found", backupID,
+		)
+	}
+	index, err := readIndexFile(ctx, store, matchingIdxFile)
+	if err != nil {
+		return backuppb.BackupIndexMetadata{}, err
+	}
+	return index, nil
+}
+
 // ParseBackupFilePathFromIndexFileName parses the path to a backup given the
 // basename of its index file and its subdirectory. For full backups, the
 // returned path is relative to the root of the backup. For incremental
@@ -280,7 +681,7 @@ func GetBackupTreeIndexMetadata(
 // and derive it from the filename solely because backup paths are
 // millisecond-precise and so are the timestamps encoded in the filename.
 func ParseBackupFilePathFromIndexFileName(subdir, basename string) (string, error) {
-	start, end, err := parseIndexFilename(basename)
+	start, end, err := parseIndexBasename(basename)
 	if err != nil {
 		return "", err
 	}
@@ -296,7 +697,7 @@ func ParseBackupFilePathFromIndexFileName(subdir, basename string) (string, erro
 //
 // Note: The timestamps are only millisecond-precise and so do not represent the
 // exact nano-specific times in the corresponding backup manifest.
-func parseIndexFilename(basename string) (start time.Time, end time.Time, err error) {
+func parseIndexBasename(basename string) (start time.Time, end time.Time, err error) {
 	invalidFmtErr := errors.Newf("invalid index filename format: %s", basename)
 
 	if !strings.HasSuffix(basename, "_metadata.pb") {
@@ -321,57 +722,29 @@ func parseIndexFilename(basename string) (start time.Time, end time.Time, err er
 	return start, end, nil
 }
 
-// ListSubdirsFromIndex lists the paths of all full backup subdirectories that
-// have an entry in the index. The store should be rooted at the default
-// collection URI. The subdirs are returned in chronological order.
-func ListSubdirsFromIndex(ctx context.Context, store cloud.ExternalStorage) ([]string, error) {
-	var subdirs []string
-	if err := store.List(
-		ctx,
-		backupbase.BackupIndexDirectoryPath,
-		"/",
-		func(indexSubdir string) error {
-			indexSubdir = strings.TrimSuffix(indexSubdir, "/")
-			subdir, err := unflattenIndexSubdir(indexSubdir)
-			if err != nil {
-				return err
-			}
-			subdirs = append(subdirs, subdir)
-			return nil
-		},
-	); err != nil {
-		return nil, errors.Wrapf(err, "listing index subdirs")
-	}
-	return subdirs, nil
-}
-
 // shouldWriteIndex determines if a backup index file should be written for a
-// given backup. The rule is:
-//  1. An index should only be written on a v25.4+ cluster.
-//  2. An incremental backup only writes an index if its parent full has written
-//     an index file.
+// given backup. An incremental backup only writes an index if its parent full
+// has written an index file. This ensures that if a backup chain exists in the
+// index directory, then every backup in that chain has an index file, ensuring
+// that the index is usable.
 //
-// This ensures that if a backup chain exists in the index directory, then every
-// backup in that chain has an index file, ensuring that the index is usable.
+// TODO (kev-cao): This check can be removed in 26.4 and indexes will always be
+// written.
 func shouldWriteIndex(
 	ctx context.Context,
+	mem *mon.BoundAccount,
 	execCfg *sql.ExecutorConfig,
 	store cloud.ExternalStorage,
+	kmsEnv cloud.KMSEnv,
 	details jobspb.BackupDetails,
 ) (bool, error) {
-	// This version check can be removed in v26.1 when we no longer need to worry
-	// about a mixed-version cluster where we have both v25.4+ nodes and pre-v25.4
-	// nodes.
-	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V25_4) {
-		return false, nil
-	}
-
-	// As we are going to be deprecating the `incremental_location` option, we
-	// will avoid writing an index for any backups that specify an `incremental`
-	// location. Note that if `incremental_location` is explicitly set to the
-	// default location, then we will have some backups containing an index and
-	// others not. We are treating this as an unsupported state and the user
-	// should not use `incremental_location` in this manner.
+	// While `incremental_location` has been removed in 26.2, we still need to
+	// keep this check for one major version. A backup with custom incremental
+	// locations could be started on a 25.4 node, then the cluster could be
+	// upgraded and the job dropped. It could then be picked up by a 26.2 node. If
+	// this check were removed, we'd end up writing an index for a backup with a
+	// custom incremental location.
+	// TODO (kev-cao): Remove this check in v26.4.
 	if len(details.Destination.IncrementalStorage) != 0 {
 		return false, nil
 	}
@@ -381,7 +754,7 @@ func shouldWriteIndex(
 		return true, nil
 	}
 
-	return IndexExists(ctx, store, details.Destination.Subdir)
+	return IndexExists(ctx, mem, store, details.Destination.Subdir, details.EncryptionOptions, kmsEnv)
 }
 
 // getBackupIndexFilePath returns the path to the backup index file representing
@@ -417,54 +790,250 @@ func getBackupIndexFileName(startTime, endTime hlc.Timestamp) string {
 	)
 }
 
+// endTimeToIndexSubdir converts an end time to the full path to its
+// corresponding index subdir.
+//
+// Example:
+// 2025-08-13 12:00:00.00 -> metadata/index/<encoded_full_end>_20250813-120000.00
+func endTimeToIndexSubdir(endTime time.Time) (string, error) {
+	subdir := endTime.Format(backupbase.DateBasedIntoFolderName)
+	return indexSubdir(subdir)
+}
+
+// indexSubdirToEndTime extracts the end time from an index subdir.
+//
+// Example:
+// <encoded_full_end>_20250813-120000.00 -> 2025-08-13 12:00:00.00
+func indexSubdirToEndTime(indexSubdir string) (time.Time, error) {
+	parts := strings.Split(indexSubdir, "_")
+	if len(parts) != 2 {
+		return time.Time{}, errors.Newf(
+			"invalid index subdir format: %s", indexSubdir,
+		)
+	}
+	endTime, err := time.Parse(backupbase.BackupIndexFilenameTimestampFormat, parts[1])
+	if err != nil {
+		return time.Time{}, errors.Wrapf(
+			err, "index subdir %s could not be decoded", indexSubdir,
+		)
+	}
+	return endTime, nil
+}
+
 // indexSubdir is a convenient helper function to get the corresponding index
 // path for a given full backup subdir. The path is relative to the root of the
 // collection URI and does not contain a trailing slash. It assumes that subdir
 // has been resolved and is not `LATEST`.
+//
+// Example:
+// /2025/08/13-120000.00 -> metadata/index/<encoded_full_end>_20250813-120000.00
 func indexSubdir(subdir string) (string, error) {
-	flattened, err := flattenSubdirForIndex(subdir)
+	flattened, err := convertSubdirToIndexSubdir(subdir)
 	if err != nil {
 		return "", err
 	}
 	return path.Join(backupbase.BackupIndexDirectoryPath, flattened), nil
 }
 
-// flattenSubdirForIndex flattens a full backup subdirectory to be used in the
-// index. Note that this path does not contain a trailing or leading slash.
+// convertSubdirToIndexSubdir flattens a full backup subdirectory to be used in
+// the index. Note that this path does not contain a trailing or leading slash.
 // It assumes subdir is not `LATEST` and has been resolved.
 // We flatten the subdir so that when listing from the index, we can list with
-// the `index/` prefix and delimit on `/`. e.g.:
+// the index prefix and delimit on `/`. e.g.:
 //
-// index/
+// metadata/index/
 //
-//	|_ 2025-08-13-120000.00/
+//	|_ <desc_end_time>_20250813-120000.00/
 //	|  |_ <index_meta>.pb
-//	|_ 2025-08-14-120000.00/
+//	|_ <desc_end_time>_20250814-120000.00/
 //	|  |_ <index_meta>.pb
-//	|_ 2025-08-14-120000.00/
+//	|_ <desc_end_time>_20250814-120000.00/
 //		 |_ <index_meta>.pb
 //
-// Listing on `index/` and delimiting on `/` will return the subdirectories
-// without listing the files in them.
-func flattenSubdirForIndex(subdir string) (string, error) {
+// Listing on `metadata/index/` and delimiting on `/` will return the
+// subdirectories without listing the files in them.
+//
+// Example:
+// /2025/08/13-120000.00 -> <encoded_full_end>_20250813-120000.00
+func convertSubdirToIndexSubdir(subdir string) (string, error) {
 	subdirTime, err := time.Parse(backupbase.DateBasedIntoFolderName, subdir)
 	if err != nil {
 		return "", errors.Wrapf(
-			err, "subdir does not match format '%s'", backupbase.DateBasedIntoFolderName,
+			err, "invalid subdir format: %s", subdir,
 		)
 	}
-	return subdirTime.Format(backupbase.BackupIndexFlattenedSubdir), nil
+	return fmt.Sprintf(
+		"%s_%s",
+		backuputils.EncodeDescendingTS(subdirTime),
+		subdirTime.Format(backupbase.BackupIndexFilenameTimestampFormat),
+	), nil
 }
 
-// unflattenIndexSubdir is the inverse of flattenSubdirForIndex. It converts a
-// flattened index subdir back to the original full backup subdir.
-func unflattenIndexSubdir(flattened string) (string, error) {
-	subdirTime, err := time.Parse(backupbase.BackupIndexFlattenedSubdir, flattened)
-	if err != nil {
-		return "", errors.Wrapf(
-			err, "index subdir does not match format %s", backupbase.BackupIndexFlattenedSubdir,
+// convertIndexSubdirToSubdir converts an index subdir back to the
+// original full backup subdir.
+//
+// Example:
+// <encoded_full_end>_20250813-120000.00 -> /2025/08/13-120000.00
+func convertIndexSubdirToSubdir(flattened string) (string, error) {
+	parts := strings.Split(flattened, "_")
+	if len(parts) != 2 {
+		return "", errors.Newf(
+			"invalid index subdir format: %s", flattened,
 		)
 	}
-	unflattened := subdirTime.Format(backupbase.DateBasedIntoFolderName)
+	descSubdirTime, err := backuputils.DecodeDescendingTS(parts[0])
+	if err != nil {
+		return "", errors.Wrapf(
+			err, "index subdir %s could not be decoded", flattened,
+		)
+	}
+	// Validate that the two parts of the index subdir correspond to the same time.
+	subdirTime, err := time.Parse(backupbase.BackupIndexFilenameTimestampFormat, parts[1])
+	if err != nil {
+		return "", errors.Wrapf(
+			err, "index subdir %s could not be decoded", flattened,
+		)
+	}
+	if !descSubdirTime.Equal(subdirTime) {
+		return "", errors.Newf(
+			"index subdir %s has mismatched timestamps", flattened,
+		)
+	}
+	unflattened := descSubdirTime.Format(backupbase.DateBasedIntoFolderName)
 	return unflattened, nil
+}
+
+// parseTimesFromIndexFilepath extracts the full end time, start time, and end
+// time from the index file path. The filepath is relative to the index
+// directory.
+//
+// Example:
+// <encoded_full_end>_<full_end>/<encoded_end>_<start>_<end>_metadata.pb ->
+//
+// full_end, start, end
+func parseTimesFromIndexFilepath(filepath string) (fullEnd, start, end time.Time, err error) {
+	parts := strings.Split(filepath, "/")
+	if len(parts) != 2 {
+		return time.Time{}, time.Time{}, time.Time{}, errors.Newf(
+			"invalid index filepath format: %s", filepath,
+		)
+	}
+
+	fullEnd, err = indexSubdirToEndTime(parts[0])
+	if err != nil {
+		return time.Time{}, time.Time{}, time.Time{}, err
+	}
+
+	start, end, err = parseIndexBasename(path.Base(parts[1]))
+	if err != nil {
+		return time.Time{}, time.Time{}, time.Time{}, err
+	}
+
+	return fullEnd, start, end, nil
+}
+
+// readIndexFile reads and unmarshals the backup index file at the given path.
+// store should be rooted at the default collection URI (the one that contains
+// the `metadata/` directory). The indexFilePath is relative to the collection
+// URI.
+func readIndexFile(
+	ctx context.Context, store cloud.ExternalStorage, indexFilePath string,
+) (backuppb.BackupIndexMetadata, error) {
+	reader, _, err := store.ReadFile(ctx, indexFilePath, cloud.ReadOptions{})
+	if err != nil {
+		return backuppb.BackupIndexMetadata{}, errors.Wrapf(err, "reading index file %s", indexFilePath)
+	}
+	defer besteffort.Cleanup(ctx, "cleanup-index-reader", func() error {
+		return reader.Close(ctx)
+	})
+
+	bytes, err := ioctx.ReadAll(ctx, reader)
+	if err != nil {
+		return backuppb.BackupIndexMetadata{}, errors.Wrapf(err, "reading index file %s", indexFilePath)
+	}
+
+	idxMeta := backuppb.BackupIndexMetadata{}
+	if err := protoutil.Unmarshal(bytes, &idxMeta); err != nil {
+		return backuppb.BackupIndexMetadata{}, errors.Wrapf(err, "unmarshalling index file %s", indexFilePath)
+	}
+	return idxMeta, nil
+}
+
+// encodeBackupID generates a backup ID for a backup identified by its parent
+// full end time and its own end time.
+//
+// NB: The times passed to this function are expected to be as precise as the
+// timestamps encoded in the index file names, no more or less.
+func encodeBackupID(fullEnd time.Time, backupEnd time.Time) (string, error) {
+	if !fullEnd.Equal(fullEnd.Truncate(backupbase.BackupIndexFilenameTSGranularity)) ||
+		!backupEnd.Equal(backupEnd.Truncate(backupbase.BackupIndexFilenameTSGranularity)) {
+		return "", errors.AssertionFailedf(
+			"end times encoded in backup ID can have a maximum granularity of %s: "+
+				"received full end %s and backup end %s",
+			backupbase.BackupIndexFilenameTSGranularity, fullEnd, backupEnd,
+		)
+	}
+	var buf []byte
+	buf = encoding.EncodeUint64Ascending(buf, uint64(fullEnd.UnixMilli()))
+	buf = encoding.EncodeUint64Ascending(buf, uint64(backupEnd.UnixMilli()))
+	// Because backups with the same chain share a full end time, we XOR the
+	// backup end time with the full end time and reverse the bytes to provide
+	// more easily distinguishable IDs.
+	for i := range 8 {
+		buf[i] = buf[i] ^ buf[i+8]
+	}
+	slices.Reverse(buf)
+	// Many backups will end up ending with trailing zeroes since incremental
+	// backups tend to share a YYYY/MM/DD with their fulls. We can truncate these
+	// in the encoding and re-add them during decoding.
+	buf = bytes.TrimRight(buf, "\x00")
+	return base64.URLEncoding.EncodeToString(buf), nil
+}
+
+// DecodeBackupID decodes a backup ID into its corresponding full end time and
+// backup end time.
+//
+// NB: Because the backup IDs are encodings of timestamps that are as precise as
+// the timestamps encoded in the index file names, the returned times are only
+// as precise as that.
+func DecodeBackupID(backupID string) (fullEnd time.Time, backupEnd time.Time, err error) {
+	if backupID == "" {
+		return time.Time{}, time.Time{}, errors.Newf("failed decoding backup ID: cannot be empty")
+	}
+
+	decoded, err := base64.URLEncoding.DecodeString(backupID)
+	if err != nil {
+		return time.Time{}, time.Time{}, errors.Wrapf(err, "failed decoding backup ID %s", backupID)
+	} else if len(decoded) > 16 {
+		return time.Time{}, time.Time{}, errors.Newf("failed decoding backup ID %s: invalid encoding", backupID)
+	}
+	// Re-add trailing zeroes that may have been trimmed during encoding.
+	padded := make([]byte, 16)
+	copy(padded[:len(decoded)], decoded)
+	slices.Reverse(padded)
+	// Reverse the XOR obfuscation.
+	for i := range 8 {
+		padded[i] = padded[i] ^ padded[i+8]
+	}
+
+	_, fullEndMillis, err := encoding.DecodeUint64Ascending(padded)
+	if err != nil {
+		return time.Time{}, time.Time{}, errors.Wrapf(err, "failed decoding full end time from backup ID %s", backupID)
+	}
+	_, backupEndMillis, err := encoding.DecodeUint64Ascending(padded[8:])
+	if err != nil {
+		return time.Time{}, time.Time{}, errors.Wrapf(err, "failed decoding backup end time from backup ID %s", backupID)
+	}
+
+	return time.UnixMilli(int64(fullEndMillis)).UTC(), time.UnixMilli(int64(backupEndMillis)).UTC(), nil
+}
+
+// BackupIDToFullSubdir converts a backup ID to its corresponding full backup
+// subdirectory.
+func BackupIDToFullSubdir(backupID string) (string, error) {
+	fullEnd, _, err := DecodeBackupID(backupID)
+	if err != nil {
+		return "", err
+	}
+	return fullEnd.Format(backupbase.DateBasedIntoFolderName), nil
 }

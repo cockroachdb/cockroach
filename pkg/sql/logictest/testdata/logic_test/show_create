@@ -1,4 +1,4 @@
-# LogicTest: default-configs 3node-tenant local-leased-descriptors
+# LogicTest: default-configs 3node-tenant
 
 statement ok
 SET experimental_enable_unique_without_index_constraints = true

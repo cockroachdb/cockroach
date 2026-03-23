@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geoindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/storageparam/indexstorageparam"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecsettings"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -44,11 +44,6 @@ import (
 
 // CreateIndex implements CREATE INDEX.
 func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
-	// Ensure that the cluster is fully upgraded to 25.2 before creating a vector index.
-	if n.Type == idxtype.VECTOR && !b.EvalCtx().Settings.Version.ActiveVersion(b).AtLeast(clusterversion.V25_2.Version()) {
-		panic(pgerror.Newf(pgcode.FeatureNotSupported, "cannot create a vector index until finalizing on 25.2"))
-	}
-
 	b.IncrementSchemaChangeCreateCounter("index")
 	// Resolve the table name and start building the new index element.
 	relationElements := b.ResolveRelation(n.Table.ToUnresolvedObjectName(), ResolveParams{
@@ -69,7 +64,7 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	if n.Type == idxtype.VECTOR {
 		// Disable vector indexes by default in 25.2.
 		// TODO(andyk): Remove this check after 25.2.
-		if err := vecindex.CheckEnabled(&b.ClusterSettings().SV); err != nil {
+		if err := vecsettings.CheckEnabled(&b.ClusterSettings().SV); err != nil {
 			panic(err)
 		}
 	}
@@ -198,9 +193,23 @@ func CreateIndex(b BuildCtx, n *tree.CreateIndex) {
 	maybeAddPartitionDescriptorForIndex(b, n, &idxSpec)
 	// If necessary set up a partial predicate.
 	maybeAddIndexPredicate(b, n, &idxSpec)
-	// Picks up any geoconfig/vecconfig parameters, hash sharded ones are
-	// picked independently.
-	maybeApplyStorageParameters(b, n.StorageParams, &idxSpec)
+	// Validate and apply storage parameters specified in the WITH clause.
+	if err := paramparse.ValidateIndexStorageParams(
+		b,
+		n.StorageParams,
+		paramparse.IndexStorageParamContext{
+			IsUnique:                n.Unique,
+			IsSharded:               n.Sharded != nil,
+			HasImplicitPartitioning: idxSpec.partitioning != nil && idxSpec.partitioning.NumImplicitColumns > 0,
+			Version:                 b.EvalCtx().Settings.Version,
+		},
+	); err != nil {
+		panic(err)
+	}
+	maybeApplyStorageParameters(b, n.StorageParams, &idxSpec.secondary.Index, idxSpec.partitioning)
+	if idxSpec.temporary != nil {
+		idxSpec.temporary.SkipUniqueChecks = idxSpec.secondary.SkipUniqueChecks
+	}
 
 	switch n.Type {
 	case idxtype.INVERTED:
@@ -412,7 +421,7 @@ func processColNodeType(
 		case types.PGVectorFamily:
 			// Create config for vector index, using the number of dimensions from
 			// the vector column.
-			cfg, err := vecindex.MakeVecConfig(b, b.EvalCtx(), columnType.Type, columnNode.OpClass)
+			cfg, err := vecsettings.MakeVecConfig(b, b.EvalCtx(), columnType.Type, columnNode.OpClass)
 			if err != nil {
 				panic(err)
 			}
@@ -456,26 +465,28 @@ func maybeAddPartitionDescriptorForIndex(b BuildCtx, n *tree.CreateIndex, idxSpe
 		n.PartitionByIndex = &tree.PartitionByIndex{
 			PartitionBy: &tree.PartitionBy{},
 		}
-		var indexImplicitCols []*scpb.IndexColumn
-		scpb.ForEachIndexColumn(relationElts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn) {
-			if e.IndexID == idxSpec.secondary.SourceIndexID && e.Implicit {
-				indexImplicitCols = append(indexImplicitCols, e)
-			}
-		})
-		sort.Slice(indexImplicitCols, func(i, j int) bool {
-			return indexImplicitCols[i].OrdinalInKind < indexImplicitCols[j].OrdinalInKind
-		})
-
-		for _, ic := range indexImplicitCols {
-			columnName := mustRetrieveColumnNameElem(b, ic.TableID, ic.ColumnID)
-			n.PartitionByIndex.Fields = append(n.PartitionByIndex.Fields, tree.Name(columnName.Name))
-		}
-		// Recover the rest from the partitioning data.
+		// Get the source index's partitioning to find NumColumns.
+		var sourcePartitioning *scpb.IndexPartitioning
 		scpb.ForEachIndexPartitioning(relationElts, func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexPartitioning) {
 			if e.IndexID == idxSpec.secondary.SourceIndexID {
-				idxSpec.partitioning = protoutil.Clone(e).(*scpb.IndexPartitioning)
+				sourcePartitioning = e
 			}
 		})
+		if sourcePartitioning != nil {
+			// Clone the partitioning for the new index.
+			idxSpec.partitioning = protoutil.Clone(sourcePartitioning).(*scpb.IndexPartitioning)
+			// Get the partition columns from the source index's key columns.
+			// We need the first NumColumns key columns, regardless of whether
+			// they're marked as Implicit (they won't be if they're explicitly
+			// part of the primary key).
+			numPartitionCols := int(sourcePartitioning.NumColumns)
+			sourceKeyColumns := getIndexColumns(relationElts, idxSpec.secondary.SourceIndexID, scpb.IndexColumn_KEY)
+			// Add the first numPartitionCols columns to the partition fields.
+			for i := 0; i < numPartitionCols && i < len(sourceKeyColumns); i++ {
+				columnName := mustRetrieveColumnNameElem(b, sourceKeyColumns[i].TableID, sourceKeyColumns[i].ColumnID)
+				n.PartitionByIndex.Fields = append(n.PartitionByIndex.Fields, tree.Name(columnName.Name))
+			}
+		}
 	}
 	if n.PartitionByIndex.ContainsPartitions() || idxSpec.partitioning != nil {
 		// Detect if the partitioning overlaps with any of the secondary index
@@ -490,12 +501,19 @@ func maybeAddPartitionDescriptorForIndex(b BuildCtx, n *tree.CreateIndex, idxSpe
 					}
 				}
 			})
+			// Check if this is a REGIONAL BY ROW table. Since REGIONAL BY ROW
+			// and PARTITION ALL BY are mutually exclusive (in fact the former
+			// creates implicit PARTITION ALL BY LIST(crdb_region)
+			// partitioning), we only need to confirm one to rule out the
+			// other.
+			isRegionalByRow := isTableLocalityRegionalByRow(b, idxSpec.secondary.TableID)
 			for _, col := range idxSpec.columns {
 				if _, ok := implicitColumns[col.ColumnID]; !col.Implicit && ok {
-					panic(pgerror.New(
-						pgcode.FeatureNotSupported,
-						`hash sharded indexes cannot include implicit partitioning columns from "PARTITION ALL BY" or "LOCALITY REGIONAL BY ROW"`,
-					))
+					if isRegionalByRow {
+						panic(sqlerrors.NewIndexIncludesImplicitPartitionColFromRBR)
+					} else {
+						panic(sqlerrors.NewIndexIncludeImplicitPartitionColFromPartitionAllBy)
+					}
 				}
 			}
 		}
@@ -507,6 +525,7 @@ func maybeAddPartitionDescriptorForIndex(b BuildCtx, n *tree.CreateIndex, idxSpe
 					&idxSpec.secondary.Index, idxSpec.columns, n.PartitionByIndex.PartitionBy),
 			}
 		} else {
+			idxSpec.partitioning.TableID = idxSpec.secondary.TableID
 			idxSpec.partitioning.IndexID = idxSpec.secondary.IndexID
 		}
 		var columnsToPrepend []*scpb.IndexColumn
@@ -537,6 +556,14 @@ func maybeAddPartitionDescriptorForIndex(b BuildCtx, n *tree.CreateIndex, idxSpe
 			columnsToPrepend = append(columnsToPrepend, newIndexColumn)
 		}
 		idxSpec.columns = append(columnsToPrepend, idxSpec.columns...)
+		// Update NumImplicitColumns to reflect the columns we just prepended.
+		// This is needed when cloning partitioning from the source index where
+		// the partition columns are explicitly part of the primary key (and thus
+		// NumImplicitColumns is 0 there), but for this secondary index they are
+		// being prepended implicitly.
+		if idxSpec.partitioning != nil {
+			idxSpec.partitioning.NumImplicitColumns = uint32(len(columnsToPrepend))
+		}
 		switch n.Type {
 		case idxtype.INVERTED:
 			b.IncrementSchemaChangeIndexCounter("partitioned_inverted")
@@ -647,6 +674,7 @@ func addColumnsForSecondaryIndex(
 	// Set the key suffix column IDs.
 	// We want to find the key column IDs
 	var keySuffixColumns []*scpb.IndexColumn
+	primaryKeyStoringCols := map[string]struct{}{}
 	scpb.ForEachIndexColumn(relationElements, func(
 		current scpb.Status, target scpb.TargetStatus, e *scpb.IndexColumn,
 	) {
@@ -679,11 +707,16 @@ func addColumnsForSecondaryIndex(
 		// earlier so this covers any extra columns.
 		columnName := mustRetrieveColumnNameElem(b, e.TableID, e.ColumnID)
 		if _, found := columnRefs[columnName.Name]; found {
-			panic(errors.WithDetailf(
-				sqlerrors.NewColumnAlreadyExistsInIndexError(string(n.Name), columnName.Name),
-				"column %q is part of the primary index and therefore implicit in all indexes", columnName.Name))
+			b.EvalCtx().ClientNoticeSender.BufferClientNotice(b,
+				pgnotice.Newf(
+					"index %q already contains column %q which is part of the primary key and therefore implicit in all indexes",
+					string(n.Name), columnName.Name,
+				),
+			)
+			primaryKeyStoringCols[columnName.Name] = struct{}{}
+		} else {
+			columnRefs[columnName.Name] = struct{}{}
 		}
-		columnRefs[columnName.Name] = struct{}{}
 		keySuffixColumns = append(keySuffixColumns, e)
 	})
 	sort.Slice(keySuffixColumns, func(i, j int) bool {
@@ -703,7 +736,11 @@ func addColumnsForSecondaryIndex(
 	}
 
 	// Set the storing column IDs.
-	for i, storingNode := range n.Storing {
+	storeOrdinal := uint32(0)
+	for _, storingNode := range n.Storing {
+		if _, skip := primaryKeyStoringCols[string(storingNode)]; skip {
+			continue
+		}
 		colElts := b.ResolveColumn(tableID, storingNode, ResolveParams{
 			RequiredPrivilege: privilege.CREATE,
 		})
@@ -714,10 +751,11 @@ func addColumnsForSecondaryIndex(
 			TableID:       idxSpec.secondary.TableID,
 			IndexID:       idxSpec.secondary.IndexID,
 			ColumnID:      column.ColumnID,
-			OrdinalInKind: uint32(i),
+			OrdinalInKind: storeOrdinal,
 			Kind:          scpb.IndexColumn_STORED,
 		}
 		idxSpec.columns = append(idxSpec.columns, c)
+		storeOrdinal++
 	}
 	// Set up sharding.
 	if n.Sharded != nil {
@@ -857,14 +895,10 @@ func maybeCreateAndAddShardCol(
 		notNull: true,
 	}
 	wexpr := b.WrapExpression(tbl.TableID, parsedExpr)
-	if spec.colType.ElementCreationMetadata.In_24_3OrLater {
-		spec.compute = &scpb.ColumnComputeExpression{
-			TableID:    tbl.TableID,
-			ColumnID:   shardColID,
-			Expression: *wexpr,
-		}
-	} else {
-		spec.colType.ComputeExpr = wexpr
+	spec.compute = &scpb.ColumnComputeExpression{
+		TableID:    tbl.TableID,
+		ColumnID:   shardColID,
+		Expression: *wexpr,
 	}
 
 	if spec.colType.ElementCreationMetadata.In_26_1OrLater {
@@ -1024,38 +1058,42 @@ func maybeAddIndexPredicate(b BuildCtx, n *tree.CreateIndex, idxSpec *indexSpec)
 	}
 }
 
-// maybeApplyStorageParameters apply any storage parameters into the index spec.
-func maybeApplyStorageParameters(b BuildCtx, storageParams tree.StorageParams, idxSpec *indexSpec) {
+// maybeApplyStorageParameters parses storage params, applies them to the
+// index, and validates the result. The caller is responsible for propagating
+// values to any associated temporary indexes.
+func maybeApplyStorageParameters(
+	b BuildCtx,
+	storageParams tree.StorageParams,
+	idx *scpb.Index,
+	partitioning *scpb.IndexPartitioning,
+) {
 	if len(storageParams) == 0 {
 		return
 	}
 
-	// Handle storage params for geospatial inverted indexes and vector indexes.
 	dummyIndexDesc := &descpb.IndexDescriptor{}
-	if idxSpec.secondary != nil {
-		if idxSpec.secondary.GeoConfig != nil {
-			dummyIndexDesc.GeoConfig = *idxSpec.secondary.GeoConfig
-		} else if idxSpec.secondary.VecConfig != nil {
-			dummyIndexDesc.VecConfig = *idxSpec.secondary.VecConfig
-		}
+	if idx.GeoConfig != nil {
+		dummyIndexDesc.GeoConfig = *idx.GeoConfig
+	} else if idx.VecConfig != nil {
+		dummyIndexDesc.VecConfig = *idx.VecConfig
 	}
 	storageParamSetter := &indexstorageparam.Setter{
 		IndexDesc: dummyIndexDesc,
+		NewObject: true,
 	}
-	err := storageparam.Set(b, b.SemaCtx(), b.EvalCtx(), storageParams, storageParamSetter)
-	if err != nil {
+	if err := storageparam.Set(b, b.SemaCtx(), b.EvalCtx(), storageParams, storageParamSetter); err != nil {
 		panic(err)
 	}
-	if idxSpec.secondary != nil {
-		if idxSpec.secondary.GeoConfig != nil {
-			if !dummyIndexDesc.GeoConfig.IsEmpty() {
-				idxSpec.secondary.GeoConfig = &dummyIndexDesc.GeoConfig
-			} else {
-				idxSpec.secondary.GeoConfig = nil
-			}
-		} else if idxSpec.secondary.VecConfig != nil {
-			*idxSpec.secondary.VecConfig = dummyIndexDesc.VecConfig
+
+	idx.SkipUniqueChecks = dummyIndexDesc.SkipUniqueChecks
+	if idx.GeoConfig != nil {
+		if !dummyIndexDesc.GeoConfig.IsEmpty() {
+			idx.GeoConfig = &dummyIndexDesc.GeoConfig
+		} else {
+			idx.GeoConfig = nil
 		}
+	} else if idx.VecConfig != nil {
+		*idx.VecConfig = dummyIndexDesc.VecConfig
 	}
 }
 

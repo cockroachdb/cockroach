@@ -62,7 +62,7 @@ func TestSerialUnorderedSynchronizer(t *testing.T) {
 	s.Init(ctx)
 	resultBatches := 0
 	for {
-		b := s.Next()
+		b := colexecop.NextNoMeta(s)
 		if b.Length() == 0 {
 			require.Equal(t, len(inputs), len(s.DrainMeta()))
 			break

@@ -21,7 +21,7 @@ import (
 )
 
 func BenchmarkCoverageChecks(b *testing.B) {
-	tc, _, _, cleanupFn := backupRestoreTestSetup(b, singleNode, 1, InitManualReplication)
+	tc, _, _, cleanupFn := backupRestoreTestSetup(b, singleNode, 2, InitManualReplication)
 	defer cleanupFn()
 	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
 	ctx := context.Background()
@@ -56,7 +56,7 @@ func BenchmarkCoverageChecks(b *testing.B) {
 }
 
 func BenchmarkRestoreEntryCover(b *testing.B) {
-	tc, _, _, cleanupFn := backupRestoreTestSetup(b, singleNode, 1, InitManualReplication)
+	tc, _, _, cleanupFn := backupRestoreTestSetup(b, singleNode, 2, InitManualReplication)
 	defer cleanupFn()
 	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
 
@@ -109,7 +109,9 @@ func BenchmarkRestoreEntryCover(b *testing.B) {
 													nil,
 													filter,
 													&inclusiveEndKeyComparator{},
-													spanCh)
+													spanCh,
+													false, /* useLink */
+												)
 											})
 
 											var cov []execinfrapb.RestoreSpanEntry

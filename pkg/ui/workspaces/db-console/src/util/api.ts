@@ -16,11 +16,6 @@ import * as protos from "src/js/protos";
 import { FixLong } from "src/util/fixLong";
 import { propsToQueryString } from "src/util/query";
 
-export type LocationsRequestMessage =
-  protos.cockroach.server.serverpb.LocationsRequest;
-export type LocationsResponseMessage =
-  protos.cockroach.server.serverpb.LocationsResponse;
-
 export type NodesRequestMessage = protos.cockroach.server.serverpb.NodesRequest;
 export type NodesResponseExternalMessage =
   protos.cockroach.server.serverpb.NodesResponseExternal;
@@ -63,11 +58,6 @@ export type IndexStatsRequestMessage =
 export type IndexStatsResponseMessage =
   protos.cockroach.server.serverpb.TableIndexStatsResponse;
 
-export type NonTableStatsRequestMessage =
-  protos.cockroach.server.serverpb.NonTableStatsRequest;
-export type NonTableStatsResponseMessage =
-  protos.cockroach.server.serverpb.NonTableStatsResponse;
-
 export type LogsRequestMessage = protos.cockroach.server.serverpb.LogsRequest;
 export type LogEntriesResponseMessage =
   protos.cockroach.server.serverpb.LogEntriesResponse;
@@ -87,11 +77,6 @@ export type ListJobProfilerExecutionDetailsRequestMessage =
   protos.cockroach.server.serverpb.ListJobProfilerExecutionDetailsRequest;
 export type ListJobProfilerExecutionDetailsResponseMessage =
   protos.cockroach.server.serverpb.ListJobProfilerExecutionDetailsResponse;
-
-export type QueryPlanRequestMessage =
-  protos.cockroach.server.serverpb.QueryPlanRequest;
-export type QueryPlanResponseMessage =
-  protos.cockroach.server.serverpb.QueryPlanResponse;
 
 export type ProblemRangesRequestMessage =
   protos.cockroach.server.serverpb.ProblemRangesRequest;
@@ -155,9 +140,6 @@ export type StatementsResponseMessage =
 export type StatementDetailsResponseMessage =
   protos.cockroach.server.serverpb.StatementDetailsResponse;
 
-export type DataDistributionResponseMessage =
-  protos.cockroach.server.serverpb.DataDistributionResponse;
-
 export type EnqueueRangeRequestMessage =
   protos.cockroach.server.serverpb.EnqueueRangeRequest;
 export type EnqueueRangeResponseMessage =
@@ -200,11 +182,6 @@ export type ListTenantsRequestMessage =
   protos.cockroach.server.serverpb.ListTenantsRequest;
 export type ListTenantsResponseMessage =
   protos.cockroach.server.serverpb.ListTenantsResponse;
-
-export type NetworkConnectivityRequest =
-  protos.cockroach.server.serverpb.NetworkConnectivityRequest;
-export type NetworkConnectivityResponse =
-  protos.cockroach.server.serverpb.NetworkConnectivityResponse;
 
 export type GetThrottlingMetadataRequest =
   protos.cockroach.server.serverpb.GetThrottlingMetadataRequest;
@@ -376,18 +353,6 @@ export function setUIData(
   );
 }
 
-export function getLocations(
-  _req: LocationsRequestMessage,
-  timeout?: moment.Duration,
-): Promise<LocationsResponseMessage> {
-  return timeoutFetch(
-    serverpb.LocationsResponse,
-    `${API_PREFIX}/locations`,
-    null,
-    timeout,
-  );
-}
-
 // getNodes gets node data
 export function getNodesUI(
   _req: NodesRequestMessage,
@@ -517,20 +482,6 @@ export function getIndexStats(
   );
 }
 
-// getNonTableStats gets detailed stats about non-table data ranges on the
-// cluster.
-export function getNonTableStats(
-  _req: NonTableStatsRequestMessage,
-  timeout?: moment.Duration,
-): Promise<NonTableStatsResponseMessage> {
-  return timeoutFetch(
-    serverpb.NonTableStatsResponse,
-    `${API_PREFIX}/nontablestats`,
-    null,
-    timeout,
-  );
-}
-
 // TODO (maxlang): add filtering
 // getLogs gets the logs for a specific node
 export function getLogs(
@@ -553,19 +504,6 @@ export function getLiveness(
   return timeoutFetch(
     serverpb.LivenessResponse,
     `${API_PREFIX}/liveness`,
-    null,
-    timeout,
-  );
-}
-
-// getQueryPlan gets physical query plan JSON for the provided query.
-export function getQueryPlan(
-  req: QueryPlanRequestMessage,
-  timeout?: moment.Duration,
-): Promise<QueryPlanResponseMessage> {
-  return timeoutFetch(
-    serverpb.QueryPlanResponse,
-    `${API_PREFIX}/queryplan?query=${encodeURIComponent(req.query)}`,
     null,
     timeout,
   );
@@ -657,15 +595,18 @@ export function getSettings(
 
 // getSessions gets all cluster sessions.
 export function getSessions(
-  _req: SessionsRequestMessage,
+  req: SessionsRequestMessage,
   timeout?: moment.Duration,
 ): Promise<SessionsResponseMessage> {
-  return timeoutFetch(
-    serverpb.ListSessionsResponse,
-    `${STATUS_PREFIX}/sessions`,
-    null,
-    timeout,
-  );
+  const params = new URLSearchParams();
+  if (req?.exclude_closed_sessions) {
+    params.set("exclude_closed_sessions", "true");
+  }
+  const queryString = params.toString();
+  const path = queryString
+    ? `${STATUS_PREFIX}/sessions?${queryString}`
+    : `${STATUS_PREFIX}/sessions`;
+  return timeoutFetch(serverpb.ListSessionsResponse, path, null, timeout);
 }
 
 // cancelSession cancels the session with the given id on the given node.
@@ -735,18 +676,6 @@ export function getStatementDetails(
   return timeoutFetch(
     serverpb.StatementDetailsResponse,
     `${STATUS_PREFIX}/stmtdetails/${req.fingerprint_id}?${queryStr}`,
-    null,
-    timeout,
-  );
-}
-
-// getDataDistribution returns information about how replicas are distributed across nodes.
-export function getDataDistribution(
-  timeout?: moment.Duration,
-): Promise<DataDistributionResponseMessage> {
-  return timeoutFetch(
-    serverpb.DataDistributionResponse,
-    `${API_PREFIX}/data_distribution`,
     null,
     timeout,
   );
@@ -844,18 +773,6 @@ export function getTenants(
   return timeoutFetch(
     serverpb.ListTenantsResponse,
     `${API_PREFIX}/tenants`,
-    req as any,
-    timeout,
-  );
-}
-
-export function getNetworkConnectivity(
-  req: NetworkConnectivityRequest,
-  timeout?: moment.Duration,
-): Promise<NetworkConnectivityResponse> {
-  return timeoutFetch(
-    serverpb.NetworkConnectivityResponse,
-    `${STATUS_PREFIX}/connectivity`,
     req as any,
     timeout,
   );

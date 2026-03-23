@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -431,11 +432,14 @@ func cmpInBool(
 	}
 }
 
-func (si *selectInOpBool) Next() coldata.Batch {
+func (si *selectInOpBool) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := si.Input.Next()
+		batch, meta := si.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 
 		vec := batch.ColVec(si.colIdx)
@@ -499,15 +503,18 @@ func (si *selectInOpBool) Next() coldata.Batch {
 
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
 
-func (pi *projectInOpBool) Next() coldata.Batch {
-	batch := pi.Input.Next()
+func (pi *projectInOpBool) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := pi.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	vec := batch.ColVec(pi.colIdx)
@@ -584,7 +591,7 @@ func (pi *projectInOpBool) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 type selectInOpBytes struct {
@@ -657,11 +664,14 @@ func cmpInBytes(
 	}
 }
 
-func (si *selectInOpBytes) Next() coldata.Batch {
+func (si *selectInOpBytes) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := si.Input.Next()
+		batch, meta := si.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 
 		vec := batch.ColVec(si.colIdx)
@@ -723,15 +733,18 @@ func (si *selectInOpBytes) Next() coldata.Batch {
 
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
 
-func (pi *projectInOpBytes) Next() coldata.Batch {
-	batch := pi.Input.Next()
+func (pi *projectInOpBytes) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := pi.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	vec := batch.ColVec(pi.colIdx)
@@ -806,7 +819,7 @@ func (pi *projectInOpBytes) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 type selectInOpDecimal struct {
@@ -879,11 +892,14 @@ func cmpInDecimal(
 	}
 }
 
-func (si *selectInOpDecimal) Next() coldata.Batch {
+func (si *selectInOpDecimal) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := si.Input.Next()
+		batch, meta := si.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 
 		vec := batch.ColVec(si.colIdx)
@@ -947,15 +963,18 @@ func (si *selectInOpDecimal) Next() coldata.Batch {
 
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
 
-func (pi *projectInOpDecimal) Next() coldata.Batch {
-	batch := pi.Input.Next()
+func (pi *projectInOpDecimal) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := pi.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	vec := batch.ColVec(pi.colIdx)
@@ -1032,7 +1051,7 @@ func (pi *projectInOpDecimal) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 type selectInOpInt16 struct {
@@ -1117,11 +1136,14 @@ func cmpInInt16(
 	}
 }
 
-func (si *selectInOpInt16) Next() coldata.Batch {
+func (si *selectInOpInt16) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := si.Input.Next()
+		batch, meta := si.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 
 		vec := batch.ColVec(si.colIdx)
@@ -1185,15 +1207,18 @@ func (si *selectInOpInt16) Next() coldata.Batch {
 
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
 
-func (pi *projectInOpInt16) Next() coldata.Batch {
-	batch := pi.Input.Next()
+func (pi *projectInOpInt16) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := pi.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	vec := batch.ColVec(pi.colIdx)
@@ -1270,7 +1295,7 @@ func (pi *projectInOpInt16) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 type selectInOpInt32 struct {
@@ -1355,11 +1380,14 @@ func cmpInInt32(
 	}
 }
 
-func (si *selectInOpInt32) Next() coldata.Batch {
+func (si *selectInOpInt32) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := si.Input.Next()
+		batch, meta := si.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 
 		vec := batch.ColVec(si.colIdx)
@@ -1423,15 +1451,18 @@ func (si *selectInOpInt32) Next() coldata.Batch {
 
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
 
-func (pi *projectInOpInt32) Next() coldata.Batch {
-	batch := pi.Input.Next()
+func (pi *projectInOpInt32) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := pi.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	vec := batch.ColVec(pi.colIdx)
@@ -1508,7 +1539,7 @@ func (pi *projectInOpInt32) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 type selectInOpInt64 struct {
@@ -1592,11 +1623,14 @@ func cmpInInt64(
 	}
 }
 
-func (si *selectInOpInt64) Next() coldata.Batch {
+func (si *selectInOpInt64) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := si.Input.Next()
+		batch, meta := si.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 
 		vec := batch.ColVec(si.colIdx)
@@ -1660,15 +1694,18 @@ func (si *selectInOpInt64) Next() coldata.Batch {
 
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
 
-func (pi *projectInOpInt64) Next() coldata.Batch {
-	batch := pi.Input.Next()
+func (pi *projectInOpInt64) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := pi.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	vec := batch.ColVec(pi.colIdx)
@@ -1745,7 +1782,7 @@ func (pi *projectInOpInt64) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 type selectInOpFloat64 struct {
@@ -1837,11 +1874,14 @@ func cmpInFloat64(
 	}
 }
 
-func (si *selectInOpFloat64) Next() coldata.Batch {
+func (si *selectInOpFloat64) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := si.Input.Next()
+		batch, meta := si.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 
 		vec := batch.ColVec(si.colIdx)
@@ -1905,15 +1945,18 @@ func (si *selectInOpFloat64) Next() coldata.Batch {
 
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
 
-func (pi *projectInOpFloat64) Next() coldata.Batch {
-	batch := pi.Input.Next()
+func (pi *projectInOpFloat64) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := pi.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	vec := batch.ColVec(pi.colIdx)
@@ -1990,7 +2033,7 @@ func (pi *projectInOpFloat64) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 type selectInOpTimestamp struct {
@@ -2070,11 +2113,14 @@ func cmpInTimestamp(
 	}
 }
 
-func (si *selectInOpTimestamp) Next() coldata.Batch {
+func (si *selectInOpTimestamp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := si.Input.Next()
+		batch, meta := si.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 
 		vec := batch.ColVec(si.colIdx)
@@ -2138,15 +2184,18 @@ func (si *selectInOpTimestamp) Next() coldata.Batch {
 
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
 
-func (pi *projectInOpTimestamp) Next() coldata.Batch {
-	batch := pi.Input.Next()
+func (pi *projectInOpTimestamp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := pi.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	vec := batch.ColVec(pi.colIdx)
@@ -2223,7 +2272,7 @@ func (pi *projectInOpTimestamp) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 type selectInOpInterval struct {
@@ -2296,11 +2345,14 @@ func cmpInInterval(
 	}
 }
 
-func (si *selectInOpInterval) Next() coldata.Batch {
+func (si *selectInOpInterval) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := si.Input.Next()
+		batch, meta := si.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 
 		vec := batch.ColVec(si.colIdx)
@@ -2364,15 +2416,18 @@ func (si *selectInOpInterval) Next() coldata.Batch {
 
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
 
-func (pi *projectInOpInterval) Next() coldata.Batch {
-	batch := pi.Input.Next()
+func (pi *projectInOpInterval) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := pi.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	vec := batch.ColVec(pi.colIdx)
@@ -2449,7 +2504,7 @@ func (pi *projectInOpInterval) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 type selectInOpJSON struct {
@@ -2528,11 +2583,14 @@ func cmpInJSON(
 	}
 }
 
-func (si *selectInOpJSON) Next() coldata.Batch {
+func (si *selectInOpJSON) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := si.Input.Next()
+		batch, meta := si.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 
 		vec := batch.ColVec(si.colIdx)
@@ -2594,15 +2652,18 @@ func (si *selectInOpJSON) Next() coldata.Batch {
 
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
 
-func (pi *projectInOpJSON) Next() coldata.Batch {
-	batch := pi.Input.Next()
+func (pi *projectInOpJSON) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := pi.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	vec := batch.ColVec(pi.colIdx)
@@ -2677,7 +2738,7 @@ func (pi *projectInOpJSON) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 type selectInOpDatum struct {
@@ -2752,11 +2813,14 @@ func cmpInDatum(
 	}
 }
 
-func (si *selectInOpDatum) Next() coldata.Batch {
+func (si *selectInOpDatum) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := si.Input.Next()
+		batch, meta := si.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 
 		vec := batch.ColVec(si.colIdx)
@@ -2818,15 +2882,18 @@ func (si *selectInOpDatum) Next() coldata.Batch {
 
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
 
-func (pi *projectInOpDatum) Next() coldata.Batch {
-	batch := pi.Input.Next()
+func (pi *projectInOpDatum) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := pi.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	vec := batch.ColVec(pi.colIdx)
@@ -2901,5 +2968,5 @@ func (pi *projectInOpDatum) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }

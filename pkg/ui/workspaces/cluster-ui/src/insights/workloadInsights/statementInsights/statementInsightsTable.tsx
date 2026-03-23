@@ -233,6 +233,7 @@ export const StatementInsightsTable: React.FC<
     <SortedTable
       columns={props.visibleColumns}
       className="statements-table"
+      dataTestId="statement-insights-table"
       {...props}
     />
   );

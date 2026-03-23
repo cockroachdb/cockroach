@@ -3123,6 +3123,38 @@ left-join (lookup lookup_expr [as=t])
  │         └── column1:1 = w:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
  └── filters (true)
 
+# The filters in the lookup expression should contains all columns of the
+# idx_vrw index. Column r, though not in the ON exprs, should still be
+# in the filters, because for the column w that comes behind it in
+# idx_vrw, there is a necessary filter `w IN (10, 20)`.
+opt expect=GenerateLookupJoinsWithFilter
+SELECT * FROM (VALUES (1), (2), (3)) AS q(v) LEFT LOOKUP JOIN lookup_expr t
+ON q.v = t.v WHERE w IN (10, 20)
+----
+inner-join (lookup lookup_expr [as=t])
+ ├── columns: v:1!null r:2!null k:3!null u:4 v:5!null w:6!null x:7 y:8!null z:9!null
+ ├── key columns: [2 3] = [2 3]
+ ├── lookup columns are key
+ ├── fd: ()-->(9), (2,3)-->(4-8), (1)==(5), (5)==(1)
+ ├── inner-join (lookup lookup_expr@idx_vrw [as=t])
+ │    ├── columns: column1:1!null r:2!null k:3!null v:5!null w:6!null
+ │    ├── flags: force lookup join (into right side)
+ │    ├── lookup expression
+ │    │    └── filters
+ │    │         ├── r:2 IN ('east', 'west') [outer=(2), constraints=(/2: [/'east' - /'east'] [/'west' - /'west']; tight)]
+ │    │         ├── w:6 IN (10, 20) [outer=(6), constraints=(/6: [/10 - /10] [/20 - /20]; tight)]
+ │    │         └── column1:1 = v:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ │    ├── fd: (2,3)-->(5,6), (1)==(5), (5)==(1)
+ │    ├── values
+ │    │    ├── columns: column1:1!null
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── (1,)
+ │    │    ├── (2,)
+ │    │    └── (3,)
+ │    └── filters (true)
+ └── filters (true)
+
+
 # Ensure that we constrain all columns in idx_vrw, not just v.
 opt expect=GenerateLookupJoins
 SELECT * FROM (VALUES (1, 10), (2, 20), (3, NULL)) AS q(v, w) LEFT JOIN lookup_expr t

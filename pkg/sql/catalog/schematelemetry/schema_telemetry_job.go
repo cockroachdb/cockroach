@@ -12,12 +12,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/followerreads"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -72,12 +72,12 @@ func (t schemaTelemetryResumer) Resume(ctx context.Context, execCtx interface{})
 		if err != nil {
 			return err
 		}
-		p.ExecCfg().StatsRefresher.NotifyMutation(desc, math.MaxInt64 /* rowCount */)
+		p.ExecCfg().StatsRefresher.NotifyMutation(ctx, desc, math.MaxInt64 /* rowCount */)
 
 		// Note: This won't be perfectly up-to-date, but it will make sure the
 		// metric gets updated periodically. It also gets updated after every
 		// schema change.
-		tableStats, err := p.ExecCfg().TableStatsCache.GetTableStats(ctx, desc, nil /* typeResolver */)
+		tableStats, err := p.ExecCfg().TableStatsCache.GetFreshTableStats(ctx, desc, nil /* typeResolver */)
 		if err != nil {
 			return err
 		}
@@ -97,10 +97,8 @@ func (t schemaTelemetryResumer) Resume(ctx context.Context, execCtx interface{})
 	aostDuration := builtinconstants.DefaultFollowerReadDuration
 	if knobs.AOSTDuration != nil {
 		aostDuration = *knobs.AOSTDuration
-	} else if fn := builtins.EvalFollowerReadOffset; fn != nil {
-		if d, err := fn(p.ExecCfg().Settings); err == nil {
-			aostDuration = d
-		}
+	} else if d, err := followerreads.EvalFollowerReadOffset(p.ExecCfg().Settings); err == nil {
+		aostDuration = d
 	}
 
 	const maxRecords = 10000

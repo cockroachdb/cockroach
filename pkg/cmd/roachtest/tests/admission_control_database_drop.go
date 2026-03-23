@@ -38,7 +38,7 @@ func registerDatabaseDrop(r registry.Registry) {
 		// node falls below 5% available capacity. 800GiB (7.2TiB) ought to be more
 		// than enough.
 		spec.VolumeSize(800),
-		spec.GCEVolumeType("pd-ssd"),
+		spec.VolumeType("pd-ssd"),
 		spec.GCEMachineType("n2-standard-8"),
 		spec.GCEZones("us-east1-b"),
 	)

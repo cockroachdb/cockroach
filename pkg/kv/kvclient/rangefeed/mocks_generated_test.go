@@ -8,8 +8,8 @@ import (
 	context "context"
 	reflect "reflect"
 
-	kv "github.com/cockroachdb/cockroach/pkg/kv"
 	kvcoord "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
+	kvpb "github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 	span "github.com/cockroachdb/cockroach/pkg/util/span"
@@ -78,7 +78,7 @@ func (mr *MockDBMockRecorder) RangeFeedFromFrontier(arg0, arg1, arg2 interface{}
 }
 
 // Scan mocks base method.
-func (m *MockDB) Scan(arg0 context.Context, arg1 []roachpb.Span, arg2 hlc.Timestamp, arg3 func(roachpb.KeyValue), arg4 func([]kv.KeyValue), arg5 scanConfig) error {
+func (m *MockDB) Scan(arg0 context.Context, arg1 []roachpb.Span, arg2 hlc.Timestamp, arg3 func(roachpb.KeyValue), arg4 func([]kvpb.RangeFeedValue), arg5 scanConfig) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Scan", arg0, arg1, arg2, arg3, arg4, arg5)
 	ret0, _ := ret[0].(error)

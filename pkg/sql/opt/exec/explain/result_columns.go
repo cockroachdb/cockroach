@@ -22,18 +22,10 @@ import (
 // input exec.Nodes.
 func getResultColumns(
 	op execOperator, args interface{}, inputs ...colinfo.ResultColumns,
-) (out colinfo.ResultColumns, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			// If we have a bug in the code below, it's easily possible to hit panic
-			// (like out-of-bounds). Catch these here and return as an error.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				panic(r)
-			}
-		}
-	}()
+) (out colinfo.ResultColumns, retErr error) {
+	// If we have a bug in the code below, it's easily possible to hit panic
+	// (like out-of-bounds). Catch these here and return as an error.
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
 	switch op {
 	case filterOp, invertedFilterOp, limitOp, max1RowOp, sortOp, topKOp, bufferOp, hashSetOpOp,

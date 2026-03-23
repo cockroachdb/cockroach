@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -846,4 +847,78 @@ func buildWorkloadSchema(
 	computeRowCounts(blocks, baseRowCount)
 
 	return blocks
+}
+
+// listDatabases scans the debug logs TSV file and returns a list of all unique
+// database names found. It filters out system databases (system, postgres, defaultdb).
+func listDatabases(zipDir string) ([]string, error) {
+	f, err := openCreateStatementsTSV(zipDir)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to open TSV file")
+	}
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = errors.Wrap(cerr, "failed to close TSV file")
+		}
+	}()
+
+	reader := csv.NewReader(bufio.NewReader(f))
+	reader.Comma = '\t'
+	reader.LazyQuotes = true
+
+	// Read the header row to get column indices
+	header, err := reader.Read()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed reading TSV header")
+	}
+	colIndex := map[string]int{}
+	for i, col := range header {
+		colIndex[col] = i
+	}
+
+	// Check if database_name column exists
+	dbColIdx, ok := colIndex[databaseName]
+	if !ok {
+		return nil, errors.New("missing database_name column in TSV file")
+	}
+
+	// Collect unique database names
+	dbSet := make(map[string]struct{})
+	systemDBs := map[string]struct{}{
+		"system":    {},
+		"postgres":  {},
+		"defaultdb": {},
+		"NULL":      {},
+	}
+
+	for {
+		rec, err := reader.Read()
+		if err != nil {
+			if errors.Is(err, os.ErrClosed) || err.Error() == "EOF" {
+				break
+			}
+			if len(rec) == 0 {
+				break
+			}
+			return nil, errors.Wrap(err, "failed while reading TSV rows")
+		}
+		if len(rec) == 0 {
+			break
+		}
+
+		dbName := rec[dbColIdx]
+		// Add databases not in the systemDBs set
+		if _, isSystem := systemDBs[dbName]; !isSystem && dbName != "" {
+			dbSet[dbName] = struct{}{}
+		}
+	}
+
+	// Convert set to sorted slice
+	databases := make([]string, 0, len(dbSet))
+	for db := range dbSet {
+		databases = append(databases, db)
+	}
+	sort.Strings(databases)
+
+	return databases, nil
 }

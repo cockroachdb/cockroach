@@ -109,6 +109,7 @@ func RunNemesis(
 	n := nodes{
 		running: make(map[int]struct{}),
 		stopped: make(map[int]struct{}),
+		crashed: make(map[int]struct{}),
 	}
 	for i := 1; i <= config.NumNodes; i++ {
 		// In liveness mode, we don't allow stopping and restarting the two
@@ -137,7 +138,7 @@ func RunNemesis(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = w.Finish() }()
+	defer func() { _ = w.Finish(ctx) }()
 
 	var stepsStartedAtomic int64
 	stepsByWorker := make([][]Step, concurrency)
@@ -197,7 +198,7 @@ func RunNemesis(
 	}
 	env.Partitioner.EnablePartitions(false)
 	for i := 0; i < config.NumNodes; i++ {
-		_ = env.Restarter.RestartServer(i)
+		_ = env.ServerController.RestartServer(i)
 	}
 
 	allSteps := make(steps, 0, numSteps)
@@ -210,7 +211,7 @@ func RunNemesis(
 	if err := w.WaitForFrontier(ctx, allSteps.After()); err != nil {
 		return nil, err
 	}
-	kvs := w.Finish()
+	kvs := w.Finish(ctx)
 	defer kvs.Close()
 
 	failures := Validate(allSteps, kvs, env.Tracker)

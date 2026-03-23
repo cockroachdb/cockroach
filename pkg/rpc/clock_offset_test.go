@@ -136,27 +136,22 @@ func TestVerifyClockOffset(t *testing.T) {
 // local clock has too great an offset or not.
 func TestIsHealthyOffsetInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	maxOffset := 10 * time.Nanosecond
 
-	for i, tc := range []struct {
-		offset          RemoteOffset
-		expectedHealthy bool
+	maxOffset := 10 * time.Nanosecond
+	for _, tc := range []struct {
+		offset         RemoteOffset
+		expectedHealth remoteHealth
 	}{
-		{RemoteOffset{}, true},
-		{RemoteOffset{Offset: 0, Uncertainty: 5}, true},
-		{RemoteOffset{Offset: -15, Uncertainty: 4}, false},
-		{RemoteOffset{Offset: 15, Uncertainty: 4}, false},
-		{RemoteOffset{Offset: math.MaxInt64, Uncertainty: 0}, false},
+		{RemoteOffset{}, definitelyHealthy},
+		{RemoteOffset{Offset: 0, Uncertainty: 5}, definitelyHealthy},
+		{RemoteOffset{Offset: -15, Uncertainty: 4}, definitelyUnhealthy},
+		{RemoteOffset{Offset: 15, Uncertainty: 4}, definitelyUnhealthy},
+		{RemoteOffset{Offset: math.MaxInt64, Uncertainty: 0}, definitelyUnhealthy},
+		{RemoteOffset{Offset: 13, Uncertainty: 4}, ambiguousHealth},
+		{RemoteOffset{Offset: -13, Uncertainty: 4}, ambiguousHealth},
 	} {
-		if isHealthy := tc.offset.isHealthy(context.Background(), maxOffset); tc.expectedHealthy {
-			if !isHealthy {
-				t.Errorf("%d: expected remote offset %s for maximum offset %s to be healthy", i, tc.offset, maxOffset)
-			}
-		} else {
-			if isHealthy {
-				t.Errorf("%d: expected remote offset %s for maximum offset %s to be unhealthy", i, tc.offset, maxOffset)
-			}
-		}
+		actualHealth := tc.offset.isHealthy(maxOffset)
+		require.Equal(t, tc.expectedHealth, actualHealth, "unexpected health status for %s", tc.offset)
 	}
 }
 

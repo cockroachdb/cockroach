@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/geo/geos"
+	"github.com/cockroachdb/cockroach/pkg/geo/mvt"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -555,7 +556,7 @@ var aggregates = map[string]builtinDefinition{
 				params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 			) eval.AggregateFunc {
 				return &stMakeLineAgg{
-					acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+					acc: evalCtx.SingleDatumAggMemAccount.Monitor().MakeBoundAccount(),
 				}
 			},
 			infoBuilder{
@@ -588,6 +589,7 @@ var aggregates = map[string]builtinDefinition{
 	"st_memunion":   makeSTUnionBuiltin(),
 	"st_collect":    makeSTCollectBuiltin(),
 	"st_memcollect": makeSTCollectBuiltin(),
+	"st_asmvt":      makeSTAsMVTBuiltin(),
 
 	AnyNotNull: makePrivate(makeBuiltin(tree.FunctionProperties{},
 		makeImmutableAggOverloadWithReturnType(
@@ -826,7 +828,7 @@ func makeSTUnionBuiltin() builtinDefinition {
 				params []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 			) eval.AggregateFunc {
 				return &stUnionAgg{
-					acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+					acc: evalCtx.SingleDatumAggMemAccount.Monitor().MakeBoundAccount(),
 				}
 			},
 			infoBuilder{
@@ -1042,7 +1044,7 @@ type stCollectAgg struct {
 
 func newSTCollectAgg(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &stCollectAgg{
-		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc: evalCtx.SingleDatumAggMemAccount.Monitor().MakeBoundAccount(),
 	}
 }
 
@@ -1426,52 +1428,14 @@ var _ aggregateWithIntermediateResult = &decimalVarianceAggregate{}
 // singleDatumAggregateBase is a utility struct that helps aggregate builtins
 // that store a single datum internally track their memory usage related to
 // that single datum.
-// It will reuse tree.EvalCtx.SingleDatumAggMemAccount when non-nil and will
-// *not* close that account upon its closure; if it is nil, then a new memory
-// account will be created specifically for this struct and that account will
-// be closed upon this struct's closure.
+//
+// It will reuse eval.Context.SingleDatumAggMemAccount and will *not* close that
+// account upon its closure.
 type singleDatumAggregateBase struct {
-	mode singleDatumAggregateBaseMode
-	acc  *mon.BoundAccount
+	acc *mon.BoundAccount
 	// accountedFor indicates how much memory (in bytes) have been registered
 	// with acc.
 	accountedFor int64
-}
-
-// singleDatumAggregateBaseMode indicates the mode in which
-// singleDatumAggregateBase operates with regards to resetting and closing
-// behaviors.
-type singleDatumAggregateBaseMode int
-
-const (
-	// sharedSingleDatumAggregateBaseMode is a mode in which the memory account
-	// will be grown and shrunk according the corresponding aggregate builtin's
-	// memory usage, but the account will never be cleared or closed. In this
-	// mode, singleDatumAggregateBaseMode is *not* responsible for closing the
-	// memory account.
-	sharedSingleDatumAggregateBaseMode singleDatumAggregateBaseMode = iota
-	// nonSharedSingleDatumAggregateBaseMode is a mode in which the memory
-	// account is "owned" by singleDatumAggregateBase, so the account can be
-	// cleared and closed by it. In fact, singleDatumAggregateBase is
-	// responsible for the account's closure.
-	nonSharedSingleDatumAggregateBaseMode
-)
-
-// makeSingleDatumAggregateBase makes a new singleDatumAggregateBase. If
-// evalCtx has non-nil SingleDatumAggMemAccount field, then that memory account
-// will be used by the new struct which will operate in "shared" mode
-func makeSingleDatumAggregateBase(evalCtx *eval.Context) singleDatumAggregateBase {
-	if evalCtx.SingleDatumAggMemAccount == nil {
-		newAcc := evalCtx.Planner.Mon().MakeBoundAccount()
-		return singleDatumAggregateBase{
-			mode: nonSharedSingleDatumAggregateBaseMode,
-			acc:  &newAcc,
-		}
-	}
-	return singleDatumAggregateBase{
-		mode: sharedSingleDatumAggregateBaseMode,
-		acc:  evalCtx.SingleDatumAggMemAccount,
-	}
 }
 
 // updateMemoryUsage updates the memory account to reflect the new memory
@@ -1487,27 +1451,13 @@ func (b *singleDatumAggregateBase) updateMemoryUsage(ctx context.Context, newUsa
 }
 
 func (b *singleDatumAggregateBase) reset(ctx context.Context) {
-	switch b.mode {
-	case sharedSingleDatumAggregateBaseMode:
-		b.acc.Shrink(ctx, b.accountedFor)
-		b.accountedFor = 0
-	case nonSharedSingleDatumAggregateBaseMode:
-		b.acc.Clear(ctx)
-	default:
-		panic(errors.Errorf("unexpected singleDatumAggregateBaseMode: %d", b.mode))
-	}
+	b.acc.Shrink(ctx, b.accountedFor)
+	b.accountedFor = 0
 }
 
 func (b *singleDatumAggregateBase) close(ctx context.Context) {
-	switch b.mode {
-	case sharedSingleDatumAggregateBaseMode:
-		b.acc.Shrink(ctx, b.accountedFor)
-		b.accountedFor = 0
-	case nonSharedSingleDatumAggregateBaseMode:
-		b.acc.Close(ctx)
-	default:
-		panic(errors.Errorf("unexpected singleDatumAggregateBaseMode: %d", b.mode))
-	}
+	b.acc.Shrink(ctx, b.accountedFor)
+	b.accountedFor = 0
 }
 
 // See NewAnyNotNullAggregate.
@@ -1535,7 +1485,7 @@ type anyNotNullAggregate struct {
 //     add NULL values).
 func NewAnyNotNullAggregate(evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &anyNotNullAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		val:                      tree.DNull,
 	}
 }
@@ -1589,7 +1539,7 @@ type arrayAggregate struct {
 func newArrayAggregate(params []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &arrayAggregate{
 		arr: tree.NewDArray(params[0]),
-		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc: evalCtx.SingleDatumAggMemAccount.Monitor().MakeBoundAccount(),
 	}
 }
 
@@ -1637,7 +1587,7 @@ func newAggStatementStatistics(
 	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &aggStatementStatistics{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 	}
 }
 
@@ -1695,7 +1645,7 @@ func newAggStatementMetadata(
 	params []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &aggStatementMetadata{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		stats:                    appstatspb.AggregatedStatementMetadata{},
 	}
 }
@@ -1809,7 +1759,7 @@ func newAggregatedStmtMetadataAggregate(
 	_ []*types.T, evalCtx *eval.Context, _ tree.Datums,
 ) eval.AggregateFunc {
 	return &aggregatedStmtMetadataAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		stats:                    appstatspb.AggregatedStatementMetadata{},
 	}
 }
@@ -2005,7 +1955,7 @@ func newArrayCatAggregate(
 ) eval.AggregateFunc {
 	return &arrayCatAggregate{
 		arr: tree.NewDArray(params[0].ArrayContents()),
-		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc: evalCtx.SingleDatumAggMemAccount.Monitor().MakeBoundAccount(),
 	}
 }
 
@@ -2150,7 +2100,7 @@ func newBytesConcatAggregate(
 	_ []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	concatAgg := &concatAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		forBytes:                 true,
 	}
 	if len(arguments) == 1 && arguments[0] != tree.DNull {
@@ -2165,7 +2115,7 @@ func newStringConcatAggregate(
 	_ []*types.T, evalCtx *eval.Context, arguments tree.Datums,
 ) eval.AggregateFunc {
 	concatAgg := &concatAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 	}
 	if len(arguments) == 1 && arguments[0] != tree.DNull {
 		concatAgg.delimiter = string(tree.MustBeDString(arguments[0]))
@@ -2564,7 +2514,7 @@ type regressionAccumulatorDecimalBase struct {
 func makeRegressionAccumulatorDecimalBase(evalCtx *eval.Context) regressionAccumulatorDecimalBase {
 	ed := apd.MakeErrDecimal(tree.HighPrecisionCtx)
 	return regressionAccumulatorDecimalBase{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		ed:                       &ed,
 	}
 }
@@ -2577,7 +2527,7 @@ func makeTransitionRegressionAccumulatorDecimalBase(
 ) eval.AggregateFunc {
 	ed := apd.MakeErrDecimal(tree.HighPrecisionCtx)
 	return &regressionAccumulatorDecimalBase{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		ed:                       &ed,
 	}
 }
@@ -3615,7 +3565,7 @@ func newMaxAggregate(params []*types.T, evalCtx *eval.Context, _ tree.Datums) ev
 	// it has a fixed size, the memory account will be updated only on the
 	// first non-null datum.
 	return &maxAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		evalCtx:                  evalCtx,
 		variableDatumSize:        variable,
 	}
@@ -3688,7 +3638,7 @@ func newMinAggregate(params []*types.T, evalCtx *eval.Context, _ tree.Datums) ev
 	// it has a fixed size, the memory account will be updated only on the
 	// first non-null datum.
 	return &minAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		evalCtx:                  evalCtx,
 		variableDatumSize:        variable,
 	}
@@ -3805,7 +3755,7 @@ type intSumAggregate struct {
 }
 
 func newIntSumAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
-	return &intSumAggregate{singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx)}
+	return &intSumAggregate{singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount}}
 }
 
 // Add adds the value of the passed datum to the sum.
@@ -3890,7 +3840,7 @@ type decimalSumAggregate struct {
 }
 
 func newDecimalSumAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
-	return &decimalSumAggregate{singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx)}
+	return &decimalSumAggregate{singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount}}
 }
 
 // Add adds the value of the passed datum to the sum.
@@ -4169,7 +4119,7 @@ type decimalSqrDiffAggregate struct {
 func newDecimalSqrDiff(evalCtx *eval.Context) decimalSqrDiff {
 	ed := apd.MakeErrDecimal(tree.IntermediateCtx)
 	return &decimalSqrDiffAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		ed:                       &ed,
 	}
 }
@@ -4365,7 +4315,7 @@ type decimalSumSqrDiffsAggregate struct {
 func newDecimalSumSqrDiffs(evalCtx *eval.Context) decimalSqrDiff {
 	ed := apd.MakeErrDecimal(tree.IntermediateCtx)
 	return &decimalSumSqrDiffsAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		ed:                       &ed,
 	}
 }
@@ -4907,7 +4857,7 @@ type bytesXorAggregate struct {
 }
 
 func newBytesXorAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
-	return &bytesXorAggregate{singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx)}
+	return &bytesXorAggregate{singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount}}
 }
 
 // Add inserts one value into the running xor.
@@ -5011,7 +4961,7 @@ type jsonAggregate struct {
 
 func newJSONAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &jsonAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		evalCtx:                  evalCtx,
 		builder:                  json.NewArrayBuilderWithCounter(),
 		sawNonNull:               false,
@@ -5115,7 +5065,7 @@ func newPercentileDiscAggregate(
 ) eval.AggregateFunc {
 	return &percentileDiscAggregate{
 		arr: tree.NewDArray(params[1]),
-		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc: evalCtx.SingleDatumAggMemAccount.Monitor().MakeBoundAccount(),
 	}
 }
 
@@ -5213,7 +5163,7 @@ func newPercentileContAggregate(
 ) eval.AggregateFunc {
 	return &percentileContAggregate{
 		arr: tree.NewDArray(params[1]),
-		acc: evalCtx.Planner.Mon().MakeBoundAccount(),
+		acc: evalCtx.SingleDatumAggMemAccount.Monitor().MakeBoundAccount(),
 	}
 }
 
@@ -5335,7 +5285,7 @@ type jsonObjectAggregate struct {
 
 func newJSONObjectAggregate(_ []*types.T, evalCtx *eval.Context, _ tree.Datums) eval.AggregateFunc {
 	return &jsonObjectAggregate{
-		singleDatumAggregateBase: makeSingleDatumAggregateBase(evalCtx),
+		singleDatumAggregateBase: singleDatumAggregateBase{acc: evalCtx.SingleDatumAggMemAccount},
 		evalCtx:                  evalCtx,
 		builder:                  json.NewObjectBuilderWithCounter(),
 		sawNonNull:               false,
@@ -5404,4 +5354,242 @@ func (a *jsonObjectAggregate) Close(ctx context.Context) {
 // Size is part of the eval.AggregateFunc interface.
 func (a *jsonObjectAggregate) Size() int64 {
 	return sizeOfJSONObjectAggregate
+}
+
+func makeSTAsMVTBuiltin() builtinDefinition {
+	const defaultLayerName = "default"
+	const defaultExtent = 4096
+	const defaultGeomColumn = ""
+	const defaultFeatureIDColumn = ""
+
+	// parseSTAsMVTArgs extracts the constant arguments from the arguments slice.
+	parseSTAsMVTArgs := func(arguments tree.Datums) (string, uint32, string, string) {
+		layerName := defaultLayerName
+		extent := uint32(defaultExtent)
+		geomColumn := defaultGeomColumn
+		featureIDColumn := defaultFeatureIDColumn
+		if len(arguments) >= 1 && arguments[0] != tree.DNull {
+			layerName = string(tree.MustBeDString(arguments[0]))
+		}
+		if len(arguments) >= 2 && arguments[1] != tree.DNull {
+			extent = uint32(tree.MustBeDInt(arguments[1]))
+		}
+		if len(arguments) >= 3 && arguments[2] != tree.DNull {
+			geomColumn = string(tree.MustBeDString(arguments[2]))
+		}
+		if len(arguments) >= 4 && arguments[3] != tree.DNull {
+			featureIDColumn = string(tree.MustBeDString(arguments[3]))
+		}
+		return layerName, extent, geomColumn, featureIDColumn
+	}
+
+	makeOverload := func(argTypes []*types.T, info string) tree.Overload {
+		return makeAggOverload(
+			argTypes,
+			types.Bytes,
+			func(params []*types.T, evalCtx *eval.Context, arguments tree.Datums) eval.AggregateFunc {
+				layerName, extent, geomColumn, featureIDColumn := parseSTAsMVTArgs(arguments)
+				return newSTAsMVTAggregate(evalCtx, layerName, extent, geomColumn, featureIDColumn)
+			},
+			info,
+			volatility.Immutable,
+			true, /* calledOnNullInput */
+		)
+	}
+
+	return makeBuiltin(
+		tree.FunctionProperties{
+			AvailableOnPublicSchema: true,
+		},
+		makeOverload(
+			[]*types.T{types.AnyTuple},
+			"Generates a Mapbox Vector Tile (MVT) representation of a set of rows. "+
+				"Uses default layer name 'default' and extent 4096. "+
+				"Expects a geometry column named 'geom' in the input rows.",
+		),
+		makeOverload(
+			[]*types.T{types.AnyTuple, types.String},
+			"Generates a Mapbox Vector Tile (MVT) representation of a set of rows with the specified layer name. "+
+				"Uses extent 4096 and expects a geometry column named 'geom' in the input rows.",
+		),
+		makeOverload(
+			[]*types.T{types.AnyTuple, types.String, types.Int},
+			"Generates a Mapbox Vector Tile (MVT) representation of a set of rows with the specified layer name and extent. "+
+				"Expects a geometry column named 'geom' in the input rows.",
+		),
+		makeOverload(
+			[]*types.T{types.AnyTuple, types.String, types.Int, types.String},
+			"Generates a Mapbox Vector Tile (MVT) representation of a set of rows with the specified layer name, extent, and geometry column name.",
+		),
+		makeOverload(
+			[]*types.T{types.AnyTuple, types.String, types.Int, types.String, types.String},
+			"Generates a Mapbox Vector Tile (MVT) representation of a set of rows with the specified layer name, extent, geometry column name, and feature ID column name.",
+		),
+	)
+}
+
+// stAsMVTAggregate implements the ST_AsMVT aggregate function.
+type stAsMVTAggregate struct {
+	mvtBuilder      *mvt.MVTBuilder
+	layerName       string
+	extent          uint32
+	geomColumn      string
+	featureIDColumn string
+	acc             mon.BoundAccount
+}
+
+const sizeOfSTAsMVTAggregate = int64(unsafe.Sizeof(stAsMVTAggregate{}))
+
+func newSTAsMVTAggregate(
+	evalCtx *eval.Context, layerName string, extent uint32, geomColumn string, featureIDColumn string,
+) eval.AggregateFunc {
+	return &stAsMVTAggregate{
+		mvtBuilder:      mvt.NewMVTBuilder(),
+		layerName:       layerName,
+		extent:          extent,
+		geomColumn:      geomColumn,
+		featureIDColumn: featureIDColumn,
+		acc:             evalCtx.Planner.ExecMon().MakeBoundAccount(),
+	}
+}
+
+// Add implements the AggregateFunc interface.
+func (agg *stAsMVTAggregate) Add(
+	ctx context.Context, firstArg tree.Datum, otherArgs ...tree.Datum,
+) error {
+	if firstArg == tree.DNull {
+		return nil
+	}
+
+	// Handle optional parameters from otherArgs in order: layer_name, extent,
+	// geom_column, feature_id_column. These are constant per aggregate and
+	// are also parsed in the constructor, but in some execution paths, the
+	// constant args are rendered as columns and passed via otherArgs.
+	if len(otherArgs) >= 1 && otherArgs[0] != tree.DNull {
+		agg.layerName = string(tree.MustBeDString(otherArgs[0]))
+	}
+	if len(otherArgs) >= 2 && otherArgs[1] != tree.DNull {
+		agg.extent = uint32(tree.MustBeDInt(otherArgs[1]))
+	}
+	if len(otherArgs) >= 3 && otherArgs[2] != tree.DNull {
+		agg.geomColumn = string(tree.MustBeDString(otherArgs[2]))
+	}
+	if len(otherArgs) >= 4 && otherArgs[3] != tree.DNull {
+		agg.featureIDColumn = string(tree.MustBeDString(otherArgs[3]))
+	}
+
+	// Expect the first argument to be a tuple (representing a row).
+	tuple, ok := firstArg.(*tree.DTuple)
+	if !ok {
+		return errors.Newf("ST_AsMVT expects tuple input, got %T", firstArg)
+	}
+
+	// Parse the tuple to extract geometry and properties.
+	geometry, id, properties, err := agg.parseTupleRow(tuple)
+	if err != nil {
+		return err
+	}
+
+	if geometry == nil {
+		return nil // Skip rows without geometry.
+	}
+
+	// Add the feature to the MVT builder
+	return agg.mvtBuilder.AddFeature(*geometry, id, properties)
+}
+
+// parseTupleRow extracts geometry, ID, and properties from a tuple row.
+func (agg *stAsMVTAggregate) parseTupleRow(
+	tuple *tree.DTuple,
+) (*geo.Geometry, *uint64, []mvt.Property, error) {
+	var geometry *geo.Geometry
+	var id *uint64
+	var properties []mvt.Property
+
+	// Get tuple type information to access column labels
+	tupleType := tuple.ResolvedType()
+	labels := tupleType.TupleLabels()
+
+	// Find geometry column and extract it. If geomColumn is not specified, then
+	// the first geometry column in the tuple will be used.
+	geomColumnIndex := -1
+	for i, datum := range tuple.D {
+		if geomDatum, ok := datum.(*tree.DGeometry); ok &&
+			(agg.geomColumn == "" || (labels != nil && i < len(labels) && labels[i] == agg.geomColumn)) {
+			geom := geomDatum.Geometry
+			geometry = &geom
+			geomColumnIndex = i
+			break
+		}
+	}
+
+	// Extract feature ID only if specified. PostGIS only considers columns with
+	// integer types (INT2/INT4/INT8) as feature ID candidates. For duplicate
+	// column names, only the first column matching both name and integer type is
+	// used as the feature ID column; subsequent matches become regular properties.
+	featureIDColumnIndex := -1
+	if agg.featureIDColumn != "" {
+		found := false
+		tupleContents := tupleType.TupleContents()
+		for i, label := range labels {
+			if label == agg.featureIDColumn {
+				// Only consider columns with integer types as feature ID candidates,
+				// matching PostGIS behavior.
+				if i < len(tupleContents) && tupleContents[i].Family() == types.IntFamily {
+					found = true
+					if featureIDColumnIndex < 0 {
+						featureIDColumnIndex = i
+						if intDatum, ok := tuple.D[i].(*tree.DInt); ok && *intDatum >= 0 {
+							idVal := uint64(*intDatum)
+							id = &idVal
+						}
+					}
+				}
+			}
+		}
+		if !found {
+			return nil, nil, nil, pgerror.Newf(pgcode.InvalidParameterValue, "could not find column '%s' of integer type", agg.featureIDColumn)
+		}
+	}
+
+	// Add all non-geometry, non-ID columns as properties using column labels.
+	for i, datum := range tuple.D {
+		if i != geomColumnIndex && i != featureIDColumnIndex {
+			// Use column label if available, otherwise fall back to generic name.
+			var key string
+			if labels != nil && i < len(labels) && labels[i] != "" {
+				key = labels[i]
+			} else {
+				key = fmt.Sprintf("attr_%d", i)
+			}
+			properties = append(properties, mvt.Property{Key: key, Value: datum})
+		}
+	}
+
+	return geometry, id, properties, nil
+}
+
+// Result returns the MVT binary data.
+func (agg *stAsMVTAggregate) Result() (tree.Datum, error) {
+	data, err := agg.mvtBuilder.Build(agg.layerName, agg.extent)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDBytes(tree.DBytes(data)), nil
+}
+
+// Reset implements eval.AggregateFunc interface.
+func (agg *stAsMVTAggregate) Reset(ctx context.Context) {
+	agg.mvtBuilder = mvt.NewMVTBuilder()
+	agg.acc.Clear(ctx)
+}
+
+// Close allows the aggregate to release the memory it requested during operation.
+func (agg *stAsMVTAggregate) Close(ctx context.Context) {
+	agg.acc.Close(ctx)
+}
+
+// Size is part of the eval.AggregateFunc interface.
+func (agg *stAsMVTAggregate) Size() int64 {
+	return sizeOfSTAsMVTAggregate
 }

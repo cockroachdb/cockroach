@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func slurpUserDataKVs(t testing.TB, e storage.Engine, codec keys.SQLCodec) []roachpb.KeyValue {
+func slurpUserDataKVs(t testing.TB, r storage.Reader, codec keys.SQLCodec) []roachpb.KeyValue {
 	t.Helper()
 
 	// Scan meta keys directly from engine. We put this in a retry loop
@@ -39,7 +39,7 @@ func slurpUserDataKVs(t testing.TB, e storage.Engine, codec keys.SQLCodec) []roa
 	var kvs []roachpb.KeyValue
 	testutils.SucceedsSoon(t, func() error {
 		kvs = nil
-		it, err := e.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: codec.TenantEndKey()})
+		it, err := r.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: codec.TenantEndKey()})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -165,7 +165,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		SELECT cluster_logical_timestamp();
 	END;`).Scan(&ts1)
 
-	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.TODOEngine(), codec)), []rowWithMVCCMetadata{
+	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.StateEngine(), codec)), []rowWithMVCCMetadata{
 		{PrimaryKey: []string{`1`, `a`, `a`, `a`}, RowIsDeleted: false, RowLastModified: ts1},
 		{PrimaryKey: []string{`2`, `b`, `b`, `b`}, RowIsDeleted: false, RowLastModified: ts1},
 	}; !reflect.DeepEqual(expected, actual) {
@@ -179,7 +179,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		SELECT cluster_logical_timestamp();
 	END;`).Scan(&ts2)
 
-	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.TODOEngine(), codec)), []rowWithMVCCMetadata{
+	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.StateEngine(), codec)), []rowWithMVCCMetadata{
 		{PrimaryKey: []string{`1`, `NULL`, `NULL`, `NULL`}, RowIsDeleted: false, RowLastModified: ts2},
 		{PrimaryKey: []string{`2`, `b`, `b`, `NULL`}, RowIsDeleted: false, RowLastModified: ts2},
 	}; !reflect.DeepEqual(expected, actual) {
@@ -191,7 +191,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		DELETE FROM parent WHERE a = '1';
 		SELECT cluster_logical_timestamp();
 	END;`).Scan(&ts3)
-	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.TODOEngine(), codec)), []rowWithMVCCMetadata{
+	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.StateEngine(), codec)), []rowWithMVCCMetadata{
 		{PrimaryKey: []string{`1`, `NULL`, `NULL`, `NULL`}, RowIsDeleted: true, RowLastModified: ts3},
 		{PrimaryKey: []string{`2`, `b`, `b`, `NULL`}, RowIsDeleted: false, RowLastModified: ts2},
 	}; !reflect.DeepEqual(expected, actual) {

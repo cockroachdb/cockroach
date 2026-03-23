@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
@@ -186,7 +187,12 @@ func (w *workloadReader) readFiles(
 	}
 
 	for _, wc := range wcs {
-		if err := ctxgroup.GroupWorkers(ctx, w.parallelism, func(ctx context.Context, _ int) error {
+		if err := ctxgroup.GroupWorkers(ctx, w.parallelism, func(ctx context.Context, _ int) (retErr error) {
+			defer func() {
+				if r := recover(); r != nil {
+					retErr = errors.CombineErrors(logcrash.PanicAsError(1, r), retErr)
+				}
+			}()
 			evalCtx := w.evalCtx.Copy()
 			return wc.Worker(ctx, evalCtx, w.semaCtx)
 		}); err != nil {

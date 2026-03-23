@@ -109,3 +109,48 @@ because why not
 	out := cleanupString(in)
 	require.Equal(t, "this is a string that has been broken up into many lines, because why not", out)
 }
+
+func TestManagerStringArrayAndMap(t *testing.T) {
+	t.Run("string_array", func(t *testing.T) {
+		m := &manager{}
+		var arrayVal []string
+		m.RegisterFlag(runCmdID, &arrayVal, FlagInfo{
+			Name:  "start-env",
+			Usage: "env vars to inject",
+		})
+
+		runCmd := &cobra.Command{}
+		m.AddFlagsToCommand(runCmdID, runCmd.Flags())
+
+		// Test multiple --start-env flags
+		require.NoError(t, runCmd.ParseFlags([]string{
+			"--start-env", "FOO=bar",
+			"--start-env", "BAZ=qux",
+		}))
+		require.Equal(t, []string{"FOO=bar", "BAZ=qux"}, arrayVal)
+		require.NotNil(t, m.Changed(&arrayVal))
+	})
+
+	t.Run("string_to_string_map", func(t *testing.T) {
+		m := &manager{}
+		var mapVal map[string]string
+		m.RegisterFlag(runCmdID, &mapVal, FlagInfo{
+			Name:  "start-setting",
+			Usage: "cluster settings to apply",
+		})
+
+		runCmd := &cobra.Command{}
+		m.AddFlagsToCommand(runCmdID, runCmd.Flags())
+
+		// Test key=value format
+		require.NoError(t, runCmd.ParseFlags([]string{
+			"--start-setting", "foo.bar=baz",
+			"--start-setting", "qux.quux=corge",
+		}))
+		require.Equal(t, map[string]string{
+			"foo.bar":  "baz",
+			"qux.quux": "corge",
+		}, mapVal)
+		require.NotNil(t, m.Changed(&mapVal))
+	})
+}

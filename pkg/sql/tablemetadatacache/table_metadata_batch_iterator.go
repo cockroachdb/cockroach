@@ -95,7 +95,9 @@ func newTableMetadataBatchIterator(
 // - crdb_internal.tenant_span_stats
 //
 // It will return true if any tables were fetched.
-func (batchIter *tableMetadataBatchIterator) fetchNextBatch(ctx context.Context) (bool, error) {
+func (batchIter *tableMetadataBatchIterator) fetchNextBatch(
+	ctx context.Context,
+) (more bool, retErr error) {
 	batchSize := batchIter.batchSize
 	if batchSize == 0 {
 		return false, nil
@@ -112,80 +114,99 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(ctx context.Context)
 	// a single SpanStats rpc via the spanStatsFetcher to get the span
 	// stats for all the tables in the batch.
 	var spans roachpb.Spans
+	var itErr error
+	var exhausted bool
 	for {
-		it, err := batchIter.ie.QueryIteratorEx(
-			ctx,
-			"fetch-table-metadata-batch",
-			nil, /* txn */
-			sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
-			batchIter.queryStatement,
-			batchIter.lastID.parentID, batchIter.lastID.schemaID, batchIter.lastID.name,
-			batchSize,
-		)
-		if err != nil {
-			return false, err
-		}
-
-		// If there are no more results we've reached the end of the namespace table
-		// and are done.
-		ok, err := it.Next(ctx)
-		if !ok || err != nil {
-			return false, err
-		}
-
-		for ; ok; ok, err = it.Next(ctx) {
+		// The logic in this for-loop is wrapped in an IIFE so that the iterator
+		// can be closed with defer.
+		func() {
+			it, err := batchIter.ie.QueryIteratorEx(
+				ctx,
+				"fetch-table-metadata-batch",
+				nil, /* txn */
+				sessiondata.NodeUserWithBulkLowPriSessionDataOverride,
+				batchIter.queryStatement,
+				batchIter.lastID.parentID, batchIter.lastID.schemaID, batchIter.lastID.name,
+				batchSize,
+			)
 			if err != nil {
-				return len(batchIter.batchRows) > 0, err
+				itErr = err
+				return
+			}
+			defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
+
+			// If there are no more results we've reached the end of the namespace table
+			// and are done.
+			ok, err := it.Next(ctx)
+			if !ok || err != nil {
+				itErr = err
+				exhausted = !ok
+				return
 			}
 
-			row := it.Cur()
-			if row.Len() != iterCols {
-				return false, errors.New("unexpected number of columns returned")
+			for ; ok; ok, err = it.Next(ctx) {
+				if err != nil {
+					itErr = err
+					more = len(batchIter.batchRows) > 0
+					return
+				}
+
+				row := it.Cur()
+				if row.Len() != iterCols {
+					itErr = errors.New("unexpected number of columns returned")
+					return
+				}
+
+				batchIter.lastID = paginationKey{
+					parentID: int64(tree.MustBeDInt(row[parentIDIdx])),
+					schemaID: int64(tree.MustBeDInt(row[schemaIDIdx])),
+					name:     string(tree.MustBeDString(row[tableNameIdx])),
+				}
+
+				// If the column count row is NULL, this is not a table.
+				if row[columnCountIdx] == tree.DNull {
+					continue
+				}
+
+				iterRow := tableMetadataIterRow{
+					tableID:     int(tree.MustBeDInt(row[idIdx])),
+					tableName:   string(tree.MustBeDString(row[tableNameIdx])),
+					dbID:        int(tree.MustBeDInt(row[parentIDIdx])),
+					dbName:      string(tree.MustBeDString(row[databaseNameIdx])),
+					schemaID:    int(tree.MustBeDInt(row[schemaIDIdx])),
+					schemaName:  string(tree.MustBeDString(row[schemaNameIdx])),
+					columnCount: int(tree.MustBeDInt(row[columnCountIdx])),
+					// Add 1 to the index count to account for the primary index.
+					indexCount: int(tree.MustBeDInt(row[secondaryIndexCountIdx])) + 1,
+					tableType:  string(tree.MustBeDString(row[tableTypeIdx])),
+				}
+
+				if row[autoStatsEnabledIdx] != tree.DNull {
+					b := bool(tree.MustBeDBool(row[autoStatsEnabledIdx]))
+					iterRow.autoStatsEnabled = &b
+				}
+
+				if row[statsLastUpdatedIdx] != tree.DNull {
+					t := tree.MustBeDTimestamp(row[statsLastUpdatedIdx])
+					iterRow.statsLastUpdated = &t.Time
+				}
+
+				dSpan := tree.MustBeDArray(row[spanIdx]).Array
+				spans = append(spans, roachpb.Span{
+					Key:    []byte(tree.MustBeDBytes(dSpan[0])),
+					EndKey: []byte(tree.MustBeDBytes(dSpan[1])),
+				})
+
+				batchIter.batchRows = append(batchIter.batchRows, iterRow)
 			}
+		}()
 
-			batchIter.lastID = paginationKey{
-				parentID: int64(tree.MustBeDInt(row[parentIDIdx])),
-				schemaID: int64(tree.MustBeDInt(row[schemaIDIdx])),
-				name:     string(tree.MustBeDString(row[tableNameIdx])),
-			}
-
-			// If the column count row is NULL, this is not a table.
-			if row[columnCountIdx] == tree.DNull {
-				continue
-			}
-
-			iterRow := tableMetadataIterRow{
-				tableID:     int(tree.MustBeDInt(row[idIdx])),
-				tableName:   string(tree.MustBeDString(row[tableNameIdx])),
-				dbID:        int(tree.MustBeDInt(row[parentIDIdx])),
-				dbName:      string(tree.MustBeDString(row[databaseNameIdx])),
-				schemaID:    int(tree.MustBeDInt(row[schemaIDIdx])),
-				schemaName:  string(tree.MustBeDString(row[schemaNameIdx])),
-				columnCount: int(tree.MustBeDInt(row[columnCountIdx])),
-				// Add 1 to the index count to account for the primary index.
-				indexCount: int(tree.MustBeDInt(row[secondaryIndexCountIdx])) + 1,
-				tableType:  string(tree.MustBeDString(row[tableTypeIdx])),
-			}
-
-			if row[autoStatsEnabledIdx] != tree.DNull {
-				b := bool(tree.MustBeDBool(row[autoStatsEnabledIdx]))
-				iterRow.autoStatsEnabled = &b
-			}
-
-			if row[statsLastUpdatedIdx] != tree.DNull {
-				t := tree.MustBeDTimestamp(row[statsLastUpdatedIdx])
-				iterRow.statsLastUpdated = &t.Time
-			}
-
-			dSpan := tree.MustBeDArray(row[spanIdx]).Array
-			spans = append(spans, roachpb.Span{
-				Key:    []byte(tree.MustBeDBytes(dSpan[0])),
-				EndKey: []byte(tree.MustBeDBytes(dSpan[1])),
-			})
-
-			batchIter.batchRows = append(batchIter.batchRows, iterRow)
+		if itErr != nil {
+			return more, itErr
 		}
-
+		if exhausted {
+			return false, nil
+		}
 		// The namespace table contains non-table entries like types. It's possible we did not
 		// encounter any table entries in this batch - in that case, let's get the next one.
 		if len(batchIter.batchRows) > 0 {
@@ -197,6 +218,9 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(ctx context.Context)
 	res, err := batchIter.spanStatsFetcher.SpanStats(ctx, &roachpb.SpanStatsRequest{
 		Spans:  spans,
 		NodeID: "0", // Fan out.
+		// Tablemetadata does not use the ApproximateTotalStats field, so we can skip the
+		// nodes making additional RangeStats RPCs to collect the MVCC stats across all replicas.
+		SkipApproxTotalStats: true,
 	})
 
 	if err != nil {
@@ -228,13 +252,31 @@ func (batchIter *tableMetadataBatchIterator) fetchNextBatch(ctx context.Context)
 // system.table_metadata.
 func newBatchQueryStatement(aostClause string) string {
 	return fmt.Sprintf(`
-SELECT 
-    n.id,
-    n.name,
-    n."parentID",
-    db_name.name as db_name,
-    n."parentSchemaID",
-    schema_name.name as schema_name,
+WITH cte (n_id, n_name, "n_parentID", db_name, "n_parentSchemaID", schema_name, d) AS (
+   SELECT
+       n.id,
+       n.name,
+       n."parentID",
+       db_name.name,
+       n."parentSchemaID",
+       schema_name.name,
+       crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', enc_desc.descriptor)
+   FROM system.namespace n
+   JOIN system.descriptor enc_desc ON n.id = enc_desc.id
+   JOIN system.namespace db_name ON n."parentID" = db_name.id AND db_name."parentID" = 0
+   JOIN system.namespace schema_name ON n."parentSchemaID" = schema_name.id AND schema_name."parentID" = n."parentID"
+   WHERE (n."parentID", n."parentSchemaID", n.name) > ($1, $2, $3)
+     AND n."parentSchemaID" != 0
+   ORDER BY n."parentID", n."parentSchemaID", n.name
+   LIMIT $4
+)
+SELECT
+    n_id AS id,
+    n_name AS name,
+    "n_parentID" AS "parentID",
+    db_name,
+    "n_parentSchemaID" AS "parentSchemaID",
+    schema_name,
     json_array_length(d->'table' -> 'columns') as columns,
     COALESCE(json_array_length(d->'table' -> 'indexes'), 0) as indexes,
     CASE
@@ -244,22 +286,15 @@ SELECT
         ELSE 'TABLE'
     END as table_type,
     (d->'table'->'autoStatsSettings'->>'enabled')::BOOL as auto_stats_enabled,
-    ts.last_updated as stats_last_updated,
-    crdb_internal.table_span(n.id) as span
-FROM system.namespace n
-JOIN system.descriptor enc_desc ON n.id = enc_desc.id
-CROSS JOIN LATERAL crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', enc_desc.descriptor) AS d
-JOIN system.namespace db_name ON n."parentID" = db_name.id AND db_name."parentID" = 0
-JOIN system.namespace schema_name ON n."parentSchemaID" = schema_name.id AND schema_name."parentID" = n."parentID"
-LEFT JOIN (
-    SELECT "tableID", max("createdAt") as last_updated 
-    FROM system.table_statistics 
-    GROUP BY "tableID"
-) ts ON ts."tableID" = n.id
+    (
+        SELECT max("createdAt") as stats_last_updated
+        FROM system.table_statistics
+        WHERE "tableID" = n_id
+        GROUP BY "tableID"
+    ),
+    crdb_internal.table_span(n_id) as span
+FROM
+    cte
 %[1]s
-WHERE (n."parentID", n."parentSchemaID", n.name) > ($1, $2, $3) 
-  AND n."parentSchemaID" != 0
-ORDER BY n."parentID", n."parentSchemaID", n.name
-LIMIT $4
 `, aostClause)
 }

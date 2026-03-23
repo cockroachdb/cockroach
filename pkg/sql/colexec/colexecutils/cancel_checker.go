@@ -11,6 +11,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 )
 
@@ -27,6 +29,8 @@ type CancelChecker struct {
 	// Number of times check() has been called since last context cancellation
 	// check.
 	callsSinceLastCheck uint32
+
+	cpuHandle *admission.GoroutineCPUHandle
 }
 
 var _ colexecop.Operator = &CancelChecker{}
@@ -46,10 +50,14 @@ func (c *CancelChecker) Init(ctx context.Context) {
 		// Check*() methods, and the input remains nil then.
 		c.Input.Init(c.Ctx)
 	}
+	cpuHandle := admission.SQLCPUHandleFromContext(ctx)
+	if cpuHandle != nil {
+		c.cpuHandle = cpuHandle.RegisterGoroutine()
+	}
 }
 
 // Next is part of colexecop.Operator interface.
-func (c *CancelChecker) Next() coldata.Batch {
+func (c *CancelChecker) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	c.CheckEveryCall()
 	return c.Input.Next()
 }
@@ -80,5 +88,11 @@ func (c *CancelChecker) CheckEveryCall() {
 	case <-c.Ctx.Done():
 		colexecerror.ExpectedError(cancelchecker.QueryCanceledError)
 	default:
+	}
+	if c.cpuHandle != nil {
+		err := c.cpuHandle.MeasureAndAdmit(c.Ctx)
+		if err != nil {
+			colexecerror.ExpectedError(cancelchecker.QueryCanceledError)
+		}
 	}
 }

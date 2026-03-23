@@ -11,7 +11,6 @@ import (
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
 // DialMigrationClient establishes a DRPC connection if enabled; otherwise,
@@ -22,9 +21,10 @@ func DialMigrationClient(
 	ctx context.Context,
 	nodeID roachpb.NodeID,
 	class rpcbase.ConnectionClass,
-	cs *cluster.Settings,
+	useDRPC bool,
 ) (RPCMigrationClient, error) {
-	return rpcbase.DialRPCClient(nd, ctx, nodeID, class, NewGRPCMigrationClientAdapter, NewDRPCMigrationClientAdapter, cs)
+	return rpcbase.DialRPCClient(nd, ctx, nodeID, class, NewGRPCMigrationClientAdapter, NewDRPCMigrationClientAdapter,
+		useDRPC)
 }
 
 // DialStatusClientNoBreaker establishes a DRPC connection if enabled;
@@ -42,34 +42,20 @@ func DialStatusClientNoBreaker(
 // falls back to gRPC. The established connection is used to create a
 // RPCStatusClient.
 func DialStatusClient(
-	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, cs *cluster.Settings,
+	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, useDRPC bool,
 ) (RPCStatusClient, error) {
-	if rpcbase.TODODRPC {
-		return rpcbase.DialRPCClient(nd, ctx, nodeID, rpcbase.DefaultClass,
-			NewGRPCStatusClientAdapter, NewDRPCStatusClientAdapter, cs)
-	}
-	conn, err := nd.Dial(ctx, nodeID, rpcbase.DefaultClass)
-	if err != nil {
-		return nil, err
-	}
-	return NewGRPCStatusClientAdapter(conn), nil
+	return rpcbase.DialRPCClient(nd, ctx, nodeID, rpcbase.DefaultClass,
+		NewGRPCStatusClientAdapter, NewDRPCStatusClientAdapter, useDRPC)
 }
 
 // DialAdminClient establishes a DRPC connection if enabled; otherwise, it
 // falls back to gRPC. The established connection is used to create a
 // RPCAdminClient.
 func DialAdminClient(
-	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, cs *cluster.Settings,
+	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, useDRPC bool,
 ) (RPCAdminClient, error) {
-	if rpcbase.TODODRPC {
-		return rpcbase.DialRPCClient(nd, ctx, nodeID, rpcbase.DefaultClass,
-			NewGRPCAdminClientAdapter, NewDRPCAdminClientAdapter, cs)
-	}
-	conn, err := nd.Dial(ctx, nodeID, rpcbase.DefaultClass)
-	if err != nil {
-		return nil, err
-	}
-	return NewGRPCAdminClientAdapter(conn), nil
+	return rpcbase.DialRPCClient(nd, ctx, nodeID, rpcbase.DefaultClass,
+		NewGRPCAdminClientAdapter, NewDRPCAdminClientAdapter, useDRPC)
 }
 
 // DialAdminClientNoBreaker establishes a DRPC connection if enabled;

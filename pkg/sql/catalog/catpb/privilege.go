@@ -182,7 +182,7 @@ func NewBasePrivilegeDescriptor(owner username.SQLUsername) *PrivilegeDescriptor
 // Here we also add the CONNECT privilege for the database.
 func NewBaseDatabasePrivilegeDescriptor(owner username.SQLUsername) *PrivilegeDescriptor {
 	p := NewBasePrivilegeDescriptor(owner)
-	p.Grant(username.PublicRoleName(), privilege.List{privilege.CONNECT}, false /* withGrantOption */)
+	p.Grant(username.PublicRoleName(), privilege.List{privilege.CONNECT, privilege.TEMPORARY}, false /* withGrantOption */)
 	return p
 }
 

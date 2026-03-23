@@ -36,10 +36,11 @@ run_bazel() {
     # git objects.
     teamcity_alternates="/home/agent/system/git"
     vols="--volume ${teamcity_alternates}:${teamcity_alternates}:ro"
+    vols="${vols} --volume ${TEAMCITY_BUILD_PROPERTIES_FILE}:${TEAMCITY_BUILD_PROPERTIES_FILE}:ro"
     artifacts_dir=$root/artifacts
     mkdir -p "$artifacts_dir"
     vols="${vols} --volume ${artifacts_dir}:/artifacts"
-    cache=/home/agent/.bzlhome
+    cache=/home/agent/.bzlhome24
     mkdir -p $cache
     vols="${vols} --volume ${root}:/go/src/github.com/cockroachdb/cockroach"
     vols="${vols} --volume ${cache}:/home/roach"

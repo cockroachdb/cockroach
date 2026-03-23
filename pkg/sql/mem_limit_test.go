@@ -180,7 +180,7 @@ func TestStreamerTightBudget(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf("SET distsql_workmem = '%dB'", blobSize))
 
 	// Perform an index join to read the blobs.
-	query := "EXPLAIN ANALYZE SELECT sum(length(blob)) FROM t@t_k_idx WHERE k = 1"
+	query := "EXPLAIN ANALYZE (VERBOSE) SELECT sum(length(blob)) FROM t@t_k_idx WHERE k = 1"
 	maximumMemoryUsageRegex := regexp.MustCompile(`maximum memory usage: (\d+\.\d+) MiB`)
 	rows := sqlDB.QueryStr(t, query)
 	// Build pretty output for an error message in case we need it.

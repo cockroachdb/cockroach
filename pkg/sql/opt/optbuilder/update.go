@@ -124,6 +124,8 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	}
 	mb.buildUpdate(returningExpr, cat.PolicyScopeUpdate, &exprColRefs)
 
+	mb.trackTargetColDeps()
+
 	return mb.outScope
 }
 

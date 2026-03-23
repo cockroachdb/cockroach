@@ -170,6 +170,14 @@ func (ol *OpLoggerBatch) LogicalOps() []enginepb.MVCCLogicalOp {
 	return ol.ops
 }
 
+// ShallowCopyWithBatch returns a shallow copy of the OpLoggerBatch with a
+// different underlying batch. The ops slice is shared with the original.
+func (ol *OpLoggerBatch) ShallowCopyWithBatch(b Batch) *OpLoggerBatch {
+	cpy := *ol
+	cpy.Batch = b
+	return &cpy
+}
+
 // DisableOpLogger disables op logging for the given read/writer.
 func DisableOpLogger(rw ReadWriter) ReadWriter {
 	return &noOpLogger{ReadWriter: rw}

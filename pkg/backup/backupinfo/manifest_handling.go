@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/backup/backupencryption"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
-	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -42,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -329,7 +329,7 @@ func readManifest(
 		if err != nil {
 			return backuppb.BackupManifest{}, 0, err
 		}
-		plaintextBytes, err := storageccl.DecryptFile(ctx, descBytes, encryptionKey, mem)
+		plaintextBytes, err := storage.DecryptFile(ctx, descBytes, encryptionKey, mem)
 		if err != nil {
 			return backuppb.BackupManifest{}, 0, err
 		}
@@ -358,7 +358,7 @@ func readManifest(
 	var backupManifest backuppb.BackupManifest
 	if err := protoutil.Unmarshal(descBytes, &backupManifest); err != nil {
 		mem.Shrink(ctx, approxMemSize)
-		if encryption == nil && storageccl.AppearsEncrypted(descBytes) {
+		if encryption == nil && storage.AppearsEncrypted(descBytes) {
 			return backuppb.BackupManifest{}, 0, errors.Wrapf(
 				err, "file appears encrypted -- try specifying one of \"%s\" or \"%s\"",
 				backupencryption.BackupOptEncPassphrase, backupencryption.BackupOptEncKMS)
@@ -418,7 +418,7 @@ func readBackupPartitionDescriptor(
 		if err != nil {
 			return backuppb.BackupPartitionDescriptor{}, err
 		}
-		plaintextData, err := storageccl.DecryptFile(ctx, descBytes, encryptionKey, memAcc)
+		plaintextData, err := storage.DecryptFile(ctx, descBytes, encryptionKey, memAcc)
 		if err != nil {
 			return backuppb.BackupPartitionDescriptor{}, err
 		}
@@ -467,7 +467,7 @@ func readTableStatistics(
 		if err != nil {
 			return nil, err
 		}
-		statsBytes, err = storageccl.DecryptFile(ctx, statsBytes, encryptionKey, mon.NewStandaloneUnlimitedAccount())
+		statsBytes, err = storage.DecryptFile(ctx, statsBytes, encryptionKey, mon.NewStandaloneUnlimitedAccount())
 		if err != nil {
 			return nil, err
 		}
@@ -643,7 +643,7 @@ func WriteBackupManifest(
 		if err != nil {
 			return err
 		}
-		descBuf, err = storageccl.EncryptFile(descBuf, encryptionKey)
+		descBuf, err = storage.EncryptFile(descBuf, encryptionKey)
 		if err != nil {
 			return err
 		}
@@ -705,7 +705,7 @@ func WriteBackupPartitionDescriptor(
 		if err != nil {
 			return err
 		}
-		descBuf, err = storageccl.EncryptFile(descBuf, encryptionKey)
+		descBuf, err = storage.EncryptFile(descBuf, encryptionKey)
 		if err != nil {
 			return err
 		}
@@ -736,7 +736,7 @@ func WriteTableStatistics(
 		if err != nil {
 			return err
 		}
-		statsBuf, err = storageccl.EncryptFile(statsBuf, encryptionKey)
+		statsBuf, err = storage.EncryptFile(statsBuf, encryptionKey)
 		if err != nil {
 			return err
 		}
@@ -948,10 +948,11 @@ func UnzipBackupTreeEntries(
 	return defaultURIs, mainBackupManifests, localityInfo
 }
 
-// ValidateEndTimeAndTruncate checks that the requested target time, if
-// specified, is valid for the list of incremental backups resolved, truncating
-// the results to the backup that contains the target time.
-// The method also performs additional sanity checks to ensure the backups cover
+// ValidateEndTimeAndTruncate checks that the requested target time is valid for
+// the list of incremental backups resolved, truncating the results to the
+// backup that contains the target time. If the endTime is empty, it is assumed
+// that the endTime is the end time of the last backup in the chain. The
+// function also performs additional sanity checks to ensure the backups cover
 // the requested time.
 //
 // Note: This function assumes that the manifests in the chain are sorted by end
@@ -967,34 +968,54 @@ func ValidateEndTimeAndTruncate[E ManifestLike](
 		if includeSkipped {
 			return manifests, nil
 		}
-		manifests = elideSkippedLayers(manifests)
+		manifests = elideSkippedLayers(manifests, endTime)
 		if err := validateContinuity(manifests); err != nil {
 			return nil, err
 		}
 		return manifests, nil
 	}
+
+	var closestEndTime hlc.Timestamp
+	var closestTimeDiff time.Duration
+	arbitraryTimeErr := func() error {
+		return errors.Errorf(
+			"invalid RESTORE timestamp: restoring to arbitrary time requires that "+
+				"BACKUP for requested time be created with `revision_history` option."+
+				" nearest backup time is %s",
+			closestEndTime.GoTime().UTC(),
+		)
+	}
 	for i, b := range manifests {
-		// Find the backup that covers the requested time.
-		if !(b.Start().Less(endTime) && endTime.LessEq(b.End())) {
-			continue
+		timeDiff := b.End().GoTime().Sub(endTime.GoTime()).Abs()
+		if closestEndTime.IsEmpty() || timeDiff < closestTimeDiff {
+			closestEndTime = b.End()
+			closestTimeDiff = timeDiff
 		}
 
-		// Ensure that the backup actually has revision history.
+		if b.End().Less(endTime) {
+			// This backup precedes the requested time, so continue.
+			continue
+		} else if endTime.LessEq(b.Start()) {
+			// We've overshot the requested time, so no subsequent backups will cover
+			// it. This implies the user has requested an arbitrary time without a
+			// covering revision history backup.
+			return nil, arbitraryTimeErr()
+		}
+
+		// At this point, we know that b.Start() < endTime <= b.End(). If endTime !=
+		// b.End(), then this backup only covers the time if it is a revision
+		// history backup.
 		if !endTime.Equal(b.End()) {
 			if b.MVCC() != backuppb.MVCCFilter_All {
-				const errPrefix = "invalid RESTORE timestamp: restoring to arbitrary time requires that BACKUP for requested time be created with 'revision_history' option."
-				if i == 0 {
-					return nil, errors.Errorf(
-						errPrefix+" nearest backup time is %s",
-						timeutil.Unix(0, b.End().WallTime).UTC(),
-					)
+				if i < len(manifests)-1 {
+					// This backup is not a revision history backup, but subsequent
+					// backups might be (e.g. revision history backup chain that contains
+					// compacted backups). We continue to search.
+					continue
 				}
-				return nil, errors.Errorf(
-					errPrefix+" nearest BACKUP times are %s or %s",
-					timeutil.Unix(0, manifests[i-1].End().WallTime).UTC(),
-					timeutil.Unix(0, b.End().WallTime).UTC(),
-				)
+				return nil, arbitraryTimeErr()
 			}
+
 			// Ensure that the revision history actually covers the requested time -
 			// while the BACKUP's start and end might contain the requested time for
 			// example if start time is 0 (full backup), the revision history was
@@ -1007,16 +1028,18 @@ func ValidateEndTimeAndTruncate[E ManifestLike](
 				)
 			}
 		}
+
 		if includeSkipped {
 			return manifests[:i+1], nil
 		}
-		manifests = elideSkippedLayers(manifests[:i+1])
+		manifests = elideSkippedLayers(manifests[:i+1], endTime)
 		if err := validateContinuity(manifests); err != nil {
 			return nil, err
 		}
 		return manifests, nil
 	}
 
+	// If we reach here, the requested time is beyond the end time of all backups.
 	return nil, errors.Errorf(
 		"invalid RESTORE timestamp: supplied backups do not cover requested time",
 	)
@@ -1037,7 +1060,7 @@ func skipCompactedBackups[E ManifestLike](manifests []E) []E {
 
 // validateContinuity checks that the backups are continuous.
 //
-// Note: This fucntion assumes the backups are sorted by end time in ascending
+// Note: This function assumes the backups are sorted by end time in ascending
 // order.
 func validateContinuity[E ManifestLike](manifests []E) error {
 	if len(manifests) == 0 {
@@ -1056,12 +1079,48 @@ func validateContinuity[E ManifestLike](manifests []E) error {
 	return nil
 }
 
+// elideCompactedBackupsForRevisionHistory removes compacted backups that will
+// not be used in a revision history restore. Since compacted backups do not
+// contain revision histories, any compacted backup that contains the requested
+// time without matching its end time must be elided. However, all prior
+// compacted backups can be retained. The requestedEnd may be empty to indicate
+// no specified end time.
+//
+// Note: This function assumes that the backups are sorted by end time in
+// increasing order.
+func elideCompactedBackupsForRevisionHistory[E ManifestLike](
+	manifests []E, requestedEnd hlc.Timestamp,
+) []E {
+	if requestedEnd.IsEmpty() {
+		return manifests
+	}
+	for i := len(manifests) - 1; i >= 0; i-- {
+		// Since manifests are sorted by end time ascending, once we reach a backup
+		// whose end time is less than the requested end time, we can stop. No
+		// subsequent backups will cover.
+		if manifests[i].End().Less(requestedEnd) {
+			break
+		}
+		if !manifests[i].Compacted() {
+			continue
+		}
+		// If the compacted backup covers the end time but does not end at the end
+		// time specifically, it cannot be used in the restore.
+		if manifests[i].Start().Less(requestedEnd) && !requestedEnd.Equal(manifests[i].End()) {
+			manifests = slices.Delete(manifests, i, i+1)
+		}
+	}
+	return manifests
+}
+
 // elideSkippedLayers removes backups that are skipped in the backup chain and
-// ensures only backups that will be used in the restore are returned.
+// ensures only backups that will be used in the restore are returned. The
+// provided requestedEnd may be empty to indicate no specified end time.
 //
 // Note: This function assumes that the manifests in the chain are sorted by end
 // time in ascending order and ties are broken by start time in ascending order.
-func elideSkippedLayers[E ManifestLike](manifests []E) []E {
+func elideSkippedLayers[E ManifestLike](manifests []E, requestedEnd hlc.Timestamp) []E {
+	manifests = elideCompactedBackupsForRevisionHistory(manifests, requestedEnd)
 	manifests = elideDuplicateEndTimes(manifests)
 	i := len(manifests) - 1
 	for i > 0 {
@@ -1334,21 +1393,24 @@ func CheckForPreviousBackup(
 
 	// Check for the presence of a BACKUP-LOCK file with a job ID different from
 	// that of our job.
-	if err := defaultStore.List(ctx, "", backupbase.ListingDelimDataSlash, func(s string) error {
-		s = strings.TrimPrefix(s, "/")
-		if strings.HasPrefix(s, BackupLockFilePrefix) {
-			jobIDSuffix := strings.TrimPrefix(s, BackupLockFilePrefix)
-			if len(jobIDSuffix) == 0 {
-				return errors.AssertionFailedf("malformed BACKUP-LOCK file %s, expected a job ID suffix", s)
+	if err := defaultStore.List(
+		ctx, "", cloud.ListOptions{Delimiter: backupbase.ListingDelimDataSlash},
+		func(s string) error {
+			s = strings.TrimPrefix(s, "/")
+			if strings.HasPrefix(s, BackupLockFilePrefix) {
+				jobIDSuffix := strings.TrimPrefix(s, BackupLockFilePrefix)
+				if len(jobIDSuffix) == 0 {
+					return errors.AssertionFailedf("malformed BACKUP-LOCK file %s, expected a job ID suffix", s)
+				}
+				if jobIDSuffix != strconv.FormatInt(int64(jobID), 10) {
+					return pgerror.Newf(pgcode.FileAlreadyExists,
+						"%s already contains a `BACKUP-LOCK` file written by job %s",
+						redactedURI, jobIDSuffix)
+				}
 			}
-			if jobIDSuffix != strconv.FormatInt(int64(jobID), 10) {
-				return pgerror.Newf(pgcode.FileAlreadyExists,
-					"%s already contains a `BACKUP-LOCK` file written by job %s",
-					redactedURI, jobIDSuffix)
-			}
-		}
-		return nil
-	}); err != nil {
+			return nil
+		},
+	); err != nil {
 		// HTTP external storage does not support listing, and so we skip checking
 		// for a BACKUP-LOCK file.
 		if !errors.Is(err, cloud.ErrListingUnsupported) {
@@ -1464,7 +1526,7 @@ func WriteBackupManifestCheckpoint(
 		if err != nil {
 			return err
 		}
-		descBuf, err = storageccl.EncryptFile(descBuf, encryptionKey)
+		descBuf, err = storage.EncryptFile(descBuf, encryptionKey)
 		if err != nil {
 			return err
 		}
@@ -1536,7 +1598,7 @@ func readLatestCheckpointFile(
 
 	// We name files such that the most recent checkpoint will always
 	// be at the top, so just grab the first filename.
-	err = exportStore.List(ctx, BackupProgressDirectory, "", func(p string) error {
+	err = exportStore.List(ctx, BackupProgressDirectory, cloud.ListOptions{}, func(p string) error {
 		// The first file returned by List could be either the checkpoint or
 		// checksum file, but we are only concerned with the timestamped prefix.
 		// We resolve if it is a checkpoint or checksum file separately below.
@@ -1726,7 +1788,7 @@ func (f *IterFactory) NewFileIter(
 	ctx context.Context,
 ) (bulk.Iterator[*backuppb.BackupManifest_File], error) {
 	if f.m.HasExternalManifestSSTs {
-		storeFile := storageccl.StoreFile{
+		storeFile := storage.StoreFile{
 			Store:    f.store,
 			FilePath: f.fileSSTPath,
 		}
@@ -1873,6 +1935,7 @@ func WriteBackupMetadata(
 			execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
 			details,
 			backupManifest.RevisionStartTime,
+			kmsEnv,
 		),
 		"writing backup index metadata",
 	)

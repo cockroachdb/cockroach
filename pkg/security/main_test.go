@@ -25,10 +25,8 @@ func ResetTest() {
 
 func TestMain(m *testing.M) {
 	ResetTest()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
-	defer serverutils.TestingGlobalDRPCOption(
-		base.TestDRPCEnabledRandomly,
-	)()
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithDRPCOption(base.TestDRPCEnabledRandomly))
 	os.Exit(m.Run())
 }
 

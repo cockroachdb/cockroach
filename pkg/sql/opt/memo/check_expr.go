@@ -365,6 +365,11 @@ func (m *Memo) CheckExpr(e opt.Expr) {
 			panic(errors.AssertionFailedf("invalid WithScan input columns %v", t.InCols))
 		}
 
+	case *CaseExpr:
+		if len(t.Whens) == 0 {
+			panic(errors.AssertionFailedf("CASE expression must have at least one WHEN branch"))
+		}
+
 	default:
 		if opt.IsJoinOp(e) {
 			left := e.Child(0).(RelExpr)

@@ -276,10 +276,16 @@ var retiredSettings = map[InternalKey]struct{}{
 	"storage.columnar_blocks.enabled": {},
 
 	// removed as of 26.1
-	"sql.distsql_planning.use_gossip.enabled":             {},
 	"rocksdb.ingest_backpressure.l0_file_count_threshold": {},
 	"rocksdb.ingest_backpressure.max_delay":               {},
 	"pebble.pre_ingest_delay.enabled":                     {},
+
+	// removed as of 26.2
+	"bulkio.import.write_import_epoch.enabled":                 {},
+	"physical_replication.consumer.stream_compression.enabled": {},
+	"kvadmission.export_request_elastic_control.enabled":       {},
+	"changefeed.shutdown_checkpoint.enabled":                   {},
+	"changefeed.aggregator.heartbeat":                          {},
 }
 
 // grandfatheredDefaultSettings is the list of "grandfathered" existing sql.defaults

@@ -350,6 +350,21 @@ func BenchmarkTimestampString(b *testing.B) {
 	}
 }
 
+// BenchmarkTimestampIsEmpty benchmarks our IsEmpty implementation.
+//
+// Performance regression triage notes:
+//
+// We've changed the function under test between the following two different
+// implementations:
+//
+//	t == Timestamp{}
+//
+// and
+//
+//	t.WallTime == 0 && t.Logical == 0
+//
+// a few times based on this benchmark. If we find ourselves changing it again,
+// consider deleting the benchmark instead.
 func BenchmarkTimestampIsEmpty(b *testing.B) {
 	cases := map[string]Timestamp{
 		"empty":    {},

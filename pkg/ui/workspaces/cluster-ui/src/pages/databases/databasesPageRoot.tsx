@@ -265,6 +265,7 @@ export const DatabasesPageV2 = () => {
           error={error}
           columns={colsWithSort}
           dataSource={tableData}
+          dataTest="databases-table"
           pagination={{
             size: "small",
             current: params.pagination.page,

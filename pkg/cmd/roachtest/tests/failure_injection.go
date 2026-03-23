@@ -961,6 +961,199 @@ func runFailureSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster, no
 	}
 }
 
+// newFailerLogger creates a quiet child logger for failure injection operations.
+// This keeps verbose failure injection logs out of the main test.log.
+func newFailerLogger(
+	l *logger.Logger, nodes option.NodeListOption, testName string,
+) *logger.Logger {
+	quietLogger, file, err := roachtestutil.LoggerForCmd(l, nodes, testName, "failer")
+	if err != nil {
+		l.Printf("WARN: failed to create child logger for failer: %v", err)
+		return l
+	}
+	l.Printf("Failure injection details in %s.log", file)
+	return quietLogger
+}
+
+// runNetworkPartitionExample is a reference example showing how to write a
+// roachtest that uses the failure injection library to inject a network partition.
+func runNetworkPartitionExample(ctx context.Context, t test.Test, c cluster.Cluster) {
+	const testName = "network-partition-example"
+
+	// Start the cluster.
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
+
+	// Initialize workload.
+	c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload init kv {pgurl:1}")
+
+	// Select nodes to partition.
+	srcNode := c.Node(1)
+	destNode := c.Node(2)
+
+	// Create a failer for bidirectional network partition using the helper.
+	failer, failureArgs, err := roachtestutil.MakeBidirectionalPartitionFailer(
+		t.L(), c, srcNode, destNode)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a separate logger for all failure injection operations.
+	failerLogger := newFailerLogger(t.L(), c.CRDBNodes(), testName)
+
+	// Always cleanup, even on test failure.
+	defer func() {
+		if err := failer.Cleanup(context.Background(), failerLogger); err != nil {
+			t.L().Printf("cleanup failed: %v", err)
+		}
+	}()
+
+	// Setup (no-op for iptables, but required by the interface).
+	if err := failer.Setup(ctx, failerLogger, failureArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// Start a workload in the background.
+	cancel := t.GoWithCancel(func(goCtx context.Context, l *logger.Logger) error {
+		cmd := roachtestutil.NewCommand("./cockroach workload run kv --tolerate-errors").
+			Arg("{pgurl%s}", c.CRDBNodes()).
+			String()
+		return c.RunE(goCtx, option.WithNodes(c.WorkloadNode()), cmd)
+	}, task.Name("kv-workload"))
+	defer cancel()
+
+	// Inject the network partition.
+	t.L().Printf("Injecting network partition between node %s and node %s", srcNode, destNode)
+	if err := failer.Inject(ctx, failerLogger, failureArgs); err != nil {
+		t.Fatal(err)
+	}
+
+	// (Optional) Wait for the failure to propagate. Use this when you need to
+	// ensure the cluster has reacted to the failure (e.g., node marked dead,
+	// replicas moved) before proceeding.
+	if err := failer.WaitForFailureToPropagate(ctx, failerLogger); err != nil {
+		t.Fatal(err)
+	}
+
+	// Let the failure persist for a while.
+	time.Sleep(5 * time.Minute)
+
+	// Recover from the partition.
+	t.L().Printf("Recovering from network partition")
+	if err := failer.Recover(ctx, failerLogger); err != nil {
+		t.Fatal(err)
+	}
+
+	// (Optional) Wait for recovery. Use this when you need to verify the cluster
+	// is stable (e.g., replicas rebalanced, nodes healthy) before continuing.
+	if err := failer.WaitForFailureToRecover(ctx, failerLogger); err != nil {
+		t.Fatal(err)
+	}
+
+	t.L().Printf("Network partition helper test completed successfully")
+}
+
+// runDiskStallExample is a reference example showing how to write a roachtest
+// that uses the failure injection library to inject a disk stall.
+func runDiskStallExample(ctx context.Context, t test.Test, c cluster.Cluster) {
+	const testName = "disk-stall-example"
+
+	startSettings := install.MakeClusterSettings()
+	startSettings.Env = append(startSettings.Env,
+		// Increase disk stall detection timeout to allow time for validation.
+		"COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT=2m",
+	)
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), startSettings, c.CRDBNodes())
+
+	stalledNode := c.Node(1)
+	// Create a separate logger for all failure injection operations.
+	failerLogger := newFailerLogger(t.L(), c.CRDBNodes(), testName)
+	// Create a failer for disk stall using the helper.
+	failer, args, err := roachtestutil.MakeDmsetupDiskStallFailer(t.L(), c, stalledNode, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Setup
+	if err := failer.Setup(ctx, failerLogger, args); err != nil {
+		t.Fatal(err)
+	}
+
+	// Initialize workload.
+	c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload init kv {pgurl:1}")
+
+	defer func() {
+		if err := failer.Cleanup(context.Background(), failerLogger); err != nil {
+			t.L().Printf("cleanup failed: %v", err)
+		}
+	}()
+
+	// Start a workload in the background.
+	cancel := t.GoWithCancel(func(goCtx context.Context, l *logger.Logger) error {
+		cmd := roachtestutil.NewCommand("./cockroach workload run kv --tolerate-errors --read-percent=50").
+			Arg("{pgurl%s}", c.CRDBNodes()).
+			String()
+		return c.RunE(goCtx, option.WithNodes(c.WorkloadNode()), cmd)
+	}, task.Name("kv-workload"))
+	defer cancel()
+
+	// Let the workload run for a bit before injecting the failure.
+	time.Sleep(1 * time.Minute)
+
+	// Inject the disk stall.
+	t.L().Printf("Stalling disk I/O on node %s", stalledNode)
+	if err := failer.Inject(ctx, failerLogger, args); err != nil {
+		t.Fatal(err)
+	}
+
+	// (Optional) Wait for the failure to propagate. For disk stalls with
+	// StallWrites=true, this waits for the node to become unavailable (disk stall
+	// detection kills the node). Use this when you need to ensure the cluster has
+	// reacted to the failure before proceeding.
+	if err := failer.WaitForFailureToPropagate(ctx, failerLogger); err != nil {
+		t.Fatal(err)
+	}
+
+	// Let the cluster operate in degraded mode.
+	time.Sleep(5 * time.Minute)
+
+	// Recover from the disk stall.
+	t.L().Printf("Recovering from disk stall")
+	if err := failer.Recover(ctx, failerLogger); err != nil {
+		t.Fatal(err)
+	}
+
+	// (Optional) Wait for recovery. Use this when you need to verify the cluster
+	// is stable (e.g., node restarts, replicas rebalance) before continuing.
+	if err := failer.WaitForFailureToRecover(ctx, failerLogger); err != nil {
+		t.Fatal(err)
+	}
+
+	t.L().Printf("Disk stall helper test completed successfully")
+}
+
+func registerFIExamples(r registry.Registry) {
+	r.Add(registry.TestSpec{
+		Name:             "failure-injection/example/network-partition",
+		Owner:            registry.OwnerTestEng,
+		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode()),
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.ManualOnly,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runNetworkPartitionExample(ctx, t, c)
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "failure-injection/example/disk-stall",
+		Owner:            registry.OwnerTestEng,
+		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.ReuseNone()),
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.ManualOnly,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runDiskStallExample(ctx, t, c)
+		},
+	})
+}
+
 func registerFISmokeTest(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:  "failure-injection/smoke-test",

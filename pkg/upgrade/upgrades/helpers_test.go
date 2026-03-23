@@ -34,6 +34,8 @@ var (
 	HasColumnFamily     = hasColumnFamily
 	CreateSystemTable   = createSystemTable
 	OnlyHasColumnFamily = onlyHasColumnFamily
+	ColumnExists        = columnExists
+	IndexExists         = indexExists
 )
 
 type Schema struct {

@@ -72,6 +72,7 @@ func TestOutbox(t *testing.T) {
 			Settings:          st,
 			Stopper:           stopper,
 			SQLInstanceDialer: dialer,
+			RPCContext:        &rpc.Context{ContextOptions: rpc.ContextOptions{}},
 		},
 		NodeID: base.TestingIDContainer,
 	}
@@ -238,6 +239,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 			Settings:          st,
 			Stopper:           stopper,
 			SQLInstanceDialer: dialer,
+			RPCContext:        &rpc.Context{ContextOptions: rpc.ContextOptions{}},
 		},
 		NodeID: base.TestingIDContainer,
 	}
@@ -311,6 +313,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 					Settings:          st,
 					Stopper:           stopper,
 					SQLInstanceDialer: dialer,
+					RPCContext:        &rpc.Context{ContextOptions: rpc.ContextOptions{}},
 				},
 				NodeID: base.TestingIDContainer,
 			}
@@ -389,6 +392,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 			Settings:          st,
 			Stopper:           stopper,
 			SQLInstanceDialer: dialer,
+			RPCContext:        &rpc.Context{ContextOptions: rpc.ContextOptions{}},
 		},
 		NodeID: base.TestingIDContainer,
 	}
@@ -446,6 +450,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 			Stopper:  stopper,
 			// a nil SQLInstanceDialer will always fail to connect.
 			SQLInstanceDialer: nil,
+			RPCContext:        &rpc.Context{ContextOptions: rpc.ContextOptions{}},
 		},
 		NodeID: base.TestingIDContainer,
 	}
@@ -521,6 +526,7 @@ func BenchmarkOutbox(b *testing.B) {
 					Settings:          st,
 					Stopper:           stopper,
 					SQLInstanceDialer: dialer,
+					RPCContext:        &rpc.Context{ContextOptions: rpc.ContextOptions{}},
 				},
 				NodeID: base.TestingIDContainer,
 			}

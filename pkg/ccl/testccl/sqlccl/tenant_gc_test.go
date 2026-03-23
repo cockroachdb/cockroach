@@ -174,7 +174,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 	ptp := execCfg.ProtectedTimestampProvider
 	mkRecordAndProtect := func(ts hlc.Timestamp, target *ptpb.Target) *ptpb.Record {
 		recordID := uuid.MakeV4()
-		rec := jobsprotectedts.MakeRecord(recordID, int64(1), ts, nil, /* deprecatedSpans */
+		rec := jobsprotectedts.MakeRecord(recordID, int64(1), ts,
 			jobsprotectedts.Jobs, target)
 		require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			return ptp.WithTxn(txn).Protect(ctx, rec)
@@ -306,7 +306,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		clusterTarget := ptpb.MakeClusterTarget()
 		recordID := uuid.MakeV4()
 		rec := jobsprotectedts.MakeRecord(recordID, int64(1),
-			hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}, nil, /* deprecatedSpans */
+			hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
 			jobsprotectedts.Jobs, clusterTarget)
 		tenInsqlDB := ten.ExecutorConfig().(sql.ExecutorConfig).InternalDB
 		require.NoError(t, tenInsqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {

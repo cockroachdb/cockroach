@@ -9,10 +9,11 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"maps"
 	"math/rand/v2"
+	"slices"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -32,17 +33,36 @@ const (
 		col7 INT,
 		col8 INT,
 		col9 INT,
-		col10 INT
+		col10 INT,
+    INDEX idx_1 (col1 ASC)
 	)`
 	tableName     = "sql_stats_workload"
 	defaultDbName = "sql_stats"
 )
+
+// fingerprintSizeConfigValues configures the size of the query generated for
+// READ operations. The values of this map are used to determine how many times
+// a character is repeated in the column alias, increasing the size of the
+// query.
+var fingerprintSizeConfigValues = map[string]int{
+	"xsmall": 1,
+	"small":  10,
+	"medium": 75,
+	"large":  100,
+	"xlarge": 500,
+}
+
+var fingerprintSizeConfigOptions = strings.Join(slices.Collect(maps.Keys(fingerprintSizeConfigValues)), ", ")
 
 var RandomSeed = workload.NewUint64RandomSeed()
 
 type sqlStats struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
+
+	readPercent     float64
+	cardinality     int
+	fingerprintSize string
 }
 
 var _ workload.Generator = &sqlStats{}
@@ -62,6 +82,23 @@ var sqlStatsMeta = workload.Meta{
 	New: func() workload.Generator {
 		g := &sqlStats{}
 		g.flags.FlagSet = pflag.NewFlagSet(`sqlstats`, pflag.ContinueOnError)
+		g.flags.Meta = map[string]workload.FlagMeta{
+			`read-percent`:     {RuntimeOnly: true},
+			`cardinality`:      {RuntimeOnly: true},
+			`fingerprint-size`: {RuntimeOnly: true},
+		}
+		g.flags.Float64Var(&g.readPercent, `read-percent`, 0.0,
+			`Percent (0-1.0) of operations that are reads vs writes`)
+		g.flags.IntVar(&g.cardinality, `cardinality`, 6,
+			"Configures the cardinality of the workload. The value provided "+
+				"determines the amount of unique query fingerprints generated for read "+
+				"and write queries. For example, a cardinality of 4 will generate 4! "+
+				"(24) unique read and write query fingerprints")
+
+		g.flags.StringVar(&g.fingerprintSize, `fingerprint-size`, "small",
+			fmt.Sprintf(`The cardinality of the workload. Options are %s`,
+				fingerprintSizeConfigOptions))
+
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
@@ -88,42 +125,8 @@ func (s *sqlStats) Tables() []workload.Table {
 func (s *sqlStats) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
-			return nil
+			return s.validateConfig()
 		},
-	}
-}
-
-type gen struct {
-	syncutil.Mutex
-
-	in  []string
-	rng *rand.Rand
-}
-
-func (g *gen) Next() string {
-	g.Lock()
-	defer g.Unlock()
-
-	g.shuffleLocked()
-
-	s := strings.Join(g.in, ", ")
-	return fmt.Sprintf(`
-		INSERT INTO sql_stats_workload
-		(%s) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-	`, s)
-}
-
-func (g *gen) shuffleLocked() {
-	g.rng.Shuffle(len(g.in), func(i, j int) {
-		g.in[i], g.in[j] = g.in[j], g.in[i]
-	})
-}
-
-func genPermutations() *gen {
-	rng := rand.New(rand.NewPCG(RandomSeed.Seed(), 0))
-	return &gen{
-		rng: rng,
-		in:  []string{"col1", "col2", "col3", "col4", "col5", "col6", "col7", "col8", "col9", "col10"},
 	}
 }
 
@@ -138,31 +141,110 @@ func (s *sqlStats) Ops(
 	db.SetMaxOpenConns(s.connFlags.Concurrency + 1)
 	db.SetMaxIdleConns(s.connFlags.Concurrency + 1)
 
-	gen := genPermutations()
-
 	ql := workload.QueryLoad{
 		Close: func(_ context.Context) error {
 			return db.Close()
 		},
 	}
+
 	for i := 0; i < s.connFlags.Concurrency; i++ {
-		rng := rand.New(rand.NewPCG(RandomSeed.Seed(), 0))
-		hists := reg.GetHandle()
-		workerFn := func(ctx context.Context) error {
-			start := timeutil.Now()
-
-			query := gen.Next()
-			updateStmt, err := db.Prepare(query)
-			if err != nil {
-				return errors.CombineErrors(err, db.Close())
-			}
-
-			_, err = updateStmt.Exec(rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int(), rng.Int())
-			elapsed := timeutil.Since(start)
-			hists.Get(`transfer`).Record(elapsed)
-			return err
+		cols := make([]int, s.cardinality)
+		for col := range s.cardinality {
+			cols[col] = col + 1
 		}
-		ql.WorkerFns = append(ql.WorkerFns, workerFn)
+
+		worker := sqlStatsWorker{
+			queryCols:   cols,
+			colNameLen:  fingerprintSizeConfigValues[s.fingerprintSize],
+			db:          db,
+			hists:       reg.GetHandle(),
+			rng:         rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(i))),
+			readPercent: s.readPercent,
+		}
+		ql.WorkerFns = append(ql.WorkerFns, worker.work)
 	}
 	return ql, nil
+}
+
+func (s *sqlStats) validateConfig() error {
+	if s.readPercent < 0 || s.readPercent > 1 {
+		return errors.Newf("read-percent must be between 0 and 1.0, got %f", s.readPercent)
+	}
+
+	if s.cardinality < 1 || s.cardinality > 10 {
+		return errors.Newf("cardinality must be between greater than 0 and less than 11, got %d", s.cardinality)
+	}
+
+	if _, ok := fingerprintSizeConfigValues[s.fingerprintSize]; !ok {
+		return errors.Newf("fingerprint-size must be one of %s, got %s", fingerprintSizeConfigOptions, s.fingerprintSize)
+	}
+	return nil
+}
+
+type sqlStatsWorker struct {
+	db    *gosql.DB
+	hists *histogram.Histograms
+	rng   *rand.Rand
+
+	// readPercent is the percentage of operations that are reads
+	readPercent float64
+	// queryCols are the columns to be used in the queries for this workload
+	queryCols []int
+	// colNameLen is used to determine the length of the column alias in the
+	// SELECT queries.
+	colNameLen int
+}
+
+func (sw *sqlStatsWorker) ShuffleCols() {
+	sw.rng.Shuffle(len(sw.queryCols), func(i, j int) {
+		sw.queryCols[i], sw.queryCols[j] = sw.queryCols[j], sw.queryCols[i]
+	})
+}
+
+func (sw *sqlStatsWorker) insert() error {
+	sw.ShuffleCols()
+	maxCols := len(sw.queryCols)
+
+	cols := make([]string, maxCols)
+	placeholders := make([]string, maxCols)
+	args := make([]interface{}, maxCols)
+	for i := range maxCols {
+		cols[i] = fmt.Sprintf("col%d", sw.queryCols[i])
+		placeholders[i] = "$" + fmt.Sprintf("%d", i+1)
+		args[i] = sw.rng.Int()
+	}
+	query := fmt.Sprintf(`INSERT INTO sql_stats_workload (%s) VALUES (%s)`, strings.Join(cols, ", "), strings.Join(placeholders, ", "))
+	_, err := sw.db.Exec(query, args...)
+	return err
+}
+
+func (sw *sqlStatsWorker) query() error {
+	sw.ShuffleCols()
+	cols := make([]string, len(sw.queryCols))
+	for i := 0; i < len(cols); i++ {
+		s := fmt.Sprintf(`%d`, sw.queryCols[i])
+		cols[i] = fmt.Sprintf(`col%s as "col-%s"`, s, strings.Repeat(s, sw.colNameLen))
+	}
+	query := fmt.Sprintf(`SELECT %s FROM sql_stats_workload WHERE col1 = (SELECT max(col1) FROM sql_stats_workload)`, strings.Join(cols, ", "))
+	_, err := sw.db.Exec(query)
+	return err
+}
+
+func (sw *sqlStatsWorker) work(ctx context.Context) error {
+	startTime := timeutil.Now()
+	var err error
+	var opName string
+	if sw.rng.Float64() < sw.readPercent {
+		opName = "read"
+		err = sw.query()
+	} else {
+		opName = "write"
+		err = sw.insert()
+	}
+
+	if err == nil {
+		sw.hists.Get(opName).Record(timeutil.Since(startTime))
+	}
+
+	return err
 }

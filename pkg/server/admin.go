@@ -15,8 +15,6 @@ import (
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -31,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -216,7 +213,7 @@ func newAdminServer(
 		),
 		st:             cs,
 		serverIterator: serverIterator,
-		nd:             &nodeDialer{cs: cs, si: serverIterator},
+		nd:             &nodeDialer{useDRPC: rpcCtx.UseDRPC, si: serverIterator},
 		distSender:     distSender,
 		rpcContext:     rpcCtx,
 		clock:          clock,
@@ -1314,7 +1311,7 @@ func (s *adminServer) statsForSpan(
 				var spanResponse *roachpb.SpanStatsResponse
 				err := timeutil.RunWithTimeout(ctx, "request remote stats", 20*time.Second,
 					func(ctx context.Context) error {
-						client, err := serverpb.DialStatusClient(s.nd, ctx, nodeID, s.nd.cs)
+						client, err := serverpb.DialStatusClient(s.nd, ctx, nodeID, s.nd.useDRPC)
 						if err == nil {
 							req := roachpb.SpanStatsRequest{
 								Spans:  []roachpb.Span{span},
@@ -2042,18 +2039,11 @@ func (s *adminServer) Cluster(
 		return nil, grpcstatus.Errorf(codes.Unavailable, "cluster ID not yet available")
 	}
 
-	// Check if enterprise features are enabled.  We currently test for the
-	// feature "BACKUP", although enterprise licenses do not yet distinguish
-	// between different features.
-	enterpriseEnabled := base.CheckEnterpriseEnabled(
-		s.st,
-		"BACKUP") == nil
-
 	return &serverpb.ClusterResponse{
 		// TODO(knz): Respond with the logical cluster ID as well.
 		ClusterID:         storageClusterID.String(),
 		ReportingEnabled:  logcrash.DiagnosticsReportingEnabled.Get(&s.st.SV),
-		EnterpriseEnabled: enterpriseEnabled,
+		EnterpriseEnabled: true,
 	}, nil
 }
 
@@ -2092,7 +2082,7 @@ func (s *adminServer) checkReadinessForHealthCheck(ctx context.Context) error {
 		return err
 	}
 
-	if rpcbase.DRPCEnabled(ctx, s.st) {
+	if s.rpcContext.UseDRPC {
 		if err := s.drpc.health(ctx); err != nil {
 			return err
 		}
@@ -2138,7 +2128,7 @@ func (s *systemAdminServer) checkReadinessForHealthCheck(ctx context.Context) er
 		return err
 	}
 
-	if rpcbase.DRPCEnabled(ctx, s.st) {
+	if s.rpcContext.UseDRPC {
 		if err := s.drpc.health(ctx); err != nil {
 			return err
 		}
@@ -2442,10 +2432,8 @@ func jobHelper(
 		return nil, err
 	}
 
-	// On 25.1+, add any recorded job messages to the response as well.
-	if sqlServer.cfg.Settings.Version.IsActive(ctx, clusterversion.V25_1) {
-		job.Messages = fetchJobMessages(ctx, job.ID, userName, sqlServer)
-	}
+	// Add any recorded job messages to the response as well.
+	job.Messages = fetchJobMessages(ctx, job.ID, userName, sqlServer)
 	return &job, nil
 }
 
@@ -3681,7 +3669,7 @@ func (s *adminServer) queryTableID(
 func (s *adminServer) dialNode(
 	ctx context.Context, nodeID roachpb.NodeID,
 ) (serverpb.RPCAdminClient, error) {
-	return serverpb.DialAdminClient(s.nd, ctx, nodeID, s.nd.cs)
+	return serverpb.DialAdminClient(s.nd, ctx, nodeID, s.nd.useDRPC)
 }
 
 func (s *adminServer) ListTracingSnapshots(

@@ -225,7 +225,7 @@ Check --parallelism, --run-forever and --wait-before-next-execution flags`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Printf("\nRunning operation %s on %s.\n\n", args[1], args[0])
 			cmd.SilenceUsage = true
-			return runOperations(operations.RegisterOperations, args[1], args[0])
+			return runOperations(operations.RegisterOperations, args[1], roachtestflags.SkipOperations, args[0])
 		},
 	}
 	roachtestflags.AddRunOpsFlags(runOperationCmd.Flags())
@@ -236,7 +236,7 @@ Check --parallelism, --run-forever and --wait-before-next-execution flags`,
 	rootCmd.AddCommand(runOperationCmd)
 
 	var listOperationCmd = &cobra.Command{
-		Use:   "list-operations",
+		Use:   "list-operations [regex...]",
 		Short: "list all operation names",
 		Long: `List all available operations that can be run with the run-operation command.
 
@@ -245,12 +245,22 @@ This command lists the names of all registered operations.
 Example:
 
    roachtest list-operations
+   roachtest list-operations node-kill/.*m$
+   roachtest list-operations --skip disk-stall
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			r := makeTestRegistry()
 			operations.RegisterOperations(&r)
 
-			ops := r.AllOperations()
+			var skipRegex *regexp.Regexp
+			if roachtestflags.SkipOperations != "" {
+				var err error
+				skipRegex, err = regexp.Compile(roachtestflags.SkipOperations)
+				if err != nil {
+					return err
+				}
+			}
+			ops := r.FilteredOperations(registry.MergeRegEx(args), skipRegex)
 			for _, op := range ops {
 				fmt.Printf("%s\n", op.Name)
 			}
@@ -258,6 +268,7 @@ Example:
 			return nil
 		},
 	}
+	roachtestflags.AddRunOpsFlags(listOperationCmd.Flags())
 	rootCmd.AddCommand(listOperationCmd)
 
 	var err error
@@ -454,17 +465,19 @@ func testShouldBeSkipped(
 	return td != nil && !td.Selected
 }
 
-func opsToRun(r testRegistryImpl, filter string) ([]registry.OperationSpec, error) {
+func opsToRun(r testRegistryImpl, filter string, skip string) ([]registry.OperationSpec, error) {
 	regex, err := regexp.Compile(filter)
 	if err != nil {
 		return nil, err
 	}
-	var filteredOps []registry.OperationSpec
-	for _, opSpec := range r.AllOperations() {
-		if regex.MatchString(opSpec.Name) {
-			filteredOps = append(filteredOps, opSpec)
+	var skipRegex *regexp.Regexp
+	if skip != "" {
+		skipRegex, err = regexp.Compile(skip)
+		if err != nil {
+			return nil, err
 		}
 	}
+	filteredOps := r.FilteredOperations(regex, skipRegex)
 	if len(filteredOps) == 0 {
 		return nil, errors.New("no matching operations to run")
 	}

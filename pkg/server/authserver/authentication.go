@@ -20,14 +20,16 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/jwtauth"
+	"github.com/cockroachdb/cockroach/pkg/security/ldapauth"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
+	secuser "github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/settings/rulebasedscanner"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
@@ -35,19 +37,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
+	"github.com/go-ldap/ldap/v3"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"storj.io/drpc"
 )
 
 const (
@@ -76,36 +77,16 @@ const (
 	UsernameHeader = "X-Cockroach-User"
 )
 
-type noOIDCConfigured struct{}
-
-var _ ui.OIDCUI = &noOIDCConfigured{}
-
-func (c *noOIDCConfigured) GetOIDCConf() ui.OIDCUIConf {
-	return ui.OIDCUIConf{
-		Enabled: false,
-	}
-}
-
-// OIDC is an interface that an OIDC-based authentication module should implement to integrate with
-// the rest of the node's functionality
-type OIDC interface {
-	ui.OIDCUI
-}
-
-// ConfigureOIDC is a hook for the `oidcccl` library to add OIDC login support. It's called during
-// server startup to initialize a client for OIDC support.
-var ConfigureOIDC = func(
-	ctx context.Context,
-	st *cluster.Settings,
-	locality roachpb.Locality,
-	handleHTTP func(pattern string, handler http.Handler),
-	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
-	ambientCtx log.AmbientContext,
-	cluster uuid.UUID,
-	execCfg *sql.ExecutorConfig,
-) (OIDC, error) {
-	return &noOIDCConfigured{}, nil
-}
+// ServerHTTPBasePath is a cluster setting that contains the path to
+// route the user to after successful login. It is intended to be
+// overridden in cases where DB Console is being proxied.
+var ServerHTTPBasePath = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	"server.http.base_path",
+	"path to redirect the user to upon succcessful login",
+	"/",
+	settings.WithPublic,
+)
 
 // WebSessionTimeout is the cluster setting for web session TTL.
 var WebSessionTimeout = settings.RegisterDurationSetting(
@@ -116,13 +97,11 @@ var WebSessionTimeout = settings.RegisterDurationSetting(
 	settings.WithName("server.web_session.timeout"),
 	settings.WithPublic)
 
-// jwtVerifier is a duplicate of the singleton global pgwire object which gets
-// initialized from VerifyJWT method whenever a JWT auth attempt for accessing
-// DB console APIs happens. It depends on jwtauthccl module to be imported
-// properly to override its default ConfigureJWTAuth constructor.
+// jwtVerifier is a singleton initialized from VerifyJWT on the first JWT auth
+// attempt for DB console API access.
 var jwtVerifier = struct {
 	sync.Once
-	j pgwire.JWTVerifier
+	j jwtauth.JWTVerifier
 }{}
 
 type authenticationServer struct {
@@ -134,15 +113,6 @@ type authenticationServer struct {
 func (s *authenticationServer) RegisterService(g *grpc.Server) {
 	serverpb.RegisterLogInServer(g, s)
 	serverpb.RegisterLogOutServer(g, s)
-
-}
-
-// RegisterService registers the LogIn and LogOut services with DRPC.
-func (s *authenticationServer) RegisterDRPCService(d drpc.Mux) error {
-	if err := serverpb.DRPCRegisterLogIn(d, s); err != nil {
-		return err
-	}
-	return serverpb.DRPCRegisterLogOut(d, s)
 }
 
 // RegisterGateway starts the gateway (i.e. reverse proxy) that proxies HTTP requests
@@ -156,19 +126,34 @@ func (s *authenticationServer) RegisterGateway(
 	return serverpb.RegisterLogOutHandler(ctx, mux, conn)
 }
 
-// ldapManager is a duplicate of singleton global pgwire object which gets
-// initialized from UserLogin method whenever an LDAP auth attempt happens. It
-// depends on ldapccl module to be imported properly to override its default
-// ConfigureLDAPAuth constructor.
+// ldapManager is a singleton global object which gets initialized from
+// UserLogin method whenever an LDAP auth attempt happens.
 var ldapManager = struct {
 	sync.Once
-	m pgwire.LDAPManager
+	m ldapauth.LDAPManager
 }{}
 
 // UserLogin is part of the Server interface.
 func (s *authenticationServer) UserLogin(
 	ctx context.Context, req *serverpb.UserLoginRequest,
 ) (*serverpb.UserLoginResponse, error) {
+	cookie, err := s.userLogin(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	// Set the cookie header on the outgoing response.
+	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
+		return nil, srverrors.APIInternalError(ctx, err)
+	}
+
+	return &serverpb.UserLoginResponse{}, nil
+}
+
+// userLogin returns an HTTP cookie upon successful authentication.
+// This is an internal helper used by both the gRPC and HTTP login handlers.
+func (s *authenticationServer) userLogin(
+	ctx context.Context, req *serverpb.UserLoginRequest,
+) (*http.Cookie, error) {
 	if req.Username == "" {
 		return nil, status.Errorf(
 			codes.Unauthenticated,
@@ -181,17 +166,14 @@ func (s *authenticationServer) UserLogin(
 	// here, so that the normalized username is retained in the session
 	// table: the APIs extract the username from the session table
 	// without further normalization.
-	username, _ := username.MakeSQLUsernameFromUserInput(req.Username, username.PurposeValidation)
+	username, _ := secuser.MakeSQLUsernameFromUserInput(req.Username, secuser.PurposeValidation)
 	// Verify the user and check if DB console session could be started.
 	verified, pwRetrieveFn, err := s.VerifyUserSessionDBConsole(ctx, username)
 	if err != nil {
 		return nil, srverrors.APIInternalError(ctx, err)
 	}
-	if !verified {
-		return nil, errWebAuthenticationFailure
-	}
-
 	ldapAuthSuccess := false
+	var ldapUserDN *ldap.DN
 	originIP := s.lookupIncomingRequestOriginIP(ctx)
 	hbaConf, identMap := s.sqlServer.PGServer().GetAuthenticationConfiguration()
 	authMethod, hbaEntry, err := s.lookupAuthenticationMethodUsingRules(hba.ConnHostSSL, hbaConf, username, originIP)
@@ -206,10 +188,12 @@ func (s *authenticationServer) UserLogin(
 		execCfg := s.sqlServer.ExecutorConfig()
 		ldapManager.Do(func() {
 			if ldapManager.m == nil {
-				ldapManager.m = pgwire.ConfigureLDAPAuth(ctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
+				ldapManager.m = ldapauth.ConfigureLDAPAuth(ctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
 			}
 		})
-		ldapUserDN, detailedErrors, authError := ldapManager.m.FetchLDAPUserDN(ctx, execCfg.Settings, username, hbaEntry, identMap)
+		var detailedErrors redact.RedactableString
+		var authError error
+		ldapUserDN, detailedErrors, authError = ldapManager.m.FetchLDAPUserDN(ctx, execCfg.Settings, username, hbaEntry, identMap)
 		if authError != nil {
 			if log.V(1) {
 				log.Dev.Infof(ctx, "ldap search response error: ldapUserDN %v, authError %v, detailedErrors %v", ldapUserDN, authError, detailedErrors)
@@ -226,9 +210,33 @@ func (s *authenticationServer) UserLogin(
 		}
 	}
 
+	// If the user does not exist but LDAP authentication succeeded, attempt
+	// to provision the user if LDAP provisioning is enabled.
+	if !verified && ldapAuthSuccess {
+		execCfg := s.sqlServer.ExecutorConfig()
+		if provisioning.ClusterProvisioningConfig(execCfg.Settings).Enabled("ldap") {
+			if log.V(1) {
+				log.Dev.Infof(ctx, "LDAP authentication succeeded for non-existent user %s; attempting provisioning", username)
+			}
+			if err := pgwire.ProvisionLDAPHelper(ctx, execCfg, username, hbaEntry); err != nil {
+				log.Ops.VWarningf(ctx, 1, "LDAP provisioning failed for user %s: %v", username, err)
+				return nil, errWebAuthenticationFailure
+			}
+			// Re-verify the user after provisioning.
+			verified, pwRetrieveFn, err = s.VerifyUserSessionDBConsole(ctx, username)
+			if err != nil {
+				return nil, srverrors.APIInternalError(ctx, err)
+			}
+		}
+	}
+
 	if !ldapAuthSuccess {
+		if !verified {
+			return nil, errWebAuthenticationFailure
+		}
 		// Verify the provided username/password pair.
-		verified, expired, err := s.VerifyPasswordDBConsole(ctx, username, req.Password, pwRetrieveFn)
+		var expired bool
+		verified, expired, err = s.VerifyPasswordDBConsole(ctx, username, req.Password, pwRetrieveFn)
 		if err != nil {
 			return nil, srverrors.APIInternalError(ctx, err)
 		}
@@ -244,17 +252,52 @@ func (s *authenticationServer) UserLogin(
 		}
 	}
 
+	// Final verification check: handles the case where LDAP auth succeeded
+	// but provisioning was disabled and the user doesn't exist.
+	if !verified {
+		return nil, errWebAuthenticationFailure
+	}
+
+	// If LDAP authentication was successful and the HBA entry includes a
+	// group list filter, perform role authorization.
+	if ldapAuthSuccess && hbaEntry.GetOption("ldapgrouplistfilter") != "" {
+		if log.V(1) {
+			log.Dev.Infof(ctx, "LDAP authentication succeeded; attempting authorization for user %s", username)
+		}
+
+		execCfg := s.sqlServer.ExecutorConfig()
+
+		if detailedErrors, authError := pgwire.AuthorizeLDAPHelper(
+			ctx, nil, ldapManager.m, execCfg, ldapUserDN, username, hbaEntry, identMap,
+		); authError != nil {
+			// Construct a detailed error for internal logging.
+			errForLog := errors.Wrapf(authError, "LDAP authorization: error during role sync")
+			if detailedErrors != "" {
+				errForLog = errors.Join(errForLog, errors.Newf("%s", detailedErrors))
+			}
+			log.Ops.VWarningf(ctx, 1, "%v", errForLog)
+
+			// Return only the generic, client-safe error to the API caller.
+			return nil, srverrors.APIInternalError(ctx, authError)
+		}
+	}
+
+	// Update estimated_last_login_time for LDAP-authenticated users when
+	// LDAP provisioning is enabled.
+	if ldapAuthSuccess {
+		execCfg := s.sqlServer.ExecutorConfig()
+		if provisioning.ClusterProvisioningConfig(execCfg.Settings).Enabled("ldap") {
+			if err = sql.UpdateLastLoginTime(ctx, execCfg, []secuser.SQLUsername{username}); err != nil {
+				return nil, srverrors.APIInternalError(ctx, err)
+			}
+		}
+	}
+
 	cookie, err := s.createSessionFor(ctx, username)
 	if err != nil {
 		return nil, srverrors.APIInternalError(ctx, err)
 	}
-
-	// Set the cookie header on the outgoing response.
-	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
-		return nil, srverrors.APIInternalError(ctx, err)
-	}
-
-	return &serverpb.UserLoginResponse{}, nil
+	return cookie, err
 }
 
 // DemoLogin is the same as UserLogin but using the GET method.
@@ -292,7 +335,7 @@ func (s *authenticationServer) DemoLogin(w http.ResponseWriter, req *http.Reques
 	// here, so that the normalized username is retained in the session
 	// table: the APIs extract the username from the session table
 	// without further normalization.
-	username, _ := username.MakeSQLUsernameFromUserInput(userInput, username.PurposeValidation)
+	username, _ := secuser.MakeSQLUsernameFromUserInput(userInput, secuser.PurposeValidation)
 	// Verify the user and check if DB console session could be started.
 	verified, pwRetrieveFn, err := s.VerifyUserSessionDBConsole(ctx, username)
 	if err != nil {
@@ -345,7 +388,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 	// here, so that the normalized username is retained in the session
 	// table: the APIs extract the username from the session table
 	// without further normalization.
-	username, _ := username.MakeSQLUsernameFromUserInput(reqUsername, username.PurposeValidation)
+	username, _ := secuser.MakeSQLUsernameFromUserInput(reqUsername, secuser.PurposeValidation)
 
 	exists, _, canLoginDBConsole, _, _, _, _, _, _, err := sql.GetUserSessionInitInfo(
 		ctx,
@@ -368,7 +411,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 //
 // The caller is responsible to ensure the username has been normalized already.
 func (s *authenticationServer) createSessionFor(
-	ctx context.Context, userName username.SQLUsername,
+	ctx context.Context, userName secuser.SQLUsername,
 ) (*http.Cookie, error) {
 	// Create a new database session, generating an ID and secret key.
 	id, secret, err := s.NewAuthSession(ctx, userName)
@@ -390,6 +433,7 @@ func (s *authenticationServer) createSessionFor(
 func (s *authenticationServer) UserLogout(
 	ctx context.Context, req *serverpb.UserLogoutRequest,
 ) (*serverpb.UserLogoutResponse, error) {
+	// Extract session ID from gRPC metadata
 	md, ok := grpcutil.FastFromIncomingContext(ctx)
 	if !ok {
 		return nil, srverrors.APIInternalError(ctx, fmt.Errorf("couldn't get incoming context"))
@@ -405,7 +449,22 @@ func (s *authenticationServer) UserLogout(
 			codes.InvalidArgument,
 			"invalid session id: %d", sessionID)
 	}
+	cookie, err := s.userLogout(ctx, req, int64(sessionID))
+	if err != nil {
+		return nil, err
+	}
 
+	// Set the cookie header on the outgoing response.
+	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
+		return nil, srverrors.APIInternalError(ctx, err)
+	}
+	return &serverpb.UserLogoutResponse{}, nil
+}
+
+// userLogout is an internal helper used by both the gRPC and HTTP logout handlers.
+func (s *authenticationServer) userLogout(
+	ctx context.Context, req *serverpb.UserLogoutRequest, sessionID int64,
+) (*http.Cookie, error) {
 	// Revoke the session.
 	if n, err := s.sqlServer.InternalExecutor().ExecEx(
 		ctx,
@@ -429,12 +488,54 @@ func (s *authenticationServer) UserLogout(
 	cookie := CreateSessionCookie("", false /* forHTTPSOnly */)
 	cookie.MaxAge = -1
 
-	// Set the cookie header on the outgoing response.
-	if err := grpc.SetHeader(ctx, metadata.Pairs("set-cookie", cookie.String())); err != nil {
-		return nil, srverrors.APIInternalError(ctx, err)
+	return cookie, nil
+}
+
+// LoginHandler handles user login requests.
+// It extracts credentials from the request, validates them, and sets a session cookie.
+func (s *authenticationServer) LoginHandler(w http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	var loginReq serverpb.UserLoginRequest
+
+	if err := apiutil.DecodeRequest(req, &loginReq); err != nil {
+		apiutil.WriteHTTPError(ctx, w, req, status.Errorf(codes.InvalidArgument, "failed to decode request body: %v", err))
+		return
+	}
+	cookie, err := s.userLogin(ctx, &loginReq)
+	if err != nil {
+		apiutil.WriteHTTPError(ctx, w, req, err)
+		return
+	}
+	http.SetCookie(w, cookie)
+
+	if err := apiutil.WriteResponse(ctx, w, req, http.StatusOK, &serverpb.UserLoginResponse{}); err != nil {
+		log.Dev.Errorf(ctx, "failed to write login response: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
+}
+
+// LogoutHandler handles user logout requests.
+// It extracts the session from context, revokes it, and clears the cookie.
+func (s *authenticationServer) LogoutHandler(w http.ResponseWriter, req *http.Request) {
+	ctx := req.Context()
+	sessionID, ok := getWebSessionID(ctx)
+	if !ok {
+		apiutil.WriteHTTPError(ctx, w, req, status.Errorf(codes.InvalidArgument, "invalid session id: %d", sessionID))
+		return
 	}
 
-	return &serverpb.UserLogoutResponse{}, nil
+	cookie, err := s.userLogout(ctx, &serverpb.UserLogoutRequest{}, sessionID)
+	if err != nil {
+		apiutil.WriteHTTPError(ctx, w, req, err)
+		return
+	}
+	http.SetCookie(w, cookie)
+
+	if err := apiutil.WriteResponse(ctx, w, req, http.StatusOK, &serverpb.UserLogoutResponse{}); err != nil {
+		log.Dev.Errorf(ctx, "failed to write logout response: %v", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
+
 }
 
 // VerifySession is part of the Server interface.
@@ -499,7 +600,7 @@ WHERE id = $1`
 // session details required for proceeding with DB console login.
 // (CockroachDB has case-insensitive usernames, unlike PostgreSQL.)
 func (s *authenticationServer) VerifyUserSessionDBConsole(
-	ctx context.Context, userName username.SQLUsername,
+	ctx context.Context, userName secuser.SQLUsername,
 ) (
 	verified bool,
 	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
@@ -524,7 +625,7 @@ func (s *authenticationServer) VerifyUserSessionDBConsole(
 // (CockroachDB has case-insensitive usernames, unlike PostgreSQL.)
 func (s *authenticationServer) VerifyPasswordDBConsole(
 	ctx context.Context,
-	userName username.SQLUsername,
+	userName secuser.SQLUsername,
 	passwordStr string,
 	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
 ) (valid bool, expired bool, err error) {
@@ -563,7 +664,7 @@ func (s *authenticationServer) VerifyJWT(
 	execCfg := s.sqlServer.ExecutorConfig()
 	jwtVerifier.Do(func() {
 		if jwtVerifier.j == nil {
-			jwtVerifier.j = pgwire.ConfigureJWTAuth(
+			jwtVerifier.j = jwtauth.ConfigureJWTAuth(
 				ctx,
 				execCfg.AmbientCtx,
 				execCfg.Settings,
@@ -574,7 +675,7 @@ func (s *authenticationServer) VerifyJWT(
 
 	// Retrieve the matching user identity within the JWT.
 	_, identMap := s.sqlServer.PGServer().GetAuthenticationConfiguration()
-	inputUser, _ := username.MakeSQLUsernameFromUserInput(usernameOptional, username.PurposeValidation)
+	inputUser, _ := secuser.MakeSQLUsernameFromUserInput(usernameOptional, secuser.PurposeValidation)
 	retrievedUser, err := jwtVerifier.j.RetrieveIdentity(
 		ctx,
 		execCfg.Settings,
@@ -638,7 +739,7 @@ func (s *authenticationServer) lookupIncomingRequestOriginIP(ctx context.Context
 }
 
 func (s *authenticationServer) lookupAuthenticationMethodUsingRules(
-	connType hba.ConnType, auth *hba.Conf, user username.SQLUsername, originIP net.IP,
+	connType hba.ConnType, auth *hba.Conf, user secuser.SQLUsername, originIP net.IP,
 ) (authMethod rulebasedscanner.String, entry *hba.Entry, err error) {
 	// Look up the method.
 	for i := range auth.Entries {
@@ -688,7 +789,7 @@ func CreateAuthSecret() (secret, hashedSecret []byte, err error) {
 // The caller is responsible to ensure the username has been
 // normalized already.
 func (s *authenticationServer) NewAuthSession(
-	ctx context.Context, userName username.SQLUsername,
+	ctx context.Context, userName secuser.SQLUsername,
 ) (int64, []byte, error) {
 	st := s.sqlServer.ExecutorConfig().Settings
 

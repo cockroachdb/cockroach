@@ -73,7 +73,9 @@ func (i *internalCommandResult) SendNotice(
 	return nil
 }
 
-func (i *internalCommandResult) SetColumns(ctx context.Context, cols colinfo.ResultColumns) {
+func (i *internalCommandResult) SetColumns(
+	ctx context.Context, cols colinfo.ResultColumns, skipRowDescription bool,
+) {
 	// We don't need this because the datums include type information.
 }
 
@@ -166,7 +168,7 @@ func (i *internalCommandResult) SendCopyOut(
 }
 
 func (i *internalCommandResult) SetPortalOutput(
-	ctx context.Context, cols colinfo.ResultColumns, formatCodes []pgwirebase.FormatCode,
+	ctx context.Context, cols colinfo.ResultColumns, fmtCode []pgwirebase.FormatCode,
 ) {
 	i.SetError(errors.AssertionFailedf("SetPortalOutput is not supported by the internal session"))
 }

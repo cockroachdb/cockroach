@@ -40,7 +40,7 @@ SELECT * FROM unrelated
 ----
 1
 
-statement ok
+statement count 1
 DELETE FROM testing WHERE k = 5
 
 # Now try again with the strict setting

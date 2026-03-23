@@ -514,7 +514,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		// synchronizes with the rangefeed Processor calling this function by
 		// waiting for the Register call below to return.
 		r.raftMu.AssertHeld()
-		return rangefeed.NewSeparatedIntentScanner(streamCtx, r.store.TODOEngine(), desc.RSpan())
+		return rangefeed.NewSeparatedIntentScanner(streamCtx, r.store.StateEngine(), desc.RSpan())
 	}
 
 	// NB: This only errors if the stopper is stopping, and we have to return here
@@ -659,8 +659,8 @@ func populatePrevValsInLogicalOpLog(
 		if err != nil {
 			return errors.Wrapf(err, "consuming %T for key %v @ ts %v", op, key, ts)
 		}
-		if prevValRes.Value != nil {
-			*prevValPtr = prevValRes.Value.RawBytes
+		if prevValRes.Value.Exists() {
+			*prevValPtr = prevValRes.Value.Value.RawBytes
 		} else {
 			*prevValPtr = nil
 		}

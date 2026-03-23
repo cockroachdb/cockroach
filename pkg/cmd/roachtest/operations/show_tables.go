@@ -41,9 +41,16 @@ func runShowTables(
 
 	// Process and log the results
 	tableCount := 0
+	cols, err := rows.Columns()
+	if err != nil {
+		o.Fatal(err)
+	}
 	for rows.Next() {
-		var tableName string
-		if err := rows.Scan(&tableName); err != nil {
+		vals := make([]interface{}, len(cols))
+		for i := range vals {
+			vals[i] = new(interface{})
+		}
+		if err := rows.Scan(vals...); err != nil {
 			o.Fatal(err)
 		}
 		tableCount++

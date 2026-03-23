@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -135,9 +134,7 @@ func (sr *SampleReservoir) MaybeResize(ctx context.Context, k int) bool {
 	heap.Init(sr)
 	for len(sr.samples) > k {
 		samp := heap.Pop(sr).(SampledRow)
-		if sr.memAcc != nil {
-			sr.memAcc.Shrink(ctx, int64(samp.Row.Size()))
-		}
+		sr.memAcc.Shrink(ctx, int64(samp.Row.Size()))
 	}
 	// Copy to a new array to allow garbage collection.
 	samples := make([]SampledRow, len(sr.samples), k)
@@ -166,7 +163,7 @@ func (sr *SampleReservoir) retryMaybeResize(ctx context.Context, op func() error
 // SampleRow returns an error (any type of error), no additional calls to
 // SampleRow should be made as the failed samples will have introduced bias.
 func (sr *SampleReservoir) SampleRow(
-	ctx context.Context, evalCtx *eval.Context, row rowenc.EncDatumRow, rank uint64,
+	ctx context.Context, collationEnv *tree.CollationEnvironment, row rowenc.EncDatumRow, rank uint64,
 ) error {
 	return sr.retryMaybeResize(ctx, func() error {
 		if len(sr.samples) < cap(sr.samples) {
@@ -175,12 +172,10 @@ func (sr *SampleReservoir) SampleRow(
 
 			// Perform memory accounting for the allocated EncDatumRow. We will
 			// account for the additional memory used after copying inside copyRow.
-			if sr.memAcc != nil {
-				if err := sr.memAcc.Grow(ctx, int64(rowCopy.Size())); err != nil {
-					return err
-				}
+			if err := sr.memAcc.Grow(ctx, int64(rowCopy.Size())); err != nil {
+				return err
 			}
-			if err := sr.copyRow(ctx, evalCtx, rowCopy, row); err != nil {
+			if err := sr.copyRow(ctx, collationEnv, rowCopy, row); err != nil {
 				return err
 			}
 			sr.samples = append(sr.samples, SampledRow{Row: rowCopy, Rank: rank})
@@ -192,7 +187,7 @@ func (sr *SampleReservoir) SampleRow(
 		}
 		// Replace the max rank if ours is smaller.
 		if len(sr.samples) > 0 && rank < sr.samples[0].Rank {
-			if err := sr.copyRow(ctx, evalCtx, sr.samples[0].Row, row); err != nil {
+			if err := sr.copyRow(ctx, collationEnv, sr.samples[0].Row, row); err != nil {
 				return err
 			}
 			sr.samples[0].Rank = rank
@@ -216,10 +211,8 @@ func (sr *SampleReservoir) GetNonNullDatums(
 ) (values tree.Datums, err error) {
 	err = sr.retryMaybeResize(ctx, func() error {
 		// Account for the memory we'll use copying the samples into values.
-		if memAcc != nil {
-			if err := memAcc.Grow(ctx, memsize.DatumOverhead*int64(len(sr.samples))); err != nil {
-				return err
-			}
+		if err := memAcc.Grow(ctx, memsize.DatumOverhead*int64(len(sr.samples))); err != nil {
+			return err
 		}
 		values = make(tree.Datums, 0, len(sr.samples))
 		for _, sample := range sr.samples {
@@ -238,7 +231,7 @@ func (sr *SampleReservoir) GetNonNullDatums(
 }
 
 func (sr *SampleReservoir) copyRow(
-	ctx context.Context, evalCtx *eval.Context, dst, src rowenc.EncDatumRow,
+	ctx context.Context, collationEnv *tree.CollationEnvironment, dst, src rowenc.EncDatumRow,
 ) error {
 	// First, we calculate how much memory has already been accounted for the
 	// "before" row (row that we're about to overwrite) as well as how much
@@ -249,6 +242,16 @@ func (sr *SampleReservoir) copyRow(
 		if !sr.sampleCols.Contains(i) {
 			sr.scratch[i].Datum = tree.DNull
 			continue
+		}
+		// If we've already decoded this EncDatum, unset the decoded datum. We
+		// do so in order to not accumulate a bounded memory leak by keeping the
+		// datum that came from the DatumAlloc elsewhere (which would share the
+		// underlying slice with 15 another datums).
+		//
+		// (This should only happen for datums needed for evaluating the virtual
+		// computed column expressions in the tableReader which should be rare.)
+		if src[i].EncodedBytes() != nil {
+			src[i].Datum = nil
 		}
 		// Copy only the decoded datum to ensure that we remove any reference to
 		// the encoded bytes. The encoded bytes would have been scanned in a batch
@@ -267,17 +270,15 @@ func (sr *SampleReservoir) copyRow(
 
 		// If the datum is too large, truncate it.
 		if afterSize > uintptr(maxBytesPerSample) {
-			sr.scratch[i].Datum = truncateDatum(evalCtx, sr.scratch[i].Datum, maxBytesPerSample)
+			sr.scratch[i].Datum = truncateDatum(collationEnv, sr.scratch[i].Datum, maxBytesPerSample)
 			afterSize = sr.scratch[i].Size()
 		}
 		afterRowSize += int64(afterSize)
 	}
 	// Now that we know the exact row sizes we're dealing with, we perform the
 	// memory accounting.
-	if sr.memAcc != nil {
-		if err := sr.memAcc.Resize(ctx, beforeRowSize, afterRowSize); err != nil {
-			return err
-		}
+	if err := sr.memAcc.Resize(ctx, beforeRowSize, afterRowSize); err != nil {
+		return err
 	}
 	// The memory reservation, if needed, was approved, so we're ok to keep the
 	// row.
@@ -293,7 +294,7 @@ const maxBytesPerSample = 400
 //
 // For example, if maxBytes=10, "Cockroach Labs" would be truncated to
 // "Cockroach ".
-func truncateDatum(evalCtx *eval.Context, d tree.Datum, maxBytes int) tree.Datum {
+func truncateDatum(collationEnv *tree.CollationEnvironment, d tree.Datum, maxBytes int) tree.Datum {
 	switch t := d.(type) {
 	case *tree.DBitArray:
 		b := tree.DBitArray{BitArray: t.ToWidth(uint(maxBytes * 8))}
@@ -314,7 +315,7 @@ func truncateDatum(evalCtx *eval.Context, d tree.Datum, maxBytes int) tree.Datum
 
 		// Note: this will end up being larger than maxBytes due to the key and
 		// locale, so this is just a best-effort attempt to limit the size.
-		res, err := tree.NewDCollatedString(contents, t.Locale, &evalCtx.CollationEnv)
+		res, err := tree.NewDCollatedString(contents, t.Locale, collationEnv)
 		if err != nil {
 			return d
 		}
@@ -322,7 +323,7 @@ func truncateDatum(evalCtx *eval.Context, d tree.Datum, maxBytes int) tree.Datum
 
 	case *tree.DOidWrapper:
 		return &tree.DOidWrapper{
-			Wrapped: truncateDatum(evalCtx, t.Wrapped, maxBytes),
+			Wrapped: truncateDatum(collationEnv, t.Wrapped, maxBytes),
 			Oid:     t.Oid,
 		}
 

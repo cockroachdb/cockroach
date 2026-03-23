@@ -59,70 +59,131 @@ var upgrades = []upgradebase.Upgrade{
 		bootstrapCluster,
 		upgrade.RestoreActionNotRequired("initialization runs before restore")),
 
-	newFirstUpgrade(clusterversion.V25_3_Start.Version()),
+	newFirstUpgrade(clusterversion.V26_1_Start.Version()),
 
 	upgrade.NewTenantUpgrade(
-		"add 'payload' column to system.eventlog table and add new index on eventType column",
-		clusterversion.V25_3_AddEventLogColumnAndIndex.Version(),
+		"create table_statistics_locks table",
+		clusterversion.V26_1_AddTableStatisticsLocksTable.Version(),
 		upgrade.NoPrecondition,
-		eventLogTableMigration,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column or index"),
+		createTableStatisticsLocksTable,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
 
+	newFirstUpgrade(clusterversion.V26_2_Start.Version()),
+
 	upgrade.NewTenantUpgrade(
-		"add 'estimated_last_login_time' column to system.users table",
-		clusterversion.V25_3_AddEstimatedLastLoginTime.Version(),
+		"add delayDelete column to system.table_statistics",
+		clusterversion.V26_2_AddTableStatisticsDelayDeleteColumn.Version(),
 		upgrade.NoPrecondition,
-		usersLastLoginTimeTableMigration,
+		tableStatisticsDelayDeleteColumnMigration,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
 	),
-
 	upgrade.NewTenantUpgrade(
-		"add new hot range logger job",
-		clusterversion.V25_3_AddHotRangeLoggerJob.Version(),
+		"add request_id column/index to system.statement_diagnostics",
+		clusterversion.V26_2_StmtDiagnosticsRequestID.Version(),
 		upgrade.NoPrecondition,
-		addHotRangeLoggerJob,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore this job"),
-	),
-
-	newFirstUpgrade(clusterversion.V25_4_Start.Version()),
-
-	upgrade.NewTenantUpgrade(
-		"add new system.inspect_errors table",
-		clusterversion.V25_4_InspectErrorsTable.Version(),
-		upgrade.NoPrecondition,
-		createInspectErrorsTable,
+		stmtDiagnosticsAddRequestIDColumnAndIndex,
 		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
 
 	upgrade.NewTenantUpgrade(
-		"add transaction diagnostics tables and update statement_diagnostics table",
-		clusterversion.V25_4_TransactionDiagnosticsSupport.Version(),
+		"create cluster_metrics table",
+		clusterversion.V26_2_AddSystemClusterMetricsTable.Version(),
 		upgrade.NoPrecondition,
-		createTransactionDiagnosticsTables,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore these tables"),
+		createClusterMetricsTable,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
 	),
 
 	upgrade.NewTenantUpgrade(
-		"set autostats fraction for system stats tables",
-		clusterversion.V25_4_SystemStatsTablesAutostatsFraction.Version(),
+		"repair trigger backrefs to include trigger ID",
+		clusterversion.V26_2_TriggerBackrefRepair.Version(),
 		upgrade.NoPrecondition,
-		systemStatsTablesAutostatsFractionMigration,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore table storage parameters"),
+		repairTriggerBackrefs,
+		upgrade.RestoreActionImplemented("handled in RunRestoreChanges"),
 	),
 
 	upgrade.NewTenantUpgrade(
-		"create statement_hints table",
-		clusterversion.V25_4_AddSystemStatementHintsTable.Version(),
+		"add hint_type, hint_name, and enabled columns to statement_hints table",
+		clusterversion.V26_2_StatementHintsTypeNameEnabledColumnsAdded.Version(),
 		upgrade.NoPrecondition,
-		createStatementHintsTable,
+		statementHintsAddColumnsTableMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"remove default value from hint_type column in the statement_hints table",
+		clusterversion.V26_2_StatementHintsTypeColumnBackfilled.Version(),
+		upgrade.NoPrecondition,
+		statementHintsRemoveTypeDefaultTableMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"cleanup lease manager descriptor txn keys",
+		clusterversion.V26_2_DescriptorTxnKeyCleanup.Version(),
+		upgrade.NoPrecondition,
+		descriptorTxnKeyCleanup,
+		upgrade.RestoreActionImplemented("handled in RunRestoreChanges"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"add computed columns and covering index to system.statement_statistics",
+		clusterversion.V26_2_AddStatementStatisticsComputedColumns.Version(),
+		upgrade.NoPrecondition,
+		statementStatisticsComputedColumnsMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore computed columns"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"add computed columns and covering index to system.transaction_statistics",
+		clusterversion.V26_2_AddTransactionStatisticsComputedColumns.Version(),
+		upgrade.NoPrecondition,
+		transactionStatisticsComputedColumnsMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore computed columns"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"backfill changefeed persisted frontiers from span-level checkpoints",
+		clusterversion.V26_2_ChangefeedsStopReadingSpanLevelCheckpoints.Version(),
+		upgrade.NoPrecondition,
+		backfillChangefeedPersistedFrontiers,
+		upgrade.RestoreActionNotRequired("changefeed jobs are not restored"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"stop writing changefeed span-level checkpoints",
+		clusterversion.V26_2_ChangefeedsStopWritingSpanLevelCheckpoints.Version(),
+		upgrade.NoPrecondition,
+		// NB: We need a migration to bump the system database schema version.
+		NoTenantUpgradeFunc,
+		upgrade.RestoreActionNotRequired("changefeed jobs are not restored"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"purge changefeed span-level checkpoints",
+		clusterversion.V26_2_ChangefeedsNoLongerHaveSpanLevelCheckpoints.Version(),
+		upgrade.NoPrecondition,
+		purgeChangefeedSpanLevelCheckpoints,
+		upgrade.RestoreActionNotRequired("changefeed jobs are not restored"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"grant TEMPORARY privilege to public on all databases",
+		clusterversion.V26_2_GrantTemporaryToPublic.Version(),
+		upgrade.NoPrecondition,
+		grantTemporaryToPublic,
+		upgrade.RestoreActionNotRequired("privilege is granted on restore via NewBaseDatabasePrivilegeDescriptor"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"create statements table",
+		clusterversion.V26_2_AddSystemStatementsTable.Version(),
+		upgrade.NoPrecondition,
+		createStatementsTable,
 		upgrade.RestoreActionNotRequired(
 			"restore for a cluster predating this table can leave it empty",
 		),
 	),
-
-	newFirstUpgrade(clusterversion.V26_1_Start.Version()),
-
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

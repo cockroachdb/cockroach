@@ -41,10 +41,11 @@ import (
 type sampleAggregator struct {
 	execinfra.ProcessorBase
 
-	spec    *execinfrapb.SampleAggregatorSpec
-	input   execinfra.RowSource
-	inTypes []*types.T
-	sr      stats.SampleReservoir
+	spec         *execinfrapb.SampleAggregatorSpec
+	input        execinfra.RowSource
+	inTypes      []*types.T
+	sr           stats.SampleReservoir
+	collationEnv tree.CollationEnvironment
 
 	// memAcc accounts for memory accumulated throughout the life of the
 	// sampleAggregator.
@@ -191,15 +192,21 @@ func (s *sampleAggregator) Run(ctx context.Context, output execinfra.RowReceiver
 	ctx = s.StartInternal(ctx, sampleAggregatorProcName)
 	s.input.Start(ctx)
 
-	earlyExit, err := s.mainLoop(ctx, output)
-	if err != nil {
-		execinfra.DrainAndClose(ctx, s.FlowCtx, s.input, output, err)
-	} else if !earlyExit {
-		execinfra.SendTraceData(ctx, s.FlowCtx, output)
-		s.input.ConsumerClosed()
-		output.ProducerDone()
-	}
-	s.MoveToDraining(nil /* err */)
+	// Use defer to ensure cleanup happens even on panic (fix for issue #160337).
+	var earlyExit bool
+	var err error
+	defer func() {
+		if err != nil {
+			execinfra.DrainAndClose(ctx, s.FlowCtx, s.input, output, err)
+		} else if !earlyExit {
+			execinfra.SendTraceData(ctx, s.FlowCtx, output)
+			s.input.ConsumerClosed()
+			output.ProducerDone()
+		}
+		s.MoveToDraining(nil /* err */)
+	}()
+
+	earlyExit, err = s.mainLoop(ctx, output)
 }
 
 // Close is part of the execinfra.Processor interface.
@@ -241,7 +248,9 @@ func (s *sampleAggregator) mainLoop(
 			return job.NoTxn().CheckState(ctx)
 		}
 		lastReportedFractionCompleted = fractionCompleted
-		return job.NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(fractionCompleted))
+		return s.FlowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return jobs.ProgressStorage(jobID).SetFraction(ctx, txn, float64(fractionCompleted))
+		})
 	}
 
 	var rowsProcessed uint64
@@ -249,6 +258,7 @@ func (s *sampleAggregator) mainLoop(
 	var da tree.DatumAlloc
 	for {
 		row, meta := s.input.Next()
+
 		if meta != nil {
 			if meta.SamplerProgress != nil {
 				rowsProcessed += meta.SamplerProgress.RowsProcessed
@@ -296,6 +306,8 @@ func (s *sampleAggregator) mainLoop(
 		}
 		if row == nil {
 			break
+		} else if s.FlowCtx.Cfg.TestingKnobs.SampleAggregatorTestingKnobRowHook != nil {
+			s.FlowCtx.Cfg.TestingKnobs.SampleAggregatorTestingKnobRowHook()
 		}
 
 		// There are four kinds of rows. They should be identified in this order:
@@ -419,7 +431,7 @@ func (s *sampleAggregator) sampleRow(
 	ctx context.Context, sr *stats.SampleReservoir, sampleRow rowenc.EncDatumRow, rank uint64,
 ) error {
 	prevCapacity := sr.Cap()
-	if err := sr.SampleRow(ctx, s.FlowCtx.EvalCtx, sampleRow, rank); err != nil {
+	if err := sr.SampleRow(ctx, &s.collationEnv, sampleRow, rank); err != nil {
 		if code := pgerror.GetPGCode(err); code != pgcode.OutOfMemory {
 			return err
 		}
@@ -496,17 +508,15 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				if !ok {
 					return errors.Errorf("no associated inverted sketch")
 				}
-				// GenerateHistogram is false for sketches
-				// with inverted index columns. Instead, the
-				// presence of those histograms is indicated
-				// by the existence of an inverted sketch on
-				// the column.
+				// GenerateHistogram is false for sketches with inverted index
+				// columns. Instead, the presence of those histograms is
+				// indicated by the existence of an inverted sketch on the
+				// column.
 
 				invDistinctCount := s.getDistinctCount(invSketch, false /* includeNulls */)
-				// Use 0 for the colIdx here because it refers
-				// to the column index of the samples, which
-				// only has a single bytes column with the
-				// inverted keys.
+				// Use 0 for the colIdx here because it refers to the column
+				// index of the samples, which only has a single bytes column
+				// with the inverted keys.
 				h, err := s.generateHistogram(
 					ctx,
 					s.FlowCtx.EvalCtx,
@@ -529,23 +539,8 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				columnIDs[i] = s.sampledCols[c]
 			}
 
-			// Delete old stats that have been superseded,
-			// if the new statistic is not partial
-			if si.spec.PartialPredicate == "" {
-				if err := stats.DeleteOldStatsForColumns(
-					ctx,
-					txn,
-					s.tableID,
-					columnIDs,
-				); err != nil {
-					return err
-				}
-			}
-
-			// Insert the new stat.
-			if err := stats.InsertNewStat(
+			if err := stats.WriteStatsWithOldDeleted(
 				ctx,
-				s.FlowCtx.Cfg.Settings,
 				txn,
 				s.tableID,
 				si.spec.StatName,
@@ -557,6 +552,9 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				histogram,
 				si.spec.PartialPredicate,
 				si.spec.FullStatisticID,
+				"", /* createdAt */
+				0,  /* statisticID */
+				s.spec.CanaryStatsEnabled,
 			); err != nil {
 				return err
 			}
@@ -661,8 +659,7 @@ func (s *sampleAggregator) generateHistogram(
 	}
 
 	if lowerBound != nil {
-		h, buckets, err := stats.ConstructExtremesHistogram(ctx, evalCtx, colType, values, numRows, distinctCount, maxBuckets, lowerBound, evalCtx.Settings)
-		_ = buckets
+		h, _, err := stats.ConstructExtremesHistogram(ctx, evalCtx, colType, values, numRows, distinctCount, maxBuckets, lowerBound, evalCtx.Settings)
 		return h, err
 	}
 

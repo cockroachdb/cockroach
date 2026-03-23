@@ -275,7 +275,7 @@ func BenchmarkSortChunks(b *testing.B) {
 									sorter := sorterConstructor(testAllocator, source, typs, ordCols, matchLen, execinfra.DefaultMemoryLimit)
 
 									sorter.Init(ctx)
-									for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
+									for out := colexecop.NextNoMeta(sorter); out.Length() != 0; out = colexecop.NextNoMeta(sorter) {
 									}
 								}
 								b.StopTimer()

@@ -105,7 +105,7 @@ func (tm *testModelRunner) getActualData() map[string]roachpb.Value {
 	// Scan over all TS Keys stored in the engine
 	startKey := keys.TimeseriesPrefix
 	endKey := startKey.PrefixEnd()
-	res, err := storage.MVCCScan(context.Background(), tm.Eng, startKey, endKey, tm.Clock.Now(), storage.MVCCScanOptions{})
+	res, err := storage.MVCCScan(context.Background(), tm.Eng.StateEngine(), startKey, endKey, tm.Clock.Now(), storage.MVCCScanOptions{})
 	if err != nil {
 		tm.t.Fatalf("error scanning TS data from engine: %s", err)
 	}
@@ -388,7 +388,7 @@ func (tm *testModelRunner) rollupWithMemoryContext(
 // maintain calls the same operation called by the TS maintenance queue,
 // simulating the effects in the model at the same time.
 func (tm *testModelRunner) maintain(nowNanos int64) {
-	snap := tm.Store.TODOEngine().NewSnapshot()
+	snap := tm.Store.StateEngine().NewSnapshot()
 	defer snap.Close()
 	if err := tm.DB.MaintainTimeSeries(
 		context.Background(),

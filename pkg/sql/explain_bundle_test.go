@@ -215,9 +215,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			{"intervalstyle", "iso_8601"},
 			{"large_full_scan_rows", "2000"},
 			{"locality_optimized_partitioned_index_scan", "off"},
-			// TODO(#129956): Enable this once non-default NULLS ordering with
-			// subqueries is allowed in tests.
-			// {"null_ordered_last", "on"},
+			{"null_ordered_last", "on"},
 			{"on_update_rehome_row_enabled", "off"},
 			{"opt_split_scan_limit", "1000"},
 			{"optimizer_use_histograms", "off"},
@@ -748,6 +746,29 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		)
 	})
 
+	t.Run("types_arr", func(t *testing.T) {
+		r.Exec(t, "CREATE TYPE test_type3 AS ENUM ('hello','world');")
+		r.Exec(t, "CREATE TYPE test_type4 AS (x INT, y INT);")
+		r.Exec(t, "CREATE TABLE arrtypt (k INT PRIMARY KEY, c test_type3[], d test_type4[]);")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM arrtypt;")
+		checkBundle(
+			t, fmt.Sprint(rows), "test_type3", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`CREATE TYPE .*\.test_type3`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 'test_type3' type in schema.sql")
+					}
+					reg = regexp.MustCompile(`CREATE TYPE .*\.test_type4`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 'test_type4' type in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.arrtypt.sql",
+		)
+	})
+
 	t.Run("udfs", func(t *testing.T) {
 		r.Exec(t, "CREATE FUNCTION add_func(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT a + b';")
 		r.Exec(t, "CREATE FUNCTION subtract_func(a INT, b INT) RETURNS INT IMMUTABLE LEAKPROOF LANGUAGE SQL AS 'SELECT a - b';")
@@ -788,6 +809,139 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 				return nil
 			}, false /* expectErrors */, base, plans,
 			"distsql.html vec-v.txt vec.txt")
+	})
+
+	// Regression test for #142041: triggers, their functions, and tables they
+	// modify should be included in the statement bundle.
+	t.Run("triggers", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE trigger_t1 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, "CREATE TABLE trigger_t2 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, `CREATE FUNCTION trigger_f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+			BEGIN
+				INSERT INTO trigger_t2 VALUES ((NEW).k, (NEW).v);
+				RETURN NEW;
+			END
+		$$;`)
+		r.Exec(t, "CREATE TRIGGER trigger_foo AFTER INSERT ON trigger_t1 FOR EACH ROW EXECUTE FUNCTION trigger_f();")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) INSERT INTO trigger_t1 VALUES (1, 10);")
+		checkBundle(
+			t, fmt.Sprint(rows), "trigger_t1", func(name, contents string) error {
+				if name == "schema.sql" {
+					for _, expected := range []string{
+						"CREATE FUNCTION public.trigger_f()",
+						"CREATE TABLE public.trigger_t1",
+						"CREATE TABLE public.trigger_t2",
+						"CREATE TRIGGER trigger_foo AFTER INSERT ON defaultdb.public.trigger_t1"} {
+						if !strings.Contains(contents, expected) {
+							return errors.Errorf("could not find %q in schema.sql:\n%s", expected, contents)
+						}
+					}
+				}
+				return nil
+			}, false /* expectErrors */, base, plans,
+			"distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt stats-defaultdb.public.trigger_t1.sql stats-defaultdb.public.trigger_t2.sql",
+		)
+	})
+
+	// Test that trigger function bodies are redacted in bundles.
+	t.Run("triggers_redact", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE trigger_redact_t1 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, "CREATE TABLE trigger_redact_t2 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, `CREATE FUNCTION trigger_redact_f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+			BEGIN
+				INSERT INTO trigger_redact_t2 VALUES ((NEW).k, 5555555555554444);
+				RETURN NEW;
+			END
+		$$;`)
+		r.Exec(t, "CREATE TRIGGER trigger_redact_foo AFTER INSERT ON trigger_redact_t1 FOR EACH ROW EXECUTE FUNCTION trigger_redact_f();")
+		rows := r.QueryStr(t,
+			"EXPLAIN ANALYZE (DEBUG, REDACT) INSERT INTO trigger_redact_t1 VALUES (1, 10)",
+		)
+		url := getBundleDownloadURL(t, fmt.Sprint(rows))
+		verboten := []string{"5555555555554444", fmt.Sprintf("%x", 5555555555554444)}
+		checkBundleContents(
+			t, url, "", func(name, contents string) error {
+				lowerContents := strings.ToLower(contents)
+				for _, pii := range verboten {
+					if strings.Contains(lowerContents, pii) {
+						return errors.Newf("file %s contained %q:\n%s\n", name, pii, contents)
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			plans, "statement.sql stats-defaultdb.public.trigger_redact_t1.sql stats-defaultdb.public.trigger_redact_t2.sql env.sql vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt",
+		)
+	})
+
+	// Test that UDTs referenced by trigger functions are included in bundles.
+	t.Run("triggers_udt_deps", func(t *testing.T) {
+		r.Exec(t, "CREATE TYPE trigger_color AS ENUM ('red', 'blue');")
+		r.Exec(t, "CREATE TABLE trigger_udt_t1 (k INT PRIMARY KEY, v trigger_color);")
+		r.Exec(t, "CREATE TABLE trigger_udt_t2 (k INT PRIMARY KEY, v trigger_color);")
+		r.Exec(t, `CREATE FUNCTION trigger_udt_f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+			BEGIN
+				INSERT INTO trigger_udt_t2 VALUES ((NEW).k, (NEW).v);
+				RETURN NEW;
+			END
+		$$;`)
+		r.Exec(t, "CREATE TRIGGER trigger_udt_foo AFTER INSERT ON trigger_udt_t1 FOR EACH ROW EXECUTE FUNCTION trigger_udt_f();")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) INSERT INTO trigger_udt_t1 VALUES (1, 'red');")
+		checkBundle(
+			t, fmt.Sprint(rows), "trigger_udt_t1", func(name, contents string) error {
+				if name == "schema.sql" {
+					for _, expected := range []string{
+						"CREATE TYPE public.trigger_color",
+						"CREATE FUNCTION public.trigger_udt_f()",
+						"CREATE TABLE public.trigger_udt_t1",
+						"CREATE TABLE public.trigger_udt_t2",
+					} {
+						if !strings.Contains(contents, expected) {
+							return errors.Errorf("could not find %q in schema.sql:\n%s", expected, contents)
+						}
+					}
+				}
+				return nil
+			}, false /* expectErrors */, base, plans,
+			"distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt stats-defaultdb.public.trigger_udt_t1.sql stats-defaultdb.public.trigger_udt_t2.sql",
+		)
+	})
+
+	// Test that routines called by trigger functions (via DependsOnRoutines)
+	// are included in bundles.
+	t.Run("triggers_routine_deps", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE trigger_rdep_t1 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, "CREATE TABLE trigger_rdep_t2 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, `CREATE FUNCTION trigger_helper(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$
+			INSERT INTO trigger_rdep_t2 VALUES (a, b);
+			SELECT a;
+		$$;`)
+		r.Exec(t, `CREATE FUNCTION trigger_rdep_f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+			DECLARE
+				unused INT;
+			BEGIN
+				SELECT trigger_helper((NEW).k, (NEW).v) INTO unused;
+				RETURN NEW;
+			END
+		$$;`)
+		r.Exec(t, "CREATE TRIGGER trigger_rdep_foo AFTER INSERT ON trigger_rdep_t1 FOR EACH ROW EXECUTE FUNCTION trigger_rdep_f();")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) INSERT INTO trigger_rdep_t1 VALUES (1, 10);")
+		checkBundle(
+			t, fmt.Sprint(rows), "trigger_rdep_t1", func(name, contents string) error {
+				if name == "schema.sql" {
+					for _, expected := range []string{
+						"CREATE FUNCTION public.trigger_helper",
+						"CREATE FUNCTION public.trigger_rdep_f()",
+						"CREATE TABLE public.trigger_rdep_t1",
+					} {
+						if !strings.Contains(contents, expected) {
+							return errors.Errorf("could not find %q in schema.sql:\n%s", expected, contents)
+						}
+					}
+				}
+				return nil
+			}, false /* expectErrors */, base, plans,
+			"distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt stats-defaultdb.public.trigger_rdep_t1.sql",
+		)
 	})
 
 	t.Run("different schema UDF", func(t *testing.T) {
@@ -928,20 +1082,20 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 	})
 
 	t.Run("multiple databases and special characters", func(t *testing.T) {
-		r.Exec(t, `CREATE DATABASE "db.name";`)
-		r.Exec(t, `CREATE DATABASE "db'name";`)
-		r.Exec(t, `CREATE SCHEMA "db.name"."sc.name"`)
-		r.Exec(t, `CREATE SCHEMA "db'name"."sc'name"`)
-		r.Exec(t, `CREATE TABLE "db.name"."sc.name".t (pk INT PRIMARY KEY);`)
-		r.Exec(t, `CREATE TABLE "db'name"."sc'name".t (pk INT PRIMARY KEY);`)
-		rows := r.QueryStr(t, `EXPLAIN ANALYZE (DEBUG) SELECT * FROM "db.name"."sc.name".t, "db'name"."sc'name".t;`)
+		r.Exec(t, `CREATE DATABASE "db""name";`)
+		r.Exec(t, `CREATE DATABASE "db''Name";`)
+		r.Exec(t, `CREATE SCHEMA "db""name"."sc""name"`)
+		r.Exec(t, `CREATE SCHEMA "db''Name"."sc''name"`)
+		r.Exec(t, `CREATE TABLE "db""name"."sc""name".t (pk INT PRIMARY KEY);`)
+		r.Exec(t, `CREATE TABLE "db''Name"."sc''name".t (pk INT PRIMARY KEY);`)
+		rows := r.QueryStr(t, `EXPLAIN ANALYZE (DEBUG) SELECT * FROM "db""name"."sc""name".t, "db''Name"."sc''name".t;`)
 		checkBundle(
-			t, fmt.Sprint(rows), `"sc.name".t`, nil, false, /* expectErrors */
-			base, plans, `distsql.html vec.txt vec-v.txt stats-"db.name"."sc.name".t.sql stats-"db'name"."sc'name".t.sql`,
+			t, fmt.Sprint(rows), `"sc""name".t`, nil, false, /* expectErrors */
+			base, plans, `distsql.html vec.txt vec-v.txt stats-_db__name_._sc__name_.t.sql stats-_db__name_._sc__name_.t_2.sql`,
 		)
 		checkBundle(
-			t, fmt.Sprint(rows), `"sc'name".t`, nil, false, /* expectErrors */
-			base, plans, `distsql.html vec.txt vec-v.txt stats-"db.name"."sc.name".t.sql stats-"db'name"."sc'name".t.sql`,
+			t, fmt.Sprint(rows), `"sc''name".t`, nil, false, /* expectErrors */
+			base, plans, `distsql.html vec.txt vec-v.txt stats-_db__name_._sc__name_.t.sql stats-_db__name_._sc__name_.t_2.sql`,
 		)
 	})
 
@@ -989,6 +1143,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		r.Exec(t, "CREATE POLICY policy1 ON rls1 USING (u = 'hal')")
 		r.Exec(t, "CREATE USER rls_user")
 		r.Exec(t, "GRANT SYSTEM VIEWCLUSTERSETTING TO rls_user")
+		r.Exec(t, "GRANT SYSTEM VIEWSYSTEMTABLE TO rls_user")
 		r.Exec(t, "ALTER TABLE rls1 OWNER TO rls_user")
 		r.Exec(t, "SET ROLE rls_user")
 		defer r.Exec(t, "SET ROLE root")
@@ -1019,6 +1174,148 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 				return nil
 			}, false, /* expectErrors */
 			base, plans, "stats-defaultdb.public.rls1.sql", "distsql.html vec.txt vec-v.txt",
+		)
+	})
+
+	t.Run("schema for udt", func(t *testing.T) {
+		r.Exec(t, `CREATE SCHEMA "schema.1"`)
+		r.Exec(t, `CREATE TYPE "schema.1".test_type1 AS ENUM ('hello','world')`)
+		r.Exec(t, `CREATE TABLE udt_schema_t (x INT PRIMARY KEY, y "schema.1".test_type1)`)
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM udt_schema_t")
+		checkBundle(
+			t, fmt.Sprint(rows), "udt_schema_t", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`CREATE SCHEMA IF NOT EXISTS \"schema.1\"`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf(`could not find CREATE SCHEMA for \"schema.1\" in schema.sql`)
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.udt_schema_t.sql",
+		)
+	})
+
+	t.Run("schema for udf", func(t *testing.T) {
+		r.Exec(t, `CREATE SCHEMA "schema.2"`)
+		r.Exec(t, `CREATE FUNCTION "schema.2".r1() RETURNS INT LANGUAGE SQL AS 'SELECT 1'`)
+		rows := r.QueryStr(t, `EXPLAIN ANALYZE (DEBUG) SELECT "schema.2".r1()`)
+		checkBundle(
+			t, fmt.Sprint(rows), "t", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`CREATE SCHEMA IF NOT EXISTS \"schema.2\"`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf(`could not find CREATE SCHEMA for \"schema.2\" in schema.sql`)
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt",
+		)
+	})
+
+	t.Run("schema with unique chars", func(t *testing.T) {
+		r.Exec(t, `CREATE SCHEMA "schema.3"`)
+		r.Exec(t, `CREATE TABLE "schema.3"."op.81" (X INT)`)
+		rows := r.QueryStr(t, `EXPLAIN ANALYZE (DEBUG) SELECT * FROM "schema.3"."op.81"`)
+		checkBundle(
+			t, fmt.Sprint(rows), `"op.81"`, func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`CREATE SCHEMA "schema.3"`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf(`could not find CREATE SCHEMA for \"schema.3\" in schema.sql`)
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb._schema.3_._op.81_.sql",
+		)
+	})
+
+	t.Run("statement hints", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE table161829(x INT PRIMARY KEY, y INT, z STRING)")
+		r.Exec(t, "CREATE INDEX xy161829 ON table161829 (x, y)")
+		r.Exec(t, "CREATE INDEX y161829 ON table161829 (y)")
+		r.Exec(t, "CREATE INDEX xz161829 ON table161829 (x, z)")
+		r.Exec(t, `SELECT information_schema.crdb_rewrite_inline_hints('SELECT * FROM table161829 WHERE y = 10', 'SELECT * FROM table161829@primary WHERE y = 10')`)
+		r.Exec(t, `SELECT information_schema.crdb_rewrite_inline_hints('SELECT * FROM table161829 WHERE y = 10', 'SELECT * FROM table161829@xy161829 WHERE y = 10')`)
+		r.Exec(t, `SELECT information_schema.crdb_rewrite_inline_hints('SELECT * FROM table161829 WHERE y = 10', 'SELECT * FROM table161829@y161829 WHERE y = 10')`)
+
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM table161829 WHERE y = 10")
+		checkBundle(
+			t, fmt.Sprint(rows), "table161829", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`crdb_rewrite_inline_hints\(.*\@primary.*\n.*crdb_rewrite_inline_hints.*\@xy161829.*\n.*crdb_rewrite_inline_hints.*\@y161829`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find full crdb_rewrite_inline_hints in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.table161829.sql",
+		)
+
+		// Bundle for statements that share the same fingerprint should all see the same hints.
+		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM table161829 WHERE y = 100")
+		checkBundle(
+			t, fmt.Sprint(rows), "table161829", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`crdb_rewrite_inline_hints\(.*\@primary.*\n.*crdb_rewrite_inline_hints.*\@xy161829.*\n.*crdb_rewrite_inline_hints.*\@y161829`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find full crdb_rewrite_inline_hints in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.table161829.sql",
+		)
+
+		// Test that the stmt argument must have its single quotes escaped.
+		r.Exec(t, `SELECT information_schema.crdb_rewrite_inline_hints('SELECT * FROM table161829 WHERE z = ''hello''', 'SELECT * FROM table161829@xz161829 WHERE z = ''hello''')`)
+		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM table161829 WHERE z = 'hello'")
+		checkBundle(
+			t, fmt.Sprint(rows), "table161829", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`crdb_rewrite_inline_hints\(e\'SELECT \* FROM table161829 WHERE z = \\'hello\\'\'`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find full crdb_rewrite_inline_hints in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.table161829.sql",
+		)
+
+		// Test session variable hints appear in the bundle's schema.sql.
+		r.Exec(t, `SELECT information_schema.crdb_set_session_variable_hint('SELECT * FROM table161829 WHERE y = 10', 'distsql', 'on')`)
+		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM table161829 WHERE y = 10")
+		checkBundle(
+			t, fmt.Sprint(rows), "table161829", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`crdb_set_session_variable_hint\(`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find crdb_set_session_variable_hint in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.table161829.sql",
+		)
+
+		// Test database-scoped hints include the database arg in the bundle.
+		r.Exec(t, `SELECT information_schema.crdb_set_session_variable_hint('SELECT * FROM table161829 WHERE y = 10', 'distsql', 'on', 'defaultdb')`)
+		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM table161829 WHERE y = 10")
+		checkBundle(
+			t, fmt.Sprint(rows), "table161829", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`crdb_set_session_variable_hint\(.*'distsql'.*'defaultdb'\)`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find database-scoped crdb_set_session_variable_hint in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec-v.txt vec.txt stats-defaultdb.public.table161829.sql",
 		)
 	})
 

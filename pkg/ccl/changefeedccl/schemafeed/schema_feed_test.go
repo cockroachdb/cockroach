@@ -8,6 +8,7 @@ package schemafeed
 import (
 	"context"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -194,31 +195,40 @@ func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
 	ctx := context.Background()
 	var numRequests int
 	first := true
+	var sqlCodec atomic.Pointer[keys.SQLCodec]
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-			TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
-				for _, ru := range request.Requests {
-					if _, ok := ru.GetInner().(*kvpb.ExportRequest); ok {
-						numRequests++
-						h := admission.ElasticCPUWorkHandleFromContext(ctx)
-						if h == nil {
-							t.Fatalf("expected context to have CPU work handle")
-						}
-						h.TestingOverrideOverLimit(func() (bool, time.Duration) {
-							if first {
-								first = false
-								return true, 0
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+					for _, ru := range request.Requests {
+						if exportRequest, ok := ru.GetInner().(*kvpb.ExportRequest); ok {
+							// Lease manager also uses exports after schema changes, so start
+							// intercepting exports when necessary.
+							if lease.TestIsLeasingTxnExportRequest(sqlCodec.Load(), request, exportRequest) {
+								return nil
 							}
-							return false, 0
-						})
+							numRequests++
+							h := admission.ElasticCPUWorkHandleFromContext(ctx)
+							if h == nil {
+								t.Fatalf("expected context to have CPU work handle")
+							}
+							h.TestingOverrideOverLimit(func() (bool, time.Duration) {
+								if first {
+									first = false
+									return true, 0
+								}
+								return false, 0
+							})
+						}
 					}
-				}
-				return nil
-			},
-		}},
+					return nil
+				},
+			}},
 	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
+	codec := s.Codec()
+	sqlCodec.Store(&codec)
 	sqlServer := s.SQLServer().(*sql.Server)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -252,7 +262,7 @@ func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
 		TestingAllEventFilter, targets, now, nil, changefeedbase.CanHandle{
 			MultipleColumnFamilies: true,
 			VirtualColumns:         true,
-		})
+		}, false)
 	scf := sf.(*schemaFeed)
 	desc, err := scf.fetchDescriptorVersions(ctx, beforeCreate, afterCreate)
 	require.NoError(t, err)
@@ -296,7 +306,7 @@ func TestSchemaFeedHandlesCascadeDatabaseDrop(t *testing.T) {
 		TestingAllEventFilter, targets, s.Clock().Now(), nil, changefeedbase.CanHandle{
 			MultipleColumnFamilies: true,
 			VirtualColumns:         true,
-		}).(*schemaFeed)
+		}, false).(*schemaFeed)
 
 	// initialize type dependencies in schema feed.
 	require.NoError(t, sf.primeInitialTableDescs(ctx))
@@ -419,7 +429,11 @@ func TestPauseOrResumePolling(t *testing.T) {
 		newTestLeasedDescriptor(tableID, v3, notSchemaLocked, hlc.Timestamp{WallTime: 60}),
 	}
 
+	// Use a clock set to time 0, before any test timestamps.
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 0)))
+
 	sf := schemaFeed{
+		clock: clock,
 		leaseMgr: &testLeaseAcquirer{
 			id:    tableID,
 			descs: tableDescs,
@@ -496,6 +510,60 @@ func TestPauseOrResumePolling(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{WallTime: 50}, getFrontier())
 }
 
+// TestPauseOrResumePollingAdvancesToNow verifies that when pauseOrResumePolling
+// is called with a timestamp in the past, it advances atOrBefore to the current
+// clock time.
+func TestPauseOrResumePollingAdvancesToNow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	const tableID = 123
+	tableDescs := []*testLeasedDescriptor{
+		newTestLeasedDescriptor(tableID, 1, true, hlc.Timestamp{WallTime: 10}),
+	}
+
+	// Set clock to time 100.
+	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 100))
+	clock := hlc.NewClockForTesting(manualClock)
+
+	sf := schemaFeed{
+		clock: clock,
+		leaseMgr: &testLeaseAcquirer{
+			id:    tableID,
+			descs: tableDescs,
+		},
+		targets: CreateChangefeedTargets(tableID),
+	}
+
+	getFrontier := func() hlc.Timestamp {
+		sf.mu.Lock()
+		defer sf.mu.Unlock()
+		return sf.mu.ts.frontier
+	}
+	setFrontier := func(ts hlc.Timestamp) error {
+		sf.mu.Lock()
+		defer sf.mu.Unlock()
+		return sf.mu.ts.advanceFrontier(ts)
+	}
+
+	// Set the initial frontier to 10.
+	require.NoError(t, setFrontier(hlc.Timestamp{WallTime: 10}))
+
+	// Call with a timestamp in the past (20). Since the clock is at 100,
+	// the frontier should advance to 100.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 20}))
+	require.True(t, sf.pollingPaused())
+	require.Equal(t, int64(100), getFrontier().WallTime)
+
+	// Call with a timestamp in the future (120). Since the clock is at 100,
+	// the frontier should advance to the event timestamp of 120.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 120}))
+	require.True(t, sf.pollingPaused())
+	require.Equal(t, int64(120), getFrontier().WallTime)
+}
+
 // BenchmarkPauseOrResumePolling benchmarks pauseOrResumePolling in cases where
 // there is a non-terminal error early, polling should be paused, and polling
 // should not be paused.
@@ -506,7 +574,10 @@ func BenchmarkPauseOrResumePolling(b *testing.B) {
 	ctx := context.Background()
 
 	const tableID = 123
+	// Use a clock set to time 0, matching test timestamps.
+	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 0))
 	sf := schemaFeed{
+		clock: hlc.NewClockForTesting(manualClock),
 		leaseMgr: &testLeaseAcquirer{
 			id: tableID,
 			descs: []*testLeasedDescriptor{

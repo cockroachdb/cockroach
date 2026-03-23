@@ -8,7 +8,6 @@ package optbuilder
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -19,8 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/errors"
 )
 
 // analyzeOrderBy analyzes an Ordering physical property from the ORDER BY
@@ -70,13 +67,63 @@ func (b *Builder) analyzeOrderBy(
 // columns to the projectionsScope and sets the ordering property on the
 // projectionsScope. This property later becomes part of the required physical
 // properties returned by Build.
+//
+// For columns with non-default NULLS ordering (e.g., NULLS LAST for ASC or
+// NULLS FIRST for DESC), an additional IS NULL column is generated and added
+// to the ordering before the main column. This implements the correct NULL
+// ordering semantics by first sorting by whether values are NULL, then by
+// the actual values.
 func (b *Builder) buildOrderBy(inScope, projectionsScope, orderByScope *scope) {
 	if orderByScope == nil {
 		return
 	}
 
+	nullsOrderingCount := 0
+	for i := range orderByScope.cols {
+		if orderByScope.cols[i].nonDefaultNullsOrder {
+			nullsOrderingCount++
+		}
+	}
+	if nullsOrderingCount > 0 {
+		// Pre-allocate space for the new columns list to avoid multiple
+		// allocations. We need space for original columns plus IS NULL
+		// columns for those with nonDefaultNullsOrder.
+		newCols := make([]scopeColumn, 0, len(orderByScope.cols)+nullsOrderingCount)
+
+		// Process each ORDER BY column, adding IS NULL columns for non-default NULLS ordering.
+		for i := range orderByScope.cols {
+			orderByCol := &orderByScope.cols[i]
+
+			// For non-default NULLS ordering, create an IS NULL column first.
+			if orderByCol.nonDefaultNullsOrder {
+				// Create the IS NULL expression using the ORDER BY column's expression.
+				isNullExpr := tree.NewTypedIsNullExpr(orderByCol.getExpr())
+
+				// Create the IS NULL column with a descriptive metadata
+				// name derived from the ORDER BY column's metadata alias.
+				orderByAlias := b.factory.Metadata().ColumnMeta(orderByCol.id).Alias
+				metadataName := fmt.Sprintf("nulls_ordering_%s", orderByAlias)
+				isNullCol := scopeColumn{
+					name:       scopeColName("").WithMetadataName(metadataName),
+					typ:        isNullExpr.ResolvedType(),
+					expr:       isNullExpr,
+					descending: orderByCol.descending,
+				}
+
+				// Add the IS NULL column first.
+				newCols = append(newCols, isNullCol)
+			}
+			// Add the main ORDER BY column.
+			newCols = append(newCols, *orderByCol)
+		}
+
+		// Replace the columns in orderByScope with the new list.
+		orderByScope.cols = newCols
+	}
+
 	orderByScope.ordering = make([]opt.OrderingColumn, 0, len(orderByScope.cols))
 
+	// Build all the columns and their ordering in the correct sequence.
 	for i := range orderByScope.cols {
 		b.buildOrderByArg(inScope, projectionsScope, orderByScope, &orderByScope.cols[i])
 	}
@@ -266,47 +313,93 @@ func (b *Builder) analyzeExtraArgument(
 	for _, e := range exprs {
 		// Ensure we can order on the given column(s).
 		ensureColumnOrderable(e)
-		if !nullsDefaultOrder {
-			if buildutil.CrdbTestBuild && containsSubquery(e) {
-				panic(errors.UnimplementedError(
-					errors.IssueLink{IssueURL: build.MakeIssueURL(129956)},
-					"subqueries in ORDER BY with non-default NULLS ordering is not supported"),
-				)
-			}
-			metadataName := fmt.Sprintf("nulls_ordering_%s", e.String())
-			extraColsScope.addColumn(
-				scopeColName("").WithMetadataName(metadataName),
-				tree.NewTypedIsNullExpr(e),
-			)
+		var name scopeColumnName
+		if idx != -1 {
+			name = projectionsScope.cols[idx].name
 		}
-		extraColsScope.addColumn(scopeColName(""), e)
+		col := extraColsScope.addColumn(name, e)
+		col.nonDefaultNullsOrder = !nullsDefaultOrder
 	}
 }
 
-func containsSubquery(expr tree.Expr) bool {
-	var v subqueryVisitor
-	tree.WalkExprConst(&v, expr)
-	return v.foundSubquery
-}
-
-type subqueryVisitor struct {
-	foundSubquery bool
-}
-
-var _ tree.Visitor = &subqueryVisitor{}
-
-func (s *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
-	if s.foundSubquery {
-		return false, expr
+// buildOrderByPreProjection constructs a pre-projection when ORDER BY
+// expressions with non-default NULLS ordering need to avoid duplicating
+// the expression. Without pre-projection, the IS NULL column created
+// for NULLS ordering would duplicate the ORDER BY expression, causing
+// issues with subqueries and double-evaluation of side-effecting
+// functions.
+//
+// When pre-projection is built, matching expressions in projectionsScope
+// and orderByScope are updated to be passthrough columns referencing the
+// pre-projected columns.
+func (b *Builder) buildOrderByPreProjection(
+	inScope, projectionsScope, orderByScope *scope,
+) (preProjectionScope *scope) {
+	if orderByScope == nil {
+		return nil
 	}
-	if _, ok := expr.(*subquery); ok {
-		s.foundSubquery = true
-		return false, expr
-	}
-	return true, expr
-}
 
-func (s *subqueryVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
+	// Check if any ORDER BY columns require pre-projection.
+	needPreProjection := false
+	for i := range orderByScope.cols {
+		if orderByScope.cols[i].nonDefaultNullsOrder {
+			needPreProjection = true
+			break
+		}
+	}
+	if !needPreProjection {
+		return nil
+	}
+
+	// Create a new scope for the pre-projection that will contain all
+	// projection columns plus ORDER BY expressions.
+	preProjectionScope = inScope.replace()
+	preProjectionScope.cols = make([]scopeColumn, 0, len(projectionsScope.cols)+len(orderByScope.cols))
+
+	// Copy all SELECT projection columns to the pre-projection scope.
+	// These are already built with column IDs set. They become passthrough
+	// columns referencing the pre-projected expressions.
+	for i := range projectionsScope.cols {
+		col := &projectionsScope.cols[i]
+		preProjectionScope.cols = append(preProjectionScope.cols, *col)
+		// Convert to passthrough column - clear expression fields since
+		// the column will reference the pre-projected result by ID.
+		// Also clear the cached exprStr so that findExistingCol in
+		// addOrderByOrDistinctOnColumn recomputes it from the
+		// now-nil expr (which returns the scopeColumn itself).
+		col.expr = nil
+		col.scalar = nil
+		col.exprStr = ""
+	}
+
+	// Build ORDER BY columns in the pre-projection scope. This ensures
+	// expressions are evaluated once rather than duplicated for both the
+	// main expression and IS NULL check. Reuse existing SELECT list
+	// projections when possible (SQL99 rule 3). We search
+	// preProjectionScope (not projectionsScope) because
+	// projectionsScope columns have had their expr fields cleared
+	// above.
+	for i := range orderByScope.cols {
+		orderCol := &orderByScope.cols[i]
+		if col := preProjectionScope.findExistingCol(
+			orderCol.getExpr(), true, /* allowSideEffects */
+		); col != nil {
+			orderCol.id = col.id
+		} else {
+			preProjectionScope.cols = append(preProjectionScope.cols, *orderCol)
+			preProjectedCol := &preProjectionScope.cols[len(preProjectionScope.cols)-1]
+			b.buildScalar(preProjectedCol.getExpr(), inScope, preProjectionScope, preProjectedCol, nil)
+			orderCol.id = preProjectedCol.id
+		}
+		// Clear expression so IS NULL references the column by ID
+		// rather than duplicating the expression. Also clear the
+		// cached exprStr to avoid stale matches.
+		orderCol.expr = nil
+		orderCol.scalar = nil
+		orderCol.exprStr = ""
+	}
+	return preProjectionScope
+}
 
 // hasDefaultNullsOrder returns whether the provided ordering uses the default
 // ordering for NULLs. The default order in Cockroach if null_ordered_last=False

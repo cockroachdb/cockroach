@@ -67,13 +67,9 @@ func TestMain(m *testing.M) {
 	defer ccl.TestingEnableEnterprise()()
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithTenantOption(base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124)))
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124),
-	)()
-
 	os.Exit(m.Run())
 }
 
@@ -200,6 +196,13 @@ func TestReadCommittedLogic_alter_default_privileges_with_grant_option(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "alter_default_privileges_with_grant_option")
+}
+
+func TestReadCommittedLogic_alter_index(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_index")
 }
 
 func TestReadCommittedLogic_alter_primary_key(
@@ -363,11 +366,11 @@ func TestReadCommittedLogic_bytes(
 	runLogicTest(t, "bytes")
 }
 
-func TestReadCommittedLogic_canary_stats(
+func TestReadCommittedLogic_canary_stats_deletion(
 	t *testing.T,
 ) {
 	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "canary_stats")
+	runLogicTest(t, "canary_stats_deletion")
 }
 
 func TestReadCommittedLogic_cascade(
@@ -529,6 +532,13 @@ func TestReadCommittedLogic_crdb_internal_catalog(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "crdb_internal_catalog")
+}
+
+func TestReadCommittedLogic_crdb_internal_decode_key(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "crdb_internal_decode_key")
 }
 
 func TestReadCommittedLogic_crdb_internal_default_privileges(
@@ -1840,6 +1850,13 @@ func TestReadCommittedLogic_secondary_index_column_families(
 	runLogicTest(t, "secondary_index_column_families")
 }
 
+func TestReadCommittedLogic_security_invoker_view(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "security_invoker_view")
+}
+
 func TestReadCommittedLogic_select(
 	t *testing.T,
 ) {
@@ -1852,6 +1869,13 @@ func TestReadCommittedLogic_select_for_share(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "select_for_share")
+}
+
+func TestReadCommittedLogic_select_for_share_write_buffering(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "select_for_share_write_buffering")
 }
 
 func TestReadCommittedLogic_select_index(
@@ -2069,6 +2093,13 @@ func TestReadCommittedLogic_show_inspect_errors(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "show_inspect_errors")
+}
+
+func TestReadCommittedLogic_show_statement_hints(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "show_statement_hints")
 }
 
 func TestReadCommittedLogic_show_transfer_state(
@@ -2300,13 +2331,6 @@ func TestReadCommittedLogic_truncate(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "truncate")
-}
-
-func TestReadCommittedLogic_truncate_with_concurrent_mutation(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "truncate_with_concurrent_mutation")
 }
 
 func TestReadCommittedLogic_tsvector(
@@ -2685,6 +2709,13 @@ func TestReadCommittedLogic_views(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "views")
+}
+
+func TestReadCommittedLogic_views_definer_privileges(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "views_definer_privileges")
 }
 
 func TestReadCommittedLogic_virtual_columns(

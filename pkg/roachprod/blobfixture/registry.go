@@ -167,6 +167,22 @@ func (r *Registry) GC(ctx context.Context, l *logger.Logger) error {
 	return nil
 }
 
+// MarkFailure marks the fixture at the given metadata path as having resulted
+// in a test failure. This prevents the fixture from being garbage collected,
+// providing time for investigation.
+func (r *Registry) MarkFailure(ctx context.Context, l *logger.Logger, metadataPath string) error {
+	setTime := r.clock()
+	err := r.updateMetadata(metadataPath, func(m *FixtureMetadata) error {
+		m.LastFailureAt = &setTime
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	l.Printf("fixture '%s' marked last failure at '%s'", metadataPath, setTime)
+	return nil
+}
+
 func (r *Registry) Close() {
 	_ = r.storage.Close()
 }
@@ -217,23 +233,26 @@ func (r *Registry) listFixtures(
 	}
 	var result []FixtureMetadata
 
-	err := r.storage.List(ctx, kindPrefix /*delimiter*/, "", func(found string) error {
-		json, err := r.maybeReadFile(ctx, path.Join(kindPrefix, found))
-		if err != nil {
-			return err
-		}
-		if json == nil {
-			return nil // Skip files that don't exist (may have been GC'd)
-		}
+	err := r.storage.List(
+		ctx, kindPrefix /*delimiter*/, cloud.ListOptions{},
+		func(found string) error {
+			json, err := r.maybeReadFile(ctx, path.Join(kindPrefix, found))
+			if err != nil {
+				return err
+			}
+			if json == nil {
+				return nil // Skip files that don't exist (may have been GC'd)
+			}
 
-		metadata := FixtureMetadata{}
-		if err := metadata.UnmarshalJson(json); err != nil {
-			return err
-		}
+			metadata := FixtureMetadata{}
+			if err := metadata.UnmarshalJson(json); err != nil {
+				return err
+			}
 
-		result = append(result, metadata)
-		return nil
-	})
+			result = append(result, metadata)
+			return nil
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -255,6 +274,45 @@ func (r *Registry) upsertMetadata(metadata FixtureMetadata) error {
 	if _, err := writer.Write(json); err != nil {
 		_ = writer.Close()
 		return err
+	}
+
+	return writer.Close()
+}
+
+func (r *Registry) updateMetadata(
+	metadataPath string, update func(metadata *FixtureMetadata) error,
+) error {
+	ctx := context.Background()
+	json, err := r.maybeReadFile(ctx, metadataPath)
+	if err != nil {
+		return errors.Wrap(err, "failed to read metadata for update")
+	}
+	if json == nil {
+		return errors.New("metadata does not exist for update")
+	}
+
+	metadata := &FixtureMetadata{}
+	if err := metadata.UnmarshalJson(json); err != nil {
+		return errors.Wrap(err, "failed to unmarshal metadata for update")
+	}
+
+	if err := update(metadata); err != nil {
+		return errors.Wrap(err, "failed to update metadata")
+	}
+
+	updatedJson, err := metadata.MarshalJson()
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal updated metadata")
+	}
+
+	writer, err := r.storage.Writer(ctx, metadata.MetadataPath)
+	if err != nil {
+		return errors.Wrap(err, "failed to create writer for updated metadata")
+	}
+
+	if _, err := writer.Write(updatedJson); err != nil {
+		_ = writer.Close()
+		return errors.Wrap(err, "failed to write updated metadata")
 	}
 
 	return writer.Close()
@@ -290,7 +348,7 @@ func (r *Registry) deleteBlobsMatchingPrefix(ctx context.Context, prefix string)
 	// Producer goroutine
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(paths)
-		err := r.storage.List(ctx, prefix, "", func(path string) error {
+		err := r.storage.List(ctx, prefix, cloud.ListOptions{}, func(path string) error {
 			select {
 			case paths <- path:
 				return nil

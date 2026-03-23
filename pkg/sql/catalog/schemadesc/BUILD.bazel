@@ -1,4 +1,5 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "schemadesc",
@@ -21,7 +22,7 @@ go_library(
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/catprivilege",
         "//pkg/sql/catalog/descpb",
-        "//pkg/sql/parser",
+        "//pkg/sql/parserutils",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/privilege",
@@ -58,4 +59,9 @@ go_test(
         "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
+)
+
+disallowed_imports_test(
+    src = "schemadesc",
+    disallowed_list = ["//pkg/sql/parser"],
 )

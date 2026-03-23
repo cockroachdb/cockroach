@@ -15,8 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -224,8 +222,7 @@ func TestDataDriven(t *testing.T) {
 					sqlTranslator := sqlTranslatorFactory.NewSQLTranslator(txn)
 					var err error
 					records, err = sqlTranslator.Translate(ctx, descIDs, generateSystemSpanConfigs)
-					require.NoError(t, err)
-					return nil
+					return err
 				})
 				require.NoError(t, err)
 

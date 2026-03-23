@@ -36,9 +36,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -79,9 +81,9 @@ type Collection struct {
 	// not visible to other transactions.
 	uncommitted uncommittedDescriptors
 
-	uncommittedComments uncommittedComments
-
-	uncommittedZoneConfigs uncommittedZoneConfigs
+	// uncommittedMetadata tracks uncommitted comments and zone configs using
+	// a single nstree.MutableCatalog for storage.
+	uncommittedMetadata uncommittedMetadata
 
 	// A cached implementation of catkv.CatalogReader used for accessing stored
 	// descriptors, namespace entries, comments and zone configs. The cache
@@ -123,6 +125,10 @@ type Collection struct {
 	// repairs.
 	skipValidationOnWrite bool
 
+	// waitForLockedLeaseBump indicates that we need to wait for the locked
+	// lease timestamp to bump as well.
+	waitForLockedLeaseBump bool
+
 	// readerCatalogSetup indicates that replicated descriptors can be modified
 	// by this collection.
 	readerCatalogSetup bool
@@ -145,6 +151,17 @@ type Collection struct {
 	// txn. This guarantees the generation for long-running transactions
 	// this value stays the same for the life of the transaction.
 	leaseGeneration int64
+
+	// forceStorageLookupIDs contains descriptor IDs that must bypass all
+	// non-storage layers (leased, cached, uncommitted, synthetic) and be
+	// resolved directly from KV. This is used when a fresh Collection is
+	// created for parallel check worker goroutines: the parent (planner's)
+	// Collection has uncommitted descriptors that are only visible via KV
+	// within the same transaction. Without this, a leased or cached descriptor
+	// with a stale version could be returned.
+	// When set, the collection is implicitly read-only to avoid multiple sources
+	// of uncommitted descriptor state.
+	forceStorageLookupIDs catalog.DescriptorIDSet
 }
 
 // FromTxn is a convenience function to extract a descs.Collection which is
@@ -189,6 +206,18 @@ func (tc *Collection) SkipValidationOnWrite() {
 	tc.skipValidationOnWrite = true
 }
 
+// MaybeSetLockedLeaseBump requires that the locked lease timestamp
+// is also bumped after this operation. This is needed in scenarios
+// where WaitForOneVersion has no prior version checked out, and the
+// previous version is invalid (i.e. has validation errors).
+func (tc *Collection) MaybeSetLockedLeaseBump(ctx context.Context) {
+	if !lease.LockedLeaseTimestamp.Get(&tc.settings.SV) ||
+		!tc.settings.Version.IsActive(ctx, clusterversion.V26_1) {
+		return
+	}
+	tc.waitForLockedLeaseBump = true
+}
+
 // SetReaderCatalogSetup indicates this collection is being used to
 // modify reader catalogs.
 func (tc *Collection) SetReaderCatalogSetup() {
@@ -199,6 +228,31 @@ func (tc *Collection) SetReaderCatalogSetup() {
 // the passed slice. Errors are logged but ignored.
 func (tc *Collection) ReleaseSpecifiedLeases(ctx context.Context, descs []lease.IDVersion) {
 	tc.leased.release(ctx, descs)
+}
+
+// MaybeWaitForLeaseTimestampBump waits for any lease timestamp bump, which
+// is normally used by repair queries to ensure the new version is available.
+// Normally for schema changes WaitForOneVersion is enough, since it guarantees
+// no one can lease the old version. However, if the prior version was invalid,
+// then there will be a delay after which the new version will be usable, as the
+// locked lease timestamp gets bumped.
+func (tc *Collection) MaybeWaitForLeaseTimestampBump(
+	ctx context.Context, commitTime hlc.Timestamp,
+) error {
+	// This transaction does not require any leased timestamp bump.
+	if !tc.waitForLockedLeaseBump {
+		return nil
+	}
+	// Confirm the lease manager is leasing out any new descriptor versions
+	// at the commit time.
+	r := retry.StartWithCtx(ctx, retry.Options{})
+	for r.Next() {
+		if !tc.leased.lm.GetSafeReplicationTS().Less(commitTime) {
+			return nil
+		}
+	}
+	// Otherwise, the context has timed out or has been cancelled.
+	return ctx.Err()
 }
 
 // ReleaseLeases releases all leases. Errors are logged but ignored.
@@ -216,6 +270,13 @@ func (tc *Collection) ReleaseAll(ctx context.Context) {
 	tc.ResetUncommitted(ctx)
 	tc.cr.Reset(ctx)
 	tc.skipValidationOnWrite = false
+}
+
+// ResetLeaseTimestamp temporarily releases a locked timestamp until the next
+// lease is acquired. This is mainly used to avoid deadlocks between the current txn
+// and a different txn conducting a schema change on our behalf.
+func (tc *Collection) ResetLeaseTimestamp(ctx context.Context) {
+	tc.leased.maybeReleaseReadTimestamp(ctx)
 }
 
 // ResetLeaseGeneration selects an initial value at the beginning of a txn
@@ -239,18 +300,6 @@ func (tc *Collection) GetLeaseGeneration() int64 {
 	}
 	// Return the cached lease generation, one should have been set earlier.
 	return tc.leaseGeneration
-}
-
-// HasUncommittedTables returns true if the Collection contains uncommitted
-// tables.
-func (tc *Collection) HasUncommittedTables() (has bool) {
-	_ = tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
-		if _, has = desc.(catalog.TableDescriptor); has {
-			return iterutil.StopIteration()
-		}
-		return nil
-	})
-	return has
 }
 
 // HasUncommittedDescriptors returns true if the collection contains any
@@ -284,6 +333,16 @@ func (tc *Collection) CountUncommittedNewOrDroppedDescriptors() int {
 		return nil
 	})
 	return count
+}
+
+// GetUncommittedDescriptorIDs returns the IDs of all uncommitted descriptors.
+func (tc *Collection) GetUncommittedDescriptorIDs() catalog.DescriptorIDSet {
+	var ids catalog.DescriptorIDSet
+	_ = tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
+		ids.Add(desc.GetID())
+		return nil
+	})
+	return ids
 }
 
 // HasUncommittedTypes returns true if the Collection contains uncommitted
@@ -368,7 +427,7 @@ func WithOnlyVersionBump() WriteDescOption {
 
 type getAllOptions struct {
 	allowLeased  bool
-	withMetaData bool
+	withMetadata bool
 }
 
 // GetAllOption defines functional options for GetAll* methods.
@@ -385,7 +444,7 @@ func (c allowLeasedOption) apply(opts *getAllOptions) {
 type withMetaDataOption bool
 
 func (c withMetaDataOption) apply(opts *getAllOptions) {
-	opts.withMetaData = bool(c)
+	opts.withMetadata = bool(c)
 }
 
 // WithAllowLeased configures GetAll* methods to allow leased descriptors.
@@ -412,9 +471,13 @@ var allowLeasedDescriptorsInCatalogViews = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.catalog.allow_leased_descriptors.enabled",
 	"if true, catalog views (crdb_internal, information_schema, pg_catalog) can use leased descriptors for improved performance",
-	false,
+	lease.UseLeasedDescriptorsForCatalogDefault,
 	settings.WithPublic,
 )
+
+func getAllowLeasedDescriptorsInCatalogViews(ctx context.Context, settings *cluster.Settings) bool {
+	return allowLeasedDescriptorsInCatalogViews.Get(&settings.SV) && settings.Version.IsActive(ctx, clusterversion.V26_1)
+}
 
 var prefetchLeasedDescriptorsInCatalogViews = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
@@ -425,8 +488,8 @@ var prefetchLeasedDescriptorsInCatalogViews = settings.RegisterBoolSetting(
 
 // GetCatalogGetAllOptions returns the functional options for GetAll* methods
 // based on the cluster setting for allowing leased descriptors in catalog views.
-func GetCatalogGetAllOptions(sv *settings.Values) []GetAllOption {
-	if allowLeasedDescriptorsInCatalogViews.Get(sv) {
+func GetCatalogGetAllOptions(ctx context.Context, s *cluster.Settings) []GetAllOption {
+	if getAllowLeasedDescriptorsInCatalogViews(ctx, s) {
 		return []GetAllOption{WithAllowLeased()}
 	}
 	return nil
@@ -435,9 +498,9 @@ func GetCatalogGetAllOptions(sv *settings.Values) []GetAllOption {
 // GetCatalogDescriptorGetter returns the appropriate descriptor getter for
 // catalog views based on the cluster setting.
 func GetCatalogDescriptorGetter(
-	descriptors *Collection, txn *kv.Txn, sv *settings.Values,
+	ctx context.Context, descriptors *Collection, txn *kv.Txn, s *cluster.Settings,
 ) ByIDGetterBuilder {
-	if allowLeasedDescriptorsInCatalogViews.Get(sv) {
+	if getAllowLeasedDescriptorsInCatalogViews(ctx, s) {
 		return descriptors.ByIDWithLeased(txn)
 	}
 	return descriptors.ByIDWithoutLeased(txn)
@@ -463,16 +526,25 @@ func (tc *Collection) EmitDescriptorUpdatesKey(ctx context.Context, txn *kv.Txn)
 	// This key is only emitted for 25.4 and above. Additionally, PCR
 	// reader catalog can update a large number of descriptors in a transaction,
 	// and are exempt from this logic.
+	// Starting 26.2, we will stop generating these special update keys,
+	// and the lease manager will use Export to get the same information.
 	if !tc.settings.Version.IsActive(ctx, clusterversion.V25_4) ||
 		tc.readerCatalogSetup ||
 		tc.uncommitted.uncommitted.Len() == 0 ||
-		!lease.LockedLeaseTimestamp.Get(&tc.settings.SV) {
+		!lease.GetLockedLeaseTimestampEnabled(ctx, tc.settings) ||
+		tc.settings.Version.IsActive(ctx, clusterversion.V26_2_DescriptorTxnKeyGeneration) {
 		return nil
 	}
 	updates := &descpb.DescriptorUpdates{}
 	descUpdateID := descpb.InvalidID
 	// Add all the descriptors that have been modified in this transaction.
 	if err := tc.uncommitted.iterateUncommittedByID(func(desc catalog.Descriptor) error {
+		// Dropped / Offline descriptors can be ignored, since these can no longer be leased.
+		// Note: We will detect these descriptors instantly in the lease manager, so the locked
+		// timestamp does not need to move forward. See takenOfflineAt in descriptorState.
+		if desc.Dropped() || desc.Offline() {
+			return nil
+		}
 		updates.DescriptorIDs = append(updates.DescriptorIDs, desc.GetID())
 		updates.DescriptorVersions = append(updates.DescriptorVersions, desc.GetVersion())
 		if descUpdateID < desc.GetID() {
@@ -481,6 +553,15 @@ func (tc *Collection) EmitDescriptorUpdatesKey(ctx context.Context, txn *kv.Txn)
 		return nil
 	}); err != nil {
 		return err
+	}
+	// Descriptors updated in this batch were either all offline or dropped,
+	// so nothing to inform the lease manager about.
+	if len(updates.DescriptorIDs) == 0 {
+		return nil
+	}
+	// On test builds confirm we are always selecting a valid ID.
+	if buildutil.CrdbTestBuild && descUpdateID == descpb.InvalidID {
+		return errors.AssertionFailedf("low descriptor key has invalid ID (descriptorIDs=%v)", updates.DescriptorIDs)
 	}
 	descUpdateKey := catalogkeys.MakeDescUpdateKey(tc.codec(), descUpdateID)
 	return txn.Put(ctx, descUpdateKey, updates)
@@ -495,6 +576,11 @@ func (tc *Collection) WriteDescToBatch(
 	b *kv.Batch,
 	opts ...WriteDescOption,
 ) error {
+	if !tc.forceStorageLookupIDs.Empty() {
+		return errors.AssertionFailedf("descriptor collection with " +
+			"forceStorageLookupIDs set is read-only, should not be used to write " +
+			"descriptors")
+	}
 	if desc.GetID() == descpb.InvalidID {
 		return errors.AssertionFailedf("cannot write descriptor with an empty ID: %v", desc)
 	}
@@ -676,8 +762,7 @@ func (tc *Collection) WriteCommentToBatch(
 		return err
 	}
 
-	tc.AddUncommittedComment(key, cmt)
-	return nil
+	return tc.AddUncommittedComment(key, cmt)
 }
 
 // DeleteCommentInBatch deletes a comment with the given (objID, subID, cmtType) key in
@@ -862,10 +947,18 @@ func (tc *Collection) lookupDescriptorID(
 	if err != nil {
 		return descpb.InvalidID, err
 	}
+	// Detect if there is any contradiction in the name resolution
+	// against any queried leased tables. This ensures that rename operations
+	// hit retryable errors in case of concurrent schema changes that create
+	// conflicts.
+	resolvedID := descpb.InvalidID
 	if e := read.LookupNamespaceEntry(key); e != nil {
-		return e.GetID(), nil
+		resolvedID = e.GetID()
 	}
-	return descpb.InvalidID, nil
+	if err := tc.ensureNameResolutionMatchesWithLeased(ctx, txn, key, resolvedID); err != nil {
+		return descpb.InvalidID, err
+	}
+	return resolvedID, nil
 }
 
 // GetOriginalPreviousIDVersionsForUncommitted returns all the IDVersion
@@ -956,6 +1049,19 @@ func (tc *Collection) GetDescriptorsInSpans(
 	return tc.cr.ScanDescriptorsInSpans(ctx, txn, spans)
 }
 
+// GetAllTableIDsInDatabaseFromStorage scans the system.descriptor table and
+// returns the IDs of all tables whose parent database ID matches the given ID.
+// This includes dropped tables that don't have namespace entries. Unlike
+// GetAll(), this reads only from storage and does not include uncommitted,
+// synthetic, or virtual descriptors. It uses lightweight proto parsing to
+// extract the parent_id without full unmarshaling, making it efficient for
+// large clusters.
+func (tc *Collection) GetAllTableIDsInDatabaseFromStorage(
+	ctx context.Context, txn *kv.Txn, parentDBID descpb.ID,
+) ([]descpb.ID, error) {
+	return tc.cr.ScanAllTableIDsInDatabase(ctx, txn, parentDBID)
+}
+
 // GetAllComments gets all comments for all descriptors in the given database.
 // This method never returns the underlying catalog, since it will be incomplete and only
 // contain comments.
@@ -967,8 +1073,8 @@ func (tc *Collection) GetAllComments(
 	if err != nil {
 		return nil, err
 	}
-	var allowLeased = getAllOptions{}
-	comments, err := tc.aggregateAllLayers(ctx, txn, allowLeased, kvComments)
+	var options = getAllOptions{}
+	comments, err := tc.aggregateAllLayers(ctx, txn, options, kvComments)
 	if err != nil {
 		return nil, err
 	}
@@ -1229,14 +1335,14 @@ func (tc *Collection) aggregateAllLayers(
 	})
 	// Add stored comments which are not shadowed.
 	_ = stored.ForEachComment(func(key catalogkeys.CommentKey, cmt string) error {
-		if _, _, isShadowed := tc.uncommittedComments.getUncommitted(key); !isShadowed {
+		if !tc.uncommittedMetadata.isCommentCached(key) {
 			return ret.UpsertComment(key, cmt)
 		}
 		return nil
 	})
 	// Add stored zone configs which are not shadowed.
 	_ = stored.ForEachZoneConfig(func(id descpb.ID, zc catalog.ZoneConfig) error {
-		if _, isShadowed := tc.uncommittedZoneConfigs.getUncommitted(id); !isShadowed {
+		if !tc.uncommittedMetadata.isZoneConfigCached(id) {
 			ret.UpsertZoneConfig(id, zc.ZoneConfigProto(), zc.GetRawBytesInStorage())
 		}
 		return nil
@@ -1273,18 +1379,19 @@ func (tc *Collection) aggregateAllLayers(
 		})
 	}
 	// Add uncommitted comments and zone configs.
-	if err := tc.uncommittedComments.addAllToCatalog(ret); err != nil {
+	if err := tc.uncommittedMetadata.addAllCommentsToCatalog(&ret); err != nil {
 		return nstree.MutableCatalog{}, err
 	}
-	tc.uncommittedZoneConfigs.addAllToCatalog(ret)
+	tc.uncommittedMetadata.addAllZoneConfigsToCatalog(&ret)
 	// Remove deleted descriptors from consideration, re-read and add the rest.
 	tc.deletedDescs.ForEach(descIDs.Remove)
 	allDescs := make([]catalog.Descriptor, descIDs.Len())
 	flags := defaultUnleasedFlags()
 	if getAllOptions.allowLeased {
 		flags.layerFilters.withoutLeased = false
+		flags.layerFilters.withAdding = true
 	}
-	if getAllOptions.withMetaData {
+	if getAllOptions.withMetadata {
 		flags.layerFilters.withMetadata = true
 	}
 	if err := getDescriptorsByID(
@@ -1443,8 +1550,7 @@ func (tc *Collection) ResetSyntheticDescriptors() {
 // ResetUncommitted resets all uncommitted state in the Collection.
 func (tc *Collection) ResetUncommitted(ctx context.Context) {
 	tc.uncommitted.reset(ctx)
-	tc.uncommittedComments.reset()
-	tc.uncommittedZoneConfigs.reset()
+	tc.uncommittedMetadata.reset()
 	tc.shadowedNames = nil
 	tc.validationLevels = nil
 	tc.ResetSyntheticDescriptors()
@@ -1572,7 +1678,7 @@ func (tc *Collection) LockDescriptorWithLease(
 		return uint64(vo.Desc().GetVersion()), nil
 	}
 	// Otherwise, we should be able to lease the relevant object out.
-	desc, shouldReadFromStore, err := tc.leased.getByID(ctx, txn, id)
+	desc, shouldReadFromStore, err := tc.leased.getByID(ctx, txn, id, false /* withoutLockedTimestamp */)
 	if err != nil {
 		return 0, err
 	}
@@ -1582,6 +1688,25 @@ func (tc *Collection) LockDescriptorWithLease(
 		return 0, ErrDescCannotBeLeased{id: id}
 	}
 	return uint64(desc.GetVersion()), err
+}
+
+// GetLookupContextFallbackFn returns a fallback function if leased descriptors
+// are being used for GetAll.*
+func (tc *Collection) GetLookupContextFallbackFn(
+	ctx context.Context, txn *kv.Txn,
+) func(id descpb.ID) (catalog.Descriptor, error) {
+	// Without leased descriptors everything should be fully resolved
+	// within a look up context.
+	if !getAllowLeasedDescriptorsInCatalogViews(ctx, tc.settings) {
+		return nil
+	}
+	// If we are in a concurrent drop scenario, then GetAll will miss
+	// entiries that don't currently have a namespace entry. The locked
+	// descriptor leasing could pick an earlier timestamp, so we still
+	// need some type of look up
+	return func(id descpb.ID) (catalog.Descriptor, error) {
+		return tc.ByIDWithLeased(txn).Get().Desc(ctx, id)
+	}
 }
 
 // MakeTestCollection makes a Collection that can be used for tests.

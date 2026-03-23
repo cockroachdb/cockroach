@@ -19,11 +19,14 @@ Schema change plan for TRUNCATE TABLE ‹defaultdb›.‹public›.‹t›;
  │         │    ├── ABSENT → PUBLIC    IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 4 (t_j_key+)}
  │         │    ├── ABSENT → PUBLIC    IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (t_j_key+)}
  │         │    └── ABSENT → PUBLIC    IndexData:{DescID: 104 (t), IndexID: 4 (t_j_key+)}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT    TableSchemaLocked:{DescID: 104 (t)}
  │         ├── 3 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 2}
  │         │    ├── PUBLIC → ABSENT    IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey-)}
  │         │    └── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_j_key-), ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
- │         └── 21 Mutation operations
+ │         └── 22 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":3,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":3,"Kind":2,"TableID":104}
@@ -58,6 +61,8 @@ Schema change plan for TRUNCATE TABLE ‹defaultdb›.‹public›.‹t›;
  │    │    │    ├── PUBLIC    → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 4 (t_j_key+)}
  │    │    │    ├── PUBLIC    → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (t_j_key+)}
  │    │    │    └── PUBLIC    → ABSENT IndexData:{DescID: 104 (t), IndexID: 4 (t_j_key+)}
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT    → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
  │    │    ├── 3 elements transitioning toward ABSENT
  │    │    │    ├── VALIDATED → PUBLIC PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 2}
  │    │    │    ├── ABSENT    → PUBLIC IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey-)}
@@ -76,11 +81,14 @@ Schema change plan for TRUNCATE TABLE ‹defaultdb›.‹public›.‹t›;
  │         │    ├── ABSENT → PUBLIC    IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 4 (t_j_key+)}
  │         │    ├── ABSENT → PUBLIC    IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 4 (t_j_key+)}
  │         │    └── ABSENT → PUBLIC    IndexData:{DescID: 104 (t), IndexID: 4 (t_j_key+)}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT    TableSchemaLocked:{DescID: 104 (t)}
  │         ├── 3 elements transitioning toward ABSENT
  │         │    ├── PUBLIC → VALIDATED PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 2}
  │         │    ├── PUBLIC → ABSENT    IndexName:{DescID: 104 (t), Name: "t_pkey", IndexID: 1 (t_pkey-)}
  │         │    └── PUBLIC → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_j_key-), ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
- │         └── 26 Mutation operations
+ │         └── 27 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"Index":{"ConstraintID":3,"IndexID":3,"IsUnique":true,"SourceIndexID":1,"TableID":104}}
  │              ├── MaybeAddSplitForIndex {"CopyIndexID":1,"IndexID":3,"TableID":104}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"TableID":104}
@@ -108,7 +116,7 @@ Schema change plan for TRUNCATE TABLE ‹defaultdb›.‹public›.‹t›;
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"Pending: Updatin..."}
  └── PostCommitNonRevertiblePhase
-      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
       │    ├── 7 elements transitioning toward ABSENT
       │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 1 (t_pkey-)}
       │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 1 (t_pkey-)}
@@ -127,16 +135,23 @@ Schema change plan for TRUNCATE TABLE ‹defaultdb›.‹public›.‹t›;
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
-      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
-           ├── 4 elements transitioning toward ABSENT
-           │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 2}
-           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 1 (t_pkey-)}
-           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_j_key-), ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
-           │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (t_j_key-)}
-           └── 6 Mutation operations
-                ├── MakeIndexAbsent {"IndexID":1,"TableID":104}
-                ├── CreateGCJobForIndex {"IndexID":1,"TableID":104}
-                ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
-                ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
+      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
+      │    ├── 4 elements transitioning toward ABSENT
+      │    │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 2}
+      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 1 (t_pkey-)}
+      │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (t_j_key-), ConstraintID: 1, RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+      │    │    └── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (t_j_key-)}
+      │    └── 6 Mutation operations
+      │         ├── MakeIndexAbsent {"IndexID":1,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":1,"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
+      │         ├── CreateGCJobForIndex {"IndexID":2,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
+      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

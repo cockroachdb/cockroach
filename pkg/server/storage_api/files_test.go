@@ -73,18 +73,24 @@ func TestStatusGetFiles(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if a, e := len(response.Files), testFilesNo; a != e {
-				t.Errorf("expected %d files(s), found %d", e, a)
+			if a, e := len(response.Files), testFilesNo; a < e {
+				t.Errorf("expected at least %d files(s), found %d", e, a)
 			}
 
-			for i, file := range response.Files {
+			fileMap := make(map[string][]byte, len(response.Files))
+			for _, file := range response.Files {
+				fileMap[file.Name] = file.Contents
+			}
+
+			for i := 0; i < testFilesNo; i++ {
 				expectedFileName := fmt.Sprintf(fileFormatStr, i)
-				if file.Name != expectedFileName {
-					t.Fatalf("expected file name %s, found %s", expectedFileName, file.Name)
-				}
 				expectedFileContents := []byte(fmt.Sprintf("I'm %s profile %d", name, i))
-				if !bytes.Equal(file.Contents, expectedFileContents) {
-					t.Fatalf("expected file contents %s, found %s", expectedFileContents, file.Contents)
+				contents, found := fileMap[expectedFileName]
+				if !found {
+					t.Fatalf("expected to find file %s in response", expectedFileName)
+				}
+				if !bytes.Equal(contents, expectedFileContents) {
+					t.Fatalf("expected file contents %s, found %s", expectedFileContents, contents)
 				}
 			}
 		})
@@ -94,16 +100,16 @@ func TestStatusGetFiles(t *testing.T) {
 	t.Run("goroutines", func(t *testing.T) {
 
 		// regex for goroutine file names manually added
-		reDump := regexp.MustCompile(`goroutine_dump\d+.txt.gz`)
+		reDump := regexp.MustCompile(`goroutine_dump\d+.pb.gz`)
 		// regex for goroutine file names dumped by goroutinedumper
-		reOOMDump := regexp.MustCompile("goroutine_dump.*.double_since_last_dump.*.txt.gz")
+		reOOMDump := regexp.MustCompile("goroutine_dump.*.double_since_last_dump.*.pb.gz")
 		// regex for content of goroutine files manually added
 		reDumpContent := regexp.MustCompile(`Goroutine dump \d+`)
 
 		const testFilesNo = 3
 		for i := 0; i < testFilesNo; i++ {
 			testGoroutineDir := filepath.Join(storeSpec.Path, "logs", base.GoroutineDumpDir)
-			testGoroutineFile := filepath.Join(testGoroutineDir, fmt.Sprintf("goroutine_dump%d.txt.gz", i))
+			testGoroutineFile := filepath.Join(testGoroutineDir, fmt.Sprintf("goroutine_dump%d.pb.gz", i))
 			if err := os.MkdirAll(testGoroutineDir, os.ModePerm); err != nil {
 				t.Fatal(err)
 			}

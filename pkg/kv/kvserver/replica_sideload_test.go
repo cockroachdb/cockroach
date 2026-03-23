@@ -66,7 +66,7 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 		ba.Add(&get)
 		ba.Header.RangeID = tc.repl.RangeID
 
-		br, pErr := tc.store.Send(ctx, ba)
+		br, pErr := ToSenderForTesting(tc.store).Send(ctx, ba)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -160,7 +160,7 @@ func TestRaftSSTableSideloading(t *testing.T) {
 		addReq.EndKey = addReq.Key.Next()
 		ba.Add(&addReq)
 
-		_, pErr := tc.store.Send(ctx, ba)
+		_, pErr := ToSenderForTesting(tc.store).Send(ctx, ba)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -178,7 +178,7 @@ func TestRaftSSTableSideloading(t *testing.T) {
 
 	tc.store.raftEntryCache.Clear(tc.repl.RangeID, last)
 	ents, cachedBytes, _, err := logstore.LoadEntries(
-		ctx, tc.store.TODOEngine(), tc.repl.RangeID, tc.store.raftEntryCache,
+		ctx, tc.store.LogEngine(), tc.repl.RangeID, tc.store.raftEntryCache,
 		tc.repl.logStorage.ls.Sideload, comp+1, last+1, math.MaxUint64, nil /* account */)
 	require.NoError(t, err)
 	require.Len(t, ents, int(last-comp))
@@ -245,7 +245,8 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 		fmtSideloaded := func() []string {
 			tc.repl.raftMu.Lock()
 			defer tc.repl.raftMu.Unlock()
-			fs, _ := tc.repl.store.TODOEngine().Env().List(tc.repl.logStorage.ls.Sideload.Dir())
+			// NB: sideloaded entries are in the StateEngine filesystem.
+			fs, _ := tc.repl.store.StateEngine().Env().List(tc.repl.logStorage.ls.Sideload.Dir())
 			sort.Strings(fs)
 			return fs
 		}

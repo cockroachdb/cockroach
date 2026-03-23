@@ -300,7 +300,7 @@ NOTICE: 2
 NOTICE: 5
 NOTICE: 5
 
-statement ok
+statement count 1
 DELETE FROM t WHERE x > 2;
 
 query T noticetrace
@@ -325,8 +325,10 @@ SELECT * FROM t;
 
 subtest exceptions
 
-statement ok
+statement count 3
 DELETE FROM t WHERE True;
+
+statement ok
 INSERT INTO t VALUES (1);
 
 statement ok
@@ -540,7 +542,7 @@ subtest retries
 
 # NOTE: logictest configurations will ensure this test gets coverage for both
 # serializable and read-committed isolation.
-statement ok
+statement count 1
 DELETE FROM t WHERE x <> 1;
 
 statement ok

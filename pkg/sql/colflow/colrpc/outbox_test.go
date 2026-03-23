@@ -67,7 +67,7 @@ func TestOutboxCatchesPanics(t *testing.T) {
 	// propagate the panic.
 	err = colexecerror.CatchVectorizedRuntimeError(func() {
 		inbox.Init(ctx)
-		inbox.Next()
+		colexecop.NextNoMeta(inbox)
 	})
 	require.Error(t, err)
 

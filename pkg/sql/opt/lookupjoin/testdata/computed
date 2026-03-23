@@ -1,5 +1,18 @@
 # Tests for computed columns.
 
+# Test for identity computed column (regression test for #161978) When a
+# computed column is defined as identical to another column (e.g., v AS
+# x), and the base column is in the equality set, the constraint builder
+# should properly replace the column reference in the projection.
+lookup-constraints left=(a int, b int) right=(x int not null, v int not null as (x) stored) index=(v, x)
+x = a
+----
+key cols:
+  v = v_eq
+  x = a
+input projections:
+  v_eq = a [type=INT8]
+
 lookup-constraints left=(a int, b int) right=(x int, v int not null as (x + 10) stored) index=(v, x)
 x = a
 ----

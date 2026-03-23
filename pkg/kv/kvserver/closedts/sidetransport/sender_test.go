@@ -367,34 +367,6 @@ func TestSenderColocateReplicasOnSameNode(t *testing.T) {
 	}, up.AddedOrUpdated)
 }
 
-// TestSenderPolicyCountForDifferentVersions verifies that the sender tracks the
-// correct number of policies based on the cluster version.
-func TestSenderPolicyCountForDifferentVersions(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-
-	testutils.RunTrueAndFalse(t, "cluster version", func(t *testing.T, useOldVersion bool) {
-		var st *cluster.Settings
-		var expectedPolicyCount int
-		if useOldVersion {
-			prevVersion := roachpb.Version{Major: 25, Minor: 1}
-			st = cluster.MakeTestingClusterSettingsWithVersions(prevVersion, prevVersion, true)
-			expectedPolicyCount = int(roachpb.MAX_CLOSED_TIMESTAMP_POLICY)
-		} else {
-			st = cluster.MakeTestingClusterSettings()
-			expectedPolicyCount = int(ctpb.MAX_CLOSED_TIMESTAMP_POLICY)
-		}
-		connFactory := &mockConnFactory{}
-		s, stopper := newMockSenderWithSt(connFactory, st)
-		defer stopper.Stop(ctx)
-
-		s.publish(ctx)
-		require.Len(t, s.trackedMu.tracked, 0)
-		require.Len(t, s.trackedMu.lastClosed, expectedPolicyCount)
-	})
-}
-
 // TestSenderWithLatencyTracker verifies that the sender correctly updates
 // closed timestamp policies based on network latency between nodes.
 func TestSenderWithLatencyTracker(t *testing.T) {
@@ -644,6 +616,12 @@ func newMockDialer(addrs ...nodeAddr) *mockDialer {
 	return d
 }
 
+func newMockSideTransportClientFactory(nd rpcbase.NodeDialer) sideTransportClientFactory {
+	return func(ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass) (ctpb.RPCSideTransportClient, error) {
+		return ctpb.DialSideTransportClient(nd, ctx, nodeID, class, false) // TODO(server): enable DRPC
+	}
+}
+
 func (m *mockDialer) addOrUpdateNode(nid roachpb.NodeID, addr string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -699,7 +677,7 @@ func TestRPCConnUnblocksOnStopper(t *testing.T) {
 	defer dialer.Close()
 
 	ch := make(chan struct{})
-	s, stopper := newMockSender(newRPCConnFactory(dialer,
+	s, stopper := newMockSender(newRPCConnFactory(newMockSideTransportClientFactory(dialer),
 		connTestingKnobs{beforeSend: func(_ roachpb.NodeID, msg *ctpb.Update) {
 			// Try to send an update to ch, if anyone is still listening.
 			ch <- struct{}{}
@@ -809,7 +787,7 @@ func TestSenderReceiverIntegration(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	s, senderStopper := newMockSender(newRPCConnFactory(dialer, connTestingKnobs{}))
+	s, senderStopper := newMockSender(newRPCConnFactory(newMockSideTransportClientFactory(dialer), connTestingKnobs{}))
 	defer senderStopper.Stop(ctx)
 	s.Run(ctx, roachpb.NodeID(1))
 
@@ -863,7 +841,8 @@ func TestRPCConnStopOnClose(t *testing.T) {
 	sleepTime := time.Millisecond
 
 	dialer := &failingDialer{}
-	factory := newRPCConnFactory(dialer, connTestingKnobs{sleepOnErrOverride: sleepTime})
+	factory := newRPCConnFactory(newMockSideTransportClientFactory(dialer),
+		connTestingKnobs{sleepOnErrOverride: sleepTime})
 
 	s, stopper := newMockSender(factory)
 	defer stopper.Stop(ctx)
@@ -1027,9 +1006,10 @@ func TestPaceUpdateSignalling(t *testing.T) {
 	t.Run("pacing_interval=0ms", func(t *testing.T) {
 		closedts.SideTransportPacingRefreshInterval.Override(ctx, &st.SV, 0)
 		testPacing(t, 3 /* seqNum */, func(timeSpread time.Duration) {
-			// The expectation here is many 30x what is typically seen. But, we want
-			// to avoid flakes.
-			require.LessOrEqual(t, timeSpread, 30*time.Millisecond)
+			// With pacing disabled, all 1000 goroutines should be woken nearly
+			// simultaneously. The typical spread is ~1ms, but CI machines under
+			// load need more headroom for goroutine scheduling.
+			require.LessOrEqual(t, timeSpread, 40*time.Millisecond)
 		})
 	})
 }

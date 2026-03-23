@@ -39,8 +39,9 @@ npm_package(
     visibility = ["//visibility:public"],
 )
 
+# rules_js 2.x expects npm_package targets to be named 'pkg' by default
 alias(
-    name = "js",
+    name = "pkg",
     actual = ":crdb-protobuf-client",
     visibility = ["//visibility:public"],
 )

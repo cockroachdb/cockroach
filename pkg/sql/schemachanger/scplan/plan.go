@@ -16,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/current"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_25_3"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_25_4"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_26_1"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -157,8 +157,8 @@ type rulesForRelease struct {
 var rulesForReleases = []rulesForRelease{
 	// NB: sort versions in descending order, i.e. newest supported version first.
 	{activeVersion: clusterversion.Latest, rulesRegistry: current.GetRegistry()},
+	{activeVersion: clusterversion.V26_1, rulesRegistry: release_26_1.GetRegistry()},
 	{activeVersion: clusterversion.V25_4, rulesRegistry: release_25_4.GetRegistry()},
-	{activeVersion: clusterversion.V25_3, rulesRegistry: release_25_3.GetRegistry()},
 }
 
 func init() {

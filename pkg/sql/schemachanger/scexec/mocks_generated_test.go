@@ -212,6 +212,20 @@ func (mr *MockCatalogMockRecorder) InsertTemporarySchema(arg0, arg1, arg2 interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InsertTemporarySchema", reflect.TypeOf((*MockCatalog)(nil).InsertTemporarySchema), arg0, arg1, arg2)
 }
 
+// MaybeUpdateSequenceValue mocks base method.
+func (m *MockCatalog) MaybeUpdateSequenceValue(arg0 context.Context, arg1 *scexec.SequenceToMaybeUpdate) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MaybeUpdateSequenceValue", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MaybeUpdateSequenceValue indicates an expected call of MaybeUpdateSequenceValue.
+func (mr *MockCatalogMockRecorder) MaybeUpdateSequenceValue(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MaybeUpdateSequenceValue", reflect.TypeOf((*MockCatalog)(nil).MaybeUpdateSequenceValue), arg0, arg1)
+}
+
 // MustReadImmutableDescriptors mocks base method.
 func (m *MockCatalog) MustReadImmutableDescriptors(arg0 context.Context, arg1 ...catid.DescID) ([]catalog.Descriptor, error) {
 	m.ctrl.T.Helper()
@@ -273,6 +287,20 @@ func (m *MockCatalog) Run(arg0 context.Context) error {
 func (mr *MockCatalogMockRecorder) Run(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Run", reflect.TypeOf((*MockCatalog)(nil).Run), arg0)
+}
+
+// SetSequence mocks base method.
+func (m *MockCatalog) SetSequence(arg0 context.Context, arg1 *scexec.SequenceToSet) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetSequence", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetSequence indicates an expected call of SetSequence.
+func (mr *MockCatalogMockRecorder) SetSequence(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetSequence", reflect.TypeOf((*MockCatalog)(nil).SetSequence), arg0, arg1)
 }
 
 // UpdateComment mocks base method.

@@ -30,32 +30,41 @@ import (
 )
 
 type env struct {
-	eng storage.Engine
+	eng Engines
 	tr  *tracing.Tracer
 }
 
-func newEnv(t *testing.T) *env {
-	ctx := context.Background()
+func newEnv() *env {
+	tr := tracing.NewTracer()
+	tr.SetRedactable(true)
+	return &env{tr: tr}
+}
+
+func (e *env) maybeInit(t *testing.T, separated bool) {
+	if e.eng.StateEngine() != nil { // initialized
+		return
+	}
 	eng := storage.NewDefaultInMemForTesting()
+	if separated {
+		e.eng = MakeSeparatedEnginesForTesting(eng, eng)
+	} else {
+		e.eng = MakeEngines(eng)
+	}
 	// TODO(tbg): ideally this would do full bootstrap, which requires
 	// moving a lot more code from kvserver. But then we could unit test
 	// all of it with the datadriven harness!
-	require.NoError(t, WriteClusterVersion(ctx, eng, clusterversion.TestingClusterVersion))
-	require.NoError(t, InitEngine(ctx, eng, roachpb.StoreIdent{
+	require.NoError(t, e.eng.SetMinVersion(clusterversion.TestingClusterVersion))
+	require.NoError(t, InitEngine(context.Background(), e.eng, roachpb.StoreIdent{
 		ClusterID: uuid.MakeV4(),
 		NodeID:    1,
 		StoreID:   1,
 	}))
-	tr := tracing.NewTracer()
-	tr.SetRedactable(true)
-	return &env{
-		eng: eng,
-		tr:  tr,
-	}
 }
 
 func (e *env) close() {
-	e.eng.Close()
+	if e.eng.StateEngine() != nil { // initialized
+		e.eng.Close()
+	}
 	e.tr.Close()
 }
 
@@ -67,9 +76,9 @@ func (e *env) handleNewReplica(
 	k, ek roachpb.RKey,
 ) *roachpb.RangeDescriptor {
 	sl := MakeStateLoader(id.RangeID)
-	require.NoError(t, sl.SetHardState(ctx, e.eng, raftpb.HardState{}))
+	require.NoError(t, sl.SetHardState(ctx, e.eng.LogEngine(), raftpb.HardState{}))
 	if !skipRaftReplicaID && id.ReplicaID != 0 {
-		require.NoError(t, sl.SetRaftReplicaID(ctx, e.eng, id.ReplicaID))
+		require.NoError(t, sl.SetRaftReplicaID(ctx, e.eng.StateEngine(), id.ReplicaID))
 	}
 	if len(ek) == 0 {
 		return nil
@@ -88,7 +97,7 @@ func (e *env) handleNewReplica(
 	var v roachpb.Value
 	require.NoError(t, v.SetProto(desc))
 	ts := hlc.Timestamp{WallTime: 123}
-	require.NoError(t, e.eng.PutMVCC(storage.MVCCKey{
+	require.NoError(t, e.eng.StateEngine().PutMVCC(storage.MVCCKey{
 		Key:       keys.RangeDescriptorKey(desc.StartKey),
 		Timestamp: ts,
 	}, storage.MVCCValue{Value: v}))
@@ -99,7 +108,7 @@ func (e *env) handleRangeTombstone(
 	t *testing.T, ctx context.Context, rangeID roachpb.RangeID, next roachpb.ReplicaID,
 ) {
 	require.NoError(t, MakeStateLoader(rangeID).SetRangeTombstone(
-		ctx, e.eng, kvserverpb.RangeTombstone{NextReplicaID: next},
+		ctx, e.eng.StateEngine(), kvserverpb.RangeTombstone{NextReplicaID: next},
 	))
 }
 
@@ -112,7 +121,7 @@ func TestDataDriven(t *testing.T) {
 
 	dir := filepath.Join(datapathutils.TestDataPath(t), t.Name())
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
-		e := newEnv(t)
+		e := newEnv()
 		defer e.close()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) (output string) {
 			ctx, finishAndGet := tracing.ContextWithRecordingSpan(context.Background(), e.tr, path)
@@ -142,7 +151,12 @@ func TestDataDriven(t *testing.T) {
 			}()
 
 			switch d.Cmd {
+			case "init":
+				separated := dd.ScanArgOr(t, d, "separated", false)
+				e.maybeInit(t, separated)
+
 			case "new-replica":
+				e.maybeInit(t, false /* separated */)
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
 				replicaID := dd.ScanArgOr[roachpb.ReplicaID](t, d, "replica-id", 0)
 				k := dd.ScanArgOr(t, d, "k", "")
@@ -157,11 +171,13 @@ func TestDataDriven(t *testing.T) {
 				}
 
 			case "range-tombstone":
+				e.maybeInit(t, false /* separated */)
 				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
 				nextID := dd.ScanArg[roachpb.ReplicaID](t, d, "next-replica-id")
 				e.handleRangeTombstone(t, ctx, rangeID, nextID)
 
 			case "load-and-reconcile":
+				e.maybeInit(t, false /* separated */)
 				replicas, err := LoadAndReconcileReplicas(ctx, e.eng)
 				if err != nil {
 					fmt.Fprintln(&buf, err)

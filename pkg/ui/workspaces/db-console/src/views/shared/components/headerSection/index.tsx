@@ -10,7 +10,7 @@ import { Text, TextTypes } from "src/components";
 import { trustIcon } from "src/util/trust";
 
 import ArrowLeftIcon from "!!raw-loader!assets/arrowLeft.svg";
-import "./headerSection.styl";
+import "./headerSection.scss";
 
 export interface HeaderSectionProps {
   title: string;

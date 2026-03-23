@@ -1732,10 +1732,10 @@ func TestPartialRollbackOnEndTransaction(t *testing.T) {
 		if res.Intent != nil {
 			t.Errorf("found intent, expected none: %+v", res.Intent)
 		}
-		if res.Value == nil {
+		if !res.Value.Exists() {
 			t.Errorf("no value found, expected one")
 		} else {
-			s, err := res.Value.GetBytes()
+			s, err := res.Value.Value.GetBytes()
 			if err != nil {
 				t.Fatal(err)
 			}

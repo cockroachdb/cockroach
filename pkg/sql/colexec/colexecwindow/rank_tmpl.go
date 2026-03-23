@@ -163,11 +163,14 @@ func (r *_RANK_STRINGOp) Init(ctx context.Context) {
 	r.rankIncrement = 1
 }
 
-func (r *_RANK_STRINGOp) Next() coldata.Batch {
-	batch := r.Input.Next()
+func (r *_RANK_STRINGOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := r.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	// {{if .HasPartition}}
 	partitionCol := batch.ColVec(r.partitionColIdx).Bool()
@@ -190,7 +193,7 @@ func (r *_RANK_STRINGOp) Next() coldata.Batch {
 			_COMPUTE_RANK(false)
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 // {{end}}

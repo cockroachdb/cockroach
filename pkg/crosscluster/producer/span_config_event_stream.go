@@ -343,6 +343,6 @@ func streamSpanConfigs(
 	return &spanConfigEventStream{
 		spec:    spec,
 		execCfg: evalCtx.Planner.ExecutorConfig().(*sql.ExecutorConfig),
-		mon:     evalCtx.Planner.Mon(),
+		mon:     evalCtx.Planner.TxnMon(),
 	}, nil
 }

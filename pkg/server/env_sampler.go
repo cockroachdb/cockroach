@@ -44,7 +44,6 @@ type sampleEnvironmentCfg struct {
 	st                    *cluster.Settings
 	stopper               *stop.Stopper
 	minSampleInterval     time.Duration
-	goroutineDumpDirName  string
 	heapProfileDirName    string
 	cpuProfileDirName     string
 	executionTraceDirName string
@@ -64,8 +63,10 @@ func startSampleEnvironment(
 	pebbleCacheSize int64,
 	stopper *stop.Stopper,
 	runtimeSampler *status.RuntimeStatSampler,
+	goroutineDumper *goroutinedumper.GoroutineDumper,
 	sessionRegistry *sql.SessionRegistry,
 	rootMemMonitor *mon.BytesMonitor,
+	logMetadata func(ctx context.Context, source string),
 ) error {
 	metricsSampleInterval := base.DefaultMetricsSampleInterval
 	if p, ok := srvCfg.TestingKnobs.Server.(*TestingKnobs); ok && p.EnvironmentSampleInterval != time.Duration(0) {
@@ -75,7 +76,6 @@ func startSampleEnvironment(
 		st:                    srvCfg.Settings,
 		stopper:               stopper,
 		minSampleInterval:     metricsSampleInterval,
-		goroutineDumpDirName:  srvCfg.GoroutineDumpDirName,
 		heapProfileDirName:    srvCfg.HeapProfileDirName,
 		cpuProfileDirName:     srvCfg.CPUProfileDirName,
 		executionTraceDirName: srvCfg.ExecutionTraceDirName,
@@ -84,31 +84,6 @@ func startSampleEnvironment(
 		rootMemMonitor:        rootMemMonitor,
 		cgoMemTarget:          max(uint64(pebbleCacheSize), 128*1024*1024),
 	}
-	// Immediately record summaries once on server startup.
-
-	// Initialize a goroutine dumper if we have an output directory
-	// specified.
-	var goroutineDumper *goroutinedumper.GoroutineDumper
-	if cfg.goroutineDumpDirName != "" {
-		hasValidDumpDir := true
-		if err := os.MkdirAll(cfg.goroutineDumpDirName, 0755); err != nil {
-			// This is possible when running with only in-memory stores;
-			// in that case the start-up code sets the output directory
-			// to the current directory (.). If running the process
-			// from a directory which is not writable, we won't
-			// be able to create a sub-directory here.
-			log.Dev.Warningf(ctx, "cannot create goroutine dump dir -- goroutine dumps will be disabled: %v", err)
-			hasValidDumpDir = false
-		}
-		if hasValidDumpDir {
-			var err error
-			goroutineDumper, err = goroutinedumper.NewGoroutineDumper(ctx, cfg.goroutineDumpDirName, cfg.st)
-			if err != nil {
-				return errors.Wrap(err, "starting goroutine dumper worker")
-			}
-		}
-	}
-
 	// Initialize a heap profiler if we have an output directory
 	// specified.
 	var heapProfiler *profiler.HeapProfiler
@@ -117,6 +92,7 @@ func startSampleEnvironment(
 	var statsProfiler *profiler.StatsProfiler
 	var queryProfiler *profiler.ActiveQueryProfiler
 	var cpuProfiler *profiler.CPUProfiler
+	var ashReportProfiler *profiler.ASHReportProfiler
 	if cfg.heapProfileDirName != "" {
 		hasValidDumpDir := true
 		if err := os.MkdirAll(cfg.heapProfileDirName, 0755); err != nil {
@@ -155,10 +131,14 @@ func startSampleEnvironment(
 			if err != nil {
 				log.Dev.Warningf(ctx, "failed to start cpu profiler worker: %v", err)
 			}
+			ashReportProfiler, err = profiler.NewASHReportProfiler(ctx, cfg.heapProfileDirName, cfg.st)
+			if err != nil {
+				log.Dev.Warningf(ctx, "failed to start ASH report profiler: %v", err)
+			}
 		}
 	}
 
-	simpleFlightRecorder, err := goexectrace.NewFlightRecorder(cfg.st, 10*time.Second, cfg.executionTraceDirName)
+	simpleFlightRecorder, err := goexectrace.NewFlightRecorder(cfg.st, 10*time.Second, cfg.executionTraceDirName, logMetadata)
 	if err != nil {
 		log.Dev.Warningf(ctx, "failed to initialize flight recorder: %v", err)
 	} else {
@@ -191,7 +171,11 @@ func startSampleEnvironment(
 					}
 
 					if goroutineDumper != nil {
-						goroutineDumper.MaybeDump(ctx, cfg.st, cfg.runtime.Goroutines.Value())
+						if goroutineDumper.MaybeDump(ctx, cfg.st, cfg.runtime.Goroutines.Value()) {
+							if ashReportProfiler != nil {
+								ashReportProfiler.WriteReport(ctx, profiler.TriggerGoroutineDump)
+							}
+						}
 					}
 					if heapProfiler != nil {
 						heapProfiler.MaybeTakeProfile(ctx, cfg.runtime.GoAllocBytes.Value())
@@ -203,9 +187,30 @@ func startSampleEnvironment(
 						queryProfiler.MaybeDumpQueries(ctx, cfg.sessionRegistry, cfg.st)
 					}
 					if cpuProfiler != nil {
-						cpuProfiler.MaybeTakeProfile(ctx, int64(cfg.runtime.CPUCombinedPercentNorm.Value()*100))
+						if cpuProfiler.MaybeTakeProfile(ctx, int64(cfg.runtime.CPUCombinedPercentNorm.Value()*100)) {
+							if ashReportProfiler != nil {
+								ashReportProfiler.WriteReport(ctx, profiler.TriggerCPUProfile)
+							}
+						}
 					}
 				}
 			}
 		})
+}
+
+func maybeNewGoroutineDumper(
+	ctx context.Context, goroutineDumpDirName string, st *cluster.Settings,
+) (*goroutinedumper.GoroutineDumper, error) {
+	if goroutineDumpDirName == "" {
+		return nil, nil
+	}
+	if err := os.MkdirAll(goroutineDumpDirName, 0755); err != nil {
+		// This is possible when running with only in-memory stores; in that case
+		// the start-up code sets the output directory to the current directory (.).
+		// If running the process from a directory which is not writable, we won't
+		// be able to create a sub-directory here.
+		log.Dev.Warningf(ctx, "cannot create goroutine dump dir -- goroutine dumps will be disabled: %v", err)
+		return nil, nil
+	}
+	return goroutinedumper.NewGoroutineDumper(ctx, goroutineDumpDirName, st)
 }

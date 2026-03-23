@@ -111,14 +111,8 @@ func runUnoptimizedQueryOracleImpl(
 
 	// Disable optimizer rules, the vectorized execution engine, and DistSQL on
 	// both connections.
-	seed := rnd.Int63()
-	for _, c := range []struct {
-		conn     *gosql.DB
-		connInfo string
-	}{
-		{uConn, uConnInfo},
-		{oConn, oConnInfo},
-	} {
+	setupConn := func(conn *gosql.DB) error {
+		seed := rnd.Int63()
 		for _, s := range []struct {
 			stmt string
 			kind string
@@ -140,18 +134,20 @@ func runUnoptimizedQueryOracleImpl(
 				kind: "disable DistSQL",
 			},
 		} {
-			if err := h.execStmt(s.stmt, c.conn, c.connInfo); err != nil {
+			if err := h.execStmt(s.stmt, conn); err != nil {
 				return h.makeError(err, "failed to "+s.kind)
 			}
 		}
-		if uConn == oConn {
-			break
-		}
+		return nil
 	}
 
 	// Run the statement with optimizer rules, the vectorized execution engine,
 	// and DistSQL disabled.
-	unoptimizedRows, err := h.runQuery(stmt, uConn, uConnInfo)
+	h.addStmtForLogging(uConnInfo, nil /* rows */)
+	if err := setupConn(uConn); err != nil {
+		return err
+	}
+	unoptimizedRows, err := h.runQuery(stmt, uConn)
 	if err != nil {
 		// Skip unoptimized statements that fail with an error (unless it's an
 		// internal error).
@@ -166,6 +162,12 @@ func runUnoptimizedQueryOracleImpl(
 		return nil
 	}
 
+	if uConn != oConn {
+		h.addStmtForLogging(oConnInfo, nil /* rows */)
+		if err = setupConn(oConn); err != nil {
+			return err
+		}
+	}
 	// Change the settings for the oConn connection to re-enable optimizer and/or
 	// re-enable vectorized execution and/or disable not
 	// visible index feature and/or re-enable DistSQL.
@@ -174,19 +176,19 @@ func runUnoptimizedQueryOracleImpl(
 	resetVectorizeStmt := "RESET vectorize"
 	enable := rnd.Intn(3)
 	if enable > 0 {
-		if err := h.execStmt(resetSeedStmt, oConn, oConnInfo); err != nil {
+		if err := h.execStmt(resetSeedStmt, oConn); err != nil {
 			return h.makeError(err, "failed to reset random seed")
 		}
-		if err := h.execStmt(resetOptimizerStmt, oConn, oConnInfo); err != nil {
+		if err := h.execStmt(resetOptimizerStmt, oConn); err != nil {
 			return h.makeError(err, "failed to reset the optimizer")
 		}
 	}
 	if enable < 2 {
-		if err := h.execStmt(resetVectorizeStmt, oConn, oConnInfo); err != nil {
+		if err := h.execStmt(resetVectorizeStmt, oConn); err != nil {
 			return h.makeError(err, "failed to reset the vectorized engine")
 		}
 		// Disable not visible index feature to run the statement with more optimization.
-		if err := h.execStmt("SET optimizer_use_not_visible_indexes = true", oConn, oConnInfo); err != nil {
+		if err := h.execStmt("SET optimizer_use_not_visible_indexes = true", oConn); err != nil {
 			return h.makeError(err, "failed to disable not visible index feature")
 		}
 	}
@@ -195,14 +197,14 @@ func runUnoptimizedQueryOracleImpl(
 		if roll == 3 {
 			distSQLMode = "on"
 		}
-		if err := h.execStmt(fmt.Sprintf("SET distsql = %s", distSQLMode), oConn, oConnInfo); err != nil {
+		if err := h.execStmt(fmt.Sprintf("SET distsql = %s", distSQLMode), oConn); err != nil {
 			return h.makeError(err, "failed to re-enable DistSQL")
 		}
 	}
 
 	// Then, rerun the statement with optimization and/or vectorization and/or
 	// DistSQL enabled and/or not visible index feature disabled.
-	optimizedRows, err := h.runQuery(stmt, oConn, oConnInfo)
+	optimizedRows, err := h.runQuery(stmt, oConn)
 	if err != nil {
 		// If the optimized plan fails with an internal error while the unoptimized plan
 		// succeeds, we'd like to know, so consider this a test failure.
@@ -236,13 +238,7 @@ func runUnoptimizedQueryOracleImpl(
 	}
 
 	// Reset all settings in case they weren't reset above.
-	for _, c := range []struct {
-		conn     *gosql.DB
-		connInfo string
-	}{
-		{uConn, uConnInfo},
-		{oConn, oConnInfo},
-	} {
+	resetConn := func(conn *gosql.DB) error {
 		for _, s := range []struct {
 			stmt string
 			kind string
@@ -268,12 +264,21 @@ func runUnoptimizedQueryOracleImpl(
 				kind: "reset not visible index feature",
 			},
 		} {
-			if err := h.execStmt(s.stmt, c.conn, c.connInfo); err != nil {
+			if err := h.execStmt(s.stmt, conn); err != nil {
 				return h.makeError(err, "failed to "+s.kind)
 			}
 		}
-		if uConn == oConn {
-			break
+		return nil
+	}
+
+	h.addStmtForLogging(uConnInfo, nil /* rows */)
+	if err = resetConn(uConn); err != nil {
+		return err
+	}
+	if uConn != oConn {
+		h.addStmtForLogging(oConnInfo, nil /* rows */)
+		if err = resetConn(oConn); err != nil {
+			return err
 		}
 	}
 

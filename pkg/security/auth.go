@@ -67,6 +67,18 @@ func (c *userCertDistinguishedNameMu) setDNWithString(dnString string) error {
 
 var rootSubjectMu, nodeSubjectMu userCertDistinguishedNameMu
 
+// disallowRootLoginMu controls whether root login should be disallowed.
+var disallowRootLoginMu struct {
+	syncutil.RWMutex
+	disallowed bool
+}
+
+// allowDebugUserMu controls whether debuguser login should be allowed.
+var allowDebugUserMu struct {
+	syncutil.RWMutex
+	allowed bool
+}
+
 func SetRootSubject(rootDNString string) error {
 	return rootSubjectMu.setDNWithString(rootDNString)
 }
@@ -81,6 +93,34 @@ func SetNodeSubject(nodeDNString string) error {
 
 func UnsetNodeSubject() {
 	nodeSubjectMu.unsetDN()
+}
+
+// SetDisallowRootLogin sets whether root login should be disallowed.
+func SetDisallowRootLogin(disallow bool) {
+	disallowRootLoginMu.Lock()
+	defer disallowRootLoginMu.Unlock()
+	disallowRootLoginMu.disallowed = disallow
+}
+
+// CheckRootLoginDisallowed returns whether root login is currently disallowed.
+func CheckRootLoginDisallowed() bool {
+	disallowRootLoginMu.RLock()
+	defer disallowRootLoginMu.RUnlock()
+	return disallowRootLoginMu.disallowed
+}
+
+// SetAllowDebugUser sets whether debuguser login should be allowed.
+func SetAllowDebugUser(allow bool) {
+	allowDebugUserMu.Lock()
+	defer allowDebugUserMu.Unlock()
+	allowDebugUserMu.allowed = allow
+}
+
+// CheckDebugUserLoginAllowed returns whether debuguser login is currently allowed.
+func CheckDebugUserLoginAllowed() bool {
+	allowDebugUserMu.RLock()
+	defer allowDebugUserMu.RUnlock()
+	return allowDebugUserMu.allowed
 }
 
 // CertificateUserScope indicates the scope of a user certificate i.e. which
@@ -154,6 +194,241 @@ func CheckCertDNMatchesRootDNorNodeDN(
 		}
 	}
 	return rootOrNodeDNSet, certDNMatchesRootOrNodeDN
+}
+
+type userCertSANMu struct {
+	syncutil.RWMutex
+	sans []string
+}
+
+func (c *userCertSANMu) setSANs(sans []string) {
+	c.Lock()
+	defer c.Unlock()
+	c.sans = sans
+}
+
+func (c *userCertSANMu) unsetSANs() {
+	c.Lock()
+	defer c.Unlock()
+	c.sans = nil
+}
+
+func (c *userCertSANMu) getSANs() []string {
+	c.RLock()
+	defer c.RUnlock()
+	return c.sans
+}
+
+type SANAttributeType string
+
+const (
+	SANAttributeTypeDNS SANAttributeType = "DNS"
+	SANAttributeTypeURI SANAttributeType = "URI"
+	SANAttributeTypeIP  SANAttributeType = "IP"
+)
+
+func (s SANAttributeType) String() string {
+	return string(s)
+}
+
+// setSANsWithString sets the SANs from a comma-separated string of entries in
+// the format attribute-type=attribute-value. For example:
+// "DNS=example.com,URI=spiffe://example.org/service"
+// is converted to a list SAN:DNS:example.com, SAN:URI:spiffe://example.org/service.
+// Only DNS, URI, and IP attribute types are allowed.
+func (c *userCertSANMu) setSANsWithString(sanString string) error {
+	if len(sanString) == 0 {
+		c.unsetSANs()
+		return nil
+	}
+
+	// Split comma-separated SAN attributes
+	sanEntries := strings.Split(sanString, ",")
+
+	// Parse each entry from attribute-type=attribute-value format
+	// and convert to SAN:attribute-type:attribute-value format
+	validSANs := make([]string, 0, len(sanEntries))
+	for _, entry := range sanEntries {
+		trimmed := strings.TrimSpace(entry)
+		if trimmed == "" {
+			continue
+		}
+
+		// Split on '=' to get attribute-type and attribute-value
+		idx := strings.IndexByte(trimmed, '=')
+		if idx == -1 {
+			return errors.Errorf("invalid SAN entry format: %q (expected format: attribute-type=attribute-value)", trimmed)
+		}
+
+		attrType := strings.TrimSpace(trimmed[:idx])
+		attrValue := strings.TrimSpace(trimmed[idx+1:])
+
+		if attrType == "" {
+			return errors.Errorf("invalid SAN entry format: %q (attribute type cannot be empty)", trimmed)
+		}
+
+		if attrValue == "" {
+			return errors.Errorf("invalid SAN entry format: %q (attribute value cannot be empty)", trimmed)
+		}
+
+		// Normalize attribute type to uppercase
+		attrTypeUpper := strings.ToUpper(attrType)
+
+		// Validate that attribute type is one of the allowed types
+		if attrTypeUpper != SANAttributeTypeDNS.String() && attrTypeUpper != SANAttributeTypeURI.String() && attrTypeUpper != SANAttributeTypeIP.String() {
+			return errors.Errorf("invalid SAN attribute type: %q (only DNS, URI, and IP are allowed)", attrType)
+		}
+
+		// Convert to SAN:TYPE:value format and store
+		validSANs = append(validSANs, fmt.Sprintf("SAN:%s:%s", attrTypeUpper, attrValue))
+	}
+
+	if len(validSANs) == 0 {
+		return errors.Errorf("invalid SAN string: %q (no valid entries found)", sanString)
+	}
+
+	c.setSANs(validSANs)
+	return nil
+}
+
+var rootSANMu, nodeSANMu userCertSANMu
+
+// SetRootSAN sets the global root SANs from a comma-separated string
+// and stores them as a list similar to
+// SAN:DNS:example.com, SAN:URI:spiffe://example.org/service.
+func SetRootSAN(rootSANString string) error {
+	return rootSANMu.setSANsWithString(rootSANString)
+}
+
+func UnsetRootSAN() {
+	rootSANMu.unsetSANs()
+}
+
+func GetRootSANs() []string {
+	return rootSANMu.getSANs()
+}
+
+// SetNodeSAN sets the global node SANs from a comma-separated string
+// and stores them as a list similar to
+// SAN:DNS:example.com, SAN:URI:spiffe://example.org/service.
+func SetNodeSAN(nodeSANString string) error {
+	return nodeSANMu.setSANsWithString(nodeSANString)
+}
+
+func UnsetNodeSAN() {
+	nodeSANMu.unsetSANs()
+}
+
+func GetNodeSANs() []string {
+	return nodeSANMu.getSANs()
+}
+
+// ExtractSANsFromCertificate extracts SAN entries from certificate in
+// SAN:TYPE:value format (e.g., SAN:URI:spiffe://..., SAN:DNS:example.com)
+// This maintains the order of SAN attributes as URI -> IP -> DNS.
+func ExtractSANsFromCertificate(cert *x509.Certificate) []string {
+	var sans []string
+
+	// Extract URI SANs
+	for _, uri := range cert.URIs {
+		sans = append(sans, fmt.Sprintf("SAN:%s:%s", SANAttributeTypeURI.String(), uri.String()))
+	}
+
+	// Extract IP SANs
+	for _, ip := range cert.IPAddresses {
+		sans = append(sans, fmt.Sprintf("SAN:%s:%s", SANAttributeTypeIP.String(), ip.String()))
+	}
+
+	// Extract DNS SANs
+	for _, dns := range cert.DNSNames {
+		sans = append(sans, fmt.Sprintf("SAN:%s:%s", SANAttributeTypeDNS.String(), dns))
+	}
+
+	return sans
+}
+
+// sanListIsSubset checks if SAN subset is a subset of SAN Superset
+// Returns true if all SANs in subset are present in superset.
+func sanListIsSubset(sanSubset, sanSuperset []string) bool {
+	// Create a map of superset for O(1) lookups
+	supersetMap := make(map[string]bool, len(sanSuperset))
+	for _, san := range sanSuperset {
+		supersetMap[san] = true
+	}
+
+	// Check if all entries in subset exist in superset
+	for _, san := range sanSubset {
+		if !supersetMap[san] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// checkCertSANMatchesUserSpecificSAN returns `certSANMatchesRootOrNodeSAN`
+// which validates whether SANs contained in cert being presented contain
+// all the configured rootSAN or nodeSAN entries for the specific user type
+// (i.e., configured SANs are a subset of cert SANs).
+func checkCertSANMatchesUserSpecificSAN(
+	certSANs []string, user string,
+) (certSANMatchesRootOrNodeSAN bool) {
+	// Check user-specific SANs based on username
+	switch user {
+	case username.RootUser:
+		rootSANs := rootSANMu.getSANs()
+		if len(rootSANs) > 0 {
+			// For root user, only check root SANs
+			if sanListIsSubset(rootSANs, certSANs) {
+				certSANMatchesRootOrNodeSAN = true
+			}
+		}
+	case username.NodeUser:
+		nodeSANs := nodeSANMu.getSANs()
+		if len(nodeSANs) > 0 {
+			// For node user, only check node SANs
+			if sanListIsSubset(nodeSANs, certSANs) {
+				certSANMatchesRootOrNodeSAN = true
+			}
+		}
+	}
+	return certSANMatchesRootOrNodeSAN
+}
+
+func isRootOrNodeUser(user string) bool {
+	return user == username.RootUser || user == username.NodeUser
+}
+
+// validateSANMatchForUser validates SAN for specific users
+// For root and node users, performs actual SAN validation
+// For all other users SAN is only used to map to a
+// SQL user using identity mapping and not validate the
+// SAN itself, hence we return true.
+func validateSANMatchForUser(certSANs []string, user string) bool {
+	// Only validate SAN for root and node users
+	if !isRootOrNodeUser(user) {
+		return true
+	}
+
+	// For root/node users, perform actual validation
+	return checkCertSANMatchesUserSpecificSAN(certSANs, user)
+}
+
+// CheckCertSANMatchesRootOrNodeSAN returns `certSANMatchesRootOrNodeSAN`
+// which validates whether SAN contained in cert being presented is a
+// superset of rootSAN or nodeSAN (provided they are set via start-up flag).
+func CheckCertSANMatchesRootOrNodeSAN(cert *x509.Certificate) (certSANMatchesRootOrNodeSAN bool) {
+	rootSANs := rootSANMu.getSANs()
+	nodeSANs := nodeSANMu.getSANs()
+
+	if len(rootSANs) != 0 || len(nodeSANs) != 0 {
+		certSANs := ExtractSANsFromCertificate(cert)
+		// certSANMatchesRootOrNodeSAN is true if certSANs contains all configured rootSANs or nodeSANs
+		if (len(rootSANs) != 0 && sanListIsSubset(rootSANs, certSANs)) || (len(nodeSANs) != 0 && sanListIsSubset(nodeSANs, certSANs)) {
+			certSANMatchesRootOrNodeSAN = true
+		}
+	}
+	return certSANMatchesRootOrNodeSAN
 }
 
 // SetCertPrincipalMap sets the global principal map. Each entry in the mapping
@@ -294,6 +569,7 @@ func UserAuthCertHook(
 	certManager *CertificateManager,
 	roleSubject *ldap.DN,
 	subjectRequired bool,
+	clientCertSANRequired bool,
 ) (UserAuthHook, error) {
 	var certUserScope []CertificateUserScope
 	if !insecureMode {
@@ -336,7 +612,9 @@ func UserAuthCertHook(
 		}
 
 		roleSubject = applyRootOrNodeDNFlag(roleSubject, systemIdentity)
-		if subjectRequired && roleSubject == nil {
+		// If both subjectRequired and clientCertSANRequired are true, we use OR logic,
+		// so we don't fail here if subject is missing, let ValidateUserScope handle it
+		if subjectRequired && !clientCertSANRequired && roleSubject == nil {
 			return errors.Newf(
 				"user %q does not have a distinguished name set which subject_required cluster setting mandates",
 				systemIdentity,
@@ -351,7 +629,8 @@ func UserAuthCertHook(
 			}
 		}
 
-		if ValidateUserScope(certUserScope, systemIdentity, tenantID, tenantName, roleSubject, certSubject) {
+		certSANs := ExtractSANsFromCertificate(peerCert)
+		if ValidateUserScope(certUserScope, systemIdentity, tenantID, tenantName, roleSubject, certSubject, clientCertSANRequired, certSANs) {
 			if certManager != nil {
 				certManager.MaybeUpsertClientExpiration(
 					ctx,
@@ -484,12 +763,40 @@ func ValidateUserScope(
 	tenantName roachpb.TenantName,
 	roleSubject *ldap.DN,
 	certSubject *ldap.DN,
+	clientCertSANRequired bool,
+	certSANs []string,
 ) bool {
+	if clientCertSANRequired {
+		// Try SAN validation for root and node users. For now, other users
+		// SAN mapping is done using the HBA identity map regex and not exact match.
+		sanMatches := validateSANMatchForUser(certSANs, user)
+		if sanMatches {
+			return true
+		}
+	}
+
 	// if subject role option is set, it must match the certificate subject
 	if roleSubject != nil {
 		return roleSubject.Equal(certSubject)
 	}
+
+	if clientCertSANRequired {
+		// Do not validate CN in case SAN is required.
+		// We check for SAN OR Subject mapping in case san in enabled.
+		return false
+	}
+
 	for _, scope := range certUserScope {
+		// Check if root login is disallowed and certificate contains "root" as a principal
+		if CheckRootLoginDisallowed() && scope.Username == username.RootUser {
+			return false
+		}
+
+		// Check if debuguser login is not allowed and certificate contains "debuguser" as a principal
+		if !CheckDebugUserLoginAllowed() && scope.Username == username.DebugUser {
+			return false
+		}
+
 		if scope.Username == user {
 			// If username matches, allow authentication to succeed if
 			// the tenantID is a match or if the certificate scope is global.

@@ -71,6 +71,7 @@ func (*AlterTableSetVisible) alterTableCmd()         {}
 func (*AlterTableValidateConstraint) alterTableCmd() {}
 func (*AlterTablePartitionByTable) alterTableCmd()   {}
 func (*AlterTableInjectStats) alterTableCmd()        {}
+func (*AlterTablePushStats) alterTableCmd()          {}
 func (*AlterTableSetStorageParams) alterTableCmd()   {}
 func (*AlterTableResetStorageParams) alterTableCmd() {}
 func (*AlterTableAddIdentity) alterTableCmd()        {}
@@ -78,6 +79,7 @@ func (*AlterTableSetIdentity) alterTableCmd()        {}
 func (*AlterTableIdentity) alterTableCmd()           {}
 func (*AlterTableDropIdentity) alterTableCmd()       {}
 func (*AlterTableSetRLSMode) alterTableCmd()         {}
+func (*AlterTableSetTrigger) alterTableCmd()         {}
 
 var _ AlterTableCmd = &AlterTableAddColumn{}
 var _ AlterTableCmd = &AlterTableAddConstraint{}
@@ -96,6 +98,7 @@ var _ AlterTableCmd = &AlterTableSetVisible{}
 var _ AlterTableCmd = &AlterTableValidateConstraint{}
 var _ AlterTableCmd = &AlterTablePartitionByTable{}
 var _ AlterTableCmd = &AlterTableInjectStats{}
+var _ AlterTableCmd = &AlterTablePushStats{}
 var _ AlterTableCmd = &AlterTableSetStorageParams{}
 var _ AlterTableCmd = &AlterTableResetStorageParams{}
 var _ AlterTableCmd = &AlterTableAddIdentity{}
@@ -103,6 +106,7 @@ var _ AlterTableCmd = &AlterTableSetIdentity{}
 var _ AlterTableCmd = &AlterTableIdentity{}
 var _ AlterTableCmd = &AlterTableDropIdentity{}
 var _ AlterTableCmd = &AlterTableSetRLSMode{}
+var _ AlterTableCmd = &AlterTableSetTrigger{}
 
 // ColumnMutationCmd is the subset of AlterTableCmds that modify an
 // existing column.
@@ -527,7 +531,7 @@ type AlterTableDropStored struct {
 	Column Name
 }
 
-// GetColumn implemnets the ColumnMutationCmd interface.
+// GetColumn implements the ColumnMutationCmd interface.
 func (node *AlterTableDropStored) GetColumn() Name {
 	return node.Column
 }
@@ -614,6 +618,30 @@ func (node *AlterTableInjectStats) TelemetryName() string {
 // Format implements the NodeFormatter interface.
 func (node *AlterTableInjectStats) Format(ctx *FmtCtx) {
 	ctx.WriteString(" INJECT STATISTICS ")
+	ctx.FormatNode(node.Stats)
+}
+
+// AlterTablePushStats represents an ALTER TABLE PUSH STATISTICS statement.
+type AlterTablePushStats struct {
+	Stats Expr
+	// ExplicitColumns indicates whether the user explicitly specified columns
+	// in the original statistics creation (e.g., CREATE STATISTICS ... ON col).
+	// This affects retention logic: when false, pushing statistics may trigger
+	// deletion of other existing statistics for the table.
+	ExplicitColumns bool
+}
+
+// TelemetryName implements the AlterTableCmd interface.
+func (node *AlterTablePushStats) TelemetryName() string {
+	return "push_stats"
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTablePushStats) Format(ctx *FmtCtx) {
+	ctx.WriteString(" PUSH STATISTICS ")
+	if node.ExplicitColumns {
+		ctx.WriteString("WITH EXPLICIT COLUMNS ")
+	}
 	ctx.FormatNode(node.Stats)
 }
 
@@ -772,13 +800,60 @@ func (node *AlterTableOwner) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Owner)
 }
 
+// AlterViewSetOptions represents an ALTER VIEW SET (...) command.
+type AlterViewSetOptions struct {
+	Name     *UnresolvedObjectName
+	IfExists bool
+	Options  *ViewOptions
+}
+
+// TelemetryName returns the telemetry counter to increment
+// when this command is used.
+func (node *AlterViewSetOptions) TelemetryName() string {
+	return "set_options"
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterViewSetOptions) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER VIEW ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	ctx.FormatNode(node.Name)
+	ctx.WriteString(" SET (")
+	node.Options.Format(ctx)
+	ctx.WriteString(")")
+}
+
+// AlterViewResetOptions represents an ALTER VIEW RESET (...) command.
+type AlterViewResetOptions struct {
+	Name     *UnresolvedObjectName
+	IfExists bool
+}
+
+// TelemetryName returns the telemetry counter to increment
+// when this command is used.
+func (node *AlterViewResetOptions) TelemetryName() string {
+	return "reset_options"
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterViewResetOptions) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER VIEW ")
+	if node.IfExists {
+		ctx.WriteString("IF EXISTS ")
+	}
+	ctx.FormatNode(node.Name)
+	ctx.WriteString(" RESET (security_invoker)")
+}
+
 // AlterTableAddIdentity represents commands to alter a column to an identity.
 type AlterTableAddIdentity struct {
 	Column        Name
 	Qualification ColumnQualification
 }
 
-// GetColumn implemnets the ColumnMutationCmd interface.
+// GetColumn implements the ColumnMutationCmd interface.
 func (node *AlterTableAddIdentity) GetColumn() Name {
 	return node.Column
 }
@@ -814,7 +889,7 @@ type AlterTableSetIdentity struct {
 	GeneratedAsIdentityType GeneratedIdentityType
 }
 
-// GetColumn implemnets the ColumnMutationCmd interface.
+// GetColumn implements the ColumnMutationCmd interface.
 func (node *AlterTableSetIdentity) GetColumn() Name {
 	return node.Column
 }
@@ -843,7 +918,7 @@ type AlterTableIdentity struct {
 	SeqOptions SequenceOptions
 }
 
-// GetColumn implemnets the ColumnMutationCmd interface.
+// GetColumn implements the ColumnMutationCmd interface.
 func (node *AlterTableIdentity) GetColumn() Name {
 	return node.Column
 }
@@ -873,7 +948,7 @@ type AlterTableDropIdentity struct {
 	IfExists bool
 }
 
-// GetColumn implemnets the ColumnMutationCmd interface.
+// GetColumn implements the ColumnMutationCmd interface.
 func (node *AlterTableDropIdentity) GetColumn() Name {
 	return node.Column
 }
@@ -939,6 +1014,50 @@ func (node *AlterTableSetRLSMode) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ")
 	ctx.WriteString(node.Mode.String())
 	ctx.WriteString(" ROW LEVEL SECURITY")
+}
+
+// TriggerScope indicates which triggers are affected by ENABLE/DISABLE TRIGGER.
+type TriggerScope int
+
+const (
+	// TriggerScopeName affects a specific named trigger.
+	TriggerScopeName TriggerScope = iota
+	// TriggerScopeAll affects all triggers on the table.
+	TriggerScopeAll
+	// TriggerScopeUser affects all user triggers (same as All in CockroachDB).
+	TriggerScopeUser
+)
+
+// AlterTableSetTrigger represents ALTER TABLE ENABLE/DISABLE TRIGGER.
+type AlterTableSetTrigger struct {
+	Enable bool         // true for ENABLE, false for DISABLE
+	Scope  TriggerScope // Which triggers to affect
+	Name   Name         // Trigger name (only when Scope == TriggerScopeName)
+}
+
+// TelemetryName implements the AlterTableCmd interface.
+func (node *AlterTableSetTrigger) TelemetryName() string {
+	if node.Enable {
+		return "enable_trigger"
+	}
+	return "disable_trigger"
+}
+
+// Format implements the NodeFormatter interface.
+func (node *AlterTableSetTrigger) Format(ctx *FmtCtx) {
+	if node.Enable {
+		ctx.WriteString(" ENABLE TRIGGER ")
+	} else {
+		ctx.WriteString(" DISABLE TRIGGER ")
+	}
+	switch node.Scope {
+	case TriggerScopeAll:
+		ctx.WriteString("ALL")
+	case TriggerScopeUser:
+		ctx.WriteString("USER")
+	default:
+		ctx.FormatNode(&node.Name)
+	}
 }
 
 // GetTableType returns a string representing the type of table the command

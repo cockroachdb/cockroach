@@ -27,9 +27,9 @@ store-load-msg
 
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:1000, write-bandwidth:0, byte-size:0] adjusted=[cpu:1000, write-bandwidth:0, byte-size:0] node-reported-cpu=1000 node-adjusted-cpu=1000 seq=1
-store-id=2 node-id=2 status=ok accepting all reported=[cpu:100, write-bandwidth:0, byte-size:0] adjusted=[cpu:100, write-bandwidth:0, byte-size:0] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
-store-id=3 node-id=3 status=ok accepting all reported=[cpu:100, write-bandwidth:0, byte-size:0] adjusted=[cpu:100, write-bandwidth:0, byte-size:0] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:1µs/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:1µs/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=1000 node-adjusted-cpu=1000 seq=1
+store-id=2 node-id=2 status=ok accepting all reported=[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
+store-id=3 node-id=3 status=ok accepting all reported=[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
 
 store-leaseholder-msg
 store-id=1
@@ -58,9 +58,9 @@ store-id=1
 # n1's top-k-ranges reflect r3, r2, and r1.
 get-load-info
 ----
-store-id=1 node-id=1 status=ok accepting all reported=[cpu:1000, write-bandwidth:0, byte-size:0] adjusted=[cpu:1000, write-bandwidth:0, byte-size:0] node-reported-cpu=1000 node-adjusted-cpu=1000 seq=1
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:1µs/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:1µs/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=1000 node-adjusted-cpu=1000 seq=1
   top-k-ranges (local-store-id=1) dim=CPURate: r4 r3 r2 r1
-store-id=2 node-id=2 status=ok accepting all reported=[cpu:100, write-bandwidth:0, byte-size:0] adjusted=[cpu:100, write-bandwidth:0, byte-size:0] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
+store-id=2 node-id=2 status=ok accepting all reported=[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
   top-k-ranges (local-store-id=1) dim=WriteBandwidth: r4 r3 r2 r1
-store-id=3 node-id=3 status=ok accepting all reported=[cpu:100, write-bandwidth:0, byte-size:0] adjusted=[cpu:100, write-bandwidth:0, byte-size:0] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
+store-id=3 node-id=3 status=ok accepting all reported=[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
   top-k-ranges (local-store-id=1) dim=WriteBandwidth: r4 r3 r2 r1

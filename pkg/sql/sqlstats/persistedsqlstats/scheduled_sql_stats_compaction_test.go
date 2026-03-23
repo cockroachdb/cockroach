@@ -84,6 +84,7 @@ func newTestHelper(
 	}
 
 	var params base.TestServerArgs
+	params.DisableElasticCPUAdmission = true
 	params.Knobs.JobsTestingKnobs = knobs
 	params.Knobs.SQLStatsKnobs = sqlStatsKnobs
 	srv, db, _ := serverutils.StartServer(t, params)

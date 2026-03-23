@@ -72,6 +72,7 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				ctx, statements.Statement[tree.Statement]{AST: s.Select}, clusterunique.ID{},
 				tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&p.execCfg.Settings.SV)),
 				nil, /* statementHintsCache */
+				"",  /* currentDB */
 			)
 			pt := planTop{}
 			pt.init(&stmt, &p.instrumentation)

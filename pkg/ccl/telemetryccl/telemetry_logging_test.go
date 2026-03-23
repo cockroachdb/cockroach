@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils/telemetrylogtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
@@ -201,7 +202,10 @@ func (l *telemetrySpy) Intercept(entry []byte) {
 		l.recoveryEvents = append(l.recoveryEvents, re)
 		return
 	} else {
-		l.t.Errorf("failed unmarshaling %s: %s", rawLog.Message, err)
+		// If the log message cannot be unmarshalled into a recovery event, we're not testing
+		// its existsence in this test.
+		l.t.Logf("not a recovery event: %s", rawLog.Message)
+		return
 	}
 }
 
@@ -215,9 +219,9 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 
 	ctx := context.Background()
 
-	st := logtestutils.StubTime{}
-	sqm := logtestutils.StubQueryStats{}
-	sts := logtestutils.StubTracingStatus{}
+	st := telemetrylogtestutils.StubTime{}
+	sqm := telemetrylogtestutils.StubQueryStats{}
+	sts := telemetrylogtestutils.StubTracingStatus{}
 
 	dir, dirCleanupFn := testutils.TempDir(t)
 
@@ -374,7 +378,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 		if strings.Contains(tc.query, "WITH detached") {
 			err = db.DB.QueryRowContext(ctx, tc.query).Scan(&jobID)
 		} else if strings.HasPrefix(tc.query, "IMPORT") {
-			err = db.DB.QueryRowContext(ctx, tc.query).Scan(&jobID, &unused, &unused, &unused, &unused, &unused)
+			err = db.DB.QueryRowContext(ctx, tc.query).Scan(&jobID, &unused, &unused, &unused, &unused, &unused, &unused)
 		} else {
 			err = db.DB.QueryRowContext(ctx, tc.query).Scan(&jobID, &unused, &unused, &unused)
 		}

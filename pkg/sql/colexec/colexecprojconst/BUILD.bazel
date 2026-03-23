@@ -26,6 +26,7 @@ go_library(
         "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra/execreleasable",  # keep
+        "//pkg/sql/execinfrapb",  # keep
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/sem/tree/treebin",  # keep

@@ -36,8 +36,9 @@ var (
 	channel          string
 )
 
-// Distribution is changed by the CCL init-time hook in non-APL builds.
-var Distribution = "OSS"
+// Distribution is a historical artifact from when we had OSS and non-OSS (CCL)
+// builds.
+const Distribution = "CCL"
 
 var (
 	cgoCompiler       = cgoVersion()

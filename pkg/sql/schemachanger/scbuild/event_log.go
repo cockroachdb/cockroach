@@ -549,5 +549,14 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 			CascadeDroppedViews: pb.cascadeDroppedViews(b),
 		}
 	}
+	if _, _, seq := scpb.FindSequence(b.QueryByID(screl.GetDescID(pb.Element()))); seq != nil {
+		// If the sequence has a payload attached use that instead of ALTER SEQUENCE.
+		if pb.maybePayload != nil {
+			return pb.maybePayload
+		}
+		return &eventpb.AlterSequence{
+			SequenceName: fullyQualifiedName(b, seq),
+		}
+	}
 	return nil
 }

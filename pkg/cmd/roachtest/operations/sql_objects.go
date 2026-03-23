@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operations/helpers"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -35,7 +36,7 @@ func (cl *genericSQLCleanup) Cleanup(
 
 	o.Status(fmt.Sprintf("dropping %s %s", cl.objectType, cl.objectName))
 	_, err := conn.ExecContext(ctx,
-		fmt.Sprintf("DROP %s %s", cl.objectType, cl.objectName))
+		fmt.Sprintf("DROP %s IF EXISTS %s", cl.objectType, cl.objectName))
 	if err != nil {
 		o.Fatal(err)
 	}
@@ -54,7 +55,8 @@ func runSQLOperation(
 		createStmt := createSQL(name)
 
 		o.Status(fmt.Sprintf("creating %s %s", objectType, name))
-		if _, err := conn.ExecContext(ctx, createStmt); err != nil {
+		_, err := conn.ExecContext(ctx, createStmt)
+		if err != nil {
 			o.Fatal(err)
 		}
 
@@ -64,6 +66,68 @@ func runSQLOperation(
 			objectType: objectType,
 			objectName: name,
 		}
+	}
+}
+
+// runCreateTableAs picks a random database and table, then creates a new table
+// using CREATE TABLE ... AS SELECT from that table.
+func runCreateTableAs(
+	ctx context.Context, o operation.Operation, c cluster.Cluster,
+) registry.OperationCleanup {
+	conn := c.Conn(ctx, o.L(), 1, option.VirtualClusterName(roachtestflags.VirtualCluster))
+	defer conn.Close()
+
+	dbName := helpers.PickRandomDB(ctx, o, conn, helpers.SystemDBs)
+	tableName := helpers.PickRandomTable(ctx, o, conn, dbName)
+
+	rng, _ := randutil.NewPseudoRand()
+	name := fmt.Sprintf("roachtest_ctas_%d", rng.Uint32())
+
+	createStmt := fmt.Sprintf(
+		"CREATE TABLE %s.%s AS SELECT * FROM %s.%s LIMIT 100",
+		dbName, name, dbName, tableName,
+	)
+
+	o.Status(fmt.Sprintf("creating TABLE %s.%s from %s.%s", dbName, name, dbName, tableName))
+	if _, err := conn.ExecContext(ctx, createStmt); err != nil {
+		o.Fatal(err)
+	}
+
+	o.Status(fmt.Sprintf("TABLE %s.%s created", dbName, name))
+	return &genericSQLCleanup{
+		objectType: "TABLE",
+		objectName: fmt.Sprintf("%s.%s", dbName, name),
+	}
+}
+
+// runCreateMaterializedView picks a random database and table, then creates a
+// materialized view selecting from that table.
+func runCreateMaterializedView(
+	ctx context.Context, o operation.Operation, c cluster.Cluster,
+) registry.OperationCleanup {
+	conn := c.Conn(ctx, o.L(), 1, option.VirtualClusterName(roachtestflags.VirtualCluster))
+	defer conn.Close()
+
+	dbName := helpers.PickRandomDB(ctx, o, conn, helpers.SystemDBs)
+	tableName := helpers.PickRandomTable(ctx, o, conn, dbName)
+
+	rng, _ := randutil.NewPseudoRand()
+	name := fmt.Sprintf("roachtest_mv_%d", rng.Uint32())
+
+	createStmt := fmt.Sprintf(
+		"CREATE MATERIALIZED VIEW %s.%s AS SELECT * FROM %s.%s LIMIT 100",
+		dbName, name, dbName, tableName,
+	)
+
+	o.Status(fmt.Sprintf("creating MATERIALIZED VIEW %s.%s from %s.%s", dbName, name, dbName, tableName))
+	if _, err := conn.ExecContext(ctx, createStmt); err != nil {
+		o.Fatal(err)
+	}
+
+	o.Status(fmt.Sprintf("MATERIALIZED VIEW %s.%s created", dbName, name))
+	return &genericSQLCleanup{
+		objectType: "MATERIALIZED VIEW",
+		objectName: fmt.Sprintf("%s.%s", dbName, name),
 	}
 }
 
@@ -111,44 +175,11 @@ func registerCreateSQLOperations(r registry.Registry) {
 			},
 		},
 		{
-			name:       "create-table-as",
-			objectType: "TABLE",
-			prefix:     "roachtest_ctas",
-			createSQL: func(name string) string {
-				return fmt.Sprintf(`
-			CREATE TABLE %s AS
-			SELECT
-				i_id,
-				i_name,
-				i_price,
-				length(i_name) AS name_len,
-				now() AS loaded_at
-			FROM item
-			WHERE i_price > (SELECT avg(i_price) FROM item)`, name)
-			},
-		},
-		{
 			name:       "create-sequence",
 			objectType: "SEQUENCE",
 			prefix:     "roachtest_sequence",
 			createSQL: func(name string) string {
 				return fmt.Sprintf("CREATE SEQUENCE %s", name)
-			},
-		},
-		{
-			name:       "create-materialized-view",
-			objectType: "MATERIALIZED VIEW",
-			prefix:     "roachtest_mv_sales",
-			createSQL: func(name string) string {
-				return fmt.Sprintf(`
-			CREATE MATERIALIZED VIEW %s AS
-			SELECT
-				ol_w_id AS warehouse_id,
-				ol_d_id AS district_id,
-				sum(ol_amount) AS total_sales,
-				count(*) AS num_orders
-			FROM order_line
-			GROUP BY ol_w_id, ol_d_id`, name)
 			},
 		},
 	}
@@ -164,4 +195,24 @@ func registerCreateSQLOperations(r registry.Registry) {
 			Run:                runSQLOperation(obj.objectType, obj.prefix, obj.createSQL),
 		})
 	}
+
+	// Register operations that need to discover tables dynamically.
+	r.AddOperation(registry.OperationSpec{
+		Name:               "create-table-as",
+		Owner:              registry.OwnerSQLFoundations,
+		Timeout:            time.Hour,
+		CompatibleClouds:   registry.AllClouds,
+		CanRunConcurrently: registry.OperationCanRunConcurrently,
+		Dependencies:       []registry.OperationDependency{registry.OperationRequiresPopulatedDatabase},
+		Run:                runCreateTableAs,
+	})
+	r.AddOperation(registry.OperationSpec{
+		Name:               "create-materialized-view",
+		Owner:              registry.OwnerSQLFoundations,
+		Timeout:            time.Hour,
+		CompatibleClouds:   registry.AllClouds,
+		CanRunConcurrently: registry.OperationCanRunConcurrently,
+		Dependencies:       []registry.OperationDependency{registry.OperationRequiresPopulatedDatabase},
+		Run:                runCreateMaterializedView,
+	})
 }

@@ -50,6 +50,7 @@ func New(histogramWindow time.Duration) *Timers {
 				Measurement:  "Latency",
 				LabeledName:  labeledName,
 				StaticLabels: metric.MakeLabelPairs(metric.LabelName, labelName),
+				Category:     metric.Metadata_CHANGEFEEDS,
 			},
 			Duration: histogramWindow,
 			Buckets:  prometheus.ExponentialBucketsRange(float64(1*time.Microsecond), float64(1*time.Hour), 60),

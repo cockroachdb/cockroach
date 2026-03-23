@@ -13,12 +13,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/redact"
 )
+
+var allowUnsafeSetting = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.override.allow_unsafe_internals.enabled",
+	"overrides the allow_unsafe_internals session variable behavior"+
+		" as a failsafe in case of emergencies. This setting should not be"+
+		" externally visible.",
+	envutil.EnvOrDefaultBool("COCKROACH_OVERRIDE_ALLOW_UNSAFE_INTERNALS", false),
+	settings.Sensitive)
 
 // The accessedLogLimiter is used to limit the rate of logging unsafe internal access
 // events. It is set to allow ten events per second.
@@ -55,6 +65,11 @@ func CheckInternalsAccess(
 		allowUnsafe = *override()
 	}
 
+	// If the cluster setting override is set, allow without logging.
+	if allowUnsafeSetting.Get(sv) {
+		return nil
+	}
+
 	// If the querier is internal, we should allow it.
 	if sd.Internal || sd.IsInternalAppName() {
 		return nil
@@ -78,6 +93,9 @@ func CheckInternalsAccess(
 	return sqlerrors.ErrUnsafeTableAccess
 }
 
+// PanickedQueryFormat is the placeholder used when query formatting panics.
+const PanickedQueryFormat = "<panicked query format>"
+
 // SafeFormatQuery attempts to format the query for logging, but recovers from
 // any panics that may occur during formatting.
 func SafeFormatQuery(
@@ -89,7 +107,7 @@ func SafeFormatQuery(
 	defer func() {
 		if r := recover(); r != nil {
 			log.Dev.Errorf(context.TODO(), "panic in SafeFormatQuery: %v", r)
-			s = "<panicked query format>"
+			s = PanickedQueryFormat
 		}
 	}()
 	return tree.FormatAstAsRedactableString(stmt, ann, sv)

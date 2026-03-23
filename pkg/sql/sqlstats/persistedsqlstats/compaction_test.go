@@ -46,7 +46,9 @@ func TestSQLStatsCompactorNilTestingKnobCheck(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DisableElasticCPUAdmission: true,
+	})
 	defer srv.Stopper().Stop(ctx)
 
 	server := srv.ApplicationLayer()
@@ -134,6 +136,7 @@ func TestSQLStatsCompactor(t *testing.T) {
 			}
 			srv, conn, _ := serverutils.StartServer(
 				t, base.TestServerArgs{
+					DisableElasticCPUAdmission: true,
 					Knobs: base.TestingKnobs{
 						SQLStatsKnobs: knobs,
 						Store: &kvserver.StoreTestingKnobs{
@@ -278,6 +281,7 @@ func TestSQLStatsCompactionJobMarkedAsAutomatic(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	var params base.TestServerArgs
+	params.DisableElasticCPUAdmission = true
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 
 	t.Logf("starting test server")

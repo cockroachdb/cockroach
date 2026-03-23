@@ -9,10 +9,12 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -50,7 +52,24 @@ const (
 	// non-terminal jobs.
 	NonTerminalStateTupleString = `(` + nonTerminalStateList + `)`
 
-	claimQuery = `
+	// GetClaimableJobsQuery is the first part of the new two-query claim approach
+	// that uses SELECT FOR UPDATE to prevent deadlock.
+	GetClaimableJobsQuery = `
+ SELECT id FROM system.jobs
+    WHERE ((claim_session_id IS NULL)
+      AND (status IN ` + claimableStateTupleString + `))
+ ORDER BY created DESC
+    LIMIT $1 FOR UPDATE`
+
+	// claimJobsQuery is the second part of the new two-query claim approach.
+	claimJobsQuery = `
+   UPDATE system.jobs
+      SET claim_session_id = $1, claim_instance_id = $2
+    WHERE id = ANY($3)`
+
+	// legacyClaimQuery is the old single-query approach that can deadlock
+	// when multiple nodes acquire locks across ranges in parallel.
+	legacyClaimQuery = `
    UPDATE system.jobs
       SET claim_session_id = $1, claim_instance_id = $2
     WHERE ((claim_session_id IS NULL)
@@ -94,6 +113,65 @@ func (r *Registry) maybeDumpTrace(resumerCtx context.Context, resumer Resumer, j
 // claimJobs places a claim with the given SessionID to job rows that are
 // available.
 func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
+
+	timeout := claimQueryTimeout.Get(&r.settings.SV)
+	ctx, cancel := context.WithDeadlineCause(ctx, timeutil.Now().Add(timeout), errors.New("claim jobs transaction took too long"))
+	defer cancel()
+
+	useSelectForUpdate := UseSelectForUpdate.Get(&r.settings.SV)
+	if !useSelectForUpdate {
+		return r.claimJobsLegacy(ctx, s)
+	}
+
+	return r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) (retErr error) {
+		// Run the claim transaction at low priority to ensure that it does not
+		// contend with foreground reads.
+		if err := txn.KV().SetUserPriority(roachpb.MinUserPriority); err != nil {
+			return errors.WithAssertionFailure(err)
+		}
+
+		it, err := r.db.Executor().QueryIteratorEx(ctx, "get-claimable-jobs", txn.KV(), sessiondata.NodeUserSessionDataOverride, GetClaimableJobsQuery, maxAdoptionsPerLoop.Get(&r.settings.SV))
+
+		if err != nil {
+			return errors.Wrap(err, "could not query jobs table")
+		}
+
+		defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
+
+		var jobIDs []int
+		for {
+			ok, err := it.Next(ctx)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				break
+			}
+			row := it.Cur()
+			id := int(*row[0].(*tree.DInt))
+			jobIDs = append(jobIDs, id)
+		}
+
+		if len(jobIDs) == 0 {
+			if log.ExpensiveLogEnabled(ctx, 1) {
+				log.Dev.Infof(ctx, "claimed no jobs")
+			}
+			return nil
+		}
+		totalClaimed, err := txn.Exec(
+			ctx, "claim-jobs", txn.KV(), claimJobsQuery,
+			s.ID().UnsafeBytes(), r.ID(), jobIDs,
+		)
+		if err != nil {
+			return errors.Wrap(err, "could not claim jobs")
+		}
+		r.metrics.ClaimedJobs.Inc(int64(totalClaimed))
+		log.Dev.Infof(ctx, "claimed %d jobs", totalClaimed)
+		return nil
+	})
+}
+
+func (r *Registry) claimJobsLegacy(ctx context.Context, s sqlliveness.Session) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Run the claim transaction at low priority to ensure that it does not
 		// contend with foreground reads.
@@ -101,7 +179,7 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 			return errors.WithAssertionFailure(err)
 		}
 		numRows, err := txn.Exec(
-			ctx, "claim-jobs", txn.KV(), claimQuery,
+			ctx, "claim-jobs", txn.KV(), legacyClaimQuery,
 			s.ID().UnsafeBytes(), r.ID(), maxAdoptionsPerLoop.Get(&r.settings.SV),
 		)
 		if err != nil {
@@ -135,7 +213,7 @@ const (
 )
 
 // processClaimedJobs processes all jobs currently claimed by the registry.
-func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session) error {
+func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session) (retErr error) {
 	it, err := r.db.Executor().QueryIteratorEx(
 		ctx, "select-running/get-claimed-jobs", nil,
 		sessiondata.NodeUserSessionDataOverride, processQuery, s.ID().UnsafeBytes(), r.ID(),
@@ -143,6 +221,8 @@ func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session
 	if err != nil {
 		return errors.Wrapf(err, "could not query for claimed jobs")
 	}
+
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 
 	// This map will eventually contain the job ids that must be resumed.
 	claimedToResume := make(map[jobspb.JobID]struct{})
@@ -394,6 +474,12 @@ func (r *Registry) runJob(
 	// Make sure that we remove the job from the running set when this returns.
 	defer r.unregister(job.ID())
 
+	// Inject the job's ID into the context so that any kv.DB or
+	// InternalDB transaction created within the job automatically
+	// carries the workload ID in KV BatchRequest headers for ASH
+	// attribution.
+	ctx = kv.ContextWithWorkloadInfo(ctx, uint64(job.ID()), workloadid.WorkloadTypeJob)
+
 	// Bookkeeping.
 	execCtx, cleanup := r.execCtx(ctx, "resume-"+taskName, username)
 	defer cleanup()
@@ -423,13 +509,27 @@ func (r *Registry) runJob(
 	}
 
 	r.maybeRecordExecutionFailure(ctx, err, job)
-	// NB: After this point, the job may no longer have the claim
-	// and further updates to the job record from this node may
-	// fail.
-	r.maybeClearLease(job, err)
 	r.maybeDumpTrace(ctx, resumer, job.ID())
+
 	if r.knobs.AfterJobStateMachine != nil {
 		r.knobs.AfterJobStateMachine(job.ID())
+	}
+
+	// NB: After this point, the job may no longer have the claim and further
+	// updates to the job record from this node may fail.
+	if err != nil {
+		// We delay clearing the lease to avoid situations where a job fast-fails
+		// and is immediately re-adopted by another node, causing a hot loop of job
+		// status changes. See #158597 for more info.
+		//
+		// NB: The node that holds this claim also will not rerun the job until
+		// this interval elapses and the job is removed from the list of currently
+		// running jobs.
+		select {
+		case <-ctx.Done():
+		case <-time.After(r.GetLoopInterval(adoptIntervalSetting, r.knobs.IntervalOverrides.ClaimTTLOnFailure)):
+		}
+		r.maybeClearLease(job, err)
 	}
 	return err
 }
@@ -453,7 +553,9 @@ func (r *Registry) maybeClearLease(job *Job, jobErr error) {
 func (r *Registry) clearLeaseForJobID(jobID jobspb.JobID, ex isql.Executor, txn *kv.Txn) {
 	// We use the serverCtx here rather than the context from the
 	// caller since the caller's context may have been canceled.
-	r.withSession(r.serverCtx, func(ctx context.Context, s sqlliveness.Session) {
+	ctx, cancel := r.stopper.WithCancelOnQuiesce(r.serverCtx)
+	defer cancel()
+	r.withSession(ctx, func(ctx context.Context, s sqlliveness.Session) {
 		n, err := ex.ExecEx(ctx, "clear-job-claim", txn,
 			sessiondata.NodeUserSessionDataOverride,
 			clearClaimQuery, jobID, s.ID().UnsafeBytes(), r.ID())
