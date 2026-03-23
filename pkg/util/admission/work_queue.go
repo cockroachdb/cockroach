@@ -716,7 +716,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	// tenant.estimator uses past measurements from grunning to make estimates
 	// in this code path, that is, at admission time.
 	// If mode == usesCPUTimeTokens and the caller is not a SQL CPU caller,
-	// use the per-tenant to predict CPU time. SQL callers set
+	// use the per-tenant estimator to predict CPU time. SQL callers set
 	// RequestedCount based on measured CPU consumption and skip the estimator.
 	if q.mode == usesCPUTimeTokens && !q.knobs.DisableCPUTimeTokenEstimation &&
 		!info.IsSQLCPU {
@@ -1211,9 +1211,9 @@ func (q *WorkQueue) gcTenantsResetUsedAndUpdateEstimators() {
 }
 
 // AdmittedSQLWorkDone adjusts token accounting when a SQL statement closes.
-// remaining is the leftover reservation: positive means unused tokens to
-// return, negative means a deficit (consumed more than granted, e.g. when
-// the noWait BypassAdmission Admit call failed).
+// remaining is the leftover reservation (always non-negative, since the
+// CAS-based deduction in SQLCPUHandle never drives the reservation below
+// zero). Positive remaining means unused tokens are returned to the granter.
 func (q *WorkQueue) AdmittedSQLWorkDone(tenantID roachpb.TenantID, remaining int64) {
 	q.adjustTenantUsed(tenantID, -remaining)
 	if remaining < 0 {

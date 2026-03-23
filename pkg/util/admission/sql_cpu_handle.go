@@ -14,10 +14,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/petermattis/goid"
 )
 
@@ -87,24 +89,30 @@ type SQLCPUHandle struct {
 	// CTT admission is disabled.
 	workQueue *WorkQueue
 
-	// refillMu serializes refill attempts. When multiple goroutines
-	// deplete the reservation simultaneously, only one calls Admit while
-	// others wait, then recheck the reservation.
-	refillMu struct {
-		syncutil.Mutex
-		// reservation holds the remaining CPU time tokens (in nanoseconds)
-		// available locally. When this goes negative, a refill from the
-		// WorkQueue is needed. Accessed atomically by multiple goroutines.
-		reservation int64
-		// lastRefillTime is the wall-clock time of the last normal refill.
-		// Used by refillHeuristic to determine if the buffer lasted long
-		// enough.
-		lastRefillTime time.Time
-		// lastHeuristic is the heuristic value from the last refill. Grows
-		// exponentially (×2) when refills happen within
-		// refillBackoffThreshold, and decays (÷2) when they last longer.
-		lastHeuristic int64
-	}
+	// reservation holds the remaining CPU time tokens (nanoseconds).
+	// Accessed atomically via CAS on the fast path: goroutines deduct
+	// only when the reservation has sufficient tokens, ensuring it never
+	// goes negative. This allows goroutines to consume tokens without
+	// blocking on a concurrent refill.
+	reservation atomic.Int64
+
+	// refillCh serializes refill attempts (WorkQueue.Admit calls).
+	// Buffered channel of capacity 1: sending acquires the turn to call
+	// Admit, receiving releases it. Using a channel (rather than a mutex)
+	// allows goroutines to select on ctx.Done() while waiting for the
+	// turn, enabling prompt cancellation when the context is cancelled.
+	refillCh chan struct{}
+
+	// lastRefillTime and lastHeuristic are the adaptive heuristic state.
+	// Protected by the refillCh turn — only the goroutine that has sent
+	// to refillCh may access these fields.
+	lastRefillTime time.Time
+	lastHeuristic  int64
+
+	// tearingDown is set at the start of SQLCPUHandle.Close(). Used
+	// only as a test-build assertion to catch lifecycle violations
+	// where consumed() is called after Close().
+	tearingDown atomic.Bool
 
 	mu struct {
 		syncutil.Mutex
@@ -123,6 +131,7 @@ func newSQLCPUAdmissionHandle(
 		workInfo:  workInfo,
 		p:         p,
 		workQueue: workQueue,
+		refillCh:  make(chan struct{}, 1),
 	}
 	h.mu.gHandles = h.mu.handlesBacking[:0]
 	return h
@@ -154,6 +163,21 @@ const (
 	maxRefillHeuristic = int64(10 * time.Millisecond)
 )
 
+// tryDeductReservation attempts to deduct diffNanos from the reservation
+// via CAS. Returns true if successful (reservation had enough tokens).
+// Never drives the reservation negative.
+func (h *SQLCPUHandle) tryDeductReservation(diffNanos int64) bool {
+	for {
+		current := h.reservation.Load()
+		if current < diffNanos {
+			return false
+		}
+		if h.reservation.CompareAndSwap(current, current-diffNanos) {
+			return true
+		}
+	}
+}
+
 // refillHeuristic returns the number of extra tokens to request beyond
 // covering the current checkpoint's consumption. It uses exponential
 // backoff based on wall time between refills:
@@ -168,72 +192,115 @@ const (
 // grows until it reaches the acceptable range, then stabilizes. It
 // only decays when the workload genuinely becomes lighter.
 //
-// Must be called under refillMu.
+// Must be called while holding the refillCh turn.
 func (h *SQLCPUHandle) refillHeuristic(consumed int64) int64 {
 	now := timeutil.Now()
-	if h.refillMu.lastRefillTime.IsZero() {
+	if h.lastRefillTime.IsZero() {
 		// Bootstrap: start with consumed (same as current 2x behavior).
-		h.refillMu.lastHeuristic = consumed
+		h.lastHeuristic = consumed
 	} else {
-		elapsed := now.Sub(h.refillMu.lastRefillTime)
+		elapsed := now.Sub(h.lastRefillTime)
 		if elapsed < refillGrowThreshold {
 			// Came back too soon — double to reduce call frequency.
-			h.refillMu.lastHeuristic = min(
-				h.refillMu.lastHeuristic*2, maxRefillHeuristic,
+			h.lastHeuristic = min(
+				h.lastHeuristic*2, maxRefillHeuristic,
 			)
 		} else if elapsed > refillDecayThreshold {
 			// Buffer lasted too long — halve to reduce overcounting.
-			h.refillMu.lastHeuristic = max(
-				consumed, h.refillMu.lastHeuristic/2,
-			)
+			h.lastHeuristic = max(consumed, h.lastHeuristic/2)
 		}
 		// else: in [1ms, 5ms] deadband — no change.
 	}
-	h.refillMu.lastRefillTime = now
-	return h.refillMu.lastHeuristic
+	h.lastRefillTime = now
+	return h.lastHeuristic
 }
 
-// consumed deducts measured CPU time from the local reservation. If the
-// reservation is depleted, it refills by calling WorkQueue.Admit. When
-// noWait is true (called from GoroutineCPUHandle.Close), Admit is called
-// with BypassAdmission so the consumption is properly accounted in
-// tenant.used and the granter without blocking.
+// consumed deducts measured CPU time from the local reservation. The fast
+// path uses CAS to deduct atomically without any locking, so goroutines
+// with sufficient reservation are never blocked by a concurrent refill.
+//
+// When the reservation is insufficient, the slow path acquires a turn
+// via refillCh and calls WorkQueue.Admit to refill. Goroutines waiting
+// for the turn can bail out on ctx.Done().
+//
+// When noWait is true (called from GoroutineCPUHandle.Close), Admit is
+// called with BypassAdmission so the consumption is properly accounted
+// in tenant.used and the granter without blocking.
 func (h *SQLCPUHandle) consumed(ctx context.Context, diff time.Duration, noWait bool) error {
 	if h.workQueue == nil {
 		return nil
 	}
+	diffNanos := diff.Nanoseconds()
 
-	h.refillMu.Lock()
-	defer h.refillMu.Unlock()
+	if buildutil.CrdbTestBuild && h.tearingDown.Load() {
+		panic(errors.AssertionFailedf(
+			"consumed() called after SQLCPUHandle.Close()",
+		))
+	}
 
-	// Deduct consumed CPU from the shared reservation.
-	h.refillMu.reservation -= diff.Nanoseconds()
-	if h.refillMu.reservation >= 0 {
+	// Fast path: CAS deducts only if the reservation has enough
+	// tokens. Never drives the reservation negative. No lock or
+	// channel interaction needed.
+	if h.tryDeductReservation(diffNanos) {
 		return nil
 	}
 
-	// Reservation depleted — need tokens from WorkQueue.
-	var toRequest int64
 	if noWait {
-		// Closing: just cover the deficit, don't wait.
-		toRequest = -h.refillMu.reservation
-	} else {
-		// Normal: request consumed + heuristic for amortization.
-		consumed := diff.Nanoseconds()
-		toRequest = consumed + h.refillHeuristic(consumed)
+		// Closing: account the CPU via BypassAdmission (non-blocking).
+		// Do NOT deduct from reservation — driving it negative would
+		// poison CAS for other goroutines. No turn needed since
+		// BypassAdmission just updates accounting without waiting.
+		_ = h.workQueue.Admit(ctx, WorkInfo{
+			TenantID:        h.workInfo.TenantID,
+			Priority:        h.workInfo.Priority,
+			CreateTime:      h.workInfo.CreateTime,
+			RequestedCount:  diffNanos,
+			BypassAdmission: true,
+			IsSQLCPU:        true,
+		})
+		return nil
 	}
-	_, err := h.workQueue.Admit(ctx, WorkInfo{
-		TenantID:        h.workInfo.TenantID,
-		Priority:        h.workInfo.Priority,
-		CreateTime:      h.workInfo.CreateTime,
-		RequestedCount:  toRequest,
-		BypassAdmission: noWait,
-		IsSQLCPU:        true,
+
+	// Slow path: acquire the turn to call Admit, or bail if ctx is
+	// cancelled.
+	select {
+	case h.refillCh <- struct{}{}:
+		// Got the turn.
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	// Re-check: another goroutine may have refilled while we waited.
+	if h.tryDeductReservation(diffNanos) {
+		<-h.refillCh
+		return nil
+	}
+
+	toRequest := diffNanos + h.refillHeuristic(diffNanos)
+	resp, err := h.workQueue.Admit(ctx, WorkInfo{
+		TenantID:       h.workInfo.TenantID,
+		Priority:       h.workInfo.Priority,
+		CreateTime:     h.workInfo.CreateTime,
+		RequestedCount: toRequest,
+		IsSQLCPU:       true,
 	})
 	if err != nil {
+		<-h.refillCh
 		return err
 	}
-	h.refillMu.reservation += toRequest
+	if resp.Enabled {
+		// Add the heuristic portion to reservation. We consume diffNanos
+		// ourselves, so only the extra (toRequest - diffNanos) becomes
+		// buffer for other goroutines.
+		h.reservation.Add(toRequest - diffNanos)
+	}
+	// If !resp.Enabled, AC is disabled — Admit took no tokens from
+	// the granter. We must NOT add to reservation (would create phantom
+	// tokens that corrupt the granter when returned at Close via
+	// returnGrant). The goroutine proceeds without being tracked. Next
+	// checkpoint will try Admit again; if AC stays disabled, Admit
+	// returns instantly each time.
+	<-h.refillCh
 	return nil
 }
 
@@ -289,17 +356,19 @@ func (h *SQLCPUHandle) returnUnusedReservation() {
 	if h.workQueue == nil {
 		return
 	}
-	h.refillMu.Lock()
-	defer h.refillMu.Unlock()
-	remaining := h.refillMu.reservation
-	h.workQueue.AdmittedSQLWorkDone(h.workInfo.TenantID, remaining)
-	h.refillMu.reservation = 0
+	h.refillCh <- struct{}{} // acquire turn
+	remaining := h.reservation.Swap(0)
+	if remaining != 0 {
+		h.workQueue.AdmittedSQLWorkDone(h.workInfo.TenantID, remaining)
+	}
+	<-h.refillCh
 }
 
 // Close is called when no more reporting is needed. It pools
 // GoroutineCPUHandles that have been closed. GoroutineCPUHandles that are not
 // yet closed are left for GC.
 func (h *SQLCPUHandle) Close() {
+	h.tearingDown.Store(true)
 	h.returnUnusedReservation()
 	h.mu.Lock()
 	defer h.mu.Unlock()
