@@ -134,6 +134,31 @@ targets:
             mkdir -p ~/.aws &&
             echo '[default]' > ~/.aws/config &&
             echo 'region = us-east-1' >> ~/.aws/config
+      # Install gcloud CLI on workload node (needed for SSH key retrieval from GCP)
+      - command: run
+        args:
+          - $WORKLOAD_CLUSTER
+          - --
+          - >-
+            curl -fsSL https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz -o /tmp/gcloud.tar.gz &&
+            sudo tar -xzf /tmp/gcloud.tar.gz -C /opt &&
+            sudo /opt/google-cloud-sdk/install.sh --quiet --path-update=false &&
+            sudo ln -sf /opt/google-cloud-sdk/bin/gcloud /usr/local/bin/gcloud &&
+            rm -f /tmp/gcloud.tar.gz
+      # Authenticate gcloud using service account key from AWS Secrets Manager
+      - command: run
+        args:
+          - $WORKLOAD_CLUSTER
+          - --
+          - >-
+            aws secretsmanager get-secret-value
+            --region us-east-1
+            --secret-id gcp-service-account-key
+            --query SecretString
+            --output text > /tmp/gcp-sa-key.json &&
+            gcloud auth activate-service-account --key-file=/tmp/gcp-sa-key.json &&
+            gcloud config set project cockroach-ephemeral &&
+            rm -f /tmp/gcp-sa-key.json
       - command: stage
         args:
           - $WORKLOAD_CLUSTER
