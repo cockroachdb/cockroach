@@ -83,15 +83,38 @@ var (
 	// the zones to use for the cluster, as the supported regions are defined in
 	// the each provider's instance.
 	defaultZones = map[string][]string{
+		// South America
+		"br-sao": {
+			"br-sao-1",
+			"br-sao-2",
+			"br-sao-3",
+		},
+		// North America
 		"ca-tor": {
 			"ca-tor-1",
 			"ca-tor-2",
 			"ca-tor-3",
 		},
-		"br-sao": {
-			"br-sao-1",
-			"br-sao-2",
-			"br-sao-3",
+		"us-east": {
+			"us-east-1",
+			"us-east-2",
+			"us-east-3",
+		},
+		"us-south": {
+			"us-south-1",
+			"us-south-2",
+			"us-south-3",
+		},
+		// Europe
+		"eu-de": {
+			"eu-de-1",
+			"eu-de-2",
+			"eu-de-3",
+		},
+		"eu-gb": {
+			"eu-gb-1",
+			"eu-gb-2",
+			"eu-gb-3",
 		},
 	}
 )

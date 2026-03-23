@@ -43,10 +43,16 @@ const (
 
 var (
 	// supportedRegions is the list of regions used by roachprod resources.
-	// These regions have been contractually agreed upon with IBM.
+	// br-sao and ca-tor are historic regions contractually agreed upon with IBM,
+	// while the others have been added after s390x deprecation to load balance
+	// across more regions and mitigate capacity issues.
 	supportedRegions = []string{
 		"br-sao",
 		"ca-tor",
+		"us-east",
+		"us-south",
+		"eu-de",
+		"eu-gb",
 	}
 )
 
