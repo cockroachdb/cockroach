@@ -83,6 +83,10 @@ const (
 	defaultPercentageThreshold = 20.0
 	slackReportMax             = 3
 	skipComparison             = math.MaxFloat64
+	// slackWarningThresholdDivisor is used to compute the warning threshold
+	// for Slack reports. Changes that exceed threshold/divisor but not the
+	// full threshold are shown with a warning indicator (orange diamond).
+	slackWarningThresholdDivisor = 2
 )
 
 const slackCompareTemplateScript = `
@@ -285,7 +289,9 @@ func (c *compare) postToSlack(
 				metric := result.Metric
 
 				threshold := c.benchmarkThreshold(detail.BenchmarkName)
-				if !isRegression(comparison.Delta, threshold, metric.Better) {
+				warningThreshold := threshold / slackWarningThresholdDivisor
+				if !isRegression(comparison.Delta, metric.Better) ||
+					!meetsThreshold(comparison.Delta, warningThreshold) {
 					continue
 				}
 				nameSplit := strings.Split(detail.BenchmarkName, util.PackageSeparator)
@@ -297,7 +303,7 @@ func (c *compare) postToSlack(
 					highestPercentChange = math.Abs(comparison.Delta)
 				}
 				ci.ChangeSymbol = ":small_orange_diamond:"
-				if math.Abs(comparison.Delta) > defaultPercentageThreshold {
+				if meetsThreshold(comparison.Delta, threshold) {
 					ci.ChangeSymbol = ":small_red_triangle:"
 				}
 				mi.Changes = append(mi.Changes, ci)
@@ -392,7 +398,7 @@ func (c *compare) maybePostRegressionIssuesGroup(
 				metric := result.Metric
 
 				threshold := c.benchmarkThreshold(detail.BenchmarkName)
-				if isRegression(comparison.Delta, threshold, metric.Better) {
+				if isRegression(comparison.Delta, metric.Better) && meetsThreshold(comparison.Delta, threshold) {
 					regressions = append(regressions, regressionInfo{
 						benchmarkName:  detail.BenchmarkName,
 						metricUnit:     result.Metric.Unit,
@@ -458,7 +464,8 @@ func (c *compare) maybePostRegressionIssuesSingle(
 					continue
 				}
 
-				if !isRegression(comparison.Delta, c.benchmarkThreshold(detail.BenchmarkName), metric.Better) {
+				if !isRegression(comparison.Delta, metric.Better) ||
+					!meetsThreshold(comparison.Delta, c.benchmarkThreshold(detail.BenchmarkName)) {
 					continue
 				}
 
@@ -603,8 +610,12 @@ func truncateBenchmarkName(text string, maxLen int) string {
 	return text
 }
 
-func isRegression(delta float64, threshold float64, better int) bool {
-	return delta*float64(better) < 0 && math.Abs(delta) >= threshold
+func isRegression(delta float64, better int) bool {
+	return delta*float64(better) < 0
+}
+
+func meetsThreshold(delta float64, threshold float64) bool {
+	return math.Abs(delta) >= threshold
 }
 
 // benchmarkThreshold returns the regression threshold (in percentage) for the
