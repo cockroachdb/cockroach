@@ -455,7 +455,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 var SQLValidOptions map[string]struct{} = nil
 
 // KafkaValidOptions is options exclusive to Kafka sink
-var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders)
+var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders, OptCompression)
 
 // CloudStorageValidOptions is options exclusive to cloud storage sink
 var CloudStorageValidOptions = makeStringSet(OptCompression)
@@ -1136,6 +1136,9 @@ type KafkaSinkOptions struct {
 
 	// Headers is a map of header names to values.
 	Headers map[string][]byte
+
+	// Compression is the top level compression setting
+	Compression string
 }
 
 func (s StatementOptions) GetKafkaSinkOptions() (KafkaSinkOptions, error) {
@@ -1143,10 +1146,15 @@ func (s StatementOptions) GetKafkaSinkOptions() (KafkaSinkOptions, error) {
 	if err != nil {
 		return KafkaSinkOptions{}, err
 	}
+	compressionVal, err := s.getEnumValue(OptCompression)
+	if err != nil {
+		return KafkaSinkOptions{}, err
+	}
 
 	o := KafkaSinkOptions{
-		JSONConfig: s.getJSONValue(OptKafkaSinkConfig),
-		Headers:    headersMap,
+		JSONConfig:  s.getJSONValue(OptKafkaSinkConfig),
+		Headers:     headersMap,
+		Compression: compressionVal,
 	}
 	return o, nil
 }

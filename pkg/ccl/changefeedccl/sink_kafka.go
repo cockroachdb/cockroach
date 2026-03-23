@@ -1188,6 +1188,14 @@ func buildKafkaConfig(
 			"failed to parse sarama config; check %s option", changefeedbase.OptKafkaSinkConfig)
 	}
 
+	if sinkOpts.Compression != "" {
+		if c, ok := saramaCompressionCodecOptions[strings.ToUpper(sinkOpts.Compression)]; ok {
+			saramaCfg.Compression = compressionCodec(c)
+		} else {
+			return nil, errors.Errorf(`unknown compression codec: %v`, sinkOpts.Compression)
+		}
+	}
+
 	// Leverage sarama's proxy support to slip in our net metrics
 	config.Net.Proxy.Enable = true
 	// This is how sarama constructs its Dialer. See (*Config).getDialer() in sarama.
