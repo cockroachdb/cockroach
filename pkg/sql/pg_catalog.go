@@ -852,6 +852,24 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		if err != nil {
 			return err
 		}
+		// Only populate relacl for user-defined tables. Virtual tables
+		// (pg_catalog, information_schema) should return NULL to match
+		// PostgreSQL behavior and avoid pg_dump emitting spurious
+		// GRANT/REVOKE statements.
+		var relacl tree.Datum = tree.DNull
+		if sc.SchemaKind() != catalog.SchemaVirtual {
+			privObjectType := privilege.Table
+			if table.IsSequence() {
+				privObjectType = privilege.Sequence
+			}
+			var err error
+			relacl, err = privilegeDescriptorToACLArray(
+				table.GetPrivileges(), privObjectType,
+			)
+			if err != nil {
+				return err
+			}
+		}
 		implicitTypOID := typedesc.TableIDToImplicitTypeOID(table.GetID())
 		namespaceOid := schemaOid(sc.GetID())
 		if err := addRow(
@@ -881,7 +899,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			tree.DBoolFalse, // relhastriggers
 			tree.DBoolFalse, // relhassubclass
 			zeroVal,         // relfrozenxid
-			tree.DNull,      // relacl
+			relacl,          // relacl
 			relOptions,      // reloptions
 			// These columns were automatically created by pg_catalog_test's missing column generator.
 			tree.MakeDBool(tree.DBool(table.IsRowLevelSecurityForced())), // relforcerowsecurity
@@ -1457,6 +1475,12 @@ https://www.postgresql.org/docs/9.5/catalog-pg-database.html`,
 				if err != nil {
 					return err
 				}
+				datacl, err := privilegeDescriptorToACLArray(
+					db.GetPrivileges(), privilege.Database,
+				)
+				if err != nil {
+					return err
+				}
 				return addRow(
 					dbOid(db.GetID()),           // oid
 					tree.NewDName(db.GetName()), // datname
@@ -1473,7 +1497,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-database.html`,
 					tree.DNull,                 // datfrozenxid
 					tree.DNull,                 // datminmxid
 					oidZero,                    // dattablespace
-					tree.DNull,                 // datacl
+					datacl,                     // datacl
 				)
 			})
 	},
@@ -1545,13 +1569,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 					privilegeObjectType := targetObjectToPrivilegeObject[objectType]
 					arr := tree.NewDArray(types.AclItem)
 					for _, userPrivs := range privs.Users {
-						var user string
-						if userPrivs.UserProto.Decode().IsPublicRole() {
-							// Postgres represents Public in defacl as an empty string.
-							user = ""
-						} else {
-							user = userPrivs.UserProto.Decode().Normalized()
-						}
+						user := userPrivs.UserProto.Decode()
 
 						privileges, err := privilege.ListFromBitField(
 							userPrivs.Privileges, privilegeObjectType,
@@ -1569,11 +1587,7 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 						if err != nil {
 							return err
 						}
-						aclDatum, err := tree.NewDACLItem(defaclItem)
-						if err != nil {
-							return err
-						}
-						if err := arr.Append(aclDatum); err != nil {
+						if err := arr.Append(tree.NewDACLItem(defaclItem)); err != nil {
 							return err
 						}
 					}
@@ -1611,31 +1625,23 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 						// when objectType is not privilege.Types or privilege.Routines
 						if publicHasUsage {
 							defaclItem, err := createDefACLItem(
-								"" /* public role */, privilege.List{privilegeKind}, privilege.List{}, privilegeObjectType,
+								username.PublicRoleName(), privilege.List{privilegeKind}, privilege.List{}, privilegeObjectType,
 							)
 							if err != nil {
 								return err
 							}
-							aclDatum, err := tree.NewDACLItem(defaclItem)
-							if err != nil {
-								return err
-							}
-							if err := arr.Append(aclDatum); err != nil {
+							if err := arr.Append(tree.NewDACLItem(defaclItem)); err != nil {
 								return err
 							}
 						} else if roleHasAllPrivileges {
 							defaclItem, err := createDefACLItem(
-								defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode().Normalized(),
+								defaultPrivilegesForRole.GetExplicitRole().UserProto.Decode(),
 								privilege.List{privilege.ALL}, privilege.List{}, privilegeObjectType,
 							)
 							if err != nil {
 								return err
 							}
-							aclDatum, err := tree.NewDACLItem(defaclItem)
-							if err != nil {
-								return err
-							}
-							if err := arr.Append(aclDatum); err != nil {
+							if err := arr.Append(tree.NewDACLItem(defaclItem)); err != nil {
 								return err
 							}
 						} else if len(privs.Users) == 0 && schemaID != descpb.InvalidID {
@@ -1694,25 +1700,134 @@ https://www.postgresql.org/docs/13/catalog-pg-default-acl.html`,
 }
 
 func createDefACLItem(
-	user string,
+	user username.SQLUsername,
 	privileges privilege.List,
 	grantOptions privilege.List,
 	privilegeObjectType privilege.ObjectType,
-) (string, error) {
-	acl, err := privileges.ListToACL(
-		grantOptions,
-		privilegeObjectType,
-	)
-	if err != nil {
-		return "", err
+) (privilege.ACLItem, error) {
+	// Expand ALL into the underlying privileges for this object type.
+	expanded := privileges
+	if privileges.Contains(privilege.ALL) {
+		var err error
+		expanded, err = privilege.GetValidPrivilegesForObject(privilegeObjectType)
+		if err != nil {
+			return privilege.ACLItem{}, err
+		}
 	}
-	return fmt.Sprintf(`%s=%s/%s`,
+	expandedGO := grantOptions
+	if grantOptions.Contains(privilege.ALL) {
+		var err error
+		expandedGO, err = privilege.GetValidPrivilegesForObject(privilegeObjectType)
+		if err != nil {
+			return privilege.ACLItem{}, err
+		}
+	}
+	// Empty grantor: CockroachDB does not track grantors.
+	// See: https://github.com/cockroachdb/cockroach/issues/67442.
+	return privilege.NewACLItem(
 		user,
-		acl,
-		// TODO(richardjcai): CockroachDB currently does not track grantors
-		//    See: https://github.com/cockroachdb/cockroach/issues/67442.
-		"", /* grantor */
+		username.MakeSQLUsernameFromPreNormalizedString(""),
+		expanded, expandedGO,
 	), nil
+}
+
+// privilegeDescriptorToACLArray converts a PrivilegeDescriptor into a
+// tree.DArray of aclitem strings suitable for pg_catalog ACL columns
+// (e.g. pg_class.relacl, pg_namespace.nspacl). Each user's privileges
+// are formatted as "grantee=privchars/grantor" per PostgreSQL convention.
+// Only privileges that have a PostgreSQL ACL character equivalent are
+// included; CockroachDB-specific privileges (BACKUP, CHANGEFEED, etc.)
+// are silently skipped by ListToACL.
+//
+// Grant option markers ('*') are stripped for admin, root, and the owner,
+// since their grant options are implicit (matching PostgreSQL behavior).
+//
+// If the resulting ACL matches the default privileges for the object type,
+// NULL is returned (matching PostgreSQL behavior where NULL means defaults).
+func privilegeDescriptorToACLArray(
+	privDesc *catpb.PrivilegeDescriptor, objectType privilege.ObjectType,
+) (tree.Datum, error) {
+	if privDesc == nil {
+		return tree.DNull, nil
+	}
+	owner := privDesc.Owner()
+
+	var aclItems []privilege.ACLItem
+	for _, userPriv := range privDesc.Users {
+		grantee := userPriv.User()
+		privileges, err := privilege.ListFromBitField(
+			userPriv.Privileges, objectType,
+		)
+		if err != nil {
+			return nil, err
+		}
+		// Expand ALL into the underlying privileges.
+		if privileges.Contains(privilege.ALL) {
+			privileges, err = privilege.GetValidPrivilegesForObject(objectType)
+			if err != nil {
+				return nil, err
+			}
+		}
+		// Strip grant options for admin, root, and owner — their grant
+		// options are implicit in PostgreSQL convention.
+		var grantOptions privilege.List
+		if !grantee.IsAdminRole() && !grantee.IsRootUser() && grantee != owner {
+			grantOptions, err = privilege.ListFromBitField(
+				userPriv.WithGrantOption, objectType,
+			)
+			if err != nil {
+				return nil, err
+			}
+			if grantOptions.Contains(privilege.ALL) {
+				grantOptions, err = privilege.GetValidPrivilegesForObject(objectType)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+		// The owner is used as the grantor because CockroachDB does not
+		// track the actual grantor. See #67442.
+		aclItems = append(aclItems, privilege.NewACLItem(
+			grantee, owner, privileges, grantOptions,
+		))
+	}
+
+	// If the owner is not explicitly listed in the privilege descriptor
+	// (common for non-root, non-admin owners), add their implicit ALL
+	// privileges. This mirrors PostgreSQL behavior where the owner
+	// always appears in the ACL array.
+	if !owner.IsNodeUser() && !owner.Undefined() {
+		sawOwner := false
+		for _, userPriv := range privDesc.Users {
+			if userPriv.User() == owner {
+				sawOwner = true
+				break
+			}
+		}
+		if !sawOwner {
+			ownerPrivs, err := privilege.GetValidPrivilegesForObject(objectType)
+			if err != nil {
+				return nil, err
+			}
+			aclItems = append(aclItems, privilege.NewACLItem(
+				owner, owner, ownerPrivs, privilege.List{},
+			))
+		}
+	}
+
+	// If the actual privileges match the defaults, return NULL.
+	isDefault, err := privilege.IsDefaultACL(aclItems, objectType, owner)
+	if err == nil && isDefault {
+		return tree.DNull, nil
+	}
+
+	arr := tree.NewDArray(types.AclItem)
+	for _, item := range aclItems {
+		if err := arr.Append(tree.NewDACLItem(item)); err != nil {
+			return nil, err
+		}
+	}
+	return arr, nil
 }
 
 var (
@@ -2424,11 +2539,24 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 					} else if sc.SchemaKind() == catalog.SchemaVirtual {
 						ownerOID = nodeOID
 					}
+					// Virtual schemas (pg_catalog, information_schema, etc.)
+					// should return NULL nspacl to match PostgreSQL behavior
+					// and avoid pg_dump emitting spurious GRANT/REVOKE.
+					var nspacl tree.Datum = tree.DNull
+					if sc.SchemaKind() != catalog.SchemaVirtual {
+						var err error
+						nspacl, err = privilegeDescriptorToACLArray(
+							sc.GetPrivileges(), privilege.Schema,
+						)
+						if err != nil {
+							return err
+						}
+					}
 					return addRow(
 						schemaOid(sc.GetID()),         // oid
 						tree.NewDString(sc.GetName()), // nspname
 						ownerOID,                      // nspowner
-						tree.DNull,                    // nspacl
+						nspacl,                        // nspacl
 					)
 				})
 			})
@@ -2485,11 +2613,21 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 				} else if sc.SchemaKind() == catalog.SchemaVirtual {
 					ownerOID = nodeOID
 				}
+				var nspacl tree.Datum = tree.DNull
+				if sc.SchemaKind() != catalog.SchemaVirtual {
+					var err error
+					nspacl, err = privilegeDescriptorToACLArray(
+						sc.GetPrivileges(), privilege.Schema,
+					)
+					if err != nil {
+						return false, err
+					}
+				}
 				if err := addRow(
 					schemaOid(sc.GetID()),         // oid
 					tree.NewDString(sc.GetName()), // nspname
 					ownerOID,                      // nspowner
-					tree.DNull,                    // nspacl
+					nspacl,                        // nspacl
 				); err != nil {
 					return false, err
 				}
@@ -2927,6 +3065,12 @@ func addPgProcUDFRow(
 	if nArgDefaults > 0 {
 		argDefaults = tree.NewDString("(" + argDefaultsBuilder.String() + ")")
 	}
+	proacl, err := privilegeDescriptorToACLArray(
+		fnDesc.GetPrivileges(), privilege.Routine,
+	)
+	if err != nil {
+		return err
+	}
 	return addRow(
 		tree.NewDOid(catid.FuncIDToOID(fnDesc.GetID())), // oid
 		tree.NewDName(fnDesc.GetName()),                 // proname
@@ -2957,7 +3101,7 @@ func addPgProcUDFRow(
 		tree.DNull,                                      // probin
 		tree.DNull,                                      // prosqlbody
 		tree.DNull,                                      // proconfig
-		tree.DNull,                                      // proacl
+		proacl,                                          // proacl
 	)
 }
 
@@ -3685,7 +3829,7 @@ func addPGTypeRowForTable(
 		oidZero,         // typcollation
 		tree.DNull,      // typdefaultbin
 		tree.DNull,      // typdefault
-		tree.DNull,      // typacl
+		tree.DNull,      // typacl - composite types inherit table's ACL
 	)
 }
 
@@ -3695,6 +3839,7 @@ func addPGTypeRow(
 	owner tree.Datum,
 	typ *types.T,
 	isUDT bool,
+	privDesc *catpb.PrivilegeDescriptor,
 	addRow func(...tree.Datum) error,
 ) error {
 	cat := typCategory(typ)
@@ -3754,6 +3899,14 @@ func addPGTypeRow(
 	}
 	typname := typ.PGName()
 	typDelim := tree.NewDString(typ.Delimiter())
+	var typacl tree.Datum = tree.DNull
+	if privDesc != nil {
+		var err error
+		typacl, err = privilegeDescriptorToACLArray(privDesc, privilege.Type)
+		if err != nil {
+			return err
+		}
+	}
 	return addRow(
 		tree.NewDOid(typ.Oid()), // oid
 		tree.NewDName(typname),  // typname
@@ -3788,7 +3941,7 @@ func addPGTypeRow(
 		typColl(typ, h), // typcollation
 		tree.DNull,      // typdefaultbin
 		tree.DNull,      // typdefault
-		tree.DNull,      // typacl
+		typacl,          // typacl
 	)
 }
 
@@ -3937,7 +4090,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 
 				// Generate rows for all predefined types.
 				for _, typ := range types.OidToType {
-					if err := addPGTypeRow(h, nspOid, tree.DNull /* owner */, typ, false /* isUDT */, addRow); err != nil {
+					if err := addPGTypeRow(h, nspOid, tree.DNull /* owner */, typ, false /* isUDT */, nil /* privDesc */, addRow); err != nil {
 						return err
 					}
 				}
@@ -3970,7 +4123,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 						if err != nil {
 							return err
 						}
-						return addPGTypeRow(h, nspOid, ownerOid, typ, true /* isUDT */, addRow)
+						return addPGTypeRow(h, nspOid, ownerOid, typ, true /* isUDT */, typDesc.GetPrivileges(), addRow)
 					},
 				)
 			},
@@ -3990,7 +4143,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				// Check if it is a predefined type.
 				typ, ok := types.OidToType[ooid]
 				if ok {
-					if err := addPGTypeRow(h, nspOid, tree.DNull /* owner */, typ, false /* isUDT */, addRow); err != nil {
+					if err := addPGTypeRow(h, nspOid, tree.DNull /* owner */, typ, false /* isUDT */, nil /* privDesc */, addRow); err != nil {
 						return false, err
 					}
 					return true, nil
@@ -4063,7 +4216,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 				if err != nil {
 					return false, err
 				}
-				if err := addPGTypeRow(h, nspOid, ownerOid, typ, true /* isUDT */, addRow); err != nil {
+				if err := addPGTypeRow(h, nspOid, ownerOid, typ, true /* isUDT */, typDesc.GetPrivileges(), addRow); err != nil {
 					return false, err
 				}
 

@@ -176,8 +176,6 @@ func newAclexplodeGenerator(
 	}
 
 	for _, aclDatum := range aclArr.Array {
-		// Each aclitem is a string in the format "grantee=privchars/grantor".
-		// An empty grantee means PUBLIC (OID 0).
 		var aclStr string
 		switch d := tree.UnwrapDOidWrapper(aclDatum).(type) {
 		case *tree.DString:
@@ -186,52 +184,29 @@ func newAclexplodeGenerator(
 			continue
 		}
 
-		// Parse grantee (possibly quoted), then expect '='.
-		granteeStr, i := privilege.ExtractACLIdentifier(aclStr, 0)
-		if i < 0 || i >= len(aclStr) || aclStr[i] != '=' {
+		aclItem, err := privilege.ParseACLItem(aclStr)
+		if err != nil {
 			continue
-		}
-		i++ // skip '='
-
-		// Parse privchars until '/' or end of string.
-		privStart := i
-		for i < len(aclStr) && aclStr[i] != '/' {
-			i++
-		}
-		privChars := aclStr[privStart:i]
-
-		// Parse grantor (possibly quoted) after '/'.
-		var grantorStr string
-		if i < len(aclStr) && aclStr[i] == '/' {
-			i++ // skip '/'
-			grantorStr, i = privilege.ExtractACLIdentifier(aclStr, i)
-			if i < 0 {
-				continue
-			}
 		}
 
 		// Resolve role names to OIDs.
+		granteeStr := ""
+		if !aclItem.Grantee.IsPublicRole() {
+			granteeStr = aclItem.Grantee.Normalized()
+		}
 		granteeOid, err := cachedResolveRoleOid(granteeStr)
 		if err != nil {
 			return nil, err
 		}
-		grantorOid, err := cachedResolveRoleOid(grantorStr)
+		grantorOid, err := cachedResolveRoleOid(aclItem.Grantor.Normalized())
 		if err != nil {
 			return nil, err
 		}
 
-		// Iterate over privilege characters. A '*' after a character means
-		// the privilege is grantable.
-		for j := 0; j < len(privChars); j++ {
-			ch := privChars[j]
-			if ch == '*' {
-				continue
-			}
-			privName, ok := privilege.ACLCharToPrivName[ch]
-			if !ok {
-				continue
-			}
-			grantable := j+1 < len(privChars) && privChars[j+1] == '*'
+		// Each privilege produces a row.
+		for _, kind := range aclItem.Privileges {
+			privName := string(kind.DisplayName())
+			grantable := aclItem.GrantOptions.Contains(kind)
 			items = append(items, aclexplodeRow{
 				grantor:       tree.NewDOid(grantorOid),
 				grantee:       tree.NewDOid(granteeOid),

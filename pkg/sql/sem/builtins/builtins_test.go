@@ -767,6 +767,107 @@ func TestPGBuiltinsCalledOnNull(t *testing.T) {
 	}
 }
 
+// TestAclDefaultPublicPrivileges verifies that the public role's default
+// privileges returned by acldefault match the actual privileges that
+// CockroachDB grants to the public role on newly created objects.
+func TestAclDefaultPublicPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	// Create a non-root user to own objects.
+	tdb.Exec(t, "CREATE USER testowner")
+	tdb.Exec(t, "GRANT ALL ON DATABASE defaultdb TO testowner WITH GRANT OPTION")
+
+	// Create test objects as testowner with default privileges.
+	tdb.Exec(t, "SET ROLE testowner")
+	tdb.Exec(t, "CREATE TABLE test_acl_t (id INT PRIMARY KEY)")
+	tdb.Exec(t, "CREATE SEQUENCE test_acl_seq")
+	tdb.Exec(t, "CREATE SCHEMA test_acl_s")
+	tdb.Exec(t, "CREATE FUNCTION test_acl_fn() RETURNS INT LANGUAGE SQL AS 'SELECT 1'")
+	tdb.Exec(t, "CREATE TYPE test_acl_type AS ENUM ('a', 'b')")
+	tdb.Exec(t, "SET ROLE root")
+
+	// For each object type, extract the public role's privileges from
+	// acldefault (via aclexplode) and compare against the actual
+	// privileges from SHOW GRANTS.
+	testCases := []struct {
+		name     string
+		typeChar string
+		// grantsQuery returns (privilege_type, is_grantable) for the
+		// public role on the object.
+		grantsQuery string
+	}{
+		{
+			name:     "table",
+			typeChar: "r",
+			grantsQuery: `SELECT privilege_type, is_grantable
+				FROM [SHOW GRANTS ON TABLE test_acl_t]
+				WHERE grantee = 'public'
+				ORDER BY privilege_type`,
+		},
+		{
+			name:     "sequence",
+			typeChar: "s",
+			grantsQuery: `SELECT privilege_type, is_grantable
+				FROM [SHOW GRANTS ON SEQUENCE test_acl_seq]
+				WHERE grantee = 'public'
+				ORDER BY privilege_type`,
+		},
+		{
+			name:     "schema",
+			typeChar: "n",
+			grantsQuery: `SELECT privilege_type, is_grantable
+				FROM [SHOW GRANTS ON SCHEMA test_acl_s]
+				WHERE grantee = 'public'
+				ORDER BY privilege_type`,
+		},
+		{
+			name:     "function",
+			typeChar: "f",
+			grantsQuery: `SELECT privilege_type, is_grantable
+				FROM [SHOW GRANTS ON FUNCTION test_acl_fn]
+				WHERE grantee = 'public'
+				ORDER BY privilege_type`,
+		},
+		{
+			name:     "type",
+			typeChar: "T",
+			grantsQuery: `SELECT privilege_type, is_grantable
+				FROM [SHOW GRANTS ON TYPE test_acl_type]
+				WHERE grantee = 'public'
+				ORDER BY privilege_type`,
+		},
+	}
+
+	ownerOID := tdb.QueryStr(t,
+		"SELECT oid FROM pg_roles WHERE rolname = 'testowner'")
+	require.Len(t, ownerOID, 1)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Extract public role privileges from acldefault.
+			acldefaultQuery := fmt.Sprintf(`
+				SELECT a.privilege_type,
+					CASE WHEN a.is_grantable THEN 'true' ELSE 'false' END
+				FROM aclexplode(acldefault('%s'::"char", %s::oid)) a
+				WHERE a.grantee = 0
+				ORDER BY a.privilege_type`,
+				tc.typeChar, ownerOID[0][0])
+			expected := tdb.QueryStr(t, acldefaultQuery)
+			actual := tdb.QueryStr(t, tc.grantsQuery)
+			require.Equal(t, expected, actual,
+				"acldefault('%s') public role privileges do not match "+
+					"actual defaults", tc.typeChar)
+		})
+	}
+}
+
 func TestBitmaskOrAndXor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	testCases := []struct {

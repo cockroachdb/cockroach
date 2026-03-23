@@ -71,48 +71,6 @@ func TestPrivilegeListFormat(t *testing.T) {
 	}
 }
 
-func TestValidateACLItemString(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	testCases := []struct {
-		input string
-		err   string
-	}{
-		// Valid cases.
-		{input: "user1=r/"},
-		{input: "user1=r/grantor"},
-		{input: "=rw/root"},
-		{input: "user1=arwdDxtXUCTcsAm/"},
-		{input: "user1=r*w/"},
-		{input: "user1=/"},
-		{input: "user1=r"},
-		{input: `"user with spaces"=r/`},
-		{input: `"user-1"=rw/`},
-		{input: `"user""quote"=r/`},
-		{input: `user1=r/"grantor-1"`},
-
-		// Invalid cases.
-		{input: "user1=z/", err: `invalid mode character: "z"`},
-		{input: "user1rw/", err: `missing "=" sign`},
-		{input: "user1=*r/", err: `"*" must follow a privilege character`},
-		{input: "user1=r/grantor extra", err: "extra characters after aclitem specification"},
-		{input: `"unterminated=r/`, err: "unterminated quoted identifier"},
-		{input: `user1=r/"unterminated`, err: "unterminated quoted identifier"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.input, func(t *testing.T) {
-			err := privilege.ValidateACLItemString(tc.input)
-			if tc.err == "" {
-				require.NoError(t, err)
-			} else {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tc.err)
-			}
-		})
-	}
-}
-
 func TestQuoteACLIdentifier(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 

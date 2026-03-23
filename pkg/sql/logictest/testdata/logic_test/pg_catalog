@@ -430,7 +430,7 @@ crdb_internal       3233629770  NULL
 information_schema  3233629770  NULL
 pg_catalog          3233629770  NULL
 pg_extension        3233629770  NULL
-public              1546506610  NULL
+public              1546506610  {admin=CU/root,=CU/root,root=CU/root}
 
 # Verify that we can still see the schemas even if we don't have any privilege
 # on the current database.
@@ -449,7 +449,7 @@ crdb_internal       3233629770  NULL
 information_schema  3233629770  NULL
 pg_catalog          3233629770  NULL
 pg_extension        3233629770  NULL
-public              1546506610  NULL
+public              1546506610  {admin=CU/root,=CU/root,root=CU/root}
 
 user root
 
@@ -476,10 +476,10 @@ FROM pg_catalog.pg_database
 ORDER BY oid
 ----
 oid  datname        datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
-1    system         -1            0              NULL          NULL        0              NULL
+1    system         -1            0              NULL          NULL        0              {admin=c/node,root=c/node}
 100  defaultdb      -1            0              NULL          NULL        0              NULL
 102  postgres       -1            0              NULL          NULL        0              NULL
-104  test           -1            0              NULL          NULL        0              NULL
+104  test           -1            0              NULL          NULL        0              {admin=CcT/root,=c/root,root=CcT/root}
 108  constraint_db  -1            0              NULL          NULL        0              NULL
 
 user testuser
@@ -490,8 +490,8 @@ SELECT oid, datname, datconnlimit, datlastsysoid, datfrozenxid, datminmxid, datt
 FROM pg_catalog.pg_database
 ORDER BY oid LIMIT 1
 ----
-oid  datname        datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
-1    system         -1            0              NULL          NULL        0              NULL
+oid  datname  datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
+1    system   -1            0              NULL          NULL        0              {admin=c/node,root=c/node}
 
 user root
 
@@ -5680,5 +5680,215 @@ ORDER BY 1
 relname                    indisprimary  indkey  indoption
 idx_c_d                    false         3 4     2 2
 t_indkey_not_visible_pkey  true          1 2     1 2
+
+subtest end
+
+subtest pg_catalog_acl_columns
+
+# Verify that ACL columns return NULL when privileges match defaults
+# (matching PostgreSQL behavior), and non-NULL after modification.
+
+# relacl: NULL for tables with default privileges and virtual tables.
+query T
+SELECT relacl FROM pg_class WHERE relname = 't1'
+----
+NULL
+
+query T
+SELECT relacl FROM pg_class WHERE relname = 'pg_class'
+----
+NULL
+
+# relacl: non-NULL after GRANT.
+statement ok
+GRANT SELECT ON t1 TO testuser WITH GRANT OPTION
+
+query T
+SELECT relacl FROM pg_class WHERE relname = 't1'
+----
+{admin=Cradwtm/root,root=Cradwtm/root,testuser=r*/root}
+
+# relacl: returns to NULL after revoking back to defaults.
+statement ok
+REVOKE SELECT ON t1 FROM testuser
+
+query T
+SELECT relacl FROM pg_class WHERE relname = 't1'
+----
+NULL
+
+# nspacl: non-NULL for public schema (has PUBLIC privileges beyond defaults).
+# NULL for virtual schemas.
+query T
+SELECT nspacl FROM pg_namespace WHERE nspname = 'public'
+----
+{admin=CU/root,=CU/root,root=CU/root}
+
+query T
+SELECT nspacl FROM pg_namespace WHERE nspname = 'pg_catalog'
+----
+NULL
+
+# nspacl: NULL for user-defined schema with default privileges.
+statement ok
+CREATE SCHEMA acl_test_schema
+
+query T
+SELECT nspacl FROM pg_namespace WHERE nspname = 'acl_test_schema'
+----
+NULL
+
+# nspacl: non-NULL after GRANT.
+statement ok
+GRANT USAGE ON SCHEMA acl_test_schema TO testuser
+
+query T
+SELECT nspacl FROM pg_namespace WHERE nspname = 'acl_test_schema'
+----
+{admin=CU/root,root=CU/root,testuser=U/root}
+
+# nspacl: returns to NULL after revoking back to defaults.
+statement ok
+REVOKE USAGE ON SCHEMA acl_test_schema FROM testuser
+
+query T
+SELECT nspacl FROM pg_namespace WHERE nspname = 'acl_test_schema'
+----
+NULL
+
+# datacl: NULL for databases with default privileges.
+query T
+SELECT datacl FROM pg_database WHERE datname = 'defaultdb'
+----
+NULL
+
+# datacl: non-NULL after GRANT.
+statement ok
+GRANT CONNECT ON DATABASE defaultdb TO testuser
+
+query T
+SELECT datacl FROM pg_database WHERE datname = 'defaultdb'
+----
+{admin=CcT/root,=cT/root,root=CcT/root,testuser=c/root}
+
+# datacl: returns to NULL after revoking back to defaults.
+statement ok
+REVOKE CONNECT ON DATABASE defaultdb FROM testuser
+
+query T
+SELECT datacl FROM pg_database WHERE datname = 'defaultdb'
+----
+NULL
+
+# proacl: NULL for user-defined functions with default privileges.
+# NULL for builtins.
+statement ok
+CREATE FUNCTION acl_test_fn() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
+
+query T
+SELECT proacl FROM pg_proc WHERE proname = 'acl_test_fn'
+----
+NULL
+
+# proacl: non-NULL after revoking from PUBLIC.
+statement ok
+REVOKE EXECUTE ON FUNCTION acl_test_fn FROM public
+
+query T
+SELECT proacl FROM pg_proc WHERE proname = 'acl_test_fn'
+----
+{admin=X/root,root=X/root}
+
+# proacl: returns to NULL after restoring defaults.
+statement ok
+GRANT EXECUTE ON FUNCTION acl_test_fn TO public
+
+query T
+SELECT proacl FROM pg_proc WHERE proname = 'acl_test_fn'
+----
+NULL
+
+query T
+SELECT proacl FROM pg_proc WHERE proname = 'substring' LIMIT 1
+----
+NULL
+
+# typacl: NULL for user-defined types with default privileges and built-in types.
+statement ok
+CREATE TYPE acl_test_type AS ENUM ('x', 'y')
+
+query T
+SELECT typacl FROM pg_type WHERE typname = 'acl_test_type'
+----
+NULL
+
+query T
+SELECT typacl FROM pg_type WHERE typname = 'int4'
+----
+NULL
+
+# typacl: non-NULL after revoking from PUBLIC.
+statement ok
+REVOKE USAGE ON TYPE acl_test_type FROM public
+
+query T
+SELECT typacl FROM pg_type WHERE typname = 'acl_test_type'
+----
+{admin=U/root,root=U/root}
+
+# typacl: returns to NULL after restoring defaults.
+statement ok
+GRANT USAGE ON TYPE acl_test_type TO public
+
+query T
+SELECT typacl FROM pg_type WHERE typname = 'acl_test_type'
+----
+NULL
+
+# ACL columns for objects owned by a non-root user.
+# The owner's implicit ALL privileges should appear in the ACL array,
+# and default privileges should still return NULL.
+
+statement ok
+CREATE USER testowner
+
+statement ok
+CREATE TABLE testowner_table (id INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE testowner_table OWNER TO testowner
+
+# relacl: NULL for table with default privileges, even with non-root owner.
+query T
+SELECT relacl FROM pg_class WHERE relname = 'testowner_table'
+----
+NULL
+
+# relacl: non-NULL after GRANT, includes the owner entry.
+statement ok
+GRANT SELECT ON testowner_table TO testuser
+
+query T
+SELECT relacl FROM pg_class WHERE relname = 'testowner_table'
+----
+{admin=Cradwtm/testowner,root=Cradwtm/testowner,testuser=r/testowner,testowner=Cradwtm/testowner}
+
+# relacl: returns to NULL after revoking back to defaults.
+statement ok
+REVOKE SELECT ON testowner_table FROM testuser
+
+query T
+SELECT relacl FROM pg_class WHERE relname = 'testowner_table'
+----
+NULL
+
+# nspacl: NULL for schema with default privileges owned by non-root user.
+statement ok
+CREATE SCHEMA testowner_schema AUTHORIZATION testowner
+
+query T
+SELECT nspacl FROM pg_namespace WHERE nspname = 'testowner_schema'
+----
+NULL
 
 subtest end

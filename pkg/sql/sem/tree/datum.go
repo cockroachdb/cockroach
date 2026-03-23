@@ -5843,18 +5843,18 @@ func NewDName(d string) Datum {
 // aclitem OID, initialized from an existing *DString. It validates the format
 // and returns an error if the string is not a valid aclitem.
 func NewDACLItemFromDString(d *DString) (Datum, error) {
-	if err := privilege.ValidateACLItemString(string(*d)); err != nil {
+	if _, err := privilege.ParseACLItem(string(*d)); err != nil {
 		return nil, err
 	}
 	return wrapWithOid(d, oidext.T_aclitem), nil
 }
 
-// NewDACLItem is a helper routine to create a *DOidWrapper with aclitem OID,
-// initialized from a string in the format "grantee=privchars/grantor".
-// It validates the format and returns an error if the string is not valid.
-func NewDACLItem(d string) (Datum, error) {
-	s := DString(d)
-	return NewDACLItemFromDString(&s)
+// NewDACLItem creates a *DOidWrapper with aclitem OID from a structured
+// privilege.ACLItem. No validation is performed since the ACLItem is
+// already well-formed.
+func NewDACLItem(item privilege.ACLItem) Datum {
+	s := DString(item.String())
+	return wrapWithOid(&s, oidext.T_aclitem)
 }
 
 // NewDCIText is a helper routine to create a *DCIText (implemented as a *DOidWrapper)
