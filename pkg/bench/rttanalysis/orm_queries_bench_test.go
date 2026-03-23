@@ -1192,6 +1192,8 @@ EXECUTE FUNCTION trigger_func();
 `, i, i))
 	}
 	stmts = append(stmts, "COMMIT;")
+	stmts = append(stmts, "RESET use_declarative_schema_changer;")
+	stmts = append(stmts, "RESET autocommit_before_ddl;")
 	return stmts
 }
 
