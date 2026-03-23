@@ -31,6 +31,8 @@ go_test(
     srcs = ["node_capacity_provider_test.go"],
     deps = [
         ":load",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/testutils",
         "//pkg/util/admission",
         "//pkg/util/stop",
