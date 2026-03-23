@@ -1191,9 +1191,9 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 	}
 
 	// Populate the known_hosts file with both internal and external IPs of all
-	// nodes in the cluster. Internal IPs are populated within its provider peers
-	// only, and external IPs are populated for all providers. Note that as a side
-	// effect, this creates the known hosts file in unhashed format, working
+	// nodes in the cluster. Internal IPs are populated within its network peer
+	// group only, and external IPs are populated for all nodes. Note that as a
+	// side effect, this creates the known hosts file in unhashed format, working
 	// around a limitation of jsch (which is used in jepsen tests).
 
 	mu := syncutil.Mutex{}
@@ -1201,31 +1201,52 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		node Node
 		ip   string
 	}
-	// Build a list of internal IPs for each provider and
+	// Build a list of internal IPs grouped by network peer group and
 	// public IPs for all nodes.
-	providerPrivateIPs := make(map[string][]nodeInfo)
+	//
+	// For most providers, VMs within the same provider can reach each other via
+	// private IPs, so they are grouped by provider. However, for AWS, each
+	// region has its own VPC, and cross-region private IP connectivity via VPC
+	// peering may not be reliably available (e.g., due to infrastructure
+	// configuration or peering state). We group AWS nodes by region to avoid
+	// ssh-keyscan timing out on potentially unreachable cross-region private
+	// IPs. This is safe because multi-region clusters advertise public IPs
+	// (see shouldAdvertisePublicIP).
+	networkPeerGroup := func(v vm.VM) string {
+		if v.Provider == aws.ProviderName {
+			// AWS zones are formatted as "<region><az-letter>" (e.g. "us-east-1a").
+			// Strip the trailing letter to get the region.
+			zone := v.Zone
+			if len(zone) > 0 {
+				return v.Provider + ":" + zone[:len(zone)-1]
+			}
+		}
+		return v.Provider
+	}
+	peerGroupPrivateIPs := make(map[string][]nodeInfo)
 	publicIPs := make([]string, 0, len(c.Nodes))
 	for _, node := range c.Nodes {
 		v := c.VMs[node-1]
-		providerPrivateIPs[v.Provider] = append(providerPrivateIPs[v.Provider], nodeInfo{node: node, ip: v.PrivateIP})
+		group := networkPeerGroup(v)
+		peerGroupPrivateIPs[group] = append(peerGroupPrivateIPs[group], nodeInfo{node: node, ip: v.PrivateIP})
 		publicIPs = append(publicIPs, c.Host(node))
 	}
 
-	providerKnownHostData := make(map[string][]byte)
-	providers := maps.Keys(providerPrivateIPs)
+	peerGroupKnownHostData := make(map[string][]byte)
+	peerGroups := maps.Keys(peerGroupPrivateIPs)
 
-	// Only need to scan on the first node of each provider.
-	firstNodes := make([]Node, len(providers))
-	for i, provider := range providers {
-		firstNodes[i] = providerPrivateIPs[provider][0].node
+	// Only need to scan on the first node of each peer group.
+	firstNodes := make([]Node, len(peerGroups))
+	for i, group := range peerGroups {
+		firstNodes[i] = peerGroupPrivateIPs[group][0].node
 	}
 	if err := c.Parallel(ctx, l, WithNodes(firstNodes).WithDisplay("scanning hosts"),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
-			// Scan a combination of all remote IPs and local IPs pertaining to this
-			// node's cloud provider.
+			// Scan a combination of all public IPs and private IPs within this
+			// node's network peer group.
 			scanIPs := append([]string{}, publicIPs...)
-			nodeProvider := c.VMs[node-1].Provider
-			for _, nodeInfo := range providerPrivateIPs[nodeProvider] {
+			nodeGroup := networkPeerGroup(c.VMs[node-1])
+			for _, nodeInfo := range peerGroupPrivateIPs[nodeGroup] {
 				scanIPs = append(scanIPs, nodeInfo.ip)
 			}
 
@@ -1263,7 +1284,7 @@ exit 1
 			}
 			mu.Lock()
 			defer mu.Unlock()
-			providerKnownHostData[nodeProvider] = []byte(res.Stdout)
+			peerGroupKnownHostData[nodeGroup] = []byte(res.Stdout)
 			return res, nil
 		}); err != nil {
 		return err
@@ -1271,7 +1292,7 @@ exit 1
 
 	if err := c.Parallel(ctx, l, WithNodes(c.Nodes).WithDisplay("distributing known_hosts"),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
-			provider := c.VMs[node-1].Provider
+			group := networkPeerGroup(c.VMs[node-1])
 			const cmd = `
 known_hosts_data="$(cat)"
 set -e
@@ -1300,7 +1321,7 @@ if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
 fi
 `
 			runOpts := defaultCmdOpts("ssh-dist-known-hosts")
-			runOpts.stdin = bytes.NewReader(providerKnownHostData[provider])
+			runOpts.stdin = bytes.NewReader(peerGroupKnownHostData[group])
 			return c.runCmdOnSingleNode(ctx, l, node, cmd, runOpts)
 		}); err != nil {
 		return err
