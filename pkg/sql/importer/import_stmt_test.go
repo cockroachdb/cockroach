@@ -244,6 +244,7 @@ func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.WithIssue(t, 166199)
 	skip.UnderRace(t, "takes >1min under race")
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
