@@ -59,7 +59,7 @@ func registerAcceptance(r registry.Registry) {
 				name: "many-splits", fn: runManySplits,
 				encryptionSupport: registry.EncryptionMetamorphic,
 			},
-			{name: "cli/node-status", fn: runCLINodeStatus},
+			{name: "cli/node-status", fn: runCLINodeStatus, numNodes: 5, timeout: 15 * time.Minute},
 			{name: "cluster-init", fn: runClusterInit},
 			{name: "rapid-restart", fn: runRapidRestart},
 		},
