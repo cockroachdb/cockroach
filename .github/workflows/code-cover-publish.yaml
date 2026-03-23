@@ -44,12 +44,12 @@ jobs:
           unzip cover.zip -d cover
 
       - name: 'Authenticate to Google Cloud'
-        uses: 'google-github-actions/auth@v1'
+        uses: 'google-github-actions/auth@3a3c4c57d294ef65efaaee4ff17b22fa88dd3c69' # v1
         with:
           credentials_json: '${{ secrets.CODECOVER_SERVICE_ACCOUNT_KEY }}'
 
       - name: 'Upload to GCS'
-        uses: 'google-github-actions/upload-cloud-storage@v1'
+        uses: 'google-github-actions/upload-cloud-storage@e95a15f226403ed658d3e65f40205649f342ba2c' # v1
         with:
           path: 'cover'
           glob: '**/cover-*.json'
