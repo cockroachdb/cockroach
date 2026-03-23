@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatsutil"
@@ -48,6 +49,7 @@ func TestWorkloadIDPropagation(t *testing.T) {
 
 	var admissionMu syncutil.Mutex
 	seenAdmissionIDs := make(map[uint64]struct{})
+	seenAdmissionTypes := make(map[uint64]workloadid.WorkloadType)
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -66,6 +68,7 @@ func TestWorkloadIDPropagation(t *testing.T) {
 					if info.WorkloadID != 0 {
 						admissionMu.Lock()
 						seenAdmissionIDs[info.WorkloadID] = struct{}{}
+						seenAdmissionTypes[info.WorkloadID] = info.WorkloadType
 						admissionMu.Unlock()
 					}
 				},
@@ -99,6 +102,7 @@ func TestWorkloadIDPropagation(t *testing.T) {
 	clearAdmissionIDs := func() {
 		admissionMu.Lock()
 		seenAdmissionIDs = make(map[uint64]struct{})
+		seenAdmissionTypes = make(map[uint64]workloadid.WorkloadType)
 		admissionMu.Unlock()
 	}
 	getAdmissionIDs := func() map[uint64]struct{} {
@@ -106,6 +110,13 @@ func TestWorkloadIDPropagation(t *testing.T) {
 		defer admissionMu.Unlock()
 		result := make(map[uint64]struct{}, len(seenAdmissionIDs))
 		maps.Copy(result, seenAdmissionIDs)
+		return result
+	}
+	getAdmissionTypes := func() map[uint64]workloadid.WorkloadType {
+		admissionMu.Lock()
+		defer admissionMu.Unlock()
+		result := make(map[uint64]workloadid.WorkloadType, len(seenAdmissionTypes))
+		maps.Copy(result, seenAdmissionTypes)
 		return result
 	}
 
@@ -183,6 +194,12 @@ func TestWorkloadIDPropagation(t *testing.T) {
 			captured := getAdmissionIDs()
 			assertWorkloadIDMatch(t, runner, appName,
 				"SELECT * FROM t WHERE v", captured)
+			// Verify WorkloadType is set (not UNKNOWN) for all captured IDs.
+			for wid, wtype := range getAdmissionTypes() {
+				require.NotEqual(t, workloadid.WorkloadTypeUnknown, wtype,
+					"admission WorkInfo for workload ID %d has WorkloadType=UNKNOWN; "+
+						"fetcher should propagate the type", wid)
+			}
 		})
 
 		// Streamer path: a lookup join goes through the KV streamer's
@@ -194,6 +211,12 @@ func TestWorkloadIDPropagation(t *testing.T) {
 			runner.Exec(t, "SELECT count(*) FROM t INNER LOOKUP JOIN t2 ON t.v = t2.id")
 			captured := getAdmissionIDs()
 			assertWorkloadIDMatch(t, runner, appName, "LOOKUP JOIN t2", captured)
+			// Verify WorkloadType is set (not UNKNOWN) for all captured IDs.
+			for wid, wtype := range getAdmissionTypes() {
+				require.NotEqual(t, workloadid.WorkloadTypeUnknown, wtype,
+					"admission WorkInfo for workload ID %d has WorkloadType=UNKNOWN; "+
+						"streamer should propagate the type", wid)
+			}
 		})
 	})
 

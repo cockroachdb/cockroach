@@ -596,6 +596,7 @@ func newJoinReader(
 			spec.FetchSpec.External,
 			row.FetchSpecRequiresRawMVCCValues(spec.FetchSpec),
 			flowCtx.EvalCtx.WorkloadID,
+			flowCtx.EvalCtx.WorkloadType,
 		)
 	} else {
 		// When not using the Streamer API, we want to limit the batch size hint

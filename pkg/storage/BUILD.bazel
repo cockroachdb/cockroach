@@ -60,6 +60,7 @@ go_library(
         "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/diskmap",
         "//pkg/kv/kvserver/uncertainty",
+        "//pkg/obs/workloadid",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/settings",

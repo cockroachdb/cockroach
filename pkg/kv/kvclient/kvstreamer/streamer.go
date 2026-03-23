@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -404,6 +405,7 @@ func NewStreamer(
 	lockDurability lock.Durability,
 	reverse bool,
 	workloadID uint64,
+	workloadType workloadid.WorkloadType,
 ) *Streamer {
 	if txn.Type() != kv.LeafTxn {
 		panic(errors.AssertionFailedf("RootTxn is given to the Streamer"))
@@ -449,6 +451,7 @@ func NewStreamer(
 		requestAdmissionHeader: txn.AdmissionHeader(),
 		responseAdmissionQ:     txn.DB().SQLKVResponseAdmissionQ,
 		workloadID:             workloadID,
+		workloadType:           workloadType,
 	}
 	s.coordinator.asyncSem = quotapool.NewIntPool(
 		"single Streamer async concurrency",
@@ -923,6 +926,8 @@ type workerCoordinator struct {
 	// workloadID is the identifier for the workload that triggered this
 	// request (e.g. statement fingerprint ID) for ASH sampling.
 	workloadID uint64
+	// workloadType distinguishes the kind of workload for ASH sampling.
+	workloadType workloadid.WorkloadType
 }
 
 // mainLoop runs throughout the lifetime of the Streamer (from the first Enqueue
@@ -1559,10 +1564,11 @@ func (w *workerCoordinator) performRequestAsync(
 		// Do admission control after we've finalized the memory accounting.
 		if br != nil && w.responseAdmissionQ != nil {
 			responseAdmission := admission.WorkInfo{
-				TenantID:   roachpb.SystemTenantID,
-				Priority:   admissionpb.WorkPriority(w.requestAdmissionHeader.Priority),
-				CreateTime: w.requestAdmissionHeader.CreateTime,
-				WorkloadID: w.workloadID,
+				TenantID:     roachpb.SystemTenantID,
+				Priority:     admissionpb.WorkPriority(w.requestAdmissionHeader.Priority),
+				CreateTime:   w.requestAdmissionHeader.CreateTime,
+				WorkloadID:   w.workloadID,
+				WorkloadType: w.workloadType,
 			}
 			if _, err = w.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
 				log.VEventf(ctx, 2, "dropping response: admission control: %v", err)
