@@ -813,6 +813,11 @@ func registerKVSplits(r registry.Registry) {
 				nodes := c.Spec().NodeCount - 1
 
 				settings := install.MakeClusterSettings()
+				// Enable continuous Go execution tracing to aid diagnosis of
+				// overload-driven failures. See #166402.
+				settings.ClusterSettings["obs.execution_tracer.interval"] = "10s"
+				settings.ClusterSettings["obs.execution_tracer.duration"] = "10s"
+				settings.ClusterSettings["obs.execution_tracer.total_dump_size_limit"] = "10 GiB"
 				settings.Env = append(settings.Env, "COCKROACH_MEMPROF_INTERVAL=1m", "COCKROACH_DISABLE_QUIESCENCE="+strconv.FormatBool(!item.quiesce))
 				settings.Env = append(settings.Env, item.envVars...)
 				if !item.quiesce {
