@@ -244,7 +244,6 @@ func TestImportData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 166199)
 	skip.UnderRace(t, "takes >1min under race")
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -957,22 +956,36 @@ func TestImportData(t *testing.T) {
 		},
 	}
 
-	var mockRecorder struct {
-		syncutil.Mutex
-		dataString, rejectedString string
+	// mockData stores per-subtest import data and rejected row output, keyed
+	// by a unique path. This allows subtests to run in parallel without sharing
+	// mutable state.
+	type mockTestData struct {
+		dataString     string
+		rejectedString string
+		mu             syncutil.Mutex
 	}
+	var mockData syncutil.Map[string, mockTestData]
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mockRecorder.Lock()
-		defer mockRecorder.Unlock()
+		// The .rejected suffix is appended by the import job when writing
+		// rejected rows; strip it to find the test data entry.
+		path := strings.TrimSuffix(r.URL.Path, ".rejected")
+		td, ok := mockData.Load(path)
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		td.mu.Lock()
+		defer td.mu.Unlock()
 		if r.Method == "GET" {
-			fmt.Fprint(w, mockRecorder.dataString)
+			fmt.Fprint(w, td.dataString)
 		}
 		if r.Method == "PUT" {
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
 				panic(err)
 			}
-			mockRecorder.rejectedString = string(body)
+			td.rejectedString = string(body)
 		}
 	}))
 	defer srv.Close()
@@ -982,71 +995,116 @@ func TestImportData(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE blah (i int8)`)
 	sqlDB.Exec(t, `DROP TABLE blah`)
 
-	for _, saveRejected := range []bool{false, true} {
-		// this test is big and slow as is, so we can't afford to double it in race.
-		if util.RaceEnabled && saveRejected {
-			continue
-		}
-
-		for i, tc := range tests {
-			if tc.typ != "CSV" && tc.typ != "DELIMITED" && saveRejected {
+	// Use a subtest group so the parent waits for all parallel subtests to
+	// finish before tearing down the server and DB. Limit concurrency to
+	// avoid exhausting the single-node server's bulk ingest memory budget.
+	const maxParallelImports = 4
+	sem := make(chan struct{}, maxParallelImports)
+	t.Run("group", func(t *testing.T) {
+		for _, saveRejected := range []bool{false, true} {
+			// this test is big and slow as is, so we can't afford to double it in race.
+			if util.RaceEnabled && saveRejected {
 				continue
 			}
-			if saveRejected {
-				if tc.with == "" {
-					tc.with = "WITH experimental_save_rejected"
-				} else {
-					tc.with += ", experimental_save_rejected"
-				}
-			}
-			t.Run(fmt.Sprintf("%s/%s: save_rejected=%v", tc.typ, tc.name, saveRejected), func(t *testing.T) {
-				dbName := fmt.Sprintf("d%d", i)
-				if saveRejected {
-					dbName = dbName + "_save"
-				}
-				sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s; USE %[1]s`, dbName))
-				defer func() {
-					sqlDB.CheckQueryResultsRetry(t,
-						fmt.Sprintf(`SELECT count(*) FROM %s.crdb_internal.invalid_objects`, dbName),
-						[][]string{{"0"}},
-					)
-					// This DROP may fail in the face of OFFLINE descriptors,
-					// proceed on a best-effort basis.
-					_, _ = db.Exec(fmt.Sprintf("DROP DATABASE %s", dbName))
-				}()
-				var q string
-				if tc.create != "" {
-					sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, tc.create))
-					q = fmt.Sprintf(`IMPORT INTO t %s DATA ($1) %s`, tc.typ, tc.with)
-				} else {
-					q = fmt.Sprintf(`IMPORT %s ($1) %s`, tc.typ, tc.with)
-				}
-				mockRecorder.dataString = tc.data
-				mockRecorder.rejectedString = ""
-				if !saveRejected || tc.rejected == "" {
-					sqlDB.ExpectErr(t, tc.err, q, srv.URL)
-				} else {
-					sqlDB.Exec(t, q, srv.URL)
-				}
-				if tc.err == "" || saveRejected {
-					for query, res := range tc.query {
-						sqlDB.CheckQueryResults(t, query, res)
-					}
-					if tc.rejected != mockRecorder.rejectedString {
-						t.Errorf("expected:\n%q\ngot:\n%q\n", tc.rejected,
-							mockRecorder.rejectedString)
-					}
-				}
-			})
-		}
-	}
 
-	t.Run("mysqlout multiple", func(t *testing.T) {
-		sqlDB.Exec(t, `CREATE DATABASE mysqlout; USE mysqlout`)
-		mockRecorder.dataString = "1"
-		sqlDB.Exec(t, `CREATE TABLE t (s STRING)`)
-		sqlDB.Exec(t, `IMPORT INTO t DELIMITED DATA ($1, $1)`, srv.URL)
-		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1"}, {"1"}})
+			for i, tc := range tests {
+				if tc.typ != "CSV" && tc.typ != "DELIMITED" && saveRejected {
+					continue
+				}
+				if saveRejected {
+					// Only run save_rejected=true for test cases that actually verify
+					// rejected row output. The other cases just re-run the same import
+					// with the flag and provide no unique coverage, but each takes ~7s
+					// of import job overhead, causing the overall test to time out.
+					if tc.rejected == "" {
+						continue
+					}
+				}
+				// Copy loop variables for the closure.
+				i, tc, saveRejected := i, tc, saveRejected
+				if saveRejected {
+					if tc.with == "" {
+						tc.with = "WITH experimental_save_rejected"
+					} else {
+						tc.with += ", experimental_save_rejected"
+					}
+				}
+				t.Run(fmt.Sprintf("%s/%s: save_rejected=%v", tc.typ, tc.name, saveRejected), func(t *testing.T) {
+					t.Parallel()
+					sem <- struct{}{}
+					defer func() { <-sem }()
+					dbName := fmt.Sprintf("d%d", i)
+					if saveRejected {
+						dbName = dbName + "_save"
+					}
+					// Each parallel subtest needs its own connection so that USE
+					// doesn't interfere with other subtests.
+					conn, err := db.Conn(ctx)
+					require.NoError(t, err)
+					defer func() { _ = conn.Close() }()
+					connDB := sqlutils.MakeSQLRunner(conn)
+
+					connDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s; USE %[1]s`, dbName))
+					defer func() {
+						connDB.CheckQueryResultsRetry(t,
+							fmt.Sprintf(`SELECT count(*) FROM %s.crdb_internal.invalid_objects`, dbName),
+							[][]string{{"0"}},
+						)
+						// This DROP may fail in the face of OFFLINE descriptors,
+						// proceed on a best-effort basis.
+						_, _ = conn.ExecContext(ctx, fmt.Sprintf("DROP DATABASE %s", dbName))
+					}()
+
+					// Register per-subtest data at a unique path.
+					dataPath := fmt.Sprintf("/data/%d/%v", i, saveRejected)
+					td := &mockTestData{dataString: tc.data}
+					mockData.Store(dataPath, td)
+					dataURL := srv.URL + dataPath
+
+					var q string
+					if tc.create != "" {
+						connDB.Exec(t, fmt.Sprintf(`CREATE TABLE t (%s)`, tc.create))
+						q = fmt.Sprintf(`IMPORT INTO t %s DATA ($1) %s`, tc.typ, tc.with)
+					} else {
+						q = fmt.Sprintf(`IMPORT %s ($1) %s`, tc.typ, tc.with)
+					}
+					if !saveRejected || tc.rejected == "" {
+						connDB.ExpectErr(t, tc.err, q, dataURL)
+					} else {
+						connDB.Exec(t, q, dataURL)
+					}
+					if tc.err == "" || saveRejected {
+						for query, res := range tc.query {
+							connDB.CheckQueryResults(t, query, res)
+						}
+						td.mu.Lock()
+						rejectedString := td.rejectedString
+						td.mu.Unlock()
+						if tc.rejected != rejectedString {
+							t.Errorf("expected:\n%q\ngot:\n%q\n", tc.rejected,
+								rejectedString)
+						}
+					}
+				})
+			}
+		}
+
+		t.Run("mysqlout multiple", func(t *testing.T) {
+			t.Parallel()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			conn, err := db.Conn(ctx)
+			require.NoError(t, err)
+			defer func() { _ = conn.Close() }()
+			connDB := sqlutils.MakeSQLRunner(conn)
+			connDB.Exec(t, `CREATE DATABASE mysqlout; USE mysqlout`)
+			dataPath := "/data/mysqlout"
+			mockData.Store(dataPath, &mockTestData{dataString: "1"})
+			dataURL := srv.URL + dataPath
+			connDB.Exec(t, `CREATE TABLE t (s STRING)`)
+			connDB.Exec(t, `IMPORT INTO t DELIMITED DATA ($1, $1)`, dataURL)
+			connDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1"}, {"1"}})
+		})
 	})
 }
 
