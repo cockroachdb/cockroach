@@ -64,28 +64,28 @@ rebalance-stores store-id=1
 [mmaid=1] cluster means: (stores-load [cpu:950ns/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:unknown/s, byte-size:1.0 kB]) (nodes-cpu-load 950) (nodes-cpu-capacity 1000)
 [mmaid=1] load summary for dim=CPURate (s1): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
-[mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] evaluating s1: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] overload-start s1 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - grace period expired
 [mmaid=1] store s1 was added to shedding store list
 [mmaid=1] load summary for dim=CPURate (s2): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
-[mmaid=1] load summary for dim=ByteSize (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n2): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] evaluating s2: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] overload-start s2 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - grace period expired
 [mmaid=1] store s2 was added to shedding store list
 [mmaid=1] load summary for dim=CPURate (s3): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
-[mmaid=1] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n3): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] evaluating s3: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] overload-start s3 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - grace period expired
 [mmaid=1] store s3 was added to shedding store list
 [mmaid=1] load summary for dim=CPURate (s4): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
-[mmaid=1] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n4): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] evaluating s4: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
 [mmaid=1] overload-start s4 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - grace period expired
@@ -97,15 +97,15 @@ rebalance-stores store-id=1
 [mmaid=1] considering lease-transfer r1 from s1: candidates are [2 3]
 [mmaid=1] load summary for dim=CPURate (s1): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
-[mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (s2): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
-[mmaid=1] load summary for dim=ByteSize (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s2): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n2): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (s3): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
-[mmaid=1] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s3): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n3): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] candidate store 2 was discarded due to (nls=false overloadDim=true pending_thresh=false): sls=(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))
 [mmaid=1] candidate store 3 was discarded due to (nls=false overloadDim=true pending_thresh=false): sls=(store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))
@@ -114,11 +114,11 @@ rebalance-stores store-id=1
 [mmaid=1] attempting to shed replicas next
 [mmaid=1] load summary for dim=CPURate (s1): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
-[mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s1): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n1): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (s4): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] load summary for dim=WriteBandwidth (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0]
-[mmaid=1] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00% meanUtil=0.00% capacity=1000]
+[mmaid=1] load summary for dim=ByteSize (s4): loadNormal, reason: load is within 5% of mean [load=0 meanLoad=0 fractionUsed=0.00%* meanUtil=0.00% capacity=1000]
 [mmaid=1] load summary for dim=CPURate (n4): overloadUrgent, reason: fractionUsed > 90% [load=950 meanLoad=950 fractionUsed=95.00% meanUtil=95.00% capacity=1000]
 [mmaid=1] considering replica-transfer r1 from s1: store load [cpu:950ns/s, write-bandwidth:0 B/s, byte-size:0 B]
 [mmaid=1] candidates for r1:
