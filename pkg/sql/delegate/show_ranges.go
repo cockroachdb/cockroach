@@ -426,6 +426,10 @@ all_span_stats AS (
 			endKey,
 		)
 	}
+	// If zone config was requested, include it via the builtin.
+	if n.Options.Zone {
+		buf.WriteString(",\n  crdb_internal.zone_config_for_key(r.start_key) AS zone_config")
+	}
 	buf.WriteString("\nFROM named_ranges r)\n")
 
 	// Time to assemble the final projection.
@@ -714,6 +718,11 @@ all_span_stats AS (
 			fmt.Fprintf(&buf, ",\n  %s", tree.NameString(colinfo.Ranges[i].Name))
 		}
 		buf.WriteString(",\n  span_stats")
+	}
+
+	// If zone config was requested, propagate the column.
+	if n.Options.Zone {
+		buf.WriteString(",\n  zone_config")
 	}
 
 	// Complete this CTE. and add an order if needed.

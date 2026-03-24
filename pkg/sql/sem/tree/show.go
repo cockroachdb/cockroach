@@ -1140,6 +1140,7 @@ type ShowRangesOptions struct {
 	Details bool
 	Explain bool
 	Keys    bool
+	Zone    bool
 	Mode    ShowRangesMode
 }
 
@@ -1204,6 +1205,11 @@ func (node *ShowRangesOptions) Format(ctx *FmtCtx) {
 	if node.Explain {
 		ctx.WriteString(comma)
 		ctx.WriteString("EXPLAIN")
+		comma = ", "
+	}
+	if node.Zone {
+		ctx.WriteString(comma)
+		ctx.WriteString("ZONE")
 		comma = ", "
 	}
 	if node.Mode != UniqueRanges {
