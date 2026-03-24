@@ -105,6 +105,8 @@ USE test;`)
 	return b.String()
 }
 
+// BenchmarkAlterRegions is a benchmark for adding and dropping regions in a multi-region database.
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterRegions(b *testing.B) { multiRegionReg.Run(b) }
 func init() {
 	multiRegionReg.Register("AlterRegions", []RoundTripBenchTestCase{
@@ -135,6 +137,8 @@ func init() {
 	})
 }
 
+// BenchmarkAlterPrimaryRegion is a benchmark for setting and altering the primary region of a multi-region database.
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterPrimaryRegion(b *testing.B) { multiRegionReg.Run(b) }
 func init() {
 	multiRegionReg.Register("AlterPrimaryRegion", []RoundTripBenchTestCase{
@@ -178,6 +182,8 @@ CREATE TABLE test10 (p int);
 	})
 }
 
+// BenchmarkAlterSurvivalGoals is a benchmark for altering the survival goals of a multi-region database.
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterSurvivalGoals(b *testing.B) { multiRegionReg.Run(b) }
 func init() {
 	multiRegionReg.Register("AlterSurvivalGoals", []RoundTripBenchTestCase{
@@ -209,6 +215,8 @@ ALTER DATABASE test SURVIVE REGION FAILURE`,
 	})
 }
 
+// BenchmarkAlterTableLocality is a benchmark for altering the locality of a table in a multi-region database.
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterTableLocality(b *testing.B) { multiRegionReg.Run(b) }
 func init() {
 	multiRegionReg.Register("AlterTableLocality", []RoundTripBenchTestCase{
@@ -275,6 +283,8 @@ CREATE TABLE test (p int) WITH (schema_locked = false) LOCALITY REGIONAL BY ROW;
 	})
 }
 
+// BenchmarkMultiRegionVirtualTableQueries is a benchmark for virtual table queries in a multi-region setup.
+// benchmark-ci: benchtime=20x
 func BenchmarkMultiRegionVirtualTableQueries(b *testing.B) { multiRegionReg.Run(b) }
 func init() {
 	multiRegionReg.Register("MultiRegionVirtualTableQueries", []RoundTripBenchTestCase{

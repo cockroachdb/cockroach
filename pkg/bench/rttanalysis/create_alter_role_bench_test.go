@@ -13,6 +13,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 )
 
+// BenchmarkCreateRole is a benchmark for the CREATE ROLE statement.
+// benchmark-ci: benchtime=20x
 func BenchmarkCreateRole(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("CreateRole", []RoundTripBenchTestCase{
@@ -39,6 +41,8 @@ func init() {
 	})
 }
 
+// BenchmarkAlterRole is a benchmark for the ALTER ROLE statement.
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterRole(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("AlterRole", []RoundTripBenchTestCase{
