@@ -267,6 +267,12 @@ type PrivilegeChecker interface {
 	// CurrentUser returns the user of current session.
 	CurrentUser() username.SQLUsername
 
+	// CheckPrivilegeForUser checks that the specified user has the given
+	// privilege on the element's descriptor.
+	CheckPrivilegeForUser(
+		e scpb.Element, priv privilege.Kind, user username.SQLUsername,
+	) error
+
 	// CheckRoleExists returns nil if `role` exists.
 	CheckRoleExists(ctx context.Context, role username.SQLUsername) error
 }

@@ -534,7 +534,7 @@ CREATE TYPE db1.sc1.typ AS ENUM ('a');
 statement ok
 SET CLUSTER SETTING jobs.debug.pausepoints="typeschemachanger.before.exec"
 
-skipif config local-legacy-schema-changer
+onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 statement error job \d+ was paused before it completed with reason: pause point "typeschemachanger.before.exec" hit
 ALTER TYPE db1.sc1.typ OWNER TO testuser
 
@@ -551,9 +551,11 @@ DROP SCHEMA db1.sc1 CASCADE
 statement ok
 SET CLUSTER SETTING jobs.debug.pausepoints=""
 
+onlyif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 statement ok
 RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'ALTER TYPE%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
 
+onlyif config local-legacy-schema-changer local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 statement ok
 RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'ALTER TYPE%' AND status='paused' FETCH FIRST 1 ROWS ONLY);
 

@@ -206,9 +206,8 @@ StatementPhase stage 1 of 1 with 53 MutationType ops
         DescriptorID: 108
         Name: fooview
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 108
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 108
     *scop.RemoveUserPrivileges
       DescriptorID: 108
       User: admin
@@ -676,9 +675,8 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 61 MutationType ops
         DescriptorID: 108
         Name: fooview
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 108
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 108
     *scop.RemoveUserPrivileges
       DescriptorID: 108
       User: admin
@@ -1798,9 +1796,8 @@ StatementPhase stage 1 of 1 with 52 MutationType ops
         DescriptorID: 108
         Name: fooview
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 108
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 108
     *scop.RemoveUserPrivileges
       DescriptorID: 108
       User: admin
@@ -2283,9 +2280,8 @@ PostCommitNonRevertiblePhase stage 1 of 3 with 64 MutationType ops
         DescriptorID: 108
         Name: fooview
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 108
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 108
     *scop.RemoveUserPrivileges
       DescriptorID: 108
       User: admin

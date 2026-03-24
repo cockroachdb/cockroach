@@ -575,5 +575,13 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 			TypeName: fullyQualifiedName(b, enumType),
 		}
 	}
+	if _, _, aliasType := scpb.FindAliasType(b.QueryByID(screl.GetDescID(pb.Element()))); aliasType != nil {
+		if pb.maybePayload != nil {
+			return pb.maybePayload
+		}
+		return &eventpb.AlterType{
+			TypeName: fullyQualifiedName(b, aliasType),
+		}
+	}
 	return nil
 }

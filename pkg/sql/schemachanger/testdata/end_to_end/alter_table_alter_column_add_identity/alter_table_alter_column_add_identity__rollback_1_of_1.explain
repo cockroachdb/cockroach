@@ -35,7 +35,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ALTER COLUMN 
       │         ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":105}
       │         ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":105}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":105}
-      │         ├── NotImplementedForPublicObjects {"DescID":105,"ElementType":"scpb.Owner"}
+      │         ├── RemoveOwner {"DescriptorID":105}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"admin"}
       │         ├── RemoveUserPrivileges {"DescriptorID":105,"User":"root"}
       │         ├── RemoveSequenceOwner {"ColumnID":2,"OwnedSequenceID":105,"TableID":104}

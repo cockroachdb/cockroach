@@ -1097,6 +1097,13 @@ type UpdateOwner struct {
 	Owner scpb.Owner
 }
 
+// RemoveOwner is a noop. The descriptor drop or the UpdateOwner handles the
+// state change.
+type RemoveOwner struct {
+	immediateMutationOp
+	DescriptorID descpb.ID
+}
+
 type CreateSchemaDescriptor struct {
 	immediateMutationOp
 	SchemaID descpb.ID

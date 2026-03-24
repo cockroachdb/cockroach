@@ -157,6 +157,7 @@ type ImmediateMutationVisitor interface {
 	SetObjectParentID(context.Context, SetObjectParentID) error
 	UpdateUserPrivileges(context.Context, UpdateUserPrivileges) error
 	UpdateOwner(context.Context, UpdateOwner) error
+	RemoveOwner(context.Context, RemoveOwner) error
 	CreateSchemaDescriptor(context.Context, CreateSchemaDescriptor) error
 	CreateSequenceDescriptor(context.Context, CreateSequenceDescriptor) error
 	SetSequenceOption(context.Context, SetSequenceOption) error
@@ -892,6 +893,11 @@ func (op UpdateUserPrivileges) Visit(ctx context.Context, v ImmediateMutationVis
 // Visit is part of the ImmediateMutationOp interface.
 func (op UpdateOwner) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
 	return v.UpdateOwner(ctx, op)
+}
+
+// Visit is part of the ImmediateMutationOp interface.
+func (op RemoveOwner) Visit(ctx context.Context, v ImmediateMutationVisitor) error {
+	return v.RemoveOwner(ctx, op)
 }
 
 // Visit is part of the ImmediateMutationOp interface.

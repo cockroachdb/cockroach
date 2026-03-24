@@ -876,6 +876,20 @@ public  root  NULL  NULL  NULL  NULL
 sc      u     NULL  NULL  NULL  NULL
 
 # Verify that events were logged.
+onlyif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query ITT
+SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnReadTimestamp'
+  FROM system.eventlog
+ WHERE "eventType" LIKE '%_owner'
+ORDER BY "timestamp", info
+----
+1  alter_database_owner  {"DatabaseName": "atest", "EventType": "alter_database_owner", "Owner": "u", "Statement": "ALTER DATABASE atest OWNER TO u", "Tag": "ALTER DATABASE", "User": "root"}
+1  alter_schema_owner    {"EventType": "alter_schema_owner", "Owner": "u", "SchemaName": "atest.sc", "Statement": "ALTER SCHEMA atest.sc OWNER TO u", "Tag": "ALTER SCHEMA", "User": "root"}
+1  alter_table_owner     {"EventType": "alter_table_owner", "Owner": "u", "Statement": "ALTER TABLE atest.sc.t OWNER TO u", "TableName": "atest.sc.t", "Tag": "ALTER TABLE", "User": "root"}
+1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "Tag": "ALTER TYPE", "TypeName": "atest.sc.ty", "User": "root"}
+1  alter_type_owner      {"EventType": "alter_type_owner", "Owner": "u", "Statement": "ALTER TYPE atest.sc.ty OWNER TO u", "Tag": "ALTER TYPE", "TypeName": "atest.sc._ty", "User": "root"}
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
 query ITT
 SELECT "reportingID", "eventType", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnReadTimestamp'
   FROM system.eventlog
