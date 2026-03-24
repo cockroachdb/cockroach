@@ -43,6 +43,8 @@ func (s *Exception) PlpgSQLStatementTag() string {
 	return "proc_exception"
 }
 
+func (s *Exception) HumanReadableStmtTag() string { return "exception handler" }
+
 func (s *Exception) WalkStmt(visitor StatementVisitor) Statement {
 	newStmt, recurse := visitor.Visit(s)
 	if recurse {

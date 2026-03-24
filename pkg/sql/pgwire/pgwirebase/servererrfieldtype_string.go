@@ -23,6 +23,7 @@ func _() {
 	_ = x[ServerErrFieldSrcLine-76]
 	_ = x[ServerErrFieldSrcFunction-82]
 	_ = x[ServerErrFieldConstraintName-110]
+	_ = x[ServerErrFieldContext-87]
 }
 
 func (i ServerErrFieldType) String() string {
@@ -47,6 +48,8 @@ func (i ServerErrFieldType) String() string {
 		return "ServerErrFieldSrcFunction"
 	case ServerErrFieldConstraintName:
 		return "ServerErrFieldConstraintName"
+	case ServerErrFieldContext:
+		return "ServerErrFieldContext"
 	default:
 		return "ServerErrFieldType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}

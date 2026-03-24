@@ -3745,6 +3745,7 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 		nil,   /* blockState */
 		nil,   /* cursorDeclaration */
 		nil,   /* firstStmtResultWriter */
+		udf.Def.PLpgSQLCtx,
 	)
 
 	var ep execPlan
