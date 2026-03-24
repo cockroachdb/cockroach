@@ -74,13 +74,13 @@ CREATE FUNCTION public.f_test_alter_name(INT8)
   SELECT 1;
 $$
 
-statement error pgcode 42723 pq: function f_test_alter_name\(INT8\) already exists in schema "public"
+statement error pgcode 42723 pq: function public.f_test_alter_name\(INT8\) already exists in schema "public"
 ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name
 
-statement error pgcode 42723 pq: function f_test_alter_name_same_in\(INT8\) already exists in schema "public"
+statement error pgcode 42723 pq: function public.f_test_alter_name_same_in\(INT8\) already exists in schema "public"
 ALTER FUNCTION f_test_alter_name RENAME TO f_test_alter_name_same_in
 
-statement error pgcode 42723 pq: procedure p\(INT8\) already exists in schema "public"
+statement error pgcode 42723 pq: procedure public.p\(INT8\) already exists in schema "public"
 ALTER FUNCTION f_test_alter_name RENAME TO p
 
 statement error pgcode 42883 could not find a procedure named "f_test_alter_name"
@@ -139,6 +139,38 @@ $$
 statement ok
 DROP PROCEDURE p
 
+# Regression test: renaming a function in a non-public schema should
+# detect duplicate (name, arguments) within that schema. Two functions
+# with different arguments can have the same name.
+# Overloaded functions cannot be dropped or renamed without specifying
+# the function signature.
+statement ok
+CREATE SCHEMA rename_dup_sc;
+CREATE FUNCTION rename_dup_sc.fa(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a $$;
+CREATE FUNCTION rename_dup_sc.fb(a INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a $$;
+CREATE FUNCTION rename_dup_sc.fc(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$ SELECT a + b $$
+
+statement error pgcode 42723 pq: function rename_dup_sc.fa\(INT8\) already exists in schema "rename_dup_sc"
+ALTER FUNCTION rename_dup_sc.fb RENAME TO fa
+
+statement ok
+ALTER FUNCTION rename_dup_sc.fb RENAME TO fc
+
+statement error pgcode 42725 pq: function name "fc" is not unique
+ALTER FUNCTION rename_dup_sc.fc RENAME TO fb
+
+statement error pgcode 42725 pq: function name "fc" is not unique
+DROP FUNCTION rename_dup_sc.fc
+
+statement ok
+ALTER FUNCTION rename_dup_sc.fc(INT) RENAME TO fb
+
+statement ok
+DROP FUNCTION rename_dup_sc.fa;
+DROP FUNCTION rename_dup_sc.fb;
+DROP FUNCTION rename_dup_sc.fc;
+DROP SCHEMA rename_dup_sc
+
 subtest end
 
 subtest alter_function_set_schema
@@ -175,9 +207,9 @@ SELECT oid, proname, prosrc
 FROM pg_catalog.pg_proc WHERE proname IN ('f_test_sc')
 ORDER BY oid
 ----
-100113  f_test_sc  SELECT 1;
-100114  f_test_sc  SELECT 2;
-100116  f_test_sc  SELECT 3;
+100117  f_test_sc  SELECT 1;
+100118  f_test_sc  SELECT 2;
+100120  f_test_sc  SELECT 3;
 
 query TT
   WITH fns AS (
@@ -198,9 +230,9 @@ SELECT fn->>'id' AS id, fn->'parentSchemaId'
   FROM fns
   ORDER BY id;
 ----
-113  105
-114  105
-116  115
+117  105
+118  105
+120  119
 
 statement error pgcode 0A000 pq: cannot move objects into or out of virtual schemas
 ALTER FUNCTION f_test_sc() SET SCHEMA pg_catalog;
@@ -234,9 +266,9 @@ SELECT fn->>'id' AS id, fn->'parentSchemaId'
   FROM fns
   ORDER BY id;
 ----
-113  105
-114  105
-116  115
+117  105
+118  105
+120  119
 
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_sc] ORDER BY 1
@@ -286,9 +318,9 @@ SELECT fn->>'id' AS id, fn->'parentSchemaId'
   FROM fns
   ORDER BY id;
 ----
-113  105
-114  115
-116  115
+117  105
+118  119
+120  119
 
 query T
 SELECT create_statement FROM [SHOW CREATE FUNCTION public.f_test_sc];
