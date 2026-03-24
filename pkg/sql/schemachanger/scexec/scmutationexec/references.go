@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -878,6 +879,13 @@ func (i *immediateVisitor) SetObjectParentID(ctx context.Context, op scop.SetObj
 			}
 		}
 		sc.AddFunction(obj.GetName(), ol)
+	case *typedesc.Mutable:
+		sc, err := i.checkOutSchema(ctx, op.ObjParent.SchemaID)
+		if err != nil {
+			return err
+		}
+		t.ParentID = sc.GetParentID()
+		t.ParentSchemaID = sc.GetID()
 	}
 	return nil
 }

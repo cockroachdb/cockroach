@@ -16,8 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -34,7 +36,7 @@ var supportedAlterTypeStatements = map[reflect.Type]supportedAlterTypeCommand{
 	reflect.TypeOf((*tree.AlterTypeAddValue)(nil)):    {fn: alterTypeAddValue, on: true, checks: isV263Active},
 	reflect.TypeOf((*tree.AlterTypeRenameValue)(nil)): {fn: alterTypeRenameValue, on: true, checks: isV263Active},
 	reflect.TypeOf((*tree.AlterTypeRename)(nil)):      {fn: alterTypeRename, on: false, checks: nil},
-	reflect.TypeOf((*tree.AlterTypeSetSchema)(nil)):   {fn: alterTypeSetSchema, on: false, checks: nil},
+	reflect.TypeOf((*tree.AlterTypeSetSchema)(nil)):   {fn: alterTypeSetSchema, on: true, checks: isV263Active},
 	reflect.TypeOf((*tree.AlterTypeOwner)(nil)):       {fn: alterTypeOwner, on: false, checks: nil},
 	reflect.TypeOf((*tree.AlterTypeDropValue)(nil)):   {fn: alterTypeDropValue, on: true, checks: isV263Active},
 }
@@ -280,7 +282,71 @@ func alterTypeRename(
 func alterTypeSetSchema(
 	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeSetSchema,
 ) {
-	panic(scerrors.NotImplementedErrorf(t, "ALTER TYPE SET SCHEMA is not supported"))
+	typeID := enumType.TypeID
+
+	currNamespace := mustRetrieveNamespaceElem(b, typeID)
+	currSchemaID := currNamespace.SchemaID
+	panicIfSchemaIsTemporaryOrVirtual(t.Schema)
+	newSchema := resolveSchemaByName(b, t.Schema, currNamespace.DatabaseID)
+	newSchemaID := newSchema.SchemaID
+
+	checkSchemaCreatePrivilege(b, newSchema)
+
+	if currSchemaID == newSchemaID {
+		return
+	}
+
+	currName := tree.MakeTableNameFromPrefix(b.NamePrefix(enumType), tree.Name(currNamespace.Name))
+	newName := currName
+	newName.SchemaName = t.Schema
+
+	checkTableNameConflicts(b, currName, newName, currNamespace)
+
+	newNS, newSchemaChild := moveDescriptorToSchema(b, typeID, currNamespace, newSchemaID)
+	arrayNamespace := mustRetrieveNamespaceElem(b, enumType.ArrayTypeID)
+	moveDescriptorToSchema(b, enumType.ArrayTypeID, arrayNamespace, newSchemaID)
+
+	b.LogEventForExistingPayload(newNS, &eventpb.SetSchema{
+		DescriptorName:    currName.FQString(),
+		NewDescriptorName: newName.FQString(),
+		DescriptorType:    "type",
+	})
+	b.LogEventForExistingPayload(newSchemaChild, &eventpb.AlterType{
+		TypeName: currName.FQString(),
+	})
+}
+
+// moveDescriptorToSchema drops the old Namespace and SchemaChild elements for
+// the given descriptor and adds new ones with the updated schema ID.
+// It returns the new Namespace and SchemaChild elements.
+func moveDescriptorToSchema(
+	b BuildCtx, descID catid.DescID, currNamespace *scpb.Namespace, newSchemaID catid.DescID,
+) (*scpb.Namespace, *scpb.SchemaChild) {
+	// Drop old namespace and add new one.
+	newNamespace := *currNamespace
+	newNamespace.SchemaID = newSchemaID
+	b.Drop(currNamespace)
+	b.Add(&newNamespace)
+
+	// Drop old schema child and add new one.
+	currSchemaChild := b.QueryByID(descID).FilterSchemaChild().MustGetOneElement()
+	newSchemaChild := &scpb.SchemaChild{
+		ChildObjectID: descID,
+		SchemaID:      newSchemaID,
+	}
+	b.Drop(currSchemaChild)
+	b.Add(newSchemaChild)
+
+	return &newNamespace, newSchemaChild
+}
+
+func checkSchemaCreatePrivilege(b BuildCtx, schema *scpb.Schema) {
+	if schema.IsPublic {
+		return
+	}
+	if err := b.CheckPrivilege(schema, privilege.CREATE); err != nil {
+		panic(err)
+	}
 }
 
 func alterTypeOwner(

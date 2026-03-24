@@ -165,21 +165,18 @@ func checkTableNameConflicts(
 
 func getRelationElement(
 	elts ElementResultSet,
-) (descID catid.DescID, element scpb.Element, isTemp bool) {
+) (descID catid.DescID, element scpb.Element) {
 	if tbl := elts.FilterTable().MustGetZeroOrOneElement(); tbl != nil {
 		element = tbl
 		descID = tbl.TableID
-		isTemp = tbl.IsTemporary
 	} else if view := elts.FilterView().MustGetZeroOrOneElement(); view != nil {
 		element = view
 		descID = view.ViewID
-		isTemp = view.IsTemporary
 	} else if seq := elts.FilterSequence().MustGetZeroOrOneElement(); seq != nil {
 		element = seq
 		descID = seq.SequenceID
-		isTemp = seq.IsTemporary
 	}
-	return descID, element, isTemp
+	return descID, element
 }
 
 // validateObjectType validates that the resolved object type matches what was
