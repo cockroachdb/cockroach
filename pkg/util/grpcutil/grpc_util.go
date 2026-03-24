@@ -80,6 +80,9 @@ func IsContextCanceled(err error) bool {
 // IsClosedConnection returns true if err's Cause is an error produced by gRPC
 // on closed connections.
 func IsClosedConnection(err error) bool {
+	if err == nil {
+		return false
+	}
 	if errors.Is(err, ErrConnectionInterrupted) {
 		return true
 	}
