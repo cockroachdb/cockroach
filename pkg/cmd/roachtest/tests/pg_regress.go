@@ -1424,8 +1424,8 @@ index 2c0f87a651..26bd75bbf0 100644
  
  -- **************** pg_class ****************
 `},
-	// TODO(#114676): Remove the patch around wslot_slotlink_view when
-	// the internal error is fixed.
+	// TODO(yuzefovich): this no longer hits an internal error so no need to
+	// comment it out.
 	{"plpgsql.sql", `diff --git a/src/test/regress/sql/plpgsql.sql b/src/test/regress/sql/plpgsql.sql
 index 924d524094..eb7bc0cf87 100644
 --- a/src/test/regress/sql/plpgsql.sql
