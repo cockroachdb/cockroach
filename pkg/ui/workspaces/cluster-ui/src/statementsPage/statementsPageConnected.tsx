@@ -7,8 +7,7 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
 
-import { StatementsRequest } from "src/api/statementsApi";
-import { AppState, uiConfigActions } from "src/store";
+import { AppState } from "src/store";
 import { actions as analyticsActions } from "src/store/analytics";
 import { actions as databasesListActions } from "src/store/databasesList";
 import {
@@ -17,22 +16,10 @@ import {
   updateStmsPageReqSortAction,
 } from "src/store/localStorage";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
-import { actions as statementDiagnosticsActions } from "src/store/statementDiagnostics";
 
-import {
-  InsertStmtDiagnosticRequest,
-  StatementDiagnosticsReport,
-  SqlStatsSortType,
-} from "../api";
-import {
-  actions as nodesActions,
-  nodeRegionsByIDSelector,
-} from "../store/nodes";
-import {
-  selectIsTenant,
-  selectHasViewActivityRedactedRole,
-  selectHasAdminRole,
-} from "../store/uiConfig";
+import { StatementDiagnosticsReport, SqlStatsSortType } from "../api";
+import { Filters } from "../queryFilter";
+import { selectIsTenant } from "../store/uiConfig";
 import {
   selectTimeScale,
   selectStmtsPageLimit,
@@ -91,28 +78,17 @@ export const ConnectedStatementsPage = withRouter(
         timeScale: selectTimeScale(state),
         filters: selectFilters(state),
         isTenant: selectIsTenant(state),
-        hasViewActivityRedactedRole: selectHasViewActivityRedactedRole(state),
-        hasAdminRole: selectHasAdminRole(state),
-        nodeRegions: nodeRegionsByIDSelector(state),
         search: selectSearch(state),
         sortSetting: selectSortSetting(state),
         limit: selectStmtsPageLimit(state),
         requestTime: selectRequestTime(state),
         reqSortSetting: selectStmtsPageReqSort(state),
-        stmtsTotalRuntimeSecs:
-          state.adminUI?.statements?.data?.stmts_total_runtime_secs ?? 0,
-        statementsResponse: state.adminUI.statements,
-        statementDiagnostics: state.adminUI.statementDiagnostics?.data,
-        oldestDataAvailable:
-          state.adminUI?.statements?.data?.oldest_aggregated_ts_returned,
       },
       activePageProps: mapStateToActiveStatementsPageProps(state),
     }),
     (dispatch: Dispatch) => ({
       fingerprintsPageProps: {
         refreshDatabases: () => dispatch(databasesListActions.refresh()),
-        refreshStatements: (req: StatementsRequest) =>
-          dispatch(sqlStatsActions.refresh(req)),
         onTimeScaleChange: (ts: TimeScale) => {
           dispatch(
             sqlStatsActions.updateTimeScale({
@@ -120,36 +96,15 @@ export const ConnectedStatementsPage = withRouter(
             }),
           );
         },
-        refreshStatementDiagnosticsRequests: () =>
-          dispatch(statementDiagnosticsActions.refresh()),
-        refreshNodes: () => dispatch(nodesActions.refresh()),
-        refreshUserSQLRoles: () =>
-          dispatch(uiConfigActions.refreshUserSQLRoles()),
-        resetSQLStats: () => dispatch(sqlStatsActions.reset()),
-        dismissAlertMessage: () =>
-          dispatch(
-            localStorageActions.update({
-              key: "adminUi/showDiagnosticsModal",
-              value: false,
-            }),
-          ),
-        onActivateStatementDiagnostics: (
-          insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest,
-        ) => {
-          dispatch(
-            statementDiagnosticsActions.createReport(
-              insertStmtDiagnosticsRequest,
-            ),
-          );
+        onActivateStatementDiagnosticsAnalytics: () =>
           dispatch(
             analyticsActions.track({
               name: "Statement Diagnostics Clicked",
               page: "Statements",
               action: "Activated",
             }),
-          );
-        },
-        onSelectDiagnosticsReportDropdownOption: (
+          ),
+        onDiagnosticsReportDropdownOptionAnalytics: (
           report: StatementDiagnosticsReport,
         ) => {
           if (report.completed) {
@@ -161,11 +116,6 @@ export const ConnectedStatementsPage = withRouter(
               }),
             );
           } else {
-            dispatch(
-              statementDiagnosticsActions.cancelReport({
-                requestId: report.id,
-              }),
-            );
             dispatch(
               analyticsActions.track({
                 name: "Statement Diagnostics Clicked",
@@ -189,7 +139,7 @@ export const ConnectedStatementsPage = withRouter(
             }),
           );
         },
-        onFilterChange: (value: any) => {
+        onFilterChange: (value: Filters) => {
           dispatch(
             analyticsActions.track({
               name: "Filter Clicked",
@@ -240,10 +190,6 @@ export const ConnectedStatementsPage = withRouter(
               page: "Statements",
             }),
           ),
-        // We use `null` when the value was never set and it will show all columns.
-        // If the user modifies the selection and no columns are selected,
-        // the function will save the value as a blank space, otherwise
-        // it gets saved as `null`.
         onColumnsChange: (selectedColumns: string[]) =>
           dispatch(
             localStorageActions.update({

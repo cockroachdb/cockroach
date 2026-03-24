@@ -4,8 +4,6 @@
 // included in the /LICENSE file.
 
 /* eslint-disable prettier/prettier */
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import * as protos from "@cockroachlabs/crdb-protobuf-client";
 import { createMemoryHistory } from "history";
 import noop from "lodash/noop";
 import Long from "long";
@@ -13,16 +11,12 @@ import moment from "moment-timezone";
 
 import { DEFAULT_STATS_REQ_OPTIONS } from "src/api/statementsApi";
 import { mockStmtStats } from "src/api/testUtils";
-import { RequestError } from "src/util";
 
 import { StatementDiagnosticsReport } from "../api";
 
 import { StatementsPageProps } from "./statementsPage";
 
 const history = createMemoryHistory({ initialEntries: ["/statements"] });
-const timestamp = new protos.google.protobuf.Timestamp({
-  seconds: new Long(Date.parse("Sep 15 2021 01:00:00 GMT") * 1e-3),
-});
 
 const diagnosticsReports: StatementDiagnosticsReport[] = [
   {
@@ -59,9 +53,8 @@ const diagnosticsReportsInProgress: StatementDiagnosticsReport[] = [
 ];
 
 const aggregatedTs = Date.parse("Sep 15 2021 01:00:00 GMT") * 1e-3;
-const lastUpdated = moment("Sep 15 2021 01:30:00 GMT");
 
-const statementsDefault = [
+export const statementsDefault = [
   {
     aggregatedFingerprintID: "1253500548539870016",
     label:
@@ -318,21 +311,6 @@ const statementsDefault = [
 );
 
 const statementsPagePropsFixture: StatementsPageProps = {
-  stmtsTotalRuntimeSecs: 100,
-  statementsResponse: {
-    data: new cockroach.server.serverpb.StatementsResponse({
-      statements: statementsDefault,
-      transactions: [],
-      last_reset: null,
-      internal_app_name_prefix: "$ internal",
-      stmts_total_runtime_secs: 100,
-      txns_total_runtime_secs: 100,
-    }),
-    lastUpdated,
-    valid: true,
-    error: null,
-    inFlight: false,
-  },
   history,
   location: {
     pathname: "/statements",
@@ -347,12 +325,6 @@ const statementsPagePropsFixture: StatementsPageProps = {
     params: {},
   },
   databases: ["defaultdb", "foo", "system"],
-  nodeRegions: {
-    "1": "gcp-us-east1",
-    "2": "gcp-us-east1",
-    "3": "gcp-us-west1",
-    "4": "gcp-europe-west1",
-  },
   sortSetting: {
     ascending: false,
     columnTitle: "executionCount",
@@ -381,22 +353,10 @@ const statementsPagePropsFixture: StatementsPageProps = {
   },
   columns: null,
   isTenant: false,
-  hasViewActivityRedactedRole: false,
-  hasAdminRole: true,
-  statementDiagnostics: [],
-  oldestDataAvailable: timestamp,
-  dismissAlertMessage: noop,
   refreshDatabases: noop,
-  refreshStatementDiagnosticsRequests: noop,
-  refreshStatements: noop,
-  refreshUserSQLRoles: noop,
-  refreshNodes: noop,
-  resetSQLStats: noop,
   onTimeScaleChange: noop,
-  onActivateStatementDiagnostics: noop,
-  onDiagnosticsModalOpen: noop,
+  onDiagnosticsModalOpenAnalytics: noop,
   onSearchComplete: noop,
-  onSelectDiagnosticsReportDropdownOption: noop,
   onColumnsChange: noop,
   onSortingChange: noop,
   onFilterChange: noop,
@@ -404,18 +364,6 @@ const statementsPagePropsFixture: StatementsPageProps = {
   onChangeReqSort: noop,
   onApplySearchCriteria: noop,
   onRequestTimeChange: noop,
-};
-
-export const statementsPagePropsWithRequestError: StatementsPageProps = {
-  ...statementsPagePropsFixture,
-
-  statementsResponse: {
-    data: null,
-    lastUpdated,
-    valid: true,
-    error: new RequestError(403, "this operation requires admin privilege"),
-    inFlight: false,
-  },
 };
 
 export default statementsPagePropsFixture;
