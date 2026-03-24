@@ -362,3 +362,14 @@ USING MESSAGE = 'blah blah blah',
 COLUMN = 'foo';
 END;
  -- identifiers removed
+
+pretty
+DECLARE
+BEGIN
+RAISE EXCEPTION USING MESSAGE = "why is this so involved?";
+END
+----
+DECLARE
+BEGIN
+	RAISE EXCEPTION USING MESSAGE = "why is this so involved?";
+END;

@@ -79,6 +79,17 @@ RETURN QUERY (SELECT * FROM _ INNER JOIN _ ON _ = _);
 END;
  -- identifiers removed
 
+pretty
+DECLARE
+BEGIN
+RETURN QUERY SELECT 1 + 1;
+END
+----
+DECLARE
+BEGIN
+	RETURN QUERY SELECT 1 + 1;
+END;
+
 error
 DECLARE
 BEGIN

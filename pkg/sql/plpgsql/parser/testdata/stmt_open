@@ -144,3 +144,14 @@ DECLARE
 BEGIN
 OPEN curs1 FOR;
            ^
+
+pretty
+DECLARE
+BEGIN
+OPEN curs1;
+END
+----
+DECLARE
+BEGIN
+	OPEN curs1;
+END;

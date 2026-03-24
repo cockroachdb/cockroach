@@ -61,3 +61,16 @@ CONTINUE _;
 CONTINUE _ WHEN _;
 END;
  -- identifiers removed
+
+pretty
+DECLARE
+BEGIN
+EXIT some_label;
+EXIT some_label WHEN some_condition;
+END
+----
+DECLARE
+BEGIN
+	EXIT some_label;
+	EXIT some_label WHEN some_condition;
+END;

@@ -60,9 +60,11 @@ func parseOne(t *testing.T, input string, p Parser) (tree.NodeFormatter, error) 
 	return nil, fmt.Errorf("unreachable code")
 }
 
-// VerifyParseFormat is used in the SQL and PL/pgSQL datadriven parser tests to
-// check that a successfully parsed expression round trips and correctly handles
-// formatting flags.
+// VerifyParseFormat is used in datadriven parser tests. It parses the input
+// and returns the output from formatting the parsed statements with various flags.
+// It also ensures that pretty-printing round-trips by comparing the result of
+// formatting the original input statements with the result of formatting the
+// pretty-printed statements (i.e. Format(Parse(Pretty(AST))) == Format(AST)).
 //
 // -reParseWithoutLiterals indicates whether the statement should be re-parsed
 // after constants are removed. This can be needed to handle cases where quotes
@@ -125,6 +127,22 @@ func VerifyParseFormat(
 	}
 
 	return buf.String()
+}
+
+// VerifyParsePretty is used in datadriven parser tests to pretty-print a
+// parsed statement and return the result.
+func VerifyParsePretty(t *testing.T, input, pos string, p Parser) string {
+	t.Helper()
+	stmt, err := parseOne(t, input, p)
+	if err != nil {
+		t.Fatalf("%s\nunexpected parse error: %v", pos, err)
+	}
+	cfg := tree.DefaultPrettyCfg()
+	prettyStr, err := cfg.Pretty(stmt)
+	if err != nil {
+		t.Fatalf("%s\nunexpected pretty error: %v", pos, err)
+	}
+	return prettyStr + "\n"
 }
 
 var issueLinkRE = regexp.MustCompile("https://go.crdb.dev/issue-v/([0-9]+)/.*")

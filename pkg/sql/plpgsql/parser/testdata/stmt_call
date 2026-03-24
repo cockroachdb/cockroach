@@ -116,3 +116,12 @@ BEGIN
   CALL p 1 2;
             ^
 HINT: try \h SET SESSION
+
+pretty
+BEGIN
+CALL p();
+END
+----
+BEGIN
+	CALL p();
+END;

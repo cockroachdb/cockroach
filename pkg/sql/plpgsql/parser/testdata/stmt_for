@@ -363,3 +363,18 @@ using the support form.
 We appreciate your feedback.
 ----
 ----
+
+pretty
+DECLARE
+BEGIN
+FOR counter IN 1..5 LOOP
+RAISE NOTICE 'The counter is %', counter;
+END LOOP;
+END
+----
+DECLARE
+BEGIN
+	FOR counter IN 1..5 LOOP
+		RAISE NOTICE 'The counter is %', counter;
+	END LOOP;
+END;

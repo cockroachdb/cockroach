@@ -431,3 +431,16 @@ DECLARE
 BEGIN
   UPSERT INTO t1 VALUES (1,2) INTO y;
                                     ^
+
+pretty
+DECLARE
+BEGIN
+IMPORT INTO foo
+CSV DATA ('userfile://defaultdb.public.userfiles_root/db.sql')
+WITH max_row_size='524288';
+END
+----
+DECLARE
+BEGIN
+	IMPORT INTO foo CSV DATA ('userfile://defaultdb.public.userfiles_root/db.sql') WITH OPTIONS (max_row_size = '524288');
+END;

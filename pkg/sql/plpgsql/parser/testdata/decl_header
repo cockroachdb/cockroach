@@ -275,3 +275,16 @@ DECLARE
 HINT: you may have attempted to use %TYPE or %ROWTYPE syntax, which is unsupported.
 --
 See: https://go.crdb.dev/issue-v/114676/
+
+pretty
+<<foo>>
+DECLARE
+var1 integer := 30;
+BEGIN
+END
+----
+<<foo>>
+DECLARE
+	var1 INT8 := 30;
+BEGIN
+END foo;

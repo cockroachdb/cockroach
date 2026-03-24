@@ -796,3 +796,14 @@ BEGIN
 FETCH BACKWARD ALL FROM _ INTO _;
 END;
  -- identifiers removed
+
+pretty
+DECLARE
+BEGIN
+MOVE NEXT FROM emp_cur;
+END
+----
+DECLARE
+BEGIN
+	MOVE 1 FROM emp_cur;
+END;

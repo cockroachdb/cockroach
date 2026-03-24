@@ -135,3 +135,12 @@ BEGIN
   RETURN NEXT SELECT * FROM xy;
                             ^
 HINT: try \h SET SESSION
+
+pretty
+BEGIN
+RETURN NEXT foo;
+END
+----
+BEGIN
+	RETURN NEXT foo;
+END;

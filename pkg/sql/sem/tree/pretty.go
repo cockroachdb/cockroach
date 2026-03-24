@@ -179,6 +179,13 @@ func (p *PrettyCfg) docAsString(f NodeFormatter) pretty.Doc {
 	return pretty.Text(strings.TrimSpace(txt))
 }
 
+// HasFlags returns true if the given flags are set in the pretty-printer's
+// effective FmtFlags (which includes defaults like FmtParsable when no
+// explicit flags are configured).
+func (p *PrettyCfg) HasFlags(f FmtFlags) bool {
+	return p.fmtFlags().HasFlags(f)
+}
+
 func (p *PrettyCfg) fmtFlags() FmtFlags {
 	if p.FmtFlags != FmtFlags(0) {
 		return p.FmtFlags

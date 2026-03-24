@@ -380,7 +380,7 @@ func (s *ElseIf) WalkStmt(visitor StatementVisitor) Statement {
 // stmt_case
 type Case struct {
 	StatementImpl
-	// TODO(drewk): Change to Expr
+	// TODO(drewk): Change to Expr.
 	TestExpr     string
 	Var          Variable
 	CaseWhenList []*CaseWhen
@@ -402,6 +402,8 @@ func (s *Case) CopyNode() *Case {
 
 // TODO(drewk): fix the whitespace/newline formatting for CASE (see the
 // stmt_case test file).
+// TODO(yang): When this statement is implemented, also implement Doc() for the
+// pretty-printer.
 func (s *Case) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("CASE")
 	if len(s.TestExpr) > 0 {
@@ -455,7 +457,7 @@ func (s *Case) WalkStmt(visitor StatementVisitor) Statement {
 
 type CaseWhen struct {
 	StatementImpl
-	// TODO(drewk): Change to Expr
+	// TODO(drewk): Change to Expr.
 	Expr  string
 	Stmts []Statement
 }
@@ -466,6 +468,8 @@ func (s *CaseWhen) CopyNode() *CaseWhen {
 	return &copyNode
 }
 
+// TODO(yang): When this statement is implemented, also implement Doc() for the
+// pretty-printer.
 func (s *CaseWhen) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString(fmt.Sprintf("WHEN %s THEN\n", s.Expr))
 	for i, stmt := range s.Stmts {
@@ -714,6 +718,8 @@ type ForEachArray struct {
 }
 
 func (s *ForEachArray) Format(ctx *tree.FmtCtx) {
+	// TODO(yang): When this statement is implemented, also implement Doc()
+	// for the pretty-printer.
 }
 
 func (s *ForEachArray) PlpgSQLStatementTag() string {
@@ -904,15 +910,15 @@ func (s *Raise) Format(ctx *tree.FmtCtx) {
 	}
 	if s.Code != "" {
 		ctx.WriteString(" SQLSTATE ")
-		formatStringQuotes(ctx, s.Code)
+		ctx.WriteString(formatStringQuotes(ctx, s.Code))
 	}
 	if s.CodeName != "" {
 		ctx.WriteString(" ")
-		formatString(ctx, s.CodeName)
+		ctx.WriteString(formatString(ctx, s.CodeName))
 	}
 	if s.Message != "" {
 		ctx.WriteString(" ")
-		formatStringQuotes(ctx, s.Message)
+		ctx.WriteString(formatStringQuotes(ctx, s.Message))
 		for i := range s.Params {
 			ctx.WriteString(", ")
 			ctx.FormatNode(s.Params[i])
@@ -961,7 +967,7 @@ func (s *Assert) CopyNode() *Assert {
 }
 
 func (s *Assert) Format(ctx *tree.FmtCtx) {
-	// TODO(drewk): Pretty print the assert condition and message
+	// TODO(drewk): Pretty print the assert condition and message.
 	ctx.WriteString("ASSERT\n")
 }
 
@@ -1032,7 +1038,9 @@ func (s *DynamicExecute) CopyNode() *DynamicExecute {
 }
 
 func (s *DynamicExecute) Format(ctx *tree.FmtCtx) {
-	// TODO(drewk): Pretty print the original command
+	// TODO(drewk): Pretty print the original command.
+	// TODO(yang): When this statement is implemented, also implement Doc()
+	// for the pretty-printer.
 	ctx.WriteString("EXECUTE a dynamic command")
 	if s.Into {
 		ctx.WriteString(" WITH INTO")
@@ -1368,20 +1376,22 @@ func (s *Null) WalkStmt(visitor StatementVisitor) Statement {
 	return newStmt
 }
 
-// formatString is a helper function that prints "_" if FmtHideConstants is set,
-// and otherwise prints the given string.
-func formatString(ctx *tree.FmtCtx, str string) {
-	if ctx.HasFlags(tree.FmtHideConstants) {
-		ctx.WriteString("_")
-	} else {
-		ctx.WriteString(str)
-	}
+// flagChecker is implemented by both tree.FmtCtx and tree.PrettyCfg, allowing
+// format helpers to be used in both Format() and Doc() methods.
+type flagChecker interface {
+	HasFlags(tree.FmtFlags) bool
 }
 
-// formatStringQuotes is similar to formatString, but surrounds the output with
+// formatString returns "_" if FmtHideConstants is set, otherwise returns str.
+func formatString(f flagChecker, str string) string {
+	if f.HasFlags(tree.FmtHideConstants) {
+		return "_"
+	}
+	return str
+}
+
+// formatStringQuotes is like formatString but surrounds the output with
 // single quotes.
-func formatStringQuotes(ctx *tree.FmtCtx, str string) {
-	ctx.WriteString("'")
-	formatString(ctx, str)
-	ctx.WriteString("'")
+func formatStringQuotes(f flagChecker, str string) string {
+	return "'" + formatString(f, str) + "'"
 }
