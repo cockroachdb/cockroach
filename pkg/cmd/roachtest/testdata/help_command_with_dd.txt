@@ -14,6 +14,8 @@ See: [How To Investigate \(internal\)](https://cockroachlabs.atlassian.net/l/c/S
 See: [Grafana](https://go.crdb.dev/roachtest-grafana//acceptance-gossip-locality-address/1689957243000/1689957853000)
 
 
-_Logs were not uploaded to Datadog_
+
+See: [Datadog Logs](https://us5.datadoghq.com/logs?query=service%3Aroachtest+%40cluster%3Afoo-cluster&from_ts=1689957243000&to_ts=1689957853000&live=false&storage=flex_tier)
+
 ----
 ----
