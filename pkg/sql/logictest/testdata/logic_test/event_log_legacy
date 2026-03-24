@@ -938,6 +938,9 @@ DROP USER u
 subtest regression_57734
 
 statement ok
+USE defaultdb
+
+statement ok
 CREATE TYPE eventlog AS ENUM ('event', 'log')
 
 query ITT
