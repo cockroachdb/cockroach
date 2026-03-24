@@ -8,12 +8,14 @@ import Long from "long";
 import moment from "moment-timezone";
 
 import { fetchData } from "src/api/fetchData";
+import { TimeScale, toRoundedDateRange } from "src/timeScaleDropdown";
 import {
   FixFingerprintHexValue,
   HexStringToInt64String,
   NumericStat,
   propsToQueryString,
   stringToTimestamp,
+  useSwrWithClusterId,
 } from "src/util";
 
 import { AggregateStatistics } from "../statementsTable";
@@ -203,6 +205,43 @@ export type StatementRawFormat = {
   index_recommendations: string[];
   indexes_usage: string[];
 };
+
+export const STATEMENTS_SWR_KEY = "statements";
+
+export function useStatements(
+  timeScale: TimeScale | null,
+  limit: number,
+  sort: SqlStatsSortType,
+) {
+  const timeRange = timeScale ? toRoundedDateRange(timeScale) : null;
+  const startUnix = timeRange?.[0]?.unix();
+  const endUnix = timeRange?.[1]?.unix();
+
+  return useSwrWithClusterId<SqlStatsResponse>(
+    timeScale
+      ? {
+          name: STATEMENTS_SWR_KEY,
+          start: startUnix,
+          end: endUnix,
+          limit,
+          sort: Number(sort),
+        }
+      : null,
+    () =>
+      getCombinedStatements(
+        createCombinedStmtsRequest({
+          start: timeRange[0],
+          end: timeRange[1],
+          limit,
+          sort,
+        }),
+      ),
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
+  );
+}
 
 export function convertStatementRawFormatToAggregatedStatistics(
   s: StatementRawFormat,
