@@ -689,6 +689,10 @@ type PrivilegedAccessor interface {
 
 	// IsSystemTable returns if a given descriptor ID is a system table.s
 	IsSystemTable(ctx context.Context, id int64) (bool, error)
+
+	// ResolvedZoneConfigForKey returns the fully resolved (inheritance-applied)
+	// zone configuration for the given range start key, as JSONB.
+	ResolvedZoneConfigForKey(ctx context.Context, key roachpb.Key) (tree.Datum, error)
 }
 
 // RegionOperator gives access to the current region, validation for all

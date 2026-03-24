@@ -6,17 +6,22 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/errors"
 )
 
@@ -79,6 +84,59 @@ func (p *planner) IsSystemTable(ctx context.Context, id int64) (bool, error) {
 		return false, err
 	}
 	return catalog.IsSystemDescriptor(tbl), nil
+}
+
+// ResolvedZoneConfigForKey implements eval.PrivilegedAccessor.
+//
+// It returns the fully resolved (inheritance-applied) zone configuration for
+// the given range start key as a JSONB datum. The resolution works as follows:
+//
+//   - Pre-table keyspace: the key is mapped to its named zone (meta, liveness,
+//     system, timeseries, tenants) and resolved via GetHydratedForNamedZone.
+//   - Table keyspace (>= TableDataMin): the table ID is decoded from the key
+//     and the zone config is resolved via GetHydratedForTable, which walks the
+//     full inheritance chain (table → database → RANGE DEFAULT).
+func (p *planner) ResolvedZoneConfigForKey(
+	ctx context.Context, key roachpb.Key,
+) (tree.Datum, error) {
+	var zc *zonepb.ZoneConfig
+	var err error
+
+	rKey := roachpb.RKey(key)
+	if rKey.Equal(roachpb.RKeyMin) ||
+		bytes.HasPrefix(rKey, keys.Meta1Prefix) ||
+		bytes.HasPrefix(rKey, keys.Meta2Prefix) {
+		zc, err = zoneconfig.GetHydratedForNamedZone(ctx, p.Txn(), p.Descriptors(), zonepb.MetaZoneName)
+	} else if bytes.HasPrefix(rKey, keys.SystemPrefix) {
+		if bytes.HasPrefix(rKey, keys.NodeLivenessPrefix) {
+			zc, err = zoneconfig.GetHydratedForNamedZone(ctx, p.Txn(), p.Descriptors(), zonepb.LivenessZoneName)
+		} else if bytes.HasPrefix(rKey, keys.TimeseriesPrefix) {
+			zc, err = zoneconfig.GetHydratedForNamedZone(ctx, p.Txn(), p.Descriptors(), zonepb.TimeseriesZoneName)
+		} else {
+			zc, err = zoneconfig.GetHydratedForNamedZone(ctx, p.Txn(), p.Descriptors(), zonepb.SystemZoneName)
+		}
+	} else if bytes.HasPrefix(rKey, keys.TenantPrefix) {
+		zc, err = zoneconfig.GetHydratedForNamedZone(ctx, p.Txn(), p.Descriptors(), zonepb.TenantsZoneName)
+	} else if key.Compare(keys.TableDataMin) >= 0 {
+		// Table keyspace: decode the table ID and resolve its zone config.
+		_, tableID, decErr := keys.SystemSQLCodec.DecodeTablePrefix(key)
+		if decErr != nil {
+			return nil, errors.Wrap(decErr, "decoding table prefix from key")
+		}
+		zc, err = zoneconfig.GetHydratedForTable(ctx, p.Txn(), p.Descriptors(), descpb.ID(tableID))
+	} else {
+		// Fallback: use RANGE DEFAULT.
+		zc, err = zoneconfig.GetHydratedForNamedZone(ctx, p.Txn(), p.Descriptors(), zonepb.DefaultZoneName)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	j, err := protoreflect.MessageToJSON(zc, protoreflect.FmtFlags{EmitDefaults: true})
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDJSON(j), nil
 }
 
 // checkDescriptorPermissions returns nil if the executing user has permissions
