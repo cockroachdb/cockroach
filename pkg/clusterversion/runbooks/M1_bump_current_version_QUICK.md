@@ -147,6 +147,23 @@ from `pkg/BUILD.bazel` before committing. See MEMORY.md.
 - `pkg/cli/testdata/declarative-rules/invalid_version`
 - Various generated docs and BUILD.bazel files
 
+## Commit and PR
+
+**Title:** `clusterversion: move to <NEW_VER> version`
+
+**Body template:**
+```
+This change advances the current release series version on master from
+<OLD_VER> to <NEW_VER>, following the standard M.1 process after forking the
+release-<OLD_VER> branch. This allows the addition of new upgrade gates for
+version <NEW_VER> and prepares master for the next development cycle.
+```
+
+> **Common mistake:** The commit message should say "from `<OLD_VER>` to `<NEW_VER>`"
+> (i.e., from the *frozen* version to the *new* dev version). Do NOT say "from
+> `<PREV>` to `<OLD_VER>`" — that would be off by one. The frozen key `<OLD>` means
+> `<OLD_VER>` is done; the new development target is `<NEW_VER>`.
+
 ## CI failures
 
 All M.1 CI failures are Type 2 (testdata updates, no code changes).
