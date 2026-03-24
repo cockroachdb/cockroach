@@ -53,12 +53,27 @@ COMMIT
 statement ok
 ALTER TYPE new__name RENAME TO newname
 
+statement error pq: type "test\.public\.newname" already exists
+ALTER TYPE newname RENAME TO newname
+
 # We shouldn't be able to rename into a conflicting type.
 statement ok
 CREATE TABLE conflict (x INT)
 
 statement error pq: relation "test\.public\.conflict" already exists
 ALTER TYPE newname RENAME TO conflict
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+CREATE DOMAIN domain_conflict AS INT
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error pq: type "test\.public\.domain_conflict" already exists
+ALTER TYPE newname RENAME TO domain_conflict
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+DROP DOMAIN domain_conflict
 
 # Renames should try and move around the array type to find a valid name.
 # This creates types _why and __why.

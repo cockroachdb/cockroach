@@ -1,5 +1,5 @@
 /* setup */
-CREATE TYPE salmon AS ENUM ('sockeye', 'king');
+CREATE TYPE salmon AS ENUM('chinook', 'sockeye');
 
 /* test */
 ALTER TYPE salmon ADD VALUE 'atlantic';

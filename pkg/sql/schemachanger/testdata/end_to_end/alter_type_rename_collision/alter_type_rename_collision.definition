@@ -1,0 +1,8 @@
+setup
+CREATE TYPE salmon AS ENUM ('sockeye', 'king', 'atlantic');
+CREATE TYPE _trout AS ENUM ('rainbow');
+----
+
+test
+ALTER TYPE salmon RENAME TO trout;
+----
