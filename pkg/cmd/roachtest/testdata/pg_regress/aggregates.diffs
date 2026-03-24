@@ -2402,7 +2402,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- deparse and multiple features:
  create view aggordview1 as
  select ten,
-@@ -2380,73 +2113,83 @@
+@@ -2380,74 +2113,80 @@
         rank(5,'AZZZZ',50) within group (order by hundred, string4 desc, hundred)
    from tenk1
   group by ten order by ten;
@@ -2530,15 +2530,12 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  
  -- test aggregates with common transition functions share the same states
  begin work;
-+ERROR:  at or near "work": syntax error
-+DETAIL:  source SQL:
-+begin work
-+      ^
-+HINT:  try \h BEGIN
  create type avg_state as (total bigint, count bigint);
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
  create or replace function avg_transfn(state avg_state, n int) returns avg_state as
  $$
-@@ -2469,6 +2212,10 @@
+ declare new_state avg_state;
+@@ -2469,6 +2208,10 @@
  	return null;
  end
  $$ language plpgsql;
@@ -2549,7 +2546,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  create function avg_finalfn(state avg_state) returns int4 as
  $$
  begin
-@@ -2479,6 +2226,10 @@
+@@ -2479,6 +2222,10 @@
  	end if;
  end
  $$ language plpgsql;
@@ -2560,7 +2557,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  create function sum_finalfn(state avg_state) returns int4 as
  $$
  begin
-@@ -2489,106 +2240,70 @@
+@@ -2489,106 +2236,70 @@
  	end if;
  end
  $$ language plpgsql;
@@ -2693,7 +2690,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- test that aggs with the same sfunc and initcond share the same agg state
  create aggregate my_sum_init(int4)
  (
-@@ -2597,6 +2312,12 @@
+@@ -2597,6 +2308,12 @@
     finalfunc = sum_finalfn,
     initcond = '(10,0)'
  );
@@ -2706,7 +2703,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  create aggregate my_avg_init(int4)
  (
     stype = avg_state,
-@@ -2604,6 +2325,12 @@
+@@ -2604,6 +2321,12 @@
     finalfunc = avg_finalfn,
     initcond = '(10,0)'
  );
@@ -2719,7 +2716,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  create aggregate my_avg_init2(int4)
  (
     stype = avg_state,
-@@ -2611,30 +2338,28 @@
+@@ -2611,27 +2334,20 @@
     finalfunc = avg_finalfn,
     initcond = '(4,0)'
  );
@@ -2756,15 +2753,15 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- test aggregate state sharing to ensure it works if one aggregate has a
  -- finalfn and the other one has none.
  begin work;
-+ERROR:  at or near "work": syntax error
-+DETAIL:  source SQL:
-+begin work
-+      ^
-+HINT:  try \h BEGIN
- create or replace function sum_transfn(state int4, n int4) returns int4 as
+@@ -2654,6 +2370,7 @@
+ 	return null;
+ end
+ $$ language plpgsql;
++NOTICE:  auto-committing transaction before processing DDL due to autocommit_before_ddl setting
+ create function halfsum_finalfn(state int4) returns int4 as
  $$
- declare new_state int4;
-@@ -2664,29 +2389,35 @@
+ begin
+@@ -2664,29 +2381,35 @@
  	end if;
  end
  $$ language plpgsql;
@@ -2809,7 +2806,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- test that the aggregate transition logic correctly handles
  -- transition / combine functions returning NULL
  -- First test the case of a normal transition function returning NULL
-@@ -2701,6 +2432,8 @@
+@@ -2701,6 +2424,8 @@
      END IF;
      RETURN NULL;
  END$$;
@@ -2818,7 +2815,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  CREATE AGGREGATE balk(int4)
  (
      SFUNC = balkifnull(int8, int4),
-@@ -2708,13 +2441,16 @@
+@@ -2708,13 +2433,16 @@
      PARALLEL = SAFE,
      INITCOND = '0'
  );
@@ -2840,7 +2837,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- Secondly test the case of a parallel aggregate combiner function
  -- returning NULL. For that use normal transition function, but a
  -- combiner function returning NULL.
-@@ -2730,6 +2466,23 @@
+@@ -2730,6 +2458,23 @@
      END IF;
      RETURN NULL;
  END$$;
@@ -2864,7 +2861,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  CREATE AGGREGATE balk(int4)
  (
      SFUNC = int4_sum(int8, int4),
-@@ -2738,26 +2491,27 @@
+@@ -2738,26 +2483,27 @@
      PARALLEL = SAFE,
      INITCOND = '0'
  );
@@ -2906,7 +2903,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  ROLLBACK;
  -- test multiple usage of an aggregate whose finalfn returns a R/W datum
  BEGIN;
-@@ -2767,6 +2521,8 @@
+@@ -2767,6 +2513,8 @@
      RETURN array_fill(y[1], ARRAY[4]);
  END;
  $$;
@@ -2915,7 +2912,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  CREATE FUNCTION rwagg_finalfunc(x anyarray) RETURNS anyarray
  LANGUAGE plpgsql STRICT IMMUTABLE AS $$
  DECLARE
-@@ -2777,11 +2533,25 @@
+@@ -2777,11 +2525,25 @@
      RETURN res;
  END;
  $$;
@@ -2941,7 +2938,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  CREATE FUNCTION eatarray(x real[]) RETURNS real[]
  LANGUAGE plpgsql STRICT IMMUTABLE AS $$
  BEGIN
-@@ -2789,21 +2559,44 @@
+@@ -2789,21 +2551,44 @@
      RETURN x;
  END;
  $$;
@@ -2991,7 +2988,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- variance(int4) covers numeric_poly_combine
  -- sum(int8) covers int8_avg_combine
  -- regr_count(float8, float8) covers int8inc_float8_float8 and aggregates with > 1 arg
-@@ -2813,36 +2606,17 @@
+@@ -2813,36 +2598,17 @@
        UNION ALL SELECT * FROM tenk1
        UNION ALL SELECT * FROM tenk1
        UNION ALL SELECT * FROM tenk1) u;
@@ -3034,7 +3031,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- variance(int8) covers numeric_combine
  -- avg(numeric) covers numeric_avg_combine
  EXPLAIN (COSTS OFF, VERBOSE)
-@@ -2851,46 +2625,22 @@
+@@ -2851,46 +2617,22 @@
        UNION ALL SELECT * FROM tenk1
        UNION ALL SELECT * FROM tenk1
        UNION ALL SELECT * FROM tenk1) u;
@@ -3089,7 +3086,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  -- Ensure that the STRICT checks for aggregates does not take NULLness
  -- of ORDER BY columns into account. See bug report around
  -- 2a505161-2727-2473-7c46-591ed108ac52@email.cz
-@@ -2929,27 +2679,46 @@
+@@ -2929,27 +2671,46 @@
  -- does not lead to array overflow due to unexpected duplicate hash keys
  -- see CAFeeJoKKu0u+A_A9R9316djW-YW3-+Gtgvy3ju655qRHR3jtdA@mail.gmail.com
  set enable_memoize to off;
@@ -3148,7 +3145,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  select unique1, count(*), sum(twothousand) from tenk1
  group by unique1
  having sum(fivethous) > 4975
-@@ -3007,36 +2776,84 @@
+@@ -3007,36 +2768,84 @@
  (48 rows)
  
  set work_mem to default;
@@ -3242,7 +3239,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  create table agg_group_2 as
  select * from
    (values (100), (300), (500)) as r(a),
-@@ -3047,30 +2864,58 @@
+@@ -3047,30 +2856,58 @@
      from agg_data_2k
      where g < r.a
      group by g/2) as s;
@@ -3308,7 +3305,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/aggregates.out --
  create table agg_hash_2 as
  select * from
    (values (100), (300), (500)) as r(a),
-@@ -3081,15 +2926,43 @@
+@@ -3081,15 +2918,43 @@
      from agg_data_2k
      where g < r.a
      group by g/2) as s;

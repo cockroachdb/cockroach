@@ -1602,7 +1602,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/inherit.out --lab
  WITH RECURSIVE r AS (
    SELECT 'inht1'::regclass AS inhrelid
  UNION ALL
-@@ -1109,131 +959,162 @@
+@@ -1109,131 +959,159 @@
    ORDER BY a.attrelid::regclass::name, a.attnum;
   attrelid | attname | attinhcount | expected 
  ----------+---------+-------------+----------
@@ -1657,9 +1657,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/inherit.out --lab
 +WHERE c.relname OPERATOR(pg_catalog.~) '^(test_constraints)$' COLLATE pg_catalog.default
 +                                                                                ^
  ALTER TABLE ONLY test_constraints DROP CONSTRAINT test_constraints_val1_val2_key;
-+ERROR:  unimplemented: cannot drop UNIQUE constraint "test_constraints_val1_val2_key" using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+See: https://go.crdb.dev/issue-v/42840/_version_
  \d+ test_constraints
 -                                   Table "public.test_constraints"
 - Column |       Type        | Collation | Nullable | Default | Storage  | Stats target | Description 
@@ -1858,7 +1855,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/inherit.out --lab
  DROP TABLE test_foreign_constraints;
  DROP TABLE test_primary_constraints;
  -- Test foreign key behavior
-@@ -1242,7 +1123,14 @@
+@@ -1242,7 +1120,14 @@
  create table inh_fk_2 (x int primary key, y int references inh_fk_1 on delete cascade);
  insert into inh_fk_2 values (11, 1), (22, 2), (33, 3);
  create table inh_fk_2_child () inherits (inh_fk_2);
@@ -1873,7 +1870,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/inherit.out --lab
  delete from inh_fk_1 where a = 1;
  select * from inh_fk_1 order by 1;
   a 
-@@ -1252,24 +1140,29 @@
+@@ -1252,24 +1137,29 @@
  (2 rows)
  
  select * from inh_fk_2 order by 1, 2;
@@ -1912,7 +1909,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/inherit.out --lab
  select conrelid::regclass::text as relname, conname, conislocal, coninhcount
  from pg_constraint where conname like 'inh\_check\_constraint%'
  order by 1, 2;
-@@ -1277,38 +1170,41 @@
+@@ -1277,38 +1167,41 @@
  ---------+-----------------------+------------+-------------
   p1      | inh_check_constraint1 | t          |           0
   p1      | inh_check_constraint2 | t          |           0
@@ -1969,7 +1966,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/inherit.out --lab
  
  -- We don't drop the invalid_check_con* tables, to test dump/reload with
  --
-@@ -1316,342 +1212,325 @@
+@@ -1316,342 +1209,325 @@
  --
  create temp table patest0 (id, x) as
    select x, x from generate_series(0,1000) x;
@@ -2513,7 +2510,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/inherit.out --lab
  -- XXX planner doesn't recognize that index on unique2 is sufficiently sorted
  explain (costs off)
  SELECT x, y FROM
-@@ -1659,16 +1538,11 @@
+@@ -1659,16 +1535,11 @@
     UNION ALL
     SELECT unique2 AS x, unique2 AS y FROM tenk1 b) s
  ORDER BY x, y;
@@ -2535,7 +2532,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/inherit.out --lab
  -- exercise rescan code path via a repeatedly-evaluated subquery
  explain (costs off)
  SELECT
-@@ -1679,21 +1553,11 @@
+@@ -1679,21 +1550,11 @@
      ) f(i)
      ORDER BY f.i LIMIT 10)
  FROM generate_series(1, 3) g(i);
@@ -2562,7 +2559,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/inherit.out --lab
  SELECT
      ARRAY(SELECT f.i FROM (
          (SELECT d + g.i FROM generate_series(4, 30, 3) d ORDER BY 1)
-@@ -1710,173 +1574,183 @@
+@@ -1710,173 +1571,183 @@
  (3 rows)
  
  reset enable_seqscan;
@@ -2836,7 +2833,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/inherit.out --lab
  --
  -- Check that constraint exclusion works correctly with partitions using
  -- implicit constraints generated from the partition bound information.
-@@ -1884,747 +1758,864 @@
+@@ -1884,747 +1755,864 @@
  create table list_parted (
  	a	varchar
  ) partition by list (a);
@@ -4240,7 +4237,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/inherit.out --lab
  -- Verify that constraint errors across partition root / child are
  -- handled correctly (Bug #16293)
  CREATE TABLE errtst_parent (
-@@ -2633,6 +2624,16 @@
+@@ -2633,6 +2621,16 @@
      data int NOT NULL DEFAULT 0,
      CONSTRAINT shdata_small CHECK(shdata < 3)
  ) PARTITION BY RANGE (partid);
@@ -4257,7 +4254,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/inherit.out --lab
  -- fast defaults lead to attribute mapping being used in one
  -- direction, but not the other
  CREATE TABLE errtst_child_fastdef (
-@@ -2659,58 +2660,67 @@
+@@ -2659,58 +2657,67 @@
  ALTER TABLE errtst_child_fastdef ADD COLUMN data int NOT NULL DEFAULT 0;
  ALTER TABLE errtst_child_fastdef ADD CONSTRAINT errtest_child_fastdef_data_check CHECK (data < 10);
  ALTER TABLE errtst_parent ATTACH PARTITION errtst_child_fastdef FOR VALUES FROM (0) TO (10);
@@ -4349,7 +4346,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/inherit.out --lab
  -- direct leaf partition update, without partition id violation
  BEGIN;
  UPDATE errtst_child_fastdef SET partid = 1 WHERE partid = 0;
-@@ -2719,32 +2729,26 @@
+@@ -2719,32 +2726,26 @@
  ROLLBACK;
  -- direct leaf partition update, with partition id violation
  UPDATE errtst_child_fastdef SET partid = partid + 10 WHERE partid = 0;

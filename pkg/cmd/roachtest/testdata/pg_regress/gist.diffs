@@ -1,7 +1,7 @@
 diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/gist.out --label=/mnt/data1/postgres/src/test/regress/results/gist.out /mnt/data1/postgres/src/test/regress/expected/gist.out /mnt/data1/postgres/src/test/regress/results/gist.out
 --- /mnt/data1/postgres/src/test/regress/expected/gist.out
 +++ /mnt/data1/postgres/src/test/regress/results/gist.out
-@@ -4,132 +4,169 @@
+@@ -4,132 +4,165 @@
  -- There are other tests to test different GiST opclasses. This is for
  -- testing GiST code itself. Vacuuming in particular.
  create table gist_point_tbl(id int4, p point);
@@ -63,11 +63,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/gist.out --label=
 +^
  -- rebuild the index with a different fillfactor
  alter index gist_pointidx SET (fillfactor = 40);
-+ERROR:  at or near "set": syntax error
-+DETAIL:  source SQL:
-+alter index gist_pointidx SET (fillfactor = 40)
-+                          ^
-+HINT:  try \h ALTER INDEX
++ERROR:  index "gist_pointidx" does not exist
  reindex index gist_pointidx;
 +ERROR:  at or near "gist_pointidx": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
@@ -242,7 +238,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/gist.out --label=
  -- Check case with multiple rescans (bug #14641)
  explain (costs off)
  select p from
-@@ -138,266 +175,205 @@
+@@ -138,266 +171,205 @@
            (box(point(0.8,0.8), point(1.0,1.0)))) as v(bb)
  cross join lateral
    (select p from gist_tbl where p <@ bb order by p <-> bb[0] limit 2) ss;
