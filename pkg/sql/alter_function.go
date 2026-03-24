@@ -188,6 +188,8 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 		return err
 	}
 	maybeExistingFuncObj.FuncName.ObjectName = n.n.NewName
+	maybeExistingFuncObj.FuncName.SchemaName = tree.Name(scDesc.GetName())
+	maybeExistingFuncObj.FuncName.ExplicitSchema = true
 	existing, err := params.p.matchRoutine(
 		params.ctx, maybeExistingFuncObj, false, /* required */
 		tree.UDFRoutine|tree.ProcedureRoutine, false, /* inDropContext */
