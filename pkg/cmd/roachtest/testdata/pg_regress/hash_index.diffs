@@ -284,7 +284,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/hash_index.out --
  
  -- UPDATE hash_ovfl_heap
  --    SET x = 1000
-@@ -251,42 +361,146 @@
+@@ -251,42 +361,142 @@
  CREATE TABLE hash_split_heap (keycol INT);
  INSERT INTO hash_split_heap SELECT 1 FROM generate_series(1, 500) a;
  CREATE INDEX hash_split_index on hash_split_heap USING HASH (keycol);
@@ -343,11 +343,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/hash_index.out --
 +^
  -- Rebuild the index using a different fillfactor
  ALTER INDEX hash_split_index SET (fillfactor = 10);
-+ERROR:  at or near "set": syntax error
-+DETAIL:  source SQL:
-+ALTER INDEX hash_split_index SET (fillfactor = 10)
-+                             ^
-+HINT:  try \h ALTER INDEX
++ERROR:  index "hash_split_index" does not exist
  REINDEX INDEX hash_split_index;
 +ERROR:  at or near "hash_split_index": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:

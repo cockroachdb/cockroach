@@ -280,7 +280,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/lock.out --label=
  ROLLBACK;
  RESET ROLE;
  REVOKE UPDATE ON TABLE lock_tbl1 FROM regress_rol_lock1;
-@@ -163,79 +254,91 @@
+@@ -163,25 +254,25 @@
  -- fail without permissions on the view
  BEGIN;
  LOCK TABLE lock_view1;
@@ -315,11 +315,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/lock.out --label=
  ROLLBACK;
  RESET ROLE;
  REVOKE UPDATE ON TABLE lock_view1 FROM regress_rol_lock1;
- -- Tables referred to by security invoker views require explicit permission to
- -- be locked.
- CREATE VIEW lock_view8 WITH (security_invoker) AS SELECT * FROM lock_tbl1;
-+ERROR:  security invoker views are not supported
- SET ROLE regress_rol_lock1;
+@@ -192,7 +283,10 @@
  -- fail without permissions on the view
  BEGIN;
  LOCK TABLE lock_view8;
@@ -331,8 +327,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/lock.out --label=
  ROLLBACK;
  RESET ROLE;
  GRANT UPDATE ON TABLE lock_view8 TO regress_rol_lock1;
-+ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "lock_view8" does not exist
- SET ROLE regress_rol_lock1;
+@@ -200,24 +294,24 @@
  -- fail without permissions on the table referenced by the view
  BEGIN;
  LOCK TABLE lock_view8;
@@ -366,14 +361,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/lock.out --label=
  ROLLBACK;
  RESET ROLE;
  REVOKE UPDATE ON TABLE lock_view8 FROM regress_rol_lock1;
-+ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "lock_view8" does not exist
- --
- -- Clean up
- --
- DROP VIEW lock_view8;
-+ERROR:  relation "lock_view8" does not exist
- DROP VIEW lock_view7;
- DROP VIEW lock_view6;
+@@ -230,12 +324,17 @@
  DROP VIEW lock_view5;
  DROP VIEW lock_view4;
  DROP VIEW lock_view3 CASCADE;
@@ -392,7 +380,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/lock.out --label=
  DROP SCHEMA lock_schema1 CASCADE;
  DROP ROLE regress_rol_lock1;
  -- atomic ops tests
-@@ -244,9 +347,8 @@
+@@ -244,9 +343,8 @@
      RETURNS bool
      AS :'regresslib'
      LANGUAGE C;

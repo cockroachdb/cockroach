@@ -352,11 +352,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/collate.linux.utf
 +HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
 +-- to_date
 +SELECT to_date('01 ŞUB 2010', 'DD TMMON YYYY');
-+ERROR:  unknown function: to_date()
++ERROR:  invalid value for abbreviated month name
 +SELECT to_date('01 Şub 2010', 'DD TMMON YYYY');
-+ERROR:  unknown function: to_date()
++ERROR:  invalid value for abbreviated month name
 +SELECT to_date('1234567890ab 2010', 'TMMONTH YYYY'); -- fail
-+ERROR:  unknown function: to_date()
++ERROR:  invalid value for month name
 +-- backwards parsing
 +CREATE VIEW collview1 AS SELECT * FROM collate_test1 WHERE b COLLATE "C" >= 'bbc';
 +CREATE VIEW collview2 AS SELECT a, b FROM collate_test1 ORDER BY b COLLATE "C";

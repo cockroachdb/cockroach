@@ -545,9 +545,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/btree_index.out -
  CREATE TABLE dedup_unique_test_table (a int) WITH (autovacuum_enabled=false);
 +NOTICE:  storage parameter "autovacuum_enabled = false" is ignored
  CREATE UNIQUE INDEX dedup_unique ON dedup_unique_test_table (a) WITH (deduplicate_items=on);
-+ERROR:  invalid storage parameter "deduplicate_items"
++ERROR:  invalid storage param "deduplicate_items" on unique index
  CREATE UNIQUE INDEX plain_unique ON dedup_unique_test_table (a) WITH (deduplicate_items=off);
-+ERROR:  invalid storage parameter "deduplicate_items"
++ERROR:  invalid storage param "deduplicate_items" on unique index
  -- Generate enough garbage tuples in index to ensure that even the unique index
  -- with deduplication enabled has to check multiple leaf pages during unique
  -- checking (at least with a BLCKSZ of 8192 or less)

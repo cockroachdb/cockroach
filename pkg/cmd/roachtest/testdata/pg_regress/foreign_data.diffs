@@ -93,7 +93,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
  
  SELECT srvname, srvoptions FROM pg_foreign_server;
   srvname | srvoptions 
-@@ -44,268 +96,595 @@
+@@ -44,261 +96,652 @@
  
  -- CREATE FOREIGN DATA WRAPPER
  CREATE FOREIGN DATA WRAPPER foo VALIDATOR bar;            -- ERROR
@@ -176,14 +176,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 +We appreciate your feedback.
 +
  CREATE FOREIGN DATA WRAPPER foo OPTIONS (testing '1');
--\dew+
--                                                 List of foreign-data wrappers
--    Name    |           Owner           | Handler |        Validator         | Access privileges |  FDW options  | Description 
--------------+---------------------------+---------+--------------------------+-------------------+---------------+-------------
-- dummy      | regress_foreign_data_user | -       | -                        |                   |               | useless
-- foo        | regress_foreign_data_user | -       | -                        |                   | (testing '1') | 
-- postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |               | 
--(3 rows)
 +ERROR:  at or near "wrapper": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +CREATE FOREIGN DATA WRAPPER foo OPTIONS (testing '1')
@@ -196,11 +188,22 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 +
 +If you would rather not post publicly, please contact us directly
 +using the support form.
- 
++
 +We appreciate your feedback.
 +
-+\dew+
-+ERROR:  column "fdw.tableoid" does not exist
+ \dew+
+-                                                 List of foreign-data wrappers
+-    Name    |           Owner           | Handler |        Validator         | Access privileges |  FDW options  | Description 
+-------------+---------------------------+---------+--------------------------+-------------------+---------------+-------------
+- dummy      | regress_foreign_data_user | -       | -                        |                   |               | useless
+- foo        | regress_foreign_data_user | -       | -                        |                   | (testing '1') | 
+- postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |               | 
+-(3 rows)
++                           List of foreign-data wrappers
++ Name | Owner | Handler | Validator | Access privileges | FDW options | Description 
++------+-------+---------+-----------+-------------------+-------------+-------------
++(0 rows)
+ 
  DROP FOREIGN DATA WRAPPER foo;
 +ERROR:  at or near "wrapper": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
@@ -235,14 +238,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 +We appreciate your feedback.
 +
  CREATE FOREIGN DATA WRAPPER foo OPTIONS (testing '1', another '2');
--\dew+
--                                                       List of foreign-data wrappers
--    Name    |           Owner           | Handler |        Validator         | Access privileges |        FDW options         | Description 
--------------+---------------------------+---------+--------------------------+-------------------+----------------------------+-------------
-- dummy      | regress_foreign_data_user | -       | -                        |                   |                            | useless
-- foo        | regress_foreign_data_user | -       | -                        |                   | (testing '1', another '2') | 
-- postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |                            | 
--(3 rows)
 +ERROR:  at or near "wrapper": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +CREATE FOREIGN DATA WRAPPER foo OPTIONS (testing '1', another '2')
@@ -255,11 +250,22 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 +
 +If you would rather not post publicly, please contact us directly
 +using the support form.
- 
++
 +We appreciate your feedback.
 +
-+\dew+
-+ERROR:  column "fdw.tableoid" does not exist
+ \dew+
+-                                                       List of foreign-data wrappers
+-    Name    |           Owner           | Handler |        Validator         | Access privileges |        FDW options         | Description 
+-------------+---------------------------+---------+--------------------------+-------------------+----------------------------+-------------
+- dummy      | regress_foreign_data_user | -       | -                        |                   |                            | useless
+- foo        | regress_foreign_data_user | -       | -                        |                   | (testing '1', another '2') | 
+- postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |                            | 
+-(3 rows)
++                           List of foreign-data wrappers
++ Name | Owner | Handler | Validator | Access privileges | FDW options | Description 
++------+-------+---------+-----------+-------------------+-------------+-------------
++(0 rows)
+ 
  DROP FOREIGN DATA WRAPPER foo;
 +ERROR:  at or near "wrapper": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
@@ -297,14 +303,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 +
  RESET ROLE;
  CREATE FOREIGN DATA WRAPPER foo VALIDATOR postgresql_fdw_validator;
--\dew+
--                                                List of foreign-data wrappers
--    Name    |           Owner           | Handler |        Validator         | Access privileges | FDW options | Description 
--------------+---------------------------+---------+--------------------------+-------------------+-------------+-------------
-- dummy      | regress_foreign_data_user | -       | -                        |                   |             | useless
-- foo        | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |             | 
-- postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |             | 
--(3 rows)
 +ERROR:  at or near "wrapper": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +CREATE FOREIGN DATA WRAPPER foo VALIDATOR postgresql_fdw_validator
@@ -314,14 +312,25 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
- 
++
 +If you would rather not post publicly, please contact us directly
 +using the support form.
 +
 +We appreciate your feedback.
 +
-+\dew+
-+ERROR:  column "fdw.tableoid" does not exist
+ \dew+
+-                                                List of foreign-data wrappers
+-    Name    |           Owner           | Handler |        Validator         | Access privileges | FDW options | Description 
+-------------+---------------------------+---------+--------------------------+-------------------+-------------+-------------
+- dummy      | regress_foreign_data_user | -       | -                        |                   |             | useless
+- foo        | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |             | 
+- postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |             | 
+-(3 rows)
++                           List of foreign-data wrappers
++ Name | Owner | Handler | Validator | Access privileges | FDW options | Description 
++------+-------+---------+-----------+-------------------+-------------+-------------
++(0 rows)
+ 
  -- HANDLER related checks
  CREATE FUNCTION invalid_fdw_handler() RETURNS int LANGUAGE SQL AS 'SELECT 1;';
  CREATE FOREIGN DATA WRAPPER test_fdw HANDLER invalid_fdw_handler;  -- ERROR
@@ -431,8 +440,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - foo        | regress_foreign_data_user | -       | -                        |                   |             | 
 - postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |             | 
 -(3 rows)
--
-+ERROR:  column "fdw.tableoid" does not exist
++                           List of foreign-data wrappers
++ Name | Owner | Handler | Validator | Access privileges | FDW options | Description 
++------+-------+---------+-----------+-------------------+-------------+-------------
++(0 rows)
+ 
  ALTER FOREIGN DATA WRAPPER foo OPTIONS (a '1', b '2');
 +ERROR:  at or near "foreign": syntax error
 +DETAIL:  source SQL:
@@ -467,8 +479,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - foo        | regress_foreign_data_user | -       | -                        |                   | (a '1', b '2') | 
 - postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |                | 
 -(3 rows)
--
-+ERROR:  column "fdw.tableoid" does not exist
++                           List of foreign-data wrappers
++ Name | Owner | Handler | Validator | Access privileges | FDW options | Description 
++------+-------+---------+-----------+-------------------+-------------+-------------
++(0 rows)
+ 
  ALTER FOREIGN DATA WRAPPER foo OPTIONS (DROP a, SET b '3', ADD c '4');
 +ERROR:  at or near "foreign": syntax error
 +DETAIL:  source SQL:
@@ -483,8 +498,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - foo        | regress_foreign_data_user | -       | -                        |                   | (b '3', c '4') | 
 - postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |                | 
 -(3 rows)
--
-+ERROR:  column "fdw.tableoid" does not exist
++                           List of foreign-data wrappers
++ Name | Owner | Handler | Validator | Access privileges | FDW options | Description 
++------+-------+---------+-----------+-------------------+-------------+-------------
++(0 rows)
+ 
  ALTER FOREIGN DATA WRAPPER foo OPTIONS (a '2');
 +ERROR:  at or near "foreign": syntax error
 +DETAIL:  source SQL:
@@ -506,8 +524,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - foo        | regress_foreign_data_user | -       | -                        |                   | (b '3', c '4', a '2') | 
 - postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |                       | 
 -(3 rows)
--
-+ERROR:  column "fdw.tableoid" does not exist
++                           List of foreign-data wrappers
++ Name | Owner | Handler | Validator | Access privileges | FDW options | Description 
++------+-------+---------+-----------+-------------------+-------------+-------------
++(0 rows)
+ 
  SET ROLE regress_test_role;
  ALTER FOREIGN DATA WRAPPER foo OPTIONS (ADD d '5');         -- ERROR
 -ERROR:  permission denied to alter foreign-data wrapper "foo"
@@ -533,8 +554,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - foo        | regress_foreign_data_user | -       | -                        |                   | (b '3', c '4', a '2', d '5') | 
 - postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |                              | 
 -(3 rows)
--
-+ERROR:  column "fdw.tableoid" does not exist
++                           List of foreign-data wrappers
++ Name | Owner | Handler | Validator | Access privileges | FDW options | Description 
++------+-------+---------+-----------+-------------------+-------------+-------------
++(0 rows)
+ 
  ALTER FOREIGN DATA WRAPPER foo OWNER TO regress_test_role;  -- ERROR
 -ERROR:  permission denied to change owner of foreign-data wrapper "foo"
 -HINT:  The owner of a foreign-data wrapper must be a superuser.
@@ -574,8 +598,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - foo        | regress_test_role_super   | -       | -                        |                   | (b '3', c '4', a '2', d '5') | 
 - postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |                              | 
 -(3 rows)
--
-+ERROR:  column "fdw.tableoid" does not exist
++                           List of foreign-data wrappers
++ Name | Owner | Handler | Validator | Access privileges | FDW options | Description 
++------+-------+---------+-----------+-------------------+-------------+-------------
++(0 rows)
+ 
  ALTER FOREIGN DATA WRAPPER foo RENAME TO foo1;
 +ERROR:  at or near "foreign": syntax error
 +DETAIL:  source SQL:
@@ -590,8 +617,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - foo1       | regress_test_role_super   | -       | -                        |                   | (b '3', c '4', a '2', d '5') | 
 - postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |                              | 
 -(3 rows)
--
-+ERROR:  column "fdw.tableoid" does not exist
++                           List of foreign-data wrappers
++ Name | Owner | Handler | Validator | Access privileges | FDW options | Description 
++------+-------+---------+-----------+-------------------+-------------+-------------
++(0 rows)
+ 
  ALTER FOREIGN DATA WRAPPER foo1 RENAME TO foo;
 +ERROR:  at or near "foreign": syntax error
 +DETAIL:  source SQL:
@@ -643,14 +673,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 +
  DROP FOREIGN DATA WRAPPER IF EXISTS nonexistent;
 -NOTICE:  foreign-data wrapper "nonexistent" does not exist, skipping
--\dew+
--                                                             List of foreign-data wrappers
--    Name    |           Owner           |     Handler      |        Validator         | Access privileges |         FDW options          | Description 
--------------+---------------------------+------------------+--------------------------+-------------------+------------------------------+-------------
-- dummy      | regress_foreign_data_user | -                | -                        |                   |                              | useless
-- foo        | regress_test_role_super   | test_fdw_handler | -                        |                   | (b '3', c '4', a '2', d '5') | 
-- postgresql | regress_foreign_data_user | -                | postgresql_fdw_validator |                   |                              | 
--(3 rows)
 +ERROR:  at or near "wrapper": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +DROP FOREIGN DATA WRAPPER IF EXISTS nonexistent
@@ -663,11 +685,22 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 +
 +If you would rather not post publicly, please contact us directly
 +using the support form.
- 
++
 +We appreciate your feedback.
 +
-+\dew+
-+ERROR:  column "fdw.tableoid" does not exist
+ \dew+
+-                                                             List of foreign-data wrappers
+-    Name    |           Owner           |     Handler      |        Validator         | Access privileges |         FDW options          | Description 
+-------------+---------------------------+------------------+--------------------------+-------------------+------------------------------+-------------
+- dummy      | regress_foreign_data_user | -                | -                        |                   |                              | useless
+- foo        | regress_test_role_super   | test_fdw_handler | -                        |                   | (b '3', c '4', a '2', d '5') | 
+- postgresql | regress_foreign_data_user | -                | postgresql_fdw_validator |                   |                              | 
+-(3 rows)
++                           List of foreign-data wrappers
++ Name | Owner | Handler | Validator | Access privileges | FDW options | Description 
++------+-------+---------+-----------+-------------------+-------------+-------------
++(0 rows)
+ 
  DROP ROLE regress_test_role_super;                          -- ERROR
 -ERROR:  role "regress_test_role_super" cannot be dropped because some objects depend on it
 -DETAIL:  owner of foreign-data wrapper foo
@@ -700,8 +733,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - dummy      | regress_foreign_data_user | -       | -                        |                   |             | useless
 - postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |             | 
 -(2 rows)
--
-+ERROR:  column "fdw.tableoid" does not exist
++                           List of foreign-data wrappers
++ Name | Owner | Handler | Validator | Access privileges | FDW options | Description 
++------+-------+---------+-----------+-------------------+-------------+-------------
++(0 rows)
+ 
  CREATE FOREIGN DATA WRAPPER foo;
 +ERROR:  at or near "wrapper": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
@@ -767,16 +803,22 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - foo        | regress_foreign_data_user | -       | -                        |                   |             | 
 - postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |             | 
 -(3 rows)
--
-+ERROR:  column "fdw.tableoid" does not exist
++                           List of foreign-data wrappers
++ Name | Owner | Handler | Validator | Access privileges | FDW options | Description 
++------+-------+---------+-----------+-------------------+-------------+-------------
++(0 rows)
+ 
  \des+
 -                                                   List of foreign servers
 - Name |           Owner           | Foreign-data wrapper | Access privileges | Type | Version | FDW options |  Description   
 -------+---------------------------+----------------------+-------------------+------+---------+-------------+----------------
 - s1   | regress_foreign_data_user | foo                  |                   |      |         |             | foreign server
 -(1 row)
--
-+ERROR:  column "s.tableoid" does not exist
++                                       List of foreign servers
++ Name | Owner | Foreign-data wrapper | Access privileges | Type | Version | FDW options | Description 
++------+-------+----------------------+-------------------+------+---------+-------------+-------------
++(0 rows)
+ 
  \deu+
 -              List of user mappings
 - Server |         User name         | FDW options 
@@ -831,13 +873,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 -NOTICE:  drop cascades to 2 other objects
 -DETAIL:  drop cascades to server s1
 -drop cascades to user mapping for regress_foreign_data_user on server s1
--\dew+
--                                                List of foreign-data wrappers
--    Name    |           Owner           | Handler |        Validator         | Access privileges | FDW options | Description 
--------------+---------------------------+---------+--------------------------+-------------------+-------------+-------------
-- dummy      | regress_foreign_data_user | -       | -                        |                   |             | useless
-- postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |             | 
--(2 rows)
 +ERROR:  at or near "wrapper": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +DROP FOREIGN DATA WRAPPER foo CASCADE
@@ -847,25 +882,27 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
- 
--\des+
--                                       List of foreign servers
-- Name | Owner | Foreign-data wrapper | Access privileges | Type | Version | FDW options | Description 
--------+-------+----------------------+-------------------+------+---------+-------------+-------------
--(0 rows)
++
 +If you would rather not post publicly, please contact us directly
 +using the support form.
 +
 +We appreciate your feedback.
++
+ \dew+
+-                                                List of foreign-data wrappers
+-    Name    |           Owner           | Handler |        Validator         | Access privileges | FDW options | Description 
+-------------+---------------------------+---------+--------------------------+-------------------+-------------+-------------
+- dummy      | regress_foreign_data_user | -       | -                        |                   |             | useless
+- postgresql | regress_foreign_data_user | -       | postgresql_fdw_validator |                   |             | 
+-(2 rows)
++                           List of foreign-data wrappers
++ Name | Owner | Handler | Validator | Access privileges | FDW options | Description 
++------+-------+---------+-----------+-------------------+-------------+-------------
++(0 rows)
  
-+\dew+
-+ERROR:  column "fdw.tableoid" does not exist
-+\des+
-+ERROR:  column "s.tableoid" does not exist
- \deu+
-       List of user mappings
-  Server | User name | FDW options 
-@@ -314,269 +693,609 @@
+ \des+
+                                        List of foreign servers
+@@ -314,269 +757,633 @@
  
  -- exercise CREATE SERVER
  CREATE SERVER s1 FOREIGN DATA WRAPPER foo;                  -- ERROR
@@ -1065,7 +1102,22 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 +We appreciate your feedback.
 +
  CREATE SERVER s8 FOREIGN DATA WRAPPER postgresql OPTIONS (host 'localhost', dbname 's8db');
--\des+
++ERROR:  at or near "s8": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE SERVER s8 FOREIGN DATA WRAPPER postgresql OPTIONS (host 'localhost', dbname 's8db')
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ \des+
 -                                                             List of foreign servers
 - Name |           Owner           | Foreign-data wrapper | Access privileges |  Type  | Version |            FDW options            | Description 
 -------+---------------------------+----------------------+-------------------+--------+---------+-----------------------------------+-------------
@@ -1078,23 +1130,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - s7   | regress_foreign_data_user | foo                  |                   | oracle | 17.0    | (host 'a', dbname 'b')            | 
 - s8   | regress_foreign_data_user | postgresql           |                   |        |         | (host 'localhost', dbname 's8db') | 
 -(8 rows)
-+ERROR:  at or near "s8": syntax error: unimplemented: this syntax
-+DETAIL:  source SQL:
-+CREATE SERVER s8 FOREIGN DATA WRAPPER postgresql OPTIONS (host 'localhost', dbname 's8db')
-+              ^
-+HINT:  You have attempted to use a feature that is not yet implemented.
-+
-+Please check the public issue tracker to check whether this problem is
-+already tracked. If you cannot find it there, please report the error
-+with details by creating a new issue.
++                                       List of foreign servers
++ Name | Owner | Foreign-data wrapper | Access privileges | Type | Version | FDW options | Description 
++------+-------+----------------------+-------------------+------+---------+-------------+-------------
++(0 rows)
  
-+If you would rather not post publicly, please contact us directly
-+using the support form.
-+
-+We appreciate your feedback.
-+
-+\des+
-+ERROR:  column "s.tableoid" does not exist
  SET ROLE regress_test_role;
  CREATE SERVER t1 FOREIGN DATA WRAPPER foo;                 -- ERROR: no usage on FDW
 -ERROR:  permission denied for foreign-data wrapper foo
@@ -1152,8 +1192,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - s8   | regress_foreign_data_user | postgresql           |                   |        |         | (host 'localhost', dbname 's8db') | 
 - t1   | regress_test_role         | foo                  |                   |        |         |                                   | 
 -(9 rows)
--
-+ERROR:  column "s.tableoid" does not exist
++                                       List of foreign servers
++ Name | Owner | Foreign-data wrapper | Access privileges | Type | Version | FDW options | Description 
++------+-------+----------------------+-------------------+------+---------+-------------+-------------
++(0 rows)
+ 
  REVOKE USAGE ON FOREIGN DATA WRAPPER foo FROM regress_test_role;
 +ERROR:  at or near "foreign": syntax error
 +DETAIL:  source SQL:
@@ -1188,21 +1231,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
  GRANT regress_test_indirect TO regress_test_role;
  SET ROLE regress_test_role;
  CREATE SERVER t2 FOREIGN DATA WRAPPER foo;
--\des+
--                                                             List of foreign servers
-- Name |           Owner           | Foreign-data wrapper | Access privileges |  Type  | Version |            FDW options            | Description 
--------+---------------------------+----------------------+-------------------+--------+---------+-----------------------------------+-------------
-- s1   | regress_foreign_data_user | foo                  |                   |        |         |                                   | 
-- s2   | regress_foreign_data_user | foo                  |                   |        |         | (host 'a', dbname 'b')            | 
-- s3   | regress_foreign_data_user | foo                  |                   | oracle |         |                                   | 
-- s4   | regress_foreign_data_user | foo                  |                   | oracle |         | (host 'a', dbname 'b')            | 
-- s5   | regress_foreign_data_user | foo                  |                   |        | 15.0    |                                   | 
-- s6   | regress_foreign_data_user | foo                  |                   |        | 16.0    | (host 'a', dbname 'b')            | 
-- s7   | regress_foreign_data_user | foo                  |                   | oracle | 17.0    | (host 'a', dbname 'b')            | 
-- s8   | regress_foreign_data_user | postgresql           |                   |        |         | (host 'localhost', dbname 's8db') | 
-- t1   | regress_test_role         | foo                  |                   |        |         |                                   | 
-- t2   | regress_test_role         | foo                  |                   |        |         |                                   | 
--(10 rows)
 +ERROR:  at or near "t2": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +CREATE SERVER t2 FOREIGN DATA WRAPPER foo
@@ -1217,9 +1245,27 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 +using the support form.
 +
 +We appreciate your feedback.
++
+ \des+
+-                                                             List of foreign servers
+- Name |           Owner           | Foreign-data wrapper | Access privileges |  Type  | Version |            FDW options            | Description 
+-------+---------------------------+----------------------+-------------------+--------+---------+-----------------------------------+-------------
+- s1   | regress_foreign_data_user | foo                  |                   |        |         |                                   | 
+- s2   | regress_foreign_data_user | foo                  |                   |        |         | (host 'a', dbname 'b')            | 
+- s3   | regress_foreign_data_user | foo                  |                   | oracle |         |                                   | 
+- s4   | regress_foreign_data_user | foo                  |                   | oracle |         | (host 'a', dbname 'b')            | 
+- s5   | regress_foreign_data_user | foo                  |                   |        | 15.0    |                                   | 
+- s6   | regress_foreign_data_user | foo                  |                   |        | 16.0    | (host 'a', dbname 'b')            | 
+- s7   | regress_foreign_data_user | foo                  |                   | oracle | 17.0    | (host 'a', dbname 'b')            | 
+- s8   | regress_foreign_data_user | postgresql           |                   |        |         | (host 'localhost', dbname 's8db') | 
+- t1   | regress_test_role         | foo                  |                   |        |         |                                   | 
+- t2   | regress_test_role         | foo                  |                   |        |         |                                   | 
+-(10 rows)
++                                       List of foreign servers
++ Name | Owner | Foreign-data wrapper | Access privileges | Type | Version | FDW options | Description 
++------+-------+----------------------+-------------------+------+---------+-------------+-------------
++(0 rows)
  
-+\des+
-+ERROR:  column "s.tableoid" does not exist
  RESET ROLE;
  REVOKE regress_test_indirect FROM regress_test_role;
  -- ALTER SERVER
@@ -1286,8 +1332,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - t1   | regress_test_role         | foo                  |                                                       |        |         |                                   | 
 - t2   | regress_test_role         | foo                  |                                                       |        |         |                                   | 
 -(10 rows)
--
-+ERROR:  column "s.tableoid" does not exist
++                                       List of foreign servers
++ Name | Owner | Foreign-data wrapper | Access privileges | Type | Version | FDW options | Description 
++------+-------+----------------------+-------------------+------+---------+-------------+-------------
++(0 rows)
+ 
  SET ROLE regress_test_role;
  ALTER SERVER s1 VERSION '1.1';                              -- ERROR
 -ERROR:  must be owner of foreign server s1
@@ -1391,8 +1440,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - t1   | regress_test_role         | foo                  |                                                       |        |         |                                      | 
 - t2   | regress_test_role         | foo                  |                                                       |        |         |                                      | 
 -(10 rows)
--
-+ERROR:  column "s.tableoid" does not exist
++                                       List of foreign servers
++ Name | Owner | Foreign-data wrapper | Access privileges | Type | Version | FDW options | Description 
++------+-------+----------------------+-------------------+------+---------+-------------+-------------
++(0 rows)
+ 
  ALTER SERVER s8 RENAME to s8new;
 +ERROR:  at or near "server": syntax error
 +DETAIL:  source SQL:
@@ -1415,8 +1467,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 - t1    | regress_test_role         | foo                  |                                                       |        |         |                                      | 
 - t2    | regress_test_role         | foo                  |                                                       |        |         |                                      | 
 -(10 rows)
--
-+ERROR:  column "s.tableoid" does not exist
++                                       List of foreign servers
++ Name | Owner | Foreign-data wrapper | Access privileges | Type | Version | FDW options | Description 
++------+-------+----------------------+-------------------+------+---------+-------------+-------------
++(0 rows)
+ 
  ALTER SERVER s8new RENAME to s8;
 +ERROR:  at or near "server": syntax error
 +DETAIL:  source SQL:
@@ -1646,7 +1701,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
  
  \deu
  List of user mappings
-@@ -586,134 +1305,325 @@
+@@ -586,134 +1393,325 @@
  
  -- CREATE USER MAPPING
  CREATE USER MAPPING FOR regress_test_missing_role SERVER s1;  -- ERROR
@@ -2036,7 +2091,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
  DROP TABLE ref_table;
  CREATE FOREIGN TABLE ft1 (
  	c1 integer OPTIONS ("param 1" 'val1') NOT NULL,
-@@ -721,374 +1631,828 @@
+@@ -721,374 +1719,832 @@
  	c3 date,
  	UNIQUE (c3)
  ) SERVER s0 OPTIONS (delimiter ',', quote '"', "be quoted" 'value'); -- ERROR
@@ -2114,8 +2169,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 ---------+-------+--------+-------------------------------------------------+-------------
 - public | ft1   | s0     | (delimiter ',', quote '"', "be quoted" 'value') | ft1
 -(1 row)
--
-+ERROR:  column "c.tableoid" does not exist
++               List of foreign tables
++ Schema | Table | Server | FDW options | Description 
++--------+-------+--------+-------------+-------------
++(0 rows)
+ 
  CREATE INDEX id_ft1_c2 ON ft1 (c2);                             -- ERROR
 -ERROR:  cannot create index on relation "ft1"
 -DETAIL:  This operation is not supported for foreign tables.
@@ -3067,7 +3125,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
  
  RESET ROLE;
  -- has_foreign_data_wrapper_privilege
-@@ -1096,255 +2460,566 @@
+@@ -1096,255 +2552,566 @@
      (SELECT oid FROM pg_foreign_data_wrapper WHERE fdwname='foo'), 'USAGE');
   has_foreign_data_wrapper_privilege 
  ------------------------------------
@@ -3761,7 +3819,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
  -- Triggers
  CREATE FUNCTION dummy_trigger() RETURNS TRIGGER AS $$
    BEGIN
-@@ -1355,39 +3030,60 @@
+@@ -1355,39 +3122,60 @@
  ON foreign_schema.foreign_table_1
  FOR EACH STATEMENT
  EXECUTE PROCEDURE dummy_trigger();
@@ -3826,7 +3884,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
  DROP FUNCTION dummy_trigger();
  -- Table inheritance
  CREATE TABLE fd_pt1 (
-@@ -1397,113 +3093,181 @@
+@@ -1397,113 +3185,181 @@
  );
  CREATE FOREIGN TABLE ft2 () INHERITS (fd_pt1)
    SERVER s0 OPTIONS (delimiter ',', quote '"', "be quoted" 'value');
@@ -3903,9 +3961,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 +
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
-+We appreciate your feedback.
  
++We appreciate your feedback.
++
 +\d+ fd_pt1
 +ERROR:  at or near ".": syntax error
 +DETAIL:  source SQL:
@@ -4092,7 +4150,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
  -- add attributes recursively
  ALTER TABLE fd_pt1 ADD COLUMN c4 integer;
  ALTER TABLE fd_pt1 ADD COLUMN c5 integer DEFAULT 0;
-@@ -1511,111 +3275,97 @@
+@@ -1511,111 +3367,97 @@
  ALTER TABLE fd_pt1 ADD COLUMN c7 integer NOT NULL;
  ALTER TABLE fd_pt1 ADD COLUMN c8 integer;
  \d+ fd_pt1
@@ -4278,7 +4336,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
  -- drop attributes recursively
  ALTER TABLE fd_pt1 DROP COLUMN c4;
  ALTER TABLE fd_pt1 DROP COLUMN c5;
-@@ -1623,172 +3373,205 @@
+@@ -1623,172 +3465,205 @@
  ALTER TABLE fd_pt1 DROP COLUMN c7;
  ALTER TABLE fd_pt1 DROP COLUMN c8;
  \d+ fd_pt1
@@ -4610,7 +4668,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
  -- changes name of an attribute recursively
  ALTER TABLE fd_pt1 RENAME COLUMN c1 TO f1;
  ALTER TABLE fd_pt1 RENAME COLUMN c2 TO f2;
-@@ -1796,297 +3579,606 @@
+@@ -1796,297 +3671,606 @@
  -- changes name of a constraint recursively
  ALTER TABLE fd_pt1 RENAME CONSTRAINT fd_pt1chk3 TO f2_check;
  \d+ fd_pt1
@@ -4857,7 +4915,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 +CREATE FOREIGN TABLE fd_pt2_1 (
 +                     ^
 +HINT:  You have attempted to use a feature that is not yet implemented.
- 
++
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
@@ -4866,7 +4924,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 +using the support form.
 +
 +We appreciate your feedback.
-+
+ 
 +\d+ fd_pt2_1
 +ERROR:  at or near ".": syntax error
 +DETAIL:  source SQL:
@@ -4904,12 +4962,12 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
- 
++
 +If you would rather not post publicly, please contact us directly
 +using the support form.
 +
 +We appreciate your feedback.
-+
+ 
 +\d+ fd_pt2
 +ERROR:  at or near ".": syntax error
 +DETAIL:  source SQL:
@@ -4946,9 +5004,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/foreign_data.out 
 +
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
-+We appreciate your feedback.
  
++We appreciate your feedback.
++
 +\d+ fd_pt2_1
 +ERROR:  at or near ".": syntax error
 +DETAIL:  source SQL:

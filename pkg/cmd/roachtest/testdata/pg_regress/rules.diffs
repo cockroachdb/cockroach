@@ -3904,10 +3904,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
- 
++
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
+ 
 +We appreciate your feedback.
 +
 +\d+ rule_t1
@@ -4555,7 +4555,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  -- tests for pg_get_*def with invalid objects
  SELECT pg_get_constraintdef(0);
   pg_get_constraintdef 
-@@ -3489,23 +2947,11 @@
+@@ -3489,17 +2947,9 @@
  (1 row)
  
  SELECT pg_get_ruledef(0);
@@ -4573,16 +4573,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
 -
 +ERROR:  unknown function: pg_get_statisticsobjdef()
  SELECT pg_get_triggerdef(0);
-- pg_get_triggerdef 
---------------------
-- 
--(1 row)
--
-+ERROR:  unknown function: pg_get_triggerdef()
- SELECT pg_get_viewdef(0);
-  pg_get_viewdef 
- ----------------
-@@ -3550,11 +2996,42 @@
+  pg_get_triggerdef 
+ -------------------
+@@ -3550,11 +3000,42 @@
  
  -- test rename for a rule defined on a partitioned table
  CREATE TABLE rules_parted_table (a int) PARTITION BY LIST (a);
@@ -4625,7 +4618,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  --
  -- test MERGE
  --
-@@ -3562,11 +3039,56 @@
+@@ -3562,11 +3043,56 @@
  CREATE TABLE rule_merge2 (a int, b text);
  CREATE RULE rule1 AS ON INSERT TO rule_merge1
  	DO INSTEAD INSERT INTO rule_merge2 VALUES (NEW.*);
@@ -4682,7 +4675,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  -- MERGE not supported for table with rules
  MERGE INTO rule_merge1 t USING (SELECT 1 AS a) s
  	ON t.a = s.a
-@@ -3576,8 +3098,10 @@
+@@ -3576,8 +3102,10 @@
  		DELETE
  	WHEN NOT MATCHED THEN
  		INSERT VALUES (s.a, '');
@@ -4695,7 +4688,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  -- should be ok with the other table though
  MERGE INTO rule_merge2 t USING (SELECT 1 AS a) s
  	ON t.a = s.a
-@@ -3587,6 +3111,10 @@
+@@ -3587,6 +3115,10 @@
  		DELETE
  	WHEN NOT MATCHED THEN
  		INSERT VALUES (s.a, '');
@@ -4706,7 +4699,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  -- test deparsing
  CREATE TABLE sf_target(id int, data text, filling int[]);
  CREATE FUNCTION merge_sf_test()
-@@ -3629,48 +3157,19 @@
+@@ -3629,48 +3161,19 @@
     THEN INSERT (filling[1], id)
     VALUES (s.a, s.a);
  END;
@@ -4763,7 +4756,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  DROP TABLE sf_target;
  --
  -- Test enabling/disabling
-@@ -3679,30 +3178,84 @@
+@@ -3679,30 +3182,84 @@
  CREATE TABLE ruletest2 (b int);
  CREATE RULE rule1 AS ON INSERT TO ruletest1
      DO INSTEAD INSERT INTO ruletest2 VALUES (NEW.*);
@@ -4852,13 +4845,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  
  DROP TABLE ruletest1;
  DROP TABLE ruletest2;
-@@ -3715,24 +3268,78 @@
- CREATE TABLE ruletest_t2 (x int);
- CREATE VIEW ruletest_v1 WITH (security_invoker=true) AS
-     SELECT * FROM ruletest_t1;
-+ERROR:  security invoker views are not supported
+@@ -3718,21 +3275,73 @@
  GRANT INSERT ON ruletest_v1 TO regress_rule_user1;
-+ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "ruletest_v1" does not exist
  CREATE RULE rule1 AS ON INSERT TO ruletest_v1
      DO INSTEAD INSERT INTO ruletest_t2 VALUES (NEW.*);
 +ERROR:  at or near "rule1": syntax error: unimplemented: this syntax
@@ -4884,7 +4872,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
 +HINT:  You have attempted to use a feature that is not yet implemented.
 +See: https://go.crdb.dev/issue-v/40283/_version_
  INSERT INTO ruletest_v1 VALUES (1);
-+ERROR:  relation "ruletest_v1" does not exist
++ERROR:  "ruletest_v1" is not a table
  RESET SESSION AUTHORIZATION;
 +ERROR:  at or near "authorization": syntax error
 +DETAIL:  source SQL:
@@ -4932,7 +4920,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  SELECT * FROM ruletest_t1;
   x 
  ---
-@@ -3741,11 +3348,26 @@
+@@ -3741,11 +3350,25 @@
  SELECT * FROM ruletest_t2;
   x 
  ---
@@ -4941,7 +4929,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
 +(0 rows)
  
  DROP VIEW ruletest_v1;
-+ERROR:  relation "ruletest_v1" does not exist
  DROP RULE rule2 ON ruletest_t1;
 +ERROR:  at or near "rule2": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
