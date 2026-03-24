@@ -33,7 +33,7 @@ type supportedAlterTypeCommand = supportedStatement
 var supportedAlterTypeStatements = map[reflect.Type]supportedAlterTypeCommand{
 	reflect.TypeOf((*tree.AlterTypeAddValue)(nil)):    {fn: alterTypeAddValue, on: true, checks: isV263Active},
 	reflect.TypeOf((*tree.AlterTypeRenameValue)(nil)): {fn: alterTypeRenameValue, on: true, checks: isV263Active},
-	reflect.TypeOf((*tree.AlterTypeRename)(nil)):      {fn: alterTypeRename, on: false, checks: nil},
+	reflect.TypeOf((*tree.AlterTypeRename)(nil)):      {fn: alterTypeRename, on: true, checks: isV263Active},
 	reflect.TypeOf((*tree.AlterTypeSetSchema)(nil)):   {fn: alterTypeSetSchema, on: false, checks: nil},
 	reflect.TypeOf((*tree.AlterTypeOwner)(nil)):       {fn: alterTypeOwner, on: false, checks: nil},
 	reflect.TypeOf((*tree.AlterTypeDropValue)(nil)):   {fn: alterTypeDropValue, on: true, checks: isV263Active},
@@ -269,12 +269,6 @@ func alterTypeRenameValue(
 	b.LogEventForExistingPayload(enumValue, &eventpb.AlterType{
 		TypeName: tn.FQString(),
 	})
-}
-
-func alterTypeRename(
-	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeRename,
-) {
-	panic(scerrors.NotImplementedErrorf(t, "ALTER TYPE RENAME is not supported"))
 }
 
 func alterTypeSetSchema(
