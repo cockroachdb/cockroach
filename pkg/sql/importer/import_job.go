@@ -274,14 +274,26 @@ func (r *importResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		// attempt. Without this check, resuming an import into an empty table
 		// would re-count and include the already-ingested import data in the
 		// initial row count.
+		// Split the row count read and job details update into separate txns.
+		// The read can be large (full table scan) and should run at BulkNormalPri,
+		// but the updateDetails write to the jobs table should not be subject to
+		// bulk admission control queuing to avoid priority inversion — holding a
+		// lock on the jobs table while waiting in an AC queue would block
+		// higher-priority work.
+		var rowCountDetails jobspb.ImportDetails
 		if err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-			rowCountDetails, err := r.detailsWithInitialRowCount(ctx, txn, details)
+			var err error
+			rowCountDetails, err = r.detailsWithInitialRowCount(ctx, txn, details)
 			if err != nil {
 				return err
 			}
-
-			return updateDetails(txn, rowCountDetails)
+			return nil
 		}, isql.WithPriority(admissionpb.BulkNormalPri)); err != nil {
+			return err
+		}
+		// The table is offline at this point, the row count won't change even if
+		// we use a separate txn (by passing nil) to update it.
+		if err := updateDetails(nil /* txn */, rowCountDetails); err != nil {
 			return err
 		}
 
