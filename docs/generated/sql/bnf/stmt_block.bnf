@@ -3220,7 +3220,7 @@ show_job_options ::=
 	| 'RESOLVED' 'TIMESTAMP'
 
 show_ranges_options ::=
-	( 'TABLES' | 'INDEXES' | 'DETAILS' | 'KEYS' | 'EXPLAIN' ) ( ( ',' 'TABLES' | ',' 'INDEXES' | ',' 'DETAILS' | ',' 'EXPLAIN' | ',' 'KEYS' ) )*
+	( 'TABLES' | 'INDEXES' | 'DETAILS' | 'KEYS' | 'ZONE' | 'EXPLAIN' ) ( ( ',' 'TABLES' | ',' 'INDEXES' | ',' 'DETAILS' | ',' 'EXPLAIN' | ',' 'KEYS' | ',' 'ZONE' ) )*
 
 partition ::=
 	'PARTITION' partition_name
