@@ -49,9 +49,10 @@ type uploadServerRPCClient struct {
 	// gcsClient is set by initGCSClient and used for all uploads.
 	// Uploads use the GCS client library (chunked resumable uploads
 	// with automatic retry).
-	gcsClient *storage.Client
-	gcsBucket string
-	gcsPrefix string
+	gcsClient      *storage.Client
+	gcsBucket      string
+	gcsPrefix      string
+	gcsAccessToken string
 }
 
 // newUploadServerClientForRPC creates a client for the coordinator
@@ -215,7 +216,16 @@ func (c *uploadServerRPCClient) initGCSClient(ctx context.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "getting upload token")
 	}
-	token := &oauth2.Token{AccessToken: tokenResp.AccessToken}
+	return c.initGCSClientWithCredentials(ctx, tokenResp.AccessToken, tokenResp.Bucket, tokenResp.Prefix)
+}
+
+// initGCSClientWithCredentials creates a GCS client from provided
+// credentials. This allows nodes to reuse the coordinator's GCS
+// prefix so all uploads land in a single session folder.
+func (c *uploadServerRPCClient) initGCSClientWithCredentials(
+	ctx context.Context, accessToken, bucket, prefix string,
+) error {
+	token := &oauth2.Token{AccessToken: accessToken}
 	client, err := storage.NewClient(ctx,
 		option.WithTokenSource(oauth2.StaticTokenSource(token)),
 	)
@@ -223,8 +233,12 @@ func (c *uploadServerRPCClient) initGCSClient(ctx context.Context) error {
 		return errors.Wrap(err, "creating GCS client")
 	}
 	c.gcsClient = client
-	c.gcsBucket = tokenResp.Bucket
-	c.gcsPrefix = tokenResp.Prefix
+	c.gcsBucket = bucket
+	if prefix != "" && !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+	c.gcsPrefix = prefix
+	c.gcsAccessToken = accessToken
 	return nil
 }
 

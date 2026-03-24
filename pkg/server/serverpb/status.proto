@@ -2316,6 +2316,12 @@ message UploadNodeDebugDataRequest {
   int32 cpu_prof_seconds = 5;
   bool include_range_info = 6;
   bool include_goroutine_stacks = 7;
+
+  // GCS credentials passed from the coordinator so all nodes upload
+  // to the same GCS prefix (single session folder).
+  string gcs_access_token = 8;
+  string gcs_bucket = 9;
+  string gcs_prefix = 10;
 }
 
 // UploadNodeDebugDataResponse is the per-node upload result.

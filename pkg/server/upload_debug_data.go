@@ -107,7 +107,8 @@ func (s *systemStatusServer) UploadDebugData(
 	clusterAllErrs := append(clusterDataErrs, clusterTableErrs...)
 	clusterTotalArtifacts := clusterArtifacts + clusterTableArtifacts
 
-	// Prepare the per-node request.
+	// Prepare the per-node request. Pass the coordinator's GCS
+	// credentials so all nodes upload to the same session folder.
 	nodeReq := &serverpb.UploadNodeDebugDataRequest{
 		ServerUrl:              req.ServerUrl,
 		SessionId:              client.sessionID,
@@ -116,6 +117,9 @@ func (s *systemStatusServer) UploadDebugData(
 		CpuProfSeconds:         req.CpuProfSeconds,
 		IncludeRangeInfo:       req.IncludeRangeInfo,
 		IncludeGoroutineStacks: req.IncludeGoroutineStacks,
+		GcsAccessToken:         client.gcsAccessToken,
+		GcsBucket:              client.gcsBucket,
+		GcsPrefix:              client.gcsPrefix,
 	}
 
 	// Build the set of requested node IDs (empty = all).
@@ -237,9 +241,18 @@ func (s *systemStatusServer) UploadNodeDebugData(
 	)
 	defer func() { _ = client.closeGCS() }()
 
-	// Initialize the GCS client for chunked resumable uploads.
-	if err := client.initGCSClient(ctx); err != nil {
-		return nil, errors.Wrapf(err, "initializing GCS client for node %d", nodeID)
+	// Initialize the GCS client. Use the coordinator's credentials if
+	// provided so all nodes upload to the same session folder.
+	if req.GcsAccessToken != "" && req.GcsBucket != "" && req.GcsPrefix != "" {
+		if err := client.initGCSClientWithCredentials(
+			ctx, req.GcsAccessToken, req.GcsBucket, req.GcsPrefix,
+		); err != nil {
+			return nil, errors.Wrapf(err, "initializing GCS client for node %d", nodeID)
+		}
+	} else {
+		if err := client.initGCSClient(ctx); err != nil {
+			return nil, errors.Wrapf(err, "initializing GCS client for node %d", nodeID)
+		}
 	}
 
 	var errs []string

@@ -259,7 +259,11 @@ func (c *uploadServerClient) InitGCSClient(ctx context.Context) error {
 	}
 	c.gcsClient = client
 	c.gcsBucket = tokenResp.Bucket
-	c.gcsPrefix = tokenResp.Prefix
+	prefix := tokenResp.Prefix
+	if prefix != "" && !strings.HasSuffix(prefix, "/") {
+		prefix += "/"
+	}
+	c.gcsPrefix = prefix
 	return nil
 }
 
