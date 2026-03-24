@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -178,6 +179,7 @@ func newCFetcherWrapper(
 	startKey roachpb.Key,
 	mustSerialize bool,
 	workloadID uint64,
+	workloadType workloadid.WorkloadType,
 ) (_ storage.CFetcherWrapper, retErr error) {
 	// At the moment, we always serialize the columnar batches if they contain
 	// enums, so it is safe to handle enum types without proper hydration - we
@@ -241,6 +243,7 @@ func newCFetcherWrapper(
 		nil, /* txn; TODO(dt): this means no AC priority info is passed. */
 		tenantID,
 		workloadID,
+		workloadType,
 	}
 
 	// This memory monitor is not connected to the memory accounting system

@@ -75,6 +75,7 @@ func getStreamer(
 		lock.Unreplicated,
 		reverse,
 		0, /* workloadID */
+		0, /* workloadType */
 	)
 }
 
@@ -138,6 +139,7 @@ func TestStreamerLimitations(t *testing.T) {
 				lock.Unreplicated,
 				false, /* reverse */
 				0,     /* workloadID */
+				0,     /* workloadType */
 			)
 		})
 	})

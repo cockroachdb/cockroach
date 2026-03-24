@@ -638,6 +638,7 @@ func NewColIndexJoin(
 			spec.FetchSpec.External,
 			tableArgs.RequiresRawMVCCValues(),
 			flowCtx.EvalCtx.WorkloadID,
+			flowCtx.EvalCtx.WorkloadType,
 		)
 	} else {
 		kvFetcher = row.NewKVFetcher(
@@ -654,6 +655,7 @@ func NewColIndexJoin(
 			flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 			spec.FetchSpec.External,
 			flowCtx.EvalCtx.WorkloadID,
+			flowCtx.EvalCtx.WorkloadType,
 		)
 	}
 
@@ -671,6 +673,7 @@ func NewColIndexJoin(
 		txn,
 		flowCtx.Codec().TenantID,
 		flowCtx.EvalCtx.WorkloadID,
+		flowCtx.EvalCtx.WorkloadType,
 	}
 	if err = fetcher.Init(
 		fetcherAllocator, kvFetcher, tableArgs,
