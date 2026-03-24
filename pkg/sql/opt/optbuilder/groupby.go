@@ -771,10 +771,6 @@ func (b *Builder) buildAggregateFunction(
 	return &info
 }
 
-var stAsMVTWindowFunctionErr = pgerror.New(
-	pgcode.FeatureNotSupported, "aggregate function st_asmvt does not support use as a window function",
-)
-
 func (b *Builder) constructWindowFn(name string, args []opt.ScalarExpr) opt.ScalarExpr {
 	switch name {
 	case "rank":
@@ -799,8 +795,6 @@ func (b *Builder) constructWindowFn(name string, args []opt.ScalarExpr) opt.Scal
 		return b.factory.ConstructLastValue(args[0])
 	case "nth_value":
 		return b.factory.ConstructNthValue(args[0], args[1])
-	case "st_asmvt":
-		panic(stAsMVTWindowFunctionErr)
 	default:
 		return b.constructAggregate(name, args)
 	}
