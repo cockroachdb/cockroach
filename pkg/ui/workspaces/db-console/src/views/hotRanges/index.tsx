@@ -19,19 +19,9 @@ import React, { useRef, useMemo, useEffect, useContext, useState } from "react";
 import { Helmet } from "react-helmet";
 import { useDispatch, useSelector } from "react-redux";
 
-import { cockroach } from "src/js/protos";
+import { useHotRanges } from "src/hooks/useHotRanges";
 import { analytics } from "src/redux/analytics";
-import {
-  refreshHotRanges,
-  clearHotRanges,
-  refreshDatabases,
-} from "src/redux/apiReducers";
-import {
-  hotRangesSelector,
-  isLoadingSelector,
-  lastErrorSelector,
-  lastSetAtSelector,
-} from "src/redux/hotRanges";
+import { refreshDatabases } from "src/redux/apiReducers";
 import { selectNodeLocalities } from "src/redux/localities";
 import { performanceBestPracticesHotSpots } from "src/util/docs";
 import { HotRangesFilter } from "src/views/hotRanges/hotRangesFilter";
@@ -43,7 +33,6 @@ import styles from "./hotRanges.module.scss";
 import HotRangesTable from "./hotRangesTable";
 
 const cx = classNames.bind(styles);
-const HotRangesRequest = cockroach.server.serverpb.HotRangesRequest;
 
 const emptyMessages = {
   SELECT_NODES: {
@@ -60,29 +49,18 @@ const emptyMessages = {
 
 const HotRangesPage = () => {
   const dispatch = useDispatch();
-  const hotRanges = useSelector(hotRangesSelector);
-  const lastError = useSelector(lastErrorSelector);
-  const lastSetAt = useSelector(lastSetAtSelector);
-  const isLoading = useSelector(isLoadingSelector);
   const nodeIdToLocalityMap = useSelector(selectNodeLocalities);
   const timezone = useContext(TimezoneContext);
 
   const { filters, applyFilters } = useFilters();
-  const [sortSetting, setSortSetting] = useState<SortSetting>(null);
+  const { hotRanges, error, isLoading, lastSetAt } = useHotRanges(
+    filters.nodeIds,
+  );
+  const [sortSetting, setSortSetting] = useState<SortSetting>({
+    ascending: false,
+    columnTitle: "qps",
+  });
   const [pagination, setPagination] = useState<ISortedTablePagination>(null);
-
-  // dispatch hot ranges call whenever the filters change and are not empty
-  useEffect(() => {
-    if (filters.nodeIds.length > 0) {
-      dispatch(
-        refreshHotRanges(
-          new HotRangesRequest({ nodes: filters.nodeIds.map(String) }),
-        ),
-      );
-    } else {
-      dispatch(clearHotRanges());
-    }
-  }, [filters.nodeIds, dispatch]);
 
   // track analytics on filters, pagination and sort.
   const analyticsKey = createHash("md5")
@@ -143,7 +121,7 @@ const HotRangesPage = () => {
         <Loading
           loading={isLoading}
           loadingText={`Loading ranges for ${filters.nodeIds?.length} nodes...`}
-          error={lastError}
+          error={error}
           render={() => (
             <HotRangesTable
               hotRangesList={filteredRanges}
@@ -157,16 +135,18 @@ const HotRangesPage = () => {
               }
               nodeIdToLocalityMap={nodeIdToLocalityMap}
               clearFilterContainer={<span ref={clearButtonRef} />}
+              sortSetting={sortSetting}
+              onSortChange={setSortSetting}
               emptyMessage={emptyMessage}
               onViewPropertiesChange={({
-                sortSetting,
-                pagination,
+                sortSetting: ss,
+                pagination: pg,
               }: {
                 sortSetting: SortSetting;
                 pagination: ISortedTablePagination;
               }) => {
-                setSortSetting(sortSetting);
-                setPagination(pagination);
+                setSortSetting(ss);
+                setPagination(pg);
               }}
             />
           )}
