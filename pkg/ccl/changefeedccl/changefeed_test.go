@@ -12115,6 +12115,41 @@ func TestChangefeedRetryBackoffLogging(t *testing.T) {
 	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
 
+func TestSinklessChangefeedSessionDisconnectLog(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	spy := &changefeedLogSpy{}
+	cleanup := log.InterceptWith(context.Background(), spy)
+	defer cleanup()
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		assertPayloads(t, foo, []string{
+			`foo: [1]->{"after": {"a": 1}}`,
+		})
+
+		closeFeed(t, foo)
+
+		testutils.SucceedsSoon(t, func() error {
+			spy.Lock()
+			defer spy.Unlock()
+			for _, l := range spy.logs {
+				if strings.Contains(l, "sinkless changefeed stopping: client session disconnected") {
+					return nil
+				}
+			}
+			return errors.New("expected session disconnect log not found")
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("sinkless"))
+}
+
 // TestChangefeedRetryBackoffResetOnHighwaterAdvance verifies that the retry
 // backoff is reset when a changefeed advances its highwater mark before
 // encountering a retryable error. This ensures that transient errors after

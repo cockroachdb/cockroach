@@ -530,7 +530,11 @@ func coreChangefeed(
 	for r := getRetry(ctx, maxBackoff, backoffReset); ; {
 		if !r.Next() {
 			// Retry loop exits when context is canceled.
-			log.Changefeed.Infof(ctx, "core changefeed retry loop exiting: %s", ctx.Err())
+			if errors.Is(ctx.Err(), context.Canceled) {
+				log.Changefeed.Infof(ctx, "sinkless changefeed stopping: client session disconnected")
+			} else {
+				log.Changefeed.Infof(ctx, "core changefeed retry loop exiting: %s", ctx.Err())
+			}
 			return ctx.Err()
 		}
 
@@ -567,7 +571,11 @@ func coreChangefeed(
 		}
 
 		if err := changefeedbase.AsTerminalError(ctx, p.ExecCfg().LeaseManager, err); err != nil {
-			log.Changefeed.Infof(ctx, "core changefeed failed due to error: %s", err)
+			if errors.Is(err, context.Canceled) {
+				log.Changefeed.Infof(ctx, "sinkless changefeed stopping: client session disconnected")
+			} else {
+				log.Changefeed.Infof(ctx, "core changefeed failed due to error: %s", err)
+			}
 			return err
 		}
 
