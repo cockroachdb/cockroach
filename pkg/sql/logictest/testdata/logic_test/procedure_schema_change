@@ -12,16 +12,16 @@ CREATE PROCEDURE p_int(INT) LANGUAGE SQL AS 'SELECT 1'
 statement ok
 CREATE FUNCTION p_func() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
 
-statement error pgcode 42723 pq: procedure p\(\) already exists in schema "public"
+statement error pgcode 42723 pq: procedure public.p\(\) already exists in schema "public"
 ALTER PROCEDURE p RENAME TO p
 
-statement error pgcode 42723 pq: function p_func\(\) already exists in schema "public"
+statement error pgcode 42723 pq: function public.p_func\(\) already exists in schema "public"
 ALTER PROCEDURE p RENAME TO p_func
 
 statement error pgcode 42883 pq: could not find a function named "p"
 ALTER FUNCTION p RENAME TO p_new
 
-statement error pgcode 42723 pq: procedure p2\(\) already exists in schema "public"
+statement error pgcode 42723 pq: procedure public.p2\(\) already exists in schema "public"
 ALTER PROCEDURE p RENAME TO p2
 
 statement ok
@@ -94,6 +94,38 @@ DROP PROCEDURE p_func(INT);
 DROP PROCEDURE p_int();
 DROP PROCEDURE p2();
 DROP FUNCTION p_func();
+
+# Regression test: renaming a procedure in a non-public schema should
+# detect duplicate (name, arguments) within that schema. Two procedure
+# with different arguments can have the same name.
+# Overloaded procedure cannot be dropped or renamed without specifying
+# the procedure signature.
+statement ok
+CREATE SCHEMA rename_dup_sc;
+CREATE PROCEDURE rename_dup_sc.pa(a INT) LANGUAGE SQL AS $$ SELECT a $$;
+CREATE PROCEDURE rename_dup_sc.pb(a INT) LANGUAGE SQL AS $$ SELECT a $$;
+CREATE PROCEDURE rename_dup_sc.pc(a INT, b INT) LANGUAGE SQL AS $$ SELECT a + b $$
+
+statement error pgcode 42723 pq: procedure rename_dup_sc.pa\(INT8\) already exists in schema "rename_dup_sc"
+ALTER PROCEDURE rename_dup_sc.pb RENAME TO pa
+
+statement ok
+ALTER PROCEDURE rename_dup_sc.pb RENAME TO pc
+
+statement error pgcode 42725 pq: function name "pc" is not unique
+ALTER PROCEDURE rename_dup_sc.pc RENAME TO pb
+
+statement error pgcode 42725 pq: procedure name "pc" is not unique
+DROP PROCEDURE rename_dup_sc.pc
+
+statement ok
+ALTER PROCEDURE rename_dup_sc.pc(INT) RENAME TO pb
+
+statement ok
+DROP PROCEDURE rename_dup_sc.pa;
+DROP PROCEDURE rename_dup_sc.pb;
+DROP PROCEDURE rename_dup_sc.pc;
+DROP SCHEMA rename_dup_sc
 
 subtest end
 
