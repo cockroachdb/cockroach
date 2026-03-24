@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvstreamer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -62,6 +63,7 @@ func newTxnKVFetcher(
 	forceProductionKVBatchSize bool,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 	workloadID uint64,
+	workloadType workloadid.WorkloadType,
 ) *txnKVFetcher {
 	alloc := new(struct {
 		batchRequestsIssued int64
@@ -119,6 +121,7 @@ func newTxnKVFetcher(
 		batchRequestsIssued:        &alloc.batchRequestsIssued,
 		kvCPUTime:                  &alloc.kvCPUTime,
 		workloadID:                 workloadID,
+		workloadType:               workloadType,
 	}
 	fetcherArgs.admission.requestHeader = txn.AdmissionHeader()
 	fetcherArgs.admission.responseQ = txn.DB().SQLKVResponseAdmissionQ
@@ -151,10 +154,11 @@ func NewDirectKVBatchFetcher(
 	forceProductionKVBatchSize bool,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 	workloadID uint64,
+	workloadType workloadid.WorkloadType,
 ) KVBatchFetcher {
 	f := newTxnKVFetcher(
 		txn, bsHeader, reverse, rawMVCCValues, lockStrength, lockWaitPolicy, lockDurability,
-		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext, workloadID,
+		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext, workloadID, workloadType,
 	)
 	f.scanFormat = kvpb.COL_BATCH_RESPONSE
 	f.indexFetchSpec = spec
@@ -181,10 +185,11 @@ func NewKVFetcher(
 	forceProductionKVBatchSize bool,
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 	workloadID uint64,
+	workloadType workloadid.WorkloadType,
 ) *KVFetcher {
 	return newKVFetcher(newTxnKVFetcher(
 		txn, bsHeader, reverse, rawMVCCValues, lockStrength, lockWaitPolicy, lockDurability,
-		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext, workloadID,
+		lockTimeout, deadlockTimeout, acc, forceProductionKVBatchSize, ext, workloadID, workloadType,
 	))
 }
 
@@ -213,6 +218,7 @@ func NewStreamingKVFetcher(
 	ext *fetchpb.IndexFetchSpec_ExternalRowData,
 	rawMVCCValues bool,
 	workloadID uint64,
+	workloadType workloadid.WorkloadType,
 ) *KVFetcher {
 	var kvPairsRead int64
 	var batchRequestsIssued int64
@@ -235,6 +241,7 @@ func NewStreamingKVFetcher(
 		GetKeyLockingDurability(lockDurability),
 		reverse,
 		workloadID,
+		workloadType,
 	)
 	mode := kvstreamer.OutOfOrder
 	if maintainOrdering {

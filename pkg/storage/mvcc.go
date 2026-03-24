@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -4944,6 +4945,8 @@ type MVCCScanOptions struct {
 	// WorkloadID identifies the workload that triggered the scan (e.g.
 	// statement fingerprint ID, job ID). Used for ASH sampling.
 	WorkloadID uint64
+	// WorkloadType distinguishes the kind of workload for ASH sampling.
+	WorkloadType workloadid.WorkloadType
 }
 
 func (opts *MVCCScanOptions) validate() error {

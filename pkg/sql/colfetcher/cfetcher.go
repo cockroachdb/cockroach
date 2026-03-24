@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -226,6 +227,8 @@ type cFetcherArgs struct {
 	tenantID roachpb.TenantID
 	// workloadID is used for ASH sampling.
 	workloadID uint64
+	// workloadType distinguishes the kind of workload for ASH sampling.
+	workloadType workloadid.WorkloadType
 }
 
 // noOutputColumn is a sentinel value to denote that a system column is not
@@ -568,10 +571,11 @@ func (cf *cFetcher) Init(
 			cf.pacer = cf.txn.DB().AdmissionPacerFactory.NewPacer(
 				50*time.Millisecond, // Request a realistic per-batch amount.
 				admission.WorkInfo{
-					TenantID:   cf.tenantID,
-					Priority:   pri,
-					CreateTime: timeutil.Now().UnixNano(),
-					WorkloadID: cf.workloadID,
+					TenantID:     cf.tenantID,
+					Priority:     pri,
+					CreateTime:   timeutil.Now().UnixNano(),
+					WorkloadID:   cf.workloadID,
+					WorkloadType: cf.workloadType,
 				},
 			)
 		}
