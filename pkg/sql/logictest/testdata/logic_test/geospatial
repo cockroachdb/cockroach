@@ -7612,3 +7612,76 @@ FI9.2  Gi8KBHRlc3QSDhIEAAABARgBIgQJMt4/GgJjMhoCYzEiBgoEYWJjZCICKBQogCB4Ag==
 
 
 subtest end
+
+subtest st_asmvt_window
+
+statement ok
+CREATE TABLE mvt_win_test (
+  id INT PRIMARY KEY,
+  geom GEOMETRY,
+  name STRING
+)
+
+statement ok
+INSERT INTO mvt_win_test VALUES
+  (1, 'POINT(100 200)', 'a'),
+  (2, 'POINT(300 400)', 'b'),
+  (3, 'POINT(500 600)', 'c')
+
+# st_asmvt can be used as a window function.
+query IB rowsort
+SELECT id, st_asmvt(mvt_win_test.*) OVER () IS NOT NULL FROM mvt_win_test
+----
+1  true
+2  true
+3  true
+
+# st_asmvt as a window function with a custom layer name.
+query IB rowsort
+SELECT id, st_asmvt(mvt_win_test.*, 'layer1') OVER () IS NOT NULL FROM mvt_win_test
+----
+1  true
+2  true
+3  true
+
+# st_asmvt as a window function with custom layer name and extent.
+query IB rowsort
+SELECT id, st_asmvt(mvt_win_test.*, 'layer1', 2048) OVER () IS NOT NULL FROM mvt_win_test
+----
+1  true
+2  true
+3  true
+
+# st_asmvt as a window function with PARTITION BY.
+query IB rowsort
+SELECT id, st_asmvt(mvt_win_test.*) OVER (PARTITION BY id) IS NOT NULL FROM mvt_win_test
+----
+1  true
+2  true
+3  true
+
+# st_asmvt as a window function with ORDER BY.
+query IB rowsort
+SELECT id, st_asmvt(mvt_win_test.*) OVER (ORDER BY id) IS NOT NULL FROM mvt_win_test
+----
+1  true
+2  true
+3  true
+
+# Regression test for #165687: st_asmvt with NULL arguments alongside an
+# ordered aggregate should not panic.
+statement ok
+SET testing_optimizer_disable_rule_probability = 0.5
+
+query TT
+SELECT array_agg(id ORDER BY id)::STRING, st_asmvt(NULL, NULL)::STRING FROM mvt_win_test
+----
+{1,2,3}  \x
+
+statement ok
+RESET testing_optimizer_disable_rule_probability
+
+statement ok
+DROP TABLE mvt_win_test
+
+subtest end
