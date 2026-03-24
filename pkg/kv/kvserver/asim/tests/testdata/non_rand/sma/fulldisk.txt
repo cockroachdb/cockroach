@@ -39,19 +39,19 @@ hash: c3f26592a16d40d7
 ==========================
 mma-only:
 disk_fraction_used#1: first: [s1=0.20, s2=0.20, s3=0.20, s4=0.20, s5=1.00] (stddev=0.32, mean=0.36, sum=2)
-disk_fraction_used#1: last:  [s1=0.28, s2=0.28, s3=0.28, s4=0.26, s5=0.86] (stddev=0.24, mean=0.39, sum=2)
-disk_fraction_used#1: thrash_pct: [s1=1%, s2=1%, s3=1%, s4=0%, s5=46%]  (sum=50%)
+disk_fraction_used#1: last:  [s1=0.28, s2=0.28, s3=0.28, s4=0.27, s5=0.86] (stddev=0.23, mean=0.39, sum=2)
+disk_fraction_used#1: thrash_pct: [s1=1%, s2=0%, s3=3%, s4=0%, s5=47%]  (sum=50%)
 replicas#1: first: [s1=300, s2=300, s3=300, s4=300, s5=300] (stddev=0.00, mean=300.00, sum=1500)
-replicas#1: last:  [s1=329, s2=330, s3=329, s4=312, s5=200] (stddev=50.45, mean=300.00, sum=1500)
-replicas#1: thrash_pct: [s1=9%, s2=8%, s3=6%, s4=0%, s5=0%]  (sum=23%)
-hash: 46a4e5c2de31c27e
+replicas#1: last:  [s1=329, s2=330, s3=329, s4=314, s5=198] (stddev=51.35, mean=300.00, sum=1500)
+replicas#1: thrash_pct: [s1=4%, s2=0%, s3=21%, s4=0%, s5=0%]  (sum=25%)
+hash: 9184b3428df1bd8c
 ==========================
 mma-count:
 disk_fraction_used#1: first: [s1=0.20, s2=0.20, s3=0.20, s4=0.20, s5=1.00] (stddev=0.32, mean=0.36, sum=2)
-disk_fraction_used#1: last:  [s1=0.27, s2=0.28, s3=0.27, s4=0.28, s5=0.84] (stddev=0.23, mean=0.39, sum=2)
-disk_fraction_used#1: thrash_pct: [s1=24%, s2=25%, s3=26%, s4=27%, s5=46%]  (sum=148%)
+disk_fraction_used#1: last:  [s1=0.28, s2=0.27, s3=0.27, s4=0.28, s5=0.90] (stddev=0.25, mean=0.40, sum=2)
+disk_fraction_used#1: thrash_pct: [s1=25%, s2=25%, s3=26%, s4=26%, s5=96%]  (sum=198%)
 replicas#1: first: [s1=300, s2=300, s3=300, s4=300, s5=300] (stddev=0.00, mean=300.00, sum=1500)
-replicas#1: last:  [s1=323, s2=328, s3=323, s4=332, s5=194] (stddev=53.11, mean=300.00, sum=1500)
-replicas#1: thrash_pct: [s1=174%, s2=188%, s3=189%, s4=204%, s5=0%]  (sum=755%)
-hash: 2e7b5e4eab14c540
+replicas#1: last:  [s1=326, s2=321, s3=319, s4=326, s5=208] (stddev=46.08, mean=300.00, sum=1500)
+replicas#1: thrash_pct: [s1=214%, s2=215%, s3=228%, s4=228%, s5=96%]  (sum=981%)
+hash: 3d60e53df25d21ad
 ==========================
