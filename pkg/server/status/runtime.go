@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/gcassist"
 	"github.com/cockroachdb/cockroach/pkg/util/goschedstats"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -167,6 +168,12 @@ var (
 		Help:        "Estimated total CPU time user goroutines spent to assist the GC process",
 		Measurement: "CPU Time",
 		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaGCAssistEnabled = metric.Metadata{
+		Name:        "sys.gc.assist.enabled",
+		Help:        "Indicates whether GC assist is currently enabled (1) or disabled (0)",
+		Measurement: "GC Assist",
+		Unit:        metric.Unit_CONST,
 	}
 	metaGCTotalNS = metric.Metadata{
 		Name:        "sys.gc.total.ns",
@@ -846,6 +853,7 @@ type RuntimeStatSampler struct {
 	NonGcStopNS              *metric.Gauge
 	GcPausePercent           *metric.GaugeFloat64
 	GcAssistNS               *metric.Counter
+	GcAssistEnabled          *metric.Gauge
 	GcTotalNS                *metric.Counter
 	// CPU stats for the CRDB process usage.
 	CPUUserNS              *metric.Counter
@@ -954,6 +962,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 		GcStopNS:                 metric.NewGauge(metaGCStopNS),
 		GcPausePercent:           metric.NewGaugeFloat64(metaGCPausePercent),
 		GcAssistNS:               metric.NewCounter(metaGCAssistNS),
+		GcAssistEnabled:          metric.NewGauge(metaGCAssistEnabled),
 		GcTotalNS:                metric.NewCounter(metaGCTotalNS),
 		NonGcPauseNS:             metric.NewGauge(metaNonGCPauseNS),
 		NonGcStopNS:              metric.NewGauge(metaNonGCStopNS),
@@ -1269,6 +1278,11 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	rsr.GcStopNS.Update(gcStopTotalNs)
 	rsr.GcPausePercent.Update(gcPauseRatio)
 	rsr.GcAssistNS.Update(gcAssistNS)
+	if gcassist.Enabled() {
+		rsr.GcAssistEnabled.Update(1)
+	} else {
+		rsr.GcAssistEnabled.Update(0)
+	}
 	rsr.GcTotalNS.Update(int64(rsr.goRuntimeSampler.float64(runtimeMetricGCTotal) * 1e9))
 	rsr.NonGcPauseNS.Update(nonGcPauseTotalNs)
 	rsr.NonGcStopNS.Update(nonGcStopTotalNs)

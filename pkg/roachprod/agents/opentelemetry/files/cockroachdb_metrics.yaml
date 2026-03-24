@@ -2996,6 +2996,7 @@ sys_cpu_user_ns: sys.cpu.user.ns
 sys_cpu_user_percent: sys.cpu.user.percent
 sys_fd_open: sys.fd.open
 sys_fd_softlimit: sys.fd.softlimit
+sys_gc_assist_enabled: sys.gc.assist.enabled
 sys_gc_assist_ns: sys.gc.assist.ns
 sys_gc_count: sys.gc.count
 sys_gc_pause_ns: sys.gc.pause.ns
