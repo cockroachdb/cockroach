@@ -315,9 +315,12 @@ func TestAlterTenantFailUpdatingCutoverTime(t *testing.T) {
 	// Wait for cutover to start.
 	<-cutoverStartedCh
 
-	// Another cutover should fail, verify the error.
+	// Attempting to cutover to the same timestamp (LATEST) should succeed (noop).
+	c.DestSysSQL.Exec(c.T, `ALTER TENANT $1 COMPLETE REPLICATION TO LATEST`, args.DestTenantName)
+
+	// Attempting to cutover to a different timestamp should fail.
 	c.DestSysSQL.ExpectErr(t, "already started cutting over to timestamp",
-		fmt.Sprintf("ALTER TENANT %s COMPLETE REPLICATION TO LATEST", args.DestTenantName))
+		fmt.Sprintf("ALTER TENANT %s COMPLETE REPLICATION TO SYSTEM TIME '-1us'", args.DestTenantName))
 
 	// Done, the tenant is cutting over, unblock the job.
 	unblockJob()
