@@ -38,8 +38,8 @@ func (n *createSchemaNode) startExec(params runParams) error {
 	return params.p.createUserDefinedSchema(params, n.n)
 }
 
-// CreateUserDefinedSchemaDescriptor constructs a mutable schema descriptor.
-func CreateUserDefinedSchemaDescriptor(
+// createUserDefinedSchemaDescriptor constructs a mutable schema descriptor.
+func (p *planner) createUserDefinedSchemaDescriptor(
 	ctx context.Context,
 	sessionData *sessiondata.SessionData,
 	n *tree.CreateSchema,
@@ -102,6 +102,22 @@ func CreateUserDefinedSchemaDescriptor(
 		}
 		if !exists {
 			return nil, nil, sqlerrors.NewUndefinedUserError(authRole)
+		}
+		if authRole != p.User() {
+			isAdmin, err := p.UserHasAdminRole(ctx, p.User())
+			if err != nil {
+				return nil, nil, err
+			}
+			if !isAdmin {
+				memberOf, err := p.MemberOfWithAdminOption(ctx, p.User())
+				if err != nil {
+					return nil, nil, err
+				}
+				if _, ok := memberOf[authRole]; !ok {
+					return nil, nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+						"must be member of role %q", authRole)
+				}
+			}
 		}
 		owner = authRole
 	}
@@ -196,7 +212,7 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		return err
 	}
 
-	desc, privs, err := CreateUserDefinedSchemaDescriptor(
+	desc, privs, err := p.createUserDefinedSchemaDescriptor(
 		params.ctx, params.SessionData(), n, p.InternalSQLTxn(),
 		p.extendedEvalCtx.DescIDGenerator, db, true, /* allocateID */
 	)
