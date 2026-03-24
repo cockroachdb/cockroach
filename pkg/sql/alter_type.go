@@ -356,8 +356,8 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 		return err
 	}
 
-	// The prepareSetSchema checks the primary type's name. The name of the
-	// companion array is collision checked below.
+	// The prepareSetSchema checks the primary type's name while the name of the
+	// companion array is collision-checked below.
 	desiredSchemaID, err := p.prepareSetSchema(ctx, n.prefix.Database, typeDesc, schema)
 	if err != nil {
 		return err
@@ -375,11 +375,11 @@ func (p *planner) setTypeSchema(ctx context.Context, n *alterTypeNode, schema st
 	}
 
 	// The CheckObjectNameCollision checks that the companion array can be moved
-	// without colliding with
+	// with its name.
 	//
 	// This is consistent with the PG behavior which itself is inconsistent:
-	// `SET SCHEMA` errors on collision while `ALTER TYPE ... RENAME` auto-resolves
-	// conflicts on companion array names.
+	// `SET SCHEMA` errors on collision while `ALTER TYPE ... RENAME`
+	// auto-resolves conflicts on companion array names.
 	if err := descs.CheckObjectNameCollision(
 		ctx,
 		p.Descriptors(),

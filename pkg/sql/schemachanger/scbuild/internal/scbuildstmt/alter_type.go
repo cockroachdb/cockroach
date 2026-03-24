@@ -34,7 +34,7 @@ var supportedAlterTypeStatements = map[reflect.Type]supportedAlterTypeCommand{
 	reflect.TypeOf((*tree.AlterTypeAddValue)(nil)):    {fn: alterTypeAddValue, on: true, checks: isV263Active},
 	reflect.TypeOf((*tree.AlterTypeRenameValue)(nil)): {fn: alterTypeRenameValue, on: true, checks: isV263Active},
 	reflect.TypeOf((*tree.AlterTypeRename)(nil)):      {fn: alterTypeRename, on: false, checks: nil},
-	reflect.TypeOf((*tree.AlterTypeSetSchema)(nil)):   {fn: alterTypeSetSchema, on: false, checks: nil},
+	reflect.TypeOf((*tree.AlterTypeSetSchema)(nil)):   {fn: alterTypeSetSchema, on: true, checks: isV263Active},
 	reflect.TypeOf((*tree.AlterTypeOwner)(nil)):       {fn: alterTypeOwner, on: false, checks: nil},
 	reflect.TypeOf((*tree.AlterTypeDropValue)(nil)):   {fn: alterTypeDropValue, on: true, checks: isV263Active},
 }
@@ -82,7 +82,8 @@ func AlterType(b BuildCtx, n *tree.AlterType) {
 	elts := b.ResolveUserDefinedTypeType(n.Type, ResolveParams{})
 
 	if !elts.FilterCompositeType().IsEmpty() {
-		panic(pgerror.Newf(pgcode.WrongObjectType, "%q is not an enum", n.Type.Object()))
+		panic(scerrors.NotImplementedErrorf(n,
+			"ALTER TYPE for composite types is not supported"))
 	}
 
 	enumType := elts.FilterEnumType().MustGetOneElement()
@@ -280,7 +281,43 @@ func alterTypeRename(
 func alterTypeSetSchema(
 	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeSetSchema,
 ) {
-	panic(scerrors.NotImplementedErrorf(t, "ALTER TYPE SET SCHEMA is not supported"))
+	typeID := enumType.TypeID
+
+	currNamespace := mustRetrieveNamespaceElem(b, typeID)
+	currSchemaID := currNamespace.SchemaID
+	panicIfSchemaIsTemporaryOrVirtual(t.Schema)
+	newSchema := resolveSchemaByName(b, t.Schema, currNamespace.DatabaseID)
+	newSchemaID := newSchema.SchemaID
+
+	if currSchemaID == newSchemaID {
+		return
+	}
+
+	currName := tree.MakeTableNameFromPrefix(b.NamePrefix(enumType), tree.Name(currNamespace.Name))
+	newName := currName
+	newName.SchemaName = t.Schema
+
+	checkTableNameConflicts(b, currName, newName, currNamespace)
+
+	arrayNamespace := mustRetrieveNamespaceElem(b, enumType.ArrayTypeID)
+	arrayName := tree.MakeTableNameFromPrefix(
+		b.NamePrefix(enumType), tree.Name(arrayNamespace.Name),
+	)
+	newArrayName := arrayName
+	newArrayName.SchemaName = t.Schema
+	checkTableNameConflicts(b, arrayName, newArrayName, arrayNamespace)
+
+	newNS, newSchemaChild := moveDescriptorToSchema(b, typeID, currNamespace, newSchemaID)
+	moveDescriptorToSchema(b, enumType.ArrayTypeID, arrayNamespace, newSchemaID)
+
+	b.LogEventForExistingPayload(newNS, &eventpb.SetSchema{
+		DescriptorName:    currName.FQString(),
+		NewDescriptorName: newName.FQString(),
+		DescriptorType:    "type",
+	})
+	b.LogEventForExistingPayload(newSchemaChild, &eventpb.AlterType{
+		TypeName: currName.FQString(),
+	})
 }
 
 func alterTypeOwner(

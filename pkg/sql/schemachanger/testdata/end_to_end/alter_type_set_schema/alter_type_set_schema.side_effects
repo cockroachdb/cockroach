@@ -1,0 +1,115 @@
+/* setup */
+CREATE TYPE salmon AS ENUM('chinook', 'sockeye');
+CREATE SCHEMA fish;
+----
+...
++object {100 101 salmon} -> 104
++object {100 101 _salmon} -> 105
++schema {100 0 fish} -> 106
+
+/* test */
+ALTER TYPE salmon SET SCHEMA fish;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TYPE
+increment telemetry for sql.schema.alter_type.set_schema
+increment telemetry for sql.udts.alter_enum
+write *eventpb.SetSchema to event log:
+  descriptorName: defaultdb.public.salmon
+  descriptorType: type
+  newDescriptorName: defaultdb.fish.salmon
+  sql:
+    descriptorId: 104
+    statement: ALTER TYPE ‹defaultdb›.‹public›.‹salmon› SET SCHEMA ‹fish›
+    tag: ALTER TYPE
+    user: root
+write *eventpb.AlterType to event log:
+  sql:
+    descriptorId: 104
+    statement: ALTER TYPE ‹defaultdb›.‹public›.‹salmon› SET SCHEMA ‹fish›
+    tag: ALTER TYPE
+    user: root
+  typeName: defaultdb.public.salmon
+## StatementPhase stage 1 of 1 with 10 MutationType ops
+delete object namespace entry {100 101 salmon} -> 104
+delete object namespace entry {100 101 _salmon} -> 105
+add object namespace entry {100 106 salmon} -> 104
+add object namespace entry {100 106 _salmon} -> 105
+upsert descriptor #104
+  ...
+     name: salmon
+     parentId: 100
+  -  parentSchemaId: 101
+  +  parentSchemaId: 106
+     privileges:
+       ownerProto: root
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #105
+  ...
+     name: _salmon
+     parentId: 100
+  -  parentSchemaId: 101
+  +  parentSchemaId: 106
+     privileges:
+       ownerProto: root
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #106
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 12 MutationType ops
+delete object namespace entry {100 101 salmon} -> 104
+delete object namespace entry {100 101 _salmon} -> 105
+add object namespace entry {100 106 salmon} -> 104
+add object namespace entry {100 106 _salmon} -> 105
+upsert descriptor #104
+  ...
+     name: salmon
+     parentId: 100
+  -  parentSchemaId: 101
+  +  parentSchemaId: 106
+     privileges:
+       ownerProto: root
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #105
+  ...
+     name: _salmon
+     parentId: 100
+  -  parentSchemaId: 101
+  +  parentSchemaId: 106
+     privileges:
+       ownerProto: root
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #106
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1

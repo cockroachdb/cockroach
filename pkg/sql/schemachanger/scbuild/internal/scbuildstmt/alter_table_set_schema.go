@@ -6,10 +6,13 @@
 package scbuildstmt
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -49,10 +52,10 @@ func AlterTableSetSchema(b BuildCtx, n *tree.AlterTableSetSchema) {
 	// Get the schema ID directly from the namespace element
 	currNamespace := mustRetrieveNamespaceElem(b, descID)
 	currSchemaID := currNamespace.SchemaID
+	// Ensure that new schema is neither temporary nor virtual.
+	panicIfSchemaIsTemporaryOrVirtual(n.Schema)
 	newSchema := resolveSchemaByName(b, n.Schema, currNamespace.DatabaseID)
 	newSchemaID := newSchema.SchemaID
-	// Ensure that new schema is not temporary or virtual
-	panicIfSchemaIsTemporaryOrVirtual(newSchema)
 	// If new schema is the same as the curr schema, do a no-op
 	if currSchemaID == newSchemaID {
 		return
@@ -63,20 +66,7 @@ func AlterTableSetSchema(b BuildCtx, n *tree.AlterTableSetSchema) {
 	// Check for name conflicts
 	checkTableNameConflicts(b, currName, newName, currNamespace)
 
-	// drop the old namespace and add a new one
-	newNamespace := *currNamespace
-	newNamespace.SchemaID = newSchemaID
-	b.Drop(currNamespace)
-	b.Add(&newNamespace)
-
-	// drop old schema child and add new one
-	currSchemaChild := b.QueryByID(descID).FilterSchemaChild().MustGetOneElement()
-	newSchemaChild := scpb.SchemaChild{
-		ChildObjectID: descID,
-		SchemaID:      newSchemaID,
-	}
-	b.Drop(currSchemaChild)
-	b.Add(&newSchemaChild)
+	newNamespace, _ := moveDescriptorToSchema(b, descID, currNamespace, newSchemaID)
 
 	// Log event for audit logging.
 	kind := tree.GetTableType(n.IsSequence, n.IsView, n.IsMaterialized)
@@ -85,7 +75,7 @@ func AlterTableSetSchema(b BuildCtx, n *tree.AlterTableSetSchema) {
 		NewDescriptorName: newName.FQString(),
 		DescriptorType:    kind,
 	}
-	b.LogEventForExistingPayload(&newNamespace, setSchemaEvent)
+	b.LogEventForExistingPayload(newNamespace, setSchemaEvent)
 }
 
 func resolveSchemaByName(b BuildCtx, schemaName tree.Name, databaseID catid.DescID) *scpb.Schema {
@@ -104,13 +94,38 @@ func resolveSchemaByName(b BuildCtx, schemaName tree.Name, databaseID catid.Desc
 	return newSchema
 }
 
-func panicIfSchemaIsTemporaryOrVirtual(newSchema *scpb.Schema) {
-	if newSchema.IsTemporary {
-		panic(pgerror.Newf(pgcode.FeatureNotSupported,
-			"cannot move objects into or out of temporary schemas"))
-	}
-	if newSchema.IsVirtual {
+func panicIfSchemaIsTemporaryOrVirtual(schemaName tree.Name) {
+	name := string(schemaName)
+	if _, ok := catconstants.VirtualSchemaNames[name]; ok {
 		panic(pgerror.Newf(pgcode.FeatureNotSupported,
 			"cannot move objects into or out of virtual schemas"))
 	}
+	if strings.HasPrefix(name, catconstants.PgTempSchemaName) {
+		panic(pgerror.Newf(pgcode.FeatureNotSupported,
+			"cannot move objects into or out of temporary schemas"))
+	}
+}
+
+// moveDescriptorToSchema drops the old Namespace and SchemaChild elements for
+// the given descriptor and adds new ones with the updated schema ID.
+// It returns the new Namespace and SchemaChild elements.
+func moveDescriptorToSchema(
+	b BuildCtx, descID catid.DescID, currNamespace *scpb.Namespace, newSchemaID catid.DescID,
+) (*scpb.Namespace, *scpb.SchemaChild) {
+	// drop the old namespace and add a new one
+	newNamespace := *currNamespace
+	newNamespace.SchemaID = newSchemaID
+	b.Drop(currNamespace)
+	b.Add(&newNamespace)
+
+	// drop old schema child and add new one
+	currSchemaChild := b.QueryByID(descID).FilterSchemaChild().MustGetOneElement()
+	newSchemaChild := &scpb.SchemaChild{
+		ChildObjectID: descID,
+		SchemaID:      newSchemaID,
+	}
+	b.Drop(currSchemaChild)
+	b.Add(newSchemaChild)
+
+	return &newNamespace, newSchemaChild
 }

@@ -868,3 +868,104 @@ t_rename_computed  CREATE TABLE public.t_rename_computed (
                    );
 
 subtest end
+
+subtest alter_type_set_schema
+
+statement ok
+CREATE SCHEMA s1;
+CREATE SCHEMA s2;
+CREATE TYPE sc_type AS ENUM ('a', 'b', 'c');
+
+# Move type from public to s1.
+statement ok
+ALTER TYPE sc_type SET SCHEMA s1
+
+# The type should be resolvable in the new schema.
+query T
+SELECT 'a'::s1.sc_type
+----
+a
+
+# The array type should have moved too.
+query T
+SELECT ARRAY['a']::s1._sc_type
+----
+{a}
+
+# Setting the same schema should be a no-op.
+statement ok
+ALTER TYPE s1.sc_type SET SCHEMA s1
+
+# Move from s1 to s2.
+statement ok
+ALTER TYPE s1.sc_type SET SCHEMA s2
+
+query T
+SELECT 'b'::s2.sc_type
+----
+b
+
+query T
+SELECT ARRAY['b']::s2._sc_type
+----
+{b}
+
+# The type should no longer exist in s1.
+query error pq: type "s1.sc_type" does not exist
+SELECT 'a'::s1.sc_type
+
+# Error when target schema doesn't exist.
+statement error pq: unknown schema "does_not_exist"
+ALTER TYPE s2.sc_type SET SCHEMA does_not_exist
+
+# Error when there's a name conflict in the target schema.
+statement ok
+CREATE TYPE s1.sc_type AS ENUM ('x', 'y')
+
+statement error pq: type "test.s1.sc_type" already exists
+ALTER TYPE s2.sc_type SET SCHEMA s1
+
+# Clean up.
+statement ok
+DROP TYPE s1.sc_type;
+DROP TYPE s2.sc_type;
+DROP SCHEMA s1;
+DROP SCHEMA s2
+
+subtest end
+
+subtest alter_type_set_schema_with_table_ref
+
+# Moving a type that is referenced by a table column should succeed
+# because types are referenced by ID, not name.
+statement ok
+CREATE SCHEMA s_ref;
+CREATE TYPE ref_type AS ENUM ('x', 'y', 'z');
+CREATE TABLE t_ref (c ref_type);
+INSERT INTO t_ref VALUES ('x')
+
+statement ok
+ALTER TYPE ref_type SET SCHEMA s_ref
+
+# The table should still work with the moved type.
+query T
+SELECT c FROM t_ref
+----
+x
+
+statement ok
+INSERT INTO t_ref VALUES ('y')
+
+query T rowsort
+SELECT c FROM t_ref
+----
+x
+y
+
+# Clean up.
+statement ok
+DROP TABLE t_ref;
+DROP TYPE s_ref.ref_type;
+DROP SCHEMA s_ref
+
+subtest end
