@@ -1755,80 +1755,109 @@ func registerClusterReplicationResilience(r registry.Registry) {
 	}
 }
 
-// registerClusterReplicationDisconnect tests that a physical replication stream
-// succeeds if a source and destination node pair disconnects. When the pair
-// disconnects, we expect its pg connection to time out, causing the job to
-// retry. The job will recreate a topology, potentially with different src-node
-// pairings. If the disconnected nodes no longer match in the new topology, the
-// physical replication stream will make progress in the face of network
-// partition. In the unlikely event that the two disconnected nodes continue to
-// get paired together, the stream should catch up once the test driver
-// reconnects the nodes.
+// registerClusterReplicationDisconnect registers two variants of the c2c
+// disconnect test. Both partition all source nodes from all destination nodes.
+//
+// c2c/disconnect-temporary: the partition is temporary; after the disconnect
+// duration, the nodes are reconnected and we verify the stream advances and
+// completes cutover.
+//
+// c2c/disconnect-permanent: the partition persists through cutover. The
+// blackhole is only cleaned up after rd.main() returns.
 func registerClusterReplicationDisconnect(r registry.Registry) {
-	sp := replicationSpec{
-		name:                      "c2c/disconnect",
-		srcNodes:                  3,
-		dstNodes:                  3,
-		cpus:                      4,
-		workload:                  replicateKV{readPercent: 0, initRows: 1000000, maxBlockBytes: 1024, initWithSplitAndScatter: true, tolerateErrors: true},
-		timeout:                   20 * time.Minute,
-		additionalDuration:        10 * time.Minute,
-		cutover:                   2 * time.Minute,
-		maxAcceptedLatency:        12 * time.Minute,
-		skipNodeDistributionCheck: true,
-		clouds:                    registry.OnlyGCE,
-		suites:                    registry.Suites(registry.Nightly),
-	}
-	c2cRegisterWrapper(r, sp, func(ctx context.Context, t test.Test, c cluster.Cluster) {
-		rd := makeReplicationDriver(t, c, sp)
-		cleanup := rd.setupC2C(ctx, t, c)
-		defer cleanup()
-
-		shutdownSetupDone := make(chan struct{})
-
-		rd.replicationStartHook = func(ctx context.Context, rd *replicationDriver) {
-			defer close(shutdownSetupDone)
+	for _, tc := range []struct {
+		name             string
+		persistPartition bool
+		additionalDur    time.Duration
+		cutover          time.Duration
+		cutoverTimeout   time.Duration
+		timeout          time.Duration
+	}{
+		{
+			name:          "c2c/disconnect-temporary",
+			additionalDur: 10 * time.Minute,
+			cutover:       2 * time.Minute,
+			timeout:       20 * time.Minute,
+		},
+		{
+			name:             "c2c/disconnect-permanent",
+			persistPartition: true,
+			additionalDur:    2 * time.Minute,
+			cutover:          0, // CUTOVER TO LATEST
+			cutoverTimeout:   10 * time.Minute,
+			timeout:          30 * time.Minute,
+		},
+	} {
+		tc := tc
+		sp := replicationSpec{
+			name:                      tc.name,
+			srcNodes:                  3,
+			dstNodes:                  3,
+			cpus:                      4,
+			workload:                  replicateKV{readPercent: 0, initRows: 1000, maxBlockBytes: 1024, initWithSplitAndScatter: true, tolerateErrors: true},
+			timeout:                   tc.timeout,
+			additionalDuration:        tc.additionalDur,
+			cutover:                   tc.cutover,
+			cutoverTimeout:            tc.cutoverTimeout,
+			maxAcceptedLatency:        12 * time.Minute,
+			skipNodeDistributionCheck: true,
+			clouds:                    registry.OnlyGCE,
+			suites:                    registry.Suites(registry.Nightly),
 		}
-		m := rd.newMonitor(ctx)
-		m.Go(func(ctx context.Context) error {
-			rd.main(ctx)
-			return nil
+		c2cRegisterWrapper(r, sp, func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runClusterReplicationDisconnect(ctx, t, c, sp, tc.persistPartition)
 		})
-		defer m.Wait()
+	}
+}
 
-		// Dont begin node disconnecion until c2c job is setup.
-		<-shutdownSetupDone
-		dstJobID := jobspb.JobID(getIngestionJobID(t, rd.setup.dst.sysSQL, rd.setup.dst.name))
+func runClusterReplicationDisconnect(
+	ctx context.Context, t test.Test, c cluster.Cluster, sp replicationSpec, persistPartition bool,
+) {
+	rd := makeReplicationDriver(t, c, sp)
+	cleanup := rd.setupC2C(ctx, t, c)
+	defer cleanup()
 
-		// TODO(msbutler): disconnect nodes during a random phase
-		require.NoError(t, waitForTargetPhase(ctx, rd, dstJobID, phaseSteadyState))
+	shutdownSetupDone := make(chan struct{})
+
+	rd.replicationStartHook = func(ctx context.Context, rd *replicationDriver) {
+		defer close(shutdownSetupDone)
+	}
+	m := rd.newMonitor(ctx)
+	m.Go(func(ctx context.Context) error {
+		rd.main(ctx)
+		return nil
+	})
+
+	// Don't begin node disconnection until c2c job is set up.
+	<-shutdownSetupDone
+	dstJobID := jobspb.JobID(getIngestionJobID(t, rd.setup.dst.sysSQL, rd.setup.dst.name))
+
+	// TODO(msbutler): disconnect nodes during a random phase
+	require.NoError(t, waitForTargetPhase(ctx, rd, dstJobID, phaseSteadyState))
+
+	rd.t.L().Printf("Disconnecting all src nodes %v from all dst nodes %v",
+		rd.setup.src.nodes, rd.setup.dst.nodes)
+
+	blackholeFailer := &blackholeFailer{t: rd.t, c: rd.c, input: true, output: true}
+	for _, srcNode := range rd.setup.src.nodes {
+		blackholeFailer.FailPartial(ctx, srcNode, rd.setup.dst.nodes)
+	}
+
+	if !persistPartition {
+		// Persist the partition for the duration of the workload. Once the network
+		// is restored, PCR will need to catch up to perform cutover AOST -2m.
 		sleepBeforeResiliencyEvent(rd, phaseSteadyState)
-
-		srcNode := rd.setup.src.nodes.RandNode()[0]
-		srcTenantSQL := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), srcNode))
-
-		var dstNode int
-		srcTenantSQL.QueryRow(t, `select split_part(consumer, '[', 1) from crdb_internal.cluster_replication_node_streams order by random() limit 1`).Scan(&dstNode)
-
-		roachprodDstNode := dstNode + sp.srcNodes
-
-		disconnectDuration := sp.additionalDuration
-		rd.t.L().Printf("Disconnecting Src %d, Dest %d for %.2f minutes", srcNode,
-			roachprodDstNode, disconnectDuration.Minutes())
-
-		// Normally, the blackholeFailer is accessed through the failer interface,
-		// at least in the failover tests. Because this test shouldn't use all the
-		// failer interface calls (e.g. Setup(), and Ready()), we use the
-		// blakholeFailer struct directly. In other words, in this test, we
-		// shouldn't treat the blackholeFailer as an abstracted api.
-		blackholeFailer := &blackholeFailer{t: rd.t, c: rd.c, input: true, output: true}
-		blackholeFailer.FailPartial(ctx, srcNode, []int{roachprodDstNode})
-
-		time.Sleep(disconnectDuration)
-		// Calling this will log the latest topology.
+		time.Sleep(sp.additionalDuration)
 		blackholeFailer.Cleanup(ctx)
 		rd.t.L().Printf("Nodes reconnected. C2C Job should eventually complete")
-	})
+	}
+
+	m.Wait()
+
+	if persistPartition {
+		blackholeFailer.Cleanup(ctx)
+		rd.t.L().Printf("Partition cleaned up after cutover completed")
+	}
 }
 
 func getIngestionJobID(t test.Test, dstSQL *sqlutils.SQLRunner, dstTenantName string) int {
