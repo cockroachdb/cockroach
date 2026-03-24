@@ -173,8 +173,8 @@ func (node *Explain) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Statement)
 }
 
-// doc is part of the docer interface.
-func (node *Explain) doc(p *PrettyCfg) pretty.Doc {
+// Doc is part of the Docer interface.
+func (node *Explain) Doc(p *PrettyCfg) pretty.Doc {
 	d := pretty.Keyword("EXPLAIN")
 	var opts []pretty.Doc
 	if node.Mode != ExplainPlan {
@@ -211,8 +211,8 @@ func (node *ExplainAnalyze) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Statement)
 }
 
-// doc is part of the docer interface.
-func (node *ExplainAnalyze) doc(p *PrettyCfg) pretty.Doc {
+// Doc is part of the Docer interface.
+func (node *ExplainAnalyze) Doc(p *PrettyCfg) pretty.Doc {
 	d := pretty.Keyword("EXPLAIN ANALYZE")
 	var opts []pretty.Doc
 	if node.Mode != ExplainPlan {
