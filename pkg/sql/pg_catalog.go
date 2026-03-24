@@ -923,7 +923,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		}
 
 		// Indexes.
-		return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
+		indexOpts := catalog.IndexOpts{AddMutations: true, DropMutations: true}
+		return catalog.ForEachIndex(table, indexOpts, func(index catalog.Index) error {
 			indexType := forwardIndexOid
 			if index.GetType() == idxtype.INVERTED {
 				indexType = invertedIndexOid
@@ -2198,7 +2199,7 @@ func addRowForPgIndex(
 	tableOid := tableOid(table.GetID())
 	isMutation, isWriteOnly :=
 		table.GetIndexMutationCapabilities(index.GetID())
-	isReady := isMutation && isWriteOnly
+	isReady := !isMutation || isWriteOnly
 
 	// Get the collations for all of the columns. To do this we require
 	// the type of the column.
@@ -2320,7 +2321,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 		return forEachTableDesc(ctx, p, dbContext, opts,
 			func(ctx context.Context, descCtx tableDescContext) error {
 				table := descCtx.table
-				return catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
+				indexOpts := catalog.IndexOpts{AddMutations: true, DropMutations: true}
+				return catalog.ForEachIndex(table, indexOpts, func(index catalog.Index) error {
 					return addRowForPgIndex(ctx, p, h, table, index, addRow)
 				})
 			})
@@ -2346,7 +2348,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-index.html`,
 					// If the descriptor is not a table, return no match.
 					return false, nil
 				}
-				if err := catalog.ForEachIndex(table, catalog.IndexOpts{}, func(index catalog.Index) error {
+				indexOpts := catalog.IndexOpts{AddMutations: true, DropMutations: true}
+				if err := catalog.ForEachIndex(table, indexOpts, func(index catalog.Index) error {
 					return addRowForPgIndex(ctx, p, h, table, index, addRow)
 				}); err != nil {
 					return false, err
