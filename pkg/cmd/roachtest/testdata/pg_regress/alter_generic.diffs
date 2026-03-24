@@ -89,7 +89,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_generic.out
 +See: https://go.crdb.dev/issue-v/74775/_version_
  ALTER FUNCTION alt_func1(int) RENAME TO alt_func2;  -- failed (name conflict)
 -ERROR:  function alt_func2(integer) already exists in schema "alt_nsp1"
-+ERROR:  function alt_func2(INT8) already exists in schema "alt_nsp1"
++ERROR:  function alt_nsp1.alt_func2(INT8) already exists in schema "alt_nsp1"
  ALTER FUNCTION alt_func1(int) RENAME TO alt_func3;  -- OK
  ALTER FUNCTION alt_func2(int) OWNER TO regress_alter_generic_user2;  -- failed (no role membership)
 -ERROR:  must be able to SET ROLE "regress_alter_generic_user2"
@@ -165,7 +165,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_generic.out
  ALTER FUNCTION alt_func3(int) RENAME TO alt_func4;	-- failed (not owner)
 -ERROR:  must be owner of function alt_func3
  ALTER FUNCTION alt_func1(int) RENAME TO alt_func4;	-- OK
-+ERROR:  function alt_func4(INT8) already exists in schema "alt_nsp1"
++ERROR:  function alt_nsp1.alt_func4(INT8) already exists in schema "alt_nsp1"
  ALTER FUNCTION alt_func3(int) OWNER TO regress_alter_generic_user2;	-- failed (not owner)
 -ERROR:  must be owner of function alt_func3
 +ERROR:  unknown function: alt_func3()

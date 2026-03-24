@@ -24,33 +24,25 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/text.out --label=
  /*
   * various string functions
   */
-@@ -59,11 +54,7 @@
- (1 row)
- 
+@@ -61,7 +56,7 @@
  select concat(1,2,3,'hello',true, false, to_date('20100309','YYYYMMDD'));
--        concat        
------------------------
+         concat        
+ ----------------------
 - 123hellotf03-09-2010
--(1 row)
--
-+ERROR:  unknown function: to_date()
- select concat_ws('#','one');
-  concat_ws 
- -----------
-@@ -71,11 +62,7 @@
++ 123hellotf2010-03-09
  (1 row)
  
+ select concat_ws('#','one');
+@@ -73,7 +68,7 @@
  select concat_ws('#',1,2,3,'hello',true, false, to_date('20100309','YYYYMMDD'));
--         concat_ws          
------------------------------
+          concat_ws          
+ ----------------------------
 - 1#2#3#hello#t#f#03-09-2010
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 1#2#3#hello#t#f#2010-03-09
+ (1 row)
+ 
  select concat_ws(',',10,20,null,30);
-  concat_ws 
- -----------
-@@ -125,51 +112,113 @@
+@@ -125,51 +120,113 @@
  select quote_literal('abc''');
   quote_literal 
  ---------------
@@ -189,7 +181,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/text.out --label=
  /*
   * format
   */
-@@ -205,12 +254,11 @@
+@@ -205,12 +262,11 @@
  
  -- should fail
  select format('Hello %s %s', 'World');
@@ -205,7 +197,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/text.out --label=
  -- check literal and sql identifiers
  select format('INSERT INTO %I VALUES(%L,%L)', 'mytab', 10, 'Hello');
                   format                 
-@@ -238,7 +286,7 @@
+@@ -238,7 +294,7 @@
  
  -- should fail, sql identifier cannot be NULL
  select format('INSERT INTO %I VALUES(%L,%L)', NULL, 10, 'Hello');
@@ -214,7 +206,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/text.out --label=
  -- check positional placeholders
  select format('%1$s %3$s', 1, 2, 3);
   format 
-@@ -254,19 +302,17 @@
+@@ -254,19 +310,17 @@
  
  -- should fail
  select format('%1$s %4$s', 1, 2, 3);
@@ -240,7 +232,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/text.out --label=
  -- check mix of positional and ordered placeholders
  select format('Hello %s %1$s %s', 'World', 'Hello again');
              format             
-@@ -282,56 +328,136 @@
+@@ -282,56 +336,136 @@
  
  -- check variadic labeled arguments
  select format('%s, %s', variadic array['Hello','World']);
