@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/cdcutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -402,13 +403,14 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 		"min_checkpoint_frequency": fmt.Sprintf("'%s'", minCheckpointFrequency),
 	}
 
-	var ff cdcFeatureFlags
+	metamorphic := cdcutil.NewMetamorphicSettings(l)
+	// Disable settings not supported at the current cluster version.
 	rangefeedSchedulerSupported, err := cmvt.rangefeedSchedulerSupported(r, h)
 	if err != nil {
 		return err
 	}
 	if !rangefeedSchedulerSupported {
-		ff.RangeFeedScheduler.v = &featureUnset
+		metamorphic.Disable(cdcutil.RangeFeedSchedulerEnabled)
 	}
 
 	distributionStrategySupported, err := cmvt.distributionStrategySupported(r, h)
@@ -416,11 +418,11 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 		return err
 	}
 	if !distributionStrategySupported {
-		ff.DistributionStrategy.v = &featureUnset
+		metamorphic.Disable(cdcutil.DistributionStrategy)
 	}
 
-	jobID, err := newChangefeedCreator(db, systemDB, l, r, fmt.Sprintf("%s.%s", targetDB, targetTable),
-		cmvt.kafka.manager.sinkURL(ctx), ff).
+	jobID, err := newChangefeedCreator(db, systemDB, l, fmt.Sprintf("%s.%s", targetDB, targetTable),
+		cmvt.kafka.manager.sinkURL(ctx), metamorphic).
 		With(options).
 		Create()
 	if err != nil {

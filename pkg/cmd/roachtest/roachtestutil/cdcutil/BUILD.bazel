@@ -1,0 +1,13 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "cdcutil",
+    srcs = ["metamorphic.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/cdcutil",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/ccl/changefeedccl",
+        "//pkg/roachprod/logger",
+        "//pkg/util/randutil",
+    ],
+)

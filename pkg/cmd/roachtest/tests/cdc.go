@@ -22,7 +22,6 @@ import (
 	"io"
 	"maps"
 	"math/big"
-	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -54,6 +53,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/cdcutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -122,6 +122,8 @@ type cdcTester struct {
 
 	workloadWg *sync.WaitGroup
 	doneCh     chan struct{}
+
+	metamorphic *cdcutil.MetamorphicSettings
 }
 
 // startStatsCollection sets the start point of the stats collection window
@@ -352,7 +354,6 @@ type tpccArgs struct {
 	tolerateErrors bool
 	conns          int
 	noWait         bool
-	cdcFeatureFlags
 }
 
 func (ct *cdcTester) lockSchema(targets []string) {
@@ -378,7 +379,7 @@ func (ct *cdcTester) runTPCCWorkload(args tpccArgs) {
 	if !ct.t.SkipInit() {
 		ct.t.Status("installing TPCC workload")
 		tpcc.install(ct.ctx, ct.cluster)
-		if args.SchemaLockTables.enabled(globalEntropy) == featureEnabled {
+		if v, ok := ct.metamorphic.Get(cdcutil.SchemaLockTables); ok && v == "true" {
 			ct.t.Status(fmt.Sprintf("Setting schema_locked for %s", allTpccTargets))
 			ct.lockSchema(allTpccTargets)
 		}
@@ -434,6 +435,11 @@ func (ct *cdcTester) DB() *gosql.DB {
 func (ct *cdcTester) Close() {
 	ct.t.Status("cdcTester closing")
 	close(ct.doneCh)
+	// Add our metamorphic settings to the test parameters so they are
+	// easily visible in the github issue for comparison across failures.
+	for name, value := range ct.metamorphic.Resolved() {
+		ct.t.AddParam(name, value)
+	}
 	ct.mon.Wait()
 
 	_, _ = ct.DB().Exec(`CANCEL ALL CHANGEFEED JOBS;`)
@@ -485,84 +491,6 @@ var allLedgerTargets []string = []string{
 	`ledger.session`,
 }
 
-type featureFlag struct {
-	v *featureState
-}
-
-type featureState int
-
-var (
-	featureUnset    featureState = 0
-	featureDisabled featureState = 1
-	featureEnabled  featureState = 2
-)
-
-type entropy struct {
-	*rand.Rand
-}
-
-func (r *entropy) Bool() bool {
-	if r.Rand == nil {
-		return rand.Int()%2 == 0
-	}
-	return r.Rand.Int()%2 == 0
-}
-
-func (r *entropy) Intn(n int) int {
-	if r.Rand == nil {
-		return rand.Intn(n)
-	}
-	return r.Rand.Intn(n)
-}
-
-var globalRand *rand.Rand
-var globalEntropy entropy
-
-func (f *featureFlag) enabled(r entropy) featureState {
-	if f.v != nil {
-		return *f.v
-	}
-
-	if r.Bool() {
-		f.v = &featureEnabled
-		return featureEnabled
-	}
-	f.v = &featureDisabled
-	return featureDisabled
-}
-
-type enumFeatureFlag struct {
-	state string
-	v     *featureState
-}
-
-// enabled returns a valid string if the returned featureState is featureEnabled.
-func (f *enumFeatureFlag) enabled(r entropy, choose func(entropy) string) (string, featureState) {
-	if f.v != nil {
-		return f.state, *f.v
-	}
-
-	if r.Bool() {
-		f.v = &featureEnabled
-		f.state = choose(r)
-		return f.state, featureEnabled
-	}
-	f.v = &featureDisabled
-	return f.state, featureDisabled
-}
-
-// cdcFeatureFlags describes various cdc feature flags.
-// zero value cdcFeatureFlags uses metamorphic settings for features.
-type cdcFeatureFlags struct {
-	RangeFeedScheduler   featureFlag
-	SchemaLockTables     featureFlag
-	DistributionStrategy enumFeatureFlag
-}
-
-func makeDefaultFeatureFlags() cdcFeatureFlags {
-	return cdcFeatureFlags{}
-}
-
 type feedArgs struct {
 	sinkType        sinkType
 	targets         []string
@@ -571,8 +499,7 @@ type feedArgs struct {
 	assumeRole      string
 	tolerateErrors  bool
 	sinkURIOverride string
-	cdcFeatureFlags
-	kafkaArgs kafkaFeedArgs
+	kafkaArgs       kafkaFeedArgs
 }
 
 // kafkaFeedArgs are args that are specific to kafkaSink changefeeds.
@@ -625,7 +552,7 @@ func (ct *cdcTester) newChangefeed(args feedArgs) changefeedJob {
 		args.sinkType, args.targets, feedOptions,
 	))
 	db := ct.DB()
-	jobID, err := newChangefeedCreator(db, db, ct.logger, globalRand, targetsStr, sinkURI, makeDefaultFeatureFlags()).
+	jobID, err := newChangefeedCreator(db, db, ct.logger, targetsStr, sinkURI, ct.metamorphic).
 		With(feedOptions).Create()
 	if err != nil {
 		ct.t.Fatalf("failed to create changefeed: %s", err.Error())
@@ -795,6 +722,14 @@ func withNumSinkNodes(num int) opt {
 	}
 }
 
+func disableMetamorphicSettings(settings ...cdcutil.MetamorphicSetting) opt {
+	return func(ct *cdcTester) {
+		for _, s := range settings {
+			ct.metamorphic.Disable(s)
+		}
+	}
+}
+
 // Silence staticcheck.
 var _ = withNumSinkNodes
 
@@ -818,6 +753,7 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster, opts ...o
 		doneCh:       make(chan struct{}),
 		sinkCache:    make(map[sinkType]string),
 		workloadWg:   &sync.WaitGroup{},
+		metamorphic:  cdcutil.NewMetamorphicSettings(t.L()),
 	}
 
 	for _, opt := range opts {
@@ -841,14 +777,11 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster, opts ...o
 
 	// Set cluster settings that we want to test metamorphically to random values
 	// since metamorphic settings don't extend to roachtests.
-	{
-		quantization := fmt.Sprintf("%ds", rand.Intn(30))
-		settings.ClusterSettings["changefeed.resolved_timestamp.granularity"] = quantization
-		t.Status(fmt.Sprintf("changefeed.resolved_timestamp.granularity: %s", quantization))
-
-		perTableTracking := fmt.Sprintf("%t", rand.Intn(2) == 0)
-		settings.ClusterSettings["changefeed.progress.per_table_tracking.enabled"] = perTableTracking
-		t.Status(fmt.Sprintf("changefeed.progress.per_table_tracking.enabled: %s", perTableTracking))
+	if v, ok := tester.metamorphic.Get(cdcutil.ResolvedTSGranularity); ok {
+		settings.ClusterSettings["changefeed.resolved_timestamp.granularity"] = v
+	}
+	if v, ok := tester.metamorphic.Get(cdcutil.PerTableTrackingEnabled); ok {
+		settings.ClusterSettings["changefeed.progress.per_table_tracking.enabled"] = v
 	}
 
 	settings.Env = append(settings.Env, envVars...)
@@ -952,7 +885,8 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster, cfg cdcBank
 		"min_checkpoint_frequency": "'2s'",
 		"diff":                     "",
 	}
-	_, err := newChangefeedCreator(db, db, t.L(), globalRand, "bank.bank", kafka.sinkURL(ctx), makeDefaultFeatureFlags()).
+	metamorphic := cdcutil.NewMetamorphicSettings(t.L())
+	_, err := newChangefeedCreator(db, db, t.L(), "bank.bank", kafka.sinkURL(ctx), metamorphic).
 		With(options).
 		Create()
 	if err != nil {
@@ -1854,7 +1788,8 @@ func runCDCSchemaRegistry(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"diff":                      "",
 	}
 
-	_, err := newChangefeedCreator(db, db, t.L(), globalRand, "foo", kafka.sinkURL(ctx), makeDefaultFeatureFlags()).
+	metamorphic := cdcutil.NewMetamorphicSettings(t.L())
+	_, err := newChangefeedCreator(db, db, t.L(), "foo", kafka.sinkURL(ctx), metamorphic).
 		With(options).
 		Args(kafka.schemaRegistryURL(ctx)).
 		Create()
@@ -1994,9 +1929,10 @@ func runCDCKafkaAuth(ctx context.Context, t test.Test, c cluster.Cluster) {
 		},
 	}
 
+	metamorphic := cdcutil.NewMetamorphicSettings(t.L())
 	for _, f := range feeds {
 		t.Status(fmt.Sprintf("running:%s, query:%s", f.desc, f.queryArg))
-		_, err := newChangefeedCreator(db, db, t.L(), globalRand, "auth_test_table", f.queryArg, makeDefaultFeatureFlags()).Create()
+		_, err := newChangefeedCreator(db, db, t.L(), "auth_test_table", f.queryArg, metamorphic).Create()
 		if err != nil {
 			t.Fatalf("%s: %s", f.desc, err.Error())
 		}
@@ -3167,8 +3103,9 @@ CONFIGURE ZONE USING
 			tdb := sqlutils.MakeSQLRunner(db)
 			tdb.Exec(t, `CREATE TABLE auth_test_table (a INT PRIMARY KEY)`)
 
+			metamorphic := cdcutil.NewMetamorphicSettings(t.L())
 			t.L().Printf("creating changefeed with iam: %s", brokers.connectURI)
-			_, err := newChangefeedCreator(db, db, t.L(), globalRand, "auth_test_table", brokers.connectURI, makeDefaultFeatureFlags()).Create()
+			_, err := newChangefeedCreator(db, db, t.L(), "auth_test_table", brokers.connectURI, metamorphic).Create()
 			if err != nil {
 				t.Fatalf("creating changefeed: %v", err)
 			}
@@ -3532,7 +3469,10 @@ CONFIGURE ZONE USING
 				Suites:           registry.Suites(registry.Nightly),
 				Timeout:          2 * time.Hour,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					ct := newCDCTester(ctx, t, c)
+					// This is a latency sensitive scale test, use the default granularity.
+					// The benchmark has a 2 minute latency threshold, and up to 30
+					// seconds of quantization delay eats into that budget significantly.
+					ct := newCDCTester(ctx, t, c, disableMetamorphicSettings(cdcutil.ResolvedTSGranularity))
 					defer ct.Close()
 
 					db := ct.DB()
@@ -3550,11 +3490,6 @@ CONFIGURE ZONE USING
 						"spanconfig.range_coalescing.application.enabled": "'false'",
 						// TODO(#158779): When we add back per-table PTS, make sure that this test
 						// turns it off, to avoid it impacting the results.
-						//
-						// This is a latency sensitive scale test, use the default granularity.
-						// The benchmark has a 2 minute latency threshold, and up to 30
-						// seconds of quantization delay eats into that budget significantly.
-						"changefeed.resolved_timestamp.granularity": "'1s'",
 					} {
 						stmt := fmt.Sprintf(`SET CLUSTER SETTING %s = %s`, name, value)
 						if _, err := db.ExecContext(ctx, stmt); err != nil {
@@ -4782,27 +4717,24 @@ type changefeedCreator struct {
 	sinkURL         string
 	options         map[string]string
 	extraArgs       []interface{}
-	flags           cdcFeatureFlags
-	rng             entropy
+	metamorphic     *cdcutil.MetamorphicSettings
 	settingsApplied bool
 }
 
 func newChangefeedCreator(
 	db, systemDB *gosql.DB,
 	logger *logger.Logger,
-	r *rand.Rand,
 	targets, sinkURL string,
-	flags cdcFeatureFlags,
+	metamorphic *cdcutil.MetamorphicSettings,
 ) *changefeedCreator {
 	return &changefeedCreator{
-		db:       db,
-		systemDB: systemDB,
-		logger:   logger,
-		targets:  targets,
-		sinkURL:  sinkURL,
-		options:  make(map[string]string),
-		flags:    flags,
-		rng:      entropy{Rand: r},
+		db:          db,
+		systemDB:    systemDB,
+		logger:      logger,
+		targets:     targets,
+		sinkURL:     sinkURL,
+		options:     make(map[string]string),
+		metamorphic: metamorphic,
 	}
 }
 
@@ -4825,13 +4757,8 @@ func (cfc *changefeedCreator) Args(args ...interface{}) *changefeedCreator {
 	return cfc
 }
 
-func chooseDistributionStrategy(r entropy) string {
-	vals := changefeedccl.RangeDistributionStrategy.GetAvailableValues()
-	return vals[r.Intn(len(vals))]
-}
-
 // applySettings aplies various settings to the cluster -- once per the
-// lifetime of changefeedCreator
+// lifetime of changefeedCreator.
 func (cfc *changefeedCreator) applySettings() error {
 	if cfc.settingsApplied {
 		return nil
@@ -4841,26 +4768,24 @@ func (cfc *changefeedCreator) applySettings() error {
 		return err
 	}
 
-	schedEnabled := cfc.flags.RangeFeedScheduler.enabled(cfc.rng)
-	if schedEnabled != featureUnset {
-		cfc.logger.Printf("Setting kv.rangefeed.scheduler.enabled to %t", schedEnabled == featureEnabled)
+	if enabled, ok := cfc.metamorphic.Get(cdcutil.RangeFeedSchedulerEnabled); ok {
+		cfc.logger.Printf("Setting kv.rangefeed.scheduler.enabled to %s", enabled)
 		if _, err := cfc.systemDB.Exec(
-			"SET CLUSTER SETTING kv.rangefeed.scheduler.enabled = $1", schedEnabled == featureEnabled,
+			"SET CLUSTER SETTING kv.rangefeed.scheduler.enabled = $1", enabled,
 		); err != nil {
 			return err
 		}
 	}
 
-	rangeDistribution, rangeDistributionEnabled := cfc.flags.DistributionStrategy.enabled(cfc.rng,
-		chooseDistributionStrategy)
-	if rangeDistributionEnabled == featureEnabled {
-		cfc.logger.Printf("Setting changefeed.default_range_distribution_strategy to %s", rangeDistribution)
+	if strategy, ok := cfc.metamorphic.Get(cdcutil.DistributionStrategy); ok {
+		cfc.logger.Printf("Setting changefeed.default_range_distribution_strategy to %s", strategy)
 		if _, err := cfc.db.Exec(fmt.Sprintf(
-			"SET CLUSTER SETTING changefeed.default_range_distribution_strategy = '%s'", rangeDistribution)); err != nil {
+			"SET CLUSTER SETTING changefeed.default_range_distribution_strategy = '%s'", strategy)); err != nil {
 			return err
 		}
 	}
 
+	cfc.settingsApplied = true
 	return nil
 }
 
