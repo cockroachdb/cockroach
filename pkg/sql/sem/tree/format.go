@@ -574,8 +574,18 @@ func (ctx *FmtCtx) FormatStringConstant(s string) {
 
 // FormatStringDollarQuotes formats a string constant with dollar quotes.
 func (ctx *FmtCtx) FormatStringDollarQuotes(s string) {
-	// Find a delimiter that will not collide with any part of the string. This is
-	// very similar to what Postgres does.
+	delimiter := DollarQuoteDelimiter(s)
+	tag := "$" + delimiter + "$"
+	if ctx.flags.HasFlags(FmtAnonymize) || ctx.flags.HasFlags(FmtHideConstants) {
+		ctx.WriteString(tag + "_" + tag)
+	} else {
+		ctx.WriteString(tag + s + tag)
+	}
+}
+
+// DollarQuoteDelimiter finds a dollar-quote delimiter that will not collide
+// with any part of s. This is very similar to what Postgres does.
+func DollarQuoteDelimiter(s string) string {
 	delimiter := ""
 	if strings.Contains(s, "$$") {
 		delimiter = "funcbody"
@@ -583,17 +593,7 @@ func (ctx *FmtCtx) FormatStringDollarQuotes(s string) {
 			delimiter = delimiter + "x"
 		}
 	}
-	ctx.WriteByte('$')
-	ctx.WriteString(delimiter)
-	ctx.WriteByte('$')
-	if ctx.flags.HasFlags(FmtAnonymize) || ctx.flags.HasFlags(FmtHideConstants) {
-		ctx.WriteString("_")
-	} else {
-		ctx.WriteString(s)
-	}
-	ctx.WriteByte('$')
-	ctx.WriteString(delimiter)
-	ctx.WriteByte('$')
+	return delimiter
 }
 
 // FormatURIs formats a list of string literals or placeholders containing URIs.
