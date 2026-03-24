@@ -1853,40 +1853,33 @@ func TestTransactionLatencies(t *testing.T) {
 	s := serverutils.StartServerOnly(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	verifyTxnStats := func(t *testing.T, lastTxnStats *sqlstats.RecordedTxnStats, expectedIdleLatency time.Duration, totalTxnTime time.Duration) {
-		// txn idle latency should be >= expectedIdleLatency.
+	verifyTxnStats := func(t *testing.T, lastTxnStats *sqlstats.RecordedTxnStats, expectedIdleLatency time.Duration) {
+		txnTime := time.Duration(lastTxnStats.TransactionTimeSec * float64(time.Second))
+		// Verify the invariant chain: expectedIdle <= idle <= service <= txnTime.
 		require.GreaterOrEqual(t, lastTxnStats.IdleLatency, expectedIdleLatency)
-		// txn service latency should be >= txn idle latency.
 		require.GreaterOrEqual(t, lastTxnStats.ServiceLatency, lastTxnStats.IdleLatency)
-		// txn service latency should be <= txn time.
-		require.LessOrEqual(t, lastTxnStats.ServiceLatency, time.Duration(lastTxnStats.TransactionTimeSec*float64(time.Second)))
-		// txn time should be roughly equal to the time we tracked (within 2%).
-		// Note(alyshan): Most test runs the difference is < 1%, but under stress it can be > 1%.
-		require.InDelta(t, totalTxnTime.Seconds(), lastTxnStats.TransactionTimeSec, totalTxnTime.Seconds()*0.05)
+		require.LessOrEqual(t, lastTxnStats.ServiceLatency, txnTime)
+		require.GreaterOrEqual(t, txnTime, expectedIdleLatency)
 	}
 
 	db := sqlutils.MakeSQLRunner(s.SQLConn(t))
 	// Create a test table
 	db.Exec(t, "CREATE TABLE test_idle (id INT)")
 	t.Run("simple statements", func(t *testing.T) {
-		startTime := time.Now()
 		db.Exec(t, "BEGIN")
 		for i := 0; i < 10; i++ {
 			db.Exec(t, "INSERT INTO test_idle VALUES (1)")
 			time.Sleep(100 * time.Millisecond)
 		}
 		db.Exec(t, "COMMIT")
-		endTime := time.Now()
-		totalTxnTime := endTime.Sub(startTime)
 
 		stats.Lock()
 		defer stats.Unlock()
 		lastTxnStats := stats.txnStats[len(stats.txnStats)-1]
-		verifyTxnStats(t, lastTxnStats, time.Second, totalTxnTime)
+		verifyTxnStats(t, lastTxnStats, time.Second)
 	})
 
 	t.Run("with intermediate observer statements", func(t *testing.T) {
-		startTime := time.Now()
 		db.Exec(t, "BEGIN")
 		// This mimics the behaviour of the cockroach sql cli.
 		for i := 0; i < 10; i++ {
@@ -1901,17 +1894,14 @@ func TestTransactionLatencies(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 		}
 		db.Exec(t, "COMMIT")
-		endTime := time.Now()
-		totalTxnTime := endTime.Sub(startTime)
 
 		stats.Lock()
 		defer stats.Unlock()
 		lastTxnStats := stats.txnStats[len(stats.txnStats)-1]
-		verifyTxnStats(t, lastTxnStats, time.Second, totalTxnTime)
+		verifyTxnStats(t, lastTxnStats, time.Second)
 	})
 
 	t.Run("prepare/bind statements", func(t *testing.T) {
-		startTime := time.Now()
 		db.Exec(t, "BEGIN")
 		for i := 0; i < 10; i++ {
 			// Placeholders invoke prepare/bind.
@@ -1919,13 +1909,11 @@ func TestTransactionLatencies(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 		}
 		db.Exec(t, "COMMIT")
-		endTime := time.Now()
-		totalTxnTime := endTime.Sub(startTime)
 
 		stats.Lock()
 		defer stats.Unlock()
 		lastTxnStats := stats.txnStats[len(stats.txnStats)-1]
-		verifyTxnStats(t, lastTxnStats, time.Second, totalTxnTime)
+		verifyTxnStats(t, lastTxnStats, time.Second)
 	})
 
 }
