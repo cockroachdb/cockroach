@@ -1480,6 +1480,8 @@ GO_TARGETS = [
     "//pkg/cmd/testowner:testowner",
     "//pkg/cmd/testowner:testowner_lib",
     "//pkg/cmd/testowner:testowner_test",
+    "//pkg/cmd/tsdump2duck:tsdump2duck",
+    "//pkg/cmd/tsdump2duck:tsdump2duck_lib",
     "//pkg/cmd/uptodate:uptodate",
     "//pkg/cmd/uptodate:uptodate_lib",
     "//pkg/cmd/urlcheck/lib/urlcheck:urlcheck",
