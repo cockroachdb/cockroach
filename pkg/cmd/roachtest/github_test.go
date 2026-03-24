@@ -257,6 +257,8 @@ func TestCreatePostRequest(t *testing.T) {
 				ti.spec.CockroachBinary = registry.RuntimeAssertionsCockroach
 			case "set-coverage-enabled-build":
 				ti.goCoverEnabled = true
+			case "set-branch":
+				t.Setenv("TC_BUILD_BRANCH", d.CmdArgs[0].Vals[0])
 			case "add-additional-info":
 				msg_type := d.CmdArgs[0].Vals[0]
 				switch msg_type {
