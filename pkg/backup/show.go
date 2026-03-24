@@ -1500,10 +1500,10 @@ func showBackupsInCollectionPlanHook(
 						return err
 					}
 				}
-				resultsCh <- tree.Datums{
-					tree.NewDString(i.ID),
-					backupTime,
-					revStartTime,
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case resultsCh <- tree.Datums{tree.NewDString(i.ID), backupTime, revStartTime}:
 				}
 			}
 		} else {
@@ -1512,7 +1512,11 @@ func showBackupsInCollectionPlanHook(
 				return err
 			}
 			for _, i := range res {
-				resultsCh <- tree.Datums{tree.NewDString(i)}
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case resultsCh <- tree.Datums{tree.NewDString(i)}:
+				}
 			}
 		}
 		return nil
