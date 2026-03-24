@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/gcassist"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -38,6 +39,15 @@ var jemallocPurgePeriod = settings.RegisterDurationSettingWithExplicitUnit(
 	"server.jemalloc_purge_period",
 	"minimum amount of time that must pass between two jemalloc dirty page purges (0 disables purging)",
 	2*time.Minute,
+)
+
+var gcAssistEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"server.gc_assist.enabled",
+	"set to false to dynamically disable GC assist in the Go runtime "+
+		"(requires CockroachDB's forked Go runtime; no-op otherwise); "+
+		"picks up the GODEBUG gcnoassist flag as its default",
+	gcassist.Enabled(), // default reflects GODEBUG=gcnoassist at startup
 )
 
 type sampleEnvironmentCfg struct {
@@ -147,6 +157,13 @@ func startSampleEnvironment(
 			log.Dev.Warningf(ctx, "failed to start flight recorder: %v", err)
 		}
 	}
+
+	// Apply the initial value of the GC assist setting and install a
+	// callback for dynamic updates.
+	gcassist.SetEnabled(gcAssistEnabled.Get(&cfg.st.SV))
+	gcAssistEnabled.SetOnChange(&cfg.st.SV, func(ctx context.Context) {
+		gcassist.SetEnabled(gcAssistEnabled.Get(&cfg.st.SV))
+	})
 
 	return cfg.stopper.RunAsyncTaskEx(ctx,
 		stop.TaskOpts{TaskName: "mem-logger", SpanOpt: stop.SterileRootSpan},
