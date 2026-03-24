@@ -1,0 +1,109 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TYPE db.blue_fish AS ENUM('salmon');
+
+/* test */
+EXPLAIN (DDL) DROP TYPE db.blue_fish;
+----
+Schema change plan for DROP TYPE ‹db›.‹public›.‹blue_fish›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 15 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106 (blue_fish-), Name: "blue_fish", ReferencedDescID: 104 (db), IntValue: 105}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 106 (blue_fish-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (blue_fish-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (blue_fish-), Name: "public"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (blue_fish-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED EnumType:{DescID: 106 (blue_fish-)}
+ │         │    ├── PUBLIC → ABSENT  EnumTypeValue:{DescID: 106 (blue_fish-), Name: "salmon"}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 106 (blue_fish-), ReferencedDescID: 105 (public)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 107 (_blue_fish-), Name: "_blue_fish", ReferencedDescID: 104 (db), IntValue: 105}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 107 (_blue_fish-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (_blue_fish-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (_blue_fish-), Name: "public"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (_blue_fish-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED AliasType:{DescID: 107 (_blue_fish-), ReferencedTypeIDs: [106 (blue_fish-), 107 (_blue_fish-)]}
+ │         │    └── PUBLIC → ABSENT  SchemaChild:{DescID: 107 (_blue_fish-), ReferencedDescID: 105 (public)}
+ │         └── 15 Mutation operations
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
+ │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
+ │              ├── RemoveObjectParent {"ObjectID":106,"ParentSchemaID":105}
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
+ │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":105}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"blue_fish","SchemaID":105}}
+ │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"public"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"_blue_fish","SchemaID":105}}
+ │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"public"}
+ │              └── RemoveUserPrivileges {"DescriptorID":107,"User":"root"}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 15 elements transitioning toward ABSENT
+ │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 106 (blue_fish-), Name: "blue_fish", ReferencedDescID: 104 (db), IntValue: 105}
+ │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 106 (blue_fish-)}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 106 (blue_fish-), Name: "admin"}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 106 (blue_fish-), Name: "public"}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 106 (blue_fish-), Name: "root"}
+ │    │    │    ├── DROPPED → PUBLIC EnumType:{DescID: 106 (blue_fish-)}
+ │    │    │    ├── ABSENT  → PUBLIC EnumTypeValue:{DescID: 106 (blue_fish-), Name: "salmon"}
+ │    │    │    ├── ABSENT  → PUBLIC SchemaChild:{DescID: 106 (blue_fish-), ReferencedDescID: 105 (public)}
+ │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 107 (_blue_fish-), Name: "_blue_fish", ReferencedDescID: 104 (db), IntValue: 105}
+ │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 107 (_blue_fish-)}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 107 (_blue_fish-), Name: "admin"}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 107 (_blue_fish-), Name: "public"}
+ │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 107 (_blue_fish-), Name: "root"}
+ │    │    │    ├── DROPPED → PUBLIC AliasType:{DescID: 107 (_blue_fish-), ReferencedTypeIDs: [106 (blue_fish-), 107 (_blue_fish-)]}
+ │    │    │    └── ABSENT  → PUBLIC SchemaChild:{DescID: 107 (_blue_fish-), ReferencedDescID: 105 (public)}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 15 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106 (blue_fish-), Name: "blue_fish", ReferencedDescID: 104 (db), IntValue: 105}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 106 (blue_fish-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (blue_fish-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (blue_fish-), Name: "public"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (blue_fish-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED EnumType:{DescID: 106 (blue_fish-)}
+ │         │    ├── PUBLIC → ABSENT  EnumTypeValue:{DescID: 106 (blue_fish-), Name: "salmon"}
+ │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 106 (blue_fish-), ReferencedDescID: 105 (public)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 107 (_blue_fish-), Name: "_blue_fish", ReferencedDescID: 104 (db), IntValue: 105}
+ │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 107 (_blue_fish-)}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (_blue_fish-), Name: "admin"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (_blue_fish-), Name: "public"}
+ │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 107 (_blue_fish-), Name: "root"}
+ │         │    ├── PUBLIC → DROPPED AliasType:{DescID: 107 (_blue_fish-), ReferencedTypeIDs: [106 (blue_fish-), 107 (_blue_fish-)]}
+ │         │    └── PUBLIC → ABSENT  SchemaChild:{DescID: 107 (_blue_fish-), ReferencedDescID: 105 (public)}
+ │         └── 18 Mutation operations
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
+ │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.EnumTypeVal..."}
+ │              ├── RemoveObjectParent {"ObjectID":106,"ParentSchemaID":105}
+ │              ├── MarkDescriptorAsDropped {"DescriptorID":107}
+ │              ├── RemoveObjectParent {"ObjectID":107,"ParentSchemaID":105}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"blue_fish","SchemaID":105}}
+ │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"public"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":107,"Name":"_blue_fish","SchemaID":105}}
+ │              ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.Owner"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"admin"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"public"}
+ │              ├── RemoveUserPrivileges {"DescriptorID":107,"User":"root"}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":107,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"Pending: Updatin..."}
+ └── PostCommitNonRevertiblePhase
+      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
+           ├── 2 elements transitioning toward ABSENT
+           │    ├── DROPPED → ABSENT EnumType:{DescID: 106 (blue_fish-)}
+           │    └── DROPPED → ABSENT AliasType:{DescID: 107 (_blue_fish-), ReferencedTypeIDs: [106 (blue_fish-), 107 (_blue_fish-)]}
+           └── 5 Mutation operations
+                ├── DeleteDescriptor {"DescriptorID":106}
+                ├── DeleteDescriptor {"DescriptorID":107}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":107}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

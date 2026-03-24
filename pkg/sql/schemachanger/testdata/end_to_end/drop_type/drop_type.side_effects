@@ -1,0 +1,124 @@
+/* setup */
+CREATE DATABASE db;
+CREATE TYPE db.blue_fish AS ENUM('salmon');
+----
+...
++database {0 0 db} -> 104
++schema {104 0 public} -> 105
++object {104 105 blue_fish} -> 106
++object {104 105 _blue_fish} -> 107
+
+/* test */
+DROP TYPE db.blue_fish;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: DROP TYPE
+increment telemetry for sql.udts.drop_enum
+write *eventpb.DropType to event log:
+  sql:
+    descriptorId: 106
+    statement: DROP TYPE ‹db›.‹public›.‹blue_fish›
+    tag: DROP TYPE
+    user: root
+  typeName: db.public.blue_fish
+## StatementPhase stage 1 of 1 with 15 MutationType ops
+delete object namespace entry {104 105 blue_fish} -> 106
+delete object namespace entry {104 105 _blue_fish} -> 107
+upsert descriptor #106
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+upsert descriptor #107
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 18 MutationType ops
+delete object namespace entry {104 105 blue_fish} -> 106
+delete object namespace entry {104 105 _blue_fish} -> 107
+upsert descriptor #106
+   type:
+     arrayTypeId: 107
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 106
+  +      name: blue_fish
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP TYPE ‹db›.‹public›.‹blue_fish›
+  +        statement: DROP TYPE db.blue_fish
+  +        statementTag: DROP TYPE
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     enumMembers:
+     - logicalRepresentation: salmon
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+upsert descriptor #107
+  ...
+       family: ArrayFamily
+       oid: 100107
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 107
+  +      name: _blue_fish
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: DROP TYPE ‹db›.‹public›.‹blue_fish›
+  +        statement: DROP TYPE db.blue_fish
+  +        statementTag: DROP TYPE
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     id: 107
+     kind: ALIAS
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  state: DROP
+  +  version: "2"
+persist all catalog changes to storage
+create job #1 (non-cancelable: true): "DROP TYPE db.public.blue_fish"
+  descriptor IDs: [106 107]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
+delete descriptor #106
+delete descriptor #107
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 106
+commit transaction #3
+# end PostCommitPhase
