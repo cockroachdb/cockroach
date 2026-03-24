@@ -237,6 +237,14 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 		selectRateLimit := ttlbase.GetSelectRateLimit(settingsValues, rowLevelTTL)
 		deleteRateLimit := ttlbase.GetDeleteRateLimit(settingsValues, rowLevelTTL)
 		disableChangefeedReplication := ttlbase.GetChangefeedReplicationDisabled(settingsValues, rowLevelTTL)
+		var ttlDurationNanos int64
+		if rowLevelTTL.HasDurationExpr() && !rowLevelTTL.HasExpirationExpr() {
+			var err error
+			ttlDurationNanos, err = ttlbase.ParseTTLDurationExprToNanos(rowLevelTTL.DurationExpr)
+			if err != nil {
+				return nil, nil, err
+			}
+		}
 		newTTLSpec := func(spans []roachpb.Span) *execinfrapb.TTLSpec {
 			return &execinfrapb.TTLSpec{
 				JobID:                        jobID,
@@ -252,6 +260,7 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 				PreSelectStatement:           knobs.PreSelectStatement,
 				AOSTDuration:                 aostDuration,
 				DisableChangefeedReplication: disableChangefeedReplication,
+				TTLDurationNanos:             ttlDurationNanos,
 			}
 		}
 

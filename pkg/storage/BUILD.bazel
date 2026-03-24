@@ -129,6 +129,7 @@ go_test(
         "backup_compaction_iterator_test.go",
         "ballast_test.go",
         "batch_test.go",
+        "bench_block_skip_test.go",
         "bench_cloud_io_test.go",
         "bench_data_test.go",
         "bench_test.go",

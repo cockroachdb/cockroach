@@ -64,6 +64,9 @@ func ReverseScan(
 		ReturnRawMVCCValues:     args.ReturnRawMVCCValues,
 		WorkloadID:              h.WorkloadID,
 	}
+	if !args.BlockOnlyMaxTimestamp.IsEmpty() {
+		opts.BlockOnlyMaxTimestamp = args.BlockOnlyMaxTimestamp
+	}
 
 	switch args.ScanFormat {
 	case kvpb.BATCH_RESPONSE:

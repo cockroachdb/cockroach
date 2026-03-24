@@ -678,6 +678,13 @@ message ScanRequest {
   // This option is not compatible for reads over inline values (see
   // https://github.com/cockroachdb/cockroach/issues/131667)
   bool return_raw_mvcc_values = 7 [(gogoproto.customname) = "ReturnRawMVCCValues"];
+
+  // block_only_max_timestamp is a performance hint that allows the storage
+  // layer to skip SST data blocks whose MVCC timestamps are entirely above
+  // this value. Does not affect key-level visibility within non-skipped blocks.
+  // Only safe in contexts where the caller tolerates block-level data omission.
+  util.hlc.Timestamp block_only_max_timestamp = 8
+    [(gogoproto.nullable) = false, (gogoproto.customname) = "BlockOnlyMaxTimestamp"];
 }
 
 // A ScanResponse is the return value from the Scan() method.
@@ -800,6 +807,13 @@ message ReverseScanRequest {
   // This option is not compatible for reads over inline values (see
   // https://github.com/cockroachdb/cockroach/issues/131667)
   bool return_raw_mvcc_values = 7 [(gogoproto.customname) = "ReturnRawMVCCValues"];
+
+  // block_only_max_timestamp is a performance hint that allows the storage
+  // layer to skip SST data blocks whose MVCC timestamps are entirely above
+  // this value. Does not affect key-level visibility within non-skipped blocks.
+  // Only safe in contexts where the caller tolerates block-level data omission.
+  util.hlc.Timestamp block_only_max_timestamp = 8
+    [(gogoproto.nullable) = false, (gogoproto.customname) = "BlockOnlyMaxTimestamp"];
 }
 
 // A ReverseScanResponse is the return value from the ReverseScan() method.

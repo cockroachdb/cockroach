@@ -292,6 +292,7 @@ func getPredicateAndQueryArgs(
 	bounds, hasRows, err := spanutils.SpanToQueryBounds(
 		ctx, cfg.DB.KV(), cfg.Codec, pkColIDs, pkColTypes, pkColDirs,
 		len(tableDesc.GetFamilies()), span, alloc, asOf,
+		hlc.Timestamp{}, // no block skipping
 	)
 	if err != nil {
 		return "", nil, errors.Wrap(err, "converting span to query bounds")

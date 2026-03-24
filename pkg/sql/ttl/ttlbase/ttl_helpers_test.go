@@ -7,8 +7,10 @@ package ttlbase
 
 import (
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -395,6 +397,37 @@ AND (col0, col1, col2) IN (($2, $3, $4), ($5, $6, $7), ($8, $9, $10))`,
 				tc.numRows,
 			)
 			require.Equal(t, tc.expectedQuery, actualQuery)
+		})
+	}
+}
+
+func TestParseTTLDurationExprToNanos(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		expr     string
+		expected int64
+		hasErr   bool
+	}{
+		{expr: "'30 days':::INTERVAL", expected: int64(30) * 24 * int64(time.Hour)},
+		{expr: "'1 hour':::INTERVAL", expected: int64(time.Hour)},
+		{expr: "'90 seconds':::INTERVAL", expected: int64(90) * int64(time.Second)},
+		{expr: "'1 mon':::INTERVAL", expected: int64(30) * 24 * int64(time.Hour)},
+		{expr: "'2 mons':::INTERVAL", expected: int64(60) * 24 * int64(time.Hour)},
+		{expr: "'1 day 12:00:00':::INTERVAL", expected: int64(36) * int64(time.Hour)},
+		{expr: "'00:00:00':::INTERVAL", hasErr: true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.expr, func(t *testing.T) {
+			nanos, err := ParseTTLDurationExprToNanos(catpb.Expression(tc.expr))
+			if tc.hasErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.expected, nanos)
+			}
 		})
 	}
 }

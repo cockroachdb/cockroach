@@ -86,6 +86,7 @@ func SpanToQueryBounds(
 	span roachpb.Span,
 	alloc *tree.DatumAlloc,
 	asOf hlc.Timestamp,
+	blockMaxTimestamp hlc.Timestamp,
 ) (bounds QueryBounds, hasRows bool, _ error) {
 	partialStartKey := span.Key
 	partialEndKey := span.EndKey
@@ -100,7 +101,13 @@ func SpanToQueryBounds(
 				return err
 			}
 			var scanErr error
-			startKeyValues, scanErr = txn.Scan(ctx, partialStartKey, partialEndKey, int64(numFamilies))
+			if blockMaxTimestamp.IsSet() {
+				startKeyValues, scanErr = txn.ScanWithBlockTimestampHint(
+					ctx, partialStartKey, partialEndKey, int64(numFamilies), blockMaxTimestamp,
+				)
+			} else {
+				startKeyValues, scanErr = txn.Scan(ctx, partialStartKey, partialEndKey, int64(numFamilies))
+			}
 			return scanErr
 		})
 	}
@@ -121,7 +128,13 @@ func SpanToQueryBounds(
 				return err
 			}
 			var scanErr error
-			endKeyValues, scanErr = txn.ReverseScan(ctx, partialStartKey, partialEndKey, int64(numFamilies))
+			if blockMaxTimestamp.IsSet() {
+				endKeyValues, scanErr = txn.ReverseScanWithBlockTimestampHint(
+					ctx, partialStartKey, partialEndKey, int64(numFamilies), blockMaxTimestamp,
+				)
+			} else {
+				endKeyValues, scanErr = txn.ReverseScan(ctx, partialStartKey, partialEndKey, int64(numFamilies))
+			}
 			return scanErr
 		})
 	}
