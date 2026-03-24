@@ -6,116 +6,186 @@
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { AlignedData } from "uplot";
 
+import { GroupedBarData } from "../graphs/groupedBarChart";
 import { longToInt, TimestampToNumber } from "../util";
 
 type StatementStatisticsPerAggregatedTs =
   cockroach.server.serverpb.StatementDetailsResponse.ICollectedStatementGroupedByAggregatedTs;
 
+// Default color palette matching the existing uPlot bar chart series colors.
+const SERIES_PALETTE = [
+  "#003EBD",
+  "#2AAF44",
+  "#F16969",
+  "#4E9FD1",
+  "#49D990",
+  "#D77FBF",
+  "#87326D",
+  "#A3415B",
+  "#B59153",
+  "#C9DB6D",
+  "#475872",
+  "#748BF2",
+  "#91C8F2",
+  "#FF9696",
+  "#EF843C",
+  "#DCCD4B",
+];
+
 export function generateExecuteAndPlanningTimeseries(
   stats: StatementStatisticsPerAggregatedTs[],
-): AlignedData {
-  const ts: Array<number> = [];
-  const execution: Array<number> = [];
-  const planning: Array<number> = [];
-
-  stats.forEach(function (stat: StatementStatisticsPerAggregatedTs) {
-    ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
-    execution.push(stat.stats.run_lat.mean * 1e9);
-    planning.push(stat.stats.plan_lat.mean * 1e9);
-  });
-
-  return [ts, execution, planning];
+): GroupedBarData {
+  return stats.map(stat => ({
+    timestamp: TimestampToNumber(stat.aggregated_ts) * 1e3,
+    groups: [
+      {
+        label: "",
+        layers: [
+          {
+            label: "Execution",
+            value: stat.stats.run_lat.mean * 1e9,
+            color: SERIES_PALETTE[0],
+          },
+          {
+            label: "Planning",
+            value: stat.stats.plan_lat.mean * 1e9,
+            color: SERIES_PALETTE[1],
+          },
+        ],
+      },
+    ],
+  }));
 }
 
 export function generateClientWaitTimeseries(
   stats: StatementStatisticsPerAggregatedTs[],
-): AlignedData {
-  const ts: Array<number> = [];
-  const clientWait: Array<number> = [];
-
-  stats.forEach(function (stat: StatementStatisticsPerAggregatedTs) {
-    ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
-    clientWait.push(stat.stats.idle_lat.mean * 1e9);
-  });
-
-  return [ts, clientWait];
+): GroupedBarData {
+  return stats.map(stat => ({
+    timestamp: TimestampToNumber(stat.aggregated_ts) * 1e3,
+    groups: [
+      {
+        label: "",
+        layers: [
+          {
+            label: "Client Wait Time",
+            value: stat.stats.idle_lat.mean * 1e9,
+            color: SERIES_PALETTE[0],
+          },
+        ],
+      },
+    ],
+  }));
 }
 
 export function generateRowsProcessedTimeseries(
   stats: StatementStatisticsPerAggregatedTs[],
-): AlignedData {
-  const ts: Array<number> = [];
-  const read: Array<number> = [];
-  const written: Array<number> = [];
-
-  stats.forEach(function (stat: StatementStatisticsPerAggregatedTs) {
-    ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
-    read.push(stat.stats.rows_read?.mean);
-    written.push(stat.stats.rows_written?.mean);
-  });
-
-  return [ts, read, written];
+): GroupedBarData {
+  return stats.map(stat => ({
+    timestamp: TimestampToNumber(stat.aggregated_ts) * 1e3,
+    groups: [
+      {
+        label: "",
+        layers: [
+          {
+            label: "Rows Read",
+            value: stat.stats.rows_read?.mean ?? 0,
+            color: SERIES_PALETTE[0],
+          },
+          {
+            label: "Rows Written",
+            value: stat.stats.rows_written?.mean ?? 0,
+            color: SERIES_PALETTE[1],
+          },
+        ],
+      },
+    ],
+  }));
 }
 
 export function generateExecRetriesTimeseries(
   stats: StatementStatisticsPerAggregatedTs[],
-): AlignedData {
-  const ts: Array<number> = [];
-  const retries: Array<number> = [];
-
-  stats.forEach(function (stat: StatementStatisticsPerAggregatedTs) {
-    ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
-
-    const totalCountBarChart = longToInt(stat.stats.count);
-    const firstAttemptsBarChart = longToInt(stat.stats.first_attempt_count);
-    retries.push(totalCountBarChart - firstAttemptsBarChart);
+): GroupedBarData {
+  return stats.map(stat => {
+    const totalCount = longToInt(stat.stats.count);
+    const firstAttempts = longToInt(stat.stats.first_attempt_count);
+    return {
+      timestamp: TimestampToNumber(stat.aggregated_ts) * 1e3,
+      groups: [
+        {
+          label: "",
+          layers: [
+            {
+              label: "Retries",
+              value: totalCount - firstAttempts,
+              color: SERIES_PALETTE[0],
+            },
+          ],
+        },
+      ],
+    };
   });
-
-  return [ts, retries];
 }
 
 export function generateExecCountTimeseries(
   stats: StatementStatisticsPerAggregatedTs[],
-): AlignedData {
-  const ts: Array<number> = [];
-  const count: Array<number> = [];
-
-  stats.forEach(function (stat: StatementStatisticsPerAggregatedTs) {
-    ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
-    count.push(longToInt(stat.stats.count));
-  });
-
-  return [ts, count];
+): GroupedBarData {
+  return stats.map(stat => ({
+    timestamp: TimestampToNumber(stat.aggregated_ts) * 1e3,
+    groups: [
+      {
+        label: "",
+        layers: [
+          {
+            label: "Execution Counts",
+            value: longToInt(stat.stats.count),
+            color: SERIES_PALETTE[0],
+          },
+        ],
+      },
+    ],
+  }));
 }
 
 export function generateContentionTimeseries(
   stats: StatementStatisticsPerAggregatedTs[],
-): AlignedData {
-  const ts: Array<number> = [];
-  const count: Array<number> = [];
-
-  stats.forEach(function (stat: StatementStatisticsPerAggregatedTs) {
-    ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
-    count.push(stat.stats.exec_stats.contention_time.mean * 1e9);
-  });
-
-  return [ts, count];
+): GroupedBarData {
+  return stats.map(stat => ({
+    timestamp: TimestampToNumber(stat.aggregated_ts) * 1e3,
+    groups: [
+      {
+        label: "",
+        layers: [
+          {
+            label: "Contention",
+            value: stat.stats.exec_stats.contention_time.mean * 1e9,
+            color: SERIES_PALETTE[0],
+          },
+        ],
+      },
+    ],
+  }));
 }
 
 export function generateCPUTimeseries(
   stats: StatementStatisticsPerAggregatedTs[],
-): AlignedData {
-  const ts: Array<number> = [];
-  const count: Array<number> = [];
-
-  stats.forEach(function (stat: StatementStatisticsPerAggregatedTs) {
-    if (stat.stats.exec_stats.cpu_sql_nanos) {
-      ts.push(TimestampToNumber(stat.aggregated_ts) * 1e3);
-      count.push(stat.stats.exec_stats.cpu_sql_nanos.mean);
-    }
-  });
-
-  return [ts, count];
+): GroupedBarData {
+  return stats
+    .filter(stat => stat.stats.exec_stats.cpu_sql_nanos != null)
+    .map(stat => ({
+      timestamp: TimestampToNumber(stat.aggregated_ts) * 1e3,
+      groups: [
+        {
+          label: "",
+          layers: [
+            {
+              label: "SQL CPU Time",
+              value: stat.stats.exec_stats.cpu_sql_nanos.mean,
+              color: SERIES_PALETTE[0],
+            },
+          ],
+        },
+      ],
+    }));
 }
 
 // generateCanaryVsStableTimeseries builds a time series with four data
@@ -164,7 +234,7 @@ type StatementStatisticsPerAggregatedTsAndPlanHash =
   cockroach.server.serverpb.StatementDetailsResponse.IStatementPlanDistribution;
 export function generatePlanDistributionTimeseries(
   stats: StatementStatisticsPerAggregatedTsAndPlanHash[],
-): { alignedData: AlignedData; planGists: string[] } {
+): { data: GroupedBarData; planGists: string[] } {
   const timeMap = new Map<number, Map<string, number>>();
   const planGistSet = new Set<string>();
 
@@ -186,17 +256,27 @@ export function generatePlanDistributionTimeseries(
   const timestamps = Array.from(timeMap.keys()).sort((a, b) => a - b);
   const planGists = Array.from(planGistSet).sort();
 
-  // Build aligned data structure: [timestamps, plan1_counts, plan2_counts, ...]
-  const alignedData: AlignedData = [timestamps];
-
-  planGists.forEach(planGist => {
-    const counts = timestamps.map(ts => {
-      return timeMap.get(ts)?.get(planGist) || 0;
-    });
-    alignedData.push(counts);
+  // Assign a color to each plan gist.
+  const gistColors = new Map<string, string>();
+  planGists.forEach((gist, i) => {
+    gistColors.set(gist, SERIES_PALETTE[i % SERIES_PALETTE.length]);
   });
 
-  return { alignedData, planGists };
+  const data: GroupedBarData = timestamps.map(ts => ({
+    timestamp: ts,
+    groups: [
+      {
+        label: "",
+        layers: planGists.map(gist => ({
+          label: `Plan ${gist}`,
+          value: timeMap.get(ts)?.get(gist) || 0,
+          color: gistColors.get(gist),
+        })),
+      },
+    ],
+  }));
+
+  return { data, planGists };
 }
 
 // latencyToColor maps a latency value to a purple-tone HSL color.

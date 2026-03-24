@@ -63,11 +63,8 @@ import { useUserSQLRoles } from "../api/userApi";
 import { CockroachCloudContext, ClusterDetailsContext } from "../contexts";
 import { Delayed } from "../delayed";
 import { AxisUnits } from "../graphs";
-import {
-  BarGraphTimeSeries,
-  GroupedStackedBarGraphTimeSeries,
-  XScale,
-} from "../graphs/bargraph";
+import { GroupedStackedBarGraphTimeSeries } from "../graphs/bargraph";
+import { GroupedBarChart } from "../graphs/groupedBarChart";
 import { getStmtInsightRecommendations, InsightType } from "../insights";
 import {
   InsightsSortedTable,
@@ -113,7 +110,6 @@ export type StatementDetailsProps = StatementDetailsOwnProps &
 
 export interface StatementDetailsState {
   currentTab?: string;
-  cardWidth: number;
 
   /**
    * The latest non-null query text associated with the statement fingerprint in the URL.
@@ -270,7 +266,6 @@ export function StatementDetails(
   };
 
   const [currentTab, setCurrentTab] = useState<string>(getInitialTab);
-  const [cardWidth, setCardWidth] = useState<number>(700);
   const [query, setQuery] = useState<string>(
     statementDetails?.statement?.metadata?.query,
   );
@@ -291,14 +286,6 @@ export function StatementDetails(
     },
     [onRequestTimeChange, onTimeScaleChange],
   );
-
-  const handleResize = useCallback((): void => {
-    const cardElement = document.getElementById("first-card");
-    const newCardWidth = cardElement ? cardElement.offsetWidth - 22 : 700;
-    if (newCardWidth !== cardWidth) {
-      setCardWidth(newCardWidth);
-    }
-  }, [cardWidth]);
 
   const onTabChange = (tabId: string): void => {
     const searchParams = new URLSearchParams(history.location.search);
@@ -326,15 +313,6 @@ export function StatementDetails(
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Resize handler.
-  useEffect(() => {
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-    };
-  }, [handleResize]);
 
   // Update query state when statementDetails changes
   useEffect(() => {
@@ -485,66 +463,19 @@ export function StatementDetails(
             : 0,
     );
 
-    const executionAndPlanningTimeseries: AlignedData =
+    const executionAndPlanningTimeseries =
       generateExecuteAndPlanningTimeseries(statsPerAggregatedTs);
-    const executionAndPlanningOps: Partial<Options> = {
-      axes: [{}, { label: "Time Spent" }],
-      series: [{}, { label: "Execution" }, { label: "Planning" }],
-      width: cardWidth,
-    };
-
-    const rowsProcessedTimeseries: AlignedData =
+    const rowsProcessedTimeseries =
       generateRowsProcessedTimeseries(statsPerAggregatedTs);
-    const rowsProcessedOps: Partial<Options> = {
-      axes: [{}, { label: "Rows" }],
-      series: [{}, { label: "Rows Read" }, { label: "Rows Written" }],
-      width: cardWidth,
-    };
-
-    const execRetriesTimeseries: AlignedData =
+    const execRetriesTimeseries =
       generateExecRetriesTimeseries(statsPerAggregatedTs);
-    const execRetriesOps: Partial<Options> = {
-      axes: [{}, { label: "Retries" }],
-      series: [{}, { label: "Retries" }],
-      legend: { show: false },
-      width: cardWidth,
-    };
-
-    const execCountTimeseries: AlignedData =
+    const execCountTimeseries =
       generateExecCountTimeseries(statsPerAggregatedTs);
-    const execCountOps: Partial<Options> = {
-      axes: [{}, { label: "Execution Counts" }],
-      series: [{}, { label: "Execution Counts" }],
-      legend: { show: false },
-      width: cardWidth,
-    };
-
-    const contentionTimeseries: AlignedData =
+    const contentionTimeseries =
       generateContentionTimeseries(statsPerAggregatedTs);
-    const contentionOps: Partial<Options> = {
-      axes: [{}, { label: "Contention" }],
-      series: [{}, { label: "Contention" }],
-      legend: { show: false },
-      width: cardWidth,
-    };
-
-    const cpuTimeseries: AlignedData =
-      generateCPUTimeseries(statsPerAggregatedTs);
-    const cpuOps: Partial<Options> = {
-      axes: [{}, { label: "SQL CPU Time" }],
-      series: [{}, { label: "SQL CPU Time" }],
-      legend: { show: false },
-      width: cardWidth,
-    };
-
-    const clientWaitTimeseries: AlignedData =
+    const cpuTimeseries = generateCPUTimeseries(statsPerAggregatedTs);
+    const clientWaitTimeseries =
       generateClientWaitTimeseries(statsPerAggregatedTs);
-    const clientWaitOps: Partial<Options> = {
-      axes: [{}, { label: "Time Spent" }],
-      series: [{}, { label: "Client Wait Time" }],
-      legend: { show: false },
-      width: cardWidth,
-    };
 
     const canaryVsStableTimeseries: AlignedData =
       generateCanaryVsStableTimeseries(statsPerAggregatedTs);
@@ -587,7 +518,7 @@ export function StatementDetails(
     const xScale = {
       graphTsStartMillis: chartsStart.valueOf(),
       graphTsEndMillis: chartsEnd.valueOf(),
-    } as XScale;
+    };
 
     return (
       <>
@@ -763,20 +694,18 @@ export function StatementDetails(
           <p className={summaryCardStylesCx("summary--card__divider--large")} />
           <Row gutter={24}>
             <Col className="gutter-row" span={12}>
-              <BarGraphTimeSeries
-                title="Statement Times"
-                alignedData={executionAndPlanningTimeseries}
-                uPlotOptions={executionAndPlanningOps}
+              <GroupedBarChart
+                data={executionAndPlanningTimeseries}
                 yAxisUnits={AxisUnits.Duration}
+                title="Statement Times"
                 xScale={xScale}
               />
             </Col>
             <Col className="gutter-row" span={12}>
-              <BarGraphTimeSeries
-                title="Rows Processed"
-                alignedData={rowsProcessedTimeseries}
-                uPlotOptions={rowsProcessedOps}
+              <GroupedBarChart
+                data={rowsProcessedTimeseries}
                 yAxisUnits={AxisUnits.Count}
+                title="Rows Processed"
                 xScale={xScale}
               />
             </Col>
@@ -784,7 +713,9 @@ export function StatementDetails(
           {hasCanaryData && (
             <Row gutter={24}>
               <Col className="gutter-row" span={12}>
-                <GroupedStackedBarGraphTimeSeries
+                <GroupedBarChart
+                  data={canaryVsStableData}
+                  yAxisUnits={AxisUnits.Duration}
                   title="Canary vs Stable Statement Times"
                   alignedData={canaryVsStableTimeseries}
                   uPlotOptions={canaryVsStableOps}
@@ -809,49 +740,47 @@ export function StatementDetails(
           )}
           <Row gutter={24}>
             <Col className="gutter-row" span={12}>
-              <BarGraphTimeSeries
+              <GroupedBarChart
+                data={execRetriesTimeseries}
+                yAxisUnits={AxisUnits.Count}
                 title="Execution Retries"
-                alignedData={execRetriesTimeseries}
-                uPlotOptions={execRetriesOps}
-                yAxisUnits={AxisUnits.Count}
                 xScale={xScale}
               />
             </Col>
             <Col className="gutter-row" span={12}>
-              <BarGraphTimeSeries
+              <GroupedBarChart
+                data={execCountTimeseries}
+                yAxisUnits={AxisUnits.Count}
                 title="Execution Count"
-                alignedData={execCountTimeseries}
-                uPlotOptions={execCountOps}
-                yAxisUnits={AxisUnits.Count}
                 xScale={xScale}
               />
             </Col>
           </Row>
           <Row gutter={24}>
             <Col className="gutter-row" span={12}>
-              <BarGraphTimeSeries
+              <GroupedBarChart
+                data={contentionTimeseries}
+                yAxisUnits={AxisUnits.Duration}
                 title={`Contention Time${noSamples}`}
-                alignedData={contentionTimeseries}
-                uPlotOptions={contentionOps}
                 tooltip={unavailableTooltip}
-                yAxisUnits={AxisUnits.Duration}
                 xScale={xScale}
               />
             </Col>
             <Col className="gutter-row" span={12}>
-              <BarGraphTimeSeries
-                title={`SQL CPU Time${noSamples}`}
-                alignedData={cpuTimeseries}
-                uPlotOptions={cpuOps}
-                tooltip={unavailableTooltip}
+              <GroupedBarChart
+                data={cpuTimeseries}
                 yAxisUnits={AxisUnits.Duration}
+                title={`SQL CPU Time${noSamples}`}
+                tooltip={unavailableTooltip}
                 xScale={xScale}
               />
             </Col>
           </Row>
           <Row gutter={24}>
             <Col className="gutter-row" span={12}>
-              <BarGraphTimeSeries
+              <GroupedBarChart
+                data={clientWaitTimeseries}
+                yAxisUnits={AxisUnits.Duration}
                 title="Client Wait Time"
                 tooltip={
                   <>
@@ -868,9 +797,6 @@ export function StatementDetails(
                     {"."}
                   </>
                 }
-                alignedData={clientWaitTimeseries}
-                uPlotOptions={clientWaitOps}
-                yAxisUnits={AxisUnits.Duration}
                 xScale={xScale}
               />
             </Col>
@@ -895,21 +821,10 @@ export function StatementDetails(
       statementDetails.statement.metadata.formatted_query;
 
     // Generate plan distribution data for the chart
-    const { alignedData: planDistData, planGists } =
+    const { data: planDistData, planGists } =
       generatePlanDistributionTimeseries(
         statementStatisticsPerAggregatedTsAndPlanHash || [],
       );
-
-    const planDistOps: Partial<Options> = {
-      axes: [{}, { label: "Execution Count" }],
-      series: [
-        {},
-        ...planGists.map(gist => ({
-          label: `Plan ${gist}`,
-          stroke: undefined, // Let the default color palette handle it
-        })),
-      ],
-    };
 
     // Build a map from plan_gist → average run latency (seconds)
     // for heat map coloring. If multiple plan_hashes share a gist,
@@ -958,7 +873,7 @@ export function StatementDetails(
     const xScale = {
       graphTsStartMillis: chartsStart.valueOf(),
       graphTsEndMillis: chartsEnd.valueOf(),
-    } as XScale;
+    };
 
     return (
       <>
@@ -992,27 +907,24 @@ export function StatementDetails(
           </Row>
           <p className={summaryCardStylesCx("summary--card__divider")} />
           {planGists.length > 0 && (
-            <>
-              <Row gutter={24}>
-                <Col className="gutter-row" span={24}>
-                  <BarGraphTimeSeries
-                    title="Plan Distribution Over Time"
-                    tooltip={
-                      <>
-                        Shows which execution plans were used during each time
-                        period. Each color represents a different plan hash.
-                        Stacked bars show the total execution count broken down
-                        by plan.
-                      </>
-                    }
-                    alignedData={planDistData}
-                    uPlotOptions={planDistOps}
-                    yAxisUnits={AxisUnits.Count}
-                    xScale={xScale}
-                  />
-                </Col>
-              </Row>
-            </>
+            <Row gutter={24}>
+              <Col className="gutter-row" span={24}>
+                <GroupedBarChart
+                  data={planDistData}
+                  yAxisUnits={AxisUnits.Count}
+                  title="Plan Distribution Over Time"
+                  tooltip={
+                    <>
+                      Shows which execution plans were used during each time
+                      period. Each color represents a different plan hash.
+                      Stacked bars show the total execution count broken down by
+                      plan.
+                    </>
+                  }
+                  xScale={xScale}
+                />
+              </Col>
+            </Row>
           )}
           {hasCanaryPlanData && (
             <Row gutter={24}>
