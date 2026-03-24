@@ -229,6 +229,20 @@ your findings rather than failing the investigation.
 If there is no TeamCity build ID and no EngFlow invocation URL, work
 with what is available in the issue.
 
+**Heap profile analysis (OOM failures):**
+
+When a node is OOM-killed, the `debug.zip` profile for that node will
+be an error (node is dead), but the node's heap profiler typically
+wrote profiles to disk before the crash. Look in `artifacts.zip` under
+`logs/<node>.unredacted/heap_profiler/` for `memprof.*.pprof` files
+(the filename suffix is Go heap in-use bytes — scan these to see the
+growth trajectory). Use `go tool pprof -top -inuse_space` on the
+latest profile, and diff the earliest vs latest with `-base` to
+isolate the runaway allocation sites. Include the diff in your
+findings. Also check the `memmonitoring.*.txt` files in the same
+directory to see whether the growth is tracked by CockroachDB's
+memory accounting.
+
 ### Step 5: Write Your Findings
 
 Write your findings to `artifacts/findings.md` (create the

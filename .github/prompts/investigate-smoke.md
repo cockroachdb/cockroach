@@ -38,6 +38,7 @@ mkdir -p artifacts
 13. **Grep tool**: Search for "package" in `pkg/util/log/`
 14. **Glob tool**: Find `*.go` files in `pkg/util/log/`
 15. **WebFetch tool**: Fetch `https://httpbin.org/get`
+16. **Bash(go tool pprof)**: `go tool pprof -top -inuse_space -nodecount=5 /dev/null 2>&1 || true` (confirms the command is allowed; an error about the input file is fine)
 
 ## Output
 
