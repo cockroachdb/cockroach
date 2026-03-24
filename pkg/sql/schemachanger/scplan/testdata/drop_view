@@ -96,9 +96,8 @@ StatementPhase stage 1 of 1 with 31 MutationType ops
         DescriptorID: 105
         Name: v1
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 105
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 105
     *scop.RemoveUserPrivileges
       DescriptorID: 105
       User: admin
@@ -255,9 +254,8 @@ PreCommitPhase stage 2 of 2 with 34 MutationType ops
         DescriptorID: 105
         Name: v1
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 105
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 105
     *scop.RemoveUserPrivileges
       DescriptorID: 105
       User: admin
@@ -1126,9 +1124,8 @@ StatementPhase stage 1 of 1 with 176 MutationType ops
         DescriptorID: 105
         Name: v1
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 105
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 105
     *scop.RemoveUserPrivileges
       DescriptorID: 105
       User: admin
@@ -1156,9 +1153,8 @@ StatementPhase stage 1 of 1 with 176 MutationType ops
         DescriptorID: 106
         Name: v2
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 106
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 106
     *scop.RemoveUserPrivileges
       DescriptorID: 106
       User: admin
@@ -1189,9 +1185,8 @@ StatementPhase stage 1 of 1 with 176 MutationType ops
         DescriptorID: 107
         Name: v3
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 107
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 107
     *scop.RemoveUserPrivileges
       DescriptorID: 107
       User: admin
@@ -1222,9 +1217,8 @@ StatementPhase stage 1 of 1 with 176 MutationType ops
         DescriptorID: 108
         Name: v4
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 108
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 108
     *scop.RemoveUserPrivileges
       DescriptorID: 108
       User: admin
@@ -1255,9 +1249,8 @@ StatementPhase stage 1 of 1 with 176 MutationType ops
         DescriptorID: 111
         Name: v5
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 111
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 111
     *scop.RemoveUserPrivileges
       DescriptorID: 111
       User: admin
@@ -1990,9 +1983,8 @@ PreCommitPhase stage 2 of 2 with 185 MutationType ops
         DescriptorID: 105
         Name: v1
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 105
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 105
     *scop.RemoveUserPrivileges
       DescriptorID: 105
       User: admin
@@ -2020,9 +2012,8 @@ PreCommitPhase stage 2 of 2 with 185 MutationType ops
         DescriptorID: 106
         Name: v2
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 106
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 106
     *scop.RemoveUserPrivileges
       DescriptorID: 106
       User: admin
@@ -2053,9 +2044,8 @@ PreCommitPhase stage 2 of 2 with 185 MutationType ops
         DescriptorID: 107
         Name: v3
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 107
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 107
     *scop.RemoveUserPrivileges
       DescriptorID: 107
       User: admin
@@ -2086,9 +2076,8 @@ PreCommitPhase stage 2 of 2 with 185 MutationType ops
         DescriptorID: 108
         Name: v4
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 108
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 108
     *scop.RemoveUserPrivileges
       DescriptorID: 108
       User: admin
@@ -2119,9 +2108,8 @@ PreCommitPhase stage 2 of 2 with 185 MutationType ops
         DescriptorID: 111
         Name: v5
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 111
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 111
     *scop.RemoveUserPrivileges
       DescriptorID: 111
       User: admin

@@ -443,6 +443,26 @@ func (b *builderState) requirePrivilege(id catid.DescID, priv privilege.Kind) {
 	}
 }
 
+// CheckPrivilegeForUser implements the scbuildstmt.PrivilegeChecker interface.
+func (b *builderState) CheckPrivilegeForUser(
+	e scpb.Element, priv privilege.Kind, user username.SQLUsername,
+) error {
+	id := screl.GetDescID(e)
+	b.ensureDescriptor(id)
+	c := b.descCache[id]
+	isPrivileged, err := b.auth.HasPrivilege(b.ctx, c.desc, priv, user)
+	if err != nil {
+		return err
+	}
+	if isPrivileged {
+		return nil
+	}
+	return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(
+		user, []privilege.Kind{priv},
+		string(c.desc.DescriptorType()), c.desc.GetName(),
+	)
+}
+
 // CheckGlobalPrivilege implements the scbuildstmt.PrivilegeChecker interface.
 func (b *builderState) CheckGlobalPrivilege(privilege privilege.Kind) error {
 	return b.auth.CheckPrivilege(b.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege)

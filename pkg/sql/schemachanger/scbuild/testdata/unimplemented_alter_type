@@ -13,7 +13,3 @@ ALTER TYPE defaultdb.climes RENAME TO environs
 unimplemented
 ALTER TYPE defaultdb.climes SET SCHEMA public
 ----
-
-unimplemented
-ALTER TYPE defaultdb.climes OWNER TO weatherman
-----

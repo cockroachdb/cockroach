@@ -18,7 +18,7 @@ Schema change plan for DROP SCHEMA ‹""›.‹sc›; following CREATE SCHEMA �
  │              ├── MarkDescriptorAsDropped {"DescriptorID":104}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":100,"SchemaID":104}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"sc"}}
- │              ├── NotImplementedForPublicObjects {"DescID":104,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":104}
  │              ├── RemoveUserPrivileges {"DescriptorID":104,"User":"admin"}
  │              └── RemoveUserPrivileges {"DescriptorID":104,"User":"root"}
  └── PreCommitPhase

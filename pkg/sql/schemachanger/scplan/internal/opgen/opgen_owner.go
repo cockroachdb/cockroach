@@ -25,10 +25,10 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				// TODO(postamar): remove revertibility constraint when possible
-				revertible(false),
-				emit(func(this *scpb.Owner) *scop.NotImplementedForPublicObjects {
-					return notImplementedForPublicObjects(this)
+				emit(func(this *scpb.Owner) *scop.RemoveOwner {
+					return &scop.RemoveOwner{
+						DescriptorID: this.DescriptorID,
+					}
 				}),
 			),
 		),

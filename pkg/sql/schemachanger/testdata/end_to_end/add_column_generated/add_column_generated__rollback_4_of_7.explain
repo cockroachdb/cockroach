@@ -75,7 +75,7 @@ Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN serial_
       │         ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":107}
       │         ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":107}
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":1,"TableID":107}
-      │         ├── NotImplementedForPublicObjects {"DescID":107,"ElementType":"scpb.Owner"}
+      │         ├── RemoveOwner {"DescriptorID":107}
       │         ├── RemoveUserPrivileges {"DescriptorID":107,"User":"admin"}
       │         ├── RemoveUserPrivileges {"DescriptorID":107,"User":"root"}
       │         ├── RemoveSequenceOwner {"ColumnID":2,"OwnedSequenceID":107,"TableID":106}
