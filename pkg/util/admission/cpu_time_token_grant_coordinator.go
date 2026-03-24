@@ -180,6 +180,7 @@ func makeCPUTimeTokenGrantCoordinator(
 			tokensUsed:     metrics.TokensUsedPerTenant[tier],
 			tokensReturned: metrics.TokensReturnedPerTenant[tier],
 		}
+		opts.cpuTimeTokenMetrics = metrics
 		requesters[tier] = makeWorkQueue(
 			ambientCtx, KVWork, &childGranters[tier], settings, wqMetrics, opts)
 		granter.requester[tier] = requesters[tier]

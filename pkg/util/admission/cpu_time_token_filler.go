@@ -388,7 +388,18 @@ func (a *cpuTimeTokenAllocator) resetInterval(ctx context.Context) {
 	targets[systemTenant][noBurst] = systemTarget
 	targets[systemTenant][canBurst] = systemTarget + burstDelta
 
-	newRefillRates := a.model.fit(ctx, targets)
+	// Collect SQL CPU stats from all WorkQueues for this interval.
+	var sqlStats sqlIntervalStats
+	for tier := range a.queues {
+		if a.queues[tier] != nil {
+			ac, tc, tr := a.queues[tier].resetSQLStatsInInterval()
+			sqlStats.admittedCount += ac
+			sqlStats.tokensConsumed += tc
+			sqlStats.tokensReturned += tr
+		}
+	}
+
+	newRefillRates := a.model.fit(ctx, targets, sqlStats)
 
 	// deltaRefillRates is the difference in tokens to add per interval (1s)
 	// from the previous call to fit to this one. We add it immediately to the
@@ -453,11 +464,23 @@ func (a *cpuTimeTokenAllocator) refill(
 // to enable unit testing.
 type workQueueIForAllocator interface {
 	refillBurstBuckets(toAdd int64, capacity int64)
+	// resetSQLStatsInInterval resets per-interval SQL admission stats and
+	// returns the previous values.
+	resetSQLStatsInInterval() (admittedCount, tokensConsumed, tokensReturned int64)
+}
+
+// sqlIntervalStats holds SQL CPU admission stats for a single interval,
+// collected from WorkQueues by the allocator and passed to the model for
+// logging.
+type sqlIntervalStats struct {
+	admittedCount  int64
+	tokensConsumed int64
+	tokensReturned int64
 }
 
 // cpuTimeModel abstracts cpuTimeLinearModel for testing.
 type cpuTimeModel interface {
-	fit(context.Context, targetUtilizations) rates
+	fit(context.Context, targetUtilizations, sqlIntervalStats) rates
 }
 
 var _ cpuTimeModel = &cpuTimeTokenLinearModel{}
@@ -565,7 +588,9 @@ type CPUMetricsProvider interface {
 // parameter. targets tracks a target CPU utilization for all buckets in
 // the multi-dimensional token buckets owned by cpuTimeTokenGranter. fit
 // returns the refill rates.
-func (m *cpuTimeTokenLinearModel) fit(ctx context.Context, targets targetUtilizations) rates {
+func (m *cpuTimeTokenLinearModel) fit(
+	ctx context.Context, targets targetUtilizations, sqlStats sqlIntervalStats,
+) rates {
 	if !m.init {
 		m.init = true
 		m.lastFitTime = m.timeSource.Now()
@@ -737,6 +762,7 @@ func (m *cpuTimeTokenLinearModel) fit(ctx context.Context, targets targetUtiliza
 		m.tokenToCPUTimeMultiplier, isLowCPUUtil,
 		intCPUTime, tokensUsed,
 		elapsedSinceLastFit, cpuCapacity,
+		sqlStats.admittedCount, sqlStats.tokensConsumed, sqlStats.tokensReturned,
 	); shouldLog {
 		log.Dev.Infof(ctx, "%s", msg)
 	}

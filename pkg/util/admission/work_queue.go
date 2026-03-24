@@ -330,6 +330,17 @@ type WorkQueue struct {
 	// metrics. Only set when mode == usesCPUTimeTokens.
 	perTenantAggMetrics *tenantAggMetrics
 
+	// SQL CPU admission stats, tracked atomically for lock-free reads
+	// by the periodic logger. Reset every gcTenantsResetUsedAndUpdateEstimators
+	// interval (1s).
+	sqlAdmittedCount  atomic.Int64
+	sqlTokensConsumed atomic.Int64
+	sqlTokensReturned atomic.Int64
+
+	// cpuTimeTokenMetrics holds metrics for SQL-specific counters. Only
+	// set when mode == usesCPUTimeTokens.
+	cpuTimeTokenMetrics *cpuTimeTokenMetrics
+
 	timeSource timeutil.TimeSource
 	knobs      *TestingKnobs
 }
@@ -353,6 +364,10 @@ type workQueueOptions struct {
 	// metrics. Only set when mode == usesCPUTimeTokens. See
 	// cpuTimeTokenMetrics for details.
 	perTenantAggMetrics *tenantAggMetrics
+	// cpuTimeTokenMetrics holds the global CPU time token metrics,
+	// including SQL-specific counters. Only set when mode ==
+	// usesCPUTimeTokens.
+	cpuTimeTokenMetrics *cpuTimeTokenMetrics
 
 	// timeSource can be set to non-nil for tests. If nil,
 	// the timeutil.DefaultTimeSource will be used.
@@ -434,6 +449,7 @@ func initWorkQueue(
 	q.metrics = metrics
 	q.stopCh = stopCh
 	q.perTenantAggMetrics = opts.perTenantAggMetrics
+	q.cpuTimeTokenMetrics = opts.cpuTimeTokenMetrics
 	q.timeSource = timeSource
 	q.knobs = knobs
 	q.mu.defaultCPUTimeTokenEstimator = cpuTimeTokenEstimator{}
@@ -754,6 +770,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 		q.granter.tookWithoutPermission(info.RequestedCount)
 		q.metrics.incAdmitted(info.Priority)
 		q.metrics.recordBypassedAdmission(info.Priority)
+		if info.IsSQLCPU {
+			q.incSQLAdmitted(info.RequestedCount)
+		}
 		admitResponse.Enabled = true
 		return admitResponse, nil
 	}
@@ -789,6 +808,9 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 				admittedCount.Inc(1)
 			}
 			q.metrics.incAdmitted(info.Priority)
+			if info.IsSQLCPU {
+				q.incSQLAdmitted(info.RequestedCount)
+			}
 			if info.ReplicatedWorkInfo.Enabled {
 				// TODO(irfansharif): There's a race here, and could lead to
 				// over-admission. It's possible that there are enqueued work
@@ -873,6 +895,7 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	}
 	work := newWaitingWork(info.Priority, ordering, info.CreateTime, info.RequestedCount, startTime, q.mu.epochLengthNanos)
 	work.replicated = info.ReplicatedWorkInfo
+	work.isSQLCPU = info.IsSQLCPU
 
 	inTenantHeap := isInTenantHeap(tenant)
 	if work.epoch <= q.mu.closedEpochThreshold || ordering == fifoWorkOrdering {
@@ -1134,14 +1157,18 @@ func (q *WorkQueue) granted(grantChainID grantChainID) int64 {
 	if !isInTenantHeap(tenant) {
 		q.mu.tenantHeap.remove(tenant)
 	}
-	// Get the value of requestedCount before releasing the mutex, since after
-	// releasing Admit can notice that item is no longer in the heap and call
-	// releaseWaitingWork to return item to the waitingWorkPool.
+	// Get the value of requestedCount and isSQLCPU before releasing the mutex,
+	// since after releasing Admit can notice that item is no longer in the heap
+	// and call releaseWaitingWork to return item to the waitingWorkPool.
 	requestedCount := item.requestedCount
+	isSQLCPU := item.isSQLCPU
 	// Cannot read tenant after release q.mu, since tenant may get GC'd and
 	// reused.
 	tenantID := tenant.id
 	q.mu.Unlock()
+	if isSQLCPU {
+		q.incSQLAdmitted(requestedCount)
+	}
 
 	if !item.replicated.Enabled {
 		// Reduce critical section by sending on channel after releasing mutex.
@@ -1220,7 +1247,29 @@ func (q *WorkQueue) AdmittedSQLWorkDone(tenantID roachpb.TenantID, remaining int
 		q.granter.tookWithoutPermission(-remaining)
 	} else if remaining > 0 {
 		q.granter.returnGrant(remaining)
+		q.sqlTokensReturned.Add(remaining)
+		if q.cpuTimeTokenMetrics != nil {
+			q.cpuTimeTokenMetrics.SQLTokensReturned.Inc(remaining)
+		}
 	}
+}
+
+// incSQLAdmitted increments SQL-specific admission counters.
+func (q *WorkQueue) incSQLAdmitted(tokensConsumed int64) {
+	q.sqlAdmittedCount.Add(1)
+	q.sqlTokensConsumed.Add(tokensConsumed)
+	if q.cpuTimeTokenMetrics != nil {
+		q.cpuTimeTokenMetrics.SQLAdmittedCount.Inc(1)
+		q.cpuTimeTokenMetrics.SQLTokensConsumed.Inc(tokensConsumed)
+	}
+}
+
+// resetSQLStatsInInterval resets the per-interval SQL admission stats to
+// zero and returns the previous values. Called by the periodic logger.
+func (q *WorkQueue) resetSQLStatsInInterval() (
+	admittedCount, tokensConsumed, tokensReturned int64,
+) {
+	return q.sqlAdmittedCount.Swap(0), q.sqlTokensConsumed.Swap(0), q.sqlTokensReturned.Swap(0)
 }
 
 // adjustTenantUsed is used internally by StoreWorkQueue, and by the KV queue
@@ -1853,6 +1902,7 @@ type waitingWork struct {
 	inWaitingWorkHeap bool
 	enqueueingTime    time.Time
 	replicated        ReplicatedWorkInfo
+	isSQLCPU          bool
 }
 
 var waitingWorkPool = sync.Pool{

@@ -28,6 +28,10 @@ type fitLogger struct {
 	multiplierLo, multiplierHi float64
 	// Previous isLowCPU value, used to detect transitions.
 	prevIsLowCPU bool
+	// SQL CPU stats accumulated across the window.
+	sqlAdmittedCount  int64
+	sqlTokensConsumed int64
+	sqlTokensReturned int64
 }
 
 // fitLogInterval is the number of fit() calls between log lines. Since fit()
@@ -46,11 +50,17 @@ func (a *fitLogger) accumulate(
 	tokensUsed int64,
 	elapsed time.Duration,
 	cpuCapacity float64,
+	sqlAdmittedCount int64,
+	sqlTokensConsumed int64,
+	sqlTokensReturned int64,
 ) (redact.RedactableString, bool) {
 	a.intervals++
 	a.elapsed += elapsed
 	a.intCPU += intCPU
 	a.tokensUsed += tokensUsed
+	a.sqlAdmittedCount += sqlAdmittedCount
+	a.sqlTokensConsumed += sqlTokensConsumed
+	a.sqlTokensReturned += sqlTokensReturned
 	if a.intervals == 1 {
 		a.multiplierLo = multiplier
 		a.multiplierHi = multiplier
@@ -85,11 +95,26 @@ func (a *fitLogger) accumulate(
 		cpuState = " (low)"
 	}
 
+	// SQL stats: show per-work token average and return rate when SQL
+	// CPU admission has been active during this window.
+	var sqlSuffix redact.RedactableString
+	if a.sqlAdmittedCount > 0 {
+		sqlTokPerWork := time.Duration(a.sqlTokensConsumed / a.sqlAdmittedCount)
+		sqlRetPerSec := float64(a.sqlTokensReturned) / float64(time.Second) / elapsedSec
+		sqlSuffix = redact.Sprintf(
+			", sql: %d admits, %s/work, %.2f ret-tok/s",
+			redact.Safe(a.sqlAdmittedCount),
+			redact.Safe(sqlTokPerWork),
+			redact.Safe(sqlRetPerSec),
+		)
+	}
+
 	msg := redact.Sprintf(
-		"cpu time tokens: %.2f/%g vcpu/s%s, %.2f tok/s, mult=[%.2f,%.2f]",
+		"cpu time tokens: %.2f/%g vcpu/s%s, %.2f tok/s, mult=[%.2f,%.2f]%s",
 		redact.Safe(cpuPerSec), redact.Safe(cpuCapacity), redact.SafeString(cpuState),
 		redact.Safe(tokPerSec),
 		redact.Safe(a.multiplierLo), redact.Safe(a.multiplierHi),
+		sqlSuffix,
 	)
 	*a = fitLogger{prevIsLowCPU: isLowCPU}
 	return msg, true
