@@ -613,6 +613,62 @@ WHERE
 user1         user1
 user1_schema  user1
 
+# Non-superusers must be a member of the role specified in AUTHORIZATION.
+subtest authorization_membership_check
+
+user root
+
+statement ok
+CREATE ROLE auth_check_role;
+
+statement ok
+CREATE DATABASE auth_check_db;
+
+statement ok
+GRANT CREATE ON DATABASE auth_check_db TO testuser;
+
+user testuser
+
+statement ok
+USE auth_check_db
+
+statement error pq: role/user "auth_check_role2" does not exist
+CREATE SCHEMA AUTHORIZATION auth_check_role2
+
+statement error pq: must be member of role "auth_check_role"
+CREATE SCHEMA AUTHORIZATION auth_check_role
+
+statement error pq: must be member of role "auth_check_role"
+CREATE SCHEMA s_auth AUTHORIZATION auth_check_role
+
+# After granting auth_check_role to testuser, the CREATE SCHEMA should succeed.
+user root
+
+statement ok
+GRANT auth_check_role TO testuser
+
+user testuser
+
+statement ok
+USE auth_check_db
+
+statement ok
+CREATE SCHEMA AUTHORIZATION auth_check_role
+
+statement ok
+CREATE SCHEMA s_auth AUTHORIZATION auth_check_role
+
+# A user can always create a schema with authorization as themselves.
+statement ok
+CREATE SCHEMA s_testuser AUTHORIZATION testuser
+
+user root
+
+statement ok
+USE defaultdb
+
+subtest end
+
 # Ensure that we need CREATE on a database to create a schema.
 statement ok
 CREATE DATABASE perms

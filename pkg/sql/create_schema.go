@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -38,16 +37,16 @@ func (n *createSchemaNode) startExec(params runParams) error {
 	return params.p.createUserDefinedSchema(params, n.n)
 }
 
-// CreateUserDefinedSchemaDescriptor constructs a mutable schema descriptor.
-func CreateUserDefinedSchemaDescriptor(
+// createUserDefinedSchemaDescriptor constructs a mutable schema descriptor.
+func (p *planner) createUserDefinedSchemaDescriptor(
 	ctx context.Context,
 	sessionData *sessiondata.SessionData,
 	n *tree.CreateSchema,
-	txn descs.Txn,
-	descIDGenerator eval.DescIDGenerator,
 	db catalog.DatabaseDescriptor,
 	allocateID bool,
 ) (*schemadesc.Mutable, *catpb.PrivilegeDescriptor, error) {
+	txn := p.InternalSQLTxn()
+	descIDGenerator := p.extendedEvalCtx.DescIDGenerator
 	authRole, err := decodeusername.FromRoleSpec(
 		sessionData, username.PurposeValidation, n.AuthRole,
 	)
@@ -96,12 +95,8 @@ func CreateUserDefinedSchemaDescriptor(
 
 	owner := user
 	if !n.AuthRole.Undefined() {
-		exists, err := RoleExists(ctx, txn, authRole)
-		if err != nil {
+		if err := p.checkAdminOrMemberOfRole(ctx, authRole); err != nil {
 			return nil, nil, err
-		}
-		if !exists {
-			return nil, nil, sqlerrors.NewUndefinedUserError(authRole)
 		}
 		owner = authRole
 	}
@@ -196,9 +191,8 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		return err
 	}
 
-	desc, privs, err := CreateUserDefinedSchemaDescriptor(
-		params.ctx, params.SessionData(), n, p.InternalSQLTxn(),
-		p.extendedEvalCtx.DescIDGenerator, db, true, /* allocateID */
+	desc, privs, err := p.createUserDefinedSchemaDescriptor(
+		params.ctx, params.SessionData(), n, db, true, /* allocateID */
 	)
 	if err != nil {
 		return err
