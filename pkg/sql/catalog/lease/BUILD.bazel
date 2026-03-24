@@ -25,6 +25,7 @@ go_library(
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvpb",
         "//pkg/multitenant",
+        "//pkg/obs/workloadid",
         "//pkg/roachpb",
         "//pkg/server/settingswatcher",
         "//pkg/settings",

@@ -497,6 +497,8 @@ func runBackupProcessor(
 							TargetBytes:                 1,
 							Timestamp:                   span.end,
 							ReturnElasticCPUResumeSpans: true,
+							WorkloadID:                  flowCtx.EvalCtx.WorkloadID,
+							WorkloadType:                flowCtx.EvalCtx.WorkloadType.ToUint32(),
 						}
 						if priority {
 							// This re-attempt is reading far enough in the past that we just want
@@ -812,6 +814,7 @@ func newBackupPacer(
 		if !ok {
 			tenantID = roachpb.SystemTenantID
 		}
+		wid, wtype := kv.WorkloadInfoFromContext(ctx)
 		pacer = factory.NewPacer(
 			100*time.Millisecond,
 			admission.WorkInfo{
@@ -819,6 +822,8 @@ func newBackupPacer(
 				Priority:        admissionpb.BulkNormalPri,
 				CreateTime:      timeutil.Now().UnixNano(),
 				BypassAdmission: false,
+				WorkloadID:      wid,
+				WorkloadType:    wtype,
 			},
 		)
 	}
