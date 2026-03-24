@@ -74,7 +74,10 @@ func (c *CustomFuncs) CanRemoveAggDistinctForKeys(
 		return false
 	}
 	inputFDs := &input.Relational().FuncDeps
-	variable := agg.Child(0).(*memo.VariableExpr)
+	variable, ok := agg.Child(0).(*memo.VariableExpr)
+	if !ok {
+		return false
+	}
 	cols := c.AddColToSet(private.GroupingCols, variable.Col)
 	return inputFDs.ColsAreStrictKey(cols)
 }

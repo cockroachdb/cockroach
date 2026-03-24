@@ -254,7 +254,13 @@ func deriveGroupByRejectNullCols(
 		}
 
 		// Get column ID of aggregate's Variable operator input.
-		inColID := agg.Child(0).(*memo.VariableExpr).Col
+		variable, ok := agg.Child(0).(*memo.VariableExpr)
+		if !ok {
+			// The aggregate's first argument is not a variable (e.g., a NULL
+			// literal), so we can't reject nulls for this aggregate.
+			return opt.ColSet{}
+		}
+		inColID := variable.Col
 
 		// Criteria #3.
 		if savedInColID != 0 && savedInColID != inColID {

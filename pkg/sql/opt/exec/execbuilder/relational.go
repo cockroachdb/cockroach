@@ -3940,17 +3940,25 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (_ execPlan, outputCols colOrd
 		props, _ := builtinsregistry.GetBuiltinProperties(name)
 
 		args := make([]tree.TypedExpr, fn.ChildCount())
-		argIdxs[i] = make([]exec.NodeColumnOrdinal, fn.ChildCount())
+		varArgIdxs := make([]exec.NodeColumnOrdinal, 0, fn.ChildCount())
 		for j, n := 0, fn.ChildCount(); j < n; j++ {
-			col := fn.Child(j).(*memo.VariableExpr).Col
-			indexedVar, err := b.indexedVar(&ctx, b.mem.Metadata(), col)
-			if err != nil {
-				return execPlan{}, colOrdMap{}, err
+			child := fn.Child(j)
+			if variable, ok := child.(*memo.VariableExpr); ok {
+				col := variable.Col
+				indexedVar, err := b.indexedVar(&ctx, b.mem.Metadata(), col)
+				if err != nil {
+					return execPlan{}, colOrdMap{}, err
+				}
+				args[j] = indexedVar
+				idx, _ := inputCols.Get(col)
+				varArgIdxs = append(varArgIdxs, exec.NodeColumnOrdinal(idx))
+			} else {
+				// Handle constant arguments (e.g., NULL defaults in
+				// st_asmvt).
+				args[j] = memo.ExtractConstDatum(child)
 			}
-			args[j] = indexedVar
-			idx, _ := inputCols.Get(col)
-			argIdxs[i][j] = exec.NodeColumnOrdinal(idx)
 		}
+		argIdxs[i] = varArgIdxs
 
 		frame, err := b.buildFrame(inputCols, item)
 		if err != nil {
