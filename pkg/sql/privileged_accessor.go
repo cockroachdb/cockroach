@@ -9,14 +9,19 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/errors"
 )
 
@@ -79,6 +84,51 @@ func (p *planner) IsSystemTable(ctx context.Context, id int64) (bool, error) {
 		return false, err
 	}
 	return catalog.IsSystemDescriptor(tbl), nil
+}
+
+// ResolvedZoneConfigForKey implements eval.PrivilegedAccessor.
+//
+// It returns the fully resolved (inheritance-applied) zone configuration
+// for the given range start key as a JSONB datum. The key is mapped to a
+// zone via config.DecodeKeyIntoZoneIDAndSuffix (the canonical key-to-zone
+// translation used throughout the system), then hydrated via
+// GetHydratedForNamedZone or GetHydratedForTable to walk the full
+// inheritance chain (e.g. table -> database -> RANGE DEFAULT).
+//
+// This cannot reuse LookupZoneConfigByNamespaceID because that returns the
+// raw zone config bytes for a single descriptor without applying
+// inheritance; here we need the fully resolved config.
+func (p *planner) ResolvedZoneConfigForKey(
+	ctx context.Context, key roachpb.Key,
+) (tree.Datum, error) {
+	// Use the system codec: input keys are raw range keys from
+	// crdb_internal.ranges_no_leases, not tenant-scoped.
+	objectID, _ := config.DecodeKeyIntoZoneIDAndSuffix(
+		keys.SystemSQLCodec, roachpb.RKey(key),
+	)
+
+	var zc *zonepb.ZoneConfig
+	var err error
+	if zoneName, ok := zonepb.NamedZonesByID[uint32(objectID)]; ok {
+		zc, err = zoneconfig.GetHydratedForNamedZone(
+			ctx, p.Txn(), p.Descriptors(), zoneName,
+		)
+	} else {
+		zc, err = zoneconfig.GetHydratedForTable(
+			ctx, p.Txn(), p.Descriptors(), descpb.ID(objectID),
+		)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	j, err := protoreflect.MessageToJSON(
+		zc, protoreflect.FmtFlags{EmitDefaults: true},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDJSON(j), nil
 }
 
 // checkDescriptorPermissions returns nil if the executing user has permissions
