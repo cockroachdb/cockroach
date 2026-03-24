@@ -31,8 +31,6 @@ import {
   CachedDataReducerState,
   KeyedCachedDataReducer,
   KeyedCachedDataReducerState,
-  PaginatedCachedDataReducer,
-  PaginatedCachedDataReducerState,
 } from "./cachedDataReducer";
 import { AdminUIState } from "./state";
 
@@ -94,22 +92,6 @@ const databasesReducerObj = new CachedDataReducer(
   moment.duration(10, "m"),
 );
 export const refreshDatabases = databasesReducerObj.refresh;
-
-const hotRangesRequestToID = (req: api.HotRangesRequestMessage) =>
-  req.page_token;
-
-export const hotRangesReducerObj = new PaginatedCachedDataReducer(
-  api.getHotRanges,
-  "hotRanges",
-  hotRangesRequestToID,
-  1000 /* page limit */,
-  null /* invalidation period */,
-  moment.duration(30, "minutes"),
-);
-
-export const refreshHotRanges = hotRangesReducerObj.refresh;
-
-export const clearHotRanges = hotRangesReducerObj.clearData;
 
 export const tableRequestToID = (req: api.IndexStatsRequestMessage): string =>
   generateTableID(req.database, req.table);
@@ -425,7 +407,6 @@ export interface APIReducersState {
   metricMetadata: CachedDataReducerState<api.MetricMetadataResponseMessage>;
   statementDiagnosticsReports: CachedDataReducerState<clusterUiApi.StatementDiagnosticsResponse>;
   userSQLRoles: CachedDataReducerState<api.UserSQLRolesResponseMessage>;
-  hotRanges: PaginatedCachedDataReducerState<api.HotRangesV2ResponseMessage>;
   clusterLocks: CachedDataReducerState<
     clusterUiApi.SqlApiResponse<clusterUiApi.ClusterLocksResponse>
   >;
@@ -473,7 +454,6 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [statementDiagnosticsReportsReducerObj.actionNamespace]:
     statementDiagnosticsReportsReducerObj.reducer,
   [userSQLRolesReducerObj.actionNamespace]: userSQLRolesReducerObj.reducer,
-  [hotRangesReducerObj.actionNamespace]: hotRangesReducerObj.reducer,
   [clusterLocksReducerObj.actionNamespace]: clusterLocksReducerObj.reducer,
   [txnInsightsReducerObj.actionNamespace]: txnInsightsReducerObj.reducer,
   [txnInsightDetailsReducerObj.actionNamespace]:
