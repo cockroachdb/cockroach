@@ -491,3 +491,84 @@ SELECT schema_name FROM crdb_internal.ranges
 
 statement error pgcode 42703 .*\nHINT.*To retrieve index.*with ranges
 SELECT index_name FROM crdb_internal.ranges
+
+subtest show_ranges_with_zone
+
+# Assert the schema: WITH ZONE adds a zone_config JSONB column.
+query TTITTTTTTT colnames
+SELECT * FROM [SHOW CLUSTER RANGES WITH ZONE] LIMIT 0
+----
+start_key  end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config
+
+# Verify zone_config column contains valid JSON with expected fields.
+query ITB
+SELECT range_id,
+       zone_config->>'numReplicas',
+       zone_config ? 'rangeMinBytes'
+FROM [SHOW CLUSTER RANGES WITH ZONE]
+ORDER BY range_id LIMIT 1
+----
+1  5  true
+
+# Combinable with TABLES.
+query TTITTTITTTTTTTTT colnames
+SELECT * FROM [SHOW CLUSTER RANGES WITH TABLES, ZONE] LIMIT 0
+----
+start_key  end_key  range_id  database_name  schema_name  table_name  table_id  table_start_key  table_end_key  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config
+
+# Combinable with KEYS.
+query TTTTITTTTTTT colnames
+SELECT * FROM [SHOW CLUSTER RANGES WITH KEYS, ZONE] LIMIT 0
+----
+start_key  end_key  raw_start_key  raw_end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config
+
+# WITH EXPLAIN + ZONE shows the generated SQL containing the builtin.
+query B
+SELECT (SELECT * FROM [SHOW CLUSTER RANGES WITH EXPLAIN, ZONE]) LIKE '%zone_config_for_key%'
+----
+true
+
+# SHOW RANGES FROM DATABASE with ZONE.
+query TTITTTTTTT colnames
+SELECT * FROM [SHOW RANGES FROM DATABASE test WITH ZONE] LIMIT 0
+----
+start_key  end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config
+
+# Zone config changes are immediately reflected (no propagation delay).
+# Note: zone_config_for_key resolves based on the range start key, which
+# may belong to a different table when multiple tables share a range.
+# Use the builtin directly with a known key to verify correctness.
+statement ok
+CREATE TABLE zone_test (id INT PRIMARY KEY)
+
+let $zone_test_id
+SELECT 'zone_test'::regclass::oid::int
+
+statement ok
+ALTER TABLE zone_test CONFIGURE ZONE USING num_replicas = 5
+
+# Verify the builtin returns the correct zone config for the table's key prefix.
+query T
+SELECT crdb_internal.zone_config_for_key(crdb_internal.table_span($zone_test_id)[1])->>'numReplicas'
+----
+5
+
+# Verify inheritance: table without explicit zone config inherits defaults.
+statement ok
+CREATE TABLE zone_inherit (id INT PRIMARY KEY)
+
+let $zone_inherit_id
+SELECT 'zone_inherit'::regclass::oid::int
+
+query T
+SELECT crdb_internal.zone_config_for_key(crdb_internal.table_span($zone_inherit_id)[1])->>'numReplicas'
+----
+3
+
+statement ok
+DROP TABLE zone_test
+
+statement ok
+DROP TABLE zone_inherit
+
+subtest end
