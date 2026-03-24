@@ -362,3 +362,64 @@ USING MESSAGE = 'blah blah blah',
 COLUMN = 'foo';
 END;
  -- identifiers removed
+
+pretty
+DECLARE
+BEGIN
+RAISE EXCEPTION USING MESSAGE = "why is this so involved?";
+END
+----
+DECLARE
+BEGIN
+	RAISE EXCEPTION
+		USING MESSAGE = "why is this so involved?";
+END;
+
+pretty
+DECLARE
+BEGIN
+RAISE EXCEPTION USING MESSAGE = 'something went wrong with the operation', DETAIL = 'the value was out of range', HINT = 'try a smaller value';
+END
+----
+DECLARE
+BEGIN
+	RAISE EXCEPTION
+		USING
+			MESSAGE = 'something went wrong with the operation',
+			DETAIL = 'the value was out of range',
+			HINT = 'try a smaller value';
+END;
+
+pretty
+DECLARE
+BEGIN
+RAISE NOTICE 'the value of x is %, y is %, and z is %', x, y, z;
+END
+----
+DECLARE
+BEGIN
+	RAISE NOTICE
+		'the value of x is %, y is %, and z is %', x, y, z;
+END;
+
+pretty
+DECLARE
+BEGIN
+RAISE EXCEPTION SQLSTATE '22012';
+END
+----
+DECLARE
+BEGIN
+	RAISE EXCEPTION SQLSTATE '22012';
+END;
+
+pretty
+DECLARE
+BEGIN
+RAISE division_by_zero;
+END
+----
+DECLARE
+BEGIN
+	RAISE division_by_zero;
+END;

@@ -275,3 +275,95 @@ DECLARE
 HINT: you may have attempted to use %TYPE or %ROWTYPE syntax, which is unsupported.
 --
 See: https://go.crdb.dev/issue-v/114676/
+
+pretty
+<<foo>>
+DECLARE
+var1 integer := 30;
+BEGIN
+END
+----
+<<foo>>
+DECLARE
+	var1 INT8 := 30;
+BEGIN
+END foo;
+
+pretty
+DECLARE
+very_long_variable_name CONSTANT INT NOT NULL := some_function(another_long_argument_name, yet_another_argument);
+BEGIN
+END
+----
+DECLARE
+	very_long_variable_name CONSTANT INT8 NOT NULL :=
+		some_function(
+			another_long_argument_name,
+			yet_another_argument
+		);
+BEGIN
+END;
+
+pretty
+DECLARE
+x INT;
+y TEXT NOT NULL := 'hello';
+z CONSTANT DECIMAL := 3.14;
+BEGIN
+END
+----
+DECLARE
+	x INT8;
+	y STRING NOT NULL := 'hello';
+	z CONSTANT DECIMAL := 3.14;
+BEGIN
+END;
+
+pretty
+DECLARE
+name TEXT COLLATE "en_US" NOT NULL := 'default';
+BEGIN
+END
+----
+DECLARE
+	name STRING COLLATE "en_US" NOT NULL := 'default';
+BEGIN
+END;
+
+pretty
+DECLARE
+var1 CURSOR FOR SELECT x, y FROM t1 WHERE id = arg1 AND status = 'active' ORDER BY x;
+BEGIN
+END
+----
+DECLARE
+	var1 CURSOR FOR
+		SELECT
+			x, y
+		FROM
+			t1
+		WHERE
+			id = arg1 AND status = 'active'
+		ORDER BY
+			x;
+BEGIN
+END;
+
+pretty
+DECLARE
+var1 NO SCROLL CURSOR FOR SELECT x, y FROM t1 WHERE id = arg1 AND status = 'active' ORDER BY x;
+BEGIN
+END
+----
+DECLARE
+	var1 NO SCROLL CURSOR FOR
+		SELECT
+			x, y
+		FROM
+			t1
+		WHERE
+			id = arg1 AND status = 'active'
+		ORDER BY
+			x;
+BEGIN
+END;

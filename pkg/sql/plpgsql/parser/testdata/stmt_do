@@ -437,3 +437,46 @@ DETAIL: source SQL:
 BEGIN
 DO $$ BEGIN DO $$ BEGIN END $$; END $$;
                   ^
+
+pretty
+BEGIN
+DO $$
+BEGIN
+RAISE NOTICE 'outer block';
+DO $foo$
+BEGIN
+SELECT 1;
+DO $bar$
+BEGIN
+SELECT 2;
+INSERT INTO xy VALUES (3, 4);
+END
+$bar$;
+INSERT INTO xy VALUES (1, 2);
+END
+$foo$;
+INSERT INTO xy VALUES (3, 4);
+END
+$$;
+END
+----
+BEGIN
+	DO $funcbodyx$
+		BEGIN
+			RAISE NOTICE 'outer block';
+			DO $funcbody$
+				BEGIN
+					SELECT 1;
+					DO $$
+						BEGIN
+							SELECT 2;
+							INSERT INTO xy VALUES (3, 4);
+						END;
+					$$;
+					INSERT INTO xy VALUES (1, 2);
+				END;
+			$funcbody$;
+			INSERT INTO xy VALUES (3, 4);
+		END;
+	$funcbodyx$;
+END;

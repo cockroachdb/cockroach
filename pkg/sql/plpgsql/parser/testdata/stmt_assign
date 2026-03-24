@@ -226,3 +226,33 @@ END
 ----
 stmt_assign: 2
 stmt_block: 1
+
+pretty
+DECLARE
+BEGIN
+johnny := NULL;
+gyro = 7 + 7;
+END
+----
+DECLARE
+BEGIN
+	johnny := NULL;
+	gyro := 7 + 7;
+END;
+
+pretty
+DECLARE
+BEGIN
+result := some_function(first_argument, second_argument, third_argument) + another_function(fourth_argument, fifth_argument);
+END
+----
+DECLARE
+BEGIN
+	result :=
+		some_function(
+			first_argument,
+			second_argument,
+			third_argument
+		)
+		+ another_function(fourth_argument, fifth_argument);
+END;

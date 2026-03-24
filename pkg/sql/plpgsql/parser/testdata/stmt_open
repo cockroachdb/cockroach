@@ -144,3 +144,45 @@ DECLARE
 BEGIN
 OPEN curs1 FOR;
            ^
+
+pretty
+DECLARE
+BEGIN
+OPEN curs1 FOR SELECT * FROM xy WHERE x > 10 ORDER BY y DESC LIMIT 100;
+END
+----
+DECLARE
+BEGIN
+	OPEN curs1 FOR
+		SELECT
+			*
+		FROM
+			xy
+		WHERE
+			x > 10
+		ORDER BY
+			y DESC
+		LIMIT
+			100;
+END;
+
+pretty
+DECLARE
+BEGIN
+OPEN curs1 SCROLL FOR SELECT * FROM xy WHERE x > 10 ORDER BY y DESC LIMIT 100;
+END
+----
+DECLARE
+BEGIN
+	OPEN curs1 SCROLL FOR
+		SELECT
+			*
+		FROM
+			xy
+		WHERE
+			x > 10
+		ORDER BY
+			y DESC
+		LIMIT
+			100;
+END;

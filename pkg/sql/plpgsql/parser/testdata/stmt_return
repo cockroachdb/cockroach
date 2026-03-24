@@ -204,3 +204,31 @@ DECLARE
 BEGIN
   RETURN 1, (2, 3, 4, 5);
                        ^
+
+pretty
+DECLARE
+BEGIN
+RETURN 1+2;
+END
+----
+DECLARE
+BEGIN
+	RETURN 1 + 2;
+END;
+
+pretty
+DECLARE
+BEGIN
+RETURN some_function(first_argument, second_argument, third_argument) + another_function(fourth_argument);
+END
+----
+DECLARE
+BEGIN
+	RETURN
+		some_function(
+			first_argument,
+			second_argument,
+			third_argument
+		)
+		+ another_function(fourth_argument);
+END;

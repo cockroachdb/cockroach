@@ -79,6 +79,29 @@ RETURN QUERY (SELECT * FROM _ INNER JOIN _ ON _ = _);
 END;
  -- identifiers removed
 
+pretty
+DECLARE
+BEGIN
+RETURN QUERY SELECT x, y, count(*) FROM xy WHERE x > 10 GROUP BY x, y HAVING count(*) > 1 ORDER BY x;
+END
+----
+DECLARE
+BEGIN
+	RETURN QUERY
+		SELECT
+			x, y, count(*)
+		FROM
+			xy
+		WHERE
+			x > 10
+		GROUP BY
+			x, y
+		HAVING
+			count(*) > 1
+		ORDER BY
+			x;
+END;
+
 error
 DECLARE
 BEGIN
