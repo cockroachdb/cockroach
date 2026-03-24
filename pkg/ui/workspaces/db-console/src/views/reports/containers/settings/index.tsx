@@ -10,26 +10,17 @@ import {
   SortSetting,
   util,
   Timestamp,
+  useClusterSettings,
+  ClusterSetting,
 } from "@cockroachlabs/cluster-ui";
-import isNil from "lodash/isNil";
-import React, { useEffect, useState } from "react";
+import moment from "moment-timezone";
+import React, { useState } from "react";
 import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-
-import * as protos from "src/js/protos";
-import { refreshSettings } from "src/redux/apiReducers";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { AdminUIState } from "src/redux/state";
 
 import { BackToAdvanceDebug } from "../util";
 
 import "./index.scss";
-
-interface SettingsOwnProps {
-  settings: CachedDataReducerState<protos.cockroach.server.serverpb.SettingsResponse>;
-  refreshSettings: typeof refreshSettings;
-}
 
 interface IterableSetting {
   key: string;
@@ -39,8 +30,6 @@ interface IterableSetting {
   public?: boolean;
   last_updated?: moment.Moment;
 }
-
-type SettingsProps = SettingsOwnProps & RouteComponentProps;
 
 const columns: ColumnDescriptor<IterableSetting>[] = [
   {
@@ -73,48 +62,36 @@ const columns: ColumnDescriptor<IterableSetting>[] = [
   },
 ];
 
+function settingsToIterableArray(
+  allSettings: Record<string, ClusterSetting>,
+): IterableSetting[] {
+  return Object.entries(allSettings).map(([key, cs]) => ({
+    key,
+    description: cs.description,
+    type: cs.type,
+    value: cs.value,
+    public: cs.public,
+    last_updated: cs.lastUpdated,
+  }));
+}
+
 /**
  * Renders the Cluster Settings Report page.
  */
-export function Settings({
-  settings,
-  refreshSettings: refreshSettingsAction,
-  history,
-}: SettingsProps): React.ReactElement {
+export function Settings({ history }: RouteComponentProps): React.ReactElement {
   const [sortSetting, setSortSetting] = useState({
     ascending: true,
     columnTitle: "lastUpdated",
   });
 
-  useEffect(() => {
-    refreshSettingsAction(
-      new protos.cockroach.server.serverpb.SettingsRequest(),
-    );
-  }, [refreshSettingsAction]);
+  const { settingValues, isLoading, error } = useClusterSettings();
 
   const renderTable = (wantPublic: boolean) => {
-    if (isNil(settings.data)) {
-      return null;
-    }
-
-    const { key_values } = settings.data;
-    const dataArray: IterableSetting[] = Object.keys(key_values)
-      .map(key => ({
-        key,
-        ...key_values[key],
-      }))
-      .map(obj => ({
-        ...obj,
-        last_updated: obj.last_updated
-          ? util.TimestampToMoment(obj.last_updated)
-          : null,
-      }));
+    const dataArray = settingsToIterableArray(settingValues);
 
     return (
       <SortedTable
-        data={dataArray.filter(obj =>
-          wantPublic ? obj.public : obj.public === undefined,
-        )}
+        data={dataArray.filter(obj => (wantPublic ? obj.public : !obj.public))}
         columns={columns}
         sortSetting={sortSetting}
         onChangeSortSetting={(ss: SortSetting) =>
@@ -133,9 +110,9 @@ export function Settings({
       <BackToAdvanceDebug history={history} />
       <h1 className="base-heading">Cluster Settings</h1>
       <Loading
-        loading={!settings.data}
+        loading={isLoading}
         page={"container settings"}
-        error={settings.lastError}
+        error={error}
         render={() => (
           <div>
             <p className="settings-note">
@@ -156,16 +133,4 @@ export function Settings({
   );
 }
 
-const mapStateToProps = (state: AdminUIState) => ({
-  // RootState contains declaration for whole state
-  settings: state.cachedData.settings,
-});
-
-const mapDispatchToProps = {
-  // actionCreators returns objects with type and payload
-  refreshSettings,
-};
-
-export default withRouter(
-  connect(mapStateToProps, mapDispatchToProps)(Settings),
-);
+export default withRouter(Settings);

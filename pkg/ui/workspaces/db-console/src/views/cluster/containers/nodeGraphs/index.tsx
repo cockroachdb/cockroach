@@ -3,10 +3,14 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Anchor, TimeScale } from "@cockroachlabs/cluster-ui";
+import {
+  Anchor,
+  TimeScale,
+  useClusterSettings,
+  util,
+} from "@cockroachlabs/cluster-ui";
 import has from "lodash/has";
 import map from "lodash/map";
-import moment from "moment-timezone";
 import React, { useCallback, useEffect, useState } from "react";
 import { Helmet } from "react-helmet";
 import { connect } from "react-redux";
@@ -18,13 +22,8 @@ import { PayloadAction } from "src/interfaces/action";
 import {
   refreshNodes,
   refreshLiveness,
-  refreshSettings,
   refreshTenantsList,
 } from "src/redux/apiReducers";
-import {
-  selectResolution10sStorageTTL,
-  selectResolution30mStorageTTL,
-} from "src/redux/clusterSettings";
 import { getCookieValue } from "src/redux/cookies";
 import {
   hoverStateSelector,
@@ -177,8 +176,6 @@ const dashboardDropdownOptions = map(dashboards, (dashboard, key) => {
 
 type MapStateToProps = {
   hoverState: HoverState;
-  resolution10sStorageTTL: moment.Duration;
-  resolution30mStorageTTL: moment.Duration;
   timeScale: TimeScale;
   nodeDropdownOptions: ReturnType<
     typeof nodeDropdownOptionsSelector.resultFunc
@@ -195,7 +192,6 @@ type MapStateToProps = {
 type MapDispatchToProps = {
   refreshNodes: typeof refreshNodes;
   refreshLiveness: typeof refreshLiveness;
-  refreshNodeSettings: typeof refreshSettings;
   refreshTenantsList: typeof refreshTenantsList;
   hoverOn: typeof hoverOn;
   hoverOff: typeof hoverOff;
@@ -216,8 +212,6 @@ export function NodeGraphs({
   hoverState,
   hoverOn: hoverOnAction,
   hoverOff: hoverOffAction,
-  resolution10sStorageTTL,
-  resolution30mStorageTTL,
   timeScale,
   nodeDropdownOptions,
   nodeIds,
@@ -227,13 +221,29 @@ export function NodeGraphs({
   currentTenant,
   refreshNodes: refreshNodesAction,
   refreshLiveness: refreshLivenessAction,
-  refreshNodeSettings: refreshNodeSettingsAction,
   refreshTenantsList: refreshTenantsListAction,
   setMetricsFixedWindow: setMetricsFixedWindowAction,
   setTimeScale: setTimeScaleAction,
 }: NodeGraphsProps): React.ReactElement {
   const [showLowResolutionAlert, setShowLowResolutionAlert] = useState(false);
   const [showDeletedDataAlert, setShowDeletedDataAlert] = useState(false);
+
+  const { settingValues } = useClusterSettings({
+    names: [
+      "timeseries.storage.resolution_10s.ttl",
+      "timeseries.storage.resolution_30m.ttl",
+    ],
+  });
+  const sTTLValue =
+    settingValues["timeseries.storage.resolution_10s.ttl"]?.value;
+  const resolution10sStorageTTL = sTTLValue
+    ? util.durationFromISO8601String(sTTLValue)
+    : undefined;
+  const mTTLValue =
+    settingValues["timeseries.storage.resolution_30m.ttl"]?.value;
+  const resolution30mStorageTTL = mTTLValue
+    ? util.durationFromISO8601String(mTTLValue)
+    : undefined;
 
   // Refresh nodes and liveness data on every render so stale data triggers
   // a re-fetch (these calls short-circuit internally when data is fresh).
@@ -242,14 +252,13 @@ export function NodeGraphs({
     refreshLivenessAction();
   });
 
-  // Settings and tenants list only need to be fetched once on mount —
-  // they don't change frequently.
+  // Tenants list only needs to be fetched once on mount —
+  // it doesn't change frequently.
   useEffect(() => {
-    refreshNodeSettingsAction();
     if (isSystemTenant(currentTenant)) {
       refreshTenantsListAction();
     }
-  }, [refreshNodeSettingsAction, refreshTenantsListAction, currentTenant]);
+  }, [refreshTenantsListAction, currentTenant]);
 
   const setClusterPath = useCallback(
     (key: string, selected: DropdownOption) => {
@@ -525,8 +534,6 @@ const nodeDropdownOptionsSelector = createSelector(
 
 const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
   hoverState: hoverStateSelector(state),
-  resolution10sStorageTTL: selectResolution10sStorageTTL(state),
-  resolution30mStorageTTL: selectResolution30mStorageTTL(state),
   timeScale: selectTimeScale(state),
   nodeIds: nodeIDsStringifiedSelector(state),
   storeIDsByNodeID: selectStoreIDsByNodeID(state),
@@ -539,7 +546,6 @@ const mapStateToProps = (state: AdminUIState): MapStateToProps => ({
 const mapDispatchToProps: MapDispatchToProps = {
   refreshNodes,
   refreshLiveness,
-  refreshNodeSettings: refreshSettings,
   refreshTenantsList,
   hoverOn,
   hoverOff,

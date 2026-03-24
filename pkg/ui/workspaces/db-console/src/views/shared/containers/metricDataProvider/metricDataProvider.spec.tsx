@@ -3,14 +3,21 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import {
+  util,
+  findClosestTimeScale,
+  defaultTimeScaleOptions,
+} from "@cockroachlabs/cluster-ui";
 import { render } from "@testing-library/react";
 import map from "lodash/map";
 import Long from "long";
+import moment from "moment-timezone";
 import React from "react";
 import * as reactRedux from "react-redux";
 
 import { UseMetricsResult } from "src/hooks/useMetrics";
 import * as protos from "src/js/protos";
+import { adjustTimeScale } from "src/redux/timeScale";
 import {
   Axis,
   Metric,
@@ -20,7 +27,7 @@ import {
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 
 // Mock react-redux hooks so the component can render without a real store.
-// useSelector now only returns timeInfo (no longer used for metrics state).
+// useSelector now returns metricsTime (the raw time state).
 const mockDispatch = jest.fn();
 jest.mock("react-redux", () => ({
   ...jest.requireActual("react-redux"),
@@ -35,11 +42,19 @@ jest.mock("src/hooks/useMetrics", () => ({
   useMetrics: (req: any) => mockUseMetrics(req),
 }));
 
-// Mock refreshSettings to return a simple action (avoid loading the full
-// apiReducers dependency tree).
-jest.mock("src/redux/apiReducers", () => ({
-  ...jest.requireActual("src/redux/apiReducers"),
-  refreshSettings: jest.fn(() => ({ type: "MOCK_REFRESH_SETTINGS" })),
+// Mock useClusterSettings — return empty settings so TTL values are
+// undefined. This is sufficient for testing the data flow.
+jest.mock("@cockroachlabs/cluster-ui", () => ({
+  ...jest.requireActual("@cockroachlabs/cluster-ui"),
+  useClusterSettings: (): {
+    settingValues: Record<string, never>;
+    isLoading: boolean;
+    error: Error | undefined;
+  } => ({
+    settingValues: {},
+    isLoading: false,
+    error: undefined,
+  }),
 }));
 
 // TextGraph captures the props that MetricsDataProvider passes to its child
@@ -67,8 +82,44 @@ const childrenJSX = (
   </TextGraph>
 );
 
-function mockTimeInfo(timeInfoVal: QueryTimeInfo | null) {
-  (reactRedux.useSelector as jest.Mock).mockReturnValue(timeInfoVal);
+// Create a metricsTime-shaped object with a currentWindow that will
+// produce a deterministic timeInfo through the inline computation.
+function createMetricsTime(startMs: number, endMs: number) {
+  return {
+    currentWindow: {
+      start: moment(startMs),
+      end: moment(endMs),
+    },
+  };
+}
+
+// Compute the expected timeInfo for a given metricsTime, matching the
+// component's inline computation with undefined TTL values.
+function computeExpectedTimeInfo(
+  startMs: number,
+  endMs: number,
+): QueryTimeInfo {
+  const syncedScale = findClosestTimeScale(
+    defaultTimeScaleOptions,
+    util.MilliToSeconds(endMs - startMs),
+  );
+  const adjusted = adjustTimeScale(
+    { ...syncedScale, fixedWindowEnd: false },
+    { start: moment(startMs), end: moment(endMs) },
+    undefined,
+    undefined,
+  );
+  return {
+    start: Long.fromNumber(util.MilliToNano(startMs)),
+    end: Long.fromNumber(util.MilliToNano(endMs)),
+    sampleDuration: Long.fromNumber(
+      util.MilliToNano(adjusted.timeScale.sampleSize.asMilliseconds()),
+    ),
+  };
+}
+
+function mockTimeInfo(metricsTimeVal: any) {
+  (reactRedux.useSelector as jest.Mock).mockReturnValue(metricsTimeVal);
 }
 
 function makeMetricsRequest(
@@ -145,16 +196,18 @@ function withData(timeInfo: QueryTimeInfo): UseMetricsResult {
 }
 
 describe("<MetricsDataProvider>", () => {
-  const timespan1: QueryTimeInfo = {
-    start: Long.fromNumber(0),
-    end: Long.fromNumber(100),
-    sampleDuration: Long.fromNumber(300),
-  };
-  const timespan2: QueryTimeInfo = {
-    start: Long.fromNumber(100),
-    end: Long.fromNumber(200),
-    sampleDuration: Long.fromNumber(300),
-  };
+  // Use realistic millisecond values for constructing metricsTime objects.
+  // 10-minute window starting from epoch.
+  const start1Ms = 0;
+  const end1Ms = 10 * 60 * 1000;
+  const metricsTime1 = createMetricsTime(start1Ms, end1Ms);
+  const timespan1 = computeExpectedTimeInfo(start1Ms, end1Ms);
+
+  const start2Ms = 10 * 60 * 1000;
+  const end2Ms = 20 * 60 * 1000;
+  const metricsTime2 = createMetricsTime(start2Ms, end2Ms);
+  const timespan2 = computeExpectedTimeInfo(start2Ms, end2Ms);
+
   const graphid = "testgraph";
 
   beforeEach(() => {
@@ -166,7 +219,7 @@ describe("<MetricsDataProvider>", () => {
 
   describe("request construction", () => {
     it("passes correct request to useMetrics on mount", () => {
-      mockTimeInfo(timespan1);
+      mockTimeInfo(metricsTime1);
       mockUseMetrics.mockReturnValue(noData);
       render(
         <MetricsDataProvider id={graphid}>{childrenJSX}</MetricsDataProvider>,
@@ -177,7 +230,7 @@ describe("<MetricsDataProvider>", () => {
     });
 
     it("passes undefined request when timeInfo is null", () => {
-      mockTimeInfo(null);
+      mockTimeInfo({ currentWindow: null });
       mockUseMetrics.mockReturnValue(noData);
       render(
         <MetricsDataProvider id={graphid}>{childrenJSX}</MetricsDataProvider>,
@@ -186,7 +239,7 @@ describe("<MetricsDataProvider>", () => {
     });
 
     it("passes updated request when timespan changes", () => {
-      mockTimeInfo(timespan1);
+      mockTimeInfo(metricsTime1);
       mockUseMetrics.mockReturnValue(noData);
       const { rerender } = render(
         <MetricsDataProvider id={graphid}>{childrenJSX}</MetricsDataProvider>,
@@ -196,7 +249,7 @@ describe("<MetricsDataProvider>", () => {
       );
 
       // Rerender with a different timespan.
-      mockTimeInfo(timespan2);
+      mockTimeInfo(metricsTime2);
       rerender(
         <MetricsDataProvider id={graphid}>{childrenJSX}</MetricsDataProvider>,
       );
@@ -208,7 +261,7 @@ describe("<MetricsDataProvider>", () => {
 
   describe("attach", () => {
     it("attaches metrics data to contained component", () => {
-      mockTimeInfo(timespan1);
+      mockTimeInfo(metricsTime1);
       mockUseMetrics.mockReturnValue(withData(timespan1));
       render(
         <MetricsDataProvider id={graphid}>{childrenJSX}</MetricsDataProvider>,
@@ -218,7 +271,7 @@ describe("<MetricsDataProvider>", () => {
     });
 
     it("passes undefined data when loading", () => {
-      mockTimeInfo(timespan1);
+      mockTimeInfo(metricsTime1);
       mockUseMetrics.mockReturnValue(noData);
       render(
         <MetricsDataProvider id={graphid}>{childrenJSX}</MetricsDataProvider>,
@@ -227,7 +280,7 @@ describe("<MetricsDataProvider>", () => {
     });
 
     it("passes timeInfo to contained component", () => {
-      mockTimeInfo(timespan1);
+      mockTimeInfo(metricsTime1);
       mockUseMetrics.mockReturnValue(noData);
       render(
         <MetricsDataProvider id={graphid}>{childrenJSX}</MetricsDataProvider>,
@@ -240,7 +293,7 @@ describe("<MetricsDataProvider>", () => {
       const consoleSpy = jest
         .spyOn(console, "error")
         .mockImplementation(() => {});
-      mockTimeInfo(timespan1);
+      mockTimeInfo(metricsTime1);
       mockUseMetrics.mockReturnValue(noData);
       expect(() => {
         render(

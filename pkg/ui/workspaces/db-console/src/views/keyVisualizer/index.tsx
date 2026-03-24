@@ -7,6 +7,7 @@ import {
   TimeScale,
   TimeScaleDropdown,
   TimeScaleOptions,
+  useClusterSettings,
   util,
 } from "@cockroachlabs/cluster-ui";
 import moment from "moment-timezone";
@@ -15,8 +16,6 @@ import { connect } from "react-redux";
 import { RouteComponentProps } from "react-router-dom";
 
 import { cockroach } from "src/js/protos";
-import { refreshSettings } from "src/redux/apiReducers";
-import { selectClusterSettings } from "src/redux/clusterSettings";
 import { AdminUIState } from "src/redux/state";
 import { selectTimeScale, setTimeScale } from "src/redux/timeScale";
 import { getKeyVisualizerSamples } from "src/util/api";
@@ -103,23 +102,6 @@ function encodeToHexString(bytes: Uint8Array): string {
 
 // buildYAxis returns a mapping of pretty keys to the y coordinate of the key.
 function buildYAxis(sortedPrettyKeys: string[]): Record<string, number> {
-  // TODO(zachlite): make this faster
-  // const sortedPrettyKeysInWindow = state.response.sorted_pretty_keys.filter((prettyKey) => {
-  //   // is this key in the time window?
-  //   for (const sample of samples) {
-  //     for (const bucket of sample.buckets) {
-  //
-  //       const startPretty = state.response.pretty_key_for_uuid[bucket.start_key_id]
-  //       const endPretty = state.response.pretty_key_for_uuid[bucket.end_key_id]
-  //
-  //       if (startPretty === prettyKey || endPretty === prettyKey) {
-  //         return true
-  //       }
-  //     }
-  //   }
-  //   return false;
-  // })
-
   // compute y offset for each key
   const yOffsetsForKey = {} as Record<string, number>;
   sortedPrettyKeys.forEach((key, i) => {
@@ -237,10 +219,6 @@ const KeyVisualizerContainer: React.FC<
 };
 
 interface KeyVisualizerPageProps {
-  clusterSettings?: {
-    [key: string]: cockroach.server.serverpb.SettingsResponse.IValue;
-  };
-  refreshSettings: typeof refreshSettings;
   setTimeScale: typeof setTimeScale;
   timeScale: TimeScale;
 }
@@ -248,12 +226,15 @@ interface KeyVisualizerPageProps {
 const KeyVisualizerPage: React.FunctionComponent<
   KeyVisualizerPageProps & RouteComponentProps
 > = props => {
-  if (props.clusterSettings === undefined) {
-    props.refreshSettings();
+  const { settingValues, isLoading } = useClusterSettings({
+    names: [EnabledSetting, IntervalSetting],
+  });
+
+  if (isLoading) {
     return null;
   }
 
-  const enabled = props.clusterSettings[EnabledSetting].value === "true";
+  const enabled = settingValues[EnabledSetting]?.value === "true";
 
   if (!enabled) {
     return (
@@ -265,9 +246,10 @@ const KeyVisualizerPage: React.FunctionComponent<
     );
   }
 
-  const refreshInterval = util
-    .durationFromISO8601String(props.clusterSettings[IntervalSetting].value)
-    .asMilliseconds();
+  const intervalValue = settingValues[IntervalSetting]?.value;
+  const refreshInterval = intervalValue
+    ? util.durationFromISO8601String(intervalValue).asMilliseconds()
+    : 60_000;
 
   return (
     <KeyVisualizerContainer
@@ -280,11 +262,9 @@ const KeyVisualizerPage: React.FunctionComponent<
 
 export default connect(
   (state: AdminUIState) => ({
-    clusterSettings: selectClusterSettings(state),
     timeScale: selectTimeScale(state),
   }),
   {
-    refreshSettings,
     setTimeScale,
   },
 )(KeyVisualizerPage);
