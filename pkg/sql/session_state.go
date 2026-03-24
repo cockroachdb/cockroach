@@ -140,8 +140,16 @@ func (p *planner) DeserializeSessionState(
 			"can only deserialize matching session users",
 		)
 	}
-	if err := p.checkCanBecomeUser(ctx, sd.User()); err != nil {
+	canBecome, err := p.checkCanBecomeUser(ctx, p.SessionData().SessionUser(), sd.User())
+	if err != nil {
 		return nil, err
+	}
+	if !canBecome {
+		return nil, pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			`permission denied to set role "%s"`,
+			sd.User().Normalized(),
+		)
 	}
 
 	for _, prepStmt := range m.PreparedStatements {

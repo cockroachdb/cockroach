@@ -869,17 +869,14 @@ func (p *planner) checkCanAlterToNewOwner(
 
 	// To alter the owner, you must also be a direct or indirect member of the new
 	// owning role.
-	if p.User() == newOwner {
-		return nil
-	}
-	memberOf, err := p.MemberOfWithAdminOption(ctx, p.User())
+	canBecome, err := p.checkCanBecomeUser(ctx, p.User(), newOwner)
 	if err != nil {
 		return err
 	}
-	if _, ok := memberOf[newOwner]; ok {
-		return nil
+	if !canBecome {
+		return pgerror.Newf(pgcode.InsufficientPrivilege, "must be member of role %q", newOwner)
 	}
-	return pgerror.Newf(pgcode.InsufficientPrivilege, "must be member of role %q", newOwner)
+	return nil
 }
 
 // HasOwnershipOnSchema checks if the current user has ownership on the schema.

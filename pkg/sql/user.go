@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -589,8 +588,16 @@ func (p *planner) setRole(ctx context.Context, scope setScope, s username.SQLUse
 		}
 	}
 
-	if err := p.checkCanBecomeUser(ctx, becomeUser); err != nil {
+	canBecome, err := p.checkCanBecomeUser(ctx, p.SessionData().SessionUser(), becomeUser)
+	if err != nil {
 		return err
+	}
+	if !canBecome {
+		return pgerror.Newf(
+			pgcode.InsufficientPrivilege,
+			`permission denied to set role "%s"`,
+			becomeUser.Normalized(),
+		)
 	}
 
 	// Buffer the ParamStatusUpdate. We must *always* send this on an update,
@@ -637,55 +644,43 @@ func (p *planner) setRole(ctx context.Context, scope setScope, s username.SQLUse
 
 }
 
-// checkCanBecomeUser returns an error if the SessionUser cannot become the
-// becomeUser.
-func (p *planner) checkCanBecomeUser(ctx context.Context, becomeUser username.SQLUsername) error {
-	sessionUser := p.SessionData().SessionUser()
+// checkCanBecomeUser reports whether checkUser can become becomeUser.
+// It returns (true, nil) if the transition is allowed,
+// (false, nil) if it is not, and (false, err) on unexpected errors.
+// For SET ROLE, checkUser should be SessionUser(); for DDL ownership
+// checks, checkUser should be User() (current_user).
+func (p *planner) checkCanBecomeUser(
+	ctx context.Context, checkUser username.SQLUsername, becomeUser username.SQLUsername,
+) (bool, error) {
+	sessionUser := checkUser
 
-	// Switching to None can always succeed.
 	if becomeUser.IsNoneRole() {
-		return nil
+		return true, nil
 	}
-	// No one, not even root, can become the public or node role.
 	if becomeUser.IsPublicRole() || becomeUser.IsNodeUser() {
-		return sqlerrors.NewUndefinedUserError(becomeUser)
+		return false, nil
 	}
-	// Root users are able to become anyone.
 	if sessionUser.IsRootUser() {
-		return nil
+		return true, nil
 	}
-	// You can always become yourself.
 	if becomeUser.Normalized() == sessionUser.Normalized() {
-		return nil
+		return true, nil
 	}
-	// Only root can become root.
-	// This is a CockroachDB specialization of the superuser case, as we don't want
-	// to allow admins to become root in the tenant case, where only system
-	// admins can be the root user.
 	if becomeUser.IsRootUser() {
-		return pgerror.Newf(
-			pgcode.InsufficientPrivilege,
-			"only root can become root",
-		)
+		return false, nil
 	}
 
 	memberships, err := p.MemberOfWithAdminOption(ctx, sessionUser)
 	if err != nil {
-		return err
+		return false, err
 	}
-	// Superusers can become anyone except root. In CRDB, admins are superusers.
 	if _, ok := memberships[username.AdminRoleName()]; ok {
-		return nil
+		return true, nil
 	}
-	// Otherwise, check the session user is a member of the user they will become.
-	if _, ok := memberships[becomeUser]; !ok {
-		return pgerror.Newf(
-			pgcode.InsufficientPrivilege,
-			`permission denied to set role "%s"`,
-			becomeUser.Normalized(),
-		)
+	if _, ok := memberships[becomeUser]; ok {
+		return true, nil
 	}
-	return nil
+	return false, nil
 }
 
 // MaybeConvertStoredPasswordHash attempts to convert a stored hash
