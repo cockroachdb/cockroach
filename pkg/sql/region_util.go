@@ -2293,6 +2293,8 @@ func (p *planner) optimizeSystemDatabase(ctx context.Context) error {
 		// Delete statistics for the table because the statistics materialize
 		// the column type for `crdb_region` and the column type is changing
 		// from bytes to an enum.
+		log.Dev.Infof(ctx, "deleting statistics for table %s (id %d) during multi-region system database optimization",
+			tableName, descriptor.GetID())
 		if _, err := p.InternalSQLTxn().Exec(ctx, "delete-stats", p.txn,
 			`DELETE FROM system.table_statistics WHERE "tableID" = $1;`,
 			descriptor.GetID(),

@@ -73,7 +73,10 @@ func TestMrSystemDatabase(t *testing.T) {
 	// deletes old stats, but automatic stats collection can re-insert stats with
 	// the old column type before the async refresh completes, causing
 	// "unsupported comparison: bytes to crdb_internal_region" errors.
+	// Also wait for any in-flight auto stats jobs that were already running before
+	// the setting was disabled.
 	tDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
+	tDB.Exec(t, `SHOW JOBS WHEN COMPLETE (SELECT job_id FROM crdb_internal.jobs WHERE job_type = 'AUTO CREATE STATS' AND status = 'running')`)
 
 	// Generate stats for system.sqlinstances. See the "QueryByEnum" test for
 	// details.
@@ -94,6 +97,7 @@ func TestMrSystemDatabase(t *testing.T) {
 	sDB := sqlutils.MakeSQLRunner(systemSQL)
 
 	sDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
+	sDB.Exec(t, `SHOW JOBS WHEN COMPLETE (SELECT job_id FROM crdb_internal.jobs WHERE job_type = 'AUTO CREATE STATS' AND status = 'running')`)
 	sDB.Exec(t, `ANALYZE system.sqlliveness;`)
 	sDB.Exec(t, `SET CLUSTER SETTING sql.multiregion.system_database_multiregion.enabled = true`)
 	sDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
