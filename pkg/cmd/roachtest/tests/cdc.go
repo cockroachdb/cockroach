@@ -3538,6 +3538,11 @@ CONFIGURE ZONE USING
 						"spanconfig.range_coalescing.application.enabled": "'false'",
 						// TODO(#158779): When we add back per-table PTS, make sure that this test
 						// turns it off, to avoid it impacting the results.
+						//
+						// This is a latency sensitive scale test, use the default granularity.
+						// The benchmark has a 2 minute latency threshold, and up to 30
+						// seconds of quantization delay eats into that budget significantly.
+						"changefeed.resolved_timestamp.granularity": "'1s'",
 					} {
 						stmt := fmt.Sprintf(`SET CLUSTER SETTING %s = %s`, name, value)
 						if _, err := db.ExecContext(ctx, stmt); err != nil {
