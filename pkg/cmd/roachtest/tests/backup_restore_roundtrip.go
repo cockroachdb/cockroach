@@ -282,15 +282,15 @@ func backupRestoreChaos(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 	}()
 
-	doOnlineRestore := testRNG.Intn(2) == 0
 	// TODO (kev-cao): Running this test with withMock(true) causes the
 	// backups to complete too quickly, but the default workload sizes also take
 	// quite a while to backup. Considering the goal of this test, it'd be good
 	// to add some options to provide the caller with more flexibility over the
 	// workload.
+	// TODO (kev-cao): Once OR download phase is resilient to node failures, we
+	// can metamorphically add online restore to this test as well.
 	testUtils, err := setupBackupRestoreTestUtils(
-		ctx, t, c, testRNG,
-		withCompaction(true), withOnlineRestore(doOnlineRestore),
+		ctx, t, c, testRNG, withCompaction(true),
 	)
 	require.NoError(t, err)
 	defer testUtils.CloseConnections()
@@ -357,12 +357,21 @@ func backupRestoreChaos(ctx context.Context, t test.Test, c cluster.Cluster) {
 	err = testUtils.resetCluster(ctx, t.L(), clusterupgrade.CurrentVersion(), nil, nil)
 	require.NoError(t, err)
 
-	// TODO (kev-cao): Perform failure injection in restore path as well.
-	err = d.verifyBackupCollection(
-		ctx, t.L(), testRNG, collection,
-		true /* checkFiles */, true /* internalSystemJobs */, nil, /* mvHelper */
+	// Resetting the cluster resets expected deaths, so set them again for
+	// restore failure injection.
+	t.Monitor().ExpectProcessDead(failureNodes)
+
+	restoreJob, err := d.Restore(
+		ctx, t.L(), testRNG, collection, false /* checkFiles */, true, /* internalSystemJobs */
 	)
 	require.NoError(t, err)
+	injectAndRecoverFailure(
+		ctx, t, t.L(), testUtils, testUtils.RandomNode(testRNG, liveNodes), restoreJob.ID(), failer, args,
+		randFloatBetween(testRNG, 0.15, 0.65),
+		min(randFloatBetween(testRNG, 0.65, 1.1), 1),
+	)
+	require.NoError(t, restoreJob.WaitForJobSuccess(ctx))
+	require.NoError(t, restoreJob.ValidateRestore(ctx))
 }
 
 // injectAndRecoverFailure waits for the job to progress past
