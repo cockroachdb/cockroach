@@ -394,7 +394,7 @@ func makeKafkaSinkV2(
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}
 
-	clientOpts, err := buildKgoConfig(ctx, u, jsonConfig, mb(true).netMetrics())
+	clientOpts, err := buildKgoConfig(ctx, u, jsonConfig, sinkOpts.Compression, mb(true).netMetrics())
 	if err != nil {
 		return nil, err
 	}
@@ -426,6 +426,7 @@ func buildKgoConfig(
 	ctx context.Context,
 	u *changefeedbase.SinkURL,
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
+	topLevelCompression string,
 	netMetrics *cidr.NetMetrics,
 ) ([]kgo.Opt, error) {
 	var opts []kgo.Opt
@@ -487,7 +488,7 @@ func buildKgoConfig(
 
 	// Apply some statement level overrides. The flush related ones (Messages, MaxMessages, Bytes) are not applied here, but on the sinkBatchConfig instead.
 	// TODO(#126991): Remove this sarama dependency.
-	sinkCfg, err := getSaramaConfig(jsonStr)
+	sinkCfg, err := getSaramaConfig(jsonStr, topLevelCompression)
 	if err != nil {
 		return nil, errors.Wrapf(err,
 			"failed to parse sink config; check %s option", changefeedbase.OptKafkaSinkConfig)

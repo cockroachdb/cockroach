@@ -460,7 +460,7 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 var SQLValidOptions map[string]struct{} = nil
 
 // KafkaValidOptions is options exclusive to Kafka sink
-var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders, OptPartitionAlg)
+var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders, OptPartitionAlg, OptCompression)
 
 // CloudStorageValidOptions is options exclusive to cloud storage sink
 var CloudStorageValidOptions = makeStringSet(OptCompression)
@@ -1169,6 +1169,9 @@ type KafkaSinkOptions struct {
 	// PartitionAlg is the hash function to use for Kafka partitioning.
 	// Valid values are "fnv-1a" (default) and "murmur2".
 	PartitionAlg string
+
+	// Compression is the top-level compression option (e.g. "gzip", "zstd").
+	Compression string
 }
 
 func (s StatementOptions) GetKafkaSinkOptions() (KafkaSinkOptions, error) {
@@ -1186,6 +1189,7 @@ func (s StatementOptions) GetKafkaSinkOptions() (KafkaSinkOptions, error) {
 		JSONConfig:   s.getJSONValue(OptKafkaSinkConfig),
 		Headers:      headersMap,
 		PartitionAlg: partitionAlg,
+		Compression:  s.m[OptCompression],
 	}
 	return o, nil
 }
