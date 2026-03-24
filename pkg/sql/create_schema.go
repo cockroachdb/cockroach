@@ -196,6 +196,31 @@ func (p *planner) createUserDefinedSchema(params runParams, n *tree.CreateSchema
 		return err
 	}
 
+	if !n.AuthRole.Undefined() {
+		authRole, err := decodeusername.FromRoleSpec(
+			params.SessionData(), username.PurposeValidation, n.AuthRole,
+		)
+		if err != nil {
+			return err
+		}
+		if authRole != p.User() {
+			isAdmin, err := p.UserHasAdminRole(params.ctx, p.User())
+			if err != nil {
+				return err
+			}
+			if !isAdmin {
+				memberOf, err := p.MemberOfWithAdminOption(params.ctx, p.User())
+				if err != nil {
+					return err
+				}
+				if _, ok := memberOf[authRole]; !ok {
+					return pgerror.Newf(pgcode.InsufficientPrivilege,
+						"must be member of role %q", authRole)
+				}
+			}
+		}
+	}
+
 	desc, privs, err := CreateUserDefinedSchemaDescriptor(
 		params.ctx, params.SessionData(), n, p.InternalSQLTxn(),
 		p.extendedEvalCtx.DescIDGenerator, db, true, /* allocateID */
