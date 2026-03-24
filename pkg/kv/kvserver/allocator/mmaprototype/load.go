@@ -613,20 +613,39 @@ const (
 	capacityFractionForSignificanceFloor = 0.05
 )
 
-// significanceFloor returns the minimum meaningful denominator for computing
-// fractionAbove in loadSummaryForDimension, preventing small mean loads from
-// amplifying small absolute differences into large fractions. When capacity is
-// known, it is derived as capacityFractionForSignificanceFloor of capacity.
-// For dimensions with unknown capacity, a per-dimension fallback constant is
-// used.
-func significanceFloor(dim LoadDimension, capacity LoadValue) LoadValue {
+// computeFractionAbove computes how far above (or below) the mean a store's
+// load is, as a fraction. For resources with known capacity, this works in
+// utilization space (load/capacity vs mean utilization) to handle heterogeneous
+// nodes correctly. For resources with unknown capacity (e.g. WriteBandwidth),
+// it works in absolute load space.
+//
+// In both cases, the denominator is clamped to a significance floor to prevent
+// small absolute differences from appearing as large fractions when the mean is
+// small. For example, 50 KiB/s above the mean is 25% at a 200 KiB/s mean,
+// enough to trigger overloadSlow and cause unnecessary replica moves. Clamping
+// the denominator to 2 MiB/s for WriteBandwidth makes that same 50 KiB/s only
+// ~2.4%. At high loads (mean > floor), the clamp has no effect.
+// The returned effectiveDenom is the denominator actually used (after
+// clamping), for diagnostic logging.
+func computeFractionAbove(
+	dim LoadDimension, load, capacity, meanLoad LoadValue, meanUtil float64,
+) (fractionAbove, effectiveDenom float64) {
 	if capacity != UnknownCapacity {
-		return LoadValue(float64(capacity) * capacityFractionForSignificanceFloor)
+		util := float64(load) / float64(capacity)
+		denom := max(meanUtil, capacityFractionForSignificanceFloor)
+		return (util - meanUtil) / denom, denom
 	}
-	// NB: We never expect to reach these fallbacks for CPURate or ByteSize
-	// since they should always have a known capacity. These are purely defensive.
+	// For dimensions with unknown capacity, fall back to absolute load space.
+	denom := float64(max(meanLoad, significanceFloorForUnknownCapacity(dim)))
+	return float64(load-meanLoad) / denom, denom
+}
+
+// significanceFloorForUnknownCapacity returns the minimum meaningful
+// denominator for dimensions that lack a known capacity. This prevents small
+// mean loads from amplifying small absolute differences into large fractions.
+func significanceFloorForUnknownCapacity(dim LoadDimension) LoadValue {
 	if buildutil.CrdbTestBuild && (dim == CPURate || dim == ByteSize) {
-		panic(fmt.Sprintf("unexpected UnknownCapacity for dimension %v", dim))
+		panic(fmt.Sprintf("unexpected call for dimension %v which should have a known capacity", dim))
 	}
 	switch dim {
 	case WriteBandwidth:
@@ -637,6 +656,72 @@ func significanceFloor(dim LoadDimension, capacity LoadValue) LoadValue {
 		return byteSizeSignificanceFloor
 	}
 	panic(fmt.Sprintf("unknown dimension: %v", dim))
+}
+
+// computeSummaryUpperBound caps the load summary to loadNormal when absolute
+// utilization is low, even if the store is above the mean in relative terms.
+// This complements the significance floor clamping in computeFractionAbove:
+// clamping addresses statistical significance (preventing small absolute
+// differences from producing large fractions), while this function addresses
+// prioritization (preventing shedding in dimensions that don't matter yet).
+//
+// At low utilizations there is overlap: significance floor clamping dampens
+// fractionAbove, which may already prevent overloadSlow. But the dampening
+// alone isn't always sufficient (see Example 2), so the upper bound provides
+// a hard backstop based on absolute utilization. Raising the significance
+// floor high enough to fully subsume the upper bound is not viable. For
+// fractionAbove to stay below the 0.1 overloadSlow threshold, we need
+// (util - meanUtil) / floor < 0.1, i.e. floor > 10 * (util - meanUtil). In
+// the worst case (one store at threshold X, others near zero, N stores),
+// meanUtil ≈ X/N and the required floor approaches 10*X*(N-1)/N. For
+// CPURate (X=0.05, N=3): floor > 10 * 0.05 * 2/3 ≈ 33%. A 33% floor would
+// cripple detection at moderate utilizations: a store at 30% with a mean of
+// 25% would get fractionAbove = 0.05/0.33 ≈ 0.15 — barely above the
+// threshold, when it should clearly be shedding.
+//
+// Example 1 (ByteSize, threshold 50%): Three stores at 40%, 30%, 30%
+// utilization. The mean is ~33%, well above the 5% significance floor, so
+// clamping has no effect. fractionAbove for the 40% store is
+// (0.4-0.333)/0.333 ≈ 0.18, triggering overloadSlow. But at 40% disk usage,
+// shedding bytes is wasteful — it causes unnecessary data movement and
+// thrashing when multiple leaseholders rebalance concurrently along this
+// low-priority dimension. Capping to loadNormal prevents shedding.
+//
+// Example 2 (CPURate, threshold 5%): Three stores at 4%, 1%, 1% utilization.
+// The mean is 2%, below the 5% significance floor, so the denominator is
+// clamped to 5%. This dampens fractionAbove to (0.04-0.02)/0.05 = 0.4,
+// down from the unclamped (0.04-0.02)/0.02 = 1.0 — but 0.4 still exceeds
+// the 0.1 overloadSlow threshold. The upper bound provides the final
+// protection: at 4% CPU utilization the cluster is essentially idle, so
+// shedding is pointless regardless of relative position.
+func computeSummaryUpperBound(
+	dim LoadDimension, capacity LoadValue, fractionUsed float64,
+) loadSummary {
+	switch dim {
+	case ByteSize:
+		if buildutil.CrdbTestBuild && capacity == UnknownCapacity {
+			panic("ByteSize should always have a known capacity")
+		}
+		// A disk that is less than half full is not considered for shedding to
+		// avoid unnecessary data movement that could cause thrashing.
+		if capacity != UnknownCapacity && fractionUsed < 0.5 {
+			return loadNormal
+		}
+	case CPURate:
+		if buildutil.CrdbTestBuild && capacity == UnknownCapacity {
+			panic("CPURate should always have a known capacity")
+		}
+		// An almost-idle CPU (< 5% utilization) is not considered for shedding.
+		if capacity != UnknownCapacity && fractionUsed < 0.05 {
+			return loadNormal
+		}
+	case WriteBandwidth:
+		// TODO(sumeer): consider adding a summaryUpperBound for small
+		// WriteBandwidth values too.
+	default:
+		panic(fmt.Sprintf("unknown dimension: %v", dim))
+	}
+	return overloadUrgent
 }
 
 // Computes the loadSummary for a particular load dimension.
@@ -669,38 +754,14 @@ func loadSummaryForDimension(
 	// different summarization for cpu and ByteSize since the consequence of
 	// running out-of-disk is much more severe.
 	//
-	// The capacity may be UnknownCapacity. Even if we have a known capacity, we
-	// currently consider how far we are from the mean. But the mean isn't very
-	// useful when there are heterogeneous nodes/stores, so this computation
-	// will need to be revisited.
-	//
-	// Clamp the denominator to a significance floor so that when mean load
-	// is small, small absolute differences don't look like large percentages.
-	// For example, 50 KiB/s above the mean is 25% at a 200 KiB/s mean,
-	// enough to trigger overloadSlow and cause unnecessary replica moves.
-	// Clamping the denominator to 2 MiB/s for WriteBandwidth makes that same
-	// 50 KiB/s only ~2.4%. At high loads (mean > floor), the clamp has no
-	// effect.
-	denominator := max(meanLoad, significanceFloor(dim, capacity))
-	fractionAbove := float64(load-meanLoad) / float64(denominator)
+	fractionAbove, effectiveDenom := computeFractionAbove(dim, load, capacity, meanLoad, meanUtil)
 	var fractionUsed float64
 	if capacity != UnknownCapacity {
 		// NB: capacity can be 0 if nodeCPURateUsage >> nodeCPURateCapacity.
 		fractionUsed = float64(load) / float64(capacity)
 	}
 
-	summaryUpperBound := overloadUrgent
-	// Be less aggressive about the ByteSize dimension when the fractionUsed is
-	// low. Rebalancing along too many dimensions results in more thrashing due
-	// to concurrent rebalancing actions by many leaseholders.
-	if dim == ByteSize && capacity != UnknownCapacity && fractionUsed < 0.5 {
-		summaryUpperBound = loadNormal
-	}
-	// Don't bother equalizing CPURate by shedding, if the utilization is < 5%.
-	// The choice of 5% here is arbitrary.
-	if dim == CPURate && capacity != UnknownCapacity && fractionUsed < 0.05 {
-		summaryUpperBound = loadNormal
-	}
+	summaryUpperBound := computeSummaryUpperBound(dim, capacity, fractionUsed)
 	const (
 		meanFractionSlow     = 0.1
 		meanFractionLow      = -0.1
@@ -734,44 +795,29 @@ func loadSummaryForDimension(
 			buf.Printf("s%v", storeID)
 		}
 		buf.Printf("): %v, reason: %v [load=%v meanLoad=%v", summary, redact.SafeString(reason), load, meanLoad)
-		if denominator != meanLoad {
-			buf.Printf(" denom=%v", denominator)
-		}
 		if capacity != UnknownCapacity {
-			buf.Printf(" fractionUsed=%.2f%% meanUtil=%.2f%% capacity=%v",
-				redact.SafeFloat(fractionUsed*100), redact.SafeFloat(meanUtil*100), capacity)
+			// Annotate fractionUsed with * when the significance floor clamped
+			// the denominator used to compute fractionAbove.
+			naturalDenom := meanUtil
+			clamped := ""
+			if effectiveDenom != naturalDenom {
+				clamped = "*"
+			}
+			buf.Printf(" fractionUsed=%.2f%%%s meanUtil=%.2f%% capacity=%v",
+				redact.SafeFloat(fractionUsed*100), redact.SafeString(clamped),
+				redact.SafeFloat(meanUtil*100), capacity)
 		}
 		buf.SafeRune(']')
 		log.KvDistribution.VEventf(ctx, 3, "%s", buf.RedactableString())
 	}()
 
-	if capacity != UnknownCapacity && meanUtil*1.1 < fractionUsed {
-		// Further tune the summary based on utilization.
-		//
-		// Currently, we only tune towards overload based on utilization, and not
-		// towards underload. The idea is that the former allows us to identify
-		// overload due to heterogeneity, while we primarily still want to focus
-		// on balancing towards the mean usage.
-		if fractionUsed > 0.9 {
-			reason = "fractionUsed > 90%"
-			return min(summaryUpperBound, overloadUrgent)
-		}
-		// INVARIANT: fractionUsed <= 0.9
-		if fractionUsed > 0.75 {
-			if meanUtil*1.5 < fractionUsed {
-				reason = "fractionUsed > 75% and >1.5x meanUtil"
-				return min(summaryUpperBound, overloadUrgent)
-			}
-			reason = "fractionUsed > 75%"
-			return min(summaryUpperBound, overloadSlow)
-		}
-		// INVARIANT: fractionUsed <= 0.75
-		if meanUtil*1.75 < fractionUsed {
-			reason = "fractionUsed < 75% and >1.75x meanUtil"
-			return min(summaryUpperBound, overloadSlow)
-		}
-		reason = "fractionUsed < 75%"
-		return min(summaryUpperBound, max(summ, loadNoChange))
+	// Treat nearing full capacity as urgent regardless of relative position.
+	// Since fractionAbove is utilization-based (when capacity is known), the
+	// relative distance from the mean is already captured above. But absolute
+	// utilization > 90% is dangerous enough to always warrant urgency.
+	if capacity != UnknownCapacity && fractionUsed > 0.9 {
+		reason = "fractionUsed > 90%"
+		return min(summaryUpperBound, overloadUrgent)
 	}
 	return min(summaryUpperBound, summ)
 }
