@@ -20,6 +20,7 @@ message Error {
   string hint = 4;
   string severity = 8;
   string constraint_name = 9;
+  string context = 10;
 
   message Source {
       string file = 1;

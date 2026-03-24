@@ -60,13 +60,18 @@ exports_files(
 
 go_test(
     name = "parser_test",
-    srcs = ["parser_test.go"],
+    srcs = [
+        "parser_test.go",
+        "plpgsql_lineno_test.go",
+    ],
     data = glob(["testdata/**"]),
     deps = [
         ":parser",
+        "//pkg/sql/sem/plpgsqltree",
         "//pkg/sql/sem/plpgsqltree/utils",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/sqlutils",
         "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
     ],
 )
