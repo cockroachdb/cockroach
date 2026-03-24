@@ -100,7 +100,6 @@ type TestServerArgs struct {
 
 	// Fields copied to the server.Config.
 	Insecure                    bool
-	UseDRPC                     bool
 	RetryOptions                retry.Options // TODO(tbg): make testing knob.
 	SocketFile                  string
 	ScanInterval                time.Duration
@@ -171,6 +170,11 @@ type TestServerArgs struct {
 	// server. This controls whether inter-node connectivity uses DRPC, just
 	// gRPC, or is chosen randomly.
 	DefaultDRPCOption DefaultTestDRPCOption
+
+	// UseDRPC is the resolved DRPC enablement decision, set by the test
+	// framework after evaluating DefaultDRPCOption. It's a framework-internal
+	// arg and tests should not set this directly; use DefaultDRPCOption instead.
+	UseDRPC bool
 
 	// DefaultTenantName is the name of the tenant created implicitly according
 	// to DefaultTestTenant. It is typically `test-tenant` for unit tests and
