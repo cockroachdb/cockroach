@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
 
@@ -185,47 +184,14 @@ func (u *uploadZipOutput) artifactsUploaded() int {
 // uploadBytes is the common upload path. Must be called with mu held.
 func (u *uploadZipOutput) uploadBytes(name string, data []byte) error {
 	u.mu.AssertHeld()
-	artType := inferArtifactType(name)
 	contentType := inferContentType(name)
-	idempotencyKey := uuid.MakeV4().String()
 
-	err := u.client.UploadArtifact(
-		u.ctx, name, u.nodeID, artType, contentType, idempotencyKey, data,
-	)
+	err := u.client.UploadArtifact(u.ctx, name, contentType, data)
 	if err != nil {
 		return err
 	}
 	u.artifacts++
 	return nil
-}
-
-// inferArtifactType maps file paths to artifact types based on
-// extension and path patterns.
-func inferArtifactType(name string) artifactType {
-	ext := filepath.Ext(name)
-	switch ext {
-	case ".pprof":
-		return artifactTypeProfile
-	}
-	base := filepath.Base(name)
-	switch {
-	case strings.Contains(name, "/logs/"):
-		return artifactTypeLog
-	case base == "stacks.txt" || base == "stacks_with_labels.txt":
-		return artifactTypeStack
-	case base == "lsm.txt":
-		return artifactTypeEngineStats
-	case ext == ".json":
-		return artifactTypeMetadata
-	case ext == ".txt" || ext == ".csv" || ext == ".tsv":
-		return artifactTypeTable
-	case ext == ".zip":
-		return artifactTypeTrace
-	case ext == ".sh":
-		return artifactTypeMetadata
-	default:
-		return artifactTypeMetadata
-	}
 }
 
 // inferContentType returns a Content-Type header value based on file

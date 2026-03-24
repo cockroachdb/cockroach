@@ -46,10 +46,9 @@ type uploadServerRPCClient struct {
 	sessionID   string
 	uploadToken string
 
-	// gcsClient is non-nil when the upload server supports the
-	// upload-token endpoint. When set, uploads use the GCS client
-	// library (chunked resumable uploads with automatic retry)
-	// instead of raw signed URL PUTs.
+	// gcsClient is set by initGCSClient and used for all uploads.
+	// Uploads use the GCS client library (chunked resumable uploads
+	// with automatic retry).
 	gcsClient *storage.Client
 	gcsBucket string
 	gcsPrefix string
@@ -125,178 +124,57 @@ func (c *uploadServerRPCClient) createSession(
 	return nil
 }
 
-// uploadArtifactBytes uploads raw bytes as an artifact via GCS signed URL.
+// uploadArtifactBytes uploads raw bytes as an artifact via GCS.
 func (c *uploadServerRPCClient) uploadArtifactBytes(
-	ctx context.Context, artifactPath string, nodeID int32, artType string, data []byte,
+	ctx context.Context, artifactPath string, data []byte,
 ) error {
-	return c.uploadArtifact(ctx, artifactPath, nodeID, artType, "application/octet-stream", data)
+	return c.uploadArtifact(ctx, artifactPath, "application/octet-stream", data)
 }
 
-// uploadArtifactJSON marshals a value to JSON and uploads it via GCS signed URL.
+// uploadArtifactJSON marshals a value to JSON and uploads it via GCS.
 func (c *uploadServerRPCClient) uploadArtifactJSON(
-	ctx context.Context, artifactPath string, nodeID int32, artType string, v interface{},
+	ctx context.Context, artifactPath string, v interface{},
 ) error {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return errors.Wrap(err, "marshaling artifact JSON")
 	}
-	return c.uploadArtifact(ctx, artifactPath, nodeID, artType, "application/json", data)
+	return c.uploadArtifact(ctx, artifactPath, "application/json", data)
 }
 
-// getSignedURL requests a GCS signed URL from the upload server.
-func (c *uploadServerRPCClient) getSignedURL(
-	ctx context.Context, artifactPath string, nodeID int32, artType string, contentType string,
-) (*rpcSignedURLResponse, error) {
-	reqBody := map[string]interface{}{
-		"artifact_path": artifactPath,
-		"node_id":       nodeID,
-		"artifact_type": artType,
-		"content_type":  contentType,
-	}
-	data, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, errors.Wrap(err, "marshaling signed URL request")
-	}
-
-	url := fmt.Sprintf(
-		"%s/api/v1/sessions/%s/signed-url",
-		c.serverURL, c.sessionID,
-	)
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(data))
-	if err != nil {
-		return nil, errors.Wrap(err, "creating signed URL request")
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.uploadToken)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, errors.Wrap(err, "requesting signed URL")
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		return nil, readUploadHTTPError(resp)
-	}
-
-	var result rpcSignedURLResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, errors.Wrap(err, "decoding signed URL response")
-	}
-	return &result, nil
-}
-
-// rpcSignedURLResponse is the JSON response from POST .../signed-url.
-type rpcSignedURLResponse struct {
-	SignedURL string `json:"signed_url"`
-	ExpiresAt string `json:"expires_at"`
-}
-
-// uploadToSignedURL uploads data directly to a GCS signed URL.
-func (c *uploadServerRPCClient) uploadToSignedURL(
-	ctx context.Context, signedURL string, contentType string, body io.Reader,
-) error {
-	req, err := http.NewRequestWithContext(ctx, "PUT", signedURL, body)
-	if err != nil {
-		return errors.Wrap(err, "creating GCS upload request")
-	}
-	req.Header.Set("Content-Type", contentType)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return errors.Wrap(err, "uploading to GCS")
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return errors.Newf("GCS upload returned HTTP %d: %s", resp.StatusCode, string(respBody))
-	}
-	return nil
-}
-
-// uploadArtifactStreaming uploads an artifact to GCS. When a GCS
-// client is available (via initGCSClient), it uses the GCS client
-// library which provides chunked resumable uploads with automatic
-// retry. Otherwise, it falls back to signed URL PUTs with a single
-// retry on expired URL.
+// uploadArtifactStreaming uploads an artifact to GCS using the GCS
+// client library, which provides chunked resumable uploads with
+// automatic retry.
 //
-// The newBody callback is called to obtain a fresh io.ReadCloser.
-// When using the GCS client, the factory is only called once since
-// the GCS client handles retries internally at the chunk level.
+// The newBody callback is called once to obtain an io.ReadCloser.
+// The GCS client handles retries internally at the chunk level.
 func (c *uploadServerRPCClient) uploadArtifactStreaming(
 	ctx context.Context,
 	artifactPath string,
-	nodeID int32,
-	artType string,
 	contentType string,
 	newBody func() (io.ReadCloser, error),
 ) error {
-	if c.gcsClient != nil {
-		body, err := newBody()
-		if err != nil {
-			return errors.Wrap(err, "creating body reader")
-		}
-		defer body.Close()
-		return c.uploadArtifactGCS(ctx, artifactPath, contentType, body)
+	if c.gcsClient == nil {
+		return errors.AssertionFailedf("GCS client not initialized; call initGCSClient first")
 	}
-
-	// Signed URL fallback path.
-	signedResp, err := c.getSignedURL(ctx, artifactPath, nodeID, artType, contentType)
-	if err != nil {
-		return errors.Wrap(err, "getting signed URL")
-	}
-
 	body, err := newBody()
 	if err != nil {
 		return errors.Wrap(err, "creating body reader")
 	}
-	err = c.uploadToSignedURL(ctx, signedResp.SignedURL, contentType, body)
-	body.Close()
-	if err != nil && isRPCSignedURLExpiredError(err) {
-		signedResp, err = c.getSignedURL(ctx, artifactPath, nodeID, artType, contentType)
-		if err != nil {
-			return errors.Wrap(err, "getting fresh signed URL on retry")
-		}
-		body, err = newBody()
-		if err != nil {
-			return errors.Wrap(err, "creating body reader on retry")
-		}
-		err = c.uploadToSignedURL(ctx, signedResp.SignedURL, contentType, body)
-		body.Close()
-	}
-	if err != nil {
-		return errors.Wrapf(err, "uploading artifact %s", artifactPath)
-	}
-	return nil
+	defer body.Close()
+	return c.uploadArtifactGCS(ctx, artifactPath, contentType, body)
 }
 
-// uploadArtifact uploads an artifact using GCS signed URLs. It
-// requests a signed URL from the upload server, then PUTs the data
-// directly to GCS. Retries once on expired URL (HTTP 403).
+// uploadArtifact uploads an artifact to GCS.
 func (c *uploadServerRPCClient) uploadArtifact(
-	ctx context.Context,
-	artifactPath string,
-	nodeID int32,
-	artType string,
-	contentType string,
-	data []byte,
+	ctx context.Context, artifactPath string, contentType string, data []byte,
 ) error {
 	return c.uploadArtifactStreaming(
-		ctx, artifactPath, nodeID, artType, contentType,
+		ctx, artifactPath, contentType,
 		func() (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(data)), nil
 		},
 	)
-}
-
-// isRPCSignedURLExpiredError returns true if the error indicates a
-// GCS signed URL has expired.
-func isRPCSignedURLExpiredError(err error) bool {
-	errStr := err.Error()
-	return strings.Contains(errStr, "HTTP 403") ||
-		strings.Contains(errStr, "ExpiredToken") ||
-		strings.Contains(errStr, "AccessDenied")
 }
 
 // getUploadToken requests a GCS upload token from the upload server.
@@ -331,15 +209,10 @@ func (c *uploadServerRPCClient) getUploadToken(
 }
 
 // initGCSClient requests an upload token and creates a GCS client.
-// Call this once per session. If the upload server doesn't support
-// the upload-token endpoint (HTTP 404), the client falls back to
-// signed URLs and gcsClient remains nil.
+// Call this once per session. All errors are propagated to the caller.
 func (c *uploadServerRPCClient) initGCSClient(ctx context.Context) error {
 	tokenResp, err := c.getUploadToken(ctx)
 	if err != nil {
-		if strings.Contains(err.Error(), "HTTP 404") {
-			return nil
-		}
 		return errors.Wrap(err, "getting upload token")
 	}
 	token := &oauth2.Token{AccessToken: tokenResp.AccessToken}

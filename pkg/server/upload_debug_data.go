@@ -92,9 +92,9 @@ func (s *systemStatusServer) UploadDebugData(
 	defer func() { _ = client.closeGCS() }()
 	log.Ops.Infof(ctx, "upload session created: %s", client.sessionID)
 
-	// Try to initialize the GCS client for chunked resumable uploads.
+	// Initialize the GCS client for chunked resumable uploads.
 	if err := client.initGCSClient(ctx); err != nil {
-		log.Ops.Warningf(ctx, "GCS client init failed, using signed URLs: %v", err)
+		return nil, status.Errorf(codes.Internal, "initializing GCS client: %v", err)
 	}
 
 	// Collect cluster-level data (coordinator only).
@@ -237,9 +237,9 @@ func (s *systemStatusServer) UploadNodeDebugData(
 	)
 	defer func() { _ = client.closeGCS() }()
 
-	// Try to initialize the GCS client for chunked resumable uploads.
+	// Initialize the GCS client for chunked resumable uploads.
 	if err := client.initGCSClient(ctx); err != nil {
-		log.Ops.Warningf(ctx, "GCS client init failed for node %d, using signed URLs: %v", nodeID, err)
+		return nil, errors.Wrapf(err, "initializing GCS client for node %d", nodeID)
 	}
 
 	var errs []string
@@ -254,7 +254,7 @@ func (s *systemStatusServer) UploadNodeDebugData(
 			errs = append(errs, fmt.Sprintf("stacks: %v", err))
 		} else {
 			name := fmt.Sprintf("nodes/%d/stacks.txt", nodeID)
-			if uploadErr := client.uploadArtifactBytes(ctx, name, int32(nodeID), "stack", stacks.Data); uploadErr != nil {
+			if uploadErr := client.uploadArtifactBytes(ctx, name, stacks.Data); uploadErr != nil {
 				errs = append(errs, fmt.Sprintf("upload stacks: %v", uploadErr))
 			} else {
 				artifacts++
@@ -270,7 +270,7 @@ func (s *systemStatusServer) UploadNodeDebugData(
 		errs = append(errs, fmt.Sprintf("stacks_with_labels: %v", err))
 	} else {
 		name := fmt.Sprintf("nodes/%d/stacks_with_labels.txt", nodeID)
-		if uploadErr := client.uploadArtifactBytes(ctx, name, int32(nodeID), "stack", stacksLabels.Data); uploadErr != nil {
+		if uploadErr := client.uploadArtifactBytes(ctx, name, stacksLabels.Data); uploadErr != nil {
 			errs = append(errs, fmt.Sprintf("upload stacks_with_labels: %v", uploadErr))
 		} else {
 			artifacts++
@@ -285,7 +285,7 @@ func (s *systemStatusServer) UploadNodeDebugData(
 		errs = append(errs, fmt.Sprintf("stacks.pprof: %v", err))
 	} else {
 		name := fmt.Sprintf("nodes/%d/stacks.pprof", nodeID)
-		if uploadErr := client.uploadArtifactBytes(ctx, name, int32(nodeID), "profile", stacksPprof.Data); uploadErr != nil {
+		if uploadErr := client.uploadArtifactBytes(ctx, name, stacksPprof.Data); uploadErr != nil {
 			errs = append(errs, fmt.Sprintf("upload stacks.pprof: %v", uploadErr))
 		} else {
 			artifacts++
@@ -301,7 +301,7 @@ func (s *systemStatusServer) UploadNodeDebugData(
 		errs = append(errs, fmt.Sprintf("heap profile: %v", err))
 	} else {
 		name := fmt.Sprintf("nodes/%d/heap.pprof", nodeID)
-		if uploadErr := client.uploadArtifactBytes(ctx, name, int32(nodeID), "profile", heap.Data); uploadErr != nil {
+		if uploadErr := client.uploadArtifactBytes(ctx, name, heap.Data); uploadErr != nil {
 			errs = append(errs, fmt.Sprintf("upload heap: %v", uploadErr))
 		} else {
 			artifacts++
@@ -320,7 +320,7 @@ func (s *systemStatusServer) UploadNodeDebugData(
 			errs = append(errs, fmt.Sprintf("cpu profile: %v", err))
 		} else {
 			name := fmt.Sprintf("nodes/%d/cpu.pprof", nodeID)
-			if uploadErr := client.uploadArtifactBytes(ctx, name, int32(nodeID), "profile", cpuProf.Data); uploadErr != nil {
+			if uploadErr := client.uploadArtifactBytes(ctx, name, cpuProf.Data); uploadErr != nil {
 				errs = append(errs, fmt.Sprintf("upload cpu: %v", uploadErr))
 			} else {
 				artifacts++
@@ -335,7 +335,7 @@ func (s *systemStatusServer) UploadNodeDebugData(
 	} else {
 		name := fmt.Sprintf("nodes/%d/lsm.txt", nodeID)
 		lsmText := formatLSMStatsForUpload(engineStats)
-		if uploadErr := client.uploadArtifactBytes(ctx, name, int32(nodeID), "engine-stats", []byte(lsmText)); uploadErr != nil {
+		if uploadErr := client.uploadArtifactBytes(ctx, name, []byte(lsmText)); uploadErr != nil {
 			errs = append(errs, fmt.Sprintf("upload lsm: %v", uploadErr))
 		} else {
 			artifacts++
@@ -351,7 +351,7 @@ func (s *systemStatusServer) UploadNodeDebugData(
 		errs = append(errs, fmt.Sprintf("details: %v", err))
 	} else {
 		name := fmt.Sprintf("nodes/%d/details.json", nodeID)
-		if uploadErr := client.uploadArtifactJSON(ctx, name, int32(nodeID), "metadata", details); uploadErr != nil {
+		if uploadErr := client.uploadArtifactJSON(ctx, name, details); uploadErr != nil {
 			errs = append(errs, fmt.Sprintf("upload details: %v", uploadErr))
 		} else {
 			artifacts++
@@ -364,7 +364,7 @@ func (s *systemStatusServer) UploadNodeDebugData(
 		errs = append(errs, fmt.Sprintf("gossip: %v", err))
 	} else {
 		name := fmt.Sprintf("nodes/%d/gossip.json", nodeID)
-		if uploadErr := client.uploadArtifactJSON(ctx, name, int32(nodeID), "metadata", gossipInfo); uploadErr != nil {
+		if uploadErr := client.uploadArtifactJSON(ctx, name, gossipInfo); uploadErr != nil {
 			errs = append(errs, fmt.Sprintf("upload gossip: %v", uploadErr))
 		} else {
 			artifacts++
@@ -385,7 +385,7 @@ func (s *systemStatusServer) UploadNodeDebugData(
 		}
 		if localStatus != nil {
 			name := fmt.Sprintf("nodes/%d/status.json", nodeID)
-			if uploadErr := client.uploadArtifactJSON(ctx, name, int32(nodeID), "metadata", localStatus); uploadErr != nil {
+			if uploadErr := client.uploadArtifactJSON(ctx, name, localStatus); uploadErr != nil {
 				errs = append(errs, fmt.Sprintf("upload status: %v", uploadErr))
 			} else {
 				artifacts++
@@ -407,7 +407,7 @@ func (s *systemStatusServer) UploadNodeDebugData(
 				return rangesResp.Ranges[i].State.Desc.RangeID < rangesResp.Ranges[j].State.Desc.RangeID
 			})
 			name := fmt.Sprintf("nodes/%d/ranges.json", nodeID)
-			if uploadErr := client.uploadArtifactJSON(ctx, name, int32(nodeID), "metadata", rangesResp); uploadErr != nil {
+			if uploadErr := client.uploadArtifactJSON(ctx, name, rangesResp); uploadErr != nil {
 				errs = append(errs, fmt.Sprintf("upload ranges: %v", uploadErr))
 			} else {
 				artifacts++
@@ -465,7 +465,7 @@ func (s *systemStatusServer) uploadLogFiles(
 		doRedact := redact
 		name := fmt.Sprintf("nodes/%d/logs/%s", nodeID, file.Name)
 		uploadErr := client.uploadArtifactStreaming(
-			ctx, name, int32(nodeID), "log", "text/plain",
+			ctx, name, "text/plain",
 			func() (io.ReadCloser, error) {
 				pr, pw := io.Pipe()
 				go func() {
@@ -538,7 +538,7 @@ func (s *systemStatusServer) uploadHistoricalProfiles(
 
 			name := fmt.Sprintf("nodes/%d/%s/%s", nodeID, pt.subdir, f.Name)
 			if uploadErr := client.uploadArtifactBytes(
-				ctx, name, int32(nodeID), "profile", fileData.Files[0].Contents,
+				ctx, name, fileData.Files[0].Contents,
 			); uploadErr != nil {
 				errs = append(errs, fmt.Sprintf("upload %s/%s: %v", pt.subdir, f.Name, uploadErr))
 			} else {
@@ -619,7 +619,7 @@ func (s *systemStatusServer) uploadInternalTables(
 		sanitizedName := strings.ReplaceAll(table.name, ".", "_")
 		artifactName := fmt.Sprintf("nodes/%d/%s.txt", nodeID, sanitizedName)
 		if uploadErr := client.uploadArtifactBytes(
-			ctx, artifactName, int32(nodeID), "table", buf.Bytes(),
+			ctx, artifactName, buf.Bytes(),
 		); uploadErr != nil {
 			errs = append(errs, fmt.Sprintf("upload table %s: %v", table.name, uploadErr))
 		} else {
@@ -875,7 +875,7 @@ func (s *systemStatusServer) uploadClusterData(
 		errs = append(errs, fmt.Sprintf("cluster nodes: %v", err))
 	} else {
 		if uploadErr := client.uploadArtifactJSON(
-			ctx, "cluster/nodes.json", 0, "metadata", nodesResp,
+			ctx, "cluster/nodes.json", nodesResp,
 		); uploadErr != nil {
 			errs = append(errs, fmt.Sprintf("upload cluster nodes: %v", uploadErr))
 		} else {
@@ -892,8 +892,7 @@ func (s *systemStatusServer) uploadClusterData(
 			errs = append(errs, fmt.Sprintf("problem ranges: %v", err))
 		} else {
 			if uploadErr := client.uploadArtifactJSON(
-				ctx, "cluster/reports/problemranges.json",
-				0, "metadata", problemRanges,
+				ctx, "cluster/reports/problemranges.json", problemRanges,
 			); uploadErr != nil {
 				errs = append(errs,
 					fmt.Sprintf("upload problem ranges: %v", uploadErr))
@@ -922,7 +921,7 @@ func (s *systemStatusServer) uploadClusterData(
 					"cluster/tenant_ranges/%s.json", locality,
 				)
 				if uploadErr := client.uploadArtifactJSON(
-					ctx, name, 0, "metadata", rangeList,
+					ctx, name, rangeList,
 				); uploadErr != nil {
 					errs = append(errs,
 						fmt.Sprintf("upload tenant ranges %s: %v",
@@ -1029,7 +1028,7 @@ func (s *systemStatusServer) uploadClusterTables(
 		sanitizedName := strings.ReplaceAll(table.name, ".", "_")
 		artifactName := fmt.Sprintf("cluster/%s.txt", sanitizedName)
 		if uploadErr := client.uploadArtifactBytes(
-			ctx, artifactName, 0, "table", buf.Bytes(),
+			ctx, artifactName, buf.Bytes(),
 		); uploadErr != nil {
 			errs = append(errs,
 				fmt.Sprintf("upload table %s: %v",

@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -77,11 +76,9 @@ func runUploadFromZipFile(ctx context.Context, zipPath string) error {
 	}
 	fmt.Fprintf(stderr, "  Session ID: %s\n", client.sessionID)
 
-	// Try to initialize the GCS client for chunked resumable uploads.
-	// If the upload server doesn't support the upload-token endpoint,
-	// we fall back to signed URLs.
+	// Initialize the GCS client for chunked resumable uploads.
 	if err := client.InitGCSClient(ctx); err != nil {
-		fmt.Fprintf(stderr, "  warning: GCS client init failed, using signed URLs: %v\n", err)
+		return errors.Wrap(err, "initializing GCS client")
 	}
 
 	// Upload each zip entry as an artifact.
@@ -104,7 +101,6 @@ func runUploadFromZipFile(ctx context.Context, zipPath string) error {
 		}
 
 		nodeID := extractNodeID(relPath)
-		artType := inferArtifactTypeFromPath(relPath)
 
 		// Stream the zip entry directly to GCS without buffering the
 		// entire entry in memory. zip.File.Open() can be called
@@ -114,10 +110,7 @@ func runUploadFromZipFile(ctx context.Context, zipPath string) error {
 		uploadErr := client.UploadArtifactStreaming(
 			ctx,
 			relPath,
-			nodeID,
-			artType,
 			"application/octet-stream",
-			"", // no idempotency key
 			func() (io.ReadCloser, error) {
 				return zipFile.Open()
 			},
@@ -203,44 +196,4 @@ func extractNodeID(path string) int32 {
 		return 0
 	}
 	return int32(id)
-}
-
-// inferArtifactTypeFromPath determines the artifact type based on the
-// file path within the debug zip.
-func inferArtifactTypeFromPath(path string) artifactType {
-	base := filepath.Base(path)
-	ext := filepath.Ext(base)
-
-	if ext == ".pprof" {
-		// Stacks pprof files are stacks, not profiles.
-		if strings.Contains(base, "stacks") {
-			return artifactTypeStack
-		}
-		return artifactTypeProfile
-	}
-
-	// Log files live under a logs/ directory.
-	if strings.Contains(path, "/logs/") {
-		return artifactTypeLog
-	}
-
-	// Stack traces.
-	if strings.Contains(base, "stacks") && ext == ".txt" {
-		return artifactTypeStack
-	}
-
-	// LSM stats.
-	if strings.HasSuffix(base, "lsm.txt") {
-		return artifactTypeEngineStats
-	}
-
-	if ext == ".json" {
-		return artifactTypeMetadata
-	}
-
-	if ext == ".txt" {
-		return artifactTypeTable
-	}
-
-	return artifactTypeMetadata
 }
