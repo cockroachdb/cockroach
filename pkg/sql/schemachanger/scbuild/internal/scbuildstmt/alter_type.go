@@ -216,12 +216,6 @@ func alterTypeRenameValue(
 	panic(scerrors.NotImplementedErrorf(t, "ALTER TYPE RENAME VALUE is not supported"))
 }
 
-func alterTypeRename(
-	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeRename,
-) {
-	panic(scerrors.NotImplementedErrorf(t, "ALTER TYPE RENAME is not supported"))
-}
-
 func alterTypeSetSchema(
 	b BuildCtx, tn *tree.TypeName, enumType *scpb.EnumType, t *tree.AlterTypeSetSchema,
 ) {

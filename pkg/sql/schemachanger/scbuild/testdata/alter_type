@@ -13,3 +13,15 @@ ALTER TYPE defaultdb.climes DROP VALUE 'arctic'
 ----
 - [[EnumTypeValue:{DescID: 104, Name: arctic}, ABSENT], PUBLIC]
   {logicalRepresentation: arctic, physicalRepresentation: gA==, typeId: 104}
+
+build
+ALTER TYPE defaultdb.climes RENAME TO environs
+----
+- [[Namespace:{DescID: 104, Name: climes, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC]
+  {databaseId: 100, descriptorId: 104, name: climes, schemaId: 101}
+- [[Namespace:{DescID: 104, Name: environs, ReferencedDescID: 100, IntValue: 101}, PUBLIC], ABSENT]
+  {databaseId: 100, descriptorId: 104, name: environs, schemaId: 101}
+- [[Namespace:{DescID: 105, Name: _climes, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC]
+  {databaseId: 100, descriptorId: 105, name: _climes, schemaId: 101}
+- [[Namespace:{DescID: 105, Name: _environs, ReferencedDescID: 100, IntValue: 101}, PUBLIC], ABSENT]
+  {databaseId: 100, descriptorId: 105, name: _environs, schemaId: 101}
