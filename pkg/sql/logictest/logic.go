@@ -1514,6 +1514,11 @@ func (t *logicTest) newCluster(
 		// disable stats collection on system tables in order to have
 		// deterministic tests.
 		stats.AutomaticStatisticsOnSystemTables.Override(context.Background(), &st.SV, false)
+		for _, opt := range clusterOpts {
+			if so, ok := opt.(settingsOpt); ok {
+				so.applySettings(st)
+			}
+		}
 		if t.cfg.UseFakeSpanResolver {
 			// We will need to update the DistSQL span resolver with the fake
 			// resolver, but this can only be done while DistSQL is disabled.
@@ -2139,6 +2144,14 @@ type clusterOpt interface {
 	apply(args *base.TestServerArgs)
 }
 
+// settingsOpt is an optional interface that clusterOpts can implement to
+// apply settings overrides to the cluster settings object. This is useful for
+// overriding unsafe settings that cannot be set via SET CLUSTER SETTING
+// without the interlock.
+type settingsOpt interface {
+	applySettings(st *cluster.Settings)
+}
+
 // clusterOptTracingOff corresponds to the tracing-off directive.
 type clusterOptTracingOff struct{}
 
@@ -2210,6 +2223,19 @@ func (c clusterOptDisableUseMVCCRangeTombstonesForPointDeletes) apply(args *base
 		args.Knobs.Store = &kvserver.StoreTestingKnobs{}
 	}
 	args.Knobs.Store.(*kvserver.StoreTestingKnobs).EvalKnobs.UseRangeTombstonesForPointDeletes = false
+}
+
+// clusterOptEnablePreparedTransactions enables the unsafe prepared transactions
+// cluster setting via Override, bypassing the unsafe setting interlock.
+type clusterOptEnablePreparedTransactions struct{}
+
+var _ clusterOpt = clusterOptEnablePreparedTransactions{}
+var _ settingsOpt = clusterOptEnablePreparedTransactions{}
+
+func (c clusterOptEnablePreparedTransactions) apply(args *base.TestServerArgs) {}
+
+func (c clusterOptEnablePreparedTransactions) applySettings(st *cluster.Settings) {
+	sql.PreparedTransactionsEnabled.Override(context.Background(), &st.SV, true)
 }
 
 // knobOptDisableCorpusGeneration disables corpus generation for declarative
@@ -2360,6 +2386,8 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 			res = append(res, clusterOptIgnoreStrictGCForTenants{})
 		case "disable-mvcc-range-tombstones-for-point-deletes":
 			res = append(res, clusterOptDisableUseMVCCRangeTombstonesForPointDeletes{})
+		case "enable-prepared-transactions-unsafe":
+			res = append(res, clusterOptEnablePreparedTransactions{})
 		default:
 			t.Fatalf("unrecognized cluster option: %s", opt)
 		}
