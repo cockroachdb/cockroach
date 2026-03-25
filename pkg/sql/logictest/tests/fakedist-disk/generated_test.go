@@ -2295,6 +2295,13 @@ func TestLogic_two_phase_commit(
 	runLogicTest(t, "two_phase_commit")
 }
 
+func TestLogic_two_phase_commit_disabled(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "two_phase_commit_disabled")
+}
+
 func TestLogic_txn(
 	t *testing.T,
 ) {

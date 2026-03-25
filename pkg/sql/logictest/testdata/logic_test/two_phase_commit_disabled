@@ -1,0 +1,11 @@
+# LogicTest: !3node-tenant-default-configs !local-prepared
+
+# Verify that prepared transactions are disabled by default. BEGIN is required
+# because PREPARE TRANSACTION is only valid inside an explicit transaction. The
+# failed PREPARE TRANSACTION rolls back the transaction and transitions to
+# stateNoTxn, so no explicit ROLLBACK is needed.
+statement ok
+BEGIN
+
+statement error pgcode 0A000 prepared transactions are disabled
+PREPARE TRANSACTION 'disabled'
