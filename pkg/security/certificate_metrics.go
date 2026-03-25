@@ -268,23 +268,23 @@ func createMetricsLocked(cm *CertificateManager) *Metrics {
 	b := aggmetric.MakeBuilder(SQLUserLabel)
 	return &Metrics{
 		CAExpiration:         expirationGauge(metaCAExpiration, cm.CACert),
-		TenantExpiration:     expirationGauge(metaTenantExpiration, func() *CertInfo { return cm.tenantCert }),
-		TenantCAExpiration:   expirationGauge(metaTenantCAExpiration, func() *CertInfo { return cm.tenantCACert }),
+		TenantExpiration:     expirationGauge(metaTenantExpiration, cm.TenantCert),
+		TenantCAExpiration:   expirationGauge(metaTenantCAExpiration, cm.TenantCACert),
 		UIExpiration:         expirationGauge(metaUIExpiration, cm.UICert),
 		UICAExpiration:       expirationGauge(metaUICAExpiration, cm.UICACert),
 		ClientExpiration:     b.Gauge(metaClientExpiration),
 		ClientCAExpiration:   expirationGauge(metaClientCAExpiration, cm.ClientCACert),
 		NodeExpiration:       expirationGauge(metaNodeExpiration, cm.NodeCert),
-		NodeClientExpiration: expirationGauge(metaNodeClientExpiration, func() *CertInfo { return cm.nodeClientCert }),
+		NodeClientExpiration: expirationGauge(metaNodeClientExpiration, cm.NodeClientCert),
 
 		CATTL:         ttlGauge(metaCATTL, cm.CACert, ts),
-		TenantTTL:     ttlGauge(metaTenantTTL, func() *CertInfo { return cm.tenantCert }, ts),
-		TenantCATTL:   ttlGauge(metaTenantCATTL, func() *CertInfo { return cm.tenantCACert }, ts),
+		TenantTTL:     ttlGauge(metaTenantTTL, cm.TenantCert, ts),
+		TenantCATTL:   ttlGauge(metaTenantCATTL, cm.TenantCACert, ts),
 		UITTL:         ttlGauge(metaUITTL, cm.UICert, ts),
 		UICATTL:       ttlGauge(metaUICATTL, cm.UICACert, ts),
 		ClientTTL:     b.FunctionalGauge(metaClientTTL, func(cvs []int64) int64 { return 0 }),
 		ClientCATTL:   ttlGauge(metaClientCATTL, cm.ClientCACert, ts),
 		NodeTTL:       ttlGauge(metaNodeTTL, cm.NodeCert, ts),
-		NodeClientTTL: ttlGauge(metaNodeClientTTL, func() *CertInfo { return cm.nodeClientCert }, ts),
+		NodeClientTTL: ttlGauge(metaNodeClientTTL, cm.NodeClientCert, ts),
 	}
 }
