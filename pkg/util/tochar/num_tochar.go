@@ -419,9 +419,14 @@ func numProcessorToChar(
 			numIn = false
 
 			// Write sign before first digit when appropriate.
+			// The last condition matches PG's:
+			//   (IS_PREDEC_SPACE(Np) == false ||
+			//    (Np->last_relevant && *Np->last_relevant == '.'))
+			// Note: PG checks the character at last_relevant, not at the
+			// current number position.
 			if !signWrote &&
 				(numCurr >= outPreSpaces || (desc.isZero() && desc.zeroStart == numCurr)) &&
-				!(isPredecSpace(desc, number, numberIdx) && !(lastRelevant >= 0 && numberIdx < len(number) && number[numberIdx] == '.')) {
+				(!isPredecSpace(desc, number, numberIdx) || (lastRelevant >= 0 && lastRelevant < len(number) && number[lastRelevant] == '.')) {
 				sb.WriteString(writeSign(desc, sign))
 				signWrote = true
 			}
