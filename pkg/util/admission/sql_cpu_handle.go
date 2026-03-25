@@ -13,43 +13,20 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/petermattis/goid"
 )
 
-// SQLWorkInfo captures identifying information about SQL work for CPU
-// accounting and admission.
-type SQLWorkInfo struct {
-	// AtGateway is true if the work is being executed at a gateway node.
-	AtGateway bool
-	// TenantID is the id of the tenant. For single-tenant clusters, this will
-	// always be the SystemTenantID.
-	TenantID roachpb.TenantID
-	// Priority is utilized within a tenant.
-	Priority admissionpb.WorkPriority
-	// CreateTime is equivalent to Time.UnixNano() at the creation time of this
-	// work or a parent work (e.g. could be the start time of the transaction,
-	// if this work was created as part of a transaction). It is used to order
-	// work within a (WorkloadID, Priority) pair -- earlier CreateTime is given
-	// preference.
-	CreateTime int64
-	// WorkloadID is the statement fingerprint ID, used for ASH sampling.
-	WorkloadID uint64
-	// AppNameID is the hash of the application name, used for ASH sampling.
-	AppNameID uint64
-	// GatewayNodeID is the node that initiated the workload, used for ASH
-	// sampling.
-	GatewayNodeID roachpb.NodeID
-}
-
 // SQLCPUProvider is used to get a SQLCPUHandle that is used for CPU
 // accounting and admission.
 type SQLCPUProvider interface {
 	// GetHandle returns a SQLCPUHandle for the supplied work info.
-	GetHandle(work SQLWorkInfo) *SQLCPUHandle
+	// atGateway indicates whether the work is being executed at the
+	// gateway node, used for CPU accounting to distinguish gateway
+	// vs DistSQL CPU usage.
+	GetHandle(work WorkInfo, atGateway bool) *SQLCPUHandle
 	GetCumulativeSQLCPUNanos() (gatewayCPUNanos, distCPUNanos int64)
 }
 
@@ -86,9 +63,10 @@ var goroutineCPUHandlePool = sync.Pool{
 //
 // TODO(sumeer): fill in more details.
 type SQLCPUHandle struct {
-	workInfo SQLWorkInfo
-	p        *sqlCPUProviderImpl
-	wq       *WorkQueue
+	workInfo  WorkInfo
+	atGateway bool
+	p         *sqlCPUProviderImpl
+	wq        *WorkQueue
 
 	mu struct {
 		syncutil.Mutex
@@ -101,12 +79,13 @@ type SQLCPUHandle struct {
 }
 
 func newSQLCPUAdmissionHandle(
-	workInfo SQLWorkInfo, p *sqlCPUProviderImpl, wq *WorkQueue,
+	workInfo WorkInfo, atGateway bool, p *sqlCPUProviderImpl, wq *WorkQueue,
 ) *SQLCPUHandle {
 	h := &SQLCPUHandle{
-		workInfo: workInfo,
-		p:        p,
-		wq:       wq,
+		workInfo:  workInfo,
+		atGateway: atGateway,
+		p:         p,
+		wq:        wq,
 	}
 	h.mu.gHandles = h.mu.handlesBacking[:0]
 	return h
@@ -115,7 +94,7 @@ func newSQLCPUAdmissionHandle(
 // reportCPU atomically adds the CPU time difference to the appropriate
 // cumulative counter.
 func (h *SQLCPUHandle) reportCPU(diff time.Duration) {
-	if h.workInfo.AtGateway {
+	if h.atGateway {
 		h.p.cumulativeGatewayCPUNanos.Add(diff.Nanoseconds())
 	} else {
 		h.p.cumulativeDistSQLCPUNanos.Add(diff.Nanoseconds())
@@ -294,12 +273,12 @@ func (p *sqlCPUProviderImpl) GetCumulativeSQLCPUNanos() (gatewayCPUNanos, distCP
 	return p.cumulativeGatewayCPUNanos.Load(), p.cumulativeDistSQLCPUNanos.Load()
 }
 
-func (p *sqlCPUProviderImpl) GetHandle(workInfo SQLWorkInfo) *SQLCPUHandle {
+func (p *sqlCPUProviderImpl) GetHandle(workInfo WorkInfo, atGateway bool) *SQLCPUHandle {
 	var wq *WorkQueue
 	if p.getWorkQueue != nil && sqlCPUTimeTokenACIsEnabled(p.sv) {
 		wq = p.getWorkQueue(workInfo.TenantID)
 	}
-	return newSQLCPUAdmissionHandle(workInfo, p, wq)
+	return newSQLCPUAdmissionHandle(workInfo, atGateway, p, wq)
 }
 
 // NewSQLCPUProvider creates a new SQLCPUProvider. The sv parameter is required

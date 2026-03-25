@@ -783,15 +783,14 @@ func MakeCPUHandle(
 		priority = admissionpb.WorkPriority(h.Priority)
 		createTime = h.CreateTime
 	}
-	cpuHandle := provider.GetHandle(admission.SQLWorkInfo{
-		AtGateway:     atGateway,
+	cpuHandle := provider.GetHandle(admission.WorkInfo{
 		TenantID:      tenantID,
 		Priority:      priority,
 		CreateTime:    createTime,
 		WorkloadID:    workloadID,
 		AppNameID:     appNameID,
 		GatewayNodeID: gatewayNodeID,
-	})
+	}, atGateway)
 	newCtx := admission.ContextWithSQLCPUHandle(ctx, cpuHandle)
 	gh := cpuHandle.RegisterGoroutine()
 	err := gh.MeasureAndAdmit(ctx)
