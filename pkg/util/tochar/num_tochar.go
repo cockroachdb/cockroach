@@ -17,9 +17,27 @@ import (
 )
 
 // DecimalToChar formats a decimal number using the given format string.
-// This is the main entry point for to_char(numeric, text),
-// to_char(int, text), and to_char(float8, text).
+// This is the main entry point for to_char(numeric, text) and
+// to_char(int, text).
 func DecimalToChar(d *apd.Decimal, c *FormatCache, format string) (string, error) {
+	return decimalToCharInternal(d, c, format, 0)
+}
+
+// Float8DecimalToChar formats a float8 (converted to decimal) using the given
+// format string. It adjusts the post-decimal digit count to fit within
+// DBL_DIG (15) significant digits, matching PostgreSQL's float8_to_char
+// behavior.
+func Float8DecimalToChar(d *apd.Decimal, c *FormatCache, format string) (string, error) {
+	return decimalToCharInternal(d, c, format, dblDig)
+}
+
+// dblDig is the maximum number of significant digits for a float8,
+// matching C's DBL_DIG (IEEE 754 double precision).
+const dblDig = 15
+
+func decimalToCharInternal(
+	d *apd.Decimal, c *FormatCache, format string, maxSigDigits int,
+) (string, error) {
 	nodes, desc, err := c.lookupNum(format)
 	if err != nil {
 		return "", err
@@ -27,6 +45,27 @@ func DecimalToChar(d *apd.Decimal, c *FormatCache, format string) (string, error
 
 	if len(format) == 0 {
 		return "", nil
+	}
+
+	// For float8, adjust post-decimal digits to fit within maxSigDigits,
+	// matching PostgreSQL's float8_to_char which limits Num.post based on
+	// DBL_DIG.
+	if maxSigDigits > 0 && !desc.isRoman() && !desc.isEEEE() {
+		abs := new(apd.Decimal).Abs(d)
+		// Compute the number of pre-decimal digits by formatting the integer
+		// part, matching PG's: orgnum = psprintf("%.0f", fabs(val)).
+		ctx := apd.BaseContext.WithPrecision(50)
+		intVal := new(apd.Decimal)
+		_, err := ctx.RoundToIntegralValue(intVal, abs)
+		if err != nil {
+			return "", err
+		}
+		preLen := len(intVal.Text('f'))
+		if preLen >= maxSigDigits {
+			desc.post = 0
+		} else if preLen+desc.post > maxSigDigits {
+			desc.post = maxSigDigits - preLen
+		}
 	}
 
 	return numToChar(d, nodes, &desc)
@@ -380,9 +419,14 @@ func numProcessorToChar(
 			numIn = false
 
 			// Write sign before first digit when appropriate.
+			// The last condition matches PG's:
+			//   (IS_PREDEC_SPACE(Np) == false ||
+			//    (Np->last_relevant && *Np->last_relevant == '.'))
+			// Note: PG checks the character at last_relevant, not at the
+			// current number position.
 			if !signWrote &&
 				(numCurr >= outPreSpaces || (desc.isZero() && desc.zeroStart == numCurr)) &&
-				!(isPredecSpace(desc, number, numberIdx) && !(lastRelevant >= 0 && numberIdx < len(number) && number[numberIdx] == '.')) {
+				(!isPredecSpace(desc, number, numberIdx) || (lastRelevant >= 0 && lastRelevant < len(number) && number[lastRelevant] == '.')) {
 				sb.WriteString(writeSign(desc, sign))
 				signWrote = true
 			}
