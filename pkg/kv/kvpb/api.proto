@@ -2194,7 +2194,7 @@ message LinkExternalSSTableRequest {
     RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
 
   message  ExternalFile {
-    string locator = 1;
+    string locator = 1 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/redact.RedactableString"];
     string path = 2;
     uint64 backing_file_size = 3;
     uint64 approximate_physical_size = 4;
