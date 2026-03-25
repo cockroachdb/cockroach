@@ -768,6 +768,25 @@ func TestRelocateVoters(t *testing.T) {
 					require.NoErrorf(t, err, message)
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
+					testutils.SucceedsSoon(t, func() error {
+						rows, err := db.QueryContext(ctx,
+							`SELECT learner_replicas FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS]`)
+						if err != nil {
+							return err
+						}
+						defer rows.Close()
+						if rows.Next() {
+							var learners string
+							err = rows.Scan(&learners)
+							if err != nil {
+								return err
+							}
+							if learners != "{}" && learners != "" {
+								return errors.Newf("waiting for LEARNER replicas: %s", learners)
+							}
+						}
+						return nil
+					})
 					testCluster.ToggleLeaseQueues(false)
 					testCluster.ToggleReplicateQueues(false)
 					testCluster.ToggleSplitQueues(false)
@@ -849,6 +868,25 @@ func TestExperimentalRelocateVoters(t *testing.T) {
 					require.NoErrorf(t, err, message)
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
+					testutils.SucceedsSoon(t, func() error {
+						rows, err := db.QueryContext(ctx,
+							`SELECT learner_replicas FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS]`)
+						if err != nil {
+							return err
+						}
+						defer rows.Close()
+						if rows.Next() {
+							var learners string
+							err = rows.Scan(&learners)
+							if err != nil {
+								return err
+							}
+							if learners != "{}" && learners != "" {
+								return errors.Newf("waiting for LEARNER replicas: %s", learners)
+							}
+						}
+						return nil
+					})
 					testCluster.ToggleLeaseQueues(false)
 					testCluster.ToggleReplicateQueues(false)
 					testCluster.ToggleSplitQueues(false)
@@ -1039,6 +1077,25 @@ func TestExperimentalRelocateNonVoters(t *testing.T) {
 					require.NoErrorf(t, err, message)
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
+					testutils.SucceedsSoon(t, func() error {
+						rows, err := db.QueryContext(ctx,
+							`SELECT learner_replicas FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS]`)
+						if err != nil {
+							return err
+						}
+						defer rows.Close()
+						if rows.Next() {
+							var learners string
+							err = rows.Scan(&learners)
+							if err != nil {
+								return err
+							}
+							if learners != "{}" && learners != "" {
+								return errors.Newf("waiting for LEARNER replicas: %s", learners)
+							}
+						}
+						return nil
+					})
 					testCluster.ToggleLeaseQueues(false)
 					testCluster.ToggleReplicateQueues(false)
 					testCluster.ToggleSplitQueues(false)
