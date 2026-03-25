@@ -46,6 +46,11 @@ export { useCluster, useClusterLabel } from "./api/clusterApi";
 export { useNodes } from "./api/nodesApi";
 export { useNodesSummary } from "./api/nodesSummaryApi";
 export { useHealth } from "./api/healthApi";
+export { useLiveWorkload } from "./api/liveWorkloadApi";
+export type {
+  LiveWorkloadData,
+  UseLiveWorkloadResult,
+} from "./api/liveWorkloadApi";
 export type { NodesSummary } from "./api/nodesSummaryApi";
 export { useConnectivity } from "./api/connectivityApi";
 export { useLocations, buildLocalityTree } from "./api/locationsApi";

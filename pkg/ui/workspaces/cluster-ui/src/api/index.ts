@@ -30,3 +30,4 @@ export * from "./healthApi";
 export * from "./connectivityApi";
 export * from "./locationsApi";
 export * from "./dataDistributionApi";
+export * from "./liveWorkloadApi";
