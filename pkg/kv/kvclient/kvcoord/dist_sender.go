@@ -447,6 +447,12 @@ var NonTransactionalWritesNotIdempotent = settings.RegisterBoolSetting(
 	false,
 )
 
+// rangeDescriptorCacheContextErrorTTL controls the timeout after which a range
+// descriptor cache entry is forcibly evicted when a context error occurs while
+// sending a request to a range using it. This can be due to request timeouts,
+// or context cancellation by the caller.
+const rangeDescriptorCacheContextErrorTTL = 2 * time.Second
+
 // DistSenderMetrics is the set of metrics for a given distributed sender.
 type DistSenderMetrics struct {
 	BatchCount                         *metric.Counter
@@ -2403,6 +2409,15 @@ func (ds *DistSender) sendPartialBatch(
 		log.KvExec.Fatal(ctx, "exited retry loop without an error or early exit")
 	}
 
+	// If a context error occurred and the cache entry is older than a set duration,
+	// then evict it. See the comment for the function (*EvictionToken).ExtendTTL()
+	// for an explanation.
+	if ctx.Err() != nil && routingTok.Valid() && routingTok.Age() > rangeDescriptorCacheContextErrorTTL {
+		log.VEventf(ctx, 1, "evicting a cached descriptor %s with age %s due to a context error",
+			routingTok.Desc(), routingTok.Age())
+		routingTok.Evict(ctx)
+	}
+
 	return response{pErr: pErr}
 }
 
@@ -2974,6 +2989,12 @@ func (ds *DistSender) sendToReplicas(
 						// routing information not exposed by the KV API.
 						br.RangeInfos = nil
 					}
+				} else {
+					// Because the request that used this range cache entry
+					// succeeded, and we received no updated range descriptors,
+					// we should renew the liveness timestamp of the cached
+					// entry.
+					routing.ExtendTTL()
 				}
 
 				if ds.kvInterceptor != nil {

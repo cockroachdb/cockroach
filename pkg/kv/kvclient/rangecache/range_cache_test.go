@@ -9,7 +9,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"reflect"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -293,7 +295,7 @@ func evict(ctx context.Context, rc *RangeCache, desc *roachpb.RangeDescriptor) b
 func clearOlderOverlapping(
 	ctx context.Context, rc *RangeCache, desc *roachpb.RangeDescriptor,
 ) bool {
-	ent := &cacheEntry{desc: *desc}
+	ent := newCacheEntry(cacheEntryData{desc: *desc}, 0)
 	ok, _ /* newerEntry */ := rc.clearOlderOverlapping(ctx, ent)
 	return ok
 }
@@ -1029,7 +1031,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	cache := NewRangeCache(st, nil, staticSize(2<<10), stopper)
-	cache.addEntryLocked(&cacheEntry{desc: *defDesc})
+	cache.addEntryLocked(newCacheEntry(cacheEntryData{desc: *defDesc}, 0))
 
 	// Now, add a new, overlapping set of descriptors.
 	minToBDesc := roachpb.RangeDescriptor{
@@ -1044,12 +1046,12 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	}
 	curGeneration := roachpb.RangeGeneration(1)
 	require.True(t, clearOlderOverlapping(ctx, cache, &minToBDesc))
-	cache.addEntryLocked(&cacheEntry{desc: minToBDesc})
+	cache.addEntryLocked(newCacheEntry(cacheEntryData{desc: minToBDesc}, 0))
 	_, err := cache.TestingGetCached(ctx, roachpb.RKey("b"), false, roachpb.LAG_BY_CLUSTER_SETTING)
 	require.Error(t, err)
 
 	require.True(t, clearOlderOverlapping(ctx, cache, &bToMaxDesc))
-	cache.addEntryLocked(&cacheEntry{desc: bToMaxDesc})
+	cache.addEntryLocked(newCacheEntry(cacheEntryData{desc: bToMaxDesc}, 0))
 	ce, _ := cache.getCachedRLocked(ctx, roachpb.RKey("b"), false)
 	require.Equal(t, bToMaxDesc, ce.desc)
 
@@ -1058,7 +1060,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 	curGeneration++
 	defDescCpy.Generation = curGeneration
 	require.True(t, clearOlderOverlapping(ctx, cache, &defDescCpy))
-	cache.addEntryLocked(&cacheEntry{desc: defDescCpy})
+	cache.addEntryLocked(newCacheEntry(cacheEntryData{desc: defDescCpy}, 0))
 	for _, key := range []roachpb.RKey{roachpb.RKey("a"), roachpb.RKey("b")} {
 		ce, _ = cache.getCachedRLocked(ctx, key, false)
 		require.Equal(t, defDescCpy, ce.desc)
@@ -1072,7 +1074,7 @@ func TestRangeCacheClearOverlapping(t *testing.T) {
 		Generation: curGeneration,
 	}
 	require.True(t, clearOlderOverlapping(ctx, cache, &bToCDesc))
-	cache.addEntryLocked(&cacheEntry{desc: bToCDesc})
+	cache.addEntryLocked(newCacheEntry(cacheEntryData{desc: bToCDesc}, 0))
 	ce, _ = cache.getCachedRLocked(ctx, roachpb.RKey("c"), true)
 	require.Equal(t, bToCDesc, ce.desc)
 
@@ -1207,7 +1209,7 @@ func TestRangeCacheClearOlderOverlapping(t *testing.T) {
 			for _, d := range tc.cachedDescs {
 				cache.Insert(ctx, roachpb.RangeInfo{Desc: d})
 			}
-			newEntry := &cacheEntry{desc: tc.clearDesc}
+			newEntry := newCacheEntry(cacheEntryData{desc: tc.clearDesc}, 0)
 			newest, newer := cache.clearOlderOverlapping(ctx, newEntry)
 			all := cache.GetCachedOverlapping(ctx, roachpb.RSpan{Key: roachpb.RKeyMin, EndKey: roachpb.RKeyMax})
 			var allDescs []roachpb.RangeDescriptor
@@ -1271,7 +1273,7 @@ func TestRangeCacheClearOverlappingMeta(t *testing.T) {
 				t.Fatalf("invocation of clearOlderOverlapping panicked: %v", r)
 			}
 		}()
-		cache.clearOlderOverlapping(ctx, &cacheEntry{desc: metaSplitDesc})
+		cache.clearOlderOverlapping(ctx, newCacheEntry(cacheEntryData{desc: metaSplitDesc}, 0))
 	}()
 }
 
@@ -2017,10 +2019,10 @@ func TestRangeCacheEntryMaybeUpdate(t *testing.T) {
 		Generation: 5,
 	}
 
-	e := &cacheEntry{
+	e := newCacheEntry(cacheEntryData{
 		desc:  desc,
 		lease: roachpb.Lease{},
-	}
+	}, 0)
 
 	// Check that some lease overwrites an empty lease.
 	l := roachpb.Lease{
@@ -2176,17 +2178,17 @@ func TestRangeCacheEntryOverrides(t *testing.T) {
 	tests := []struct {
 		name string
 		// We'll test b.overrides(a).
-		a, b cacheEntry
+		a, b cacheEntryData
 		exp  bool
 	}{
 		{
 			name: "b newer gen",
 			exp:  true,
-			a: cacheEntry{
+			a: cacheEntryData{
 				desc:  desc(5),
 				lease: roachpb.Lease{},
 			},
-			b: cacheEntry{
+			b: cacheEntryData{
 				desc:  desc(6),
 				lease: roachpb.Lease{},
 			},
@@ -2194,11 +2196,11 @@ func TestRangeCacheEntryOverrides(t *testing.T) {
 		{
 			name: "a newer gen",
 			exp:  false,
-			a: cacheEntry{
+			a: cacheEntryData{
 				desc:  desc(7),
 				lease: roachpb.Lease{},
 			},
-			b: cacheEntry{
+			b: cacheEntryData{
 				desc:  desc(6),
 				lease: roachpb.Lease{},
 			},
@@ -2206,11 +2208,11 @@ func TestRangeCacheEntryOverrides(t *testing.T) {
 		{
 			name: "b newer lease",
 			exp:  true,
-			a: cacheEntry{
+			a: cacheEntryData{
 				desc:  desc(5),
 				lease: roachpb.Lease{Sequence: 1},
 			},
-			b: cacheEntry{
+			b: cacheEntryData{
 				desc:  desc(5),
 				lease: roachpb.Lease{Sequence: 2},
 			},
@@ -2218,11 +2220,11 @@ func TestRangeCacheEntryOverrides(t *testing.T) {
 		{
 			name: "a newer lease",
 			exp:  false,
-			a: cacheEntry{
+			a: cacheEntryData{
 				desc:  desc(5),
 				lease: roachpb.Lease{Sequence: 2},
 			},
-			b: cacheEntry{
+			b: cacheEntryData{
 				desc:  desc(5),
 				lease: roachpb.Lease{Sequence: 1},
 			},
@@ -2230,12 +2232,12 @@ func TestRangeCacheEntryOverrides(t *testing.T) {
 		{
 			name: "different closed timestamp policy #1",
 			exp:  true,
-			a: cacheEntry{
+			a: cacheEntryData{
 				desc:     desc(5),
 				lease:    roachpb.Lease{Sequence: 1},
 				closedts: roachpb.LAG_BY_CLUSTER_SETTING,
 			},
-			b: cacheEntry{
+			b: cacheEntryData{
 				desc:     desc(5),
 				lease:    roachpb.Lease{Sequence: 1},
 				closedts: roachpb.LEAD_FOR_GLOBAL_READS,
@@ -2244,12 +2246,12 @@ func TestRangeCacheEntryOverrides(t *testing.T) {
 		{
 			name: "different closed timestamp policy #2",
 			exp:  true,
-			a: cacheEntry{
+			a: cacheEntryData{
 				desc:     desc(5),
 				lease:    roachpb.Lease{Sequence: 1},
 				closedts: roachpb.LEAD_FOR_GLOBAL_READS,
 			},
-			b: cacheEntry{
+			b: cacheEntryData{
 				desc:     desc(5),
 				lease:    roachpb.Lease{Sequence: 1},
 				closedts: roachpb.LAG_BY_CLUSTER_SETTING,
@@ -2258,11 +2260,11 @@ func TestRangeCacheEntryOverrides(t *testing.T) {
 		{
 			name: "equal",
 			exp:  false,
-			a: cacheEntry{
+			a: cacheEntryData{
 				desc:  desc(5),
 				lease: roachpb.Lease{Sequence: 1},
 			},
-			b: cacheEntry{
+			b: cacheEntryData{
 				desc:  desc(5),
 				lease: roachpb.Lease{Sequence: 1},
 			},
@@ -2270,11 +2272,11 @@ func TestRangeCacheEntryOverrides(t *testing.T) {
 		{
 			name: "a speculative desc",
 			exp:  true,
-			a: cacheEntry{
+			a: cacheEntryData{
 				desc:  desc(0),
 				lease: roachpb.Lease{Sequence: 1},
 			},
-			b: cacheEntry{
+			b: cacheEntryData{
 				desc:  desc(5),
 				lease: roachpb.Lease{Sequence: 2},
 			},
@@ -2282,11 +2284,11 @@ func TestRangeCacheEntryOverrides(t *testing.T) {
 		{
 			name: "b speculative desc",
 			exp:  true,
-			a: cacheEntry{
+			a: cacheEntryData{
 				desc:  desc(1),
 				lease: roachpb.Lease{Sequence: 1},
 			},
-			b: cacheEntry{
+			b: cacheEntryData{
 				desc:  desc(0),
 				lease: roachpb.Lease{Sequence: 2},
 			},
@@ -2294,11 +2296,11 @@ func TestRangeCacheEntryOverrides(t *testing.T) {
 		{
 			name: "both speculative descs",
 			exp:  true,
-			a: cacheEntry{
+			a: cacheEntryData{
 				desc:  desc(0),
 				lease: roachpb.Lease{Sequence: 1},
 			},
-			b: cacheEntry{
+			b: cacheEntryData{
 				desc:  desc(0),
 				lease: roachpb.Lease{Sequence: 2},
 			},
@@ -2306,11 +2308,11 @@ func TestRangeCacheEntryOverrides(t *testing.T) {
 		{
 			name: "a speculative lease",
 			exp:  true,
-			a: cacheEntry{
+			a: cacheEntryData{
 				desc:  desc(1),
 				lease: roachpb.Lease{Sequence: 0},
 			},
-			b: cacheEntry{
+			b: cacheEntryData{
 				desc:  desc(1),
 				lease: roachpb.Lease{Sequence: 1},
 			},
@@ -2318,11 +2320,11 @@ func TestRangeCacheEntryOverrides(t *testing.T) {
 		{
 			name: "both speculative leases",
 			exp:  true,
-			a: cacheEntry{
+			a: cacheEntryData{
 				desc:  desc(1),
 				lease: roachpb.Lease{Replica: roachpb.ReplicaDescriptor{ReplicaID: 1}, Sequence: 0},
 			},
-			b: cacheEntry{
+			b: cacheEntryData{
 				desc:  desc(1),
 				lease: roachpb.Lease{Replica: roachpb.ReplicaDescriptor{ReplicaID: 2}, Sequence: 0},
 			},
@@ -2330,7 +2332,41 @@ func TestRangeCacheEntryOverrides(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.exp, tc.b.overrides(&tc.a))
+			a, b := newCacheEntry(tc.a, 0), newCacheEntry(tc.b, 0)
+			require.Equal(t, tc.exp, b.overrides(a))
 		})
 	}
+}
+
+func TestRangeCacheEntryAge(t *testing.T) {
+	db := initTestDescriptorDB(t)
+	ctx := context.Background()
+
+	// We should set the value of this delta to be reasonable because there
+	// might be thread preemptions or timer delays that cause our timestamps to
+	// be slightly different from the ones inside range cache entry.
+	expectedDelta := 20 * time.Millisecond
+
+	// We should lock the thread to reduce the chances of scheduling messing
+	// with timing-based assertions.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	// Test whether a token reflects the age of the created range cache entry.
+	token, err := db.cache.LookupWithEvictionToken(ctx, roachpb.RKey("a"), EvictionToken{}, false)
+	require.NoError(t, err)
+	require.True(t, token.Valid())
+	require.LessOrEqual(t, token.Age(), expectedDelta)
+
+	// Test whether this created token's age progresses linearly with time in
+	// the absence of evictions.
+	minDur, maxDur := 150*time.Millisecond, 500*time.Millisecond
+	expectedAge := minDur + time.Duration(rand.Int())%(maxDur-minDur)
+	time.Sleep(expectedAge)
+	difference := token.Age() - expectedAge
+	require.LessOrEqual(t, difference.Abs(), expectedDelta)
+
+	// Test whether ExtendTTL refreshes the age of a created token.
+	token.ExtendTTL()
+	require.LessOrEqual(t, token.Age(), expectedDelta)
 }
