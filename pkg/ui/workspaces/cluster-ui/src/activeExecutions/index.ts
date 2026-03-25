@@ -5,6 +5,7 @@
 
 export {
   getActiveExecutionsFromSessions,
+  getActiveExecutionsWithLockWaits,
   getContendedExecutionsForTxn,
   getWaitTimeByTxnIDFromLocks,
   getActiveTransaction,

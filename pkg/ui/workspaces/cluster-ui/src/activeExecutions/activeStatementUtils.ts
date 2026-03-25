@@ -384,3 +384,38 @@ export const getContentionDetailsFromLocksAndTxns = (
     blockingExecutions: contention?.blockers,
   };
 };
+
+/**
+ * getActiveExecutionsWithLockWaits returns active statements and transactions
+ * from the given sessions response, enriched with lock wait information from
+ * cluster locks. Statements and transactions that are waiting on a lock have
+ * their status set to Waiting and include the time spent waiting.
+ */
+export const getActiveExecutionsWithLockWaits = (
+  sessions: SessionsResponse | null,
+  clusterLocks: ClusterLocksResponse | null,
+): ActiveExecutions => {
+  if (!sessions) return { statements: [], transactions: [] };
+
+  const waitTimeByTxnID = getWaitTimeByTxnIDFromLocks(clusterLocks);
+  const execs = getActiveExecutionsFromSessions(sessions);
+
+  return {
+    statements: execs.statements.map(s => ({
+      ...s,
+      status:
+        waitTimeByTxnID[s.transactionID] != null
+          ? ExecutionStatus.Waiting
+          : s.status,
+      timeSpentWaiting: waitTimeByTxnID[s.transactionID],
+    })),
+    transactions: execs.transactions.map(t => ({
+      ...t,
+      status:
+        waitTimeByTxnID[t.transactionID] != null
+          ? ExecutionStatus.Waiting
+          : t.status,
+      timeSpentWaiting: waitTimeByTxnID[t.transactionID],
+    })),
+  };
+};
