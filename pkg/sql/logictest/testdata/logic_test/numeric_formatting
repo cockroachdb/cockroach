@@ -905,3 +905,11 @@ query T
 SELECT to_char('12345678901'::float8, 'FM9999999999D9999900000000000000000')
 ----
 ##########.####
+
+# Regression test: FMS with zero value should place the sign before the digit,
+# matching PostgreSQL's behavior. The sign-writing condition must check the
+# character at last_relevant, not at the current number position.
+query T
+SELECT to_char(0::numeric, 'FMS9999999999999999.999999999999999')
+----
++0.
