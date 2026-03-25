@@ -362,7 +362,6 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"temp",
 		// TODO(#28296): Reenable copy2 when triggers and COPY [view] FROM are supported.
 		// "copy2",
-		"rangefuncs",
 		"sequence",
 		"truncate",
 		"alter_table",
