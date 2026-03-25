@@ -348,9 +348,38 @@ func (f *resolvedSpanFrontier) HasLaggingSpans(sv *settings.Values) bool {
 	return frontier.Add(lagThresholdNanos, 0).Less(f.latestTS)
 }
 
-// LatestTS returns the latest timestamp in the frontier.
+// LatestTS returns the most recent timestamp that any span in the frontier
+// has ever been forwarded to.
 func (f *resolvedSpanFrontier) LatestTS() hlc.Timestamp {
 	return f.latestTS
+}
+
+// MaxSpanTS returns the maximum timestamp of any span in the frontier.
+//
+// N.B. This diverges from LatestTS after restarting from a checkpoint,
+// where the latestTS will be empty until new resolved spans are forwarded,
+// while the MaxSpanTS will take into account the restored spans. We need
+// this distinction for schema change boundaries, since latestTS is used to
+// determine whether we've reached a boundary. i.e. if we just forwarded the
+// latestTS to the MaxSpanTS after restoring, we would take the latestTS as
+// having passed the boundary.
+func (f *resolvedSpanFrontier) MaxSpanTS() hlc.Timestamp {
+	maxTS := hlc.Timestamp{}
+	for _, ts := range f.Entries() {
+		maxTS.Forward(ts)
+	}
+	return maxTS
+}
+
+// RestoreCheckpoint restores the frontier from a checkpoint.
+func (f *resolvedSpanFrontier) RestoreCheckpoint(spans []jobspb.ResolvedSpan) error {
+	for _, rs := range spans {
+		if _, err := f.Forward(rs.Span, rs.Timestamp); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // All returns an iterator over the resolved spans in the frontier.

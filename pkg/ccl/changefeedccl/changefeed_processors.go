@@ -140,6 +140,32 @@ type changeAggregatorLowerBoundOracle struct {
 	initialInclusiveLowerBound hlc.Timestamp
 }
 
+func newChangeAggregatorLowerBoundOracle(
+	sf frontier, scanTime hlc.Timestamp, maxSpanTSAtStart hlc.Timestamp, boundOnMaxSpanTSAtStart bool,
+) *changeAggregatorLowerBoundOracle {
+	initialLowerBound := scanTime
+	if boundOnMaxSpanTSAtStart {
+		// cloudStorageSink files are timestamped with the high watermark
+		// of the local aggregator frontier. On restart, the high watermark
+		// may rollback to an older timestamp and re-emit rows. With partial
+		// checkpoints, we skip rows already covered by the checkpoint. Those
+		// rows exist only in the previous session's higher-timestamped files
+		// which may break lexicographical ordering.
+		//
+		// We floor the initial lower bound on the initial max span timestamp,
+		// so new rows sort after any files created in the previous session.
+		//
+		// N.B. we must call `Next()` here on maxSpanTSAtStart for the
+		// same reason we call `Next()` on the frontier timestamp in
+		// `inclusiveLowerBoundTS()`.
+		initialLowerBound.Forward(maxSpanTSAtStart.Next())
+	}
+	return &changeAggregatorLowerBoundOracle{
+		sf:                         sf,
+		initialInclusiveLowerBound: initialLowerBound,
+	}
+}
+
 // inclusiveLowerBoundTs is used to generate a representative timestamp to name
 // cloudStorageSink files. This timestamp is either the statement time (in case this
 // changefeed job hasn't yet seen any resolved timestamps) or the successor timestamp to
@@ -153,7 +179,9 @@ func (o *changeAggregatorLowerBoundOracle) inclusiveLowerBoundTS() hlc.Timestamp
 		// Files being created at the point this method is called are guaranteed
 		// to contain row updates with timestamps strictly greater than the local
 		// span frontier timestamp.
-		return frontier.Next()
+		ts := frontier.Next()
+		ts.Forward(o.initialInclusiveLowerBound)
+		return ts
 	}
 	// This should only be returned in the case where the changefeed job hasn't yet
 	// seen a resolved timestamp.
@@ -344,10 +372,10 @@ func (ca *changeAggregator) Start(ctx context.Context) {
 	}
 	opts := feed.Opts
 
-	timestampOracle := &changeAggregatorLowerBoundOracle{
-		sf:                         ca.frontier,
-		initialInclusiveLowerBound: feed.ScanTime,
-	}
+	timestampOracle := newChangeAggregatorLowerBoundOracle(
+		ca.frontier, feed.ScanTime, ca.frontier.MaxSpanTS(),
+		changefeedbase.CloudStorageSinkInitialLowerBoundOnMaxSpanTS.Get(&ca.FlowCtx.Cfg.Settings.SV),
+	)
 
 	if cfKnobs, ok := ca.FlowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
 		ca.knobs = *cfKnobs
@@ -638,10 +666,8 @@ func (ca *changeAggregator) setupSpansAndFrontier() (spans []roachpb.Span, err e
 		return nil, errors.Wrapf(err, "failed to restore span-level checkpoint")
 	}
 
-	for _, rs := range ca.spec.ResolvedSpans {
-		if _, err := ca.frontier.Forward(rs.Span, rs.Timestamp); err != nil {
-			return nil, errors.Wrapf(err, "failed to restore frontier")
-		}
+	if err := ca.frontier.RestoreCheckpoint(ca.spec.ResolvedSpans); err != nil {
+		return nil, errors.Wrapf(err, "failed to restore frontier")
 	}
 
 	return spans, nil
@@ -1014,6 +1040,9 @@ type changeFrontier struct {
 	// CHANGEFEED statement was run at. It's used in an assertion that we never
 	// regress the job high-water.
 	highWaterAtStart hlc.Timestamp
+	// maxSpanTSAtStart is the max span timestamp after restoring a
+	// checkpoint.
+	maxSpanTSAtStart hlc.Timestamp
 	// passthroughBuf, in some but not all flows, contains changed row data to
 	// pass through unchanged to the gateway node.
 	passthroughBuf encDatumRowBuffer
@@ -1444,14 +1473,13 @@ func (cf *changeFrontier) Start(ctx context.Context) {
 		return
 	}
 
-	for _, rs := range cf.spec.ResolvedSpans {
-		if _, err := cf.frontier.Forward(rs.Span, rs.Timestamp); err != nil {
-			log.Changefeed.Warningf(cf.Ctx(),
-				"moving to draining due to error restoring frontier: %v", err)
-			cf.MoveToDraining(err)
-			return
-		}
+	if err := cf.frontier.RestoreCheckpoint(cf.spec.ResolvedSpans); err != nil {
+		log.Changefeed.Warningf(cf.Ctx(),
+			"moving to draining due to error restoring frontier: %v", err)
+		cf.MoveToDraining(err)
+		return
 	}
+	cf.maxSpanTSAtStart = cf.frontier.MaxSpanTS()
 
 	if cf.knobs.AfterCoordinatorFrontierRestore != nil {
 		cf.knobs.AfterCoordinatorFrontierRestore(cf.frontier)
@@ -2274,6 +2302,13 @@ func (cf *changeFrontier) remakeSystemTablesPTSRecord(
 
 func (cf *changeFrontier) maybeEmitResolved(ctx context.Context, newResolved hlc.Timestamp) error {
 	if cf.freqEmitResolved == emitNoResolved || newResolved.IsEmpty() {
+		return nil
+	}
+	// On restart, the cloud storage sink may write rows to files timestamped
+	// with the max span timestamp. We can't emit a resolved timestamp until the
+	// frontier is at least the initial maxSpanTS. We gate unconditionally
+	// regardless of the sink as the expected delay should be minimal.
+	if newResolved.Less(cf.maxSpanTSAtStart) {
 		return nil
 	}
 	sinceEmitted := newResolved.GoTime().Sub(cf.lastEmitResolved)
