@@ -1518,16 +1518,9 @@ func TestLeasedDescriptorByteSizeBaseline(t *testing.T) {
 	}
 }
 
-// TODO(adityamaru): We do not set SplitMidKey to true for ExportRequests sent
-// in getDescriptorsFromStoreForInterval. This disallows the elastic CPU limiter
-// from preempting the ExportRequest unless we are on a key boundary. In this
-// test we are only exporting revisions of the same key so we should never be
-// allowed to paginate because of exhausted CPU tokens. Once we do add support
-// for SplitMidKey, we should change the test to verify the correctness of our
-// pagination logic.
-//
-// For now, assert that all revisions are fetched in a single ExportRequest even
-// though we are always OverLimit according to the elastic CPU limiter.
+// TestGetDescriptorsFromStoreForIntervalCPULimiterPagination confirms that throttling
+// is not applied to getDescriptorsFromStoreForInterval. This function is invoked on behalf
+// of SQL work, and should not be subject to elastic CPU control.
 func TestGetDescriptorsFromStoreForIntervalCPULimiterPagination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1543,12 +1536,9 @@ func TestGetDescriptorsFromStoreForIntervalCPULimiterPagination(t *testing.T) {
 						if export, ok := ru.GetInner().(*kvpb.ExportRequest); ok && TestIsLeasingTxnExportRequest(sqlCodec.Load(), request, export) {
 							numRequests++
 							h := admission.ElasticCPUWorkHandleFromContext(ctx)
-							if h == nil {
-								t.Fatalf("expected context to have CPU work handle")
+							if h != nil {
+								t.Fatalf("expected context to have not have CPU work handle")
 							}
-							h.TestingOverrideOverLimit(func() (bool, time.Duration) {
-								return true, 0
-							})
 						}
 					}
 					return nil
