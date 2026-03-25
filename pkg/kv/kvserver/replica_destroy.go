@@ -58,6 +58,20 @@ func (s destroyStatus) Removed() bool {
 	return s.reason == destroyReasonRemoved
 }
 
+// setDestroyStatusRemovedRaftMuLocked marks the replica as removed. The caller
+// must hold raftMu; readOnlyCmdMu and mu are acquired internally.
+func (r *Replica) setDestroyStatusRemovedRaftMuLocked() {
+	r.raftMu.AssertHeld()
+	r.readOnlyCmdMu.Lock()
+	defer r.readOnlyCmdMu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.shMu.destroyStatus.Set(
+		kvpb.NewRangeNotFoundError(r.RangeID, r.StoreID()),
+		destroyReasonRemoved,
+	)
+}
+
 // postDestroyRaftMuLocked is called after the replica destruction is durably
 // written to Pebble.
 func (r *Replica) postDestroyRaftMuLocked(ctx context.Context) {
