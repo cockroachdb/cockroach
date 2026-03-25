@@ -733,6 +733,19 @@ type UDFDefinition struct {
 	// of the function invocation.
 	Params opt.ColList
 
+	// ParamTypes stores the declared parameter types. Needed for deferred body
+	// building at execution time where the original Overload is not available.
+	ParamTypes []*types.T
+
+	// BodyText is the raw SQL body text from the routine definition. Used for
+	// deferred body building at execution time.
+	BodyText string
+
+	// InsideDataSource is true if the routine is used as a data source
+	// (e.g., SELECT * FROM my_udf()). Needed for return-type finalization
+	// during deferred build.
+	InsideDataSource bool
+
 	// Body contains a relational expression for each statement in the function
 	// body. It is unset during construction of a recursive UDF.
 	Body []RelExpr

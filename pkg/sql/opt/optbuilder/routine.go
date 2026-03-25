@@ -282,6 +282,7 @@ func (b *Builder) buildRoutine(
 	// CTEs that mutate and are not at the top-level.
 	bodyScope := b.allocScope()
 	var params opt.ColList
+	var resolvedParamTypes []*types.T
 	var polyArgTyp *types.T
 	if o.Types.Length() > 0 {
 		// If necessary, add DEFAULT arguments.
@@ -323,6 +324,7 @@ func (b *Builder) buildRoutine(
 		// Add any needed casts from argument type to parameter type, and add a
 		// correctly typed column to the bodyScope for each parameter.
 		params = make(opt.ColList, len(paramTypes))
+		resolvedParamTypes = make([]*types.T, len(paramTypes))
 		for i := range paramTypes {
 			argTyp := argTypes[i]
 			desiredTyp := maybeReplacePolymorphicType(paramTypes[i].Typ, polyArgTyp)
@@ -341,6 +343,7 @@ func (b *Builder) buildRoutine(
 				}
 				args[i] = b.factory.ConstructCast(args[i], desiredTyp)
 			}
+			resolvedParamTypes[i] = desiredTyp
 			argColName := funcParamColName(tree.Name(paramTypes[i].Name), i)
 			col := b.synthesizeColumn(bodyScope, argColName, desiredTyp, nil /* expr */, nil /* scalar */)
 			col.setParamOrd(i)
@@ -562,6 +565,9 @@ func (b *Builder) buildRoutine(
 				BodyTags:           bodyTags,
 				BodyASTs:           bodyASTs,
 				Params:             params,
+				ParamTypes:         resolvedParamTypes,
+				BodyText:           o.Body,
+				InsideDataSource:   oldInsideDataSource,
 				ResultBufferID:     resultBufferID,
 			},
 		},

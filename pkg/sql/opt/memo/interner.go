@@ -1362,7 +1362,24 @@ func (h *hasher) IsUDFDefinitionEqual(l, r *UDFDefinition) bool {
 	if l.FirstStmtOutput.TargetBufferID != r.FirstStmtOutput.TargetBufferID {
 		return false
 	}
-	return h.IsColListEqual(l.Params, r.Params) && l.IsRecursive == r.IsRecursive
+	if !h.IsColListEqual(l.Params, r.Params) || l.IsRecursive != r.IsRecursive {
+		return false
+	}
+	if l.InsideDataSource != r.InsideDataSource {
+		return false
+	}
+	if l.BodyText != r.BodyText {
+		return false
+	}
+	if len(l.ParamTypes) != len(r.ParamTypes) {
+		return false
+	}
+	for i := range l.ParamTypes {
+		if !l.ParamTypes[i].Identical(r.ParamTypes[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *hasher) IsStoredProcTxnOpEqual(l, r tree.StoredProcTxnOp) bool {
