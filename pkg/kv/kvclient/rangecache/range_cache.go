@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 )
@@ -551,6 +552,24 @@ func (et *EvictionToken) RangeInfo() roachpb.RangeInfo {
 	return et.entry.toRangeInfo()
 }
 
+// Renew updates the cached entry's liveness timestamp. Must be called upon
+// a successful use of the cached entry.
+func (et *EvictionToken) Renew() {
+	if !et.Valid() {
+		return
+	}
+	et.entry.renew()
+}
+
+// Age returns the time elapsed since the underlying cache entry was last
+// created or renewed. Returns 0 for invalid tokens.
+func (et *EvictionToken) Age() time.Duration {
+	if !et.Valid() {
+		return 0
+	}
+	return et.entry.age()
+}
+
 // LookupWithEvictionToken attempts to locate a descriptor, and possibly also a
 // lease) for the range containing the given key. This is done by first trying
 // the cache, and then querying the two-level lookup table of range descriptors
@@ -910,13 +929,15 @@ func tryLookupImpl(
 	// We want to insert a new cacheEntry, possibly with a speculativeDesc.
 	// Create the entry based on the lookup and try and insert it into the
 	// cache.
-	newEntry := cacheEntry{
+	currTime := crtime.NowMono()
+	newEntry := newCacheEntry(cacheEntryData{
 		desc: rs[0],
 		// We don't have any lease information.
 		lease: roachpb.Lease{},
 		// We don't know the closed timestamp policy.
 		closedts: unknownClosedTimestampPolicy,
-	}
+	}, currTime)
+
 	// speculativeDesc comes from intents. Being uncommitted, it is speculative.
 	// We reset its generation to indicate this fact and allow it to be easily
 	// overwritten. Putting a speculative descriptor in the cache with a
@@ -932,9 +953,12 @@ func tryLookupImpl(
 	// up-to-date information will not be clobbered - for example ranges for
 	// which the cache has the prefetched descriptor already plus a lease.
 	newEntries := make([]*cacheEntry, len(preRs)+1)
-	newEntries[0] = &newEntry
+	newEntries[0] = newEntry
 	for i, preR := range preRs {
-		newEntries[i+1] = &cacheEntry{desc: preR, closedts: unknownClosedTimestampPolicy}
+		newEntries[i+1] = newCacheEntry(cacheEntryData{
+			desc:     preR,
+			closedts: unknownClosedTimestampPolicy,
+		}, currTime)
 	}
 	insertedEntries := rc.insertLockedInner(ctx, newEntries)
 	// entry corresponds to rs[0], which is the descriptor covering the key
@@ -966,7 +990,7 @@ func tryLookupImpl(
 		if consistency == ReadFromFollower {
 			return EvictionToken{}, errFailedToFindNewerDescriptor
 		}
-		entry = &newEntry
+		entry = newEntry
 	}
 	lookupRes = EvictionToken{rdc: rc, entry: entry}
 	return lookupRes, nil
@@ -1127,12 +1151,13 @@ func (rc *RangeCache) Insert(ctx context.Context, rs ...roachpb.RangeInfo) {
 // stale.
 func (rc *RangeCache) insertLocked(ctx context.Context, rs ...roachpb.RangeInfo) []*cacheEntry {
 	entries := make([]*cacheEntry, len(rs))
+	currTime := crtime.NowMono()
 	for i, r := range rs {
-		entries[i] = &cacheEntry{
+		entries[i] = newCacheEntry(cacheEntryData{
 			desc:     r.Desc,
 			lease:    r.Lease,
 			closedts: r.ClosedTimestampPolicy,
-		}
+		}, currTime)
 	}
 	return rc.insertLockedInner(ctx, entries)
 }
@@ -1279,10 +1304,21 @@ func (rc *RangeCache) NumInFlight(name string) int {
 
 // cacheEntry represents one cache entry.
 //
-// The cache stores *cacheEntry. Entries are immutable: cache lookups
-// returns the same *cacheEntry to multiple queriers for efficiency, but
-// nobody should modify the lookup result.
+// The cache stores *cacheEntry. Cache lookups returns the same *cacheEntry to
+// multiple queriers for efficiency, but nobody should modify the data in the
+// lookup result.
 type cacheEntry struct {
+	// The data in the cache entry is considered immutable, and should not be
+	// updated once inserted into the cache.
+	cacheEntryData
+	// lastRenewed is the time when this cache entry was renewed: either from
+	// the meta ranges, or via an updated descriptor received from a replica, or
+	// because a request that used this entry was successfully evaluated.
+	lastRenewed crtime.AtomicMono
+}
+
+// cacheEntryData is the data contained in the cacheEntry.
+type cacheEntryData struct {
 	// desc is always populated.
 	desc roachpb.RangeDescriptor
 	// speculativeDesc, if not nil, is the descriptor that should replace desc if
@@ -1327,7 +1363,7 @@ func (e *cacheEntry) LeaseSpeculative() bool {
 	return e.lease.Speculative()
 }
 
-func (e cacheEntry) String() string {
+func (e *cacheEntry) String() string {
 	return fmt.Sprintf("desc:%s, lease:%s", e.desc, e.lease)
 }
 
@@ -1489,11 +1525,11 @@ func (e *cacheEntry) maybeUpdate(
 			e.desc, rangeDesc)
 	}
 
-	newEntry = &cacheEntry{
+	newEntry = newCacheEntry(cacheEntryData{
 		lease:    e.lease,
 		desc:     e.desc,
 		closedts: e.closedts,
-	}
+	}, crtime.NowMono())
 
 	updatedLease = false
 	updatedDesc := false
@@ -1562,10 +1598,26 @@ func (e *cacheEntry) evictLeaseholder(
 	if e.lease.Replica != lh {
 		return false, e
 	}
-	return true, &cacheEntry{
+	newEntry = newCacheEntry(cacheEntryData{
 		desc:     e.desc,
 		closedts: e.closedts,
-	}
+	}, e.lastRenewed.Load())
+	return true, newEntry
+}
+
+func (e *cacheEntry) renew() {
+	e.lastRenewed.Store(crtime.NowMono())
+}
+
+func (e *cacheEntry) age() time.Duration {
+	return e.lastRenewed.Load().Elapsed()
+}
+
+// newCacheEntry creates a new cacheEntry with the given data and timestamp.
+func newCacheEntry(data cacheEntryData, ts crtime.Mono) *cacheEntry {
+	entry := &cacheEntry{cacheEntryData: data}
+	entry.lastRenewed.Store(ts)
+	return entry
 }
 
 // IsRangeLookupErrorRetryable returns whether the provided range lookup error

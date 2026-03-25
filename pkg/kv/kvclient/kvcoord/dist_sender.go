@@ -405,6 +405,18 @@ var senderConcurrencyLimit = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+// rangeDescriptorCacheTimeout controls the timeout after which a range
+// descriptor cache entry is forcibly evicted when a context error occurs while
+// sending a request to a range using it. This can be due to request timeouts,
+// or context cancellation by the caller.
+var rangeDescriptorCacheTimeout = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"kv.range_descriptor_cache.timeout",
+	"timeout after which a range descriptor cache entry is forcibly evicted",
+	2*time.Second,
+	settings.DurationWithMinimum(500*time.Millisecond),
+)
+
 // FollowerReadsUnhealthy controls whether we will send follower reads to nodes
 // that are not considered healthy. By default, we will sort these nodes behind
 // healthy nodes.
@@ -2403,6 +2415,19 @@ func (ds *DistSender) sendPartialBatch(
 		log.KvExec.Fatal(ctx, "exited retry loop without an error or early exit")
 	}
 
+	// A context cancellation indicates that this request timed out due to some
+	// kind of stall, due to pathologically low timeouts, or was canceled for
+	// some other reason. We ensure that, in the presence of timeouts, the
+	// DistSender eventually updates the range cache entry and doesn't
+	// indefinitely try to send requests targeting this range using a possibly
+	// stale entry.
+	if ctx.Err() != nil &&
+		routingTok.Valid() && routingTok.Age() > rangeDescriptorCacheTimeout.Get(&ds.st.SV) {
+		log.VEventf(ctx, 1, "evicting a cached descriptor %s with age %s due to a context error",
+			routingTok.Desc(), routingTok.Age())
+		routingTok.Evict(ctx)
+	}
+
 	return response{pErr: pErr}
 }
 
@@ -2974,6 +2999,12 @@ func (ds *DistSender) sendToReplicas(
 						// routing information not exposed by the KV API.
 						br.RangeInfos = nil
 					}
+				} else {
+					// Because the request that used this range cache entry
+					// succeeded, and we received no updated range descriptors,
+					// we should renew the liveness timestamp of the cached
+					// entry.
+					routing.Renew()
 				}
 
 				if ds.kvInterceptor != nil {
