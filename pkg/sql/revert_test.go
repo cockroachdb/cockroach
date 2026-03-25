@@ -13,9 +13,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -84,14 +86,17 @@ func TestRollbackRandomTable(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 	tableName := "rand_table"
-	// Virtual columns make it possible to create rows that can't be
-	// fingerprinted. E.g. an expression like a+b may cause an integer overflow.
-	noVirtualColumns := randgen.WithColumnFilter(func(col *tree.ColumnTableDef) bool {
-		return !col.IsVirtual()
+	// Filter out columns that can't be fingerprinted:
+	// - Virtual columns can cause integer overflow in expressions like a+b.
+	// - Non-key-encodable types (e.g. TSVECTOR, TSQUERY, PGVECTOR) can't be
+	//   used with crdb_internal.datums_to_bytes() which SHOW FINGERPRINTS uses.
+	fingerprintableColumns := randgen.WithColumnFilter(func(col *tree.ColumnTableDef) bool {
+		return !col.IsVirtual() &&
+			!colinfo.MustBeValueEncoded(col.Type.(*types.T))
 	})
 	createStmt := randgen.RandCreateTableWithName(
 		ctx, rng, tableName, 1,
-		[]randgen.TableOption{noVirtualColumns})
+		[]randgen.TableOption{fingerprintableColumns})
 	stmt := tree.SerializeForDisplay(createStmt)
 	t.Log(stmt)
 
@@ -101,7 +106,7 @@ func TestRollbackRandomTable(t *testing.T) {
 	require.NoError(t, err)
 
 	rollbackTs := tt.Clock().Now()
-	fingerprint := db.QueryStr(t, fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE test.%s", tableName))
+	fingerprint := db.QueryStr(t, fmt.Sprintf("SHOW FINGERPRINTS FROM TABLE test.%s", tableName))
 
 	_, err = randgen.PopulateTableWithRandData(rng, sqlDB, tableName, 100, nil)
 	require.NoError(t, err)
@@ -114,6 +119,6 @@ func TestRollbackRandomTable(t *testing.T) {
 	require.NoError(t, sql.DeleteTableWithPredicate(
 		ctx, kv, codec, tt.ClusterSettings(), execCfg.DistSender, desc.GetID(), predicates, 10))
 
-	afterFingerprint := db.QueryStr(t, fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE test.%s", tableName))
+	afterFingerprint := db.QueryStr(t, fmt.Sprintf("SHOW FINGERPRINTS FROM TABLE test.%s", tableName))
 	require.Equal(t, fingerprint, afterFingerprint)
 }
