@@ -2923,7 +2923,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/horology.out --la
   1997-01-02 00:00:00
   1997-01-02 03:04:05
   1997-02-10 17:32:01
-@@ -2667,846 +1168,426 @@
+@@ -2667,505 +1168,410 @@
   1997-02-10 17:32:01
   1997-06-10 17:32:01
   2001-09-22 18:19:20
@@ -2938,11 +2938,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/horology.out --la
 - 1997-02-10 17:32:01
 - 1997-02-10 17:32:01
 - 1997-02-10 17:32:01
+  1997-02-10 17:32:01
+  1997-02-10 17:32:01
+  1997-02-10 17:32:01
+  1997-02-10 17:32:01
 - 1997-02-10 17:32:01
-  1997-02-10 17:32:01
-  1997-02-10 17:32:01
-  1997-02-10 17:32:01
-  1997-02-10 17:32:01
 - 1997-02-10 17:32:01
 - 1997-06-10 18:32:01
 - 1997-02-10 17:32:01
@@ -3085,365 +3085,407 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/horology.out --la
 -         to_timestamp         
 -------------------------------
 - Sat Feb 16 08:14:30 0097 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 0097-02-16 08:14:30-08
+ (1 row)
+ 
  SELECT to_timestamp('97/2/16 8:14:30', 'FMYYYY/FMMM/FMDD FMHH:FMMI:FMSS');
 -         to_timestamp         
 -------------------------------
 - Sat Feb 16 08:14:30 0097 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 0097-02-16 08:14:30-08
+ (1 row)
+ 
  SELECT to_timestamp('2011$03!18 23_38_15', 'YYYY-MM-DD HH24:MI:SS');
 -         to_timestamp         
 -------------------------------
 - Fri Mar 18 23:38:15 2011 PDT
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2011-03-18 23:38:15-07
+ (1 row)
+ 
  SELECT to_timestamp('1985 January 12', 'YYYY FMMonth DD');
 -         to_timestamp         
 -------------------------------
 - Sat Jan 12 00:00:00 1985 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 1985-01-12 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('1985 FMMonth 12', 'YYYY "FMMonth" DD');
 -         to_timestamp         
 -------------------------------
 - Sat Jan 12 00:00:00 1985 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 1985-01-12 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('1985 \ 12', 'YYYY \\ DD');
 -         to_timestamp         
 -------------------------------
 - Sat Jan 12 00:00:00 1985 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 1985-01-12 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('My birthday-> Year: 1976, Month: May, Day: 16',
                      '"My birthday-> Year:" YYYY, "Month:" FMMonth, "Day:" DD');
 -         to_timestamp         
 -------------------------------
 - Sun May 16 00:00:00 1976 PDT
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 1976-05-16 00:00:00-07
+ (1 row)
+ 
  SELECT to_timestamp('1,582nd VIII 21', 'Y,YYYth FMRM DD');
 -         to_timestamp         
 -------------------------------
 - Sat Aug 21 00:00:00 1582 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 1582-08-21 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('15 "text between quote marks" 98 54 45',
                      E'HH24 "\\"text between quote marks\\"" YY MI SS');
 -         to_timestamp         
 -------------------------------
 - Thu Jan 01 15:54:45 1998 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 1998-01-01 15:54:45-08
+ (1 row)
+ 
  SELECT to_timestamp('05121445482000', 'MMDDHH24MISSYYYY');
 -         to_timestamp         
 -------------------------------
 - Fri May 12 14:45:48 2000 PDT
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2000-05-12 14:45:48-07
+ (1 row)
+ 
  SELECT to_timestamp('2000January09Sunday', 'YYYYFMMonthDDFMDay');
 -         to_timestamp         
 -------------------------------
 - Sun Jan 09 00:00:00 2000 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2000-01-09 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('97/Feb/16', 'YYMonDD');
 -ERROR:  invalid value "/Feb/16" for "Mon"
 -DETAIL:  The given value did not match any of the allowed values for this field.
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  invalid value for abbreviated month name
  SELECT to_timestamp('97/Feb/16', 'YY:Mon:DD');
 -         to_timestamp         
 -------------------------------
 - Sun Feb 16 00:00:00 1997 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 1997-02-16 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('97/Feb/16', 'FXYY:Mon:DD');
 -         to_timestamp         
 -------------------------------
 - Sun Feb 16 00:00:00 1997 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 1997-02-16 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('97/Feb/16', 'FXYY/Mon/DD');
 -         to_timestamp         
 -------------------------------
 - Sun Feb 16 00:00:00 1997 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 1997-02-16 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('19971116', 'YYYYMMDD');
 -         to_timestamp         
 -------------------------------
 - Sun Nov 16 00:00:00 1997 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 1997-11-16 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('20000-1116', 'YYYY-MMDD');
 -         to_timestamp          
 --------------------------------
 - Thu Nov 16 00:00:00 20000 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp       
++-------------------------
++ 20000-11-16 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('1997 AD 11 16', 'YYYY BC MM DD');
 -         to_timestamp         
 -------------------------------
 - Sun Nov 16 00:00:00 1997 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 1997-11-16 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('1997 BC 11 16', 'YYYY BC MM DD');
 -          to_timestamp           
 ----------------------------------
 - Tue Nov 16 00:00:00 1997 PST BC
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++       to_timestamp        
++---------------------------
++ 1997-11-16 00:00:00-08 BC
+ (1 row)
+ 
  SELECT to_timestamp('1997 A.D. 11 16', 'YYYY B.C. MM DD');
 -         to_timestamp         
 -------------------------------
 - Sun Nov 16 00:00:00 1997 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 1997-11-16 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('1997 B.C. 11 16', 'YYYY B.C. MM DD');
 -          to_timestamp           
 ----------------------------------
 - Tue Nov 16 00:00:00 1997 PST BC
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++       to_timestamp        
++---------------------------
++ 1997-11-16 00:00:00-08 BC
+ (1 row)
+ 
  SELECT to_timestamp('9-1116', 'Y-MMDD');
 -         to_timestamp         
 -------------------------------
 - Mon Nov 16 00:00:00 2009 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2009-11-16 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('95-1116', 'YY-MMDD');
 -         to_timestamp         
 -------------------------------
 - Thu Nov 16 00:00:00 1995 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 1995-11-16 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('995-1116', 'YYY-MMDD');
 -         to_timestamp         
 -------------------------------
 - Thu Nov 16 00:00:00 1995 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 1995-11-16 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('2005426', 'YYYYWWD');
 -         to_timestamp         
 -------------------------------
 - Sat Oct 15 00:00:00 2005 PDT
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2005-10-15 00:00:00-07
+ (1 row)
+ 
  SELECT to_timestamp('2005300', 'YYYYDDD');
 -         to_timestamp         
 -------------------------------
 - Thu Oct 27 00:00:00 2005 PDT
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2005-10-27 00:00:00-07
+ (1 row)
+ 
  SELECT to_timestamp('2005527', 'IYYYIWID');
 -         to_timestamp         
 -------------------------------
 - Sun Jan 01 00:00:00 2006 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2006-01-01 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('005527', 'IYYIWID');
 -         to_timestamp         
 -------------------------------
 - Sun Jan 01 00:00:00 2006 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2006-01-01 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('05527', 'IYIWID');
 -         to_timestamp         
 -------------------------------
 - Sun Jan 01 00:00:00 2006 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2006-01-01 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('5527', 'IIWID');
 -         to_timestamp         
 -------------------------------
 - Sun Jan 01 00:00:00 2006 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2006-01-01 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('2005364', 'IYYYIDDD');
 -         to_timestamp         
 -------------------------------
 - Sun Jan 01 00:00:00 2006 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2005-12-30 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('20050302', 'YYYYMMDD');
 -         to_timestamp         
 -------------------------------
 - Wed Mar 02 00:00:00 2005 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2005-03-02 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('2005 03 02', 'YYYYMMDD');
 -         to_timestamp         
 -------------------------------
 - Wed Mar 02 00:00:00 2005 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2005-03-02 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp(' 2005 03 02', 'YYYYMMDD');
 -         to_timestamp         
 -------------------------------
 - Wed Mar 02 00:00:00 2005 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2005-03-02 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('  20050302', 'YYYYMMDD');
 -         to_timestamp         
 -------------------------------
 - Wed Mar 02 00:00:00 2005 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2005-03-02 00:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('2011-12-18 11:38 AM', 'YYYY-MM-DD HH12:MI PM');
 -         to_timestamp         
 -------------------------------
 - Sun Dec 18 11:38:00 2011 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2011-12-18 11:38:00-08
+ (1 row)
+ 
  SELECT to_timestamp('2011-12-18 11:38 PM', 'YYYY-MM-DD HH12:MI PM');
 -         to_timestamp         
 -------------------------------
 - Sun Dec 18 23:38:00 2011 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2011-12-18 23:38:00-08
+ (1 row)
+ 
  SELECT to_timestamp('2011-12-18 11:38 A.M.', 'YYYY-MM-DD HH12:MI P.M.');
 -         to_timestamp         
 -------------------------------
 - Sun Dec 18 11:38:00 2011 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2011-12-18 11:38:00-08
+ (1 row)
+ 
  SELECT to_timestamp('2011-12-18 11:38 P.M.', 'YYYY-MM-DD HH12:MI P.M.');
 -         to_timestamp         
 -------------------------------
 - Sun Dec 18 23:38:00 2011 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2011-12-18 23:38:00-08
+ (1 row)
+ 
  SELECT to_timestamp('2011-12-18 11:38 +05',    'YYYY-MM-DD HH12:MI TZH');
 -         to_timestamp         
 -------------------------------
 - Sat Dec 17 22:38:00 2011 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2011-12-17 22:38:00-08
+ (1 row)
+ 
  SELECT to_timestamp('2011-12-18 11:38 -05',    'YYYY-MM-DD HH12:MI TZH');
 -         to_timestamp         
 -------------------------------
 - Sun Dec 18 08:38:00 2011 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2011-12-18 08:38:00-08
+ (1 row)
+ 
  SELECT to_timestamp('2011-12-18 11:38 +05:20', 'YYYY-MM-DD HH12:MI TZH:TZM');
 -         to_timestamp         
 -------------------------------
 - Sat Dec 17 22:18:00 2011 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2011-12-17 22:18:00-08
+ (1 row)
+ 
  SELECT to_timestamp('2011-12-18 11:38 -05:20', 'YYYY-MM-DD HH12:MI TZH:TZM');
 -         to_timestamp         
 -------------------------------
 - Sun Dec 18 08:58:00 2011 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2011-12-18 08:58:00-08
+ (1 row)
+ 
  SELECT to_timestamp('2011-12-18 11:38 20',     'YYYY-MM-DD HH12:MI TZM');
 -         to_timestamp         
 -------------------------------
 - Sun Dec 18 03:18:00 2011 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2011-12-18 11:38:00-08
+ (1 row)
+ 
  SELECT to_timestamp('2011-12-18 11:38 PST', 'YYYY-MM-DD HH12:MI TZ');  -- NYI
 -ERROR:  formatting field "TZ" is only supported in to_char
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  "TZ"/"tz" format patterns are not supported in to_date/to_timestamp
  SELECT to_timestamp('2018-11-02 12:34:56.025', 'YYYY-MM-DD HH24:MI:SS.MS');
 -           to_timestamp           
 -----------------------------------
 - Fri Nov 02 12:34:56.025 2018 PDT
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++        to_timestamp        
++----------------------------
++ 2018-11-02 12:34:56.025-07
+ (1 row)
+ 
  SELECT i, to_timestamp('2018-11-02 12:34:56', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
 - i |         to_timestamp         
 ----+------------------------------
@@ -3453,10 +3495,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/horology.out --la
 - 4 | Fri Nov 02 12:34:56 2018 PDT
 - 5 | Fri Nov 02 12:34:56 2018 PDT
 - 6 | Fri Nov 02 12:34:56 2018 PDT
--(6 rows)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ i |      to_timestamp      
++---+------------------------
++ 1 | 2018-11-02 12:34:56-07
++ 2 | 2018-11-02 12:34:56-07
++ 3 | 2018-11-02 12:34:56-07
++ 4 | 2018-11-02 12:34:56-07
++ 5 | 2018-11-02 12:34:56-07
++ 6 | 2018-11-02 12:34:56-07
+ (6 rows)
+ 
  SELECT i, to_timestamp('2018-11-02 12:34:56.1', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
 - i |          to_timestamp          
 ----+--------------------------------
@@ -3466,10 +3514,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/horology.out --la
 - 4 | Fri Nov 02 12:34:56.1 2018 PDT
 - 5 | Fri Nov 02 12:34:56.1 2018 PDT
 - 6 | Fri Nov 02 12:34:56.1 2018 PDT
--(6 rows)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ i |       to_timestamp       
++---+--------------------------
++ 1 | 2018-11-02 12:34:56.1-07
++ 2 | 2018-11-02 12:34:56.1-07
++ 3 | 2018-11-02 12:34:56.1-07
++ 4 | 2018-11-02 12:34:56.1-07
++ 5 | 2018-11-02 12:34:56.1-07
++ 6 | 2018-11-02 12:34:56.1-07
+ (6 rows)
+ 
  SELECT i, to_timestamp('2018-11-02 12:34:56.12', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
 - i |          to_timestamp           
 ----+---------------------------------
@@ -3479,10 +3533,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/horology.out --la
 - 4 | Fri Nov 02 12:34:56.12 2018 PDT
 - 5 | Fri Nov 02 12:34:56.12 2018 PDT
 - 6 | Fri Nov 02 12:34:56.12 2018 PDT
--(6 rows)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ i |       to_timestamp        
++---+---------------------------
++ 1 | 2018-11-02 12:34:56.1-07
++ 2 | 2018-11-02 12:34:56.12-07
++ 3 | 2018-11-02 12:34:56.12-07
++ 4 | 2018-11-02 12:34:56.12-07
++ 5 | 2018-11-02 12:34:56.12-07
++ 6 | 2018-11-02 12:34:56.12-07
+ (6 rows)
+ 
  SELECT i, to_timestamp('2018-11-02 12:34:56.123', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
 - i |           to_timestamp           
 ----+----------------------------------
@@ -3492,10 +3552,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/horology.out --la
 - 4 | Fri Nov 02 12:34:56.123 2018 PDT
 - 5 | Fri Nov 02 12:34:56.123 2018 PDT
 - 6 | Fri Nov 02 12:34:56.123 2018 PDT
--(6 rows)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ i |        to_timestamp        
++---+----------------------------
++ 1 | 2018-11-02 12:34:56.1-07
++ 2 | 2018-11-02 12:34:56.12-07
++ 3 | 2018-11-02 12:34:56.123-07
++ 4 | 2018-11-02 12:34:56.123-07
++ 5 | 2018-11-02 12:34:56.123-07
++ 6 | 2018-11-02 12:34:56.123-07
+ (6 rows)
+ 
  SELECT i, to_timestamp('2018-11-02 12:34:56.1234', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
 - i |           to_timestamp            
 ----+-----------------------------------
@@ -3505,10 +3571,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/horology.out --la
 - 4 | Fri Nov 02 12:34:56.1234 2018 PDT
 - 5 | Fri Nov 02 12:34:56.1234 2018 PDT
 - 6 | Fri Nov 02 12:34:56.1234 2018 PDT
--(6 rows)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ i |        to_timestamp         
++---+-----------------------------
++ 1 | 2018-11-02 12:34:56.1-07
++ 2 | 2018-11-02 12:34:56.12-07
++ 3 | 2018-11-02 12:34:56.123-07
++ 4 | 2018-11-02 12:34:56.1234-07
++ 5 | 2018-11-02 12:34:56.1234-07
++ 6 | 2018-11-02 12:34:56.1234-07
+ (6 rows)
+ 
  SELECT i, to_timestamp('2018-11-02 12:34:56.12345', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
 - i |            to_timestamp            
 ----+------------------------------------
@@ -3518,10 +3590,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/horology.out --la
 - 4 | Fri Nov 02 12:34:56.1235 2018 PDT
 - 5 | Fri Nov 02 12:34:56.12345 2018 PDT
 - 6 | Fri Nov 02 12:34:56.12345 2018 PDT
--(6 rows)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ i |         to_timestamp         
++---+------------------------------
++ 1 | 2018-11-02 12:34:56.1-07
++ 2 | 2018-11-02 12:34:56.12-07
++ 3 | 2018-11-02 12:34:56.123-07
++ 4 | 2018-11-02 12:34:56.1235-07
++ 5 | 2018-11-02 12:34:56.12345-07
++ 6 | 2018-11-02 12:34:56.12345-07
+ (6 rows)
+ 
  SELECT i, to_timestamp('2018-11-02 12:34:56.123456', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
 - i |            to_timestamp             
 ----+-------------------------------------
@@ -3531,83 +3609,90 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/horology.out --la
 - 4 | Fri Nov 02 12:34:56.1235 2018 PDT
 - 5 | Fri Nov 02 12:34:56.12346 2018 PDT
 - 6 | Fri Nov 02 12:34:56.123456 2018 PDT
--(6 rows)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ i |         to_timestamp          
++---+-------------------------------
++ 1 | 2018-11-02 12:34:56.1-07
++ 2 | 2018-11-02 12:34:56.12-07
++ 3 | 2018-11-02 12:34:56.123-07
++ 4 | 2018-11-02 12:34:56.1235-07
++ 5 | 2018-11-02 12:34:56.12346-07
++ 6 | 2018-11-02 12:34:56.123456-07
+ (6 rows)
+ 
  SELECT i, to_timestamp('2018-11-02 12:34:56.123456789', 'YYYY-MM-DD HH24:MI:SS.FF' || i) FROM generate_series(1, 6) i;
 -ERROR:  date/time field value out of range: "2018-11-02 12:34:56.123456789"
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  date/time field value out of range
  SELECT to_date('1 4 1902', 'Q MM YYYY');  -- Q is ignored
--  to_date   
--------------
+   to_date   
+ ------------
 - 04-01-1902
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 1902-04-01
+ (1 row)
+ 
  SELECT to_date('3 4 21 01', 'W MM CC YY');
--  to_date   
--------------
+   to_date   
+ ------------
 - 04-15-2001
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 2001-04-15
+ (1 row)
+ 
  SELECT to_date('2458872', 'J');
--  to_date   
--------------
+   to_date   
+ ------------
 - 01-23-2020
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 2020-01-23
+ (1 row)
+ 
  --
- -- Check handling of BC dates
- --
+@@ -3174,310 +1580,297 @@
  SELECT to_date('44-02-01 BC','YYYY-MM-DD BC');
--    to_date    
-----------------
+     to_date    
+ ---------------
 - 02-01-0044 BC
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 0044-02-01 BC
+ (1 row)
+ 
  SELECT to_date('-44-02-01','YYYY-MM-DD');
--    to_date    
-----------------
+     to_date    
+ ---------------
 - 02-01-0044 BC
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 0044-02-01 BC
+ (1 row)
+ 
  SELECT to_date('-44-02-01 BC','YYYY-MM-DD BC');
--  to_date   
--------------
+   to_date   
+ ------------
 - 02-01-0044
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 0044-02-01
+ (1 row)
+ 
  SELECT to_timestamp('44-02-01 11:12:13 BC','YYYY-MM-DD HH24:MI:SS BC');
 -          to_timestamp           
 ----------------------------------
 - Fri Feb 01 11:12:13 0044 PST BC
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++       to_timestamp        
++---------------------------
++ 0044-02-01 11:12:13-08 BC
+ (1 row)
+ 
  SELECT to_timestamp('-44-02-01 11:12:13','YYYY-MM-DD HH24:MI:SS');
 -          to_timestamp           
 ----------------------------------
 - Fri Feb 01 11:12:13 0044 PST BC
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++       to_timestamp        
++---------------------------
++ 0044-02-01 11:12:13-08 BC
+ (1 row)
+ 
  SELECT to_timestamp('-44-02-01 11:12:13 BC','YYYY-MM-DD HH24:MI:SS BC');
 -         to_timestamp         
 -------------------------------
 - Mon Feb 01 11:12:13 0044 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 0044-02-01 11:12:13-08
+ (1 row)
+ 
  --
  -- Check handling of multiple spaces in format and/or input
  --
@@ -3615,370 +3700,361 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/horology.out --la
 -         to_timestamp         
 -------------------------------
 - Sun Dec 18 23:38:15 2011 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2011-12-18 23:38:15-08
+ (1 row)
+ 
  SELECT to_timestamp('2011-12-18  23:38:15', 'YYYY-MM-DD  HH24:MI:SS');
 -         to_timestamp         
 -------------------------------
 - Sun Dec 18 23:38:15 2011 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2011-12-18 23:38:15-08
+ (1 row)
+ 
  SELECT to_timestamp('2011-12-18   23:38:15', 'YYYY-MM-DD  HH24:MI:SS');
 -         to_timestamp         
 -------------------------------
 - Sun Dec 18 23:38:15 2011 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2011-12-18 23:38:15-08
+ (1 row)
+ 
  SELECT to_timestamp('2011-12-18  23:38:15', 'YYYY-MM-DD HH24:MI:SS');
 -         to_timestamp         
 -------------------------------
 - Sun Dec 18 23:38:15 2011 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2011-12-18 23:38:15-08
+ (1 row)
+ 
  SELECT to_timestamp('2011-12-18  23:38:15', 'YYYY-MM-DD  HH24:MI:SS');
 -         to_timestamp         
 -------------------------------
 - Sun Dec 18 23:38:15 2011 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2011-12-18 23:38:15-08
+ (1 row)
+ 
  SELECT to_timestamp('2011-12-18  23:38:15', 'YYYY-MM-DD   HH24:MI:SS');
 -         to_timestamp         
 -------------------------------
 - Sun Dec 18 23:38:15 2011 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2011-12-18 23:38:15-08
+ (1 row)
+ 
  SELECT to_timestamp('2000+   JUN', 'YYYY/MON');
 -         to_timestamp         
 -------------------------------
 - Thu Jun 01 00:00:00 2000 PDT
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2000-06-01 00:00:00-07
+ (1 row)
+ 
  SELECT to_timestamp('  2000 +JUN', 'YYYY/MON');
 -         to_timestamp         
 -------------------------------
 - Thu Jun 01 00:00:00 2000 PDT
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2000-06-01 00:00:00-07
+ (1 row)
+ 
  SELECT to_timestamp(' 2000 +JUN', 'YYYY//MON');
 -         to_timestamp         
 -------------------------------
 - Thu Jun 01 00:00:00 2000 PDT
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2000-06-01 00:00:00-07
+ (1 row)
+ 
  SELECT to_timestamp('2000  +JUN', 'YYYY//MON');
 -         to_timestamp         
 -------------------------------
 - Thu Jun 01 00:00:00 2000 PDT
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2000-06-01 00:00:00-07
+ (1 row)
+ 
  SELECT to_timestamp('2000 + JUN', 'YYYY MON');
 -         to_timestamp         
 -------------------------------
 - Thu Jun 01 00:00:00 2000 PDT
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2000-06-01 00:00:00-07
+ (1 row)
+ 
  SELECT to_timestamp('2000 ++ JUN', 'YYYY  MON');
 -         to_timestamp         
 -------------------------------
 - Thu Jun 01 00:00:00 2000 PDT
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2000-06-01 00:00:00-07
+ (1 row)
+ 
  SELECT to_timestamp('2000 + + JUN', 'YYYY  MON');
 -ERROR:  invalid value "+" for "MON"
 -DETAIL:  The given value did not match any of the allowed values for this field.
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  invalid value for abbreviated month name
  SELECT to_timestamp('2000 + + JUN', 'YYYY   MON');
 -         to_timestamp         
 -------------------------------
 - Thu Jun 01 00:00:00 2000 PDT
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2000-06-01 00:00:00-07
+ (1 row)
+ 
  SELECT to_timestamp('2000 -10', 'YYYY TZH');
 -         to_timestamp         
 -------------------------------
 - Sat Jan 01 02:00:00 2000 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2000-01-01 02:00:00-08
+ (1 row)
+ 
  SELECT to_timestamp('2000 -10', 'YYYY  TZH');
 -         to_timestamp         
 -------------------------------
 - Fri Dec 31 06:00:00 1999 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 1999-12-31 06:00:00-08
+ (1 row)
+ 
  SELECT to_date('2011 12  18', 'YYYY MM DD');
--  to_date   
--------------
+   to_date   
+ ------------
 - 12-18-2011
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 2011-12-18
+ (1 row)
+ 
  SELECT to_date('2011 12  18', 'YYYY MM  DD');
--  to_date   
--------------
+   to_date   
+ ------------
 - 12-18-2011
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 2011-12-18
+ (1 row)
+ 
  SELECT to_date('2011 12  18', 'YYYY MM   DD');
--  to_date   
--------------
+   to_date   
+ ------------
 - 12-18-2011
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 2011-12-18
+ (1 row)
+ 
  SELECT to_date('2011 12 18', 'YYYY  MM DD');
--  to_date   
--------------
+   to_date   
+ ------------
 - 12-18-2011
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 2011-12-18
+ (1 row)
+ 
  SELECT to_date('2011  12 18', 'YYYY  MM DD');
--  to_date   
--------------
+   to_date   
+ ------------
 - 12-18-2011
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 2011-12-18
+ (1 row)
+ 
  SELECT to_date('2011   12 18', 'YYYY  MM DD');
--  to_date   
--------------
+   to_date   
+ ------------
 - 12-18-2011
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 2011-12-18
+ (1 row)
+ 
  SELECT to_date('2011 12 18', 'YYYYxMMxDD');
--  to_date   
--------------
+   to_date   
+ ------------
 - 12-18-2011
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 2011-12-18
+ (1 row)
+ 
  SELECT to_date('2011x 12x 18', 'YYYYxMMxDD');
--  to_date   
--------------
+   to_date   
+ ------------
 - 12-18-2011
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 2011-12-18
+ (1 row)
+ 
  SELECT to_date('2011 x12 x18', 'YYYYxMMxDD');
--ERROR:  invalid value "x1" for "MM"
+ ERROR:  invalid value "x1" for "MM"
 -DETAIL:  Value must be an integer.
-+ERROR:  unknown function: to_date()
  --
  -- Check errors for some incorrect usages of to_timestamp() and to_date()
  --
  -- Mixture of date conventions (ISO week and Gregorian):
  SELECT to_timestamp('2005527', 'YYYYIWID');
--ERROR:  invalid combination of date conventions
+ ERROR:  invalid combination of date conventions
 -HINT:  Do not mix Gregorian and ISO week date conventions in a formatting template.
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  -- Insufficient characters in the source string:
  SELECT to_timestamp('19971', 'YYYYMMDD');
--ERROR:  source string too short for "MM" formatting field
+ ERROR:  source string too short for "MM" formatting field
 -DETAIL:  Field requires 2 characters, but only 1 remain.
 -HINT:  If your source string is not fixed-width, try using the "FM" modifier.
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  -- Insufficient digit characters for a single node:
  SELECT to_timestamp('19971)24', 'YYYYMMDD');
--ERROR:  invalid value "1)" for "MM"
+ ERROR:  invalid value "1)" for "MM"
 -DETAIL:  Field requires 2 characters, but only 1 could be parsed.
 -HINT:  If your source string is not fixed-width, try using the "FM" modifier.
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  -- We don't accept full-length day or month names if short form is specified:
  SELECT to_timestamp('Friday 1-January-1999', 'DY DD MON YYYY');
--ERROR:  invalid value "da" for "DD"
+ ERROR:  invalid value "da" for "DD"
 -DETAIL:  Value must be an integer.
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  SELECT to_timestamp('Fri 1-January-1999', 'DY DD MON YYYY');
--ERROR:  invalid value "uary" for "YYYY"
+ ERROR:  invalid value "uary" for "YYYY"
 -DETAIL:  Value must be an integer.
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  SELECT to_timestamp('Fri 1-Jan-1999', 'DY DD MON YYYY');  -- ok
 -         to_timestamp         
 -------------------------------
 - Fri Jan 01 00:00:00 1999 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 1999-01-01 00:00:00-08
+ (1 row)
+ 
  -- Value clobbering:
  SELECT to_timestamp('1997-11-Jan-16', 'YYYY-MM-Mon-DD');
--ERROR:  conflicting values for "Mon" field in formatting string
+ ERROR:  conflicting values for "Mon" field in formatting string
 -DETAIL:  This value contradicts a previous setting for the same field type.
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  -- Non-numeric input:
  SELECT to_timestamp('199711xy', 'YYYYMMDD');
--ERROR:  invalid value "xy" for "DD"
+ ERROR:  invalid value "xy" for "DD"
 -DETAIL:  Value must be an integer.
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  -- Input that doesn't fit in an int:
  SELECT to_timestamp('10000000000', 'FMYYYY');
--ERROR:  value for "YYYY" in source string is out of range
+ ERROR:  value for "YYYY" in source string is out of range
 -DETAIL:  Value must be in the range -2147483648 to 2147483647.
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  -- Out-of-range and not-quite-out-of-range fields:
  SELECT to_timestamp('2016-06-13 25:00:00', 'YYYY-MM-DD HH24:MI:SS');
 -ERROR:  date/time field value out of range: "2016-06-13 25:00:00"
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  date/time field value out of range: hour must be between 0 and 23, got 25
  SELECT to_timestamp('2016-06-13 15:60:00', 'YYYY-MM-DD HH24:MI:SS');
 -ERROR:  date/time field value out of range: "2016-06-13 15:60:00"
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  date/time field value out of range: minute must be between 0 and 59, got 60
  SELECT to_timestamp('2016-06-13 15:50:60', 'YYYY-MM-DD HH24:MI:SS');
 -ERROR:  date/time field value out of range: "2016-06-13 15:50:60"
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  date/time field value out of range: second must be between 0 and 59, got 60
  SELECT to_timestamp('2016-06-13 15:50:55', 'YYYY-MM-DD HH24:MI:SS');  -- ok
 -         to_timestamp         
 -------------------------------
 - Mon Jun 13 15:50:55 2016 PDT
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2016-06-13 15:50:55-07
+ (1 row)
+ 
  SELECT to_timestamp('2016-06-13 15:50:55', 'YYYY-MM-DD HH:MI:SS');
--ERROR:  hour "15" is invalid for the 12-hour clock
+ ERROR:  hour "15" is invalid for the 12-hour clock
 -HINT:  Use the 24-hour clock, or give an hour between 1 and 12.
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
  SELECT to_timestamp('2016-13-01 15:50:55', 'YYYY-MM-DD HH24:MI:SS');
 -ERROR:  date/time field value out of range: "2016-13-01 15:50:55"
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  date/time field value out of range: month must be between 1 and 12, got 13
  SELECT to_timestamp('2016-02-30 15:50:55', 'YYYY-MM-DD HH24:MI:SS');
 -ERROR:  date/time field value out of range: "2016-02-30 15:50:55"
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  date/time field value out of range: day must be between 1 and 29 for month 2, got 30
  SELECT to_timestamp('2016-02-29 15:50:55', 'YYYY-MM-DD HH24:MI:SS');  -- ok
 -         to_timestamp         
 -------------------------------
 - Mon Feb 29 15:50:55 2016 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2016-02-29 15:50:55-08
+ (1 row)
+ 
  SELECT to_timestamp('2015-02-29 15:50:55', 'YYYY-MM-DD HH24:MI:SS');
 -ERROR:  date/time field value out of range: "2015-02-29 15:50:55"
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  date/time field value out of range: day must be between 1 and 28 for month 2, got 29
  SELECT to_timestamp('2015-02-11 86000', 'YYYY-MM-DD SSSS');  -- ok
 -         to_timestamp         
 -------------------------------
 - Wed Feb 11 23:53:20 2015 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2015-02-11 23:53:20-08
+ (1 row)
+ 
  SELECT to_timestamp('2015-02-11 86400', 'YYYY-MM-DD SSSS');
 -ERROR:  date/time field value out of range: "2015-02-11 86400"
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  date/time field value out of range: hour must be between 0 and 23, got 24
  SELECT to_timestamp('2015-02-11 86000', 'YYYY-MM-DD SSSSS');  -- ok
 -         to_timestamp         
 -------------------------------
 - Wed Feb 11 23:53:20 2015 PST
--(1 row)
--
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++      to_timestamp      
++------------------------
++ 2015-02-11 23:53:20-08
+ (1 row)
+ 
  SELECT to_timestamp('2015-02-11 86400', 'YYYY-MM-DD SSSSS');
 -ERROR:  date/time field value out of range: "2015-02-11 86400"
-+ERROR:  unknown signature: to_timestamp(string, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  date/time field value out of range: hour must be between 0 and 23, got 24
  SELECT to_date('2016-13-10', 'YYYY-MM-DD');
 -ERROR:  date/time field value out of range: "2016-13-10"
-+ERROR:  unknown function: to_date()
++ERROR:  date/time field value out of range: month must be between 1 and 12, got 13
  SELECT to_date('2016-02-30', 'YYYY-MM-DD');
 -ERROR:  date/time field value out of range: "2016-02-30"
-+ERROR:  unknown function: to_date()
++ERROR:  date/time field value out of range: day must be between 1 and 29 for month 2, got 30
  SELECT to_date('2016-02-29', 'YYYY-MM-DD');  -- ok
--  to_date   
--------------
+   to_date   
+ ------------
 - 02-29-2016
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 2016-02-29
+ (1 row)
+ 
  SELECT to_date('2015-02-29', 'YYYY-MM-DD');
 -ERROR:  date/time field value out of range: "2015-02-29"
-+ERROR:  unknown function: to_date()
++ERROR:  date/time field value out of range: day must be between 1 and 28 for month 2, got 29
  SELECT to_date('2015 365', 'YYYY DDD');  -- ok
--  to_date   
--------------
+   to_date   
+ ------------
 - 12-31-2015
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 2015-12-31
+ (1 row)
+ 
  SELECT to_date('2015 366', 'YYYY DDD');
 -ERROR:  date/time field value out of range: "2015 366"
-+ERROR:  unknown function: to_date()
++ERROR:  date/time field value out of range
  SELECT to_date('2016 365', 'YYYY DDD');  -- ok
--  to_date   
--------------
+   to_date   
+ ------------
 - 12-30-2016
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 2016-12-30
+ (1 row)
+ 
  SELECT to_date('2016 366', 'YYYY DDD');  -- ok
--  to_date   
--------------
+   to_date   
+ ------------
 - 12-31-2016
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 2016-12-31
+ (1 row)
+ 
  SELECT to_date('2016 367', 'YYYY DDD');
 -ERROR:  date/time field value out of range: "2016 367"
-+ERROR:  unknown function: to_date()
++ERROR:  date/time field value out of range
  SELECT to_date('0000-02-01','YYYY-MM-DD');  -- allowed, though it shouldn't be
--    to_date    
-----------------
+     to_date    
+ ---------------
 - 02-01-0001 BC
--(1 row)
--
-+ERROR:  unknown function: to_date()
++ 0001-02-01 BC
+ (1 row)
+ 
  --
- -- Check behavior with SQL-style fixed-GMT-offset time zone (cf bug #8572)
- --
+@@ -3486,27 +1879,27 @@
  SET TIME ZONE 'America/New_York';
  SET TIME ZONE '-1.5';
  SHOW TIME ZONE;

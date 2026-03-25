@@ -221,6 +221,8 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"comments",
 		"geometry",
 		"xid",
+		// TODO(yuzefovich): add a patch to explicitly set the time zone in the
+		// 'horology' so that time zone handling is unified between two DBs.
 		"horology",
 		"type_sanity",
 		"expressions",
