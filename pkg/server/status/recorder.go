@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/internal/metricscan"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
@@ -130,9 +131,10 @@ var ChildMetricsStorageEnabled = settings.RegisterBoolSetting(
 // scrape. Because the metrics themselves live in the node registry, they are
 // self-referentially included in the output.
 type ScrapeMetrics struct {
-	NameCount  *metric.Gauge
-	LineCount  *metric.Gauge
-	ChildCount *metric.GaugeVec
+	NameCount      *metric.Gauge
+	LineCount      *metric.Gauge
+	ChildCount     *metric.GaugeVec
+	OwnerLineCount *metric.GaugeVec
 }
 
 func newScrapeMetrics() *ScrapeMetrics {
@@ -155,6 +157,12 @@ func newScrapeMetrics() *ScrapeMetrics {
 			Measurement: "Child Instances",
 			Unit:        metric.Unit_COUNT,
 		}, []string{"metric_name"}),
+		OwnerLineCount: metric.NewExportedGaugeVec(metric.Metadata{
+			Name:        "obs.metric_export.codeowner.line_count",
+			Help:        "Prometheus export line count per CODEOWNER team",
+			Measurement: "Lines",
+			Unit:        metric.Unit_COUNT,
+		}, []string{"codeowner"}),
 	}
 }
 
@@ -193,6 +201,12 @@ type MetricsRecorder struct {
 	// scrapeMetrics holds meta-metrics that describe the volume of the most
 	// recent /_status/vars Prometheus scrape.
 	scrapeMetrics *ScrapeMetrics
+
+	// metricOwners maps scraped metric names to CODEOWNER teams. Loaded
+	// once at construction from the generated metric_owners data. If the
+	// data is unavailable (e.g. in tests), this is nil and owner-based
+	// line counts are skipped.
+	metricOwners *metricscan.MetricOwners
 
 	// mu synchronizes the reading of node/store registries against the adding of
 	// nodes/stores. Consequently, almost all uses of it only need to take an
@@ -257,6 +271,13 @@ func NewMetricsRecorder(
 	clock hlc.WallClock,
 	settings *cluster.Settings,
 ) *MetricsRecorder {
+	mo, err := metricscan.DefaultMetricOwners()
+	if err != nil {
+		log.Ops.Warningf(
+			context.Background(),
+			"could not load metric owners; codeowner line counts will be unavailable: %v", err,
+		)
+	}
 	mr := &MetricsRecorder{
 		HealthChecker:       NewHealthChecker(trackedMetrics),
 		nodeLiveness:        nodeLiveness,
@@ -267,6 +288,7 @@ func NewMetricsRecorder(
 		tenantNameContainer: tenantNameContainer,
 		prometheusExporter:  metric.MakePrometheusExporter(),
 		scrapeMetrics:       newScrapeMetrics(),
+		metricOwners:        mo,
 	}
 	mr.mu.storeRegistries = make(map[roachpb.StoreID]*metric.Registry)
 	mr.mu.stores = make(map[roachpb.StoreID]storeMetrics)
@@ -540,6 +562,25 @@ func countTimeSeriesLines(data []byte) int64 {
 	return count
 }
 
+// countFamilyLines estimates the number of Prometheus text-format lines
+// a MetricFamily will produce. Each family contributes a HELP line, a
+// TYPE line, and one or more sample lines per Metric entry.
+func countFamilyLines(family *prometheusgo.MetricFamily) int64 {
+	count := int64(2) // HELP + TYPE lines
+	for _, m := range family.Metric {
+		if m.Histogram != nil {
+			// _bucket lines + _count + _sum + _inf
+			count += int64(len(m.Histogram.Bucket)) + 3
+		} else if m.Summary != nil {
+			// quantile lines + _count + _sum
+			count += int64(len(m.Summary.Quantile)) + 2
+		} else {
+			count++
+		}
+	}
+	return count
+}
+
 // updateScrapeMetrics updates the name count and child count meta-metrics
 // from the current exporter state. Called inside ScrapeAndPrintAsText's
 // lock, after all registries have been scraped but before clearMetrics.
@@ -553,6 +594,23 @@ func (mr *MetricsRecorder) updateScrapeMetrics(pm *metric.PrometheusExporter) {
 		mr.scrapeMetrics.ChildCount.Update(
 			map[string]string{"metric_name": metricName}, count,
 		)
+	}
+
+	if mr.metricOwners != nil {
+		ownerCounts := make(map[string]int64)
+		for _, family := range families {
+			owner, ok := mr.metricOwners.Resolve(family.GetName())
+			if !ok {
+				owner = "unknown"
+			}
+			ownerCounts[owner] += countFamilyLines(family)
+		}
+		mr.scrapeMetrics.OwnerLineCount.Clear()
+		for owner, count := range ownerCounts {
+			mr.scrapeMetrics.OwnerLineCount.Update(
+				map[string]string{"codeowner": owner}, count,
+			)
+		}
 	}
 }
 

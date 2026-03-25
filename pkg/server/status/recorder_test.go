@@ -219,14 +219,14 @@ func TestMetricsRecorderLabels(t *testing.T) {
 			},
 		},
 		// The scrape meta-metrics are updated by the PrintAsText calls above.
-		// The system recorder sees 6 metric families and 10 time series.
+		// The system recorder sees 7 metric families and 12 time series.
 		{
 			Name:   "cr.node.obs.metric_export.name.count",
 			Source: "7",
 			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: manual.Now().UnixNano(),
-					Value:          6,
+					Value:          7,
 				},
 			},
 		},
@@ -236,7 +236,7 @@ func TestMetricsRecorderLabels(t *testing.T) {
 			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: manual.Now().UnixNano(),
-					Value:          10,
+					Value:          12,
 				},
 			},
 		},
@@ -271,14 +271,14 @@ func TestMetricsRecorderLabels(t *testing.T) {
 				},
 			},
 		},
-		// The tenant recorder sees 6 metric families and 6 time series.
+		// The tenant recorder sees 7 metric families and 7 time series.
 		{
 			Name:   "cr.node.obs.metric_export.name.count",
 			Source: "7-123",
 			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: manual.Now().UnixNano(),
-					Value:          6,
+					Value:          7,
 				},
 			},
 		},
@@ -288,7 +288,7 @@ func TestMetricsRecorderLabels(t *testing.T) {
 			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: manual.Now().UnixNano(),
-					Value:          6,
+					Value:          7,
 				},
 			},
 		},

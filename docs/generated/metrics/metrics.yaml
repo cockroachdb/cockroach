@@ -17885,6 +17885,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: obs.metric_export.codeowner.line_count
+      exported_name: obs_metric_export_codeowner_line_count
+      description: Prometheus export line count per CODEOWNER team
+      y_axis_label: Lines
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: obs.metric_export.line.count
       exported_name: obs_metric_export_line_count
       description: Total individual time series (all label combinations) in the most recent Prometheus scrape

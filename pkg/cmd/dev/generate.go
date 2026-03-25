@@ -229,13 +229,17 @@ func (d *dev) generateMetricOwners(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return d.exec.CommandContextInheritingStdStreams(
+	yamlPath := filepath.Join(workspace, "docs", "generated", "metrics", "metric_owners.yaml")
+	if err := d.exec.CommandContextInheritingStdStreams(
 		ctx, "bazel", "run", "//pkg/cmd/gen-metric-owners", "--",
-		fmt.Sprintf(
-			"-out=%s",
-			filepath.Join(workspace, "docs", "generated", "metrics", "metric_owners.yaml"),
-		),
-	)
+		fmt.Sprintf("-out=%s", yamlPath),
+	); err != nil {
+		return err
+	}
+	// Copy the YAML into the metricscan package so it can be embedded
+	// at build time via go:embed for runtime owner resolution.
+	embedPath := filepath.Join(workspace, "pkg", "internal", "metricscan", "metric_owners.yaml")
+	return d.os.CopyFile(yamlPath, embedPath)
 }
 
 func (d *dev) generateLogicTest(cmd *cobra.Command) error {

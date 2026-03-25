@@ -43,6 +43,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/build",
+        "//pkg/internal/metricscan",
         "//pkg/keys",
         "//pkg/kv",
         "//pkg/kv/kvbase",
