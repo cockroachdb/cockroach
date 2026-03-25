@@ -2581,7 +2581,7 @@ var regularBuiltins = map[string]builtinDefinition{
 				if _, err := d.SetFloat64(val); err != nil {
 					return nil, err
 				}
-				s, err := tochar.DecimalToChar(d, ctx.ToCharFormatCache, f)
+				s, err := tochar.Float8DecimalToChar(d, ctx.ToCharFormatCache, f)
 				return tree.NewDString(s), err
 			},
 			Info:       "Convert a float to a string using the given format.",
