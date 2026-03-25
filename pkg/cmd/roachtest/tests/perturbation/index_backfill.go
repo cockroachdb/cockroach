@@ -82,8 +82,8 @@ func (b backfill) startTargetNode(ctx context.Context, t test.Test, v variations
 	// want the fill to impact the test throughput. We use a larger block size
 	// to create a lot of SSTables and ranges in a short amount of time.
 	runCmd := fmt.Sprintf(
-		"./cockroach workload run kv --db backfill --duration=%s --max-block-bytes=%d --min-block-bytes=%d --concurrency=100 {pgurl%s}",
-		v.perturbationDuration, 10_000, 10_000, v.stableNodes())
+		"./cockroach workload run kv --db backfill --max-ops=11000000 --max-rate=8000 --max-block-bytes=10000 --min-block-bytes=10000 --concurrency=100 {pgurl%s}",
+		v.stableNodes())
 	v.Run(ctx, option.WithNodes(v.workloadNodes()), runCmd)
 
 	t.L().Printf("waiting for io overload to end")
