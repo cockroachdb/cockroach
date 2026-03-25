@@ -103,7 +103,7 @@ func makeCertificateManager(
 		timeSource:       o.timeSource,
 		tlsSettings:      tlsSettings,
 	}
-	cm.certMetrics = createMetricsLocked(cm)
+	cm.certMetrics = createMetrics(cm)
 	return cm
 }
 
@@ -270,6 +270,30 @@ func (cm *CertificateManager) NodeCert() *CertInfo {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 	return cm.nodeCert
+}
+
+// NodeClientCert returns the client cert for the 'node' user. May be nil.
+// Callers should check for an internal Error field.
+func (cm *CertificateManager) NodeClientCert() *CertInfo {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.nodeClientCert
+}
+
+// TenantCert returns the tenant client cert. May be nil.
+// Callers should check for an internal Error field.
+func (cm *CertificateManager) TenantCert() *CertInfo {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.tenantCert
+}
+
+// TenantCACert returns the tenant CA cert. May be nil.
+// Callers should check for an internal Error field.
+func (cm *CertificateManager) TenantCACert() *CertInfo {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.tenantCACert
 }
 
 // ClientCerts returns the Client certs.
