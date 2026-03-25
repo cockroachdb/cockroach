@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/crypto/ssh"
@@ -39,6 +40,69 @@ const (
 	maxFloatingIPAttempts   = 5
 	ErrUnsupportedLocalSSDs = "WARN: local SSDs are not supported by IBM Cloud; using network volumes instead"
 )
+
+// throttledTransport wraps an http.RoundTripper with a semaphore to limit
+// the number of concurrent in-flight HTTP requests. This is used to enforce
+// a global request concurrency limit across all IBM SDK services within a
+// single Provider instance, regardless of how many goroutines are active.
+type throttledTransport struct {
+	sem   chan struct{}
+	inner http.RoundTripper
+}
+
+func (t *throttledTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	t.sem <- struct{}{}
+	defer func() { <-t.sem }()
+	return t.inner.RoundTrip(req)
+}
+
+// newThrottledHTTPClient returns an http.Client that limits concurrent
+// requests to maxConcurrent using a shared semaphore channel.
+func newThrottledHTTPClient(sem chan struct{}) *http.Client {
+	return &http.Client{
+		Transport: &throttledTransport{
+			sem:   sem,
+			inner: http.DefaultTransport,
+		},
+	}
+}
+
+// isRateLimitError checks if an IBM API error is a rate-limiting response.
+// IBM Cloud APIs return 429 for standard rate limiting, but the Global Tagging
+// service is known to return 403 (Forbidden) when rate-limited.
+func isRateLimitError(resp *core.DetailedResponse) bool {
+	if resp == nil {
+		return false
+	}
+	return resp.StatusCode == http.StatusTooManyRequests ||
+		resp.StatusCode == http.StatusForbidden
+}
+
+// retryOnRateLimit retries the given function on rate-limit errors (429 and
+// 403). The function must return a *core.DetailedResponse and an error, which
+// is the standard signature for IBM SDK API calls.
+func retryOnRateLimit[T any](fn func() (T, *core.DetailedResponse, error)) (T, error) {
+	var result T
+	var lastErr error
+	for r := retry.StartWithCtx(
+		context.Background(), retry.Options{
+			InitialBackoff: 2 * time.Second,
+			MaxBackoff:     retryMaxInterval,
+			Multiplier:     2,
+			MaxRetries:     retryMaxAttempts,
+		},
+	); r.Next(); {
+		var resp *core.DetailedResponse
+		result, resp, lastErr = fn()
+		if lastErr == nil {
+			return result, nil
+		}
+		if !isRateLimitError(resp) {
+			return result, lastErr
+		}
+	}
+	return result, lastErr
+}
 
 // getVpcService returns the VPC service for a given region.
 func (p *Provider) getVpcService(region string) (*vpcv1.VpcV1, error) {
@@ -237,7 +301,11 @@ func (p *Provider) createInstance(
 	// Add tags to the instance before doing anything else.
 	// This is to ensure that if the floating IP address creation fails,
 	// the instance is still tagged and we can destroy the cluster during cleanup.
-	_, _, err = p.tagService.AttachTag(opts.tags.toAttachTagOptions(*instanceResp.CRN))
+	_, err = retryOnRateLimit(func() (*globaltaggingv1.TagResults, *core.DetailedResponse, error) {
+		return p.tagService.AttachTag(
+			opts.tags.toAttachTagOptions(*instanceResp.CRN),
+		)
+	})
 	if err != nil {
 		return nil, errors.Wrapf(
 			err,
@@ -248,34 +316,33 @@ func (p *Provider) createInstance(
 	}
 
 	// Wait for the instance to be in a valid state to get all the information.
+	// Use exponential backoff to reduce API call frequency during instance startup.
+	// Instances typically take 30-60 seconds to become ready.
 	instanceReady := false
-	stableState := struct {
-		InstanceStatus  string
-		NetworkAttached bool
-	}{}
-	waitForRunningState := retry.Start(retry.Options{
-		InitialBackoff: 1 * time.Second,
-		MaxBackoff:     1 * time.Second,
-		MaxRetries:     int(maxWaitForReadyState.Seconds()),
-	})
-	for waitForRunningState.Next() {
+	lastKnownStatus := ""
+	networkAttached := false
+	for r := retry.Start(retry.Options{
+		InitialBackoff: 2 * time.Second,
+		MaxBackoff:     10 * time.Second,
+		Multiplier:     1.5,
+		MaxDuration:    maxWaitForReadyState,
+	}); r.Next(); {
 		instanceResp, _, err = vpcService.GetInstance(&vpcv1.GetInstanceOptions{
 			ID: instanceResp.ID,
 		})
 		if err != nil {
 			return nil, err
 		}
-		lastKnownStatus := core.StringNilMapper(instanceResp.Status)
+		lastKnownStatus = core.StringNilMapper(instanceResp.Status)
 		if lastKnownStatus == "failed" {
 			return nil, fmt.Errorf(
 				"instance %s in zone %s failed to start; [instance state: %s | network attached: %t]",
 				opts.vmName,
 				opts.zone,
 				lastKnownStatus,
-				stableState.NetworkAttached,
+				networkAttached,
 			)
 		} else if lastKnownStatus != "running" {
-			stableState.InstanceStatus = lastKnownStatus
 			continue
 		}
 
@@ -283,7 +350,7 @@ func (p *Provider) createInstance(
 			instanceResp.PrimaryNetworkAttachment.VirtualNetworkInterface == nil {
 			continue
 		}
-		stableState.NetworkAttached = true
+		networkAttached = true
 
 		// Fill missing boot volume information.
 		if instanceResp.BootVolumeAttachment != nil && instanceResp.BootVolumeAttachment.Volume != nil {
@@ -332,11 +399,11 @@ func (p *Provider) createInstance(
 
 	if !instanceReady {
 		return nil, fmt.Errorf(
-			`instance %s didn't reach stable state in %s; [instance state: %s|network attached: %t]`,
+			"instance %s didn't reach stable state in %s; [instance state: %s|network attached: %t]",
 			opts.vmName,
 			maxWaitForReadyState.String(),
-			stableState.InstanceStatus,
-			stableState.NetworkAttached,
+			lastKnownStatus,
+			networkAttached,
 		)
 	}
 
@@ -754,9 +821,12 @@ func (p *Provider) getSshKeyID(l *logger.Logger, keyName, region string) (string
 	return "", ErrKeyNotFound
 }
 
-// listRegion queries the IBM Cloud API to get all Roachprod VMs in a single region.
+// listRegion queries the IBM Cloud API to get all Roachprod VMs in a single
+// region. concurrencyLimit controls how many parallel API calls (e.g. toVM)
+// this region is allowed to make, so that the caller can keep the total
+// across all regions within bounds.
 func (p *Provider) listRegion(
-	ctx context.Context, l *logger.Logger, r string, opts vm.ListOptions,
+	ctx context.Context, l *logger.Logger, r string, opts vm.ListOptions, concurrencyLimit int,
 ) (vm.List, error) {
 
 	// We have to force the IncludeVolumes flag to get basic volume information
@@ -772,9 +842,10 @@ func (p *Provider) listRegion(
 	}
 
 	g := ctxgroup.WithContext(ctx)
+	g.SetLimit(concurrencyLimit)
 
 	// Fetch instances
-	g.Go(func() error {
+	g.GoCtx(func(ctx context.Context) error {
 		var err error
 		instances, err = p.listRegionInstances(ctx, l, r, vpcService)
 		if err != nil {
@@ -801,6 +872,9 @@ func (p *Provider) listRegion(
 	}
 
 	var vms vm.List
+	var vmListMutex syncutil.Mutex
+	g = ctxgroup.WithContext(ctx)
+	g.SetLimit(concurrencyLimit)
 	for _, i := range instances {
 
 		if opts.IncludeVolumes {
@@ -852,7 +926,24 @@ func (p *Provider) listRegion(
 			continue
 		}
 
-		vms = append(vms, i.toVM())
+		// toVM will query additional information like floating IPs, so we parallelize it.
+		g.GoCtx(func(ctx context.Context) error {
+
+			// Load the instance information and convert it to a VM.
+			vm := i.toVM()
+
+			// Add it to the list of VMs.
+			vmListMutex.Lock()
+			defer vmListMutex.Unlock()
+			vms = append(vms, vm)
+
+			return nil
+		})
+	}
+
+	err = g.Wait()
+	if err != nil {
+		return nil, err
 	}
 
 	return vms, nil
