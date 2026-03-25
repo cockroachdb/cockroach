@@ -1642,15 +1642,44 @@ func (e *ClusterAlreadyExistsError) Error() string {
 	return fmt.Sprintf("cluster %s already exists", e.name)
 }
 
-func cleanupFailedCreate(l *logger.Logger, clusterName string) error {
+func cleanupFailedCreate(l *logger.Logger, clusterName string, providers []string) error {
 	c, err := getClusterFromCloud(l, clusterName)
 	if err != nil {
-		// If the cluster doesn't exist, we didn't manage to create any VMs
-		// before failing. Not an error.
-		//nolint:returnerrcheck
-		return nil
+		// We failed to list the cluster (e.g., due to API rate limiting),
+		// but VMs may still have been created. Fall back to asking the
+		// providers that were involved in creation to delete by name.
+		l.Printf(
+			"failed to list cluster %s for cleanup, trying DeleteCluster: %v",
+			clusterName, err,
+		)
+		return deleteClusterByName(l, clusterName, providers)
 	}
 	return cloud.DestroyCluster(l, c)
+}
+
+// deleteClusterByName asks the specified providers to delete any resources
+// matching the given cluster name. Providers that support DeleteCluster can
+// find instances by name pattern even when tag queries fail.
+func deleteClusterByName(l *logger.Logger, clusterName string, providers []string) error {
+	var errs []error
+	for _, name := range providers {
+		p, ok := vm.Providers[name]
+		if !ok || !p.Active() {
+			continue
+		}
+		dc, ok := p.(vm.DeleteCluster)
+		if !ok {
+			continue
+		}
+		if err := dc.DeleteCluster(l, clusterName); err != nil {
+			l.Printf(
+				"failed to delete cluster %s via provider %s: %v",
+				clusterName, name, err,
+			)
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // AddLabels adds (or updates) the given labels to the VMs corresponding to the given cluster.
@@ -1754,7 +1783,7 @@ func Create(
 				return
 			}
 			l.Errorf("Cleaning up partially-created cluster (prev err: %s)", retErr)
-			if err := cleanupFailedCreate(l, clusterName); err != nil {
+			if err := cleanupFailedCreate(l, clusterName, includeProviders); err != nil {
 				l.Errorf("Error while cleaning up partially-created cluster: %s", err)
 			} else {
 				l.Printf("Cleaning up OK")

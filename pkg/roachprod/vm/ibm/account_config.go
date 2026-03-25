@@ -43,16 +43,26 @@ const (
 
 var (
 	// supportedRegions is the list of regions used by roachprod resources.
-	// These regions have been contractually agreed upon with IBM.
+	// br-sao and ca-tor are historic regions contractually agreed upon with IBM,
+	// while the others have been added after s390x deprecation to load balance
+	// across more regions and mitigate capacity issues.
 	supportedRegions = []string{
 		"br-sao",
 		"ca-tor",
+		"us-east",
+		"us-south",
+		"eu-de",
+		"eu-gb",
 	}
 )
 
 // ibmCloudConfig contains the configuration for the IBM Cloud provider
 // for roachprod including the account ID, resource group ID, and regions info.
 type ibmCloudConfig struct {
+	// mu serializes calls to configureCloudAccountFull so that concurrent
+	// Create calls don't all run the full account setup in parallel.
+	mu syncutil.Mutex
+
 	accountID                string
 	roachprodResourceGroupID string
 	regions                  map[string]regionDetails
@@ -110,12 +120,18 @@ func (p *Provider) configureCloudAccountInitial() (*ibmCloudConfig, error) {
 // within a region.
 func (p *Provider) configureCloudAccountFull(cc *ibmCloudConfig) error {
 
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+
 	// Check if the account is already configured.
 	if cc.loaded {
 		return nil
 	}
 
 	var g errgroup.Group
+	// Limit the number of concurrent region configurations to avoid
+	// overwhelming the IBM API with too many parallel requests.
+	g.SetLimit(maxConcurrentRequests)
 	var regionMutex syncutil.Mutex
 
 	// Create a transit gateway for the account in the first region.
@@ -214,6 +230,7 @@ func (p *Provider) configureCloudAccountFull(cc *ibmCloudConfig) error {
 		return errors.Wrap(err, "failed to configure IBM Cloud account")
 	}
 
+	cc.loaded = true
 	return nil
 }
 
