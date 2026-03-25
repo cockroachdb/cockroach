@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
@@ -255,6 +256,26 @@ func TestScatterWithOneVoter(t *testing.T) {
 	}
 	t.Logf("before scatter: replica distribution across stores: %v (total: %d)",
 		oldReplicaCounts, oldTotalReplicas)
+
+	// Ensure the allocator considers all the stores when scattering: wait until
+	// all store descriptors are in n1 StorePool, in "available" status.
+	// WaitForNStores in StartCluster is not sufficient. Additionally, stores can
+	// be transiently marked "suspect" after startup, and excluded from the store
+	// list during scatter. See #165936.
+	sl := tc.Server(0).StorageLayer()
+	store, err2 := sl.GetStores().(*kvserver.Stores).GetStore(sl.GetFirstStoreID())
+	require.NoError(t, err2)
+	sp := store.GetStoreConfig().StorePool
+	testutils.SucceedsSoon(t, func() error {
+		for storeID := roachpb.StoreID(1); storeID <= 3; storeID++ {
+			if ok, err := sp.IsLive(storeID); err != nil {
+				return errors.Wrapf(err, "s%d status: not found", storeID)
+			} else if !ok {
+				return errors.Newf("s%d status: not available", storeID)
+			}
+		}
+		return nil
+	})
 
 	// Expect that the number of replicas on store 1 to have changed. We can't
 	// assert that the distribution will be even across all three stores, but s1
