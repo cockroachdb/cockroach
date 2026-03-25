@@ -20,6 +20,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// NB: disabling this setting while sqlCPUTimeTokenACEnabled is true leaves the
+// SQL setting dangling, but is harmless: sqlCPUTimeTokenACIsEnabled requires
+// both settings to be true, so the SQL path is effectively disabled at runtime.
 var cpuTimeTokenACEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"admission.cpu_time_tokens.enabled",
@@ -30,9 +33,9 @@ var cpuTimeTokenACEnabled = settings.RegisterBoolSetting(
 var sqlCPUTimeTokenACEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"admission.sql_cpu_time_tokens.enabled",
-	"if true, SQL work will be admitted through the CPU time token WorkQueue via "+
-		"periodic MeasureAndAdmit calls, sharing the same CPU budget as KV work -- "+
-		"requires admission.cpu_time_tokens.enabled to also be true",
+	"when true, SQL CPU usage is admitted through the same CPU time token "+
+		"budget as KV work; has no effect unless admission.cpu_time_tokens.enabled "+
+		"is also true",
 	false,
 	settings.WithValidateBool(func(sv *settings.Values, val bool) error {
 		if val && !cpuTimeTokenACIsEnabled(sv) {
