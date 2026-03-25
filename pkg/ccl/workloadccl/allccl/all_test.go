@@ -69,6 +69,7 @@ func runImportFixtureTest(
 
 	ctx := context.Background()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		UseDatabase:       "d",
 		SQLMemoryPoolSize: sqlMemoryPoolSize,
 	})
