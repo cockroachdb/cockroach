@@ -1863,6 +1863,14 @@ func stepLeader(r *raft, m pb.Message) error {
 				cc = ccc
 			}
 			if cc != nil {
+				// Config change entries must be proposed alone, not batched with
+				// other entries. See confChangeToMsg.
+				if len(m.Entries) != 1 {
+					r.logger.Panicf(
+						"%x conf change entry at index %d must be proposed alone, got %d entries",
+						r.id, i, len(m.Entries),
+					)
+				}
 				ccCtx := confchange.ValidationContext{
 					CurConfig:                         &r.config,
 					Applied:                           r.raftLog.applied,
