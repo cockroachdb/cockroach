@@ -71,7 +71,18 @@ Applying:
 1/4 EntryConfChangeV2 v2 v3
 INFO 1 switched to configuration voters=(1 2 3)&&(1) autoleave
 INFO 1 ignoring conf change {ConfChangeTransitionAuto [] []} at config voters=(1 2 3)&&(1) autoleave: lead support has not caught up to previous configuration
-INFO initiating automatic transition out of joint configuration voters=(1 2 3)&&(1) autoleave
+DEBUG not initiating automatic transition out of joint configuration voters=(1 2 3)&&(1) autoleave: raft proposal dropped
+
+# The automatic transition was rejected because lead support hasn't caught up
+# (n2 and n3 haven't fortified yet). Propose some entry so that, once lead
+# support catches up and the entry is applied, the auto-leave is retried.
+#
+# TODO(pav-kv): the autoleave mechanism is not entirely reliable because it is
+# only triggered by applied commands. It must also happen when all the blocking
+# conditions are cleared. We could also remove it since CRDB doesn't use it.
+propose 1 abc
+----
+ok
 
 # n1 immediately probes n2 and n3.
 stabilize 1
@@ -79,7 +90,7 @@ stabilize 1
 > 1 handling Ready
   Ready:
   Entries:
-  1/5 EntryNormal ""
+  1/5 EntryNormal "abc"
   Messages:
   1->2 MsgFortifyLeader Term:1 Log:0/0
   1->3 MsgFortifyLeader Term:1 Log:0/0
@@ -90,9 +101,9 @@ stabilize 1
 
 # First, play out the whole interaction between n1 and n2. We see n1's probe to
 # n2 get rejected (since n2 needs a snapshot); the snapshot is delivered at which
-# point n2 switches to the correct config, and n1 catches it up. This notably
-# includes the empty conf change which gets committed and applied by both and
-# which transitions them out of their joint configuration into the final one (1 2 3).
+# point n2 switches to the joint config. Once n2 catches up, n1 commits and
+# applies the entry proposed above, which triggers the auto-leave out of the
+# joint configuration into the final one (1 2 3).
 stabilize 1 2
 ----
 > 2 receiving messages
@@ -139,13 +150,13 @@ stabilize 1 2
 > 1 handling Ready
   Ready:
   Messages:
-  1->2 MsgApp Term:1 Log:1/4 Commit:4 Entries:[1/5 EntryNormal ""]
+  1->2 MsgApp Term:1 Log:1/4 Commit:4 Entries:[1/5 EntryNormal "abc"]
 > 2 receiving messages
-  1->2 MsgApp Term:1 Log:1/4 Commit:4 Entries:[1/5 EntryNormal ""]
+  1->2 MsgApp Term:1 Log:1/4 Commit:4 Entries:[1/5 EntryNormal "abc"]
 > 2 handling Ready
   Ready:
   Entries:
-  1/5 EntryNormal ""
+  1/5 EntryNormal "abc"
   OnSync:
   2->1 MsgAppResp Term:1 Log:0/5 Commit:4
 > 1 receiving messages
@@ -157,7 +168,7 @@ stabilize 1 2
   Messages:
   1->2 MsgApp Term:1 Log:1/5 Commit:5
   Applying:
-  1/5 EntryNormal ""
+  1/5 EntryNormal "abc"
   INFO initiating automatic transition out of joint configuration voters=(1 2 3)&&(1) autoleave
 > 2 receiving messages
   1->2 MsgApp Term:1 Log:1/5 Commit:5
@@ -176,7 +187,7 @@ stabilize 1 2
   OnSync:
   2->1 MsgAppResp Term:1 Log:0/5 Commit:5
   Applying:
-  1/5 EntryNormal ""
+  1/5 EntryNormal "abc"
 > 1 receiving messages
   2->1 MsgAppResp Term:1 Log:0/5 Commit:5
 > 2 receiving messages
