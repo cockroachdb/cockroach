@@ -720,6 +720,7 @@ var demoCtx = struct {
 	democluster.Context
 	disableEnterpriseFeatures bool
 	pidFile                   string
+	background                bool
 
 	demoNodeCacheSizeValue  bytesOrPercentageValue
 	demoNodeSQLMemSizeValue bytesOrPercentageValue
@@ -753,6 +754,7 @@ func setDemoContextDefaults() {
 	demoCtx.DefaultEnableRangefeeds = true
 
 	demoCtx.pidFile = ""
+	demoCtx.background = false
 	demoCtx.disableEnterpriseFeatures = false
 
 	demoCtx.demoNodeCacheSizeValue = makeBytesOrPercentageValue(

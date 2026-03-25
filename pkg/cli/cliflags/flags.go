@@ -1639,6 +1639,15 @@ Disable the creation of a default dataset in the demo shell.
 This makes 'cockroach demo' faster to start.`,
 	}
 
+	DemoBackground = FlagInfo{
+		Name: "background",
+		Description: `
+Start the demo cluster in the background without opening an interactive SQL
+shell. The cluster runs until the process receives a SIGINT or SIGTERM signal.
+Use --listening-url-file to write the connection URL to a file for use by
+other tools.`,
+	}
+
 	GeoLibsDir = FlagInfo{
 		Name: "spatial-libs",
 		Description: `
