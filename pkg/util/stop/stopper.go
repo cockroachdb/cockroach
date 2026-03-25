@@ -330,6 +330,13 @@ func (s *Stopper) startRegion(ctx context.Context, taskName string) region {
 	if !trace.IsEnabled() {
 		return noopRegion{}
 	}
+	// Truncate the task name to avoid hitting a Go runtime bug where
+	// trace.StartRegion crashes with strings longer than ~64KB. See
+	// https://github.com/golang/go/pull/78348.
+	const maxRegionNameLen = 256
+	if len(taskName) > maxRegionNameLen {
+		taskName = taskName[:maxRegionNameLen]
+	}
 	return trace.StartRegion(ctx, taskName)
 }
 
