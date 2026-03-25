@@ -77,6 +77,14 @@ func ValidateColumnDefType(ctx context.Context, st *cluster.Settings, t *types.T
 				return pgerror.Newf(pgcode.Syntax, `invalid locale %s`, t.Locale())
 			}
 		}
+		if t.Oid() == oid.T_aclitem {
+			if !st.Version.IsActive(ctx, clusterversion.V26_2) {
+				return pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"aclitem not supported until version 26.2",
+				)
+			}
+		}
 
 	case types.DecimalFamily:
 		switch {
