@@ -36,6 +36,13 @@ type SQLWorkInfo struct {
 	// work within a (WorkloadID, Priority) pair -- earlier CreateTime is given
 	// preference.
 	CreateTime int64
+	// WorkloadID is the statement fingerprint ID, used for ASH sampling.
+	WorkloadID uint64
+	// AppNameID is the hash of the application name, used for ASH sampling.
+	AppNameID uint64
+	// GatewayNodeID is the node that initiated the workload, used for ASH
+	// sampling.
+	GatewayNodeID roachpb.NodeID
 }
 
 // SQLCPUProvider is used to get a SQLCPUHandle that is used for CPU
