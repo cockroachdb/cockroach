@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import Analytics from "analytics-node";
+import { Analytics } from "@segment/analytics-node";
 import { call, put, takeEvery } from "redux-saga/effects";
 
 import { PayloadAction } from "src/interfaces/action";
@@ -20,16 +20,15 @@ export type AnalyticsClientTarget = "email_sign_up";
 // TODO (koorosh): has to be moved out from code base
 const EMAIL_SIGN_UP_CLIENT_KEY = "72EEC0nqQKfoLWq0ZcGoTkJFIG9G9SII";
 
-const analyticsOpts = {
-  host: COCKROACHLABS_ADDR + "/api/segment",
-};
-
 export function getAnalyticsClientFor(
   target: AnalyticsClientTarget,
 ): Analytics {
   switch (target) {
     case "email_sign_up":
-      return new Analytics(EMAIL_SIGN_UP_CLIENT_KEY, analyticsOpts);
+      return new Analytics({
+        writeKey: EMAIL_SIGN_UP_CLIENT_KEY,
+        host: COCKROACHLABS_ADDR + "/api/segment",
+      });
     default:
       throw new Error("Unrecognized Analytics Client target.");
   }
