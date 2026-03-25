@@ -14,6 +14,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
@@ -171,6 +172,9 @@ func TestCloudBackupRestoreGoogleCloudStorage(t *testing.T) {
 func TestCloudBackupRestoreAzure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// Fast restore does not yet support encrypted backups.
+	backuptestutils.DisableFastRestoreForTest(t)
+
 	accountName := os.Getenv("AZURE_ACCOUNT_NAME")
 	if accountName == "" {
 		skip.IgnoreLint(t, "AZURE_ACCOUNT_NAME env var must be set")
@@ -272,6 +276,8 @@ func TestCloudBackupRestoreAzure(t *testing.T) {
 func TestCloudBackupRestoreKMSInaccessibleMetric(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// Fast restore does not yet support encrypted backups.
+	backuptestutils.DisableFastRestoreForTest(t)
 
 	azureVaultName := os.Getenv("AZURE_VAULT_NAME")
 	if azureVaultName == "" {
