@@ -19,6 +19,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -1859,6 +1860,150 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 	if count != 3 {
 		t.Errorf("expected three retries; got %d", count)
 	}
+}
+
+// TestEventuallyRecoverFromStalledLeaseholder verifies that when the
+// leaseholder replica is stalled indefinitely, we eventually try to contact a
+// different replica and can recover.
+func TestEventuallyRecoverFromStalledLeaseholder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClockForTesting(nil)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+	for _, n := range testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors() {
+		require.NoError(t, g.AddInfoProto(
+			gossip.MakeNodeIDKey(n.NodeID),
+			newNodeDesc(n.NodeID),
+			gossip.NodeDescriptorTTL,
+		))
+	}
+
+	originalLeaseholder := testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors()[0]
+	stallDuration := 5 * time.Second
+	timeoutDuration := 1 * time.Second
+	testFn := func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+		// We wish to create an artificial stall in the leaseholder replica.
+		switch ba.Replica {
+		case originalLeaseholder:
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(stallDuration):
+				return ba.CreateReply(), nil
+			}
+		default:
+			return ba.CreateReply(), nil
+		}
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:             clock,
+		NodeDescs:         g,
+		Stopper:           stopper,
+		TransportFactory:  adaptSimpleTransport(testFn),
+		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+		Settings:          cluster.MakeTestingClusterSettings(),
+	}
+	ds := NewDistSender(cfg)
+
+	// Pre-populate the range cache with a known leaseholder.
+	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
+		Desc:  testUserRangeDescriptor3Replicas,
+		Lease: roachpb.Lease{Replica: originalLeaseholder, Sequence: 1},
+	})
+
+	testutils.SucceedsSoon(t, func() error {
+		sendCtx, cancel := context.WithTimeout(ctx, timeoutDuration)
+		defer cancel()
+		get := kvpb.NewGet(roachpb.Key("a"))
+		_, pErr := kv.SendWrapped(sendCtx, ds, get)
+		return pErr.GoError()
+	})
+}
+
+// TestRandomizeLeaseOnContextError verifies that when a context error occurs
+// and the range cache entry is older than rangeDescriptorCacheContextErrorTTL,
+// the DistSender randomly selects a different replica as a speculative
+// leaseholder and updates the cache.
+func TestRandomizeLeaseOnContextError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	synctest.Test(t, func(t *testing.T) {
+		ctx := t.Context()
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+
+		clock := hlc.NewClockForTesting(nil)
+		rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+		g := makeGossip(t, stopper, rpcContext)
+		for _, n := range testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors() {
+			require.NoError(t, g.AddInfoProto(
+				gossip.MakeNodeIDKey(n.NodeID),
+				newNodeDesc(n.NodeID),
+				gossip.NodeDescriptorTTL,
+			))
+		}
+
+		originalLeaseholder := testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors()[0]
+		stallDuration := 5 * time.Second
+		timeoutDuration := 1 * time.Second
+		testFn := func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+			// We wish to create an artificial stall in the leaseholder replica.
+			switch ba.Replica {
+			case originalLeaseholder:
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(stallDuration):
+					return ba.CreateReply(), nil
+				}
+			default:
+				return ba.CreateReply(), nil
+			}
+		}
+
+		cfg := DistSenderConfig{
+			AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
+			Clock:             clock,
+			NodeDescs:         g,
+			Stopper:           stopper,
+			TransportFactory:  adaptSimpleTransport(testFn),
+			RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+			Settings:          cluster.MakeTestingClusterSettings(),
+		}
+		ds := NewDistSender(cfg)
+
+		// Pre-populate the range cache with a known leaseholder.
+		ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
+			Desc:  testUserRangeDescriptor3Replicas,
+			Lease: roachpb.Lease{Replica: originalLeaseholder, Sequence: 1},
+		})
+
+		// Wait to ensure that the range cache entry is old enough
+		time.Sleep(rangeDescriptorCacheContextErrorTTL)
+
+		sendCtx, cancel := context.WithTimeout(ctx, timeoutDuration)
+		defer cancel()
+		get := kvpb.NewGet(roachpb.Key("a"))
+		_, pErr := kv.SendWrapped(sendCtx, ds, get)
+		require.ErrorIs(t, pErr.GoError(), sendCtx.Err())
+
+		// Verify the cache was updated with a different speculative leaseholder.
+		rng, err := ds.rangeCache.TestingGetCached(
+			ctx, testUserRangeDescriptor3Replicas.StartKey, false, roachpb.LAG_BY_CLUSTER_SETTING)
+		require.NoError(t, err)
+		require.False(t, rng.Lease.Empty(), "expected lease to be populated with speculative leaseholder")
+		require.NotEqual(t, originalLeaseholder, rng.Lease.Replica,
+			"expected speculative leaseholder to differ from original")
+	})
 }
 
 // TestRetryOnWrongReplicaError sets up a DistSender on a minimal gossip

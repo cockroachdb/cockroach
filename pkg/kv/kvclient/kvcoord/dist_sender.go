@@ -8,6 +8,7 @@ package kvcoord
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"runtime"
 	"runtime/pprof"
 	"strings"
@@ -446,6 +447,12 @@ var NonTransactionalWritesNotIdempotent = settings.RegisterBoolSetting(
 	"when true, non-transactional writes are not retried and may return an ambiguous error",
 	false,
 )
+
+// rangeDescriptorCacheContextErrorTTL controls the timeout after which a range
+// descriptor cache entry is forcibly evicted when a context error occurs while
+// sending a request to a range using it. This can be due to request timeouts,
+// or context cancellation by the caller.
+const rangeDescriptorCacheContextErrorTTL = 2 * time.Second
 
 // DistSenderMetrics is the set of metrics for a given distributed sender.
 type DistSenderMetrics struct {
@@ -2403,6 +2410,30 @@ func (ds *DistSender) sendPartialBatch(
 		log.KvExec.Fatal(ctx, "exited retry loop without an error or early exit")
 	}
 
+	// If a context error occurred and the cache entry is older than a set
+	// duration, then we randomly select another replica as a speculative
+	// leaseholder.
+	//
+	// See the comment for the function (*EvictionToken).ExtendTTL() for an
+	// explanation.
+	if ctx.Err() != nil && routingTok.Valid() && routingTok.Age() >= rangeDescriptorCacheContextErrorTTL {
+		replicas := routingTok.Desc().Replicas().VoterDescriptors()
+		randIdx := rand.Intn(len(replicas))
+		randLease := replicas[randIdx]
+
+		// Prevent the current leaseholder from being randomly selected as the
+		// speculative leaseholder.
+		if len(replicas) > 1 && routingTok.Leaseholder().Equal(randLease) {
+			randLease = replicas[(randIdx+1)%len(replicas)]
+		}
+
+		log.VEventf(ctx, 1, "cached descriptor %s with age %s saw context error,"+
+			" randomly selecting %s as a speculative leaseholder",
+			routingTok.Desc(), routingTok.Age(), randLease)
+		routingTok.SyncTokenAndMaybeUpdateCache(ctx,
+			&roachpb.Lease{Replica: randLease}, routingTok.Desc())
+	}
+
 	return response{pErr: pErr}
 }
 
@@ -2974,6 +3005,12 @@ func (ds *DistSender) sendToReplicas(
 						// routing information not exposed by the KV API.
 						br.RangeInfos = nil
 					}
+				} else {
+					// Because the request that used this range cache entry
+					// succeeded, and we received no updated range descriptors,
+					// we should renew the liveness timestamp of the cached
+					// entry.
+					routing.ExtendTTL()
 				}
 
 				if ds.kvInterceptor != nil {
