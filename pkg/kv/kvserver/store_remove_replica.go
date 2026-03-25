@@ -55,7 +55,9 @@ func (s *Store) removeReplicaRaftMuLocked(
 			ctx, rep, nextReplicaID, reason, RemoveOptions{DestroyData: true})
 		return errors.Wrap(err, "failed to remove replica")
 	}
-	s.removeUninitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID)
+	if err := s.removeUninitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID); err != nil {
+		return errors.Wrap(err, "failed to remove replica")
+	}
 	return nil
 }
 
@@ -229,12 +231,17 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 // All paths which call this code held the raftMu before calling this method
 // and ensured that the removal was sane given the current replicaID and
 // initialization status (which only changes under the raftMu).
+//
+// The replica must not have been previously destroyed. Unlike
+// removeInitializedReplicaRaftMuLocked, this method does not handle the
+// idempotent "already removed" case and will fatal if called on a replica
+// whose destroyStatus is already set.
 func (s *Store) removeUninitializedReplicaRaftMuLocked(
 	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID,
-) {
+) error {
 	rep.raftMu.AssertHeld()
 
-	// Sanity check this removal and set the destroyStatus.
+	// Sanity check this removal.
 	{
 		rep.readOnlyCmdMu.Lock()
 		rep.mu.Lock()
@@ -254,20 +261,43 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 			log.KvDistribution.Fatalf(ctx, "cannot remove initialized replica in removeUninitializedReplica: %v", rep)
 		}
 
-		// Mark the replica as removed before deleting data.
-		rep.shMu.destroyStatus.Set(kvpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
-			destroyReasonRemoved)
-
 		rep.mu.Unlock()
 		rep.readOnlyCmdMu.Unlock()
 	}
 
+	// Stage the engine work before any in-memory state changes. If the engine
+	// work fails (e.g. context cancellation, I/O error), we can return the error
+	// cleanly without leaving the replica in a half-destroyed state.
+	pending, err := stageDestroyReplica(
+		ctx, &s.batchFactory,
+		s.StateEngine(), s.LogEngine(),
+		rep.destroyInfoRaftMuLocked(), nextReplicaID,
+		rep.GetMVCCStats(),
+	)
+	if err != nil {
+		return err
+	}
+	defer pending.Close()
+
+	// Mark the replica as removed. This is done after staging (which is
+	// fallible) but before committing (which is infallible), so that a staging
+	// failure leaves the replica in a clean state.
+	func() {
+		rep.readOnlyCmdMu.Lock()
+		defer rep.readOnlyCmdMu.Unlock()
+		rep.mu.Lock()
+		defer rep.mu.Unlock()
+		// NB: we hold raftMu throughout and destroyStatus is in shMu, so the
+		// destroyStatus did not change between the earlier sanity checks and here.
+		rep.shMu.destroyStatus.Set(kvpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
+			destroyReasonRemoved)
+	}()
+
 	// Proceed with the removal.
 
 	rep.disconnectReplicationRaftMuLocked(ctx)
-	if err := rep.destroyRaftMuLocked(ctx, nextReplicaID); err != nil {
-		log.KvDistribution.Fatalf(ctx, "failed to remove uninitialized replica %v: %v", rep, err)
-	}
+	pending.MustCommit(ctx)
+	rep.postDestroyRaftMuLocked(ctx)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -284,6 +314,7 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 	}
 
 	s.unlinkReplicaByRangeIDLocked(ctx, rep.RangeID)
+	return nil
 }
 
 // unlinkReplicaByRangeIDLocked removes all of the store's references to the
