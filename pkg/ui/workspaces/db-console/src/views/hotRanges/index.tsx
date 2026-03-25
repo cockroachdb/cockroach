@@ -3,8 +3,6 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { createHash } from "crypto";
-
 import {
   Loading,
   Text,
@@ -61,9 +59,7 @@ const HotRangesPage = () => {
   const [pagination, setPagination] = useState<ISortedTablePagination>(null);
 
   // track analytics on filters, pagination and sort.
-  const analyticsKey = createHash("md5")
-    .update(JSON.stringify([filters, sortSetting, pagination]))
-    .digest("hex");
+  const analyticsKey = JSON.stringify([filters, sortSetting, pagination]);
   useEffect(() => {
     if (!filters.nodeIds.length || !pagination || !sortSetting) {
       return;

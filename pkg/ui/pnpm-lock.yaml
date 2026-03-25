@@ -555,9 +555,6 @@ importers:
       create-react-context:
         specifier: ^0.3.0
         version: 0.3.0(prop-types@15.5.10)(react@16.12.0)
-      crypto-browserify:
-        specifier: ^3.12.1
-        version: 3.12.1
       d3-array:
         specifier: ^3.2.4
         version: 3.2.4
