@@ -40,7 +40,6 @@ export enum LocalStorageKeys {
 
 export type LocalStorageState = {
   "adminUi/showDiagnosticsModal": boolean;
-  "showColumns/ActiveStatementsPage": string;
   "showColumns/ActiveTransactionsPage": string;
   "showColumns/StatementsPage": string;
   "showColumns/TransactionPage": string;
@@ -52,7 +51,6 @@ export type LocalStorageState = {
   [LocalStorageKeys.STMT_FINGERPRINTS_SORT]: SqlStatsSortType;
   [LocalStorageKeys.TXN_FINGERPRINTS_LIMIT]: number;
   [LocalStorageKeys.TXN_FINGERPRINTS_SORT]: SqlStatsSortType;
-  "sortSetting/ActiveStatementsPage": SortSetting;
   "sortSetting/ActiveTransactionsPage": SortSetting;
   "sortSetting/StatementsPage": SortSetting;
   "sortSetting/TransactionsPage": SortSetting;
@@ -63,7 +61,6 @@ export type LocalStorageState = {
   [LocalStorageKeys.DB_SORT]: SortSetting;
   [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SORT]: SortSetting;
   [LocalStorageKeys.DB_DETAILS_GRANTS_PAGE_SORT]: SortSetting;
-  "filters/ActiveStatementsPage": Filters;
   "filters/ActiveTransactionsPage": Filters;
   "filters/StatementsPage": Filters;
   "filters/TransactionsPage": Filters;
@@ -176,9 +173,6 @@ const initialState: LocalStorageState = {
   "adminUi/showDiagnosticsModal":
     Boolean(JSON.parse(localStorage.getItem("adminUi/showDiagnosticsModal"))) ||
     false,
-  "showColumns/ActiveStatementsPage":
-    JSON.parse(localStorage.getItem("showColumns/ActiveStatementsPage")) ??
-    null,
   [LocalStorageKeys.STMT_FINGERPRINTS_LIMIT]:
     JSON.parse(
       localStorage.getItem(LocalStorageKeys.STMT_FINGERPRINTS_LIMIT),
@@ -212,9 +206,6 @@ const initialState: LocalStorageState = {
   [LocalStorageKeys.GLOBAL_TIME_SCALE]:
     JSON.parse(localStorage.getItem(LocalStorageKeys.GLOBAL_TIME_SCALE)) ||
     defaultTimeScaleSelected,
-  "sortSetting/ActiveStatementsPage":
-    JSON.parse(localStorage.getItem("sortSetting/ActiveStatementsPage")) ||
-    defaultSortSettingActiveExecutions,
   "sortSetting/ActiveTransactionsPage":
     JSON.parse(localStorage.getItem("sortSetting/ActiveTransactionsPage")) ||
     defaultSortSettingActiveExecutions,
@@ -247,9 +238,6 @@ const initialState: LocalStorageState = {
     JSON.parse(
       localStorage.getItem(LocalStorageKeys.DB_DETAILS_GRANTS_PAGE_SORT),
     ) || defaultNameSortSetting,
-  "filters/ActiveStatementsPage":
-    JSON.parse(localStorage.getItem("filters/ActiveStatementsPage")) ||
-    defaultFiltersActiveExecutions,
   "filters/ActiveTransactionsPage":
     JSON.parse(localStorage.getItem("filters/ActiveTransactionsPage")) ||
     defaultFiltersActiveExecutions,

@@ -8,9 +8,7 @@ import {
   defaultFilters,
   util,
   StatementsPageRoot,
-  ActiveStatementsViewStateProps,
   StatementsPageStateProps,
-  ActiveStatementsViewDispatchProps,
   StatementsPageDispatchProps,
   StatementsPageRootProps,
   api,
@@ -55,11 +53,6 @@ import {
   selectHasAdminRole,
 } from "src/redux/user";
 import { PrintTime } from "src/views/reports/containers/range/print";
-
-import {
-  activeStatementsViewActions,
-  mapStateToActiveStatementViewProps,
-} from "./activeStatementsSelectors";
 
 // selectDatabases returns the array of all databases in the cluster.
 export const selectDatabases = createSelector(
@@ -200,12 +193,10 @@ const fingerprintsPageActions = {
 
 type StateProps = {
   fingerprintsPageProps: StatementsPageStateProps;
-  activePageProps: ActiveStatementsViewStateProps;
 };
 
 type DispatchProps = {
   fingerprintsPageProps: StatementsPageDispatchProps;
-  activePageProps: ActiveStatementsViewDispatchProps;
 };
 
 const selectStatements =
@@ -246,15 +237,10 @@ export default withRouter(
         oldestDataAvailable:
           state.cachedData?.statements?.data?.oldest_aggregated_ts_returned,
       },
-      activePageProps: mapStateToActiveStatementViewProps(state),
     }),
     (dispatch: AppDispatch): DispatchProps => ({
       fingerprintsPageProps: bindActionCreators(
         fingerprintsPageActions,
-        dispatch,
-      ),
-      activePageProps: bindActionCreators(
-        activeStatementsViewActions,
         dispatch,
       ),
     }),
@@ -262,10 +248,6 @@ export default withRouter(
       fingerprintsPageProps: {
         ...stateProps.fingerprintsPageProps,
         ...dispatchProps.fingerprintsPageProps,
-      },
-      activePageProps: {
-        ...stateProps.activePageProps,
-        ...dispatchProps.activePageProps,
       },
     }),
   )(StatementsPageRoot),

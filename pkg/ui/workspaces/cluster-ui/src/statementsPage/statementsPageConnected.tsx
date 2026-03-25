@@ -41,14 +41,6 @@ import {
 import { TimeScale } from "../timeScaleDropdown";
 
 import {
-  mapDispatchToActiveStatementsPageProps,
-  mapStateToActiveStatementsPageProps,
-} from "./activeStatementsPage.selectors";
-import {
-  ActiveStatementsViewDispatchProps,
-  ActiveStatementsViewStateProps,
-} from "./activeStatementsView";
-import {
   StatementsPageDispatchProps,
   StatementsPageStateProps,
 } from "./statementsPage";
@@ -67,12 +59,10 @@ import {
 
 type StateProps = {
   fingerprintsPageProps: StatementsPageStateProps & RouteComponentProps;
-  activePageProps: ActiveStatementsViewStateProps;
 };
 
 type DispatchProps = {
   fingerprintsPageProps: StatementsPageDispatchProps;
-  activePageProps: ActiveStatementsViewDispatchProps;
 };
 
 export const ConnectedStatementsPage = withRouter(
@@ -106,7 +96,6 @@ export const ConnectedStatementsPage = withRouter(
         oldestDataAvailable:
           state.adminUI?.statements?.data?.oldest_aggregated_ts_returned,
       },
-      activePageProps: mapStateToActiveStatementsPageProps(state),
     }),
     (dispatch: Dispatch) => ({
       fingerprintsPageProps: {
@@ -267,16 +256,11 @@ export const ConnectedStatementsPage = withRouter(
             }),
           ),
       },
-      activePageProps: mapDispatchToActiveStatementsPageProps(dispatch),
     }),
     (stateProps, dispatchProps): StatementsPageRootProps => ({
       fingerprintsPageProps: {
         ...stateProps.fingerprintsPageProps,
         ...dispatchProps.fingerprintsPageProps,
-      },
-      activePageProps: {
-        ...stateProps.activePageProps,
-        ...dispatchProps.activePageProps,
       },
     }),
   )(StatementsPageRoot),
