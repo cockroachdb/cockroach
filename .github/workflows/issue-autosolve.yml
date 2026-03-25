@@ -26,6 +26,20 @@ jobs:
       id-token: write
 
     steps:
+      - name: Check that labeler is not the issue author
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LABELER: ${{ github.actor }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+        run: |
+          if [ "$LABELER" = "$ISSUE_AUTHOR" ]; then
+            echo "::notice::Skipping auto-solver: labeler ($LABELER) is the issue author"
+            gh issue comment ${{ github.event.issue.number }} --body \
+              "Auto-solver skipped: the \`c-autosolve\` label should be applied by someone other than the issue author."
+            gh issue edit ${{ github.event.issue.number }} --remove-label "c-autosolve" || true
+            exit 1
+          fi
+
       - name: Validate required secrets and configuration
         env:
           AUTOSOLVER_PUSH_TO_FORK_PAT: ${{ secrets.AUTOSOLVER_PUSH_TO_FORK_PAT }}
