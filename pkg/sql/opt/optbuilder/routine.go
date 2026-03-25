@@ -466,32 +466,10 @@ func (b *Builder) buildRoutine(
 			})
 			appendedNullForVoidReturn = true
 		}
-		body = make([]memo.RelExpr, len(stmts))
-		bodyProps = make([]*physical.Required, len(stmts))
-		bodyTags = make([]string, len(stmts))
-		bodyASTs = make([]tree.Statement, len(stmts))
-		for i := range stmts {
-			// TODO(michae2): We should be checking the statement hints cache here to
-			// find any external statement hints that could apply to this statement.
-			stmtScope := b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
-
-			// The last statement produces the output of the UDF.
-			if i == len(stmts)-1 {
-				rTyp := b.finalizeRoutineReturnType(f, stmtScope, inScope, oldInsideDataSource)
-				stmtScope = b.finishRoutineReturnStmt(stmtScope, isSetReturning, oldInsideDataSource, rTyp)
-			}
-			body[i] = stmtScope.expr
-			bodyProps[i] = stmtScope.makePhysicalProps()
-			bodyASTs[i] = stmts[i].AST
-			// We don't need a statement tag for the artificial appended `SELECT NULL`
-			// statement.
-			if appendedNullForVoidReturn && i == len(stmts)-1 {
-				bodyTags[i] = ""
-			} else {
-				bodyTags[i] = stmts[i].AST.StatementTag()
-			}
-
-		}
+		body, bodyProps, bodyTags, bodyASTs = b.buildSQLRoutineBodyStmts(
+			stmts, bodyScope, f, inScope,
+			isSetReturning, oldInsideDataSource, appendedNullForVoidReturn,
+		)
 
 		if b.verboseTracing {
 			bodyStmts = make([]string, len(stmts))
@@ -573,6 +551,50 @@ func (b *Builder) buildRoutine(
 		},
 	)
 	return routine
+}
+
+// buildSQLRoutineBodyStmts builds RelExprs for each statement in a SQL-language
+// routine body. bodyScope must already have parameter columns set up. For the
+// last statement, it calls finalizeRoutineReturnType and finishRoutineReturnStmt
+// to handle return-type resolution and output column shaping.
+func (b *Builder) buildSQLRoutineBodyStmts(
+	stmts statements.Statements,
+	bodyScope *scope,
+	f *tree.FuncExpr,
+	inScope *scope,
+	isSetReturning bool,
+	insideDataSource bool,
+	appendedNullForVoidReturn bool,
+) (
+	body []memo.RelExpr,
+	bodyProps []*physical.Required,
+	bodyTags []string,
+	bodyASTs []tree.Statement,
+) {
+	body = make([]memo.RelExpr, len(stmts))
+	bodyProps = make([]*physical.Required, len(stmts))
+	bodyTags = make([]string, len(stmts))
+	bodyASTs = make([]tree.Statement, len(stmts))
+	for i := range stmts {
+		stmtScope := b.buildStmtAtRootWithScope(stmts[i].AST, nil /* desiredTypes */, bodyScope)
+
+		// The last statement produces the output of the UDF.
+		if i == len(stmts)-1 {
+			rTyp := b.finalizeRoutineReturnType(f, stmtScope, inScope, insideDataSource)
+			stmtScope = b.finishRoutineReturnStmt(stmtScope, isSetReturning, insideDataSource, rTyp)
+		}
+		body[i] = stmtScope.expr
+		bodyProps[i] = stmtScope.makePhysicalProps()
+		bodyASTs[i] = stmts[i].AST
+		// We don't need a statement tag for the artificial appended
+		// `SELECT NULL` statement.
+		if appendedNullForVoidReturn && i == len(stmts)-1 {
+			bodyTags[i] = ""
+		} else {
+			bodyTags[i] = stmts[i].AST.StatementTag()
+		}
+	}
+	return body, bodyProps, bodyTags, bodyASTs
 }
 
 // finishRoutineReturnStmt manages the output columns for a statement that will
