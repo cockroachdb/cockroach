@@ -240,11 +240,725 @@ func TestImportDistributedMergeDuplicateDetection(t *testing.T) {
 	}
 }
 
-func TestImportData(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+// importDataTest defines a single test case for the TestImportData* family
+// of tests. Tests are split across multiple top-level functions by format type
+// to avoid exceeding shard timeouts.
+type importDataTest struct {
+	name     string
+	create   string
+	with     string
+	typ      string
+	data     string
+	err      string
+	rejected string
+	query    map[string][][]string
+}
 
-	skip.WithIssue(t, 166199)
+var validImportDataTypes = map[string]struct{}{
+	"CSV": {}, "DELIMITED": {}, "PGCOPY": {}, "NOPE": {},
+}
+
+func init() {
+	for i, tc := range importDataTests {
+		if _, ok := validImportDataTypes[tc.typ]; !ok {
+			panic(fmt.Sprintf("importDataTests[%d] (%s) has unknown typ %q", i, tc.name, tc.typ))
+		}
+	}
+}
+
+var importDataTests = []importDataTest{
+	{
+		name: "duplicate unique index key",
+		create: `
+				a int8 primary key,
+				i int8,
+				unique index idx_f (i)
+			`,
+		typ: "CSV",
+		data: `1,1
+2,2
+3,3
+4,3
+5,4`,
+		err: "duplicate key",
+	},
+	{
+		name: "duplicate PK",
+		create: `
+				i int8 primary key,
+				s string
+			`,
+		typ: "CSV",
+		data: `1, A
+2, B
+3, C
+3, D
+4, E`,
+		err: "duplicate key",
+	},
+	{
+		name: "duplicate collated string key",
+		create: `
+				s string collate en_u_ks_level1 primary key
+			`,
+		typ: "CSV",
+		data: `'a' collate en_u_ks_level1
+'B' collate en_u_ks_level1
+'c' collate en_u_ks_level1
+'D' collate en_u_ks_level1
+'d' collate en_u_ks_level1
+`,
+		err: "duplicate key",
+	},
+	{
+		name: "duplicate PK at sst boundary",
+		create: `
+				i int8 primary key,
+				s string
+			`,
+		typ: "CSV",
+		data: `1,0000000000
+1,0000000001`,
+		err: "duplicate key",
+	},
+	{
+		name: "verify no splits mid row",
+		create: `
+				i int8 primary key,
+				s string,
+				b int8,
+				c int8,
+				index (s),
+				index (i, s),
+				family (i, b),
+				family (s, c)
+			`,
+		typ:  "CSV",
+		data: `5,STRING,7,9`,
+		query: map[string][][]string{
+			`SELECT count(*) from t`: {{"1"}},
+		},
+	},
+	{
+		name:   "good bytes encoding",
+		create: `b bytes`,
+		typ:    "CSV",
+		data: `\x0143
+0143`,
+		query: map[string][][]string{
+			`SELECT * from t`: {{"\x01C"}, {"0143"}},
+		},
+	},
+	{
+		name:     "invalid byte",
+		create:   `b bytes`,
+		typ:      "CSV",
+		data:     `\x0g`,
+		rejected: `\x0g` + "\n",
+		err:      "invalid byte",
+	},
+	{
+		name:     "bad bytes length",
+		create:   `b bytes`,
+		typ:      "CSV",
+		data:     `\x0`,
+		rejected: `\x0` + "\n",
+		err:      "odd length hex string",
+	},
+	{
+		name:   "new line characters",
+		create: `t text`,
+		typ:    "CSV",
+		data:   "\"hello\r\nworld\"\n\"friend\nfoe\"\n\"mr\rmrs\"",
+		query: map[string][][]string{
+			`SELECT t from t`: {{"hello\r\nworld"}, {"friend\nfoe"}, {"mr\rmrs"}},
+		},
+	},
+	{
+		name:   "CR in int8, 2 cols",
+		create: `a int8, b int8`,
+		typ:    "CSV",
+		data:   "1,2\r\n3,4\n5,6",
+		query: map[string][][]string{
+			`SELECT * FROM t ORDER BY a`: {{"1", "2"}, {"3", "4"}, {"5", "6"}},
+		},
+	},
+	{
+		name:   "CR in int8, 1 col",
+		create: `a int8`,
+		typ:    "CSV",
+		data:   "1\r\n3\n5",
+		query: map[string][][]string{
+			`SELECT * FROM t ORDER BY a`: {{"1"}, {"3"}, {"5"}},
+		},
+	},
+	{
+		name:   "collated strings",
+		create: `s string collate en_u_ks_level1`,
+		typ:    "CSV",
+		data:   strings.Repeat("'1' COLLATE en_u_ks_level1\n", 2000),
+		query: map[string][][]string{
+			`SELECT s, count(*) FROM t GROUP BY s`: {{"1", "2000"}},
+		},
+	},
+	{
+		name:   "quotes are accepted in a quoted string",
+		create: `s string`,
+		typ:    "CSV",
+		data:   `"abc""de"`,
+		query: map[string][][]string{
+			`SELECT s FROM t`: {{`abc"de`}},
+		},
+	},
+	{
+		name:   "bare quote in the middle of a field that is not quoted",
+		create: `s string`,
+		typ:    "CSV",
+		data:   `abc"de`,
+		query:  map[string][][]string{`SELECT * from t`: {{`abc"de`}}},
+	},
+	{
+		name:   "strict quotes: bare quote in the middle of a field that is not quoted",
+		create: `s string`,
+		typ:    "CSV",
+		with:   `WITH strict_quotes`,
+		data:   `abc"de`,
+		err:    `parse error on line 1, column 3: bare " in non-quoted-field`,
+	},
+	{
+		name:   "no matching quote in a quoted field",
+		create: `s string`,
+		typ:    "CSV",
+		data:   `"abc"de`,
+		query:  map[string][][]string{`SELECT * from t`: {{`abc"de`}}},
+	},
+	{
+		name:   "strict quotes: bare quote in the middle of a quoted field is not ok",
+		create: `s string`,
+		typ:    "CSV",
+		with:   `WITH strict_quotes`,
+		data:   `"abc"de"`,
+		err:    `parse error on line 1, column 4: extraneous or missing " in quoted-field`,
+	},
+	{
+		name:     "too many imported columns",
+		create:   `i int8`,
+		typ:      "CSV",
+		data:     "1,2\n3\n11,22",
+		err:      "row 1: expected 1 fields, got 2",
+		rejected: "1,2\n11,22\n",
+		query:    map[string][][]string{`SELECT * from t`: {{"3"}}},
+	},
+	{
+		name:     "parsing error",
+		create:   `i int8, j int8`,
+		typ:      "CSV",
+		data:     "not_int,2\n3,4",
+		err:      `row 1: parse "i" as INT8: could not parse "not_int" as type int`,
+		rejected: "not_int,2\n",
+		query:    map[string][][]string{`SELECT * from t`: {{"3", "4"}}},
+	},
+
+	// MySQL OUTFILE
+	// If err field is non-empty, the query filed specifies what expect
+	// to get from the rows that are parsed correctly (see option experimental_save_rejected).
+	{
+		name:   "empty file",
+		create: `a string`,
+		typ:    "DELIMITED",
+		data:   "",
+		query:  map[string][][]string{`SELECT * from t`: {}},
+	},
+	{
+		name:   "empty field",
+		create: `a string, b string`,
+		typ:    "DELIMITED",
+		data:   "\t",
+		query:  map[string][][]string{`SELECT * from t`: {{"", ""}}},
+	},
+	{
+		name:   "empty line",
+		create: `a string`,
+		typ:    "DELIMITED",
+		data:   "\n",
+		query:  map[string][][]string{`SELECT * from t`: {{""}}},
+	},
+	{
+		name:     "too many imported columns",
+		create:   `i int8`,
+		typ:      "DELIMITED",
+		data:     "1\t2\n3",
+		err:      "row 1: too many columns, got 2 expected 1",
+		rejected: "1\t2\n",
+		query:    map[string][][]string{`SELECT * from t`: {{"3"}}},
+	},
+	{
+		name:     "cannot parse data",
+		create:   `i int8, j int8`,
+		typ:      "DELIMITED",
+		data:     "bad_int\t2\n3\t4",
+		err:      "error parsing row 1",
+		rejected: "bad_int\t2\n",
+		query:    map[string][][]string{`SELECT * from t`: {{"3", "4"}}},
+	},
+	{
+		name:     "unexpected number of columns",
+		create:   `a string, b string`,
+		typ:      "DELIMITED",
+		data:     "1,2\n3\t4",
+		err:      "row 1: unexpected number of columns, expected 2 got 1",
+		rejected: "1,2\n",
+		query:    map[string][][]string{`SELECT * from t`: {{"3", "4"}}},
+	},
+	{
+		name:     "unexpected number of columns in 1st row",
+		create:   `a string, b string`,
+		typ:      "DELIMITED",
+		data:     "1,2\n3\t4",
+		err:      "row 1: unexpected number of columns, expected 2 got 1",
+		rejected: "1,2\n",
+		query:    map[string][][]string{`SELECT * from t`: {{"3", "4"}}},
+	},
+	{
+		name:   "field enclosure",
+		create: `a string, b string`,
+		with:   `WITH fields_enclosed_by = '$'`,
+		typ:    "DELIMITED",
+		data:   "$foo$\tnormal",
+		query: map[string][][]string{
+			`SELECT * from t`: {{"foo", "normal"}},
+		},
+	},
+	{
+		name:   "unescaped newline in quoted field",
+		create: `a string, b string`,
+		with:   `WITH fields_enclosed_by = '$'`,
+		typ:    "DELIMITED",
+		data:   "foo\t$foo\nbar$\nfoo\tbar",
+		query: map[string][][]string{
+			`SELECT * FROM t`: {{"foo", "foo\nbar"}, {"foo", "bar"}},
+		},
+	},
+	{
+		name:   "field enclosure in middle of unquoted field",
+		create: `a string, b string`,
+		with:   `WITH fields_enclosed_by = '$'`,
+		typ:    "DELIMITED",
+		data:   "fo$o\tb$a$z",
+		query: map[string][][]string{
+			`SELECT * from t`: {{"fo$o", "b$a$z"}},
+		},
+	},
+	{
+		name:   "field enclosure in middle of quoted field",
+		create: `a string, b string`,
+		with:   `WITH fields_enclosed_by = '$'`,
+		typ:    "DELIMITED",
+		data:   "$fo$o$\t$b$a$z$",
+		query: map[string][][]string{
+			`SELECT * from t`: {{"fo$o", "b$a$z"}},
+		},
+	},
+	{
+		name:     "unmatched field enclosure",
+		create:   `a string, b string`,
+		with:     `WITH fields_enclosed_by = '$'`,
+		typ:      "DELIMITED",
+		data:     "$foo\tnormal\nbaz\tbar",
+		err:      "error parsing row 1: unmatched field enclosure at start of field",
+		rejected: "$foo\tnormal\nbaz\tbar\n",
+		query:    map[string][][]string{`SELECT * from t`: {}},
+	},
+	{
+		name:     "unmatched field enclosure at end",
+		create:   `a string, b string`,
+		with:     `WITH fields_enclosed_by = '$'`,
+		typ:      "DELIMITED",
+		data:     "foo$\tnormal\nbar\tbaz",
+		err:      "row 1: unmatched field enclosure at end of field",
+		rejected: "foo$\tnormal\n",
+		query:    map[string][][]string{`SELECT * from t`: {{"bar", "baz"}}},
+	},
+	{
+		name:     "unmatched field enclosure 2nd field",
+		create:   `a string, b string`,
+		with:     `WITH fields_enclosed_by = '$'`,
+		typ:      "DELIMITED",
+		data:     "normal\t$foo",
+		err:      "row 1: unmatched field enclosure at start of field",
+		rejected: "normal\t$foo\n",
+		query:    map[string][][]string{`SELECT * from t`: {}},
+	},
+	{
+		name:     "unmatched field enclosure at end 2nd field",
+		create:   `a string, b string`,
+		with:     `WITH fields_enclosed_by = '$'`,
+		typ:      "DELIMITED",
+		data:     "normal\tfoo$",
+		err:      "row 1: unmatched field enclosure at end of field",
+		rejected: "normal\tfoo$\n",
+		query:    map[string][][]string{`SELECT * from t`: {}},
+	},
+	{
+		name:     "unmatched literal",
+		create:   `i int8`,
+		with:     `WITH fields_escaped_by = '\'`,
+		typ:      "DELIMITED",
+		data:     `\`,
+		err:      "row 1: unmatched literal",
+		rejected: "\\\n",
+		query:    map[string][][]string{`SELECT * from t`: {}},
+	},
+	{
+		name:   "escaped field enclosure",
+		create: `a string, b string`,
+		with: `WITH fields_enclosed_by = '$', fields_escaped_by = '\',
+				    fields_terminated_by = ','`,
+		typ:  "DELIMITED",
+		data: `\$foo\$,\$baz`,
+		query: map[string][][]string{
+			`SELECT * from t`: {{"$foo$", "$baz"}},
+		},
+	},
+	{
+		name:   "weird escape char",
+		create: `s STRING`,
+		with:   `WITH fields_escaped_by = '@'`,
+		typ:    "DELIMITED",
+		data:   "@N\nN@@@\n\nNULL",
+		query: map[string][][]string{
+			`SELECT COALESCE(s, '(null)') from t`: {{"(null)"}, {"N@\n"}, {"NULL"}},
+		},
+	},
+	{
+		name:   `null and \N with escape`,
+		create: `s STRING`,
+		with:   `WITH fields_escaped_by = '\'`,
+		typ:    "DELIMITED",
+		data:   "\\N\n\\\\N\nNULL",
+		query: map[string][][]string{
+			`SELECT COALESCE(s, '(null)') from t`: {{"(null)"}, {`\N`}, {"NULL"}},
+		},
+	},
+	{
+		name:     `\N with trailing char`,
+		create:   `s STRING`,
+		with:     `WITH fields_escaped_by = '\'`,
+		typ:      "DELIMITED",
+		data:     "\\N1\nfoo",
+		err:      "row 1: unexpected data after null encoding",
+		rejected: "\\N1\n",
+		query:    map[string][][]string{`SELECT * from t`: {{"foo"}}},
+	},
+	{
+		name:     `double null`,
+		create:   `s STRING`,
+		with:     `WITH fields_escaped_by = '\'`,
+		typ:      "DELIMITED",
+		data:     `\N\N`,
+		err:      "row 1: unexpected null encoding",
+		rejected: `\N\N` + "\n",
+		query:    map[string][][]string{`SELECT * from t`: {}},
+	},
+	{
+		name:   `null and \N without escape`,
+		create: `s STRING`,
+		typ:    "DELIMITED",
+		data:   "\\N\n\\\\N\nNULL",
+		query: map[string][][]string{
+			`SELECT COALESCE(s, '(null)') from t`: {{`\N`}, {`\\N`}, {"(null)"}},
+		},
+	},
+	{
+		name:   `bytes with escape`,
+		create: `b BYTES`,
+		typ:    "DELIMITED",
+		data:   `\x`,
+		query: map[string][][]string{
+			`SELECT * from t`: {{`\x`}},
+		},
+	},
+	{
+		name:   "skip 0 lines",
+		create: `a string, b string`,
+		with:   `WITH fields_terminated_by = ',', skip = '0'`,
+		typ:    "DELIMITED",
+		data:   "foo,normal",
+		query: map[string][][]string{
+			`SELECT * from t`: {{"foo", "normal"}},
+		},
+	},
+	{
+		name:   "skip 1 lines",
+		create: `a string, b string`,
+		with:   `WITH fields_terminated_by = ',', skip = '1'`,
+		typ:    "DELIMITED",
+		data:   "a string, b string\nfoo,normal",
+		query: map[string][][]string{
+			`SELECT * from t`: {{"foo", "normal"}},
+		},
+	},
+	{
+		name:   "skip 2 lines",
+		create: `a string, b string`,
+		with:   `WITH fields_terminated_by = ',', skip = '2'`,
+		typ:    "DELIMITED",
+		data:   "a string, b string\nfoo,normal\nbar,baz",
+		query: map[string][][]string{
+			`SELECT * from t`: {{"bar", "baz"}},
+		},
+	},
+	{
+		name:   "skip all lines",
+		create: `a string, b string`,
+		with:   `WITH fields_terminated_by = ',', skip = '3'`,
+		typ:    "DELIMITED",
+		data:   "a string, b string\nfoo,normal\nbar,baz",
+		query: map[string][][]string{
+			`SELECT * from t`: {},
+		},
+	},
+	{
+		name:   "skip > all lines",
+		create: `a string, b string`,
+		with:   `WITH fields_terminated_by = ',', skip = '4'`,
+		typ:    "DELIMITED",
+		data:   "a string, b string\nfoo,normal\nbar,baz",
+		query:  map[string][][]string{`SELECT * from t`: {}},
+	},
+	{
+		name:   "skip -1 lines",
+		create: `a string, b string`,
+		with:   `WITH fields_terminated_by = ',', skip = '-1'`,
+		typ:    "DELIMITED",
+		data:   "a string, b string\nfoo,normal",
+		err:    "pq: skip must be >= 0",
+	},
+	{
+		name:   "nullif empty string",
+		create: `a string, b string`,
+		with:   `WITH fields_terminated_by = ',', nullif = ''`,
+		typ:    "DELIMITED",
+		data:   ",normal",
+		query: map[string][][]string{
+			`SELECT * from t`: {{"NULL", "normal"}},
+		},
+	},
+	{
+		name:   "nullif empty string plus escape",
+		create: `a INT8, b INT8`,
+		with:   `WITH fields_terminated_by = ',', fields_escaped_by = '\', nullif = ''`,
+		typ:    "DELIMITED",
+		data:   ",4",
+		query: map[string][][]string{
+			`SELECT * from t`: {{"NULL", "4"}},
+		},
+	},
+	{
+		name:   "nullif single char string",
+		create: `a string, b string`,
+		with:   `WITH fields_terminated_by = ',', nullif = 'f'`,
+		typ:    "DELIMITED",
+		data:   "f,normal",
+		query: map[string][][]string{
+			`SELECT * from t`: {{"NULL", "normal"}},
+		},
+	},
+	{
+		name:   "nullif multiple char string",
+		create: `a string, b string`,
+		with:   `WITH fields_terminated_by = ',', nullif = 'foo'`,
+		typ:    "DELIMITED",
+		data:   "foo,foop",
+		query: map[string][][]string{
+			`SELECT * from t`: {{"NULL", "foop"}},
+		},
+	},
+	{
+		name: "zero string is the default for nullif with CSV",
+		create: `
+				i int primary key,
+        s string
+      `,
+		typ: "CSV",
+		data: `1,
+2,""`,
+		query: map[string][][]string{
+			`SELECT i, s from t`: {
+				{"1", "NULL"},
+				{"2", ""},
+			},
+		},
+	},
+	{
+		name: "zero string in not null",
+		create: `
+						i int primary key,
+		       s string,
+		       s2 string not null
+		     `,
+		typ: "CSV",
+		data: `1,,
+		2,"",""`,
+		err: "null value in column \"s2\" violates not-null constraint",
+	},
+	{
+		name: "quoted nullif is treated as a string",
+		create: `
+				i int primary key,
+        s string
+      `,
+		with: `WITH nullif = 'foo'`,
+		typ:  "CSV",
+		data: `1,foo
+2,"foo"`,
+		query: map[string][][]string{
+			`SELECT i, s from t`: {
+				{"1", "NULL"},
+				{"2", "foo"},
+			},
+		},
+	},
+	{
+		name: "quoted nullif is treated as a null if allow_quoted_null is used",
+		create: `
+				i int primary key,
+        s string
+      `,
+		with: `WITH nullif = 'foo', allow_quoted_null`,
+		typ:  "CSV",
+		data: `1,foo
+2,"foo"`,
+		query: map[string][][]string{
+			`SELECT i, s from t`: {
+				{"1", "NULL"},
+				{"2", "NULL"},
+			},
+		},
+	},
+	{
+		name:   "array",
+		create: `a string, b string[]`,
+		typ:    "CSV",
+		data:   `cat,"{somevalue,anothervalue,anothervalue123}"`,
+		query: map[string][][]string{
+			`SELECT * from t`: {
+				{"cat", "{somevalue,anothervalue,anothervalue123}"},
+			},
+		},
+	},
+	{
+		name:     "array",
+		create:   `a string, b string[]`,
+		typ:      "CSV",
+		data:     `dog,{some,thing}`,
+		err:      "error parsing row 1: expected 2 fields, got 3",
+		rejected: "dog,{some,thing}\n",
+	},
+	{
+		name:     "hint for quoted string matching nullif when allow_quoted_null is not set",
+		create:   `a string, b bool`,
+		with:     `WITH nullif = 'NULL'`,
+		typ:      "CSV",
+		data:     `dog,"NULL"`,
+		err:      "null value is quoted but allow_quoted_null option is not set",
+		rejected: "dog,\"NULL\"\n",
+	},
+	{
+		name:     "hint for extra leading whitespace in string matching nullif",
+		create:   `a string, b bool`,
+		with:     `WITH nullif = 'NULL'`,
+		typ:      "CSV",
+		data:     `dog, NULL`,
+		err:      "null value must not have extra whitespace",
+		rejected: "dog, NULL\n",
+	},
+
+	// PG COPY
+	{
+		name:   "unexpected escape x",
+		create: `b bytes`,
+		typ:    "PGCOPY",
+		data:   `\x`,
+		err:    `unsupported escape sequence: \\x`,
+	},
+	{
+		name:   "unexpected escape 3",
+		create: `b bytes`,
+		typ:    "PGCOPY",
+		data:   `\3`,
+		err:    `unsupported escape sequence: \\3`,
+	},
+	{
+		name:   "escapes",
+		create: `b bytes`,
+		typ:    "PGCOPY",
+		data:   `\x43\122`,
+		query: map[string][][]string{
+			`SELECT * from t`: {{"CR"}},
+		},
+	},
+	{
+		name:   "normal",
+		create: `i int8, s string`,
+		typ:    "PGCOPY",
+		data:   "1\tSTR\n2\t\\N\n\\N\t\\t",
+		query: map[string][][]string{
+			`SELECT * from t`: {{"1", "STR"}, {"2", "NULL"}, {"NULL", "\t"}},
+		},
+	},
+	{
+		name:   "comma delim",
+		create: `i int8, s string`,
+		typ:    "PGCOPY",
+		with:   `WITH delimiter = ','`,
+		data:   "1,STR\n2,\\N\n\\N,\\,",
+		query: map[string][][]string{
+			`SELECT * from t`: {{"1", "STR"}, {"2", "NULL"}, {"NULL", ","}},
+		},
+	},
+	{
+		name:   "size out of range",
+		create: `i int8`,
+		typ:    "PGCOPY",
+		with:   `WITH max_row_size = '10GB'`,
+		err:    "out of range: 10000000000",
+	},
+	{
+		name:   "line too long",
+		create: `i int8`,
+		typ:    "PGCOPY",
+		data:   "123456",
+		with:   `WITH max_row_size = '5B'`,
+		err:    "line too long",
+	},
+	{
+		name:   "not enough values",
+		typ:    "PGCOPY",
+		create: "a INT8, b INT8",
+		data:   `1`,
+		err:    "expected 2 values, got 1",
+	},
+	{
+		name:   "too many values",
+		typ:    "PGCOPY",
+		create: "a INT8, b INT8",
+		data:   "1\t2\t3",
+		err:    "expected 2 values, got 3",
+	},
+
+	// Error
+	{
+		name:   "unsupported import format",
+		create: `b bytes`,
+		typ:    "NOPE",
+		err:    `unsupported import format`,
+	},
+}
+
+// runImportDataTests runs the given importDataTest cases against a fresh
+// server. It is the shared implementation behind the TestImportData* tests.
+func runImportDataTests(t *testing.T, tests []importDataTest) {
 	skip.UnderRace(t, "takes >1min under race")
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
@@ -257,705 +971,6 @@ func TestImportData(t *testing.T) {
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
-
-	tests := []struct {
-		name     string
-		create   string
-		with     string
-		typ      string
-		data     string
-		err      string
-		rejected string
-		query    map[string][][]string
-	}{
-		{
-			name: "duplicate unique index key",
-			create: `
-				a int8 primary key,
-				i int8,
-				unique index idx_f (i)
-			`,
-			typ: "CSV",
-			data: `1,1
-2,2
-3,3
-4,3
-5,4`,
-			err: "duplicate key",
-		},
-		{
-			name: "duplicate PK",
-			create: `
-				i int8 primary key,
-				s string
-			`,
-			typ: "CSV",
-			data: `1, A
-2, B
-3, C
-3, D
-4, E`,
-			err: "duplicate key",
-		},
-		{
-			name: "duplicate collated string key",
-			create: `
-				s string collate en_u_ks_level1 primary key
-			`,
-			typ: "CSV",
-			data: `'a' collate en_u_ks_level1
-'B' collate en_u_ks_level1
-'c' collate en_u_ks_level1
-'D' collate en_u_ks_level1
-'d' collate en_u_ks_level1
-`,
-			err: "duplicate key",
-		},
-		{
-			name: "duplicate PK at sst boundary",
-			create: `
-				i int8 primary key,
-				s string
-			`,
-			typ: "CSV",
-			data: `1,0000000000
-1,0000000001`,
-			err: "duplicate key",
-		},
-		{
-			name: "verify no splits mid row",
-			create: `
-				i int8 primary key,
-				s string,
-				b int8,
-				c int8,
-				index (s),
-				index (i, s),
-				family (i, b),
-				family (s, c)
-			`,
-			typ:  "CSV",
-			data: `5,STRING,7,9`,
-			query: map[string][][]string{
-				`SELECT count(*) from t`: {{"1"}},
-			},
-		},
-		{
-			name:   "good bytes encoding",
-			create: `b bytes`,
-			typ:    "CSV",
-			data: `\x0143
-0143`,
-			query: map[string][][]string{
-				`SELECT * from t`: {{"\x01C"}, {"0143"}},
-			},
-		},
-		{
-			name:     "invalid byte",
-			create:   `b bytes`,
-			typ:      "CSV",
-			data:     `\x0g`,
-			rejected: `\x0g` + "\n",
-			err:      "invalid byte",
-		},
-		{
-			name:     "bad bytes length",
-			create:   `b bytes`,
-			typ:      "CSV",
-			data:     `\x0`,
-			rejected: `\x0` + "\n",
-			err:      "odd length hex string",
-		},
-		{
-			name:   "new line characters",
-			create: `t text`,
-			typ:    "CSV",
-			data:   "\"hello\r\nworld\"\n\"friend\nfoe\"\n\"mr\rmrs\"",
-			query: map[string][][]string{
-				`SELECT t from t`: {{"hello\r\nworld"}, {"friend\nfoe"}, {"mr\rmrs"}},
-			},
-		},
-		{
-			name:   "CR in int8, 2 cols",
-			create: `a int8, b int8`,
-			typ:    "CSV",
-			data:   "1,2\r\n3,4\n5,6",
-			query: map[string][][]string{
-				`SELECT * FROM t ORDER BY a`: {{"1", "2"}, {"3", "4"}, {"5", "6"}},
-			},
-		},
-		{
-			name:   "CR in int8, 1 col",
-			create: `a int8`,
-			typ:    "CSV",
-			data:   "1\r\n3\n5",
-			query: map[string][][]string{
-				`SELECT * FROM t ORDER BY a`: {{"1"}, {"3"}, {"5"}},
-			},
-		},
-		{
-			name:   "collated strings",
-			create: `s string collate en_u_ks_level1`,
-			typ:    "CSV",
-			data:   strings.Repeat("'1' COLLATE en_u_ks_level1\n", 2000),
-			query: map[string][][]string{
-				`SELECT s, count(*) FROM t GROUP BY s`: {{"1", "2000"}},
-			},
-		},
-		{
-			name:   "quotes are accepted in a quoted string",
-			create: `s string`,
-			typ:    "CSV",
-			data:   `"abc""de"`,
-			query: map[string][][]string{
-				`SELECT s FROM t`: {{`abc"de`}},
-			},
-		},
-		{
-			name:   "bare quote in the middle of a field that is not quoted",
-			create: `s string`,
-			typ:    "CSV",
-			data:   `abc"de`,
-			query:  map[string][][]string{`SELECT * from t`: {{`abc"de`}}},
-		},
-		{
-			name:   "strict quotes: bare quote in the middle of a field that is not quoted",
-			create: `s string`,
-			typ:    "CSV",
-			with:   `WITH strict_quotes`,
-			data:   `abc"de`,
-			err:    `parse error on line 1, column 3: bare " in non-quoted-field`,
-		},
-		{
-			name:   "no matching quote in a quoted field",
-			create: `s string`,
-			typ:    "CSV",
-			data:   `"abc"de`,
-			query:  map[string][][]string{`SELECT * from t`: {{`abc"de`}}},
-		},
-		{
-			name:   "strict quotes: bare quote in the middle of a quoted field is not ok",
-			create: `s string`,
-			typ:    "CSV",
-			with:   `WITH strict_quotes`,
-			data:   `"abc"de"`,
-			err:    `parse error on line 1, column 4: extraneous or missing " in quoted-field`,
-		},
-		{
-			name:     "too many imported columns",
-			create:   `i int8`,
-			typ:      "CSV",
-			data:     "1,2\n3\n11,22",
-			err:      "row 1: expected 1 fields, got 2",
-			rejected: "1,2\n11,22\n",
-			query:    map[string][][]string{`SELECT * from t`: {{"3"}}},
-		},
-		{
-			name:     "parsing error",
-			create:   `i int8, j int8`,
-			typ:      "CSV",
-			data:     "not_int,2\n3,4",
-			err:      `row 1: parse "i" as INT8: could not parse "not_int" as type int`,
-			rejected: "not_int,2\n",
-			query:    map[string][][]string{`SELECT * from t`: {{"3", "4"}}},
-		},
-
-		// MySQL OUTFILE
-		// If err field is non-empty, the query filed specifies what expect
-		// to get from the rows that are parsed correctly (see option experimental_save_rejected).
-		{
-			name:   "empty file",
-			create: `a string`,
-			typ:    "DELIMITED",
-			data:   "",
-			query:  map[string][][]string{`SELECT * from t`: {}},
-		},
-		{
-			name:   "empty field",
-			create: `a string, b string`,
-			typ:    "DELIMITED",
-			data:   "\t",
-			query:  map[string][][]string{`SELECT * from t`: {{"", ""}}},
-		},
-		{
-			name:   "empty line",
-			create: `a string`,
-			typ:    "DELIMITED",
-			data:   "\n",
-			query:  map[string][][]string{`SELECT * from t`: {{""}}},
-		},
-		{
-			name:     "too many imported columns",
-			create:   `i int8`,
-			typ:      "DELIMITED",
-			data:     "1\t2\n3",
-			err:      "row 1: too many columns, got 2 expected 1",
-			rejected: "1\t2\n",
-			query:    map[string][][]string{`SELECT * from t`: {{"3"}}},
-		},
-		{
-			name:     "cannot parse data",
-			create:   `i int8, j int8`,
-			typ:      "DELIMITED",
-			data:     "bad_int\t2\n3\t4",
-			err:      "error parsing row 1",
-			rejected: "bad_int\t2\n",
-			query:    map[string][][]string{`SELECT * from t`: {{"3", "4"}}},
-		},
-		{
-			name:     "unexpected number of columns",
-			create:   `a string, b string`,
-			typ:      "DELIMITED",
-			data:     "1,2\n3\t4",
-			err:      "row 1: unexpected number of columns, expected 2 got 1",
-			rejected: "1,2\n",
-			query:    map[string][][]string{`SELECT * from t`: {{"3", "4"}}},
-		},
-		{
-			name:     "unexpected number of columns in 1st row",
-			create:   `a string, b string`,
-			typ:      "DELIMITED",
-			data:     "1,2\n3\t4",
-			err:      "row 1: unexpected number of columns, expected 2 got 1",
-			rejected: "1,2\n",
-			query:    map[string][][]string{`SELECT * from t`: {{"3", "4"}}},
-		},
-		{
-			name:   "field enclosure",
-			create: `a string, b string`,
-			with:   `WITH fields_enclosed_by = '$'`,
-			typ:    "DELIMITED",
-			data:   "$foo$\tnormal",
-			query: map[string][][]string{
-				`SELECT * from t`: {{"foo", "normal"}},
-			},
-		},
-		{
-			name:   "unescaped newline in quoted field",
-			create: `a string, b string`,
-			with:   `WITH fields_enclosed_by = '$'`,
-			typ:    "DELIMITED",
-			data:   "foo\t$foo\nbar$\nfoo\tbar",
-			query: map[string][][]string{
-				`SELECT * FROM t`: {{"foo", "foo\nbar"}, {"foo", "bar"}},
-			},
-		},
-		{
-			name:   "field enclosure in middle of unquoted field",
-			create: `a string, b string`,
-			with:   `WITH fields_enclosed_by = '$'`,
-			typ:    "DELIMITED",
-			data:   "fo$o\tb$a$z",
-			query: map[string][][]string{
-				`SELECT * from t`: {{"fo$o", "b$a$z"}},
-			},
-		},
-		{
-			name:   "field enclosure in middle of quoted field",
-			create: `a string, b string`,
-			with:   `WITH fields_enclosed_by = '$'`,
-			typ:    "DELIMITED",
-			data:   "$fo$o$\t$b$a$z$",
-			query: map[string][][]string{
-				`SELECT * from t`: {{"fo$o", "b$a$z"}},
-			},
-		},
-		{
-			name:     "unmatched field enclosure",
-			create:   `a string, b string`,
-			with:     `WITH fields_enclosed_by = '$'`,
-			typ:      "DELIMITED",
-			data:     "$foo\tnormal\nbaz\tbar",
-			err:      "error parsing row 1: unmatched field enclosure at start of field",
-			rejected: "$foo\tnormal\nbaz\tbar\n",
-			query:    map[string][][]string{`SELECT * from t`: {}},
-		},
-		{
-			name:     "unmatched field enclosure at end",
-			create:   `a string, b string`,
-			with:     `WITH fields_enclosed_by = '$'`,
-			typ:      "DELIMITED",
-			data:     "foo$\tnormal\nbar\tbaz",
-			err:      "row 1: unmatched field enclosure at end of field",
-			rejected: "foo$\tnormal\n",
-			query:    map[string][][]string{`SELECT * from t`: {{"bar", "baz"}}},
-		},
-		{
-			name:     "unmatched field enclosure 2nd field",
-			create:   `a string, b string`,
-			with:     `WITH fields_enclosed_by = '$'`,
-			typ:      "DELIMITED",
-			data:     "normal\t$foo",
-			err:      "row 1: unmatched field enclosure at start of field",
-			rejected: "normal\t$foo\n",
-			query:    map[string][][]string{`SELECT * from t`: {}},
-		},
-		{
-			name:     "unmatched field enclosure at end 2nd field",
-			create:   `a string, b string`,
-			with:     `WITH fields_enclosed_by = '$'`,
-			typ:      "DELIMITED",
-			data:     "normal\tfoo$",
-			err:      "row 1: unmatched field enclosure at end of field",
-			rejected: "normal\tfoo$\n",
-			query:    map[string][][]string{`SELECT * from t`: {}},
-		},
-		{
-			name:     "unmatched literal",
-			create:   `i int8`,
-			with:     `WITH fields_escaped_by = '\'`,
-			typ:      "DELIMITED",
-			data:     `\`,
-			err:      "row 1: unmatched literal",
-			rejected: "\\\n",
-			query:    map[string][][]string{`SELECT * from t`: {}},
-		},
-		{
-			name:   "escaped field enclosure",
-			create: `a string, b string`,
-			with: `WITH fields_enclosed_by = '$', fields_escaped_by = '\',
-				    fields_terminated_by = ','`,
-			typ:  "DELIMITED",
-			data: `\$foo\$,\$baz`,
-			query: map[string][][]string{
-				`SELECT * from t`: {{"$foo$", "$baz"}},
-			},
-		},
-		{
-			name:   "weird escape char",
-			create: `s STRING`,
-			with:   `WITH fields_escaped_by = '@'`,
-			typ:    "DELIMITED",
-			data:   "@N\nN@@@\n\nNULL",
-			query: map[string][][]string{
-				`SELECT COALESCE(s, '(null)') from t`: {{"(null)"}, {"N@\n"}, {"NULL"}},
-			},
-		},
-		{
-			name:   `null and \N with escape`,
-			create: `s STRING`,
-			with:   `WITH fields_escaped_by = '\'`,
-			typ:    "DELIMITED",
-			data:   "\\N\n\\\\N\nNULL",
-			query: map[string][][]string{
-				`SELECT COALESCE(s, '(null)') from t`: {{"(null)"}, {`\N`}, {"NULL"}},
-			},
-		},
-		{
-			name:     `\N with trailing char`,
-			create:   `s STRING`,
-			with:     `WITH fields_escaped_by = '\'`,
-			typ:      "DELIMITED",
-			data:     "\\N1\nfoo",
-			err:      "row 1: unexpected data after null encoding",
-			rejected: "\\N1\n",
-			query:    map[string][][]string{`SELECT * from t`: {{"foo"}}},
-		},
-		{
-			name:     `double null`,
-			create:   `s STRING`,
-			with:     `WITH fields_escaped_by = '\'`,
-			typ:      "DELIMITED",
-			data:     `\N\N`,
-			err:      "row 1: unexpected null encoding",
-			rejected: `\N\N` + "\n",
-			query:    map[string][][]string{`SELECT * from t`: {}},
-		},
-		{
-			name:   `null and \N without escape`,
-			create: `s STRING`,
-			typ:    "DELIMITED",
-			data:   "\\N\n\\\\N\nNULL",
-			query: map[string][][]string{
-				`SELECT COALESCE(s, '(null)') from t`: {{`\N`}, {`\\N`}, {"(null)"}},
-			},
-		},
-		{
-			name:   `bytes with escape`,
-			create: `b BYTES`,
-			typ:    "DELIMITED",
-			data:   `\x`,
-			query: map[string][][]string{
-				`SELECT * from t`: {{`\x`}},
-			},
-		},
-		{
-			name:   "skip 0 lines",
-			create: `a string, b string`,
-			with:   `WITH fields_terminated_by = ',', skip = '0'`,
-			typ:    "DELIMITED",
-			data:   "foo,normal",
-			query: map[string][][]string{
-				`SELECT * from t`: {{"foo", "normal"}},
-			},
-		},
-		{
-			name:   "skip 1 lines",
-			create: `a string, b string`,
-			with:   `WITH fields_terminated_by = ',', skip = '1'`,
-			typ:    "DELIMITED",
-			data:   "a string, b string\nfoo,normal",
-			query: map[string][][]string{
-				`SELECT * from t`: {{"foo", "normal"}},
-			},
-		},
-		{
-			name:   "skip 2 lines",
-			create: `a string, b string`,
-			with:   `WITH fields_terminated_by = ',', skip = '2'`,
-			typ:    "DELIMITED",
-			data:   "a string, b string\nfoo,normal\nbar,baz",
-			query: map[string][][]string{
-				`SELECT * from t`: {{"bar", "baz"}},
-			},
-		},
-		{
-			name:   "skip all lines",
-			create: `a string, b string`,
-			with:   `WITH fields_terminated_by = ',', skip = '3'`,
-			typ:    "DELIMITED",
-			data:   "a string, b string\nfoo,normal\nbar,baz",
-			query: map[string][][]string{
-				`SELECT * from t`: {},
-			},
-		},
-		{
-			name:   "skip > all lines",
-			create: `a string, b string`,
-			with:   `WITH fields_terminated_by = ',', skip = '4'`,
-			typ:    "DELIMITED",
-			data:   "a string, b string\nfoo,normal\nbar,baz",
-			query:  map[string][][]string{`SELECT * from t`: {}},
-		},
-		{
-			name:   "skip -1 lines",
-			create: `a string, b string`,
-			with:   `WITH fields_terminated_by = ',', skip = '-1'`,
-			typ:    "DELIMITED",
-			data:   "a string, b string\nfoo,normal",
-			err:    "pq: skip must be >= 0",
-		},
-		{
-			name:   "nullif empty string",
-			create: `a string, b string`,
-			with:   `WITH fields_terminated_by = ',', nullif = ''`,
-			typ:    "DELIMITED",
-			data:   ",normal",
-			query: map[string][][]string{
-				`SELECT * from t`: {{"NULL", "normal"}},
-			},
-		},
-		{
-			name:   "nullif empty string plus escape",
-			create: `a INT8, b INT8`,
-			with:   `WITH fields_terminated_by = ',', fields_escaped_by = '\', nullif = ''`,
-			typ:    "DELIMITED",
-			data:   ",4",
-			query: map[string][][]string{
-				`SELECT * from t`: {{"NULL", "4"}},
-			},
-		},
-		{
-			name:   "nullif single char string",
-			create: `a string, b string`,
-			with:   `WITH fields_terminated_by = ',', nullif = 'f'`,
-			typ:    "DELIMITED",
-			data:   "f,normal",
-			query: map[string][][]string{
-				`SELECT * from t`: {{"NULL", "normal"}},
-			},
-		},
-		{
-			name:   "nullif multiple char string",
-			create: `a string, b string`,
-			with:   `WITH fields_terminated_by = ',', nullif = 'foo'`,
-			typ:    "DELIMITED",
-			data:   "foo,foop",
-			query: map[string][][]string{
-				`SELECT * from t`: {{"NULL", "foop"}},
-			},
-		},
-		{
-			name: "zero string is the default for nullif with CSV",
-			create: `
-				i int primary key,
-        s string
-      `,
-			typ: "CSV",
-			data: `1,
-2,""`,
-			query: map[string][][]string{
-				`SELECT i, s from t`: {
-					{"1", "NULL"},
-					{"2", ""},
-				},
-			},
-		},
-		{
-			name: "zero string in not null",
-			create: `
-						i int primary key,
-		       s string,
-		       s2 string not null
-		     `,
-			typ: "CSV",
-			data: `1,,
-		2,"",""`,
-			err: "null value in column \"s2\" violates not-null constraint",
-		},
-		{
-			name: "quoted nullif is treated as a string",
-			create: `
-				i int primary key,
-        s string
-      `,
-			with: `WITH nullif = 'foo'`,
-			typ:  "CSV",
-			data: `1,foo
-2,"foo"`,
-			query: map[string][][]string{
-				`SELECT i, s from t`: {
-					{"1", "NULL"},
-					{"2", "foo"},
-				},
-			},
-		},
-		{
-			name: "quoted nullif is treated as a null if allow_quoted_null is used",
-			create: `
-				i int primary key,
-        s string
-      `,
-			with: `WITH nullif = 'foo', allow_quoted_null`,
-			typ:  "CSV",
-			data: `1,foo
-2,"foo"`,
-			query: map[string][][]string{
-				`SELECT i, s from t`: {
-					{"1", "NULL"},
-					{"2", "NULL"},
-				},
-			},
-		},
-		{
-			name:   "array",
-			create: `a string, b string[]`,
-			typ:    "CSV",
-			data:   `cat,"{somevalue,anothervalue,anothervalue123}"`,
-			query: map[string][][]string{
-				`SELECT * from t`: {
-					{"cat", "{somevalue,anothervalue,anothervalue123}"},
-				},
-			},
-		},
-		{
-			name:     "array",
-			create:   `a string, b string[]`,
-			typ:      "CSV",
-			data:     `dog,{some,thing}`,
-			err:      "error parsing row 1: expected 2 fields, got 3",
-			rejected: "dog,{some,thing}\n",
-		},
-		{
-			name:     "hint for quoted string matching nullif when allow_quoted_null is not set",
-			create:   `a string, b bool`,
-			with:     `WITH nullif = 'NULL'`,
-			typ:      "CSV",
-			data:     `dog,"NULL"`,
-			err:      "null value is quoted but allow_quoted_null option is not set",
-			rejected: "dog,\"NULL\"\n",
-		},
-		{
-			name:     "hint for extra leading whitespace in string matching nullif",
-			create:   `a string, b bool`,
-			with:     `WITH nullif = 'NULL'`,
-			typ:      "CSV",
-			data:     `dog, NULL`,
-			err:      "null value must not have extra whitespace",
-			rejected: "dog, NULL\n",
-		},
-
-		// PG COPY
-		{
-			name:   "unexpected escape x",
-			create: `b bytes`,
-			typ:    "PGCOPY",
-			data:   `\x`,
-			err:    `unsupported escape sequence: \\x`,
-		},
-		{
-			name:   "unexpected escape 3",
-			create: `b bytes`,
-			typ:    "PGCOPY",
-			data:   `\3`,
-			err:    `unsupported escape sequence: \\3`,
-		},
-		{
-			name:   "escapes",
-			create: `b bytes`,
-			typ:    "PGCOPY",
-			data:   `\x43\122`,
-			query: map[string][][]string{
-				`SELECT * from t`: {{"CR"}},
-			},
-		},
-		{
-			name:   "normal",
-			create: `i int8, s string`,
-			typ:    "PGCOPY",
-			data:   "1\tSTR\n2\t\\N\n\\N\t\\t",
-			query: map[string][][]string{
-				`SELECT * from t`: {{"1", "STR"}, {"2", "NULL"}, {"NULL", "\t"}},
-			},
-		},
-		{
-			name:   "comma delim",
-			create: `i int8, s string`,
-			typ:    "PGCOPY",
-			with:   `WITH delimiter = ','`,
-			data:   "1,STR\n2,\\N\n\\N,\\,",
-			query: map[string][][]string{
-				`SELECT * from t`: {{"1", "STR"}, {"2", "NULL"}, {"NULL", ","}},
-			},
-		},
-		{
-			name:   "size out of range",
-			create: `i int8`,
-			typ:    "PGCOPY",
-			with:   `WITH max_row_size = '10GB'`,
-			err:    "out of range: 10000000000",
-		},
-		{
-			name:   "line too long",
-			create: `i int8`,
-			typ:    "PGCOPY",
-			data:   "123456",
-			with:   `WITH max_row_size = '5B'`,
-			err:    "line too long",
-		},
-		{
-			name:   "not enough values",
-			typ:    "PGCOPY",
-			create: "a INT8, b INT8",
-			data:   `1`,
-			err:    "expected 2 values, got 1",
-		},
-		{
-			name:   "too many values",
-			typ:    "PGCOPY",
-			create: "a INT8, b INT8",
-			data:   "1\t2\t3",
-			err:    "expected 2 values, got 3",
-		},
-
-		// Error
-		{
-			name:   "unsupported import format",
-			create: `b bytes`,
-			typ:    "NOPE",
-			err:    `unsupported import format`,
-		},
-	}
 
 	var mockRecorder struct {
 		syncutil.Mutex
@@ -983,11 +998,6 @@ func TestImportData(t *testing.T) {
 	sqlDB.Exec(t, `DROP TABLE blah`)
 
 	for _, saveRejected := range []bool{false, true} {
-		// this test is big and slow as is, so we can't afford to double it in race.
-		if util.RaceEnabled && saveRejected {
-			continue
-		}
-
 		for i, tc := range tests {
 			if tc.typ != "CSV" && tc.typ != "DELIMITED" && saveRejected {
 				continue
@@ -1040,14 +1050,61 @@ func TestImportData(t *testing.T) {
 			})
 		}
 	}
+}
 
-	t.Run("mysqlout multiple", func(t *testing.T) {
-		sqlDB.Exec(t, `CREATE DATABASE mysqlout; USE mysqlout`)
-		mockRecorder.dataString = "1"
-		sqlDB.Exec(t, `CREATE TABLE t (s STRING)`)
-		sqlDB.Exec(t, `IMPORT INTO t DELIMITED DATA ($1, $1)`, srv.URL)
-		sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1"}, {"1"}})
-	})
+func TestImportDataCSV(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	var tests []importDataTest
+	for _, tc := range importDataTests {
+		if tc.typ == "CSV" {
+			tests = append(tests, tc)
+		}
+	}
+	runImportDataTests(t, tests)
+}
+
+func TestImportDataDelimited(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	var tests []importDataTest
+	for _, tc := range importDataTests {
+		if tc.typ == "DELIMITED" {
+			tests = append(tests, tc)
+		}
+	}
+	runImportDataTests(t, tests)
+}
+
+func TestImportDataPgCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	var tests []importDataTest
+	for _, tc := range importDataTests {
+		if tc.typ == "PGCOPY" || tc.typ == "NOPE" {
+			tests = append(tests, tc)
+		}
+	}
+	runImportDataTests(t, tests)
+}
+
+func TestImportDataMysqloutMultiple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
+	sqlDB.Exec(t, `CREATE DATABASE mysqlout; USE mysqlout`)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "1")
+	}))
+	defer srv.Close()
+	sqlDB.Exec(t, `CREATE TABLE t (s STRING)`)
+	sqlDB.Exec(t, `IMPORT INTO t DELIMITED DATA ($1, $1)`, srv.URL)
+	sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"1"}, {"1"}})
 }
 
 func TestImportIntoUserDefinedTypes(t *testing.T) {
@@ -1459,6 +1516,7 @@ func TestFailedImport(t *testing.T) {
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 	sqlDB.Exec(t, "CREATE DATABASE failedimport; USE failedimport;")
 	sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
@@ -1533,6 +1591,7 @@ func TestImportIntoCSVCancel(t *testing.T) {
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 	testFiles := makeCSVData(t, numFiles, rowsPerFile, nodes, rowsPerRaceFile)
 
 	sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b STRING)`)
@@ -3681,6 +3740,7 @@ func TestImportDefault(t *testing.T) {
 	conn := tc.ServerConn(0)
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 	var data string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
@@ -4112,6 +4172,7 @@ func TestImportDefaultNextVal(t *testing.T) {
 	conn := tc.ServerConn(0)
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 
 	type seqMetadata struct {
 		start                     int
@@ -4392,6 +4453,7 @@ func TestImportComputed(t *testing.T) {
 	conn := tc.ServerConn(0)
 
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 	var data string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
@@ -4890,6 +4952,7 @@ func TestImportWorkerFailure(t *testing.T) {
 	sqlCodec.Store(&codec)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 	setSmallIngestBufferSizes(t, sqlDB)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -4986,6 +5049,7 @@ func TestImportDelimited(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
@@ -5076,6 +5140,7 @@ func TestImportPgCopy(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	conn := tc.ServerConn(0)
 	sqlDB := sqlutils.MakeSQLRunner(conn)
+	sqlDB.Exec(t, `SET CLUSTER SETTING bulkio.import.elastic_control.enabled = false`)
 
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.bulk_ingest.batch_size = '10KB'`)
 	sqlDB.Exec(t, `CREATE DATABASE foo; SET DATABASE = foo`)
