@@ -387,9 +387,13 @@ func (i *instance) getTagsAsMap() (map[string]string, error) {
 		SetOffset(0)
 
 	for {
-		tagResp, _, err := tagService.ListTags(options)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to query instance tags")
+		tagResp, listTagsErr := retryOnRateLimit(
+			func() (*globaltaggingv1.TagList, *core.DetailedResponse, error) {
+				return tagService.ListTags(options)
+			},
+		)
+		if listTagsErr != nil {
+			return nil, errors.Wrap(listTagsErr, "failed to query instance tags")
 		}
 
 		nbItems := int64(len(tagResp.Items))
@@ -523,22 +527,34 @@ func (i *instance) load() error {
 		}
 	}
 
-	vpcService, err := i.provider.getVpcServiceFromZone(*i.instance.Zone.Name)
-	if err != nil {
-		return errors.Wrap(err, "failed to get VPC service from zone")
+	// Only fetch full instance details if we have a partial object (e.g., only CRN was provided).
+	// Check if CreatedAt is present - it's always populated by List/Get/Create APIs but not when
+	// constructing minimal instance objects manually.
+	if i.instance.CreatedAt == nil {
+		vpcService, err := i.provider.getVpcServiceFromZone(*i.instance.Zone.Name)
+		if err != nil {
+			return errors.Wrap(err, "failed to get VPC service from zone")
+		}
+
+		instanceResp, _, err := vpcService.GetInstance(
+			vpcService.NewGetInstanceOptions(*i.instance.ID),
+		)
+		if err != nil {
+			return errors.Wrap(err, "failed to query instance")
+		}
+
+		i.instance = instanceResp
 	}
 
-	instanceResp, _, err := vpcService.GetInstance(
-		vpcService.NewGetInstanceOptions(*i.instance.ID),
-	)
-	if err != nil {
-		return errors.Wrap(err, "failed to query instance")
-	}
-
-	i.instance = instanceResp
-	i.networkInterface, err = i.getPrimaryNetworkInterface()
-	if err != nil {
-		return errors.Wrap(err, "failed to get primary network interface")
+	// Only fetch network interface details if not already present.
+	// When instances come from List API, they already have complete instance data,
+	// so we skip the expensive GetInstance call and only fetch network interface if needed.
+	if i.networkInterface == nil {
+		var err error
+		i.networkInterface, err = i.getPrimaryNetworkInterface()
+		if err != nil {
+			return errors.Wrap(err, "failed to get primary network interface")
+		}
 	}
 
 	return nil
