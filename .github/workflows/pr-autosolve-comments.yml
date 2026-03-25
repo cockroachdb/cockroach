@@ -230,6 +230,7 @@ jobs:
           printf '%s' "$REVIEW_USER" > "$CONTEXT_DIR/review_user.txt"
           printf '%s' "$REVIEW_BODY" > "$CONTEXT_DIR/review_body.txt"
           printf '%s' "$ALL_COMMENTS" > "$CONTEXT_DIR/all_comments.json"
+          cp /tmp/event-context/pr_body.txt "$CONTEXT_DIR/pr_body.txt" 2>/dev/null || true
 
       - name: Parse Reviewable comments from review body
         id: parse_reviewable
@@ -371,6 +372,7 @@ jobs:
             - /tmp/review-context/comment_body.txt: The comment text (no file/line context)
 
             /tmp/review-context/all_comments.json: JSON array of all native review comments on this PR
+            /tmp/review-context/pr_body.txt: The PR description (commit record), providing context about the change
             </untrusted_user_content>
 
             <task>
