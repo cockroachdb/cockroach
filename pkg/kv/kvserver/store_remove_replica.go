@@ -81,8 +81,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		return nil, errors.AssertionFailedf("cannot specify both InsertPlaceholder and DestroyData")
 	}
 
-	// Run sanity checks and on success commit to the removal by setting the
-	// destroy status. If (nil, nil) is returned, there's nothing to do.
+	// Run sanity checks. If (nil, nil) is returned, there's nothing to do.
 	desc, err := func() (*roachpb.RangeDescriptor, error) {
 		rep.readOnlyCmdMu.Lock()
 		defer rep.readOnlyCmdMu.Unlock()
@@ -130,9 +129,6 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 				repDesc.ReplicaID, nextReplicaID)
 		}
 
-		// Sanity checks passed. Mark the replica as removed before deleting data.
-		rep.shMu.destroyStatus.Set(kvpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
-			destroyReasonRemoved)
 		return desc, nil
 	}()
 	if err != nil {
@@ -142,6 +138,37 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		// Already removed/removing, no-op.
 		return nil, nil
 	}
+
+	// Stage the engine destruction batch before any in-memory state changes.
+	// If staging fails, we return the error with no side effects.
+	var pending pendingReplicaDestruction
+	if opts.DestroyData {
+		var err error
+		pending, err = stageDestroyReplica(
+			ctx, &s.batchFactory,
+			s.StateEngine(), s.LogEngine(),
+			rep.destroyInfoRaftMuLocked(), nextReplicaID,
+			rep.GetMVCCStats(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		defer pending.Close()
+	}
+
+	// Mark the replica as removed. This is done after staging (which is
+	// fallible) but before committing (which is infallible), so that a staging
+	// failure leaves the replica in a clean state.
+	func() {
+		rep.readOnlyCmdMu.Lock()
+		defer rep.readOnlyCmdMu.Unlock()
+		rep.mu.Lock()
+		defer rep.mu.Unlock()
+		// NB: we hold raftMu throughout and destroyStatus is in shMu, so the destroyStatus
+		// did not change between the earlier sanity checks and here.
+		rep.shMu.destroyStatus.Set(kvpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
+			destroyReasonRemoved)
+	}()
 
 	// Proceed with the removal, all errors encountered from here down are fatal.
 
@@ -176,9 +203,8 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	// (preventing any concurrent access to the replica's key range).
 	rep.disconnectReplicationRaftMuLocked(ctx)
 	if opts.DestroyData {
-		if err := rep.destroyRaftMuLocked(ctx, nextReplicaID); err != nil {
-			return nil, err
-		}
+		pending.MustCommit(ctx)
+		rep.postDestroyRaftMuLocked(ctx)
 	}
 
 	ph := func() *ReplicaPlaceholder {
