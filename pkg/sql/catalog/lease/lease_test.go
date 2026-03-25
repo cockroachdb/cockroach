@@ -1703,28 +1703,28 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 
 	// When to end the test.
 	end := timeutil.Now().Add(maxTime)
-	var wg sync.WaitGroup
-	wg.Add(2)
 
 	log.Dev.Infof(ctx, "until %s", end)
 
-	go func() {
+	grp := ctxgroup.WithContext(ctx)
+
+	grp.GoCtx(func(ctx context.Context) error {
 		for count := 0; timeutil.Now().Before(end); count++ {
 			log.Dev.Infof(ctx, "renaming test%d to test%d", count, count+1)
 			if _, err := t.db.Exec(fmt.Sprintf(`ALTER TABLE t.test%d RENAME TO t.test%d`, count, count+1)); err != nil {
-				t.Fatal(err)
+				return err
 			}
 		}
-		wg.Done()
-	}()
+		return nil
+	})
 
-	go func() {
+	grp.GoCtx(func(ctx context.Context) error {
 		leaseMgr := t.node(1)
 		for timeutil.Now().Before(end) {
 			log.Dev.Infof(ctx, "publishing new descriptor")
 			desc, err := leaseMgr.Publish(ctx, descID, func(catalog.MutableDescriptor) error { return nil }, nil)
 			if err != nil {
-				t.Fatalf("error while publishing: %v", err)
+				return errors.Wrap(err, "error while publishing")
 			}
 			table := desc.(catalog.TableDescriptor)
 
@@ -1741,31 +1741,33 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 			log.Dev.Infof(ctx, "checking version %d", table.GetVersion())
 			txn := kv.NewTxn(ctx, t.kvDB, roachpb.NodeID(0))
 			// Make the txn look back at the known modification timestamp.
-			require.NoError(t, txn.SetFixedTimestamp(ctx, table.GetModificationTime()))
+			if err := txn.SetFixedTimestamp(ctx, table.GetModificationTime()); err != nil {
+				return err
+			}
 
 			// Look up the descriptor.
 			descKey := catalogkeys.MakeDescMetadataKey(t.server.Codec(), descID)
 			res, err := txn.Get(ctx, descKey)
 			if err != nil {
-				t.Fatalf("error while reading proto: %v", err)
+				return errors.Wrap(err, "error while reading proto")
 			}
 			b, err := descbuilder.FromSerializedValue(res.Value)
 			if err != nil {
-				t.Fatal(err)
+				return err
 			}
 			// Look at the descriptor that comes back from the database.
 			if b != nil && b.DescriptorType() == catalog.Table {
 				dbTable := b.BuildImmutable()
 				if v, modTime := dbTable.GetVersion(), dbTable.GetModificationTime(); v != table.GetVersion() || modTime != table.GetModificationTime() {
-					t.Fatalf("db has version %d at ts %s, expected version %d at ts %s",
+					return errors.Newf("db has version %d at ts %s, expected version %d at ts %s",
 						v, modTime, table.GetVersion(), table.GetModificationTime())
 				}
 			}
 		}
-		wg.Done()
-	}()
+		return nil
+	})
 
-	wg.Wait()
+	require.NoError(testingT, grp.Wait())
 }
 
 // TestReadBeforeDrop tests that a read over a table from a transaction
