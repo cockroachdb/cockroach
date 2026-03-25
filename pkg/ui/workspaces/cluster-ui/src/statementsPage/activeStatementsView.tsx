@@ -5,7 +5,6 @@
 
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
-import moment from "moment-timezone";
 import React, { useContext, useEffect, useState } from "react";
 import { useHistory } from "react-router-dom";
 
@@ -27,6 +26,7 @@ import {
   ACTIVE_STATEMENT_SEARCH_PARAM,
   getAppsFromActiveExecutions,
   filterActiveStatements,
+  useDisplayRefreshAlert,
 } from "../activeExecutions/activeStatementUtils";
 import { ClusterDetailsContext } from "../contexts";
 import {
@@ -84,38 +84,9 @@ export const ActiveStatementsView: React.FC = () => {
     1,
     PAGE_SIZE,
   );
-  // Local state to store the difference between the current time and the last
-  // time the data was updated, in minutes.
-  const [minutesSinceLastRefresh, setMinutesSinceLastRefresh] = useState(0);
-  // Local state to store whether or not to display the refresh alert.
-  const [displayRefreshAlert, setDisplayRefreshAlert] = useState(false);
 
-  useEffect(() => {
-    // This useEffect hook checks the difference between the current time and
-    // the last time the data was updated. It triggers a state change to display
-    // an alert if the difference is greater than 10 minutes and auto-refresh
-    // is disabled. The check is performed immediately when the component mounts
-    // and then every 10 seconds thereafter.
-    const checkTimeDifference = () => {
-      if (!isAutoRefreshEnabled && lastUpdated) {
-        // Calculate the difference between the last updated time and the current time in minutes
-        const diffMinutes = moment().diff(lastUpdated, "minutes");
-        if (diffMinutes >= 10) {
-          setDisplayRefreshAlert(true);
-          setMinutesSinceLastRefresh(diffMinutes);
-        } else {
-          setDisplayRefreshAlert(false);
-        }
-      }
-    };
-
-    checkTimeDifference();
-    const intervalId = setInterval(checkTimeDifference, 10 * 1000);
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [lastUpdated, isAutoRefreshEnabled, setDisplayRefreshAlert]);
+  const { displayRefreshAlert, minutesSinceLastRefresh } =
+    useDisplayRefreshAlert(isAutoRefreshEnabled, lastUpdated);
 
   // Sync sort, filters, and search to URL whenever they change.
   useEffect(() => {
@@ -156,7 +127,6 @@ export const ActiveStatementsView: React.FC = () => {
   const onSubmitToggleAutoRefresh = () => {
     // Refresh immediately when toggling auto-refresh on.
     if (!isAutoRefreshEnabled) {
-      setDisplayRefreshAlert(false);
       refresh();
     }
     setIsAutoRefreshEnabled(!isAutoRefreshEnabled);

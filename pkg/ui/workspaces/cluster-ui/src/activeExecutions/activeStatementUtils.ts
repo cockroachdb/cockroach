@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 import moment from "moment-timezone";
+import { useEffect, useState } from "react";
 
 import { ClusterLocksResponse, ClusterLockState } from "src/api";
 import { byteArrayToUuid } from "src/sessions";
@@ -418,4 +419,44 @@ export const getActiveExecutionsWithLockWaits = (
       timeSpentWaiting: waitTimeByTxnID[t.transactionID],
     })),
   };
+};
+
+export const useDisplayRefreshAlert = (
+  isAutoRefreshEnabled: boolean,
+  lastUpdated: moment.Moment,
+) => {
+  const [displayRefreshAlert, setDisplayRefreshAlert] = useState(false);
+  const [minutesSinceLastRefresh, setMinutesSinceLastRefresh] = useState(0);
+  useEffect(() => {
+    // This useEffect hook checks the difference between the current time and
+    // the last time the data was updated. It triggers a state change to display
+    // an alert if the difference is greater than 10 minutes and auto-refresh
+    // is disabled. The check is performed immediately when the component mounts
+    // and then every 10 seconds thereafter.
+    const checkTimeDifference = () => {
+      if (!isAutoRefreshEnabled && lastUpdated) {
+        // Calculate the difference between the last updated time and the current time in minutes
+        const diffMinutes = moment().diff(lastUpdated, "minutes");
+        if (diffMinutes >= 10) {
+          setDisplayRefreshAlert(true);
+          setMinutesSinceLastRefresh(diffMinutes);
+        } else {
+          setDisplayRefreshAlert(false);
+        }
+      }
+    };
+
+    // Reset the alert when auto-refresh is re-enabled.
+    if (isAutoRefreshEnabled) {
+      setDisplayRefreshAlert(false);
+    }
+    checkTimeDifference();
+    const intervalId = setInterval(checkTimeDifference, 10 * 1000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [isAutoRefreshEnabled, lastUpdated]);
+
+  return { displayRefreshAlert, minutesSinceLastRefresh };
 };
