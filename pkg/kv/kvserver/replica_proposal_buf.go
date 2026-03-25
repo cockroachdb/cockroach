@@ -516,8 +516,11 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				continue
 			}
 			sl := []raftpb.Entry{{Type: typ, Data: data}}
-			// Send config change in a single-element batch. We go through
-			// proposeBatch since there's observability in there.
+			// Config change entries must be proposed alone in a MsgProp, not
+			// batched with other entries. The raft leader relies on this
+			// invariant to reject invalid config changes via ErrProposalDropped
+			// (see stepLeader in pkg/raft/raft.go). We go through proposeBatch
+			// since there's observability in there.
 			if err := proposeBatch(
 				b.p, raftGroup, sl, []*ProposalData{p},
 			); err != nil && !errors.Is(err, raft.ErrProposalDropped) {
