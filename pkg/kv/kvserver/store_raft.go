@@ -33,8 +33,9 @@ import (
 )
 
 var (
-	logRaftRecvQueueFullEvery = log.Every(1 * time.Second)
-	logRaftSendQueueFullEvery = log.Every(1 * time.Second)
+	logRaftRecvQueueFullEvery    = log.Every(1 * time.Second)
+	logRaftSendQueueFullEvery    = log.Every(1 * time.Second)
+	logReplicaRemovalFailedEvery = log.Every(1 * time.Second)
 )
 
 type raftRequestInfo struct {
@@ -640,10 +641,12 @@ func (s *Store) HandleRaftResponse(
 
 				repl.mu.Unlock()
 				nextReplicaID := tErr.ReplicaID + 1
-				// TODO(in this PR): we can log this error now (behind a log.Every)
-				// and return nil. No reason to break down the stream due to an error
-				// affecting possibly only a single local replica. Log and move on.
-				return s.removeReplicaRaftMuLocked(ctx, repl, nextReplicaID, "received ReplicaTooOldError")
+				if err := s.removeReplicaRaftMuLocked(ctx, repl, nextReplicaID, "received ReplicaTooOldError"); err != nil {
+					if logReplicaRemovalFailedEvery.ShouldLog() {
+						log.KvExec.Warningf(ctx, "failed to remove replica %v: %v", repl, err)
+					}
+				}
+				return nil
 			case *kvpb.RaftGroupDeletedError:
 				if replErr != nil {
 					// RangeNotFoundErrors are expected here; nothing else is.
