@@ -210,12 +210,26 @@ func TestReadCommittedReadTimestampNotSteppedOnCommit(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	_, err := sqlDB.Exec(`CREATE TABLE kv (k TEXT, v INT) WITH (sql_stats_automatic_collection_enabled = false);`)
+	// Pin the write buffer size to the default (4MB). With a small metamorphic
+	// value, the buffer can overflow mid-transaction, causing a flush that
+	// prevents parallel commit and breaks the filter's EndTxn detection.
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '4MB'`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`CREATE TABLE kv (k TEXT, v INT) WITH (sql_stats_automatic_collection_enabled = false);`)
+	require.NoError(t, err)
+
+	// Use a dedicated connection so we can collect a KV trace on failure.
+	conn, err := sqlDB.Conn(ctx)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, conn.Close()) }()
+
+	_, err = conn.ExecContext(ctx, "SET TRACING = on, kv")
 	require.NoError(t, err)
 
 	// Create a read committed transaction that writes to three rows in three
 	// different statements and then commits.
-	tx, err := sqlDB.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
+	tx, err := conn.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
 	require.NoError(t, err)
 	_, err = tx.Exec(`INSERT INTO kv VALUES ('a', 1);`)
 	require.NoError(t, err)
@@ -224,6 +238,19 @@ func TestReadCommittedReadTimestampNotSteppedOnCommit(t *testing.T) {
 	_, err = tx.Exec(`INSERT INTO kv VALUES ('c', 3);`)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())
+
+	_, err = conn.ExecContext(ctx, "SET TRACING = off")
+	require.NoError(t, err)
+
+	// Collect KV trace for debugging on failure.
+	traceRows := sqlutils.MakeSQLRunner(conn).QueryStr(t, "SHOW KV TRACE FOR SESSION")
+	defer func() {
+		if t.Failed() {
+			for _, row := range traceRows {
+				t.Logf("trace: %s", strings.Join(row, "\t"))
+			}
+		}
+	}()
 
 	// Verify that the transaction's read timestamp was not stepped on commit but
 	// was stepped between every other statement.
