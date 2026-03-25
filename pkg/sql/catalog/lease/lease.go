@@ -837,7 +837,10 @@ func getDescriptorsFromStoreForInterval(
 
 		// Export request returns descriptors in decreasing modification time.
 		res, pErr := kv.SendWrappedWithAdmission(ctx, db.NonTransactionalSender(), batchRequestHeader, kvpb.AdmissionHeader{
-			Priority:                 int32(admissionpb.BulkNormalPri),
+			// We are fetching descriptor versions for foreground traffic, so getting
+			// throttled delays foreground work. As a result, lease manager exports
+			// should execute with a normal priority.
+			Priority:                 int32(admissionpb.NormalPri),
 			CreateTime:               timeutil.Now().UnixNano(),
 			Source:                   kvpb.AdmissionHeader_FROM_SQL,
 			NoMemoryReservedAtSource: true,
@@ -1090,6 +1093,10 @@ func (m *Manager) getDescriptorsInTxnAtTimestamp(
 		}
 
 		res, pErr := kv.SendWrappedWithAdmission(ctx, m.storage.db.KV().NonTransactionalSender(), batchRequestHeader, kvpb.AdmissionHeader{
+			// We intentionally use a lower priority here because getting
+			// transaction information is background work. If we get throttled
+			// fetching this information, nothing bad happens, and the range feed
+			// checkpoint will cause us to public descriptors.
 			Priority:                 int32(admissionpb.BulkNormalPri),
 			CreateTime:               timeutil.Now().UnixNano(),
 			Source:                   kvpb.AdmissionHeader_FROM_SQL,
