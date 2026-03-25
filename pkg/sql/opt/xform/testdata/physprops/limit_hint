@@ -678,3 +678,141 @@ project
  │    └── -1
  └── projections
       └── 0 [as="?column?":5]
+
+# --------------------------------------------------
+# Regression test for #116022, #166646. Exploration rules like
+# PushFilterIntoJoinLeftAndRight can duplicate scalar expressions
+# containing subqueries, causing the same memo group to be visited
+# twice with different required physical properties during
+# setLowestCostTree. Ensure this does not cause a panic in
+# SetBestProps.
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE limhint_a (
+  id INT PRIMARY KEY
+)
+----
+
+exec-ddl
+CREATE TABLE limhint_b (
+  id INT PRIMARY KEY,
+  x INT
+)
+----
+
+exec-ddl
+CREATE TABLE limhint_c (
+  id INT PRIMARY KEY,
+  x INT,
+  y INT
+)
+----
+
+exec-ddl
+CREATE TABLE limhint_d (
+  id INT PRIMARY KEY,
+  x INT,
+  y INT
+)
+----
+
+opt locality=(region=east)
+SELECT limhint_a.id
+FROM limhint_a
+INNER JOIN limhint_b ON limhint_b.x = limhint_a.id
+INNER JOIN limhint_c ON limhint_c.y = limhint_b.id
+LEFT JOIN LATERAL (
+  SELECT limhint_d.id
+  FROM limhint_d
+  WHERE limhint_d.x = limhint_c.x
+  ORDER BY limhint_d.y
+  LIMIT 1
+) ON true
+WHERE limhint_b.id = (SELECT id FROM limhint_b)
+----
+distribute
+ ├── columns: id:1!null
+ ├── fd: ()-->(1)
+ ├── distribution: east
+ ├── input distribution: 
+ └── project
+      ├── columns: limhint_a.id:1!null
+      ├── fd: ()-->(1)
+      └── distinct-on
+           ├── columns: limhint_a.id:1!null limhint_c.id:8!null
+           ├── grouping columns: limhint_c.id:8!null
+           ├── internal-ordering: +15 opt(1,4,5,10,18)
+           ├── key: (8)
+           ├── fd: ()-->(1)
+           ├── sort
+           │    ├── columns: limhint_a.id:1!null limhint_b.id:4!null limhint_b.x:5!null limhint_c.id:8!null limhint_c.x:9 limhint_c.y:10!null limhint_d.x:14 limhint_d.y:15 limhint_b.id:18!null
+           │    ├── fd: ()-->(1,4,5,10,18), (8)-->(9), (4)==(10,18), (10)==(4,18), (18)==(4,10), (1)==(5), (5)==(1)
+           │    ├── ordering: +15 opt(1,4,5,10,18) [actual: +15]
+           │    └── right-join (hash)
+           │         ├── columns: limhint_a.id:1!null limhint_b.id:4!null limhint_b.x:5!null limhint_c.id:8!null limhint_c.x:9 limhint_c.y:10!null limhint_d.x:14 limhint_d.y:15 limhint_b.id:18!null
+           │         ├── fd: ()-->(1,4,5,10,18), (8)-->(9), (4)==(10,18), (10)==(4,18), (18)==(4,10), (1)==(5), (5)==(1)
+           │         ├── scan limhint_d
+           │         │    └── columns: limhint_d.x:14 limhint_d.y:15
+           │         ├── inner-join (hash)
+           │         │    ├── columns: limhint_a.id:1!null limhint_b.id:4!null limhint_b.x:5!null limhint_c.id:8!null limhint_c.x:9 limhint_c.y:10!null limhint_b.id:18!null
+           │         │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+           │         │    ├── key: (8)
+           │         │    ├── fd: ()-->(1,4,5,10,18), (8)-->(9), (4)==(10,18), (10)==(4,18), (18)==(4,10), (1)==(5), (5)==(1)
+           │         │    ├── select
+           │         │    │    ├── columns: limhint_c.id:8!null limhint_c.x:9 limhint_c.y:10!null
+           │         │    │    ├── key: (8)
+           │         │    │    ├── fd: (8)-->(9,10)
+           │         │    │    ├── scan limhint_c
+           │         │    │    │    ├── columns: limhint_c.id:8!null limhint_c.x:9 limhint_c.y:10
+           │         │    │    │    ├── key: (8)
+           │         │    │    │    └── fd: (8)-->(9,10)
+           │         │    │    └── filters
+           │         │    │         └── eq [outer=(10), subquery]
+           │         │    │              ├── limhint_c.y:10
+           │         │    │              └── subquery
+           │         │    │                   └── max1-row
+           │         │    │                        ├── columns: limhint_b.id:18!null
+           │         │    │                        ├── error: "more than one row returned by a subquery used as an expression"
+           │         │    │                        ├── cardinality: [0 - 1]
+           │         │    │                        ├── key: ()
+           │         │    │                        ├── fd: ()-->(18)
+           │         │    │                        ├── distribution: east
+           │         │    │                        └── scan limhint_b
+           │         │    │                             ├── columns: limhint_b.id:18!null
+           │         │    │                             ├── key: (18)
+           │         │    │                             └── distribution: east
+           │         │    ├── inner-join (lookup limhint_a)
+           │         │    │    ├── columns: limhint_a.id:1!null limhint_b.id:4!null limhint_b.x:5!null limhint_b.id:18!null
+           │         │    │    ├── key columns: [5] = [1]
+           │         │    │    ├── lookup columns are key
+           │         │    │    ├── cardinality: [0 - 1]
+           │         │    │    ├── key: ()
+           │         │    │    ├── fd: ()-->(1,4,5,18), (4)==(18), (18)==(4), (1)==(5), (5)==(1)
+           │         │    │    ├── inner-join (lookup limhint_b)
+           │         │    │    │    ├── columns: limhint_b.id:4!null limhint_b.x:5 limhint_b.id:18!null
+           │         │    │    │    ├── key columns: [18] = [4]
+           │         │    │    │    ├── lookup columns are key
+           │         │    │    │    ├── cardinality: [0 - 1]
+           │         │    │    │    ├── key: ()
+           │         │    │    │    ├── fd: ()-->(4,5,18), (4)==(18), (18)==(4)
+           │         │    │    │    ├── max1-row
+           │         │    │    │    │    ├── columns: limhint_b.id:18!null
+           │         │    │    │    │    ├── error: "more than one row returned by a subquery used as an expression"
+           │         │    │    │    │    ├── cardinality: [0 - 1]
+           │         │    │    │    │    ├── key: ()
+           │         │    │    │    │    ├── fd: ()-->(18)
+           │         │    │    │    │    ├── distribution: east
+           │         │    │    │    │    └── scan limhint_b
+           │         │    │    │    │         ├── columns: limhint_b.id:18!null
+           │         │    │    │    │         ├── key: (18)
+           │         │    │    │    │         └── distribution: east
+           │         │    │    │    └── filters (true)
+           │         │    │    └── filters (true)
+           │         │    └── filters
+           │         │         └── limhint_c.y:10 = limhint_b.id:4 [outer=(4,10), fd=(4)==(10), (10)==(4)]
+           │         └── filters
+           │              └── limhint_d.x:14 = limhint_c.x:9 [outer=(9,14), fd=(9)==(14), (14)==(9)]
+           └── aggregations
+                └── const-agg [as=limhint_a.id:1, outer=(1)]
+                     └── limhint_a.id:1
