@@ -1842,6 +1842,10 @@ func stepLeader(r *raft, m pb.Message) error {
 			return ErrProposalDropped
 		}
 
+		// Scan entries for config changes. Config change entries must be proposed
+		// alone in a MsgProp (not batched with other entries), as ensured by
+		// confChangeToMsg. This allows the leader to reject the entire MsgProp
+		// if config change validation fails.
 		for i := range m.Entries {
 			e := &m.Entries[i]
 			var cc pb.ConfChangeI

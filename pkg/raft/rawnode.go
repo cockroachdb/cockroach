@@ -96,8 +96,13 @@ func (rn *RawNode) Propose(data []byte) error {
 
 // ProposeConfChange proposes a config change. Like any proposal, the config
 // change may be dropped with or without an error being returned (see the
-// Propose() method). In addition, config changes are dropped unless the leader
-// has certainty that there is no prior unapplied config change in its log.
+// Propose() method). In particular, ErrProposalDropped is returned if config
+// change validation fails, e.g. because there is a prior unapplied config
+// change in the leader's log.
+//
+// The config change is proposed as a single-entry MsgProp message (see
+// confChangeToMsg). This is a requirement: config change entries must not be
+// batched with other entries in a MsgProp.
 //
 // The method accepts either a pb.ConfChange (deprecated) or pb.ConfChangeV2
 // message. The latter allows arbitrary config changes via joint consensus,
@@ -112,6 +117,9 @@ func (rn *RawNode) ProposeConfChange(cc pb.ConfChangeI) error {
 	return rn.raft.Step(m)
 }
 
+// confChangeToMsg converts a config change to a MsgProp message with a single
+// entry. Config change entries must always be proposed alone in a MsgProp, not
+// batched with other entries. The raft leader relies on this invariant.
 func confChangeToMsg(c pb.ConfChangeI) (pb.Message, error) {
 	typ, data, err := pb.MarshalConfChange(c)
 	if err != nil {
