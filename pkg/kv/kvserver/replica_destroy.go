@@ -8,11 +8,14 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -84,51 +87,121 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context) {
 	}
 }
 
-// destroyRaftMuLocked deletes data associated with a replica, leaving a
-// tombstone. The Replica may not be initialized in which case only the
-// range ID local data is removed.
-func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb.ReplicaID) error {
-	startTime := timeutil.Now()
+// pendingReplicaDestruction holds a staged but uncommitted replica destruction.
+// The engine batch has been populated with all writes needed to destroy the
+// replica's on-disk state and install a tombstone. Call MustCommit to durably
+// apply the destruction. Close must be called when the pendingReplicaDestruction
+// is no longer needed (it is safe to call after MustCommit).
+type pendingReplicaDestruction struct {
+	batch       kvstorage.Batch[storage.WriteBatch]
+	ms          enginepb.MVCCStats
+	initialized bool
+	stageTime   time.Time
+	clearTime   time.Time
+}
 
-	ms := r.GetMVCCStats()
-	batch := r.store.batchFactory.NewWriteBatch()
-	defer batch.Close()
+// MustCommit sync-commits the staged destruction batch and logs the result. The
+// caller should call Close when done (it is safe to call after MustCommit).
+//
+// A batch commit is expected to be infallible (the data is already in memory
+// and just needs to be written to the WAL). Callers rely on this by performing
+// irreversible in-memory state changes (e.g. setting destroyStatus) between
+// staging and committing. Making commit fallible would force callers to handle
+// rollback of those in-memory changes, adding significant complexity. If a
+// commit does fail, we are in an unrecoverable situation and must terminate.
+//
+// We sync here because we are potentially deleting sideloaded proposals from the
+// file system next. We could write the tombstone only in a synchronous batch
+// first and then delete the data alternatively, but then need to handle the case
+// in which there is both the tombstone and leftover replica data.
+func (p *pendingReplicaDestruction) MustCommit(ctx context.Context) {
+	if err := p.batch.Commit(true /* sync */); err != nil {
+		log.KvDistribution.Fatalf(ctx, "unable to commit replica destruction batch: %v", err)
+	}
+	commitTime := timeutil.Now()
+	if p.initialized {
+		log.KvDistribution.Infof(ctx,
+			"removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
+			p.ms.KeyCount+p.ms.SysCount, p.ms.KeyCount, p.ms.SysCount,
+			commitTime.Sub(p.stageTime).Seconds()*1000,
+			p.clearTime.Sub(p.stageTime).Seconds()*1000,
+			commitTime.Sub(p.clearTime).Seconds()*1000,
+		)
+	} else {
+		log.KvDistribution.Infof(ctx,
+			"removed uninitialized range in %0.0fms [clear=%0.0fms commit=%0.0fms]",
+			commitTime.Sub(p.stageTime).Seconds()*1000,
+			p.clearTime.Sub(p.stageTime).Seconds()*1000,
+			commitTime.Sub(p.clearTime).Seconds()*1000,
+		)
+	}
+}
 
+// Close closes the underlying batch. It is idempotent and safe to call after
+// MustCommit.
+func (p *pendingReplicaDestruction) Close() {
+	p.batch.Close()
+}
+
+// stageDestroyReplica builds a batch that, when committed, will destroy the
+// replica's on-disk state and install a tombstone. The returned
+// pendingReplicaDestruction must have Close called when it is no longer needed.
+//
+// This function performs engine reads (to validate replica ID and tombstone
+// state) and stages engine writes into a batch, but does not commit. If any
+// engine read fails (e.g. due to context cancellation or I/O error), the error
+// is returned and the caller can abort with no side effects.
+func stageDestroyReplica(
+	ctx context.Context,
+	bf *kvstorage.BatchFactory,
+	stateReader kvstorage.StateRO,
+	logReader kvstorage.RaftRO,
+	info kvstorage.DestroyReplicaInfo,
+	nextReplicaID roachpb.ReplicaID,
+	ms enginepb.MVCCStats,
+) (pendingReplicaDestruction, error) {
+	stageTime := timeutil.Now()
+	batch := bf.NewWriteBatch()
 	stateWO, raftWO := kvstorage.StateWO(batch.State()), batch.Raft()
 	if err := kvstorage.DestroyReplica(
 		ctx, kvstorage.ReadWriter{
-			State: kvstorage.State{RO: r.store.StateEngine(), WO: stateWO},
-			Raft:  kvstorage.Raft{RO: r.store.LogEngine(), WO: raftWO},
+			State: kvstorage.State{RO: stateReader, WO: stateWO},
+			Raft:  kvstorage.Raft{RO: logReader, WO: raftWO},
 		},
-		r.destroyInfoRaftMuLocked(), nextReplicaID,
+		info, nextReplicaID,
 	); err != nil {
+		batch.Close()
+		return pendingReplicaDestruction{}, err
+	}
+	return pendingReplicaDestruction{
+		batch:       batch,
+		ms:          ms,
+		initialized: len(info.Keys.EndKey) > 0,
+		stageTime:   stageTime,
+		clearTime:   timeutil.Now(),
+	}, nil
+}
+
+// destroyRaftMuLocked deletes data associated with a replica, leaving a
+// tombstone. The Replica may not be initialized in which case only the
+// range ID local data is removed.
+//
+// If an error is returned from this method, the removal failed but no
+// side effects have occurred, i.e. the caller may be able to handle the
+// error cleanly.
+func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb.ReplicaID) error {
+	pending, err := stageDestroyReplica(
+		ctx, &r.store.batchFactory,
+		r.store.StateEngine(), r.store.LogEngine(),
+		r.destroyInfoRaftMuLocked(), nextReplicaID,
+		r.GetMVCCStats(),
+	)
+	if err != nil {
 		return err
 	}
-	preTime := timeutil.Now()
-
-	// We need to sync here because we are potentially deleting sideloaded
-	// proposals from the file system next. We could write the tombstone only in
-	// a synchronous batch first and then delete the data alternatively, but
-	// then need to handle the case in which there is both the tombstone and
-	// leftover replica data.
-	if err := batch.Commit(true /* sync */); err != nil {
-		return err
-	}
-	commitTime := timeutil.Now()
-
+	defer pending.Close()
+	pending.MustCommit(ctx)
 	r.postDestroyRaftMuLocked(ctx)
-	if r.IsInitialized() {
-		log.KvDistribution.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
-			ms.KeyCount+ms.SysCount, ms.KeyCount, ms.SysCount,
-			commitTime.Sub(startTime).Seconds()*1000,
-			preTime.Sub(startTime).Seconds()*1000,
-			commitTime.Sub(preTime).Seconds()*1000)
-	} else {
-		log.KvDistribution.Infof(ctx, "removed uninitialized range in %0.0fms [clear=%0.0fms commit=%0.0fms]",
-			commitTime.Sub(startTime).Seconds()*1000,
-			preTime.Sub(startTime).Seconds()*1000,
-			commitTime.Sub(preTime).Seconds()*1000)
-	}
 	return nil
 }
 
