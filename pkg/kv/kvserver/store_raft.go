@@ -640,6 +640,9 @@ func (s *Store) HandleRaftResponse(
 
 				repl.mu.Unlock()
 				nextReplicaID := tErr.ReplicaID + 1
+				// TODO(in this PR): we can log this error now (behind a log.Every)
+				// and return nil. No reason to break down the stream due to an error
+				// affecting possibly only a single local replica. Log and move on.
 				return s.removeReplicaRaftMuLocked(ctx, repl, nextReplicaID, "received ReplicaTooOldError")
 			case *kvpb.RaftGroupDeletedError:
 				if replErr != nil {
