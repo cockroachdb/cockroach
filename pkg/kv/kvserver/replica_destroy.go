@@ -57,12 +57,19 @@ func (s destroyStatus) Removed() bool {
 
 // postDestroyRaftMuLocked is called after the replica destruction is durably
 // written to Pebble.
-func (r *Replica) postDestroyRaftMuLocked(ctx context.Context) error {
+func (r *Replica) postDestroyRaftMuLocked(ctx context.Context) {
+	// Clearing sideloaded storage may fail (e.g. due to I/O errors), but we log
+	// and continue. The sideloaded files are keyed by the replica ID which has
+	// already been permanently tombstoned, so they will never be accessed again.
+	// Leaking the files is preferable to crashing or having to recover from a
+	// partially-destroyed replica state.
+	//
 	// TODO(#136416): at node startup, we should remove all on-disk directories
 	// belonging to replicas which aren't present. A crash before a call to
 	// postDestroyRaftMuLocked will currently leave the files around forever.
 	if err := r.logStorage.ls.Sideload.Clear(ctx); err != nil {
-		return err
+		log.KvDistribution.Warningf(ctx, "failed to clear sideloaded storage: %v", err)
+		err = nil // ignore intentionally
 	}
 
 	// Release the reference to this tenant in metrics, we know the tenant ID is
@@ -75,8 +82,6 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context) error {
 	if r.tenantLimiter != nil {
 		r.store.tenantRateLimiters.Release(r.tenantLimiter)
 	}
-
-	return nil
 }
 
 // destroyRaftMuLocked deletes data associated with a replica, leaving a
@@ -111,9 +116,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	}
 	commitTime := timeutil.Now()
 
-	if err := r.postDestroyRaftMuLocked(ctx); err != nil {
-		return err
-	}
+	r.postDestroyRaftMuLocked(ctx)
 	if r.IsInitialized() {
 		log.KvDistribution.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
 			ms.KeyCount+ms.SysCount, ms.KeyCount, ms.SysCount,
