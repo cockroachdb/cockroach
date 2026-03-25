@@ -1714,16 +1714,17 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 	log.Dev.Infof(ctx, "until %s", end)
 
 	go func() {
+		defer wg.Done()
 		for count := 0; timeutil.Now().Before(end); count++ {
 			log.Dev.Infof(ctx, "renaming test%d to test%d", count, count+1)
 			if _, err := t.db.Exec(fmt.Sprintf(`ALTER TABLE t.test%d RENAME TO t.test%d`, count, count+1)); err != nil {
 				t.Fatal(err)
 			}
 		}
-		wg.Done()
 	}()
 
 	go func() {
+		defer wg.Done()
 		leaseMgr := t.node(1)
 		for timeutil.Now().Before(end) {
 			log.Dev.Infof(ctx, "publishing new descriptor")
@@ -1767,7 +1768,6 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 				}
 			}
 		}
-		wg.Done()
 	}()
 
 	wg.Wait()
