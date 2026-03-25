@@ -769,6 +769,9 @@ func MakeCPUHandle(
 	tenantID roachpb.TenantID,
 	txn *kv.Txn,
 	atGateway bool,
+	workloadID uint64,
+	appNameID uint64,
+	gatewayNodeID roachpb.NodeID,
 ) (context.Context, *admission.SQLCPUHandle, *admission.GoroutineCPUHandle, error) {
 	var priority admissionpb.WorkPriority
 	var createTime int64
@@ -781,10 +784,13 @@ func MakeCPUHandle(
 		createTime = h.CreateTime
 	}
 	cpuHandle := provider.GetHandle(admission.SQLWorkInfo{
-		AtGateway:  atGateway,
-		TenantID:   tenantID,
-		Priority:   priority,
-		CreateTime: createTime,
+		AtGateway:     atGateway,
+		TenantID:      tenantID,
+		Priority:      priority,
+		CreateTime:    createTime,
+		WorkloadID:    workloadID,
+		AppNameID:     appNameID,
+		GatewayNodeID: gatewayNodeID,
 	})
 	newCtx := admission.ContextWithSQLCPUHandle(ctx, cpuHandle)
 	gh := cpuHandle.RegisterGoroutine()

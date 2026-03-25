@@ -2937,7 +2937,11 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 		var mainGoroutineCPUHandle *admission.GoroutineCPUHandle
 		var err error
 		ctx, cpuHandle, mainGoroutineCPUHandle, err = flowinfra.MakeCPUHandle(
-			ctx, cpuProvider, planner.extendedEvalCtx.Codec.TenantID, planner.txn, true /* atGateway */)
+			ctx, cpuProvider, planner.extendedEvalCtx.Codec.TenantID, planner.txn, true, /* atGateway */
+			planner.extendedEvalCtx.WorkloadID,
+			planner.extendedEvalCtx.AppNameID,
+			roachpb.NodeID(planner.extendedEvalCtx.NodeID.SQLInstanceID()),
+		)
 		if err != nil {
 			return err
 		}

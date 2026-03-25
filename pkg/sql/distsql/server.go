@@ -405,8 +405,16 @@ func (ds *ServerImpl) setupFlow(
 			var mainGoroutineCPUHandle *admission.GoroutineCPUHandle
 			var err error
 			// Remote flow (for flows at the gateway, the initialization happens in connExecutor).
+			// TODO(wenyi): this passes the local node ID as GatewayNodeID, matching
+			// the existing pattern in flow.go:337. Consider using
+			// roachpb.NodeID(req.Flow.Gateway) instead to reflect the actual
+			// gateway node for ASH attribution.
 			ctx, cpuHandle, mainGoroutineCPUHandle, err = flowinfra.MakeCPUHandle(
-				ctx, ds.SQLCPUProvider, evalCtx.Codec.TenantID, evalCtx.Txn, false /* atGateway */)
+				ctx, ds.SQLCPUProvider, evalCtx.Codec.TenantID, evalCtx.Txn, false, /* atGateway */
+				evalCtx.WorkloadID,
+				evalCtx.AppNameID,
+				roachpb.NodeID(ds.ServerConfig.NodeID.SQLInstanceID()),
+			)
 			if err != nil {
 				return nil, nil, nil, err
 			}
