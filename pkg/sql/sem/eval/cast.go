@@ -515,7 +515,7 @@ func performCastWithoutPrecisionTruncation(
 			if t.Oid() == oid.T_name {
 				return tree.NewDName(s), nil
 			}
-			if t.Oid() == oidext.T_aclitem {
+			if t.Oid() == oid.T_aclitem {
 				return tree.NewDACLItem(s)
 			}
 
