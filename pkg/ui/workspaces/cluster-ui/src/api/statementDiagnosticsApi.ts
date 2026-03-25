@@ -6,10 +6,17 @@
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import Long from "long";
 import moment from "moment-timezone";
+import { useCallback, useState } from "react";
+import { useSWRConfig } from "swr";
 
 import { fetchData } from "src/api";
 
-import { DurationToMomentDuration, NumberToDuration } from "../util";
+import {
+  DurationToMomentDuration,
+  NumberToDuration,
+  useSwrKeyWithClusterId,
+  useSwrWithClusterId,
+} from "../util";
 
 const STATEMENT_DIAGNOSTICS_PATH = "_status/stmtdiagreports";
 const CANCEL_STATEMENT_DIAGNOSTICS_PATH =
@@ -109,4 +116,64 @@ export async function cancelStatementDiagnosticsReport(
       stmt_diag_req_id: req.requestId,
     };
   });
+}
+
+export const STATEMENT_DIAGNOSTICS_SWR_KEY = "statementDiagnostics";
+
+export function useStatementDiagnostics() {
+  const [hasActiveRequests, setHasActiveRequests] = useState(false);
+
+  const { data, error, isLoading } =
+    useSwrWithClusterId<StatementDiagnosticsResponse>(
+      { name: STATEMENT_DIAGNOSTICS_SWR_KEY },
+      () => getStatementDiagnosticsReports(),
+      {
+        revalidateOnFocus: false,
+        revalidateOnReconnect: false,
+        refreshInterval: hasActiveRequests ? 30_000 : 0,
+        onSuccess: (reports: StatementDiagnosticsResponse) => {
+          setHasActiveRequests(reports?.some(s => !s.completed) ?? false);
+        },
+      },
+    );
+
+  return {
+    data: data ?? [],
+    error,
+    isLoading,
+  };
+}
+
+export function useCreateDiagnosticsReport() {
+  const { mutate: globalMutate } = useSWRConfig();
+  const diagnosticsKey = useSwrKeyWithClusterId({
+    name: STATEMENT_DIAGNOSTICS_SWR_KEY,
+  });
+
+  const createReport = useCallback(
+    async (req: InsertStmtDiagnosticRequest) => {
+      await createStatementDiagnosticsReport(req);
+      await globalMutate(diagnosticsKey);
+    },
+    [globalMutate, diagnosticsKey],
+  );
+
+  return { createReport };
+}
+
+export function useCancelDiagnosticsReport() {
+  const { mutate: globalMutate } = useSWRConfig();
+  const diagnosticsKey = useSwrKeyWithClusterId({
+    name: STATEMENT_DIAGNOSTICS_SWR_KEY,
+  });
+
+  const cancelReport = useCallback(
+    async (req: CancelStmtDiagnosticRequest) => {
+      await cancelStatementDiagnosticsReport(req);
+      await globalMutate(diagnosticsKey);
+    },
+    [globalMutate, diagnosticsKey],
+  );
+
+  return { cancelReport };
 }

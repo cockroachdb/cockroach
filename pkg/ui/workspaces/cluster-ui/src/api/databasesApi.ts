@@ -5,6 +5,8 @@
 
 import moment from "moment-timezone";
 
+import { useSwrWithClusterId } from "../util";
+
 import {
   executeInternalSql,
   LARGE_RESULT_SIZE,
@@ -59,4 +61,23 @@ export async function getDatabasesList(
   // This request only contains a single txn_result, any error encountered by the txn_result
   // will be surfaced at the response level by the sql api.
   return { databases: dbNames, error: resp.error };
+}
+
+const DATABASES_LIST_SWR_KEY = "databasesList";
+
+export function useDatabasesList() {
+  const { data, error, isLoading } = useSwrWithClusterId<DatabasesListResponse>(
+    { name: DATABASES_LIST_SWR_KEY },
+    () => getDatabasesList(moment.duration(10, "m")),
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
+  );
+
+  const databases = (data?.databases ?? [])
+    .filter((dbName: string) => dbName !== null && dbName.length > 0)
+    .sort();
+
+  return { databases, error, isLoading };
 }
