@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
@@ -80,6 +81,7 @@ var goroutineCPUHandlePool = sync.Pool{
 type SQLCPUHandle struct {
 	workInfo SQLWorkInfo
 	p        *sqlCPUProviderImpl
+	wq       *WorkQueue
 
 	mu struct {
 		syncutil.Mutex
@@ -91,10 +93,13 @@ type SQLCPUHandle struct {
 	}
 }
 
-func newSQLCPUAdmissionHandle(workInfo SQLWorkInfo, p *sqlCPUProviderImpl) *SQLCPUHandle {
+func newSQLCPUAdmissionHandle(
+	workInfo SQLWorkInfo, p *sqlCPUProviderImpl, wq *WorkQueue,
+) *SQLCPUHandle {
 	h := &SQLCPUHandle{
 		workInfo: workInfo,
 		p:        p,
+		wq:       wq,
 	}
 	h.mu.gHandles = h.mu.handlesBacking[:0]
 	return h
@@ -290,6 +295,12 @@ type sqlCPUProviderImpl struct {
 	// increasing and is updated atomically as CPU time is reported via
 	// SQLCPUHandle.reportCPU.
 	cumulativeDistSQLCPUNanos atomic.Int64
+	// sv is the settings values used to check if CTT AC is enabled.
+	sv *settings.Values
+	// getWorkQueue returns the CTT WorkQueue for the given tenant. This
+	// allows SQL to share the KV CTT WorkQueue, using the appropriate
+	// tier (system vs app) based on tenant ID. Can be nil in testing.
+	getWorkQueue func(roachpb.TenantID) *WorkQueue
 }
 
 func (p *sqlCPUProviderImpl) GetCumulativeSQLCPUNanos() (gatewayCPUNanos, distCPUNanos int64) {
@@ -297,13 +308,23 @@ func (p *sqlCPUProviderImpl) GetCumulativeSQLCPUNanos() (gatewayCPUNanos, distCP
 }
 
 func (p *sqlCPUProviderImpl) GetHandle(workInfo SQLWorkInfo) *SQLCPUHandle {
-	// TODO(sumeer): implement.
-	return newSQLCPUAdmissionHandle(workInfo, p)
+	var wq *WorkQueue
+	if p.getWorkQueue != nil && sqlCPUTimeTokenACIsEnabled(p.sv) {
+		wq = p.getWorkQueue(workInfo.TenantID)
+	}
+	return newSQLCPUAdmissionHandle(workInfo, p, wq)
 }
 
-// NewSQLCPUProvider creates a new SQLCPUProvider.
-//
-// TODO(sumeer): real implementation.
-func NewSQLCPUProvider() SQLCPUProvider {
-	return &sqlCPUProviderImpl{}
+// NewSQLCPUProvider creates a new SQLCPUProvider. The sv parameter is required
+// and provides access to cluster settings for checking if SQL CPU time token
+// AC is enabled. The getWorkQueue function returns the CTT WorkQueue for a
+// given tenant, allowing SQL to share the KV CTT WorkQueue; it may be nil when
+// CTT AC is not available (e.g. separate-process tenants).
+func NewSQLCPUProvider(
+	sv *settings.Values, getWorkQueue func(roachpb.TenantID) *WorkQueue,
+) SQLCPUProvider {
+	return &sqlCPUProviderImpl{
+		sv:           sv,
+		getWorkQueue: getWorkQueue,
+	}
 }
