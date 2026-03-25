@@ -6440,6 +6440,22 @@ false
 statement ok
 DROP TABLE mvt_test
 
+# Regression test: st_asmvt with NULL args alongside an ordered aggregate
+# should not cause an internal error. When a non-commutative aggregate (like
+# array_agg with ORDER BY) is present, all aggregates are built as window
+# functions. st_asmvt's optional args must be properly projected into columns
+# rather than remaining as raw NullExprs.
+statement ok
+CREATE TABLE mvt_null_test (a INT)
+
+query TI
+SELECT st_asmvt(NULL, NULL), array_agg(a ORDER BY a) FROM mvt_null_test
+----
+NULL  NULL
+
+statement ok
+DROP TABLE mvt_null_test
+
 # Test ST_AsMVT with empty geometries and edge cases
 subtest st_asmvt_edge_cases
 
