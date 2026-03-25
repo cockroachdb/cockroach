@@ -406,7 +406,7 @@ func waitForStatementStatsRows(
 		}
 
 		return nil
-	}, 5*time.Second)
+	}, testutils.SucceedsSoonDuration())
 }
 
 // WaitForStatementEntriesAtLeast waits for the count of statement stats entries to be >= expectedCount.
@@ -515,7 +515,7 @@ func waitForTransactionStatsRows(
 			return errors.Errorf("expected exec count of at least %d, got %d", filters[0].ExecCount, execCount)
 		}
 		return nil
-	}, 5*time.Second)
+	}, testutils.SucceedsSoonDuration())
 }
 
 // WaitForTransactionEntriesAtLeast waits for transaction fingerprint to be >= expectedCount.
