@@ -738,7 +738,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  -- Check cases that could trigger overflow or underflow within the calculation
  SELECT oper, low, high, cnt, width_bucket(oper, low, high, cnt)
  FROM
-@@ -1516,379 +1286,90 @@
+@@ -1516,27 +1286,14 @@
      (0, 0, 1, 2147483647),
      (1, 1, 0, 2147483647)
    ) as sample(oper, low, high, cnt);
@@ -771,268 +771,21 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  --
  -- TO_CHAR()
  --
- SELECT to_char(val, '9G999G999G999G999G999')
- 	FROM num_data;
--        to_char         
--------------------------
--                      0
--                      0
--            -34,338,492
--                      4
--              7,799,461
--                 16,397
--                 93,902
--            -83,028,485
--                 74,881
--            -24,926,804
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, '9G999G999G999G999G999D999G999G999G999G999')
- 	FROM num_data;
--                  to_char                   
----------------------------------------------
--                       .000,000,000,000,000
--                       .000,000,000,000,000
--            -34,338,492.215,397,047,000,000
--                      4.310,000,000,000,000
--              7,799,461.411,900,000,000,000
--                 16,397.038,491,000,000,000
--                 93,901.577,630,260,000,000
--            -83,028,485.000,000,000,000,000
--                 74,881.000,000,000,000,000
--            -24,926,804.045,047,420,000,000
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, '9999999999999999.999999999999999PR')
- 	FROM num_data;
--              to_char               
--------------------------------------
--                  .000000000000000 
--                  .000000000000000 
--         <34338492.215397047000000>
--                 4.310000000000000 
--           7799461.411900000000000 
--             16397.038491000000000 
--             93901.577630260000000 
--         <83028485.000000000000000>
--             74881.000000000000000 
--         <24926804.045047420000000>
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, '9999999999999999.999999999999999S')
- 	FROM num_data;
--              to_char              
-------------------------------------
--                 .000000000000000+
--                 .000000000000000+
--         34338492.215397047000000-
--                4.310000000000000+
--          7799461.411900000000000+
--            16397.038491000000000+
--            93901.577630260000000+
--         83028485.000000000000000-
--            74881.000000000000000+
--         24926804.045047420000000-
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, 'MI9999999999999999.999999999999999')     FROM num_data;
--              to_char              
-------------------------------------
--                  .000000000000000
--                  .000000000000000
-- -        34338492.215397047000000
--                 4.310000000000000
--           7799461.411900000000000
--             16397.038491000000000
--             93901.577630260000000
-- -        83028485.000000000000000
--             74881.000000000000000
-- -        24926804.045047420000000
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+@@ -1622,8 +1379,8 @@
  SELECT to_char(val, 'FMS9999999999999999.999999999999999')    FROM num_data;
--       to_char       
-----------------------
+        to_char       
+ ---------------------
 - +0.
 - +0.
-- -34338492.215397047
-- +4.31
-- +7799461.4119
-- +16397.038491
-- +93901.57763026
-- -83028485.
-- +74881.
-- -24926804.04504742
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, 'FM9999999999999999.999999999999999THPR') FROM num_data;
--       to_char        
------------------------
-- 0.
-- 0.
-- <34338492.215397047>
-- 4.31
-- 7799461.4119
-- 16397.038491
-- 93901.57763026
-- <83028485.>
-- 74881.
-- <24926804.04504742>
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, 'SG9999999999999999.999999999999999th')   FROM num_data;
--              to_char              
-------------------------------------
-- +                .000000000000000
-- +                .000000000000000
-- -        34338492.215397047000000
-- +               4.310000000000000
-- +         7799461.411900000000000
-- +           16397.038491000000000
-- +           93901.577630260000000
-- -        83028485.000000000000000
-- +           74881.000000000000000
-- -        24926804.045047420000000
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, '0999999999999999.999999999999999')       FROM num_data;
--              to_char              
-------------------------------------
--  0000000000000000.000000000000000
--  0000000000000000.000000000000000
-- -0000000034338492.215397047000000
--  0000000000000004.310000000000000
--  0000000007799461.411900000000000
--  0000000000016397.038491000000000
--  0000000000093901.577630260000000
-- -0000000083028485.000000000000000
--  0000000000074881.000000000000000
-- -0000000024926804.045047420000000
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, 'S0999999999999999.999999999999999')      FROM num_data;
--              to_char              
-------------------------------------
-- +0000000000000000.000000000000000
-- +0000000000000000.000000000000000
-- -0000000034338492.215397047000000
-- +0000000000000004.310000000000000
-- +0000000007799461.411900000000000
-- +0000000000016397.038491000000000
-- +0000000000093901.577630260000000
-- -0000000083028485.000000000000000
-- +0000000000074881.000000000000000
-- -0000000024926804.045047420000000
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, 'FM0999999999999999.999999999999999')     FROM num_data;
--           to_char           
-------------------------------
-- 0000000000000000.
-- 0000000000000000.
-- -0000000034338492.215397047
-- 0000000000000004.31
-- 0000000007799461.4119
-- 0000000000016397.038491
-- 0000000000093901.57763026
-- -0000000083028485.
-- 0000000000074881.
-- -0000000024926804.04504742
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, 'FM9999999999999999.099999999999999') 	FROM num_data;
--       to_char       
-----------------------
-- .0
-- .0
-- -34338492.215397047
-- 4.31
-- 7799461.4119
-- 16397.038491
-- 93901.57763026
-- -83028485.0
-- 74881.0
-- -24926804.04504742
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, 'FM9999999999990999.990999999999999') 	FROM num_data;
--       to_char       
-----------------------
-- 0000.000
-- 0000.000
-- -34338492.215397047
-- 0004.310
-- 7799461.4119
-- 16397.038491
-- 93901.57763026
-- -83028485.000
-- 74881.000
-- -24926804.04504742
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, 'FM0999999999999999.999909999999999') 	FROM num_data;
--           to_char           
-------------------------------
-- 0000000000000000.00000
-- 0000000000000000.00000
-- -0000000034338492.215397047
-- 0000000000000004.31000
-- 0000000007799461.41190
-- 0000000000016397.038491
-- 0000000000093901.57763026
-- -0000000083028485.00000
-- 0000000000074881.00000
-- -0000000024926804.04504742
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, 'FM9999999990999999.099999999999999') 	FROM num_data;
--       to_char       
-----------------------
-- 0000000.0
-- 0000000.0
-- -34338492.215397047
-- 0000004.31
-- 7799461.4119
-- 0016397.038491
-- 0093901.57763026
-- -83028485.0
-- 0074881.0
-- -24926804.04504742
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ 0+.
++ 0+.
+  -34338492.215397047
+  +4.31
+  +7799461.4119
+@@ -1772,16 +1529,16 @@
  SELECT to_char(val, 'L9999999999999999.099999999999999')	FROM num_data;
--              to_char               
--------------------------------------
+               to_char               
+ ------------------------------------
 -                   .000000000000000
 -                   .000000000000000
 -          -34338492.215397047000000
@@ -1043,133 +796,31 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
 -          -83028485.000000000000000
 -              74881.000000000000000
 -          -24926804.045047420000000
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ $                 .000000000000000
++ $                 .000000000000000
++ $        -34338492.215397047000000
++ $                4.310000000000000
++ $          7799461.411900000000000
++ $            16397.038491000000000
++ $            93901.577630260000000
++ $        -83028485.000000000000000
++ $            74881.000000000000000
++ $        -24926804.045047420000000
+ (10 rows)
+ 
  SELECT to_char(val, 'FM9999999999999999.99999999999999')	FROM num_data;
--       to_char       
-----------------------
-- 0.
-- 0.
-- -34338492.215397047
-- 4.31
-- 7799461.4119
-- 16397.038491
-- 93901.57763026
-- -83028485.
-- 74881.
-- -24926804.04504742
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
--                                to_char                                
-------------------------------------------------------------------------
--                                  +. 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
--                                  +. 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
--                  -3 4 3 3 8 4 9 2 . 2 1 5 3 9 7 0 4 7 0 0 0 0 0 0 0 0
--                                +4 . 3 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
--                    +7 7 9 9 4 6 1 . 4 1 1 9 0 0 0 0 0 0 0 0 0 0 0 0 0
--                        +1 6 3 9 7 . 0 3 8 4 9 1 0 0 0 0 0 0 0 0 0 0 0
--                        +9 3 9 0 1 . 5 7 7 6 3 0 2 6 0 0 0 0 0 0 0 0 0
--                  -8 3 0 2 8 4 8 5 . 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
--                        +7 4 8 8 1 . 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
--                  -2 4 9 2 6 8 0 4 . 0 4 5 0 4 7 4 2 0 0 0 0 0 0 0 0 0
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+@@ -1817,8 +1574,8 @@
  SELECT to_char(val, 'FMS 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9') FROM num_data;
--                        to_char                        
---------------------------------------------------------
+                         to_char                        
+ -------------------------------------------------------
 -                 +0 .                 
 -                 +0 .                 
--          -3 4 3 3 8 4 9 2 . 2 1 5 3 9 7 0 4 7        
--                 +4 . 3 1               
--           +7 7 9 9 4 6 1 . 4 1 1 9             
--             +1 6 3 9 7 . 0 3 8 4 9 1           
--             +9 3 9 0 1 . 5 7 7 6 3 0 2 6         
--          -8 3 0 2 8 4 8 5 .                 
--             +7 4 8 8 1 .                 
--          -2 4 9 2 6 8 0 4 . 0 4 5 0 4 7 4 2         
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, E'99999 "text" 9999 "9999" 999 "\\"text between quote marks\\"" 9999') FROM num_data;
--                          to_char                          
-------------------------------------------------------------
--       text      9999     "text between quote marks"     0
--       text      9999     "text between quote marks"     0
--       text    -3 9999 433 "text between quote marks" 8492
--       text      9999     "text between quote marks"     4
--       text      9999  779 "text between quote marks" 9461
--       text      9999    1 "text between quote marks" 6397
--       text      9999    9 "text between quote marks" 3902
--       text    -8 9999 302 "text between quote marks" 8485
--       text      9999    7 "text between quote marks" 4881
--       text    -2 9999 492 "text between quote marks" 6804
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, '999999SG9999999999')			FROM num_data;
--      to_char      
---------------------
--       +         0
--       +         0
--       -  34338492
--       +         4
--       +   7799461
--       +     16397
--       +     93902
--       -  83028485
--       +     74881
--       -  24926804
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, 'FM9999999999999999.999999999999999')	FROM num_data;
--       to_char       
-----------------------
-- 0.
-- 0.
-- -34338492.215397047
-- 4.31
-- 7799461.4119
-- 16397.038491
-- 93901.57763026
-- -83028485.
-- 74881.
-- -24926804.04504742
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(val, '9.999EEEE')				FROM num_data;
--  to_char   
--------------
--  0.000e+00
--  0.000e+00
-- -3.434e+07
--  4.310e+00
--  7.799e+06
--  1.640e+04
--  9.390e+04
-- -8.303e+07
--  7.488e+04
-- -2.493e+07
--(10 rows)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- WITH v(val) AS
-   (VALUES('0'::numeric),('-4.2'),('4.2e9'),('1.2e-5'),('inf'),('-inf'),('nan'))
- SELECT val,
-@@ -1896,49 +1377,15 @@
++                 0 +.                 
++                 0 +.                 
+           -3 4 3 3 8 4 9 2 . 2 1 5 3 9 7 0 4 7        
+                  +4 . 3 1               
+            +7 7 9 9 4 6 1 . 4 1 1 9             
+@@ -1896,49 +1653,14 @@
    to_char(val::float8, '9.999EEEE') as float8,
    to_char(val::float4, '9.999EEEE') as float4
  FROM v;
@@ -1217,12 +868,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
 - 131071 |  1.235e+131071
 -(22 rows)
 -
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  could not parse "1.2345e-16379" as type decimal: underflow, subnormal
  WITH v(val) AS
    (VALUES('0'::numeric),('-4.2'),('4.2e9'),('1.2e-5'),('inf'),('-inf'),('nan'))
  SELECT val,
-@@ -1946,17 +1393,7 @@
+@@ -1946,17 +1668,7 @@
    to_char(val::float8, 'MI9999999999.99') as float8,
    to_char(val::float4, 'MI9999999999.99') as float4
  FROM v;
@@ -1241,7 +891,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  WITH v(val) AS
    (VALUES('0'::numeric),('-4.2'),('4.2e9'),('1.2e-5'),('inf'),('-inf'),('nan'))
  SELECT val,
-@@ -1964,237 +1401,100 @@
+@@ -1964,17 +1676,7 @@
    to_char(val::float8, 'MI99.99') as float8,
    to_char(val::float4, 'MI99.99') as float4
  FROM v;
@@ -1258,118 +908,22 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
 -
 +ERROR:  VALUES types string and decimal cannot be matched
  SELECT to_char('100'::numeric, 'FM999.9');
-- to_char 
-----------
-- 100.
--(1 row)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char('100'::numeric, 'FM999.');
-- to_char 
-----------
-- 100
--(1 row)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char('100'::numeric, 'FM999');
-- to_char 
-----------
-- 100
--(1 row)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+  to_char 
+ ---------
+@@ -1994,9 +1696,9 @@
+ (1 row)
+ 
  SELECT to_char('12345678901'::float8, 'FM9999999999D9999900000000000000000');
 -     to_char     
 ------------------
 - ##########.####
--(1 row)
--
-+ERROR:  unknown signature: to_char(float, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++              to_char              
++-----------------------------------
++ ##########.######################
+ (1 row)
+ 
  -- Check parsing of literal text in a format string
- SELECT to_char('100'::numeric, 'foo999');
-- to_char 
-----------
-- foo 100
--(1 row)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char('100'::numeric, 'f\oo999');
-- to_char  
------------
-- f\oo 100
--(1 row)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char('100'::numeric, 'f\\oo999');
--  to_char  
-------------
-- f\\oo 100
--(1 row)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char('100'::numeric, 'f\"oo999');
-- to_char  
------------
-- f"oo 100
--(1 row)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char('100'::numeric, 'f\\"oo999');
--  to_char  
-------------
-- f\"oo 100
--(1 row)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char('100'::numeric, 'f"ool"999');
-- to_char  
------------
-- fool 100
--(1 row)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char('100'::numeric, 'f"\ool"999');
-- to_char  
------------
-- fool 100
--(1 row)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char('100'::numeric, 'f"\\ool"999');
--  to_char  
-------------
-- f\ool 100
--(1 row)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char('100'::numeric, 'f"ool\"999');
-- to_char  
------------
-- fool"999
--(1 row)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char('100'::numeric, 'f"ool\\"999');
--  to_char  
-------------
-- fool\ 100
--(1 row)
--
-+ERROR:  unknown signature: to_char(decimal, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+@@ -2063,6 +1765,9 @@
  -- TO_NUMBER()
  --
  SET lc_numeric = 'C';
@@ -1377,163 +931,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
 +DETAIL:  this parameter is currently recognized only for compatibility and has no effect in CockroachDB.
 +HINT:  Available values: c.utf-8
  SELECT to_number('-34,338,492', '99G999G999');
-- to_number 
-------------
-- -34338492
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('-34,338,492.654,878', '99G999G999D999G999');
--    to_number     
--------------------
-- -34338492.654878
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('<564646.654564>', '999999.999999PR');
--   to_number    
------------------
-- -564646.654564
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('0.00001-', '9.999999S');
-- to_number 
-------------
--  -0.00001
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('5.01-', 'FM9.999999S');
-- to_number 
-------------
--     -5.01
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('5.01-', 'FM9.999999MI');
-- to_number 
-------------
--     -5.01
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('5 4 4 4 4 8 . 7 8', '9 9 9 9 9 9 . 9 9');
-- to_number 
-------------
-- 544448.78
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('.01', 'FM9.99');
-- to_number 
-------------
--      0.01
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('.0', '99999999.99999999');
-- to_number 
-------------
--       0.0
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('0', '99.99');
-- to_number 
-------------
--         0
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('.-01', 'S99.99');
-- to_number 
-------------
--     -0.01
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('.01-', '99.99S');
-- to_number 
-------------
--     -0.01
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number(' . 0 1-', ' 9 9 . 9 9 S');
-- to_number 
-------------
--     -0.01
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('34,50','999,99');
-- to_number 
-------------
--      3450
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('123,000','999G');
-- to_number 
-------------
--       123
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('123456','999G999');
-- to_number 
-------------
--    123456
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('$1234.56','L9,999.99');
-- to_number 
-------------
--   1234.56
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('$1234.56','L99,999.99');
-- to_number 
-------------
--   1234.56
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('$1,234.56','L99,999.99');
-- to_number 
-------------
--   1234.56
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('1234.56','L99,999.99');
-- to_number 
-------------
--   1234.56
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('1,234.56','L99,999.99');
-- to_number 
-------------
--   1234.56
--(1 row)
--
-+ERROR:  unknown function: to_number()
- SELECT to_number('42nd', '99th');
-- to_number 
-------------
--        42
--(1 row)
--
-+ERROR:  unknown function: to_number()
- RESET lc_numeric;
- --
- -- Input syntax
-@@ -2215,203 +1515,117 @@
+  to_number 
+ -----------
+@@ -2215,203 +1920,117 @@
  INSERT INTO num_input_test(n1) VALUES (' +inFinity ');
  INSERT INTO num_input_test(n1) VALUES (' -INFINITY ');
  INSERT INTO num_input_test(n1) VALUES ('12_000_000_000');
@@ -1799,7 +1199,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  --
  -- Test precision and scale typemods
  --
-@@ -2422,59 +1636,56 @@
+@@ -2422,59 +2041,56 @@
    thousandths numeric(3, 3),
    millionths numeric(3, 6)
  );
@@ -1890,7 +1290,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  --
  -- Test some corner cases for multiplication
  --
-@@ -2503,11 +1714,7 @@
+@@ -2503,11 +2119,7 @@
  (1 row)
  
  select trim_scale((0.1 - 2e-16383) * (0.1 - 3e-16383));
@@ -1903,7 +1303,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  --
  -- Test some corner cases for division
  --
-@@ -2560,9 +1767,9 @@
+@@ -2560,9 +2172,9 @@
  (1 row)
  
  select 70.0 / 70 ;
@@ -1916,7 +1316,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  select 12345678901234567890 % 123;
-@@ -2572,9 +1779,9 @@
+@@ -2572,9 +2184,9 @@
  (1 row)
  
  select 12345678901234567890 / 123;
@@ -1929,7 +1329,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  select div(12345678901234567890, 123);
-@@ -2593,239 +1800,183 @@
+@@ -2593,239 +2205,183 @@
  -- Test some corner cases for square root
  --
  select sqrt(1.000000000000003::numeric);
@@ -2251,7 +1651,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  -- NaNs
-@@ -2866,34 +2017,34 @@
+@@ -2866,34 +2422,34 @@
  ERROR:  a negative number raised to a non-integer power yields a complex result
  -- cases that used to generate inaccurate results
  select 32.1 ^ 9.8;
@@ -2301,7 +1701,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  --
-@@ -2901,21 +2052,21 @@
+@@ -2901,21 +2457,21 @@
  --
  -- special cases
  select exp(0.0);
@@ -2332,7 +1732,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  select exp('nan'::numeric);
-@@ -2937,145 +2088,92 @@
+@@ -2937,145 +2493,92 @@
  (1 row)
  
  select coalesce(nullif(exp(-5000::numeric), 0), 0) as rounds_to_zero;
@@ -2523,7 +1923,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  --
  -- Tests for LN()
  --
-@@ -3086,51 +2184,51 @@
+@@ -3086,51 +2589,51 @@
  ERROR:  cannot take logarithm of zero
  -- Some random tests
  select ln(1.2345678e-28);
@@ -2599,7 +1999,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  --
-@@ -3139,45 +2237,43 @@
+@@ -3139,45 +2642,43 @@
  -- invalid inputs
  select log(-12.34);
  ERROR:  cannot take logarithm of a negative number
@@ -2663,7 +2063,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  (1 row)
  
  --
-@@ -3198,230 +2294,102 @@
+@@ -3198,230 +2699,102 @@
  ERROR:  division by zero
  -- some random tests
  select log(1.23e-89, 6.4689e45);
@@ -2938,7 +2338,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  --
  -- Tests for SUM()
  --
-@@ -3446,47 +2414,100 @@
+@@ -3446,47 +2819,100 @@
  INSERT INTO num_variance VALUES (3e-500);
  INSERT INTO num_variance VALUES (-3e-500);
  INSERT INTO num_variance VALUES (4e-500 - 1e-16383);
@@ -3055,7 +2455,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  DROP TABLE num_variance;
  --
  -- Tests for GCD()
-@@ -3502,19 +2523,7 @@
+@@ -3502,19 +2928,7 @@
               ('inf', '42'),
               ('inf', 'inf')
       ) AS v(a, b);
@@ -3076,7 +2476,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/numeric.out --lab
  --
  -- Tests for LCM()
  --
-@@ -3530,71 +2539,40 @@
+@@ -3530,71 +2944,40 @@
               ('inf', '42'),
               ('inf', 'inf')
       ) AS v(a, b);
