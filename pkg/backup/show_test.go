@@ -894,7 +894,7 @@ func TestShowBackupsWithIDs(t *testing.T) {
 
 	t.Run("backup times are in descending order", func(t *testing.T) {
 		shownTimes := sqlDB.QueryStr(
-			t, fmt.Sprintf(`SELECT backup_time FROM [SHOW BACKUPS IN '%s']`, collectionURI),
+			t, `SELECT backup_time FROM [SHOW BACKUPS IN $1]`, collectionURI,
 		)
 		require.Equal(t, len(times), len(shownTimes))
 		require.True(
@@ -921,10 +921,8 @@ func TestShowBackupsWithIDs(t *testing.T) {
 			var count int
 			sqlDB.QueryRow(
 				t,
-				fmt.Sprintf(
-					`SELECT count(*) FROM [SHOW BACKUPS IN '%s' OLDER THAN %d]`,
-					collectionURI, filterTime,
-				),
+				fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUPS IN $1 OLDER THAN %d]`, filterTime),
+				collectionURI,
 			).Scan(&count)
 
 			var expected int
@@ -946,10 +944,8 @@ func TestShowBackupsWithIDs(t *testing.T) {
 			var count int
 			sqlDB.QueryRow(
 				t,
-				fmt.Sprintf(
-					`SELECT count(*) FROM [SHOW BACKUPS IN '%s' NEWER THAN %d]`,
-					collectionURI, filterTime,
-				),
+				fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUPS IN $1 NEWER THAN %d]`, filterTime),
+				collectionURI,
 			).Scan(&count)
 
 			var expected int
@@ -980,10 +976,8 @@ func TestShowBackupsWithIDs(t *testing.T) {
 			var count int
 			sqlDB.QueryRow(
 				t,
-				fmt.Sprintf(
-					`SELECT count(*) FROM [SHOW BACKUPS IN '%s' OLDER THAN %d NEWER THAN %d]`,
-					collectionURI, newerTime, olderTime,
-				),
+				fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUPS IN $1 OLDER THAN %d NEWER THAN %d]`, newerTime, olderTime),
+				collectionURI,
 			).Scan(&count)
 
 			var expected int
@@ -1023,10 +1017,8 @@ func TestShowBackupsWithIDsAndRevisionHistory(t *testing.T) {
 	t.Run("WITH REVISION START TIME", func(t *testing.T) {
 		revStartTimes := sqlDB.QueryStr(
 			t,
-			fmt.Sprintf(
-				`SELECT backup_time, revision_start_time FROM [SHOW BACKUPS IN '%s' WITH REVISION START TIME]`,
-				collectionURI,
-			),
+			`SELECT backup_time, revision_start_time FROM [SHOW BACKUPS IN $1 WITH REVISION START TIME]`,
+			collectionURI,
 		)
 		require.Len(t, revStartTimes, 3, "expected 3 backups")
 		for idx, row := range revStartTimes {
@@ -1048,10 +1040,8 @@ func TestShowBackupsWithIDsAndRevisionHistory(t *testing.T) {
 	t.Run("WITHOUT REVISION START TIME", func(t *testing.T) {
 		revStartTimes := sqlDB.QueryStr(
 			t,
-			fmt.Sprintf(
-				`SELECT revision_start_time FROM [SHOW BACKUPS IN '%s']`,
-				collectionURI,
-			),
+			`SELECT revision_start_time FROM [SHOW BACKUPS IN $1]`,
+			collectionURI,
 		)
 		require.Len(t, revStartTimes, 3, "expected 3 backups")
 		for idx, row := range revStartTimes {
@@ -1112,7 +1102,7 @@ func TestShowBackupWithIDs(t *testing.T) {
 		sqlDB.Exec(t, "BACKUP DATABASE foo INTO LATEST IN $1 AS OF SYSTEM TIME $2::STRING", localFoo, t3.AsOfSystemTime())
 
 		sqlDB.QueryRow(
-			t, fmt.Sprintf(`SELECT path FROM [SHOW BACKUPS IN '%s']`, localFoo),
+			t, `SELECT path FROM [SHOW BACKUPS IN $1]`, localFoo,
 		).Scan(&fullSubdir)
 		require.NotEmpty(t, fullSubdir)
 
@@ -1150,7 +1140,7 @@ func TestShowBackupWithIDs(t *testing.T) {
 	}
 
 	sqlDB.Exec(t, "SET SESSION use_backups_with_ids = true")
-	idRows := sqlDB.Query(t, fmt.Sprintf(`SHOW BACKUPS IN '%s'`, localFoo))
+	idRows := sqlDB.Query(t, `SHOW BACKUPS IN $1`, localFoo)
 	var ids []string // All ids in sorted chronological order
 	for idRows.Next() {
 		var id string

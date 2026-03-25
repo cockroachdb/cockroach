@@ -747,7 +747,7 @@ func TestRestoreWithBackupIDs(t *testing.T) {
 		// in time.
 		for _, coll := range []string{classicColl, rhColl} {
 			var ids []string
-			rows := sqlDB.Query(t, fmt.Sprintf("SHOW BACKUPS IN '%s'", coll))
+			rows := sqlDB.Query(t, "SHOW BACKUPS IN $1", coll)
 			for rows.Next() {
 				var id string
 				var unused any
@@ -761,7 +761,7 @@ func TestRestoreWithBackupIDs(t *testing.T) {
 		sqlDB.Exec(t, "SET SESSION use_backups_with_ids = false")
 		for _, coll := range []string{classicColl, rhColl} {
 			var subdirs []string
-			rows := sqlDB.Query(t, fmt.Sprintf("SHOW BACKUPS IN '%s'", coll))
+			rows := sqlDB.Query(t, "SHOW BACKUPS IN $1", coll)
 			for rows.Next() {
 				var subdir string
 				require.NoError(t, rows.Scan(&subdir))

@@ -1379,6 +1379,10 @@ func showBackupsInCollectionTypeCheck(
 	); err != nil {
 		return false, nil, err
 	}
+
+	if p.SessionData().UseBackupsWithIDs {
+		return true, showBackupsWithIDsHeader, nil
+	}
 	return true, showBackupsInCollectionHeader, nil
 }
 
