@@ -101,7 +101,7 @@ func TestRollbackRandomTable(t *testing.T) {
 	require.NoError(t, err)
 
 	rollbackTs := tt.Clock().Now()
-	fingerprint := db.QueryStr(t, fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE test.%s", tableName))
+	fingerprint := db.QueryStr(t, fmt.Sprintf("SHOW FINGERPRINTS FROM TABLE test.%s", tableName))
 
 	_, err = randgen.PopulateTableWithRandData(rng, sqlDB, tableName, 100, nil)
 	require.NoError(t, err)
@@ -114,6 +114,6 @@ func TestRollbackRandomTable(t *testing.T) {
 	require.NoError(t, sql.DeleteTableWithPredicate(
 		ctx, kv, codec, tt.ClusterSettings(), execCfg.DistSender, desc.GetID(), predicates, 10))
 
-	afterFingerprint := db.QueryStr(t, fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE test.%s", tableName))
+	afterFingerprint := db.QueryStr(t, fmt.Sprintf("SHOW FINGERPRINTS FROM TABLE test.%s", tableName))
 	require.Equal(t, fingerprint, afterFingerprint)
 }
