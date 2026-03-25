@@ -52,6 +52,7 @@ type upsertRun struct {
 func (r *upsertRun) init(params runParams) error {
 	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
 		r.originTimestampCPutHelper.OriginTimestamp = ots
+		r.originTimestampCPutHelper.ShouldWinTie = params.extendedEvalCtx.SessionData().WinLwwTies
 	}
 	return r.tw.init(params.ctx, params.p.txn, params.EvalContext())
 }

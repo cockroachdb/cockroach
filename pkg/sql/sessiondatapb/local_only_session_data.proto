@@ -807,6 +807,11 @@ message LocalOnlySessionData {
   // BufferedWritesImplicitTxnsEnabled, if set, will make it so that the
   // buffered writes feature is used for implicit txns.
   bool buffered_writes_implicit_txns_enabled = 205;
+  // WinLwwTies, if true, causes ConditionalPut requests with
+  // OriginTimestamp to win when the incoming and existing timestamps
+  // are equal. Used by logical data replication for deterministic
+  // tie-breaking.
+  bool win_lww_ties = 206;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

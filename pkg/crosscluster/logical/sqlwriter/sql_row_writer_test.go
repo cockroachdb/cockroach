@@ -24,12 +24,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// makeTestRow creates a row for a table with columns (id, is_always_null,
+// name) in alphabetical order, matching the order used by GetColumnSchema.
 func makeTestRow(t *testing.T, _ catalog.TableDescriptor, id int64, name string) tree.Datums {
 	t.Helper()
 	return tree.Datums{
 		tree.NewDInt(tree.DInt(id)),
-		tree.NewDString(name),
 		tree.DNull,
+		tree.NewDString(name),
 	}
 }
 
@@ -83,14 +85,14 @@ func TestSQLRowWriter(t *testing.T) {
 	// Test UpdateRow
 	updateRow := makeTestRow(t, desc, 1, "updated")
 	updateTimestamp := s.Clock().Now()
-	require.NoError(t, writer.UpdateRow(ctx, updateTimestamp, insertRow, updateRow))
+	require.NoError(t, writer.UpdateRow(ctx, updateTimestamp, insertRow, updateRow, false /* winLwwTie */))
 	require.Equal(t,
 		[][]string{{"1", "updated", "NULL", hlcToString(updateTimestamp), "1"}},
 		sqlDB.QueryStr(t, "SELECT id, name, is_always_null, crdb_internal_origin_timestamp, crdb_internal_origin_id FROM test_table WHERE id = 1"))
 
 	// Test UpdateRow with stale previous value
 	staleRow := makeTestRow(t, desc, 1, "test") // Using old value
-	err = writer.UpdateRow(ctx, s.Clock().Now(), staleRow, updateRow)
+	err = writer.UpdateRow(ctx, s.Clock().Now(), staleRow, updateRow, false /* winLwwTie */)
 	require.ErrorIs(t, err, ErrStalePreviousValue)
 
 	// Test DeleteRow - first insert a test row to verify origin data before delete

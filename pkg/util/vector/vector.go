@@ -277,8 +277,12 @@ func Mult(t T, t2 T) (T, error) {
 // Random returns a random vector with the number of dimensions in [1, maxDim]
 // range.
 func Random(rng *rand.Rand, maxDim int) T {
-	n := 1 + rng.Intn(maxDim)
-	v := make(T, n)
+	return MakeRandom(rng, 1+rng.Intn(maxDim))
+}
+
+// MakeRandom returns a random vector with exactly dim dimensions.
+func MakeRandom(rng *rand.Rand, dim int) T {
+	v := make(T, dim)
 	for i := range v {
 		for {
 			v[i] = float32(rng.NormFloat64())

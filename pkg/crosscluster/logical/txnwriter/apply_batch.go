@@ -38,7 +38,7 @@ func (tw *transactionWriter) ApplyBatch(
 	err := tw.session.Txn(ctx, func(ctx context.Context) error {
 		// We clear the results because the Txn may be retried.
 		clear(results)
-		return tw.tryApply(ctx, transactions, results)
+		return tw.tryApply(ctx, transactions, results, false /* winLwwTie */)
 	})
 	if err == nil {
 		return results, nil
@@ -53,7 +53,7 @@ func (tw *transactionWriter) ApplyBatch(
 		if err != nil {
 			return err
 		}
-		return tw.tryApply(ctx, refreshed, results)
+		return tw.tryApply(ctx, refreshed, results, true /* winLwwTie */)
 	})
 	if err != nil {
 		return nil, err
@@ -63,7 +63,7 @@ func (tw *transactionWriter) ApplyBatch(
 }
 
 func (tw *transactionWriter) tryApply(
-	ctx context.Context, txn []ldrdecoder.Transaction, results []ApplyResult,
+	ctx context.Context, txn []ldrdecoder.Transaction, results []ApplyResult, winLwwTie bool,
 ) error {
 	for i, transaction := range txn {
 		// NOTE: Rolling back savepoints only works if the transactions have
@@ -71,7 +71,7 @@ func (tw *transactionWriter) tryApply(
 		// the previous value for the successor transaction is the value written by
 		// the predecessor, which won't be correct if the predecessor is aborted.
 		err := tw.session.Savepoint(ctx, func(ctx context.Context) error {
-			applied, err := tw.tryApplyTransaction(ctx, transaction)
+			applied, err := tw.tryApplyTransaction(ctx, transaction, winLwwTie)
 			results[i].AppliedRows = applied.AppliedRows
 			// We accumulate the LWW losers since some of them were filtered out
 			// during the refresh.
@@ -88,7 +88,7 @@ func (tw *transactionWriter) tryApply(
 }
 
 func (tw *transactionWriter) tryApplyTransaction(
-	ctx context.Context, transaction ldrdecoder.Transaction,
+	ctx context.Context, transaction ldrdecoder.Transaction, winLwwTie bool,
 ) (ApplyResult, error) {
 	lwwLosers := 0
 	for _, row := range transaction.WriteSet {
@@ -117,6 +117,7 @@ func (tw *transactionWriter) tryApplyTransaction(
 				transaction.TxnID.Timestamp,
 				row.PrevRow,
 				row.Row,
+				winLwwTie,
 			)
 			if err != nil {
 				return ApplyResult{}, err

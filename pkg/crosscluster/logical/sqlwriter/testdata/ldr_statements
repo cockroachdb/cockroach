@@ -10,19 +10,19 @@ ok
 
 show-insert table=basic_table
 ----
-INSERT INTO [104 AS replication_target](id, name, value, data) VALUES ($1::INT8, $2::STRING, $3::INT8, $4::BYTES)
+INSERT INTO [104 AS replication_target](data, id, name, value) VALUES ($1::BYTES, $2::INT8, $3::STRING, $4::INT8)
 
 show-update table=basic_table
 ----
-UPDATE [104 AS replication_target] SET id = $5::INT8, name = $6::STRING, value = $7::INT8, data = $8::BYTES WHERE (((id = $1::INT8) AND (name IS NOT DISTINCT FROM $2::STRING)) AND (value IS NOT DISTINCT FROM $3::INT8)) AND (data IS NOT DISTINCT FROM $4::BYTES)
+UPDATE [104 AS replication_target] SET data = $5::BYTES, id = $6::INT8, name = $7::STRING, value = $8::INT8 WHERE (((data IS NOT DISTINCT FROM $1::BYTES) AND (id = $2::INT8)) AND (name IS NOT DISTINCT FROM $3::STRING)) AND (value IS NOT DISTINCT FROM $4::INT8)
 
 show-delete table=basic_table
 ----
-DELETE FROM [104 AS replication_target] WHERE (((id = $1::INT8) AND (name IS NOT DISTINCT FROM $2::STRING)) AND (value IS NOT DISTINCT FROM $3::INT8)) AND (data IS NOT DISTINCT FROM $4::BYTES) RETURNING *
+DELETE FROM [104 AS replication_target] WHERE (((data IS NOT DISTINCT FROM $1::BYTES) AND (id = $2::INT8)) AND (name IS NOT DISTINCT FROM $3::STRING)) AND (value IS NOT DISTINCT FROM $4::INT8) RETURNING *
 
 show-select table=basic_table
 ----
-SELECT key_list.index, replication_target.crdb_internal_origin_timestamp, replication_target.crdb_internal_mvcc_timestamp, replication_target.id, replication_target.name, replication_target.value, replication_target.data FROM ROWS FROM (unnest($1::INT8[])) WITH ORDINALITY AS key_list (key1, index) INNER LOOKUP JOIN [104 AS replication_target] ON replication_target.id = key_list.key1
+SELECT key_list.index, replication_target.crdb_internal_origin_timestamp, replication_target.crdb_internal_mvcc_timestamp, replication_target.data, replication_target.id, replication_target.name, replication_target.value FROM ROWS FROM (unnest($1::INT8[])) WITH ORDINALITY AS key_list (key1, index) INNER LOOKUP JOIN [104 AS replication_target] ON replication_target.id = key_list.key1
 
 exec
 CREATE TYPE status AS ENUM ('pending', 'active', 'completed', 'cancelled');
@@ -44,19 +44,19 @@ ok
 
 show-insert table=tasks
 ----
-INSERT INTO [107 AS replication_target](id, title, description, status, priority, created_at) VALUES ($1::INT8, $2::STRING, $3::STRING, $4::@100105, $5::INT8, $6::TIMESTAMP)
+INSERT INTO [107 AS replication_target](created_at, description, id, priority, status, title) VALUES ($1::TIMESTAMP, $2::STRING, $3::INT8, $4::INT8, $5::@100105, $6::STRING)
 
 show-update table=tasks
 ----
-UPDATE [107 AS replication_target] SET id = $7::INT8, title = $8::STRING, description = $9::STRING, status = $10::@100105, priority = $11::INT8, created_at = $12::TIMESTAMP WHERE (((((id = $1::INT8) AND (title IS NOT DISTINCT FROM $2::STRING)) AND (description IS NOT DISTINCT FROM $3::STRING)) AND (status IS NOT DISTINCT FROM $4::@100105)) AND (priority IS NOT DISTINCT FROM $5::INT8)) AND (created_at IS NOT DISTINCT FROM $6::TIMESTAMP)
+UPDATE [107 AS replication_target] SET created_at = $7::TIMESTAMP, description = $8::STRING, id = $9::INT8, priority = $10::INT8, status = $11::@100105, title = $12::STRING WHERE (((((created_at IS NOT DISTINCT FROM $1::TIMESTAMP) AND (description IS NOT DISTINCT FROM $2::STRING)) AND (id = $3::INT8)) AND (priority IS NOT DISTINCT FROM $4::INT8)) AND (status IS NOT DISTINCT FROM $5::@100105)) AND (title IS NOT DISTINCT FROM $6::STRING)
 
 show-delete table=tasks
 ----
-DELETE FROM [107 AS replication_target] WHERE (((((id = $1::INT8) AND (title IS NOT DISTINCT FROM $2::STRING)) AND (description IS NOT DISTINCT FROM $3::STRING)) AND (status IS NOT DISTINCT FROM $4::@100105)) AND (priority IS NOT DISTINCT FROM $5::INT8)) AND (created_at IS NOT DISTINCT FROM $6::TIMESTAMP) RETURNING *
+DELETE FROM [107 AS replication_target] WHERE (((((created_at IS NOT DISTINCT FROM $1::TIMESTAMP) AND (description IS NOT DISTINCT FROM $2::STRING)) AND (id = $3::INT8)) AND (priority IS NOT DISTINCT FROM $4::INT8)) AND (status IS NOT DISTINCT FROM $5::@100105)) AND (title IS NOT DISTINCT FROM $6::STRING) RETURNING *
 
 show-select table=tasks
 ----
-SELECT key_list.index, replication_target.crdb_internal_origin_timestamp, replication_target.crdb_internal_mvcc_timestamp, replication_target.id, replication_target.title, replication_target.description, replication_target.status, replication_target.priority, replication_target.created_at FROM ROWS FROM (unnest($1::INT8[])) WITH ORDINALITY AS key_list (key1, index) INNER LOOKUP JOIN [107 AS replication_target] ON replication_target.id = key_list.key1
+SELECT key_list.index, replication_target.crdb_internal_origin_timestamp, replication_target.crdb_internal_mvcc_timestamp, replication_target.created_at, replication_target.description, replication_target.id, replication_target.priority, replication_target.status, replication_target.title FROM ROWS FROM (unnest($1::INT8[])) WITH ORDINALITY AS key_list (key1, index) INNER LOOKUP JOIN [107 AS replication_target] ON replication_target.id = key_list.key1
 
 # Test a table with a stored and virtual computed column. Note that the
 # computed columns are not included in the INSERT/UPDATE/DELETE statements.
@@ -76,23 +76,23 @@ ok
 
 show-insert table=products
 ----
-INSERT INTO [108 AS replication_target](id, name, unit_price, quantity, last_updated) VALUES ($1::INT8, $2::STRING, $3::DECIMAL(10,2), $4::INT8, $6::TIMESTAMP)
+INSERT INTO [108 AS replication_target](id, last_updated, name, quantity, unit_price) VALUES ($1::INT8, $2::TIMESTAMP, $3::STRING, $4::INT8, $6::DECIMAL(10,2))
 
 # NOTE: total_price and discount_price are not included since they are computed.[
 show-update table=products
 ----
-UPDATE [108 AS replication_target] SET id = $7::INT8, name = $8::STRING, unit_price = $9::DECIMAL(10,2), quantity = $10::INT8, last_updated = $12::TIMESTAMP WHERE ((((id = $1::INT8) AND (name IS NOT DISTINCT FROM $2::STRING)) AND (unit_price IS NOT DISTINCT FROM $3::DECIMAL(10,2))) AND (quantity IS NOT DISTINCT FROM $4::INT8)) AND (last_updated IS NOT DISTINCT FROM $6::TIMESTAMP)
+UPDATE [108 AS replication_target] SET id = $7::INT8, last_updated = $8::TIMESTAMP, name = $9::STRING, quantity = $10::INT8, unit_price = $12::DECIMAL(10,2) WHERE ((((id = $1::INT8) AND (last_updated IS NOT DISTINCT FROM $2::TIMESTAMP)) AND (name IS NOT DISTINCT FROM $3::STRING)) AND (quantity IS NOT DISTINCT FROM $4::INT8)) AND (unit_price IS NOT DISTINCT FROM $6::DECIMAL(10,2))
 
 # NOTE: total_price and discount_price are not included since they are computed.[
 show-delete table=products
 ----
-DELETE FROM [108 AS replication_target] WHERE ((((id = $1::INT8) AND (name IS NOT DISTINCT FROM $2::STRING)) AND (unit_price IS NOT DISTINCT FROM $3::DECIMAL(10,2))) AND (quantity IS NOT DISTINCT FROM $4::INT8)) AND (last_updated IS NOT DISTINCT FROM $6::TIMESTAMP) RETURNING *
+DELETE FROM [108 AS replication_target] WHERE ((((id = $1::INT8) AND (last_updated IS NOT DISTINCT FROM $2::TIMESTAMP)) AND (name IS NOT DISTINCT FROM $3::STRING)) AND (quantity IS NOT DISTINCT FROM $4::INT8)) AND (unit_price IS NOT DISTINCT FROM $6::DECIMAL(10,2)) RETURNING *
 
 # NOTE: total_price is not included because it is a computed column, but
 # discount_price is included because its part of the primary key.
 show-select table=products
 ----
-SELECT key_list.index, replication_target.crdb_internal_origin_timestamp, replication_target.crdb_internal_mvcc_timestamp, replication_target.id, replication_target.name, replication_target.unit_price, replication_target.quantity, replication_target.total_value, replication_target.last_updated FROM ROWS FROM (unnest($1::INT8[], $2::DECIMAL[])) WITH ORDINALITY AS key_list (key1, key2, index) INNER LOOKUP JOIN [108 AS replication_target] ON (replication_target.id = key_list.key1) AND (replication_target.total_value = key_list.key2)
+SELECT key_list.index, replication_target.crdb_internal_origin_timestamp, replication_target.crdb_internal_mvcc_timestamp, replication_target.id, replication_target.last_updated, replication_target.name, replication_target.quantity, replication_target.total_value, replication_target.unit_price FROM ROWS FROM (unnest($1::INT8[], $2::DECIMAL[])) WITH ORDINALITY AS key_list (key1, key2, index) INNER LOOKUP JOIN [108 AS replication_target] ON (replication_target.id = key_list.key1) AND (replication_target.total_value = key_list.key2)
 
 # Test a table with an expression, inverted index, and partial index. The
 # indexes are not expected to impact the INSERT/UPDATE/DELETE statements.
@@ -129,19 +129,19 @@ ok
 
 show-insert table=employees
 ----
-INSERT INTO [109 AS replication_target](id, first_name, last_name, email, salary, department, hire_date) VALUES ($1::INT8, $2::STRING, $3::STRING, $4::STRING, $5::DECIMAL(12,2), $6::STRING, $7::DATE)
+INSERT INTO [109 AS replication_target](department, email, first_name, hire_date, id, last_name, salary) VALUES ($1::STRING, $2::STRING, $3::STRING, $4::DATE, $5::INT8, $6::STRING, $7::DECIMAL(12,2))
 
 show-update table=employees
 ----
-UPDATE [109 AS replication_target] SET id = $8::INT8, first_name = $9::STRING, last_name = $10::STRING, email = $11::STRING, salary = $12::DECIMAL(12,2), department = $13::STRING, hire_date = $14::DATE WHERE ((((((id = $1::INT8) AND (first_name IS NOT DISTINCT FROM $2::STRING)) AND (last_name IS NOT DISTINCT FROM $3::STRING)) AND (email IS NOT DISTINCT FROM $4::STRING)) AND (salary IS NOT DISTINCT FROM $5::DECIMAL(12,2))) AND (department IS NOT DISTINCT FROM $6::STRING)) AND (hire_date IS NOT DISTINCT FROM $7::DATE)
+UPDATE [109 AS replication_target] SET department = $8::STRING, email = $9::STRING, first_name = $10::STRING, hire_date = $11::DATE, id = $12::INT8, last_name = $13::STRING, salary = $14::DECIMAL(12,2) WHERE ((((((department IS NOT DISTINCT FROM $1::STRING) AND (email IS NOT DISTINCT FROM $2::STRING)) AND (first_name IS NOT DISTINCT FROM $3::STRING)) AND (hire_date IS NOT DISTINCT FROM $4::DATE)) AND (id = $5::INT8)) AND (last_name IS NOT DISTINCT FROM $6::STRING)) AND (salary IS NOT DISTINCT FROM $7::DECIMAL(12,2))
 
 show-delete table=employees
 ----
-DELETE FROM [109 AS replication_target] WHERE ((((((id = $1::INT8) AND (first_name IS NOT DISTINCT FROM $2::STRING)) AND (last_name IS NOT DISTINCT FROM $3::STRING)) AND (email IS NOT DISTINCT FROM $4::STRING)) AND (salary IS NOT DISTINCT FROM $5::DECIMAL(12,2))) AND (department IS NOT DISTINCT FROM $6::STRING)) AND (hire_date IS NOT DISTINCT FROM $7::DATE) RETURNING *
+DELETE FROM [109 AS replication_target] WHERE ((((((department IS NOT DISTINCT FROM $1::STRING) AND (email IS NOT DISTINCT FROM $2::STRING)) AND (first_name IS NOT DISTINCT FROM $3::STRING)) AND (hire_date IS NOT DISTINCT FROM $4::DATE)) AND (id = $5::INT8)) AND (last_name IS NOT DISTINCT FROM $6::STRING)) AND (salary IS NOT DISTINCT FROM $7::DECIMAL(12,2)) RETURNING *
 
 show-select table=employees
 ----
-SELECT key_list.index, replication_target.crdb_internal_origin_timestamp, replication_target.crdb_internal_mvcc_timestamp, replication_target.id, replication_target.first_name, replication_target.last_name, replication_target.email, replication_target.salary, replication_target.department, replication_target.hire_date FROM ROWS FROM (unnest($1::INT8[])) WITH ORDINALITY AS key_list (key1, index) INNER LOOKUP JOIN [109 AS replication_target] ON replication_target.id = key_list.key1
+SELECT key_list.index, replication_target.crdb_internal_origin_timestamp, replication_target.crdb_internal_mvcc_timestamp, replication_target.department, replication_target.email, replication_target.first_name, replication_target.hire_date, replication_target.id, replication_target.last_name, replication_target.salary FROM ROWS FROM (unnest($1::INT8[])) WITH ORDINALITY AS key_list (key1, index) INNER LOOKUP JOIN [109 AS replication_target] ON replication_target.id = key_list.key1
 
 exec
 ALTER DATABASE defaultdb PRIMARY REGION "us-east1";
@@ -163,19 +163,19 @@ ok
 
 show-insert table=user_events
 ----
-INSERT INTO [112 AS replication_target](id, user_id, event_type, event_data, created_at, region) VALUES ($1::UUID, $2::INT8, $3::STRING, $4::JSONB, $5::TIMESTAMP, $6::@100110)
+INSERT INTO [112 AS replication_target](created_at, event_data, event_type, id, region, user_id) VALUES ($1::TIMESTAMP, $2::JSONB, $3::STRING, $4::UUID, $5::@100110, $6::INT8)
 
 show-update table=user_events
 ----
-UPDATE [112 AS replication_target] SET id = $7::UUID, user_id = $8::INT8, event_type = $9::STRING, event_data = $10::JSONB, created_at = $11::TIMESTAMP, region = $12::@100110 WHERE (((((id = $1::UUID) AND (user_id IS NOT DISTINCT FROM $2::INT8)) AND (event_type IS NOT DISTINCT FROM $3::STRING)) AND (event_data IS NOT DISTINCT FROM $4::JSONB)) AND (created_at IS NOT DISTINCT FROM $5::TIMESTAMP)) AND (region = $6::@100110)
+UPDATE [112 AS replication_target] SET created_at = $7::TIMESTAMP, event_data = $8::JSONB, event_type = $9::STRING, id = $10::UUID, region = $11::@100110, user_id = $12::INT8 WHERE (((((created_at IS NOT DISTINCT FROM $1::TIMESTAMP) AND (event_data IS NOT DISTINCT FROM $2::JSONB)) AND (event_type IS NOT DISTINCT FROM $3::STRING)) AND (id = $4::UUID)) AND (region = $5::@100110)) AND (user_id IS NOT DISTINCT FROM $6::INT8)
 
 show-delete table=user_events
 ----
-DELETE FROM [112 AS replication_target] WHERE (((((id = $1::UUID) AND (user_id IS NOT DISTINCT FROM $2::INT8)) AND (event_type IS NOT DISTINCT FROM $3::STRING)) AND (event_data IS NOT DISTINCT FROM $4::JSONB)) AND (created_at IS NOT DISTINCT FROM $5::TIMESTAMP)) AND (region = $6::@100110) RETURNING *
+DELETE FROM [112 AS replication_target] WHERE (((((created_at IS NOT DISTINCT FROM $1::TIMESTAMP) AND (event_data IS NOT DISTINCT FROM $2::JSONB)) AND (event_type IS NOT DISTINCT FROM $3::STRING)) AND (id = $4::UUID)) AND (region = $5::@100110)) AND (user_id IS NOT DISTINCT FROM $6::INT8) RETURNING *
 
 show-select table=user_events
 ----
-SELECT key_list.index, replication_target.crdb_internal_origin_timestamp, replication_target.crdb_internal_mvcc_timestamp, replication_target.id, replication_target.user_id, replication_target.event_type, replication_target.event_data, replication_target.created_at, replication_target.region FROM ROWS FROM (unnest($1::UUID[], $2::@100111)) WITH ORDINALITY AS key_list (key1, key2, index) INNER LOOKUP JOIN [112 AS replication_target] ON (replication_target.id = key_list.key1) AND (replication_target.region = key_list.key2)
+SELECT key_list.index, replication_target.crdb_internal_origin_timestamp, replication_target.crdb_internal_mvcc_timestamp, replication_target.created_at, replication_target.event_data, replication_target.event_type, replication_target.id, replication_target.region, replication_target.user_id FROM ROWS FROM (unnest($1::UUID[], $2::@100111)) WITH ORDINALITY AS key_list (key1, key2, index) INNER LOOKUP JOIN [112 AS replication_target] ON (replication_target.id = key_list.key1) AND (replication_target.region = key_list.key2)
 
 # Test table with array primary key - this requires point select due to array-of-arrays limitations
 exec

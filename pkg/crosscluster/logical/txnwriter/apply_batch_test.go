@@ -43,12 +43,12 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	sqlDB.Exec(t, `CREATE TABLE parent (id INT PRIMARY KEY, payload STRING)`)
+	sqlDB.Exec(t, `CREATE TABLE parent (id INT PRIMARY KEY, val STRING)`)
 	sqlDB.Exec(t, `CREATE TABLE child (
 		id INT PRIMARY KEY,
 		parent_id INT REFERENCES parent(id),
 		unique_val INT UNIQUE,
-		payload STRING
+		val STRING
 	)`)
 
 	writer := newTxnWriter(t, s)
@@ -58,23 +58,23 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 	sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'parent'`).Scan(&parentID)
 	sqlDB.QueryRow(t, `SELECT id FROM system.namespace WHERE name = 'child'`).Scan(&childID)
 
-	parentRow := func(id int, payload string) tree.Datums {
-		return tree.Datums{tree.NewDInt(tree.DInt(id)), tree.NewDString(payload)}
+	parentRow := func(id int, val string) tree.Datums {
+		return tree.Datums{tree.NewDInt(tree.DInt(id)), tree.NewDString(val)}
 	}
-	childRow := func(id, parentFK int, payload string) tree.Datums {
+	childRow := func(id, parentFK int, val string) tree.Datums {
 		return tree.Datums{
 			tree.NewDInt(tree.DInt(id)),
 			tree.NewDInt(tree.DInt(parentFK)),
 			tree.DNull,
-			tree.NewDString(payload),
+			tree.NewDString(val),
 		}
 	}
-	childRowWithUnique := func(id, parentFK, uniqueVal int, payload string) tree.Datums {
+	childRowWithUnique := func(id, parentFK, uniqueVal int, val string) tree.Datums {
 		return tree.Datums{
 			tree.NewDInt(tree.DInt(id)),
 			tree.NewDInt(tree.DInt(parentFK)),
 			tree.NewDInt(tree.DInt(uniqueVal)),
-			tree.NewDString(payload),
+			tree.NewDString(val),
 		}
 	}
 
@@ -107,7 +107,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		validate: func(t *testing.T, baseID int, result ApplyResult) {
 			require.Equal(t, ApplyResult{AppliedRows: 1}, result)
 			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT payload FROM parent WHERE id = %d`, baseID+1),
+				fmt.Sprintf(`SELECT val FROM parent WHERE id = %d`, baseID+1),
 				[][]string{{"inserted"}},
 			)
 		},
@@ -115,7 +115,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		name: "update",
 		setup: func(t *testing.T, baseID int) {
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO parent (id, payload) VALUES (%d, 'before')`, baseID+1))
+				`INSERT INTO parent (id, val) VALUES (%d, 'before')`, baseID+1))
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
@@ -130,7 +130,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		validate: func(t *testing.T, baseID int, result ApplyResult) {
 			require.Equal(t, ApplyResult{AppliedRows: 1}, result)
 			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT payload FROM parent WHERE id = %d`, baseID+1),
+				fmt.Sprintf(`SELECT val FROM parent WHERE id = %d`, baseID+1),
 				[][]string{{"after"}},
 			)
 		},
@@ -138,7 +138,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		name: "delete",
 		setup: func(t *testing.T, baseID int) {
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO parent (id, payload) VALUES (%d, 'doomed')`, baseID+1))
+				`INSERT INTO parent (id, val) VALUES (%d, 'doomed')`, baseID+1))
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
@@ -162,7 +162,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		name: "update_insert_and_delete",
 		setup: func(t *testing.T, baseID int) {
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO parent (id, payload) VALUES (%d, 'update-me'), (%d, 'delete-me')`,
+				`INSERT INTO parent (id, val) VALUES (%d, 'update-me'), (%d, 'delete-me')`,
 				baseID+1, baseID+2))
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
@@ -191,7 +191,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		validate: func(t *testing.T, baseID int, result ApplyResult) {
 			require.Equal(t, ApplyResult{AppliedRows: 3}, result)
 			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT id, payload FROM parent WHERE id IN (%d, %d, %d) ORDER BY id`,
+				fmt.Sprintf(`SELECT id, val FROM parent WHERE id IN (%d, %d, %d) ORDER BY id`,
 					baseID+1, baseID+2, baseID+3),
 				[][]string{
 					{fmt.Sprintf("%d", baseID+1), "updated"},
@@ -205,7 +205,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		name: "insert_lww_loser",
 		setup: func(t *testing.T, baseID int) {
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO parent (id, payload) VALUES (%d, 'existing')`, baseID+1))
+				`INSERT INTO parent (id, val) VALUES (%d, 'existing')`, baseID+1))
 		},
 		buildTxn: func(t *testing.T, baseID int, preSetupTS hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
@@ -228,12 +228,12 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 			require.Equal(t, ApplyResult{AppliedRows: 1, LwwLoserRows: 1}, result)
 			// Original row unchanged.
 			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT payload FROM parent WHERE id = %d`, baseID+1),
+				fmt.Sprintf(`SELECT val FROM parent WHERE id = %d`, baseID+1),
 				[][]string{{"existing"}},
 			)
 			// Second insert succeeded.
 			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT payload FROM parent WHERE id = %d`, baseID+2),
+				fmt.Sprintf(`SELECT val FROM parent WHERE id = %d`, baseID+2),
 				[][]string{{"new-insert"}},
 			)
 		},
@@ -241,7 +241,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		name: "update_lww_loser",
 		setup: func(t *testing.T, baseID int) {
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO parent (id, payload) VALUES (%d, 'local')`, baseID+1))
+				`INSERT INTO parent (id, val) VALUES (%d, 'local')`, baseID+1))
 		},
 		buildTxn: func(t *testing.T, baseID int, preSetupTS hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
@@ -264,12 +264,12 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 			require.Equal(t, ApplyResult{AppliedRows: 1, LwwLoserRows: 1}, result)
 			// Original row unchanged.
 			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT payload FROM parent WHERE id = %d`, baseID+1),
+				fmt.Sprintf(`SELECT val FROM parent WHERE id = %d`, baseID+1),
 				[][]string{{"local"}},
 			)
 			// Second insert succeeded.
 			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT payload FROM parent WHERE id = %d`, baseID+2),
+				fmt.Sprintf(`SELECT val FROM parent WHERE id = %d`, baseID+2),
 				[][]string{{"new-insert"}},
 			)
 		},
@@ -277,7 +277,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		name: "delete_lww_loser",
 		setup: func(t *testing.T, baseID int) {
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO parent (id, payload) VALUES (%d, 'local')`, baseID+1))
+				`INSERT INTO parent (id, val) VALUES (%d, 'local')`, baseID+1))
 		},
 		buildTxn: func(t *testing.T, baseID int, preSetupTS hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
@@ -301,12 +301,12 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 			require.Equal(t, ApplyResult{AppliedRows: 1, LwwLoserRows: 1}, result)
 			// Original row unchanged.
 			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT payload FROM parent WHERE id = %d`, baseID+1),
+				fmt.Sprintf(`SELECT val FROM parent WHERE id = %d`, baseID+1),
 				[][]string{{"local"}},
 			)
 			// Second insert succeeded.
 			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT payload FROM parent WHERE id = %d`, baseID+2),
+				fmt.Sprintf(`SELECT val FROM parent WHERE id = %d`, baseID+2),
 				[][]string{{"new-insert"}},
 			)
 		},
@@ -316,7 +316,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		name: "update_lww_winner",
 		setup: func(t *testing.T, baseID int) {
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO parent (id, payload) VALUES (%d, 'old')`, baseID+1))
+				`INSERT INTO parent (id, val) VALUES (%d, 'old')`, baseID+1))
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
@@ -331,7 +331,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		validate: func(t *testing.T, baseID int, result ApplyResult) {
 			require.Equal(t, ApplyResult{AppliedRows: 1}, result)
 			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT payload FROM parent WHERE id = %d`, baseID+1),
+				fmt.Sprintf(`SELECT val FROM parent WHERE id = %d`, baseID+1),
 				[][]string{{"winner"}},
 			)
 		},
@@ -339,7 +339,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		name: "delete_lww_winner",
 		setup: func(t *testing.T, baseID int) {
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO parent (id, payload) VALUES (%d, 'old')`, baseID+1))
+				`INSERT INTO parent (id, val) VALUES (%d, 'old')`, baseID+1))
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
 			return ldrdecoder.Transaction{
@@ -376,7 +376,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		validate: func(t *testing.T, baseID int, result ApplyResult) {
 			require.Equal(t, ApplyResult{AppliedRows: 1}, result)
 			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT payload FROM parent WHERE id = %d`, baseID+1),
+				fmt.Sprintf(`SELECT val FROM parent WHERE id = %d`, baseID+1),
 				[][]string{{"recovered"}},
 			)
 		},
@@ -426,10 +426,10 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		validate: func(t *testing.T, baseID int, result ApplyResult) {
 			require.Equal(t, ApplyResult{AppliedRows: 2}, result)
 			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT payload from parent WHERE id = %d`, baseID+1),
+				fmt.Sprintf(`SELECT val from parent WHERE id = %d`, baseID+1),
 				[][]string{{"parent-row"}})
 			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT payload FROM child WHERE id = %d`, baseID+2),
+				fmt.Sprintf(`SELECT val FROM child WHERE id = %d`, baseID+2),
 				[][]string{{"child-row"}})
 		},
 	}, {
@@ -452,9 +452,9 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		name: "dlq_fk_update",
 		setup: func(t *testing.T, baseID int) {
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO parent (id, payload) VALUES (%d, 'p')`, baseID+1))
+				`INSERT INTO parent (id, val) VALUES (%d, 'p')`, baseID+1))
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO child (id, parent_id, unique_val, payload) VALUES (%d, %d, %d, 'child')`,
+				`INSERT INTO child (id, parent_id, unique_val, val) VALUES (%d, %d, %d, 'child')`,
 				baseID+1, baseID+1, baseID+1))
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
@@ -474,9 +474,9 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		name: "dlq_fk_delete",
 		setup: func(t *testing.T, baseID int) {
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO parent (id, payload) VALUES (%d, 'p')`, baseID+1))
+				`INSERT INTO parent (id, val) VALUES (%d, 'p')`, baseID+1))
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO child (id, parent_id, unique_val, payload) VALUES (%d, %d, %d, 'child')`,
+				`INSERT INTO child (id, parent_id, unique_val, val) VALUES (%d, %d, %d, 'child')`,
 				baseID+1, baseID+1, baseID+1))
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
@@ -500,10 +500,10 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		name: "unique_transfer",
 		setup: func(t *testing.T, baseID int) {
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO parent (id, payload) VALUES (%d, 'p1'), (%d, 'p2')`,
+				`INSERT INTO parent (id, val) VALUES (%d, 'p1'), (%d, 'p2')`,
 				baseID+1, baseID+2))
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO child (id, parent_id, unique_val, payload) VALUES (%d, %d, %d, 'old-child')`,
+				`INSERT INTO child (id, parent_id, unique_val, val) VALUES (%d, %d, %d, 'old-child')`,
 				baseID+1, baseID+1, baseID+1))
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
@@ -538,7 +538,7 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 				[][]string{{"0"}},
 			)
 			sqlDB.CheckQueryResults(t,
-				fmt.Sprintf(`SELECT unique_val, payload FROM child WHERE id = %d`, baseID+2),
+				fmt.Sprintf(`SELECT unique_val, val FROM child WHERE id = %d`, baseID+2),
 				[][]string{{fmt.Sprintf("%d", baseID+1), "new-child"}},
 			)
 		},
@@ -546,10 +546,10 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		name: "dlq_unique_insert",
 		setup: func(t *testing.T, baseID int) {
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO parent (id, payload) VALUES (%d, 'p1'), (%d, 'p2')`,
+				`INSERT INTO parent (id, val) VALUES (%d, 'p1'), (%d, 'p2')`,
 				baseID+1, baseID+2))
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO child (id, parent_id, unique_val, payload) VALUES (%d, %d, %d, 'existing')`,
+				`INSERT INTO child (id, parent_id, unique_val, val) VALUES (%d, %d, %d, 'existing')`,
 				baseID+1, baseID+1, baseID+1))
 		},
 		buildTxn: func(t *testing.T, baseID int, _ hlc.Timestamp) ldrdecoder.Transaction {
@@ -569,10 +569,10 @@ func TestTransactionWriter_ApplyBatch(t *testing.T) {
 		name: "dlq_unique_update",
 		setup: func(t *testing.T, baseID int) {
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO parent (id, payload) VALUES (%d, 'p1'), (%d, 'p2')`,
+				`INSERT INTO parent (id, val) VALUES (%d, 'p1'), (%d, 'p2')`,
 				baseID+1, baseID+2))
 			sqlDB.Exec(t, fmt.Sprintf(
-				`INSERT INTO child (id, parent_id, unique_val, payload) VALUES (%d, %d, %d, 'child1'), (%d, %d, %d, 'child2')`,
+				`INSERT INTO child (id, parent_id, unique_val, val) VALUES (%d, %d, %d, 'child1'), (%d, %d, %d, 'child2')`,
 				baseID+1, baseID+1, baseID+1,
 				baseID+2, baseID+2, baseID+2))
 		},

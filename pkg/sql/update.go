@@ -79,6 +79,7 @@ type updateRun struct {
 func (r *updateRun) init(params runParams, columns colinfo.ResultColumns) {
 	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
 		r.originTimestampCPutHelper.OriginTimestamp = ots
+		r.originTimestampCPutHelper.ShouldWinTie = params.extendedEvalCtx.SessionData().WinLwwTies
 	}
 
 	if !r.rowsNeeded {

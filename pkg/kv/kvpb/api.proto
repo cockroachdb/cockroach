@@ -389,7 +389,10 @@ message ConditionalPutRequest {
   // Used by logical data replication.
   util.hlc.Timestamp origin_timestamp = 8 [(gogoproto.nullable) = false];
 
-  reserved 9;
+  // ShouldWinOriginTimestampTie indicates that the caller wants to win
+  // the OriginTimestamp comparison even if the timestamps are equal.
+  // Used by logical data replication for deterministic tie-breaking.
+  bool should_win_origin_timestamp_tie = 9;
 }
 
 // A ConditionalPutResponse is the return value from the

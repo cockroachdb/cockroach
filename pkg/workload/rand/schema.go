@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -112,6 +113,21 @@ func typeForOid(db *gosql.DB, typeOid oid.Oid, tableName, columnName string) (*t
 		}
 
 		datumType.InternalType.Width = width
+	}
+
+	if typeOid == oidext.T_pgvector {
+		var typmod int32
+		sqlName := tree.Name(tableName)
+		if err := db.QueryRow(
+			`SELECT atttypmod FROM pg_catalog.pg_attribute
+			WHERE attrelid = $1::REGCLASS AND attname = $2`,
+			sqlName.String(), columnName).Scan(&typmod); err != nil {
+			return nil, err
+		}
+		// atttypmod for VECTOR(N) is N; -1 means no dimension constraint.
+		if typmod > 0 {
+			datumType.InternalType.Width = typmod
+		}
 	}
 
 	return &datumType, nil

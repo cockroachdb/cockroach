@@ -568,7 +568,7 @@ func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue []byte)
 }
 
 // CPutWithOriginTimestamp is like CPut except that it also sets the
-// OriginTimestamp and ShouldWinOriginTimestampTie fields.
+// OriginTimestamp and ShouldWinOriginTimestampTie fields on the request.
 //
 // See the comments on kvpb.ConditionalPutRequest related to these
 // fields for a full description of the semantics.
@@ -576,7 +576,9 @@ func (b *Batch) CPutAllowingIfNotExists(key, value interface{}, expValue []byte)
 // This is used by logical data replication and other uses of this API
 // are discouraged since the semantics are subject to change as
 // required by that feature.
-func (b *Batch) CPutWithOriginTimestamp(key, value interface{}, expValue []byte, ts hlc.Timestamp) {
+func (b *Batch) CPutWithOriginTimestamp(
+	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
+) {
 	k, err := marshalKey(key)
 	if err != nil {
 		b.initResult(0, 1, notRaw, err)
@@ -589,7 +591,9 @@ func (b *Batch) CPutWithOriginTimestamp(key, value interface{}, expValue []byte,
 		return
 	}
 	r := kvpb.NewConditionalPut(k, v, expValue, false)
-	r.(*kvpb.ConditionalPutRequest).OriginTimestamp = ts
+	cput := r.(*kvpb.ConditionalPutRequest)
+	cput.OriginTimestamp = ts
+	cput.ShouldWinOriginTimestampTie = shouldWinTie
 	b.appendReqs(r)
 	b.approxMutationReqBytes += len(k) + len(v.RawBytes)
 	b.initResult(1, 1, notRaw, nil)

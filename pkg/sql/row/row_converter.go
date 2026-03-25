@@ -82,7 +82,7 @@ func (i KVInserter) PutMustAcquireExclusiveLock(key, value interface{}) {
 	i.Put(key, value)
 }
 func (i KVInserter) CPutWithOriginTimestamp(
-	key, value interface{}, expValue []byte, ts hlc.Timestamp,
+	key, value interface{}, expValue []byte, ts hlc.Timestamp, shouldWinTie bool,
 ) {
 	panic(errors.AssertionFailedf("unimplemented"))
 }

@@ -35,9 +35,12 @@ type RowWriter struct {
 	columns       []string
 }
 
-func (s *RowWriter) setOriginTimestamp(ctx context.Context, originTimestamp hlc.Timestamp) error {
+func (s *RowWriter) setOriginTimestamp(
+	ctx context.Context, originTimestamp hlc.Timestamp, winLwwTie bool,
+) error {
 	return s.session.ModifySession(ctx, func(m sessionmutator.SessionDataMutator) {
 		m.Data.OriginTimestampForLogicalDataReplication = originTimestamp
+		m.Data.WinLwwTies = winLwwTie
 	})
 }
 
@@ -49,7 +52,7 @@ func (s *RowWriter) DeleteRow(
 	s.scratchDatums = s.scratchDatums[:0]
 	s.scratchDatums = append(s.scratchDatums, oldRow...)
 
-	err := s.setOriginTimestamp(ctx, originTimestamp)
+	err := s.setOriginTimestamp(ctx, originTimestamp, false /* winLwwTie */)
 	if err != nil {
 		return err
 	}
@@ -65,7 +68,9 @@ func (s *RowWriter) DeleteRow(
 }
 
 // InsertRow inserts a row into the table. It will return an error if the row
-// already exists.
+// already exists. Inserts always win origin timestamp ties; if the insert
+// conflicts with a non-tombstone row, the caller should trigger a read
+// refresh to resolve the tie.
 func (s *RowWriter) InsertRow(
 	ctx context.Context, originTimestamp hlc.Timestamp, row tree.Datums,
 ) error {
@@ -79,7 +84,7 @@ func (s *RowWriter) InsertRow(
 		s.scratchDatums = s.scratchDatums[:0]
 		s.scratchDatums = append(s.scratchDatums, row...)
 
-		err := s.setOriginTimestamp(ctx, originTimestamp)
+		err := s.setOriginTimestamp(ctx, originTimestamp, true /* winLwwTie */)
 		if err != nil {
 			return err
 		}
@@ -99,13 +104,17 @@ func (s *RowWriter) InsertRow(
 // UpdateRow updates a row in the table. It returns errStalePreviousValue
 // if the oldRow argument does not match the value in the local database.
 func (s *RowWriter) UpdateRow(
-	ctx context.Context, originTimestamp hlc.Timestamp, oldRow tree.Datums, newRow tree.Datums,
+	ctx context.Context,
+	originTimestamp hlc.Timestamp,
+	oldRow tree.Datums,
+	newRow tree.Datums,
+	winLwwTie bool,
 ) error {
 	s.scratchDatums = s.scratchDatums[:0]
 	s.scratchDatums = append(s.scratchDatums, oldRow...)
 	s.scratchDatums = append(s.scratchDatums, newRow...)
 
-	err := s.setOriginTimestamp(ctx, originTimestamp)
+	err := s.setOriginTimestamp(ctx, originTimestamp, winLwwTie)
 	if err != nil {
 		return err
 	}

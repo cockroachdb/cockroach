@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -145,7 +146,7 @@ func (t *tableHandler) Close(ctx context.Context) {
 func (t *tableHandler) handleDecodedBatch(
 	ctx context.Context, batch []ldrdecoder.DecodedRow,
 ) (tableBatchStats, error) {
-	stats, err := t.attemptBatch(ctx, batch)
+	stats, err := t.attemptBatch(ctx, batch, false /* winLwwTie */)
 	if err == nil {
 		return stats, nil
 	}
@@ -155,7 +156,7 @@ func (t *tableHandler) handleDecodedBatch(
 		return stats, err
 	}
 
-	stats, err = t.attemptBatch(ctx, refreshedBatch)
+	stats, err = t.attemptBatch(ctx, refreshedBatch, true /* winLwwTie */)
 	if err != nil {
 		return tableBatchStats{}, err
 	}
@@ -166,7 +167,7 @@ func (t *tableHandler) handleDecodedBatch(
 }
 
 func (t *tableHandler) attemptBatch(
-	ctx context.Context, batch []ldrdecoder.DecodedRow,
+	ctx context.Context, batch []ldrdecoder.DecodedRow, winLwwTie bool,
 ) (tableBatchStats, error) {
 	var stats tableBatchStats
 
@@ -185,6 +186,9 @@ func (t *tableHandler) attemptBatch(
 				// Skip: handled in its own transaction.
 			case event.IsInsertRow():
 				stats.inserts++
+				// Inserts always win origin timestamp ties. If the
+				// insert conflicts with a non-tombstone row it will
+				// trigger a read refresh.
 				err := t.sqlWriter.InsertRow(ctx, event.RowTimestamp, event.Row)
 				if isLwwLoser(err) {
 					// Insert may observe a LWW failure if it loses to an existing
@@ -197,7 +201,7 @@ func (t *tableHandler) attemptBatch(
 				}
 			case event.IsUpdateRow():
 				stats.updates++
-				err := t.sqlWriter.UpdateRow(ctx, event.RowTimestamp, event.PrevRow, event.Row)
+				err := t.sqlWriter.UpdateRow(ctx, event.RowTimestamp, event.PrevRow, event.Row, winLwwTie)
 				if err != nil {
 					return err
 				}
@@ -238,8 +242,12 @@ func (t *tableHandler) attemptBatch(
 }
 
 // refreshPrevRows refreshes the prevRow field for each event in the batch. If
-// any event is known to be a lww loser based on the read, its dropped from the
-// batch.
+// any event is known to be a lww loser based on the read, it is dropped from
+// the batch.
+//
+// When the existing and incoming timestamps are equal, column values are
+// compared element-wise to break the tie deterministically. Both clusters
+// perform the same comparison and arrive at the same winner.
 func (t *tableHandler) refreshPrevRows(
 	ctx context.Context, batch []ldrdecoder.DecodedRow,
 ) ([]ldrdecoder.DecodedRow, tableBatchStats, error) {
@@ -260,18 +268,19 @@ func (t *tableHandler) refreshPrevRows(
 	for i, event := range batch {
 		var prevRow tree.Datums
 		if refreshed, found := refreshedRows[i]; found {
-			if !refreshed.LogicalTimestamp.Less(event.RowTimestamp) {
-				// TODO(jeffswenson): update this logic when its time to handle
-				// ties.
-				// Skip the row because it is a lww loser. Note: we can only identify LWW
-				// losers during the read refresh if the row exists. If its a tombstone,
-				// the local value may win LWW, but we have to attempt the
-				// insert/tombstone update to find out. We even have to do this if the
-				// replicated event is a delete because the local tombstone may have an
-				// older logical timestamp.
+			won, err := sqlwriter.IsLwwWinner(event.RowTimestamp, refreshed.LogicalTimestamp, event.Row, refreshed.Row)
+			if err != nil {
+				return nil, tableBatchStats{}, err
+			}
+			if !won {
+				log.VEventf(ctx, 2, "LWW: incoming row lost or identical")
 				stats.refreshLwwLosers++
 				continue
 			}
+			// Note: we can only identify LWW losers during the read refresh
+			// if the row exists. If it is a tombstone, the local value may win
+			// LWW, but we have to attempt the insert/tombstone update to find
+			// out.
 			prevRow = refreshed.Row
 		}
 		refreshedEvent := ldrdecoder.DecodedRow{
