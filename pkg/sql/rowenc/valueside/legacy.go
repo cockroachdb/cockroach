@@ -291,7 +291,7 @@ func UnmarshalLegacy(a *tree.DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		if typ.Oid() == oid.T_name {
 			return a.NewDName(tree.DString(v)), nil
 		}
-		if typ.Oid() == oidext.T_aclitem {
+		if typ.Oid() == oid.T_aclitem {
 			return a.NewDACLItem(tree.DString(v))
 		}
 		return a.NewDString(tree.DString(v)), nil

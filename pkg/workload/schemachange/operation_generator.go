@@ -4363,9 +4363,9 @@ func (og *operationGenerator) randType(
 		return nil, nil, err
 	}
 
-	typ := randgen.RandSortingType(og.params.rng)
+	typ := randgen.RandColumnType(og.params.rng)
 	for ltreeNotSupported && (typ.Oid() == oidext.T_ltree || typ.Oid() == oidext.T__ltree) {
-		typ = randgen.RandSortingType(og.params.rng)
+		typ = randgen.RandColumnType(og.params.rng)
 	}
 
 	typeName := tree.MakeUnqualifiedTypeName(typ.SQLString())

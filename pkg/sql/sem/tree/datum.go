@@ -5656,7 +5656,7 @@ func (d *DOid) Name() string {
 // Types that currently benefit from DOidWrapper are:
 // - DName => DOidWrapper(*DString, oid.T_name)
 // - DRefCursor => DOidWrapper(*DString, oid.T_refcursor)
-// - DACLItem => DOidWrapper(*DString, oidext.T_aclitem)
+// - DACLItem => DOidWrapper(*DString, oid.T_aclitem)
 // - DCIText => DOidWrapper(*DCollatedString, oidext.T_citext)
 type DOidWrapper struct {
 	Wrapped Datum
@@ -5846,7 +5846,7 @@ func NewDACLItemFromDString(d *DString) (Datum, error) {
 	if _, err := privilege.ParseACLItem(string(*d)); err != nil {
 		return nil, err
 	}
-	return wrapWithOid(d, oidext.T_aclitem), nil
+	return wrapWithOid(d, oid.T_aclitem), nil
 }
 
 // NewDACLItem creates a *DOidWrapper with aclitem OID from a structured
@@ -5854,7 +5854,7 @@ func NewDACLItemFromDString(d *DString) (Datum, error) {
 // already well-formed.
 func NewDACLItem(item privilege.ACLItem) Datum {
 	s := DString(item.String())
-	return wrapWithOid(&s, oidext.T_aclitem)
+	return wrapWithOid(&s, oid.T_aclitem)
 }
 
 // NewDCIText is a helper routine to create a *DCIText (implemented as a *DOidWrapper)
