@@ -1973,7 +1973,7 @@ type cpuHandleAssertingSession struct {
 func (s *cpuHandleAssertingSession) assertHandle(ctx context.Context) {
 	h := admission.SQLCPUHandleFromContext(ctx)
 	if h != nil {
-		require.False(s.t, h.WorkInfo().AtGateway,
+		require.False(s.t, h.AtGateway(),
 			"LDR CPU handle should have AtGateway=false")
 		require.True(s.t, h.IsGoroutineRegistered(),
 			"goroutine handle should be registered before internal SQL execution")
