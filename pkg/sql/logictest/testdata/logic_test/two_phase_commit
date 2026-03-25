@@ -1,4 +1,9 @@
 # LogicTest: !3node-tenant-default-configs !local-prepared
+# cluster-opt: enable-prepared-transactions-unsafe
+
+# This test uses the enable-prepared-transactions-unsafe cluster-opt to bypass
+# the unsafe setting interlock, since the setting cannot be changed via SET
+# CLUSTER SETTING without the interlock dance.
 
 query T
 SHOW max_prepared_transactions

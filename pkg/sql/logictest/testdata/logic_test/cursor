@@ -1,4 +1,6 @@
 # LogicTest: !local-prepared
+# cluster-opt: enable-prepared-transactions-unsafe
+
 statement ok
 SET autocommit_before_ddl = false
 
