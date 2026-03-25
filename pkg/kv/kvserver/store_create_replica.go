@@ -114,6 +114,8 @@ func (s *Store) tryGetReplica(
 		if err := s.removeReplicaRaftMuLocked(
 			ctx, repl, id.ReplicaID, "superseded by newer Replica",
 		); err != nil {
+			// TODO(in this PR): we should be able to recover from this now, and
+			// propagate the error up.
 			log.KvExec.Fatalf(ctx, "failed to remove replica: %v", err)
 		}
 		repl.raftMu.Unlock()
