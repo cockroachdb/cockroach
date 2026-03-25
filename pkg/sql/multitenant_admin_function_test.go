@@ -768,6 +768,18 @@ func TestRelocateVoters(t *testing.T) {
 					require.NoErrorf(t, err, message)
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
+					testutils.SucceedsSoon(t, func() error {
+						var count int
+						if err := db.QueryRowContext(ctx,
+							`SELECT count(*) FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS] WHERE learner_replicas != '{}'`,
+						).Scan(&count); err != nil {
+							return err
+						}
+						if count > 0 {
+							return errors.Newf("waiting for %d ranges with LEARNER replicas to clear", count)
+						}
+						return nil
+					})
 					testCluster.ToggleLeaseQueues(false)
 					testCluster.ToggleReplicateQueues(false)
 					testCluster.ToggleSplitQueues(false)
@@ -849,6 +861,18 @@ func TestExperimentalRelocateVoters(t *testing.T) {
 					require.NoErrorf(t, err, message)
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
+					testutils.SucceedsSoon(t, func() error {
+						var count int
+						if err := db.QueryRowContext(ctx,
+							`SELECT count(*) FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS] WHERE learner_replicas != '{}'`,
+						).Scan(&count); err != nil {
+							return err
+						}
+						if count > 0 {
+							return errors.Newf("waiting for %d ranges with LEARNER replicas to clear", count)
+						}
+						return nil
+					})
 					testCluster.ToggleLeaseQueues(false)
 					testCluster.ToggleReplicateQueues(false)
 					testCluster.ToggleSplitQueues(false)
@@ -944,23 +968,14 @@ func TestRelocateNonVoters(t *testing.T) {
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
 					testutils.SucceedsSoon(t, func() error {
-						// Check for learners before disabling the replicate queues to
-						// allow cleanup of learners
-						rows, err := db.QueryContext(ctx,
-							`SELECT learner_replicas FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS]`)
-						if err != nil {
+						var count int
+						if err := db.QueryRowContext(ctx,
+							`SELECT count(*) FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS] WHERE learner_replicas != '{}'`,
+						).Scan(&count); err != nil {
 							return err
 						}
-						defer rows.Close()
-						if rows.Next() {
-							var learners string
-							err = rows.Scan(&learners)
-							if err != nil {
-								return err
-							}
-							if learners != "{}" && learners != "" {
-								return errors.Newf("waiting for LEARNER replicas: %s", learners)
-							}
+						if count > 0 {
+							return errors.Newf("waiting for %d ranges with LEARNER replicas to clear", count)
 						}
 						return nil
 					})
@@ -1039,6 +1054,18 @@ func TestExperimentalRelocateNonVoters(t *testing.T) {
 					require.NoErrorf(t, err, message)
 					err = testCluster.WaitForFullReplication()
 					require.NoErrorf(t, err, message)
+					testutils.SucceedsSoon(t, func() error {
+						var count int
+						if err := db.QueryRowContext(ctx,
+							`SELECT count(*) FROM [SHOW RANGES FROM INDEX t@primary WITH DETAILS] WHERE learner_replicas != '{}'`,
+						).Scan(&count); err != nil {
+							return err
+						}
+						if count > 0 {
+							return errors.Newf("waiting for %d ranges with LEARNER replicas to clear", count)
+						}
+						return nil
+					})
 					testCluster.ToggleLeaseQueues(false)
 					testCluster.ToggleReplicateQueues(false)
 					testCluster.ToggleSplitQueues(false)
