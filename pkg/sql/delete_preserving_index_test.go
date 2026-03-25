@@ -247,7 +247,13 @@ func TestDeletePreservingIndexEncodingUsesNormalDeletesInDeleteOnly(t *testing.T
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		// This test directly manipulates descriptors via KV and relies on
+		// TestingDisableTableLeases to make those changes immediately visible.
+		// This is incompatible with external process virtual clusters where
+		// the lease disable doesn't take effect.
+		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(166311),
+	})
 	defer server.Stopper().Stop(context.Background())
 
 	// The descriptor changes made must have an immediate effect
@@ -311,7 +317,13 @@ func TestDeletePreservingIndexEncodingWithEmptyValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		// This test directly manipulates descriptors via KV and relies on
+		// TestingDisableTableLeases to make those changes immediately visible.
+		// This is incompatible with external process virtual clusters where
+		// the lease disable doesn't take effect.
+		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(166311),
+	})
 	defer server.Stopper().Stop(context.Background())
 
 	// The descriptor changes made must have an immediate effect
@@ -608,7 +620,13 @@ func TestMergeProcessor(t *testing.T) {
 	}
 
 	run := func(t *testing.T, test TestCase) {
-		server, tdb, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+		server, tdb, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+			// This test directly manipulates descriptors via KV and relies on
+			// TestingDisableTableLeases to make those changes immediately visible.
+			// This is incompatible with external process virtual clusters where
+			// the lease disable doesn't take effect.
+			DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(166311),
+		})
 		defer server.Stopper().Stop(context.Background())
 		defer lease.TestingDisableTableLeases()()
 
