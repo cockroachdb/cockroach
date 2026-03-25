@@ -21,7 +21,6 @@ import {
 } from "src/util/constants";
 
 import { selectStatementDetails } from "./statementDetails";
-import { selectLastReset } from "./statementsPage";
 
 import ISensitiveInfo = protos.cockroach.sql.ISensitiveInfo;
 
@@ -47,25 +46,6 @@ const timeScale: TimeScale = {
   sampleSize: moment.duration(30, "seconds"),
   fixedWindowEnd: moment(1646334815),
 };
-
-describe("selectLastReset", () => {
-  it('returns "unknown" if the statements data is invalid', () => {
-    const state = makeInvalidState();
-
-    const result = selectLastReset(state);
-
-    expect(result).toEqual("unknown");
-  });
-
-  it("returns the formatted timestamp if valid", () => {
-    const timestamp = 92951700;
-    const state = makeStateWithLastReset(timestamp, timeScale);
-
-    const result = selectLastReset(state);
-
-    expect(moment.utc(result).unix()).toEqual(timestamp);
-  });
-});
 
 describe("selectStatement", () => {
   it("returns null if the statements data is invalid", () => {
@@ -426,10 +406,6 @@ function makeStateWithStatements(
     statementsDetails,
     appFilter,
   );
-}
-
-function makeStateWithLastReset(lastReset: number, timeScale: TimeScale) {
-  return makeStateWithStatementsAndLastReset([], lastReset, timeScale);
 }
 
 function makeRoutePropsWithParams(params: { [key: string]: string }) {
