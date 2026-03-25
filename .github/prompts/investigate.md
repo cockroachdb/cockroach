@@ -243,6 +243,39 @@ findings. Also check the `memmonitoring.*.txt` files in the same
 directory to see whether the growth is tracked by CockroachDB's
 memory accounting.
 
+**Timeseries analysis (tsdump.gob):**
+
+Roachtest artifacts often include a `tsdump.gob` file containing
+CockroachDB internal timeseries metrics captured during the test run.
+Convert it to a DuckDB database for interactive querying. Install
+DuckDB first (if not already present), then convert:
+
+```bash
+fetch-url https://github.com/duckdb/duckdb/releases/download/v1.3.0/duckdb_cli-linux-amd64.zip /tmp/duckdb.zip \
+  && unzip -o /tmp/duckdb.zip -d /usr/local/bin
+go run ./pkg/cmd/tsdump2duck artifacts/tsdump.gob | duckdb artifacts/ts.duckdb
+```
+
+Then query the resulting database. The schema has two tables:
+- `timeseries(name, source, ts, value)` — metric samples
+- `store_node_map(store_id, node_id)` — maps store IDs to node IDs
+
+For available metric names and their descriptions, see
+`docs/generated/metrics/metrics.yaml` in the repo.
+
+Example queries:
+
+```sql
+-- Memory usage over time per node
+duckdb artifacts/ts.duckdb "SELECT ts, source, value FROM timeseries WHERE name = 'cr.node.sys.rss' ORDER BY ts"
+
+-- Find metrics with largest values (useful for OOM investigations)
+duckdb artifacts/ts.duckdb "SELECT name, source, max(value) as peak FROM timeseries GROUP BY name, source ORDER BY peak DESC LIMIT 20"
+```
+
+This is especially useful for OOM failures, performance regressions, and
+any investigation where understanding resource usage over time helps.
+
 ### Step 5: Write Your Findings
 
 Write your findings to `artifacts/findings.md` (create the

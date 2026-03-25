@@ -39,6 +39,12 @@ mkdir -p artifacts
 14. **Glob tool**: Find `*.go` files in `pkg/util/log/`
 15. **WebFetch tool**: Fetch `https://httpbin.org/get`
 16. **Bash(go tool pprof)**: `go tool pprof -top -inuse_space -nodecount=5 /dev/null 2>&1 || true` (confirms the command is allowed; an error about the input file is fine)
+17. **Bash(duckdb)**: Install DuckDB and run a trivial query:
+    ```bash
+    fetch-url https://github.com/duckdb/duckdb/releases/download/v1.3.0/duckdb_cli-linux-amd64.zip /tmp/duckdb.zip \
+      && unzip -o /tmp/duckdb.zip -d /usr/local/bin
+    duckdb ":memory:" "SELECT 42 AS answer"
+    ```
 
 ## Output
 
