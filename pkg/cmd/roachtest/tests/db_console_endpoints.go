@@ -303,20 +303,29 @@ func withRetries(ctx context.Context, opts retry.Options, f func() error) error 
 func initializeSchemaAndIDs(
 	ctx context.Context, c cluster.Cluster, l *logger.Logger, binaryPath string,
 ) error {
-	// Initialize some schema objects. Note: we intentionally do not use --drop
-	// here because this function may be called multiple times during mixed-version
-	// testing, and --drop can race with background operations on the tables from a
-	// previous invocation (e.g., schema change GC, stats collection), causing
-	// "another operation is currently operating on the table" errors.
-	initTpcc := fmt.Sprintf("%s workload init tpcc {pgurl:1}", binaryPath)
-	c.Run(ctx, option.WithNodes([]int{1}), initTpcc)
-
 	// Get SQL connection to query for a tableID, databaseID and fingerprintID.
 	conn, err := c.ConnE(ctx, l, 1)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
+
+	// Check if TPCC is already initialized. In mixed-version testing this
+	// function is called many times across upgrade steps. We only run
+	// `workload init` once to avoid both key-collision errors (without --drop)
+	// and races with background schema operations (with --drop).
+	var exists bool
+	err = conn.QueryRowContext(ctx,
+		"SELECT count(*) > 0 FROM system.namespace WHERE name='warehouse'").Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		initTpcc := fmt.Sprintf("%s workload init tpcc {pgurl:1}", binaryPath)
+		c.Run(ctx, option.WithNodes([]int{1}), initTpcc)
+	} else {
+		l.Printf("TPCC already initialized, skipping workload init")
+	}
 
 	err = conn.QueryRowContext(ctx, "select id, \"parentID\" from system.namespace where name='warehouse'").Scan(&tableID, &databaseID)
 	if err != nil {
