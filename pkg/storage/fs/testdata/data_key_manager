@@ -16,7 +16,7 @@ get-active-store-key
 ----
 none
 
-set-active-store-key id=foo
+set-active-store-key id=foo type=AES128_CTR
 ----
 
 get-active-data-key
@@ -87,7 +87,7 @@ compare-active-data-key
 ----
 same
 
-set-active-store-key id=bar
+set-active-store-key id=bar type=AES128_CTR
 ----
 
 get-store-key id=foo
@@ -128,14 +128,14 @@ check-all-recorded-data-keys
 ----
 
 # This call is not changing the active store key, so the data key will not be rotated.
-set-active-store-key id=bar
+set-active-store-key id=bar type=AES128_CTR
 ----
 
 compare-active-data-key
 ----
 same
 
-set-active-store-key id=baz
+set-active-store-key id=baz type=AES128_CTR
 ----
 
 get-active-store-key
@@ -227,7 +227,7 @@ encryption_type:AES192_CTR creation_time:16
 record-active-data-key
 ----
 
-set-active-store-key id=foo
+set-active-store-key id=foo type=AES128_CTR
 ----
 
 compare-active-data-key
@@ -246,9 +246,76 @@ compare-active-data-key
 ----
 different
 
-set-active-store-key id=v2key version=2
+set-active-store-key id=v2key type=AES_128_CTR_V2
 ----
 
 get-active-data-key
 ----
 encryption_type:AES_128_CTR_V2 creation_time:26 source:"data key manager" parent_key_id:"v2key"
+
+close
+----
+
+# Test that re-registering the same store key ID with a different EncryptionType
+# triggers data key rotation. This exercises the SetActiveStoreKeyInfo code path
+# used during the #160004 upgrade, where LoadKeyFromFile corrects the type.
+# The initial store key type here (AES128_CTR, from setActiveStoreKeyInProto) is
+# not the exact buggy type; the full bug scenario is covered by
+# TestEncryptedFSUpgradeFromBuggyAlgorithmString.
+
+init
+dir_migration
+5
+active-store-key migkey
+active-data-key olddata
+----
+
+load
+----
+
+# Before re-registration: verify the initial store key and data key state.
+get-active-store-key
+----
+migkey
+
+get-store-key id=migkey
+----
+encryption_type:AES128_CTR key_id:"migkey"
+
+get-active-data-key
+----
+encryption_type:AES192_CTR creation_time:26
+
+record-active-data-key
+----
+
+# Simulate the upgrade: set the same key ID but with AES_256_CTR_V2
+# (the corrected type from LoadKeyFromFile). Since the EncryptionType differs,
+# SetActiveStoreKeyInfo should NOT short-circuit and should rotate the data key.
+set-active-store-key id=migkey type=AES_256_CTR_V2
+----
+
+# The data key should have been rotated with the new type.
+compare-active-data-key
+----
+different
+
+get-active-data-key
+----
+encryption_type:AES_256_CTR_V2 creation_time:26 source:"data key manager" parent_key_id:"migkey"
+
+# Record the new rotated data key.
+record-active-data-key
+----
+
+# The store key in the registry should now have the corrected type.
+get-store-key id=migkey
+----
+encryption_type:AES_256_CTR_V2 key_id:"migkey"
+
+# Both old and new data keys are in the registry (backward compatibility).
+check-all-recorded-data-keys
+----
+
+close
+----
