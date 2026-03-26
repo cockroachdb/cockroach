@@ -515,11 +515,12 @@ type Planner interface {
 	DeleteStatementHint(ctx context.Context, rowID int64, statementFingerprint string, optDatabase string) (rowIDs []int64, fingerprints []string, hintBytes [][]byte, err error)
 
 	// SetStatementHintEnabled updates the enabled status of statement hints
-	// in system.statement_hints, filtered by row ID or fingerprint. If the
-	// provided rowID is zero, we don't filter on row ID. If the fingerprint
-	// is empty string, we don't filter on fingerprint. Returns the number
-	// of affected rows.
-	SetStatementHintEnabled(ctx context.Context, rowID int64, statementFingerprint string, enabled bool) (int64, error)
+	// in system.statement_hints, filtered by row ID, fingerprint, and/or
+	// database. If the provided rowID is zero, we don't filter on row ID.
+	// If the fingerprint is empty string, we don't filter on fingerprint.
+	// If the database is empty string, we don't filter on database.
+	// Returns the number of affected rows.
+	SetStatementHintEnabled(ctx context.Context, rowID int64, statementFingerprint string, enabled bool, optDatabase string) (int64, error)
 
 	// ValidateSessionVariableHint checks that a session variable with the given
 	// name exists, is writable, and is allowed to be overridden via statement
