@@ -2900,6 +2900,7 @@ var builtinOidsArray = []string{
 	2945: `aclitem(citext: citext) -> aclitem`,
 	2946: `information_schema.crdb_enable_statement_hints(enabled: bool, rowid: int) -> int`,
 	2947: `information_schema.crdb_enable_statement_hints(enabled: bool, statement_fingerprint: string) -> int`,
+	2948: `information_schema.crdb_delete_statement_hints(statement_fingerprint: string, database: string) -> int`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

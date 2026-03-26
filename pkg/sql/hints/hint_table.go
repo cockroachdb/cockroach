@@ -259,11 +259,11 @@ func InsertHintIntoDB(
 // fingerprint. Returns the row_id, fingerprint, and raw hint protobuf bytes of
 // all deleted rows.
 func DeleteHintFromDB(
-	ctx context.Context, txn isql.Txn, rowID int64, fingerprint string,
+	ctx context.Context, txn isql.Txn, rowID int64, fingerprint string, optDatabase string,
 ) (rowIDs []int64, fingerprints []string, hintBytes [][]byte, err error) {
 	const opName = "delete-statement-hint"
-	filterCols := make([]string, 0, 2)
-	vals := make([]interface{}, 0, 2)
+	filterCols := make([]string, 0, 3)
+	vals := make([]interface{}, 0, 3)
 	if rowID != 0 {
 		filterCols = append(filterCols, `"row_id"`)
 		vals = append(vals, rowID)
@@ -271,6 +271,10 @@ func DeleteHintFromDB(
 	if fingerprint != "" {
 		filterCols = append(filterCols, "fingerprint")
 		vals = append(vals, fingerprint)
+	}
+	if optDatabase != "" {
+		filterCols = append(filterCols, `"database"`)
+		vals = append(vals, optDatabase)
 	}
 
 	if len(filterCols) == 0 {
