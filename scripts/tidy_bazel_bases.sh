@@ -82,7 +82,7 @@ maybe_remove_base() {
     return 0
   fi
 
-  echo "Keeping base $base: last used ${age}d ago, workspace: ${workspace:-unknown}." >&2
+  echo "$base: ${age}d ago by ${workspace:-unknown}." >&2
   return 1
 }
 
@@ -125,6 +125,19 @@ dedupe_base_contents() {
     return
   fi
 
+  # NB: If bazel has com.apple.provenance set (i.e. if bazelisk had it set when
+  # it was downloaded and thus bazel binaries inherited it), then files made by
+  # bazel also have it set, including the files in the output bases. When fclones
+  # deduplicates files, it creates new files and tries to copy the xattrs, but
+  # the com.apple.provenance xattr is not settable by non-root, so fclones will
+  # fail. A patched version of fclones adds --ignore-xattr-errors to handle this
+  # gracefully; skip dedup entirely if it is not available.
+  if ! fclones dedupe --help 2>&1 | grep -q 'ignore-xattr-errors'; then
+    echo "fclones does not support --ignore-xattr-errors; skipping dedup."
+    echo "Install the patched version: brew install dt/taps/fclones"
+    return
+  fi
+
   # NB: We may act on a base concurrently with bazel writing to it: the chmod
   # could miss files as bazel adds them, which would prevent de-duping (which is
   # fine -- we'll get them next run), or bazel could add more files after the
@@ -145,7 +158,7 @@ dedupe_base_contents() {
   echo "Running fclones dedupe across ${#bases[@]} bases..."
 
   # Group duplicates and deduplicate via reflinks, using persistent cache.
-  if ! nice fclones group --cache "${bases[@]}" > "${HOME}/.cache/bazel-tidy/dedupe/dupes.txt"; then
+  if ! nice fclones group --cache --threads 2 "${bases[@]}" > "${HOME}/.cache/bazel-tidy/dedupe/dupes.txt"; then
     echo "fclones group failed." >&2
     return
   fi
@@ -164,18 +177,7 @@ dedupe_base_contents() {
   done
 
   echo "Performing deduplication with fclones..."
-  # NB: If bazel has com.apple.provenance set (i.e. if bazelisk had it set when
-  # it was downloaded and thus bazel binaries inherited it), then files made by
-  # bazel also have it set, including the files in the output bases. When fclones
-  # deduplicates files, it creates new files and tries to copy the xattrs, but
-  # the com.apple.provenance xattr is not settable by non-root, so fclones will
-  # fail. DT's patched version of fclones adds --ignore-xattr-errors to handle
-  # this gracefully; use it if available.
-  local dedupe_flags="--no-lock"
-  if fclones dedupe --help 2>&1 | grep -q 'ignore-xattr-errors'; then
-    dedupe_flags="--no-lock --ignore-xattr-errors"
-  fi
-  nice fclones dedupe $dedupe_flags < "${HOME}/.cache/bazel-tidy/dedupe/dupes.txt" || true
+  nice fclones dedupe --no-lock --ignore-xattr-errors < "${HOME}/.cache/bazel-tidy/dedupe/dupes.txt" || true
 
   echo "fclones dedup complete."
 }
