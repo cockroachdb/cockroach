@@ -252,6 +252,15 @@ func runFollowerReadsTest(
 		return err
 	}())
 
+	// Bump the login timeout to 60s (from the default 10s) to avoid
+	// authentication timeouts when new SQL connections are opened after possibly
+	// causing failover for system ranges. See #166376.
+	{
+		_, err := systemConnectFunc(1).ExecContext(ctx,
+			"SET CLUSTER SETTING server.user_login.timeout = '60s'")
+		require.NoError(t, err)
+	}
+
 	var conns []*gosql.DB
 	for i := 0; i < c.Spec().NodeCount; i++ {
 		isoLevel := isoLevels[rng.Intn(len(isoLevels))]
