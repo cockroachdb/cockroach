@@ -1,5 +1,69 @@
 # LogicTest: !local-mixed-25.4 !local-mixed-26.1
 
+subtest canary_window_notice
+
+# Test that manually collecting statistics on a table with a canary window
+# emits a notice when the canary fraction cluster setting is positive.
+
+statement ok
+CREATE TABLE t_notice (a INT PRIMARY KEY) WITH (sql_stats_canary_window = '15s')
+
+# No notice when canary_fraction is 0 (default).
+query T noticetrace
+ANALYZE t_notice
+----
+
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction = 0.2
+
+# Notice should appear when both canary_window and canary_fraction are set.
+query T noticetrace
+ANALYZE t_notice
+----
+NOTICE: this table has a canary window of 15s; newly collected statistics will not take effect for all queries until the canary window passes
+
+# CREATE STATISTICS should also show the notice.
+query T noticetrace
+CREATE STATISTICS s FROM t_notice
+----
+NOTICE: this table has a canary window of 15s; newly collected statistics will not take effect for all queries until the canary window passes
+
+# No notice for a table without canary window.
+statement ok
+CREATE TABLE t_no_canary (a INT PRIMARY KEY)
+
+query T noticetrace
+ANALYZE t_no_canary
+----
+
+# Partial stats (USING EXTREMES and WHERE) are not canaried, so no notice.
+statement ok
+SET enable_create_stats_using_extremes = true
+
+statement ok
+INSERT INTO t_notice VALUES (1), (2), (3)
+
+statement ok
+ANALYZE t_notice
+
+query T noticetrace
+CREATE STATISTICS s_extremes ON a FROM t_notice USING EXTREMES
+----
+
+query T noticetrace
+CREATE STATISTICS s_where ON a FROM t_notice WHERE a > 1
+----
+
+# Reset cluster setting.
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction = 0
+
+statement ok
+DROP TABLE t_notice;
+DROP TABLE t_no_canary
+
+subtest end
+
 subtest delay_delete_with_manual_stats
 # We test that for a table with canary stats rollout enabled (i.e. with
 # a non-zero stats_canary_window), when a new stats is created, the
