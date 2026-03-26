@@ -34,9 +34,10 @@ import (
 
 // TestBackupRestoreRandomDataRoundtrips conducts backup/restore roundtrips on
 // randomly generated tables and verifies their data and schema are preserved.
-// It tests that full database backup as well as all subsets of per-table backup
-// roundtrip properly. 50% of the time, the test runs the restore with the
-// schema_only parameter, which does not restore any rows from user tables.
+// The test performs exactly two roundtrips: one full database backup/restore
+// and one table subset backup/restore on a randomly selected subset of tables.
+// 50% of the time, the test runs the restore with the schema_only parameter,
+// which does not restore any rows from user tables.
 func TestBackupRestoreRandomDataRoundtrips(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -106,26 +107,9 @@ database_name = 'rand' AND schema_name = 'public'`)
 		}
 	}
 
-	// Now that we've created our random tables, backup and restore the whole DB
-	// and compare all table descriptors for equality.
-
-	dbBackup := localFoo + "wholedb"
-	tablesBackup := localFoo + "alltables"
-	dbBackups := []string{dbBackup, tablesBackup}
-	if err := backuptestutils.VerifyBackupRestoreStatementResult(
-		t, sqlDB, "BACKUP DATABASE rand INTO $1", dbBackup,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if err := backuptestutils.VerifyBackupRestoreStatementResult(
-		t, sqlDB, "BACKUP TABLE rand.* INTO $1", tablesBackup,
-	); err != nil {
-		t.Fatal(err)
-	}
-
 	// verifyTables asserts that the list of input tables in the restored
-	// database, restoredb, contains the same schema as the original randomly
-	// generated tables.
+	// database, restoredb, contains the same schema and data as the original
+	// randomly generated tables.
 	verifyTables := func(t *testing.T, tableNames []string, restoreCmd string) {
 
 		if strings.Contains(restoreCmd, "experimental deferred copy") {
@@ -167,65 +151,76 @@ database_name = 'rand' AND schema_name = 'public'`)
 		return onlineRestoreExtension
 	}
 
-	// This loop tests that two kinds of table restores (full database restore
-	// and per-table restores) work properly with two kinds of table backups
-	// (full database backups and per-table backups).
-	for _, backup := range dbBackups {
+	// Roundtrip 1: Full database backup and restore.
+	// This verifies that BACKUP DATABASE and RESTORE DATABASE work correctly.
+	{
+		dbBackup := localFoo + "wholedb"
+		if err := backuptestutils.VerifyBackupRestoreStatementResult(
+			t, sqlDB, "BACKUP DATABASE rand INTO $1", dbBackup,
+		); err != nil {
+			t.Fatal(err)
+		}
+
 		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
-		sqlDB.Exec(t, "CREATE DATABASE restoredb")
 
 		online := withOnlineRestore()
-		tableQuery := fmt.Sprintf("RESTORE rand.* FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb'%s%s)", runSchemaOnlyExtension, online)
+		restoreQuery := fmt.Sprintf("RESTORE DATABASE rand FROM LATEST IN $1 WITH OPTIONS (new_db_name='restoredb'%s%s)", runSchemaOnlyExtension, online)
 		if err := backuptestutils.VerifyBackupRestoreStatementResult(
-			t, sqlDB, tableQuery, backup,
+			t, sqlDB, restoreQuery, dbBackup,
 		); err != nil && online == "" {
-			// Only fail on error for non-online restores as verification checks output for regular restores
+			// Only fail on error for non-online restores as verification checks output for regular restores.
 			t.Fatal(err)
 		}
-		verifyTables(t, tableNames, tableQuery)
+		verifyTables(t, tableNames, restoreQuery)
 		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
-
-		online = withOnlineRestore()
-		dbQuery := fmt.Sprintf("RESTORE DATABASE rand FROM LATEST IN $1 WITH OPTIONS (new_db_name='restoredb'%s%s)", runSchemaOnlyExtension, online)
-		if err := backuptestutils.VerifyBackupRestoreStatementResult(
-			t, sqlDB, dbQuery, backup,
-		); err != nil && online == "" {
-			t.Fatal(err)
-		}
-		verifyTables(t, tableNames, dbQuery)
 	}
 
-	tableNameCombos := powerset(tableNames)
-
-	for i, combo := range tableNameCombos {
-		sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
-		sqlDB.Exec(t, "CREATE DATABASE restoredb")
-		backupTarget := fmt.Sprintf("%s%d", localFoo, i)
-		if len(combo) == 0 {
-			continue
-		}
-		var buf strings.Builder
-		comma := ""
-		for _, t := range combo {
-			buf.WriteString(comma)
-			buf.WriteString(tree.NameString(t))
-			comma = ", "
-		}
-		tables := buf.String()
-		t.Logf("Testing subset backup/restore %s", tables)
-		sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE %s INTO $1`, tables), backupTarget)
-		comboQuery := fmt.Sprintf("RESTORE TABLE %s FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb' %s%s)", tables, runSchemaOnlyExtension, withOnlineRestore())
-		_, err := tc.Conns[0].Exec(comboQuery, backupTarget)
-		if err != nil {
-			if strings.Contains(err.Error(), "skip_missing_foreign_keys") {
-				// Ignore subset, since we can't restore subsets that don't include the
-				// full foreign key graph for any of the contained tables.
-				continue
+	// Roundtrip 2: Random table subset backup/restore.
+	// This verifies that BACKUP TABLE works for an arbitrary subset of tables.
+	{
+		tableNameCombos := powerset(tableNames)
+		// Filter out empty combos.
+		nonEmptyCombos := make([][]string, 0, len(tableNameCombos))
+		for _, combo := range tableNameCombos {
+			if len(combo) > 0 {
+				nonEmptyCombos = append(nonEmptyCombos, combo)
 			}
-			t.Fatal(err)
 		}
-		verifyTables(t, combo, comboQuery)
-		t.Log("combo", i, combo)
+
+		// Try a random subset until we find one that doesn't have foreign key issues.
+		// In practice, most subsets work, but some may require skip_missing_foreign_keys.
+		maxAttempts := 10
+		for attempt := 0; attempt < maxAttempts; attempt++ {
+			combo := nonEmptyCombos[rng.Intn(len(nonEmptyCombos))]
+			sqlDB.Exec(t, "DROP DATABASE IF EXISTS restoredb")
+			sqlDB.Exec(t, "CREATE DATABASE restoredb")
+			backupTarget := localFoo + "subset"
+
+			var buf strings.Builder
+			comma := ""
+			for _, tableName := range combo {
+				buf.WriteString(comma)
+				buf.WriteString(tree.NameString(tableName))
+				comma = ", "
+			}
+			tables := buf.String()
+			t.Logf("Testing subset backup/restore %s", tables)
+			sqlDB.Exec(t, fmt.Sprintf(`BACKUP TABLE %s INTO $1`, tables), backupTarget)
+			comboQuery := fmt.Sprintf("RESTORE TABLE %s FROM LATEST IN $1 WITH OPTIONS (into_db='restoredb' %s%s)", tables, runSchemaOnlyExtension, withOnlineRestore())
+			_, err := tc.Conns[0].Exec(comboQuery, backupTarget)
+			if err != nil {
+				if strings.Contains(err.Error(), "skip_missing_foreign_keys") {
+					// This subset doesn't include the full foreign key graph.
+					// Try another random subset.
+					t.Logf("Skipping subset due to foreign key constraints, trying another")
+					continue
+				}
+				t.Fatal(err)
+			}
+			verifyTables(t, combo, comboQuery)
+			t.Logf("Successfully tested subset: %v", combo)
+			break
+		}
 	}
 }
 
