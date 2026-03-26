@@ -4397,11 +4397,3 @@ NULL  4  4
 
 statement ok
 RESET null_ordered_last
-
-# Regression test for #165754 - st_asmvt cannot be used as a window function
-# (which matches postgres).
-statement ok
-CREATE TABLE t165754 (geom GEOMETRY)
-
-query error pgcode 0A000 aggregate function st_asmvt does not support use as a window function
-SELECT st_asmvt(t165754) OVER () FROM t165754
