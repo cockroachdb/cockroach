@@ -182,29 +182,6 @@ func stageDestroyReplica(
 	}, nil
 }
 
-// destroyRaftMuLocked deletes data associated with a replica, leaving a
-// tombstone. The Replica may not be initialized in which case only the
-// range ID local data is removed.
-//
-// If an error is returned from this method, the removal failed but no
-// side effects have occurred, i.e. the caller may be able to handle the
-// error cleanly.
-func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb.ReplicaID) error {
-	pending, err := stageDestroyReplica(
-		ctx, &r.store.batchFactory,
-		r.store.StateEngine(), r.store.LogEngine(),
-		r.destroyInfoRaftMuLocked(), nextReplicaID,
-		r.GetMVCCStats(),
-	)
-	if err != nil {
-		return err
-	}
-	defer pending.Close()
-	pending.MustCommit(ctx)
-	r.postDestroyRaftMuLocked(ctx)
-	return nil
-}
-
 // disconnectReplicationRaftMuLocked is called when a Replica is being removed.
 // It cancels all outstanding proposals, closes the proposalQuota if there
 // is one, releases all held flow tokens, and removes the in-memory raft state.
