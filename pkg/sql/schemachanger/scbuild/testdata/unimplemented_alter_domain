@@ -1,0 +1,51 @@
+setup
+CREATE DOMAIN defaultdb.d AS INT DEFAULT 0 NOT NULL CHECK (VALUE > 0);
+----
+
+unimplemented
+ALTER DOMAIN defaultdb.d SET DEFAULT 1
+----
+
+unimplemented
+ALTER DOMAIN defaultdb.d DROP DEFAULT
+----
+
+unimplemented
+ALTER DOMAIN defaultdb.d SET NOT NULL
+----
+
+unimplemented
+ALTER DOMAIN defaultdb.d DROP NOT NULL
+----
+
+unimplemented
+ALTER DOMAIN defaultdb.d ADD CONSTRAINT positive CHECK (VALUE > 0)
+----
+
+unimplemented
+ALTER DOMAIN defaultdb.d ADD CONSTRAINT nn NOT NULL
+----
+
+unimplemented
+ALTER DOMAIN defaultdb.d DROP CONSTRAINT positive
+----
+
+unimplemented
+ALTER DOMAIN defaultdb.d RENAME CONSTRAINT positive TO pos
+----
+
+unimplemented
+ALTER DOMAIN defaultdb.d VALIDATE CONSTRAINT positive
+----
+
+unimplemented
+ALTER DOMAIN defaultdb.d OWNER TO testuser
+----
+
+unimplemented
+ALTER DOMAIN defaultdb.d RENAME TO d2
+----
+
+unimplemented
+ALTER DOMAIN defaultdb.d SET SCHEMA public
+----

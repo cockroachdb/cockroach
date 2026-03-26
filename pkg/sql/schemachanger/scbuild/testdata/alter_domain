@@ -1,0 +1,3 @@
+setup
+CREATE DOMAIN defaultdb.d AS INT DEFAULT 0 NOT NULL CHECK (VALUE > 0);
+----
