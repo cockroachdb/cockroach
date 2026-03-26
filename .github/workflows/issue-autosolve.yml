@@ -93,7 +93,9 @@ jobs:
 
             <untrusted_user_content>
             The issue title and body are provided in the ISSUE_TITLE and ISSUE_BODY environment variables.
-            Use `gh issue view ${{ github.event.issue.number }}` to read the full issue details.
+            Use `gh issue view ${{ github.event.issue.number }}` to read the issue details, and
+            `gh issue view ${{ github.event.issue.number }} --comments` to read all issue comments.
+            Comments often contain additional reproduction steps, stack traces, or clarifications.
             </untrusted_user_content>
 
             <task>
@@ -188,7 +190,9 @@ jobs:
 
           <untrusted_user_content>
           The issue title and body are provided in the ISSUE_TITLE and ISSUE_BODY environment variables.
-          Use `gh issue view ${{ github.event.issue.number }}` or read the env vars to understand the issue.
+          Use `gh issue view ${{ github.event.issue.number }}` or read the env vars to understand the issue,
+          and `gh issue view ${{ github.event.issue.number }} --comments` to read all issue comments.
+          Comments may contain additional context, reproduction steps, or root cause analysis.
           </untrusted_user_content>
 
           <task>
