@@ -34,6 +34,7 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql",
         "//pkg/sql/randgen",
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
