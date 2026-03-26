@@ -26,8 +26,9 @@ type appliedTransaction struct {
 
 type ScheduledTransaction struct {
 	ldrdecoder.Transaction
-	Dependencies []ldrdecoder.TxnID
-	EventHorizon hlc.Timestamp
+	Dependencies  []ldrdecoder.TxnID
+	EventHorizon  hlc.Timestamp
+	remainingDeps int
 }
 
 // ApplierEvent is an event that can be sent to the Applier's input channel.
@@ -252,6 +253,7 @@ func (a *Applier) recordTransaction(transaction ScheduledTransaction) (bool, err
 		return false, err
 	}
 
+	transaction.remainingDeps = len(transaction.Dependencies)
 	a.mu.transactions[transaction.TxnID] = transaction
 	if a.mu.txnIDs.Len() != 0 && transaction.TxnID.LessEq(a.mu.txnIDs.GetLast()) {
 		return false, errors.AssertionFailedf(
@@ -277,7 +279,7 @@ func (a *Applier) recordTransaction(transaction ScheduledTransaction) (bool, err
 		a.depResolver.Wait(a.id, newRemoteDeps)
 	}
 
-	if len(transaction.Dependencies) == 0 {
+	if transaction.remainingDeps == 0 {
 		if transaction.EventHorizon.LessEq(a.getGlobalFrontierLocked()) {
 			return true, nil
 		}
@@ -460,14 +462,10 @@ func (a *Applier) resolveDependencyLocked(
 			return errors.AssertionFailedf("missing transaction %+v", waitingID)
 		}
 
-		waitingTxn.Dependencies = slices.DeleteFunc(
-			waitingTxn.Dependencies,
-			func(id ldrdecoder.TxnID) bool {
-				return id == completedID
-			})
+		waitingTxn.remainingDeps--
 		a.mu.transactions[waitingID] = waitingTxn
 
-		if len(waitingTxn.Dependencies) == 0 {
+		if waitingTxn.remainingDeps == 0 {
 			if waitingTxn.EventHorizon.LessEq(a.getGlobalFrontierLocked()) {
 				readyBuffer.AddLast(waitingTxn.Transaction)
 			} else {
