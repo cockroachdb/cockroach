@@ -3200,7 +3200,7 @@ func (s *systemStatusServer) localHotRanges(
 }
 
 // addDescriptorsToHotRanges adds database/table/index mappings to the hot ranges response.
-// It's necessary, because of how calls can be propogated. The hot ranges endpoint
+// It's necessary, because of how calls can be propagated. The hot ranges endpoint
 // specifically can follow one of the below pathways:
 //   - incoming -> statusServer -> systemStatusServer
 //   - incoming -> systemStatusServer

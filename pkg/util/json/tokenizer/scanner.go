@@ -77,7 +77,7 @@ var whitespace = [256]bool{
 
 // Next returns a []byte referencing the next lexical token in the stream.
 // The []byte is valid until Next is called again.
-// If the stream is at its end, or an error has occured, Next returns a zero
+// If the stream is at its end, or an error has occurred, Next returns a zero
 // length []byte slice.
 //
 // A valid token begins with one of the following:
