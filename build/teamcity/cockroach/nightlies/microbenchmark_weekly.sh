@@ -132,8 +132,8 @@ log_into_gcloud
 # For this machine type we need to specify additional flags
 additional_roachprod_args=""
 if [[ "$GCE_MACHINE_TYPE" == c4* ]]; then
-  additional_roachprod_args="--gce-boot-disk-type=\"hyperdisk-balanced\" \
-    --gce-pd-volume-type=\"hyperdisk-balanced\" \
+  additional_roachprod_args="--gce-boot-disk-type=hyperdisk-balanced \
+    --gce-pd-volume-type=hyperdisk-balanced \
     --gce-turbo-mode=ALL_CORE_MAX \
     --gce-threads-per-core=1"
 fi
