@@ -65,7 +65,7 @@ func (s *Store) removeReplicaRaftMuLocked(
 // which is sometimes called directly when the necessary lock is already held.
 // It requires that Replica.raftMu is held and that s.mu is not held.
 //
-// If opts.DestroyData is false, replica.destroyRaftMuLocked is not called.
+// If opts.DestroyData is false, the on-disk replica data is not destroyed.
 func (s *Store) removeInitializedReplicaRaftMuLocked(
 	ctx context.Context,
 	rep *Replica,
