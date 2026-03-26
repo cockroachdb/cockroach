@@ -1395,3 +1395,104 @@ func TestOnlineRestoreCleanupDroppedDescs(t *testing.T) {
 	sqlDB.Exec(t, fmt.Sprintf("CANCEL JOB %d", downloadJobID))
 	jobutils.WaitForJobToCancel(t, sqlDB, jobspb.JobID(downloadJobID))
 }
+
+// TestOnlineRestoreURIRedaction verifies that query parameters in backup URIs are redacted when
+// they appear in error messages during online restore.
+func TestOnlineRestoreURIRedaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	backuptestutils.EnableFastRestoreForTest(t)
+
+	const numAccounts = 1000
+	ts, sqlDB, tmpDir, cleanupFn := backupRestoreTestSetup(
+		t, singleNode, numAccounts, InitManualReplication,
+	)
+	defer cleanupFn()
+
+	t.Run("params-redacted-in-errors", func(t *testing.T) {
+		// Use a backup URI with multiple fake query params. All of them should be
+		// redacted in error messages.
+		fakeSecrets := []string{"super_secret_value", "another_secret_token"}
+		backupURI := fmt.Sprintf(
+			"nodelocal://1/backup?FAKE_SECRET=%s&FAKE_TOKEN=%s",
+			fakeSecrets[0], fakeSecrets[1],
+		)
+
+		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'")
+		defer sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
+
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO '%s'", backupURI))
+
+		var linkJobID int
+		sqlDB.QueryRow(t, fmt.Sprintf(
+			"RESTORE DATABASE data FROM LATEST IN '%s' WITH EXPERIMENTAL DEFERRED COPY, new_db_name=data_redact, detached",
+			backupURI,
+		)).Scan(&linkJobID)
+		jobutils.WaitForJobToSucceed(t, sqlDB, jobspb.JobID(linkJobID))
+
+		var downloadJobID int
+		sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
+		jobutils.WaitForJobToPause(t, sqlDB, jobspb.JobID(downloadJobID))
+
+		// Delete the backing SST file so reads from the linked external SST fail.
+		corruptBackup(t, sqlDB, tmpDir, "nodelocal://1/backup")
+
+		// Query the restored data to trigger an error containing the locator URI.
+		_, err := sqlDB.DB.ExecContext(
+			context.Background(), "SELECT count(*) FROM data_redact.bank",
+		)
+		require.Error(t, err)
+
+		// Validate that the backup URI's query parameters are redacted in the error.
+		//
+		// The pebble locator stores the URI as a RedactableString with the query params wrapped in
+		// redaction markers (`‹›`).
+		//
+		// When this string is passed to an error, the query params in between the markers are replaced
+		// with `×` (utf8 multiplication sign), and the markers are replaced with `?` (for escaping purposes),
+		// resulting in a URI that looks like this:
+		//
+		//   nodelocal://1/backup/<subdir>??×?
+		//
+		// Where the first `?` is the URI query separator, the second `?` is the escaped `‹` marker,
+		// `×` is the redacted query params, and the trailing `?` is the escaped `›` marker.
+		//
+		// The regex below confirms the URI appears with the expected redaction pattern,
+		// and the NotContains checks verify no raw secrets are leaked.
+		require.Regexp(t,
+			`nodelocal://1/backup/[^?]+\?\?×\?`,
+			err.Error(),
+			"error message should contain the backup URI with redacted query params",
+		)
+		for _, secret := range fakeSecrets {
+			require.NotContains(t, err.Error(), secret,
+				"error message should not contain raw query parameter value",
+			)
+		}
+	})
+
+	// Sanity check that query params used during the backup/restore path still work with redaction.
+	// In this case a locality-aware online restore with COCKROACH_LOCALITY query params still works.
+	t.Run("locality-aware-still-works", func(t *testing.T) {
+		a := "nodelocal://1/a?COCKROACH_LOCALITY=default"
+		b := "nodelocal://1/b?COCKROACH_LOCALITY=dc%3Ddc2"
+		c := "nodelocal://1/c?COCKROACH_LOCALITY=dc%3Ddc3"
+
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE data INTO ('%s', '%s', '%s')", a, b, c))
+
+		j := sqlDB.QueryStr(t, fmt.Sprintf(
+			`RESTORE DATABASE data FROM LATEST IN ('%s', '%s', '%s')
+			WITH new_db_name='d2', EXPERIMENTAL DEFERRED COPY`,
+			a, b, c,
+		))
+
+		ts.Servers[0].JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
+		sqlDB.Exec(t, fmt.Sprintf(`SHOW JOB WHEN COMPLETE %s`, j[0][4]))
+
+		// Verify the restored data is accessible.
+		var rowCount int
+		sqlDB.QueryRow(t, "SELECT count(*) FROM d2.bank").Scan(&rowCount)
+		require.Equal(t, numAccounts, rowCount)
+	})
+}
