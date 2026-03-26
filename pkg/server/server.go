@@ -606,7 +606,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	sqlCPUProvider := admission.NewSQLCPUProvider(
 		&st.SV,
 		func(tenantID roachpb.TenantID) *admission.WorkQueue {
-			return gcoords.RegularCPU.GetKVWorkQueue(tenantID.IsSystem())
+			return gcoords.RegularCPU.GetCTTWorkQueue(tenantID.IsSystem())
 		},
 	)
 	db.SQLCPUProvider = sqlCPUProvider
