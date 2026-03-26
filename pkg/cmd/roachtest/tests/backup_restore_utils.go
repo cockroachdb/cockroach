@@ -469,6 +469,9 @@ func (u *CommonTestUtils) waitForJobSuccessWithNode(
 	if internalSystemJobs {
 		jobsQuery = fmt.Sprintf("(%s)", jobutils.InternalSystemJobsBaseQuery)
 	}
+
+	var lastStatus jobs.State
+	logThrottler := util.EveryMono(30 * time.Second)
 	r := retry.StartWithCtx(ctx, retry.Options{
 		InitialBackoff: time.Second,
 		MaxBackoff:     time.Second,
@@ -495,7 +498,12 @@ func (u *CommonTestUtils) waitForJobSuccessWithNode(
 		}
 
 		if expected, actual := jobs.StateSucceeded, jobs.State(status); expected != actual {
-			l.Printf("job %d: current status %q, waiting for %q", jobID, actual, expected)
+			// Log current status if there has been a change or if it has been long
+			// enough since the last update.
+			if logThrottler.ShouldProcess(crtime.NowMono()) || lastStatus != actual {
+				l.Printf("job %d: current status %q, waiting for %q", jobID, actual, expected)
+			}
+			lastStatus = actual
 			continue
 		}
 
