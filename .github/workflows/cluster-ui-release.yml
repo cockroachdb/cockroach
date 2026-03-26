@@ -17,24 +17,24 @@ jobs:
         working-directory: pkg/ui/workspaces/cluster-ui
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         submodules: true
 
     - name: Bazel Cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/bazel
         key: ${{ runner.os }}-bazel-cache
 
-    - uses: pnpm/action-setup@eae0cfeb286e66ffb5155f1a79b90583a127a68b # v2
+    - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
       with:
-        version: "8.6.10"
+        version: "9.15.5"
 
     - name: Setup NodeJS
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
-        node-version: 16
+        node-version: 22
         registry-url: 'https://registry.npmjs.org'
         always-auth: true
         cache: 'pnpm'
