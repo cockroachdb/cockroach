@@ -1203,9 +1203,9 @@ func (p *planner) InsertStatementHint(
 
 // DeleteStatementHint is part of the eval.Planner interface.
 func (p *planner) DeleteStatementHint(
-	ctx context.Context, rowID int64, statementFingerprint string,
+	ctx context.Context, rowID int64, statementFingerprint string, optDatabase string,
 ) ([]int64, []string, [][]byte, error) {
-	return hints.DeleteHintFromDB(ctx, p.InternalSQLTxn(), rowID, statementFingerprint)
+	return hints.DeleteHintFromDB(ctx, p.InternalSQLTxn(), rowID, statementFingerprint, optDatabase)
 }
 
 // SetStatementHintEnabled is part of the eval.Planner interface.

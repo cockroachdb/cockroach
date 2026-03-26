@@ -9938,7 +9938,7 @@ WHERE object_id = table_descriptor_id
 					return nil, err
 				}
 				rowIDArg := int64(tree.MustBeDInt(args[0]))
-				rowIDs, fingerprints, rawHintBytes, err := evalCtx.Planner.DeleteStatementHint(ctx, rowIDArg, "" /* statementFingerprint */)
+				rowIDs, fingerprints, rawHintBytes, err := evalCtx.Planner.DeleteStatementHint(ctx, rowIDArg, "" /* statementFingerprint */, "" /* optDatabase */)
 				if err != nil {
 					return nil, err
 				}
@@ -9983,7 +9983,7 @@ WHERE object_id = table_descriptor_id
 						ctx, pgnotice.Newf("statement fingerprint changed to: %s", fingerprintArg),
 					)
 				}
-				rowIDs, fingerprints, rawHintBytes, err := evalCtx.Planner.DeleteStatementHint(ctx, 0 /* rowID */, fingerprintArg)
+				rowIDs, fingerprints, rawHintBytes, err := evalCtx.Planner.DeleteStatementHint(ctx, 0 /* rowID */, fingerprintArg, "" /* optDatabase */)
 				if err != nil {
 					return nil, err
 				}
@@ -10002,6 +10002,55 @@ WHERE object_id = table_descriptor_id
 			Info: `This function deletes all statement hints matching the ` +
 				`given statement fingerprint. The statement fingerprint argument is ` +
 				`normalized before matching. It returns the number of deleted rows.`,
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "statement_fingerprint", Typ: types.String},
+				{Name: "database", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// The user must have REPAIRCLUSTER to use this builtin.
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
+					return nil, err
+				}
+				arg := string(tree.MustBeDString(args[0]))
+				fingerprintFlags := tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(
+					&evalCtx.Settings.SV,
+				))
+				fingerprintArg, err := parserutils.FingerprintStatement(parserutils.FingerprintTagStatementFingerprint, arg, fingerprintFlags)
+				if err != nil {
+					return nil, err
+				}
+				if fingerprintArg != arg {
+					evalCtx.ClientNoticeSender.BufferClientNotice(
+						ctx, pgnotice.Newf("statement fingerprint changed to: %s", fingerprintArg),
+					)
+				}
+				database := string(tree.MustBeDString(args[1]))
+				rowIDs, fingerprints, rawHintBytes, err := evalCtx.Planner.DeleteStatementHint(ctx, 0 /* rowID */, fingerprintArg, database)
+				if err != nil {
+					return nil, err
+				}
+				for i := range rowIDs {
+					hint, err := hintpb.ParseHintProto(rawHintBytes[i])
+					if err != nil {
+						log.Dev.Warningf(ctx, "could not unmarshal hint for row %d: %v", rowIDs[i], err)
+						continue
+					}
+					if err := logDeleteHintEvent(ctx, evalCtx, hint, rowIDs[i], fingerprints[i]); err != nil {
+						return nil, err
+					}
+				}
+				return tree.NewDInt(tree.DInt(len(rowIDs))), nil
+			},
+			Info: `This function deletes all statement hints matching the ` +
+				`given statement fingerprint and database. The statement fingerprint ` +
+				`argument is normalized before matching. It returns the number of ` +
+				`deleted rows.`,
 			Volatility: volatility.Volatile,
 		},
 	),

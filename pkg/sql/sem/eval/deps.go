@@ -506,11 +506,13 @@ type Planner interface {
 	InsertStatementHint(ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion, optDatabase string) (int64, error)
 
 	// DeleteStatementHint deletes statement hints from
-	// system.statement_hints, filtered by the row ID or fingerprint. If the
-	// provided rowID is zero, we don't filter on row ID. If the fingerprint
-	// is empty string, we don't filter on fingerprint. Returns the row_id,
-	// fingerprint, and raw hint protobuf bytes of all deleted rows.
-	DeleteStatementHint(ctx context.Context, rowID int64, statementFingerprint string) (rowIDs []int64, fingerprints []string, hintBytes [][]byte, err error)
+	// system.statement_hints, filtered by the row ID, fingerprint, and/or
+	// database. If the provided rowID is zero, we don't filter on row ID.
+	// If the fingerprint is empty string, we don't filter on fingerprint.
+	// If the database is empty string, we don't filter on database.
+	// Returns the row_id, fingerprint, and raw hint protobuf bytes of all
+	// deleted rows.
+	DeleteStatementHint(ctx context.Context, rowID int64, statementFingerprint string, optDatabase string) (rowIDs []int64, fingerprints []string, hintBytes [][]byte, err error)
 
 	// SetStatementHintEnabled updates the enabled status of statement hints
 	// in system.statement_hints, filtered by row ID or fingerprint. If the
