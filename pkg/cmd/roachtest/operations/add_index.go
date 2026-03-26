@@ -100,8 +100,7 @@ WHERE
 		if typ.Family() == types.ArrayFamily ||
 			typ.Family() == types.JsonFamily ||
 			typ.Family() == types.GeographyFamily ||
-			typ.Family() == types.GeometryFamily ||
-			typ.Family() == types.StringFamily {
+			typ.Family() == types.GeometryFamily {
 			if rng.Intn(2) == 0 {
 				indexUsingClause = "INVERTED"
 			}

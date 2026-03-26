@@ -37,9 +37,12 @@ func runDebugZip(
 
 	// NOTE(seanc@): we don't actually want the payload from the debug zip, we
 	// just want to run the debug zip command to observe its impact. We write to
-	// a temporary file because /dev/null causes a "zip: not a valid zip file"
-	// error when the command validates the output.
-	zipFile := fmt.Sprintf("/tmp/debug-zip-%d.zip", rng.Uint32())
+	// the parent of the store directory because /tmp was running out of disk
+	// space on DRT clusters. We avoid writing directly inside the store
+	// directory to prevent interfering with CockroachDB's data. /dev/null
+	// causes a "zip: not a valid zip file" error when the command validates
+	// the output.
+	zipFile := fmt.Sprintf("$(dirname {store-dir})/debug-zip-%d.zip", rng.Uint32())
 	debugZipCmd := roachtestutil.NewCommand("./%s debug zip %s", o.ClusterCockroach(), zipFile).
 		WithEqualsSyntax().
 		Flag("host", addr[0]).
@@ -49,7 +52,7 @@ func runDebugZip(
 
 	o.Status(fmt.Sprintf("running %q on node %s", debugZipCmd.String(), node.NodeIDsString()))
 	err = c.RunE(ctx, option.WithNodes(node), debugZipCmd.String())
-	// Clean up the temporary zip file regardless of success or failure.
+	// Clean up the zip file regardless of success or failure.
 	_ = c.RunE(ctx, option.WithNodes(node), fmt.Sprintf("rm -f %s", zipFile))
 	if err != nil {
 		o.Fatal(err)
