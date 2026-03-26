@@ -4,24 +4,25 @@
 // included in the /LICENSE file.
 
 import { ArrowLeft } from "@cockroachlabs/icons";
-import { Col, Row } from "antd";
+import { Col, Row, message } from "antd";
 import classNames from "classnames/bind";
-import isNil from "lodash/isNil";
 import moment from "moment-timezone";
-import React, { useEffect, useCallback, useRef } from "react";
+import React, { useCallback, useContext, useMemo, useRef } from "react";
 import { Helmet } from "react-helmet";
-import { RouteComponentProps } from "react-router-dom";
+import { useHistory, useRouteMatch } from "react-router-dom";
 
-import { SessionsRequest } from "src/api/sessionsApi";
+import { useNodesSummary } from "src/api/nodesSummaryApi";
+import { useSessions } from "src/api/sessionsApi";
+import {
+  terminateSession,
+  terminateQuery,
+  CancelSessionRequestMessage,
+  CancelQueryRequestMessage,
+} from "src/api/terminateQueryApi";
 import { commonStyles } from "src/common";
 import { SqlBox, SqlBoxSize } from "src/sql/box";
 import statementsPageStyles from "src/statementsPage/statementsPage.module.scss";
 import { NodeLink } from "src/statementsTable/statementsTableContent";
-import { UIConfigState } from "src/store";
-import {
-  ICancelQueryRequest,
-  ICancelSessionRequest,
-} from "src/store/terminateQuery";
 import { createTimeScaleFromDateRange, TimeScale } from "src/timeScaleDropdown";
 import { sessionAttr } from "src/util/constants";
 import { DurationToMomentDuration, TimestampToMoment } from "src/util/convert";
@@ -29,6 +30,7 @@ import { Bytes, DATE_FORMAT_24_TZ, Count } from "src/util/format";
 import { getMatchParamByName } from "src/util/query";
 
 import { Button } from "../button";
+import { ClusterDetailsContext } from "../contexts";
 import { CircleFilled } from "../icon";
 import { Loading } from "../loading";
 import LoadingError from "../sqlActivity/errorComponent";
@@ -39,6 +41,7 @@ import { FixLong } from "../util";
 
 import styles from "./sessionDetails.module.scss";
 import {
+  byteArrayToUuid,
   getStatusClassname,
   getStatusString,
   SessionInfo,
@@ -53,26 +56,9 @@ import TerminateSessionModal, {
 const cx = classNames.bind(styles);
 const statementsPageCx = classNames.bind(statementsPageStyles);
 
-export interface OwnProps {
-  id?: string;
-  nodeNames: { [nodeId: string]: string };
-  session: SessionInfo;
-  sessionError: Error | null;
-  refreshSessions: (req?: SessionsRequest) => void;
-  refreshNodes: () => void;
-  refreshNodesLiveness: () => void;
-  cancelSession: (payload: ICancelSessionRequest) => void;
-  cancelQuery: (payload: ICancelQueryRequest) => void;
-  uiConfig?: UIConfigState["pages"]["sessionDetails"];
-  isTenant?: UIConfigState["isTenant"];
-  onBackButtonClick?: () => void;
-  onTerminateSessionClick?: () => void;
-  onTerminateStatementClick?: () => void;
-  onStatementClick?: () => void;
+export interface SessionDetailsProps {
   setTimeScale: (ts: TimeScale) => void;
 }
-
-export type SessionDetailsProps = OwnProps & RouteComponentProps;
 
 function yesOrNo(b: boolean) {
   return b ? "Yes" : "No";
@@ -92,55 +78,41 @@ export const MemoryUsageItem: React.FC<{
   />
 );
 
-export function SessionDetails(props: SessionDetailsProps): React.ReactElement {
-  const {
-    history,
-    match,
-    session: sessionInfo,
-    sessionError,
-    refreshSessions,
-    refreshNodes,
-    refreshNodesLiveness,
-    cancelSession,
-    cancelQuery,
-    uiConfig,
-    isTenant,
-    nodeNames,
-    onBackButtonClick,
-    onTerminateSessionClick,
-    onTerminateStatementClick,
-    setTimeScale,
-  } = props;
+export const SessionDetails: React.FC<SessionDetailsProps> = ({
+  setTimeScale,
+}) => {
+  const history = useHistory();
+  const match = useRouteMatch();
+  const { isTenant } = useContext(ClusterDetailsContext);
 
   const terminateSessionRef = useRef<TerminateSessionModalRef>(null);
   const terminateQueryRef = useRef<TerminateQueryModalRef>(null);
 
-  // Refs to hold latest values for mount effect, avoiding stale closures
-  // while preserving "run once on mount" semantics.
-  const isTenantRef = useRef(isTenant);
-  const refreshNodesRef = useRef(refreshNodes);
-  const refreshNodesLivenessRef = useRef(refreshNodesLiveness);
-  const refreshSessionsRef = useRef(refreshSessions);
+  // Fetch sessions data via SWR. Session details shows a snapshot of
+  // an existing session, so we don't poll for updates.
+  const {
+    data: sessionsResponse,
+    isLoading: sessionsLoading,
+    error: sessionError,
+    refresh,
+  } = useSessions();
 
-  // Keep refs up to date on each render
-  isTenantRef.current = isTenant;
-  refreshNodesRef.current = refreshNodes;
-  refreshNodesLivenessRef.current = refreshNodesLiveness;
-  refreshSessionsRef.current = refreshSessions;
+  // Fetch node display names via SWR (only when not a tenant).
+  const { nodeDisplayNameByID } = useNodesSummary();
 
-  // componentDidMount
-  useEffect(() => {
-    if (!isTenantRef.current) {
-      refreshNodesRef.current();
-      refreshNodesLivenessRef.current();
-    }
-    refreshSessionsRef.current();
-  }, []);
+  const sessionID = getMatchParamByName(match, sessionAttr);
+
+  const sessionInfo: SessionInfo | null = useMemo(() => {
+    if (!sessionsResponse) return null;
+    const session = sessionsResponse.sessions.find(
+      s => byteArrayToUuid(s.id) === sessionID,
+    );
+    return session ? { session } : null;
+  }, [sessionsResponse, sessionID]);
 
   const backToSessionsPage = useCallback((): void => {
-    onBackButtonClick && onBackButtonClick();
     history.push("/sql-activity?tab=Sessions");
-  }, [history, onBackButtonClick]);
+  }, [history]);
 
   const onCachedTransactionFingerprintClick = useCallback(
     (fingerprintDec: string): void => {
@@ -318,16 +290,12 @@ export function SessionDetails(props: SessionDetailsProps): React.ReactElement {
                 <SummaryCardItem
                   label={"Gateway Node"}
                   value={
-                    uiConfig?.showGatewayNodeLink ? (
-                      <div className={cx("session-details-link")}>
-                        <NodeLink
-                          nodeId={session.node_id.toString()}
-                          nodeNames={nodeNames}
-                        />
-                      </div>
-                    ) : (
-                      session.node_id.toString()
-                    )
+                    <div className={cx("session-details-link")}>
+                      <NodeLink
+                        nodeId={session.node_id.toString()}
+                        nodeNames={nodeDisplayNameByID}
+                      />
+                    </div>
                   }
                 />
               )}
@@ -407,12 +375,10 @@ export function SessionDetails(props: SessionDetailsProps): React.ReactElement {
     sessionInfo,
     match,
     isTenant,
-    uiConfig?.showGatewayNodeLink,
-    nodeNames,
+    nodeDisplayNameByID,
     onCachedTransactionFingerprintClick,
   ]);
 
-  const sessionID = getMatchParamByName(match, sessionAttr);
   const session = sessionInfo?.session;
   const showActionButtons = !!session && !sessionError;
 
@@ -443,7 +409,6 @@ export function SessionDetails(props: SessionDetailsProps): React.ReactElement {
               <Button
                 disabled={session.active_queries?.length === 0}
                 onClick={() => {
-                  onTerminateStatementClick && onTerminateStatementClick();
                   if (session.active_queries?.length > 0) {
                     terminateQueryRef?.current?.showModalFor({
                       query_id: session.active_queries[0].id,
@@ -458,7 +423,6 @@ export function SessionDetails(props: SessionDetailsProps): React.ReactElement {
               </Button>
               <Button
                 onClick={() => {
-                  onTerminateSessionClick && onTerminateSessionClick();
                   terminateSessionRef?.current?.showModalFor({
                     session_id: session.id,
                     node_id: session.node_id.toString(),
@@ -477,7 +441,7 @@ export function SessionDetails(props: SessionDetailsProps): React.ReactElement {
         className={`${statementsPageCx("section")} ${cx("section--container")}`}
       >
         <Loading
-          loading={isNil(sessionInfo)}
+          loading={sessionsLoading}
           page={"sessions details"}
           error={sessionError}
           render={renderContent}
@@ -489,10 +453,32 @@ export function SessionDetails(props: SessionDetailsProps): React.ReactElement {
           }
         />
       </section>
-      <TerminateSessionModal ref={terminateSessionRef} cancel={cancelSession} />
-      <TerminateQueryModal ref={terminateQueryRef} cancel={cancelQuery} />
+      <TerminateSessionModal
+        ref={terminateSessionRef}
+        cancel={(req: CancelSessionRequestMessage) =>
+          terminateSession(req).then(
+            () => {
+              refresh();
+              message.success("Session cancelled.");
+            },
+            () => message.error("There was an error cancelling the session."),
+          )
+        }
+      />
+      <TerminateQueryModal
+        ref={terminateQueryRef}
+        cancel={(req: CancelQueryRequestMessage) =>
+          terminateQuery(req).then(
+            () => {
+              refresh();
+              message.success("Statement cancelled.");
+            },
+            () => message.error("There was an error cancelling the statement."),
+          )
+        }
+      />
     </div>
   );
-}
+};
 
 export default SessionDetails;
