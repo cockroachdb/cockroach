@@ -13,10 +13,9 @@ import { ClusterDetailsContext } from "../contexts";
 import { useSwrWithClusterId } from "../util";
 
 import { ClusterLocksResponse, getClusterLocksState } from "./clusterLocksApi";
-import { getSessions, SessionsResponseMessage } from "./sessionsApi";
+import { useSessions } from "./sessionsApi";
 import { SqlApiResponse } from "./sqlApi";
 
-const SESSIONS_SWR_KEY = "liveWorkload/sessions";
 const CLUSTER_LOCKS_SWR_KEY = "liveWorkload/clusterLocks";
 
 interface UseLiveWorkloadOptions {
@@ -66,20 +65,13 @@ export const useLiveWorkload = (
     data: sessionsData,
     error: sessionsError,
     isLoading: sessionsLoading,
-    mutate: mutateSessions,
-  } = useSwrWithClusterId<SessionsResponseMessage>(
-    SESSIONS_SWR_KEY,
-    () => getSessions({ excludeClosedSessions: true }),
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 5000,
-      refreshInterval: opts?.refreshInterval,
-      onSuccess: () => {
-        setLastUpdated(moment.utc());
-      },
-      ...immutableConfig,
-    },
-  );
+    refresh: refreshSessions,
+  } = useSessions({
+    excludeClosedSessions: true,
+    refreshInterval: opts?.refreshInterval,
+    immutable: opts?.immutable,
+    onSuccess: () => setLastUpdated(moment.utc()),
+  });
 
   const {
     data: clusterLocksData,
@@ -117,7 +109,7 @@ export const useLiveWorkload = (
   );
 
   const refresh = () => {
-    mutateSessions();
+    refreshSessions();
     mutateClusterLocks();
   };
 
