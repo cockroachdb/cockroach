@@ -5039,12 +5039,12 @@ subtest alter_dropped_col
 let $schema_changer_state
 SELECT value FROM information_schema.session_variables where variable='use_declarative_schema_changer'
 
+statement disable-cf-mutator ok
+create table t_droppedcol (dropme int);
+
 skipif config local-legacy-schema-changer
 statement ok
 set use_declarative_schema_changer = 'unsafe_always';
-
-statement disable-cf-mutator ok
-create table t_droppedcol (dropme int);
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;

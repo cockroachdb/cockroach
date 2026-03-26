@@ -304,9 +304,9 @@ func TestCreateFunctionVisibilityInExplicitTransaction(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 
-	tDB.Exec(t, `SET use_declarative_schema_changer = 'unsafe_always'`)
 	tDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL)`)
 	tDB.Exec(t, `INSERT INTO t VALUES (1,1), (2,1)`)
+	tDB.Exec(t, `SET use_declarative_schema_changer = 'unsafe_always'`)
 
 	// Make sure that everything is rolled back if post commit job fails.
 	_, err := sqlDB.Exec(`
