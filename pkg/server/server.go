@@ -424,15 +424,18 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	// and after ValidateAddrs().
 	rpcContext.CheckCertificateAddrs(ctx)
 
-	requestMetrics := rpc.NewRequestMetrics()
-	appRegistry.AddMetricStruct(requestMetrics)
+	serverRequestMetrics := rpc.NewServerRequestMetrics()
+	appRegistry.AddMetricStruct(serverRequestMetrics)
+	if rpcContext.UseDRPC {
+		appRegistry.AddMetricStruct(rpcContext.ClientRequestMetrics())
+	}
 
-	grpcServer, err := newGRPCServer(ctx, rpcContext, requestMetrics)
+	grpcServer, err := newGRPCServer(ctx, rpcContext, serverRequestMetrics)
 	if err != nil {
 		return nil, err
 	}
 
-	drpcServer, err := newDRPCServer(ctx, rpcContext, requestMetrics)
+	drpcServer, err := newDRPCServer(ctx, rpcContext, serverRequestMetrics)
 	if err != nil {
 		return nil, err
 	}

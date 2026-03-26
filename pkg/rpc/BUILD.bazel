@@ -183,6 +183,7 @@ go_test(
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
         "@io_storj_drpc//:drpc",
+        "@io_storj_drpc//drpcclient",
         "@io_storj_drpc//drpcctx",
         "@io_storj_drpc//drpcmux",
         "@io_storj_drpc//drpcserver",

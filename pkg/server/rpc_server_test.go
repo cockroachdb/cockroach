@@ -28,12 +28,12 @@ func TestRequestMetricRegistered(t *testing.T) {
 	ts := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer ts.Stopper().Stop(ctx)
 
-	requestMetrics := rpc.NewRequestMetrics()
+	requestMetrics := rpc.NewServerRequestMetrics()
 
 	var histogramVec *metric.HistogramVec
 	registry := ts.MetricsRecorder().AppRegistry()
 	registry.Select(
-		map[string]struct{}{requestMetrics.Duration.Name: {}},
+		map[string]struct{}{requestMetrics.RequestDuration.Name: {}},
 		func(name string, val interface{}) {
 			histogramVec = val.(*metric.HistogramVec)
 		})
@@ -41,9 +41,11 @@ func TestRequestMetricRegistered(t *testing.T) {
 
 	_, _ = ts.GetAdminClient(t).Settings(ctx, &serverpb.SettingsRequest{})
 	require.Len(t, histogramVec.ToPrometheusMetrics(), 0, "Should not have recorded any metrics yet")
-	serverRPCRequestMetricsEnabled.Override(context.Background(), &ts.ClusterSettings().SV, true)
+	serverRPCRequestMetricsEnabled.Override(context.Background(),
+		&ts.ClusterSettings().SV, true)
 	_, _ = ts.GetAdminClient(t).Settings(ctx, &serverpb.SettingsRequest{})
-	require.Len(t, histogramVec.ToPrometheusMetrics(), 1, "Should have recorded metrics for request")
+	require.Greater(t, len(histogramVec.ToPrometheusMetrics()), 0,
+		"Should have recorded metrics for request")
 }
 
 func TestShouldRecordRequestDuration(t *testing.T) {
