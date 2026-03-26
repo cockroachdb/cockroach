@@ -1,0 +1,136 @@
+Test Failure Analysis: Unconditional Deferral of SQL Routine Body Building
+===========================================================================
+
+6 test failures caused by deferring the optbuilder phase (AST → RelExpr)
+for SQL-language routine body statements from plan time to execution time.
+
+
+1. udf_fk/corruption_check (udf_fk:670)
+----------------------------------------
+
+Expected: Error "multiple mutations of the same table "child" are not
+  supported unless they all use INSERT without ON CONFLICT"
+Got: No error
+
+Root cause: The "multiple mutations" safety check works by inspecting the
+top-level memo for mutation operators. With eager build, the UDF's body
+RelExprs are embedded in the memo, so the checker sees both the outer
+mutation and the inner (UDF body) mutation of the same table. With deferred
+build, Body is nil — the top-level optimizer never sees the UDF's internal
+mutations, so the safety check is bypassed entirely.
+
+Fix approach: Either (a) infer mutation targets from ASTs at plan time and
+store them in UDFDefinition for the safety checker, or (b) keep eager build
+for UDFs whose body contains mutations targeting the same table as the outer
+statement.
+
+
+2. udf_in_index (udf_in_index:157)
+-----------------------------------
+
+Expected: Success
+Got: (42809) index "t_idx2" is a partial index that does not contain all the
+  rows needed
+
+Root cause: The deferred build creates a fresh temporary optimizer/optbuilder.
+When the UDF body references a table with partial indexes, the partial index
+predicate evaluation needs the same planning context (e.g., stable function
+folding context) as the outer query. The fresh optimizer may evaluate partial
+index predicates differently, causing the optimizer to select a partial index
+that doesn't cover all needed rows.
+
+Fix approach: Ensure the temporary optimizer inherits the same evalCtx and
+catalog state. This may already be happening, so the issue could be more
+subtle — likely related to how the exec builder's scan constraints interact
+with partial indexes when the UDF is used in an index expression context.
+
+
+3. udf_options/volatility (udf_options:67)
+-------------------------------------------
+
+Expected: Success (for SELECT pg_get_functiondef(...))
+Got: (42501) Access to crdb_internal and system is restricted
+
+Root cause: At plan time, the session may have appropriate internal executor
+privileges to access crdb_internal tables. When the body is built at execution
+time via a fresh optbuilder, the privilege check for restricted virtual tables
+runs in a context that doesn't carry the same internal access permissions.
+
+Fix approach: Propagate the "allow restricted table access" flag from the
+session/evalCtx into the temporary optbuilder created during deferred build.
+
+
+4. udf_polymorphic/poly_in (udf_polymorphic:362)
+-------------------------------------------------
+
+Expected: "return type mismatch in function declared to return int"
+Got: "internal error: invalid cast from STRING to INT8 should have been caught
+  earlier"
+
+Root cause: Polymorphic type validation at plan time produces a clean
+user-facing error when the body's return type doesn't match the resolved
+polymorphic return type. With deferred build, the body isn't built at plan
+time so the mismatch isn't caught. At execution time,
+finishRoutineReturnStmt → maybeAddRoutineAssignmentCasts encounters the type
+mismatch and hits an internal assertion rather than producing a proper user
+error.
+
+Fix approach: Either (a) add explicit return-type validation in
+BuildSQLRoutineBodyFromASTs that produces the same user-facing error, or
+(b) keep eager build for polymorphic functions where type validation is
+critical at plan time.
+
+
+5. udf_record/column_definition_errors (udf_record:624)
+--------------------------------------------------------
+
+Expected: "a column definition list is only allowed for functions returning
+  "record""
+Got: No error
+
+Root cause: The column definition list validation happens during buildRoutine
+at plan time when the optbuilder processes the function call with a column
+definition list. With deferred build, the body build is skipped, and this
+validation (which checks the relationship between the column definition list
+and the function's return type) doesn't run.
+
+Fix approach: Move or duplicate this validation check to occur at plan time
+independent of body building — it only depends on the function signature
+metadata, not the body RelExprs.
+
+
+6. udf_security/nested_udfs (udf_security:224)
+-----------------------------------------------
+
+Expected: "user owner1 does not have SELECT privilege on relation t"
+Got: "user invoker does not have SELECT privilege on relation t"
+
+Root cause: Nested SECURITY DEFINER. When outer UDF A (SECURITY DEFINER,
+owner=owner1) calls inner UDF B, A's body is built at execution time with
+DefinerUser = "owner1". However, when building A's body, the optbuilder
+encounters a call to B. In the eager path, the nested buildRoutine for B
+would inherit the privilege context showing that the current effective user
+is owner1. In the deferred path, the fresh optbuilder's
+BuildSQLRoutineBodyFromASTs for A correctly sets
+dataSourcePrivilegeUserOverride = "owner1", but when it encounters the
+nested call to B and builds B's definition, B's DefinerUser is set based on
+the catalog owner lookup, not the effective invoker context. The privilege
+check at B's call site sees "invoker" instead of "owner1".
+
+Fix approach: When building A's body at execution time and encountering a
+nested routine call to B, the effective user for privilege checking at B's
+call site should be the definer user of A (owner1), not the original
+invoker. This requires the deferred-build optbuilder to propagate the
+SECURITY DEFINER context through nested routine resolution.
+
+
+Summary Table
+=============
+
+  #  Test                              Category                 Severity
+  1  udf_fk/corruption_check           Safety check bypassed    HIGH — could allow data corruption
+  2  udf_in_index                      Partial index evaluation MEDIUM — runtime error, not silent
+  3  udf_options/volatility            Privilege propagation    MEDIUM — blocks valid queries
+  4  udf_polymorphic/poly_in           Error quality regression LOW — still errors, just worse message
+  5  udf_record/column_definition_errors  Validation bypassed   LOW — cosmetic, query still runs
+  6  udf_security/nested_udfs          Nested SECURITY DEFINER  MEDIUM — wrong privilege context

@@ -283,6 +283,7 @@ func (b *Builder) buildRoutine(
 	bodyScope := b.allocScope()
 	var params opt.ColList
 	var resolvedParamTypes []*types.T
+	var resolvedParamNames []string
 	var polyArgTyp *types.T
 	if o.Types.Length() > 0 {
 		// If necessary, add DEFAULT arguments.
@@ -325,6 +326,7 @@ func (b *Builder) buildRoutine(
 		// correctly typed column to the bodyScope for each parameter.
 		params = make(opt.ColList, len(paramTypes))
 		resolvedParamTypes = make([]*types.T, len(paramTypes))
+		resolvedParamNames = make([]string, len(paramTypes))
 		for i := range paramTypes {
 			argTyp := argTypes[i]
 			desiredTyp := maybeReplacePolymorphicType(paramTypes[i].Typ, polyArgTyp)
@@ -344,6 +346,7 @@ func (b *Builder) buildRoutine(
 				args[i] = b.factory.ConstructCast(args[i], desiredTyp)
 			}
 			resolvedParamTypes[i] = desiredTyp
+			resolvedParamNames[i] = paramTypes[i].Name
 			argColName := funcParamColName(tree.Name(paramTypes[i].Name), i)
 			col := b.synthesizeColumn(bodyScope, argColName, desiredTyp, nil /* expr */, nil /* scalar */)
 			col.setParamOrd(i)
@@ -379,6 +382,7 @@ func (b *Builder) buildRoutine(
 	b.insideUDF = true
 	b.insideSQLRoutine = o.Language == tree.RoutineLangSQL
 	isSetReturning := o.Class == tree.GeneratorClass
+	var definerUser string
 	if o.Type != tree.BuiltinRoutine {
 		if o.SecurityMode == tree.RoutineDefiner {
 			// SECURITY DEFINER: override both privilege users to the routine
@@ -390,6 +394,7 @@ func (b *Builder) buildRoutine(
 			}
 			b.dataSourcePrivilegeUserOverride = checkPrivUser
 			b.executePrivilegeUserOverride = checkPrivUser
+			definerUser = checkPrivUser.Normalized()
 		} else {
 			// SECURITY INVOKER (default): set dataSourcePrivilegeUserOverride to
 			// the invoker. This is necessary because a view may have overridden
@@ -466,10 +471,33 @@ func (b *Builder) buildRoutine(
 			})
 			appendedNullForVoidReturn = true
 		}
-		body, bodyProps, bodyTags, bodyASTs = b.buildSQLRoutineBodyStmts(
-			stmts, bodyScope, f, inScope,
-			isSetReturning, oldInsideDataSource, appendedNullForVoidReturn,
-		)
+
+		// For routines whose return type needs to be inferred from the body
+		// (RETURNS RECORD without OUT params), we must build eagerly. Otherwise,
+		// defer body building to execution time.
+		if f.ResolvedType().Identical(types.AnyTuple) {
+			body, bodyProps, bodyTags, bodyASTs = b.buildSQLRoutineBodyStmts(
+				stmts, bodyScope, f, inScope,
+				isSetReturning, oldInsideDataSource, appendedNullForVoidReturn,
+			)
+		} else {
+			// Defer body building to execution time. Populate bodyASTs and
+			// bodyTags now; body and bodyProps remain nil.
+			bodyTags = make([]string, len(stmts))
+			bodyASTs = make([]tree.Statement, len(stmts))
+			for i := range stmts {
+				bodyASTs[i] = stmts[i].AST
+				if appendedNullForVoidReturn && i == len(stmts)-1 {
+					bodyTags[i] = ""
+				} else {
+					bodyTags[i] = stmts[i].AST.StatementTag()
+				}
+				// Register mutation targets from the AST in the
+				// statementTree so that the multiple-mutation safety
+				// check works even though we skip full body building.
+				b.checkMultipleMutationsFromAST(stmts[i].AST)
+			}
+		}
 
 		if b.verboseTracing {
 			bodyStmts = make([]string, len(stmts))
@@ -544,8 +572,10 @@ func (b *Builder) buildRoutine(
 				BodyASTs:           bodyASTs,
 				Params:             params,
 				ParamTypes:         resolvedParamTypes,
+				ParamNames:         resolvedParamNames,
 				BodyText:           o.Body,
 				InsideDataSource:   oldInsideDataSource,
+				DefinerUser:        definerUser,
 				ResultBufferID:     resultBufferID,
 			},
 		},
@@ -595,6 +625,80 @@ func (b *Builder) buildSQLRoutineBodyStmts(
 		}
 	}
 	return body, bodyProps, bodyTags, bodyASTs
+}
+
+// BuildSQLRoutineBodyFromASTs builds RelExprs from statement ASTs for a
+// SQL-language routine body. It creates a body scope with parameter columns,
+// builds each statement, and applies finishRoutineReturnStmt on the last
+// statement. This is used at execution time for deferred body building.
+//
+// definerUser, when non-empty, indicates that the routine is SECURITY DEFINER
+// and privilege checks within the body should use the definer's credentials.
+func (b *Builder) BuildSQLRoutineBodyFromASTs(
+	stmtASTs []tree.Statement,
+	paramTypes []*types.T,
+	paramNames []string,
+	rTyp *types.T,
+	isSetReturning bool,
+	insideDataSource bool,
+	definerUser string,
+) (body []memo.RelExpr, bodyProps []*physical.Required, params opt.ColList) {
+	// Set up builder state for building inside a SQL routine.
+	defer func(
+		origUDF, origSQLRoutine, origDS, origTrackDeps bool,
+		origDSPriv, origExecPriv username.SQLUsername,
+	) {
+		b.insideUDF = origUDF
+		b.insideSQLRoutine = origSQLRoutine
+		b.insideDataSource = origDS
+		b.trackSchemaDeps = origTrackDeps
+		b.dataSourcePrivilegeUserOverride = origDSPriv
+		b.executePrivilegeUserOverride = origExecPriv
+	}(
+		b.insideUDF, b.insideSQLRoutine, b.insideDataSource, b.trackSchemaDeps,
+		b.dataSourcePrivilegeUserOverride, b.executePrivilegeUserOverride,
+	)
+	b.insideUDF = true
+	b.insideSQLRoutine = true
+	b.insideDataSource = false
+	b.trackSchemaDeps = false
+
+	// For SECURITY DEFINER routines, override privilege checks to use the
+	// definer's credentials.
+	if definerUser != "" {
+		user := username.MakeSQLUsernameFromPreNormalizedString(definerUser)
+		b.dataSourcePrivilegeUserOverride = user
+		b.executePrivilegeUserOverride = user
+	}
+
+	// Create body scope with parameter columns.
+	bodyScope := b.allocScope()
+	params = make(opt.ColList, len(paramTypes))
+	for i, typ := range paramTypes {
+		var name tree.Name
+		if i < len(paramNames) {
+			name = tree.Name(paramNames[i])
+		}
+		argColName := funcParamColName(name, i)
+		col := b.synthesizeColumn(bodyScope, argColName, typ, nil /* expr */, nil /* scalar */)
+		col.setParamOrd(i)
+		params[i] = col.id
+	}
+
+	// Build each statement.
+	body = make([]memo.RelExpr, len(stmtASTs))
+	bodyProps = make([]*physical.Required, len(stmtASTs))
+	for i, ast := range stmtASTs {
+		stmtScope := b.buildStmtAtRootWithScope(ast, nil /* desiredTypes */, bodyScope)
+		if i == len(stmtASTs)-1 {
+			stmtScope = b.finishRoutineReturnStmt(
+				stmtScope, isSetReturning, insideDataSource, rTyp,
+			)
+		}
+		body[i] = stmtScope.expr
+		bodyProps[i] = stmtScope.makePhysicalProps()
+	}
+	return body, bodyProps, params
 }
 
 // finishRoutineReturnStmt manages the output columns for a statement that will

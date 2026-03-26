@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/optbuilder"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
@@ -701,7 +702,8 @@ func (b *Builder) buildExistsSubquery(
 			nil,  /* stmtASTs */
 			true, /* allowOuterWithRefs */
 			wrapRootExpr,
-			0, /* resultBufferID */
+			0,   /* resultBufferID */
+			nil, /* def */
 		)
 		return tree.NewTypedCoalesceExpr(tree.TypedExprs{
 			tree.NewTypedRoutineExpr(
@@ -830,6 +832,7 @@ func (b *Builder) buildSubquery(
 			true, /* allowOuterWithRefs */
 			nil,  /* wrapRootExpr */
 			0,    /* resultBufferID */
+			nil,  /* def */
 		)
 		_, tailCall := b.tailCalls[subquery]
 		return tree.NewTypedRoutineExpr(
@@ -986,9 +989,17 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		return nil, err
 	}
 
-	for _, s := range udf.Def.Body {
-		if s.Relational().CanMutate {
-			b.setMutationFlags(s)
+	if udf.Def.Body != nil {
+		for _, s := range udf.Def.Body {
+			if s.Relational().CanMutate {
+				b.setMutationFlags(s)
+			}
+		}
+	} else {
+		// Body is nil for SQL routines with deferred build. Infer mutation
+		// flags from body statement tags.
+		for _, tag := range udf.Def.BodyTags {
+			b.setMutationFlagsFromTag(tag)
 		}
 	}
 
@@ -1000,8 +1011,10 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 
 	// Execution expects there to be more than one body statement if a cursor is
 	// opened or the result of the first statement is directed to a buffer.
+	// This check is skipped for deferred-build routines (nil Body) since cursor
+	// declarations and target buffers are PL/pgSQL features only.
 	firstStmtOut := udf.Def.FirstStmtOutput
-	if len(udf.Def.Body) <= 1 &&
+	if udf.Def.Body != nil && len(udf.Def.Body) <= 1 &&
 		(firstStmtOut.CursorDeclaration != nil || firstStmtOut.TargetBufferID != 0) {
 		panic(errors.AssertionFailedf(
 			"expected more than one body statement for a routine that " +
@@ -1016,6 +1029,12 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	}
 
 	// Create a tree.RoutinePlanFn that can plan the statements in the UDF body.
+	// For SQL routines with deferred body building (nil Body), pass the
+	// definition so the planGen closure can build from ASTs at execution time.
+	var deferredDef *memo.UDFDefinition
+	if udf.Def.Body == nil {
+		deferredDef = udf.Def
+	}
 	planGen := b.buildRoutinePlanGenerator(
 		udf.Def.Params,
 		udf.Def.Body,
@@ -1026,6 +1045,7 @@ func (b *Builder) buildUDF(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 		false, /* allowOuterWithRefs */
 		nil,   /* wrapRootExpr */
 		udf.Def.ResultBufferID,
+		deferredDef,
 	)
 
 	// Enable stepping for volatile functions so that statements within the UDF
@@ -1101,6 +1121,7 @@ func (b *Builder) initRoutineExceptionHandler(
 			false, /* allowOuterWithRefs */
 			nil,   /* wrapRootExpr */
 			0,     /* resultBufferID */
+			nil,   /* def */
 		)
 		// Build a routine with no arguments for the exception handler. The actual
 		// arguments will be supplied when (if) the handler is invoked.
@@ -1152,6 +1173,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 	allowOuterWithRefs bool,
 	wrapRootExpr wrapRootExprFn,
 	resultBufferID memo.RoutineResultBufferID,
+	def *memo.UDFDefinition, // non-nil for SQL routines with deferred build
 ) tree.RoutinePlanGenerator {
 	// argOrd returns the ordinal of the argument within the arguments list that
 	// can be substituted for each reference to the given function parameter
@@ -1198,6 +1220,43 @@ func (b *Builder) buildRoutinePlanGenerator(
 		defer errorutil.MaybeCatchPanic(&retErr, func(caughtErr error) {
 			log.VEventf(ctx, 1, "%v", caughtErr)
 		})
+
+		// Shadow closure variables so that the deferred-build path can
+		// override them without affecting future invocations.
+		stmts := stmts
+		stmtProps := stmtProps
+		originalMemo := originalMemo
+		argOrd := argOrd
+		if def != nil {
+			// Deferred-build path: build body RelExprs from ASTs now, at
+			// execution time. This enables a future hint-injection fallback
+			// (retry without hints if optimization fails) because we have the
+			// original ASTs available.
+			var tmpO xform.Optimizer
+			tmpO.Init(ctx, b.evalCtx, b.catalog)
+			// The stmt parameter is nil because we don't call bld.Build() (which
+			// uses it). Instead, we call BuildSQLRoutineBodyFromASTs directly.
+			bld := optbuilder.New(
+				ctx, b.semaCtx, b.evalCtx, b.catalog, tmpO.Factory(), nil, /* stmt */
+			)
+
+			body, bodyProps, newParams := bld.BuildSQLRoutineBodyFromASTs(
+				def.BodyASTs, def.ParamTypes, def.ParamNames,
+				def.Typ, def.SetReturning, def.InsideDataSource,
+				def.DefinerUser,
+			)
+			stmts = body
+			stmtProps = bodyProps
+			originalMemo = tmpO.Factory().Memo()
+			argOrd = func(col opt.ColumnID) (ord int, ok bool) {
+				for i, p := range newParams {
+					if col == p {
+						return i, true
+					}
+				}
+				return 0, false
+			}
+		}
 
 		dbName := b.evalCtx.SessionData().Database
 		appName := b.evalCtx.SessionData().ApplicationName

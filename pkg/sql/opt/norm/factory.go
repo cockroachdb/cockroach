@@ -379,10 +379,13 @@ func (f *Factory) AssignPlaceholders(from *memo.Memo) (retErr error) {
 				newDef = &defCopy
 				newRoutineDefs[t.Def] = newDef
 				// Make sure to copy the slice that stores the body statements, rather
-				// than mutating the original.
-				newDef.Body = make([]memo.RelExpr, len(t.Def.Body))
-				for i := range t.Def.Body {
-					newDef.Body[i] = f.CopyAndReplaceDefault(t.Def.Body[i], replaceFn).(memo.RelExpr)
+				// than mutating the original. Body may be nil for SQL routines with
+				// deferred body building.
+				if t.Def.Body != nil {
+					newDef.Body = make([]memo.RelExpr, len(t.Def.Body))
+					for i := range t.Def.Body {
+						newDef.Body[i] = f.CopyAndReplaceDefault(t.Def.Body[i], replaceFn).(memo.RelExpr)
+					}
 				}
 			}
 			return f.ConstructUDFCall(newArgs, &memo.UDFCallPrivate{Def: newDef})

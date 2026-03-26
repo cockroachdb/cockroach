@@ -1379,6 +1379,17 @@ func (h *hasher) IsUDFDefinitionEqual(l, r *UDFDefinition) bool {
 			return false
 		}
 	}
+	if len(l.ParamNames) != len(r.ParamNames) {
+		return false
+	}
+	for i := range l.ParamNames {
+		if l.ParamNames[i] != r.ParamNames[i] {
+			return false
+		}
+	}
+	if l.DefinerUser != r.DefinerUser {
+		return false
+	}
 	return true
 }
 
