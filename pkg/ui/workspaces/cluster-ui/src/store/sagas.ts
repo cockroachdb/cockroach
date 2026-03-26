@@ -14,12 +14,9 @@ import { transactionInsightsSaga } from "./insights/transactionInsights/transact
 import { livenessSaga } from "./liveness";
 import { localStorageSaga } from "./localStorage";
 import { nodesSaga } from "./nodes";
-import { notifificationsSaga } from "./notifications";
-import { sessionsSaga } from "./sessions";
 import { sqlStatsSaga } from "./sqlStats";
 import { sqlDetailsStatsSaga } from "./statementDetails";
 import { statementsDiagnosticsSagas } from "./statementDiagnostics";
-import { terminateSaga } from "./terminateQuery";
 import { txnStatsSaga } from "./transactionStats";
 import { uiConfigSaga } from "./uiConfig";
 
@@ -31,9 +28,6 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(livenessSaga, cacheInvalidationPeriod),
     fork(transactionInsightsSaga),
     fork(databasesListSaga),
-    fork(sessionsSaga),
-    fork(terminateSaga),
-    fork(notifificationsSaga),
     fork(sqlStatsSaga),
     fork(sqlDetailsStatsSaga),
     fork(clusterLocksSaga),

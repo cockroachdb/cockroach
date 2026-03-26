@@ -10,7 +10,7 @@ import React, {
   useState,
 } from "react";
 
-import { ICancelQueryRequest } from "src/store/terminateQuery";
+import { CancelQueryRequestMessage as ICancelQueryRequest } from "src/api/terminateQueryApi";
 
 import { Modal } from "../modal";
 import { Text } from "../text";

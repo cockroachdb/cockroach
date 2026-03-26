@@ -30,7 +30,6 @@ import { LivenessState, reducer as liveness } from "./liveness";
 import { LocalStorageState, reducer as localStorage } from "./localStorage";
 import { NodesState, reducer as nodes } from "./nodes";
 import { rootActions } from "./rootActions";
-import { reducer as sessions, SessionsState } from "./sessions";
 import { reducer as sqlStats, SQLStatsState } from "./sqlStats";
 import {
   reducer as sqlDetailsStats,
@@ -40,10 +39,6 @@ import {
   reducer as statementDiagnostics,
   StatementDiagnosticsState,
 } from "./statementDiagnostics";
-import {
-  reducer as terminateQuery,
-  TerminateQueryState,
-} from "./terminateQuery";
 import { reducer as txnStats, TxnStatsState } from "./transactionStats";
 import { reducer as uiConfig, UIConfigState } from "./uiConfig";
 
@@ -52,8 +47,6 @@ export type AdminUiState = {
   localStorage: LocalStorageState;
   nodes: NodesState;
   liveness: LivenessState;
-  sessions: SessionsState;
-  terminateQuery: TerminateQueryState;
   uiConfig: UIConfigState;
   statements: SQLStatsState;
   transactions: TxnStatsState;
@@ -74,9 +67,7 @@ export const reducers = combineReducers<AdminUiState>({
   statementDiagnostics,
   nodes,
   liveness,
-  sessions,
   txnInsights,
-  terminateQuery,
   uiConfig,
   statements: sqlStats,
   transactions: txnStats,
