@@ -53,6 +53,10 @@ func TestTrace(t *testing.T) {
 		"admissionWorkQueueWait",
 		"index recommendation",
 		"/cockroach.roachpb.Internal/Batch",
+		// Internal queries (e.g. statement hints lookups) may produce
+		// spans in the session trace before their cache is initialized.
+		"get-plan-hints",
+		"prepare stmt",
 	}
 	// Depending on whether the data is local or not, we may not see these
 	// spans. Only applicable with distsql=on.
