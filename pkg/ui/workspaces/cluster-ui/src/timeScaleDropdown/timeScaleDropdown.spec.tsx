@@ -159,7 +159,7 @@ describe("<TimeScaleDropdown> component", function () {
     getByText("Past Hour");
   });
 
-  it.skip("initializes the custom selection to the current time interval", () => {
+  it("initializes the custom selection to the current time interval", () => {
     const mockSetTimeScale = jest.fn();
     // Default state
     const { getByText, getByDisplayValue } = render(
@@ -192,9 +192,9 @@ describe("<TimeScaleDropdown> component", function () {
     // start and end dropdowns; for an attempt see: https://github.com/jocrl/cockroach/commit/a15ac08b3ed0515a4c4910396e32dc8712cc86ec#diff-491a1b9fd6a93863973c270c8c05ab0d28e0a41f616ecd2222df9fab327806f2R196.
   });
 
-  it.skip("opens directly to the custom menu when a custom time interval is currently selected", async () => {
+  it("opens directly to the custom menu when a custom time interval is currently selected", async () => {
     const mockSetTimeScale = jest.fn();
-    const { getByText, getByRole, baseElement } = render(
+    const { getByText, getByRole, getByTestId, baseElement } = render(
       <MemoryRouter>
         <TimeScaleDropdownWrapper
           currentScale={new timescale.TimeScaleState().scale}
@@ -208,12 +208,15 @@ describe("<TimeScaleDropdown> component", function () {
     getByText("Past 30 Minutes");
     getByText("Past 6 Hours");
 
-    // Change to a custom selection
+    // Change to a custom selection by clicking the previous time interval arrow.
+    // In antd 5.x, clicking outside the dropdown overlay (the arrow button) closes
+    // the dropdown, so we re-open it afterward.
     userEvent.click(
       getByRole("button", {
         name: "previous time interval",
       }),
     );
+    userEvent.click(getByTestId("dropdown-button"));
 
     // When a custom option is selected, the dropdown should open to the custom selector.
     const expectedText = getExpectedCustomText(
