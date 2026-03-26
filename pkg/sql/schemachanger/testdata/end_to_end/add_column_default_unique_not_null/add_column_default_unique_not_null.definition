@@ -20,8 +20,19 @@ INSERT INTO db.public.tbl VALUES($stageKey);
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=1
 INSERT INTO db.public.tbl VALUES($stageKey);
+INSERT INTO db.public.tbl VALUES($stageKey+1);
 ----
 .*duplicate key value violates unique constraint \"tbl_j_key\".*
+
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=2
+INSERT INTO db.public.tbl VALUES($stageKey);
+----
+.*null value in column \"j\" violates not-null constraint.*
+
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+SELECT * FROM db.public.tbl;
+----
 
 # Add a column which will have a unique index and a not null constraint at
 # the same time.
