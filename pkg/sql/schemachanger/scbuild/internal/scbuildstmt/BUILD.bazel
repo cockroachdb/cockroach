@@ -4,6 +4,7 @@ load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 go_library(
     name = "scbuildstmt",
     srcs = [
+        "alter_domain.go",
         "alter_policy.go",
         "alter_sequence.go",
         "alter_table.go",
