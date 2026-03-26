@@ -40,6 +40,7 @@ go_test(
     ],
     embed = [":stmtdiagnostics"],
     exec_properties = {"test.Pool": "large"},
+    shard_count = 4,
     deps = [
         "//pkg/base",
         "//pkg/kv",
