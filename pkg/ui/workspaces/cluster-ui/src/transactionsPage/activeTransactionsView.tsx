@@ -5,24 +5,22 @@
 
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
-import moment, { Moment } from "moment-timezone";
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { useHistory } from "react-router-dom";
 
 import {
-  ActiveTransaction,
-  ActiveStatementFilters,
   ActiveTransactionFilters,
   ExecutionStatus,
 } from "src/activeExecutions";
 import { ActiveTransactionsSection } from "src/activeExecutions/activeTransactionsSection";
-import { RefreshControl } from "src/activeExecutions/refreshControl";
+import RefreshControl from "src/activeExecutions/refreshControl/refreshControl";
+import { useLiveWorkload } from "src/api/liveWorkloadApi";
 import { Loading } from "src/loading/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
 import { Pagination } from "src/pagination";
+import { Filter } from "src/queryFilter";
 import { getActiveTransactionFiltersFromURL } from "src/queryFilter/utils";
 import { Search } from "src/search/search";
-import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
 import { SortSetting } from "src/sortedtable/sortedtable";
 import LoadingError from "src/sqlActivity/errorComponent";
 import { queryByName, syncHistory } from "src/util/query";
@@ -30,153 +28,77 @@ import { queryByName, syncHistory } from "src/util/query";
 import {
   filterActiveTransactions,
   getAppsFromActiveExecutions,
+  useDisplayRefreshAlert,
 } from "../activeExecutions/activeStatementUtils";
+import { ClusterDetailsContext } from "../contexts";
 import {
   calculateActiveFilters,
-  Filter,
+  defaultFilters,
   getFullFiltersAsStringRecord,
-  inactiveFiltersState,
 } from "../queryFilter";
+import { getTableSortFromURL } from "../sortedtable/getTableSortFromURL";
 import styles from "../statementsPage/statementsPage.module.scss";
 import { usePagination } from "../util";
 
 const cx = classNames.bind(styles);
 
-export type ActiveTransactionsViewDispatchProps = {
-  onColumnsSelect: (columns: string[]) => void;
-  onFiltersChange: (filters: ActiveTransactionFilters) => void;
-  onSortChange: (ss: SortSetting) => void;
-  refreshLiveWorkload: () => void;
-  onAutoRefreshToggle: (isEnabled: boolean) => void;
-  onManualRefresh: () => void;
-};
-
-export type ActiveTransactionsViewStateProps = {
-  selectedColumns: string[];
-  transactions: ActiveTransaction[];
-  sessionsError: Error | null;
-  filters: ActiveTransactionFilters;
-  sortSetting: SortSetting;
-  internalAppNamePrefix: string;
-  isTenant?: boolean;
-  maxSizeApiReached?: boolean;
-  isAutoRefreshEnabled?: boolean;
-  lastUpdated: Moment | null;
-};
-
-export type ActiveTransactionsViewProps = ActiveTransactionsViewStateProps &
-  ActiveTransactionsViewDispatchProps;
-
 const RECENT_TXN_SEARCH_PARAM = "q";
 const PAGE_SIZE = 20;
 
-export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
-  onColumnsSelect,
-  refreshLiveWorkload,
-  onFiltersChange,
-  onSortChange,
-  isTenant,
-  selectedColumns,
-  sortSetting,
-  transactions,
-  sessionsError,
-  filters,
-  internalAppNamePrefix,
-  maxSizeApiReached,
-  isAutoRefreshEnabled,
-  onAutoRefreshToggle,
-  lastUpdated,
-  onManualRefresh,
-}: ActiveTransactionsViewProps) => {
+const DEFAULT_SORT_SETTING: SortSetting = {
+  ascending: false,
+  columnTitle: "startTime",
+};
+
+const DEFAULT_FILTERS: ActiveTransactionFilters = {
+  app: defaultFilters.app,
+  executionStatus: defaultFilters.executionStatus,
+};
+
+export const ActiveTransactionsView: React.FC = () => {
+  const { isTenant } = useContext(ClusterDetailsContext);
+  const history = useHistory();
+
+  // Initialize sort and filters from URL params, falling back to defaults.
+  const [sortSetting, setSortSetting] = useState<SortSetting>(
+    () => getTableSortFromURL(history.location) ?? DEFAULT_SORT_SETTING,
+  );
+  const [filters, setFilters] = useState<ActiveTransactionFilters>(
+    () =>
+      ({
+        ...DEFAULT_FILTERS,
+        ...getActiveTransactionFiltersFromURL(history.location),
+      }) as ActiveTransactionFilters,
+  );
+  const [search, setSearch] = useState<string>(
+    queryByName(history.location, RECENT_TXN_SEARCH_PARAM),
+  );
+  const [selectedColumns, setSelectedColumns] = useState<string[] | null>(null);
+  const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState(true);
+
+  const { data, isLoading, error, lastUpdated, refresh } = useLiveWorkload({
+    refreshInterval: isAutoRefreshEnabled ? 10_000 : 0,
+  });
+  const transactions = data.transactions;
+  const internalAppNamePrefix = data.internalAppNamePrefix;
+  const maxSizeApiReached = data.maxSizeApiReached;
+
   const [pagination, updatePagination, resetPagination] = usePagination(
     1,
     PAGE_SIZE,
   );
 
-  const history = useHistory();
-  const [search, setSearch] = useState<string>(
-    queryByName(history.location, RECENT_TXN_SEARCH_PARAM),
-  );
-  // Local state to store the difference between the current time and the last
-  // time the data was updated, in minutes.
-  const [minutesSinceLastRefresh, setMinutesSinceLastRefresh] = useState(0);
-  // Local state to store whether or not to display the refresh alert.
-  const [displayRefreshAlert, setDisplayRefreshAlert] = useState(false);
+  const { displayRefreshAlert, minutesSinceLastRefresh } =
+    useDisplayRefreshAlert(isAutoRefreshEnabled, lastUpdated);
 
+  // Sync sort, filters, and search to URL whenever they change.
   useEffect(() => {
-    // useEffect hook which triggers an immediate data refresh if auto-refresh
-    // is enabled. It fetches the latest workload details by dispatching a
-    // refresh action when the component mounts, ensuring that users see fresh
-    // data as soon as they land on the page if auto-refresh is on.
-    if (isAutoRefreshEnabled) {
-      refreshLiveWorkload();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    // Refresh every 10 seconds if auto refresh is on.
-    if (isAutoRefreshEnabled) {
-      const interval = setInterval(refreshLiveWorkload, 10 * 1000);
-      return () => {
-        clearInterval(interval);
-      };
-    }
-  }, [isAutoRefreshEnabled, refreshLiveWorkload]);
-
-  useEffect(() => {
-    // This useEffect hook checks the difference between the current time and
-    // the last time the data was updated. It triggers a state change to display
-    // an alert if the difference is greater than 10 minutes and auto-refresh
-    // is disabled. The check is performed immediately when the component mounts
-    // and then every 10 seconds thereafter.
-    const checkTimeDifference = () => {
-      if (!isAutoRefreshEnabled && lastUpdated) {
-        // Calculate the difference between the last updated time and the current time in minutes
-        const diffMinutes = moment().diff(lastUpdated, "minutes");
-        if (diffMinutes >= 10) {
-          setDisplayRefreshAlert(true);
-          setMinutesSinceLastRefresh(diffMinutes);
-        } else {
-          setDisplayRefreshAlert(false);
-        }
-      }
-    };
-
-    checkTimeDifference();
-    const intervalId = setInterval(checkTimeDifference, 10 * 1000);
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [lastUpdated, isAutoRefreshEnabled, setDisplayRefreshAlert]);
-
-  useEffect(() => {
-    // We use this effect to sync settings defined on the URL (sort, filters),
-    // with the redux store. The only time we do this is when the user navigates
-    // to the page directly via the URL and specifies settings in the query string.
-    // Note that the desired behaviour is currently that the user is unable to
-    // clear filters via the URL, and must do so with page controls.
-    const sortSettingURL = getTableSortFromURL(history.location);
-    const filtersFromURL = getActiveTransactionFiltersFromURL(history.location);
-
-    if (sortSettingURL) {
-      onSortChange(sortSettingURL);
-    }
-    if (filtersFromURL) {
-      onFiltersChange(filtersFromURL);
-    }
-  }, [history, onSortChange, onFiltersChange]);
-
-  useEffect(() => {
-    // This effect runs when the filters or sort settings received from
-    // redux changes and syncs the URL params with redux.
     syncHistory(
       {
         ascending: sortSetting.ascending.toString(),
         columnTitle: sortSetting.columnTitle,
-        ...getFullFiltersAsStringRecord(filters),
         [RECENT_TXN_SEARCH_PARAM]: search,
+        ...getFullFiltersAsStringRecord(filters),
       },
       history,
     );
@@ -189,40 +111,31 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
   ]);
 
   const onChangeSortSetting = (ss: SortSetting): void => {
-    onSortChange(ss);
+    setSortSetting(ss);
     resetPagination();
   };
 
-  const onSubmitSearch = (newSearch: string) => {
+  const onSubmitSearch = (newSearch: string): void => {
     if (newSearch === search) return;
     setSearch(newSearch);
     resetPagination();
   };
 
-  const onSubmitFilters = (selectedFilters: ActiveStatementFilters) => {
-    onFiltersChange(selectedFilters);
+  const onSubmitFilters = (selectedFilters: ActiveTransactionFilters) => {
+    setFilters(selectedFilters);
     resetPagination();
   };
 
   const onSubmitToggleAutoRefresh = () => {
     // Refresh immediately when toggling auto-refresh on.
     if (!isAutoRefreshEnabled) {
-      setDisplayRefreshAlert(false);
-      refreshLiveWorkload();
+      refresh();
     }
-    onAutoRefreshToggle(!isAutoRefreshEnabled);
-  };
-
-  const handleRefresh = () => {
-    onManualRefresh();
+    setIsAutoRefreshEnabled(!isAutoRefreshEnabled);
   };
 
   const clearSearch = () => onSubmitSearch("");
-  const clearFilters = () =>
-    onSubmitFilters({
-      app: inactiveFiltersState.app,
-      executionStatus: inactiveFiltersState.executionStatus,
-    });
+  const clearFilters = () => onSubmitFilters(DEFAULT_FILTERS);
 
   const apps = getAppsFromActiveExecutions(transactions, internalAppNamePrefix);
   const countActiveFilters = calculateActiveFilters(filters);
@@ -260,7 +173,7 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
           <RefreshControl
             isAutoRefreshEnabled={isAutoRefreshEnabled}
             onToggleAutoRefresh={onSubmitToggleAutoRefresh}
-            onManualRefresh={handleRefresh}
+            onManualRefresh={refresh}
             lastRefreshTimestamp={lastUpdated}
             execType={"transaction"}
           />
@@ -281,13 +194,13 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
       )}
       <div className={cx("table-area")}>
         <Loading
-          loading={transactions == null}
+          loading={isLoading}
           page="active transactions"
-          error={sessionsError}
+          error={error}
           renderError={() =>
             LoadingError({
               statsType: "transactions",
-              error: sessionsError,
+              error,
             })
           }
         >
@@ -300,7 +213,7 @@ export const ActiveTransactionsView: React.FC<ActiveTransactionsViewProps> = ({
             sortSetting={sortSetting}
             onClearFilters={clearFilters}
             onChangeSortSetting={onChangeSortSetting}
-            onColumnsSelect={onColumnsSelect}
+            onColumnsSelect={setSelectedColumns}
             isTenant={isTenant}
           />
           <Pagination
