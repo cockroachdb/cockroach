@@ -15,9 +15,7 @@ set -euxo pipefail
 bazel test //pkg/server:server_test \
     --config crosslinux --config race \
     --test_filter=TestSpanStatsFanOut \
-    --jobs 100 $(./build/github/engflow-args.sh) \
-    --remote_download_minimal \
+    --jobs 100 \
     --test_timeout=300 \
     --runs_per_test=10 \
-    --bes_keywords ci-race-canary \
-    --build_event_binary_file=bes.bin
+    --bes_keywords ci-race-canary
