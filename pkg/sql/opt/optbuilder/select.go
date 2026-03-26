@@ -353,13 +353,13 @@ func (b *Builder) buildView(
 	// the invoker on the underlying tables. Checking the invoker would defeat
 	// the purpose of having separate SELECT privileges on the view, which is
 	// intended to allow exposing some subset of a restricted table's data to
-	// less privileged users. We also DisableUnsafeInternalCheck to allow
-	// reading system tables through user-defined views.
+	// less privileged users.
 	//
 	// For user-created views, we check the SELECT privilege of the view owner
 	// (definer) on the underlying tables to ensure the view owner still has
 	// access. This also means that the definer's RLS policies are enforced
-	// rather than the invoker's.
+	// rather than the invoker's. Additionaly, we check for indirect unsafe
+	// access to crdb_internals through the view.
 	//
 	// For system views (e.g. pg_catalog.pg_description,
 	// crdb_internal.transaction_statistics), we skip SELECT privilege checks
@@ -380,7 +380,6 @@ func (b *Builder) buildView(
 			}(b.dataSourcePrivilegeUserOverride)
 			b.dataSourcePrivilegeUserOverride = view.Owner()
 		}
-		defer b.DisableUnsafeInternalCheck()()
 		if b.skipSelectPrivilegeChecks {
 			b.skipSelectPrivilegeChecks = false
 			defer func() { b.skipSelectPrivilegeChecks = true }()
