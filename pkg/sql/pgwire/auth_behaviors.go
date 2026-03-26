@@ -40,6 +40,7 @@ type AuthBehaviors struct {
 	provisioner      Provisioner
 	externalAuthTime time.Duration
 	sanIdentities    []string
+	usedCertSANAuth  bool
 }
 
 // Ensure that an AuthBehaviors is easily composable with itself.
@@ -230,4 +231,14 @@ func (b *AuthBehaviors) SetSANIdentities(sans []string) {
 // GetSANIdentities returns the SAN identities extracted from the client certificate.
 func (b *AuthBehaviors) GetSANIdentities() []string {
 	return b.sanIdentities
+}
+
+// MarkUsedCertSANAuth marks that SAN-based authentication was used for this connection.
+func (b *AuthBehaviors) MarkUsedCertSANAuth() {
+	b.usedCertSANAuth = true
+}
+
+// UsedCertSANAuth returns whether SAN-based authentication was used for this connection.
+func (b *AuthBehaviors) UsedCertSANAuth() bool {
+	return b.usedCertSANAuth
 }
