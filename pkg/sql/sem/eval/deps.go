@@ -696,6 +696,11 @@ type PrivilegedAccessor interface {
 	// ResolvedZoneConfigForKey returns the fully resolved (inheritance-applied)
 	// zone configuration for the given range start key, as JSONB.
 	ResolvedZoneConfigForKey(ctx context.Context, key roachpb.Key) (tree.Datum, error)
+
+	// ZoneConfigSpanEnd returns the end key of the zone config span that
+	// the given key belongs to. For table zones this is the table's key
+	// span end; for named zones it is the next static split point.
+	ZoneConfigSpanEnd(ctx context.Context, key roachpb.Key) (roachpb.Key, error)
 }
 
 // RegionOperator gives access to the current region, validation for all
