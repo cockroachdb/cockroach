@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/errors"
 )
 
 var cpuTimeTokenACEnabled = settings.RegisterBoolSetting(
@@ -47,18 +46,7 @@ var sqlCPUTimeTokenACEnabled = settings.RegisterBoolSetting(
 		"budget as KV work; has no effect unless admission.cpu_time_tokens.enabled "+
 		"is also true",
 	false,
-	settings.WithValidateBool(func(sv *settings.Values, val bool) error {
-		// Note: disabling cpuTimeTokenACEnabled with sqlCPUTimeTokenACEnabled
-		// is allowed and harmless (SQL CPU admission path is effectively
-		// disabled).
-		if val && !cpuTimeTokenACIsEnabled(sv) {
-			return errors.New(
-				"admission.sql_cpu_time_tokens.enabled requires " +
-					"admission.cpu_time_tokens.enabled to also be true",
-			)
-		}
-		return nil
-	}))
+)
 
 // sqlCPUTimeTokenACIsEnabled returns true if SQL CPU usage is admitted through
 // the same CPU time token AC as KV work. It has no effect unless
