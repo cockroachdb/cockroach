@@ -40,6 +40,7 @@ type supportedStatement struct {
 //
 // Please keep this list alphabetized for easier navigation.
 var supportedStatements = map[reflect.Type]supportedStatement{
+	reflect.TypeOf((*tree.AlterDomain)(nil)): {fn: AlterDomain, statementTags: []string{tree.AlterDomainTag}, on: true, checks: alterDomainChecks},
 	// Alter table will have commands individually whitelisted via the
 	// supportedAlterTableStatements list, so we will consider it fully supported
 	// here.
