@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
@@ -170,6 +172,10 @@ type createStatsNode struct {
 
 	// whereIndexID is the index to use to collect statistics with a WHERE clause.
 	whereIndexID descpb.IndexID
+
+	// statsCanaryWindow is set during makeJobRecord to the table's canary
+	// window duration so that runJob can emit a notice for manual collections.
+	statsCanaryWindow time.Duration
 }
 
 func (n *createStatsNode) startExec(params runParams) error {
@@ -236,6 +242,15 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 		}
 	} else {
 		telemetry.Inc(sqltelemetry.CreateStatisticsUseCounter)
+		if n.statsCanaryWindow > 0 &&
+			stats.CanaryFraction.Get(n.p.ExecCfg().SV()) > 0 &&
+			!n.Options.UsingExtremes && n.Options.Where == nil {
+			n.p.BufferClientNotice(ctx, pgnotice.Newf(
+				"this table has a canary window of %s; newly collected statistics "+
+					"will not take effect for all queries until the canary window passes",
+				n.statsCanaryWindow,
+			))
+		}
 	}
 
 	var job *jobs.StartableJob
@@ -515,6 +530,8 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 			return nil, maintainErr
 		}
 	}
+
+	n.statsCanaryWindow = tableDesc.TableDesc().StatsCanaryWindow
 
 	var colStats []jobspb.CreateStatsDetails_ColStat
 	var deleteOtherStats bool
