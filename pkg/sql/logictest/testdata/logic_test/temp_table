@@ -762,7 +762,42 @@ USE defaultdb
 statement ok
 DROP DATABASE temp_priv_db CASCADE
 
+subtest end
+
+# Tests that UDFs referencing temp tables in a differnt schema will leave the
+# schema accessible to the user (see #166495).
+subtest temp_schema_udf_regression
+
+user root
+
 statement ok
-DROP USER temp_test_user
+CREATE DATABASE tmpdb
+
+user testuser
+
+statement ok
+USE tmpdb
+
+statement ok
+CREATE TEMP TABLE users (userid INT PRIMARY KEY)
+
+statement ok
+CREATE OR REPLACE FUNCTION tmpdb.public.get_users() RETURNS SETOF users AS
+$$ SELECT * FROM users ORDER BY userid; $$
+LANGUAGE SQL STABLE
+
+user root
+
+statement ok
+USE tmpdb
+
+statement ok
+SELECT * FROM [SHOW TABLES]
+
+statement ok
+DROP DATABASE tmpdb CASCADE
 
 subtest end
+
+statement ok
+DROP USER temp_test_user
