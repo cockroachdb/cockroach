@@ -48,8 +48,8 @@ Name,Owner,Encoding,Collate,Ctype,Access privileges
 defaultdb,root,UTF8,en_US.utf8,en_US.utf8,
 mydb,root,UTF8,en_US.utf8,en_US.utf8,
 postgres,root,UTF8,en_US.utf8,en_US.utf8,
-system,node,UTF8,en_US.utf8,en_US.utf8,"admin=c/node
-root=c/node"
+system,node,UTF8,en_US.utf8,en_US.utf8,"admin=c*/node
+root=c*/node"
 
 cli
 \l+
@@ -74,8 +74,8 @@ Name,Owner,Encoding,Collate,Ctype,Access privileges,Connections,Description
 defaultdb,root,UTF8,en_US.utf8,en_US.utf8,,Unlimited,
 mydb,root,UTF8,en_US.utf8,en_US.utf8,,Unlimited,my awesome db comment
 postgres,root,UTF8,en_US.utf8,en_US.utf8,,Unlimited,
-system,node,UTF8,en_US.utf8,en_US.utf8,"admin=c/node
-root=c/node",Unlimited,
+system,node,UTF8,en_US.utf8,en_US.utf8,"admin=c*/node
+root=c*/node",Unlimited,
 
 cli
 \l my%
@@ -145,9 +145,9 @@ List of schemas:
    AND n.nspname <> 'information_schema'
 ORDER BY 1
 Name,Owner,Access privileges,Description
-public,root,"admin=CU/root
+public,root,"admin=C*U*/root
 =CU/root
-root=CU/root",
+root=C*U*/root",
 
 cli
 \dn+ p%
@@ -164,9 +164,9 @@ ORDER BY 1
 Name,Owner,Access privileges,Description
 pg_catalog,node,,
 pg_extension,node,,
-public,root,"admin=CU/root
+public,root,"admin=C*U*/root
 =CU/root
-root=CU/root",
+root=C*U*/root",
 
 cli
 \dnS
@@ -202,9 +202,9 @@ crdb_internal,node,,
 information_schema,node,,
 pg_catalog,node,,
 pg_extension,node,,
-public,root,"admin=CU/root
+public,root,"admin=C*U*/root
 =CU/root
-root=CU/root",
+root=C*U*/root",
 
 subtest end
 
