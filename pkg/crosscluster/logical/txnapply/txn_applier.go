@@ -76,7 +76,7 @@ type Applier struct {
 		committed committedSet
 
 		// transactions maps unapplied txn TxnIDs to their state.
-		transactions map[ldrdecoder.TxnID]ScheduledTransaction
+		transactions map[ldrdecoder.TxnID]*ScheduledTransaction
 
 		// localWaiting maps a pending transaction to its dependents. I.e. if t5
 		// depends on t2, then localWaiting[t2] will contain t5.
@@ -130,7 +130,7 @@ func NewApplier(
 		localResolvedTime: MakeLatest[hlc.Timestamp](),
 	}
 	a.mu.committed = makeCommittedSet()
-	a.mu.transactions = make(map[ldrdecoder.TxnID]ScheduledTransaction)
+	a.mu.transactions = make(map[ldrdecoder.TxnID]*ScheduledTransaction)
 	a.mu.localWaiting = make(map[ldrdecoder.TxnID][]ldrdecoder.TxnID)
 	a.mu.remoteWaiting = make(map[ldrdecoder.TxnID][]ldrdecoder.TxnID)
 	a.mu.remoteApplierResolvedTimes = make(map[ldrdecoder.ApplierID]hlc.Timestamp, len(allApplierIDs))
@@ -254,7 +254,7 @@ func (a *Applier) recordTransaction(transaction ScheduledTransaction) (bool, err
 	}
 
 	transaction.remainingDeps = len(transaction.Dependencies)
-	a.mu.transactions[transaction.TxnID] = transaction
+	a.mu.transactions[transaction.TxnID] = &transaction
 	if a.mu.txnIDs.Len() != 0 && transaction.TxnID.LessEq(a.mu.txnIDs.GetLast()) {
 		return false, errors.AssertionFailedf(
 			"transactions must be sent in increasing timestamp order: got %s, last was %s",
@@ -463,7 +463,6 @@ func (a *Applier) resolveDependencyLocked(
 		}
 
 		waitingTxn.remainingDeps--
-		a.mu.transactions[waitingID] = waitingTxn
 
 		if waitingTxn.remainingDeps == 0 {
 			if waitingTxn.EventHorizon.LessEq(a.getGlobalFrontierLocked()) {
