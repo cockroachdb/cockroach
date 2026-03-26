@@ -1,0 +1,109 @@
+# LogicTest: local
+
+# Test ALTER DOMAIN syntax. All operations currently return unimplemented
+# errors, but the grammar should parse correctly.
+
+statement ok
+CREATE DOMAIN d AS INT DEFAULT 0 NOT NULL CHECK (VALUE > 0)
+
+subtest set_default
+
+statement error pgcode 0A000 unimplemented: ALTER DOMAIN SET DEFAULT
+ALTER DOMAIN d SET DEFAULT 42
+
+statement error pgcode 0A000 unimplemented: ALTER DOMAIN SET DEFAULT
+ALTER DOMAIN d SET DEFAULT 1 + 2
+
+subtest end
+
+subtest drop_default
+
+statement error pgcode 0A000 unimplemented: ALTER DOMAIN DROP DEFAULT
+ALTER DOMAIN d DROP DEFAULT
+
+subtest end
+
+subtest set_not_null
+
+statement error pgcode 0A000 unimplemented: ALTER DOMAIN SET NOT NULL
+ALTER DOMAIN d SET NOT NULL
+
+subtest end
+
+subtest drop_not_null
+
+statement error pgcode 0A000 unimplemented: ALTER DOMAIN DROP NOT NULL
+ALTER DOMAIN d DROP NOT NULL
+
+subtest end
+
+subtest add_constraint
+
+statement error pgcode 0A000 unimplemented: ALTER DOMAIN ADD CONSTRAINT
+ALTER DOMAIN d ADD CHECK (VALUE < 100)
+
+statement error pgcode 0A000 unimplemented: ALTER DOMAIN ADD CONSTRAINT
+ALTER DOMAIN d ADD CONSTRAINT positive CHECK (VALUE > 0)
+
+statement error pgcode 0A000 unimplemented: ALTER DOMAIN ADD CONSTRAINT
+ALTER DOMAIN d ADD CONSTRAINT bounded CHECK (VALUE < 100) NOT VALID
+
+subtest end
+
+subtest drop_constraint
+
+statement error pgcode 0A000 unimplemented: ALTER DOMAIN DROP CONSTRAINT
+ALTER DOMAIN d DROP CONSTRAINT positive
+
+statement error pgcode 0A000 unimplemented: ALTER DOMAIN DROP CONSTRAINT
+ALTER DOMAIN d DROP CONSTRAINT IF EXISTS positive
+
+subtest end
+
+subtest rename_constraint
+
+statement error pgcode 0A000 unimplemented: ALTER DOMAIN RENAME CONSTRAINT
+ALTER DOMAIN d RENAME CONSTRAINT positive TO nonneg
+
+subtest end
+
+subtest validate_constraint
+
+statement error pgcode 0A000 unimplemented: ALTER DOMAIN VALIDATE CONSTRAINT
+ALTER DOMAIN d VALIDATE CONSTRAINT positive
+
+subtest end
+
+subtest owner_to
+
+statement error pgcode 0A000 unimplemented: ALTER DOMAIN OWNER TO
+ALTER DOMAIN d OWNER TO testuser
+
+subtest end
+
+subtest rename_to
+
+statement error pgcode 0A000 unimplemented: ALTER DOMAIN RENAME TO
+ALTER DOMAIN d RENAME TO d2
+
+subtest end
+
+subtest set_schema
+
+statement error pgcode 0A000 unimplemented: ALTER DOMAIN SET SCHEMA
+ALTER DOMAIN d SET SCHEMA public
+
+subtest end
+
+subtest schema_qualified
+
+statement ok
+CREATE SCHEMA s
+
+statement ok
+CREATE DOMAIN s.d_qual AS INT
+
+statement error pgcode 0A000 unimplemented: ALTER DOMAIN SET DEFAULT
+ALTER DOMAIN s.d_qual SET DEFAULT 1
+
+subtest end
