@@ -181,220 +181,24 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  (5 rows)
  
  SELECT q2, abs(q2) FROM INT8_TBL;
-@@ -478,178 +448,59 @@
- --
- SELECT to_char(q1, '9G999G999G999G999G999'), to_char(q2, '9,999,999,999,999,999')
- 	FROM INT8_TBL;
--        to_char         |        to_char         
--------------------------+------------------------
--                    123 |                    456
--                    123 |  4,567,890,123,456,789
--  4,567,890,123,456,789 |                    123
--  4,567,890,123,456,789 |  4,567,890,123,456,789
--  4,567,890,123,456,789 | -4,567,890,123,456,789
--(5 rows)
--
-+ERROR:  unknown signature: to_char(int, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(q1, '9G999G999G999G999G999D999G999'), to_char(q2, '9,999,999,999,999,999.999,999')
- 	FROM INT8_TBL;
--            to_char             |            to_char             
----------------------------------+--------------------------------
--                    123.000,000 |                    456.000,000
--                    123.000,000 |  4,567,890,123,456,789.000,000
--  4,567,890,123,456,789.000,000 |                    123.000,000
--  4,567,890,123,456,789.000,000 |  4,567,890,123,456,789.000,000
--  4,567,890,123,456,789.000,000 | -4,567,890,123,456,789.000,000
--(5 rows)
--
-+ERROR:  unknown signature: to_char(int, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char( (q1 * -1), '9999999999999999PR'), to_char( (q2 * -1), '9999999999999999.999PR')
- 	FROM INT8_TBL;
--      to_char       |        to_char         
----------------------+------------------------
--              <123> |              <456.000>
--              <123> | <4567890123456789.000>
-- <4567890123456789> |              <123.000>
-- <4567890123456789> | <4567890123456789.000>
-- <4567890123456789> |  4567890123456789.000 
--(5 rows)
--
-+ERROR:  unknown signature: to_char(int, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char( (q1 * -1), '9999999999999999S'), to_char( (q2 * -1), 'S9999999999999999')
- 	FROM INT8_TBL;
--      to_char      |      to_char      
---------------------+-------------------
--              123- |              -456
--              123- | -4567890123456789
-- 4567890123456789- |              -123
-- 4567890123456789- | -4567890123456789
-- 4567890123456789- | +4567890123456789
--(5 rows)
--
-+ERROR:  unknown signature: to_char(int, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(q2, 'MI9999999999999999')     FROM INT8_TBL;
--      to_char      
---------------------
--               456
--  4567890123456789
--               123
--  4567890123456789
-- -4567890123456789
--(5 rows)
--
-+ERROR:  unknown signature: to_char(int, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(q2, 'FMS9999999999999999')    FROM INT8_TBL;
--      to_char      
---------------------
-- +456
-- +4567890123456789
-- +123
-- +4567890123456789
-- -4567890123456789
--(5 rows)
--
-+ERROR:  unknown signature: to_char(int, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(q2, 'FM9999999999999999THPR') FROM INT8_TBL;
--      to_char       
----------------------
-- 456TH
-- 4567890123456789TH
-- 123RD
-- 4567890123456789TH
-- <4567890123456789>
--(5 rows)
--
-+ERROR:  unknown signature: to_char(int, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(q2, 'SG9999999999999999th')   FROM INT8_TBL;
--       to_char       
-----------------------
-- +             456th
-- +4567890123456789th
-- +             123rd
-- +4567890123456789th
-- -4567890123456789
--(5 rows)
--
-+ERROR:  unknown signature: to_char(int, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(q2, '0999999999999999')       FROM INT8_TBL;
--      to_char      
---------------------
--  0000000000000456
--  4567890123456789
--  0000000000000123
--  4567890123456789
-- -4567890123456789
--(5 rows)
--
-+ERROR:  unknown signature: to_char(int, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(q2, 'S0999999999999999')      FROM INT8_TBL;
--      to_char      
---------------------
-- +0000000000000456
-- +4567890123456789
-- +0000000000000123
-- +4567890123456789
-- -4567890123456789
--(5 rows)
--
-+ERROR:  unknown signature: to_char(int, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(q2, 'FM0999999999999999')     FROM INT8_TBL;
--      to_char      
---------------------
-- 0000000000000456
-- 4567890123456789
-- 0000000000000123
-- 4567890123456789
-- -4567890123456789
--(5 rows)
--
-+ERROR:  unknown signature: to_char(int, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(q2, 'FM9999999999999999.000') FROM INT8_TBL;
--        to_char        
-------------------------
-- 456.000
-- 4567890123456789.000
-- 123.000
-- 4567890123456789.000
-- -4567890123456789.000
--(5 rows)
--
-+ERROR:  unknown signature: to_char(int, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+@@ -603,11 +573,11 @@
  SELECT to_char(q2, 'L9999999999999999.000')  FROM INT8_TBL;
--        to_char         
--------------------------
+         to_char         
+ ------------------------
 -                456.000
 -   4567890123456789.000
 -                123.000
 -   4567890123456789.000
 -  -4567890123456789.000
--(5 rows)
--
-+ERROR:  unknown signature: to_char(int, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ $              456.000
++ $ 4567890123456789.000
++ $              123.000
++ $ 4567890123456789.000
++ $-4567890123456789.000
+ (5 rows)
+ 
  SELECT to_char(q2, 'FM9999999999999999.999') FROM INT8_TBL;
--      to_char       
----------------------
-- 456.
-- 4567890123456789.
-- 123.
-- 4567890123456789.
-- -4567890123456789.
--(5 rows)
--
-+ERROR:  unknown signature: to_char(int, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(q2, 'S 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 9 . 9 9 9') FROM INT8_TBL;
--                  to_char                  
---------------------------------------------
--                            +4 5 6 . 0 0 0
--  +4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 . 0 0 0
--                            +1 2 3 . 0 0 0
--  +4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 . 0 0 0
--  -4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 . 0 0 0
--(5 rows)
--
-+ERROR:  unknown signature: to_char(int, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(q2, E'99999 "text" 9999 "9999" 999 "\\"text between quote marks\\"" 9999') FROM INT8_TBL;
--                          to_char                          
-------------------------------------------------------------
--       text      9999     "text between quote marks"   456
--  45678 text 9012 9999 345 "text between quote marks" 6789
--       text      9999     "text between quote marks"   123
--  45678 text 9012 9999 345 "text between quote marks" 6789
-- -45678 text 9012 9999 345 "text between quote marks" 6789
--(5 rows)
--
-+ERROR:  unknown signature: to_char(int, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- SELECT to_char(q2, '999999SG9999999999')     FROM INT8_TBL;
--      to_char      
---------------------
--       +       456
-- 456789+0123456789
--       +       123
-- 456789+0123456789
-- 456789-0123456789
--(5 rows)
--
-+ERROR:  unknown signature: to_char(int, string)
-+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
- -- check min/max values and overflow behavior
- select '-9223372036854775808'::int8;
-          int8         
-@@ -658,9 +509,7 @@
+@@ -658,9 +628,7 @@
  (1 row)
  
  select '-9223372036854775809'::int8;
@@ -405,7 +209,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  select '9223372036854775807'::int8;
          int8         
  ---------------------
-@@ -668,9 +517,7 @@
+@@ -668,9 +636,7 @@
  (1 row)
  
  select '9223372036854775808'::int8;
@@ -416,7 +220,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  select -('-9223372036854775807'::int8);
        ?column?       
  ---------------------
-@@ -678,49 +525,49 @@
+@@ -678,49 +644,49 @@
  (1 row)
  
  select -('-9223372036854775808'::int8);
@@ -485,7 +289,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  select '100'::int2 / '0'::int8;
  ERROR:  division by zero
  SELECT CAST(q1 AS int4) FROM int8_tbl WHERE q2 = 456;
-@@ -730,7 +577,7 @@
+@@ -730,7 +696,7 @@
  (1 row)
  
  SELECT CAST(q1 AS int4) FROM int8_tbl WHERE q2 <> 456;
@@ -494,7 +298,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  SELECT CAST(q1 AS int2) FROM int8_tbl WHERE q2 = 456;
   q1  
  -----
-@@ -738,7 +585,7 @@
+@@ -738,7 +704,7 @@
  (1 row)
  
  SELECT CAST(q1 AS int2) FROM int8_tbl WHERE q2 <> 456;
@@ -503,7 +307,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  SELECT CAST('42'::int2 AS int8), CAST('-37'::int2 AS int8);
   int8 | int8 
  ------+------
-@@ -758,17 +605,17 @@
+@@ -758,17 +724,17 @@
  SELECT CAST('36854775807.0'::float4 AS int8);
      int8     
  -------------
@@ -523,11 +327,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
 - 1259
 +    oid     
 +------------
-+ 4294967079
++ 4294967077
  (1 row)
  
  -- bit operations
-@@ -810,7 +657,7 @@
+@@ -810,7 +776,7 @@
  (11 rows)
  
  SELECT * FROM generate_series('+4567890123456789'::int8, '+4567890123456799'::int8, 0);
@@ -536,7 +340,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  SELECT * FROM generate_series('+4567890123456789'::int8, '+4567890123456799'::int8, 2);
   generate_series  
  ------------------
-@@ -837,9 +684,13 @@
+@@ -837,9 +803,13 @@
  
  -- check sane handling of INT64_MIN overflow cases
  SELECT (-9223372036854775808)::int8 * (-1)::int8;
@@ -552,7 +356,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  SELECT (-9223372036854775808)::int8 % (-1)::int8;
   ?column? 
  ----------
-@@ -847,9 +698,13 @@
+@@ -847,9 +817,13 @@
  (1 row)
  
  SELECT (-9223372036854775808)::int8 * (-1)::int4;
@@ -568,7 +372,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  SELECT (-9223372036854775808)::int8 % (-1)::int4;
   ?column? 
  ----------
-@@ -857,9 +712,13 @@
+@@ -857,9 +831,13 @@
  (1 row)
  
  SELECT (-9223372036854775808)::int8 * (-1)::int2;
@@ -584,7 +388,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  SELECT (-9223372036854775808)::int8 % (-1)::int2;
   ?column? 
  ----------
-@@ -915,21 +774,11 @@
+@@ -915,21 +893,11 @@
               ((-9223372036854775808)::int8, 1::int8),
               ((-9223372036854775808)::int8, 9223372036854775807::int8),
               ((-9223372036854775808)::int8, 4611686018427387904::int8)) AS v(a, b);
@@ -609,7 +413,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  -- test lcm()
  SELECT a, b, lcm(a, b), lcm(a, -b), lcm(b, a), lcm(-b, a)
  FROM (VALUES (0::int8, 0::int8),
-@@ -938,20 +787,11 @@
+@@ -938,20 +906,11 @@
               (288484263558::int8, 29893644334::int8),
               (-288484263558::int8, 29893644334::int8),
               ((-9223372036854775808)::int8, 0::int8)) AS v(a, b);
@@ -633,7 +437,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  -- non-decimal literals
  SELECT int8 '0b100101';
   int8 
-@@ -972,17 +812,11 @@
+@@ -972,17 +931,11 @@
  (1 row)
  
  SELECT int8 '0b';
@@ -654,7 +458,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  -- cases near overflow
  SELECT int8 '0b111111111111111111111111111111111111111111111111111111111111111';
          int8         
-@@ -991,9 +825,7 @@
+@@ -991,9 +944,7 @@
  (1 row)
  
  SELECT int8 '0b1000000000000000000000000000000000000000000000000000000000000000';
@@ -665,7 +469,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  SELECT int8 '0o777777777777777777777';
          int8         
  ---------------------
-@@ -1001,9 +833,7 @@
+@@ -1001,9 +952,7 @@
  (1 row)
  
  SELECT int8 '0o1000000000000000000000';
@@ -676,7 +480,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  SELECT int8 '0x7FFFFFFFFFFFFFFF';
          int8         
  ---------------------
-@@ -1011,9 +841,7 @@
+@@ -1011,9 +960,7 @@
  (1 row)
  
  SELECT int8 '0x8000000000000000';
@@ -687,7 +491,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  SELECT int8 '-0b1000000000000000000000000000000000000000000000000000000000000000';
           int8         
  ----------------------
-@@ -1021,9 +849,7 @@
+@@ -1021,9 +968,7 @@
  (1 row)
  
  SELECT int8 '-0b1000000000000000000000000000000000000000000000000000000000000001';
@@ -698,7 +502,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  SELECT int8 '-0o1000000000000000000000';
           int8         
  ----------------------
-@@ -1031,9 +857,7 @@
+@@ -1031,9 +976,7 @@
  (1 row)
  
  SELECT int8 '-0o1000000000000000000001';
@@ -709,7 +513,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  SELECT int8 '-0x8000000000000000';
           int8         
  ----------------------
-@@ -1041,9 +865,7 @@
+@@ -1041,9 +984,7 @@
  (1 row)
  
  SELECT int8 '-0x8000000000000001';
@@ -720,7 +524,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/int8.out --label=
  -- underscores
  SELECT int8 '1_000_000';
    int8   
-@@ -1077,14 +899,8 @@
+@@ -1077,14 +1018,8 @@
  
  -- error cases
  SELECT int8 '_100';

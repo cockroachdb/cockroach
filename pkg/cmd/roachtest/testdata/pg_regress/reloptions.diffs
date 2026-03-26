@@ -1,7 +1,7 @@
 diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/reloptions.out --label=/mnt/data1/postgres/src/test/regress/results/reloptions.out /mnt/data1/postgres/src/test/regress/expected/reloptions.out /mnt/data1/postgres/src/test/regress/results/reloptions.out
 --- /mnt/data1/postgres/src/test/regress/expected/reloptions.out
 +++ /mnt/data1/postgres/src/test/regress/results/reloptions.out
-@@ -1,226 +1,240 @@
+@@ -1,226 +1,232 @@
  -- Simple create
  CREATE TABLE reloptions_test(i INT) WITH (FiLLFaCToR=30,
  	autovacuum_enabled = false, autovacuum_analyze_scale_factor = 0.2);
@@ -337,11 +337,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/reloptions.out --
 +ERROR:  relation "reloptions_test" does not exist
  -- Check ALTER
  ALTER INDEX reloptions_test_idx SET (fillfactor=40);
-+ERROR:  at or near "set": syntax error
-+DETAIL:  source SQL:
-+ALTER INDEX reloptions_test_idx SET (fillfactor=40)
-+                                ^
-+HINT:  try \h ALTER INDEX
++ERROR:  index "reloptions_test_idx" does not exist
  SELECT reloptions FROM pg_class WHERE oid = 'reloptions_test_idx'::regclass;
 -   reloptions    
 ------------------
@@ -353,11 +349,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/reloptions.out --
  CREATE INDEX reloptions_test_idx3 ON reloptions_test (s);
 +ERROR:  relation "reloptions_test" does not exist
  ALTER INDEX reloptions_test_idx3 SET (fillfactor=40);
-+ERROR:  at or near "set": syntax error
-+DETAIL:  source SQL:
-+ALTER INDEX reloptions_test_idx3 SET (fillfactor=40)
-+                                 ^
-+HINT:  try \h ALTER INDEX
++ERROR:  index "reloptions_test_idx3" does not exist
  SELECT reloptions FROM pg_class WHERE oid = 'reloptions_test_idx3'::regclass;
 -   reloptions    
 ------------------
