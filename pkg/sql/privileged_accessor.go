@@ -131,6 +131,28 @@ func (p *planner) ResolvedZoneConfigForKey(
 	return tree.NewDJSON(j), nil
 }
 
+// ZoneConfigSpanEnd implements eval.PrivilegedAccessor.
+//
+// It returns the end key of the zone config span that the given key
+// belongs to. For named zones (meta, liveness, timeseries, system,
+// tenants) this is the next static split point. For tables this is
+// the table's key span end.
+//
+// Note: this does not account for subzone (index/partition-level)
+// boundaries within a table.
+func (p *planner) ZoneConfigSpanEnd(ctx context.Context, key roachpb.Key) (roachpb.Key, error) {
+	objectID, _ := config.DecodeKeyIntoZoneIDAndSuffix(
+		keys.SystemSQLCodec, roachpb.RKey(key),
+	)
+	if _, ok := zonepb.NamedZonesByID[uint32(objectID)]; ok {
+		if end, ok := config.StaticSplitAfter(roachpb.RKey(key)); ok {
+			return end.AsRawKey(), nil
+		}
+		return keys.TableDataMin, nil
+	}
+	return keys.SystemSQLCodec.TableSpan(uint32(objectID)).EndKey, nil
+}
+
 // checkDescriptorPermissions returns nil if the executing user has permissions
 // to check the permissions of a descriptor given its ID, or the id given
 // is not a descriptor of a table or database.

@@ -494,11 +494,11 @@ SELECT index_name FROM crdb_internal.ranges
 
 subtest show_ranges_with_zone
 
-# Assert the schema: WITH ZONE adds a zone_config JSONB column.
-query TTITTTTTTT colnames
+# Assert the schema: WITH ZONE adds zone_config and zone_config_conformant.
+query TTITTTTTTTB colnames
 SELECT * FROM [SHOW CLUSTER RANGES WITH ZONE] LIMIT 0
 ----
-start_key  end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config
+start_key  end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config  zone_config_conformant
 
 # Verify zone_config column contains valid JSON with expected fields.
 query ITB
@@ -511,28 +511,30 @@ ORDER BY range_id LIMIT 1
 1  5  true
 
 # Combinable with TABLES.
-query TTITTTITTTTTTTTT colnames
+query TTITTTITTTTTTTTTB colnames
 SELECT * FROM [SHOW CLUSTER RANGES WITH TABLES, ZONE] LIMIT 0
 ----
-start_key  end_key  range_id  database_name  schema_name  table_name  table_id  table_start_key  table_end_key  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config
+start_key  end_key  range_id  database_name  schema_name  table_name  table_id  table_start_key  table_end_key  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config  zone_config_conformant
 
 # Combinable with KEYS.
-query TTTTITTTTTTT colnames
+query TTTTITTTTTTTB colnames
 SELECT * FROM [SHOW CLUSTER RANGES WITH KEYS, ZONE] LIMIT 0
 ----
-start_key  end_key  raw_start_key  raw_end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config
+start_key  end_key  raw_start_key  raw_end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config  zone_config_conformant
 
-# WITH EXPLAIN + ZONE shows the generated SQL containing the builtin.
-query B
-SELECT (SELECT * FROM [SHOW CLUSTER RANGES WITH EXPLAIN, ZONE]) LIKE '%zone_config_for_key%'
+# WITH EXPLAIN + ZONE shows the generated SQL containing the builtins.
+query BB
+SELECT
+  (SELECT * FROM [SHOW CLUSTER RANGES WITH EXPLAIN, ZONE]) LIKE '%zone_config_for_key%',
+  (SELECT * FROM [SHOW CLUSTER RANGES WITH EXPLAIN, ZONE]) LIKE '%zone_config_span_end%'
 ----
-true
+true  true
 
 # SHOW RANGES FROM DATABASE with ZONE.
-query TTITTTTTTT colnames
+query TTITTTTTTTB colnames
 SELECT * FROM [SHOW RANGES FROM DATABASE test WITH ZONE] LIMIT 0
 ----
-start_key  end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config
+start_key  end_key  range_id  replicas  replica_localities  voting_replicas  non_voting_replicas  learner_replicas  split_enforced_until  zone_config  zone_config_conformant
 
 # Zone config changes are immediately reflected (no propagation delay).
 # Note: zone_config_for_key resolves based on the range start key, which
@@ -564,6 +566,49 @@ query T
 SELECT crdb_internal.zone_config_for_key(crdb_internal.table_span($zone_inherit_id)[1])->>'numReplicas'
 ----
 3
+
+## zone_config_span_end builtin
+
+# For a table, zone_config_span_end returns the table's key span end.
+query B
+SELECT crdb_internal.zone_config_span_end(crdb_internal.table_span($zone_test_id)[1])
+       = crdb_internal.table_span($zone_test_id)[2]
+----
+true
+
+# For a table without explicit zone config, same behavior (inherited zone).
+query B
+SELECT crdb_internal.zone_config_span_end(crdb_internal.table_span($zone_inherit_id)[1])
+       = crdb_internal.table_span($zone_inherit_id)[2]
+----
+true
+
+## Subzone false positive (known limitation)
+#
+# zone_config_span_end currently returns the table-level end key,
+# ignoring index/partition-level subzone boundaries. When a table
+# has index-level zone configs, zone_config_conformant may report
+# true even when a range spans a subzone boundary.
+
+statement ok
+CREATE TABLE zone_subzone_test (a INT PRIMARY KEY, b INT, INDEX idx(b))
+
+let $zone_subzone_id
+SELECT 'zone_subzone_test'::regclass::oid::int
+
+statement ok
+ALTER INDEX zone_subzone_test@idx CONFIGURE ZONE USING num_replicas = 5
+
+# zone_config_span_end returns the table end key, not the subzone
+# boundary — this documents the false positive.
+query B
+SELECT crdb_internal.zone_config_span_end(crdb_internal.table_span($zone_subzone_id)[1])
+       = crdb_internal.table_span($zone_subzone_id)[2]
+----
+true
+
+statement ok
+DROP TABLE zone_subzone_test
 
 statement ok
 DROP TABLE zone_test

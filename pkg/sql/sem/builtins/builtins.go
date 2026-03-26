@@ -6960,6 +6960,24 @@ SELECT
 		},
 	),
 
+	"crdb_internal.zone_config_span_end": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "key", Typ: types.Bytes}},
+			ReturnType: tree.FixedReturnType(types.Bytes),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				key := roachpb.Key(tree.MustBeDBytes(args[0]))
+				endKey, err := evalCtx.PrivilegedAccessor.ZoneConfigSpanEnd(ctx, key)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDBytes(tree.DBytes(endKey)), nil
+			},
+			Info:       "Returns the end key of the zone config span that the given key belongs to.",
+			Volatility: volatility.Stable,
+		},
+	),
+
 	"crdb_internal.set_vmodule": makeBuiltin(
 		tree.FunctionProperties{
 			Category: builtinconstants.CategorySystemInfo,
