@@ -823,9 +823,10 @@ const statementDetailsData: StatementDetailsResponse = {
   statement_statistics_per_aggregated_ts_and_plan_hash: [],
 };
 
-export const getStatementDetailsPropsFixture = (
-  withData = true,
-): StatementDetailsProps => {
+export const statementDetailsFixtureData = statementDetailsData;
+export const statementDetailsFixtureNoData = statementDetailsNoData;
+
+export const getStatementDetailsPropsFixture = (): StatementDetailsProps => {
   const history = createMemoryHistory({ initialEntries: ["/statements"] });
   return {
     history,
@@ -843,8 +844,6 @@ export const getStatementDetailsPropsFixture = (
         statement: "4705782015019656142",
       },
     },
-    isLoading: false,
-    lastUpdated: lastUpdated,
     timeScale: {
       windowSize: moment.duration(5, "day"),
       sampleSize: moment.duration(5, "minutes"),
@@ -852,39 +851,9 @@ export const getStatementDetailsPropsFixture = (
       key: "Custom",
     },
     statementFingerprintID: "4705782015019656142",
-    statementDetails: withData ? statementDetailsData : statementDetailsNoData,
-    statementsError: null,
-    nodeRegions: {
-      "1": "gcp-us-east1",
-      "2": "gcp-us-east1",
-      "3": "gcp-us-west1",
-      "4": "gcp-europe-west1",
-    },
     requestTime: moment.utc("2021.12.12"),
-    refreshStatementDetails: noop,
-    refreshStatementDiagnosticsRequests: noop,
-    refreshNodes: noop,
-    refreshNodesLiveness: noop,
-    refreshUserSQLRoles: noop,
-    refreshStatementFingerprintInsights: noop,
-    diagnosticsReports: [
-      {
-        id: "123",
-        statement_fingerprint: "SELECT x, y FROM xy",
-        completed: true,
-        requested_at: moment("2021-12-08T09:51:27Z"),
-        min_execution_latency: moment.duration("1ms"),
-        expires_at: moment("2021-12-08T10:06:00Z"),
-      },
-    ],
     dismissStatementDiagnosticsAlertMessage: noop,
     onTimeScaleChange: noop,
     onRequestTimeChange: noop,
-    createStatementDiagnosticsReport: noop,
-    uiConfig: {
-      showStatementDiagnosticsLink: true,
-    },
-    isTenant: false,
-    hasViewActivityRedactedRole: false,
   };
 };
