@@ -102,6 +102,7 @@ root     admin    INSERT          false
 root     admin    MAINTAIN        false
 root     admin    SELECT          false
 root     admin    TRIGGER         false
+root     admin    TRUNCATE        false
 root     admin    UPDATE          false
 root     root     CREATE          false
 root     root     DELETE          false
@@ -109,6 +110,7 @@ root     root     INSERT          false
 root     root     MAINTAIN        false
 root     root     SELECT          false
 root     root     TRIGGER         false
+root     root     TRUNCATE        false
 root     root     UPDATE          false
 
 subtest end
@@ -164,7 +166,7 @@ subtest acldefault
 query T
 SELECT acldefault('r'::"char", 'root'::regrole)
 ----
-{admin=Cradwtm/root,root=Cradwtm/root}
+{admin=CradwDtm/root,root=CradwDtm/root}
 
 # Database defaults: admin and root get CREATE, CONNECT, TEMPORARY.
 # PUBLIC gets CONNECT and TEMPORARY.

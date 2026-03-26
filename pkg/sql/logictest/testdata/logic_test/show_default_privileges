@@ -193,6 +193,7 @@ root  false          tables       bar      MAINTAIN           false
 root  false          tables       bar      REPLICATIONDEST    false
 root  false          tables       bar      REPLICATIONSOURCE  false
 root  false          tables       bar      TRIGGER            false
+root  false          tables       bar      TRUNCATE           false
 root  false          tables       bar      UPDATE             false
 root  false          tables       bar      ZONECONFIG         false
 root  false          tables       foo      BACKUP             false
@@ -205,6 +206,7 @@ root  false          tables       foo      MAINTAIN           false
 root  false          tables       foo      REPLICATIONDEST    false
 root  false          tables       foo      REPLICATIONSOURCE  false
 root  false          tables       foo      TRIGGER            false
+root  false          tables       foo      TRUNCATE           false
 root  false          tables       foo      UPDATE             false
 root  false          tables       foo      ZONECONFIG         false
 root  false          types        root     ALL                true

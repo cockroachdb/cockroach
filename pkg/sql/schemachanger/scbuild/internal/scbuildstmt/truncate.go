@@ -40,11 +40,14 @@ func Truncate(b BuildCtx, stmt *tree.Truncate) {
 	for i := range stmt.Tables {
 		tblName := &stmt.Tables[i]
 		elts := b.ResolveTable(tblName.ToUnresolvedObjectName(), ResolveParams{
-			RequiredPrivilege: privilege.DROP,
-			WithOffline:       stmt.ImportRollback,
+			WithOffline: stmt.ImportRollback,
 		})
 		tbl := elts.FilterTable().MustGetOneElement()
 		tblName.ObjectNamePrefix = b.NamePrefix(tbl)
+		// Accept either TRUNCATE or DROP privilege for backward compatibility.
+		if err := b.CheckPrivilege(tbl, privilege.TRUNCATE, privilege.DROP); err != nil {
+			panic(err)
+		}
 		tablesToTruncate.Add(tbl.TableID)
 	}
 
@@ -67,8 +70,8 @@ func Truncate(b BuildCtx, stmt *tree.Truncate) {
 			// Queue this table to process dependencies.
 			truncatesToProcess = append(truncatesToProcess, referencingTableID)
 		}
-		// Validate we have permission to drop this table.
-		if err := b.CheckPrivilege(refElts.FilterTable().MustGetOneElement(), privilege.DROP); err != nil {
+		// Accept either TRUNCATE or DROP privilege for backward compatibility.
+		if err := b.CheckPrivilege(refElts.FilterTable().MustGetOneElement(), privilege.TRUNCATE, privilege.DROP); err != nil {
 			panic(err)
 		}
 	}
