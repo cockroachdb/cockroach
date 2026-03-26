@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/IBM/go-sdk-core/v5/core"
@@ -42,7 +41,7 @@ const (
 	defaultCPUArch     = vm.ArchS390x
 	defaultCPUFamily   = "IBM zSystem"
 	defaultRemoteUser  = "ubuntu"
-	defaultImageAMI    = "ibm-ubuntu-22-04-5-minimal-s390x-5"
+	defaultImageAMI    = "ibm-ubuntu-22-04-5-minimal-s390x-7"
 	defaultNTPServer   = "time.adn.networklayer.com"
 
 	// Default values for volumes
@@ -57,6 +56,18 @@ const (
 	InstanceNotRochprod    = "not-roachprod"
 
 	expectedEnvVarIBMAPIKey = defaultAPIKeyEnvVarPrefix + "_" + core.PROPNAME_APIKEY
+
+	// This limits the number of concurrent requests made to the IBM API.
+	// This is not an absolute requests limit, but this is used to limit the number
+	// of goroutines making requests to avoid overwhelming the API.
+	maxConcurrentRequests = 30
+
+	// retryMaxAttempts is the maximum number of retries for IBM API calls
+	// when encountering 429 (Too Many Requests) or 503 (Service Unavailable).
+	retryMaxAttempts = 5
+
+	// retryMaxInterval is the maximum interval between retries.
+	retryMaxInterval = 30 * time.Second
 )
 
 var (
@@ -83,15 +94,38 @@ var (
 	// the zones to use for the cluster, as the supported regions are defined in
 	// the each provider's instance.
 	defaultZones = map[string][]string{
+		// South America
+		"br-sao": {
+			"br-sao-1",
+			"br-sao-2",
+			"br-sao-3",
+		},
+		// North America
 		"ca-tor": {
 			"ca-tor-1",
 			"ca-tor-2",
 			"ca-tor-3",
 		},
-		"br-sao": {
-			"br-sao-1",
-			"br-sao-2",
-			"br-sao-3",
+		"us-east": {
+			"us-east-1",
+			"us-east-2",
+			"us-east-3",
+		},
+		"us-south": {
+			"us-south-1",
+			"us-south-2",
+			"us-south-3",
+		},
+		// Europe
+		"eu-de": {
+			"eu-de-1",
+			"eu-de-2",
+			"eu-de-3",
+		},
+		"eu-gb": {
+			"eu-gb-1",
+			"eu-gb-2",
+			"eu-gb-3",
 		},
 	}
 )
@@ -244,6 +278,11 @@ func NewProvider(options ...Option) (p *Provider, err error) {
 		}
 	}
 
+	// Create a shared semaphore and HTTP client to enforce a global limit on
+	// the number of concurrent API requests across all services.
+	apiSem := make(chan struct{}, maxConcurrentRequests)
+	throttledClient := newThrottledHTTPClient(apiSem)
+
 	// Build the list of supported regions if none are provided.
 	if len(p.regions) == 0 {
 		for _, region := range supportedRegions {
@@ -270,6 +309,8 @@ func NewProvider(options ...Option) (p *Provider, err error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to create VPC service for region %s", region)
 		}
+		p.vpcServices[region].Service.SetHTTPClient(throttledClient)
+		p.vpcServices[region].EnableRetries(retryMaxAttempts, retryMaxInterval)
 	}
 
 	// Create Global Tagging service.
@@ -279,6 +320,8 @@ func NewProvider(options ...Option) (p *Provider, err error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create Global Tagging service")
 	}
+	p.tagService.Service.SetHTTPClient(throttledClient)
+	p.tagService.EnableRetries(retryMaxAttempts, retryMaxInterval)
 
 	// Resource Controller service is used to get resource details like preemption events.
 	p.resourceControllerService, err = resourcecontrollerv2.NewResourceControllerV2(
@@ -289,6 +332,8 @@ func NewProvider(options ...Option) (p *Provider, err error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create Resource Controller service")
 	}
+	p.resourceControllerService.Service.SetHTTPClient(throttledClient)
+	p.resourceControllerService.EnableRetries(retryMaxAttempts, retryMaxInterval)
 
 	// Resource Manager service is used to get/create the resource group
 	p.resourceManagerService, err = resourcemanagerv2.NewResourceManagerV2(
@@ -299,6 +344,8 @@ func NewProvider(options ...Option) (p *Provider, err error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create Resource Manager service")
 	}
+	p.resourceManagerService.Service.SetHTTPClient(throttledClient)
+	p.resourceManagerService.EnableRetries(retryMaxAttempts, retryMaxInterval)
 
 	// Global Search service is used to search for resources across all regions.
 	p.globalSearchService, err = globalsearchv2.NewGlobalSearchV2(&globalsearchv2.GlobalSearchV2Options{
@@ -307,6 +354,8 @@ func NewProvider(options ...Option) (p *Provider, err error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create Global Search service")
 	}
+	p.globalSearchService.Service.SetHTTPClient(throttledClient)
+	p.globalSearchService.EnableRetries(retryMaxAttempts, retryMaxInterval)
 
 	// Create the Transit Gateway service.
 	p.transitgatewayService, err = transitgatewayapisv1.NewTransitGatewayApisV1(
@@ -318,6 +367,8 @@ func NewProvider(options ...Option) (p *Provider, err error) {
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to create Transit Gateway service")
 	}
+	p.transitgatewayService.Service.SetHTTPClient(throttledClient)
+	p.transitgatewayService.EnableRetries(retryMaxAttempts, retryMaxInterval)
 
 	// Configure the IBM Cloud account and get the required resource IDs.
 	p.config, err = p.configureCloudAccountInitial()
@@ -344,11 +395,20 @@ func (p *Provider) List(l *logger.Logger, opts vm.ListOptions) (vm.List, error) 
 
 	var ret vm.List
 	var mux syncutil.Mutex
-	var g errgroup.Group
+	g := ctxgroup.WithContext(context.Background())
+	numRegions := len(p.vpcServices)
+	g.SetLimit(numRegions)
+
+	// Compute a per-region concurrency limit so that the total number of
+	// concurrent API requests across all regions stays within bounds.
+	perRegionLimit := maxConcurrentRequests / numRegions
+	if perRegionLimit < 1 {
+		perRegionLimit = 1
+	}
 
 	for r := range p.vpcServices {
-		g.Go(func() error {
-			vms, err := p.listRegion(l, r, opts)
+		g.GoCtx(func(ctx context.Context) error {
+			vms, err := p.listRegion(ctx, l, r, opts, perRegionLimit)
 			if err != nil {
 				// Failing to list VMs in a region is not fatal.
 				l.Printf("failed to list IBM VMs in region: %s\n%v\n", r, err)
@@ -426,15 +486,14 @@ func (p *Provider) Create(
 		waitTime = 900
 	}
 
-	// We will create all VMs in parallel. We don't use an errgroup here
-	// because we don't want goroutines to be cancelled if one of them fails.
-	// This is because we create the instance and tag it in two different
-	// API calls, and we want to make sure that all instances are tagged
-	// even if an error occurs during the creation of one instance.
+	// We will create all VMs in parallel with a concurrency limit.
+	// ctxgroup does not cancel sibling goroutines on error, so all
+	// instances will be tagged even if one creation fails.
 	var mutex syncutil.Mutex
-	var g sync.WaitGroup
 	createErrors := make([]error, 0)
 	vms := make(vm.List, len(names))
+	g := ctxgroup.WithContext(context.TODO())
+	g.SetLimit(maxConcurrentRequests)
 
 	for i, vmName := range names {
 
@@ -457,10 +516,7 @@ func (p *Provider) Create(
 			return nil, errors.Wrapf(err, "unable to get SSH key ID for region %s", region)
 		}
 
-		g.Add(1)
-
-		go func() {
-			defer g.Done()
+		g.GoCtx(func(ctx context.Context) error {
 
 			vm, err := p.createInstance(l, instanceOptions{
 				vmName: vmName,
@@ -490,13 +546,14 @@ func (p *Provider) Create(
 			} else {
 				vms[i] = *vm
 			}
-		}()
+
+			return nil
+		})
 	}
 
-	g.Wait()
-
-	if len(createErrors) > 0 {
-		return nil, errors.Join(createErrors...)
+	err = g.Wait()
+	if err != nil || len(createErrors) > 0 {
+		return nil, errors.CombineErrors(err, errors.Join(createErrors...))
 	}
 
 	return vms, nil
@@ -743,10 +800,12 @@ func (p *Provider) AddLabels(l *logger.Logger, vms vm.List, labels map[string]st
 		})
 	}
 
-	_, _, err := p.tagService.AttachTag(&globaltaggingv1.AttachTagOptions{
-		Resources: resources,
-		TagNames:  tags,
-		Update:    core.BoolPtr(true),
+	_, err := retryOnRateLimit(func() (*globaltaggingv1.TagResults, *core.DetailedResponse, error) {
+		return p.tagService.AttachTag(&globaltaggingv1.AttachTagOptions{
+			Resources: resources,
+			TagNames:  tags,
+			Update:    core.BoolPtr(true),
+		})
 	})
 	if err != nil {
 		return errors.Wrap(err, "failed to attach tags to resources")
@@ -801,9 +860,11 @@ func (p *Provider) RemoveLabels(l *logger.Logger, vms vm.List, labels []string) 
 			ResourceID: &vm.ProviderID,
 		})
 	}
-	_, _, err = p.tagService.DetachTag(&globaltaggingv1.DetachTagOptions{
-		Resources: resources,
-		TagNames:  labelsToRemove,
+	_, err = retryOnRateLimit(func() (*globaltaggingv1.TagResults, *core.DetailedResponse, error) {
+		return p.tagService.DetachTag(&globaltaggingv1.DetachTagOptions{
+			Resources: resources,
+			TagNames:  labelsToRemove,
+		})
 	})
 	if err != nil {
 		return errors.Wrapf(err, "failed to detach tags from instances")
@@ -901,6 +962,9 @@ func (p *Provider) GetVMSpecsWithContext(
 	vmSpecs := make(map[string]map[string]interface{})
 	var mu syncutil.Mutex
 	g := ctxgroup.WithContext(ctx)
+	// Not using the maxConcurrentRequests constant as specs fetching can be slower
+	// and we don't want to overload the API with too many requests at once.
+	// 5 seems like a reasonable limit here.
 	g.SetLimit(5)
 
 	for _, vmInstance := range vms {
