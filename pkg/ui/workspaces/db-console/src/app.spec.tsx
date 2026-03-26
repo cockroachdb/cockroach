@@ -665,11 +665,12 @@ describe("Routing to", () => {
   });
 
   describe("'/sessions' path", () => {
-    // The default filters are set to Active and Idle.
-    test("redirected to '/sql-activity?tab=Sessions&timeNumber=0&timeUnit=seconds&fullScan=false&sessionStatus=Active%2CIdle'", () => {
+    // The default filters are set to Active and Idle, and sort defaults
+    // (ascending=false, columnTitle=statementAge) are synced to the URL.
+    test("redirected to '/sql-activity?tab=Sessions&ascending=false&columnTitle=statementAge&timeUnit=seconds&sessionStatus=Active%2CIdle'", () => {
       navigateToPath("/sessions");
       expect(history.location.pathname + history.location.search).toBe(
-        "/sql-activity?tab=Sessions&timeNumber=0&timeUnit=seconds&fullScan=false&sessionStatus=Active%2CIdle",
+        "/sql-activity?tab=Sessions&ascending=false&columnTitle=statementAge&timeUnit=seconds&sessionStatus=Active%2CIdle",
       );
     });
   });
