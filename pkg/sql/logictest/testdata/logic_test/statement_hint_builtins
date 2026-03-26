@@ -546,6 +546,50 @@ SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
 SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
 SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
 
+# Test delete by fingerprint and database.
+
+# Add a hint scoped to a specific database.
+skipif config local-mixed-25.4 local-mixed-26.1
+let $dbhint
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@primary WHERE y = 10',
+  'mydb'
+);
+
+# Add a hint with no database scope.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@xy_yx WHERE y = 10'
+);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT count(*) FROM system.statement_hints WHERE fingerprint = 'SELECT * FROM xy WHERE y = _';
+----
+2
+
+# Delete only the hint scoped to 'mydb'.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM xy WHERE y = 10', 'mydb');
+----
+1
+
+# The unscoped hint should still be there.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT count(*) FROM system.statement_hints WHERE fingerprint = 'SELECT * FROM xy WHERE y = _';
+----
+1
+
+# Clean up remaining hints.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM xy WHERE y = _');
+
 subtest end
 
 # ---- Session setting hints ----

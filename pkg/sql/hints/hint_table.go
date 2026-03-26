@@ -259,11 +259,11 @@ func InsertHintIntoDB(
 // fingerprint. Returns the row_id, fingerprint, and raw hint protobuf bytes of
 // all deleted rows.
 func DeleteHintFromDB(
-	ctx context.Context, txn isql.Txn, rowID int64, fingerprint string,
+	ctx context.Context, txn isql.Txn, rowID int64, fingerprint string, optDatabase string,
 ) (rowIDs []int64, fingerprints []string, hintBytes [][]byte, err error) {
 	const opName = "delete-statement-hint"
-	filterCols := make([]string, 0, 2)
-	vals := make([]interface{}, 0, 2)
+	filterCols := make([]string, 0, 3)
+	vals := make([]interface{}, 0, 3)
 	if rowID != 0 {
 		filterCols = append(filterCols, `"row_id"`)
 		vals = append(vals, rowID)
@@ -272,9 +272,15 @@ func DeleteHintFromDB(
 		filterCols = append(filterCols, "fingerprint")
 		vals = append(vals, fingerprint)
 	}
+	if optDatabase != "" {
+		filterCols = append(filterCols, `"database"`)
+		vals = append(vals, optDatabase)
+	}
 
 	if len(filterCols) == 0 {
-		return nil, nil, nil, errors.New("delete statement hint must specify at least one of row_id or fingerprint")
+		return nil, nil, nil, errors.New(
+			"delete statement hint must specify at least one of row_id or fingerprint or database",
+		)
 	}
 
 	var b strings.Builder
@@ -289,7 +295,9 @@ func DeleteHintFromDB(
 	}
 	rows, err := txn.QueryBufferedEx(
 		ctx, opName, txn.KV(), sessiondata.NodeUserSessionDataOverride,
-		fmt.Sprintf("DELETE FROM system.statement_hints WHERE %s RETURNING row_id, fingerprint, hint", b.String()), vals...,
+		fmt.Sprintf(
+			"DELETE FROM system.statement_hints WHERE %s RETURNING row_id, fingerprint, hint", b.String(),
+		), vals...,
 	)
 	if err != nil {
 		return nil, nil, nil, err
