@@ -1449,6 +1449,7 @@ unreserved_keyword ::=
 	| 'REPLICATED'
 	| 'REPLICATION'
 	| 'RESET'
+	| 'RESOLVED'
 	| 'RESTART'
 	| 'RESTORE'
 	| 'RESTRICT'
@@ -3066,6 +3067,7 @@ targets_roles ::=
 
 show_job_options ::=
 	'EXECUTION' 'DETAILS'
+	| 'RESOLVED' 'TIMESTAMP'
 
 show_ranges_options ::=
 	( 'TABLES' | 'INDEXES' | 'DETAILS' | 'KEYS' | 'EXPLAIN' ) ( ( ',' 'TABLES' | ',' 'INDEXES' | ',' 'DETAILS' | ',' 'EXPLAIN' | ',' 'KEYS' ) )*
@@ -4419,6 +4421,7 @@ bare_label_keywords ::=
 	| 'REPLICATED'
 	| 'REPLICATION'
 	| 'RESET'
+	| 'RESOLVED'
 	| 'RESTART'
 	| 'RESTORE'
 	| 'RESTRICT'
