@@ -30,8 +30,7 @@ type drpcServer struct {
 // newDRPCServer creates and configures a new drpcServer instance. It enables
 // DRPC if the experimental setting is on, otherwise returns a dummy server.
 func newDRPCServer(
-	ctx context.Context, rpcCtx *rpc.Context,
-	serverRequestMetrics *rpc.ServerRequestMetrics,
+	ctx context.Context, rpcCtx *rpc.Context, serverRequestMetrics *rpc.ServerRequestMetrics,
 ) (*drpcServer, error) {
 	drpcServer := &drpcServer{}
 	drpcServer.setMode(modeInitializing)

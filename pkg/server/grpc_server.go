@@ -26,8 +26,7 @@ type grpcServer struct {
 }
 
 func newGRPCServer(
-	ctx context.Context, rpcCtx *rpc.Context,
-	requestMetrics *rpc.ServerRequestMetrics,
+	ctx context.Context, rpcCtx *rpc.Context, requestMetrics *rpc.ServerRequestMetrics,
 ) (*grpcServer, error) {
 	s := &grpcServer{}
 	s.mode.set(modeInitializing)
