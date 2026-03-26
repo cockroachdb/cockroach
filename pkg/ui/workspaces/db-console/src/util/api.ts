@@ -107,11 +107,6 @@ export type SettingsRequestMessage =
 export type SettingsResponseMessage =
   protos.cockroach.server.serverpb.SettingsResponse;
 
-export type SessionsRequestMessage =
-  protos.cockroach.server.serverpb.ListSessionsRequest;
-export type SessionsResponseMessage =
-  protos.cockroach.server.serverpb.ListSessionsResponse;
-
 export type CancelSessionRequestMessage =
   protos.cockroach.server.serverpb.CancelSessionRequest;
 export type CancelSessionResponseMessage =
@@ -591,22 +586,6 @@ export function getSettings(
     null,
     timeout,
   );
-}
-
-// getSessions gets all cluster sessions.
-export function getSessions(
-  req: SessionsRequestMessage,
-  timeout?: moment.Duration,
-): Promise<SessionsResponseMessage> {
-  const params = new URLSearchParams();
-  if (req?.exclude_closed_sessions) {
-    params.set("exclude_closed_sessions", "true");
-  }
-  const queryString = params.toString();
-  const path = queryString
-    ? `${STATUS_PREFIX}/sessions?${queryString}`
-    : `${STATUS_PREFIX}/sessions`;
-  return timeoutFetch(serverpb.ListSessionsResponse, path, null, timeout);
 }
 
 // cancelSession cancels the session with the given id on the given node.

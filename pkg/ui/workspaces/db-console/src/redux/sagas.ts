@@ -11,7 +11,6 @@ import { analyticsSaga } from "./analyticsSagas";
 import { customAnalyticsSaga } from "./customAnalytics";
 import { indexUsageStatsSaga } from "./indexUsageStats";
 import { localSettingsSaga } from "./localsettings";
-import { sessionsSaga } from "./sessions";
 import { sqlStatsSaga } from "./sqlStats";
 import { statementsSaga } from "./statements";
 
@@ -21,7 +20,6 @@ export default function* rootSaga() {
     fork(customAnalyticsSaga),
     fork(statementsSaga),
     fork(analyticsSaga),
-    fork(sessionsSaga),
     fork(sqlStatsSaga),
     fork(indexUsageStatsSaga),
     fork(timeScaleSaga),
