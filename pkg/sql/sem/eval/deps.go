@@ -703,8 +703,10 @@ type PrivilegedAccessor interface {
 	ResolvedZoneConfigForKey(ctx context.Context, key roachpb.Key) (tree.Datum, error)
 
 	// ZoneConfigSpanEnd returns the end key of the zone config span that
-	// the given key belongs to. For table zones this is the table's key
-	// span end; for named zones it is the next static split point.
+	// the given key belongs to. For named zones this is the next static
+	// split point. For table zones this is the next subzone
+	// (index/partition) boundary within the table, or the table's key
+	// span end if no subzone boundary follows the given key.
 	ZoneConfigSpanEnd(ctx context.Context, key roachpb.Key) (roachpb.Key, error)
 }
 

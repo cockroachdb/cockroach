@@ -583,12 +583,11 @@ SELECT crdb_internal.zone_config_span_end(crdb_internal.table_span($zone_inherit
 ----
 true
 
-## Subzone false positive (known limitation)
+## Subzone awareness
 #
-# zone_config_span_end currently returns the table-level end key,
-# ignoring index/partition-level subzone boundaries. When a table
-# has index-level zone configs, zone_config_conformant may report
-# true even when a range spans a subzone boundary.
+# zone_config_span_end detects index/partition-level subzone boundaries
+# within a table. When such boundaries exist, it returns the next
+# subzone split point rather than the table's end key.
 
 statement ok
 CREATE TABLE zone_subzone_test (a INT PRIMARY KEY, b INT, INDEX idx(b))
@@ -599,13 +598,13 @@ SELECT 'zone_subzone_test'::regclass::oid::int
 statement ok
 ALTER INDEX zone_subzone_test@idx CONFIGURE ZONE USING num_replicas = 5
 
-# zone_config_span_end returns the table end key, not the subzone
-# boundary — this documents the false positive.
+# zone_config_span_end returns a subzone boundary, not the table end
+# key, because the index has its own zone config.
 query B
 SELECT crdb_internal.zone_config_span_end(crdb_internal.table_span($zone_subzone_id)[1])
        = crdb_internal.table_span($zone_subzone_id)[2]
 ----
-true
+false
 
 statement ok
 DROP TABLE zone_subzone_test

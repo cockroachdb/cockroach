@@ -6,6 +6,7 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
@@ -136,10 +137,9 @@ func (p *planner) ResolvedZoneConfigForKey(
 // It returns the end key of the zone config span that the given key
 // belongs to. For named zones (meta, liveness, timeseries, system,
 // tenants) this is the next static split point. For tables this is
-// the table's key span end.
-//
-// Note: this does not account for subzone (index/partition-level)
-// boundaries within a table.
+// the narrowest applicable boundary: the next subzone split point
+// within the table (for index/partition-level zone configs), or the
+// table's key span end if no subzone boundaries exist.
 func (p *planner) ZoneConfigSpanEnd(ctx context.Context, key roachpb.Key) (roachpb.Key, error) {
 	objectID, _ := config.DecodeKeyIntoZoneIDAndSuffix(
 		keys.SystemSQLCodec, roachpb.RKey(key),
@@ -148,9 +148,28 @@ func (p *planner) ZoneConfigSpanEnd(ctx context.Context, key roachpb.Key) (roach
 		if end, ok := config.StaticSplitAfter(roachpb.RKey(key)); ok {
 			return end.AsRawKey(), nil
 		}
+		// The tenants named zone extends to the end of the keyspace with
+		// no static split after it.
+		if bytes.HasPrefix(key, keys.TenantPrefix) {
+			return roachpb.KeyMax, nil
+		}
 		return keys.TableDataMin, nil
 	}
-	return keys.SystemSQLCodec.TableSpan(uint32(objectID)).EndKey, nil
+	tableSpan := keys.SystemSQLCodec.TableSpan(uint32(objectID))
+	// Check for subzone boundaries (index/partition-level zone configs).
+	zc, err := zoneconfig.GetHydratedForTable(
+		ctx, p.Txn(), p.Descriptors(), descpb.ID(objectID),
+	)
+	if err != nil {
+		return nil, err
+	}
+	for _, splitSuffix := range zc.SubzoneSplits() {
+		splitKey := append(tableSpan.Key.Clone(), splitSuffix...)
+		if key.Compare(splitKey) < 0 {
+			return splitKey, nil
+		}
+	}
+	return tableSpan.EndKey, nil
 }
 
 // checkDescriptorPermissions returns nil if the executing user has permissions
