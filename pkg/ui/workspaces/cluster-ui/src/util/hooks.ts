@@ -102,7 +102,7 @@ export const useScheduleFunction = (
   return [scheduleNow, clearSchedule];
 };
 
-const useSwrKeyWithClusterId = (key: Arguments): Arguments => {
+export const useSwrKeyWithClusterId = (key: Arguments): Arguments => {
   const { clusterId } = useContext(ClusterDetailsContext);
   let keyWithClusterId: Arguments;
   if (key) {

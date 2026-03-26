@@ -10,16 +10,29 @@ import groupBy from "lodash/groupBy";
 import isString from "lodash/isString";
 import merge from "lodash/merge";
 import moment from "moment-timezone";
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, {
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import { RouteComponentProps } from "react-router-dom";
 
+import { useDatabasesList } from "src/api/databasesApi";
+import { useNodes } from "src/api/nodesApi";
+import { useResetSQLStats } from "src/api/sqlStatsApi";
+import {
+  useCancelDiagnosticsReport,
+  useCreateDiagnosticsReport,
+  useStatementDiagnostics,
+} from "src/api/statementDiagnosticsApi";
 import {
   SqlStatsSortType,
-  StatementsRequest,
-  createCombinedStmtsRequest,
   SqlStatsSortOptions,
+  useCombinedStatementStats,
 } from "src/api/statementsApi";
-import { RequestState } from "src/api/types";
+import { useUserSQLRoles } from "src/api/userApi";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 import { Delayed } from "src/delayed";
 import { getValidErrorsList, Loading } from "src/loading";
@@ -38,7 +51,7 @@ import {
   ActivateStatementDiagnosticsModal,
 } from "src/statementsDiagnostics";
 import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
-import { Timestamp, TimestampToMoment, syncHistory, unique } from "src/util";
+import { TimestampToMoment, syncHistory, unique } from "src/util";
 import {
   STATS_LONG_LOADING_DURATION,
   getSortLabel,
@@ -47,14 +60,10 @@ import {
   getReqSortColumn,
 } from "src/util/sqlActivityConstants";
 
-import {
-  InsertStmtDiagnosticRequest,
-  StatementDiagnosticsReport,
-  SqlStatsResponse,
-  StatementDiagnosticsResponse,
-} from "../api";
+import { StatementDiagnosticsReport } from "../api";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
 import { commonStyles } from "../common";
+import { ClusterDetailsContext } from "../contexts";
 import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
 import {
   calculateActiveFilters,
@@ -83,12 +92,10 @@ import {
   getLabel,
   StatisticTableColumnKeys,
 } from "../statsTableUtil/statsTableUtil";
-import { UIConfigState } from "../store";
 import {
   getValidOption,
   TimeScale,
   timeScale1hMinOptions,
-  toRoundedDateRange,
 } from "../timeScaleDropdown";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 
@@ -100,23 +107,14 @@ const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 
-// Most of the props are supposed to be provided as connected props
-// from redux store.
-// StatementsPageDispatchProps, StatementsPageStateProps, and StatementsPageOuterProps interfaces
-// provide convenient definitions for `mapDispatchToProps`, `mapStateToProps` and props that
-// have to be provided by parent component.
+// StatementsPageDispatchProps defines callbacks for analytics tracking
+// and UI state updates, provided by the connected wrapper.
+// Data fetching is handled internally via SWR hooks.
 export interface StatementsPageDispatchProps {
-  refreshDatabases: (timeout?: moment.Duration) => void;
-  refreshStatements: (req: StatementsRequest) => void;
-  refreshStatementDiagnosticsRequests: () => void;
-  refreshNodes: () => void;
-  refreshUserSQLRoles: () => void;
-  resetSQLStats: () => void;
-  dismissAlertMessage: () => void;
-  onActivateStatementDiagnostics: (
-    insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest,
+  onActivateStatementDiagnosticsAnalytics?: (
+    statementFingerprint: string,
   ) => void;
-  onDiagnosticsModalOpen?: (statement: string) => void;
+  onDiagnosticsModalOpenAnalytics?: (statement: string) => void;
   onSearchComplete?: (query: string) => void;
   onPageChanged?: (newPage: number) => void;
   onSortingChange?: (
@@ -124,7 +122,7 @@ export interface StatementsPageDispatchProps {
     columnTitle: string,
     ascending: boolean,
   ) => void;
-  onSelectDiagnosticsReportDropdownOption?: (
+  onDiagnosticsReportDropdownOptionAnalytics?: (
     report: StatementDiagnosticsReport,
   ) => void;
   onFilterChange?: (value: Filters) => void;
@@ -137,23 +135,14 @@ export interface StatementsPageDispatchProps {
   onRequestTimeChange: (t: moment.Moment) => void;
 }
 export interface StatementsPageStateProps {
-  statementsResponse: RequestState<SqlStatsResponse>;
   timeScale: TimeScale;
   limit: number;
   reqSortSetting: SqlStatsSortType;
-  databases: string[];
   columns: string[];
-  nodeRegions: { [key: string]: string };
   sortSetting: SortSetting;
   filters: Filters;
   search: string;
-  isTenant?: UIConfigState["isTenant"];
-  hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
-  hasAdminRole?: UIConfigState["hasAdminRole"];
-  stmtsTotalRuntimeSecs: number;
-  statementDiagnostics: StatementDiagnosticsResponse | null;
   requestTime: moment.Moment;
-  oldestDataAvailable: Timestamp;
 }
 
 export interface StatementsPageState {
@@ -169,21 +158,6 @@ export type StatementsPageProps = StatementsPageDispatchProps &
   StatementsPageStateProps &
   RouteComponentProps<unknown>;
 
-type RequestParams = Pick<
-  StatementsPageState,
-  "limit" | "reqSortSetting" | "timeScale"
->;
-
-function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
-  const [start, end] = toRoundedDateRange(params.timeScale);
-  return createCombinedStmtsRequest({
-    start,
-    end,
-    limit: params.limit,
-    sort: params.reqSortSetting,
-  });
-}
-
 export function StatementsPage(props: StatementsPageProps): React.ReactElement {
   const {
     history,
@@ -193,17 +167,10 @@ export function StatementsPage(props: StatementsPageProps): React.ReactElement {
     onSearchComplete,
     onFilterChange,
     onSortingChange,
-    refreshDatabases,
-    refreshStatements,
-    refreshStatementDiagnosticsRequests,
-    refreshNodes,
-    refreshUserSQLRoles,
-    resetSQLStats: resetSQLStatsAction,
-    dismissAlertMessage,
-    onActivateStatementDiagnostics,
-    onDiagnosticsModalOpen,
+    onActivateStatementDiagnosticsAnalytics,
+    onDiagnosticsModalOpenAnalytics,
     onPageChanged,
-    onSelectDiagnosticsReportDropdownOption,
+    onDiagnosticsReportDropdownOptionAnalytics,
     onStatementClick,
     columns: userSelectedColumnsToShow,
     onColumnsChange,
@@ -212,46 +179,47 @@ export function StatementsPage(props: StatementsPageProps): React.ReactElement {
     onChangeReqSort: onChangeReqSortProp,
     onApplySearchCriteria,
     onRequestTimeChange,
-    statementsResponse,
     timeScale: propsTimeScale,
     limit: propsLimit,
     reqSortSetting: propsReqSortSetting,
-    databases,
-    nodeRegions,
-    isTenant,
-    hasViewActivityRedactedRole,
-    hasAdminRole,
-    stmtsTotalRuntimeSecs,
-    statementDiagnostics,
     requestTime,
-    oldestDataAvailable,
   } = props;
+
+  const { isTenant } = useContext(ClusterDetailsContext);
+
+  const {
+    data: statementsData,
+    error: statementsError,
+    isLoading: statementsLoading,
+  } = useCombinedStatementStats(
+    propsTimeScale,
+    propsLimit,
+    propsReqSortSetting,
+  );
+  const { data: statementDiagnostics } = useStatementDiagnostics();
+  const { createReport: activateStatementDiagnostics } =
+    useCreateDiagnosticsReport();
+  const { cancelReport: cancelStatementDiagnostic } =
+    useCancelDiagnosticsReport();
+  const { databases } = useDatabasesList();
+  const { nodeRegionsByID: nodeRegions } = useNodes();
+  const { data: userRoles } = useUserSQLRoles();
+  const { reset: resetSQLStats } = useResetSQLStats();
+
+  const hasViewActivityRedactedRole =
+    userRoles?.roles?.includes("VIEWACTIVITYREDACTED") ?? false;
+  const hasAdminRole = userRoles?.roles?.includes("ADMIN") ?? false;
+  const stmtsTotalRuntimeSecs = statementsData?.stmts_total_runtime_secs ?? 0;
+  const oldestDataAvailable = statementsData?.oldest_aggregated_ts_returned;
 
   const activateDiagnosticsRef = useRef<ActivateDiagnosticsModalRef>(null);
 
-  // Refs to hold latest values for mount effects, avoiding stale closures
+  // Ref to hold latest value for mount effect, avoiding stale closure
   // while preserving "run once on mount" semantics.
-  const refreshDatabasesRef = useRef(refreshDatabases);
   const propsTimeScaleRef = useRef(propsTimeScale);
-  const statementsResponseRef = useRef(statementsResponse);
-  const refreshUserSQLRolesRef = useRef(refreshUserSQLRoles);
-  const isTenantRef = useRef(isTenant);
-  const refreshNodesRef = useRef(refreshNodes);
-  const hasViewActivityRedactedRoleRef = useRef(hasViewActivityRedactedRole);
-  const refreshStatementDiagnosticsRequestsRef = useRef(
-    refreshStatementDiagnosticsRequests,
-  );
 
-  // Keep refs up to date on each render
-  refreshDatabasesRef.current = refreshDatabases;
+  // Keep ref up to date on each render.
   propsTimeScaleRef.current = propsTimeScale;
-  statementsResponseRef.current = statementsResponse;
-  refreshUserSQLRolesRef.current = refreshUserSQLRoles;
-  isTenantRef.current = isTenant;
-  refreshNodesRef.current = refreshNodes;
-  hasViewActivityRedactedRoleRef.current = hasViewActivityRedactedRole;
-  refreshStatementDiagnosticsRequestsRef.current =
-    refreshStatementDiagnosticsRequests;
 
   // Compute initial state from history once
   const getInitialState = (): StatementsPageState => {
@@ -324,19 +292,6 @@ export function StatementsPage(props: StatementsPageProps): React.ReactElement {
     }));
   };
 
-  const refreshStatementsInternal = useCallback((): void => {
-    const req = stmtsRequestFromParams({
-      limit: localLimit,
-      reqSortSetting: localReqSortSetting,
-      timeScale: localTimeScale,
-    });
-    refreshStatements(req);
-  }, [localLimit, localReqSortSetting, localTimeScale, refreshStatements]);
-
-  // Ref for mount effect
-  const refreshStatementsInternalRef = useRef(refreshStatementsInternal);
-  refreshStatementsInternalRef.current = refreshStatementsInternal;
-
   const changeSortSetting = useCallback(
     (ss: SortSetting): void => {
       syncHistory(
@@ -382,14 +337,6 @@ export function StatementsPage(props: StatementsPageProps): React.ReactElement {
     }
     onRequestTimeChange(moment());
 
-    // Refresh statements with the new params
-    const req = stmtsRequestFromParams({
-      limit: localLimit,
-      reqSortSetting: localReqSortSetting,
-      timeScale: localTimeScale,
-    });
-    refreshStatements(req);
-
     const ss: SortSetting = {
       ascending: false,
       columnTitle: getSortColumn(localReqSortSetting),
@@ -407,7 +354,6 @@ export function StatementsPage(props: StatementsPageProps): React.ReactElement {
     onTimeScaleChange,
     onApplySearchCriteria,
     onRequestTimeChange,
-    refreshStatements,
     changeSortSetting,
   ]);
 
@@ -424,11 +370,8 @@ export function StatementsPage(props: StatementsPageProps): React.ReactElement {
     }
   }, [localReqSortSetting]);
 
-  const resetSQLStats = (): void => {
-    resetSQLStatsAction();
-  };
-
-  const updateQueryParams = useCallback((): void => {
+  // Sync query params when search, filters, or sort settings change.
+  useEffect(() => {
     const tab = "Statements";
 
     // Search.
@@ -558,62 +501,31 @@ export function StatementsPage(props: StatementsPageProps): React.ReactElement {
     return found;
   };
 
-  // componentDidMount
   useEffect(() => {
-    refreshDatabasesRef.current();
     // In case the user selected a option not available on this page,
     // force a selection of a valid option. This is necessary for the case
     // where the value 10/30 min is selected on the Metrics page.
     const ts = getValidOption(propsTimeScaleRef.current, timeScale1hMinOptions);
     if (ts !== propsTimeScaleRef.current) {
       changeTimeScale(ts);
-    } else if (
-      !statementsResponseRef.current.valid ||
-      !statementsResponseRef.current.data ||
-      !statementsResponseRef.current.lastUpdated
-    ) {
-      refreshStatementsInternalRef.current();
-    }
-
-    refreshUserSQLRolesRef.current();
-    if (!isTenantRef.current) {
-      refreshNodesRef.current();
-    }
-    if (!hasViewActivityRedactedRoleRef.current) {
-      refreshStatementDiagnosticsRequestsRef.current();
     }
   }, []);
 
-  // componentDidUpdate - update query params and refresh data
-  useEffect(() => {
-    updateQueryParams();
-    if (!isTenant) {
-      refreshNodes();
+  const handleDiagnosticsDropdownOption = (
+    report: StatementDiagnosticsReport,
+  ): void => {
+    if (!report.completed) {
+      cancelStatementDiagnostic({ requestId: report.id }).catch(() => {});
     }
-    if (!hasViewActivityRedactedRole) {
-      refreshStatementDiagnosticsRequests();
-    }
-  }, [
-    updateQueryParams,
-    isTenant,
-    refreshNodes,
-    hasViewActivityRedactedRole,
-    refreshStatementDiagnosticsRequests,
-  ]);
-
-  // componentWillUnmount
-  useEffect(() => {
-    return () => {
-      dismissAlertMessage();
-    };
-  }, [dismissAlertMessage]);
+    onDiagnosticsReportDropdownOptionAnalytics?.(report);
+  };
 
   const renderStatements = (
     statements: AggregateStatistics[],
   ): React.ReactElement => {
     const data = filterStatementsData(filters, search, statements, isTenant);
 
-    const apps = getAppsFromStmtsResponseMemoized(statementsResponse?.data);
+    const apps = getAppsFromStmtsResponseMemoized(statementsData);
 
     const isEmptySearchResults = statements?.length > 0 && search?.length > 0;
     const nodes = Object.keys(nodeRegions)
@@ -641,7 +553,7 @@ export function StatementsPage(props: StatementsPageProps): React.ReactElement {
       hasViewActivityRedactedRole,
       search,
       activateDiagnosticsRef,
-      onSelectDiagnosticsReportDropdownOption,
+      handleDiagnosticsDropdownOption,
       onStatementClick,
     )
       .filter(c => !(c.name === "regions" && regions.length < 2))
@@ -793,7 +705,7 @@ export function StatementsPage(props: StatementsPageProps): React.ReactElement {
   );
 
   const statements = convertRawStmtsToAggregateStatisticsMemoized(
-    statementsResponse?.data?.statements,
+    statementsData?.statements,
   ).map(
     (s): AggregateStatistics => ({
       ...s,
@@ -824,28 +736,35 @@ export function StatementsPage(props: StatementsPageProps): React.ReactElement {
       />
       <div className={cx("table-area")}>
         <Loading
-          loading={statementsResponse.inFlight}
+          loading={statementsLoading}
           page={"statements"}
-          error={statementsResponse.error}
+          error={statementsError}
           render={() => renderStatements(statements)}
           renderError={() =>
             LoadingError({
               statsType: "statements",
-              error: statementsResponse?.error,
-              sourceTables: statementsResponse?.data?.stmts_source_table && [
-                statementsResponse?.data?.stmts_source_table,
+              error: statementsError,
+              sourceTables: statementsData?.stmts_source_table && [
+                statementsData?.stmts_source_table,
               ],
             })
           }
         />
-        {statementsResponse.inFlight &&
-          getValidErrorsList(statementsResponse.error) == null &&
+        {statementsLoading &&
+          getValidErrorsList(statementsError) == null &&
           longLoadingMessage}
         <ActivateStatementDiagnosticsModal
           ref={activateDiagnosticsRef}
-          activate={onActivateStatementDiagnostics}
-          refreshDiagnosticsReports={refreshStatementDiagnosticsRequests}
-          onOpenModal={onDiagnosticsModalOpen}
+          activate={req => {
+            activateStatementDiagnostics(req)
+              .then(() =>
+                onActivateStatementDiagnosticsAnalytics?.(req.stmtFingerprint),
+              )
+              .catch(() => {});
+          }}
+          // No-op: SWR revalidates via mutate() in createReport.
+          refreshDiagnosticsReports={() => {}}
+          onOpenModal={onDiagnosticsModalOpenAnalytics}
         />
       </div>
     </div>

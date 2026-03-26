@@ -4,8 +4,12 @@
 // included in the /LICENSE file.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
+import { useCallback } from "react";
+import { useSWRConfig } from "swr";
 
 import { fetchData } from "src/api";
+
+import { STATEMENTS_SWR_KEY } from "./statementsApi";
 
 const RESET_SQL_STATS_PATH = "_status/resetsqlstats";
 
@@ -22,3 +26,35 @@ export const resetSQLStats =
       }),
     );
   };
+
+// SWR key prefixes for cache invalidation after reset.
+// Resetting SQL stats clears both statement and transaction data, so all
+// related SWR caches must be revalidated.
+// TODO(jasonlmfong): Replace the magic strings below with exported
+// constants (e.g. TRANSACTIONS_SWR_KEY, STATEMENT_DETAILS_SWR_KEY) once
+// the useTransactions and useStatementDetails hooks are migrated to SWR.
+const INVALIDATED_KEY_NAMES = [
+  STATEMENTS_SWR_KEY,
+  "transactions",
+  "statementDetails",
+];
+
+export function useResetSQLStats() {
+  const { mutate } = useSWRConfig();
+
+  const reset = useCallback(async () => {
+    await resetSQLStats();
+    await mutate(
+      (key: unknown) => {
+        if (key && typeof key === "object" && "name" in key) {
+          return INVALIDATED_KEY_NAMES.includes((key as { name: string }).name);
+        }
+        return false;
+      },
+      undefined,
+      { revalidate: true },
+    );
+  }, [mutate]);
+
+  return { reset };
+}
