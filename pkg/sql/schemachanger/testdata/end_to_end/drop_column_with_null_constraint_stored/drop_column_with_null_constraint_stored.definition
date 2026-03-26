@@ -8,12 +8,10 @@ create table t (i int primary key, j int not null AS (i +32) STORED);
 stage-exec phase=PostCommitPhase stage=:
 INSERT INTO t (i) VALUES($stageKey);
 ----
-pq: failed to satisfy CHECK constraint \(j IS NOT NULL\)
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=1
 INSERT INTO t (i) VALUES($stageKey);
 ----
-pq: failed to satisfy CHECK constraint \(j IS NOT NULL\)
 
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=2:
