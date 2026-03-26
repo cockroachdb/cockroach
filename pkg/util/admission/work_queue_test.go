@@ -779,7 +779,7 @@ func TestSQLCPUAdmission(t *testing.T) {
 
 		// Admit with an explicit RequestedCount — the estimator should be
 		// skipped and the exact value preserved. This is the path taken by
-		// SQL CPU admission via reportCPU.
+		// SQL CPU admission via reportAndAcquireConsumedCPU.
 		explicitCount := int64(12345)
 		resp, err = q.Admit(ctx, WorkInfo{
 			TenantID:       tenantID,
@@ -806,7 +806,7 @@ func TestSQLCPUAdmission(t *testing.T) {
 		// Gateway CPU.
 		h := newSQLCPUAdmissionHandle(
 			WorkInfo{TenantID: tenantID}, true /* atGateway */, provider, q)
-		require.NoError(t, h.reportCPU(ctx, 5*time.Millisecond, false /* noWait */))
+		require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 5*time.Millisecond, false /* noWait */))
 		gw, dist := provider.GetCumulativeSQLCPUNanos()
 		require.Equal(t, int64(5*time.Millisecond), gw)
 		require.Equal(t, int64(0), dist)
@@ -814,7 +814,7 @@ func TestSQLCPUAdmission(t *testing.T) {
 		// DistSQL CPU.
 		h2 := newSQLCPUAdmissionHandle(
 			WorkInfo{TenantID: tenantID}, false /* atGateway */, provider, q)
-		require.NoError(t, h2.reportCPU(ctx, 10*time.Millisecond, false /* noWait */))
+		require.NoError(t, h2.reportAndAcquireConsumedCPU(ctx, 10*time.Millisecond, false /* noWait */))
 		gw, dist = provider.GetCumulativeSQLCPUNanos()
 		require.Equal(t, int64(5*time.Millisecond), gw)
 		require.Equal(t, int64(10*time.Millisecond), dist)
@@ -824,7 +824,7 @@ func TestSQLCPUAdmission(t *testing.T) {
 		provider := &sqlCPUProviderImpl{}
 		h := newSQLCPUAdmissionHandle(
 			WorkInfo{TenantID: tenantID}, true /* atGateway */, provider, nil /* wq */)
-		require.NoError(t, h.reportCPU(ctx, 5*time.Millisecond, false /* noWait */))
+		require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 5*time.Millisecond, false /* noWait */))
 		gw, _ := provider.GetCumulativeSQLCPUNanos()
 		require.Equal(t, int64(5*time.Millisecond), gw)
 	})
@@ -844,7 +844,7 @@ func TestSQLCPUAdmission(t *testing.T) {
 			WorkInfo{TenantID: tenantID}, true /* atGateway */, provider, q)
 		cancelCtx, cancel := context.WithCancel(ctx)
 		cancel()
-		err := h.reportCPU(cancelCtx, 1*time.Millisecond, false /* noWait */)
+		err := h.reportAndAcquireConsumedCPU(cancelCtx, 1*time.Millisecond, false /* noWait */)
 		require.ErrorIs(t, err, context.Canceled)
 	})
 }
