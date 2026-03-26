@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
@@ -112,11 +111,6 @@ type propBuf struct {
 		// dontCloseTimestamps inhibits the closing of timestamps.
 		dontCloseTimestamps bool
 	}
-}
-
-type admitEntHandle struct {
-	handle *kvflowcontrolpb.RaftAdmissionMeta
-	pCtx   context.Context
 }
 
 type singleBatchProposer interface {
@@ -398,10 +392,6 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	// and apply them.
 
 	ents := make([]raftpb.Entry, 0, used)
-	// Use this slice to track, for each entry that's proposed to raft, whether
-	// it's subject to replication admission control. Updated in tandem with
-	// slice above.
-	admitHandles := make([]admitEntHandle, 0, used)
 	// INVARIANT: buf[firstProp:nextProp] lines up with the ents slice.
 	firstProp, nextProp := 0, 0
 	buf := b.arr.asSlice()[:used]
@@ -495,7 +485,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// Flush any previously batched (non-conf change) proposals to
 			// preserve the correct ordering or proposals. Later proposals
 			// will start a new batch.
-			propErr := proposeBatch(ctx, b.p, raftGroup, ents, admitHandles, buf[firstProp:nextProp])
+			propErr := proposeBatch(b.p, raftGroup, ents, buf[firstProp:nextProp])
 			if propErr != nil {
 				firstErr = propErr
 				continue
@@ -503,7 +493,6 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 
 			ents = ents[len(ents):]
 			firstProp, nextProp = i+1, i+1
-			admitHandles = admitHandles[len(admitHandles):]
 
 			confChangeCtx := kvserverpb.ConfChangeContext{
 				CommandID: string(p.idKey),
@@ -529,13 +518,8 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			sl := []raftpb.Entry{{Type: typ, Data: data}}
 			// Send config change in a single-element batch. We go through
 			// proposeBatch since there's observability in there.
-			//
-			// TODO(replication): we can construct a proper admitEntHandle here by
-			// pulling the initialization code from the "regular" branch to the top so
-			// that it can be shared. For now, this is fine since conf changes are
-			// internal commands anyway and unlikely to be sent at significant volume.
 			if err := proposeBatch(
-				ctx, b.p, raftGroup, sl, []admitEntHandle{{}}, []*ProposalData{p},
+				b.p, raftGroup, sl, []*ProposalData{p},
 			); err != nil && !errors.Is(err, raft.ErrProposalDropped) {
 				// Silently ignore dropped proposals (they were always silently
 				// ignored prior to the introduction of ErrProposalDropped).
@@ -559,25 +543,13 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			})
 			nextProp++
 			log.VEvent(p.Context(), 2, "flushing proposal to Raft")
-
-			// We don't want deduct flow tokens for reproposed commands, and of
-			// course for proposals that didn't integrate with kvflowcontrol.
-			shouldAdmit := !reproposal && p.raftAdmissionMeta != nil
-			if !shouldAdmit {
-				admitHandles = append(admitHandles, admitEntHandle{})
-			} else {
-				admitHandles = append(admitHandles, admitEntHandle{
-					handle: p.raftAdmissionMeta,
-					pCtx:   p.Context(),
-				})
-			}
 		}
 	}
 	if firstErr != nil {
 		return 0, firstErr
 	}
 
-	propErr := proposeBatch(ctx, b.p, raftGroup, ents, admitHandles, buf[firstProp:nextProp])
+	propErr := proposeBatch(b.p, raftGroup, ents, buf[firstProp:nextProp])
 	return used, propErr
 }
 
@@ -842,12 +814,7 @@ func (b *propBuf) forwardClosedTimestampLocked(closedTS hlc.Timestamp) bool {
 }
 
 func proposeBatch(
-	ctx context.Context,
-	p singleBatchProposer,
-	raftGroup proposerRaft,
-	ents []raftpb.Entry,
-	handles []admitEntHandle,
-	props []*ProposalData,
+	p singleBatchProposer, raftGroup proposerRaft, ents []raftpb.Entry, props []*ProposalData,
 ) (_ error) {
 	if len(ents) != len(props) {
 		return errors.AssertionFailedf("ents and props don't match up: %v and %v", ents, props)
