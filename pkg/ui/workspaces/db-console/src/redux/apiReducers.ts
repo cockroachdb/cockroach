@@ -179,16 +179,6 @@ export const settingsReducerObj = new CachedDataReducer(
 );
 export const refreshSettings = settingsReducerObj.refresh;
 
-export const sessionsReducerObj = new CachedDataReducer(
-  api.getSessions,
-  "sessions",
-  // The sessions page is polled at the usage sites.
-  null,
-  moment.duration(1, "m"),
-);
-export const invalidateSessions = sessionsReducerObj.invalidateData;
-export const refreshSessions = sessionsReducerObj.refresh;
-
 export const storesRequestKey = (req: api.StoresRequestMessage): string =>
   isEmpty(req.node_id) ? "none" : req.node_id;
 
@@ -385,7 +375,6 @@ export interface APIReducersState {
   range: KeyedCachedDataReducerState<api.RangeResponseMessage>;
   allocatorRange: KeyedCachedDataReducerState<api.AllocatorRangeResponseMessage>;
   rangeLog: KeyedCachedDataReducerState<api.RangeLogResponseMessage>;
-  sessions: CachedDataReducerState<api.SessionsResponseMessage>;
   settings: CachedDataReducerState<api.SettingsResponseMessage>;
   stores: KeyedCachedDataReducerState<api.StoresResponseMessage>;
   statements: CachedDataReducerState<clusterUiApi.SqlStatsResponse>;
@@ -430,7 +419,6 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [allocatorRangeReducerObj.actionNamespace]: allocatorRangeReducerObj.reducer,
   [rangeLogReducerObj.actionNamespace]: rangeLogReducerObj.reducer,
   [settingsReducerObj.actionNamespace]: settingsReducerObj.reducer,
-  [sessionsReducerObj.actionNamespace]: sessionsReducerObj.reducer,
   [storesReducerObj.actionNamespace]: storesReducerObj.reducer,
   [queriesReducerObj.actionNamespace]: queriesReducerObj.reducer,
   [txnFingerprintStatsReducerObj.actionNamespace]:
