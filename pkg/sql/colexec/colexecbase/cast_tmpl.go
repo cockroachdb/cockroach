@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -54,7 +53,6 @@ var (
 	_ = lex.DecodeRawBytesToByteArrayAuto
 	_ = uuid.FromBytes
 	_ = oid.T_name
-	_ = oidext.T_aclitem
 	_ = util.TruncateString
 	_ = pgcode.Syntax
 	_ = pgdate.ParseTimestamp

@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
-	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -423,7 +422,7 @@ func vecToDatum(
 			}
 			return
 		}
-		if ct.Oid() == oidext.T_aclitem {
+		if ct.Oid() == oid.T_aclitem {
 			for idx = 0; idx < length; idx++ {
 				setDestIdx(destIdx, idx, sel, hasSel, deselect)
 				setSrcIdx(srcIdx, idx, sel, hasSel)
