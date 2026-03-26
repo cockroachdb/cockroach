@@ -401,14 +401,10 @@ func (wb *writeBatch) SyncWait() error {
 	}
 	err := wb.batch.SyncWait()
 	if err != nil {
-		// TODO(storage): ensure that these errors are only ever due to invariant
-		// violations and never due to unrecoverable Pebble states. Then switch to
-		// returning the error instead of panicking.
-		//
-		// Once we do that, document on the storage.Batch interface the meaning of
-		// an error returned from this method and the guarantees that callers have
-		// or don't have after they receive an error from this method.
-		panic(err)
+		// SyncWait can fail due to environmental causes such as permission
+		// denied or disk I/O errors. See the WriteBatch.SyncWait interface
+		// doc for error semantics.
+		return err
 	}
 	wb.batchStatsReporter.aggregateBatchCommitStats(
 		BatchCommitStats{wb.batch.CommitStats()})

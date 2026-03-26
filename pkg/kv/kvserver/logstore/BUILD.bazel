@@ -59,6 +59,7 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":logstore"],
     deps = [
+        "//pkg/cli/exit",
         "//pkg/keys",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverbase",

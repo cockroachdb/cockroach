@@ -7,12 +7,16 @@ package logstore
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSyncWaiterLoop(t *testing.T) {
@@ -78,6 +82,45 @@ func BenchmarkSyncWaiterLoop(b *testing.B) {
 		<-c
 	}
 }
+
+// TestSyncWaiterLoopError verifies that a SyncWait error (e.g. a WAL write
+// failure) triggers a fatal log for graceful shutdown rather than a panic.
+func TestSyncWaiterLoopError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Intercept log.Fatalf to prevent the test process from exiting.
+	var fatalCalled atomic.Bool
+	log.SetExitFunc(true /* hideStack */, func(exit.Code) {
+		fatalCalled.Store(true)
+	})
+	defer log.ResetExitFunc()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	w := NewSyncWaiterLoop()
+	w.Start(ctx, stopper)
+
+	// Enqueue a waiter whose SyncWait returns an error.
+	injectedErr := errors.New("permission denied")
+	wg := &errSyncWaiter{err: injectedErr}
+	cb := funcSyncWaiterCallback(func() {})
+	w.enqueue(ctx, wg, cb)
+
+	// Verify that the error triggers a fatal log, not a panic.
+	require.Eventually(t, func() bool {
+		return fatalCalled.Load()
+	}, time.Second, time.Millisecond)
+}
+
+// errSyncWaiter implements the syncWaiter interface and returns an error.
+type errSyncWaiter struct {
+	err error
+}
+
+func (e *errSyncWaiter) SyncWait() error { return e.err }
+func (e *errSyncWaiter) Close()          {}
 
 // chanSyncWaiter implements the syncWaiter interface.
 type chanSyncWaiter chan struct{}
