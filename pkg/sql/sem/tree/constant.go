@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -635,7 +634,7 @@ func (expr *StrVal) ResolveAsType(
 		fallthrough
 	case types.StringFamily:
 		switch typ.Oid() {
-		case oidext.T_aclitem:
+		case oid.T_aclitem:
 			return NewDACLItem(expr.s)
 		case oid.T_name:
 			expr.resString = DString(expr.s)

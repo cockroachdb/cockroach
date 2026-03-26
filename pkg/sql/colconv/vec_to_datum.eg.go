@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
-	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -322,7 +321,7 @@ func ColVecToDatumAndDeselect(
 					}
 					goto vecToDatum_true_true_true_return_0
 				}
-				if ct.Oid() == oidext.T_aclitem {
+				if ct.Oid() == oid.T_aclitem {
 					for idx = 0; idx < length; idx++ {
 						{
 							destIdx = idx
@@ -815,7 +814,7 @@ func ColVecToDatumAndDeselect(
 					}
 					goto vecToDatum_false_true_true_return_1
 				}
-				if ct.Oid() == oidext.T_aclitem {
+				if ct.Oid() == oid.T_aclitem {
 					for idx = 0; idx < length; idx++ {
 						{
 							destIdx = idx
@@ -1240,7 +1239,7 @@ func ColVecToDatum(
 						}
 						goto vecToDatum_true_true_false_return_2
 					}
-					if ct.Oid() == oidext.T_aclitem {
+					if ct.Oid() == oid.T_aclitem {
 						for idx = 0; idx < length; idx++ {
 							{
 								//gcassert:bce
@@ -1718,7 +1717,7 @@ func ColVecToDatum(
 						}
 						goto vecToDatum_true_false_false_return_3
 					}
-					if ct.Oid() == oidext.T_aclitem {
+					if ct.Oid() == oid.T_aclitem {
 						for idx = 0; idx < length; idx++ {
 							{
 								destIdx = idx
@@ -2214,7 +2213,7 @@ func ColVecToDatum(
 						}
 						goto vecToDatum_false_true_false_return_4
 					}
-					if ct.Oid() == oidext.T_aclitem {
+					if ct.Oid() == oid.T_aclitem {
 						for idx = 0; idx < length; idx++ {
 							{
 								//gcassert:bce
@@ -2615,7 +2614,7 @@ func ColVecToDatum(
 						}
 						goto vecToDatum_false_false_false_return_5
 					}
-					if ct.Oid() == oidext.T_aclitem {
+					if ct.Oid() == oid.T_aclitem {
 						for idx = 0; idx < length; idx++ {
 							{
 								destIdx = idx

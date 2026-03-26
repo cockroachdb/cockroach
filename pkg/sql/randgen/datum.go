@@ -274,7 +274,7 @@ func RandDatumWithNullChance(
 		if typ.Oid() == oid.T_bpchar {
 			return tree.NewDString(strings.TrimRight(string(p), " "))
 		}
-		if typ.Oid() == oidext.T_aclitem {
+		if typ.Oid() == oid.T_aclitem {
 			// Generate a valid aclitem string: grantee=privchars/grantor.
 			// Use only alphanumeric chars for the grantee to avoid special
 			// characters (=, /, ") that break the aclitem format.
@@ -471,7 +471,7 @@ func adjustDatum(datum tree.Datum, typ *types.T) tree.Datum {
 	case types.StringFamily:
 		if typ.Oid() == oid.T_name {
 			datum = tree.NewDName(string(*datum.(*tree.DString)))
-		} else if typ.Oid() == oidext.T_aclitem {
+		} else if typ.Oid() == oid.T_aclitem {
 			// Return a fixed valid aclitem rather than trying to adapt
 			// the generic string datum, since special characters like
 			// quotes break the aclitem parser.

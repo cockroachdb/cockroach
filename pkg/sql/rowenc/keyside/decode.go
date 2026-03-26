@@ -119,7 +119,7 @@ func Decode(
 		switch valType.Oid() {
 		case oid.T_name:
 			return a.NewDName(tree.DString(r)), rkey, err
-		case oidext.T_aclitem:
+		case oid.T_aclitem:
 			d, aclErr := a.NewDACLItem(tree.DString(r))
 			if aclErr != nil {
 				return nil, rkey, aclErr
