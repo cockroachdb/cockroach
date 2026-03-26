@@ -5,34 +5,75 @@
 
 import { render, screen, fireEvent } from "@testing-library/react";
 import React from "react";
-import { MemoryRouter as Router } from "react-router-dom";
-import { createSandbox } from "sinon";
+import { MemoryRouter, Route } from "react-router-dom";
 
+import * as liveWorkloadApi from "../api/liveWorkloadApi";
 import * as sqlApi from "../api/sqlApi";
+import * as userApi from "../api/userApi";
 import { MockSqlResponse } from "../util/testing";
 
-import {
-  ActiveStatementDetails,
-  ActiveStatementDetailsProps,
-} from "./activeStatementDetails";
-import { getActiveStatementDetailsPropsFixture } from "./activeStatementDetails.fixture";
+import { ActiveStatementDetails } from "./activeStatementDetails";
+import { getLiveWorkloadFixture } from "./activeStatementDetails.fixture";
 
-const sandbox = createSandbox();
+const STMT_EXECUTION_ID = "17ab864032f8e1c20000000000000001";
+
+const renderPage = () =>
+  render(
+    <MemoryRouter
+      initialEntries={[`/execution/statement/${STMT_EXECUTION_ID}`]}
+    >
+      <Route path="/execution/statement/:execution_id">
+        <ActiveStatementDetails />
+      </Route>
+    </MemoryRouter>,
+  );
 
 describe("ActiveStatementDetails page", () => {
-  let props: ActiveStatementDetailsProps;
-
   beforeEach(() => {
-    sandbox.reset();
-    props = getActiveStatementDetailsPropsFixture();
+    jest.spyOn(userApi, "useUserSQLRoles").mockReturnValue({
+      data: { roles: ["ADMIN"] },
+      isLoading: false,
+      error: null,
+      mutate: jest.fn(),
+      isValidating: false,
+    } as any);
+    jest
+      .spyOn(liveWorkloadApi, "useLiveWorkload")
+      .mockReturnValue(getLiveWorkloadFixture());
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("uses immutable SWR to preserve cached data", () => {
+    renderPage();
+
+    expect(liveWorkloadApi.useLiveWorkload).toHaveBeenCalledWith({
+      immutable: true,
+    });
+  });
+
+  it("shows 'not found' when statement is missing from cache", () => {
+    const fixture = getLiveWorkloadFixture();
+    fixture.data.statements = [];
+    jest.restoreAllMocks();
+    jest.spyOn(userApi, "useUserSQLRoles").mockReturnValue({
+      data: { roles: ["ADMIN"] },
+      isLoading: false,
+      error: null,
+      mutate: jest.fn(),
+      isValidating: false,
+    } as any);
+    jest.spyOn(liveWorkloadApi, "useLiveWorkload").mockReturnValue(fixture);
+
+    renderPage();
+
+    screen.getAllByText((_, e) => e.textContent === "SQL Execution not found.");
   });
 
   it("shows information about the active statement", () => {
-    render(
-      <Router>
-        <ActiveStatementDetails {...props} />
-      </Router>,
-    );
+    renderPage();
 
     screen.getAllByText(
       (_, e) => e.textContent === "SELECT count(*) FROM foo",
@@ -44,15 +85,13 @@ describe("ActiveStatementDetails page", () => {
     screen.getByText("andy", { exact: false });
     screen.getByText("127.0.0.1", { exact: false });
     screen.getByText("123456789", { exact: false });
-    screen.getByText("fac8885a-f40a-4666-b746-a45061faad74", { exact: false });
+    screen.getByText("fac8885a-f40a-4666-b746-a45061faad74", {
+      exact: false,
+    });
   });
 
   it("switches to the Explain Plan tab and shows the plan", async () => {
-    render(
-      <Router>
-        <ActiveStatementDetails {...props} />
-      </Router>,
-    );
+    renderPage();
 
     // Click on the Explain tab. Mock executeInternalSql, which should be called
     // in order to decode the plan gist and .

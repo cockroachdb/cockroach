@@ -5,7 +5,7 @@
 
 import {
   ActiveExecutions,
-  selectActiveExecutionsCombiner,
+  getActiveExecutionsWithLockWaits,
   getActiveStatement,
   getActiveTransaction,
   getContentionDetailsFromLocksAndTxns,
@@ -31,7 +31,7 @@ export const selectClusterLocksMaxApiSizeReached = (
 export const selectActiveExecutions = createSelector(
   selectSessions,
   selectClusterLocks,
-  selectActiveExecutionsCombiner,
+  getActiveExecutionsWithLockWaits,
 );
 
 export const selectActiveStatements = createSelector(

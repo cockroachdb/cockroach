@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 import moment from "moment-timezone";
+import { useEffect, useState } from "react";
 
 import { ClusterLocksResponse, ClusterLockState } from "src/api";
 import { byteArrayToUuid } from "src/sessions";
@@ -383,4 +384,79 @@ export const getContentionDetailsFromLocksAndTxns = (
     waitingExecutions: contention?.waiters,
     blockingExecutions: contention?.blockers,
   };
+};
+
+/**
+ * getActiveExecutionsWithLockWaits returns active statements and transactions
+ * from the given sessions response, enriched with lock wait information from
+ * cluster locks. Statements and transactions that are waiting on a lock have
+ * their status set to Waiting and include the time spent waiting.
+ */
+export const getActiveExecutionsWithLockWaits = (
+  sessions: SessionsResponse | null,
+  clusterLocks: ClusterLocksResponse | null,
+): ActiveExecutions => {
+  if (!sessions) return { statements: [], transactions: [] };
+
+  const waitTimeByTxnID = getWaitTimeByTxnIDFromLocks(clusterLocks);
+  const execs = getActiveExecutionsFromSessions(sessions);
+
+  return {
+    statements: execs.statements.map(s => ({
+      ...s,
+      status:
+        waitTimeByTxnID[s.transactionID] != null
+          ? ExecutionStatus.Waiting
+          : s.status,
+      timeSpentWaiting: waitTimeByTxnID[s.transactionID],
+    })),
+    transactions: execs.transactions.map(t => ({
+      ...t,
+      status:
+        waitTimeByTxnID[t.transactionID] != null
+          ? ExecutionStatus.Waiting
+          : t.status,
+      timeSpentWaiting: waitTimeByTxnID[t.transactionID],
+    })),
+  };
+};
+
+export const useDisplayRefreshAlert = (
+  isAutoRefreshEnabled: boolean,
+  lastUpdated: moment.Moment,
+) => {
+  const [displayRefreshAlert, setDisplayRefreshAlert] = useState(false);
+  const [minutesSinceLastRefresh, setMinutesSinceLastRefresh] = useState(0);
+  useEffect(() => {
+    // This useEffect hook checks the difference between the current time and
+    // the last time the data was updated. It triggers a state change to display
+    // an alert if the difference is greater than 10 minutes and auto-refresh
+    // is disabled. The check is performed immediately when the component mounts
+    // and then every 10 seconds thereafter.
+    const checkTimeDifference = () => {
+      if (!isAutoRefreshEnabled && lastUpdated) {
+        // Calculate the difference between the last updated time and the current time in minutes
+        const diffMinutes = moment().diff(lastUpdated, "minutes");
+        if (diffMinutes >= 10) {
+          setDisplayRefreshAlert(true);
+          setMinutesSinceLastRefresh(diffMinutes);
+        } else {
+          setDisplayRefreshAlert(false);
+        }
+      }
+    };
+
+    // Reset the alert when auto-refresh is re-enabled.
+    if (isAutoRefreshEnabled) {
+      setDisplayRefreshAlert(false);
+    }
+    checkTimeDifference();
+    const intervalId = setInterval(checkTimeDifference, 10 * 1000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [isAutoRefreshEnabled, lastUpdated]);
+
+  return { displayRefreshAlert, minutesSinceLastRefresh };
 };

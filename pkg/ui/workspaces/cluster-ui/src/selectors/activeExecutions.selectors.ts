@@ -7,11 +7,11 @@ import { createSelector } from "reselect";
 
 import {
   getActiveTransaction,
+  getActiveExecutionsWithLockWaits,
   getContentionDetailsFromLocksAndTxns,
   getActiveStatement,
 } from "src/activeExecutions/activeStatementUtils";
 import { ActiveExecutions } from "src/activeExecutions/types";
-import { selectActiveExecutionsCombiner } from "src/selectors/activeExecutionsCommon.selectors";
 import { selectExecutionID } from "src/selectors/common";
 import { AppState } from "src/store";
 
@@ -30,7 +30,7 @@ export const selectClusterLocksMaxApiSizeReached = (state: AppState) =>
 export const selectActiveExecutions = createSelector(
   selectSessions,
   selectClusterLocks,
-  selectActiveExecutionsCombiner,
+  getActiveExecutionsWithLockWaits,
 );
 
 export const selectActiveStatements = createSelector(

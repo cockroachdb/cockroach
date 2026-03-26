@@ -5,16 +5,12 @@
 
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
-import moment, { Moment } from "moment-timezone";
-import React, { useEffect, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { useHistory } from "react-router-dom";
 
-import {
-  ActiveStatement,
-  ActiveStatementFilters,
-  ExecutionStatus,
-} from "src/activeExecutions";
+import { ActiveStatementFilters, ExecutionStatus } from "src/activeExecutions";
 import RefreshControl from "src/activeExecutions/refreshControl/refreshControl";
+import { useLiveWorkload } from "src/api/liveWorkloadApi";
 import { Loading } from "src/loading/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
 import { Pagination } from "src/pagination";
@@ -30,7 +26,9 @@ import {
   ACTIVE_STATEMENT_SEARCH_PARAM,
   getAppsFromActiveExecutions,
   filterActiveStatements,
+  useDisplayRefreshAlert,
 } from "../activeExecutions/activeStatementUtils";
+import { ClusterDetailsContext } from "../contexts";
 import {
   calculateActiveFilters,
   defaultFilters,
@@ -44,132 +42,54 @@ import styles from "./statementsPage.module.scss";
 const cx = classNames.bind(styles);
 const PAGE_SIZE = 20;
 
-export type ActiveStatementsViewDispatchProps = {
-  onColumnsSelect: (columns: string[]) => void;
-  onFiltersChange: (filters: ActiveStatementFilters) => void;
-  onSortChange: (ss: SortSetting) => void;
-  refreshLiveWorkload: () => void;
-  onAutoRefreshToggle: (isEnabled: boolean) => void;
-  onManualRefresh: () => void;
+const DEFAULT_SORT_SETTING: SortSetting = {
+  ascending: false,
+  columnTitle: "startTime",
 };
 
-export type ActiveStatementsViewStateProps = {
-  selectedColumns: string[];
-  statements: ActiveStatement[];
-  sortSetting: SortSetting;
-  sessionsError: Error | null;
-  filters: ActiveStatementFilters;
-  internalAppNamePrefix: string;
-  isTenant?: boolean;
-  maxSizeApiReached?: boolean;
-  isAutoRefreshEnabled?: boolean;
-  lastUpdated: Moment | null;
+const DEFAULT_FILTERS: ActiveStatementFilters = {
+  app: defaultFilters.app,
+  executionStatus: defaultFilters.executionStatus,
 };
 
-export type ActiveStatementsViewProps = ActiveStatementsViewStateProps &
-  ActiveStatementsViewDispatchProps;
+export const ActiveStatementsView: React.FC = () => {
+  const { isTenant } = useContext(ClusterDetailsContext);
+  const history = useHistory();
 
-export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
-  onColumnsSelect,
-  refreshLiveWorkload,
-  onFiltersChange,
-  onSortChange,
-  selectedColumns,
-  sortSetting,
-  statements,
-  sessionsError,
-  filters,
-  internalAppNamePrefix,
-  isTenant,
-  maxSizeApiReached,
-  isAutoRefreshEnabled,
-  onAutoRefreshToggle,
-  lastUpdated,
-  onManualRefresh,
-}: ActiveStatementsViewProps) => {
+  // Initialize sort and filters from URL params, falling back to defaults.
+  const [sortSetting, setSortSetting] = useState<SortSetting>(
+    () => getTableSortFromURL(history.location) ?? DEFAULT_SORT_SETTING,
+  );
+  const [filters, setFilters] = useState<ActiveStatementFilters>(
+    () =>
+      ({
+        ...DEFAULT_FILTERS,
+        ...getActiveStatementFiltersFromURL(history.location),
+      }) as ActiveStatementFilters,
+  );
+  const [search, setSearch] = useState<string>(
+    queryByName(history.location, ACTIVE_STATEMENT_SEARCH_PARAM),
+  );
+  const [selectedColumns, setSelectedColumns] = useState<string[] | null>(null);
+  const [isAutoRefreshEnabled, setIsAutoRefreshEnabled] = useState(true);
+
+  const { data, isLoading, error, lastUpdated, refresh } = useLiveWorkload({
+    refreshInterval: isAutoRefreshEnabled ? 10_000 : 0,
+  });
+  const statements = data.statements;
+  const internalAppNamePrefix = data.internalAppNamePrefix;
+  const maxSizeApiReached = data.maxSizeApiReached;
+
   const [pagination, updatePagination, resetPagination] = usePagination(
     1,
     PAGE_SIZE,
   );
-  const history = useHistory();
-  const [search, setSearch] = useState<string>(
-    queryByName(history.location, ACTIVE_STATEMENT_SEARCH_PARAM),
-  );
-  // Local state to store the difference between the current time and the last
-  // time the data was updated, in minutes.
-  const [minutesSinceLastRefresh, setMinutesSinceLastRefresh] = useState(0);
-  // Local state to store whether or not to display the refresh alert.
-  const [displayRefreshAlert, setDisplayRefreshAlert] = useState(false);
 
+  const { displayRefreshAlert, minutesSinceLastRefresh } =
+    useDisplayRefreshAlert(isAutoRefreshEnabled, lastUpdated);
+
+  // Sync sort, filters, and search to URL whenever they change.
   useEffect(() => {
-    // useEffect hook which triggers an immediate data refresh if auto-refresh
-    // is enabled. It fetches the latest workload details by dispatching a
-    // refresh action when the component mounts, ensuring that users see fresh
-    // data as soon as they land on the page if auto-refresh is on.
-    if (isAutoRefreshEnabled) {
-      refreshLiveWorkload();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    // Refresh the workload every 10 seconds if auto refresh is on.
-    if (isAutoRefreshEnabled) {
-      const interval = setInterval(refreshLiveWorkload, 10 * 1000);
-      return () => {
-        clearInterval(interval);
-      };
-    }
-  }, [isAutoRefreshEnabled, refreshLiveWorkload]);
-
-  useEffect(() => {
-    // This useEffect hook checks the difference between the current time and
-    // the last time the data was updated. It triggers a state change to display
-    // an alert if the difference is greater than 10 minutes and auto-refresh
-    // is disabled. The check is performed immediately when the component mounts
-    // and then every 10 seconds thereafter.
-    const checkTimeDifference = () => {
-      if (!isAutoRefreshEnabled && lastUpdated) {
-        // Calculate the difference between the last updated time and the current time in minutes
-        const diffMinutes = moment().diff(lastUpdated, "minutes");
-        if (diffMinutes >= 10) {
-          setDisplayRefreshAlert(true);
-          setMinutesSinceLastRefresh(diffMinutes);
-        } else {
-          setDisplayRefreshAlert(false);
-        }
-      }
-    };
-
-    checkTimeDifference();
-    const intervalId = setInterval(checkTimeDifference, 10 * 1000);
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, [lastUpdated, isAutoRefreshEnabled, setDisplayRefreshAlert]);
-
-  useEffect(() => {
-    // We use this effect to sync settings defined on the URL (sort, filters),
-    // with the redux store. The only time we do this is when the user navigates
-    // to the page directly via the URL and specifies settings in the query string.
-    // Note that the desired behaviour is currently that the user is unable to
-    // clear filters via the URL, and must do so with page controls.
-    const sortSettingURL = getTableSortFromURL(history.location);
-    const filtersFromURL = getActiveStatementFiltersFromURL(history.location);
-
-    if (sortSettingURL) {
-      onSortChange(sortSettingURL);
-    }
-
-    if (filtersFromURL) {
-      onFiltersChange(filtersFromURL);
-    }
-  }, [history, onSortChange, onFiltersChange]);
-
-  useEffect(() => {
-    // This effect runs when the filters or sort settings received from
-    // redux changes and syncs the URL params with redux.
     syncHistory(
       {
         ascending: sortSetting.ascending.toString(),
@@ -189,7 +109,7 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
   ]);
 
   const onSortClick = (ss: SortSetting): void => {
-    onSortChange(ss);
+    setSortSetting(ss);
     resetPagination();
   };
 
@@ -200,29 +120,20 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
   };
 
   const onSubmitFilters = (selectedFilters: ActiveStatementFilters) => {
-    onFiltersChange(selectedFilters);
+    setFilters(selectedFilters);
     resetPagination();
   };
 
   const onSubmitToggleAutoRefresh = () => {
     // Refresh immediately when toggling auto-refresh on.
     if (!isAutoRefreshEnabled) {
-      setDisplayRefreshAlert(false);
-      refreshLiveWorkload();
+      refresh();
     }
-    onAutoRefreshToggle(!isAutoRefreshEnabled);
-  };
-
-  const handleRefresh = () => {
-    onManualRefresh();
+    setIsAutoRefreshEnabled(!isAutoRefreshEnabled);
   };
 
   const clearSearch = () => onSubmitSearch("");
-  const clearFilters = () =>
-    onSubmitFilters({
-      app: defaultFilters.app,
-      executionStatus: defaultFilters.executionStatus,
-    });
+  const clearFilters = () => onSubmitFilters(DEFAULT_FILTERS);
 
   const apps = getAppsFromActiveExecutions(statements, internalAppNamePrefix);
   const countActiveFilters = calculateActiveFilters(filters);
@@ -261,7 +172,7 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
           <RefreshControl
             isAutoRefreshEnabled={isAutoRefreshEnabled}
             onToggleAutoRefresh={onSubmitToggleAutoRefresh}
-            onManualRefresh={handleRefresh}
+            onManualRefresh={refresh}
             lastRefreshTimestamp={lastUpdated}
             execType={"statement"}
           />
@@ -282,13 +193,13 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
       )}
       <div className={cx("table-area")}>
         <Loading
-          loading={statements == null}
+          loading={isLoading}
           page="active statements"
-          error={sessionsError}
+          error={error}
           renderError={() =>
             LoadingError({
               statsType: "statements",
-              error: sessionsError,
+              error,
             })
           }
         >
@@ -301,7 +212,7 @@ export const ActiveStatementsView: React.FC<ActiveStatementsViewProps> = ({
             sortSetting={sortSetting}
             onClearFilters={clearFilters}
             onChangeSortSetting={onSortClick}
-            onColumnsSelect={onColumnsSelect}
+            onColumnsSelect={setSelectedColumns}
             isTenant={isTenant}
           />
           <Pagination

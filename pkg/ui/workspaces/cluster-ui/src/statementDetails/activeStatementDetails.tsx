@@ -6,14 +6,16 @@
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Col, Row, Tabs } from "antd";
 import classNames from "classnames/bind";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Helmet from "react-helmet";
-import { useHistory, match } from "react-router-dom";
+import { useHistory, useRouteMatch } from "react-router-dom";
 
 import {
-  ActiveStatement,
-  ExecutionContentionDetails,
+  getActiveStatement,
+  getContentionDetailsFromLocksAndTxns,
 } from "src/activeExecutions";
+import { useLiveWorkload } from "src/api/liveWorkloadApi";
+import { useUserSQLRoles } from "src/api/userApi";
 import { Button } from "src/button";
 import { commonStyles } from "src/common";
 import { SqlBox, SqlBoxSize } from "src/sql/box";
@@ -32,17 +34,6 @@ import styles from "./statementDetails.module.scss";
 
 const cx = classNames.bind(styles);
 
-export type ActiveStatementDetailsStateProps = {
-  contentionDetails?: ExecutionContentionDetails;
-  statement: ActiveStatement;
-  match: match;
-  hasAdminRole: boolean;
-};
-
-export type ActiveStatementDetailsDispatchProps = {
-  refreshLiveWorkload: () => void;
-};
-
 enum TabKeysEnum {
   OVERVIEW = "overview",
   EXPLAIN = "explain",
@@ -54,18 +45,33 @@ type ExplainPlanState = {
   error: Error;
 };
 
-export type ActiveStatementDetailsProps = ActiveStatementDetailsStateProps &
-  ActiveStatementDetailsDispatchProps;
-
-export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
-  contentionDetails,
-  statement,
-  match,
-  refreshLiveWorkload,
-  hasAdminRole,
-}) => {
+export const ActiveStatementDetails: React.FC = () => {
   const history = useHistory();
+  const match = useRouteMatch();
   const executionID = getMatchParamByName(match, executionIdAttr);
+  const { data: userRoles } = useUserSQLRoles();
+  const hasAdminRole = userRoles?.roles?.includes("ADMIN") ?? false;
+  // Use immutable mode so SWR reads from the cache populated by the
+  // list page without revalidating. Active statements are ephemeral —
+  // most complete within milliseconds — so a revalidation would almost
+  // certainly return different results, causing the viewed statement to
+  // disappear.
+  const { data, isLoading, error } = useLiveWorkload({ immutable: true });
+
+  const statement = getActiveStatement(data.statements, executionID);
+
+  const contentionDetails = (() => {
+    if (!statement) return null;
+    const txn = data.transactions.find(
+      t => t.transactionID === statement.transactionID,
+    );
+    return getContentionDetailsFromLocksAndTxns(
+      data.clusterLocks,
+      data.transactions,
+      txn ?? null,
+    );
+  })();
+
   const [explainPlanState, setExplainPlanState] = useState<ExplainPlanState>({
     explainPlan: null,
     loaded: false,
@@ -76,13 +82,6 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
     ascending: false,
     columnTitle: "insights",
   });
-
-  useEffect(() => {
-    if (statement == null) {
-      // Refresh sessions if the statement was not found initially.
-      refreshLiveWorkload();
-    }
-  }, [refreshLiveWorkload, statement]);
 
   const onTabClick = (key: TabKeysEnum) => {
     if (
@@ -132,62 +131,74 @@ export const ActiveStatementDetails: React.FC<ActiveStatementDetailsProps> = ({
           <span className={cx("heading-execution-id")}>{executionID}</span>
         </h3>
       </div>
-      <section className={cx("section", "section--container")}>
-        <Row gutter={24}>
-          <Col className="gutter-row" span={24}>
-            <SqlBox
-              value={statement?.query || "SQL Execution not found."}
-              size={SqlBoxSize.CUSTOM}
-            />
-          </Col>
-        </Row>
-      </section>
-      <Tabs
-        className={commonStyles("cockroach--tabs")}
-        defaultActiveKey={TabKeysEnum.OVERVIEW}
-        onTabClick={onTabClick}
+      <Loading
+        loading={isLoading}
+        page="active statement details"
+        error={error}
+        renderError={() =>
+          LoadingError({
+            statsType: "active statement",
+            error,
+          })
+        }
       >
-        <Tabs.TabPane tab="Overview" key={TabKeysEnum.OVERVIEW}>
-          <ActiveStatementDetailsOverviewTab
-            statement={statement}
-            contentionDetails={contentionDetails}
-          />
-        </Tabs.TabPane>
-        <Tabs.TabPane tab="Explain Plan" key={TabKeysEnum.EXPLAIN}>
-          <Row gutter={24} className={cx("margin-right")}>
+        <section className={cx("section", "section--container")}>
+          <Row gutter={24}>
             <Col className="gutter-row" span={24}>
-              <Loading
-                loading={
-                  !explainPlanState.loaded && statement?.planGist?.length > 0
-                }
-                page={"stmt_insight_details"}
-                error={explainPlanState.error}
-                renderError={() =>
-                  LoadingError({
-                    statsType: "explain plan",
-                    error: explainPlanState.error,
-                  })
-                }
-              >
-                <SqlBox
-                  value={explainPlanState.explainPlan || "Not available."}
-                  size={SqlBoxSize.CUSTOM}
-                />
-                {hasInsights && (
-                  <Insights
-                    idxRecommendations={indexRecommendations}
-                    query={statement.stmtNoConstants}
-                    database={statement.database}
-                    sortSetting={insightsSortSetting}
-                    onChangeSortSetting={setInsightsSortSetting}
-                    hasAdminRole={hasAdminRole}
-                  />
-                )}
-              </Loading>
+              <SqlBox
+                value={statement?.query || "SQL Execution not found."}
+                size={SqlBoxSize.CUSTOM}
+              />
             </Col>
           </Row>
-        </Tabs.TabPane>
-      </Tabs>
+        </section>
+        <Tabs
+          className={commonStyles("cockroach--tabs")}
+          defaultActiveKey={TabKeysEnum.OVERVIEW}
+          onTabClick={onTabClick}
+        >
+          <Tabs.TabPane tab="Overview" key={TabKeysEnum.OVERVIEW}>
+            <ActiveStatementDetailsOverviewTab
+              statement={statement}
+              contentionDetails={contentionDetails}
+            />
+          </Tabs.TabPane>
+          <Tabs.TabPane tab="Explain Plan" key={TabKeysEnum.EXPLAIN}>
+            <Row gutter={24} className={cx("margin-right")}>
+              <Col className="gutter-row" span={24}>
+                <Loading
+                  loading={
+                    !explainPlanState.loaded && statement?.planGist?.length > 0
+                  }
+                  page={"stmt_insight_details"}
+                  error={explainPlanState.error}
+                  renderError={() =>
+                    LoadingError({
+                      statsType: "explain plan",
+                      error: explainPlanState.error,
+                    })
+                  }
+                >
+                  <SqlBox
+                    value={explainPlanState.explainPlan || "Not available."}
+                    size={SqlBoxSize.CUSTOM}
+                  />
+                  {hasInsights && (
+                    <Insights
+                      idxRecommendations={indexRecommendations}
+                      query={statement.stmtNoConstants}
+                      database={statement.database}
+                      sortSetting={insightsSortSetting}
+                      onChangeSortSetting={setInsightsSortSetting}
+                      hasAdminRole={hasAdminRole}
+                    />
+                  )}
+                </Loading>
+              </Col>
+            </Row>
+          </Tabs.TabPane>
+        </Tabs>
+      </Loading>
     </div>
   );
 };

@@ -31,3 +31,4 @@ export * from "./connectivityApi";
 export * from "./locationsApi";
 export * from "./clusterSettingsApi";
 export * from "./dataDistributionApi";
+export * from "./liveWorkloadApi";
