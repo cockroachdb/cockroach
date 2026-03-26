@@ -2181,6 +2181,11 @@ func (c *clusterImpl) StartE(
 	if !envExists(settings.Env, "COCKROACH_INTERNAL_CHECK_CONSISTENCY_FATAL") {
 		settings.Env = append(settings.Env, "COCKROACH_INTERNAL_CHECK_CONSISTENCY_FATAL=true")
 	}
+	// Enable fatal exit marker files so maybeSaveClusterDueToInvariantProblems
+	// can detect why a node exited without grepping logs.
+	if !envExists(settings.Env, "COCKROACH_INTERNAL_WRITE_FATAL_EXIT_MARKER") {
+		settings.Env = append(settings.Env, "COCKROACH_INTERNAL_WRITE_FATAL_EXIT_MARKER=true")
+	}
 
 	if roachtestflags.ForceCpuProfile {
 		settings.ClusterSettings["server.cpu_profile.duration"] = "20s"
