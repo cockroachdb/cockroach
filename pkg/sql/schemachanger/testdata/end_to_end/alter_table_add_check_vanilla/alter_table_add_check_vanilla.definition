@@ -7,7 +7,6 @@ INSERT INTO t(i) VALUES (1), (2), (3);
 stage-exec phase=PreCommitPhase stage=1
 UPDATE t SET i=-4 WHERE i = 3;
 ----
-pq: failed to satisfy CHECK constraint .*
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=2: rollback=true schemaChangeExecErrorForRollback=(.*validation of CHECK "i > 0:::INT8" failed on row: i=-4.*)
 INSERT INTO t(i) VALUES(-$stageKey);

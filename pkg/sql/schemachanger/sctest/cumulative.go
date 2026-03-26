@@ -217,7 +217,7 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, factory TestServerFac
 						} else {
 							lastRollbackStageKey = &key
 						}
-						injectStmts := injectionFunc(key, tdb, successfulStages)
+						injectStmts := injectionFunc(key, tdb, successfulStages, false /* isReinject */)
 						regexSetOnce := false
 						for _, injectStmt := range injectStmts {
 							if injectStmt != nil && injectStmt.HasAnySchemaChangeError() != nil {
@@ -262,7 +262,7 @@ func ExecuteWithDMLInjection(t *testing.T, relPath string, factory TestServerFac
 			// the final descriptor state.
 			if lastRollbackStageKey != nil {
 				t.Logf("Job transaction committed. Re-inject statements from rollback: %s", lastRollbackStageKey.String())
-				injectionFunc(*lastRollbackStageKey, tdb, successfulStages)
+				injectionFunc(*lastRollbackStageKey, tdb, successfulStages, true /* isReinject */)
 			}
 			require.Equal(t, errorDetected, schemaChangeErrorRegex != nil)
 		}
