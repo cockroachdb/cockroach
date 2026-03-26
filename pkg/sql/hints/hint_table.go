@@ -323,6 +323,7 @@ func SetHintEnabledInDB(
 	rowID int64,
 	fingerprint string,
 	enabled bool,
+	optDatabase string,
 ) (int64, error) {
 	const opName = "set-statement-hint-enabled"
 
@@ -334,8 +335,8 @@ func SetHintEnabledInDB(
 	if !settings.Version.IsActive(ctx, clusterversion.V26_2_StatementHintsTypeNameEnabledColumnsAdded) {
 		return 0, errors.New("cannot set statement hint enabled: enabled column not yet available")
 	}
-	filterCols := make([]string, 0, 2)
-	vals := make([]interface{}, 0, 2)
+	filterCols := make([]string, 0, 3)
+	vals := make([]interface{}, 0, 3)
 	if rowID != 0 {
 		filterCols = append(filterCols, `"row_id"`)
 		vals = append(vals, rowID)
@@ -343,6 +344,10 @@ func SetHintEnabledInDB(
 	if fingerprint != "" {
 		filterCols = append(filterCols, `"fingerprint"`)
 		vals = append(vals, fingerprint)
+	}
+	if optDatabase != "" {
+		filterCols = append(filterCols, `"database"`)
+		vals = append(vals, optDatabase)
 	}
 
 	if len(filterCols) == 0 {
