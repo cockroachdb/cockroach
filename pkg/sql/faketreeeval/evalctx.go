@@ -695,6 +695,13 @@ func (ep *DummyPrivilegedAccessor) ResolvedZoneConfigForKey(
 	return nil, errors.WithStack(errEvalPrivileged)
 }
 
+// ZoneConfigSpanEnd is part of the eval.PrivilegedAccessor interface.
+func (ep *DummyPrivilegedAccessor) ZoneConfigSpanEnd(
+	ctx context.Context, key roachpb.Key,
+) (roachpb.Key, error) {
+	return nil, errors.WithStack(errEvalPrivileged)
+}
+
 // DummySessionAccessor implements the eval.SessionAccessor interface by returning errors.
 type DummySessionAccessor struct{}
 

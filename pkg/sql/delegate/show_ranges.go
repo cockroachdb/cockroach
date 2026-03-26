@@ -429,6 +429,7 @@ all_span_stats AS (
 	// If zone config was requested, include it via the builtin.
 	if n.Options.Zone {
 		buf.WriteString(",\n  crdb_internal.zone_config_for_key(r.start_key) AS zone_config")
+		buf.WriteString(",\n  r.end_key <= crdb_internal.zone_config_span_end(r.start_key) AS zone_config_conformant")
 	}
 	buf.WriteString("\nFROM named_ranges r)\n")
 
@@ -720,9 +721,10 @@ all_span_stats AS (
 		buf.WriteString(",\n  span_stats")
 	}
 
-	// If zone config was requested, propagate the column.
+	// If zone config was requested, propagate the columns.
 	if n.Options.Zone {
 		buf.WriteString(",\n  zone_config")
+		buf.WriteString(",\n  zone_config_conformant")
 	}
 
 	// Complete this CTE. and add an order if needed.
