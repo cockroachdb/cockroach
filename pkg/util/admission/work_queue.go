@@ -655,7 +655,11 @@ type AdmitResponse struct {
 // relevant when error=nil, and includes info on whether admission control
 // is enabled. AdmittedWorkDone must be called iff
 // AdmitResponse.Enabled=true && error==nil, and the WorkKind for this
-// queue is KVWork.
+// queue is KVWork, UNLESS the caller explicitly set RequestedCount (i.e.,
+// the exact resource usage is already known). In that case, the estimator
+// is skipped at Admit time and there is no estimate to correct, so
+// AdmittedWorkDone should not be called. See the callerSetRequestedCount
+// logic below for details.
 func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, error) {
 	if fn := q.knobs.WorkQueueAdmitInterceptor; fn != nil {
 		fn(info)
@@ -673,6 +677,11 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	// the memory overhead of enqueueing each raft command to see whether we
 	// need to do some coalescing at this level.
 
+	// Track whether the caller explicitly set RequestedCount. When true, the
+	// caller knows the exact resource usage (e.g., SQL CPU admission uses
+	// grunning to measure actual CPU consumed) and the CPU time token
+	// estimator should not override it.
+	callerSetRequestedCount := info.RequestedCount > 0
 	if info.RequestedCount == 0 {
 		// We treat unset RequestCounts as an implicit request of 1.
 		info.RequestedCount = 1
@@ -707,7 +716,15 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	// a measurement of CPU time used servicing the request, courtesy of grunning.
 	// tenant.estimator uses past measurements from grunning to make estimates
 	// in this code path, that is, at admission time.
-	if q.mode == usesCPUTimeTokens && !q.knobs.DisableCPUTimeTokenEstimation {
+	//
+	// The estimator is skipped when the caller explicitly set RequestedCount
+	// (callerSetRequestedCount == true). This is used by SQL CPU admission,
+	// where the exact CPU consumed is already known from grunning at the time
+	// of the call. In that case, AdmittedWorkDone is also not called, since
+	// the exact amount was deducted at Admit time (no estimate to correct)
+	// and training the estimator with SQL CPU data would corrupt KV estimates.
+	if q.mode == usesCPUTimeTokens && !q.knobs.DisableCPUTimeTokenEstimation &&
+		!callerSetRequestedCount {
 		info.RequestedCount = tenant.cpuTimeTokenEstimator.estimateTokensToBeUsed()
 	}
 	admitResponse := AdmitResponse{
@@ -997,7 +1014,12 @@ func recordAdmissionWorkQueueStats(
 }
 
 // AdmittedWorkDone is used to inform the WorkQueue that some admitted work is
-// finished. It must be called iff the WorkKind of this WorkQueue is for KVWork.
+// finished. It must be called iff the WorkKind of this WorkQueue is for KVWork
+// and the caller did not explicitly set RequestedCount at Admit time. When
+// RequestedCount is explicitly set (e.g., SQL CPU admission using grunning
+// measurements), the exact amount was already deducted at Admit time, so there
+// is no estimate to correct and AdmittedWorkDone should not be called.
+//
 // Note that cpuTime is an argument to AdmittedWorkDone. So, even though
 // WorkQueue supports various resources other than CPU, AdmittedWorkDone is
 // special-cased for CPU time admission control.
