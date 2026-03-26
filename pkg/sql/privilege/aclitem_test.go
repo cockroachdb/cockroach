@@ -220,42 +220,42 @@ func TestDefaultACLItems(t *testing.T) {
 		{
 			objectType: privilege.Table,
 			owner:      username.RootUserName(),
-			expected:   []string{"admin=CradwDtm/root", "root=CradwDtm/root"},
+			expected:   []string{"admin=C*r*a*d*w*D*t*m*/root", "root=C*r*a*d*w*D*t*m*/root"},
 		},
 		{
 			objectType: privilege.Table,
 			owner:      username.MakeSQLUsernameFromPreNormalizedString("myuser"),
-			expected:   []string{"admin=CradwDtm/myuser", "root=CradwDtm/myuser", "myuser=CradwDtm/myuser"},
+			expected:   []string{"admin=C*r*a*d*w*D*t*m*/myuser", "root=C*r*a*d*w*D*t*m*/myuser", "myuser=CradwDtm/myuser"},
 		},
 		{
 			objectType: privilege.Sequence,
 			owner:      username.RootUserName(),
-			expected:   []string{"admin=CradwU/root", "root=CradwU/root"},
+			expected:   []string{"admin=C*r*a*d*w*U*/root", "root=C*r*a*d*w*U*/root"},
 		},
 		{
 			objectType: privilege.Database,
 			owner:      username.RootUserName(),
-			expected:   []string{"=cT/root", "admin=CcT/root", "root=CcT/root"},
+			expected:   []string{"=cT/root", "admin=C*c*T*/root", "root=C*c*T*/root"},
 		},
 		{
 			objectType: privilege.Schema,
 			owner:      username.RootUserName(),
-			expected:   []string{"admin=CU/root", "root=CU/root"},
+			expected:   []string{"admin=C*U*/root", "root=C*U*/root"},
 		},
 		{
 			objectType: privilege.Routine,
 			owner:      username.RootUserName(),
-			expected:   []string{"=X/root", "admin=X/root", "root=X/root"},
+			expected:   []string{"=X/root", "admin=X*/root", "root=X*/root"},
 		},
 		{
 			objectType: privilege.Type,
 			owner:      username.RootUserName(),
-			expected:   []string{"=U/root", "admin=U/root", "root=U/root"},
+			expected:   []string{"=U/root", "admin=U*/root", "root=U*/root"},
 		},
 		{
 			objectType: privilege.Database,
 			owner:      username.MakeSQLUsernameFromPreNormalizedString("myuser"),
-			expected:   []string{"=cT/myuser", "admin=CcT/myuser", "root=CcT/myuser", "myuser=CcT/myuser"},
+			expected:   []string{"=cT/myuser", "admin=C*c*T*/myuser", "root=C*c*T*/myuser", "myuser=CcT/myuser"},
 		},
 	}
 
