@@ -14,7 +14,6 @@ import {
 import { actions as localStorageActions } from "src/store/localStorage";
 
 import { maybeError } from "../../util";
-import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
 import { actions as txnStatsActions } from "../transactionStats";
 
 import {
@@ -52,7 +51,6 @@ export function* resetSQLStatsSaga() {
   try {
     yield call(resetSQLStats);
     yield all([
-      put(sqlDetailsStatsActions.invalidateAll()),
       put(sqlStatsActions.invalidated()),
       put(txnStatsActions.invalidated()),
     ]);
