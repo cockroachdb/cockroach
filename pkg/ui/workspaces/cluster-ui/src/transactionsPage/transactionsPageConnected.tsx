@@ -30,14 +30,6 @@ import {
 import { TimeScale } from "../timeScaleDropdown";
 
 import {
-  mapStateToActiveTransactionsPageProps,
-  mapDispatchToActiveTransactionsPageProps,
-} from "./activeTransactionsPage.selectors";
-import {
-  ActiveTransactionsViewStateProps,
-  ActiveTransactionsViewDispatchProps,
-} from "./activeTransactionsView";
-import {
   TransactionsPageStateProps,
   TransactionsPageDispatchProps,
 } from "./transactionsPage";
@@ -55,12 +47,10 @@ import {
 
 type StateProps = {
   fingerprintsPageProps: TransactionsPageStateProps & RouteComponentProps;
-  activePageProps: ActiveTransactionsViewStateProps;
 };
 
 type DispatchProps = {
   fingerprintsPageProps: TransactionsPageDispatchProps;
-  activePageProps: ActiveTransactionsViewDispatchProps;
 };
 
 export const TransactionsPageConnected = withRouter(
@@ -89,7 +79,6 @@ export const TransactionsPageConnected = withRouter(
         oldestDataAvailable:
           state.adminUI?.transactions?.data?.oldest_aggregated_ts_returned,
       },
-      activePageProps: mapStateToActiveTransactionsPageProps(state),
     }),
     (dispatch: Dispatch) => ({
       fingerprintsPageProps: {
@@ -183,16 +172,11 @@ export const TransactionsPageConnected = withRouter(
           );
         },
       },
-      activePageProps: mapDispatchToActiveTransactionsPageProps(dispatch),
     }),
     (stateProps, dispatchProps) => ({
       fingerprintsPageProps: {
         ...stateProps.fingerprintsPageProps,
         ...dispatchProps.fingerprintsPageProps,
-      },
-      activePageProps: {
-        ...stateProps.activePageProps,
-        ...dispatchProps.activePageProps,
       },
     }),
   )(TransactionsPageRoot),
