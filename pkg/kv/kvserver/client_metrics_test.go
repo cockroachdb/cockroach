@@ -266,18 +266,18 @@ func TestStoreMetrics(t *testing.T) {
 					StickyVFSRegistry: stickyVFSRegistry,
 				},
 				Store: &kvserver.StoreTestingKnobs{
-					DisableRaftLogQueue: true,
-					EngineKnobs:         []storage.ConfigOption{storage.DisableAutomaticCompactions},
+					DisableRaftLogQueue:                         true,
+					DisableRefreshReasonNewLeaderOrConfigChange: true, // see #166114
+					EngineKnobs: []storage.ConfigOption{storage.DisableAutomaticCompactions},
 				},
 			},
 		}
 		specs[i] = spec
 	}
-	tc := testcluster.StartTestCluster(t, numServers,
-		base.TestClusterArgs{
-			ReplicationMode:   base.ReplicationManual,
-			ServerArgsPerNode: stickyServerArgs,
-		})
+	tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
+		ServerArgsPerNode: stickyServerArgs,
+	})
 	defer tc.Stopper().Stop(ctx)
 
 	initialCount := tc.GetFirstStoreFromServer(t, 0).Metrics().ReplicaCount.Value()
