@@ -12,16 +12,16 @@ CREATE PROCEDURE p_int(INT) LANGUAGE SQL AS 'SELECT 1'
 statement ok
 CREATE FUNCTION p_func() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
 
-statement error pgcode 42723 pq: procedure p\(\) already exists in schema "public"
+statement error pgcode 42723 pq: procedure public.p\(\) already exists in schema "public"
 ALTER PROCEDURE p RENAME TO p
 
-statement error pgcode 42723 pq: function p_func\(\) already exists in schema "public"
+statement error pgcode 42723 pq: function public.p_func\(\) already exists in schema "public"
 ALTER PROCEDURE p RENAME TO p_func
 
 statement error pgcode 42883 pq: could not find a function named "p"
 ALTER FUNCTION p RENAME TO p_new
 
-statement error pgcode 42723 pq: procedure p2\(\) already exists in schema "public"
+statement error pgcode 42723 pq: procedure public.p2\(\) already exists in schema "public"
 ALTER PROCEDURE p RENAME TO p2
 
 statement ok
@@ -95,6 +95,38 @@ DROP PROCEDURE p_int();
 DROP PROCEDURE p2();
 DROP FUNCTION p_func();
 
+# Regression test: renaming a procedure in a non-public schema should
+# detect duplicate (name, arguments) within that schema. Two procedure
+# with different arguments can have the same name.
+# Overloaded procedure cannot be dropped or renamed without specifying
+# the procedure signature.
+statement ok
+CREATE SCHEMA rename_dup_sc;
+CREATE PROCEDURE rename_dup_sc.pa(a INT) LANGUAGE SQL AS $$ SELECT a $$;
+CREATE PROCEDURE rename_dup_sc.pb(a INT) LANGUAGE SQL AS $$ SELECT a $$;
+CREATE PROCEDURE rename_dup_sc.pc(a INT, b INT) LANGUAGE SQL AS $$ SELECT a + b $$
+
+statement error pgcode 42723 pq: procedure rename_dup_sc.pa\(INT8\) already exists in schema "rename_dup_sc"
+ALTER PROCEDURE rename_dup_sc.pb RENAME TO pa
+
+statement ok
+ALTER PROCEDURE rename_dup_sc.pb RENAME TO pc
+
+statement error pgcode 42725 pq: function name "pc" is not unique
+ALTER PROCEDURE rename_dup_sc.pc RENAME TO pb
+
+statement error pgcode 42725 pq: procedure name "pc" is not unique
+DROP PROCEDURE rename_dup_sc.pc
+
+statement ok
+ALTER PROCEDURE rename_dup_sc.pc(INT) RENAME TO pb
+
+statement ok
+DROP PROCEDURE rename_dup_sc.pa;
+DROP PROCEDURE rename_dup_sc.pb;
+DROP PROCEDURE rename_dup_sc.pc;
+DROP SCHEMA rename_dup_sc
+
 subtest end
 
 
@@ -135,9 +167,9 @@ SELECT oid, proname, prosrc
 FROM pg_catalog.pg_proc WHERE proname IN ('p')
 ORDER BY oid
 ----
-100110  p  SELECT 1;
-100111  p  SELECT 2;
-100113  p  SELECT 3;
+100114  p  SELECT 1;
+100115  p  SELECT 2;
+100117  p  SELECT 3;
 
 query TT
 WITH procs AS (
@@ -147,9 +179,9 @@ WITH procs AS (
 )
 SELECT proc->>'id' AS id, proc->'parentSchemaId' FROM procs ORDER BY id
 ----
-110  105
-111  105
-113  112
+114  105
+115  105
+117  116
 
 statement error pgcode 0A000 pq: cannot move objects into or out of virtual schemas
 ALTER PROCEDURE p() SET SCHEMA pg_catalog
@@ -172,9 +204,9 @@ WITH procs AS (
 )
 SELECT proc->>'id' AS id, proc->'parentSchemaId' FROM procs ORDER BY id
 ----
-110  105
-111  105
-113  112
+114  105
+115  105
+117  116
 
 query T
 SELECT create_statement FROM [SHOW CREATE PROCEDURE public.p] ORDER BY 1
@@ -205,9 +237,9 @@ WITH procs AS (
 )
 SELECT proc->>'id' AS id, proc->'parentSchemaId' FROM procs ORDER BY id
 ----
-110  105
-111  112
-113  112
+114  105
+115  116
+117  116
 
 query T
 SELECT create_statement FROM [SHOW CREATE PROCEDURE public.p];
