@@ -700,6 +700,31 @@ func TestExitOnFullDisk(t *testing.T) {
 	exited.Wait()
 }
 
+func TestFatalHook(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer ScopeWithoutShowLogs(t).Close(t)
+
+	// Prevent actual process exit.
+	SetExitFunc(true /* hideStack */, func(exit.Code) {})
+	defer ResetExitFunc()
+
+	var hookCalled sync.WaitGroup
+	hookCalled.Add(1)
+	var capturedMsg string
+	SetFatalHook(func(format string, args ...interface{}) {
+		capturedMsg = fmt.Sprintf(format, args...)
+		hookCalled.Done()
+	})
+	defer SetFatalHook(nil)
+
+	Dev.Fatalf(context.Background(),
+		"local corruption detected: %s", "pebble: checksum mismatch")
+
+	hookCalled.Wait()
+	require.Contains(t, capturedMsg, "local corruption detected")
+	require.Contains(t, capturedMsg, "pebble: checksum mismatch")
+}
+
 func BenchmarkHeader(b *testing.B) {
 	entry := logpb.Entry{
 		Severity:  severity.INFO,

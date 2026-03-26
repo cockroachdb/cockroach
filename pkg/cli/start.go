@@ -456,6 +456,23 @@ func runStartInternal(
 	// making progress.
 	log.SetMakeProcessUnavailableFunc(closeAllSockets)
 
+	// Write a fatal exit marker file so that external tooling (e.g. roachtest)
+	// can detect exactly why the process exited without grepping logs.
+	log.SetFatalHook(func(format string, args ...interface{}) {
+		msg := fmt.Sprintf(format, args...)
+		for _, ss := range serverCfg.Stores.Specs {
+			if ss.InMemory {
+				continue
+			}
+			auxDir := filepath.Join(ss.Path, base.AuxiliaryDir)
+			_ = os.MkdirAll(auxDir, 0755)
+			_ = os.WriteFile(
+				filepath.Join(auxDir, "_FATAL_EXIT.txt"),
+				[]byte(msg), 0644,
+			)
+		}
+	})
+
 	// The context annotation ensures that server identifiers show up
 	// in the logging metadata as soon as they are known.
 	ambientCtx := serverCfg.AmbientCtx
