@@ -363,6 +363,12 @@ func captureOutput(f func()) (out string, err error) {
 		if x := recover(); x != nil {
 			err = errors.Errorf("panic: %v", x)
 		}
+		// Strip license-related NOTICE messages that the SQL driver may inject
+		// into output. These appear nondeterministically and can split retrieval
+		// lines across multiple lines, breaking the <dumping SQL tables> collapsing
+		// below. Strip them early so retrieval lines remain intact.
+		out = regexp.MustCompile(`NOTICE: No license is installed[^\n]*\n?`).
+			ReplaceAllString(out, "")
 		// Replace any series of 'retrieving SQL data for ...' messages with a
 		// single '<dumping SQL tables>' message so that these tests are agnostic to
 		// both specific names and total number of system and internal tables that
