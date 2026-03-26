@@ -44,7 +44,7 @@ go_test(
         "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
         "//conditions:default": {"test.Pool": "large"},
     }),
-    shard_count = 16,
+    shard_count = 24,
     deps = [
         "//pkg/base",
         "//pkg/ccl",

@@ -32,6 +32,7 @@ go_test(
         "statement_diagnostics_test.go",
     ],
     embed = [":stmtdiagnostics"],
+    shard_count = 4,
     tags = ["no-remote-exec"],
     deps = [
         "//pkg/base",
