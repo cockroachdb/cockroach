@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -49,7 +50,14 @@ func TestRandRun(t *testing.T) {
 	defer cancel()
 
 	dbName := "rand_test"
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: dbName})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		UseDatabase: dbName,
+		Knobs: base.TestingKnobs{
+			GCJob: &sql.GCJobTestingKnobs{
+				SkipWaitingForMVCCGC: true,
+			},
+		},
+	})
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	sqlDB.Exec(t, "CREATE DATABASE "+tree.NameString(dbName))
