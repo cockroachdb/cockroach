@@ -47,6 +47,7 @@ export { useNodes } from "./api/nodesApi";
 export { useNodesSummary } from "./api/nodesSummaryApi";
 export { useHealth } from "./api/healthApi";
 export { useLiveWorkload } from "./api/liveWorkloadApi";
+export { useSessions } from "./api/sessionsApi";
 export type {
   LiveWorkloadData,
   UseLiveWorkloadResult,
