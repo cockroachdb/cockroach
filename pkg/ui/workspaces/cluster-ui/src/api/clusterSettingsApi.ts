@@ -8,7 +8,7 @@ import moment from "moment-timezone";
 
 import { fetchData } from "src/api";
 
-import { TimestampToMoment, useSwrImmutableWithClusterId } from "../util";
+import { TimestampToMoment, useSwrWithClusterId } from "../util";
 
 import { ADMIN_API_PREFIX } from "./util";
 
@@ -38,9 +38,6 @@ export function getClusterSettings(
   );
 }
 
-// Usage of this request with the useClusterSettings hook
-// is preferred over using getClusterSettings and its corresponding
-// redux values and sagas.
 export type GetClusterSettingRequest = {
   names: string[];
 };
@@ -63,6 +60,7 @@ export type ClusterSetting = {
   type: ClusterSettingType;
   description: string;
   lastUpdated: moment.Moment | null;
+  public: boolean;
 };
 
 const formatProtoResponse = (
@@ -78,6 +76,7 @@ const formatProtoResponse = (
       type: kv.type as ClusterSettingType,
       description: kv.description,
       lastUpdated: TimestampToMoment(kv.last_updated),
+      public: kv.public ?? false,
     };
   });
 
@@ -90,34 +89,43 @@ const emptyClusterSetting: ClusterSetting = {
   type: ClusterSettingType.UNKNOWN,
   description: "",
   lastUpdated: null,
+  public: false,
 };
 
-export const useClusterSettings = (req: GetClusterSettingRequest) => {
-  const protoReq = new cockroach.server.serverpb.SettingsRequest({
-    keys: req.names,
-  });
-  const { data, isLoading, error } = useSwrImmutableWithClusterId(
-    {
-      name: "clusterSettings",
-      settings: req.names,
-    },
+const CLUSTER_SETTINGS_SWR_KEY = "clusterSettings";
+
+/**
+ * useClusterSettings fetches all cluster settings via SWR. All callers
+ * share the same cache entry regardless of the names requested.
+ *
+ * When `req` is provided, only the requested settings are returned
+ * (with missing entries filled with defaults). When omitted, all
+ * settings are returned.
+ */
+export const useClusterSettings = (req?: GetClusterSettingRequest) => {
+  const protoReq = new cockroach.server.serverpb.SettingsRequest({});
+  const { data, isLoading, error } = useSwrWithClusterId(
+    CLUSTER_SETTINGS_SWR_KEY,
     () => getClusterSettings(protoReq, "1M").then(formatProtoResponse),
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 30_000,
+    },
   );
 
-  // If we don't have data we'll return a map of empty settings.
-  const settingValues =
-    data ??
-    req.names.reduce(
-      (acc, name) => {
-        acc[name] = { ...emptyClusterSetting };
-        return acc;
-      },
-      {} as Record<string, ClusterSetting>,
-    );
+  const allSettings = data ?? {};
 
-  return {
-    settingValues,
-    isLoading,
-    error,
-  };
+  if (!req?.names) {
+    return { settingValues: allSettings, isLoading, error };
+  }
+
+  const settingValues = req.names.reduce(
+    (acc, name) => {
+      acc[name] = allSettings[name] ?? { ...emptyClusterSetting };
+      return acc;
+    },
+    {} as Record<string, ClusterSetting>,
+  );
+
+  return { settingValues, isLoading, error };
 };

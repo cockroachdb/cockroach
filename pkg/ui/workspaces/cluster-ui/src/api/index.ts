@@ -29,4 +29,5 @@ export * from "./txnInsightDetailsApi";
 export * from "./healthApi";
 export * from "./connectivityApi";
 export * from "./locationsApi";
+export * from "./clusterSettingsApi";
 export * from "./dataDistributionApi";

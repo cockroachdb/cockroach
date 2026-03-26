@@ -9,6 +9,7 @@ import {
   TimeScale,
   findClosestTimeScale,
   defaultTimeScaleOptions,
+  useClusterSettings,
 } from "@cockroachlabs/cluster-ui";
 import { History } from "history";
 import isNil from "lodash/isNil";
@@ -16,19 +17,12 @@ import isObject from "lodash/isObject";
 import map from "lodash/map";
 import Long from "long";
 import moment from "moment-timezone";
-import React, { useEffect, useMemo } from "react";
-import { useSelector, useDispatch } from "react-redux";
-import { createSelector } from "reselect";
+import React, { useMemo } from "react";
+import { useSelector } from "react-redux";
 
 import { useMetrics } from "src/hooks/useMetrics";
 import { PayloadAction } from "src/interfaces/action";
 import * as protos from "src/js/protos";
-import { refreshSettings } from "src/redux/apiReducers";
-import {
-  selectResolution10sStorageTTL,
-  selectResolution30mStorageTTL,
-} from "src/redux/clusterSettings";
-import { AdminUIState } from "src/redux/state";
 import { adjustTimeScale, selectMetricsTime } from "src/redux/timeScale";
 import { findChildrenOfType } from "src/util/find";
 import {
@@ -110,44 +104,7 @@ interface MetricsDataProviderProps {
   history?: History;
 }
 
-// timeInfoSelector converts the current global time window into a set of Long
-// timestamps, which can be sent with requests to the server.
-const timeInfoSelector = createSelector(
-  selectResolution10sStorageTTL,
-  selectResolution30mStorageTTL,
-  selectMetricsTime,
-  (sTTL, mTTL, metricsTime) => {
-    if (!isObject(metricsTime.currentWindow)) {
-      return null;
-    }
-    const { start: startMoment, end: endMoment } = metricsTime.currentWindow;
-    const start = startMoment.valueOf();
-    const end = endMoment.valueOf();
-    const syncedScale = findClosestTimeScale(
-      defaultTimeScaleOptions,
-      util.MilliToSeconds(end - start),
-    );
-    // Call adjustTimeScale to handle the case where the sample size
-    // (also known as resolution) is too small for a start and end time
-    // that is before the data's ttl.
-    const adjusted = adjustTimeScale(
-      { ...syncedScale, fixedWindowEnd: false },
-      { start: startMoment, end: endMoment },
-      sTTL,
-      mTTL,
-    );
-
-    return {
-      start: Long.fromNumber(util.MilliToNano(start)),
-      end: Long.fromNumber(util.MilliToNano(end)),
-      sampleDuration: Long.fromNumber(
-        util.MilliToNano(adjusted.timeScale.sampleSize.asMilliseconds()),
-      ),
-    };
-  },
-);
-
-const current = () => {
+const currentTimeInfo = () => {
   let now = moment();
   // Round to the nearest 10 seconds. There are 10000 ms in 10 s.
   now = moment(Math.floor(now.valueOf() / 10000) * 10000);
@@ -188,10 +145,54 @@ function MetricsDataProvider({
   setTimeScale,
   history,
 }: MetricsDataProviderProps): React.ReactElement {
-  const dispatch = useDispatch();
-  const timeInfo = useSelector((state: AdminUIState) =>
-    isCurrent ? current() : timeInfoSelector(state),
-  );
+  const { settingValues } = useClusterSettings({
+    names: [
+      "timeseries.storage.resolution_10s.ttl",
+      "timeseries.storage.resolution_30m.ttl",
+    ],
+  });
+  const sTTLValue =
+    settingValues["timeseries.storage.resolution_10s.ttl"]?.value;
+  const sTTL = sTTLValue
+    ? util.durationFromISO8601String(sTTLValue)
+    : undefined;
+  const mTTLValue =
+    settingValues["timeseries.storage.resolution_30m.ttl"]?.value;
+  const mTTL = mTTLValue
+    ? util.durationFromISO8601String(mTTLValue)
+    : undefined;
+
+  const metricsTime = useSelector(selectMetricsTime);
+
+  const timeInfo = useMemo(() => {
+    if (isCurrent) {
+      return currentTimeInfo();
+    }
+    if (!isObject(metricsTime.currentWindow)) {
+      return null;
+    }
+    const { start: startMoment, end: endMoment } = metricsTime.currentWindow;
+    const start = startMoment.valueOf();
+    const end = endMoment.valueOf();
+    const syncedScale = findClosestTimeScale(
+      defaultTimeScaleOptions,
+      util.MilliToSeconds(end - start),
+    );
+    const adjusted = adjustTimeScale(
+      { ...syncedScale, fixedWindowEnd: false },
+      { start: startMoment, end: endMoment },
+      sTTL,
+      mTTL,
+    );
+
+    return {
+      start: Long.fromNumber(util.MilliToNano(start)),
+      end: Long.fromNumber(util.MilliToNano(end)),
+      sampleDuration: Long.fromNumber(
+        util.MilliToNano(adjusted.timeScale.sampleSize.asMilliseconds()),
+      ),
+    };
+  }, [isCurrent, metricsTime, sTTL, mTTL]);
 
   // MetricsDataProvider should contain only one direct child.
   const child = React.Children.only(children);
@@ -227,11 +228,6 @@ function MetricsDataProvider({
   // MetricsDataProviders rendering in the same cycle have their
   // requests coalesced into a single API call.
   const { data } = useMetrics(requestMsg);
-
-  // Refresh node settings on mount.
-  useEffect(() => {
-    dispatch(refreshSettings());
-  }, [dispatch]);
 
   const dataProps: MetricsDataComponentProps = {
     data,
