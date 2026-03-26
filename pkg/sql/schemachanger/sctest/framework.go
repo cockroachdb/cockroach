@@ -430,11 +430,12 @@ func (m *stageExecStmtMap) GetExpectedOutputForPos(pos string) string {
 	return m.rewriteMap[pos].expectedOutput
 }
 
-type execInjectionCallback func(stage stageKey, runner *sqlutils.SQLRunner, successfulStageCount int) []*stageExecStmt
+type execInjectionCallback func(stage stageKey, runner *sqlutils.SQLRunner, successfulStageCount int, isReinject bool) []*stageExecStmt
 
 type stageExecVariables struct {
 	successfulStageCount int
 	stage                stageKey
+	stageKeyOffset       int
 }
 
 // Exec executes the statements for given stage and validates the output.
@@ -446,14 +447,14 @@ func (e *stageExecStmt) Exec(
 		if len(stmt) == 0 {
 			continue
 		}
-		t.Logf("Starting execution of statment: %+v", stmt)
+		t.Logf("Starting execution of statement: %+v", stmt)
 		// Bind any variables for the statement.
 		boundSQL := os.Expand(stmt, func(s string) string {
 			switch s {
 			case "successfulStageCount":
 				return strconv.Itoa(stageVariables.successfulStageCount)
 			case "stageKey":
-				return strconv.Itoa(stageVariables.stage.AsInt() * 1000)
+				return strconv.Itoa((stageVariables.stage.AsInt() * 10000) + stageVariables.stageKeyOffset*1000)
 			default:
 				t.Fatalf("unknown variable name %s", s)
 			}
@@ -477,6 +478,11 @@ func (e *stageExecStmt) Exec(
 						e.expectedOutput = err.Error()
 					}
 				}
+			} else if idx == len(e.stmts)-1 && e.expectedOutput != "" {
+				if !rewrite {
+					t.Fatalf("unexpected success: expected error: %v", e.expectedOutput)
+				}
+				e.expectedOutput = ""
 			}
 		case stageExecuteQuery:
 			results := runner.QueryStr(t, boundSQL)
@@ -503,13 +509,19 @@ func (e *stageExecStmt) Exec(
 // GetInjectionCallback gets call back that will inject statements based on a
 // given stage.
 func (m *stageExecStmtMap) GetInjectionCallback(t *testing.T, rewrite bool) execInjectionCallback {
-	return func(stage stageKey, runner *sqlutils.SQLRunner, successfulStageCount int) []*stageExecStmt {
+
+	return func(stage stageKey, runner *sqlutils.SQLRunner, successfulStageCount int, isReinject bool) []*stageExecStmt {
 		execStmts := m.getExecStmts(stage)
+		stageKeyOffset := 0
+		if isReinject {
+			stageKeyOffset = 1
+		}
 		for _, execStmt := range execStmts {
 			m.usedMap[execStmt] = struct{}{}
 			execStmt.Exec(t, runner, &stageExecVariables{
 				successfulStageCount: successfulStageCount,
 				stage:                stage,
+				stageKeyOffset:       stageKeyOffset,
 			}, rewrite)
 		}
 		return execStmts
