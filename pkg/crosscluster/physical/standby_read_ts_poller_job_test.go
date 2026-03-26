@@ -123,14 +123,15 @@ func maybeOffsetReaderTenantSystemTables(
 	t *testing.T, c *replicationtestutils.TenantStreamingClusters,
 ) (int, func(sql *sqlutils.SQLRunner)) {
 	if c.Rng.Intn(2) == 0 {
-		// Use the default offset of 1 billion.
-		return 1_000_000_000, func(sql *sqlutils.SQLRunner) {}
+		c.DestSysSQL.Exec(t, `SET CLUSTER SETTING physical_cluster_replication.reader_system_table_id_offset = 0`)
+		// Set on source to ensure failback works well too.
+		c.SrcSysSQL.Exec(t, `SET CLUSTER SETTING physical_cluster_replication.reader_system_table_id_offset = 0`)
+		// Override to no offset.
+		return 0, func(sql *sqlutils.SQLRunner) {}
 	}
-	// Override the offset to 0 to test the no-offset path.
-	offset := 0
-	c.DestSysSQL.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING physical_cluster_replication.reader_system_table_id_offset = %d`, offset))
-	// Set on source to ensure failback works well too.
-	c.SrcSysSQL.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING physical_cluster_replication.reader_system_table_id_offset = %d`, offset))
+
+	var offset int
+	c.DestSysSQL.QueryRow(t, `SHOW CLUSTER SETTING physical_cluster_replication.reader_system_table_id_offset`).Scan(&offset)
 
 	// swap a system table ID and a user table ID to simulate a cluster that has interleaving user and system table ids.
 	scaryTableIDRemapFunc := `
