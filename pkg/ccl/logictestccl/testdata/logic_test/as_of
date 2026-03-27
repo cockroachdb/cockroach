@@ -19,6 +19,14 @@ statement ok
 INSERT INTO t VALUES (2);
 INSERT INTO t2 VALUES (2);
 
+# Increase the closed timestamp target duration so that follower_read_timestamp()
+# goes far enough back in time to reliably predate cluster bootstrap, even in
+# slow (race) builds. The default 3s target yields follower_read_timestamp() =
+# now()-4.2s, which in race builds can land mid-bootstrap (after database
+# creation but before table creation), producing flaky error messages.
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1m'
+
 statement error pgcode 3D000 pq: database "test" does not exist
 SELECT * FROM t AS OF SYSTEM TIME follower_read_timestamp()
 
@@ -118,6 +126,11 @@ RESET autocommit_before_ddl
 
 statement ok
 SET DEFAULT_TRANSACTION_USE_FOLLOWER_READS TO FALSE
+
+# Reset the closed timestamp target duration now that follower read tests are
+# done, so the bounded staleness tests below work correctly.
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '3s'
 
 query B
 SELECT with_min_timestamp(statement_timestamp()) = statement_timestamp()
