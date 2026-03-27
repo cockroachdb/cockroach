@@ -31,16 +31,34 @@ type Storage interface {
 	Scan(ctx context.Context) ([]Record, error)
 }
 
-// storageImpl implements Storage by storing entries in the replicated KV liveness range.
+// storageImpl implements Storage by storing entries in the replicated KV
+// liveness range. The key prefix is configurable to allow contention testing
+// against a synthetic keyspace without requiring N actual nodes.
 type storageImpl struct {
-	db *kv.DB
+	db        *kv.DB
+	keyPrefix roachpb.Key
+	keyMax    roachpb.Key
+	// gossipOnUpdate is true when operating on the real liveness keyspace. It
+	// controls whether Update includes an InternalCommitTrigger to gossip the
+	// changed record. Set once at construction; the branch is essentially free.
+	gossipOnUpdate bool
 }
 
 var _ Storage = (*storageImpl)(nil)
 
 // NewKVStorage returns a Storage backed by the node liveness range.
 func NewKVStorage(db *kv.DB) Storage {
-	return &storageImpl{db}
+	return &storageImpl{
+		db:             db,
+		keyPrefix:      keys.NodeLivenessPrefix,
+		keyMax:         keys.NodeLivenessKeyMax,
+		gossipOnUpdate: true,
+	}
+}
+
+// nodeKey returns the KV key for the given node's liveness record.
+func (ls *storageImpl) nodeKey(nodeID roachpb.NodeID) roachpb.Key {
+	return keys.NodeLivenessKeyWithPrefix(ls.keyPrefix, nodeID)
 }
 
 // LivenessUpdate contains the information for CPutting a new version of a
@@ -66,7 +84,7 @@ type LivenessUpdate struct {
 // previous data.
 func (ls *storageImpl) Get(ctx context.Context, nodeID roachpb.NodeID) (Record, error) {
 	var oldLiveness livenesspb.Liveness
-	record, err := ls.db.Get(ctx, keys.NodeLivenessKey(nodeID))
+	record, err := ls.db.Get(ctx, ls.nodeKey(nodeID))
 	if err != nil {
 		return Record{}, errors.Wrap(err, "unable to get liveness")
 	}
@@ -100,26 +118,31 @@ func (ls *storageImpl) Update(
 		v = new(roachpb.Value)
 
 		b := txn.NewBatch()
-		key := keys.NodeLivenessKey(update.newLiveness.NodeID)
+		key := ls.nodeKey(update.newLiveness.NodeID)
 		if err := v.SetProto(&update.newLiveness); err != nil {
 			log.KvExec.Fatalf(ctx, "failed to marshall proto: %s", err)
 		}
 		b.CPut(key, v, update.oldRaw)
-		// Use a trigger on EndTxn to indicate that node liveness should be
-		// re-gossiped. Further, require that this transaction complete as a one
-		// phase commit to eliminate the possibility of leaving write intents.
-		b.AddRawRequest(&kvpb.EndTxnRequest{
+		// Require that this transaction complete as a one phase commit to
+		// eliminate the possibility of leaving write intents.
+		endTxn := &kvpb.EndTxnRequest{
 			Commit:     true,
 			Require1PC: true,
-			InternalCommitTrigger: &roachpb.InternalCommitTrigger{
+		}
+		// Use a trigger on EndTxn to indicate that node liveness should be
+		// re-gossiped. This is only valid on the real liveness range, not on
+		// synthetic keyspaces used for testing.
+		if ls.gossipOnUpdate {
+			endTxn.InternalCommitTrigger = &roachpb.InternalCommitTrigger{
 				ModifiedSpanTrigger: &roachpb.ModifiedSpanTrigger{
 					NodeLivenessSpan: &roachpb.Span{
 						Key:    key,
 						EndKey: key.Next(),
 					},
 				},
-			},
-		})
+			}
+		}
+		b.AddRawRequest(endTxn)
 		return txn.Run(ctx, b)
 	}); err != nil {
 		if tErr := (*kvpb.ConditionFailedError)(nil); errors.As(err, &tErr) {
@@ -159,7 +182,7 @@ func (ls *storageImpl) Create(ctx context.Context, nodeID roachpb.NodeID) error 
 		err := ls.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 			txn.SetWorkloadInfo(uint64(workloadid.WORKLOAD_ID_NODE_LIVENESS), 0 /* appNameID */, workloadid.WorkloadTypeSystem)
 			b := txn.NewBatch()
-			key := keys.NodeLivenessKey(nodeID)
+			key := ls.nodeKey(nodeID)
 			if err := v.SetProto(&liveness); err != nil {
 				log.KvExec.Fatalf(ctx, "failed to marshall proto: %s", err)
 			}
@@ -196,7 +219,7 @@ func (ls *storageImpl) Create(ctx context.Context, nodeID roachpb.NodeID) error 
 
 // Scan will iterate over the KV liveness names and generate liveness records from them.
 func (ls *storageImpl) Scan(ctx context.Context) ([]Record, error) {
-	kvs, err := ls.db.Scan(ctx, keys.NodeLivenessPrefix, keys.NodeLivenessKeyMax, 0)
+	kvs, err := ls.db.Scan(ctx, ls.keyPrefix, ls.keyMax, 0)
 	if err != nil {
 		return nil, errors.Wrap(err, "unable to get liveness")
 	}
