@@ -97,6 +97,13 @@ var maxChunkSize = settings.RegisterIntSetting(
 	settings.NonNegativeInt,
 )
 
+var ldrTraceRowsEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"logical_replication.consumer.trace_rows.enabled",
+	"if set, log every LDR write and read request with pretty-printed rows to the REPLICATION log channel",
+	true,
+)
+
 // logicalReplicationWriterProcessor consumes a cross-cluster replication stream
 // by decoding kvs in it to logical changes and applying them by executing DMLs.
 type logicalReplicationWriterProcessor struct {

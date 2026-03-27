@@ -33,6 +33,9 @@ type tableHandler struct {
 	session          isql.Session
 	db               descs.DB
 	tombstoneUpdater *tombstoneUpdater
+	columns          []string
+	settings         *cluster.Settings
+	tableID          descpb.ID
 }
 
 type tableBatchStats struct {
@@ -136,7 +139,14 @@ func newTableHandler(
 		db:               db,
 		tombstoneUpdater: tombstoneUpdater,
 		session:          session,
+		columns:          writer.Columns(),
+		settings:         settings,
+		tableID:          tableID,
 	}, nil
+}
+
+func (t *tableHandler) traceEnabled() bool {
+	return ldrTraceRowsEnabled.Get(&t.settings.SV)
 }
 
 func (t *tableHandler) Close(ctx context.Context) {
@@ -181,6 +191,10 @@ func (t *tableHandler) attemptBatch(
 				if err != nil {
 					return err
 				}
+				if t.traceEnabled() {
+					log.Replication.Infof(ctx, "LDR delete table=%d prevRow=%s",
+						t.tableID, sqlwriter.FormatRow(t.columns, event.PrevRow))
+				}
 			case event.IsTombstoneUpdate():
 				hasTombstoneUpdates = true
 				// Skip: handled in its own transaction.
@@ -194,16 +208,29 @@ func (t *tableHandler) attemptBatch(
 					// Insert may observe a LWW failure if it loses to an existing
 					// row or to a tombstone with a higher timestamp.
 					stats.kvLwwLosers++
+					if t.traceEnabled() {
+						log.Replication.Infof(ctx, "LDR lww-loser table=%d row=%s",
+							t.tableID, sqlwriter.FormatRow(t.columns, event.Row))
+					}
 					continue
 				}
 				if err != nil {
 					return err
+				}
+				if t.traceEnabled() {
+					log.Replication.Infof(ctx, "LDR insert table=%d row=%s",
+						t.tableID, sqlwriter.FormatRow(t.columns, event.Row))
 				}
 			case event.IsUpdateRow():
 				stats.updates++
 				err := t.sqlWriter.UpdateRow(ctx, event.RowTimestamp, event.PrevRow, event.Row, winLwwTie)
 				if err != nil {
 					return err
+				}
+				if t.traceEnabled() {
+					log.Replication.Infof(ctx, "LDR update table=%d prevRow=%s newRow=%s",
+						t.tableID, sqlwriter.FormatRow(t.columns, event.PrevRow),
+						sqlwriter.FormatRow(t.columns, event.Row))
 				}
 			default:
 				return errors.AssertionFailedf("unhandled event type: %v", event)
@@ -268,6 +295,11 @@ func (t *tableHandler) refreshPrevRows(
 	for i, event := range batch {
 		var prevRow tree.Datums
 		if refreshed, found := refreshedRows[i]; found {
+			if t.traceEnabled() {
+				log.Replication.Infof(ctx, "LDR read-refresh table=%d row=%s ts=%s isLocal=%t",
+					t.tableID, sqlwriter.FormatRow(t.columns, refreshed.Row),
+					refreshed.LogicalTimestamp, refreshed.IsLocal)
+			}
 			won, err := sqlwriter.IsLwwWinner(event.RowTimestamp, refreshed.LogicalTimestamp, event.Row, refreshed.Row)
 			if err != nil {
 				return nil, tableBatchStats{}, err
@@ -275,6 +307,10 @@ func (t *tableHandler) refreshPrevRows(
 			if !won {
 				log.VEventf(ctx, 2, "LWW: incoming row lost or identical")
 				stats.refreshLwwLosers++
+				if t.traceEnabled() {
+					log.Replication.Infof(ctx, "LDR refresh-lww-loser table=%d row=%s",
+						t.tableID, sqlwriter.FormatRow(t.columns, event.Row))
+				}
 				continue
 			}
 			// Note: we can only identify LWW losers during the read refresh

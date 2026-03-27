@@ -21,6 +21,9 @@ func isSupportedType(t *types.T) bool {
 		// We don't support RefCursor columns in LDR tables because they do not
 		// support equality.
 		return false
+	case types.PGVectorFamily, types.TSVectorFamily:
+		// Temporarily exclude vector types from random schema LDR tests.
+		return false
 	case types.ArrayFamily:
 		// We don't allow Arrays of bits because rand.LoadTable doesn't correctly identify their bit width.
 		if t.ArrayContents().Family() == types.BitFamily {

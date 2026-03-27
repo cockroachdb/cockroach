@@ -9,6 +9,7 @@ go_library(
         "session.go",
         "sql_row_reader.go",
         "sql_row_writer.go",
+        "trace.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/logical/sqlwriter",
     visibility = ["//visibility:public"],
