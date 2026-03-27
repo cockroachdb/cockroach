@@ -3,7 +3,6 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { InlineAlert, Text } from "@cockroachlabs/ui-components";
 import { Col, Row, Tabs } from "antd";
@@ -17,6 +16,7 @@ import React, {
   useContext,
   useState,
   useEffect,
+  useMemo,
   useRef,
 } from "react";
 import { Helmet } from "react-helmet";
@@ -24,7 +24,6 @@ import { Link, RouteComponentProps } from "react-router-dom";
 import { AlignedData, Options } from "uplot";
 
 import { Anchor } from "src/anchor";
-import { StatementDetailsRequest } from "src/api/statementsApi";
 import { Button } from "src/button";
 import { commonStyles } from "src/common";
 import { getValidErrorsList, Loading } from "src/loading";
@@ -51,13 +50,17 @@ import {
   longToInt,
 } from "src/util";
 
+import { InsightRecommendation, StatementDiagnosticsReport } from "../api";
+import { useNodes } from "../api/nodesApi";
 import {
-  InsertStmtDiagnosticRequest,
-  InsightRecommendation,
-  StatementDiagnosticsReport,
-  StmtInsightsReq,
-} from "../api";
-import { CockroachCloudContext } from "../contexts";
+  useStatementDiagnostics,
+  useCreateDiagnosticsReport,
+  useCancelDiagnosticsReport,
+} from "../api/statementDiagnosticsApi";
+import { useStatementDetails } from "../api/statementsApi";
+import { useStmtFingerprintInsights } from "../api/stmtInsightsApi";
+import { useUserSQLRoles } from "../api/userApi";
+import { CockroachCloudContext, ClusterDetailsContext } from "../contexts";
 import { Delayed } from "../delayed";
 import { AxisUnits } from "../graphs";
 import {
@@ -65,11 +68,7 @@ import {
   GroupedStackedBarGraphTimeSeries,
   XScale,
 } from "../graphs/bargraph";
-import {
-  getStmtInsightRecommendations,
-  InsightType,
-  StmtInsightEvent,
-} from "../insights";
+import { getStmtInsightRecommendations, InsightType } from "../insights";
 import {
   InsightsSortedTable,
   makeInsightsColumns,
@@ -80,7 +79,6 @@ import {
   ActivateDiagnosticsModalRef,
   ActivateStatementDiagnosticsModal,
 } from "../statementsDiagnostics";
-import { UIConfigState } from "../store";
 import {
   getValidOption,
   TimeScale,
@@ -108,9 +106,6 @@ import {
   generateCanaryVsStablePlanDistributionTimeseries,
 } from "./timeseriesUtils";
 
-type StatementDetailsResponse =
-  cockroach.server.serverpb.StatementDetailsResponse;
-
 const { TabPane } = Tabs;
 
 export type StatementDetailsProps = StatementDetailsOwnProps &
@@ -136,21 +131,17 @@ export interface StatementDetailsState {
 }
 
 export interface StatementDetailsDispatchProps {
-  refreshStatementDetails: (req: StatementDetailsRequest) => void;
-  refreshStatementDiagnosticsRequests: () => void;
-  refreshUserSQLRoles: () => void;
-  refreshNodes: () => void;
-  refreshNodesLiveness: () => void;
-  refreshStatementFingerprintInsights: (req: StmtInsightsReq) => void;
-  createStatementDiagnosticsReport: (
-    insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest,
-  ) => void;
   dismissStatementDiagnosticsAlertMessage?: () => void;
   onTabChanged?: (tabName: string) => void;
   onTimeScaleChange: (ts: TimeScale) => void;
   onDiagnosticsModalOpen?: (statementFingerprint: string) => void;
   onDiagnosticBundleDownload?: (statementFingerprint?: string) => void;
-  onDiagnosticCancelRequest?: (report: StatementDiagnosticsReport) => void;
+  onActivateStatementDiagnosticsAnalytics?: (
+    statementFingerprint: string,
+  ) => void;
+  onDiagnosticCancelRequestTracking?: (
+    report: StatementDiagnosticsReport,
+  ) => void;
   onSortingChange?: (
     name: string,
     columnTitle: string,
@@ -162,18 +153,7 @@ export interface StatementDetailsDispatchProps {
 
 export interface StatementDetailsStateProps {
   statementFingerprintID: string;
-  statementDetails: StatementDetailsResponse;
-  isLoading: boolean;
-  statementsError: Error | null;
-  lastUpdated: moment.Moment | null;
   timeScale: TimeScale;
-  nodeRegions: { [nodeId: string]: string };
-  diagnosticsReports: StatementDiagnosticsReport[];
-  uiConfig?: UIConfigState["pages"]["statementDetails"];
-  isTenant?: UIConfigState["isTenant"];
-  hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
-  hasAdminRole?: UIConfigState["hasAdminRole"];
-  statementFingerprintInsights?: StmtInsightEvent[];
   requestTime: moment.Moment;
 }
 
@@ -184,18 +164,6 @@ const cx = classNames.bind(styles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 const insightsTableCx = classNames.bind(insightTableStyles);
-
-function getStatementDetailsRequestFromProps(
-  props: StatementDetailsProps,
-): cockroach.server.serverpb.StatementDetailsRequest {
-  const [start, end] = toRoundedDateRange(props.timeScale);
-  return new cockroach.server.serverpb.StatementDetailsRequest({
-    fingerprint_id: props.statementFingerprintID,
-    app_names: queryByName(props.location, appNamesAttr)?.split(","),
-    start: Long.fromNumber(start.unix()),
-    end: Long.fromNumber(end.unix()),
-  });
-}
 
 function AppLink(props: { app: string }) {
   if (!props.app) {
@@ -238,67 +206,64 @@ export function StatementDetails(
     history,
     location,
     statementFingerprintID,
-    statementDetails,
-    isLoading,
-    statementsError,
-    lastUpdated,
     timeScale,
-    nodeRegions,
-    diagnosticsReports,
-    uiConfig,
-    isTenant,
-    hasViewActivityRedactedRole,
-    hasAdminRole,
-    statementFingerprintInsights,
     requestTime,
-    refreshStatementDetails,
-    refreshStatementDiagnosticsRequests,
-    refreshUserSQLRoles,
-    refreshNodes,
-    refreshNodesLiveness,
-    refreshStatementFingerprintInsights,
-    createStatementDiagnosticsReport,
     dismissStatementDiagnosticsAlertMessage,
     onTabChanged,
     onTimeScaleChange,
     onDiagnosticsModalOpen,
     onDiagnosticBundleDownload,
-    onDiagnosticCancelRequest,
+    onActivateStatementDiagnosticsAnalytics,
+    onDiagnosticCancelRequestTracking,
     onSortingChange,
     onBackToStatementsClick,
     onRequestTimeChange,
   } = props;
 
+  // SWR data hooks.
+  const appNames = queryByName(location, appNamesAttr);
+  const {
+    data: statementDetails,
+    error: statementsError,
+    isLoading,
+  } = useStatementDetails(statementFingerprintID, appNames, timeScale);
+
+  const { data: diagnosticsData } = useStatementDiagnostics();
+  const { createReport } = useCreateDiagnosticsReport();
+  const { cancelReport } = useCancelDiagnosticsReport();
+
+  const { nodeRegionsByID: nodeRegions } = useNodes();
+  const { data: userRoles } = useUserSQLRoles();
+  const { isTenant } = useContext(ClusterDetailsContext);
+
+  const hasAdminRole = userRoles?.roles?.includes("ADMIN") ?? false;
+  const hasViewActivityRedactedRole =
+    userRoles?.roles?.includes("VIEWACTIVITYREDACTED") ?? false;
+
+  const { data: insightsResp } = useStmtFingerprintInsights(
+    statementFingerprintID,
+    timeScale,
+  );
+  const statementFingerprintInsights = insightsResp?.results ?? [];
+
+  const statementFingerprint = statementDetails?.statement?.metadata?.query;
+  const diagnosticsReports = useMemo(() => {
+    if (
+      hasViewActivityRedactedRole ||
+      !diagnosticsData ||
+      !statementFingerprint
+    ) {
+      return [];
+    }
+    return diagnosticsData.filter(
+      d => d.statement_fingerprint === statementFingerprint,
+    );
+  }, [diagnosticsData, statementFingerprint, hasViewActivityRedactedRole]);
+
   const activateDiagnosticsRef = useRef<ActivateDiagnosticsModalRef>(null);
 
-  // Refs to hold latest values for mount effects, avoiding stale closures
-  // while preserving "run once on mount" semantics.
-  const timeScaleRef = useRef(timeScale);
-  const lastUpdatedRef = useRef(lastUpdated);
-  const refreshUserSQLRolesRef = useRef(refreshUserSQLRoles);
-  const isTenantRef = useRef(isTenant);
-  const refreshNodesRef = useRef(refreshNodes);
-  const refreshNodesLivenessRef = useRef(refreshNodesLiveness);
-  const hasViewActivityRedactedRoleRef = useRef(hasViewActivityRedactedRole);
-  const refreshStatementDiagnosticsRequestsRef = useRef(
-    refreshStatementDiagnosticsRequests,
-  );
-
-  // Keep refs up to date on each render
-  timeScaleRef.current = timeScale;
-  lastUpdatedRef.current = lastUpdated;
-  refreshUserSQLRolesRef.current = refreshUserSQLRoles;
-  isTenantRef.current = isTenant;
-  refreshNodesRef.current = refreshNodes;
-  refreshNodesLivenessRef.current = refreshNodesLiveness;
-  hasViewActivityRedactedRoleRef.current = hasViewActivityRedactedRole;
-  refreshStatementDiagnosticsRequestsRef.current =
-    refreshStatementDiagnosticsRequests;
-
-  // Context must be called at the top level of the component
   const isCockroachCloud = useContext(CockroachCloudContext);
 
-  // Initialize state from URL and props
   const getInitialTab = (): string => {
     const searchParams = new URLSearchParams(history.location.search);
     return searchParams.get("tab") || "overview";
@@ -313,10 +278,7 @@ export function StatementDetails(
     statementDetails?.statement?.metadata?.formatted_query,
   );
 
-  // Track previous values for componentDidUpdate logic
-  const prevTimeScaleRef = useRef<TimeScale>(timeScale);
   const prevStatementFingerprintIDRef = useRef<string>(statementFingerprintID);
-  const prevLocationRef = useRef(location);
 
   const hasDiagnosticReports = (): boolean => diagnosticsReports.length > 0;
 
@@ -330,39 +292,13 @@ export function StatementDetails(
     [onRequestTimeChange, onTimeScaleChange],
   );
 
-  const refreshStatementInsights = useCallback((): void => {
-    const [startTime, endTime] = toRoundedDateRange(timeScale);
-    const id = BigInt(statementFingerprintID).toString(16);
-    const req: StmtInsightsReq = {
-      start: startTime,
-      end: endTime,
-      stmtFingerprintId: id,
-    };
-    refreshStatementFingerprintInsights(req);
-  }, [refreshStatementFingerprintInsights, statementFingerprintID, timeScale]);
-
-  const refreshStatementDetailsInternal = useCallback((): void => {
-    const req = getStatementDetailsRequestFromProps(props);
-    refreshStatementDetails(req);
-    refreshStatementInsights();
-  }, [props, refreshStatementDetails, refreshStatementInsights]);
-
   const handleResize = useCallback((): void => {
-    // Use the same size as the summary card and remove a space for margin (22).
     const cardElement = document.getElementById("first-card");
     const newCardWidth = cardElement ? cardElement.offsetWidth - 22 : 700;
     if (newCardWidth !== cardWidth) {
       setCardWidth(newCardWidth);
     }
   }, [cardWidth]);
-
-  // Refs for local functions used in mount effect
-  const refreshStatementDetailsInternalRef = useRef(
-    refreshStatementDetailsInternal,
-  );
-  const handleResizeRef = useRef(handleResize);
-  refreshStatementDetailsInternalRef.current = refreshStatementDetailsInternal;
-  handleResizeRef.current = handleResize;
 
   const onTabChange = (tabId: string): void => {
     const searchParams = new URLSearchParams(history.location.search);
@@ -382,87 +318,23 @@ export function StatementDetails(
     }
   };
 
-  // componentDidMount
+  // Validate time scale on mount.
   useEffect(() => {
-    // In case the user selected a option not available on this page,
-    // force a selection of a valid option. This is necessary for the case
-    // where the value 10/30 min is selected on the Metrics page.
-    const ts = getValidOption(timeScaleRef.current, timeScale1hMinOptions);
-    if (ts !== timeScaleRef.current) {
+    const ts = getValidOption(timeScale, timeScale1hMinOptions);
+    if (ts !== timeScale) {
       changeTimeScale(ts);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    refreshStatementDetailsInternalRef.current();
-
-    const resizeHandler = handleResizeRef.current;
-    window.addEventListener("resize", resizeHandler);
-    handleResizeRef.current();
-
-    // For the first data fetch for this page, we refresh if there are:
-    // - Last updated is null (no statement details fetched previously)
-    // - The time interval is not custom, i.e. we have a moving window
-    // in which case we poll every 5 minutes. For the first fetch we will
-    // calculate the next time to refresh based on when the data was last
-    // updated.
-    if (timeScaleRef.current.key !== "Custom" || !lastUpdatedRef.current) {
-      const now = moment();
-      const nextRefresh =
-        lastUpdatedRef.current?.clone().add(5, "minutes") || now;
-      setTimeout(
-        () => refreshStatementDetailsInternalRef.current(),
-        Math.max(0, nextRefresh.diff(now, "milliseconds")),
-      );
-    }
-    refreshUserSQLRolesRef.current();
-    if (!isTenantRef.current) {
-      refreshNodesRef.current();
-      refreshNodesLivenessRef.current();
-    }
-    if (!hasViewActivityRedactedRoleRef.current) {
-      refreshStatementDiagnosticsRequestsRef.current();
-    }
-
-    return () => {
-      window.removeEventListener("resize", resizeHandler);
-    };
-  }, [changeTimeScale]);
-
-  // componentDidUpdate - handle resize and refresh data on prop changes
+  // Resize handler.
   useEffect(() => {
     handleResize();
-
-    if (
-      prevTimeScaleRef.current !== timeScale ||
-      prevStatementFingerprintIDRef.current !== statementFingerprintID ||
-      prevLocationRef.current !== location
-    ) {
-      refreshStatementDetailsInternal();
-    }
-
-    if (!isTenant) {
-      refreshNodes();
-      refreshNodesLiveness();
-    }
-    if (!hasViewActivityRedactedRole) {
-      refreshStatementDiagnosticsRequests();
-    }
-
-    // Update refs
-    prevTimeScaleRef.current = timeScale;
-    prevStatementFingerprintIDRef.current = statementFingerprintID;
-    prevLocationRef.current = location;
-  }, [
-    timeScale,
-    statementFingerprintID,
-    location,
-    handleResize,
-    refreshStatementDetailsInternal,
-    isTenant,
-    refreshNodes,
-    refreshNodesLiveness,
-    hasViewActivityRedactedRole,
-    refreshStatementDiagnosticsRequests,
-  ]);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [handleResize]);
 
   // Update query state when statementDetails changes
   useEffect(() => {
@@ -478,7 +350,7 @@ export function StatementDetails(
     }
   }, [statementDetails, query, formattedQuery]);
 
-  // Invalidate cached query texts when statementFingerprintID changes
+  // Invalidate cached query texts when statementFingerprintID changes.
   useEffect(() => {
     if (
       prevStatementFingerprintIDRef.current !== statementFingerprintID &&
@@ -487,6 +359,7 @@ export function StatementDetails(
       setQuery(null);
       setFormattedQuery(null);
     }
+    prevStatementFingerprintIDRef.current = statementFingerprintID;
   }, [statementFingerprintID]);
 
   const renderNoDataTabContent = (): React.ReactElement => (
@@ -1240,14 +1113,15 @@ export function StatementDetails(
         statementFingerprint={fingerprint}
         requestTime={moment(requestTime)}
         onDownloadDiagnosticBundleClick={onDiagnosticBundleDownload}
-        onDiagnosticCancelRequestClick={report =>
-          onDiagnosticCancelRequest(report)
-        }
-        showDiagnosticsViewLink={uiConfig?.showStatementDiagnosticsLink}
+        onDiagnosticCancelRequestClick={report => {
+          cancelReport({ requestId: report.id }).catch(() => {});
+          onDiagnosticCancelRequestTracking?.(report);
+        }}
+        showDiagnosticsViewLink={true}
         onSortingChange={onSortingChange}
         currentScale={timeScale}
         onChangeTimeScale={changeTimeScale}
-        planGists={statementDetails.statement.stats.plan_gists}
+        planGists={statementDetails?.statement?.stats?.plan_gists}
       />
     );
   };
@@ -1336,8 +1210,13 @@ export function StatementDetails(
         {longLoadingMessage}
         <ActivateStatementDiagnosticsModal
           ref={activateDiagnosticsRef}
-          activate={createStatementDiagnosticsReport}
-          refreshDiagnosticsReports={refreshStatementDiagnosticsRequests}
+          activate={req => {
+            createReport(req)
+              .then(() =>
+                onActivateStatementDiagnosticsAnalytics?.(req.stmtFingerprint),
+              )
+              .catch(() => {});
+          }}
           onOpenModal={onDiagnosticsModalOpen}
         />
       </section>

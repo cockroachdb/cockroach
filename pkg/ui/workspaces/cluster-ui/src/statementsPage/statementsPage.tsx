@@ -762,8 +762,6 @@ export function StatementsPage(props: StatementsPageProps): React.ReactElement {
               )
               .catch(() => {});
           }}
-          // No-op: SWR revalidates via mutate() in createReport.
-          refreshDiagnosticsReports={() => {}}
           onOpenModal={onDiagnosticsModalOpenAnalytics}
         />
       </div>
