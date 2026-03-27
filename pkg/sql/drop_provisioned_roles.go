@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
@@ -130,11 +129,13 @@ func (n *DropProvisionedRolesNode) startExec(params runParams) error {
 		}
 
 		// Delete the role from all system tables.
-		deleted, err := n.deleteRole(params, normalizedUsername, opName)
+		_, dbSettingsDeleted, err := dropSingleRole(
+			params, normalizedUsername, opName,
+		)
 		if err != nil {
 			return err
 		}
-		numRoleSettingsRowsDeleted += deleted
+		numRoleSettingsRowsDeleted += dbSettingsDeleted
 		numDropped++
 		droppedNames = append(droppedNames, normalizedUsername.Normalized())
 	}
@@ -275,71 +276,6 @@ func (n *DropProvisionedRolesNode) userHasDependencies(
 	}
 
 	return false, nil
-}
-
-// deleteRole removes a single role from all system tables and revokes
-// its web sessions.
-func (n *DropProvisionedRolesNode) deleteRole(
-	params runParams, normalizedUsername username.SQLUsername, opName redact.RedactableString,
-) (dbRoleSettingsDeleted int, err error) {
-	// DELETE from system.users.
-	if _, err = params.p.InternalSQLTxn().ExecEx(
-		params.ctx, opName, params.p.txn,
-		sessiondata.NodeUserSessionDataOverride,
-		`DELETE FROM system.users WHERE username=$1`,
-		normalizedUsername,
-	); err != nil {
-		return 0, err
-	}
-
-	// DELETE from system.role_members.
-	if _, err = params.p.InternalSQLTxn().ExecEx(
-		params.ctx, "drop-role-membership", params.p.txn,
-		sessiondata.NodeUserSessionDataOverride,
-		`DELETE FROM system.role_members WHERE "role" = $1 OR "member" = $1`,
-		normalizedUsername,
-	); err != nil {
-		return 0, err
-	}
-
-	// DELETE from system.role_options.
-	if _, err = params.p.InternalSQLTxn().ExecEx(
-		params.ctx, opName, params.p.txn,
-		sessiondata.NodeUserSessionDataOverride,
-		fmt.Sprintf(
-			`DELETE FROM system.public.%s WHERE username=$1`,
-			catconstants.RoleOptionsTableName,
-		),
-		normalizedUsername,
-	); err != nil {
-		return 0, err
-	}
-
-	// DELETE from system.database_role_settings.
-	rowsDeleted, err := params.p.InternalSQLTxn().ExecEx(
-		params.ctx, opName, params.p.txn,
-		sessiondata.NodeUserSessionDataOverride,
-		fmt.Sprintf(
-			`DELETE FROM system.public.%s WHERE role_name = $1`,
-			catconstants.DatabaseRoleSettingsTableName,
-		),
-		normalizedUsername,
-	)
-	if err != nil {
-		return 0, err
-	}
-
-	// Revoke web sessions.
-	if _, err = params.p.InternalSQLTxn().ExecEx(
-		params.ctx, opName, params.p.txn,
-		sessiondata.NodeUserSessionDataOverride,
-		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE username = $1 AND "revokedAt" IS NULL`,
-		normalizedUsername,
-	); err != nil {
-		return 0, err
-	}
-
-	return rowsDeleted, nil
 }
 
 // Next implements the planNode interface.
