@@ -225,7 +225,8 @@ func (sr *SQLRunner) ExpectErrSucceedsSoon(
 	})
 }
 
-// ExpectErrWithTimeout wraps ExpectErr with a timeout.
+// ExpectErrWithTimeout wraps ExpectErr with a timeout. On timeout, a
+// goroutine dump is written to help debug.
 func (sr *SQLRunner) ExpectErrWithTimeout(
 	t Fataler, errRE string, query string, args ...interface{},
 ) {
@@ -236,13 +237,18 @@ func (sr *SQLRunner) ExpectErrWithTimeout(
 	}
 	err := timeutil.RunWithTimeout(context.Background(), "expect-err", d, func(ctx context.Context) error {
 		_, err := sr.DB.ExecContext(ctx, query, args...)
+		if ctx.Err() != nil {
+			// The context timed out; return the error so RunWithTimeout can
+			// wrap it as a TimeoutError and we can dump goroutine stacks.
+			return err
+		}
 		sr.expectErr(t, query, err, errRE)
 		return nil
 	})
 
-	// Fail the test on unexpected error message OR execution timeout
 	if err != nil {
-		t.Fatalf("failed assert error: %s", err)
+		dumpFile := testutils.WriteGoroutineDump()
+		t.Fatalf("failed assert error: %s\n\ngoroutine dump: %s", err, dumpFile)
 	}
 }
 
