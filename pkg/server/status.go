@@ -2145,10 +2145,7 @@ func (s *systemStatusServer) nodesHelper(
 		Nodes: statuses,
 	}
 
-	nodeStatusMap, err := s.nodeLiveness.ScanNodeVitalityFromKV(ctx)
-	if err != nil {
-		return nil, 0, err
-	}
+	nodeStatusMap := s.nodeLiveness.ScanNodeVitalityFromCache()
 	// TODO(baptist): Consider returning something better than LivenessStatus. It
 	// is an unfortunate mix of values.
 	resp.LivenessByNodeID = make(map[roachpb.NodeID]livenesspb.NodeLivenessStatus, len(nodeStatusMap))
