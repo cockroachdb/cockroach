@@ -6,9 +6,8 @@
 package txnapply
 
 import (
-	"slices"
-
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
+	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -51,11 +50,11 @@ type trackerServer struct {
 		// IDs waiting for that txn to resolve.
 		waiters map[ldrdecoder.TxnID][]ldrdecoder.ApplierID
 
-		// horizonWaiters maps waiting applier IDs to the set of event
-		// horizon timestamps they are waiting on. Individual timestamps
-		// are cleared when the resolvedTime advances past them; a
-		// notification is sent whenever at least one is cleared.
-		horizonWaiters map[ldrdecoder.ApplierID][]hlc.Timestamp
+		// horizonWaiters is a min-heap of horizon timestamps that
+		// remote appliers are waiting on. Each entry's txnID.ApplierID
+		// identifies the waiting applier. Entries are popped when the
+		// resolvedTime advances past their horizon.
+		horizonWaiters horizonHeap
 
 		// committed tracks which transactions have been committed.
 		committed committedSet
@@ -87,8 +86,10 @@ func (inst *trackerServer) waitHorizon(
 	if inst.mu.committed.IsResolvedAt(txnHorizon) {
 		return true, inst.mu.committed.ResolvedTime()
 	}
-	inst.mu.horizonWaiters[waitingID] = append(
-		inst.mu.horizonWaiters[waitingID], txnHorizon)
+	heap.Push(&inst.mu.horizonWaiters, horizonWaiter{
+		txnID:   ldrdecoder.TxnID{ApplierID: waitingID},
+		horizon: txnHorizon,
+	})
 	return false, hlc.Timestamp{}
 }
 
@@ -116,18 +117,17 @@ func (inst *trackerServer) ready(
 	}
 
 	// Notify horizon waiters whose required horizon is satisfied by the
-	// new resolvedTime. Clear individual timestamps that are at or below the
-	// resolvedTime, and notify if at least one was cleared.
-	for waiterID, horizons := range inst.mu.horizonWaiters {
-		remaining := slices.DeleteFunc(horizons, func(h hlc.Timestamp) bool {
-			return h.LessEq(resolvedTime)
-		})
-		if len(remaining) < len(horizons) {
-			if _, ok := updates[waiterID]; !ok {
-				updates[waiterID] = update
-			}
+	// new resolvedTime.
+	for inst.mu.horizonWaiters.Len() > 0 {
+		top := inst.mu.horizonWaiters.peek()
+		if !top.horizon.LessEq(resolvedTime) {
+			break
 		}
-		inst.mu.horizonWaiters[waiterID] = remaining
+		heap.Pop(&inst.mu.horizonWaiters)
+		waiterID := top.txnID.ApplierID
+		if _, ok := updates[waiterID]; !ok {
+			updates[waiterID] = update
+		}
 	}
 
 	return updates
@@ -175,7 +175,6 @@ func NewDependencyTracker(appliers []ldrdecoder.ApplierID) DependencyResolver {
 		inst := &trackerServer{}
 		inst.mu.waiters = make(map[ldrdecoder.TxnID][]ldrdecoder.ApplierID)
 		inst.mu.committed = makeCommittedSet()
-		inst.mu.horizonWaiters = make(map[ldrdecoder.ApplierID][]hlc.Timestamp)
 		instances[id] = inst
 	}
 
