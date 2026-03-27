@@ -112,8 +112,8 @@ func CheckTwoVersionInvariant(
 	// up schema changes there and potentially create a deadlock.
 	descsCol.ReleaseLeases(ctx)
 
-	// Increment the long wait gauge for two version invariant violations, if this
-	// function takes longer than the lease duration.
+	// Increment the long wait gauge if this function takes longer than the
+	// lease duration (the grace period for old versions to expire).
 	decAfterWait := descsCol.leased.lm.IncGaugeAfterLeaseDuration(lease.GaugeWaitForTwoVersionViolation)
 	defer decAfterWait()
 	// Wait until all older version leases have been released or expired.

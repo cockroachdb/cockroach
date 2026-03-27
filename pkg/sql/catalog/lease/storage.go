@@ -108,7 +108,8 @@ var LeaseRenewalCrossValidate = settings.RegisterBoolSetting(
 	base.DefaultLeaseRenewalCrossValidate)
 
 // jitteredLeaseDuration returns a randomly jittered duration from the interval
-// [(1-leaseJitterFraction) * leaseDuration, (1+leaseJitterFraction) * leaseDuration].
+// [(1-jitterFraction) * leaseDuration, (1+jitterFraction) * leaseDuration].
+// This is used for the old-version grace period and background refresh interval.
 func (s storage) jitteredLeaseDuration() time.Duration {
 	leaseDuration := LeaseDuration.Get(&s.settings.SV)
 	jitterFraction := LeaseJitterFraction.Get(&s.settings.SV)

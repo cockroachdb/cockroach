@@ -70,18 +70,22 @@ var errReadOlderVersion = errors.New("read older descriptor version from store")
 var errReadOlderVersionAtBase = errors.New("read older descriptor version from store at base timestamp")
 var errLeaseManagerIsDraining = errors.New("cannot acquire lease when draining")
 
-// LeaseDuration controls the duration of sql descriptor leases.
+// LeaseDuration controls the grace period for old descriptor versions to
+// expire after a new version is acquired. It also controls the background
+// lease refresh/cleanup loop interval. The actual duration is jittered using
+// the jitter fraction.
 var LeaseDuration = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease_duration",
-	"mean duration of sql descriptor leases, this actual duration is jitterred",
+	"grace period for old descriptor versions to expire after a schema change, "+
+		"also controls the background lease refresh interval; the actual duration is jittered",
 	base.DefaultDescriptorLeaseDuration)
 
-// LeaseJitterFraction controls the percent jitter around sql lease durations
+// LeaseJitterFraction controls the percent jitter around the lease duration.
 var LeaseJitterFraction = settings.RegisterFloatSetting(
 	settings.ApplicationLevel,
 	"sql.catalog.descriptor_lease_jitter_fraction",
-	"mean duration of sql descriptor leases, this actual duration is jitterred",
+	"jitter fraction applied to the descriptor lease duration",
 	base.DefaultDescriptorLeaseJitterFraction,
 	settings.Fraction)
 
@@ -161,8 +165,8 @@ func (m *Manager) WaitForNoVersion(
 			Version: 0, // Unused any version flag used below.
 		},
 	}
-	// Increment the long wait gauge for wait for no version, if this function
-	// takes longer than the lease duration.
+	// Increment the long wait gauge if this function takes longer than the
+	// lease duration (the grace period for old versions to expire).
 	decAfterWait := m.IncGaugeAfterLeaseDuration(GaugeWaitForNoVersion)
 	defer decAfterWait()
 	wsTracker := startWaitStatsTracker(ctx)
@@ -580,8 +584,8 @@ func (m *Manager) WaitForOneVersion(
 ) (catalog.Descriptor, error) {
 	ctx, span := tracing.ChildSpan(ctx, "wait-for-one-version")
 	defer span.Finish()
-	// Increment the long wait gauge for wait for one version, if this function
-	// takes longer than the lease duration.
+	// Increment the long wait gauge if this function takes longer than the
+	// lease duration (the grace period for old versions to expire).
 	decAfterWait := m.IncGaugeAfterLeaseDuration(GaugeWaitForOneVersion)
 	defer decAfterWait()
 	wsTracker := startWaitStatsTracker(ctx)
@@ -1727,12 +1731,12 @@ func (m *Manager) purgeOldVersions(
 				defer m.mu.Unlock()
 				leaseToExpire.mu.Lock()
 				defer leaseToExpire.mu.Unlock()
-				// Expire any active old versions into the future based on the lease
-				// duration. If the session lifetime had been longer then use
-				// that. We will only expire later into the future, then what
-				// was previously observed, since transactions may have already
-				// picked this time. If the lease duration is zero, then we are
-				// looking at instant expiration for testing.
+				// Set an expiration on old versions so they don't persist
+				// indefinitely under session-based leasing. The expiration is
+				// now + leaseDuration, or the session expiry if that is later.
+				// We never move the expiration earlier than a previously set
+				// value, since transactions may have already observed it. A
+				// lease duration of zero means instant expiration (for testing).
 				leaseDuration := LeaseDuration.Get(&m.storage.settings.SV)
 				expiration := m.storage.db.KV().Clock().Now().AddDuration(leaseDuration)
 				if sessionExpiry := (*leaseToExpire.session.Load()).Expiration(); leaseDuration > 0 && expiration.Less(sessionExpiry) {
@@ -3599,7 +3603,8 @@ func (m *Manager) VisitLeases(
 	}
 }
 
-// AfterLeaseDurationGauge metric to increment after a long wait.
+// AfterLeaseDurationGauge identifies which long-wait gauge to increment when a
+// wait operation exceeds the lease duration.
 type AfterLeaseDurationGauge int
 
 const (
@@ -3614,8 +3619,10 @@ const (
 	GaugeWaitForInitialVersion
 )
 
-// IncGaugeAfterLeaseDuration increments a wait metric after the lease duration
-// has passed. A function is returned to decrement the same metric after.
+// IncGaugeAfterLeaseDuration increments a wait metric if the caller's operation
+// takes longer than the lease duration (the grace period for old descriptor
+// versions to expire). The returned function must be deferred to decrement the
+// metric when the operation completes.
 func (m *Manager) IncGaugeAfterLeaseDuration(
 	gaugeType AfterLeaseDurationGauge,
 ) (decrAfterWait func()) {

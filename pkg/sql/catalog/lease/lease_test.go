@@ -3538,11 +3538,11 @@ func TestLeaseTableWriteFailure(t *testing.T) {
 	require.Truef(t, firstBlock, "did not block any lease writes")
 }
 
-// TestLongLeaseWaitMetrics validates metrics that can be used to detect if
-// the lease manager is stuck waiting for old versions to expire. These are added
-// to help us diagnose if the session based leasing migration runs into issues.
-// These work by detecting active routines in any of the wait functions past
-// the lease duration (intentionally set to 0 for these tests).
+// TestLongLeaseWaitMetrics validates the long-wait gauges that detect when the
+// lease manager is stuck waiting for old descriptor versions to drain. The
+// gauges fire when a wait operation exceeds the lease duration (the grace period
+// for old versions). This test sets the lease duration to 0 so the gauges
+// trigger immediately.
 func TestLongLeaseWaitMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
