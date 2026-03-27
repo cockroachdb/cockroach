@@ -54,16 +54,16 @@ const (
 	// See https://github.com/cockroachdb/cockroach/issues/20310.
 	DefaultMetricsSampleInterval = 10 * time.Second
 
-	// DefaultDescriptorLeaseDuration is the default mean duration a
-	// lease will be acquired for. The actual duration is jittered using
-	// the jitter fraction. Jittering is done to prevent multiple leases
-	// from being renewed simultaneously if they were all acquired
-	// simultaneously.
+	// DefaultDescriptorLeaseDuration is the default duration used as a
+	// grace period for old descriptor versions to expire after a new
+	// version is acquired. It also controls the background lease
+	// refresh/cleanup loop interval. The actual duration is jittered
+	// using the jitter fraction.
 	DefaultDescriptorLeaseDuration = 5 * time.Minute
 
 	// DefaultDescriptorLeaseJitterFraction is the default factor
-	// that we use to randomly jitter the lease duration when acquiring a
-	// new lease and the lease renewal timeout.
+	// that we use to randomly jitter the lease duration when computing
+	// the old version grace period and refresh interval.
 	DefaultDescriptorLeaseJitterFraction = 0.05
 
 	// DefaultDescriptorLeaseRenewalTimeout is the default time
