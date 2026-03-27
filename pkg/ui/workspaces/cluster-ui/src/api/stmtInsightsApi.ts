@@ -11,7 +11,11 @@ import {
   StatementStatus,
   StmtInsightEvent,
 } from "src/insights/types";
-import { TimeScale, timeScaleRangeToObj } from "src/timeScaleDropdown";
+import {
+  TimeScale,
+  timeScaleRangeToObj,
+  toRoundedDateRange,
+} from "src/timeScaleDropdown";
 import { INTERNAL_APP_NAME_PREFIX } from "src/util/constants";
 
 import { getInsightsFromProblemsAndCauses } from "../insights/utils";
@@ -238,6 +242,45 @@ async function addStmtContentionInfoApi(
 
     event.contentionEvents = contentionResults.results;
   }
+}
+
+export const STMT_FINGERPRINT_INSIGHTS_SWR_KEY = "stmtFingerprintInsights";
+
+export function useStmtFingerprintInsights(
+  stmtFingerprintId: string,
+  timeScale: TimeScale,
+) {
+  let hexId: string | null = null;
+  try {
+    hexId = stmtFingerprintId ? BigInt(stmtFingerprintId).toString(16) : null;
+  } catch {
+    hexId = null;
+  }
+  const timeRange = timeScale ? toRoundedDateRange(timeScale) : null;
+  const startUnix = timeRange?.[0]?.unix();
+  const endUnix = timeRange?.[1]?.unix();
+
+  return useSwrWithClusterId<SqlApiResponse<StmtInsightEvent[]>>(
+    hexId && timeScale
+      ? {
+          name: STMT_FINGERPRINT_INSIGHTS_SWR_KEY,
+          stmtFingerprintId: hexId,
+          start: startUnix,
+          end: endUnix,
+        }
+      : null,
+    () => {
+      return getStmtInsightsApi({
+        start: timeRange[0],
+        end: timeRange[1],
+        stmtFingerprintId: hexId,
+      });
+    },
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
+  );
 }
 
 export function formatStmtInsights(

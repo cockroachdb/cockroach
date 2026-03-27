@@ -243,6 +243,43 @@ export function useCombinedStatementStats(
   );
 }
 
+export const STATEMENT_DETAILS_SWR_KEY = "stmtDetails";
+
+export function useStatementDetails(
+  fingerprintId: string,
+  appNames: string | undefined,
+  timeScale: TimeScale | null,
+) {
+  const timeRange = timeScale ? toRoundedDateRange(timeScale) : null;
+  const startUnix = timeRange?.[0]?.unix();
+  const endUnix = timeRange?.[1]?.unix();
+
+  return useSwrWithClusterId<StatementDetailsResponse>(
+    fingerprintId && timeScale
+      ? {
+          name: STATEMENT_DETAILS_SWR_KEY,
+          fingerprintId,
+          appNames: appNames ?? "",
+          start: startUnix,
+          end: endUnix,
+        }
+      : null,
+    () =>
+      getStatementDetails(
+        new cockroach.server.serverpb.StatementDetailsRequest({
+          fingerprint_id: fingerprintId,
+          app_names: appNames?.split(","),
+          start: Long.fromNumber(startUnix),
+          end: Long.fromNumber(endUnix),
+        }),
+      ),
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
+  );
+}
+
 export function convertStatementRawFormatToAggregatedStatistics(
   s: StatementRawFormat,
 ): AggregateStatistics {
