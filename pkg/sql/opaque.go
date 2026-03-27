@@ -102,6 +102,10 @@ func planOpaque(ctx context.Context, p *planner, stmt tree.Statement) (planNode,
 		return p.AlterDatabaseSetZoneConfigExtension(ctx, n)
 	case *tree.AlterDefaultPrivileges:
 		return p.alterDefaultPrivileges(ctx, n)
+	case *tree.AlterDomain:
+		return nil, errors.WithHint(pgerror.New(pgcode.FeatureNotSupported,
+			"ALTER DOMAIN is not yet supported"),
+			"See: https://github.com/cockroachdb/cockroach/issues/27796")
 	case *tree.AlterExternalConnection:
 		return p.AlterExternalConnection(ctx, n)
 	case *tree.AlterFunctionOptions:
@@ -356,6 +360,7 @@ func init() {
 		&tree.AlterDatabaseDropSecondaryRegion{},
 		&tree.AlterDatabaseSetZoneConfigExtension{},
 		&tree.AlterDefaultPrivileges{},
+		&tree.AlterDomain{},
 		&tree.AlterFunctionOptions{},
 		&tree.AlterRoutineRename{},
 		&tree.AlterRoutineSetOwner{},
