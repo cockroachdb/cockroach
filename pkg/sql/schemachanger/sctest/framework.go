@@ -684,87 +684,110 @@ var runAllCumulative = flag.Bool(
 	"if true, run all cumulative instead of a random subset",
 )
 
+// PrepResult contains the results from the prepare phase of backup tests.
+// It provides stage counts and metadata needed to build test cases, along with
+// variant-specific data to be passed to each test case.
+type PrepResult struct {
+	// PostCommitCount is the number of PostCommit stages.
+	PostCommitCount int
+	// PostCommitNonRevertibleCount is the number of PostCommitNonRevertible stages.
+	PostCommitNonRevertibleCount int
+	// After is the expected descriptor state after schema change completion.
+	After [][]string
+	// DatabaseName is the database containing the schema change.
+	DatabaseName string
+	// CreateDatabaseStmt is the CREATE DATABASE statement for this database.
+	CreateDatabaseStmt string
+	// PrepData is variant-specific data to pass to test cases.
+	// Type depends on the prepare function:
+	//   - backupSuccessPrepare: backupSuccessTestArgs
+	//   - backupRollbacksPrepare: backupRollbacksTestArgs
+	// Test functions must type-assert to the expected type. The use of interface{}
+	// provides flexibility for different test variants without requiring generics.
+	PrepData interface{}
+}
+
+// CumulativeTestPrepareFunc prepares the test environment and returns metadata
+// needed for cumulative tests. It is called once per test spec to determine
+// the number of post-commit stages and collect variant-specific test data.
+type CumulativeTestPrepareFunc func(t *testing.T, spec CumulativeTestSpec) PrepResult
+
+// CumulativeTestStageFunc is the test function executed for each post-commit
+// stage.
+type CumulativeTestStageFunc func(t *testing.T, spec CumulativeTestCaseSpec, prepData interface{})
+
+// CumulativeTestSamplingFunc optionally filters or samples the generated test
+// cases to reduce the number of stages executed.
+type CumulativeTestSamplingFunc func([]CumulativeTestCaseSpec) []CumulativeTestCaseSpec
+
 // cumulativeTestForEachPostCommitStage invokes `tf` once for each stage in the
 // PostCommitPhase.
 func cumulativeTestForEachPostCommitStage(
 	t *testing.T,
 	relTestCaseDir string,
 	factory TestServerFactory,
-	prepFn func(t *testing.T, spec CumulativeTestSpec, dbName string),
-	tf func(t *testing.T, spec CumulativeTestCaseSpec),
-	samplingFn func([]CumulativeTestCaseSpec) []CumulativeTestCaseSpec,
+	prepFn CumulativeTestPrepareFunc,
+	tf CumulativeTestStageFunc,
+	samplingFn CumulativeTestSamplingFunc,
 ) {
 	testFunc := func(t *testing.T, spec CumulativeTestSpec) {
 		// Skip this test if any of the stmts is not fully supported.
 		if err := areStmtsFullySupportedAtClusterVersion(t, spec, factory); err != nil {
 			skip.IgnoreLint(t, "test is skipped because", err.Error())
 		}
-		var postCommitCount, postCommitNonRevertibleCount int
-		var after [][]string
-		var dbName string
-		var createDatabaseStmt string
-		prepfn := func(db *gosql.DB, p scplan.Plan) {
-			for _, s := range p.Stages {
-				switch s.Phase {
-				case scop.PostCommitPhase:
-					postCommitCount++
-				case scop.PostCommitNonRevertiblePhase:
-					postCommitNonRevertibleCount++
-				}
-			}
-			tdb := sqlutils.MakeSQLRunner(db)
-			var ok bool
-			dbName, ok = maybeGetDatabaseForIDs(t, tdb, screl.AllTargetStateDescIDs(p.TargetState))
-			if ok {
-				tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
-				res := tdb.QueryStr(t, fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE DATABASE %q]", dbName))
-				createDatabaseStmt = res[0][0]
-			}
-			after = tdb.QueryStr(t, fetchDescriptorStateQuery)
+
+		// Call prepare function to get stage counts and test data.
+		// This eliminates the need for a throwaway cluster.
+		var result PrepResult
+		if prepFn != nil {
+			result = prepFn(t, spec)
+		} else {
+			// If no prepFn provided, fall back to old behavior of creating throwaway cluster.
+			result = legacyPrepareWithThrowawayCluster(t, spec, factory)
 		}
-		withPostCommitPlanAfterSchemaChange(t, spec, factory, prepfn)
-		if postCommitCount+postCommitNonRevertibleCount == 0 {
+
+		if result.PostCommitCount+result.PostCommitNonRevertibleCount == 0 {
 			skip.IgnoreLint(t, "test case has no post-commit stages")
 			return
 		}
-		if dbName == "" {
+		if result.DatabaseName == "" {
 			skip.IgnoreLint(t, "test case has no usable database")
 			return
 		}
+
+		// Build test cases from prepare result.
 		var testCases []CumulativeTestCaseSpec
-		for stageOrdinal := 1; stageOrdinal <= postCommitCount; stageOrdinal++ {
+		for stageOrdinal := 1; stageOrdinal <= result.PostCommitCount; stageOrdinal++ {
 			testCases = append(testCases, CumulativeTestCaseSpec{
 				CumulativeTestSpec: spec,
 				Phase:              scop.PostCommitPhase,
 				StageOrdinal:       stageOrdinal,
-				StagesCount:        postCommitCount,
-				After:              after,
-				DatabaseName:       dbName,
-				CreateDatabaseStmt: createDatabaseStmt,
+				StagesCount:        result.PostCommitCount,
+				After:              result.After,
+				DatabaseName:       result.DatabaseName,
+				CreateDatabaseStmt: result.CreateDatabaseStmt,
 			})
 		}
-		for stageOrdinal := 1; stageOrdinal <= postCommitNonRevertibleCount; stageOrdinal++ {
+		for stageOrdinal := 1; stageOrdinal <= result.PostCommitNonRevertibleCount; stageOrdinal++ {
 			testCases = append(testCases, CumulativeTestCaseSpec{
 				CumulativeTestSpec: spec,
 				Phase:              scop.PostCommitNonRevertiblePhase,
 				StageOrdinal:       stageOrdinal,
-				StagesCount:        postCommitNonRevertibleCount,
-				After:              after,
-				DatabaseName:       dbName,
-				CreateDatabaseStmt: createDatabaseStmt,
+				StagesCount:        result.PostCommitNonRevertibleCount,
+				After:              result.After,
+				DatabaseName:       result.DatabaseName,
+				CreateDatabaseStmt: result.CreateDatabaseStmt,
 			})
-		}
-		var hasFailed bool
-		if prepFn != nil {
-			prepFn(t, spec, dbName)
 		}
 		// If sampling is enabled limit the number of stages executed.
 		if samplingFn != nil {
 			testCases = samplingFn(testCases)
 		}
+
+		var hasFailed bool
 		for _, tc := range testCases {
 			fn := func(t *testing.T) {
-				tf(t, tc)
+				tf(t, tc, result.PrepData)
 			}
 			if hasFailed {
 				fn = func(t *testing.T) {
@@ -777,6 +800,45 @@ func cumulativeTestForEachPostCommitStage(
 		}
 	}
 	cumulativeTest(t, relTestCaseDir, testFunc)
+}
+
+// legacyPrepareWithThrowawayCluster is a fallback for tests that haven't been
+// migrated to the new PrepResult pattern. It creates a throwaway cluster just
+// to count stages, matching the old behavior.
+//
+// Tests still using this legacy path (passing nil prepFn):
+//   - Rollback
+//   - Pause
+//   - PauseMixedVersion
+//
+// These should be migrated to provide their own prepare functions that reuse
+// a single cluster, similar to how backup tests (BackupSuccess*, BackupRollbacks*)
+// have been migrated.
+func legacyPrepareWithThrowawayCluster(
+	t *testing.T, spec CumulativeTestSpec, factory TestServerFactory,
+) PrepResult {
+	var result PrepResult
+	prepfn := func(db *gosql.DB, p scplan.Plan) {
+		for _, s := range p.Stages {
+			switch s.Phase {
+			case scop.PostCommitPhase:
+				result.PostCommitCount++
+			case scop.PostCommitNonRevertiblePhase:
+				result.PostCommitNonRevertibleCount++
+			}
+		}
+		tdb := sqlutils.MakeSQLRunner(db)
+		var ok bool
+		result.DatabaseName, ok = maybeGetDatabaseForIDs(t, tdb, screl.AllTargetStateDescIDs(p.TargetState))
+		if ok {
+			tdb.Exec(t, fmt.Sprintf("USE %q", result.DatabaseName))
+			res := tdb.QueryStr(t, fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE DATABASE %q]", result.DatabaseName))
+			result.CreateDatabaseStmt = res[0][0]
+		}
+		result.After = tdb.QueryStr(t, fetchDescriptorStateQuery)
+	}
+	withPostCommitPlanAfterSchemaChange(t, spec, factory, prepfn)
+	return result
 }
 
 // fetchDescriptorStateQuery returns the CREATE statements for all descriptors
