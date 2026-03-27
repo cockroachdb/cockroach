@@ -109,9 +109,13 @@ func (m *testBurstManager) refillBurstBuckets(toAdd int64, capacity int64) {
 	}
 }
 
+func (m *testBurstManager) resetSQLStatsInInterval() (int64, int64, int64) {
+	return 0, 0, 0
+}
+
 func (m *testModel) init() {}
 
-func (m *testModel) fit(_ context.Context, targets targetUtilizations) rates {
+func (m *testModel) fit(_ context.Context, targets targetUtilizations, _ sqlIntervalStats) rates {
 	// targets uses float64, which when written to golden file can lead to
 	// test reproducibility issues. Here, we multiply by 100 & then round to
 	// the nearest integer.
@@ -276,7 +280,7 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	// to one, since in prod on the first call to fit, there will be no CPU
 	// usage data to use to determine tokenToCPUTimeMultiplier.
 	ctx := context.Background()
-	refillRates := model.fit(ctx, targets)
+	refillRates := model.fit(ctx, targets, sqlIntervalStats{})
 	require.Equal(t, float64(1), model.tokenToCPUTimeMultiplier)
 	// Given that tokenToCPUTimeMultiplier equals one, refillRates is equal
 	// to target utilization for the bucket * the vCPU count (10 vCPUs in this
@@ -305,7 +309,7 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	actualCPUTime.append(dur, 100)
 	for i := 0; i < 100; i++ {
 		testTime.Advance(time.Second)
-		_ = model.fit(ctx, targets)
+		_ = model.fit(ctx, targets, sqlIntervalStats{})
 	}
 	tolerance := 0.01
 	require.InDelta(t, 2, model.tokenToCPUTimeMultiplier, tolerance)
@@ -317,7 +321,7 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	actualCPUTime.append(dur*2, 100)
 	for i := 0; i < 100; i++ {
 		testTime.Advance(time.Second)
-		_ = model.fit(ctx, targets)
+		_ = model.fit(ctx, targets, sqlIntervalStats{})
 	}
 	require.InDelta(t, 4, model.tokenToCPUTimeMultiplier, tolerance)
 
@@ -327,7 +331,7 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	actualCPUTime.append(dur*2, 100)
 	for i := 0; i < 100; i++ {
 		testTime.Advance(time.Second)
-		_ = model.fit(ctx, targets)
+		_ = model.fit(ctx, targets, sqlIntervalStats{})
 	}
 	require.InDelta(t, 1, model.tokenToCPUTimeMultiplier, tolerance)
 
@@ -338,7 +342,7 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	actualCPUTime.append(dur*40, 100)
 	for i := 0; i < 100; i++ {
 		testTime.Advance(time.Second)
-		_ = model.fit(ctx, targets)
+		_ = model.fit(ctx, targets, sqlIntervalStats{})
 	}
 	require.InDelta(t, 20, model.tokenToCPUTimeMultiplier, tolerance)
 
@@ -349,7 +353,7 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	actualCPUTime.append(dur, 100)
 	for i := 0; i < 100; i++ {
 		testTime.Advance(time.Second)
-		_ = model.fit(ctx, targets)
+		_ = model.fit(ctx, targets, sqlIntervalStats{})
 	}
 	require.InDelta(t, 1, model.tokenToCPUTimeMultiplier, tolerance)
 
@@ -359,7 +363,7 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	actualCPUTime.append(dur*2, 100)
 	for i := 0; i < 100; i++ {
 		testTime.Advance(time.Second)
-		_ = model.fit(ctx, targets)
+		_ = model.fit(ctx, targets, sqlIntervalStats{})
 	}
 	require.InDelta(t, 2, model.tokenToCPUTimeMultiplier, tolerance)
 
@@ -378,7 +382,7 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	actualCPUTime.append(dur/5, 100)
 	for i := 0; i < 100; i++ {
 		testTime.Advance(time.Second)
-		_ = model.fit(ctx, targets)
+		_ = model.fit(ctx, targets, sqlIntervalStats{})
 	}
 	require.InDelta(t, 2, model.tokenToCPUTimeMultiplier, tolerance)
 
@@ -388,7 +392,7 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 	actualCPUTime.append(dur*100, 100)
 	for i := 0; i < 100; i++ {
 		testTime.Advance(time.Second)
-		_ = model.fit(ctx, targets)
+		_ = model.fit(ctx, targets, sqlIntervalStats{})
 	}
 	require.InDelta(t, 20, model.tokenToCPUTimeMultiplier, tolerance)
 
@@ -407,7 +411,7 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 		for i := 0; ; i++ {
 			require.Less(t, i, 100)
 			testTime.Advance(time.Second)
-			refillRates = model.fit(ctx, targets)
+			refillRates = model.fit(ctx, targets, sqlIntervalStats{})
 			mult := model.tokenToCPUTimeMultiplier
 			if mult == lastMult {
 				break
@@ -438,7 +442,7 @@ func TestCPUTimeTokenLinearModel(t *testing.T) {
 		exited = true
 	})
 	defer log.ResetExitFunc()
-	_ = model.fit(ctx, targets)
+	_ = model.fit(ctx, targets, sqlIntervalStats{})
 	require.True(t, exited, "expected log.Fatalf to be called")
 }
 

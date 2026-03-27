@@ -224,9 +224,15 @@ func NewSeparateProcessTenantServer(
 	}
 	// TODO(irfansharif): hook up NewGrantCoordinatorSQL.
 	var noopElasticCPUGrantCoord *admission.ElasticCPUGrantCoordinator = nil
+	// In separate-process mode there is no local KV, so there is no CPU
+	// work queue to connect to. Pass settings for the enabled check, and a
+	// getWorkQueue that returns nil (no admission control).
+	sqlCPUProvider := admission.NewSQLCPUProvider(
+		&baseCfg.Settings.SV, func(roachpb.TenantID) *admission.WorkQueue { return nil },
+	)
 	return newTenantServer(
 		ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, mtinfopb.ServiceModeExternal,
-		noopElasticCPUGrantCoord, admission.NewSQLCPUProvider())
+		noopElasticCPUGrantCoord, sqlCPUProvider)
 }
 
 // newSharedProcessTenantServer creates a tenant-specific, SQL-only

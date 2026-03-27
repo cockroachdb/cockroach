@@ -35,6 +35,7 @@ func TestCPUTimeTokenFitLogger(t *testing.T) {
 			multiplier, isLowCPU,
 			intCPU, tokensUsed,
 			time.Second, cpuCapacity,
+			0, 0, 0, /* sqlAdmittedCount, sqlTokensConsumed, sqlTokensReturned */
 		); shouldLog {
 			buf.WriteString(string(redact.Sprint(msg)))
 			buf.WriteByte('\n')
@@ -85,6 +86,33 @@ func TestCPUTimeTokenFitLogger(t *testing.T) {
 		2.0,           // multiplier
 		8*time.Second, // intCPU
 	)
+
+	// Scenario 6: SQL CPU admission active. Helper with SQL stats.
+	accSQL := func(
+		multiplier float64, intCPU time.Duration,
+		sqlAdmits, sqlConsumed, sqlReturned int64,
+	) {
+		tokensUsed := int64(float64(intCPU) / multiplier)
+		isLowCPU := intCPU <= 2*time.Second
+		if msg, shouldLog := fl.accumulate(
+			multiplier, isLowCPU,
+			intCPU, tokensUsed,
+			time.Second, cpuCapacity,
+			sqlAdmits, sqlConsumed, sqlReturned,
+		); shouldLog {
+			buf.WriteString(string(redact.Sprint(msg)))
+			buf.WriteByte('\n')
+		}
+	}
+	for i := 0; i < 10; i++ {
+		accSQL(
+			1.0,                            // multiplier
+			8*time.Second,                  // intCPU
+			50,                             // sqlAdmittedCount per interval
+			int64(500*time.Microsecond)*50, // sqlTokensConsumed
+			int64(100*time.Microsecond)*50, // sqlTokensReturned
+		)
+	}
 
 	echotest.Require(t, buf.String(), datapathutils.TestDataPath(t, "cpu_time_token_fit_logger"))
 }

@@ -17,14 +17,35 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 )
 
+// NB: disabling this setting while sqlCPUTimeTokenACEnabled is true leaves the
+// SQL setting dangling, but is harmless: sqlCPUTimeTokenACIsEnabled requires
+// both settings to be true, so the SQL path is effectively disabled at runtime.
 var cpuTimeTokenACEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"admission.cpu_time_tokens.enabled",
 	"if true, CPU time token AC will be used for foreground KVWork, instead of slots-based AC -- "+
 		"note that this is not supported in production except on multi-tenant Serverless clusters",
 	false)
+
+var sqlCPUTimeTokenACEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"admission.sql_cpu_time_tokens.enabled",
+	"when true, SQL CPU usage is admitted through the same CPU time token "+
+		"budget as KV work; has no effect unless admission.cpu_time_tokens.enabled "+
+		"is also true",
+	false,
+	settings.WithValidateBool(func(sv *settings.Values, val bool) error {
+		if val && !cpuTimeTokenACIsEnabled(sv) {
+			return errors.New(
+				"admission.sql_cpu_time_tokens.enabled requires " +
+					"admission.cpu_time_tokens.enabled to also be true",
+			)
+		}
+		return nil
+	}))
 
 // cpuTimeTokenACKillSwitch is an env var kill switch that disables CPU time
 // token AC regardless of the cluster setting. This is useful when SQL is
@@ -39,6 +60,13 @@ func cpuTimeTokenACIsEnabled(sv *settings.Values) bool {
 	return !cpuTimeTokenACKillSwitch && cpuTimeTokenACEnabled.Get(sv)
 }
 
+// sqlCPUTimeTokenACIsEnabled returns true if SQL CPU time token AC is
+// enabled. Both the SQL-specific setting and the base CTT setting must
+// be true.
+func sqlCPUTimeTokenACIsEnabled(sv *settings.Values) bool {
+	return cpuTimeTokenACIsEnabled(sv) && sqlCPUTimeTokenACEnabled.Get(sv)
+}
+
 // CPUGrantCoordinators's main purpose is to act as a shim. Depending on
 // whether admission.cpu_time_tokens.enabled is true or false, a WorkQueue
 // that does slot-based or CPU time token AC is returned from
@@ -48,6 +76,13 @@ type CPUGrantCoordinators struct {
 	st           *cluster.Settings
 	slotsCoord   *GrantCoordinator
 	cpuTimeCoord *cpuTimeTokenGrantCoordinator
+}
+
+func (coord *CPUGrantCoordinators) GetCPUWorkQueue(isSystemTenant bool) *WorkQueue {
+	if isSystemTenant {
+		return coord.cpuTimeCoord.getWorkQueue(systemTenant)
+	}
+	return coord.cpuTimeCoord.getWorkQueue(appTenant)
 }
 
 // GetKVWorkQueue returns a WorkQueue to use for KVWork. If
@@ -62,10 +97,7 @@ func (coord *CPUGrantCoordinators) GetKVWorkQueue(isSystemTenant bool) *WorkQueu
 	if !cpuTimeTokenACIsEnabled(&coord.st.SV) {
 		return coord.slotsCoord.GetWorkQueue(KVWork)
 	}
-	if isSystemTenant {
-		return coord.cpuTimeCoord.getWorkQueue(systemTenant)
-	}
-	return coord.cpuTimeCoord.getWorkQueue(appTenant)
+	return coord.GetCPUWorkQueue(isSystemTenant)
 }
 
 // GetSQLWorkQueue returns a WorkQueue for SQLKVResponseWork or
@@ -151,6 +183,7 @@ func makeCPUTimeTokenGrantCoordinator(
 			tokensUsed:     metrics.TokensUsedPerTenant[tier],
 			tokensReturned: metrics.TokensReturnedPerTenant[tier],
 		}
+		opts.cpuTimeTokenMetrics = metrics
 		requesters[tier] = makeWorkQueue(
 			ambientCtx, KVWork, &childGranters[tier], settings, wqMetrics, opts)
 		granter.requester[tier] = requesters[tier]

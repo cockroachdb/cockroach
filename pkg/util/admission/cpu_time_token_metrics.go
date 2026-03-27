@@ -81,6 +81,34 @@ var (
 		Measurement: "Tokens",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	cpuTimeTokenSQLAdmittedCountMeta = metric.Metadata{
+		Name: "admission.cpu_time_tokens.sql.admitted_count",
+		Help: crstrings.UnwrapText(`
+			Cumulative number of SQL CPU requests admitted by CPU time
+			token admission control`),
+		Measurement: "Requests",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	cpuTimeTokenSQLTokensConsumedMeta = metric.Metadata{
+		Name: "admission.cpu_time_tokens.sql.tokens_consumed",
+		Help: crstrings.UnwrapText(`
+			Cumulative CPU time tokens consumed by SQL CPU work;
+			rate() gives the SQL CPU token consumption rate`),
+		Measurement: "Tokens",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	cpuTimeTokenSQLTokensReturnedMeta = metric.Metadata{
+		Name: "admission.cpu_time_tokens.sql.tokens_returned",
+		Help: crstrings.UnwrapText(`
+			Cumulative CPU time tokens returned by SQL CPU work,
+			for example when actual CPU usage was lower than the
+			initial reservation`),
+		Measurement: "Tokens",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // cpuTimeTokenMetrics tracks metrics for the CPU time token admission
@@ -136,6 +164,13 @@ type cpuTimeTokenMetrics struct {
 	// they give per-tenant visibility into token flow.
 	TokensUsedPerTenant     [numResourceTiers]*aggmetric.AggCounter
 	TokensReturnedPerTenant [numResourceTiers]*aggmetric.AggCounter
+
+	// SQL-specific counters for observing the SQL CPU admission path
+	// independently from KV. These are global (not per-tenant) because
+	// SQL CPU work only flows through app tenant queues today.
+	SQLAdmittedCount  *metric.Counter
+	SQLTokensConsumed *metric.Counter
+	SQLTokensReturned *metric.Counter
 }
 
 func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
@@ -143,9 +178,12 @@ func makeCPUTimeTokenMetrics() *cpuTimeTokenMetrics {
 	// per-tenant metrics. Inlined to avoid a dependency cycle.
 	b := aggmetric.MakeBuilder("tenant_id")
 	m := &cpuTimeTokenMetrics{
-		Multiplier:     metric.NewGaugeFloat64(cpuTimeTokenMultiplierMeta),
-		TokensConsumed: metric.NewCounter(cpuTimeTokensConsumedMeta),
-		TokensReturned: metric.NewCounter(cpuTimeTokensReturnedMeta),
+		Multiplier:        metric.NewGaugeFloat64(cpuTimeTokenMultiplierMeta),
+		TokensConsumed:    metric.NewCounter(cpuTimeTokensConsumedMeta),
+		TokensReturned:    metric.NewCounter(cpuTimeTokensReturnedMeta),
+		SQLAdmittedCount:  metric.NewCounter(cpuTimeTokenSQLAdmittedCountMeta),
+		SQLTokensConsumed: metric.NewCounter(cpuTimeTokenSQLTokensConsumedMeta),
+		SQLTokensReturned: metric.NewCounter(cpuTimeTokenSQLTokensReturnedMeta),
 	}
 	// Create one AggCounter per tier for each per-tenant metric.
 	for tier := resourceTier(0); tier < numResourceTiers; tier++ {
