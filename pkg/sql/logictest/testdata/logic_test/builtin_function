@@ -2352,17 +2352,17 @@ CREATE TABLE test.pg_indexdef_test (
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_idx'))
 ----
-CREATE UNIQUE INDEX pg_indexdef_idx ON test.public.pg_indexdef_test USING btree (a ASC)
+CREATE UNIQUE INDEX pg_indexdef_idx ON public.pg_indexdef_test USING btree (a ASC)
 
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_partial_idx'))
 ----
-CREATE INDEX pg_indexdef_partial_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE (a > 0)
+CREATE INDEX pg_indexdef_partial_idx ON public.pg_indexdef_test USING btree (a ASC) WHERE (a > 0)
 
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_partial_enum_idx'))
 ----
-CREATE INDEX pg_indexdef_partial_enum_idx ON test.public.pg_indexdef_test USING btree (a ASC) WHERE (e IN ('foo'::public.testenum, 'bar'::public.testenum))
+CREATE INDEX pg_indexdef_partial_enum_idx ON public.pg_indexdef_test USING btree (a ASC) WHERE (e IN ('foo'::testenum, 'bar'::testenum))
 
 query T
 SELECT pg_catalog.pg_get_indexdef(0, 0, true)
@@ -2372,7 +2372,7 @@ NULL
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_idx'), 0, true)
 ----
-CREATE UNIQUE INDEX pg_indexdef_idx ON test.public.pg_indexdef_test USING btree (a ASC)
+CREATE UNIQUE INDEX pg_indexdef_idx ON public.pg_indexdef_test USING btree (a ASC)
 
 statement ok
 CREATE TABLE test.pg_indexdef_test_cols (a INT, b INT, UNIQUE INDEX pg_indexdef_cols_idx (a ASC, b DESC), INDEX other (a DESC))
@@ -2380,7 +2380,7 @@ CREATE TABLE test.pg_indexdef_test_cols (a INT, b INT, UNIQUE INDEX pg_indexdef_
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_cols_idx'), 0, true)
 ----
-CREATE UNIQUE INDEX pg_indexdef_cols_idx ON test.public.pg_indexdef_test_cols USING btree (a ASC, b DESC)
+CREATE UNIQUE INDEX pg_indexdef_cols_idx ON public.pg_indexdef_test_cols USING btree (a ASC, b DESC)
 
 query T
 SELECT pg_catalog.pg_get_indexdef((SELECT oid from pg_class WHERE relname='pg_indexdef_cols_idx'), 1, true)

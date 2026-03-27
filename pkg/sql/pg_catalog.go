@@ -2401,7 +2401,8 @@ func indexDefFromDescriptor(
 	table catalog.TableDescriptor,
 	index catalog.Index,
 ) (string, error) {
-	tableName := tree.MakeTableNameWithSchema(tree.Name(db.GetName()), tree.Name(sc.GetName()), tree.Name(table.GetName()))
+	tableName := tree.MakeTableNameWithSchema("", tree.Name(sc.GetName()), tree.Name(table.GetName()))
+	tableName.ExplicitCatalog = false
 	partitionStr := ""
 	fmtStr, err := catformat.IndexForDisplay(
 		ctx,
