@@ -1431,6 +1431,7 @@ GO_TARGETS = [
     "//pkg/cmd/roachtest/registry:registry_test",
     "//pkg/cmd/roachtest/roachtestflags:roachtestflags",
     "//pkg/cmd/roachtest/roachtestflags:roachtestflags_test",
+    "//pkg/cmd/roachtest/roachtestutil/cdcutil:cdcutil",
     "//pkg/cmd/roachtest/roachtestutil/clusterupgrade:clusterupgrade",
     "//pkg/cmd/roachtest/roachtestutil/mixedversion:mixedversion",
     "//pkg/cmd/roachtest/roachtestutil/mixedversion:mixedversion_test",
