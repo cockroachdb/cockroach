@@ -11,13 +11,11 @@ import {
   FilterCheckboxOptionItem,
   NodeSelector,
   NodeID,
+  useDatabasesList,
 } from "@cockroachlabs/cluster-ui";
 import { Row, Col } from "antd";
 import classNames from "classnames/bind";
 import React, { useMemo } from "react";
-import { useSelector } from "react-redux";
-
-import { selectDatabases } from "../statements/statementsPage";
 
 import styles from "./hotRanges.module.scss";
 import { Filters } from "./useFilters";
@@ -59,7 +57,7 @@ export const HotRangesFilter = (props: HotRangesFilterProps) => {
   const setIndex = (index: string) => mergeFilters({ index });
 
   // Setup the options and selected values for the database filter.
-  const databaseNames = useSelector(selectDatabases);
+  const { databases: databaseNames } = useDatabasesList();
   const databaseOptions = databaseNames.map((db: string) => ({
     label: db,
     value: db,

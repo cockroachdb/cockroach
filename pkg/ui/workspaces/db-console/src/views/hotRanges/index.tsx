@@ -17,11 +17,10 @@ import {
 import classNames from "classnames/bind";
 import React, { useRef, useMemo, useEffect, useContext, useState } from "react";
 import { Helmet } from "react-helmet";
-import { useDispatch, useSelector } from "react-redux";
+import { useSelector } from "react-redux";
 
 import { useHotRanges } from "src/hooks/useHotRanges";
 import { analytics } from "src/redux/analytics";
-import { refreshDatabases } from "src/redux/apiReducers";
 import { selectNodeLocalities } from "src/redux/localities";
 import { performanceBestPracticesHotSpots } from "src/util/docs";
 import { HotRangesFilter } from "src/views/hotRanges/hotRangesFilter";
@@ -48,7 +47,6 @@ const emptyMessages = {
 };
 
 const HotRangesPage = () => {
-  const dispatch = useDispatch();
   const nodeIdToLocalityMap = useSelector(selectNodeLocalities);
   const timezone = useContext(TimezoneContext);
 
@@ -83,11 +81,6 @@ const HotRangesPage = () => {
     // when the contents haven't changed, but the references have.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analyticsKey]);
-
-  // load the databases if possible.
-  useEffect(() => {
-    dispatch(refreshDatabases());
-  }, [dispatch]);
 
   const clearButtonRef = useRef<HTMLSpanElement>();
   const filteredRanges = useMemo(() => {
