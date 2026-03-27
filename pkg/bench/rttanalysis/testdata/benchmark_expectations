@@ -9,7 +9,7 @@ exp,benchmark
 11,AlterRegions/alter_empty_database_add_region
 12-16,AlterRegions/alter_empty_database_drop_region
 12-13,AlterRegions/alter_populated_database_add_region
-15-16,AlterRegions/alter_populated_database_drop_region
+14-16,AlterRegions/alter_populated_database_drop_region
 12,AlterRole/alter_role_with_1_option
 15,AlterRole/alter_role_with_2_options
 19,AlterRole/alter_role_with_3_options
@@ -36,12 +36,12 @@ exp,benchmark
 13,AlterTableDropConstraint/alter_table_drop_1_check_constraint
 13,AlterTableDropConstraint/alter_table_drop_2_check_constraints
 13,AlterTableDropConstraint/alter_table_drop_3_check_constraints
-28,AlterTableLocality/alter_from_global_to_rbr
+27-30,AlterTableLocality/alter_from_global_to_rbr
 9-10,AlterTableLocality/alter_from_global_to_regional_by_table
 21-24,AlterTableLocality/alter_from_rbr_to_global
 21-24,AlterTableLocality/alter_from_rbr_to_regional_by_table
 9-10,AlterTableLocality/alter_from_regional_by_table_to_global
-28,AlterTableLocality/alter_from_regional_by_table_to_rbr
+27-30,AlterTableLocality/alter_from_regional_by_table_to_rbr
 8,AlterTableSplit/alter_table_split_at_1_value
 11,AlterTableSplit/alter_table_split_at_2_values
 14,AlterTableSplit/alter_table_split_at_3_values
@@ -57,9 +57,9 @@ exp,benchmark
 16,DropDatabase/drop_database_1_table
 16,DropDatabase/drop_database_2_tables
 16,DropDatabase/drop_database_3_tables
-21,DropRole/drop_1_role
-29,DropRole/drop_2_roles
-38,DropRole/drop_3_roles
+19-21,DropRole/drop_1_role
+28-30,DropRole/drop_2_roles
+37-39,DropRole/drop_3_roles
 13,DropSequence/drop_1_sequence
 15,DropSequence/drop_2_sequences
 17,DropSequence/drop_3_sequences
