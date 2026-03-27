@@ -111,6 +111,14 @@ func (r *logicalReplicationResumer) Resume(ctx context.Context, execCtx interfac
 		return jobs.MarkPauseRequestError(errors.Newf("UDF-based logical replication writer is disabled and will be deleted in a future CockroachDB release"))
 	}
 
+	payload := r.job.Details().(jobspb.LogicalReplicationDetails)
+	if payload.Mode == jobspb.LogicalReplicationDetails_Transactional {
+		return r.handleResumeError(ctx, jobExecCtx,
+			jobs.MarkAsPermanentJobError(errors.WithHint(
+				errors.New("transactional replication mode is not yet implemented"),
+				"use MODE = 'immediate' instead")))
+	}
+
 	return r.handleResumeError(ctx, jobExecCtx, r.ingestWithRetries(ctx, jobExecCtx))
 }
 
