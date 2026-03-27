@@ -372,7 +372,10 @@ func (b *Batch[B]) State() B {
 
 // Raft returns the LogEngine writer. When engines are separated, the raft
 // batch is lazily created on first access.
-func (b *Batch[B]) Raft() RaftWO {
+//
+// TODO(pav-kv): return RaftWO when the callers needing the Repr() of the batch
+// find a workaround.
+func (b *Batch[B]) Raft() storage.WriteBatch {
 	if b.raft == nil {
 		assertTrue(b.separated(), "raft batch unexpectedly nil with non-separated engines")
 		b.raft = b.logEngine.NewWriteBatch()
@@ -384,6 +387,21 @@ func (b *Batch[B]) Raft() RaftWO {
 // not separated, the writer is a zero-value no-op.
 func (b *Batch[B]) WagWriter() *wag.Writer {
 	return &b.w
+}
+
+// TestingFlushWAG flushes the WAG node to the Raft() batch and empties the
+// staged WAG events. The batch can be then committed with the Commit method.
+//
+// Used only in tests for introspecting into the Raft() batch before the commit.
+func (b *Batch[B]) TestingFlushWAG() error {
+	if !b.separated() || b.w.Empty() {
+		return nil
+	}
+	if err := b.w.Flush(b.Raft(), b.state.Repr()); err != nil {
+		return err
+	}
+	b.w.Clear()
+	return nil
 }
 
 // Commit commits the batch to storage.
