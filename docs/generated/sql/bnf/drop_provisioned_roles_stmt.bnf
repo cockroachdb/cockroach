@@ -1,0 +1,2 @@
+drop_provisioned_roles_stmt ::=
+	'DROP' 'PROVISIONED' 'ROLES' opt_with_drop_provisioned_roles_options opt_limit_clause

@@ -11,5 +11,6 @@ drop_stmt ::=
 	| drop_trigger_stmt
 	| drop_policy_stmt
 	| drop_role_stmt
+	| drop_provisioned_roles_stmt
 	| drop_schedule_stmt
 	| drop_external_connection_stmt
