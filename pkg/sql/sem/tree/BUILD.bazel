@@ -211,6 +211,7 @@ go_test(
         "datum_invariants_test.go",
         "datum_prev_next_test.go",
         "datum_test.go",
+        "drop_provisioned_roles_test.go",
         "expr_test.go",
         "format_test.go",
         "function_definition_test.go",
