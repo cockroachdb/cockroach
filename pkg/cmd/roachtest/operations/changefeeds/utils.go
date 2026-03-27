@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -174,12 +175,21 @@ func changeStateOrCreateChangefeed(
 		return nil
 	}
 
-	// Initialize a random number generator to select a job randomly.
-	r, _ := randutil.NewPseudoRand()
-
-	// Randomly pick a job to perform the action on.
-	jobIndex := randutil.RandIntInRange(r, 0, len(cfJobs))
-	jobToAction := cfJobs[jobIndex]
+	// For RESUME, pick the longest-paused job (lowest high_water_timestamp) to
+	// prevent one changefeed from staying paused indefinitely while newer pauses
+	// get resumed first, which causes protected_age_sec to grow unboundedly.
+	// For other actions, pick a random job.
+	var jobToAction *jobDetails
+	if action == "RESUME" {
+		slices.SortFunc(cfJobs, func(a, b *jobDetails) int {
+			return a.highWaterTimestamp.Compare(b.highWaterTimestamp)
+		})
+		jobToAction = cfJobs[0]
+	} else {
+		r, _ := randutil.NewPseudoRand()
+		jobIndex := randutil.RandIntInRange(r, 0, len(cfJobs))
+		jobToAction = cfJobs[jobIndex]
+	}
 
 	// Execute the action (e.g., PAUSE or CANCEL) on the chosen job.
 	o.Status(fmt.Sprintf("Executing %s on job %s", action, jobToAction.jobID))
