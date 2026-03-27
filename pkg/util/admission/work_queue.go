@@ -201,6 +201,11 @@ type WorkInfo struct {
 	// WorkloadType distinguishes the kind of workload that WorkloadID
 	// represents. Used for ASH sampling.
 	WorkloadType workloadid.WorkloadType
+	// BypassCPUTimeTokenEstimation, when true, tells the WorkQueue to use
+	// the caller-provided RequestedCount instead of the per-tenant CPU time
+	// token estimator. Used for SQL CPU admission where the caller manages
+	// its own token budget.
+	BypassCPUTimeTokenEstimation bool
 }
 
 // ReplicatedWorkInfo groups everything needed to admit replicated writes, done
@@ -651,6 +656,9 @@ type AdmitResponse struct {
 	// CPU time token AC, where a grunning-based measurement of CPU time
 	// is available by the time AdmittedWorkDone is called.
 	requestedCount int64
+	// bypassEstimation is set when the caller bypassed CPU time token
+	// estimation. When true, AdmittedWorkDone skips updating the estimator.
+	bypassEstimation bool
 }
 
 // Admit is called when requesting admission for some work. If
@@ -711,12 +719,14 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	// a measurement of CPU time used servicing the request, courtesy of grunning.
 	// tenant.estimator uses past measurements from grunning to make estimates
 	// in this code path, that is, at admission time.
-	if q.mode == usesCPUTimeTokens && !q.knobs.DisableCPUTimeTokenEstimation {
+	if q.mode == usesCPUTimeTokens && !q.knobs.DisableCPUTimeTokenEstimation &&
+		!info.BypassCPUTimeTokenEstimation {
 		info.RequestedCount = tenant.cpuTimeTokenEstimator.estimateTokensToBeUsed()
 	}
 	admitResponse := AdmitResponse{
-		tenantID:       info.TenantID,
-		requestedCount: info.RequestedCount,
+		tenantID:         info.TenantID,
+		requestedCount:   info.RequestedCount,
+		bypassEstimation: info.BypassCPUTimeTokenEstimation,
 	}
 
 	if info.ReplicatedWorkInfo.Enabled {
@@ -1050,7 +1060,7 @@ func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) 
 		// a measurement of CPU time used servicing the request, courtesy of grunning.
 		// tenant.estimator uses past measurements from grunning to make estimates
 		// in this code path, that is, at admission time.
-		if q.mode == usesCPUTimeTokens {
+		if q.mode == usesCPUTimeTokens && !resp.bypassEstimation {
 			q.mu.defaultCPUTimeTokenEstimator.workDone(cpuTime.Nanoseconds())
 			tenant, ok := q.mu.tenants[resp.tenantID.ToUint64()]
 			// If the tenant struct doesn't exist, it has been GCed due to a lack of

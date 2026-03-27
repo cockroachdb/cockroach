@@ -9,7 +9,9 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -91,6 +93,41 @@ func (coord *CPUGrantCoordinators) SetTenantWeights(weights map[uint64]uint32) {
 // goschedstats.RunnableCountCallback.
 func (coord *CPUGrantCoordinators) GetRunnableCountCallback() goschedstats.RunnableCountCallback {
 	return coord.slotsCoord.CPULoad
+}
+
+// AdmitSQLCPU admits SQL CPU work through the CTT WorkQueue for the
+// appropriate resource tier. Returns the AdmitResponse, the WorkQueue
+// used (needed for AdmittedSQLCPUWorkDone), and any error. The
+// requestedCount is a hint for how many CPU nanosecond tokens are
+// needed; the WorkQueue's per-tenant estimator may override this.
+func (coord *CPUGrantCoordinators) AdmitSQLCPU(
+	ctx context.Context, work SQLWorkInfo, requestedCount int64,
+) (AdmitResponse, *WorkQueue, error) {
+	q := coord.cpuTimeCoord.getWorkQueue(tierForTenant(work.TenantID))
+	resp, err := q.Admit(ctx, WorkInfo{
+		TenantID:                     work.TenantID,
+		Priority:                     work.Priority,
+		CreateTime:                   work.CreateTime,
+		RequestedCount:               requestedCount,
+		BypassCPUTimeTokenEstimation: true,
+	})
+	return resp, q, err
+}
+
+// AdmittedSQLCPUWorkDone informs the WorkQueue that a batch of SQL CPU
+// work is done. cpuTime is the actual CPU time consumed by the batch.
+func (coord *CPUGrantCoordinators) AdmittedSQLCPUWorkDone(
+	q *WorkQueue, resp AdmitResponse, cpuTime time.Duration,
+) {
+	q.AdmittedWorkDone(resp, cpuTime)
+}
+
+// tierForTenant returns the resource tier for the given tenant.
+func tierForTenant(tenantID roachpb.TenantID) resourceTier {
+	if tenantID.IsSystem() {
+		return systemTenant
+	}
+	return appTenant
 }
 
 // Close implements the stop.Closer interface.

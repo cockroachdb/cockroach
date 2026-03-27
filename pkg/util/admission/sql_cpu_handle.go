@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
@@ -76,10 +77,23 @@ var goroutineCPUHandlePool = sync.Pool{
 // SQLCPUHandle manages CPU accounting and admission for SQL work across
 // multiple goroutines.
 //
-// TODO(sumeer): fill in more details.
+// When CPU time token AC is enabled, SQLCPUHandle manages a token budget
+// shared across all goroutines executing the SQL work. Each goroutine's
+// GoroutineCPUHandle.MeasureAndAdmit calls consumeCPU, which deducts from
+// the shared budget. When the budget is exhausted, a new batch of tokens is
+// requested via WorkQueue.Admit, which may block until tokens are available.
+//
+// The acquiringCh channel (buffered, capacity 1) serializes the blocking
+// Admit calls across goroutines. The mu mutex protects the token budget
+// state and is only held briefly.
 type SQLCPUHandle struct {
 	workInfo SQLWorkInfo
 	p        *sqlCPUProviderImpl
+
+	// acquiringCh serializes Admit() calls across goroutines sharing this
+	// handle. A goroutine must send to this channel before calling Admit,
+	// and receive from it after the call completes.
+	acquiringCh chan struct{}
 
 	mu struct {
 		syncutil.Mutex
@@ -88,13 +102,20 @@ type SQLCPUHandle struct {
 		// Backing for up to 2 goroutine handles, to avoid allocations in
 		// gHandles when there are 2 or fewer goroutines.
 		handlesBacking [2]*GoroutineCPUHandle
+
+		// Token budget for the current admission batch. Only used when CPU
+		// time token AC is enabled.
+		admitResp  AdmitResponse
+		admitQueue *WorkQueue
+		remaining  time.Duration
 	}
 }
 
 func newSQLCPUAdmissionHandle(workInfo SQLWorkInfo, p *sqlCPUProviderImpl) *SQLCPUHandle {
 	h := &SQLCPUHandle{
-		workInfo: workInfo,
-		p:        p,
+		workInfo:    workInfo,
+		p:           p,
+		acquiringCh: make(chan struct{}, 1),
 	}
 	h.mu.gHandles = h.mu.handlesBacking[:0]
 	return h
@@ -107,6 +128,118 @@ func (h *SQLCPUHandle) reportCPU(diff time.Duration) {
 		h.p.cumulativeGatewayCPUNanos.Add(diff.Nanoseconds())
 	} else {
 		h.p.cumulativeDistSQLCPUNanos.Add(diff.Nanoseconds())
+	}
+}
+
+// admissionEnabled returns true if CPU time token AC is enabled and this
+// handle is connected to a CPUGrantCoordinators.
+func (h *SQLCPUHandle) admissionEnabled() bool {
+	return h.p.cpuCoords != nil && h.p.st != nil &&
+		cpuTimeTokenACIsEnabled(&h.p.st.SV)
+}
+
+// consumeCPU manages the token budget for CPU time token AC. It is called
+// by GoroutineCPUHandle.measureAndAdmit when CPU usage has been measured.
+//
+// The design follows a "chunked admission" pattern: each call to
+// WorkQueue.Admit obtains a batch of tokens (CPUTokensDeducted). Subsequent
+// CPU consumption is deducted from the remaining budget. When the budget is
+// exhausted, a new batch is requested, which may block.
+//
+// Multiple goroutines may call consumeCPU concurrently. The acquiringCh
+// channel serializes the blocking Admit calls so that only one goroutine
+// calls Admit at a time. Other goroutines either find remaining tokens
+// (deposited by a concurrent Admit) or wait for their turn.
+func (h *SQLCPUHandle) consumeCPU(ctx context.Context, d time.Duration) error {
+	haveTurn := false
+	for {
+		done := func() bool {
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			if h.mu.closed || h.mu.remaining >= d {
+				h.mu.remaining -= d
+				if haveTurn {
+					<-h.acquiringCh
+				}
+				return true
+			} else if h.mu.admitResp.Enabled {
+				// Current batch exhausted. Finish the batch by reporting
+				// actual CPU used (which exceeds the initial estimate).
+				additionalCPU := d - h.mu.remaining
+				h.p.cpuCoords.AdmittedSQLCPUWorkDone(
+					h.mu.admitQueue, h.mu.admitResp,
+					additionalCPU+time.Duration(h.mu.admitResp.requestedCount))
+				h.mu.admitResp = AdmitResponse{}
+				h.mu.admitQueue = nil
+				h.mu.remaining = 0
+				if haveTurn {
+					<-h.acquiringCh
+				}
+				return true
+			}
+			if !haveTurn {
+				// Try to optimistically acquire the turn while holding mu.
+				select {
+				case h.acquiringCh <- struct{}{}:
+					haveTurn = true
+				default:
+				}
+			}
+			return false
+		}()
+		if done {
+			return nil
+		}
+		if haveTurn {
+			// Request 5x the measured CPU as the budget. This means roughly
+			// 1 in 5 measureAndAdmit calls goes through admission; the rest
+			// are fast-path deductions from the remaining budget.
+			budget := 5 * d
+			resp, q, err := h.p.cpuCoords.AdmitSQLCPU(ctx, h.workInfo, int64(budget))
+			if err != nil {
+				<-h.acquiringCh
+				return err
+			}
+			func() {
+				h.mu.Lock()
+				defer h.mu.Unlock()
+				h.mu.admitResp = resp
+				h.mu.admitQueue = q
+				if resp.Enabled {
+					// Use our own budget, not the estimator's requestedCount.
+					h.mu.remaining = budget
+				} else {
+					// AC disabled; set a large budget so we don't keep calling Admit.
+					h.mu.remaining = 1000 * time.Hour
+				}
+				h.mu.remaining -= d
+			}()
+			<-h.acquiringCh
+			return nil
+		}
+		// Don't have the turn yet. Wait for the turn or context cancellation.
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case h.acquiringCh <- struct{}{}:
+			haveTurn = true
+		}
+	}
+}
+
+// returnUnusedTokensLocked returns any unused tokens from the current
+// admission batch. Must be called with h.mu held.
+func (h *SQLCPUHandle) returnUnusedTokensLocked() {
+	if h.mu.admitResp.Enabled {
+		// Report the actual CPU used as the total deducted minus what remains
+		// unused. If remaining > requestedCount, the adjustment will be
+		// negative (returning tokens).
+		actualCPU := time.Duration(h.mu.admitResp.requestedCount) - h.mu.remaining
+		h.p.cpuCoords.AdmittedSQLCPUWorkDone(
+			h.mu.admitQueue, h.mu.admitResp, actualCPU)
+		h.mu.admitResp = AdmitResponse{}
+		h.mu.admitQueue = nil
+		h.mu.remaining = 0
 	}
 }
 
@@ -158,13 +291,15 @@ func (h *SQLCPUHandle) RegisterGoroutine() *GoroutineCPUHandle {
 	return gh
 }
 
-// Close is called when no more reporting is needed. It pools
-// GoroutineCPUHandles that have been closed. GoroutineCPUHandles that are not
-// yet closed are left for GC.
+// Close is called when no more reporting is needed. It returns any unused
+// CPU tokens from the current admission batch and pools GoroutineCPUHandles
+// that have been closed. GoroutineCPUHandles that are not yet closed are
+// left for GC.
 func (h *SQLCPUHandle) Close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.mu.closed = true
+	h.returnUnusedTokensLocked()
 	for i, gh := range h.mu.gHandles {
 		if gh.closed.Load() {
 			gh.reset()
@@ -231,8 +366,6 @@ func (h *GoroutineCPUHandle) Close(ctx context.Context) {
 // CPU time spent in the goroutine and decide whether more CPU needs to be
 // allocated. If more CPU is needed, it can block in acquiring CPU tokens.
 // Returns a non-nil error iff the context is canceled while waiting.
-//
-// TODO(sumeer): implement the measurement and admission logic.
 func (h *GoroutineCPUHandle) MeasureAndAdmit(ctx context.Context) error {
 	return h.measureAndAdmit(ctx, false /* noWait */)
 }
@@ -250,14 +383,12 @@ func (h *GoroutineCPUHandle) measureAndAdmit(ctx context.Context, noWait bool) e
 	if diff <= 0 {
 		return nil
 	}
-	// TODO(sumeer): adding this diff to an atomic in SQLCPUHandle may be too
-	// much overhead. An alternative would be implement an atomic here, and
-	// only update the SQLCPUHandle when enough has accumulated. The reason
-	// we would need an atomic here is that when SQLCPUHandle is closed, it
-	// needs to reach in and grab whatever CPU has not yet been reported.
 	h.cpuAccounted += diff
 	h.h.reportCPU(diff)
-	return nil
+	if noWait || !h.h.admissionEnabled() {
+		return nil
+	}
+	return h.h.consumeCPU(ctx, diff)
 }
 
 // PauseMeasuring is used to pause the CPU accounting for this goroutine. It
@@ -280,6 +411,14 @@ func (h *GoroutineCPUHandle) UnpauseMeasuring() {
 }
 
 type sqlCPUProviderImpl struct {
+	// cpuCoords is the CPU grant coordinators used for admission. When
+	// non-nil (along with st), SQL CPU admission is available (though
+	// it is only active when cpuTimeTokenACIsEnabled returns true).
+	cpuCoords *CPUGrantCoordinators
+	// st holds the cluster settings, used to check whether CPU time
+	// token AC is enabled.
+	st *cluster.Settings
+
 	// cumulativeGatewayCPUNanos tracks the cumulative CPU time in nanoseconds
 	// accounted for SQL work executed at gateway nodes. This value is
 	// monotonically increasing and is updated atomically as CPU time is
@@ -297,13 +436,16 @@ func (p *sqlCPUProviderImpl) GetCumulativeSQLCPUNanos() (gatewayCPUNanos, distCP
 }
 
 func (p *sqlCPUProviderImpl) GetHandle(workInfo SQLWorkInfo) *SQLCPUHandle {
-	// TODO(sumeer): implement.
 	return newSQLCPUAdmissionHandle(workInfo, p)
 }
 
-// NewSQLCPUProvider creates a new SQLCPUProvider.
-//
-// TODO(sumeer): real implementation.
-func NewSQLCPUProvider() SQLCPUProvider {
-	return &sqlCPUProviderImpl{}
+// NewSQLCPUProvider creates a new SQLCPUProvider. If cpuCoords and st are
+// non-nil, SQL CPU admission control is available (gated by the
+// admission.cpu_time_tokens.enabled cluster setting). If either is nil,
+// only CPU measurement and reporting is performed.
+func NewSQLCPUProvider(cpuCoords *CPUGrantCoordinators, st *cluster.Settings) SQLCPUProvider {
+	return &sqlCPUProviderImpl{
+		cpuCoords: cpuCoords,
+		st:        st,
+	}
 }

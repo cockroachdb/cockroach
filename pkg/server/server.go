@@ -603,7 +603,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	)
 	db.SQLKVResponseAdmissionQ = gcoords.RegularCPU.GetSQLWorkQueue(admission.SQLKVResponseWork)
 	db.AdmissionPacerFactory = gcoords.ElasticCPU
-	sqlCPUProvider := admission.NewSQLCPUProvider()
+	sqlCPUProvider := admission.NewSQLCPUProvider(gcoords.RegularCPU, st)
 	db.SQLCPUProvider = sqlCPUProvider
 	goschedstats.RegisterSettings(st)
 	if goschedstats.Supported {
