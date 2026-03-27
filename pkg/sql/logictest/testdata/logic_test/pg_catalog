@@ -1067,23 +1067,23 @@ WHERE schemaname = 'public'
 ORDER BY tablename, indexname
 ----
 crdb_oid    tablename  indexname          indexdef
-784389845   mv1        mv1_pkey           CREATE UNIQUE INDEX mv1_pkey ON constraint_db.public.mv1 USING btree (rowid ASC)
-3687884464  t1         index_key          CREATE UNIQUE INDEX index_key ON constraint_db.public.t1 USING btree (b ASC, c ASC)
-3687884465  t1         t1_a_key           CREATE UNIQUE INDEX t1_a_key ON constraint_db.public.t1 USING btree (a ASC)
-3687884466  t1         t1_pkey            CREATE UNIQUE INDEX t1_pkey ON constraint_db.public.t1 USING btree (p ASC)
-2342807459  t1_m_seq   primary            CREATE INDEX "primary" ON constraint_db.public.t1_m_seq USING btree (value ASC)
-5181036     t1_n_seq   primary            CREATE INDEX "primary" ON constraint_db.public.t1_n_seq USING btree (value ASC)
-2955071325  t2         t2_pkey            CREATE UNIQUE INDEX t2_pkey ON constraint_db.public.t2 USING btree (rowid ASC)
-2955071326  t2         t2_t1_id_idx       CREATE INDEX t2_t1_id_idx ON constraint_db.public.t2 USING btree (t1_id ASC)
-2695335053  t3         t3_a_b_idx         CREATE INDEX t3_a_b_idx ON constraint_db.public.t3 USING btree (a ASC, b DESC) STORING (c)
-2695335054  t3         t3_pkey            CREATE UNIQUE INDEX t3_pkey ON constraint_db.public.t3 USING btree (rowid ASC)
-3214807592  t4         t4_pkey            CREATE UNIQUE INDEX t4_pkey ON constraint_db.public.t4 USING btree (rowid ASC)
-1869730585  t5         t5_pkey            CREATE UNIQUE INDEX t5_pkey ON constraint_db.public.t5 USING btree (rowid ASC)
-2129466854  t6         t6_expr_expr1_idx  CREATE INDEX t6_expr_expr1_idx ON constraint_db.public.t6 USING btree (lower(c) ASC, (a + b) ASC)
-2129466855  t6         t6_expr_idx        CREATE INDEX t6_expr_idx ON constraint_db.public.t6 USING btree ((a + b) ASC)
-2129466850  t6         t6_expr_idx1       CREATE INDEX t6_expr_idx1 ON constraint_db.public.t6 USING btree ((m = 'foo'::public.mytype) ASC) WHERE (m = 'foo'::public.mytype)
-2129466848  t6         t6_expr_key        CREATE UNIQUE INDEX t6_expr_key ON constraint_db.public.t6 USING btree (lower(c) ASC)
-2129466852  t6         t6_pkey            CREATE UNIQUE INDEX t6_pkey ON constraint_db.public.t6 USING btree (rowid ASC)
+784389845   mv1        mv1_pkey           CREATE UNIQUE INDEX mv1_pkey ON public.mv1 USING btree (rowid ASC)
+3687884464  t1         index_key          CREATE UNIQUE INDEX index_key ON public.t1 USING btree (b ASC, c ASC)
+3687884465  t1         t1_a_key           CREATE UNIQUE INDEX t1_a_key ON public.t1 USING btree (a ASC)
+3687884466  t1         t1_pkey            CREATE UNIQUE INDEX t1_pkey ON public.t1 USING btree (p ASC)
+2342807459  t1_m_seq   primary            CREATE INDEX "primary" ON public.t1_m_seq USING btree (value ASC)
+5181036     t1_n_seq   primary            CREATE INDEX "primary" ON public.t1_n_seq USING btree (value ASC)
+2955071325  t2         t2_pkey            CREATE UNIQUE INDEX t2_pkey ON public.t2 USING btree (rowid ASC)
+2955071326  t2         t2_t1_id_idx       CREATE INDEX t2_t1_id_idx ON public.t2 USING btree (t1_id ASC)
+2695335053  t3         t3_a_b_idx         CREATE INDEX t3_a_b_idx ON public.t3 USING btree (a ASC, b DESC) STORING (c)
+2695335054  t3         t3_pkey            CREATE UNIQUE INDEX t3_pkey ON public.t3 USING btree (rowid ASC)
+3214807592  t4         t4_pkey            CREATE UNIQUE INDEX t4_pkey ON public.t4 USING btree (rowid ASC)
+1869730585  t5         t5_pkey            CREATE UNIQUE INDEX t5_pkey ON public.t5 USING btree (rowid ASC)
+2129466854  t6         t6_expr_expr1_idx  CREATE INDEX t6_expr_expr1_idx ON public.t6 USING btree (lower(c) ASC, (a + b) ASC)
+2129466855  t6         t6_expr_idx        CREATE INDEX t6_expr_idx ON public.t6 USING btree ((a + b) ASC)
+2129466850  t6         t6_expr_idx1       CREATE INDEX t6_expr_idx1 ON public.t6 USING btree ((m = 'foo'::public.mytype) ASC) WHERE (m = 'foo'::public.mytype)
+2129466848  t6         t6_expr_key        CREATE UNIQUE INDEX t6_expr_key ON public.t6 USING btree (lower(c) ASC)
+2129466852  t6         t6_pkey            CREATE UNIQUE INDEX t6_pkey ON public.t6 USING btree (rowid ASC)
 
 ## pg_catalog.pg_index
 
@@ -4359,7 +4359,7 @@ CREATE INDEX regression_46450_idx ON regression_46450 USING gin(json)
 query T
 select indexdef from pg_indexes where indexname = 'regression_46450_idx'
 ----
-CREATE INDEX regression_46450_idx ON test.public.regression_46450 USING gin (json)
+CREATE INDEX regression_46450_idx ON public.regression_46450 USING gin (json)
 
 # Make sure indexdef uses user-defined schemas.
 
@@ -4377,8 +4377,8 @@ FROM pg_indexes WHERE schemaname='test_schema' and tablename='test'
 ORDER BY indexname
 ----
 schemaname   tablename  indexname   indexdef
-test_schema  test       test_b_idx  CREATE INDEX test_b_idx ON test.test_schema.test USING btree (b ASC)
-test_schema  test       test_pkey   CREATE UNIQUE INDEX test_pkey ON test.test_schema.test USING btree (a ASC)
+test_schema  test       test_b_idx  CREATE INDEX test_b_idx ON test_schema.test USING btree (b ASC)
+test_schema  test       test_pkey   CREATE UNIQUE INDEX test_pkey ON test_schema.test USING btree (a ASC)
 
 # Make sure that selecting from vtables with indexes in other dbs properly
 # hides descriptors that should be hidden.
@@ -4419,9 +4419,9 @@ WHERE tablename = 'geospatial_table'
 ORDER BY indexname
 ----
 indexname              indexdef
-geospatial_table_pkey  CREATE UNIQUE INDEX geospatial_table_pkey ON test.public.geospatial_table USING btree (id ASC)
-idxa                   CREATE INDEX idxa ON test.public.geospatial_table USING gin (a)
-idxb                   CREATE INDEX idxb ON test.public.geospatial_table USING gin (b)
+geospatial_table_pkey  CREATE UNIQUE INDEX geospatial_table_pkey ON public.geospatial_table USING btree (id ASC)
+idxa                   CREATE INDEX idxa ON public.geospatial_table USING gin (a)
+idxb                   CREATE INDEX idxb ON public.geospatial_table USING gin (b)
 
 subtest vector
 
@@ -4445,9 +4445,9 @@ WHERE tablename = 'vector_table'
 ORDER BY indexname
 ----
 indexname          indexdef
-idxa               CREATE INDEX idxa ON test.public.vector_table USING cspann (a vector_l2_ops)
-idxb               CREATE INDEX idxb ON test.public.vector_table USING cspann (a vector_l2_ops)
-vector_table_pkey  CREATE UNIQUE INDEX vector_table_pkey ON test.public.vector_table USING btree (id ASC)
+idxa               CREATE INDEX idxa ON public.vector_table USING cspann (a vector_l2_ops)
+idxb               CREATE INDEX idxb ON public.vector_table USING cspann (a vector_l2_ops)
+vector_table_pkey  CREATE UNIQUE INDEX vector_table_pkey ON public.vector_table USING btree (id ASC)
 
 subtest partial_index
 
@@ -4474,9 +4474,9 @@ WHERE tablename = 'partial_index_table'
 ORDER BY indexname
 ----
 indexname                   indexdef
-partial_index_table_a_key   CREATE UNIQUE INDEX partial_index_table_a_key ON test.public.partial_index_table USING btree (a ASC) WHERE (a > 0)
-partial_index_table_a_key1  CREATE UNIQUE INDEX partial_index_table_a_key1 ON test.public.partial_index_table USING btree (a ASC) WHERE (b IN ('foo'::public.testenum, 'bar'::public.testenum))
-partial_index_table_pkey    CREATE UNIQUE INDEX partial_index_table_pkey ON test.public.partial_index_table USING btree (rowid ASC)
+partial_index_table_a_key   CREATE UNIQUE INDEX partial_index_table_a_key ON public.partial_index_table USING btree (a ASC) WHERE (a > 0)
+partial_index_table_a_key1  CREATE UNIQUE INDEX partial_index_table_a_key1 ON public.partial_index_table USING btree (a ASC) WHERE (b IN ('foo'::public.testenum, 'bar'::public.testenum))
+partial_index_table_pkey    CREATE UNIQUE INDEX partial_index_table_pkey ON public.partial_index_table USING btree (rowid ASC)
 
 query TT colnames
 SELECT conname, condef
