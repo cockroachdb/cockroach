@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -41,16 +40,10 @@ func TestCleanupSchemaObjects(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	// TODO(arul): Investigate why we need this -- the job executes serially
-	// and we are just running drop statements in the job. Ideally this should
-	// not require disabling leases, but the test fails if we don't. See #52412.
-	defer lease.TestingDisableTableLeases()()
-
 	conn, err := db.Conn(ctx)
 	require.NoError(t, err)
 
 	_, err = conn.ExecContext(ctx, `
-SET create_table_with_schema_locked=false;
 SET experimental_enable_temp_tables=true;
 SET serial_normalization='sql_sequence';
 CREATE TEMP TABLE a (a SERIAL, c INT);`,
@@ -62,10 +55,14 @@ CREATE TEMP SEQUENCE a_sequence;
 CREATE TEMP VIEW a_view AS SELECT a FROM a;`,
 	)
 	require.NoError(t, err)
-	_, err = conn.ExecContext(ctx, `
-CREATE TABLE perm_table (a int DEFAULT nextval('a_sequence'), b int);
-INSERT INTO perm_table VALUES (DEFAULT, 1);
-`)
+	_, err = conn.ExecContext(ctx,
+		`CREATE TABLE perm_table (a int DEFAULT nextval('a_sequence'), b int)`)
+	require.NoError(t, err)
+	// Unlock perm_table so that cleanup can ALTER it to remove the DEFAULT
+	// expression referencing the temp sequence; see #167117.
+	_, err = conn.ExecContext(ctx, `ALTER TABLE perm_table SET (schema_locked=false)`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `INSERT INTO perm_table VALUES (DEFAULT, 1)`)
 	require.NoError(t, err)
 
 	namesToID, tempSchemaNames := constructNameToIDMapping(ctx, t, conn)
@@ -110,7 +107,6 @@ INSERT INTO perm_table VALUES (DEFAULT, 1);
 			ctx,
 			txn,
 			txn.Descriptors(),
-			execCfg.Codec,
 			defaultDB,
 			tempSchema,
 		)
@@ -400,4 +396,569 @@ func TestTemporaryObjectCleanupRetriesWithPoisonedTransaction(t *testing.T) {
 				"expected %d attempts, got %d", tc.expectedAttempts, attemptCount)
 		})
 	}
+}
+
+// TestBatchedTempObjectCleanup verifies that session-close cleanup works
+// correctly when the number of temp objects exceeds the batch size, requiring
+// multiple batched transactions. It tests both batch size 5 (multi-object
+// batches) and batch size 1 (each object in its own transaction).
+func TestBatchedTempObjectCleanup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numTables = 17
+	testCases := []struct {
+		name      string
+		batchSize int64
+	}{
+		{"batch_size_5", 5},
+		{"batch_size_1", 1},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			settings := cluster.MakeTestingClusterSettings()
+			TempObjectCleanupBatchSize.Override(ctx, &settings.SV, tc.batchSize)
+
+			s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+				Settings: settings,
+			})
+			defer s.Stopper().Stop(ctx)
+
+			// Open a separate connection for temp table creation. Closing this
+			// connection triggers cleanupSessionTempObjects on session exit,
+			// exercising the multi-batch path through dropTempSchemaObjectsInBatches.
+			tempDB := s.ApplicationLayer().SQLConn(t)
+			conn, err := tempDB.Conn(ctx)
+			require.NoError(t, err)
+
+			_, err = conn.ExecContext(ctx, `SET experimental_enable_temp_tables=true`)
+			require.NoError(t, err)
+
+			for i := 0; i < numTables; i++ {
+				_, err = conn.ExecContext(ctx, fmt.Sprintf("CREATE TEMP TABLE t%d (x INT)", i))
+				require.NoError(t, err)
+			}
+
+			// Verify temp schema exists before cleanup.
+			var tempSchemaCount int
+			err = db.QueryRow(
+				`SELECT count(*) FROM system.namespace WHERE name LIKE 'pg_temp%'`,
+			).Scan(&tempSchemaCount)
+			require.NoError(t, err)
+			require.Equal(t, 1, tempSchemaCount)
+
+			// Close the connection to trigger session-exit cleanup via
+			// cleanupSessionTempObjects -> dropTempSchemaObjectsInBatches.
+			require.NoError(t, conn.Close())
+			require.NoError(t, tempDB.Close())
+
+			// Verify all temp schemas are cleaned up. Phase 3 of
+			// cleanupSessionTempObjects only removes schema entries after all
+			// objects are dropped in Phase 2, so 0 schemas implies all objects
+			// were successfully dropped across batches.
+			testutils.SucceedsSoon(t, func() error {
+				var count int
+				if err := db.QueryRow(
+					`SELECT count(*) FROM system.namespace WHERE name LIKE 'pg_temp%'`,
+				).Scan(&count); err != nil {
+					return err
+				}
+				if count != 0 {
+					return errors.Errorf("expected 0 temp schemas, found %d", count)
+				}
+				return nil
+			})
+
+			// Verify server is healthy after batched cleanup.
+			var result int
+			err = db.QueryRow("SELECT 1").Scan(&result)
+			require.NoError(t, err)
+			require.Equal(t, 1, result)
+		})
+	}
+}
+
+// TestBatchedTempCleanupWithMixedObjectTypes verifies that batching respects
+// dependency ordering (views -> tables -> sequences) and handles the
+// cleanupTempSequenceDeps preHook correctly across batch boundaries.
+func TestBatchedTempCleanupWithMixedObjectTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	TempObjectCleanupBatchSize.Override(ctx, &settings.SV, 3)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: settings,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	tempDB := s.ApplicationLayer().SQLConn(t)
+	conn, err := tempDB.Conn(ctx)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `SET experimental_enable_temp_tables=true`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `SET serial_normalization='sql_sequence'`)
+	require.NoError(t, err)
+
+	// Create 4 temp tables (requires 2 batches with batch size 3).
+	// t0 uses a SERIAL column, which creates an owned sequence (t0_x_seq).
+	// Owned sequences are excluded from the explicit drop lists and must be
+	// dropped via CASCADE when their owner table is dropped.
+	_, err = conn.ExecContext(ctx, `CREATE TEMP TABLE t0 (x SERIAL)`)
+	require.NoError(t, err)
+	for i := 1; i < 4; i++ {
+		_, err = conn.ExecContext(ctx, fmt.Sprintf("CREATE TEMP TABLE t%d (x INT)", i))
+		require.NoError(t, err)
+	}
+
+	// Create 4 temp views referencing the tables (requires 2 batches).
+	for i := 0; i < 4; i++ {
+		_, err = conn.ExecContext(ctx, fmt.Sprintf(
+			"CREATE TEMP VIEW v%d AS SELECT x FROM t%d", i, i,
+		))
+		require.NoError(t, err)
+	}
+
+	// Create 2 unowned temp sequences (1 batch).
+	_, err = conn.ExecContext(ctx, `CREATE TEMP SEQUENCE s0`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `CREATE TEMP SEQUENCE s1`)
+	require.NoError(t, err)
+
+	// Create a permanent table with a default expression referencing a temp
+	// sequence. This exercises the cleanupTempSequenceDeps path. The table
+	// must be unlocked so cleanup can ALTER it to remove the DEFAULT; see
+	// #167117 for the underlying schema_locked interaction.
+	_, err = conn.ExecContext(ctx,
+		`CREATE TABLE perm_table (a INT DEFAULT nextval('s0'), b INT)`)
+	require.NoError(t, err)
+	// Unlock perm_table so that cleanup can ALTER it to remove the DEFAULT
+	// expression referencing the temp sequence; see #167117.
+	_, err = conn.ExecContext(ctx, `ALTER TABLE perm_table SET (schema_locked=false)`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `INSERT INTO perm_table VALUES (DEFAULT, 1)`)
+	require.NoError(t, err)
+
+	// Close the connection to trigger session-exit cleanup.
+	require.NoError(t, conn.Close())
+	require.NoError(t, tempDB.Close())
+
+	// Verify all temp schemas are cleaned up.
+	testutils.SucceedsSoon(t, func() error {
+		var count int
+		if err := db.QueryRow(
+			`SELECT count(*) FROM system.namespace WHERE name LIKE 'pg_temp%'`,
+		).Scan(&count); err != nil {
+			return err
+		}
+		if count != 0 {
+			return errors.Errorf("expected 0 temp schemas, found %d", count)
+		}
+		return nil
+	})
+
+	// Verify permanent table is intact and queryable.
+	var rows *gosql.Rows
+	rows, err = db.Query("SELECT * FROM perm_table")
+	require.NoError(t, err)
+	require.NoError(t, rows.Close())
+
+	// Verify the default expression on the permanent table was cleared
+	// (the temp sequence it referenced was dropped by the preHook).
+	var colDefault gosql.NullString
+	err = db.QueryRow(
+		`SELECT column_default FROM information_schema.columns
+		WHERE table_name = 'perm_table' and column_name = 'a'`,
+	).Scan(&colDefault)
+	require.NoError(t, err)
+	assert.False(t, colDefault.Valid)
+}
+
+// TestBatchedTempCleanupCascadeAcrossBatches verifies that CASCADE in one
+// batch does not break subsequent batches when it implicitly drops objects
+// scheduled for later batches. For example, with batch size 1:
+//
+//	DROP VIEW v1 CASCADE  → also drops v2 (which depends on v1)
+//	DROP VIEW v2 CASCADE  → v2 already gone, must not error
+//
+// The DROP uses IF EXISTS to handle this scenario.
+func TestBatchedTempCleanupCascadeAcrossBatches(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	// Batch size 1 forces each object into its own batch, maximizing the
+	// chance of cross-batch CASCADE conflicts.
+	TempObjectCleanupBatchSize.Override(ctx, &settings.SV, 1)
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Settings: settings,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	// Use a separate pool so closing it terminates the pgwire session.
+	tempDB := s.ApplicationLayer().SQLConn(t)
+	conn, err := tempDB.Conn(ctx)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `SET experimental_enable_temp_tables=true`)
+	require.NoError(t, err)
+
+	// Create a chain of views: v3 → v2 → v1 → base_t.
+	// DROP VIEW v1 CASCADE will also drop v2 and v3.
+	_, err = conn.ExecContext(ctx, `CREATE TEMP TABLE base_t (x INT)`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `CREATE TEMP VIEW v1 AS SELECT x FROM base_t`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `CREATE TEMP VIEW v2 AS SELECT x FROM v1`)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `CREATE TEMP VIEW v3 AS SELECT x FROM v2`)
+	require.NoError(t, err)
+
+	// Close the session to trigger cleanup.
+	require.NoError(t, conn.Close())
+	require.NoError(t, tempDB.Close())
+
+	// Verify everything was cleaned up despite cross-batch CASCADE.
+	verifyDB := s.ApplicationLayer().SQLConn(t)
+	defer verifyDB.Close()
+	testutils.SucceedsSoon(t, func() error {
+		var count int
+		if err := verifyDB.QueryRow(
+			`SELECT count(*) FROM system.namespace WHERE name LIKE 'pg_temp%'`,
+		).Scan(&count); err != nil {
+			return err
+		}
+		if count != 0 {
+			return errors.Errorf("expected 0 temp schemas, found %d", count)
+		}
+		return nil
+	})
+}
+
+// TestBatchedTempCleanupViaBackgroundCleaner verifies that the background
+// TemporaryObjectCleaner correctly cleans up batched objects when session-close
+// cleanup is disabled.
+func TestBatchedTempCleanupViaBackgroundCleaner(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	ch := make(chan time.Time)
+	finishedCh := make(chan struct{})
+	knobs := base.TestingKnobs{
+		SQLExecutor: &ExecutorTestingKnobs{
+			DisableTempObjectsCleanupOnSessionExit: true,
+			TempObjectsCleanupCh:                   ch,
+			OnTempObjectsCleanupDone: func() {
+				finishedCh <- struct{}{}
+			},
+		},
+	}
+	settings := cluster.MakeTestingClusterSettings()
+	TempObjectWaitInterval.Override(ctx, &settings.SV, time.Microsecond)
+	TempObjectCleanupBatchSize.Override(ctx, &settings.SV, 5)
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs:    knobs,
+		Settings: settings,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	// Create temp tables on a separate connection.
+	tempDB := s.ApplicationLayer().SQLConn(t)
+	conn, err := tempDB.Conn(ctx)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `SET experimental_enable_temp_tables=true`)
+	require.NoError(t, err)
+
+	const numTables = 17
+	for i := 0; i < numTables; i++ {
+		_, err = conn.ExecContext(ctx, fmt.Sprintf("CREATE TEMP TABLE t%d (x INT)", i))
+		require.NoError(t, err)
+	}
+	require.NoError(t, conn.Close())
+	require.NoError(t, tempDB.Close())
+
+	// Verify temp schemas still exist (cleanup was disabled on session exit).
+	verifyDB := s.ApplicationLayer().SQLConn(t)
+	defer verifyDB.Close()
+
+	var tempSchemaCount int
+	err = verifyDB.QueryRow(
+		`SELECT count(*) FROM system.namespace WHERE name LIKE 'pg_temp%'`,
+	).Scan(&tempSchemaCount)
+	require.NoError(t, err)
+	require.Equal(t, 1, tempSchemaCount, "temp schema should still exist after session close")
+
+	// Trigger background cleaner and wait for it to clean up all temp objects.
+	testutils.SucceedsSoon(t, func() error {
+		ch <- timeutil.Now()
+		<-finishedCh
+		var count int
+		if err := verifyDB.QueryRow(
+			`SELECT count(*) FROM system.namespace WHERE name LIKE 'pg_temp%'`,
+		).Scan(&count); err != nil {
+			return err
+		}
+		if count != 0 {
+			return errors.Errorf("expected 0 temp schemas, found %d", count)
+		}
+		return nil
+	})
+}
+
+// TestBatchedTempCleanupPartialFailureRecovery verifies that if cleanup is
+// partially completed (some objects already dropped), the background cleaner
+// can recover and clean up the remaining objects and schema.
+func TestBatchedTempCleanupPartialFailureRecovery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	ch := make(chan time.Time)
+	finishedCh := make(chan struct{})
+	knobs := base.TestingKnobs{
+		SQLExecutor: &ExecutorTestingKnobs{
+			DisableTempObjectsCleanupOnSessionExit: true,
+			TempObjectsCleanupCh:                   ch,
+			OnTempObjectsCleanupDone: func() {
+				finishedCh <- struct{}{}
+			},
+		},
+	}
+	settings := cluster.MakeTestingClusterSettings()
+	TempObjectWaitInterval.Override(ctx, &settings.SV, time.Microsecond)
+	TempObjectCleanupBatchSize.Override(ctx, &settings.SV, 5)
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs:    knobs,
+		Settings: settings,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	// Create 15 temp tables on a separate connection.
+	tempDB := s.ApplicationLayer().SQLConn(t)
+	conn, err := tempDB.Conn(ctx)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `SET experimental_enable_temp_tables=true`)
+	require.NoError(t, err)
+
+	const numTables = 15
+	for i := 0; i < numTables; i++ {
+		_, err = conn.ExecContext(ctx, fmt.Sprintf("CREATE TEMP TABLE t%d (x INT)", i))
+		require.NoError(t, err)
+	}
+	require.NoError(t, conn.Close())
+	require.NoError(t, tempDB.Close())
+
+	// Get the temp schema name for cross-session table references.
+	verifyDB := s.ApplicationLayer().SQLConn(t)
+	defer verifyDB.Close()
+
+	var tempSchemaName string
+	err = verifyDB.QueryRow(
+		`SELECT name FROM system.namespace WHERE name LIKE 'pg_temp%'`,
+	).Scan(&tempSchemaName)
+	require.NoError(t, err)
+
+	// Simulate partial cleanup by manually dropping 5 of the 15 temp tables.
+	// This mimics the state after an interrupted batched cleanup (e.g., server
+	// crash after some batches completed).
+	for i := 0; i < 5; i++ {
+		_, err = verifyDB.Exec(fmt.Sprintf(
+			`DROP TABLE defaultdb."%s".t%d`, tempSchemaName, i,
+		))
+		require.NoError(t, err)
+	}
+
+	// Verify temp schema still exists with remaining objects.
+	var tempSchemaCount int
+	err = verifyDB.QueryRow(
+		`SELECT count(*) FROM system.namespace WHERE name LIKE 'pg_temp%'`,
+	).Scan(&tempSchemaCount)
+	require.NoError(t, err)
+	require.Equal(t, 1, tempSchemaCount, "temp schema should still exist")
+
+	// Trigger background cleaner to recover the remaining objects.
+	// Phase 1 should discover only the 10 remaining tables, and Phase 2/3
+	// should clean them up along with the schema.
+	testutils.SucceedsSoon(t, func() error {
+		ch <- timeutil.Now()
+		<-finishedCh
+		var count int
+		if err := verifyDB.QueryRow(
+			`SELECT count(*) FROM system.namespace WHERE name LIKE 'pg_temp%'`,
+		).Scan(&count); err != nil {
+			return err
+		}
+		if count != 0 {
+			return errors.Errorf("expected 0 temp schemas, found %d", count)
+		}
+		return nil
+	})
+}
+
+// TestBatchedTempCleanupMultiDatabase verifies that batched cleanup works
+// correctly when a session has temp objects across multiple databases.
+// This exercises Phase 1 collecting multiple tempSchemaInfo entries,
+// Phase 2 dropping objects per-database, and Phase 3 deleting multiple
+// schema namespace entries in a single KV batch.
+func TestBatchedTempCleanupMultiDatabase(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	TempObjectCleanupBatchSize.Override(ctx, &settings.SV, 3)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: settings,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	// Create a second database.
+	_, err := db.Exec(`CREATE DATABASE db2`)
+	require.NoError(t, err)
+
+	// Create temp objects in both databases on the same connection. This
+	// produces one temp schema per database, both owned by the same session.
+	tempDB := s.ApplicationLayer().SQLConn(t)
+	conn, err := tempDB.Conn(ctx)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `SET experimental_enable_temp_tables=true`)
+	require.NoError(t, err)
+
+	// Create 4 temp tables in defaultdb.
+	for i := 0; i < 4; i++ {
+		_, err = conn.ExecContext(ctx, fmt.Sprintf("CREATE TEMP TABLE t%d (x INT)", i))
+		require.NoError(t, err)
+	}
+
+	// Switch to db2 and create 4 temp tables there.
+	_, err = conn.ExecContext(ctx, `USE db2`)
+	require.NoError(t, err)
+	for i := 0; i < 4; i++ {
+		_, err = conn.ExecContext(ctx, fmt.Sprintf("CREATE TEMP TABLE t%d (x INT)", i))
+		require.NoError(t, err)
+	}
+
+	// Verify two temp schemas exist (one per database).
+	var tempSchemaCount int
+	err = db.QueryRow(
+		`SELECT count(*) FROM system.namespace WHERE name LIKE 'pg_temp%'`,
+	).Scan(&tempSchemaCount)
+	require.NoError(t, err)
+	require.Equal(t, 2, tempSchemaCount)
+
+	// Close the connection to trigger session-exit cleanup.
+	require.NoError(t, conn.Close())
+	require.NoError(t, tempDB.Close())
+
+	// Verify all temp schemas across both databases are cleaned up.
+	testutils.SucceedsSoon(t, func() error {
+		var count int
+		if err := db.QueryRow(
+			`SELECT count(*) FROM system.namespace WHERE name LIKE 'pg_temp%'`,
+		).Scan(&count); err != nil {
+			return err
+		}
+		if count != 0 {
+			return errors.Errorf("expected 0 temp schemas, found %d", count)
+		}
+		return nil
+	})
+}
+
+// TestBatchedTempCleanupIdempotent verifies that calling
+// cleanupSessionTempObjects twice for the same session is safe — the second
+// call should find no temp schemas and return early. This validates the
+// schemas = nil reset logic in Phase 1 and the len(schemas) == 0 early
+// return.
+func TestBatchedTempCleanupIdempotent(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+	TempObjectCleanupBatchSize.Override(ctx, &settings.SV, 5)
+
+	// Disable session-exit cleanup so we can call cleanupSessionTempObjects
+	// directly without racing against automatic cleanup.
+	knobs := base.TestingKnobs{
+		SQLExecutor: &ExecutorTestingKnobs{
+			DisableTempObjectsCleanupOnSessionExit: true,
+		},
+	}
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: settings,
+		Knobs:    knobs,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	tempDB := s.ApplicationLayer().SQLConn(t)
+	conn, err := tempDB.Conn(ctx)
+	require.NoError(t, err)
+
+	_, err = conn.ExecContext(ctx, `SET experimental_enable_temp_tables=true`)
+	require.NoError(t, err)
+
+	for i := 0; i < 10; i++ {
+		_, err = conn.ExecContext(ctx, fmt.Sprintf("CREATE TEMP TABLE t%d (x INT)", i))
+		require.NoError(t, err)
+	}
+
+	// Get the temp schema name to extract the session ID.
+	var tempSchemaName string
+	err = db.QueryRow(
+		`SELECT name FROM system.namespace WHERE name LIKE 'pg_temp%'`,
+	).Scan(&tempSchemaName)
+	require.NoError(t, err)
+
+	// Parse the session ID from the temp schema name.
+	isTempSchema, sessionID, err := temporarySchemaSessionID(tempSchemaName)
+	require.NoError(t, err)
+	require.True(t, isTempSchema)
+
+	// Close the connection. Session-exit cleanup is disabled, so the temp
+	// objects remain.
+	require.NoError(t, conn.Close())
+	require.NoError(t, tempDB.Close())
+
+	// Verify temp schema still exists.
+	var tempSchemaCount int
+	err = db.QueryRow(
+		`SELECT count(*) FROM system.namespace WHERE name LIKE 'pg_temp%'`,
+	).Scan(&tempSchemaCount)
+	require.NoError(t, err)
+	require.Equal(t, 1, tempSchemaCount, "temp schema should still exist")
+
+	execCfg := s.ExecutorConfig().(ExecutorConfig)
+
+	// First call: should drop all 10 tables and remove the schema entry.
+	err = cleanupSessionTempObjects(ctx, execCfg.InternalDB, execCfg.Settings, sessionID)
+	require.NoError(t, err)
+
+	// Verify everything is cleaned up.
+	var count int
+	err = db.QueryRow(
+		`SELECT count(*) FROM system.namespace WHERE name LIKE 'pg_temp%'`,
+	).Scan(&count)
+	require.NoError(t, err)
+	require.Equal(t, 0, count, "expected 0 temp schemas after first cleanup")
+
+	// Second call: should be a no-op (Phase 1 finds no schemas, returns
+	// early at the len(schemas) == 0 check).
+	err = cleanupSessionTempObjects(ctx, execCfg.InternalDB, execCfg.Settings, sessionID)
+	require.NoError(t, err)
 }
