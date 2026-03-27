@@ -98,7 +98,6 @@ export const ActiveStatementsView: React.FC = () => {
         ...getFullFiltersAsStringRecord(filters),
       },
       history,
-      true,
     );
   }, [
     history,

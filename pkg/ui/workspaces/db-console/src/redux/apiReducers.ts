@@ -16,12 +16,10 @@ import sortby from "lodash/sortBy";
 import Long from "long";
 import moment from "moment-timezone";
 import { RouteComponentProps } from "react-router";
-import { Action, combineReducers } from "redux";
-import { ThunkAction, ThunkDispatch } from "redux-thunk";
+import { combineReducers } from "redux";
 import { createSelector, ParametricSelector } from "reselect";
 
 import { VersionList } from "src/interfaces/cockroachlabs";
-import * as protos from "src/js/protos";
 import * as api from "src/util/api";
 import { versionCheck } from "src/util/cockroachlabsAPI";
 import { INodeStatus, RollupStoreMetrics } from "src/util/proto";
@@ -36,8 +34,6 @@ import { AdminUIState } from "./state";
 
 const { generateStmtDetailsToID, HexStringToInt64String, generateTableID } =
   util;
-
-const SessionsRequest = protos.cockroach.server.serverpb.ListSessionsRequest;
 
 // The primary export of this file are the "refresh" functions of the various
 // reducers, which are used by many react components to request fresh data.
@@ -286,15 +282,6 @@ const clusterLocksReducerObj = new CachedDataReducer(
   moment.duration(30, "s"),
 );
 export const refreshClusterLocks = clusterLocksReducerObj.refresh;
-
-export const refreshLiveWorkload = (): ThunkAction<any, any, any, Action> => {
-  return (dispatch: ThunkDispatch<unknown, unknown, Action>) => {
-    dispatch(
-      refreshSessions(new SessionsRequest({ exclude_closed_sessions: true })),
-    );
-    dispatch(refreshClusterLocks());
-  };
-};
 
 const stmtInsightsReducerObj = new CachedDataReducer(
   clusterUiApi.getStmtInsightsApi,

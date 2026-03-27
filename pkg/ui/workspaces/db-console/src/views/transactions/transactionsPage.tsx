@@ -8,8 +8,6 @@ import {
   defaultFilters,
   util,
   TransactionsPageStateProps,
-  ActiveTransactionsViewDispatchProps,
-  ActiveTransactionsViewStateProps,
   TransactionsPageDispatchProps,
   TransactionsPageRoot,
   TransactionsPageRootProps,
@@ -35,11 +33,6 @@ import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
 import { selectHasAdminRole } from "src/redux/user";
 import { PrintTime } from "src/views/reports/containers/range/print";
-
-import {
-  activeTransactionsPageActionCreators,
-  mapStateToActiveTransactionsPageProps,
-} from "./activeTransactionsSelectors";
 
 // selectLastReset returns a string displaying the last time the statement
 // statistics were reset.
@@ -139,12 +132,10 @@ const fingerprintsPageActions = {
 
 type StateProps = {
   fingerprintsPageProps: TransactionsPageStateProps & RouteComponentProps;
-  activePageProps: ActiveTransactionsViewStateProps;
 };
 
 type DispatchProps = {
   fingerprintsPageProps: TransactionsPageDispatchProps;
-  activePageProps: ActiveTransactionsViewDispatchProps;
 };
 
 const TransactionsPageConnected = withRouter(
@@ -172,15 +163,10 @@ const TransactionsPageConnected = withRouter(
         requestTime: requestTimeLocalSetting.selector(state),
         oldestDataAvailable: selectOldestDate(state),
       },
-      activePageProps: mapStateToActiveTransactionsPageProps(state),
     }),
     dispatch => ({
       fingerprintsPageProps: bindActionCreators(
         fingerprintsPageActions,
-        dispatch,
-      ),
-      activePageProps: bindActionCreators(
-        activeTransactionsPageActionCreators,
         dispatch,
       ),
     }),
@@ -188,10 +174,6 @@ const TransactionsPageConnected = withRouter(
       fingerprintsPageProps: {
         ...stateProps.fingerprintsPageProps,
         ...dispatchProps.fingerprintsPageProps,
-      },
-      activePageProps: {
-        ...stateProps.activePageProps,
-        ...dispatchProps.activePageProps,
       },
     }),
   )(TransactionsPageRoot),
