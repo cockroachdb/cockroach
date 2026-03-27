@@ -987,6 +987,14 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 			Execute: allNodes,
 		}
 
+		// Since we are intentionally failing the download job by deleting a file,
+		// we reduce the retry duration for the job to speed up the test.
+		if _, err := dbConn.ExecContext(
+			ctx, "SET CLUSTER SETTING backup.restore.online_download_retry_max_duration = '5s'",
+		); err != nil {
+			return errors.Wrap(err, "failed to set download phase retry duration")
+		}
+
 		// We set this pausepoint so that the download job is paused before it
 		// begins downloading external files. This allows us to guarantee that when
 		// we delete an SST file, it won't have already been downloaded by the
@@ -1074,9 +1082,19 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 				err, "waiting for download job %v to reach resumed state", downloadJobID,
 			)
 		}
-		if err := WaitForFailed(ctx, dbConn, jobspb.JobID(downloadJobID), 10*time.Minute); err != nil {
+		if err := WaitForPaused(ctx, dbConn, jobspb.JobID(downloadJobID), jobStatusWait); err != nil {
 			return errors.Wrapf(
-				err, "waiting for download job %v to reach failed state", downloadJobID,
+				err, "waiting for download job %v to reach paused state", downloadJobID,
+			)
+		}
+		if _, err := dbConn.ExecContext(ctx, "CANCEL JOB $1", downloadJobID); err != nil {
+			return errors.Wrapf(
+				err, "failed to cancel download job %v after it paused", downloadJobID,
+			)
+		}
+		if err := WaitForCanceled(ctx, dbConn, jobspb.JobID(downloadJobID), 10*time.Minute); err != nil {
+			return errors.Wrapf(
+				err, "waiting for download job %v to reach canceled state", downloadJobID,
 			)
 		}
 		return errors.Wrapf(

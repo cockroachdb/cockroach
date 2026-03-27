@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
@@ -54,6 +56,7 @@ func TestOnlineRestoreBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	AllowORDownloadBestEffortFailures(t)
 	backuptestutils.EnableFastRestoreForTest(t)
 
 	ctx := context.Background()
@@ -104,7 +107,6 @@ func TestOnlineRestoreBasic(t *testing.T) {
 			rSQLDB.Exec(t, "DROP DATABASE data CASCADE")
 		})
 	})
-
 }
 
 func TestOnlineRestoreRecovery(t *testing.T) {
@@ -117,6 +119,7 @@ func TestOnlineRestoreRecovery(t *testing.T) {
 
 	_, sqlDB, tmpDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
+	sqlDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_download_retry_max_duration = '1s'")
 
 	trueExternalStorage := "nodelocal://1/backup"
 	externalStorage := backuptestutils.GetExternalStorageURI(t, trueExternalStorage, "backup", sqlDB)
@@ -164,7 +167,9 @@ func TestOnlineRestoreRecovery(t *testing.T) {
 		corruptBackup(t, sqlDB, tmpDir, trueExternalStorage)
 		sqlDB.ExpectErr(t, "no such file or directory", "SELECT count(*) FROM data_delete.bank")
 		sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", downloadJobID))
-		jobutils.WaitForJobToFail(t, sqlDB, jobspb.JobID(downloadJobID))
+		jobutils.WaitForJobToPause(t, sqlDB, jobspb.JobID(downloadJobID))
+		sqlDB.Exec(t, fmt.Sprintf("CANCEL JOB %d", downloadJobID))
+		jobutils.WaitForJobToCancel(t, sqlDB, jobspb.JobID(downloadJobID))
 		checkRecovery(t, dbName)
 	})
 	t.Run("cancel link job", func(t *testing.T) {
@@ -195,7 +200,9 @@ func TestOnlineRestoreRecovery(t *testing.T) {
 		corruptBackup(t, sqlDB, tmpDir, trueExternalStorage)
 		sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
 		sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", blockingJobID))
-		jobutils.WaitForJobToFail(t, sqlDB, jobspb.JobID(blockingJobID))
+		jobutils.WaitForJobToPause(t, sqlDB, jobspb.JobID(blockingJobID))
+		sqlDB.Exec(t, fmt.Sprintf("CANCEL JOB %d", blockingJobID))
+		jobutils.WaitForJobToCancel(t, sqlDB, jobspb.JobID(blockingJobID))
 		checkRecovery(t, dbName)
 	})
 }
@@ -216,6 +223,8 @@ func TestFullClusterOnlineRestoreRecovery(t *testing.T) {
 	trueExternalStorage := "nodelocal://1/backup"
 	externalStorage := backuptestutils.GetExternalStorageURI(t, trueExternalStorage, "backup", sqlDB)
 
+	// We are intentionally failing the download phase so lower retry duration.
+	sqlDB.Exec(t, "SET CLUSTER SETTING backup.restore.online_download_retry_max_duration = '1s'")
 	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.before_download'")
 	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
 
@@ -242,7 +251,7 @@ func TestFullClusterOnlineRestoreRecovery(t *testing.T) {
 	corruptBackup(t, sqlDB, tmpDir, trueExternalStorage)
 	sqlDB.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = ''")
 	sqlDB.Exec(t, fmt.Sprintf("RESUME JOB %d", downloadJobID))
-	jobutils.WaitForJobToFail(t, sqlDB, downloadJobID)
+	jobutils.WaitForJobToPause(t, sqlDB, downloadJobID)
 }
 
 func corruptBackup(t *testing.T, sqlDB *sqlutils.SQLRunner, ioDir string, uri string) {
@@ -300,6 +309,7 @@ func TestOnlineRestoreLinkCheckpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	AllowORDownloadBestEffortFailures(t)
 	backuptestutils.EnableFastRestoreForTest(t)
 
 	rng, _ := randutil.NewTestRand()
@@ -328,6 +338,7 @@ func TestOnlineRestoreStatementResult(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	AllowORDownloadBestEffortFailures(t)
 	backuptestutils.EnableFastRestoreForTest(t)
 
 	const numAccounts = 2
@@ -421,6 +432,7 @@ func TestOnlineRestoreTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	AllowORDownloadBestEffortFailures(t)
 	backuptestutils.EnableFastRestoreForTest(t)
 
 	params := base.TestClusterArgs{ServerArgs: base.TestServerArgs{
@@ -522,6 +534,7 @@ func TestOnlineRestoreErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	AllowORDownloadBestEffortFailures(t)
 	backuptestutils.EnableFastRestoreForTest(t)
 
 	_, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 2, InitManualReplication)
@@ -579,6 +592,13 @@ func TestOnlineRestoreRetryingDownloadRequests(t *testing.T) {
 	rng, seed := randutil.NewPseudoRand()
 	t.Logf("random seed: %d", seed)
 
+	const maxDownloadAttempts = 5
+	downloadRetryPolicy := &retry.Options{
+		InitialBackoff: time.Millisecond * 100,
+		MaxBackoff:     time.Second,
+		MaxRetries:     maxDownloadAttempts - 1,
+	}
+
 	alwaysFail := rng.Intn(2) == 0
 	t.Logf("always fail download requests: %t", alwaysFail)
 	totalFailures := int32(rng.Intn(maxDownloadAttempts-1) + 1)
@@ -588,6 +608,7 @@ func TestOnlineRestoreRetryingDownloadRequests(t *testing.T) {
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				BackupRestore: &sql.BackupRestoreTestingKnobs{
+					DownloadPhaseRetryPolicy: downloadRetryPolicy,
 					RunBeforeSendingDownloadSpan: func() error {
 						if alwaysFail {
 							return errors.Newf("always fail download request")
@@ -622,7 +643,7 @@ func TestOnlineRestoreRetryingDownloadRequests(t *testing.T) {
 	var downloadJobID jobspb.JobID
 	sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
 	if alwaysFail {
-		jobutils.WaitForJobToFail(t, sqlDB, downloadJobID)
+		jobutils.WaitForJobToPause(t, sqlDB, downloadJobID)
 	} else {
 		jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
 	}
@@ -634,11 +655,18 @@ func TestOnlineRestoreDownloadRetryReset(t *testing.T) {
 
 	backuptestutils.EnableFastRestoreForTest(t)
 
+	const maxDownloadAttempts = 5
+
 	var attemptCount int
 	clusterArgs := base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				BackupRestore: &sql.BackupRestoreTestingKnobs{
+					DownloadPhaseRetryPolicy: &retry.Options{
+						InitialBackoff: time.Millisecond * 100,
+						MaxBackoff:     time.Second,
+						MaxRetries:     maxDownloadAttempts - 1,
+					},
 					// We want the retry loop to fail until its final attempt, and then
 					// succeed on the last attempt. This will allow the download job to
 					// make progress, in which case the retry loop _should_ reset. Then
@@ -687,6 +715,7 @@ func TestOnlineRestoreFailScatterNonEmptyRanges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	AllowORDownloadBestEffortFailures(t)
 	backuptestutils.EnableFastRestoreForTest(t)
 
 	// This test first runs online restore and waits for an external SST to be

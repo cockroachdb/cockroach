@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -590,4 +591,14 @@ func getFullBackupPaths(t *testing.T, sqlDB *sqlutils.SQLRunner, uri string) []s
 		fullBackupPaths = append(fullBackupPaths, path)
 	}
 	return fullBackupPaths
+}
+
+// AllowORDownloadBestEffortFailures marks the best-effort operations in the
+// online restore download retry loop as allowed to fail in test builds. Tests
+// that do not wait for the download phase to complete before tearing down the
+// cluster may encounter context cancellation in these operations, which would
+// otherwise panic in test builds.
+func AllowORDownloadBestEffortFailures(t *testing.T) {
+	t.Helper()
+	t.Cleanup(besteffort.TestAllowFailure("or-download-failed-log"))
 }
