@@ -1024,6 +1024,26 @@ layers:
       derivative: NONE
       how_to_use: See Description.
       visibility: ESSENTIAL
+    - name: auth.cert.san.conn.success
+      exported_name: auth_cert_san_conn_success
+      description: Number of successful SQL connections using SAN-based certificate authentication
+      y_axis_label: Connections
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric tracks successful authentications when SAN-based certificate validation is enabled. Use this to monitor adoption and success rate of SAN authentication. Failure rate = auth.cert.san.conn.total - auth.cert.san.conn.success.
+      visibility: ESSENTIAL
+    - name: auth.cert.san.conn.total
+      exported_name: auth_cert_san_conn_total
+      description: Total number of SQL connection attempts using SAN-based certificate authentication
+      y_axis_label: Connections
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: This metric tracks all authentication attempts when SAN-based certificate validation is enabled. Compare with auth.cert.san.conn.success to calculate failure rate.
+      visibility: ESSENTIAL
     - name: auth.gss.conn.latency
       exported_name: auth_gss_conn_latency
       description: Latency to establish and authenticate a SQL connection using GSS
