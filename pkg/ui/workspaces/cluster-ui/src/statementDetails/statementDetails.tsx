@@ -1117,7 +1117,6 @@ export function StatementDetails(
           cancelReport({ requestId: report.id }).catch(() => {});
           onDiagnosticCancelRequestTracking?.(report);
         }}
-        showDiagnosticsViewLink={true}
         onSortingChange={onSortingChange}
         currentScale={timeScale}
         onChangeTimeScale={changeTimeScale}
