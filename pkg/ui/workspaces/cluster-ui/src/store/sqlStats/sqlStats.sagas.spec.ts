@@ -17,8 +17,6 @@ import {
 import { resetSQLStats } from "src/api/sqlStatsApi";
 import { getCombinedStatements } from "src/api/statementsApi";
 
-import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
-
 import { actions, reducer, SQLStatsState } from "./sqlStats.reducer";
 import {
   refreshSQLStatsSaga,
@@ -107,7 +105,6 @@ describe("SQLStats sagas", () => {
     it("successfully resets SQL stats", () => {
       return expectSaga(resetSQLStatsSaga)
         .provide([[matchers.call.fn(resetSQLStats), resetSQLStatsResponse]])
-        .put(sqlDetailsStatsActions.invalidateAll())
         .put(actions.invalidated())
         .withReducer(reducer)
         .hasFinalState<SQLStatsState>({

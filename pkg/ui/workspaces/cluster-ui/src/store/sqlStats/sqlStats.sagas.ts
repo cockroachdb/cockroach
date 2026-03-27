@@ -14,11 +14,11 @@ import {
 import { actions as localStorageActions } from "src/store/localStorage";
 
 import { maybeError } from "../../util";
-import { actions as sqlDetailsStatsActions } from "../statementDetails/statementDetails.reducer";
 import { actions as txnStatsActions } from "../transactionStats";
 
 import {
   actions as sqlStatsActions,
+  StatementsResponse,
   UpdateTimeScalePayload,
 } from "./sqlStats.reducer";
 
@@ -28,10 +28,10 @@ export function* refreshSQLStatsSaga(action: PayloadAction<StatementsRequest>) {
 
 export function* requestSQLStatsSaga(
   action: PayloadAction<StatementsRequest>,
-): any {
+): Generator {
   try {
     const result = yield call(getCombinedStatements, action.payload);
-    yield put(sqlStatsActions.received(result));
+    yield put(sqlStatsActions.received(result as StatementsResponse));
   } catch (e) {
     yield put(sqlStatsActions.failed(maybeError(e)));
   }
@@ -52,7 +52,6 @@ export function* resetSQLStatsSaga() {
   try {
     yield call(resetSQLStats);
     yield all([
-      put(sqlDetailsStatsActions.invalidateAll()),
       put(sqlStatsActions.invalidated()),
       put(txnStatsActions.invalidated()),
     ]);
