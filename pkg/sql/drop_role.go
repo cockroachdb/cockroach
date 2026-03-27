@@ -429,13 +429,8 @@ func (n *DropRoleNode) startExec(params runParams) error {
 				normalizedUsername, numSchedules)
 		}
 
-		numUsersDeleted, err := params.p.InternalSQLTxn().ExecEx(
-			params.ctx,
-			opName,
-			params.p.txn,
-			sessiondata.NodeUserSessionDataOverride,
-			`DELETE FROM system.users WHERE username=$1`,
-			normalizedUsername,
+		numUsersDeleted, dbSettingsDeleted, err := dropSingleRole(
+			params, normalizedUsername, opName,
 		)
 		if err != nil {
 			return err
@@ -444,61 +439,7 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		if numUsersDeleted == 0 && !n.ifExists {
 			return sqlerrors.NewUndefinedUserError(normalizedUsername)
 		}
-
-		// Drop all role memberships involving the user/role.
-		if _, err = params.p.InternalSQLTxn().ExecEx(
-			params.ctx,
-			"drop-role-membership",
-			params.p.txn,
-			sessiondata.NodeUserSessionDataOverride,
-			`DELETE FROM system.role_members WHERE "role" = $1 OR "member" = $1`,
-			normalizedUsername,
-		); err != nil {
-			return err
-		}
-
-		_, err = params.p.InternalSQLTxn().ExecEx(
-			params.ctx,
-			opName,
-			params.p.txn,
-			sessiondata.NodeUserSessionDataOverride,
-			fmt.Sprintf(
-				`DELETE FROM system.public.%s WHERE username=$1`,
-				catconstants.RoleOptionsTableName,
-			),
-			normalizedUsername,
-		)
-		if err != nil {
-			return err
-		}
-
-		if rowsDeleted, err := params.p.InternalSQLTxn().ExecEx(
-			params.ctx,
-			opName,
-			params.p.txn,
-			sessiondata.NodeUserSessionDataOverride,
-			fmt.Sprintf(
-				`DELETE FROM system.public.%s WHERE role_name = $1`,
-				catconstants.DatabaseRoleSettingsTableName,
-			),
-			normalizedUsername,
-		); err != nil {
-			return err
-		} else {
-			numRoleSettingsRowsDeleted += rowsDeleted
-		}
-
-		_, err = params.p.InternalSQLTxn().ExecEx(
-			params.ctx,
-			opName,
-			params.p.txn,
-			sessiondata.NodeUserSessionDataOverride,
-			`UPDATE system.web_sessions SET "revokedAt" = now() WHERE username = $1 AND "revokedAt" IS NULL;`,
-			normalizedUsername,
-		)
-		if err != nil {
-			return err
-		}
+		numRoleSettingsRowsDeleted += dbSettingsDeleted
 	}
 
 	// Bump role-related table versions to force a refresh of membership/auth
@@ -533,6 +474,74 @@ func (n *DropRoleNode) startExec(params runParams) error {
 		}
 	}
 	return nil
+}
+
+// dropSingleRole deletes a single role from all system tables and
+// revokes its web sessions. It does NOT check dependencies or bump
+// table versions — the caller must do that. Returns the number of
+// rows deleted from system.users and system.database_role_settings.
+func dropSingleRole(
+	params runParams, normalizedUsername username.SQLUsername, opName redact.RedactableString,
+) (numUsersDeleted int, dbRoleSettingsDeleted int, err error) {
+	// DELETE from system.users.
+	numUsersDeleted, err = params.p.InternalSQLTxn().ExecEx(
+		params.ctx, opName, params.p.txn,
+		sessiondata.NodeUserSessionDataOverride,
+		`DELETE FROM system.users WHERE username=$1`,
+		normalizedUsername,
+	)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	// DELETE from system.role_members.
+	if _, err = params.p.InternalSQLTxn().ExecEx(
+		params.ctx, "drop-role-membership", params.p.txn,
+		sessiondata.NodeUserSessionDataOverride,
+		`DELETE FROM system.role_members WHERE "role" = $1 OR "member" = $1`,
+		normalizedUsername,
+	); err != nil {
+		return 0, 0, err
+	}
+
+	// DELETE from system.role_options.
+	if _, err = params.p.InternalSQLTxn().ExecEx(
+		params.ctx, opName, params.p.txn,
+		sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf(
+			`DELETE FROM system.public.%s WHERE username=$1`,
+			catconstants.RoleOptionsTableName,
+		),
+		normalizedUsername,
+	); err != nil {
+		return 0, 0, err
+	}
+
+	// DELETE from system.database_role_settings.
+	dbRoleSettingsDeleted, err = params.p.InternalSQLTxn().ExecEx(
+		params.ctx, opName, params.p.txn,
+		sessiondata.NodeUserSessionDataOverride,
+		fmt.Sprintf(
+			`DELETE FROM system.public.%s WHERE role_name = $1`,
+			catconstants.DatabaseRoleSettingsTableName,
+		),
+		normalizedUsername,
+	)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	// Revoke web sessions.
+	if _, err = params.p.InternalSQLTxn().ExecEx(
+		params.ctx, opName, params.p.txn,
+		sessiondata.NodeUserSessionDataOverride,
+		`UPDATE system.web_sessions SET "revokedAt" = now() WHERE username = $1 AND "revokedAt" IS NULL`,
+		normalizedUsername,
+	); err != nil {
+		return 0, 0, err
+	}
+
+	return numUsersDeleted, dbRoleSettingsDeleted, nil
 }
 
 // Next implements the planNode interface.
