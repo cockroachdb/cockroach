@@ -83,22 +83,28 @@ type LivenessUpdate struct {
 // call get, since the handleCondFailed after a CPut will notify you of the
 // previous data.
 func (ls *storageImpl) Get(ctx context.Context, nodeID roachpb.NodeID) (Record, error) {
-	var oldLiveness livenesspb.Liveness
-	record, err := ls.db.Get(ctx, ls.nodeKey(nodeID))
-	if err != nil {
-		return Record{}, errors.Wrap(err, "unable to get liveness")
+	var result Record
+	if err := ls.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		record, err := txn.Get(ctx, ls.nodeKey(nodeID))
+		if err != nil {
+			return errors.Wrap(err, "unable to get liveness")
+		}
+		if record.Value == nil {
+			return ErrMissingRecord
+		}
+		var oldLiveness livenesspb.Liveness
+		if err := record.Value.GetProto(&oldLiveness); err != nil {
+			return errors.Wrap(err, "invalid liveness record")
+		}
+		result = Record{
+			Liveness: oldLiveness,
+			raw:      record.Value.TagAndDataBytes(),
+		}
+		return nil
+	}); err != nil {
+		return Record{}, err
 	}
-	if record.Value == nil {
-		return Record{}, ErrMissingRecord
-	}
-	if err := record.Value.GetProto(&oldLiveness); err != nil {
-		return Record{}, errors.Wrap(err, "invalid liveness record")
-	}
-
-	return Record{
-		Liveness: oldLiveness,
-		raw:      record.Value.TagAndDataBytes(),
-	}, nil
+	return result, nil
 }
 
 // Update will attempt to update the liveness record using a CPut with the
