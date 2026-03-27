@@ -760,6 +760,9 @@ func (u *sqlSymUnion) showBackupDetails() tree.ShowBackupDetails {
 func (u *sqlSymUnion) showBackupOptions() *tree.ShowBackupOptions {
   return u.val.(*tree.ShowBackupOptions)
 }
+func (u *sqlSymUnion) showUsersOptions() *tree.ShowUsersOptions {
+  return u.val.(*tree.ShowUsersOptions)
+}
 func (u *sqlSymUnion) showBackupTimeFilter() *tree.ShowBackupTimeFilter {
   return u.val.(*tree.ShowBackupTimeFilter)
 }
@@ -1497,6 +1500,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
 %type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list opt_with_show_backups_options show_backups_options
+%type <*tree.ShowUsersOptions> opt_with_show_users_options show_users_option show_users_options_list
 %type <*tree.ShowBackupTimeFilter> opt_show_backups_time_filter_clause
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
@@ -10283,14 +10287,54 @@ show_create_external_connections_stmt:
 
 // %Help: SHOW USERS - list defined users
 // %Category: Priv
-// %Text: SHOW USERS
+// %Text:
+// SHOW USERS [WITH <options>] [LIMIT <n>]
+//
+// Options:
+//   SOURCE = <string>
+//   LAST LOGIN BEFORE <expr>
 // %SeeAlso: CREATE USER, DROP USER, WEBDOCS/show-users.html
 show_users_stmt:
-  SHOW USERS
+  SHOW USERS opt_with_show_users_options opt_limit_clause
   {
-    $$.val = &tree.ShowUsers{}
+    $$.val = &tree.ShowUsers{
+      Options: $3.showUsersOptions(),
+      Limit:   $4.limit(),
+    }
   }
 | SHOW USERS error // SHOW HELP: SHOW USERS
+
+opt_with_show_users_options:
+  WITH show_users_options_list
+  {
+    $$.val = $2.showUsersOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = (*tree.ShowUsersOptions)(nil)
+  }
+
+show_users_options_list:
+  show_users_option
+  {
+    $$.val = $1.showUsersOptions()
+  }
+| show_users_options_list ',' show_users_option
+  {
+    if err := $1.showUsersOptions().CombineWith($3.showUsersOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+show_users_option:
+  SOURCE '=' a_expr
+  {
+    $$.val = &tree.ShowUsersOptions{Source: $3.expr()}
+  }
+| LAST LOGIN BEFORE a_expr
+  {
+    $$.val = &tree.ShowUsersOptions{LastLoginBefore: $4.expr()}
+  }
 
 // %Help: SHOW DEFAULT SESSION VARIABLES FOR ROLE - list default session variables for role
 // %Category: Priv
