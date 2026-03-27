@@ -120,6 +120,13 @@ func TestCCLLogic_crdb_internal(
 	runCCLLogicTest(t, "crdb_internal")
 }
 
+func TestCCLLogic_drop_provisioned_roles(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "drop_provisioned_roles")
+}
+
 func TestCCLLogic_explain_redact(
 	t *testing.T,
 ) {
