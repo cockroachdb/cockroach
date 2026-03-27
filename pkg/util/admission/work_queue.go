@@ -201,6 +201,10 @@ type WorkInfo struct {
 	// WorkloadType distinguishes the kind of workload that WorkloadID
 	// represents. Used for ASH sampling.
 	WorkloadType workloadid.WorkloadType
+	// IsSQLCPU indicates this is a SQL CPU admission request. SQL callers set
+	// RequestedCount based on measured CPU consumption and bypass the
+	// per-tenant CPU time token estimator entirely.
+	IsSQLCPU bool
 }
 
 // ReplicatedWorkInfo groups everything needed to admit replicated writes, done
@@ -711,7 +715,11 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	// a measurement of CPU time used servicing the request, courtesy of grunning.
 	// tenant.estimator uses past measurements from grunning to make estimates
 	// in this code path, that is, at admission time.
-	if q.mode == usesCPUTimeTokens && !q.knobs.DisableCPUTimeTokenEstimation {
+	// If mode == usesCPUTimeTokens and the caller is not a SQL CPU caller,
+	// use the per-tenant estimator to predict CPU time. SQL callers set
+	// RequestedCount based on measured CPU consumption and skip the estimator.
+	if q.mode == usesCPUTimeTokens && !q.knobs.DisableCPUTimeTokenEstimation &&
+		!info.IsSQLCPU {
 		info.RequestedCount = tenant.cpuTimeTokenEstimator.estimateTokensToBeUsed()
 	}
 	admitResponse := AdmitResponse{
@@ -1199,6 +1207,19 @@ func (q *WorkQueue) gcTenantsResetUsedAndUpdateEstimators() {
 			// All the heap members will reset used=0, so no need to change heap
 			// ordering.
 		}
+	}
+}
+
+// AdmittedSQLWorkDone adjusts token accounting when a SQL statement closes.
+// remaining is the leftover reservation (always non-negative, since the
+// CAS-based deduction in SQLCPUHandle never drives the reservation below
+// zero). Positive remaining means unused tokens are returned to the granter.
+func (q *WorkQueue) AdmittedSQLWorkDone(tenantID roachpb.TenantID, remaining int64) {
+	q.adjustTenantUsed(tenantID, -remaining)
+	if remaining < 0 {
+		q.granter.tookWithoutPermission(-remaining)
+	} else if remaining > 0 {
+		q.granter.returnGrant(remaining)
 	}
 }
 
