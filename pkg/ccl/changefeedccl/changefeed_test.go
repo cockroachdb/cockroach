@@ -7113,7 +7113,10 @@ func TestChangefeedOutdatedCursor(t *testing.T) {
 		expectErrCreatingFeed(t, f, createChangefeed, expectedErrorSubstring)
 	}
 
-	cdcTestWithSystem(t, testFn, feedTestNoTenants)
+	// Use root to avoid flakes. Non-root connections authenticate against
+	// descriptors that may already be GC'd, so auth fails before the expected
+	// cursor error. See #166880.
+	cdcTestWithSystem(t, testFn, feedTestNoTenants, feedTestUseRootUserConnection)
 }
 
 // TestChangefeedCursorWarning ensures that we show a warning if
