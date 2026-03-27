@@ -60,6 +60,19 @@ var TempObjectWaitInterval = settings.RegisterDurationSetting(
 	30*time.Minute,
 	settings.WithPublic)
 
+// TempObjectCleanupBatchSize is a ClusterSetting controlling how many
+// temporary objects are dropped per transaction during session cleanup.
+// Each batch produces a single DROP statement (e.g. DROP TABLE t1, t2, ..., tN)
+// which creates one schema change job. Larger batches reduce the number of
+// transactions and jobs but increase per-transaction intent footprint.
+var TempObjectCleanupBatchSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.temp_object_cleaner.batch_size",
+	"number of temporary objects to drop per transaction during cleanup",
+	1000,
+	settings.IntInRange(1, 10000),
+	settings.WithPublic)
+
 var (
 	temporaryObjectCleanerActiveCleanersMetric = metric.Metadata{
 		Name:        "sql.temp_object_cleaner.active_cleaners",
@@ -154,18 +167,89 @@ func temporarySchemaSessionID(scName string) (bool, clusterunique.ID, error) {
 	return true, clusterunique.ID{Uint128: uint128.Uint128{Hi: hi, Lo: lo}}, nil
 }
 
+// tempCleanupRetryOpts returns the retry options used for temp object cleanup
+// transactions.
+func tempCleanupRetryOpts() retry.Options {
+	return retry.Options{
+		InitialBackoff: 1 * time.Second,
+		MaxBackoff:     1 * time.Minute,
+		Multiplier:     2,
+		MaxRetries:     4, // 5 total attempts
+	}
+}
+
+// retryTempCleanup wraps a function with the standard temp cleanup retry logic.
+// It does not accept a Closer channel (unlike the background cleaner's retry),
+// but it respects context cancellation via retry.StartWithCtx, so retries will
+// be interrupted during server shutdown when the connection's context is
+// cancelled.
+func retryTempCleanup(ctx context.Context, do func() error) error {
+	return tempCleanupRetryOpts().DoWithRetryable(ctx, func(ctx context.Context) (bool, error) {
+		err := do()
+		if err != nil {
+			if shouldStopTempObjectCleanupRetry(err) {
+				return false, err
+			}
+			log.Dev.Warningf(ctx, "error during temp schema cleanup, retrying: %v", err)
+			return true, err
+		}
+		return false, nil
+	})
+}
+
+// tempSchemaInfo holds the metadata collected in Phase 1 of temp schema cleanup
+// for a single database's temporary schema.
+type tempSchemaInfo struct {
+	dbDesc     catalog.DatabaseDescriptor
+	schemaName string
+	// views, tables, and sequences are the IDs of objects to drop, categorized
+	// by type. views are dropped first, then tables, then sequences.
+	views     descpb.IDs
+	tables    descpb.IDs
+	sequences descpb.IDs
+	// tblNamesByID maps object IDs to their fully-qualified names, used to
+	// construct DROP statements.
+	tblNamesByID map[descpb.ID]tree.TableName
+	// tblDescsByID maps sequence IDs to their descriptors, used by the sequence
+	// preHook to resolve dependencies on permanent tables.
+	tblDescsByID map[descpb.ID]catalog.TableDescriptor
+	// databaseIDToTempSchemaID maps database IDs to their temporary schema IDs,
+	// used by the internal executor to resolve temporary schema names.
+	databaseIDToTempSchemaID map[uint32]uint32
+}
+
 // cleanupSessionTempObjects removes all temporary objects (tables, sequences,
 // views, temporary schema) created by the session.
+//
+// The cleanup is split into three phases to avoid creating a single transaction
+// that exceeds KV transaction limits for large numbers of objects:
+//  1. Collect metadata: a read-only transaction discovers all objects to drop.
+//  2. Drop objects in batches: each batch of objects is dropped in its own
+//     transaction, with retry logic.
+//  3. Delete schema entries: a final transaction removes the temporary schema
+//     namespace entries.
+//
+// This means the overall operation is not atomic — if cleanup is interrupted
+// partway through, some objects may be dropped while others remain. This is
+// acceptable because:
+//   - The objects belong to a dead session and are not referenced by any active
+//     session.
+//   - The background TemporaryObjectCleaner will re-discover any remaining
+//     objects on its next run and continue cleaning them up.
+//   - The schema namespace entry is only removed after all objects are
+//     successfully dropped, so orphaned descriptors without a schema entry
+//     cannot occur.
 func cleanupSessionTempObjects(
-	ctx context.Context, db descs.DB, codec keys.SQLCodec, sessionID clusterunique.ID,
+	ctx context.Context, db descs.DB, st *cluster.Settings, sessionID clusterunique.ID,
 ) error {
 	tempSchemaName := temporarySchemaName(sessionID)
-	return db.DescsTxn(
-		ctx, func(
-			ctx context.Context, txn descs.Txn,
-		) error {
-			// We are going to read all database descriptor IDs, then for each database
-			// we will drop all the objects under the temporary schema.
+
+	// Phase 1: Collect metadata about objects to drop. This is a read-only
+	// transaction that enumerates all temp objects across all databases.
+	var schemas []tempSchemaInfo
+	if err := retryTempCleanup(ctx, func() error {
+		return db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+			schemas = nil // Reset on retry.
 			descsCol := txn.Descriptors()
 			allDbDescs, err := descsCol.GetAllDatabaseDescriptors(ctx, txn.KV())
 			if err != nil {
@@ -179,36 +263,237 @@ func cleanupSessionTempObjects(
 				if tempSchema == nil {
 					continue
 				}
-				if err := cleanupTempSchemaObjects(
-					ctx,
-					txn,
-					descsCol,
-					codec,
-					dbDesc,
-					tempSchema,
-				); err != nil {
+				info, err := collectTempSchemaObjects(ctx, txn, descsCol, dbDesc, tempSchema)
+				if err != nil {
 					return err
 				}
-				// Even if no objects were found under the temporary schema, the schema
-				// itself may still exist (eg. a temporary table was created and then
-				// dropped). So we remove the namespace table entry of the temporary
-				// schema.
-				b := txn.KV().NewBatch()
-				const kvTrace = false
-				if err := descsCol.DeleteTempSchemaToBatch(
-					ctx, kvTrace, dbDesc, tempSchemaName, b,
-				); err != nil {
-					return err
-				}
-				if err := txn.KV().Run(ctx, b); err != nil {
-					return err
-				}
+				schemas = append(schemas, info)
 			}
 			return nil
 		})
+	}); err != nil {
+		return err
+	}
+
+	if len(schemas) == 0 {
+		return nil
+	}
+
+	// Phase 2: Drop objects in batches. Each batch runs in its own transaction
+	// to keep the intent footprint small.
+	batchSize := int(TempObjectCleanupBatchSize.Get(&st.SV))
+	for i := range schemas {
+		if err := dropTempSchemaObjectsInBatches(ctx, db, &schemas[i], batchSize); err != nil {
+			return err
+		}
+	}
+
+	// Phase 3: Delete the temporary schema namespace entries now that all
+	// objects have been removed.
+	return retryTempCleanup(ctx, func() error {
+		return db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+			descsCol := txn.Descriptors()
+			b := txn.KV().NewBatch()
+			const kvTrace = false
+			for _, info := range schemas {
+				if err := descsCol.DeleteTempSchemaToBatch(
+					ctx, kvTrace, info.dbDesc, tempSchemaName, b,
+				); err != nil {
+					return err
+				}
+			}
+			return txn.KV().Run(ctx, b)
+		})
+	})
 }
 
-// cleanupTempSchemaObjects removes all objects that is located within a dbID and schema.
+// collectTempSchemaObjects enumerates all objects in a temp schema and returns
+// the metadata needed to drop them in batches. It is used by both the batched
+// cleanup path (cleanupSessionTempObjects) and the single-transaction DISCARD
+// path (cleanupTempSchemaObjects).
+func collectTempSchemaObjects(
+	ctx context.Context,
+	txn isql.Txn,
+	descsCol *descs.Collection,
+	dbDesc catalog.DatabaseDescriptor,
+	sc catalog.SchemaDescriptor,
+) (tempSchemaInfo, error) {
+	objects, err := descsCol.GetAllObjectsInSchema(ctx, txn.KV(), dbDesc, sc)
+	if err != nil {
+		return tempSchemaInfo{}, err
+	}
+
+	info := tempSchemaInfo{
+		dbDesc:                   dbDesc,
+		schemaName:               sc.GetName(),
+		tblDescsByID:             make(map[descpb.ID]catalog.TableDescriptor),
+		tblNamesByID:             make(map[descpb.ID]tree.TableName),
+		databaseIDToTempSchemaID: make(map[uint32]uint32),
+	}
+
+	_ = objects.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		tbl, ok := desc.(catalog.TableDescriptor)
+		if !ok || desc.Dropped() {
+			return nil
+		}
+		info.tblDescsByID[desc.GetID()] = tbl
+		info.tblNamesByID[desc.GetID()] = tree.MakeTableNameWithSchema(
+			tree.Name(dbDesc.GetName()), tree.Name(sc.GetName()), tree.Name(tbl.GetName()),
+		)
+		info.databaseIDToTempSchemaID[uint32(desc.GetParentID())] = uint32(desc.GetParentSchemaID())
+
+		if tbl.IsSequence() &&
+			tbl.GetSequenceOpts().SequenceOwner.OwnerColumnID == 0 &&
+			tbl.GetSequenceOpts().SequenceOwner.OwnerTableID == 0 {
+			info.sequences = append(info.sequences, desc.GetID())
+		} else if tbl.GetViewQuery() != "" {
+			info.views = append(info.views, desc.GetID())
+		} else if !tbl.IsSequence() {
+			info.tables = append(info.tables, desc.GetID())
+		}
+		return nil
+	})
+	return info, nil
+}
+
+// dropTempSchemaObjectsInBatches drops all objects in a temp schema using
+// batched transactions. Objects are dropped in dependency order: views first,
+// then tables, then unowned sequences.
+func dropTempSchemaObjectsInBatches(
+	ctx context.Context, db descs.DB, info *tempSchemaInfo, batchSize int,
+) error {
+	searchPath := sessiondata.DefaultSearchPathForUser(username.NodeUserName()).WithTemporarySchemaName(info.schemaName)
+	override := sessiondata.InternalExecutorOverride{
+		SearchPath:               &searchPath,
+		User:                     username.NodeUserName(),
+		DatabaseIDToTempSchemaID: info.databaseIDToTempSchemaID,
+	}
+
+	// Objects are dropped in dependency order. hasPreHook is true only for
+	// sequences, which need cleanupTempSequenceDeps to remove default
+	// expression references from permanent tables before the DROP.
+	for _, toDelete := range []struct {
+		typeName   string
+		ids        descpb.IDs
+		hasPreHook bool
+	}{
+		{"VIEW", info.views, false},
+		{"TABLE", info.tables, false},
+		{"SEQUENCE", info.sequences, true},
+	} {
+		if len(toDelete.ids) == 0 {
+			continue
+		}
+		for start := 0; start < len(toDelete.ids); start += batchSize {
+			end := start + batchSize
+			if end > len(toDelete.ids) {
+				end = len(toDelete.ids)
+			}
+			batch := toDelete.ids[start:end]
+
+			if err := retryTempCleanup(ctx, func() error {
+				return db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+					// Run the preHook for sequences in this batch that have
+					// dependencies on permanent tables.
+					if toDelete.hasPreHook {
+						descsCol := txn.Descriptors()
+						for _, id := range batch {
+							if err := cleanupTempSequenceDeps(ctx, txn, descsCol, override, info, id); err != nil {
+								return err
+							}
+						}
+					}
+
+					var query strings.Builder
+					query.WriteString("DROP ")
+					query.WriteString(toDelete.typeName)
+					query.WriteString(" IF EXISTS")
+					for i, id := range batch {
+						tbName := info.tblNamesByID[id]
+						if i != 0 {
+							query.WriteString(",")
+						}
+						query.WriteString(" ")
+						query.WriteString(tbName.FQString())
+					}
+					query.WriteString(" CASCADE")
+					_, err := txn.ExecEx(ctx, redact.Sprintf("delete-temp-%s", toDelete.typeName), txn.KV(), override, query.String())
+					return err
+				})
+			}); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// cleanupTempSequenceDeps removes default expression dependencies from
+// permanent tables that reference a temporary sequence about to be dropped.
+// It is used by both the batched cleanup path and the single-transaction
+// DISCARD path.
+func cleanupTempSequenceDeps(
+	ctx context.Context,
+	txn isql.Txn,
+	descsCol *descs.Collection,
+	override sessiondata.InternalExecutorOverride,
+	info *tempSchemaInfo,
+	seqID descpb.ID,
+) error {
+	desc := info.tblDescsByID[seqID]
+	return desc.ForeachDependedOnBy(func(d *descpb.TableDescriptor_Reference) error {
+		// Skip objects that are also temp objects being cleaned up.
+		if _, ok := info.tblDescsByID[d.ID]; ok {
+			return nil
+		}
+		dTableDesc, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, d.ID)
+		if err != nil {
+			return err
+		}
+		dDB, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, dTableDesc.GetParentID())
+		if err != nil {
+			return err
+		}
+		dSc, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, dTableDesc.GetParentSchemaID())
+		if err != nil {
+			return err
+		}
+		dependentColIDs := intsets.MakeFast()
+		for _, colID := range d.ColumnIDs {
+			dependentColIDs.Add(int(colID))
+		}
+		for _, col := range dTableDesc.PublicColumns() {
+			if dependentColIDs.Contains(int(col.GetID())) {
+				tbName := tree.MakeTableNameWithSchema(
+					tree.Name(dDB.GetName()),
+					tree.Name(dSc.GetName()),
+					tree.Name(dTableDesc.GetName()),
+				)
+				_, err = txn.ExecEx(
+					ctx,
+					"delete-temp-dependent-col",
+					txn.KV(),
+					override,
+					fmt.Sprintf(
+						"ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT",
+						tbName.FQString(),
+						tree.NameString(col.GetName()),
+					),
+				)
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+}
+
+// cleanupTempSchemaObjects removes all objects in a single database's temporary
+// schema within the caller-provided transaction (used by the DISCARD path).
+// It shares collectTempSchemaObjects and cleanupTempSequenceDeps with the
+// batched cleanup path to avoid duplicating the object enumeration and sequence
+// dependency cleanup logic.
 //
 // TODO(postamar): properly use descsCol
 // We're currently unable to leverage descsCol properly because we run DROP
@@ -219,158 +504,60 @@ func cleanupTempSchemaObjects(
 	ctx context.Context,
 	txn isql.Txn,
 	descsCol *descs.Collection,
-	codec keys.SQLCodec,
 	db catalog.DatabaseDescriptor,
 	sc catalog.SchemaDescriptor,
 ) error {
-	objects, err := descsCol.GetAllObjectsInSchema(ctx, txn.KV(), db, sc)
+	info, err := collectTempSchemaObjects(ctx, txn, descsCol, db, sc)
 	if err != nil {
 		return err
 	}
-
-	// We construct the database ID -> temp Schema ID map here so that the
-	// drop statements executed by the internal executor can resolve the temporary
-	// schemaID later.
-	databaseIDToTempSchemaID := make(map[uint32]uint32)
-
-	// TODO(andrei): We might want to accelerate the deletion of this data.
-	var tables descpb.IDs
-	var views descpb.IDs
-	var sequences descpb.IDs
-
-	tblDescsByID := make(map[descpb.ID]catalog.TableDescriptor)
-	tblNamesByID := make(map[descpb.ID]tree.TableName)
-	_ = objects.ForEachDescriptor(func(desc catalog.Descriptor) error {
-		tbl, ok := desc.(catalog.TableDescriptor)
-		if !ok || desc.Dropped() {
-			return nil
-		}
-		tblDescsByID[desc.GetID()] = tbl
-		tblNamesByID[desc.GetID()] = tree.MakeTableNameWithSchema(
-			tree.Name(db.GetName()), tree.Name(sc.GetName()), tree.Name(tbl.GetName()),
-		)
-
-		databaseIDToTempSchemaID[uint32(desc.GetParentID())] = uint32(desc.GetParentSchemaID())
-
-		// If a sequence is owned by a table column, it is dropped when the owner
-		// table/column is dropped. So here we want to only drop sequences not
-		// owned.
-		if tbl.IsSequence() &&
-			tbl.GetSequenceOpts().SequenceOwner.OwnerColumnID == 0 &&
-			tbl.GetSequenceOpts().SequenceOwner.OwnerTableID == 0 {
-			sequences = append(sequences, desc.GetID())
-		} else if tbl.GetViewQuery() != "" {
-			views = append(views, desc.GetID())
-		} else if !tbl.IsSequence() {
-			tables = append(tables, desc.GetID())
-		}
-		return nil
-	})
 
 	searchPath := sessiondata.DefaultSearchPathForUser(username.NodeUserName()).WithTemporarySchemaName(sc.GetName())
 	override := sessiondata.InternalExecutorOverride{
 		SearchPath:               &searchPath,
 		User:                     username.NodeUserName(),
-		DatabaseIDToTempSchemaID: databaseIDToTempSchemaID,
+		DatabaseIDToTempSchemaID: info.databaseIDToTempSchemaID,
 	}
 
+	// Objects are dropped in dependency order. hasPreHook is true only for
+	// sequences, which need cleanupTempSequenceDeps to remove default
+	// expression references from permanent tables before the DROP.
 	for _, toDelete := range []struct {
-		// typeName is the type of table being deleted, e.g. view, table, sequence
-		typeName string
-		// ids represents which ids we wish to remove.
-		ids descpb.IDs
-		// preHook is used to perform any operations needed before calling
-		// delete on all the given ids.
-		preHook func(descpb.ID) error
+		typeName   string
+		ids        descpb.IDs
+		hasPreHook bool
 	}{
-		// Drop views before tables to avoid deleting required dependencies.
-		{"VIEW", views, nil},
-		{"TABLE", tables, nil},
-		// Drop sequences after tables, because then we reduce the amount of work
-		// that may be needed to drop indices.
-		{
-			"SEQUENCE",
-			sequences,
-			func(id descpb.ID) error {
-				desc := tblDescsByID[id]
-				// For any dependent tables, we need to drop the sequence dependencies.
-				// This can happen if a permanent table references a temporary table.
-				return desc.ForeachDependedOnBy(func(d *descpb.TableDescriptor_Reference) error {
-					// We have already cleaned out anything we are depended on if we've seen
-					// the descriptor already.
-					if _, ok := tblDescsByID[d.ID]; ok {
-						return nil
-					}
-					dTableDesc, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, d.ID)
-					if err != nil {
-						return err
-					}
-					db, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, dTableDesc.GetParentID())
-					if err != nil {
-						return err
-					}
-					sc, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, dTableDesc.GetParentSchemaID())
-					if err != nil {
-						return err
-					}
-					dependentColIDs := intsets.MakeFast()
-					for _, colID := range d.ColumnIDs {
-						dependentColIDs.Add(int(colID))
-					}
-					for _, col := range dTableDesc.PublicColumns() {
-						if dependentColIDs.Contains(int(col.GetID())) {
-							tbName := tree.MakeTableNameWithSchema(
-								tree.Name(db.GetName()),
-								tree.Name(sc.GetName()),
-								tree.Name(dTableDesc.GetName()),
-							)
-							_, err = txn.ExecEx(
-								ctx,
-								"delete-temp-dependent-col",
-								txn.KV(),
-								override,
-								fmt.Sprintf(
-									"ALTER TABLE %s ALTER COLUMN %s DROP DEFAULT",
-									tbName.FQString(),
-									tree.NameString(col.GetName()),
-								),
-							)
-							if err != nil {
-								return err
-							}
-						}
-					}
-					return nil
-				})
-			},
-		},
+		{"VIEW", info.views, false},
+		{"TABLE", info.tables, false},
+		{"SEQUENCE", info.sequences, true},
 	} {
-		if len(toDelete.ids) > 0 {
-			if toDelete.preHook != nil {
-				for _, id := range toDelete.ids {
-					if err := toDelete.preHook(id); err != nil {
-						return err
-					}
+		if len(toDelete.ids) == 0 {
+			continue
+		}
+		if toDelete.hasPreHook {
+			for _, id := range toDelete.ids {
+				if err := cleanupTempSequenceDeps(ctx, txn, descsCol, override, &info, id); err != nil {
+					return err
 				}
 			}
+		}
 
-			var query strings.Builder
-			query.WriteString("DROP ")
-			query.WriteString(toDelete.typeName)
-
-			for i, id := range toDelete.ids {
-				tbName := tblNamesByID[id]
-				if i != 0 {
-					query.WriteString(",")
-				}
-				query.WriteString(" ")
-				query.WriteString(tbName.FQString())
+		var query strings.Builder
+		query.WriteString("DROP ")
+		query.WriteString(toDelete.typeName)
+		query.WriteString(" IF EXISTS")
+		for i, id := range toDelete.ids {
+			tbName := info.tblNamesByID[id]
+			if i != 0 {
+				query.WriteString(",")
 			}
-			query.WriteString(" CASCADE")
-			_, err = txn.ExecEx(ctx, redact.Sprintf("delete-temp-%s", toDelete.typeName), txn.KV(), override, query.String())
-			if err != nil {
-				return err
-			}
+			query.WriteString(" ")
+			query.WriteString(tbName.FQString())
+		}
+		query.WriteString(" CASCADE")
+		_, err = txn.ExecEx(ctx, redact.Sprintf("delete-temp-%s", toDelete.typeName), txn.KV(), override, query.String())
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -615,11 +802,18 @@ func (c *TemporaryObjectCleaner) doTemporaryObjectCleanup(
 
 			// Reset the session data with the appropriate sessionID such that we can resolve
 			// the given schema correctly.
+			//
+			// Note: cleanupSessionTempObjects has its own internal retries
+			// (retryTempCleanup) around each phase. This outer retryFunc provides
+			// an additional layer: if all inner retries for a phase are exhausted,
+			// the outer retry restarts from Phase 1, re-collecting the (now
+			// potentially fewer) remaining objects. Worst case is 5 × 5 = 25
+			// attempts per phase.
 			if err := retryFunc(ctx, func() error {
 				return cleanupSessionTempObjects(
 					ctx,
 					c.db,
-					c.codec,
+					c.settings,
 					sessionID,
 				)
 			}); err != nil {

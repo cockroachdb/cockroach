@@ -1468,7 +1468,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		err := cleanupSessionTempObjects(
 			ctx,
 			ex.server.cfg.InternalDB,
-			ex.server.cfg.Codec,
+			ex.server.cfg.Settings,
 			ex.planner.extendedEvalCtx.SessionID,
 		)
 		if err != nil {
