@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
@@ -352,7 +353,7 @@ func constructVirtualScan(
 		}
 		tableID := table.(*optVirtualTable).desc.GetID()
 		tableOidValue := oid.Oid(tableID)
-		if p.SessionData().PgDumpCompatibility {
+		if sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility) {
 			if pgOid, ok := pgCatalogTableOIDs[tn.Table()]; ok && tn.Schema() == "pg_catalog" {
 				tableOidValue = pgOid
 			}

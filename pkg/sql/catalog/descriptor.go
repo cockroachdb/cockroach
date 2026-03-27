@@ -820,7 +820,9 @@ type TableDescriptor interface {
 	// to be excluded during backup.
 	GetExcludeDataFromBackup() bool
 	// GetStorageParams returns a list of storage parameters for the table.
-	GetStorageParams(spaceBetweenEqual bool) ([]string, error)
+	// If excludeCRDBInternal is true, CRDB-specific parameters like
+	// schema_locked are omitted from the result.
+	GetStorageParams(spaceBetweenEqual bool, excludeCRDBInternal bool) ([]string, error)
 	// GetViewOptions returns a list of options for the view.
 	GetViewOptions(spaceBetweenEqual bool) ([]string, error)
 	// NoAutoStatsSettingsOverrides is true if no auto stats related settings are

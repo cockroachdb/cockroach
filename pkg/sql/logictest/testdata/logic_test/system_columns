@@ -372,7 +372,7 @@ SELECT DISTINCT tableoid FROM pg_namespace LIMIT 1
 
 # Enable pg_dump compatibility mode.
 statement ok
-SET pg_dump_compatibility = true
+SET pg_dump_compatibility = 'postgres'
 
 # With pg_dump_compatibility, pg_catalog tables should return standard
 # PostgreSQL tableoid values.
@@ -447,7 +447,7 @@ LOCK TABLE pg_class IN EXCLUSIVE MODE
 
 # Turn it back off and verify default behavior is restored.
 statement ok
-SET pg_dump_compatibility = false
+SET pg_dump_compatibility = 'off'
 
 query O
 SELECT DISTINCT tableoid FROM pg_namespace LIMIT 1
@@ -457,5 +457,72 @@ SELECT DISTINCT tableoid FROM pg_namespace LIMIT 1
 # LOCK TABLE is not supported by default.
 statement error pgcode 0A000 LOCK TABLE is not supported
 LOCK TABLE pg_namespace IN ACCESS SHARE MODE
+
+# Verify that invalid values produce an error.
+statement error invalid value for parameter "pg_dump_compatibility": "invalid"
+SET pg_dump_compatibility = 'invalid'
+
+# Verify SHOW returns the correct value.
+statement ok
+SET pg_dump_compatibility = 'cockroachdb'
+
+query T
+SHOW pg_dump_compatibility
+----
+cockroachdb
+
+statement ok
+SET pg_dump_compatibility = 'off'
+
+query T
+SHOW pg_dump_compatibility
+----
+off
+
+subtest end
+
+subtest pg_dump_compatibility_storage_params
+
+# In postgres mode, CRDB-specific storage params should be omitted
+# from SHOW CREATE TABLE output.
+statement ok
+CREATE TABLE t_schema_locked (id INT PRIMARY KEY) WITH (schema_locked = true)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_schema_locked]
+----
+CREATE TABLE public.t_schema_locked (
+  id INT8 NOT NULL,
+  CONSTRAINT t_schema_locked_pkey PRIMARY KEY (id ASC)
+) WITH (schema_locked = true);
+
+statement ok
+SET pg_dump_compatibility = 'postgres'
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_schema_locked]
+----
+CREATE TABLE public.t_schema_locked (
+  id INT8 NOT NULL,
+  CONSTRAINT t_schema_locked_pkey PRIMARY KEY (id ASC)
+);
+
+# cockroachdb mode should still show storage params.
+statement ok
+SET pg_dump_compatibility = 'cockroachdb'
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_schema_locked]
+----
+CREATE TABLE public.t_schema_locked (
+  id INT8 NOT NULL,
+  CONSTRAINT t_schema_locked_pkey PRIMARY KEY (id ASC)
+) WITH (schema_locked = true);
+
+statement ok
+SET pg_dump_compatibility = 'off'
+
+statement ok
+DROP TABLE t_schema_locked
 
 subtest end

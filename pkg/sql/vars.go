@@ -1795,20 +1795,29 @@ var varGen = map[string]sessionVar{
 
 	// CockroachDB extension.
 	`pg_dump_compatibility`: {
-		Description:  sessionVarDescriptions["pg_dump_compatibility"],
-		GetStringVal: makePostgresBoolGetStringValFn("pg_dump_compatibility"),
+		Description: sessionVarDescriptions["pg_dump_compatibility"],
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
-			return formatBoolAsPostgresSetting(evalCtx.SessionData().PgDumpCompatibility), nil
+			val := evalCtx.SessionData().PgDumpCompatibility
+			if val == "" {
+				return sessiondatapb.PgDumpCompatibilityOff, nil
+			}
+			return val, nil
 		},
 		Set: func(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
-			b, err := paramparse.ParseBoolVar("pg_dump_compatibility", s)
-			if err != nil {
-				return err
+			val, ok := sessiondatapb.PgDumpCompatibilityFromString(s)
+			if !ok {
+				return newVarValueError("pg_dump_compatibility", s,
+					sessiondatapb.PgDumpCompatibilityOff,
+					sessiondatapb.PgDumpCompatibilityPostgres,
+					sessiondatapb.PgDumpCompatibilityCockroachDB,
+				)
 			}
-			m.SetPgDumpCompatibility(b)
+			m.SetPgDumpCompatibility(val)
 			return nil
 		},
-		GlobalDefault: globalFalse,
+		GlobalDefault: func(_ *settings.Values) string {
+			return sessiondatapb.PgDumpCompatibilityOff
+		},
 	},
 
 	// Supported for PG compatibility only.

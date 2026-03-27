@@ -1191,7 +1191,7 @@ func (m *SessionDataMutator) SetOptimizerUseMinRowCountAntiJoinFix(val bool) {
 	m.Data.OptimizerUseMinRowCountAntiJoinFix = val
 }
 
-func (m *SessionDataMutator) SetPgDumpCompatibility(val bool) {
+func (m *SessionDataMutator) SetPgDumpCompatibility(val string) {
 	m.Data.PgDumpCompatibility = val
 }
 

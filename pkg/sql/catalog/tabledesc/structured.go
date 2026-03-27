@@ -2552,7 +2552,9 @@ func (desc *wrapper) GetExcludeDataFromBackup() bool {
 }
 
 // GetStorageParams implements the TableDescriptor interface.
-func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) ([]string, error) {
+func (desc *wrapper) GetStorageParams(
+	spaceBetweenEqual bool, excludeCRDBInternal bool,
+) ([]string, error) {
 	var storageParams []string
 	var spacing string
 	if spaceBetweenEqual {
@@ -2648,7 +2650,7 @@ func (desc *wrapper) GetStorageParams(spaceBetweenEqual bool) ([]string, error) 
 	if count, ok := desc.HistogramBucketsCount(); ok {
 		appendStorageParam(`sql_stats_histogram_buckets_count`, fmt.Sprintf("%d", count))
 	}
-	if desc.IsSchemaLocked() {
+	if desc.IsSchemaLocked() && !excludeCRDBInternal {
 		appendStorageParam(`schema_locked`, `true`)
 	}
 	if desc.StatsCanaryWindow != 0 {

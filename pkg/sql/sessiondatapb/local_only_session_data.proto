@@ -807,11 +807,11 @@ message LocalOnlySessionData {
   // BufferedWritesImplicitTxnsEnabled, if set, will make it so that the
   // buffered writes feature is used for implicit txns.
   bool buffered_writes_implicit_txns_enabled = 205;
-  // PgDumpCompatibility, when true, causes virtual pg_catalog tables to
-  // report their standard PostgreSQL tableoid values instead of
-  // CockroachDB's internal descriptor IDs. This allows tools like pg_dump
-  // that use hardcoded catalog OIDs to work correctly.
-  bool pg_dump_compatibility = 206;
+  // PgDumpCompatibility controls how CockroachDB presents its metadata to
+  // external tools. Valid values are "off" (default), "postgres" (suppress
+  // CRDB-specific syntax for pg_dump compatibility), and "cockroachdb"
+  // (show CRDB syntax explicitly).
+  string pg_dump_compatibility = 206;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

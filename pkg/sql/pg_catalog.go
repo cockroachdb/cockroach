@@ -46,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -286,7 +287,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-am.html`,
 		// statements.
 		prefixOid := forwardIndexOid
 		prefixName := tree.NewDName(indexTypeForwardIndex)
-		if p.SessionData().PgDumpCompatibility {
+		if sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility) {
 			prefixOid = btreeAmOid
 			prefixName = tree.NewDName("btree")
 		}
@@ -329,7 +330,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-am.html`,
 			return err
 		}
 
-		if p.SessionData().PgDumpCompatibility {
+		if sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility) {
 			// In compat mode, emit a heap row (PostgreSQL's default table AM)
 			// and skip the inverted index row.
 			return addRow(
@@ -637,7 +638,7 @@ https://www.postgresql.org/docs/9.6/catalog-pg-cast.html`,
 	schema: vtable.PGCatalogCast,
 	populate: func(ctx context.Context, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		h := makeOidHasher()
-		pgDumpCompat := p.SessionData().PgDumpCompatibility
+		pgDumpCompat := sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility)
 		var castOidCounter oid.Oid = 14000
 		cast.ForEachCast(func(src, tgt oid.Oid, cCtx cast.Context, ctxOrigin cast.ContextOrigin, _ volatility.V) {
 			if ctxOrigin == cast.ContextOriginPgCast {
@@ -871,13 +872,13 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 		// When pg_dump_compatibility is on, skip crdb_internal tables/views.
 		// pg_dump treats non-pg_catalog schemas as user-defined and tries to
 		// dump their contents, which fails for virtual tables.
-		if p.SessionData().PgDumpCompatibility && sc.GetID() == catconstants.CrdbInternalID {
+		if sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility) && sc.GetID() == catconstants.CrdbInternalID {
 			return nil
 		}
 		// The only difference between tables, views and sequences are the relkind and relam columns.
 		relKind := relKindTable
 		relAm := forwardIndexOid
-		if p.SessionData().PgDumpCompatibility {
+		if sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility) {
 			// Use PostgreSQL's heap AM OID for tables so pg_dump doesn't emit
 			// SET default_table_access_method = prefix.
 			relAm = heapAmOid
@@ -908,7 +909,8 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			withOptions, err = table.GetViewOptions(false /* spaceBetweenEqual */)
 		} else {
 			// Show table storage parameters in reloptions.
-			withOptions, err = table.GetStorageParams(false /* spaceBetweenEqual */)
+			pgCompat := p.SessionData().PgDumpCompatibility == sessiondatapb.PgDumpCompatibilityPostgres
+			withOptions, err = table.GetStorageParams(false /* spaceBetweenEqual */, pgCompat)
 		}
 		if err != nil {
 			return err
@@ -1003,7 +1005,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			if index.GetType() == idxtype.INVERTED {
 				indexType = invertedIndexOid
 			}
-			if p.SessionData().PgDumpCompatibility {
+			if sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility) {
 				if index.GetType() == idxtype.INVERTED {
 					indexType = oidZero
 				} else {
@@ -2615,7 +2617,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-namespace.html`,
 		return forEachDatabaseDesc(ctx, p, dbContext, true, /* requiresPrivileges */
 			func(ctx context.Context, db catalog.DatabaseDescriptor) error {
 				return forEachSchema(ctx, p, db, true /* requiresPrivileges */, false /* includeMetadata */, func(ctx context.Context, sc catalog.SchemaDescriptor) error {
-					if p.SessionData().PgDumpCompatibility && sc.GetID() == catconstants.CrdbInternalID {
+					if sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility) && sc.GetID() == catconstants.CrdbInternalID {
 						return nil
 					}
 					ownerOID := tree.DNull
@@ -3209,7 +3211,7 @@ https://www.postgresql.org/docs/16/catalog-pg-proc.html`,
 		// is selected from a different database. But this is probably fine for
 		// builtin function since they don't really belong to any database.
 
-		pgDumpCompat := p.SessionData().PgDumpCompatibility
+		pgDumpCompat := sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility)
 		err := forEachDatabaseDesc(ctx, p, dbContext, false, /* requiresPrivileges */
 			func(ctx context.Context, db catalog.DatabaseDescriptor) error {
 				for _, name := range builtins.AllBuiltinNames() {
@@ -4205,7 +4207,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-type.html`,
 					ctx context.Context, descCtx tableDescContext) error {
 					// When pg_dump_compatibility is on, skip crdb_internal tables
 					// to avoid emitting composite types for internal virtual tables.
-					if p.SessionData().PgDumpCompatibility && descCtx.schema.GetID() == catconstants.CrdbInternalID {
+					if sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility) && descCtx.schema.GetID() == catconstants.CrdbInternalID {
 						return nil
 					}
 					return addPGTypeRowForTable(ctx, p, h, descCtx.database, descCtx.schema, descCtx.table, addRow)
@@ -4521,7 +4523,7 @@ https://www.postgresql.org/docs/13/catalog-pg-statistic-ext.html`,
 			// When pg_dump_compatibility is on, skip internal statistics objects
 			// (e.g. __auto__, __auto_partial__, __forecast__, __merged__) to
 			// prevent pg_dump from emitting CREATE STATISTICS statements for them.
-			if p.SessionData().PgDumpCompatibility {
+			if sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility) {
 				name := string(tree.MustBeDString(row[1]))
 				if strings.HasPrefix(name, "__") {
 					continue

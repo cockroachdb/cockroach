@@ -491,7 +491,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 // TableStorageParam elements for each non-null parameter.
 func (w *walkCtx) walkStorageParams(tbl catalog.TableDescriptor) {
 	tableID := tbl.GetID()
-	storageParams, err := tbl.GetStorageParams(false)
+	storageParams, err := tbl.GetStorageParams(false /* spaceBetweenEqual */, false /* excludeCRDBInternal */)
 	if err != nil {
 		panic(err)
 	}
