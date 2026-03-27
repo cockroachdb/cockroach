@@ -14,14 +14,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - run: cd build/release/bincheck && ./test-linux ${{ github.ref_name }} ${{ github.sha }}
+    - run: cd build/release/bincheck && ./test-linux ${REF_NAME} ${{ github.sha }}
+      env:
+        REF_NAME: ${{ github.ref_name }}
 
   darwin-arm64:
     if: github.repository == 'cockroachdb/cockroach'
     runs-on: macos-latest
     steps:
     - uses: actions/checkout@v3
-    - run: cd build/release/bincheck && ./test-macos-arm64 ${{ github.ref_name }} ${{ github.sha }}
+    - run: cd build/release/bincheck && ./test-macos-arm64 ${REF_NAME} ${{ github.sha }}
+      env:
+        REF_NAME: ${{ github.ref_name }}
 
   windows:
     if: github.repository == 'cockroachdb/cockroach'
@@ -29,4 +33,6 @@ jobs:
     steps:
     - run: git config --system core.longpaths true
     - uses: actions/checkout@v3
-    - run: cd build/release/bincheck && bash test-windows ${{ github.ref_name }} ${{ github.sha }}
+    - run: cd build/release/bincheck && bash test-windows ${REF_NAME} ${{ github.sha }}
+      env:
+        REF_NAME: ${{ github.ref_name }}

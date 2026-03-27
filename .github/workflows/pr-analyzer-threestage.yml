@@ -45,7 +45,7 @@ jobs:
 
       - name: Stage 1 - Initial Bug Screening
         id: stage1
-        uses: cockroachdb/claude-code-action@v1
+        uses: cockroachdb/claude-code-action@426380f01bad0a17200865605a85cb28926dccbf # v1
         env:
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: global
@@ -97,7 +97,7 @@ jobs:
       - name: Stage 2 - Database Expert Review
         id: stage2
         if: contains(steps.stage1_result.outputs.result, 'STAGE1_RESULT - POTENTIAL_BUG_DETECTED')
-        uses: cockroachdb/claude-code-action@v1
+        uses: cockroachdb/claude-code-action@426380f01bad0a17200865605a85cb28926dccbf # v1
         env:
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: global
@@ -148,7 +148,7 @@ jobs:
       - name: Stage 3 - Principal Engineer Final Review
         id: stage3
         if: contains(steps.stage2_result.outputs.result, 'STAGE2_RESULT - POTENTIAL_BUG_DETECTED')
-        uses: cockroachdb/claude-code-action@v1
+        uses: cockroachdb/claude-code-action@426380f01bad0a17200865605a85cb28926dccbf # v1
         env:
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: global
@@ -213,7 +213,7 @@ jobs:
 
       - name: Final Analysis Report
         if: always()
-        uses: cockroachdb/claude-code-action@v1
+        uses: cockroachdb/claude-code-action@426380f01bad0a17200865605a85cb28926dccbf # v1
         env:
           ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
           CLOUD_ML_REGION: global

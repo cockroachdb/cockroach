@@ -152,7 +152,7 @@ jobs:
           fi
 
       - name: Investigate
-        uses: cockroachdb/claude-code-action@v1
+        uses: cockroachdb/claude-code-action@426380f01bad0a17200865605a85cb28926dccbf # v1
         env:
           ANTHROPIC_VERTEX_PROJECT_ID: ${{ env.HAS_API_KEY != 'true' && 'vertex-model-runners' || '' }}
           CLOUD_ML_REGION: ${{ env.HAS_API_KEY != 'true' && 'global' || '' }}

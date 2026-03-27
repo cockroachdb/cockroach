@@ -41,7 +41,9 @@ jobs:
       - name: Fetch the base commit
         run: git fetch origin ${{ github.event.pull_request.base.sha }} --depth 100
       - name: compute metadata
-        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+        run: echo GITHUB_ACTIONS_BRANCH=${PULL_REQUEST_NUMBER} >> "$GITHUB_ENV"
+        env:
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || github.ref_name}}
       - run: ./build/github/get-engflow-keys.sh
       - run: ./build/github/prepare-summarize-build.sh
       - name: run tests
@@ -68,7 +70,9 @@ jobs:
       - name: Fetch the base commit
         run: git fetch origin ${{ github.event.pull_request.base.sha }} --depth 100
       - name: compute metadata
-        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
+        run: echo GITHUB_ACTIONS_BRANCH=${PULL_REQUEST_NUMBER} >> "$GITHUB_ENV"
+        env:
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || github.ref_name}}
       - run: ./build/github/get-engflow-keys.sh
       - run: ./build/github/prepare-summarize-build.sh
       - name: run tests
