@@ -3299,6 +3299,65 @@ func (m *DropPolicy) AppendJSONFields(printComma bool, b redact.RedactableBytes)
 }
 
 // AppendJSONFields implements the EventPayload interface.
+func (m *DropProvisionedRoles) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
+
+	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)
+
+	printComma, b = m.CommonSQLEventDetails.AppendJSONFields(printComma, b)
+
+	if m.Source != "" {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"Source\":\""...)
+		b = append(b, redact.StartMarker()...)
+		b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(m.Source)))))
+		b = append(b, redact.EndMarker()...)
+		b = append(b, '"')
+	}
+
+	if m.NumDropped != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NumDropped\":"...)
+		b = strconv.AppendUint(b, uint64(m.NumDropped), 10)
+	}
+
+	if m.NumSkipped != 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"NumSkipped\":"...)
+		b = strconv.AppendUint(b, uint64(m.NumSkipped), 10)
+	}
+
+	if len(m.RoleNames) > 0 {
+		if printComma {
+			b = append(b, ',')
+		}
+		printComma = true
+		b = append(b, "\"RoleNames\":["...)
+		for i, v := range m.RoleNames {
+			if i > 0 {
+				b = append(b, ',')
+			}
+			b = append(b, '"')
+			b = append(b, redact.StartMarker()...)
+			b = redact.RedactableBytes(jsonbytes.EncodeString([]byte(b), string(redact.EscapeMarkers([]byte(v)))))
+			b = append(b, redact.EndMarker()...)
+			b = append(b, '"')
+		}
+		b = append(b, ']')
+	}
+
+	return printComma, b
+}
+
+// AppendJSONFields implements the EventPayload interface.
 func (m *DropRole) AppendJSONFields(printComma bool, b redact.RedactableBytes) (bool, redact.RedactableBytes) {
 
 	printComma, b = m.CommonEventDetails.AppendJSONFields(printComma, b)

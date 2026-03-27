@@ -42,6 +42,22 @@ message DropRole {
   string role_name = 3 [(gogoproto.jsontag) = ",omitempty"];
 }
 
+// DropProvisionedRoles is recorded when provisioned roles are
+// bulk-dropped via the DROP PROVISIONED ROLES statement.
+message DropProvisionedRoles {
+  CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
+  // The SOURCE filter value used in the statement.
+  string source = 3 [(gogoproto.jsontag) = ",omitempty"];
+  // Number of roles actually dropped.
+  uint32 num_dropped = 4 [(gogoproto.jsontag) = ",omitempty"];
+  // Number of roles that matched filters but were skipped
+  // (e.g., due to object dependencies).
+  uint32 num_skipped = 5 [(gogoproto.jsontag) = ",omitempty"];
+  // The names of roles that were dropped.
+  repeated string role_names = 6 [(gogoproto.jsontag) = ",omitempty"];
+}
+
 // AlterRole is recorded when a role is altered.
 message AlterRole {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];

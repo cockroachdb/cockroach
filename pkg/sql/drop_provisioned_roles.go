@@ -168,7 +168,19 @@ func (n *DropProvisionedRolesNode) startExec(params runParams) error {
 		}
 	}
 
-	return nil
+	// Log summary event.
+	var sourceStr string
+	if n.options != nil && n.options.Source != nil {
+		sourceStr = tree.AsStringWithFlags(n.options.Source, tree.FmtBareStrings)
+	}
+	return params.p.logEvent(params.ctx,
+		0, /* no target */
+		&eventpb.DropProvisionedRoles{
+			Source:     sourceStr,
+			NumDropped: uint32(numDropped),
+			NumSkipped: uint32(numSkipped),
+			RoleNames:  droppedNames,
+		})
 }
 
 // buildFilterQuery constructs the SQL query to find provisioned users
