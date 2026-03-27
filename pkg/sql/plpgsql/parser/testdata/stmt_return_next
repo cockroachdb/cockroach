@@ -135,3 +135,26 @@ BEGIN
   RETURN NEXT SELECT * FROM xy;
                             ^
 HINT: try \h SET SESSION
+
+pretty
+BEGIN
+RETURN NEXT foo;
+END
+----
+BEGIN
+	RETURN NEXT foo;
+END;
+
+pretty
+BEGIN
+RETURN NEXT some_function(first_argument, second_argument, third_argument);
+END
+----
+BEGIN
+	RETURN NEXT
+		some_function(
+			first_argument,
+			second_argument,
+			third_argument
+		);
+END;

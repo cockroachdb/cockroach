@@ -45,7 +45,6 @@ END LOOP;
 END;
  -- identifiers removed
 
-
 parse
 DECLARE
 BEGIN
@@ -196,3 +195,24 @@ LOOP
   x := x + 1;
 END LOOP nonempty_label;
                        ^
+
+pretty
+DECLARE
+BEGIN
+x := 1;
+<<mathing>>
+LOOP
+EXIT WHEN x = 10;
+x := x + 1;
+END LOOP mathing;
+END
+----
+DECLARE
+BEGIN
+	x := 1;
+	<<mathing>>
+	LOOP
+		EXIT WHEN x = 10;
+		x := x + 1;
+	END LOOP mathing;
+END;

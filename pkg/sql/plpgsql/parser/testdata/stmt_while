@@ -133,3 +133,24 @@ _ := _ - 1;
 END LOOP _;
 END;
  -- identifiers removed
+
+pretty
+DECLARE
+BEGIN
+x := 10;
+WHILE x > 0 AND x < 100 LOOP
+x := x - 1;
+x := x - 2;
+END LOOP;
+END
+----
+DECLARE
+BEGIN
+	x := 10;
+	WHILE x > 0
+	AND x
+		< 100 LOOP
+		x := x - 1;
+		x := x - 2;
+	END LOOP;
+END;

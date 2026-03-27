@@ -174,7 +174,7 @@ func (node *IndexElem) Format(ctx *FmtCtx) {
 	}
 }
 
-func (node *IndexElem) doc(p *PrettyCfg) pretty.Doc {
+func (node *IndexElem) Doc(p *PrettyCfg) pretty.Doc {
 	var d pretty.Doc
 	if node.Expr == nil {
 		d = p.Doc(&node.Column)
@@ -212,8 +212,8 @@ func (l *IndexElemList) Format(ctx *FmtCtx) {
 	}
 }
 
-// doc is part of the docer interface.
-func (l *IndexElemList) doc(p *PrettyCfg) pretty.Doc {
+// Doc is part of the Docer interface.
+func (l *IndexElemList) Doc(p *PrettyCfg) pretty.Doc {
 	if l == nil || len(*l) == 0 {
 		return pretty.Nil
 	}
@@ -1963,7 +1963,7 @@ func (node *ViewOptions) Format(ctx *FmtCtx) {
 	}
 }
 
-func (node *ViewOptions) doc(p *PrettyCfg) pretty.Doc {
+func (node *ViewOptions) Doc(p *PrettyCfg) pretty.Doc {
 	if node.SecurityInvoker {
 		return pretty.Text("security_invoker = true")
 	} else {
