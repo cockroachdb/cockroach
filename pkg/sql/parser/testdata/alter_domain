@@ -1,0 +1,215 @@
+parse
+ALTER DOMAIN d SET DEFAULT 42
+----
+ALTER DOMAIN d SET DEFAULT 42
+ALTER DOMAIN d SET DEFAULT (42) -- fully parenthesized
+ALTER DOMAIN d SET DEFAULT _ -- literals removed
+ALTER DOMAIN _ SET DEFAULT 42 -- identifiers removed
+
+parse
+ALTER DOMAIN s.d SET DEFAULT 'hello'
+----
+ALTER DOMAIN s.d SET DEFAULT 'hello'
+ALTER DOMAIN s.d SET DEFAULT ('hello') -- fully parenthesized
+ALTER DOMAIN s.d SET DEFAULT '_' -- literals removed
+ALTER DOMAIN _._ SET DEFAULT 'hello' -- identifiers removed
+
+parse
+ALTER DOMAIN d DROP DEFAULT
+----
+ALTER DOMAIN d DROP DEFAULT
+ALTER DOMAIN d DROP DEFAULT -- fully parenthesized
+ALTER DOMAIN d DROP DEFAULT -- literals removed
+ALTER DOMAIN _ DROP DEFAULT -- identifiers removed
+
+parse
+ALTER DOMAIN d SET NOT NULL
+----
+ALTER DOMAIN d SET NOT NULL
+ALTER DOMAIN d SET NOT NULL -- fully parenthesized
+ALTER DOMAIN d SET NOT NULL -- literals removed
+ALTER DOMAIN _ SET NOT NULL -- identifiers removed
+
+parse
+ALTER DOMAIN d DROP NOT NULL
+----
+ALTER DOMAIN d DROP NOT NULL
+ALTER DOMAIN d DROP NOT NULL -- fully parenthesized
+ALTER DOMAIN d DROP NOT NULL -- literals removed
+ALTER DOMAIN _ DROP NOT NULL -- identifiers removed
+
+parse
+ALTER DOMAIN d ADD CONSTRAINT chk CHECK (VALUE > 0)
+----
+ALTER DOMAIN d ADD CONSTRAINT chk CHECK (value > 0) -- normalized!
+ALTER DOMAIN d ADD CONSTRAINT chk CHECK (((value) > (0))) -- fully parenthesized
+ALTER DOMAIN d ADD CONSTRAINT chk CHECK (value > _) -- literals removed
+ALTER DOMAIN _ ADD CONSTRAINT _ CHECK (_ > 0) -- identifiers removed
+
+parse
+ALTER DOMAIN d ADD CHECK (VALUE > 0)
+----
+ALTER DOMAIN d ADD CHECK (value > 0) -- normalized!
+ALTER DOMAIN d ADD CHECK (((value) > (0))) -- fully parenthesized
+ALTER DOMAIN d ADD CHECK (value > _) -- literals removed
+ALTER DOMAIN _ ADD CHECK (_ > 0) -- identifiers removed
+
+parse
+ALTER DOMAIN d ADD CONSTRAINT chk CHECK (VALUE > 0) NOT VALID
+----
+ALTER DOMAIN d ADD CONSTRAINT chk CHECK (value > 0) NOT VALID -- normalized!
+ALTER DOMAIN d ADD CONSTRAINT chk CHECK (((value) > (0))) NOT VALID -- fully parenthesized
+ALTER DOMAIN d ADD CONSTRAINT chk CHECK (value > _) NOT VALID -- literals removed
+ALTER DOMAIN _ ADD CONSTRAINT _ CHECK (_ > 0) NOT VALID -- identifiers removed
+
+parse
+ALTER DOMAIN d ADD CHECK (VALUE > 0) NOT VALID
+----
+ALTER DOMAIN d ADD CHECK (value > 0) NOT VALID -- normalized!
+ALTER DOMAIN d ADD CHECK (((value) > (0))) NOT VALID -- fully parenthesized
+ALTER DOMAIN d ADD CHECK (value > _) NOT VALID -- literals removed
+ALTER DOMAIN _ ADD CHECK (_ > 0) NOT VALID -- identifiers removed
+
+parse
+ALTER DOMAIN d ADD CONSTRAINT nn NOT NULL
+----
+ALTER DOMAIN d ADD CONSTRAINT nn NOT NULL
+ALTER DOMAIN d ADD CONSTRAINT nn NOT NULL -- fully parenthesized
+ALTER DOMAIN d ADD CONSTRAINT nn NOT NULL -- literals removed
+ALTER DOMAIN _ ADD CONSTRAINT _ NOT NULL -- identifiers removed
+
+parse
+ALTER DOMAIN d ADD NOT NULL
+----
+ALTER DOMAIN d ADD NOT NULL
+ALTER DOMAIN d ADD NOT NULL -- fully parenthesized
+ALTER DOMAIN d ADD NOT NULL -- literals removed
+ALTER DOMAIN _ ADD NOT NULL -- identifiers removed
+
+parse
+ALTER DOMAIN d ADD CONSTRAINT nn NOT NULL NOT VALID
+----
+ALTER DOMAIN d ADD CONSTRAINT nn NOT NULL NOT VALID
+ALTER DOMAIN d ADD CONSTRAINT nn NOT NULL NOT VALID -- fully parenthesized
+ALTER DOMAIN d ADD CONSTRAINT nn NOT NULL NOT VALID -- literals removed
+ALTER DOMAIN _ ADD CONSTRAINT _ NOT NULL NOT VALID -- identifiers removed
+
+parse
+ALTER DOMAIN d ADD NOT NULL NOT VALID
+----
+ALTER DOMAIN d ADD NOT NULL NOT VALID
+ALTER DOMAIN d ADD NOT NULL NOT VALID -- fully parenthesized
+ALTER DOMAIN d ADD NOT NULL NOT VALID -- literals removed
+ALTER DOMAIN _ ADD NOT NULL NOT VALID -- identifiers removed
+
+parse
+ALTER DOMAIN d DROP CONSTRAINT chk
+----
+ALTER DOMAIN d DROP CONSTRAINT chk
+ALTER DOMAIN d DROP CONSTRAINT chk -- fully parenthesized
+ALTER DOMAIN d DROP CONSTRAINT chk -- literals removed
+ALTER DOMAIN _ DROP CONSTRAINT _ -- identifiers removed
+
+parse
+ALTER DOMAIN d DROP CONSTRAINT IF EXISTS chk
+----
+ALTER DOMAIN d DROP CONSTRAINT IF EXISTS chk
+ALTER DOMAIN d DROP CONSTRAINT IF EXISTS chk -- fully parenthesized
+ALTER DOMAIN d DROP CONSTRAINT IF EXISTS chk -- literals removed
+ALTER DOMAIN _ DROP CONSTRAINT IF EXISTS _ -- identifiers removed
+
+parse
+ALTER DOMAIN d DROP CONSTRAINT IF EXISTS chk CASCADE
+----
+ALTER DOMAIN d DROP CONSTRAINT IF EXISTS chk CASCADE
+ALTER DOMAIN d DROP CONSTRAINT IF EXISTS chk CASCADE -- fully parenthesized
+ALTER DOMAIN d DROP CONSTRAINT IF EXISTS chk CASCADE -- literals removed
+ALTER DOMAIN _ DROP CONSTRAINT IF EXISTS _ CASCADE -- identifiers removed
+
+parse
+ALTER DOMAIN d DROP CONSTRAINT IF EXISTS chk RESTRICT
+----
+ALTER DOMAIN d DROP CONSTRAINT IF EXISTS chk RESTRICT
+ALTER DOMAIN d DROP CONSTRAINT IF EXISTS chk RESTRICT -- fully parenthesized
+ALTER DOMAIN d DROP CONSTRAINT IF EXISTS chk RESTRICT -- literals removed
+ALTER DOMAIN _ DROP CONSTRAINT IF EXISTS _ RESTRICT -- identifiers removed
+
+parse
+ALTER DOMAIN d DROP CONSTRAINT chk CASCADE
+----
+ALTER DOMAIN d DROP CONSTRAINT chk CASCADE
+ALTER DOMAIN d DROP CONSTRAINT chk CASCADE -- fully parenthesized
+ALTER DOMAIN d DROP CONSTRAINT chk CASCADE -- literals removed
+ALTER DOMAIN _ DROP CONSTRAINT _ CASCADE -- identifiers removed
+
+parse
+ALTER DOMAIN d DROP CONSTRAINT chk RESTRICT
+----
+ALTER DOMAIN d DROP CONSTRAINT chk RESTRICT
+ALTER DOMAIN d DROP CONSTRAINT chk RESTRICT -- fully parenthesized
+ALTER DOMAIN d DROP CONSTRAINT chk RESTRICT -- literals removed
+ALTER DOMAIN _ DROP CONSTRAINT _ RESTRICT -- identifiers removed
+
+parse
+ALTER DOMAIN d RENAME CONSTRAINT chk TO chk2
+----
+ALTER DOMAIN d RENAME CONSTRAINT chk TO chk2
+ALTER DOMAIN d RENAME CONSTRAINT chk TO chk2 -- fully parenthesized
+ALTER DOMAIN d RENAME CONSTRAINT chk TO chk2 -- literals removed
+ALTER DOMAIN _ RENAME CONSTRAINT _ TO _ -- identifiers removed
+
+parse
+ALTER DOMAIN d VALIDATE CONSTRAINT chk
+----
+ALTER DOMAIN d VALIDATE CONSTRAINT chk
+ALTER DOMAIN d VALIDATE CONSTRAINT chk -- fully parenthesized
+ALTER DOMAIN d VALIDATE CONSTRAINT chk -- literals removed
+ALTER DOMAIN _ VALIDATE CONSTRAINT _ -- identifiers removed
+
+parse
+ALTER DOMAIN d OWNER TO foo
+----
+ALTER DOMAIN d OWNER TO foo
+ALTER DOMAIN d OWNER TO foo -- fully parenthesized
+ALTER DOMAIN d OWNER TO foo -- literals removed
+ALTER DOMAIN _ OWNER TO _ -- identifiers removed
+
+parse
+ALTER DOMAIN d OWNER TO CURRENT_USER
+----
+ALTER DOMAIN d OWNER TO CURRENT_USER
+ALTER DOMAIN d OWNER TO CURRENT_USER -- fully parenthesized
+ALTER DOMAIN d OWNER TO CURRENT_USER -- literals removed
+ALTER DOMAIN _ OWNER TO _ -- identifiers removed
+
+parse
+ALTER DOMAIN d OWNER TO SESSION_USER
+----
+ALTER DOMAIN d OWNER TO SESSION_USER
+ALTER DOMAIN d OWNER TO SESSION_USER -- fully parenthesized
+ALTER DOMAIN d OWNER TO SESSION_USER -- literals removed
+ALTER DOMAIN _ OWNER TO _ -- identifiers removed
+
+parse
+ALTER DOMAIN d RENAME TO d2
+----
+ALTER DOMAIN d RENAME TO d2
+ALTER DOMAIN d RENAME TO d2 -- fully parenthesized
+ALTER DOMAIN d RENAME TO d2 -- literals removed
+ALTER DOMAIN _ RENAME TO _ -- identifiers removed
+
+parse
+ALTER DOMAIN d SET SCHEMA newschema
+----
+ALTER DOMAIN d SET SCHEMA newschema
+ALTER DOMAIN d SET SCHEMA newschema -- fully parenthesized
+ALTER DOMAIN d SET SCHEMA newschema -- literals removed
+ALTER DOMAIN _ SET SCHEMA _ -- identifiers removed
+
+parse
+ALTER DOMAIN db.sc.d SET DEFAULT 1 + 2
+----
+ALTER DOMAIN db.sc.d SET DEFAULT 1 + 2
+ALTER DOMAIN db.sc.d SET DEFAULT ((1) + (2)) -- fully parenthesized
+ALTER DOMAIN db.sc.d SET DEFAULT _ + _ -- literals removed
+ALTER DOMAIN _._._ SET DEFAULT 1 + 2 -- identifiers removed
