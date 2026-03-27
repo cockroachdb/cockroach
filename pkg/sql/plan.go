@@ -223,6 +223,7 @@ var _ planNode = &dropSchemaNode{}
 var _ planNode = &dropSequenceNode{}
 var _ planNode = &dropTableNode{}
 var _ planNode = &dropTypeNode{}
+var _ planNode = &DropProvisionedRolesNode{}
 var _ planNode = &DropRoleNode{}
 var _ planNode = &dropViewNode{}
 var _ planNode = &errorIfRowsNode{}
