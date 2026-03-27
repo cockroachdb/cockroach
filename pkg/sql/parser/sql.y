@@ -1172,6 +1172,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> alter_role_stmt
 %type <*tree.SetVar> set_or_reset_clause
 %type <tree.Statement> alter_type_stmt
+%type <tree.Statement> alter_domain_stmt
 %type <tree.Statement> alter_schema_stmt
 %type <tree.Statement> alter_unsupported_stmt
 %type <tree.Statement> alter_func_stmt
@@ -2016,6 +2017,7 @@ alter_ddl_stmt:
 | alter_partition_stmt          // EXTEND WITH HELP: ALTER PARTITION
 | alter_schema_stmt             // EXTEND WITH HELP: ALTER SCHEMA
 | alter_type_stmt               // EXTEND WITH HELP: ALTER TYPE
+| alter_domain_stmt             // EXTEND WITH HELP: ALTER DOMAIN
 | alter_default_privileges_stmt // EXTEND WITH HELP: ALTER DEFAULT PRIVILEGES
 | alter_changefeed_stmt         // EXTEND WITH HELP: ALTER CHANGEFEED
 | alter_backup_stmt             // EXTEND WITH HELP: ALTER BACKUP
@@ -3477,6 +3479,163 @@ opt_add_val_placement:
     $$.val = (*tree.AlterTypeAddValuePlacement)(nil)
   }
 
+// %Help: ALTER DOMAIN - change the definition of a domain
+// %Category: DDL
+// %Text:
+// ALTER DOMAIN <name> SET DEFAULT <expression>
+// ALTER DOMAIN <name> DROP DEFAULT
+// ALTER DOMAIN <name> SET NOT NULL
+// ALTER DOMAIN <name> DROP NOT NULL
+// ALTER DOMAIN <name> ADD [CONSTRAINT <constraint_name>] { NOT NULL | CHECK (<expression>) } [NOT VALID]
+// ALTER DOMAIN <name> DROP CONSTRAINT [IF EXISTS] <constraint_name> [RESTRICT | CASCADE]
+// ALTER DOMAIN <name> RENAME CONSTRAINT <constraint_name> TO <new_constraint_name>
+// ALTER DOMAIN <name> VALIDATE CONSTRAINT <constraint_name>
+// ALTER DOMAIN <name> OWNER TO <new_owner>
+// ALTER DOMAIN <name> RENAME TO <new_name>
+// ALTER DOMAIN <name> SET SCHEMA <new_schema>
+// %SeeAlso: CREATE DOMAIN, DROP DOMAIN
+alter_domain_stmt:
+  ALTER DOMAIN type_name SET DEFAULT a_expr
+  {
+    $$.val = &tree.AlterDomain{
+      Domain: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterDomainSetDefault{
+        Default: $6.expr(),
+      },
+    }
+  }
+| ALTER DOMAIN type_name DROP DEFAULT
+  {
+    $$.val = &tree.AlterDomain{
+      Domain: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterDomainDropDefault{},
+    }
+  }
+| ALTER DOMAIN type_name SET NOT NULL
+  {
+    $$.val = &tree.AlterDomain{
+      Domain: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterDomainSetNotNull{},
+    }
+  }
+| ALTER DOMAIN type_name DROP NOT NULL
+  {
+    $$.val = &tree.AlterDomain{
+      Domain: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterDomainDropNotNull{},
+    }
+  }
+| ALTER DOMAIN type_name ADD CONSTRAINT name CHECK '(' a_expr ')' opt_validate_behavior
+  {
+    $$.val = &tree.AlterDomain{
+      Domain: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterDomainAddConstraint{
+        Name: tree.Name($6),
+        Check: $9.expr(),
+        NotValid: $11.validationBehavior() == tree.ValidationSkip,
+      },
+    }
+  }
+| ALTER DOMAIN type_name ADD CHECK '(' a_expr ')' opt_validate_behavior
+  {
+    $$.val = &tree.AlterDomain{
+      Domain: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterDomainAddConstraint{
+        Check: $7.expr(),
+        NotValid: $9.validationBehavior() == tree.ValidationSkip,
+      },
+    }
+  }
+| ALTER DOMAIN type_name ADD CONSTRAINT name NOT NULL opt_validate_behavior
+  {
+    $$.val = &tree.AlterDomain{
+      Domain: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterDomainAddConstraint{
+        Name: tree.Name($6),
+        NotNull: true,
+        NotValid: $9.validationBehavior() == tree.ValidationSkip,
+      },
+    }
+  }
+| ALTER DOMAIN type_name ADD NOT NULL opt_validate_behavior
+  {
+    $$.val = &tree.AlterDomain{
+      Domain: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterDomainAddConstraint{
+        NotNull: true,
+        NotValid: $7.validationBehavior() == tree.ValidationSkip,
+      },
+    }
+  }
+| ALTER DOMAIN type_name DROP CONSTRAINT IF EXISTS constraint_name opt_drop_behavior
+  {
+    $$.val = &tree.AlterDomain{
+      Domain: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterDomainDropConstraint{
+        ConstraintName: tree.Name($8),
+        IfExists: true,
+        DropBehavior: $9.dropBehavior(),
+      },
+    }
+  }
+| ALTER DOMAIN type_name DROP CONSTRAINT constraint_name opt_drop_behavior
+  {
+    $$.val = &tree.AlterDomain{
+      Domain: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterDomainDropConstraint{
+        ConstraintName: tree.Name($6),
+        DropBehavior: $7.dropBehavior(),
+      },
+    }
+  }
+| ALTER DOMAIN type_name RENAME CONSTRAINT constraint_name TO constraint_name
+  {
+    $$.val = &tree.AlterDomain{
+      Domain: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterDomainRenameConstraint{
+        ConstraintName: tree.Name($6),
+        NewConstraintName: tree.Name($8),
+      },
+    }
+  }
+| ALTER DOMAIN type_name VALIDATE CONSTRAINT constraint_name
+  {
+    $$.val = &tree.AlterDomain{
+      Domain: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterDomainValidateConstraint{
+        ConstraintName: tree.Name($6),
+      },
+    }
+  }
+| ALTER DOMAIN type_name OWNER TO role_spec
+  {
+    $$.val = &tree.AlterDomain{
+      Domain: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterDomainOwner{
+        Owner: $6.roleSpec(),
+      },
+    }
+  }
+| ALTER DOMAIN type_name RENAME TO name
+  {
+    $$.val = &tree.AlterDomain{
+      Domain: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterDomainRename{
+        NewName: tree.Name($6),
+      },
+    }
+  }
+| ALTER DOMAIN type_name SET SCHEMA schema_name
+  {
+    $$.val = &tree.AlterDomain{
+      Domain: $3.unresolvedObjectName(),
+      Cmd: &tree.AlterDomainSetSchema{
+        Schema: tree.Name($6),
+      },
+    }
+  }
+| ALTER DOMAIN error // SHOW HELP: ALTER DOMAIN
+
 role_spec:
   IDENT
   {
@@ -4331,11 +4490,7 @@ import_format:
   }
 
 alter_unsupported_stmt:
-  ALTER DOMAIN error
-  {
-    return unimplemented(sqllex, "alter domain")
-  }
-| ALTER AGGREGATE error
+  ALTER AGGREGATE error
   {
     return unimplementedWithIssueDetail(sqllex, 74775, "alter aggregate")
   }
