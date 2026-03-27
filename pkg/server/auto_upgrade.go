@@ -157,19 +157,17 @@ func (s *topLevelServer) upgradeStatus(
 	if err != nil {
 		return UpgradeBlockedDueToError, err
 	}
-	vitalities, err := s.nodeLiveness.ScanNodeVitalityFromKV(ctx)
-	if err != nil {
-		return UpgradeBlockedDueToError, err
-	}
+	vitalities := s.nodeLiveness.ScanNodeVitalityFromCache()
 
 	var newVersion string
 	var notRunningErr error
 	for _, node := range statuses {
 		nodeID := node.Desc.NodeID
-		v := vitalities[nodeID]
+		v, ok := vitalities[nodeID]
 
-		// Skip over removed nodes.
-		if v.IsDecommissioned() {
+		// Skip over removed nodes. The cache excludes decommissioned
+		// nodes, so a missing entry indicates a decommissioned node.
+		if !ok || v.IsDecommissioned() {
 			continue
 		}
 
