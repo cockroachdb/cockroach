@@ -119,17 +119,23 @@ func newSQLCPUAdmissionHandle(
 	return h
 }
 
+// reportCPU atomically adds the CPU time difference to the appropriate
+// cumulative counter.
+func (h *SQLCPUHandle) reportCPU(diff time.Duration) {
+	if h.atGateway {
+		h.p.cumulativeGatewayCPUNanos.Add(diff.Nanoseconds())
+	} else {
+		h.p.cumulativeDistSQLCPUNanos.Add(diff.Nanoseconds())
+	}
+}
+
 // reportAndAcquireConsumedCPU updates cumulative CPU counters and, if a CTT
 // WorkQueue is attached, calls Admit to deduct the consumed CPU from the token
 // bucket. This may block until tokens are available unless noWait is true.
 func (h *SQLCPUHandle) reportAndAcquireConsumedCPU(
 	ctx context.Context, diff time.Duration, noWait bool,
 ) error {
-	if h.atGateway {
-		h.p.cumulativeGatewayCPUNanos.Add(diff.Nanoseconds())
-	} else {
-		h.p.cumulativeDistSQLCPUNanos.Add(diff.Nanoseconds())
-	}
+	h.reportCPU(diff)
 
 	if h.wq == nil {
 		return nil
