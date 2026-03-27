@@ -203,7 +203,13 @@ func (r *iVarAndSubqueryReplacer) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 		newExpr := tree.Expr(val)
 		typ := t.ResolvedType()
 		if _, isTuple := val.(*tree.DTuple); !isTuple && typ.Family() != types.UnknownFamily && typ.Family() != types.TupleFamily {
-			newExpr = tree.NewTypedCastExpr(val, typ)
+			// Skip the cast if the datum's type already matches the
+			// subquery's resolved type. Adding a redundant cast can cause
+			// undesirable side effects like OID name resolution for
+			// REGCLASS values. See #166802.
+			if !val.ResolvedType().Identical(typ) {
+				newExpr = tree.NewTypedCastExpr(val, typ)
+			}
 		}
 		return false, newExpr
 

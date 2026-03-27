@@ -752,3 +752,28 @@ SELECT col1 FROM t123548_1 JOIN t123548_2 ON col1 = col2;
 statement ok
 RESET testing_optimizer_random_seed;
 RESET testing_optimizer_disable_rule_probability;
+
+# Regression test for incorrect REGCLASS rendering in scalar subqueries
+# (#166802).
+subtest regression_166802
+
+statement ok
+CREATE TABLE t166802 (a REGCLASS);
+INSERT INTO t166802 VALUES ('t166802'::REGCLASS)
+
+statement ok
+SET testing_optimizer_disable_rule_probability = 1.0
+
+# The result should be the same with and without optimizer rules disabled.
+query T
+SELECT (SELECT a FROM t166802)
+----
+132
+
+statement ok
+RESET testing_optimizer_disable_rule_probability
+
+query T
+SELECT (SELECT a FROM t166802)
+----
+132
