@@ -244,6 +244,8 @@ func TestContextualHelp(t *testing.T) {
 		{`DROP ROLE IF ??`, `DROP ROLE`},
 		{`DROP ROLE IF EXISTS bluh ??`, `DROP ROLE`},
 
+		{`DROP PROVISIONED ROLES ??`, `DROP PROVISIONED ROLES`},
+
 		{`DROP SEQUENCE blah ??`, `DROP SEQUENCE`},
 		{`DROP SEQUENCE IF ??`, `DROP SEQUENCE`},
 		{`DROP SEQUENCE IF EXISTS blih, bloh ??`, `DROP SEQUENCE`},

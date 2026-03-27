@@ -285,7 +285,7 @@ func combineBools(v1 bool, v2 bool, label string) (bool, error) {
 func combineExpr(v1 Expr, v2 Expr, label string) (Expr, error) {
 	if v1 != nil {
 		if v2 != nil {
-			return v1, errors.Newf("% option specified multiple times", label)
+			return v1, errors.Newf("%s option specified multiple times", label)
 		}
 		return v1, nil
 	}
@@ -296,7 +296,7 @@ func combineStringOrPlaceholderOptList(
 ) (StringOrPlaceholderOptList, error) {
 	if v1 != nil {
 		if v2 != nil {
-			return v1, errors.Newf("% option specified multiple times", label)
+			return v1, errors.Newf("%s option specified multiple times", label)
 		}
 		return v1, nil
 	}
