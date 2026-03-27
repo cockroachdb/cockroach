@@ -15,7 +15,6 @@ import {
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { bindActionCreators } from "redux";
-import { createSelector } from "reselect";
 
 import {
   trackApplySearchCriteriaAction,
@@ -31,20 +30,6 @@ import {
   trackActivateDiagnostics,
   trackDiagnosticsModalOpen,
 } from "src/util/analytics";
-
-// selectDatabases returns the array of all databases in the cluster.
-export const selectDatabases = createSelector(
-  (state: AdminUIState) => state.cachedData.databases,
-  state => {
-    if (!state?.data) {
-      return [];
-    }
-
-    return state.data.databases
-      .filter((dbName: string) => dbName !== null && dbName.length > 0)
-      .sort();
-  },
-);
 
 export const statementColumnsLocalSetting = new LocalSetting(
   "create_statement_columns",
