@@ -222,6 +222,7 @@ type Memo struct {
 	useImprovedRoutineDepsTriggersComputedCols bool
 	inlineAnyUnnestSubquery                    bool
 	useMinRowCountAntiJoinFix                  bool
+	useBackupsWithIDs                          bool
 
 	// txnIsoLevel is the isolation level under which the plan was created. This
 	// affects the planning of some locking operations, so it must be included in
@@ -351,6 +352,7 @@ func (m *Memo) Init(ctx context.Context, evalCtx *eval.Context) {
 		useMinRowCountAntiJoinFix:                  evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix,
 		skipUnderlyingViewPrivilegeChecks:          sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV),
 		txnIsoLevel:                                evalCtx.TxnIsoLevel,
+		useBackupsWithIDs:                          evalCtx.SessionData().UseBackupsWithIDs,
 	}
 	m.metadata.Init()
 	m.logPropsBuilder.init(ctx, evalCtx, m)
@@ -536,7 +538,8 @@ func (m *Memo) IsStale(
 		m.inlineAnyUnnestSubquery != evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery ||
 		m.useMinRowCountAntiJoinFix != evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix ||
 		m.skipUnderlyingViewPrivilegeChecks != sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&evalCtx.Settings.SV) ||
-		m.txnIsoLevel != evalCtx.TxnIsoLevel {
+		m.txnIsoLevel != evalCtx.TxnIsoLevel ||
+		m.useBackupsWithIDs != evalCtx.SessionData().UseBackupsWithIDs {
 		return true, nil
 	}
 
