@@ -99,6 +99,10 @@ type BackupRestoreTestingKnobs struct {
 	// drops its descriptors.
 	AfterRevertRestoreDropDescriptors func() error
 
+	// DownloadPhaseRetryPolicy, if set, overrides the default retry policy
+	// used for the download phase of online restore.
+	DownloadPhaseRetryPolicy *retry.Options
+
 	RestoreSpanConfigConformanceRetryPolicy *retry.Options
 
 	OnCompactionFileAccess *func(processorLocality roachpb.Locality, fileLocality string) error
