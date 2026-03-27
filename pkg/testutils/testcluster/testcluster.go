@@ -1631,7 +1631,7 @@ func (tc *TestCluster) ScratchRangeWithExpirationLease(t serverutils.TestFataler
 // NB: This doesn't actually wait for full upreplication to whatever the zone
 // config specifies.
 func (tc *TestCluster) WaitForSplitAndInitialization(startKey roachpb.Key) error {
-	return retry.ForDuration(testutils.DefaultSucceedsSoonDuration, func() error {
+	return retry.ForDuration(testutils.SucceedsSoonDuration(), func() error {
 		desc, err := tc.LookupRange(startKey)
 		if err != nil {
 			return errors.Wrapf(err, "unable to lookup range for %s", startKey)
