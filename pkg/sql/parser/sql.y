@@ -9639,7 +9639,15 @@ show_jobs_stmt:
   }
 | SHOW JOBS WHEN COMPLETE select_stmt
   {
-    $$.val = &tree.ShowJobs{Jobs: $5.slct(), Block: true}
+    $$.val = &tree.ShowJobs{Jobs: $5.slct(), Block: true, BlockTarget: tree.BlockTargetFinished}
+  }
+| SHOW JOBS WHEN PAUSED select_stmt
+  {
+    $$.val = &tree.ShowJobs{Jobs: $5.slct(), Block: true, BlockTarget: tree.BlockTargetPaused}
+  }
+| SHOW JOBS WHEN RUNNING select_stmt
+  {
+    $$.val = &tree.ShowJobs{Jobs: $5.slct(), Block: true, BlockTarget: tree.BlockTargetRunning}
   }
 | SHOW JOBS for_schedules_clause
   {
@@ -9698,6 +9706,27 @@ show_jobs_stmt:
         Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$5.expr()}}},
       },
       Block: true,
+      BlockTarget: tree.BlockTargetFinished,
+    }
+  }
+| SHOW JOB WHEN PAUSED a_expr
+  {
+    $$.val = &tree.ShowJobs{
+      Jobs: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$5.expr()}}},
+      },
+      Block: true,
+      BlockTarget: tree.BlockTargetPaused,
+    }
+  }
+| SHOW JOB WHEN RUNNING a_expr
+  {
+    $$.val = &tree.ShowJobs{
+      Jobs: &tree.Select{
+        Select: &tree.ValuesClause{Rows: []tree.Exprs{tree.Exprs{$5.expr()}}},
+      },
+      Block: true,
+      BlockTarget: tree.BlockTargetRunning,
     }
   }
 | SHOW JOB error // SHOW HELP: SHOW JOBS
