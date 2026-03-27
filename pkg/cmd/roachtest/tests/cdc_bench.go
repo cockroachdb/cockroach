@@ -219,41 +219,21 @@ func formatSI(num int64) string {
 	return fmt.Sprintf("%d%s", int64(numSI), suffix)
 }
 
-// makeCDCBenchOptions creates common cluster options for CDC benchmarks.
-func makeCDCBenchOptions(c cluster.Cluster) (option.StartOpts, install.ClusterSettings) {
+// makeCDCDefaultTestOptions creates common cluster options for CDC tests.
+// This provides baseline settings without benchmark-specific tuning.
+func makeCDCDefaultTestOptions(c cluster.Cluster) (option.StartOpts, install.ClusterSettings) {
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
 	settings.ClusterSettings["kv.rangefeed.enabled"] = "true"
 
-	// Checkpoint frequently.  Some of the larger benchmarks might overload the
-	// cluster.  Producing frequent span-level checkpoints helps with recovery.
+	// Checkpoint frequently. Some of the larger benchmarks might overload the
+	// cluster. Producing frequent span-level checkpoints helps with recovery.
 	settings.ClusterSettings["changefeed.span_checkpoint.interval"] = "60s"
 	settings.ClusterSettings["changefeed.span_checkpoint.lag_threshold"] = "30s"
 
-	// Bump up the number of allowed catchup scans.  Doing catchup for 100k ranges with default
+	// Bump up the number of allowed catchup scans. Doing catchup for 100k ranges with default
 	// configuration (8 client side, 16 per store) takes a while (~1500-2000 ranges per min minutes).
 	settings.ClusterSettings["kv.rangefeed.concurrent_catchup_iterators"] = "16"
-
-	// Give changefeed more memory and slow down rangefeed checkpoints.
-	// When running large catchup scan benchmarks (100k ranges), as the benchmark
-	// nears completion, more and more ranges generate checkpoint events.  When
-	// the rate of checkpoints high (default used to be 200ms), the changefeed
-	// begins to block on memory acquisition since the fan in factor (~20k
-	// ranges/node) greatly exceeds processing loop speed (1 goroutine).
-	// The current pipeline looks like this:
-	//    rangefeed ->
-	//       1 goroutine physicalKVFeed (acquire Memory) ->
-	//       1 goroutine copyFromSourceToDestination (filter events) ->
-	//       1 goroutine changeAggregator.Next ->
-	//       N goroutines rest of the pipeline (encode and emit)
-	// The memory for the checkpoint events (even ones after end_time) must be allocated
-	// first; then these events are thrown away (many inefficiencies here -- but
-	// it's the only thing we can do w/out having to add "end time" support to the rangefeed library).
-	// The rate of incoming events greatly exceeds the rate with which we consume these events
-	// (and release allocations), resulting in significant drop in completed ranges throughput.
-	// Current default is 3s, but if needed increase this time out:
-	//    settings.ClusterSettings["kv.rangefeed.closed_timestamp_refresh_interval"] = "5s"
-	settings.ClusterSettings["changefeed.memory.per_changefeed_limit"] = "4G"
 
 	// Scheduled backups may interfere with performance, disable them.
 	opts.RoachprodOpts.ScheduleBackups = false
@@ -272,6 +252,36 @@ func makeCDCBenchOptions(c cluster.Cluster) (option.StartOpts, install.ClusterSe
 	// due to elevated goroutine scheduling latency.
 	// Current default is 4s which should be sufficient.
 	// settings.Env = append(settings.Env, "COCKROACH_NETWORK_TIMEOUT=6s")
+
+	return opts, settings
+}
+
+// makeCDCBenchOptions creates common cluster options for CDC benchmarks.
+// Builds on makeCDCDefaultTestOptions with benchmark-specific tuning.
+func makeCDCBenchOptions(c cluster.Cluster) (option.StartOpts, install.ClusterSettings) {
+	opts, settings := makeCDCDefaultTestOptions(c)
+
+	// Give changefeed more memory.
+	settings.ClusterSettings["changefeed.memory.per_changefeed_limit"] = "4G"
+
+	// When running large catchup scan benchmarks (100k ranges), as the benchmark
+	// nears completion, more and more ranges generate checkpoint events.  When
+	// the rate of checkpoints high (default used to be 200ms), the changefeed
+	// begins to block on memory acquisition since the fan in factor (~20k
+	// ranges/node) greatly exceeds processing loop speed (1 goroutine).
+	// The current pipeline looks like this:
+	//    rangefeed ->
+	//       1 goroutine physicalKVFeed (acquire Memory) ->
+	//       1 goroutine copyFromSourceToDestination (filter events) ->
+	//       1 goroutine changeAggregator.Next ->
+	//       N goroutines rest of the pipeline (encode and emit)
+	// The memory for the checkpoint events (even ones after end_time) must be allocated
+	// first; then these events are thrown away (many inefficiencies here -- but
+	// it's the only thing we can do w/out having to add "end time" support to the rangefeed library).
+	// The rate of incoming events greatly exceeds the rate with which we consume these events
+	// (and release allocations), resulting in significant drop in completed ranges throughput.
+	// Current default is 3s, but if needed increase this time out:
+	//    settings.ClusterSettings["kv.rangefeed.closed_timestamp_refresh_interval"] = "5s"
 
 	return opts, settings
 }
