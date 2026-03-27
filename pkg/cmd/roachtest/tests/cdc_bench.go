@@ -219,20 +219,47 @@ func formatSI(num int64) string {
 	return fmt.Sprintf("%d%s", int64(numSI), suffix)
 }
 
-// makeCDCBenchOptions creates common cluster options for CDC benchmarks.
-func makeCDCBenchOptions(c cluster.Cluster) (option.StartOpts, install.ClusterSettings) {
+// makeCDCDefaultTestOptions creates common cluster options for CDC tests.
+// This provides baseline settings without benchmark-specific tuning.
+func makeCDCDefaultTestOptions(c cluster.Cluster) (option.StartOpts, install.ClusterSettings) {
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
 	settings.ClusterSettings["kv.rangefeed.enabled"] = "true"
 
-	// Checkpoint frequently.  Some of the larger benchmarks might overload the
-	// cluster.  Producing frequent span-level checkpoints helps with recovery.
+	// Checkpoint frequently. Some of the larger benchmarks might overload the
+	// cluster. Producing frequent span-level checkpoints helps with recovery.
 	settings.ClusterSettings["changefeed.span_checkpoint.interval"] = "60s"
 	settings.ClusterSettings["changefeed.span_checkpoint.lag_threshold"] = "30s"
 
-	// Bump up the number of allowed catchup scans.  Doing catchup for 100k ranges with default
+	// Bump up the number of allowed catchup scans. Doing catchup for 100k ranges with default
 	// configuration (8 client side, 16 per store) takes a while (~1500-2000 ranges per min minutes).
 	settings.ClusterSettings["kv.rangefeed.concurrent_catchup_iterators"] = "16"
+
+	// Scheduled backups may interfere with performance, disable them.
+	opts.RoachprodOpts.ScheduleBackups = false
+
+	// Prom helpers assume AdminUIPort is at 26258
+	roachtestutil.SetDefaultAdminUIPort(c, &opts.RoachprodOpts)
+
+	// Backpressure writers when rangefeed clients can't keep up. This gives more
+	// reliable results, since we can otherwise randomly hit timeouts and incur
+	// catchup scans.
+	settings.Env = append(settings.Env, "COCKROACH_RANGEFEED_SEND_TIMEOUT=0")
+
+	// If this benchmark experiences periodic changefeed restarts due to rpc errors
+	// (grpc context canceled), consider increase network timeout.
+	// Under significant load (due to rangefeed), timeout could easily be triggered
+	// due to elevated goroutine scheduling latency.
+	// Current default is 4s which should be sufficient.
+	// settings.Env = append(settings.Env, "COCKROACH_NETWORK_TIMEOUT=6s")
+
+	return opts, settings
+}
+
+// makeCDCBenchOptions creates common cluster options for CDC benchmarks.
+// Builds on makeCDCDefaultTestOptions with benchmark-specific tuning.
+func makeCDCBenchOptions(c cluster.Cluster) (option.StartOpts, install.ClusterSettings) {
+	opts, settings := makeCDCDefaultTestOptions(c)
 
 	// Give changefeed more memory and slow down rangefeed checkpoints.
 	// When running large catchup scan benchmarks (100k ranges), as the benchmark
@@ -254,24 +281,6 @@ func makeCDCBenchOptions(c cluster.Cluster) (option.StartOpts, install.ClusterSe
 	// Current default is 3s, but if needed increase this time out:
 	//    settings.ClusterSettings["kv.rangefeed.closed_timestamp_refresh_interval"] = "5s"
 	settings.ClusterSettings["changefeed.memory.per_changefeed_limit"] = "4G"
-
-	// Scheduled backups may interfere with performance, disable them.
-	opts.RoachprodOpts.ScheduleBackups = false
-
-	// Prom helpers assume AdminUIPort is at 26258
-	roachtestutil.SetDefaultAdminUIPort(c, &opts.RoachprodOpts)
-
-	// Backpressure writers when rangefeed clients can't keep up. This gives more
-	// reliable results, since we can otherwise randomly hit timeouts and incur
-	// catchup scans.
-	settings.Env = append(settings.Env, "COCKROACH_RANGEFEED_SEND_TIMEOUT=0")
-
-	// If this benchmark experiences periodic changefeed restarts due to rpc errors
-	// (grpc context canceled), consider increase network timeout.
-	// Under significant load (due to rangefeed), timeout could easily be triggered
-	// due to elevated goroutine scheduling latency.
-	// Current default is 4s which should be sufficient.
-	// settings.Env = append(settings.Env, "COCKROACH_NETWORK_TIMEOUT=6s")
 
 	return opts, settings
 }
