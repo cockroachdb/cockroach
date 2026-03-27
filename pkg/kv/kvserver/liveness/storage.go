@@ -217,27 +217,34 @@ func (ls *storageImpl) Create(ctx context.Context, nodeID roachpb.NodeID) error 
 	return errors.AssertionFailedf("unexpected problem while creating liveness record for node %d", nodeID)
 }
 
-// Scan will iterate over the KV liveness names and generate liveness records from them.
+// Scan will iterate over the KV liveness names and generate liveness records
+// from them. The scan runs inside a transaction so that the read timestamp is
+// assigned at the coordinator (not at the leaseholder), reducing false
+// serialization conflicts with concurrent heartbeat writes.
 func (ls *storageImpl) Scan(ctx context.Context) ([]Record, error) {
-	kvs, err := ls.db.Scan(ctx, ls.keyPrefix, ls.keyMax, 0)
-	if err != nil {
-		return nil, errors.Wrap(err, "unable to get liveness")
-	}
 	var results []Record
-	for _, kv := range kvs {
-		if kv.Value == nil {
-			return nil, errors.AssertionFailedf("missing liveness record")
+	if err := ls.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		results = nil
+		kvs, err := txn.Scan(ctx, ls.keyPrefix, ls.keyMax, 0)
+		if err != nil {
+			return errors.Wrap(err, "unable to get liveness")
 		}
-		var liveness livenesspb.Liveness
-		if err := kv.Value.GetProto(&liveness); err != nil {
-			return nil, errors.Wrap(err, "invalid liveness record")
+		for _, kv := range kvs {
+			if kv.Value == nil {
+				return errors.AssertionFailedf("missing liveness record")
+			}
+			var liveness livenesspb.Liveness
+			if err := kv.Value.GetProto(&liveness); err != nil {
+				return errors.Wrap(err, "invalid liveness record")
+			}
+			results = append(results, Record{
+				Liveness: liveness,
+				raw:      kv.Value.TagAndDataBytes(),
+			})
 		}
-
-		results = append(results, Record{
-			Liveness: liveness,
-			raw:      kv.Value.TagAndDataBytes(),
-		})
+		return nil
+	}); err != nil {
+		return nil, err
 	}
-
 	return results, nil
 }
