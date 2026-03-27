@@ -754,6 +754,9 @@ func (u *sqlSymUnion) showBackupDetails() tree.ShowBackupDetails {
 func (u *sqlSymUnion) showBackupOptions() *tree.ShowBackupOptions {
   return u.val.(*tree.ShowBackupOptions)
 }
+func (u *sqlSymUnion) dropProvisionedRolesOptions() *tree.DropProvisionedRolesOptions {
+  return u.val.(*tree.DropProvisionedRolesOptions)
+}
 func (u *sqlSymUnion) showBackupTimeFilter() *tree.ShowBackupTimeFilter {
   return u.val.(*tree.ShowBackupTimeFilter)
 }
@@ -1073,7 +1076,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %token <str> PARALLEL PARENT PARTIAL PARTITION PARTITIONS PASSWORD PAUSE PAUSED PER PERMISSIVE PHYSICAL PLACEMENT PLACING
 %token <str> PLAN PLANS POINT POINTM POINTZ POINTZM POLICIES POLICY POLYGON POLYGONM POLYGONZ POLYGONZM
 %token <str> POSITION PRECEDING PRECISION PREPARE PREPARED PRESERVE PRIMARY PRIOR PRIORITY PRIVILEGES PUSH
-%token <str> PROCEDURAL PROCEDURE PROCEDURES PROVISIONSRC PUBLIC PUBLICATION
+%token <str> PROCEDURAL PROCEDURE PROCEDURES PROVISIONED PROVISIONSRC PUBLIC PUBLICATION
 
 %token <str> QUERIES QUERY QUOTE
 
@@ -1338,6 +1341,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.Statement> drop_external_connection_stmt
 %type <tree.Statement> drop_index_stmt
 %type <tree.Statement> drop_role_stmt
+%type <tree.Statement> drop_provisioned_roles_stmt
 %type <tree.Statement> drop_schema_stmt
 %type <tree.Statement> drop_table_stmt
 %type <tree.Statement> drop_type_stmt
@@ -1490,6 +1494,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <tree.ShowBackupDetails> show_backup_details
 %type <*tree.ShowJobOptions> show_job_options show_job_options_list
 %type <*tree.ShowBackupOptions> opt_with_show_backup_options show_backup_options show_backup_options_list opt_with_show_backups_options show_backups_options
+%type <*tree.DropProvisionedRolesOptions> opt_with_drop_provisioned_roles_options drop_provisioned_roles_option drop_provisioned_roles_options_list
 %type <*tree.ShowBackupTimeFilter> opt_show_backups_time_filter_clause
 %type <*tree.CopyOptions> opt_with_copy_options copy_options copy_options_list copy_generic_options copy_generic_options_list
 %type <str> import_format
@@ -6628,11 +6633,12 @@ discard_stmt:
 // %Category: Group
 // %Text:
 // DROP DATABASE, DROP INDEX, DROP TABLE, DROP VIEW, DROP SEQUENCE,
-// DROP USER, DROP ROLE, DROP TYPE
+// DROP USER, DROP ROLE, DROP TYPE, DROP PROVISIONED ROLES,
 drop_stmt:
-  drop_ddl_stmt                 // help texts in sub-rule
-| drop_role_stmt                // EXTEND WITH HELP: DROP ROLE
-| drop_schedule_stmt            // EXTEND WITH HELP: DROP SCHEDULES
+  drop_ddl_stmt                    // help texts in sub-rule
+| drop_role_stmt                   // EXTEND WITH HELP: DROP ROLE
+| drop_provisioned_roles_stmt      // EXTEND WITH HELP: DROP PROVISIONED ROLES
+| drop_schedule_stmt               // EXTEND WITH HELP: DROP SCHEDULES
 | drop_external_connection_stmt // EXTEND WITH HELP: DROP EXTERNAL CONNECTION
 | drop_virtual_cluster_stmt     // EXTEND WITH HELP: DROP VIRTUAL CLUSTER
 | drop_unsupported   {}
@@ -6866,6 +6872,57 @@ drop_role_stmt:
     $$.val = &tree.DropRole{Names: $5.roleSpecList(), IfExists: true, IsRole: $2.bool()}
   }
 | DROP role_or_group_or_user error // SHOW HELP: DROP ROLE
+
+// %Help: DROP PROVISIONED ROLES - bulk-drop provisioned users
+// %Category: Priv
+// %Text:
+// DROP PROVISIONED ROLES [WITH <options>] [LIMIT <n>]
+//
+// Options:
+//   SOURCE = <string>
+//   LAST LOGIN BEFORE <expr>
+// %SeeAlso: SHOW USERS, DROP ROLE
+drop_provisioned_roles_stmt:
+  DROP PROVISIONED ROLES opt_with_drop_provisioned_roles_options opt_limit_clause
+  {
+    $$.val = &tree.DropProvisionedRoles{
+      Options: $4.dropProvisionedRolesOptions(),
+      Limit:   $5.limit(),
+    }
+  }
+| DROP PROVISIONED ROLES error // SHOW HELP: DROP PROVISIONED ROLES
+
+opt_with_drop_provisioned_roles_options:
+  WITH drop_provisioned_roles_options_list
+  {
+    $$.val = $2.dropProvisionedRolesOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = (*tree.DropProvisionedRolesOptions)(nil)
+  }
+
+drop_provisioned_roles_options_list:
+  drop_provisioned_roles_option
+  {
+    $$.val = $1.dropProvisionedRolesOptions()
+  }
+| drop_provisioned_roles_options_list ',' drop_provisioned_roles_option
+  {
+    if err := $1.dropProvisionedRolesOptions().CombineWith($3.dropProvisionedRolesOptions()); err != nil {
+      return setErr(sqllex, err)
+    }
+  }
+
+drop_provisioned_roles_option:
+  SOURCE '=' a_expr
+  {
+    $$.val = &tree.DropProvisionedRolesOptions{Source: $3.expr()}
+  }
+| LAST LOGIN BEFORE a_expr
+  {
+    $$.val = &tree.DropProvisionedRolesOptions{LastLoginBefore: $4.expr()}
+  }
 
 db_object_name_list:
   db_object_name
@@ -19112,6 +19169,7 @@ unreserved_keyword:
 | PUSH
 | PROCEDURE
 | PROCEDURES
+| PROVISIONED
 | PROVISIONSRC
 | PUBLIC
 | PUBLICATION
@@ -19704,6 +19762,7 @@ bare_label_keywords:
 | PUSH
 | PROCEDURE
 | PROCEDURES
+| PROVISIONED
 | PROVISIONSRC
 | PUBLIC
 | PUBLICATION
