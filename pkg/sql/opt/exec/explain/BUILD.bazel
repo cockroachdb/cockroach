@@ -40,6 +40,7 @@ go_library(
         "//pkg/util",
         "//pkg/util/base64",
         "//pkg/util/errorutil",
+        "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/intsets",
         "//pkg/util/optional",
