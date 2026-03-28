@@ -432,94 +432,6 @@ export const cancelStatementDiagnosticsAlertSelector = createSelector(
   },
 );
 
-type TerminateSessionAlertPayload = {
-  show: boolean;
-  status?: "SUCCESS" | "FAILED";
-};
-
-export const terminateSessionAlertLocalSetting = new LocalSetting<
-  AdminUIState,
-  TerminateSessionAlertPayload
->("terminate_session_alert", localSettingsSelector, { show: false });
-
-export const terminateSessionAlertSelector = createSelector(
-  terminateSessionAlertLocalSetting.selector,
-  (terminateSessionAlert): Alert => {
-    if (!terminateSessionAlert || !terminateSessionAlert.show) {
-      return undefined;
-    }
-    const { status } = terminateSessionAlert;
-
-    if (status === "FAILED") {
-      return {
-        level: AlertLevel.CRITICAL,
-        title: "There was an error cancelling the session.",
-        text: "Please try cancelling again. If the problem continues please reach out to customer support.",
-        showAsAlert: true,
-        dismiss: (dispatch: Dispatch<Action>) => {
-          dispatch(terminateSessionAlertLocalSetting.set({ show: false }));
-          return Promise.resolve();
-        },
-      };
-    }
-    return {
-      level: AlertLevel.SUCCESS,
-      title: "Session cancelled.",
-      showAsAlert: true,
-      autoClose: true,
-      closable: false,
-      dismiss: (dispatch: Dispatch<Action>) => {
-        dispatch(terminateSessionAlertLocalSetting.set({ show: false }));
-        return Promise.resolve();
-      },
-    };
-  },
-);
-
-type TerminateQueryAlertPayload = {
-  show: boolean;
-  status?: "SUCCESS" | "FAILED";
-};
-
-export const terminateQueryAlertLocalSetting = new LocalSetting<
-  AdminUIState,
-  TerminateQueryAlertPayload
->("terminate_query_alert", localSettingsSelector, { show: false });
-
-export const terminateQueryAlertSelector = createSelector(
-  terminateQueryAlertLocalSetting.selector,
-  (terminateQueryAlert): Alert => {
-    if (!terminateQueryAlert || !terminateQueryAlert.show) {
-      return undefined;
-    }
-    const { status } = terminateQueryAlert;
-
-    if (status === "FAILED") {
-      return {
-        level: AlertLevel.CRITICAL,
-        title: "There was an error cancelling the statement.",
-        text: "Please try cancelling again. If the problem continues please reach out to customer support.",
-        showAsAlert: true,
-        dismiss: (dispatch: Dispatch<Action>) => {
-          dispatch(terminateQueryAlertLocalSetting.set({ show: false }));
-          return Promise.resolve();
-        },
-      };
-    }
-    return {
-      level: AlertLevel.SUCCESS,
-      title: "Statement cancelled.",
-      showAsAlert: true,
-      autoClose: true,
-      closable: false,
-      dismiss: (dispatch: Dispatch<Action>) => {
-        dispatch(terminateQueryAlertLocalSetting.set({ show: false }));
-        return Promise.resolve();
-      },
-    };
-  },
-);
-
 /**
  * Notification for when the cluster.preserve_downgrade_option has been set for
  * too long of a duration (48hrs) as part of a version upgrade.
@@ -739,8 +651,6 @@ export const bannerAlertsSelector = createSelector(
   emailSubscriptionAlertSelector,
   createStatementDiagnosticsAlertSelector,
   cancelStatementDiagnosticsAlertSelector,
-  terminateSessionAlertSelector,
-  terminateQueryAlertSelector,
   dataFromServerAlertSelector,
   (...alerts: Alert[]): Alert[] => {
     return without(alerts, null, undefined);

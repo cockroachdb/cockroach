@@ -4,27 +4,15 @@
 // included in the /LICENSE file.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { createMemoryHistory } from "history";
 import Long from "long";
 import { util } from "protobufjs";
 
-import {
-  CancelQueryRequestMessage,
-  CancelSessionRequestMessage,
-} from "src/api/terminateQueryApi";
-
 import { Filters } from "../queryFilter";
 
-import {
-  SessionsPageProps,
-  defaultFiltersForSessionsPage,
-} from "./sessionsPage";
 import { SessionInfo } from "./sessionsTable";
 
 const Status = cockroach.server.serverpb.Session.Status;
 const Phase = cockroach.server.serverpb.ActiveQuery.Phase;
-
-const history = createMemoryHistory({ initialEntries: ["/sessions"] });
 
 const toUuid = function (s: string): Uint8Array {
   const buf = util.newBuffer(util.base64.length(s));
@@ -187,75 +175,10 @@ export const closedSession: SessionInfo = {
   },
 };
 
-const sessionsList: SessionInfo[] = [
-  idleSession,
-  idleTransactionSession,
-  activeSession,
-  closedSession,
-];
-
 export const filters: Filters = {
   app: "",
   timeNumber: "0",
   timeUnit: "seconds",
   regions: "",
   nodes: "",
-};
-
-export const sessionsPagePropsFixture: SessionsPageProps = {
-  filters: defaultFiltersForSessionsPage,
-  history,
-  location: {
-    pathname: "/sessions",
-    search: "",
-    hash: "",
-    state: null,
-  },
-  match: {
-    path: "/sessions",
-    url: "/sessions",
-    isExact: true,
-    params: {},
-  },
-  sessions: sessionsList,
-  sessionsError: null,
-  sortSetting: {
-    ascending: false,
-    columnTitle: "statementAge",
-  },
-  columns: null,
-  internalAppNamePrefix: "$ internal",
-  refreshSessions: () => {},
-  cancelSession: (_req: CancelSessionRequestMessage) => {},
-  cancelQuery: (_req: CancelQueryRequestMessage) => {},
-  onSortingChange: () => {},
-};
-
-export const sessionsPagePropsEmptyFixture: SessionsPageProps = {
-  filters: defaultFiltersForSessionsPage,
-  history,
-  location: {
-    pathname: "/sessions",
-    search: "",
-    hash: "",
-    state: null,
-  },
-  match: {
-    path: "/sessions",
-    url: "/sessions",
-    isExact: true,
-    params: {},
-  },
-  sessions: [],
-  sessionsError: null,
-  sortSetting: {
-    ascending: false,
-    columnTitle: "statementAge",
-  },
-  columns: null,
-  internalAppNamePrefix: "$ internal",
-  refreshSessions: () => {},
-  cancelSession: (_req: CancelSessionRequestMessage) => {},
-  cancelQuery: (_req: CancelQueryRequestMessage) => {},
-  onSortingChange: () => {},
 };
