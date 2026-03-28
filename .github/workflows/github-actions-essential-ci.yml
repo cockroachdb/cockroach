@@ -62,7 +62,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - name: compute metadata
-        run: echo GITHUB_ACTIONS_BRANCH=${PULL_REQUEST_NUMBER} >> "$GITHUB_ENV"
+        run: echo GITHUB_ACTIONS_BRANCH="${PULL_REQUEST_NUMBER}" >> "$GITHUB_ENV"
         env:
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || github.ref_name}}
       - run: ./build/github/get-engflow-keys.sh
@@ -85,7 +85,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - name: compute metadata
-        run: echo GITHUB_ACTIONS_BRANCH=${PULL_REQUEST_NUMBER} >> "$GITHUB_ENV"
+        run: echo GITHUB_ACTIONS_BRANCH="${PULL_REQUEST_NUMBER}" >> "$GITHUB_ENV"
         env:
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || github.ref_name}}
       - run: ./build/github/get-engflow-keys.sh
@@ -102,7 +102,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - name: compute metadata
-        run: echo GITHUB_ACTIONS_BRANCH=${PULL_REQUEST_NUMBER} >> "$GITHUB_ENV"
+        run: echo GITHUB_ACTIONS_BRANCH="${PULL_REQUEST_NUMBER}" >> "$GITHUB_ENV"
         env:
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || github.ref_name}}
       - run: ./build/github/get-engflow-keys.sh
@@ -131,7 +131,7 @@ jobs:
           repository: cockroachdb/examples-orms
           ref: 4422aff128585c3e0558b530558daa31972c3a40
       - name: compute metadata
-        run: echo GITHUB_ACTIONS_BRANCH=${PULL_REQUEST_NUMBER} >> "$GITHUB_ENV"
+        run: echo GITHUB_ACTIONS_BRANCH="${PULL_REQUEST_NUMBER}" >> "$GITHUB_ENV"
         env:
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || github.ref_name}}
       - run: ./cockroach/build/github/get-engflow-keys.sh
@@ -162,7 +162,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           submodules: true
       - name: compute metadata
-        run: echo GITHUB_ACTIONS_BRANCH=${PULL_REQUEST_NUMBER} >> "$GITHUB_ENV"
+        run: echo GITHUB_ACTIONS_BRANCH="${PULL_REQUEST_NUMBER}" >> "$GITHUB_ENV"
         env:
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || github.ref_name}}
       # We need this commit for TestRaftCopyrightHeaders.
@@ -188,7 +188,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           submodules: true
       - name: compute metadata
-        run: echo GITHUB_ACTIONS_BRANCH=${PULL_REQUEST_NUMBER} >> "$GITHUB_ENV"
+        run: echo GITHUB_ACTIONS_BRANCH="${PULL_REQUEST_NUMBER}" >> "$GITHUB_ENV"
         env:
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || github.ref_name}}
       - run: ./build/github/get-engflow-keys.sh
@@ -215,7 +215,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
           submodules: true
       - name: compute metadata
-        run: echo GITHUB_ACTIONS_BRANCH=${PULL_REQUEST_NUMBER} >> "$GITHUB_ENV"
+        run: echo GITHUB_ACTIONS_BRANCH="${PULL_REQUEST_NUMBER}" >> "$GITHUB_ENV"
         env:
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || github.ref_name}}
       - run: ./build/github/get-engflow-keys.sh
@@ -241,7 +241,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - name: compute metadata
-        run: echo GITHUB_ACTIONS_BRANCH=${PULL_REQUEST_NUMBER} >> "$GITHUB_ENV"
+        run: echo GITHUB_ACTIONS_BRANCH="${PULL_REQUEST_NUMBER}" >> "$GITHUB_ENV"
         env:
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || github.ref_name}}
       - run: ./build/github/get-engflow-keys.sh
@@ -264,7 +264,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - name: compute metadata
-        run: echo GITHUB_ACTIONS_BRANCH=${PULL_REQUEST_NUMBER} >> "$GITHUB_ENV"
+        run: echo GITHUB_ACTIONS_BRANCH="${PULL_REQUEST_NUMBER}" >> "$GITHUB_ENV"
         env:
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || github.ref_name}}
       - run: ./build/github/get-engflow-keys.sh
@@ -298,7 +298,7 @@ jobs:
           # Instead, we want to check out the PR as is.
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
       - name: compute metadata
-        run: echo GITHUB_ACTIONS_BRANCH=${PULL_REQUEST_NUMBER} >> "$GITHUB_ENV"
+        run: echo GITHUB_ACTIONS_BRANCH="${PULL_REQUEST_NUMBER}" >> "$GITHUB_ENV"
         env:
           PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || github.ref_name}}
       - run: ./build/github/get-engflow-keys.sh
