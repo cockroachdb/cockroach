@@ -48,6 +48,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/buildutil",
+        "//pkg/util/hlc",
         "//pkg/util/intsets",
         "//pkg/util/log",
         "//pkg/util/syncutil",

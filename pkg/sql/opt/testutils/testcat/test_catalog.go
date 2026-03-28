@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
@@ -1252,6 +1253,9 @@ func (tt *Table) CanaryAndStableStatsDiffer() bool { return false }
 
 // StatsCanaryWindow is part of the cat.Table interface.
 func (tt *Table) StatsCanaryWindow() time.Duration { return 0 }
+
+// CanaryExpiration is part of the cat.Table interface.
+func (tt *Table) CanaryExpiration() hlc.Timestamp { return hlc.Timestamp{} }
 
 // findPolicyByName will lookup the policy by its name. It returns it's policy
 // type and index within that policy type slice so that callers can do removal

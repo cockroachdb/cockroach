@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -162,9 +163,29 @@ type Metadata struct {
 	// hintIDs are the external statement hints that match this statement.
 	hintIDs []int64
 
+	// digest groups fields that are read and written during CheckDependencies,
+	// which can be called concurrently on the same Metadata when the memo is
+	// shared via the query cache. Fields that are immutable after memo
+	// construction (e.g. dataSourceDeps) do not need this protection.
+	// earliestCanaryExpiration lives here (rather than in DependencyDigest)
+	// because DependencyDigest is a catalog-global snapshot, while the
+	// expiration is memo-specific — derived from this memo's table deps.
+	//
+	// TODO(janexing): consider renaming this struct to better reflect that
+	// it holds all mutable CheckDependencies state, not just the digest.
 	digest struct {
 		syncutil.Mutex
 		depDigest cat.DependencyDigest
+		// earliestCanaryExpiration is the earliest timestamp at which any
+		// table's canary window expires. It is used to invalidate cached
+		// stable-execution memos when canary stats ripen: once the window
+		// expires, the stable path returns different stats, so the memo
+		// must be re-optimized. Empty when no tables have active canary
+		// windows or when canary and stable stats are already identical
+		// (no pending transition). This field is set alongside
+		// depDigest during the slow path of CheckDependencies and must
+		// always be updated at the same point to avoid sync hazards.
+		earliestCanaryExpiration hlc.Timestamp
 	}
 
 	// NOTE! When adding fields here, update Init (if reusing allocated
@@ -407,6 +428,19 @@ func (md *Metadata) dependencyDigestEquals(currentDigest *cat.DependencyDigest) 
 	return currentDigest.Equal(&md.digest.depDigest)
 }
 
+// canaryExpirationPassed returns true if the earliest canary window expiration
+// tracked by this metadata has passed. When true, the digest fast path should
+// be skipped so that the slow path can detect stats changes caused by canary
+// window expiration. The statsAsOf timestamp is the session's StatsAsOf
+// override; if empty, the current wall clock is used (via OrNow) — matching
+// the time source the stats cache uses to decide which stats to return.
+func (md *Metadata) canaryExpirationPassed(statsAsOf hlc.Timestamp) bool {
+	md.digest.Lock()
+	defer md.digest.Unlock()
+	exp := md.digest.earliestCanaryExpiration
+	return !exp.IsEmpty() && !statsAsOf.OrNow().Less(exp)
+}
+
 // leaseObjectsInMetaData ensures that all references within this metadata
 // are leased to prevent schema changes from modifying the underlying objects
 // excessively. Additionally, the metadata version and leased descriptor versions
@@ -473,7 +507,8 @@ func (md *Metadata) CheckDependencies(
 	if evalCtx.SessionData().CatalogDigestStalenessCheckEnabled &&
 		evalCtx.AsOfSystemTime == nil &&
 		!evalCtx.Txn.ReadTimestampFixed() &&
-		md.dependencyDigestEquals(&currentDigest) {
+		md.dependencyDigestEquals(&currentDigest) &&
+		!md.canaryExpirationPassed(evalCtx.SessionData().StatsAsOf) {
 		// Lease the underlying descriptors for this metadata. If we fail to lease
 		// any descriptors attempt to resolve them by name through the more expensive
 		// code path below.
@@ -483,7 +518,10 @@ func (md *Metadata) CheckDependencies(
 		}
 	}
 
-	// Check that no referenced data sources have changed.
+	// Check that no referenced data sources have changed. While iterating,
+	// also track the earliest canary window expiration from the freshly
+	// resolved data sources so that it can be stored alongside the digest.
+	var earliestCanaryExp hlc.Timestamp
 	for id, dataSource := range md.dataSourceDeps {
 		var toCheck cat.DataSource
 		if names, ok := md.objectRefsByName[id]; ok {
@@ -500,6 +538,15 @@ func (md *Metadata) CheckDependencies(
 			toCheck, _, err = optCatalog.ResolveDataSourceByID(ctx, cat.Flags{}, dataSource.ID())
 			if err != nil || !dataSource.Equals(toCheck) {
 				return false, maybeSwallowMetadataResolveErr(err)
+			}
+		}
+		// Extract canary expiration from tables to detect when canary
+		// window expiration changes the stats returned by the stable path.
+		if table, ok := toCheck.(cat.Table); ok {
+			if exp := table.CanaryExpiration(); !exp.IsEmpty() {
+				if earliestCanaryExp.IsEmpty() || exp.Less(earliestCanaryExp) {
+					earliestCanaryExp = exp
+				}
 			}
 		}
 	}
@@ -635,11 +682,14 @@ func (md *Metadata) CheckDependencies(
 		return false, nil
 	}
 
-	// Update the digest after a full dependency check, since our fast
-	// check did not succeed.
+	// Update the digest and canary expiration after a full dependency check,
+	// since our fast check did not succeed. Both must be updated atomically
+	// to avoid sync hazards where the digest is current but the expiration
+	// is stale.
 	if evalCtx.SessionData().CatalogDigestStalenessCheckEnabled {
 		md.digest.Lock()
 		md.digest.depDigest = currentDigest
+		md.digest.earliestCanaryExpiration = earliestCanaryExp
 		md.digest.Unlock()
 	}
 	return true, nil

@@ -1449,5 +1449,605 @@ DROP TABLE IF EXISTS t_normal;
 
 subtest end
 
+# =========================================================================
+# canary_window_expiration_digest_fast_path
+# =========================================================================
+#
+# This subtest verifies that the digest fast path in CheckDependencies
+# correctly detects canary window expiration. Previously (issue #166688),
+# StatsGeneration only incremented on cache mutations (add/remove/refresh),
+# so the digest fast path could not detect the purely time-based canary
+# window expiration, causing stale stable-stats memos to persist.
+#
+# This bug only affects stable executions: canary executions never use
+# cached memos, so they always get fresh plans. The stable path, however,
+# caches its memo and relies on CheckDependencies to detect staleness.
+#
+# We simulate time advancing by moving stats_as_of (which the stats cache
+# uses instead of the wall clock when set).
+#
+subtest canary_window_expiration_digest_fast_path
+
+statement ok
+SET optimizer_use_forecasts = off
+
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction = '0.1'
+
+statement ok
+DROP TABLE IF EXISTS t_exp
+
+statement ok
+CREATE TABLE t_exp (x INT PRIMARY KEY) WITH (sql_stats_canary_window = '30s')
+
+# Inject two generations of stats: old (row_count=10) at 00:00:00,
+# new (row_count=20) at 00:01:00.
+statement ok
+ALTER TABLE t_exp INJECT STATISTICS '[
+  {
+    "avg_size": 1, "columns": ["x"],
+    "created_at": "2000-01-01 00:00:00.000000",
+    "distinct_count": 10, "name": "__auto__",
+    "null_count": 0, "row_count": 10
+  },
+  {
+    "avg_size": 1, "columns": ["x"],
+    "created_at": "2000-01-01 00:01:00.000000",
+    "distinct_count": 20, "name": "__auto__",
+    "null_count": 0, "row_count": 20
+  }
+]'
+
+# --- Case 1: Single table (t_exp, canary_window=30s) ---
+#
+#   00:00:00  S_old collected (row_count=10)
+#       |
+#   00:01:00  S_new collected (row_count=20); canary window opens
+#       |
+#   00:01:10  <-- stats_as_of: within window, stable=S_old(10)
+#       |        PREPARE p_exp, EXECUTE → memo cached with row_count=10
+#       |
+#   00:01:15  <-- stats_as_of moved here: still within window
+#       |        EXECUTE → memo reused (window not yet expired)
+#       |
+#   00:01:30  canary window expires; stable now returns S_new(20)
+#       |
+#   00:02:00  <-- stats_as_of moved here: past window
+#                EXECUTE p_exp → digest detects expiry → re-optimized(20)
+
+statement ok
+SET stats_as_of = '2000-01-01 00:01:10.000000'
+
+statement ok
+SET canary_stats_mode = off
+
+statement ok
+SET catalog_digest_staleness_check_enabled = true
+
+statement ok
+DEALLOCATE ALL
+
+statement ok
+SELECT crdb_internal.clear_query_plan_cache()
+
+statement ok
+PREPARE p_exp AS SELECT * FROM t_exp
+
+# First EXECUTE: slow path validates the memo. Stable stats = row_count=10.
+# Memo is marked valid and digest is updated.
+statement ok
+SET TRACING = "on", cluster
+
+statement ok
+EXECUTE p_exp
+
+statement ok
+SET TRACING = "off"
+
+# Memo was just built, so it should be reused on first execute.
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%cached memo%'
+----
+rebuilding cached memo
+
+# Second EXECUTE: fast path sees matching digest → memo reused (row_count=10).
+statement ok
+SET TRACING = "on", cluster
+
+statement ok
+EXECUTE p_exp
+
+statement ok
+SET TRACING = "off"
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%cached memo%'
+----
+reusing cached memo
+
+# Advance stats_as_of but still within the canary window (expires 00:01:30).
+# The memo should still be reused — no false positive.
+statement ok
+SET stats_as_of = '2000-01-01 00:01:15.000000'
+
+statement ok
+SET TRACING = "on", cluster
+
+statement ok
+EXECUTE p_exp
+
+statement ok
+SET TRACING = "off"
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%cached memo%'
+----
+reusing cached memo
+
+# Now move stats_as_of past the canary window expiration (00:01:30).
+# Stable stats now return the newest stats (row_count=20).
+statement ok
+SET stats_as_of = '2000-01-01 00:02:00.000000'
+
+# With the fix, the digest fast path detects the expired canary window
+# and falls through to the slow path, which detects the stats change
+# (row_count=10 → 20) and triggers re-optimization.
+query T
+EXPLAIN ANALYZE (VERBOSE) EXECUTE p_exp
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, re-optimized
+table stats mode: stable
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• scan
+  columns: (x)
+  sql nodes: <hidden>
+  kv nodes: <hidden>
+  regions: <hidden>
+  vectorized batch count: 0
+  KV time: 0µs
+  KV rows decoded: 0
+  KV pairs read: 0
+  KV bytes read: 0 B
+  KV gRPC calls: 0
+  estimated max memory allocated: 0 B
+  MVCC step count (ext/int): 0/0
+  MVCC seek count (ext/int): 0/0
+  actual row count: 0
+  estimated row count: 20 (100% of the table; stats collected <hidden> ago)
+  table: t_exp@t_exp_pkey
+  spans: FULL SCAN
+
+# After re-optimization, subsequent executes should reuse the new memo.
+statement ok
+SET TRACING = "on", cluster
+
+statement ok
+EXECUTE p_exp
+
+statement ok
+SET TRACING = "off"
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%cached memo%'
+----
+reusing cached memo
+
+# --- Case 2: Multi-table (t_exp_a window=30s, t_exp_b window=60s) ---
+#
+#   00:00:00  S_old for both (a=100, b=300)
+#       |
+#   00:01:00  S_new for both (a=200, b=400); both canary windows open
+#       |
+#   00:01:10  <-- stats_as_of: within both windows. stable: a=100, b=300
+#       |        PREPARE p_multi, EXECUTE → memo cached
+#       |
+#   00:01:20  <-- stats_as_of moved here: still within both windows
+#       |        EXECUTE → memo reused (neither window expired)
+#       |
+#   00:01:30  t_exp_a's window expires (a stable → 200)
+#       |
+#   00:01:40  <-- stats_as_of (2a): between expirations
+#       |        EXECUTE → re-optimized (a=200, b=300 still stable)
+#       |        New memo's earliestCanaryExpiration = 00:02:00
+#       |        (t_exp_a's statsDiffer=false so only t_exp_b contributes)
+#       |
+#   00:02:00  t_exp_b's window expires (b stable → 400)
+#       |
+#   00:03:00  <-- stats_as_of (2b): past both expirations
+#                EXECUTE → re-optimized (a=200, b=400)
+
+statement ok
+DROP TABLE IF EXISTS t_exp_a
+
+statement ok
+DROP TABLE IF EXISTS t_exp_b
+
+statement ok
+CREATE TABLE t_exp_a (k INT PRIMARY KEY) WITH (sql_stats_canary_window = '30s')
+
+# t_exp_b has a longer canary window (60s).
+statement ok
+CREATE TABLE t_exp_b (k INT PRIMARY KEY) WITH (sql_stats_canary_window = '60s')
+
+# t_exp_a: old=100 at 00:00:00, new=200 at 00:01:00. Window expires at 00:01:30.
+statement ok
+ALTER TABLE t_exp_a INJECT STATISTICS '[
+  {
+    "avg_size": 1, "columns": ["k"],
+    "created_at": "2000-01-01 00:00:00.000000",
+    "distinct_count": 100, "name": "__auto__",
+    "null_count": 0, "row_count": 100
+  },
+  {
+    "avg_size": 1, "columns": ["k"],
+    "created_at": "2000-01-01 00:01:00.000000",
+    "distinct_count": 200, "name": "__auto__",
+    "null_count": 0, "row_count": 200
+  }
+]'
+
+# t_exp_b: old=300 at 00:00:00, new=400 at 00:01:00. Window expires at 00:02:00.
+statement ok
+ALTER TABLE t_exp_b INJECT STATISTICS '[
+  {
+    "avg_size": 1, "columns": ["k"],
+    "created_at": "2000-01-01 00:00:00.000000",
+    "distinct_count": 300, "name": "__auto__",
+    "null_count": 0, "row_count": 300
+  },
+  {
+    "avg_size": 1, "columns": ["k"],
+    "created_at": "2000-01-01 00:01:00.000000",
+    "distinct_count": 400, "name": "__auto__",
+    "null_count": 0, "row_count": 400
+  }
+]'
+
+# Within both canary windows. Stable: t_exp_a=100, t_exp_b=300.
+statement ok
+SET stats_as_of = '2000-01-01 00:01:10.000000'
+
+statement ok
+DEALLOCATE ALL
+
+statement ok
+SELECT crdb_internal.clear_query_plan_cache()
+
+statement ok
+PREPARE p_multi AS SELECT * FROM t_exp_a JOIN t_exp_b ON t_exp_a.k = t_exp_b.k
+
+# Warm up the memo so the digest is populated.
+statement ok
+EXECUTE p_multi
+
+# Confirm memo is reused on second execute.
+statement ok
+SET TRACING = "on", cluster
+
+statement ok
+EXECUTE p_multi
+
+statement ok
+SET TRACING = "off"
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%cached memo%'
+----
+reusing cached memo
+
+# Advance stats_as_of but still within both canary windows. Neither has
+# expired yet, so the memo should be reused.
+statement ok
+SET stats_as_of = '2000-01-01 00:01:20.000000'
+
+statement ok
+SET TRACING = "on", cluster
+
+statement ok
+EXECUTE p_multi
+
+statement ok
+SET TRACING = "off"
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%cached memo%'
+----
+reusing cached memo
+
+# Case 2a: Move stats_as_of between the two expiration timestamps.
+#
+# t_exp_a's window (expires 00:01:30) has expired, but t_exp_b's window
+# (expires 00:02:00) has not. The earliestCanaryExpiration is 00:01:30
+# which has passed → fast path falls through → re-optimization.
+# After re-optimization: t_exp_a=200 (promoted), t_exp_b=300 (still stable).
+# The new memo's earliestCanaryExpiration is updated to 00:02:00 — t_exp_a
+# no longer contributes (its statsDiffer is false), so only t_exp_b's
+# expiration remains.
+statement ok
+SET stats_as_of = '2000-01-01 00:01:40.000000'
+
+query T
+EXPLAIN ANALYZE (VERBOSE) EXECUTE p_multi
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, re-optimized
+table stats mode: stable
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• merge join (inner)
+│ columns: (k, k)
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ vectorized batch count: 0
+│ execution time: 0µs
+│ estimated max memory allocated: 0 B
+│ estimated max sql temp disk usage: 0 B
+│ actual row count: 0
+│ estimated row count: 200
+│ equality: (k) = (k)
+│ left cols are key
+│ right cols are key
+│ merge ordering: +"(k=k)"
+│
+├── • scan
+│     columns: (k)
+│     ordering: +k
+│     sql nodes: <hidden>
+│     kv nodes: <hidden>
+│     regions: <hidden>
+│     vectorized batch count: 0
+│     KV time: 0µs
+│     KV rows decoded: 0
+│     KV pairs read: 0
+│     KV bytes read: 0 B
+│     KV gRPC calls: 0
+│     estimated max memory allocated: 0 B
+│     MVCC step count (ext/int): 0/0
+│     MVCC seek count (ext/int): 0/0
+│     actual row count: 0
+│     estimated row count: 300 (100% of the table; stats collected <hidden> ago)
+│     canary window: 1m0s
+│     table: t_exp_b@t_exp_b_pkey  ----------------------  WARNING: the row count estimate is inaccurate, consider running 'ANALYZE t_exp_b'
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (k)
+      ordering: +k
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      vectorized batch count: 0
+      KV time: 0µs
+      KV rows decoded: 0
+      KV pairs read: 0
+      KV bytes read: 0 B
+      KV gRPC calls: 0
+      estimated max memory allocated: 0 B
+      MVCC step count (ext/int): 0/0
+      MVCC seek count (ext/int): 0/0
+      actual row count: 0
+      estimated row count: 200 (100% of the table; stats collected <hidden> ago)
+      table: t_exp_a@t_exp_a_pkey  ----------------------  WARNING: the row count estimate is inaccurate, consider running 'ANALYZE t_exp_a'
+      spans: FULL SCAN
+·
+WARNING: the row count estimate on table "t_exp_b" is inaccurate, consider running 'ANALYZE t_exp_b'
+WARNING: the row count estimate on table "t_exp_a" is inaccurate, consider running 'ANALYZE t_exp_a'
+
+# Confirm reuse after re-optimization with the same stats_as_of.
+statement ok
+SET TRACING = "on", cluster
+
+statement ok
+EXECUTE p_multi
+
+statement ok
+SET TRACING = "off"
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%cached memo%'
+----
+reusing cached memo
+
+# Case 2b: Move stats_as_of past both expiration timestamps.
+#
+# Both windows have expired → fast path falls through again →
+# re-optimization. After: t_exp_a=200, t_exp_b=400 (now promoted too).
+statement ok
+SET stats_as_of = '2000-01-01 00:03:00.000000'
+
+query T
+EXPLAIN ANALYZE (VERBOSE) EXECUTE p_multi
+----
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+vectorized: <hidden>
+plan type: generic, re-optimized
+table stats mode: stable
+maximum memory usage: <hidden>
+DistSQL network usage: <hidden>
+regions: <hidden>
+isolation level: serializable
+priority: normal
+quality of service: regular
+·
+• merge join (inner)
+│ columns: (k, k)
+│ sql nodes: <hidden>
+│ regions: <hidden>
+│ vectorized batch count: 0
+│ execution time: 0µs
+│ estimated max memory allocated: 0 B
+│ estimated max sql temp disk usage: 0 B
+│ actual row count: 0
+│ estimated row count: 200
+│ equality: (k) = (k)
+│ left cols are key
+│ right cols are key
+│ merge ordering: +"(k=k)"
+│
+├── • scan
+│     columns: (k)
+│     ordering: +k
+│     sql nodes: <hidden>
+│     kv nodes: <hidden>
+│     regions: <hidden>
+│     vectorized batch count: 0
+│     KV time: 0µs
+│     KV rows decoded: 0
+│     KV pairs read: 0
+│     KV bytes read: 0 B
+│     KV gRPC calls: 0
+│     estimated max memory allocated: 0 B
+│     MVCC step count (ext/int): 0/0
+│     MVCC seek count (ext/int): 0/0
+│     actual row count: 0
+│     estimated row count: 400 (100% of the table; stats collected <hidden> ago)
+│     table: t_exp_b@t_exp_b_pkey  ----------------------  WARNING: the row count estimate is inaccurate, consider running 'ANALYZE t_exp_b'
+│     spans: FULL SCAN
+│
+└── • scan
+      columns: (k)
+      ordering: +k
+      sql nodes: <hidden>
+      kv nodes: <hidden>
+      regions: <hidden>
+      vectorized batch count: 0
+      KV time: 0µs
+      KV rows decoded: 0
+      KV pairs read: 0
+      KV bytes read: 0 B
+      KV gRPC calls: 0
+      estimated max memory allocated: 0 B
+      MVCC step count (ext/int): 0/0
+      MVCC seek count (ext/int): 0/0
+      actual row count: 0
+      estimated row count: 200 (100% of the table; stats collected <hidden> ago)
+      table: t_exp_a@t_exp_a_pkey  ----------------------  WARNING: the row count estimate is inaccurate, consider running 'ANALYZE t_exp_a'
+      spans: FULL SCAN
+·
+WARNING: the row count estimate on table "t_exp_b" is inaccurate, consider running 'ANALYZE t_exp_b'
+WARNING: the row count estimate on table "t_exp_a" is inaccurate, consider running 'ANALYZE t_exp_a'
+
+# After re-optimization, both windows have expired and no active canary
+# windows remain → fast path is sufficient → memo reused.
+statement ok
+SET TRACING = "on", cluster
+
+statement ok
+EXECUTE p_multi
+
+statement ok
+SET TRACING = "off"
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%cached memo%'
+----
+reusing cached memo
+
+# --- Case 3: No canary window (t_no_canary) ---
+#
+# Memo is always reused regardless of stats_as_of movement.
+
+statement ok
+DROP TABLE IF EXISTS t_no_canary
+
+statement ok
+CREATE TABLE t_no_canary (k INT PRIMARY KEY)
+
+statement ok
+ALTER TABLE t_no_canary INJECT STATISTICS '[
+  {
+    "avg_size": 1, "columns": ["k"],
+    "created_at": "2000-01-01 00:00:00.000000",
+    "distinct_count": 50, "name": "__auto__",
+    "null_count": 0, "row_count": 50
+  }
+]'
+
+statement ok
+SET stats_as_of = '2000-01-01 00:01:00.000000'
+
+statement ok
+DEALLOCATE ALL
+
+statement ok
+SELECT crdb_internal.clear_query_plan_cache()
+
+statement ok
+PREPARE p_no_canary AS SELECT * FROM t_no_canary
+
+statement ok
+EXECUTE p_no_canary
+
+# Advance stats_as_of arbitrarily — no canary window, so memo stays valid.
+statement ok
+SET stats_as_of = '2000-01-01 01:00:00.000000'
+
+statement ok
+SET TRACING = "on", cluster
+
+statement ok
+EXECUTE p_no_canary
+
+statement ok
+SET TRACING = "off"
+
+query T
+SELECT split_part(message, ':', 1) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%cached memo%'
+----
+reusing cached memo
+
+# Cleanup.
+statement ok
+DROP TABLE IF EXISTS t_exp
+
+statement ok
+DROP TABLE IF EXISTS t_exp_a
+
+statement ok
+DROP TABLE IF EXISTS t_exp_b
+
+statement ok
+DROP TABLE IF EXISTS t_exp_c
+
+statement ok
+DROP TABLE IF EXISTS t_no_canary
+
+statement ok
+RESET stats_as_of
+
+statement ok
+RESET canary_stats_mode
+
+statement ok
+RESET catalog_digest_staleness_check_enabled
+
+statement ok
+RESET optimizer_use_forecasts
+
+statement ok
+SET CLUSTER SETTING sql.stats.canary_fraction = 0
+
+subtest end
+
 statement ok
 SET CLUSTER SETTING sql.stats.forecasts.enabled = $forecast;
