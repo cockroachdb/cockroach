@@ -4565,6 +4565,13 @@ FROM
 			continue
 		}
 
+		// Skip types that are not legal column types (e.g. aclitem, int2vector,
+		// oidvector, regproc, jsonpath) since they have strict format requirements
+		// or edge cases that make random generation unreliable.
+		if !randgen.IsLegalColumnType(typeVal) {
+			continue
+		}
+
 		if ltreeNotSupported &&
 			(typeVal.Oid() == oidext.T_ltree || typeVal.Oid() == oidext.T__ltree) {
 			continue
