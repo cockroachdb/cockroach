@@ -65,6 +65,8 @@ owners:
   ash_samples_collected: cockroachdb/obs-prs
   ash_work_states_active: cockroachdb/obs-prs
   auth_cert_conn_latency: cockroachdb/sql-foundations
+  auth_cert_san_conn_success: cockroachdb/sql-foundations
+  auth_cert_san_conn_total: cockroachdb/sql-foundations
   auth_gss_conn_latency: cockroachdb/sql-foundations
   auth_jwt_conn_latency: cockroachdb/sql-foundations
   auth_ldap_conn_latency: cockroachdb/sql-foundations
@@ -491,6 +493,10 @@ owners:
   obs_clustermetrics_flush_latency: cockroachdb/obs-prs
   obs_clustermetrics_flush_metrics_deleted: cockroachdb/obs-prs
   obs_clustermetrics_flush_metrics_written: cockroachdb/obs-prs
+  obs_metric_export_child_count: cockroachdb/obs-prs
+  obs_metric_export_codeowner_metric_count: cockroachdb/obs-prs
+  obs_metric_export_line_count: cockroachdb/obs-prs
+  obs_metric_export_name_count: cockroachdb/obs-prs
   obs_tablemetadata_update_job_duration: cockroachdb/obs-prs
   obs_tablemetadata_update_job_errors: cockroachdb/obs-prs
   obs_tablemetadata_update_job_runs: cockroachdb/obs-prs
@@ -1177,6 +1183,8 @@ owners:
   storage_wal_bytes_in: cockroachdb/kv
   storage_wal_bytes_written: cockroachdb/kv
   storage_wal_failover_primary_duration: cockroachdb/kv
+  storage_wal_failover_secondary_disk_available: cockroachdb/kv
+  storage_wal_failover_secondary_disk_capacity: cockroachdb/kv
   storage_wal_failover_secondary_duration: cockroachdb/kv
   storage_wal_failover_switch_count: cockroachdb/kv
   storage_wal_failover_write_and_sync_latency: cockroachdb/kv
@@ -1221,6 +1229,7 @@ owners:
   sys_cpu_user_percent: cockroachdb/obs-prs
   sys_fd_open: cockroachdb/obs-prs
   sys_fd_softlimit: cockroachdb/obs-prs
+  sys_gc_assist_enabled: cockroachdb/obs-prs
   sys_gc_assist_ns: cockroachdb/obs-prs
   sys_gc_count: cockroachdb/obs-prs
   sys_gc_pause_ns: cockroachdb/obs-prs

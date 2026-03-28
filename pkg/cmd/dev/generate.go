@@ -229,12 +229,12 @@ func (d *dev) generateMetricOwners(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// Write directly to the metricscan package where it is embedded
+	// at build time via go:embed and referenced by the metrics genrule.
+	yamlPath := filepath.Join(workspace, "pkg", "internal", "metricscan", "metric_owners.yaml")
 	return d.exec.CommandContextInheritingStdStreams(
 		ctx, "bazel", "run", "//pkg/cmd/gen-metric-owners", "--",
-		fmt.Sprintf(
-			"-out=%s",
-			filepath.Join(workspace, "docs", "generated", "metrics", "metric_owners.yaml"),
-		),
+		fmt.Sprintf("-out=%s", yamlPath),
 	)
 }
 
