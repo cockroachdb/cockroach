@@ -563,7 +563,9 @@ func makeSchemaChangeBulkIngestTest(
 		Benchmark: true,
 		Cluster:   r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.Disks(4)),
 		// Skip s390x, see https://github.com/cockroachdb/cockroach/issues/161453.
-		CompatibleClouds: registry.AllExceptAWS.NoIBM(),
+		// Limit to GCE only to avoid disk stall issues on Azure, see
+		// https://github.com/cockroachdb/cockroach/issues/166667.
+		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.LeaderLeases,
 		Timeout:          length * 2,
