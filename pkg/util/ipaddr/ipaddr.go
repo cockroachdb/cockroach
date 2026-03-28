@@ -174,7 +174,7 @@ func ParseINet(s string, dest *IPAddr) error {
 
 	// If no mask suffix was provided, implicitly don't mask.
 	if i < 0 {
-		// Trims IPv4 suffix "." to match postgres compitibility.
+		// Trims IPv4 suffix "." to match postgres compatibility.
 		addr := s
 		if family == IPv4family {
 			addr = strings.TrimRight(addr, ".")
@@ -197,7 +197,7 @@ func ParseINet(s string, dest *IPAddr) error {
 	}
 
 	addr, maskStr := s[:i], s[i+1:]
-	// Trims IPv4 suffix "." to match postgres compitibility.
+	// Trims IPv4 suffix "." to match postgres compatibility.
 	if family == IPv4family {
 		addr = strings.TrimRight(addr, ".")
 	}
@@ -523,12 +523,12 @@ func (ip Addr) WriteIPv6Bytes(writer io.Writer) error {
 	return binary.Write(writer, binary.BigEndian, ip.Lo)
 }
 
-// Equal wraps the Uint128 equivilance.
+// Equal wraps the Uint128 equivalence.
 func (ip Addr) Equal(o Addr) bool {
 	return uint128.Uint128(ip).Equal(uint128.Uint128(o))
 }
 
-// Compare wraps the Uint128 equivilance.
+// Compare wraps the Uint128 equivalence.
 func (ip Addr) Compare(o Addr) int {
 	return uint128.Uint128(ip).Compare(uint128.Uint128(o))
 }
@@ -576,7 +576,7 @@ func (ip Addr) ipv6Add(o uint64) (Addr, error) {
 	return newIP, nil
 }
 
-// ipv4Add subtracts uint64 from Uint128 and checks for IPv4 overflows.
+// ipv4Sub subtracts uint64 from Uint128 and checks for IPv4 overflows.
 func (ip Addr) ipv4Sub(o uint64) (Addr, error) {
 	if o > IPv4max || (ip.Lo&IPv4mask) < o {
 		var newAddr Addr
@@ -594,12 +594,12 @@ func (ip Addr) ipv6Sub(o uint64) (Addr, error) {
 	return newIP, nil
 }
 
-// subIPAddrIPv4 adds two Uint128s to return int64 and checks for overflows.
+// subIPAddrIPv4 subtracts two IPv4 addresses and returns the difference as int64.
 func (ip Addr) subIPAddrIPv4(o Addr) (int64, error) {
 	return int64(uint128.Uint128(ip).Lo&IPv4mask) - int64(uint128.Uint128(o).Lo&IPv4mask), nil
 }
 
-// subIPAddrIPv6 adds two Uint128s to return int64 and checks for overflows.
+// subIPAddrIPv6 subtracts two IPv6 addresses and returns the difference as int64.
 func (ip Addr) subIPAddrIPv6(o Addr) (int64, error) {
 	var sign int64 = 1
 	if ip.Compare(o) < 0 {
