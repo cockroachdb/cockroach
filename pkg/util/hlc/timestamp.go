@@ -185,6 +185,16 @@ func (t Timestamp) IsSet() bool {
 	return !t.IsEmpty()
 }
 
+// OrNow returns t if it is non-empty, otherwise a Timestamp representing the
+// current wall clock time. This is useful for optional timestamp overrides
+// (e.g. session settings) where an empty value means "use now."
+func (t Timestamp) OrNow() Timestamp {
+	if t.IsEmpty() {
+		return Timestamp{WallTime: timeutil.Now().UnixNano()}
+	}
+	return t
+}
+
 // AddDuration adds a given duration to this Timestamp. Normally if you want to
 // bump your clock to the higher of two timestamps, use Forward, however this
 // method is here to create a hlc.Timestamp in the future (or past).
