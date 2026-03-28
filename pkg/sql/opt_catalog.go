@@ -695,6 +695,7 @@ func (oc *optCatalog) dataSourceForTable(
 	// statistics and the zone config haven't changed.
 	var tableStats []*stats.TableStatistic
 	var statsDiffer bool
+	var canaryExpiration hlc.Timestamp
 	if !flags.NoTableStats {
 		var typeResolver *descs.DistSQLTypeResolver
 		if p := oc.planner; p != nil {
@@ -711,13 +712,15 @@ func (oc *optCatalog) dataSourceForTable(
 			statsCanaryWindow = desc.TableDesc().StatsCanaryWindow
 			statsAsOf = oc.planner.EvalContext().SessionData().StatsAsOf
 		}
-		tableStats, statsDiffer, err = oc.planner.execCfg.TableStatsCache.GetTableStatsMaybeStable(ctx, desc, typeResolver, stable, statsCanaryWindow, statsAsOf)
+		var canaryExp hlc.Timestamp
+		tableStats, statsDiffer, canaryExp, err = oc.planner.execCfg.TableStatsCache.GetTableStatsMaybeStable(ctx, desc, typeResolver, stable, statsCanaryWindow, statsAsOf)
 		if err != nil {
 			// Ignore any error. We still want to be able to run queries even if we lose
 			// access to the statistics table.
 			// TODO(radu): at least log the error.
 			tableStats = nil
 		}
+		canaryExpiration = canaryExp
 	}
 
 	zoneConfig, err := oc.getZoneConfig(desc)
@@ -731,7 +734,7 @@ func (oc *optCatalog) dataSourceForTable(
 		return ds, nil
 	}
 
-	ds, err := newOptTable(ctx, desc, oc.codec(), tableStats, zoneConfig, statsDiffer)
+	ds, err := newOptTable(ctx, desc, oc.codec(), tableStats, zoneConfig, statsDiffer, canaryExpiration)
 	if err != nil {
 		return nil, err
 	}
@@ -981,6 +984,13 @@ type optTable struct {
 	// table.
 	statsCanaryWindow time.Duration
 
+	// canaryExpiration is the timestamp at which this table's canary
+	// window expires. Used by CheckDependencies to invalidate cached
+	// stable-execution memos when canary stats ripen. Empty when there is
+	// no active canary window or when canary and stable stats are already
+	// identical, since there is no pending transition to detect.
+	canaryExpiration hlc.Timestamp
+
 	// Row-level security (RLS) fields
 	rlsEnabled bool
 	rlsForced  bool
@@ -1000,6 +1010,7 @@ func newOptTable(
 	stats []*stats.TableStatistic,
 	tblZone cat.Zone,
 	canaryAndStableStatsDiffer bool,
+	canaryExpiration hlc.Timestamp,
 ) (*optTable, error) {
 	ot := &optTable{
 		desc:                       desc,
@@ -1008,6 +1019,7 @@ func newOptTable(
 		zone:                       tblZone,
 		canaryAndStableStatsDiffer: canaryAndStableStatsDiffer,
 		statsCanaryWindow:          desc.TableDesc().StatsCanaryWindow,
+		canaryExpiration:           canaryExpiration,
 	}
 
 	// Determine the primary key columns.
@@ -1729,6 +1741,11 @@ func (ot *optTable) CanaryAndStableStatsDiffer() bool {
 // StatsCanaryWindow is part of the cat.Table interface.
 func (ot *optTable) StatsCanaryWindow() time.Duration {
 	return ot.statsCanaryWindow
+}
+
+// CanaryExpiration is part of the cat.Table interface.
+func (ot *optTable) CanaryExpiration() hlc.Timestamp {
+	return ot.canaryExpiration
 }
 
 // LookupColumnOrdinal returns the ordinal of the column with the given ID. A
@@ -2903,6 +2920,9 @@ func (ot *optVirtualTable) CanaryAndStableStatsDiffer() bool { return false }
 
 // StatsCanaryWindow is part of the cat.Table interface.
 func (ot *optVirtualTable) StatsCanaryWindow() time.Duration { return 0 }
+
+// CanaryExpiration is part of the cat.Table interface.
+func (ot *optVirtualTable) CanaryExpiration() hlc.Timestamp { return hlc.Timestamp{} }
 
 // optVirtualIndex is a dummy implementation of cat.Index for the indexes
 // reported by a virtual table. The index assumes that table column 0 is a dummy

@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/base64"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
@@ -677,6 +678,9 @@ func (u *unknownTable) CanaryAndStableStatsDiffer() bool { return false }
 
 // StatsCanaryWindow is part of the cat.Table interface.
 func (u *unknownTable) StatsCanaryWindow() time.Duration { return 0 }
+
+// CanaryExpiration is part of the cat.Table interface.
+func (u *unknownTable) CanaryExpiration() hlc.Timestamp { return hlc.Timestamp{} }
 
 var _ cat.Table = &unknownTable{}
 
