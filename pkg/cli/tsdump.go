@@ -109,7 +109,7 @@ must previously have been created with the --format=raw switch. The command
 will then convert it to the --format requested in the current invocation.
 `,
 	Args: cobra.RangeArgs(0, 1),
-	RunE: clierrorplus.MaybeDecorateError(func(cmd *cobra.Command, args []string) error {
+	RunE: clierrorplus.MaybeDecorateError(func(cmd *cobra.Command, args []string) (err error) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
@@ -120,11 +120,18 @@ will then convert it to the --format requested in the current invocation.
 
 		var output io.Writer = os.Stdout
 		if debugTimeSeriesDumpOpts.output != "" {
-			f, err := os.Create(debugTimeSeriesDumpOpts.output)
+			var f *os.File
+			f, err = os.Create(debugTimeSeriesDumpOpts.output)
 			if err != nil {
 				return errors.Wrapf(err, "failed to create file %q", debugTimeSeriesDumpOpts.output)
 			}
-			defer f.Close()
+			defer func() {
+				if closeErr := f.Close(); closeErr != nil {
+					if err == nil {
+						err = errors.Wrap(closeErr, "failed to close time series dump file")
+					}
+				}
+			}()
 			output = f
 		}
 
