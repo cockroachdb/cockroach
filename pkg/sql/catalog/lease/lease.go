@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -792,7 +793,16 @@ func getDescriptorsFromStoreForInterval(
 		}
 
 		// Export request returns descriptors in decreasing modification time.
-		res, pErr := kv.SendWrappedWith(ctx, db.NonTransactionalSender(), batchRequestHeader, req)
+		res, pErr := kv.SendWrappedWithAdmission(ctx, db.NonTransactionalSender(), batchRequestHeader, kvpb.AdmissionHeader{
+			// We are fetching descriptor versions for foreground traffic, so getting
+			// throttled delays foreground work. As a result, lease manager exports
+			// should execute with a normal priority.
+			Priority:                 int32(admissionpb.NormalPri),
+			CreateTime:               timeutil.Now().UnixNano(),
+			Source:                   kvpb.AdmissionHeader_FROM_SQL,
+			NoMemoryReservedAtSource: true,
+		},
+			req)
 		if pErr != nil {
 			return nil, errors.Wrapf(pErr.GoError(), "error in retrieving descs between %s, %s",
 				lowerBound, upperBound)
