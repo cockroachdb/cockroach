@@ -187,19 +187,25 @@ func NewGrantCoordinators(
 	slotsCoord := makeRegularGrantCoordinator(ambientCtx, opts, st, metrics, registry, knobs)
 	cpuTimeTokenCoord := makeCPUTimeTokenGrantCoordinator(ambientCtx, opts, st, registry, knobs)
 
-	// CPU time token AC currently only supports Serverless. In Serverless,
-	// SQL pods do not run admission control, and the vast majority of work
-	// on a KV pod is KVWork. So, for now, we allow all SQLKVResponseWork &
-	// SQLSQLResponseWork to bypass AC.
+	// When CPU time token AC is enabled (either KV-only or SQL), the
+	// SQL response queues (SQLKVResponseWork, SQLSQLResponseWork) are
+	// bypassed. In the KV-only case, SQL pods don't run admission control
+	// and the vast majority of work is KVWork. In the SQL CTT case, SQL
+	// work is admitted through MeasureAndAdmit instead of these response
+	// queues.
 	if !knobs.DisableCPUTimeTokenSQLBypass {
 		sqlKVWorkQueue := slotsCoord.GetWorkQueue(SQLKVResponseWork)
 		sqlSQLWorkQueue := slotsCoord.GetWorkQueue(SQLSQLResponseWork)
 		setLatestOverride := func() {
-			override := cpuTimeTokenACIsEnabled(&st.SV)
+			override := cpuTimeTokenACIsEnabled(&st.SV) ||
+				sqlCPUTimeTokenACIsEnabled(&st.SV)
 			sqlKVWorkQueue.SetOverrideAllToBypassAdmission(override)
 			sqlSQLWorkQueue.SetOverrideAllToBypassAdmission(override)
 		}
 		cpuTimeTokenACEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
+			setLatestOverride()
+		})
+		sqlCPUTimeTokenACEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
 			setLatestOverride()
 		})
 		// Initialize.
