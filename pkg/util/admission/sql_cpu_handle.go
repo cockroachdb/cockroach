@@ -12,36 +12,21 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/petermattis/goid"
 )
 
-// SQLWorkInfo captures identifying information about SQL work for CPU
-// accounting and admission.
-type SQLWorkInfo struct {
-	// AtGateway is true if the work is being executed at a gateway node.
-	AtGateway bool
-	// TenantID is the id of the tenant. For single-tenant clusters, this will
-	// always be the SystemTenantID.
-	TenantID roachpb.TenantID
-	// Priority is utilized within a tenant.
-	Priority admissionpb.WorkPriority
-	// CreateTime is equivalent to Time.UnixNano() at the creation time of this
-	// work or a parent work (e.g. could be the start time of the transaction,
-	// if this work was created as part of a transaction). It is used to order
-	// work within a (WorkloadID, Priority) pair -- earlier CreateTime is given
-	// preference.
-	CreateTime int64
-}
-
 // SQLCPUProvider is used to get a SQLCPUHandle that is used for CPU
 // accounting and admission.
 type SQLCPUProvider interface {
 	// GetHandle returns a SQLCPUHandle for the supplied work info.
-	GetHandle(work SQLWorkInfo) *SQLCPUHandle
+	// atGateway indicates whether the work is being executed at the
+	// gateway node, used for CPU accounting to distinguish gateway
+	// vs DistSQL CPU usage.
+	GetHandle(work WorkInfo, atGateway bool) *SQLCPUHandle
 	GetCumulativeSQLCPUNanos() (gatewayCPUNanos, distCPUNanos int64)
 }
 
@@ -78,8 +63,10 @@ var goroutineCPUHandlePool = sync.Pool{
 //
 // TODO(sumeer): fill in more details.
 type SQLCPUHandle struct {
-	workInfo SQLWorkInfo
-	p        *sqlCPUProviderImpl
+	workInfo  WorkInfo
+	atGateway bool
+	p         *sqlCPUProviderImpl
+	wq        *WorkQueue
 
 	mu struct {
 		syncutil.Mutex
@@ -91,10 +78,14 @@ type SQLCPUHandle struct {
 	}
 }
 
-func newSQLCPUAdmissionHandle(workInfo SQLWorkInfo, p *sqlCPUProviderImpl) *SQLCPUHandle {
+func newSQLCPUAdmissionHandle(
+	workInfo WorkInfo, atGateway bool, p *sqlCPUProviderImpl, wq *WorkQueue,
+) *SQLCPUHandle {
 	h := &SQLCPUHandle{
-		workInfo: workInfo,
-		p:        p,
+		workInfo:  workInfo,
+		atGateway: atGateway,
+		p:         p,
+		wq:        wq,
 	}
 	h.mu.gHandles = h.mu.handlesBacking[:0]
 	return h
@@ -103,7 +94,7 @@ func newSQLCPUAdmissionHandle(workInfo SQLWorkInfo, p *sqlCPUProviderImpl) *SQLC
 // reportCPU atomically adds the CPU time difference to the appropriate
 // cumulative counter.
 func (h *SQLCPUHandle) reportCPU(diff time.Duration) {
-	if h.workInfo.AtGateway {
+	if h.atGateway {
 		h.p.cumulativeGatewayCPUNanos.Add(diff.Nanoseconds())
 	} else {
 		h.p.cumulativeDistSQLCPUNanos.Add(diff.Nanoseconds())
@@ -114,9 +105,10 @@ func (h *SQLCPUHandle) reportCPU(diff time.Duration) {
 // https://github.com/cockroachdb/cockroach/pull/161952#pullrequestreview-3741525716
 // on additional integrations that may need to call RegisterGoroutine.
 
-// WorkInfo returns the SQLWorkInfo that was used to create this handle.
-func (h *SQLCPUHandle) WorkInfo() SQLWorkInfo {
-	return h.workInfo
+// AtGateway returns true if this handle is for work executing at the gateway
+// node, as opposed to DistSQL work on a remote node.
+func (h *SQLCPUHandle) AtGateway() bool {
+	return h.atGateway
 }
 
 // IsGoroutineRegistered returns true if the calling goroutine already has a
@@ -290,20 +282,36 @@ type sqlCPUProviderImpl struct {
 	// increasing and is updated atomically as CPU time is reported via
 	// SQLCPUHandle.reportCPU.
 	cumulativeDistSQLCPUNanos atomic.Int64
+	// sv is the settings values used to check if CTT AC is enabled.
+	sv *settings.Values
+	// getWorkQueue returns the CTT WorkQueue for the given tenant. This
+	// allows SQL to share the KV CTT WorkQueue, using the appropriate
+	// tier (system vs app) based on tenant ID. Can be nil in testing.
+	getWorkQueue func(roachpb.TenantID) *WorkQueue
 }
 
 func (p *sqlCPUProviderImpl) GetCumulativeSQLCPUNanos() (gatewayCPUNanos, distCPUNanos int64) {
 	return p.cumulativeGatewayCPUNanos.Load(), p.cumulativeDistSQLCPUNanos.Load()
 }
 
-func (p *sqlCPUProviderImpl) GetHandle(workInfo SQLWorkInfo) *SQLCPUHandle {
-	// TODO(sumeer): implement.
-	return newSQLCPUAdmissionHandle(workInfo, p)
+func (p *sqlCPUProviderImpl) GetHandle(workInfo WorkInfo, atGateway bool) *SQLCPUHandle {
+	var wq *WorkQueue
+	if p.getWorkQueue != nil && sqlCPUTimeTokenACIsEnabled(p.sv) {
+		wq = p.getWorkQueue(workInfo.TenantID)
+	}
+	return newSQLCPUAdmissionHandle(workInfo, atGateway, p, wq)
 }
 
-// NewSQLCPUProvider creates a new SQLCPUProvider.
-//
-// TODO(sumeer): real implementation.
-func NewSQLCPUProvider() SQLCPUProvider {
-	return &sqlCPUProviderImpl{}
+// NewSQLCPUProvider creates a new SQLCPUProvider. The sv parameter is required
+// and provides access to cluster settings for checking if SQL CPU time token
+// AC is enabled. The getWorkQueue function returns the CTT WorkQueue for a
+// given tenant, allowing SQL to share the KV CTT WorkQueue; it may be nil when
+// CTT AC is not available (e.g. separate-process tenants).
+func NewSQLCPUProvider(
+	sv *settings.Values, getWorkQueue func(roachpb.TenantID) *WorkQueue,
+) SQLCPUProvider {
+	return &sqlCPUProviderImpl{
+		sv:           sv,
+		getWorkQueue: getWorkQueue,
+	}
 }

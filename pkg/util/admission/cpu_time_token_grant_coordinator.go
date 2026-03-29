@@ -39,6 +39,22 @@ func cpuTimeTokenACIsEnabled(sv *settings.Values) bool {
 	return !cpuTimeTokenACKillSwitch && cpuTimeTokenACEnabled.Get(sv)
 }
 
+var sqlCPUTimeTokenACEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"admission.sql_cpu_time_tokens.enabled",
+	"when true, SQL CPU usage is admitted through the same CPU time token "+
+		"budget as KV work; has no effect unless admission.cpu_time_tokens.enabled "+
+		"is also true",
+	false,
+)
+
+// sqlCPUTimeTokenACIsEnabled returns true if SQL CPU usage is admitted through
+// the same CPU time token AC as KV work. It has no effect unless
+// admission.cpu_time_tokens.enabled is also true.
+func sqlCPUTimeTokenACIsEnabled(sv *settings.Values) bool {
+	return cpuTimeTokenACIsEnabled(sv) && sqlCPUTimeTokenACEnabled.Get(sv)
+}
+
 // CPUGrantCoordinators's main purpose is to act as a shim. Depending on
 // whether admission.cpu_time_tokens.enabled is true or false, a WorkQueue
 // that does slot-based or CPU time token AC is returned from

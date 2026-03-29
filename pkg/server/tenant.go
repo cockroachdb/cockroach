@@ -226,7 +226,10 @@ func NewSeparateProcessTenantServer(
 	var noopElasticCPUGrantCoord *admission.ElasticCPUGrantCoordinator = nil
 	return newTenantServer(
 		ctx, stopper, baseCfg, sqlCfg, tenantNameContainer, deps, mtinfopb.ServiceModeExternal,
-		noopElasticCPUGrantCoord, admission.NewSQLCPUProvider())
+		noopElasticCPUGrantCoord,
+		// nil getWorkQueue: separate-process tenants don't have access to the
+		// in-process KV CTT WorkQueue, so SQL CPU time token AC is unavailable.
+		admission.NewSQLCPUProvider(&baseCfg.Settings.SV, nil /*getWorkQueue*/))
 }
 
 // newSharedProcessTenantServer creates a tenant-specific, SQL-only
