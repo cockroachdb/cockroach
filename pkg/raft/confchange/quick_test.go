@@ -40,7 +40,7 @@ func TestConfChangeQuick(t *testing.T) {
 	const infoCount = 5
 
 	runWithJoint := func(c *Changer, ccs []pb.ConfChangeSingle) error {
-		cfg, progressMap, err := c.EnterJoint(false /* autoLeave */, ccs...)
+		cfg, progressMap, err := c.EnterJoint(ccs...)
 		if err != nil {
 			return err
 		}
