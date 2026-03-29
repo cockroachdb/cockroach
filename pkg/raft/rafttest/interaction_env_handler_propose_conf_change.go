@@ -43,8 +43,6 @@ func (env *InteractionEnv) handleProposeConfChange(t *testing.T, d datadriven.Te
 				switch val {
 				case "auto":
 					transition = raftpb.ConfChangeTransitionAuto
-				case "implicit":
-					transition = raftpb.ConfChangeTransitionJointImplicit
 				case "explicit":
 					transition = raftpb.ConfChangeTransitionJointExplicit
 				default:
