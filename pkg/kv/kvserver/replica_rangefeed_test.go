@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
@@ -1083,6 +1084,10 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 	t.Run(kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING.String(), func(t *testing.T) {
 		knobs := base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
+				DisableGCQueue: true,
+				IntentResolverKnobs: kvserverbase.IntentResolverTestingKnobs{
+					DisableAsyncIntentResolution: true,
+				},
 				// This test splits off a range manually from system table ranges.
 				// Because this happens "underneath" the span configs infra, when
 				// applying a config over the replicas, we fallback to one that
@@ -1109,6 +1114,16 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 						}
 					}
 					return nil
+				},
+				TestingPostApplyFilter: func(args kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
+					if args.RangeID == 0 {
+						return 0, nil
+					}
+					if args.Cmd.WriteBatch != nil && args.Cmd.LogicalOpLog == nil {
+						t.Logf("r%d nil-ops proposal applied: req=%v rer=%s",
+							args.RangeID, args.Req, args.ReplicatedEvalResult.String())
+					}
+					return 0, nil
 				},
 			},
 		}
@@ -1154,18 +1169,20 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		allowedError := kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING
 		waitForInitialCheckpointAcrossSpan(t, stream, streamErrC, rangefeedSpan, &allowedError)
 
+		// Wait for the lease on the test range to upgrade from expiration-based,
+		// so that the upgrade proposal doesn't race with disabling rangefeeds
+		// below and mask bugs in the test.
+		desc := store.LookupReplica(roachpb.RKey(startKey)).Desc()
+		tc.MaybeWaitForLeaseUpgrade(ctx, t, *desc)
 		// Disable rangefeeds, which stops logical op logs from being provided
 		// with Raft commands.
 		kvserver.RangefeedEnabled.Override(ctx, &store.ClusterSettings().SV, false)
 
-		// Perform a write on the range.
-		writeKey := mkKey("c")
-		pArgs := putArgs(writeKey, []byte("val2"))
-		if _, pErr := kv.SendWrapped(ctx, store.TestSender(), pArgs); pErr != nil {
-			t.Fatal(pErr)
-		}
-
-		// Check the error.
+		// Check the error. Note: we intentionally do NOT perform a write here.
+		// The bug is that mkKey("c") is outside the test range
+		// [startKey, startKey.Next()), so the explicit write was a no-op for
+		// triggering the error. The error fires due to background activity
+		// (lease upgrades, etc.) proposing to the range without logical ops.
 		pErr := <-streamErrC
 		assertRangefeedRetryErr(t, pErr, kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING)
 	})

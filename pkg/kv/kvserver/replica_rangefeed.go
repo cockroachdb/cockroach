@@ -691,6 +691,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(
 		// registrations, we're forced to throw an error. The rangefeed clients
 		// can reconnect at a later time, at which point all new Raft commands
 		// should have logical op logs.
+		log.KvDistribution.Infof(ctx, "disconnecting rangefeed due to missing logical ops")
 		r.disconnectRangefeedWithReason(kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING)
 		return
 	}
