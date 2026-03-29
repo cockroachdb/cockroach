@@ -480,16 +480,19 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/temp.out --label=
  -- Temporary tables cannot be used with two-phase commit.
  create temp table twophase_tab (a int);
  begin;
-@@ -363,19 +476,22 @@
+@@ -363,19 +476,25 @@
  (0 rows)
  
  prepare transaction 'twophase_tab';
 -ERROR:  cannot PREPARE a transaction that has operated on temporary objects
++ERROR:  prepared transactions are disabled because the feature is not yet GA
++HINT:  Set the cluster setting sql.prepared_transactions.unsafe.enabled to true to enable prepared transactions.
  begin;
  insert into twophase_tab values (1);
  prepare transaction 'twophase_tab';
 -ERROR:  cannot PREPARE a transaction that has operated on temporary objects
-+ERROR:  transaction identifier "twophase_tab" is already in use
++ERROR:  prepared transactions are disabled because the feature is not yet GA
++HINT:  Set the cluster setting sql.prepared_transactions.unsafe.enabled to true to enable prepared transactions.
  begin;
  lock twophase_tab in access exclusive mode;
 +ERROR:  at or near "lock": syntax error
@@ -507,7 +510,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/temp.out --label=
  -- Corner case: current_schema may create a temporary schema if namespace
  -- creation is pending, so check after that.  First reset the connection
  -- to remove the temporary namespace.
-@@ -385,8 +501,7 @@
+@@ -385,8 +504,9 @@
  SELECT current_schema() ~ 'pg_temp' AS is_temp_schema;
   is_temp_schema 
  ----------------
@@ -517,3 +520,5 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/temp.out --label=
  
  PREPARE TRANSACTION 'twophase_search';
 -ERROR:  cannot PREPARE a transaction that has operated on temporary objects
++ERROR:  prepared transactions are disabled because the feature is not yet GA
++HINT:  Set the cluster setting sql.prepared_transactions.unsafe.enabled to true to enable prepared transactions.

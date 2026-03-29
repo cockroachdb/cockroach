@@ -1377,7 +1377,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
  
  -- extract implementation is mostly the same as date_part, so only
  -- test a few cases for additional coverage.
-@@ -1118,260 +674,108 @@
+@@ -1118,118 +674,66 @@
     round(extract(julian from d1)) AS julian,
     extract(epoch from d1) AS epoch
     FROM TIMESTAMP_TBL;
@@ -1519,21 +1519,22 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
  ------------------------------------------------------------------------------------------
 - 
 - 
-- THURSDAY  Thursday  thursday  THU Thu thu JANUARY   January   january   I    JAN Jan jan
++ SATURDAY  Saturday  saturday  SAT Sat sat NOVEMBER  November  november  XI   NOV Nov nov
++ MONDAY    Monday    monday    MON Mon mon JANUARY   January   january   I    JAN Jan jan
+  THURSDAY  Thursday  thursday  THU Thu thu JANUARY   January   january   I    JAN Jan jan
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
-- THURSDAY  Thursday  thursday  THU Thu thu JANUARY   January   january   I    JAN Jan jan
-- THURSDAY  Thursday  thursday  THU Thu thu JANUARY   January   january   I    JAN Jan jan
-- MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
-- MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
-- MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
-- MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
-- TUESDAY   Tuesday   tuesday   TUE Tue tue JUNE      June      june      VI   JUN Jun jun
-- SATURDAY  Saturday  saturday  SAT Sat sat SEPTEMBER September september IX   SEP Sep sep
+  THURSDAY  Thursday  thursday  THU Thu thu JANUARY   January   january   I    JAN Jan jan
+  THURSDAY  Thursday  thursday  THU Thu thu JANUARY   January   january   I    JAN Jan jan
+  MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
+@@ -1238,69 +742,19 @@
+  MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
+  TUESDAY   Tuesday   tuesday   TUE Tue tue JUNE      June      june      VI   JUN Jun jun
+  SATURDAY  Saturday  saturday  SAT Sat sat SEPTEMBER September september IX   SEP Sep sep
 - WEDNESDAY Wednesday wednesday WED Wed wed MARCH     March     march     III  MAR Mar mar
 - WEDNESDAY Wednesday wednesday WED Wed wed MARCH     March     march     III  MAR Mar mar
 - WEDNESDAY Wednesday wednesday WED Wed wed MARCH     March     march     III  MAR Mar mar
@@ -1545,10 +1546,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
-- MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
-- MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
-- MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
-- MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
+  MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
+  MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
+  MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
+  MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
 - TUESDAY   Tuesday   tuesday   TUE Tue tue JUNE      June      june      VI   JUN Jun jun
@@ -1583,21 +1584,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
 - SUNDAY    Sunday    sunday    SUN Sun sun DECEMBER  December  december  XII  DEC Dec dec
 - MONDAY    Monday    monday    MON Mon mon JANUARY   January   january   I    JAN Jan jan
 -(65 rows)
-+ saturday  Saturday  saturday  sat Sat sat NOVEMBER  November  november  XI   NOV Nov nov
-+ monday    Monday    monday    mon Mon mon JANUARY   January   january   I    JAN Jan jan
-+ thursday  Thursday  thursday  thu Thu thu JANUARY   January   january   I    JAN Jan jan
-+ thursday  Thursday  thursday  thu Thu thu JANUARY   January   january   I    JAN Jan jan
-+ thursday  Thursday  thursday  thu Thu thu JANUARY   January   january   I    JAN Jan jan
-+ monday    Monday    monday    mon Mon mon FEBRUARY  February  february  II   FEB Feb feb
-+ monday    Monday    monday    mon Mon mon FEBRUARY  February  february  II   FEB Feb feb
-+ monday    Monday    monday    mon Mon mon FEBRUARY  February  february  II   FEB Feb feb
-+ monday    Monday    monday    mon Mon mon FEBRUARY  February  february  II   FEB Feb feb
-+ tuesday   Tuesday   tuesday   tue Tue tue JUNE      June      june      VI   JUN Jun jun
-+ saturday  Saturday  saturday  sat Sat sat SEPTEMBER September september IX   SEP Sep sep
-+ monday    Monday    monday    mon Mon mon FEBRUARY  February  february  II   FEB Feb feb
-+ monday    Monday    monday    mon Mon mon FEBRUARY  February  february  II   FEB Feb feb
-+ monday    Monday    monday    mon Mon mon FEBRUARY  February  february  II   FEB Feb feb
-+ monday    Monday    monday    mon Mon mon FEBRUARY  February  february  II   FEB Feb feb
 +(15 rows)
  
  SELECT to_char(d1, 'FMDAY FMDay FMday FMMONTH FMMonth FMmonth FMRM')
@@ -1606,21 +1592,24 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
 ---------------------------------------------------------------
 - 
 - 
-- THURSDAY Thursday thursday JANUARY January january I
++                           to_char                           
++-------------------------------------------------------------
++ SATURDAY Saturday saturday NOVEMBER November november XI
++ MONDAY Monday monday JANUARY January january I
+  THURSDAY Thursday thursday JANUARY January january I
 - MONDAY Monday monday FEBRUARY February february II
 - MONDAY Monday monday FEBRUARY February february II
 - MONDAY Monday monday FEBRUARY February february II
 - MONDAY Monday monday FEBRUARY February february II
 - MONDAY Monday monday FEBRUARY February february II
 - MONDAY Monday monday FEBRUARY February february II
-- THURSDAY Thursday thursday JANUARY January january I
-- THURSDAY Thursday thursday JANUARY January january I
-- MONDAY Monday monday FEBRUARY February february II
-- MONDAY Monday monday FEBRUARY February february II
-- MONDAY Monday monday FEBRUARY February february II
-- MONDAY Monday monday FEBRUARY February february II
-- TUESDAY Tuesday tuesday JUNE June june VI
-- SATURDAY Saturday saturday SEPTEMBER September september IX
+  THURSDAY Thursday thursday JANUARY January january I
+  THURSDAY Thursday thursday JANUARY January january I
+  MONDAY Monday monday FEBRUARY February february II
+@@ -1309,69 +763,19 @@
+  MONDAY Monday monday FEBRUARY February february II
+  TUESDAY Tuesday tuesday JUNE June june VI
+  SATURDAY Saturday saturday SEPTEMBER September september IX
 - WEDNESDAY Wednesday wednesday MARCH March march III
 - WEDNESDAY Wednesday wednesday MARCH March march III
 - WEDNESDAY Wednesday wednesday MARCH March march III
@@ -1634,10 +1623,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
 - MONDAY Monday monday FEBRUARY February february II
 - MONDAY Monday monday FEBRUARY February february II
 - MONDAY Monday monday FEBRUARY February february II
-- MONDAY Monday monday FEBRUARY February february II
-- MONDAY Monday monday FEBRUARY February february II
-- MONDAY Monday monday FEBRUARY February february II
-- MONDAY Monday monday FEBRUARY February february II
+  MONDAY Monday monday FEBRUARY February february II
+  MONDAY Monday monday FEBRUARY February february II
+  MONDAY Monday monday FEBRUARY February february II
+  MONDAY Monday monday FEBRUARY February february II
 - TUESDAY Tuesday tuesday JUNE June june VI
 - MONDAY Monday monday FEBRUARY February february II
 - TUESDAY Tuesday tuesday FEBRUARY February february II
@@ -1670,23 +1659,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
 - SUNDAY Sunday sunday DECEMBER December december XII
 - MONDAY Monday monday JANUARY January january I
 -(65 rows)
-+                           to_char                           
-+-------------------------------------------------------------
-+ saturday Saturday saturday NOVEMBER November november XI
-+ monday Monday monday JANUARY January january I
-+ thursday Thursday thursday JANUARY January january I
-+ thursday Thursday thursday JANUARY January january I
-+ thursday Thursday thursday JANUARY January january I
-+ monday Monday monday FEBRUARY February february II
-+ monday Monday monday FEBRUARY February february II
-+ monday Monday monday FEBRUARY February february II
-+ monday Monday monday FEBRUARY February february II
-+ tuesday Tuesday tuesday JUNE June june VI
-+ saturday Saturday saturday SEPTEMBER September september IX
-+ monday Monday monday FEBRUARY February february II
-+ monday Monday monday FEBRUARY February february II
-+ monday Monday monday FEBRUARY February february II
-+ monday Monday monday FEBRUARY February february II
 +(15 rows)
  
  SELECT to_char(d1, 'Y,YYY YYYY YYY YY Y CC Q MM WW DDD DD D J')
@@ -1719,17 +1691,17 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
 - 2,000 2000 000 00 0 20 1 03 11 075 15 4 2451619
 - 2,000 2000 000 00 0 20 1 03 11 075 15 4 2451619
 - 1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
-- 1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
-- 1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
-- 1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
-- 1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
-- 1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
-- 1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
-- 1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
   1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
   1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
   1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
   1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
+- 1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
+- 1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
+- 1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
+- 1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
+- 1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
+- 1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
+- 1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
 - 1,997 1997 997 97 7 20 2 06 23 161 10 3 2450610
 - 1,997 1997 997 97 7 20 1 02 06 041 10 2 2450490
 - 1,997 1997 997 97 7 20 1 02 06 042 11 3 2450491
@@ -1797,14 +1769,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
 - 1,997 1997 997 97 7 20 1 2 6 41 10 2 2450490
 - 1,997 1997 997 97 7 20 1 2 6 41 10 2 2450490
 - 1,997 1997 997 97 7 20 1 2 6 41 10 2 2450490
-- 1,997 1997 997 97 7 20 1 2 6 41 10 2 2450490
-- 1,997 1997 997 97 7 20 1 2 6 41 10 2 2450490
-- 1,997 1997 997 97 7 20 1 2 6 41 10 2 2450490
-- 1,997 1997 997 97 7 20 1 2 6 41 10 2 2450490
   1,997 1997 997 97 7 20 1 2 6 41 10 2 2450490
   1,997 1997 997 97 7 20 1 2 6 41 10 2 2450490
   1,997 1997 997 97 7 20 1 2 6 41 10 2 2450490
   1,997 1997 997 97 7 20 1 2 6 41 10 2 2450490
+- 1,997 1997 997 97 7 20 1 2 6 41 10 2 2450490
+- 1,997 1997 997 97 7 20 1 2 6 41 10 2 2450490
+- 1,997 1997 997 97 7 20 1 2 6 41 10 2 2450490
+- 1,997 1997 997 97 7 20 1 2 6 41 10 2 2450490
 - 1,997 1997 997 97 7 20 2 6 23 161 10 3 2450610
 - 1,997 1997 997 97 7 20 1 2 6 41 10 2 2450490
 - 1,997 1997 997 97 7 20 1 2 6 42 11 3 2450491
@@ -1887,11 +1859,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
 - 05 05 17 32 01 63121
 - 05 05 17 32 01 63121
 - 05 05 17 32 01 63121
+  05 05 17 32 01 63121
+  05 05 17 32 01 63121
+  05 05 17 32 01 63121
+  05 05 17 32 01 63121
 - 05 05 17 32 01 63121
-  05 05 17 32 01 63121
-  05 05 17 32 01 63121
-  05 05 17 32 01 63121
-  05 05 17 32 01 63121
 - 05 05 17 32 01 63121
 - 05 05 17 32 01 63121
 - 05 05 17 32 01 63121
@@ -1955,14 +1927,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
 - HH:MI:SS is 05:32:01 "text between quote marks"
 - HH:MI:SS is 05:32:01 "text between quote marks"
 - HH:MI:SS is 05:32:01 "text between quote marks"
-  HH:MI:SS is 05:32:01 "text between quote marks"
-  HH:MI:SS is 05:32:01 "text between quote marks"
-  HH:MI:SS is 05:32:01 "text between quote marks"
-  HH:MI:SS is 05:32:01 "text between quote marks"
 - HH:MI:SS is 05:32:01 "text between quote marks"
 - HH:MI:SS is 05:32:01 "text between quote marks"
 - HH:MI:SS is 05:32:01 "text between quote marks"
 - HH:MI:SS is 05:32:01 "text between quote marks"
+  HH:MI:SS is 05:32:01 "text between quote marks"
+  HH:MI:SS is 05:32:01 "text between quote marks"
+  HH:MI:SS is 05:32:01 "text between quote marks"
+  HH:MI:SS is 05:32:01 "text between quote marks"
 - HH:MI:SS is 05:32:01 "text between quote marks"
 - HH:MI:SS is 05:32:01 "text between quote marks"
 - HH:MI:SS is 05:32:01 "text between quote marks"
@@ -2022,20 +1994,20 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
 - 17--text--32--text--01
 - 17--text--32--text--01
 - 17--text--32--text--01
-  17--text--32--text--01
-  17--text--32--text--01
+- 17--text--32--text--01
+- 17--text--32--text--01
 - 18--text--32--text--01
+- 17--text--32--text--01
+- 17--text--32--text--01
+- 17--text--32--text--01
+- 17--text--32--text--01
+- 17--text--32--text--01
+- 17--text--32--text--01
+- 17--text--32--text--01
   17--text--32--text--01
   17--text--32--text--01
-- 17--text--32--text--01
-- 17--text--32--text--01
-- 17--text--32--text--01
-- 17--text--32--text--01
-- 17--text--32--text--01
-- 17--text--32--text--01
-- 17--text--32--text--01
-- 17--text--32--text--01
-- 17--text--32--text--01
+  17--text--32--text--01
+  17--text--32--text--01
 - 17--text--32--text--01
 - 17--text--32--text--01
 - 17--text--32--text--01
@@ -2090,12 +2062,12 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
 - 1997TH 1997th 2450490th
 - 1997TH 1997th 2450490th
 - 1997TH 1997th 2450490th
-  1997TH 1997th 2450490th
-  1997TH 1997th 2450490th
-  1997TH 1997th 2450490th
-  1997TH 1997th 2450490th
 - 1997TH 1997th 2450490th
 - 1997TH 1997th 2450490th
+  1997TH 1997th 2450490th
+  1997TH 1997th 2450490th
+  1997TH 1997th 2450490th
+  1997TH 1997th 2450490th
 - 1997TH 1997th 2450490th
 - 1997TH 1997th 2450490th
 - 1997TH 1997th 2450490th
@@ -2162,18 +2134,18 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
 - 2000 A.D. 2000 a.d. 2000 ad 12:14:03 P.M. 12:14:03 p.m. 12:14:03 pm
 - 2000 A.D. 2000 a.d. 2000 ad 03:14:04 A.M. 03:14:04 a.m. 03:14:04 am
 - 2000 A.D. 2000 a.d. 2000 ad 02:14:05 A.M. 02:14:05 a.m. 02:14:05 am
-- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
-- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
+  1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
+  1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
 - 1997 A.D. 1997 a.d. 1997 ad 05:32:00 P.M. 05:32:00 p.m. 05:32:00 pm
-- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
-- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
-- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
-- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
-- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
   1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
   1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
-  1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
-  1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
+- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
+- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
+- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
+- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
+- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
+- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
+- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
 - 1997 A.D. 1997 a.d. 1997 ad 06:32:01 P.M. 06:32:01 p.m. 06:32:01 pm
 - 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
 - 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
@@ -2239,14 +2211,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
 - 2000 000 00 0 11 073 3
 - 1997 997 97 7 07 043 1
 - 1997 997 97 7 07 043 1
-- 1997 997 97 7 07 043 1
-- 1997 997 97 7 07 043 1
-- 1997 997 97 7 07 043 1
-- 1997 997 97 7 07 043 1
   1997 997 97 7 07 043 1
   1997 997 97 7 07 043 1
   1997 997 97 7 07 043 1
   1997 997 97 7 07 043 1
+- 1997 997 97 7 07 043 1
+- 1997 997 97 7 07 043 1
+- 1997 997 97 7 07 043 1
+- 1997 997 97 7 07 043 1
 - 1997 997 97 7 07 043 1
 - 1997 997 97 7 07 043 1
 - 1997 997 97 7 24 163 2
@@ -2317,11 +2289,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
 - 1997 997 97 7 7 43 1
 - 1997 997 97 7 7 43 1
 - 1997 997 97 7 7 43 1
+  1997 997 97 7 7 43 1
+  1997 997 97 7 7 43 1
+  1997 997 97 7 7 43 1
+  1997 997 97 7 7 43 1
 - 1997 997 97 7 7 43 1
-  1997 997 97 7 7 43 1
-  1997 997 97 7 7 43 1
-  1997 997 97 7 7 43 1
-  1997 997 97 7 7 43 1
 - 1997 997 97 7 24 163 2
 - 1997 997 97 7 7 43 1
 - 1997 997 97 7 7 44 2
@@ -2374,38 +2346,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamp.out --l
  -- Roman months, with upper and lower case.
  SELECT i,
         to_char(i * interval '1mon', 'rm'),
-@@ -2020,19 +973,19 @@
-     FROM generate_series(-13, 13) i;
-   i  | to_char | to_char 
- -----+---------+---------
-- -13 | xii     | XII 
-+ -13 | xi      | XI  
-  -12 | i       | I   
-- -11 | ii      | II  
-- -10 | iii     | III 
--  -9 | iv      | IV  
--  -8 | v       | V   
--  -7 | vi      | VI  
--  -6 | vii     | VII 
--  -5 | viii    | VIII
--  -4 | ix      | IX  
--  -3 | x       | X   
--  -2 | xi      | XI  
--  -1 | xii     | XII 
-+ -11 | i       | I   
-+ -10 | ii      | II  
-+  -9 | iii     | III 
-+  -8 | iv      | IV  
-+  -7 | v       | V   
-+  -6 | vi      | VI  
-+  -5 | vii     | VII 
-+  -4 | viii    | VIII
-+  -3 | ix      | IX  
-+  -2 | x       | X   
-+  -1 | xi      | XI  
-    0 |         | 
-    1 | i       | I   
-    2 | ii      | II  
 @@ -2051,54 +1004,54 @@
  
  -- timestamp numeric fields constructor

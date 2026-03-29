@@ -75,7 +75,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT member::regrole, admin_option FROM pg_auth_members WHERE roleid = 'regress_priv_user1'::regrole;
   member | admin_option 
  --------+--------------
-@@ -73,117 +75,271 @@
+@@ -73,117 +75,272 @@
  SET ROLE regress_priv_user3;
  GRANT regress_priv_user1 TO regress_priv_user4;
  SELECT grantor::regrole FROM pg_auth_members WHERE roleid = 'regress_priv_user1'::regrole and member = 'regress_priv_user4'::regrole;
@@ -211,10 +211,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 +              ^
 +HINT:  try \h RESET
  REVOKE SET OPTION FOR pg_read_all_settings FROM regress_priv_user8;
-+ERROR:  at or near "option": syntax error: not a valid privilege: "set"
++ERROR:  at or near "option": syntax error
 +DETAIL:  source SQL:
 +REVOKE SET OPTION FOR pg_read_all_settings FROM regress_priv_user8
 +           ^
++HINT:  try \h REVOKE
  GRANT pg_read_all_stats TO regress_priv_user8 WITH SET FALSE;
 +ERROR:  at or near "set": syntax error
 +DETAIL:  source SQL:
@@ -371,7 +372,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  CREATE TABLE atest1 ( a int, b text );
-@@ -198,6 +354,10 @@
+@@ -198,6 +355,10 @@
  TRUNCATE atest1;
  BEGIN;
  LOCK atest1 IN ACCESS EXCLUSIVE MODE;
@@ -382,7 +383,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  COMMIT;
  REVOKE ALL ON atest1 FROM PUBLIC;
  SELECT * FROM atest1;
-@@ -216,14 +376,31 @@
+@@ -216,14 +377,31 @@
  GRANT SELECT ON atest2 TO regress_priv_user2;
  GRANT UPDATE ON atest2 TO regress_priv_user3;
  GRANT INSERT ON atest2 TO regress_priv_user4 GRANTED BY CURRENT_USER;
@@ -391,16 +392,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 +GRANT INSERT ON atest2 TO regress_priv_user4 GRANTED BY CURRENT_USER
 +                                             ^
  GRANT TRUNCATE ON atest2 TO regress_priv_user5 GRANTED BY CURRENT_ROLE;
-+ERROR:  at or near "on": syntax error: not a valid privilege: "truncate"
++ERROR:  at or near "granted": syntax error
 +DETAIL:  source SQL:
 +GRANT TRUNCATE ON atest2 TO regress_priv_user5 GRANTED BY CURRENT_ROLE
-+               ^
++                                               ^
  GRANT TRUNCATE ON atest2 TO regress_priv_user4 GRANTED BY regress_priv_user5;  -- error
 -ERROR:  grantor must be current user
-+ERROR:  at or near "on": syntax error: not a valid privilege: "truncate"
++ERROR:  at or near "granted": syntax error
 +DETAIL:  source SQL:
 +GRANT TRUNCATE ON atest2 TO regress_priv_user4 GRANTED BY regress_priv_user5
-+               ^
++                                               ^
  SET SESSION AUTHORIZATION regress_priv_user2;
 +ERROR:  at or near "regress_priv_user2": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
@@ -418,7 +419,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  -- try various combinations of queries on atest1 and atest2
-@@ -239,11 +416,9 @@
+@@ -239,11 +417,9 @@
  
  INSERT INTO atest1 VALUES (2, 'two'); -- ok
  INSERT INTO atest2 VALUES ('foo', true); -- fail
@@ -430,7 +431,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT * FROM atest1 FOR UPDATE; -- ok
   a |  b  
  ---+-----
-@@ -252,108 +427,22 @@
+@@ -252,108 +428,22 @@
  (2 rows)
  
  SELECT * FROM atest2 FOR UPDATE; -- fail
@@ -454,8 +455,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 -(0 rows)
 -
 -SELECT * FROM atest2 WHERE ( col1 IN ( SELECT b FROM atest1 ) );
-- col1 | col2 
--------+------
+  col1 | col2 
+ ------+------
 -(0 rows)
 -
 -SET SESSION AUTHORIZATION regress_priv_user6;
@@ -467,8 +468,8 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 -(2 rows)
 -
 -SELECT * FROM atest2; -- ok
-  col1 | col2 
- ------+------
+- col1 | col2 
+-------+------
 -(0 rows)
 -
 -INSERT INTO atest2 VALUES ('foo', true); -- fail
@@ -546,7 +547,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT * FROM atest1; -- ok
   a |  b  
  ---+-----
-@@ -364,187 +453,316 @@
+@@ -364,187 +454,316 @@
  -- test leaky-function protections in selfuncs
  -- regress_priv_user1 will own a table and provide views for it.
  SET SESSION AUTHORIZATION regress_priv_user1;
@@ -961,7 +962,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  CREATE VIEW atestv1 AS SELECT * FROM atest1; -- ok
  /* The next *should* fail, but it's not implemented that way yet. */
  CREATE VIEW atestv2 AS SELECT * FROM atest2;
-@@ -559,10 +777,19 @@
+@@ -559,10 +778,19 @@
  (2 rows)
  
  SELECT * FROM atestv2; -- fail
@@ -982,7 +983,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT * FROM atestv1; -- ok
   a |  b  
  ---+-----
-@@ -571,29 +798,65 @@
+@@ -571,29 +799,65 @@
  (2 rows)
  
  SELECT * FROM atestv2; -- fail
@@ -1052,7 +1053,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  CREATE VIEW atestv4 AS SELECT * FROM atestv3; -- nested view
  SELECT * FROM atestv4; -- ok
   one | two | three 
-@@ -602,9 +865,18 @@
+@@ -602,9 +866,18 @@
  
  GRANT SELECT ON atestv4 TO regress_priv_user2;
  SET SESSION AUTHORIZATION regress_priv_user2;
@@ -1072,7 +1073,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT * FROM atestv4; -- ok (even though regress_priv_user2 cannot access underlying atestv3)
   one | two | three 
  -----+-----+-------
-@@ -613,21 +885,49 @@
+@@ -613,21 +886,49 @@
  SELECT * FROM atest2; -- ok
   col1 | col2 
  ------+------
@@ -1126,7 +1127,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT one FROM atest5; -- ok
   one 
  -----
-@@ -637,13 +937,21 @@
+@@ -637,13 +938,21 @@
  COPY atest5 (one) TO stdout; -- ok
  1
  SELECT two FROM atest5; -- fail
@@ -1152,7 +1153,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT 1 FROM atest5; -- ok
   ?column? 
  ----------
-@@ -657,15 +965,34 @@
+@@ -657,15 +966,34 @@
  (1 row)
  
  SELECT 1 FROM atest5 a JOIN atest5 b USING (two); -- fail
@@ -1192,7 +1193,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT one FROM (atest5 a JOIN atest5 b(one,x,y,z) USING (one)) j; -- ok
   one 
  -----
-@@ -679,39 +1006,108 @@
+@@ -679,39 +1007,108 @@
  (1 row)
  
  SELECT two FROM (atest5 a JOIN atest5 b(one,x,y,z) USING (one)) j; -- fail
@@ -1318,7 +1319,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT atest1.* FROM atest1, atest5; -- ok
   a |  b  
  ---+-----
-@@ -727,7 +1123,10 @@
+@@ -727,7 +1124,10 @@
  (2 rows)
  
  SELECT atest1.*,atest5.one FROM atest1 JOIN atest5 ON (atest1.a = atest5.two); -- fail
@@ -1330,7 +1331,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT atest1.*,atest5.one FROM atest1 JOIN atest5 ON (atest1.a = atest5.one); -- ok
   a |  b  | one 
  ---+-----+-----
-@@ -736,15 +1135,56 @@
+@@ -736,15 +1136,56 @@
  (2 rows)
  
  SELECT one, two FROM atest5; -- fail
@@ -1389,7 +1390,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT one, two FROM atest5 NATURAL JOIN atest6; -- ok now
   one | two 
  -----+-----
-@@ -753,23 +1193,22 @@
+@@ -753,23 +1194,22 @@
  -- test column-level privileges for INSERT and UPDATE
  INSERT INTO atest5 (two) VALUES (3); -- ok
  COPY atest5 FROM stdin; -- fail
@@ -1419,7 +1420,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- Ok.  May SELECT on column "one":
  INSERT INTO atest5(two) VALUES (6) ON CONFLICT (two) DO UPDATE set three = 10 RETURNING atest5.one;
   one 
-@@ -782,35 +1221,96 @@
+@@ -782,35 +1222,96 @@
  INSERT INTO atest5(two) VALUES (6) ON CONFLICT (two) DO UPDATE set three = EXCLUDED.one;
  -- Error. No select rights on three
  INSERT INTO atest5(two) VALUES (6) ON CONFLICT (two) DO UPDATE set three = EXCLUDED.three;
@@ -1524,7 +1525,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT atest6 FROM atest6; -- ok
   atest6 
  --------
-@@ -819,15 +1319,47 @@
+@@ -819,15 +1320,47 @@
  COPY atest6 TO stdout; -- ok
  -- test column privileges with MERGE
  SET SESSION AUTHORIZATION regress_priv_user1;
@@ -1572,7 +1573,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  --
  -- test source privileges
  --
-@@ -837,21 +1369,30 @@
+@@ -837,21 +1370,30 @@
  	UPDATE SET b = s.b
  WHEN NOT MATCHED THEN
  	INSERT VALUES (a, NULL);
@@ -1606,7 +1607,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- this should be ok since only s.a is accessed
  BEGIN;
  MERGE INTO mtarget t USING msource s ON t.a = s.a
-@@ -859,10 +1400,31 @@
+@@ -859,10 +1401,31 @@
  	UPDATE SET b = 'ok'
  WHEN NOT MATCHED THEN
  	INSERT VALUES (a, NULL);
@@ -1638,7 +1639,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- should now be ok
  BEGIN;
  MERGE INTO mtarget t USING msource s ON t.a = s.a
-@@ -870,6 +1432,10 @@
+@@ -870,6 +1433,10 @@
  	UPDATE SET b = s.b
  WHEN NOT MATCHED THEN
  	INSERT VALUES (a, b);
@@ -1649,7 +1650,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  ROLLBACK;
  --
  -- test target privileges
-@@ -880,47 +1446,94 @@
+@@ -880,47 +1447,94 @@
  	UPDATE SET b = t.b
  WHEN NOT MATCHED THEN
  	INSERT VALUES (a, NULL);
@@ -1748,7 +1749,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- seed data
  INSERT INTO t1 VALUES (1, 1, 1);
  INSERT INTO t1 VALUES (1, 2, 1);
-@@ -928,78 +1541,171 @@
+@@ -928,78 +1542,171 @@
  INSERT INTO t1 VALUES (2, 2, 2);
  INSERT INTO t1 VALUES (3, 1, 3);
  SET SESSION AUTHORIZATION regress_priv_user2;
@@ -1940,7 +1941,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT atest6 FROM atest6; -- ok
   atest6 
  --------
-@@ -1011,25 +1717,81 @@
+@@ -1011,25 +1718,81 @@
  (0 rows)
  
  SET SESSION AUTHORIZATION regress_priv_user1;
@@ -2025,7 +2026,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT fx FROM atestp2; -- ok
   fx 
  ----
-@@ -1051,10 +1813,27 @@
+@@ -1051,10 +1814,27 @@
  (0 rows)
  
  SELECT fy FROM atestc; -- fail
@@ -2054,7 +2055,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT fx FROM atestp2; -- still ok
   fx 
  ----
-@@ -1077,69 +1856,127 @@
+@@ -1077,69 +1857,127 @@
  
  -- child's permissions do not apply when operating on parent
  SET SESSION AUTHORIZATION regress_priv_user1;
@@ -2195,7 +2196,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT priv_testfunc1(5), priv_testfunc2(5); -- ok
   priv_testfunc1 | priv_testfunc2 
  ----------------+----------------
-@@ -1147,30 +1984,43 @@
+@@ -1147,30 +1985,43 @@
  (1 row)
  
  CREATE FUNCTION priv_testfunc3(int) RETURNS int AS 'select 2 * $1;' LANGUAGE sql; -- fail
@@ -2250,7 +2251,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT priv_testfunc1(5); -- ok
   priv_testfunc1 
  ----------------
-@@ -1178,22 +2028,27 @@
+@@ -1178,22 +2029,27 @@
  (1 row)
  
  SELECT priv_testagg1(x) FROM (VALUES (1), (2), (3)) _(x); -- ok
@@ -2286,7 +2287,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- verify privilege checks on array-element coercions
  BEGIN;
  SELECT '{1}'::int4[]::int8[];
-@@ -1203,6 +2058,8 @@
+@@ -1203,6 +2059,8 @@
  (1 row)
  
  REVOKE ALL ON FUNCTION int8(integer) FROM PUBLIC;
@@ -2295,7 +2296,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT '{1}'::int4[]::int8[]; --superuser, succeed
   int8 
  ------
-@@ -1210,9 +2067,20 @@
+@@ -1210,9 +2068,20 @@
  (1 row)
  
  SET SESSION AUTHORIZATION regress_priv_user4;
@@ -2317,12 +2318,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- privileges on types
  -- switch to superuser
  \c -
-@@ -1220,101 +2088,338 @@
+@@ -1220,101 +2089,339 @@
  REVOKE USAGE ON TYPE priv_testtype1 FROM PUBLIC;
  GRANT USAGE ON TYPE priv_testtype1 TO regress_priv_user2;
  GRANT USAGE ON TYPE _priv_testtype1 TO regress_priv_user2; -- fail
 -ERROR:  cannot set privileges of array types
 -HINT:  Set the privileges of the element type instead.
++NOTICE:  privileges on array type _priv_testtype1 are applied to the element type priv_testtype1
  GRANT USAGE ON DOMAIN priv_testtype1 TO regress_priv_user2; -- fail
 -ERROR:  "priv_testtype1" is not a domain
 +ERROR:  at or near "priv_testtype1": syntax error
@@ -2678,7 +2680,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- has_table_privilege function
  -- bad-input checks
  select has_table_privilege(NULL,'pg_authid','select');
-@@ -1326,9 +2431,9 @@
+@@ -1326,9 +2433,9 @@
  select has_table_privilege('pg_shad','select');
  ERROR:  relation "pg_shad" does not exist
  select has_table_privilege('nosuchuser','pg_authid','select');
@@ -2690,7 +2692,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  select has_table_privilege(-999999,'pg_authid','update');
   has_table_privilege 
  ---------------------
-@@ -1352,21 +2457,21 @@
+@@ -1352,21 +2459,21 @@
  select has_table_privilege(current_user,'pg_authid','insert');
   has_table_privilege 
  ---------------------
@@ -2715,7 +2717,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  -- 'rule' privilege no longer exists, but for backwards compatibility
-@@ -1398,25 +2503,25 @@
+@@ -1398,25 +2505,25 @@
    (select oid from pg_roles where rolname = current_user) as t2;
   has_table_privilege 
  ---------------------
@@ -2745,7 +2747,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  select has_table_privilege(t1.oid,'select')
-@@ -1430,11 +2535,17 @@
+@@ -1430,11 +2537,17 @@
  from (select oid from pg_class where relname = 'pg_authid') as t1;
   has_table_privilege 
  ---------------------
@@ -2764,7 +2766,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  select has_table_privilege(current_user,'pg_class','select');
   has_table_privilege 
  ---------------------
-@@ -1465,7 +2576,7 @@
+@@ -1465,7 +2578,7 @@
  from (select oid from pg_class where relname = 'pg_class') as t1;
   has_table_privilege 
  ---------------------
@@ -2773,7 +2775,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  select has_table_privilege(t2.oid,t1.oid,'select')
-@@ -1525,28 +2636,28 @@
+@@ -1525,28 +2638,28 @@
  select has_table_privilege(current_user,'atest1','insert');
   has_table_privilege 
  ---------------------
@@ -2806,7 +2808,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  select has_table_privilege(t2.oid,t1.oid,'select')
-@@ -1562,25 +2673,25 @@
+@@ -1562,25 +2675,25 @@
    (select oid from pg_roles where rolname = current_user) as t2;
   has_table_privilege 
  ---------------------
@@ -2836,7 +2838,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  select has_table_privilege(t1.oid,'select')
-@@ -1594,7 +2705,7 @@
+@@ -1594,7 +2707,7 @@
  from (select oid from pg_class where relname = 'atest1') as t1;
   has_table_privilege 
  ---------------------
@@ -2845,7 +2847,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  -- has_column_privilege function
-@@ -1606,7 +2717,7 @@
+@@ -1606,7 +2719,7 @@
  (1 row)
  
  select has_column_privilege('pg_authid','nosuchcol','select');
@@ -2854,7 +2856,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  select has_column_privilege(9999,'nosuchcol','select');
   has_column_privilege 
  ----------------------
-@@ -1620,11 +2731,7 @@
+@@ -1620,11 +2733,7 @@
  (1 row)
  
  select has_column_privilege('pg_authid',99::int2,'select');
@@ -2867,7 +2869,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  select has_column_privilege(9999,99::int2,'select');
   has_column_privilege 
  ----------------------
-@@ -1634,65 +2741,69 @@
+@@ -1634,65 +2743,69 @@
  create temp table mytable(f1 int, f2 int, f3 int);
  alter table mytable drop column f2;
  select has_column_privilege('mytable','f2','select');
@@ -2968,7 +2970,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  SELECT has_table_privilege('regress_priv_user3', 'atest4', 'SELECT'); -- false
-@@ -1704,7 +2815,7 @@
+@@ -1704,7 +2817,7 @@
  SELECT has_table_privilege('regress_priv_user1', 'atest4', 'SELECT WITH GRANT OPTION'); -- true
   has_table_privilege 
  ---------------------
@@ -2977,7 +2979,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  -- security-restricted operations
-@@ -1720,6 +2831,19 @@
+@@ -1720,6 +2833,19 @@
  	RETURN $1;
  END;
  $$ LANGUAGE plpgsql IMMUTABLE;
@@ -2997,7 +2999,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- Create a table owned by regress_sro_user
  CREATE TABLE sro_tab (a int);
  ALTER TABLE sro_tab OWNER TO regress_sro_user;
-@@ -1727,84 +2851,201 @@
+@@ -1727,84 +2853,201 @@
  -- Create an expression index with a predicate
  CREATE INDEX sro_idx ON sro_tab ((sro_ifun(a) + sro_ifun(0)))
  	WHERE sro_ifun(a + 10) > sro_ifun(10);
@@ -3063,9 +3065,9 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 -(1 row)
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
-+We appreciate your feedback.
  
++We appreciate your feedback.
++
 +SELECT brin_desummarize_range('sro_brin', 0);
 +ERROR:  unknown function: brin_desummarize_range()
 +SELECT brin_summarize_range('sro_brin', 0);
@@ -3223,7 +3225,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  CREATE FUNCTION unwanted_grant_nofail(int) RETURNS int
  	IMMUTABLE LANGUAGE plpgsql AS $$
  BEGIN
-@@ -1814,44 +3055,85 @@
+@@ -1814,44 +3057,85 @@
  EXCEPTION WHEN OTHERS THEN
  	RETURN 2;
  END$$;
@@ -3323,7 +3325,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- has_sequence_privilege tests
  \c -
  CREATE SEQUENCE x_seq;
-@@ -1867,6 +3149,12 @@
+@@ -1867,6 +3151,12 @@
  (1 row)
  
  SET SESSION AUTHORIZATION regress_priv_user2;
@@ -3336,7 +3338,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT has_sequence_privilege('x_seq', 'USAGE');
   has_sequence_privilege 
  ------------------------
-@@ -1876,203 +3164,286 @@
+@@ -1876,203 +3166,286 @@
  -- largeobject privilege tests
  \c -
  SET SESSION AUTHORIZATION regress_priv_user1;
@@ -3757,7 +3759,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- don't allow unpriv users to access pg_largeobject contents
  \c -
  SELECT * FROM pg_largeobject LIMIT 0;
-@@ -2081,68 +3452,89 @@
+@@ -2081,68 +3454,89 @@
  (0 rows)
  
  SET SESSION AUTHORIZATION regress_priv_user1;
@@ -3880,28 +3882,17 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  ROLLBACK;
  -- test default ACLs
  \c -
-@@ -2225,64 +3617,28 @@
- -- Test makeaclitem()
- SELECT makeaclitem('regress_priv_user1'::regrole, 'regress_priv_user2'::regrole,
- 	'SELECT', TRUE);  -- single privilege
--               makeaclitem                
--------------------------------------------
-- regress_priv_user1=r*/regress_priv_user2
--(1 row)
--
-+ERROR:  unknown function: makeaclitem()
- SELECT makeaclitem('regress_priv_user1'::regrole, 'regress_priv_user2'::regrole,
+@@ -2234,7 +3628,7 @@
  	'SELECT, INSERT,  UPDATE , DELETE  ', FALSE);  -- multiple privileges
--                makeaclitem                 
----------------------------------------------
+                 makeaclitem                 
+ --------------------------------------------
 - regress_priv_user1=arwd/regress_priv_user2
--(1 row)
--
-+ERROR:  unknown function: makeaclitem()
++ regress_priv_user1=radw/regress_priv_user2
+ (1 row)
+ 
  SELECT makeaclitem('regress_priv_user1'::regrole, 'regress_priv_user2'::regrole,
- 	'SELECT, fake_privilege', FALSE);  -- error
--ERROR:  unrecognized privilege type: "fake_privilege"
-+ERROR:  unknown function: makeaclitem()
+@@ -2242,47 +3636,19 @@
+ ERROR:  unrecognized privilege type: "fake_privilege"
  -- Test non-throwing aclitem I/O
  SELECT pg_input_is_valid('regress_priv_user1=r/regress_priv_user2', 'aclitem');
 - pg_input_is_valid 
@@ -3955,7 +3946,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  --
  -- Testing blanket default grants is very hazardous since it might change
  -- the privileges attached to objects created by concurrent regression tests.
-@@ -2290,6 +3646,7 @@
+@@ -2290,6 +3656,7 @@
  --
  BEGIN;
  ALTER DEFAULT PRIVILEGES GRANT USAGE ON SCHEMAS TO regress_priv_user2;
@@ -3963,7 +3954,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  CREATE SCHEMA testns2;
  SELECT has_schema_privilege('regress_priv_user2', 'testns2', 'USAGE'); -- yes
   has_schema_privilege 
-@@ -2300,7 +3657,7 @@
+@@ -2300,7 +3667,7 @@
  SELECT has_schema_privilege('regress_priv_user6', 'testns2', 'USAGE'); -- yes
   has_schema_privilege 
  ----------------------
@@ -3972,7 +3963,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  SELECT has_schema_privilege('regress_priv_user2', 'testns2', 'CREATE'); -- no
-@@ -2339,11 +3696,13 @@
+@@ -2339,11 +3706,13 @@
  
  ALTER DEFAULT PRIVILEGES REVOKE ALL ON SCHEMAS FROM regress_priv_user2;
  COMMIT;
@@ -3986,7 +3977,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  ALTER DEFAULT PRIVILEGES GRANT ALL ON SCHEMAS TO regress_priv_user2;
  ALTER DEFAULT PRIVILEGES GRANT ALL ON SEQUENCES TO regress_priv_user2;
  ALTER DEFAULT PRIVILEGES GRANT ALL ON TABLES TO regress_priv_user2;
-@@ -2354,7 +3713,7 @@
+@@ -2354,7 +3723,7 @@
  	classid = 'pg_default_acl'::regclass;
   count 
  -------
@@ -3995,7 +3986,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  DROP OWNED BY regress_priv_user2, regress_priv_user2;
-@@ -2368,46 +3727,61 @@
+@@ -2368,46 +3737,61 @@
  (1 row)
  
  ROLLBACK;
@@ -4066,7 +4057,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  DROP PROCEDURE testns.bar();
  CREATE PROCEDURE testns.bar() AS 'select 1' LANGUAGE sql;
  SELECT has_function_privilege('regress_priv_user2', 'testns.foo()', 'EXECUTE'); -- yes
-@@ -2417,11 +3791,7 @@
+@@ -2417,11 +3801,7 @@
  (1 row)
  
  SELECT has_function_privilege('regress_priv_user2', 'testns.agg1(int)', 'EXECUTE'); -- yes
@@ -4079,7 +4070,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT has_function_privilege('regress_priv_user2', 'testns.bar()', 'EXECUTE'); -- yes (counts as function here)
   has_function_privilege 
  ------------------------
-@@ -2430,25 +3800,47 @@
+@@ -2430,25 +3810,47 @@
  
  DROP FUNCTION testns.foo();
  DROP AGGREGATE testns.agg1(int);
@@ -4137,7 +4128,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  RESET ROLE;
  SELECT count(*)
    FROM pg_default_acl d LEFT JOIN pg_namespace n ON defaclnamespace = n.oid
-@@ -2459,7 +3851,6 @@
+@@ -2459,7 +3861,6 @@
  (1 row)
  
  DROP SCHEMA testns CASCADE;
@@ -4145,7 +4136,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  DROP SCHEMA testns2 CASCADE;
  DROP SCHEMA testns3 CASCADE;
  DROP SCHEMA testns4 CASCADE;
-@@ -2510,6 +3901,12 @@
+@@ -2510,6 +3911,12 @@
  
  CREATE FUNCTION testns.priv_testfunc(int) RETURNS int AS 'select 3 * $1;' LANGUAGE sql;
  CREATE AGGREGATE testns.priv_testagg(int) (sfunc = int4pl, stype = int4);
@@ -4158,7 +4149,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  CREATE PROCEDURE testns.priv_testproc(int) AS 'select 3' LANGUAGE sql;
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testfunc(int)', 'EXECUTE'); -- true by default
   has_function_privilege 
-@@ -2518,11 +3915,7 @@
+@@ -2518,11 +3925,7 @@
  (1 row)
  
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testagg(int)', 'EXECUTE'); -- true by default
@@ -4171,7 +4162,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testproc(int)', 'EXECUTE'); -- true by default
   has_function_privilege 
  ------------------------
-@@ -2533,15 +3926,11 @@
+@@ -2533,15 +3936,11 @@
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testfunc(int)', 'EXECUTE'); -- false
   has_function_privilege 
  ------------------------
@@ -4189,7 +4180,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testproc(int)', 'EXECUTE'); -- still true, not a function
   has_function_privilege 
  ------------------------
-@@ -2552,7 +3941,7 @@
+@@ -2552,7 +3951,7 @@
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testproc(int)', 'EXECUTE'); -- now false
   has_function_privilege 
  ------------------------
@@ -4198,7 +4189,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  (1 row)
  
  GRANT ALL ON ALL ROUTINES IN SCHEMA testns TO PUBLIC;
-@@ -2563,11 +3952,7 @@
+@@ -2563,11 +3962,7 @@
  (1 row)
  
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testagg(int)', 'EXECUTE'); -- true
@@ -4211,7 +4202,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT has_function_privilege('regress_priv_user1', 'testns.priv_testproc(int)', 'EXECUTE'); -- true
   has_function_privilege 
  ------------------------
-@@ -2575,38 +3960,52 @@
+@@ -2575,38 +3970,52 @@
  (1 row)
  
  DROP SCHEMA testns CASCADE;
@@ -4276,7 +4267,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  -- test that dependent privileges are revoked (or not) properly
  \c -
  set session role regress_priv_user1;
-@@ -2620,59 +4019,179 @@
+@@ -2620,59 +4029,179 @@
  set session role regress_priv_user4;
  grant select on dep_priv_test to regress_priv_user5;
  \dp dep_priv_test
@@ -4487,7 +4478,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  DROP TABLE atest1;
  DROP TABLE atest2;
  DROP TABLE atest3;
-@@ -2680,108 +4199,219 @@
+@@ -2680,105 +4209,208 @@
  DROP TABLE atest5;
  DROP TABLE atest6;
  DROP TABLE atestc;
@@ -4679,10 +4670,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  REVOKE DELETE ON lock_table FROM regress_locktable_user;
  -- LOCK TABLE and TRUNCATE permission
  GRANT TRUNCATE ON lock_table TO regress_locktable_user;
-+ERROR:  at or near "on": syntax error: not a valid privilege: "truncate"
-+DETAIL:  source SQL:
-+GRANT TRUNCATE ON lock_table TO regress_locktable_user
-+               ^
  SET SESSION AUTHORIZATION regress_locktable_user;
 +ERROR:  at or near "regress_locktable_user": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
@@ -4713,14 +4700,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  COMMIT;
  \c
  REVOKE TRUNCATE ON lock_table FROM regress_locktable_user;
-+ERROR:  at or near "on": syntax error: not a valid privilege: "truncate"
-+DETAIL:  source SQL:
-+REVOKE TRUNCATE ON lock_table FROM regress_locktable_user
-+                ^
- -- clean up
- DROP TABLE lock_table;
- DROP USER regress_locktable_user;
-@@ -2791,24 +4421,17 @@
+@@ -2791,24 +4423,17 @@
  \c -
  CREATE ROLE regress_readallstats;
  SELECT has_table_privilege('regress_readallstats','pg_backend_memory_contexts','SELECT'); -- no
@@ -4749,7 +4729,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT has_table_privilege('regress_readallstats','pg_shmem_allocations','SELECT'); -- yes
   has_table_privilege 
  ---------------------
-@@ -2818,11 +4441,7 @@
+@@ -2818,11 +4443,7 @@
  -- run query to ensure that functions within views can be executed
  SET ROLE regress_readallstats;
  SELECT COUNT(*) >= 0 AS ok FROM pg_backend_memory_contexts;
@@ -4762,7 +4742,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  SELECT COUNT(*) >= 0 AS ok FROM pg_shmem_allocations;
   ok 
  ----
-@@ -2838,28 +4457,48 @@
+@@ -2838,28 +4459,48 @@
  CREATE ROLE regress_group_indirect_manager;
  CREATE ROLE regress_group_member;
  GRANT regress_group TO regress_group_direct_manager WITH INHERIT FALSE, ADMIN TRUE;
@@ -4821,7 +4801,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
  DROP ROLE regress_group;
  DROP ROLE regress_group_direct_manager;
  DROP ROLE regress_group_indirect_manager;
-@@ -2871,22 +4510,59 @@
+@@ -2871,22 +4512,59 @@
  CREATE SCHEMA regress_roleoption;
  GRANT CREATE, USAGE ON SCHEMA regress_roleoption TO PUBLIC;
  GRANT regress_roleoption_donor TO regress_roleoption_protagonist WITH INHERIT TRUE, SET FALSE;
