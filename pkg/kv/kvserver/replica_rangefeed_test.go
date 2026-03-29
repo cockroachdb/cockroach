@@ -1178,11 +1178,14 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		// with Raft commands.
 		kvserver.RangefeedEnabled.Override(ctx, &store.ClusterSettings().SV, false)
 
-		// Check the error. Note: we intentionally do NOT perform a write here.
-		// The bug is that mkKey("c") is outside the test range
-		// [startKey, startKey.Next()), so the explicit write was a no-op for
-		// triggering the error. The error fires due to background activity
-		// (lease upgrades, etc.) proposing to the range without logical ops.
+		// Perform a write on the range. This will be proposed without a logical
+		// op log, which should trigger the rangefeed to disconnect.
+		pArgs := putArgs(startKey, []byte("val"))
+		if _, pErr := kv.SendWrapped(ctx, store.TestSender(), pArgs); pErr != nil {
+			t.Fatal(pErr)
+		}
+
+		// Check the error.
 		pErr := <-streamErrC
 		assertRangefeedRetryErr(t, pErr, kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING)
 	})
