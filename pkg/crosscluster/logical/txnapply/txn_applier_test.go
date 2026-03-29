@@ -7,6 +7,7 @@ package txnapply
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -25,7 +26,7 @@ import (
 // testWriter is a test implementation of txnwriter.TransactionWriter that
 // adds a random delay and records applied transactions to a shared log.
 type testWriter struct {
-	t   *testing.T
+	t   testing.TB
 	rng *rand.Rand
 	mu  struct {
 		syncutil.Mutex
@@ -190,7 +191,7 @@ func generateRandomDAG(rng *rand.Rand, numTxns int, maxDeps int, numAppliers int
 	return nodes
 }
 
-func logDAG(t *testing.T, dag []txnNode) {
+func logDAG(t testing.TB, dag []txnNode) {
 	t.Log("transaction dependency graph:")
 	for _, node := range dag {
 		if node.eventHorizon.IsSet() {
@@ -203,7 +204,7 @@ func logDAG(t *testing.T, dag []txnNode) {
 
 // checkApplierDrained verifies that the applier's internal buffers are empty
 // after all transactions have been processed.
-func checkApplierDrained(t *testing.T, applier *Applier) {
+func checkApplierDrained(t testing.TB, applier *Applier) {
 	t.Helper()
 	applier.mu.Lock()
 	defer applier.mu.Unlock()
@@ -218,7 +219,7 @@ func checkApplierDrained(t *testing.T, applier *Applier) {
 
 // checkTrackerServerDrained verifies that the trackerServer's internal state is
 // empty after all transactions have been processed.
-func checkTrackerServerDrained(t *testing.T, ts *trackerServer) {
+func checkTrackerServerDrained(t testing.TB, ts *trackerServer) {
 	t.Helper()
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
@@ -233,7 +234,7 @@ func checkTrackerServerDrained(t *testing.T, ts *trackerServer) {
 
 // checkApplyOrder verifies that all transactions were applied after their
 // dependencies and after their EventHorizon was reached.
-func checkApplyOrder(t *testing.T, dag []txnNode, applied []hlc.Timestamp) {
+func checkApplyOrder(t testing.TB, dag []txnNode, applied []hlc.Timestamp) {
 	appliedAt := make(map[hlc.Timestamp]int)
 	for i, ts := range applied {
 		appliedAt[ts] = i
@@ -420,7 +421,7 @@ func (c *mockCoordinator) finalize(maxCheckpoint hlc.Timestamp) {
 // ApplierID. Returns the globally ordered log of applied transaction
 // timestamps across all appliers.
 func runDistributedApplier(
-	t *testing.T, dag []txnNode, numWritersPerApplier int, rngSeed int64,
+	t testing.TB, dag []txnNode, numWritersPerApplier int, rngSeed int64,
 ) []hlc.Timestamp {
 	t.Helper()
 
@@ -536,6 +537,137 @@ func runDistributedApplier(
 	applied := append([]hlc.Timestamp(nil), sharedWriter.mu.log...)
 	sharedWriter.mu.Unlock()
 	return applied
+}
+
+// benchWriter is a test implementation of txnwriter.TransactionWriter with no
+// delay, used for benchmarking applier overhead without simulated I/O latency.
+type benchWriter struct {
+	mu struct {
+		syncutil.Mutex
+		log []hlc.Timestamp
+	}
+}
+
+func (w *benchWriter) ApplyBatch(
+	_ context.Context, txns []ldrdecoder.Transaction,
+) ([]txnwriter.ApplyResult, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	results := make([]txnwriter.ApplyResult, len(txns))
+	for i, txn := range txns {
+		w.mu.log = append(w.mu.log, txn.TxnID.Timestamp)
+		results[i] = txnwriter.ApplyResult{AppliedRows: len(txn.WriteSet)}
+	}
+	return results, nil
+}
+
+func (w *benchWriter) Close(context.Context) {}
+
+func BenchmarkTxnApplier(b *testing.B) {
+	for _, numAppliers := range []int{1, 3, 6} {
+		for _, numTxns := range []int{100, 1000} {
+			b.Run(
+				fmt.Sprintf("appliers=%d/txns=%d", numAppliers, numTxns),
+				func(b *testing.B) {
+					for i := 0; i < b.N; i++ {
+						seed := int64(i)
+						rng := rand.New(rand.NewSource(seed))
+						dag := generateRandomDAG(rng, numTxns, 5, numAppliers)
+						runBenchApplier(b, dag, 3, seed)
+					}
+				})
+		}
+	}
+}
+
+// runBenchApplier is like runDistributedApplier but uses a no-delay writer
+// and skips logging and drain checks for benchmark use.
+func runBenchApplier(b *testing.B, dag []txnNode, numWritersPerApplier int, rngSeed int64) {
+	b.Helper()
+
+	txnsByApplier := make(map[ldrdecoder.ApplierID][]txnNode)
+	for _, node := range dag {
+		txnsByApplier[node.id.ApplierID] = append(
+			txnsByApplier[node.id.ApplierID], node)
+	}
+
+	ids := make([]ldrdecoder.ApplierID, 0, len(txnsByApplier))
+	for id := range txnsByApplier {
+		ids = append(ids, id)
+	}
+
+	depTracker := NewDependencyTracker(ids)
+
+	sharedWriter := &benchWriter{}
+
+	var maxTs hlc.Timestamp
+	for _, node := range dag {
+		if maxTs.Less(node.id.Timestamp) {
+			maxTs = node.id.Timestamp
+		}
+	}
+	maxCheckpoint := maxTs.Add(1, 0)
+
+	rng := rand.New(rand.NewSource(rngSeed))
+
+	appliers := make(map[ldrdecoder.ApplierID]*Applier)
+	inputs := make(map[ldrdecoder.ApplierID]chan ApplierEvent)
+	for _, id := range ids {
+		writers := make([]txnwriter.TransactionWriter, numWritersPerApplier)
+		for i := range writers {
+			writers[i] = sharedWriter
+		}
+		a, err := NewApplier(id, writers, depTracker, ids)
+		require.NoError(b, err)
+		inputs[id] = make(chan ApplierEvent, 2*len(dag)+len(ids)+1)
+		appliers[id] = a
+	}
+
+	coord := newMockCoordinator(rng, ids, inputs)
+	for _, node := range dag {
+		coord.send(node)
+	}
+	coord.finalize(maxCheckpoint)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	group := ctxgroup.WithContext(ctx)
+
+	for id, a := range appliers {
+		group.GoCtx(func(ctx context.Context) error {
+			defer a.Close(context.Background())
+			return a.Run(ctx, inputs[id])
+		})
+	}
+
+	var frontierMu syncutil.Mutex
+	done := make(map[ldrdecoder.ApplierID]bool)
+	for id, a := range appliers {
+		lastTs := maxCheckpoint
+		_ = txnsByApplier[id]
+		group.GoCtx(func(ctx context.Context) error {
+			for ts := range a.Frontier() {
+				if ts.Equal(lastTs) {
+					frontierMu.Lock()
+					done[id] = true
+					allDone := len(done) == len(appliers)
+					frontierMu.Unlock()
+					if allDone {
+						cancel()
+					}
+					return nil
+				}
+			}
+			return errors.Newf(
+				"applier %d frontier closed before reaching final txn", id)
+		})
+	}
+
+	err := group.Wait()
+	if err != nil && !errors.Is(err, context.Canceled) {
+		b.Fatalf("unexpected error: %v", err)
+	}
 }
 
 func TestDistributedTxnApplierSimple(t *testing.T) {
