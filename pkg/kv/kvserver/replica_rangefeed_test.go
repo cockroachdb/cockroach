@@ -1095,21 +1095,6 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 					conf.RangefeedEnabled = false
 					return conf
 				},
-				// This test has been failing with REASON_LOGICAL_OPS_MISSING (#146566)
-				// coming from waitForInitialCheckpointAcrossSpan, which could indicate
-				// that some other request to this range is racing with the enabling of
-				// the rangefeed and hitting an error in handleLogicalOpLogRaftMuLocked.
-				// To help debug this, we intercept all requests to this range. If the
-				// test stops flaking, we can remove this filter; it's not needed for
-				// the test functionality.
-				TestingRequestFilter: func(ctx context.Context, ba *kvpb.BatchRequest) *kvpb.Error {
-					for _, req := range ba.Requests {
-						if req.GetInner().Header().Key.Equal(startKey) {
-							log.KvDistribution.Infof(ctx, "intercepting request %+v", req.GetInner())
-						}
-					}
-					return nil
-				},
 			},
 		}
 		tc, _ := setup(t, knobs)
@@ -1158,9 +1143,9 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		// with Raft commands.
 		kvserver.RangefeedEnabled.Override(ctx, &store.ClusterSettings().SV, false)
 
-		// Perform a write on the range.
-		writeKey := mkKey("c")
-		pArgs := putArgs(writeKey, []byte("val2"))
+		// Perform a write on the range. This will be proposed without a logical
+		// op log, which should trigger the rangefeed to disconnect.
+		pArgs := putArgs(startKey, []byte("val"))
 		if _, pErr := kv.SendWrapped(ctx, store.TestSender(), pArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
