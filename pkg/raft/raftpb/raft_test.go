@@ -42,10 +42,10 @@ func TestProtoMemorySizes(t *testing.T) {
 	assert(unsafe.Sizeof(e), if64Bit(48, 32), "Entry")
 
 	var sm SnapshotMetadata
-	assert(unsafe.Sizeof(sm), if64Bit(120, 68), "SnapshotMetadata")
+	assert(unsafe.Sizeof(sm), if64Bit(112, 60), "SnapshotMetadata")
 
 	var s Snapshot
-	assert(unsafe.Sizeof(s), if64Bit(144, 80), "Snapshot")
+	assert(unsafe.Sizeof(s), if64Bit(136, 72), "Snapshot")
 
 	var m Message
 	assert(unsafe.Sizeof(m), if64Bit(144, 84), "Message")
@@ -54,7 +54,7 @@ func TestProtoMemorySizes(t *testing.T) {
 	assert(unsafe.Sizeof(hs), 40, "HardState")
 
 	var cs ConfState
-	assert(unsafe.Sizeof(cs), if64Bit(104, 52), "ConfState")
+	assert(unsafe.Sizeof(cs), if64Bit(96, 48), "ConfState")
 
 	var cc ConfChange
 	assert(unsafe.Sizeof(cc), if64Bit(48, 32), "ConfChange")
