@@ -5578,6 +5578,12 @@ func (d *DOid) Format(ctx *FmtCtx) {
 		// Special case for the "unknown" oid.
 		ctx.WriteString(UnknownOidName)
 	} else if d.semanticType.Oid() == oid.T_oid || d.name == "" {
+		if d.name == "" && d.semanticType.Oid() != oid.T_oid && ctx.oidNameResolver != nil {
+			if name := ctx.oidNameResolver(d.Oid, d.semanticType); name != "" {
+				lexbase.EncodeSQLStringWithFlags(&ctx.Buffer, name, lexbase.EncBareStrings)
+				return
+			}
+		}
 		ctx.Write(strconv.AppendUint(ctx.scratch[:0], uint64(d.Oid), 10))
 	} else if ctx.HasFlags(fmtDisambiguateDatumTypes) {
 		ctx.WriteString("crdb_internal.create_")

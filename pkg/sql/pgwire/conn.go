@@ -906,6 +906,8 @@ func cookTag(
 func (c *conn) bufferRow(ctx context.Context, row tree.Datums, r *commandResult) error {
 	c.msgBuilder.initMsg(pgwirebase.ServerMsgDataRow)
 	c.msgBuilder.putInt16(int16(len(row)))
+	old := c.msgBuilder.textFormatter.SetOidNameResolver(r.oidNameResolver)
+	defer c.msgBuilder.textFormatter.SetOidNameResolver(old)
 	for i, col := range row {
 		fmtCode, err := r.GetFormatCode(i)
 		if err != nil {
@@ -937,6 +939,8 @@ func (c *conn) bufferBatch(ctx context.Context, batch coldata.Batch, r *commandR
 	sel := batch.Selection()
 	n := batch.Length()
 	if n > 0 {
+		old := c.msgBuilder.textFormatter.SetOidNameResolver(r.oidNameResolver)
+		defer c.msgBuilder.textFormatter.SetOidNameResolver(old)
 		c.vecsScratch.SetBatch(batch)
 		// Make sure that c doesn't hold on to the memory of the batch.
 		defer c.vecsScratch.Reset()

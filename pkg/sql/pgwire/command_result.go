@@ -88,6 +88,10 @@ type commandResult struct {
 	// (except types must always be set).
 	types []*types.T
 
+	// oidNameResolver, if set, resolves OID values to display names when
+	// formatting reg* type result values.
+	oidNameResolver func(oid.Oid, *types.T) string
+
 	// bufferingDisabled is conditionally set during planning of certain
 	// statements.
 	bufferingDisabled bool
@@ -435,6 +439,11 @@ func (r *commandResult) ResetStmtType(stmt tree.Statement) {
 	r.assertNotReleased()
 	r.stmtType = stmt.StatementReturnType()
 	r.cmdCompleteTag = stmt.StatementTag()
+}
+
+// SetOidNameResolver is part of the sql.RestrictedCommandResult interface.
+func (r *commandResult) SetOidNameResolver(fn func(oid.Oid, *types.T) string) {
+	r.oidNameResolver = fn
 }
 
 // GetBulkJobId is part of the sql.RestrictedCommandResult interface.

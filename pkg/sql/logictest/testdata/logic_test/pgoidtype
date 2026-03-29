@@ -765,10 +765,11 @@ statement ok
 SET testing_optimizer_disable_rule_probability = 1.0
 
 # The result should be the same with and without optimizer rules disabled.
+# Both paths should display the resolved table name, not a numeric OID.
 query T
 SELECT (SELECT a FROM t166802)
 ----
-132
+t166802
 
 statement ok
 RESET testing_optimizer_disable_rule_probability
@@ -776,4 +777,4 @@ RESET testing_optimizer_disable_rule_probability
 query T
 SELECT (SELECT a FROM t166802)
 ----
-132
+t166802

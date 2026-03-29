@@ -440,6 +440,18 @@ func (ex *connExecutor) execStmtInOpenState(
 	if err != nil {
 		return makeErrEvent(err)
 	}
+
+	// Set up an OID name resolver so that reg* type values (e.g. REGCLASS)
+	// display as resolved names rather than numeric OIDs in query results.
+	if ex.executorType != executorTypeInternal {
+		res.SetOidNameResolver(
+			MakeOidNameResolver(
+				ctx, ex.server.cfg.InternalDB.Executor(), ex.state.mu.txn,
+				ex.sessionData().Database,
+			),
+		)
+	}
+
 	os := ex.machine.CurState().(stateOpen)
 
 	isExtendedProtocol := prepared != nil
