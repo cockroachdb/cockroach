@@ -314,6 +314,83 @@ func TestIntegration(t *testing.T) {
 	})
 }
 
+func TestViewOverSystemTable(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLEvalContext: &eval.TestingKnobs{
+				UnsafeOverride: func() *bool { return nil },
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	rootDB := sqlutils.MakeSQLRunner(s.SQLConn(t))
+
+	// Creating a view over pg_catalog succeeds without allow_unsafe_internals.
+	rootDB.Exec(t, "CREATE VIEW v_pg_desc AS SELECT objoid, description FROM pg_catalog.pg_description LIMIT 5")
+
+	// Creating a view over crdb_internal fails without allow_unsafe_internals.
+	_, err := rootDB.DB.ExecContext(ctx,
+		"CREATE VIEW v_should_fail AS SELECT * FROM crdb_internal.kv_catalog_comments LIMIT 5")
+	checkUnsafeErr(t, err)
+
+	// Enable unsafe access to create the view, then disable it.
+	rootDB.Exec(t, "SET allow_unsafe_internals = true")
+	rootDB.Exec(t, "CREATE VIEW v_kv_comments AS SELECT objoid, description FROM crdb_internal.kv_catalog_comments LIMIT 5")
+	rootDB.Exec(t, "SET allow_unsafe_internals = false")
+
+	// Create a non-admin test user and grant SELECT on both views.
+	rootDB.Exec(t, "CREATE USER testuser")
+	rootDB.Exec(t, "GRANT SELECT ON v_pg_desc TO testuser")
+	rootDB.Exec(t, "GRANT SELECT ON v_kv_comments TO testuser")
+
+	testUserDB := sqlutils.MakeSQLRunner(
+		s.ApplicationLayer().SQLConn(t, serverutils.User("testuser")),
+	)
+
+	// Run the same sequence for both root and a non-admin user.
+	for _, tc := range []struct {
+		name string
+		r    *sqlutils.SQLRunner
+	}{
+		{name: "root", r: rootDB},
+		{name: "testuser", r: testUserDB},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// Safe view works without any override.
+			tc.r.Exec(t, "SELECT * FROM pg_catalog.pg_description LIMIT 1")
+			tc.r.Exec(t, "SELECT * FROM v_pg_desc")
+
+			// Unsafe view is blocked.
+			_, err := tc.r.DB.ExecContext(ctx, "SELECT * FROM v_kv_comments")
+			checkUnsafeErr(t, err)
+			_, err = tc.r.DB.ExecContext(ctx, "SELECT * FROM crdb_internal.kv_catalog_comments LIMIT 1")
+			checkUnsafeErr(t, err)
+
+			// Session variable unblocks the unsafe view.
+			r := sqlutils.MakeSQLRunner(s.SQLConn(t))
+			r.Exec(t, "SET allow_unsafe_internals = true")
+			r.Exec(t, "SELECT * FROM v_pg_desc")
+			r.Exec(t, "SELECT * FROM v_kv_comments")
+			r.Exec(t, "SELECT * FROM pg_catalog.pg_description LIMIT 1")
+			r.Exec(t, "SELECT * FROM crdb_internal.kv_catalog_comments LIMIT 1")
+			r.Exec(t, "SET allow_unsafe_internals = false")
+
+			// Cluster setting override unblocks the unsafe view.
+			rootDB.Exec(t, "SET CLUSTER SETTING sql.override.allow_unsafe_internals.enabled = true")
+			tc.r.Exec(t, "SELECT * FROM v_pg_desc")
+			tc.r.Exec(t, "SELECT * FROM v_kv_comments")
+			r.Exec(t, "SELECT * FROM pg_catalog.pg_description LIMIT 1")
+			r.Exec(t, "SELECT * FROM crdb_internal.kv_catalog_comments LIMIT 1")
+			rootDB.Exec(t, "SET CLUSTER SETTING sql.override.allow_unsafe_internals.enabled = false")
+		})
+	}
+}
+
 // panickingStatement is a mock Statement that panics during formatting
 type panickingStatement struct{}
 
