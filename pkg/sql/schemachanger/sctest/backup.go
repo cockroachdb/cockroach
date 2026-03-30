@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -47,11 +46,14 @@ func BackupSuccess(t *testing.T, path string, factory TestServerFactory) {
 	}()
 	// Disable schema_locked in backup and restore tests, since the userfiles table
 	// cannot be created with schema_locked by default yet.
-	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, spec CumulativeTestSpec, dbName string) {
-		backupArgs = backupSuccessPrepare(t, factory, spec, dbName)
-	}, func(t *testing.T, cs CumulativeTestCaseSpec) {
-		backupSuccess(t, backupArgs, cs)
-	},
+	cumulativeTestForEachPostCommitStage(t, path, factory,
+		func(t *testing.T, spec CumulativeTestSpec) PrepResult[backupSuccessTestArgs] {
+			result := backupSuccessPrepare(t, factory, spec)
+			backupArgs = result.PrepData
+			return result
+		}, func(t *testing.T, cs CumulativeTestCaseSpec, prepData backupSuccessTestArgs) {
+			backupSuccess(t, backupArgs, cs)
+		},
 		nil /*samplingFn */)
 }
 
@@ -68,9 +70,20 @@ func BackupRollbacks(t *testing.T, path string, factory TestServerFactory) {
 	// Disable schema_locked in backup and restore tests, since the userfiles table
 	// cannot be created with schema_locked by default yet.
 	factory = factory.WithSchemaLockDisabled()
-	cumulativeTestForEachPostCommitStage(t, path, factory, nil, func(t *testing.T, cs CumulativeTestCaseSpec) {
-		backupRollbacks(t, factory, cs, false /*isMixedVersion*/)
-	},
+	var rollbackArgs backupRollbacksTestArgs
+	defer func() {
+		if rollbackArgs.server.Stopper != nil {
+			rollbackArgs.server.Stopper(t)
+		}
+	}()
+	cumulativeTestForEachPostCommitStage(t, path, factory,
+		func(t *testing.T, spec CumulativeTestSpec) PrepResult[backupRollbacksTestArgs] {
+			result := backupRollbacksPrepare(t, factory, spec)
+			rollbackArgs = result.PrepData
+			return result
+		}, func(t *testing.T, cs CumulativeTestCaseSpec, prepData backupRollbacksTestArgs) {
+			backupRollbacks(t, prepData, cs, false /*isMixedVersion*/)
+		},
 		nil /* samplingFn */)
 }
 
@@ -93,14 +106,16 @@ func BackupSuccessMixedVersion(t *testing.T, path string, factory TestServerFact
 	}()
 	// Disable schema_locked in backup and restore tests, since the userfiles table
 	// cannot be created with schema_locked by default yet.
-	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, spec CumulativeTestSpec, dbName string) {
-		backupArgs = backupSuccessPrepare(t, factory, spec, dbName)
-	}, func(t *testing.T, cs CumulativeTestCaseSpec) {
+	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, spec CumulativeTestSpec) PrepResult[backupSuccessTestArgs] {
+		result := backupSuccessPrepare(t, factory, spec)
+		backupArgs = result.PrepData
 		if backupArgs.isMultiRegion {
 			// Speed up the mixed version multiregion cases by excluding restores of individual
 			// tables in the mixed version state.
 			backupArgs.excludeAllTablesInDatabaseFlavor = true
 		}
+		return result
+	}, func(t *testing.T, cs CumulativeTestCaseSpec, prepData backupSuccessTestArgs) {
 		backupSuccess(t, backupArgs, cs)
 	},
 		nil /* samplingFn */)
@@ -121,8 +136,18 @@ func BackupRollbacksMixedVersion(t *testing.T, path string, factory TestServerFa
 	// Disable schema_locked in mixed version tests, since we do not support
 	// disabling schema_locked in a mixed version state yet.
 	factory = factory.WithSchemaLockDisabled()
-	cumulativeTestForEachPostCommitStage(t, path, factory, nil, func(t *testing.T, cs CumulativeTestCaseSpec) {
-		backupRollbacks(t, factory, cs, true /*isMixedVersion*/)
+	var rollbackArgs backupRollbacksTestArgs
+	defer func() {
+		if rollbackArgs.server.Stopper != nil {
+			rollbackArgs.server.Stopper(t)
+		}
+	}()
+	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, spec CumulativeTestSpec) PrepResult[backupRollbacksTestArgs] {
+		result := backupRollbacksPrepare(t, factory, spec)
+		rollbackArgs = result.PrepData
+		return result
+	}, func(t *testing.T, cs CumulativeTestCaseSpec, prepData backupRollbacksTestArgs) {
+		backupRollbacks(t, prepData, cs, true /*isMixedVersion*/)
 	}, nil /* samplingFn */)
 }
 
@@ -185,26 +210,51 @@ type backupSuccessTestArgs struct {
 	excludeAllTablesInDatabaseFlavor bool
 }
 
-// backupSuccessPrepare setups a server and takes all required backups for
-// the backupSuccess test.
+// rollbackScenario contains all data for testing one rollback scenario
+type rollbackScenario struct {
+	databaseName string     // Unique database for this scenario
+	urls         []string   // Backup URLs taken during rollback
+	expected     [][]string // Expected descriptor state after rollback
+}
+
+// backupRollbacksTestArgs are arguments generated by backupRollbacksPrepare
+type backupRollbacksTestArgs struct {
+	server    TestServer
+	scenarios map[backupKey]rollbackScenario
+}
+
+// backupSuccessPrepare sets up a server, executes the schema change, and
+// collects backups at each stage. It returns a PrepResult containing stage
+// counts and test data, eliminating the need for a throwaway cluster to
+// count stages before running tests.
 func backupSuccessPrepare(
-	t *testing.T, factory TestServerFactory, spec CumulativeTestSpec, dbName string,
-) backupSuccessTestArgs {
+	t *testing.T, factory TestServerFactory, spec CumulativeTestSpec,
+) PrepResult[backupSuccessTestArgs] {
 	ctx := context.Background()
 
 	backupArgs := backupSuccessTestArgs{
 		backups: make(map[backupKey]backupInfo),
 	}
-	var mu syncutil.Mutex
-	hasBackfill := false
-	mutationAfterBackfill := false
+	var mu struct {
+		syncutil.Mutex
+		postCommitCount              int
+		postCommitNonRevertibleCount int
+		stageCounted                 bool
+		hasBackfill                  bool
+		mutationAfterBackfill        bool
+	}
 	backupsToTake := make(map[backupKey]string)
 	var dbForBackup atomic.Pointer[gosql.DB]
 	var knobEnabled atomic.Bool
+	var dbName string
+	var createDatabaseStmt string
 	backupArgs.pe = MakePlanExplainer()
 	knobs := &scexec.TestingKnobs{
-		// Back up the database exactly once when reaching the stage prescribed
-		// by the test case specification.
+		// BeforeStage serves two purposes:
+		// 1. Count stages during the first plan encounter to populate PrepResult.
+		// 2. Collect backups at each stage during the main schema change execution.
+		// The hook fires for both the original schema change and post-RESTORE
+		// schema changes, so guards are necessary to avoid duplicate work.
 		BeforeStage: func(p scplan.Plan, stageIdx int) error {
 			// Only enabled after setup.
 			if !knobEnabled.Load() {
@@ -212,13 +262,34 @@ func backupSuccessPrepare(
 			}
 			// Collect EXPLAIN (DDL) diagram for debug purposes.
 			if err := backupArgs.pe.MaybeUpdateWithPlan(p); err != nil {
-				return err
+				return errors.Wrapf(err, "updating plan explainer (stage=%d, phase=%s)",
+					stageIdx, p.Stages[stageIdx].Phase)
 			}
 			// Since this callback is also active during post-RESTORE
 			// schema changes, we have to be careful to exit early in those cases.
 			if dbForBackup.Load() == nil {
 				return nil
 			}
+
+			// Count stages and collect backup info (all under single lock)
+			mu.Lock()
+			defer mu.Unlock()
+
+			// Count stages on first plan encounter only.
+			// The BeforeStage hook fires for both the original schema change and
+			// post-RESTORE schema changes, so we guard against double-counting.
+			if !mu.stageCounted {
+				mu.stageCounted = true
+				for _, s := range p.Stages {
+					switch s.Phase {
+					case scop.PostCommitPhase:
+						mu.postCommitCount++
+					case scop.PostCommitNonRevertiblePhase:
+						mu.postCommitNonRevertibleCount++
+					}
+				}
+			}
+
 			key := backupKey{
 				Phase:   p.Stages[stageIdx].Phase,
 				Ordinal: p.Stages[stageIdx].Ordinal,
@@ -230,19 +301,18 @@ func backupSuccessPrepare(
 				dbName,
 				url,
 				backupArgs.server.Server.Clock().Now().AsOfSystemTime())
-			mu.Lock()
-			defer mu.Unlock()
+
 			// Before backing up, check whether the plan executed so far includes
 			// backfill operations which are not going to be replayed post-RESTORE.
 			// Backing up at this point may lead the post-RESTORE schema change to fail.
 			if p.Stages[stageIdx].Type() == scop.BackfillType {
-				hasBackfill = true
-			} else if p.Stages[stageIdx].Type() == scop.MutationType && hasBackfill {
-				mutationAfterBackfill = true
+				mu.hasBackfill = true
+			} else if p.Stages[stageIdx].Type() == scop.MutationType && mu.hasBackfill {
+				mu.mutationAfterBackfill = true
 			}
 			backupArgs.backups[key] = backupInfo{
 				url:            url,
-				isPostBackfill: mutationAfterBackfill,
+				isPostBackfill: mu.mutationAfterBackfill,
 			}
 			backupsToTake[key] = backupStmt
 			return nil
@@ -250,12 +320,35 @@ func backupSuccessPrepare(
 	}
 	// Setup a server for the backup test cases.
 	backupArgs.server = factory.WithSchemaChangerKnobs(knobs).Start(ctx, t)
+	t.Cleanup(func() {
+		if backupArgs.server.Stopper != nil {
+			backupArgs.server.Stopper(t)
+		}
+	})
 	db := backupArgs.server.DB
 	dbForBackup.Store(db)
 	tdb := sqlutils.MakeSQLRunner(db)
 	// Setup the test cluster.
 	tdb.Exec(t, "CREATE DATABASE backups")
 	require.NoError(t, setupSchemaChange(ctx, t, spec, db))
+
+	// Skip test if it requires system tenant operations and we're running under a secondary tenant.
+	maybeSkipUnderSecondaryTenant(t, spec, backupArgs.server.Server)
+
+	// Determine which database contains the schema change before enabling knobs.
+	// Some tests create a separate database (e.g. "db"), others use defaultdb.
+	rows := tdb.QueryStr(t, "SELECT database_name FROM [SHOW DATABASES] WHERE database_name NOT IN ('system', 'postgres', 'defaultdb', 'backups')")
+	if len(rows) > 0 {
+		dbName = rows[0][0]
+	} else {
+		dbName = "defaultdb"
+	}
+	res := tdb.QueryStr(t, fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE DATABASE %q]", dbName))
+	if len(res) > 0 {
+		createDatabaseStmt = res[0][0]
+	}
+
+	// Enable knobs - this will capture stage counts and plan when schema change runs.
 	knobEnabled.Swap(true)
 
 	// Fetch the state of the cluster before the schema change kicks off.
@@ -263,12 +356,30 @@ func backupSuccessPrepare(
 	backupArgs.before = parserRoundTrip(t, tdb.QueryStr(t, fetchDescriptorStateQuery))
 
 	// Kick off the schema change and perform the backup via the BeforeStage hook.
+	// The knob will count stages and collect backup information.
 	require.NoError(t, executeSchemaChangeTxn(ctx, t, spec, db))
+
+	// Check if we dropped the database, and switch to system database if so.
+	// For DROP DATABASE, the database no longer exists, so we can't fetch its state.
+	droppedDatabase := false
+	for _, stmt := range spec.Stmts {
+		if stmt.AST.StatementTag() == "DROP DATABASE" {
+			droppedDatabase = true
+			tdb.Exec(t, "USE system")
+			break
+		}
+	}
+
 	require.True(t, hasLatestSchemaChangeSucceeded(t, tdb))
 
 	// Fetch the state of the cluster after the schema change succeeds.
-	tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
-	backupArgs.after = parserRoundTrip(t, tdb.QueryStr(t, fetchDescriptorStateQuery))
+	if !droppedDatabase {
+		tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
+		backupArgs.after = parserRoundTrip(t, tdb.QueryStr(t, fetchDescriptorStateQuery))
+	} else {
+		// For DROP DATABASE, "after" state is empty since the database is gone.
+		backupArgs.after = [][]string{}
+	}
 
 	knobEnabled.Store(false)
 	dbForBackup.Store(nil)
@@ -291,11 +402,294 @@ func backupSuccessPrepare(
 			backupArgs.backups[key] = backupInfo{}
 			continue
 		}
-		tdb.Exec(t, backupsToTake[key])
+		// For DROP DATABASE, the database might not exist at this stage, so we need
+		// to check and skip the backup if it fails.
+		_, err := tdb.DB.ExecContext(ctx, backupsToTake[key])
+		if err != nil && droppedDatabase {
+			// Database doesn't exist, skip this backup.
+			t.Logf("Skipping backup for dropped database (key=%v): %v", key, err)
+			backupArgs.backups[key] = backupInfo{}
+			continue
+		}
+		require.NoError(t, err, "failed to take backup: %s", backupsToTake[key])
 		numStagesIncluded += 1
 	}
 
-	return backupArgs
+	var postCommitCount, postCommitNonRevertibleCount int
+	func() {
+		mu.Lock()
+		defer mu.Unlock()
+		postCommitCount = mu.postCommitCount
+		postCommitNonRevertibleCount = mu.postCommitNonRevertibleCount
+	}()
+
+	return PrepResult[backupSuccessTestArgs]{
+		PostCommitCount:              postCommitCount,
+		PostCommitNonRevertibleCount: postCommitNonRevertibleCount,
+		After:                        backupArgs.after,
+		DatabaseName:                 dbName,
+		CreateDatabaseStmt:           createDatabaseStmt,
+		PrepData:                     backupArgs,
+	}
+}
+
+// backupRollbacksPrepare sets up a server and runs all rollback scenarios,
+// collecting backups for each. It reuses a single cluster by dropping and
+// recreating the test database for each rollback scenario.
+func backupRollbacksPrepare(
+	t *testing.T, factory TestServerFactory, spec CumulativeTestSpec,
+) PrepResult[backupRollbacksTestArgs] {
+	ctx := context.Background()
+	args := backupRollbacksTestArgs{
+		scenarios: make(map[backupKey]rollbackScenario),
+	}
+
+	// discovery is populated once during the discovery run (phase 1) and
+	// read-only thereafter. It records stage counts and which stages to test.
+	var discovery struct {
+		syncutil.Mutex
+		counted                      bool
+		postCommitCount              int
+		postCommitNonRevertibleCount int
+		stagesToTest                 []backupKey
+	}
+
+	// scenario tracks the currently-executing rollback scenario (phase 2).
+	// It is reset before each iteration and read by the BeforeStage hook.
+	var scenario struct {
+		syncutil.Mutex
+		active      bool
+		key         backupKey
+		dbName      string
+		urls        []string
+		urlsSamples map[string]struct{}
+	}
+
+	// Create knobs that handle both discovery and rollback phases.
+	knobs := &scexec.TestingKnobs{
+		BeforeStage: func(p scplan.Plan, stageIdx int) error {
+			// Count stages on first plan encounter (discovery phase).
+			func() {
+				discovery.Lock()
+				defer discovery.Unlock()
+				if !discovery.counted {
+					discovery.counted = true
+					for _, s := range p.Stages {
+						switch s.Phase {
+						case scop.PostCommitPhase:
+							discovery.postCommitCount++
+							discovery.stagesToTest = append(discovery.stagesToTest, backupKey{
+								Phase:   s.Phase,
+								Ordinal: s.Ordinal,
+							})
+						case scop.PostCommitNonRevertiblePhase:
+							discovery.postCommitNonRevertibleCount++
+						}
+					}
+				}
+			}()
+
+			// Check if a rollback scenario is active and determine
+			// what action to take.
+			var shouldBackup bool
+			var backupStmt string
+			var shouldFail bool
+			var failOrdinal int
+			var activeKey backupKey
+
+			func() {
+				scenario.Lock()
+				defer scenario.Unlock()
+
+				if !scenario.active {
+					return
+				}
+				activeKey = scenario.key
+
+				// Inject failure at target stage.
+				if s := p.Stages[stageIdx]; s.Phase == activeKey.Phase && s.Ordinal == activeKey.Ordinal {
+					shouldFail = true
+					failOrdinal = activeKey.Ordinal
+					return
+				}
+
+				// Collect backups during rollback.
+				// Skip stage 0 (first rollback stage) because the schema changer state
+				// is identical to pre-rollback state due to how rollback initialization works.
+				// Restoring this backup wouldn't test anything meaningful.
+				if p.InRollback && stageIdx > 0 {
+					url := fmt.Sprintf("userfile://backups.public.userfiles_$user/data_%s_%d_%d",
+						activeKey.Phase, activeKey.Ordinal, stageIdx)
+					if _, ok := scenario.urlsSamples[url]; !ok {
+						scenario.urlsSamples[url] = struct{}{}
+						scenario.urls = append(scenario.urls, url)
+						backupStmt = fmt.Sprintf("BACKUP DATABASE %s INTO '%s'", scenario.dbName, url)
+						shouldBackup = true
+					}
+				}
+			}()
+
+			if shouldFail {
+				return errors.Newf("boom %d", failOrdinal)
+			}
+			if shouldBackup {
+				_, err := args.server.DB.ExecContext(ctx, backupStmt)
+				if err != nil {
+					return errors.Wrapf(err, "backup during rollback (phase=%s, ordinal=%d, stage=%d)",
+						activeKey.Phase, activeKey.Ordinal, stageIdx)
+				}
+			}
+			return nil
+		},
+	}
+
+	// Create one long-lived cluster for discovery + all rollback scenarios.
+	args.server = factory.WithSchemaChangerKnobs(knobs).Start(ctx, t)
+	t.Cleanup(func() {
+		if args.server.Stopper != nil {
+			args.server.Stopper(t)
+		}
+	})
+	db := args.server.DB
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	// Create backups database for userfile before discovery.
+	tdb.Exec(t, "CREATE DATABASE backups")
+
+	// Phase 1: Discovery — run the schema change to completion to discover stages.
+	require.NoError(t, setupSchemaChange(ctx, t, spec, db))
+
+	// Skip test if it requires system tenant operations and we're running under a secondary tenant.
+	maybeSkipUnderSecondaryTenant(t, spec, args.server.Server)
+
+	require.NoError(t, executeSchemaChangeTxn(ctx, t, spec, db))
+
+	// Switch to system database before waiting for jobs if we might have dropped
+	// the current database. This prevents "database does not exist" errors.
+	for _, stmt := range spec.Stmts {
+		if stmt.AST.StatementTag() == "DROP DATABASE" {
+			tdb.Exec(t, "USE system")
+			break
+		}
+	}
+
+	waitForSchemaChangesToFinish(t, tdb)
+
+	// Discover the database name and CREATE DATABASE statement.
+	// Some tests create a separate database (e.g. "db"), others use defaultdb.
+	rows := tdb.QueryStr(t, "SELECT database_name FROM [SHOW DATABASES] WHERE database_name NOT IN ('system', 'postgres', 'defaultdb', 'backups')")
+	dbName := "defaultdb"
+	var createDatabaseStmt string
+	if len(rows) > 0 {
+		dbName = rows[0][0]
+	}
+	res := tdb.QueryStr(t, fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE DATABASE %q]", dbName))
+	if len(res) > 0 {
+		createDatabaseStmt = res[0][0]
+	}
+
+	// Phase 2: Run each rollback scenario by dropping and recreating the database.
+	// Discovery is complete, so stagesToTest is read-only from here on.
+	var stagesToTest []backupKey
+	func() {
+		discovery.Lock()
+		defer discovery.Unlock()
+		stagesToTest = append([]backupKey{}, discovery.stagesToTest...)
+	}()
+
+	for _, key := range stagesToTest {
+		// Switch to system database before dropping the test database.
+		tdb.Exec(t, "USE system")
+
+		// Reset use_declarative_schema_changer on all pool connections.
+		// executeSchemaChangeTxn sets 'unsafe_always' which persists on returned
+		// pool connections and breaks setupSchemaChange's CREATE TABLE.
+		tdb.Exec(t, "SET use_declarative_schema_changer = 'on'")
+
+		// Drop the database from the previous iteration and let setupSchemaChange recreate it.
+		tdb.Exec(t, fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", dbName))
+
+		// Re-run setup from scratch.
+		require.NoError(t, setupSchemaChange(ctx, t, spec, db))
+
+		tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
+
+		// Capture expected state before schema change.
+		expected := parserRoundTrip(t, tdb.QueryStr(t, fetchDescriptorStateQuery))
+
+		// Store the highest job ID to track relevant jobs.
+		var maxJobID int64
+		tdb.QueryRow(t, "SELECT COALESCE(max(job_id), 0) FROM [SHOW JOBS]").Scan(&maxJobID)
+
+		// Activate this scenario in the knobs.
+		func() {
+			scenario.Lock()
+			defer scenario.Unlock()
+			scenario.key = key
+			scenario.dbName = dbName
+			scenario.urls = nil
+			scenario.urlsSamples = make(map[string]struct{})
+			scenario.active = true
+		}()
+
+		// Execute schema change with failure injection.
+		require.Regexp(t, fmt.Sprintf("boom %d", key.Ordinal),
+			executeSchemaChangeTxn(ctx, t, spec, db))
+
+		// Switch to system database before waiting for rollback if we might have
+		// dropped the current database. This prevents "database does not exist" errors.
+		for _, stmt := range spec.Stmts {
+			if stmt.AST.StatementTag() == "DROP DATABASE" {
+				tdb.Exec(t, "USE system")
+				break
+			}
+		}
+
+		// Wait for rollback to complete.
+		waitForSchemaChangesToFinish(t, tdb)
+
+		// Deactivate scenario and collect URLs.
+		var urls []string
+		func() {
+			scenario.Lock()
+			defer scenario.Unlock()
+			scenario.active = false
+			urls = append([]string{}, scenario.urls...)
+		}()
+
+		// Verify rollback was successful.
+		succeeded, jobExists := hasLatestSchemaChangeSucceededWithMaxJobID(t, tdb, maxJobID)
+		require.False(t, succeeded && jobExists)
+
+		// Fetch state after rollback and verify it matches expected.
+		tdb.Exec(t, fmt.Sprintf("USE %q", dbName))
+		postRollback := parserRoundTrip(t, tdb.QueryStr(t, fetchDescriptorStateQuery))
+		require.Equal(t, expected, postRollback, "rolled back schema change should be no-op")
+
+		// Store scenario for later test execution.
+		args.scenarios[key] = rollbackScenario{
+			databaseName: dbName,
+			urls:         urls,
+			expected:     postRollback,
+		}
+	}
+
+	// Discovery is complete; extract final counts.
+	var postCommitCount, postCommitNonRevertibleCount int
+	func() {
+		discovery.Lock()
+		defer discovery.Unlock()
+		postCommitCount = discovery.postCommitCount
+		postCommitNonRevertibleCount = discovery.postCommitNonRevertibleCount
+	}()
+
+	return PrepResult[backupRollbacksTestArgs]{
+		PostCommitCount:              postCommitCount,
+		PostCommitNonRevertibleCount: postCommitNonRevertibleCount,
+		DatabaseName:                 dbName,
+		CreateDatabaseStmt:           createDatabaseStmt,
+		PrepData:                     args,
+	}
 }
 
 // backupSuccess executes cumulative tests against an existing server containing
@@ -375,133 +769,59 @@ func backupSuccess(t *testing.T, args backupSuccessTestArgs, cs CumulativeTestCa
 }
 
 func backupRollbacks(
-	t *testing.T, factory TestServerFactory, cs CumulativeTestCaseSpec, isMixedVersion bool,
+	t *testing.T, args backupRollbacksTestArgs, cs CumulativeTestCaseSpec, isMixedVersion bool,
 ) {
 	if cs.Phase != scop.PostCommitPhase {
 		return
 	}
+
+	// TODO(msbutler): perhaps we can remove this, now that we're not creating a
+	// cluster for every rollback.
 	maybeRandomlySkip(t)
-	ctx := context.Background()
-	var mu struct {
-		syncutil.Mutex
-		urls        []string
-		urlsSamples map[string]struct{}
+
+	key := backupKey{Phase: cs.Phase, Ordinal: cs.StageOrdinal}
+	scenario, ok := args.scenarios[key]
+	if !ok {
+		skip.IgnoreLintf(t, "no rollback scenario for %v", key)
 	}
-	mu.urlsSamples = make(map[string]struct{})
-	var dbForBackup atomic.Pointer[gosql.DB]
-	pe := MakePlanExplainer()
-	var knobEnabled atomic.Bool
-	knobs := &scexec.TestingKnobs{
-		// Inject an error when reaching the stage prescribed by the test case
-		// specification. This will trigger a rollback.
-		// Before each stage during the rollback, back up the database.
-		BeforeStage: func(p scplan.Plan, stageIdx int) error {
-			// Only enabled after setup.
-			if !knobEnabled.Load() {
-				return nil
-			}
-			// Collect EXPLAIN (DDL) diagram for debug purposes.
-			if err := pe.MaybeUpdateWithPlan(p); err != nil {
-				return err
-			}
-			// Since this callback is also active during post-RESTORE
-			// schema changes, we have to be careful to exit early in those cases.
-			if dbForBackup.Load() == nil {
-				return nil
-			}
-			if p.InRollback {
-				// Discard the first backup, which is going to be the backup taken
-				// right at the very beginning of the rollback. Due to various quirks,
-				// the declarative schema changer state in that backup is going to be
-				// exactly the same as the state pre-rollback.
-				//
-				// This doesn't matter in production, as whichever error triggered the
-				// rollback in the first place will simply manifest itself again during
-				// the post-RESTORE schema change and roll it back.
-				if stageIdx == 0 {
-					return nil
-				}
-				url := fmt.Sprintf("userfile://backups.public.userfiles_$user/data_%s_%d_%d",
-					cs.Phase, cs.StageOrdinal, stageIdx)
-				mu.Lock()
-				defer mu.Unlock()
-				// De-duplicated URLs that occur due to retries.
-				if _, ok := mu.urlsSamples[url]; ok {
-					return nil
-				}
-				mu.urlsSamples[url] = struct{}{}
-				mu.urls = append(mu.urls, url)
-				backupStmt := fmt.Sprintf("BACKUP DATABASE %s INTO '%s'", cs.DatabaseName, url)
-				_, err := dbForBackup.Load().ExecContext(ctx, backupStmt)
-				return err
-			}
-			if s := p.Stages[stageIdx]; s.Phase == cs.Phase && s.Ordinal == cs.StageOrdinal {
-				return errors.Newf("boom %d", cs.StageOrdinal)
-			}
-			return nil
-		},
-	}
-	runfn := func(s serverutils.TestServerInterface, db *gosql.DB) {
-		_, err := db.Exec("SET create_table_with_schema_locked = 'off'")
-		require.NoError(t, err)
-		dbForBackup.Store(db)
-		tdb := sqlutils.MakeSQLRunner(db)
-		// Setup the test cluster.
-		tdb.Exec(t, "CREATE DATABASE backups")
-		require.NoError(t, setupSchemaChange(ctx, t, cs.CumulativeTestSpec, db))
-		knobEnabled.Swap(true)
 
-		// Fetch the state of the cluster before the schema change kicks off.
-		tdb.Exec(t, fmt.Sprintf("USE %q", cs.DatabaseName))
-		expected := parserRoundTrip(t, tdb.QueryStr(t, fetchDescriptorStateQuery))
-		// Store the highest job ID, so we know which jobs are relevant.
-		jobID := tdb.QueryRow(t, "SELECT COALESCE(max(job_id), 0) FROM [SHOW JOBS]")
-		var maxJobID int64
-		jobID.Scan(&maxJobID)
-		// Kick off the schema change, fail it at the prescribed stage,
-		// and perform the backups during the rollback via the BeforeStage hook.
-		require.Regexp(t, fmt.Sprintf("boom %d", cs.StageOrdinal),
-			executeSchemaChangeTxn(ctx, t, cs.CumulativeTestSpec, db))
-		waitForSchemaChangesToFinish(t, tdb)
-		dbForBackup.Store(nil)
+	tdb := sqlutils.MakeSQLRunner(args.server.DB)
 
-		// Fetch the state of the cluster after the schema change rolls back.
-		// Note: Depending on the state of the schema objects, no job may be created
-		// to finalize the rollback, since dependent objects were never backed
-		// up.
-		succeeded, jobExists := hasLatestSchemaChangeSucceededWithMaxJobID(t, tdb, maxJobID)
-		require.False(t, succeeded && jobExists)
-		tdb.Exec(t, fmt.Sprintf("USE %q", cs.DatabaseName))
-		postRollback := parserRoundTrip(t, tdb.QueryStr(t, fetchDescriptorStateQuery))
-
-		// Check that it's the same as before the schema change was attempted.
-		require.Equal(t, expected, postRollback, "rolled back schema change should be no-op")
-		isMultiRegion := false
-		tdb.QueryRow(t, "SELECT count(*) >1  FROM [SHOW REGIONS]").Scan(&isMultiRegion)
-
-		// Restore the backups of the database taken mid-rolled-back-schema-change
-		// in various ways, check that they end up in the same state as present.
-		urls := func() []string {
-			mu.Lock()
-			defer mu.Unlock()
-			return append([]string{}, mu.urls...)
-		}()
-		for i, url := range urls {
-			b := backupRestoreOutcome{
-				url:                url,
-				mayRollback:        true,
-				expectedOnRollback: postRollback,
-				// Speed up multi-region or mixed version variants by excluding
-				// individual table restores, due to the slower speed due to multiple nodes.
-				excludeAllTablesInDatabaseFlavor: isMultiRegion || isMixedVersion,
-			}
-			name := fmt.Sprintf("post_%d_rollback_stages_exec", i+1)
-			t.Run(name, func(t *testing.T) {
-				exerciseBackupRestore(t, tdb, cs, b, pe)
-			})
+	// Upgrade cluster if mixed version.
+	if isMixedVersion {
+		if args.server.Server.StartedDefaultTestTenant() {
+			sysDB := args.server.Server.SystemLayer().SQLConn(t)
+			_, err := sysDB.Exec("SET CLUSTER SETTING VERSION = $1", clusterversion.Latest.String())
+			require.NoError(t, err)
 		}
+		tdb.Exec(t, "SET CLUSTER SETTING VERSION = $1", clusterversion.Latest.String())
 	}
-	factory.WithSchemaChangerKnobs(knobs).Run(ctx, t, runfn)
+
+	// Switch to system database which always exists (prior restore tests may
+	// have dropped the test database).
+	tdb.Exec(t, "USE system")
+
+	// Check if multi-region for test optimization.
+	isMultiRegion := false
+	tdb.QueryRow(t, "SELECT count(*) >1 FROM [SHOW REGIONS]").Scan(&isMultiRegion)
+
+	pe := MakePlanExplainer()
+
+	// Test each backup from this rollback scenario.
+	for i, url := range scenario.urls {
+		b := backupRestoreOutcome{
+			url:                url,
+			mayRollback:        true,
+			expectedOnRollback: scenario.expected,
+			// Speed up multi-region or mixed version variants by excluding
+			// individual table restores, due to the slower speed due to multiple nodes.
+			excludeAllTablesInDatabaseFlavor: isMultiRegion || isMixedVersion,
+		}
+		name := fmt.Sprintf("post_%d_rollback_stages_exec", i+1)
+		t.Run(name, func(t *testing.T) {
+			exerciseBackupRestore(t, tdb, cs, b, pe)
+		})
+	}
 }
 
 type backupRestoreOutcome struct {
@@ -602,7 +922,6 @@ func exerciseBackupRestore(
 			tdb.Exec(t, "SET use_declarative_schema_changer = 'off'")
 			tdb.Exec(t, fmt.Sprintf("DROP DATABASE IF EXISTS %q CASCADE", cs.DatabaseName))
 			if rc.restoreFlavor == restoreAllTablesInDatabase {
-				// Database must be created explicitly pre-RESTORE in this case.
 				tdb.Exec(t, cs.CreateDatabaseStmt)
 			}
 
