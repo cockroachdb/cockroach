@@ -9,6 +9,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -189,6 +190,106 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 		if _, err := store.GetReplica(desc.RangeID); !testutils.IsError(err, "r[0-9]+ was not found") {
 			// nolint:errwrap
 			return errors.Errorf("expected range removal: %v", err) // NB: errors.Wrapf(nil, ...) returns nil.
+		}
+		return nil
+	})
+}
+
+// TestReplicaGCQueueHandlesStagingError verifies that replica removal handles
+// errors from the staging phase (stageDestroyReplica) gracefully: the error
+// propagates without crashing, the replica survives intact, and a retry
+// succeeds once the error clears. Three removal paths are exercised:
+//
+//  1. Direct RemoveReplica call — observes the error return directly.
+//  2. Replica GC queue — the queue-based removal after voter removal.
+//  3. getOrCreateReplica — simulates a newer replica contacting the store.
+//
+// The eager self-removal path (ChangeReplicasTrigger) is not tested because it
+// fatals on error — the node must succeed at removing itself after applying the
+// trigger (and it uses DestroyData: false, so staging is not involved).
+func TestReplicaGCQueueHandlesStagingError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numNodes = 3
+	const targetNode = numNodes - 1 // s3 (whose replica we test on)
+
+	errInjected := errors.New("injected staging error")
+	var shouldFail atomic.Bool
+	shouldFail.Store(true)
+	var failCount atomic.Int32
+
+	knobs := &kvserver.StoreTestingKnobs{
+		// Force removal through the GC queue instead of the eager
+		// self-removal path (which fatals on error).
+		DisableEagerReplicaRemoval: true,
+		TestingReplicaDestroyErr: func() error {
+			if shouldFail.Load() {
+				failCount.Add(1)
+				return errInjected
+			}
+			return nil
+		},
+	}
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			targetNode: {Knobs: base.TestingKnobs{Store: knobs}},
+		},
+	})
+	defer tc.Stopper().Stop(context.Background())
+
+	// Create range, replicate to all nodes.
+	k := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, k, tc.Target(1), tc.Target(2))
+	require.NoError(t, tc.WaitForVoters(k, tc.Target(1), tc.Target(2)))
+
+	ts := tc.Servers[targetNode]
+	store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
+	require.NoError(t, err)
+
+	// Remove voter from targetNode, making the replica GC-able.
+	// With DisableEagerReplicaRemoval, the replica stays around until
+	// the GC queue picks it up.
+	desc := tc.RemoveVotersOrFatal(t, k, tc.Target(targetNode))
+
+	// Call RemoveReplica directly to observe the error.
+	repl, err := store.GetReplica(desc.RangeID)
+	require.NoError(t, err)
+	err = store.RemoveReplica(context.Background(), repl, desc.NextReplicaID, "test")
+	require.True(t, errors.Is(err, errInjected), "unexpected: %+v", err)
+	require.NotZero(t, failCount.Swap(0), "error injection was not hit")
+
+	// Force a GC scan — the queue should also hit the injected error.
+	store.MustForceReplicaGCScanAndProcess()
+	require.NotZero(t, failCount.Swap(0), "error injection was not hit")
+
+	// Replica should still exist because removal failed.
+	_, err = store.GetReplica(desc.RangeID)
+	require.NoError(t, err, "replica should still exist after failed removal")
+
+	// Exercise the getOrCreateReplica path: simulate an incoming raft message
+	// from a newer incarnation of this replica. This triggers tryGetReplica to
+	// attempt removal of the current replica (since the incoming ReplicaID is
+	// higher), which hits the injected staging error.
+	_, _, err = store.GetOrCreateReplica(
+		context.Background(), desc.RangeID,
+		repl.ReplicaID()+1, nil, /* pretend a newer replica is contacting us */
+	)
+	require.True(t, errors.Is(err, errInjected), "unexpected: %+v", err)
+	require.NotZero(t, failCount.Swap(0), "error injection was not hit")
+
+	// The replica should still exist — the failed removal left no side effects.
+	_, err = store.GetReplica(desc.RangeID)
+	require.NoError(t, err, "replica should survive failed getOrCreateReplica removal")
+
+	// Remove error injection, force a GC scan — should succeed.
+	shouldFail.Store(false)
+
+	testutils.SucceedsSoon(t, func() error {
+		store.MustForceReplicaGCScanAndProcess()
+		if store.GetReplicaIfExists(desc.RangeID) != nil {
+			return errors.New("expected replica removal")
 		}
 		return nil
 	})
