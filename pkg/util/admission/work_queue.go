@@ -1130,6 +1130,22 @@ func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) 
 	}
 }
 
+// AdmittedSQLWorkDone adjusts token accounting when a SQL statement closes.
+// remaining is the leftover reservation (always non-negative, since the
+// CAS-based deduction in SQLCPUHandle never drives the reservation below
+// zero). Positive remaining means unused tokens are returned to the granter.
+func (q *WorkQueue) AdmittedSQLWorkDone(tenantID roachpb.TenantID, remaining int64) {
+	if remaining == 0 {
+		return
+	}
+	q.adjustTenantUsed(tenantID, -remaining)
+	if remaining < 0 {
+		q.granter.tookWithoutPermission(-remaining)
+	} else if remaining > 0 {
+		q.granter.returnGrant(remaining)
+	}
+}
+
 func (q *WorkQueue) hasWaitingRequests() (bool, burstQualification) {
 	q.mu.Lock()
 	defer q.mu.Unlock()

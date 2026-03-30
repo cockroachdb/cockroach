@@ -96,9 +96,20 @@ type SQLCPUHandle struct {
 	p         *sqlCPUProviderImpl
 	wq        *WorkQueue
 
+	refillMu struct {
+		syncutil.Mutex
+		// reservation and closed are accessed atomically without the lock
+		// on the fast path (CAS deduction, closed check). This is safe
+		// because the fast path only deducts from reservation (self-
+		// protecting via CAS) and reads closed (monotonic false→true).
+		// The lock serializes the slow path (Admit + Add) with Close
+		// (set closed + Swap reservation).
+		reservation atomic.Int64
+		closed      atomic.Bool
+	}
+
 	mu struct {
 		syncutil.Mutex
-		closed   bool
 		gHandles []*GoroutineCPUHandle
 		// Backing for up to 2 goroutine handles, to avoid allocations in
 		// gHandles when there are 2 or fewer goroutines.
@@ -129,9 +140,61 @@ func (h *SQLCPUHandle) reportCPU(diff time.Duration) {
 	}
 }
 
+// tryDeductReservation attempts to deduct diffNanos from the reservation
+// via CAS. Returns true if successful (reservation had enough tokens).
+// Never drives the reservation negative.
+func (h *SQLCPUHandle) tryDeductReservation(diffNanos int64) bool {
+	for {
+		current := h.refillMu.reservation.Load()
+		if current < diffNanos {
+			return false
+		}
+		if h.refillMu.reservation.CompareAndSwap(current, current-diffNanos) {
+			return true
+		}
+	}
+}
+
+// maxRefillBuffer caps the reservation buffer requested per Admit call.
+// Without a cap, a large checkpoint (e.g. 100ms of CPU between two
+// CancelChecker calls) would hold 100ms of tokens idle in the reservation,
+// reducing availability for other statements until Close returns them.
+const maxRefillBuffer = int64(10 * time.Millisecond)
+
+// refillHeuristic returns the total RequestedCount to pass to Admit: the
+// consumed CPU (diffNanos) plus a buffer for future fast-path CAS deductions.
+// The buffer is min(diffNanos, maxRefillBuffer), so the reservation portion
+// (resp.requestedCount - diffNanos) is always non-negative and bounded.
+//
+// TODO(wenyihu6): replace this simple 2x heuristic with an adaptive scheme
+// that adjusts the buffer size based on the interval between Admit calls:
+// grow the buffer when calls are too frequent (interval < 1ms), shrink it
+// when calls are infrequent (interval > 5ms), and keep it stable otherwise.
+// This would reduce Admit call overhead for steady workloads while avoiding
+// over-reservation for bursty ones.
+func (h *SQLCPUHandle) refillHeuristic(diffNanos int64) int64 {
+	buffer := min(diffNanos, maxRefillBuffer)
+	return diffNanos + buffer
+}
+
+// constructWorkInfo returns a copy of the handle's WorkInfo with the given
+// RequestedCount and BypassAdmission values set.
+func (h *SQLCPUHandle) constructWorkInfo(reqCount int64, noWait bool) WorkInfo {
+	workInfo := h.workInfo
+	workInfo.RequestedCount = reqCount
+	workInfo.BypassAdmission = noWait
+	return workInfo
+}
+
 // reportAndAcquireConsumedCPU updates cumulative CPU counters and, if a CTT
-// WorkQueue is attached, calls Admit to deduct the consumed CPU from the token
-// bucket. This may block until tokens are available unless noWait is true.
+// WorkQueue is attached, deducts the consumed CPU from the token bucket. Three
+// paths are tried in order:
+//
+//  1. Fast path — CAS deduction from the local reservation (no lock, no Admit).
+//  2. noWait path — BypassAdmission Admit (non-blocking accounting only, used
+//     by GoroutineCPUHandle.Close).
+//  3. Slow path — acquire refillMu, call Admit to replenish the reservation.
+//     May block until tokens are available.
 func (h *SQLCPUHandle) reportAndAcquireConsumedCPU(
 	ctx context.Context, diff time.Duration, noWait bool,
 ) error {
@@ -141,24 +204,59 @@ func (h *SQLCPUHandle) reportAndAcquireConsumedCPU(
 		return nil
 	}
 
-	// RequestedCount is set to the exact CPU consumed (from grunning), so the
-	// WorkQueue's CPU time token estimator is skipped (see Admit). Because the
-	// exact amount is deducted at Admit time, there is no estimate to correct,
-	// so AdmittedWorkDone is not called. This also avoids training the KV
-	// estimator with SQL CPU data, which would corrupt its estimates.
-	//
-	// TODO(wenyi): Currently we call Admit on every measureAndAdmit invocation,
-	// which happens every ~1024 rows. This means each SQL goroutine takes the
-	// WorkQueue mutex on every check. Consider reserving more tokens than the
-	// exact amount consumed (e.g., 2x the last diff, or a smoothed estimate of
-	// upcoming usage) and tracking remaining reservation locally. This would
-	// allow subsequent measureAndAdmit calls to deduct from the local
-	// reservation without calling Admit, reducing contention on the WorkQueue.
-	workInfo := h.workInfo
-	workInfo.RequestedCount = diff.Nanoseconds()
-	workInfo.BypassAdmission = noWait
-	_, err := h.wq.Admit(ctx, workInfo)
-	return err
+	diffNanos := diff.Nanoseconds()
+
+	// Fast path: deduct from reservation via CAS. No lock needed.
+	// After Close, reservation is 0 (Swap'd), so CAS fails immediately.
+	if h.tryDeductReservation(diffNanos) {
+		return nil
+	}
+
+	if noWait {
+		// Account the CPU via BypassAdmission (non-blocking). This
+		// updates tenant.used and tells the granter tokens were taken,
+		// but never blocks. We do not deduct from reservation here
+		// because driving it negative would break the CAS invariant
+		// for other goroutines. This path is safe after Close because
+		// BypassAdmission never blocks and keeps tenant.used accurate
+		// for CPU consumed by goroutines that haven't closed yet.
+		_, _ = h.wq.Admit(ctx, h.constructWorkInfo(diffNanos, true))
+		return nil
+	}
+
+	// Slow path: serialize refills under refillMu so only one goroutine
+	// calls Admit at a time.
+	h.refillMu.Lock()
+	defer h.refillMu.Unlock()
+
+	// Re-check after acquiring the lock: Close may have run, or another
+	// goroutine's refill may have replenished the reservation.
+	if h.refillMu.closed.Load() {
+		return nil
+	}
+	if h.tryDeductReservation(diffNanos) {
+		return nil
+	}
+
+	// Request the consumed CPU plus a buffer (see refillHeuristic). Setting
+	// RequestedCount > 0 skips the WorkQueue's CPU time token estimator
+	// (see callerSetRequestedCount in Admit), which is designed for KV
+	// requests and should not be trained with SQL CPU data. The buffer
+	// portion goes into reservation for future fast-path CAS deductions.
+	// Because the exact amount is deducted at Admit time, there is no
+	// estimate to correct, so AdmittedWorkDone is not called.
+	resp, err := h.wq.Admit(ctx, h.constructWorkInfo(h.refillHeuristic(diffNanos), false))
+	if err != nil {
+		return err
+	}
+
+	if resp.Enabled {
+		// Add the buffer portion (requestedCount - diffNanos) to the
+		// reservation. Close cannot race here because we hold refillMu;
+		// it will return these tokens when it acquires the lock.
+		h.refillMu.reservation.Add(resp.requestedCount - diffNanos)
+	}
+	return nil
 }
 
 // TODO(sumeer): see the comment
@@ -210,13 +308,27 @@ func (h *SQLCPUHandle) RegisterGoroutine() *GoroutineCPUHandle {
 	return gh
 }
 
+// setClosed marks the handle as closed and returns any remaining reservation
+// tokens to the granter. Holding refillMu ensures no concurrent slow-path
+// refill is in progress — any in-flight Admit must complete and release the
+// lock before we proceed, so Swap(0) captures all outstanding tokens.
+func (h *SQLCPUHandle) setClosed() {
+	h.refillMu.Lock()
+	defer h.refillMu.Unlock()
+	h.refillMu.closed.Store(true)
+	if h.wq != nil {
+		remaining := h.refillMu.reservation.Swap(0)
+		h.wq.AdmittedSQLWorkDone(h.workInfo.TenantID, remaining)
+	}
+}
+
 // Close is called when no more reporting is needed. It pools
 // GoroutineCPUHandles that have been closed. GoroutineCPUHandles that are not
 // yet closed are left for GC.
 func (h *SQLCPUHandle) Close() {
+	h.setClosed()
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.mu.closed = true
 	for i, gh := range h.mu.gHandles {
 		if gh.closed.Load() {
 			gh.reset()
