@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "dlqreplay",
+    srcs = ["replay.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/dlqreplay",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/bazci/githubpost/issues",
+        "//pkg/cmd/roachtest/dlq",
+        "//pkg/roachprod/vm",
+        "@com_google_cloud_go_storage//:storage",
+        "@org_golang_google_api//iterator",
+    ],
+)

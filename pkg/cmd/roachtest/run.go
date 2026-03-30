@@ -211,6 +211,17 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		return err
 	}
 
+	var poster GithubPoster = github
+	if bucket := os.Getenv("ROACHTEST_GITHUB_DLQ_BUCKET"); bucket != "" {
+		w, err := newGCSDLQWriter(ctx, bucket)
+		if err != nil {
+			l.Printf("warning: failed to initialize DLQ writer, DLQ disabled: %v", err)
+		} else {
+			poster = &dlqGithubIssues{inner: github, writer: w}
+			l.Printf("DLQ enabled: bucket=%s", bucket)
+		}
+	}
+
 	err = runner.Run(
 		ctx, specs, roachtestflags.Count, parallelism, opt,
 		testOpts{
@@ -220,7 +231,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 			exportOpenMetrics:      roachtestflags.ExportOpenmetrics,
 		},
 		lopt,
-		github)
+		poster)
 
 	// Make sure we attempt to clean up. We run with a non-canceled ctx; the
 	// ctx above might be canceled in case a signal was received. If that's
