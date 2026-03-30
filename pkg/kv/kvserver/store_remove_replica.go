@@ -132,6 +132,11 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	// If staging fails, we return the error with no side effects.
 	var pending pendingReplicaDestruction
 	if opts.DestroyData {
+		if fn := s.TestingKnobs().TestingReplicaDestroyErr; fn != nil {
+			if err := fn(); err != nil {
+				return nil, err
+			}
+		}
 		var err error
 		pending, err = stageDestroyReplica(
 			ctx, &s.batchFactory,
@@ -261,6 +266,11 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 	// Stage the engine work before any in-memory state changes. If the engine
 	// work fails (e.g. context cancellation, I/O error), we can return the error
 	// cleanly without leaving the replica in a half-destroyed state.
+	if fn := s.TestingKnobs().TestingReplicaDestroyErr; fn != nil {
+		if err := fn(); err != nil {
+			return err
+		}
+	}
 	pending, err := stageDestroyReplica(
 		ctx, &s.batchFactory,
 		s.StateEngine(), s.LogEngine(),

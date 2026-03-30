@@ -286,6 +286,13 @@ type StoreTestingKnobs struct {
 	// spin attempting to acquire a split or merge lock on a RHS which will
 	// always fail and is generally not safe but is useful for testing.
 	DisableEagerReplicaRemoval bool
+	// TestingReplicaDestroyErr, if set, is called before staging a replica
+	// destruction batch in removal paths that set DestroyData (i.e. GC queue,
+	// direct RemoveReplica, and getOrCreateReplica — but NOT the eager
+	// self-removal via ChangeReplicasTrigger, which uses DestroyData: false).
+	// If it returns a non-nil error, the staging is short-circuited and the
+	// error is returned to the caller.
+	TestingReplicaDestroyErr func() error
 	// DisableReplicaGCQueueAddOnRaftGroupDeleted, when set, prevents
 	// HandleRaftResponse from adding replicas to the GC queue when a
 	// RaftGroupDeletedError is received. This is useful for testing the
