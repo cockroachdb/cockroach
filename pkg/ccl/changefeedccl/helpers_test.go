@@ -690,13 +690,13 @@ func startTestFullServer(
 		options.argsFn(&args)
 	}
 	resetRetry := testingUseFastRetry()
-	resetFlushFrequency := changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)
 	s, db, _ := serverutils.StartServer(t, args)
+	changefeedbase.FrontierPersistenceInterval.Override(
+		context.Background(), &s.ApplicationLayer().ClusterSettings().SV, testSinkFlushFrequency)
 
 	ctx := context.Background()
 	cleanup := func() {
 		s.Stopper().Stop(ctx)
-		resetFlushFrequency()
 		resetRetry()
 	}
 	var err error
@@ -732,14 +732,14 @@ func startTestCluster(t testing.TB) (serverutils.TestClusterInterface, *gosql.DB
 	}
 
 	resetRetry := testingUseFastRetry()
-	resetFlushFrequency := changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)
 	cluster, db, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 3 /* numServers */, knobs,
 		multiregionccltestutils.WithUseDatabase("d"),
 	)
+	changefeedbase.FrontierPersistenceInterval.Override(
+		context.Background(), &cluster.Server(0).ApplicationLayer().ClusterSettings().SV, testSinkFlushFrequency)
 	cleanupAndReset := func() {
 		cleanup()
-		resetFlushFrequency()
 		resetRetry()
 	}
 
@@ -802,6 +802,8 @@ func startTestTenant(
 	}
 
 	tenantServer, tenantDB := serverutils.StartTenant(t, systemServer, tenantArgs)
+	changefeedbase.FrontierPersistenceInterval.Override(
+		context.Background(), &tenantServer.ClusterSettings().SV, testSinkFlushFrequency)
 	// Re-run setup on the tenant as well
 	tenantRunner := sqlutils.MakeSQLRunner(tenantDB)
 	tenantRunner.ExecMultiple(t, strings.Split(tenantSetupStatements, ";")...)

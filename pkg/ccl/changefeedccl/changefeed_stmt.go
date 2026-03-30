@@ -1019,27 +1019,6 @@ func createChangefeedJobRecord(
 	if err != nil {
 		return nil, changefeedbase.Targets{}, err
 	}
-	var resolved time.Duration
-	resolvedStr := " by default"
-	if resolvedOpt != nil {
-		resolved = *resolvedOpt
-		resolvedStr = ""
-	}
-	freqOpt, err := opts.GetMinCheckpointFrequency()
-	if err != nil {
-		return nil, changefeedbase.Targets{}, err
-	}
-	freq := changefeedbase.DefaultMinCheckpointFrequency
-	freqStr := "default"
-	if freqOpt != nil {
-		freq = *freqOpt
-		freqStr = "configured"
-	}
-	if emit && (resolved < freq) {
-		p.BufferClientNotice(ctx, pgnotice.Newf("resolved (%s%s) messages will not be emitted "+
-			"more frequently than the %s min_checkpoint_frequency (%s), but may be emitted "+
-			"less frequently", resolved, resolvedStr, freqStr, freq))
-	}
 
 	const minRecommendedFrequency = 500 * time.Millisecond
 
@@ -1047,12 +1026,6 @@ func createChangefeedJobRecord(
 		p.BufferClientNotice(ctx, pgnotice.Newf(
 			"the 'resolved' timestamp interval (%s) is very low; consider increasing it to at least %s",
 			resolvedOpt, minRecommendedFrequency))
-	}
-
-	if freqOpt != nil && *freqOpt < minRecommendedFrequency {
-		p.BufferClientNotice(ctx, pgnotice.Newf(
-			"the 'min_checkpoint_frequency' timestamp interval (%s) is very low; consider increasing it to at least %s",
-			freqOpt, minRecommendedFrequency))
 	}
 
 	ptsExpiration, err := opts.GetPTSExpiration()

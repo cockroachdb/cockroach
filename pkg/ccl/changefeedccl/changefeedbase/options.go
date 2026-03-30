@@ -483,8 +483,13 @@ var ExternalConnectionValidOptions = unionStringSets(SQLValidOptions, KafkaValid
 var CaseInsensitiveOpts = makeStringSet(OptFormat, OptEnvelope, OptCompression, OptSchemaChangeEvents,
 	OptSchemaChangePolicy, OptOnError, OptInitialScan)
 
-// RetiredOptions are the options which are no longer active.
-var RetiredOptions = makeStringSet(DeprecatedOptProtectDataFromGCOnPause)
+// RetiredOptions maps retired option names to their deprecation message.
+var RetiredOptions = map[string]string{
+	DeprecatedOptProtectDataFromGCOnPause: "protect_data_from_gc_on_pause option is no longer needed",
+	OptMinCheckpointFrequency: "the 'min_checkpoint_frequency' option is retired and no longer has any " +
+		"effect. The aggregator flush frequency is now automatically derived as " +
+		"min('resolved', 'changefeed.progress.frontier_persistence.interval').",
+}
 
 // redactionFunc is a function applied to a string option which returns its redacted value.
 type redactionFunc func(string) (string, error)
@@ -656,17 +661,17 @@ func (s StatementOptions) IsSet(key string) bool {
 // DeprecationWarnings checks for options in forms we still support and serialize,
 // but should be replaced with a new form.
 func (s StatementOptions) DeprecationWarnings() []string {
+	var warnings []string
 	if newFormat, ok := NoLongerExperimental[s.m[OptFormat]]; ok {
-		return []string{fmt.Sprintf(`%[1]s is no longer experimental, use %[2]s=%[1]s`,
-			newFormat, OptFormat)}
+		warnings = append(warnings, fmt.Sprintf(`%[1]s is no longer experimental, use %[2]s=%[1]s`,
+			newFormat, OptFormat))
 	}
-	for retiredOpt := range RetiredOptions {
+	for retiredOpt, deprecationMsg := range RetiredOptions {
 		if _, isSet := s.m[retiredOpt]; isSet {
-			return []string{fmt.Sprintf("%s option is no longer needed", retiredOpt)}
+			warnings = append(warnings, deprecationMsg)
 		}
 	}
-
-	return []string{}
+	return warnings
 }
 
 // ForEachWithRedaction iterates a function over the raw key/value pairs.
@@ -1256,11 +1261,6 @@ func (s StatementOptions) KeyOnly() bool {
 	return s.m[OptEnvelope] == string(OptEnvelopeKeyOnly)
 }
 
-// GetMinCheckpointFrequency returns the minimum frequency with which checkpoints should be
-// recorded. Returns nil if not set, and an error if invalid.
-func (s StatementOptions) GetMinCheckpointFrequency() (*time.Duration, error) {
-	return s.getDurationValue(OptMinCheckpointFrequency)
-}
 
 // GetHibernationPollingFrequency returns the frequency with which polling
 // should be performed while the changefeed is waiting for the tableset to be

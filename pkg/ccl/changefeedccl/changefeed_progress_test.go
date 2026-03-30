@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -245,7 +246,7 @@ func TestChangefeedProgressSkewMetrics(t *testing.T) {
 
 			// Create changefeed for both tables with no initial scan.
 			feed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR foo, bar
-WITH no_initial_scan, min_checkpoint_frequency='1s', resolved, metrics_label='%s'`, scope))
+WITH no_initial_scan, resolved, metrics_label='%s'`, scope))
 			defer closeFeed(t, feed)
 
 			assertSpanSkewInRange := func(start int64, end int64) int64 {
@@ -317,10 +318,14 @@ WITH no_initial_scan, min_checkpoint_frequency='1s', resolved, metrics_label='%s
 	})
 }
 
-// TestChangefeedProgressUpdatesWithZeroMinCheckpointFrequency verifies that
-// resolved timestamps are still sent when we set min_checkpoint_frequency='0'.
-// This is a regression test for #164866.
-func TestChangefeedProgressUpdatesWithZeroMinCheckpointFrequency(t *testing.T) {
+// TODO(darryl): Consider whether this test is still needed now that
+// min_checkpoint_frequency is retired and the flush frequency is derived
+// from resolved. The original regression (#164866) can no longer occur.
+//
+// TestChangefeedProgressUpdatesWithZeroResolvedInterval verifies that
+// resolved timestamps still advance when resolved='0' is set, which
+// derives a flush frequency of 0 (flush on every event).
+func TestChangefeedProgressUpdatesWithZeroResolvedInterval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -329,7 +334,7 @@ func TestChangefeedProgressUpdatesWithZeroMinCheckpointFrequency(t *testing.T) {
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1), (2), (3)`)
 
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='10ms', min_checkpoint_frequency='0'`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH resolved='0'`)
 		defer closeFeed(t, foo)
 
 		// Drain the initial rows.
@@ -489,7 +494,7 @@ func TestCoreChangefeedProgress(t *testing.T) {
 
 		// Run changefeed.
 		cf := feed(t, f, `CREATE CHANGEFEED FOR foo, bar
-WITH resolved='1ns', min_checkpoint_frequency='1ns'`)
+WITH resolved='1ns'`)
 		defer closeFeed(t, cf)
 
 		// Drain initial rows so the changefeed can advance past them.
@@ -538,4 +543,82 @@ WITH resolved='1ns', min_checkpoint_frequency='1ns'`)
 
 	cdcTest(t, testFn, feedTestForceSink("sinkless"),
 		withAllowChangefeedErr("test injects retryable error"))
+}
+
+func TestGetFlushFrequency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+	sv := &st.SV
+
+	defaultInterval := changefeedbase.FrontierPersistenceInterval.Get(sv)
+
+	for _, tc := range []struct {
+		name                string
+		resolvedInterval    string
+		persistenceInterval time.Duration
+		expectedFreq        time.Duration
+		expectedSrc         string
+	}{
+		{
+			name:         "resolved not set",
+			expectedFreq: defaultInterval,
+			expectedSrc:  string(changefeedbase.FrontierPersistenceInterval.Name()),
+		},
+		{
+			name:                "resolved < persistence interval",
+			resolvedInterval:    "5s",
+			expectedFreq:        5 * time.Second,
+			persistenceInterval: 10 * time.Second,
+			expectedSrc:         changefeedbase.OptResolvedTimestamps,
+		},
+		{
+			name:                "resolved > persistence interval",
+			resolvedInterval:    "30s",
+			expectedFreq:        10 * time.Second,
+			persistenceInterval: 10 * time.Second,
+			expectedSrc:         string(changefeedbase.FrontierPersistenceInterval.Name()),
+		},
+		{
+			name:                "resolved=0",
+			resolvedInterval:    "0s",
+			expectedFreq:        0,
+			persistenceInterval: 5 * time.Second,
+			expectedSrc:         changefeedbase.OptResolvedTimestamps,
+		},
+		{
+			name:                "empty resolved",
+			resolvedInterval:    "empty",
+			expectedFreq:        0,
+			persistenceInterval: 5 * time.Second,
+			expectedSrc:         changefeedbase.OptResolvedTimestamps,
+		},
+		{
+			name:                "resolved = persistence interval",
+			resolvedInterval:    "10s",
+			persistenceInterval: 10 * time.Second,
+			expectedFreq:        10 * time.Second,
+			// Arbitrary since they are equal.
+			expectedSrc: string(changefeedbase.FrontierPersistenceInterval.Name()),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.persistenceInterval != 0 {
+				changefeedbase.FrontierPersistenceInterval.Override(ctx, sv, tc.persistenceInterval)
+				defer changefeedbase.FrontierPersistenceInterval.Override(ctx, sv, defaultInterval)
+			}
+			opts := changefeedbase.StatementOptions{}
+			if tc.resolvedInterval == "empty" {
+				opts = changefeedbase.MakeStatementOptions(map[string]string{changefeedbase.OptResolvedTimestamps: ""})
+			} else if tc.resolvedInterval != "" {
+				opts = changefeedbase.MakeStatementOptions(map[string]string{changefeedbase.OptResolvedTimestamps: tc.resolvedInterval})
+			}
+			freq, source, err := getFlushFrequency(opts, sv)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedFreq, freq)
+			require.Equal(t, tc.expectedSrc, fmt.Sprint(source))
+		})
+	}
 }
