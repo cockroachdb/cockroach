@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -127,9 +128,45 @@ const (
 	updateTableMetadataCachePermissionErrMsg = "only admin users can trigger table metadata cache updates"
 )
 
+// defaultMetricsVisibility controls the minimum metric visibility level
+// exported by the /_status/vars and /metrics Prometheus endpoints when
+// no ?visibility= query parameter is provided. Threshold semantics:
+// "essential" exports only ESSENTIAL metrics, "support" exports SUPPORT
+// and ESSENTIAL, and "all" (the default) exports everything.
+var defaultMetricsVisibility = settings.RegisterEnumSetting(
+	settings.ApplicationLevel,
+	"obs.metrics_scrape.default_visibility",
+	"controls the default minimum metric visibility level for the "+
+		"Prometheus scrape endpoints (/_status/vars and /metrics) when no "+
+		"?visibility= query parameter is provided",
+	"all",
+	map[metric.Metadata_MetricVisibility]string{
+		metric.Metadata_INTERNAL:  "all",
+		metric.Metadata_SUPPORT:   "support",
+		metric.Metadata_ESSENTIAL: "essential",
+	},
+	settings.WithPublic,
+)
+
+// parseMetricsVisibility maps a ?visibility= query parameter value to the
+// corresponding Metadata_MetricVisibility threshold. Returns the level and
+// true on success, or (0, false) if the value is not recognized.
+func parseMetricsVisibility(s string) (metric.Metadata_MetricVisibility, bool) {
+	switch strings.ToLower(s) {
+	case "all", "internal":
+		return metric.Metadata_INTERNAL, true
+	case "support":
+		return metric.Metadata_SUPPORT, true
+	case "essential":
+		return metric.Metadata_ESSENTIAL, true
+	default:
+		return 0, false
+	}
+}
+
 type metricMarshaler interface {
 	json.Marshaler
-	PrintAsText(io.Writer, expfmt.Format, bool) error
+	PrintAsText(io.Writer, expfmt.Format, bool, ...metric.ScrapeOption) error
 	ScrapeIntoPrometheus(pm *metric.PrometheusExporter)
 }
 
@@ -2500,9 +2537,32 @@ type varsHandler struct {
 func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// Determine the minimum visibility level for this request: use the
+	// ?visibility= query parameter if valid, otherwise fall back to the
+	// obs.metrics_scrape.default_visibility cluster setting.
+	var extraOpts []metric.ScrapeOption
+	if raw := r.URL.Query().Get("visibility"); raw != "" {
+		level, ok := parseMetricsVisibility(raw)
+		if !ok {
+			http.Error(w, fmt.Sprintf(
+				"invalid visibility value %q; valid values are: all, internal, support, essential",
+				raw,
+			), http.StatusBadRequest)
+			return
+		}
+		extraOpts = append(extraOpts, metric.WithMinVisibility(level))
+	} else {
+		level := defaultMetricsVisibility.Get(&h.st.SV)
+		if level > metric.Metadata_INTERNAL {
+			extraOpts = append(extraOpts, metric.WithMinVisibility(level))
+		}
+	}
+
 	contentType := expfmt.Negotiate(r.Header)
 	w.Header().Set(httputil.ContentTypeHeader, string(contentType))
-	err := h.metricSource.PrintAsText(w, contentType, h.useStaticLabels)
+	err := h.metricSource.PrintAsText(
+		w, contentType, h.useStaticLabels, extraOpts...,
+	)
 	if err != nil {
 		log.Dev.Errorf(ctx, "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)

@@ -330,3 +330,82 @@ func TestPrometheusExporterStaticLabels(t *testing.T) {
 		})
 	}
 }
+
+func TestScrapeRegistryVisibilityFilter(t *testing.T) {
+	r := NewRegistry()
+	r.AddMetric(NewGauge(Metadata{
+		Name:       "internal.metric",
+		Help:       "An internal metric",
+		Visibility: Metadata_INTERNAL,
+	}))
+	r.AddMetric(NewGauge(Metadata{
+		Name:       "support.metric",
+		Help:       "A support metric",
+		Visibility: Metadata_SUPPORT,
+	}))
+	r.AddMetric(NewGauge(Metadata{
+		Name:       "essential.metric",
+		Help:       "An essential metric",
+		Visibility: Metadata_ESSENTIAL,
+	}))
+
+	tests := []struct {
+		name        string
+		opts        []ScrapeOption
+		wantPresent []string
+		wantAbsent  []string
+	}{
+		{
+			name: "no filter includes all",
+			opts: nil,
+			wantPresent: []string{
+				"internal_metric", "support_metric", "essential_metric",
+			},
+		},
+		{
+			name: "filter INTERNAL includes all",
+			opts: []ScrapeOption{WithMinVisibility(Metadata_INTERNAL)},
+			wantPresent: []string{
+				"internal_metric", "support_metric", "essential_metric",
+			},
+		},
+		{
+			name: "filter SUPPORT excludes INTERNAL",
+			opts: []ScrapeOption{WithMinVisibility(Metadata_SUPPORT)},
+			wantPresent: []string{
+				"support_metric", "essential_metric",
+			},
+			wantAbsent: []string{"internal_metric"},
+		},
+		{
+			name:        "filter ESSENTIAL excludes INTERNAL and SUPPORT",
+			opts:        []ScrapeOption{WithMinVisibility(Metadata_ESSENTIAL)},
+			wantPresent: []string{"essential_metric"},
+			wantAbsent: []string{
+				"internal_metric", "support_metric",
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			pe := MakePrometheusExporter()
+			var buf bytes.Buffer
+			err := pe.ScrapeAndPrintAsText(
+				&buf, expfmt.FmtText, func(exporter *PrometheusExporter) {
+					exporter.ScrapeRegistry(r, tc.opts...)
+				},
+			)
+			require.NoError(t, err)
+			output := buf.String()
+			for _, name := range tc.wantPresent {
+				require.Contains(t, output, name,
+					"expected metric %q to be present", name)
+			}
+			for _, name := range tc.wantAbsent {
+				require.NotContains(t, output, name,
+					"expected metric %q to be absent", name)
+			}
+		})
+	}
+}

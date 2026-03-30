@@ -222,6 +222,105 @@ func TestMetricsEndpoint(t *testing.T) {
 	}
 }
 
+// TestStatusVarsVisibility verifies that the ?visibility= query parameter on
+// /_status/vars and /metrics correctly filters metrics by their visibility
+// level, and that the obs.metrics_scrape.default_visibility cluster setting
+// controls the default when no parameter is provided.
+func TestStatusVarsVisibility(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+
+	s := srv.ApplicationLayer()
+
+	// sql_bytesout is INTERNAL (default visibility).
+	// sql_conns is ESSENTIAL.
+
+	// Helper to fetch metrics from a given path with optional query params.
+	getVars := func(t *testing.T, path string) string {
+		t.Helper()
+		body, err := srvtestutils.GetText(s,
+			s.AdminURL().WithPath(path).String())
+		require.NoError(t, err)
+		return string(body)
+	}
+
+	getVarsWithParam := func(t *testing.T, path, visibility string) string {
+		t.Helper()
+		body, err := srvtestutils.GetText(s,
+			s.AdminURL().WithPath(path).String()+"?visibility="+visibility)
+		require.NoError(t, err)
+		return string(body)
+	}
+
+	for _, endpoint := range []string{
+		apiconstants.StatusPrefix + "vars",
+		"/metrics",
+	} {
+		t.Run(endpoint, func(t *testing.T) {
+			t.Run("visibility=all returns all metrics", func(t *testing.T) {
+				body := getVarsWithParam(t, endpoint, "all")
+				require.Contains(t, body, "sql_bytesout")
+				require.Contains(t, body, "sql_conns")
+			})
+
+			t.Run("visibility=support excludes INTERNAL", func(t *testing.T) {
+				body := getVarsWithParam(t, endpoint, "support")
+				require.NotContains(t, body, "sql_bytesout")
+				require.Contains(t, body, "sql_conns")
+			})
+
+			t.Run("visibility=essential excludes INTERNAL and SUPPORT", func(t *testing.T) {
+				body := getVarsWithParam(t, endpoint, "essential")
+				require.NotContains(t, body, "sql_bytesout")
+				require.Contains(t, body, "sql_conns")
+			})
+
+			t.Run("no param with default setting returns all", func(t *testing.T) {
+				body := getVars(t, endpoint)
+				require.Contains(t, body, "sql_bytesout")
+				require.Contains(t, body, "sql_conns")
+			})
+
+			t.Run("invalid visibility value returns HTTP 400", func(t *testing.T) {
+				httpClient, err := s.GetAdminHTTPClient()
+				require.NoError(t, err)
+				resp, err := httpClient.Get(
+					s.AdminURL().WithPath(endpoint).String() + "?visibility=bogus")
+				require.NoError(t, err)
+				defer resp.Body.Close()
+				require.Equal(t, 400, resp.StatusCode)
+			})
+		})
+	}
+
+	// Verify that the cluster setting takes effect when no query parameter
+	// is provided.
+	t.Run("cluster setting controls default visibility", func(t *testing.T) {
+		db := s.SQLConn(t)
+		defer db.Close()
+
+		_, err := db.Exec(
+			"SET CLUSTER SETTING obs.metrics_scrape.default_visibility = 'essential'")
+		require.NoError(t, err)
+
+		body := getVars(t, apiconstants.StatusPrefix+"vars")
+		require.NotContains(t, body, "sql_bytesout")
+		require.Contains(t, body, "sql_conns")
+
+		// Query parameter overrides the cluster setting.
+		body = getVarsWithParam(t, apiconstants.StatusPrefix+"vars", "all")
+		require.Contains(t, body, "sql_bytesout")
+		require.Contains(t, body, "sql_conns")
+
+		// Reset for other tests.
+		_, err = db.Exec(
+			"SET CLUSTER SETTING obs.metrics_scrape.default_visibility = 'all'")
+		require.NoError(t, err)
+	})
+}
+
 // TestStatusVarsTxnMetrics verifies that the metrics from the /_status/vars
 // endpoint for txns and the special cockroach_restart savepoint are correct.
 func TestStatusVarsTxnMetrics(t *testing.T) {
