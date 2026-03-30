@@ -109,7 +109,7 @@ must previously have been created with the --format=raw switch. The command
 will then convert it to the --format requested in the current invocation.
 `,
 	Args: cobra.RangeArgs(0, 1),
-	RunE: clierrorplus.MaybeDecorateError(func(cmd *cobra.Command, args []string) (err error) {
+	RunE: clierrorplus.MaybeDecorateError(func(cmd *cobra.Command, args []string) error {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
@@ -119,20 +119,16 @@ will then convert it to the --format requested in the current invocation.
 		}
 
 		var output io.Writer = os.Stdout
+		var outputFile *os.File
+
 		if debugTimeSeriesDumpOpts.output != "" {
-			var f *os.File
-			f, err = os.Create(debugTimeSeriesDumpOpts.output)
+			var err error
+			outputFile, err = os.Create(debugTimeSeriesDumpOpts.output)
 			if err != nil {
 				return errors.Wrapf(err, "failed to create file %q", debugTimeSeriesDumpOpts.output)
 			}
-			defer func() {
-				if closeErr := f.Close(); closeErr != nil {
-					if err == nil {
-						err = errors.Wrap(closeErr, "failed to close time series dump file")
-					}
-				}
-			}()
-			output = f
+			defer outputFile.Close() // Simple safety net
+			output = outputFile
 		}
 
 		// Validate encoding flag is only used with raw format
@@ -408,18 +404,30 @@ will then convert it to the --format requested in the current invocation.
 			}
 		}
 
+		var err error
 		for {
-			data, err := recv()
+			var data *tspb.TimeSeriesData
+			data, err = recv()
 			if err == io.EOF {
-				return w.Flush()
+				err = w.Flush()
+				break
 			}
 			if err != nil {
-				return errors.Wrapf(err, "connecting to %s", serverCfg.AdvertiseAddr)
+				err = errors.Wrapf(err, "connecting to %s", serverCfg.AdvertiseAddr)
+				break
 			}
-			if err := w.Emit(data); err != nil {
-				return err
+			if err = w.Emit(data); err != nil {
+				break
 			}
 		}
+
+		if outputFile != nil {
+			if closeErr := outputFile.Close(); closeErr != nil && err == nil {
+				return errors.Wrap(closeErr, "failed to close time series dump file")
+			}
+		}
+
+		return err
 	}),
 }
 
