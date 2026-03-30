@@ -395,6 +395,54 @@ DROP OWNED BY root
 statement error pq: cannot drop objects owned by role "admin" because they are required by the database system
 DROP OWNED BY admin
 
+# Regression test for #122901: granting testuser membership IN testuser2's
+# child role should not allow testuser to drop testuser2's objects. Only being
+# a member OF testuser2 (or a parent role of testuser2) should grant that.
+user root
+
+statement ok
+CREATE ROLE child_role;
+
+statement ok
+GRANT child_role TO testuser2
+
+statement ok
+GRANT child_role TO testuser
+
+user testuser
+
+statement error pq: permission denied to drop objects
+DROP OWNED BY testuser2
+
+user root
+
+statement ok
+REVOKE child_role FROM testuser
+
+statement ok
+REVOKE child_role FROM testuser2
+
+statement ok
+DROP ROLE child_role
+
+statement ok
+GRANT ADMIN TO testuser
+
+user testuser 
+
+statement ok
+DROP OWNED BY testuser2
+
+statement error pq: cannot drop objects owned by role "root" because they are required by the database system
+DROP OWNED BY root
+
+user root
+
+statement ok
+REVOKE ADMIN FROM testuser
+
+subtest end
+
 # KITCHEN-SINK: Test DROP OWNED BY when there are multiple databases/schemas.
 # Only objects/privileges in the current database should be dropped.
 subtest kitchen-sink

@@ -613,6 +613,90 @@ WHERE
 user1         user1
 user1_schema  user1
 
+# Non-admins must be a member of the role specified in AUTHORIZATION.
+subtest authorization_membership_check
+
+user root
+
+statement ok
+CREATE ROLE auth_check_role;
+
+statement ok
+CREATE DATABASE auth_check_db;
+
+statement ok
+GRANT CREATE ON DATABASE auth_check_db TO testuser;
+
+user testuser
+
+statement ok
+USE auth_check_db
+
+statement error pq: role/user "auth_check_role2" does not exist
+CREATE SCHEMA AUTHORIZATION auth_check_role2
+
+statement error pq: must be member of role "auth_check_role"
+CREATE SCHEMA AUTHORIZATION auth_check_role
+
+statement error pq: must be member of role "auth_check_role"
+CREATE SCHEMA s_auth AUTHORIZATION auth_check_role
+
+# After granting auth_check_role to testuser, the CREATE SCHEMA should succeed.
+user root
+
+statement ok
+GRANT auth_check_role TO testuser
+
+user testuser
+
+statement ok
+USE auth_check_db
+
+statement ok
+CREATE SCHEMA AUTHORIZATION auth_check_role
+
+statement ok
+CREATE SCHEMA s_auth AUTHORIZATION auth_check_role
+
+# A user can always create a schema with authorization as themselves.
+statement ok
+CREATE SCHEMA s_testuser AUTHORIZATION testuser
+
+user root
+
+# Admin role must bypass role membership.
+statement ok
+CREATE USER db_admin_role;
+GRANT CREATE ON DATABASE auth_check_db TO db_admin_role;
+
+statement ok
+SET ROLE db_admin_role;
+USE auth_check_db
+
+statement error pq: must be member of role "auth_check_role"
+CREATE SCHEMA s_admin AUTHORIZATION auth_check_role
+
+statement ok
+RESET ROLE;
+REVOKE CREATE ON DATABASE auth_check_db FROM db_admin_role;
+GRANT ADMIN TO db_admin_role;
+SET ROLE db_admin_role
+
+statement ok
+CREATE SCHEMA s_admin AUTHORIZATION auth_check_role
+
+statement ok
+CREATE SCHEMA s_admin_root AUTHORIZATION root
+
+statement ok
+RESET ROLE;
+DROP USER db_admin_role
+
+statement ok
+USE defaultdb
+
+subtest end
+
 # Ensure that we need CREATE on a database to create a schema.
 statement ok
 CREATE DATABASE perms
