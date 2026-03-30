@@ -17,11 +17,11 @@ CLOUD="${3:-}"
 
 if [ -z "${CLUSTER}" ] || [ -z "${WORKLOAD_CLUSTER}" ] || [ -z "${CLOUD}" ]; then
   echo "Usage: $0 <cluster> <workload_cluster> <cloud>"
-  echo "  cloud: aws or gcp"
+  echo "  cloud: aws or gce"
   echo ""
   echo "Examples:"
   echo "  $0 drt-chaos-aws workload-chaos-aws aws"
-  echo "  $0 drt-chaos workload-chaos gcp"
+  echo "  $0 drt-chaos workload-chaos gce"
   exit 1
 fi
 
@@ -29,7 +29,7 @@ cd /home/ubuntu
 
 export ROACHPROD_GCE_DEFAULT_PROJECT=cockroach-drt
 export ROACHPROD_DNS="drt.crdb.io"
-./roachprod sync
+./drtprod sync
 sleep 20
 
 # Fetch secrets from cloud provider at runtime (not stored in any file)
@@ -52,7 +52,7 @@ fetch_secret() {
         exit 1
       fi
       ;;
-    gcp)
+    gce)
       if ! secret_value="$(gcloud --project=cockroach-drt secrets versions access latest \
         --secret "${secret_name}" 2>&1)"; then
         echo "Error: Failed to fetch secret '${secret_name}' from GCP Secret Manager" >&2
