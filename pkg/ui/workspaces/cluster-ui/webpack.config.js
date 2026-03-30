@@ -19,6 +19,9 @@ module.exports = (env, argv) => {
   env = env || {};
 
   return {
+    stats: {
+      errorDetails: true,
+    },
     context: __dirname,
     name: "cluster-ui",
     entry: path.resolve(__dirname, "./src/index.ts"),
