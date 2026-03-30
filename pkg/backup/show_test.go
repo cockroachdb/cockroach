@@ -1291,3 +1291,37 @@ func TestShowBackupWithIDs(t *testing.T) {
 		})
 	})
 }
+
+// This tests that if SHOW BACKUPS is used in a subquery and the parent query
+// runs into the error, we properly close the subquery and exit instead of
+// hanging. See issue #166581.
+func TestShowBackupsSubqueryClose(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `SET use_backups_with_ids = true`)
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/backup'`)
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN 'nodelocal://1/backup'`)
+	var ts int64
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()::INT`).Scan(&ts)
+	// Casting a nanosecond timestamp to timestamptz will fail due to exceeding
+	// the bounds, which should cause the query to error and not consume from the
+	// SHOW BACKUPS subquery. We test both the old and new SHOW BACKUPS syntax as
+	// both are susceptible to this issue.
+	sqlDB.ExpectErrWithTimeout(
+		t,
+		"exceeds supported timestamp bounds",
+		fmt.Sprintf(`SELECT * FROM [SHOW BACKUPS IN 'nodelocal://1/backup'] WHERE %d::TIMESTAMPTZ < 1000::TIMESTAMPTZ`, ts),
+	)
+
+	sqlDB.Exec(t, `SET use_backups_with_ids = true`)
+	sqlDB.ExpectErrWithTimeout(
+		t,
+		"exceeds supported timestamp bounds",
+		fmt.Sprintf(`SELECT * FROM [SHOW BACKUPS IN 'nodelocal://1/backup'] WHERE %d::TIMESTAMPTZ < backup_time`, ts),
+	)
+}
