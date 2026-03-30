@@ -154,8 +154,8 @@ func (p *pendingReplicaDestruction) Close() {
 func stageDestroyReplica(
 	ctx context.Context,
 	bf *kvstorage.BatchFactory,
-	stateReader kvstorage.StateRO,
-	logReader kvstorage.RaftRO,
+	stateRO kvstorage.StateRO,
+	raftRO kvstorage.RaftRO,
 	info kvstorage.DestroyReplicaInfo,
 	nextReplicaID roachpb.ReplicaID,
 	ms enginepb.MVCCStats,
@@ -165,8 +165,8 @@ func stageDestroyReplica(
 	stateWO, raftWO := kvstorage.StateWO(batch.State()), batch.Raft()
 	if err := kvstorage.DestroyReplica(
 		ctx, kvstorage.ReadWriter{
-			State: kvstorage.State{RO: stateReader, WO: stateWO},
-			Raft:  kvstorage.Raft{RO: logReader, WO: raftWO},
+			State: kvstorage.State{RO: stateRO, WO: stateWO},
+			Raft:  kvstorage.Raft{RO: raftRO, WO: raftWO},
 		},
 		info, nextReplicaID,
 	); err != nil {
