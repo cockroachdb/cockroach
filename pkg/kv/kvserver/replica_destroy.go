@@ -136,8 +136,7 @@ func (p *pendingReplicaDestruction) MustCommit(ctx context.Context) {
 	}
 }
 
-// Close closes the underlying batch. It is idempotent and safe to call after
-// MustCommit.
+// Close closes the underlying batch. It is safe to call after MustCommit.
 func (p *pendingReplicaDestruction) Close() {
 	p.batch.Close()
 }
