@@ -123,6 +123,8 @@ func createLogicalReplicationStreamPlanHook(
 				}
 			case "validated":
 				mode = jobspb.LogicalReplicationDetails_Validated
+			case "transactional":
+				mode = jobspb.LogicalReplicationDetails_Transactional
 			default:
 				return pgerror.Newf(pgcode.InvalidParameterValue, "unknown mode %q", m)
 			}
@@ -472,16 +474,19 @@ func doLDRPlan(
 			}
 		}
 
-		writer, err := getWriterType(ctx, details.Mode, execCfg.Settings)
-		if err != nil {
-			return err
+		var writer sqlclustersettings.LDRWriterType
+		if details.Mode != jobspb.LogicalReplicationDetails_Transactional {
+			writer, err = getWriterType(ctx, details.Mode, execCfg.Settings)
+			if err != nil {
+				return err
+			}
 		}
 
 		for i := range srcExternalCatalog.Tables {
 			destTableDesc := dstTableDescs[i]
-			if details.Mode != jobspb.LogicalReplicationDetails_Validated {
+			if details.Mode == jobspb.LogicalReplicationDetails_Immediate {
 				if len(destTableDesc.OutboundForeignKeys()) > 0 || len(destTableDesc.InboundForeignKeys()) > 0 {
-					return pgerror.Newf(pgcode.InvalidParameterValue, "foreign keys are only supported with MODE = 'validated'")
+					return pgerror.Newf(pgcode.InvalidParameterValue, "foreign keys are not supported with MODE = 'immediate'")
 				}
 			}
 
