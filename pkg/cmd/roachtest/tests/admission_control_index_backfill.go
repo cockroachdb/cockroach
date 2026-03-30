@@ -8,6 +8,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -155,10 +156,17 @@ func runIndexBackfill(
 		// Create the aforementioned snapshots.
 		snapshots, err = c.CreateSnapshot(ctx, t.SnapshotPrefix())
 		if err != nil {
-			t.Fatal(err)
+			if strings.Contains(err.Error(), "already exists") {
+				// Another concurrent run may have already created snapshots
+				// with the same name.
+				t.L().Printf("snapshot creation hit 'already exists' error, proceeding: %v", err)
+			} else {
+				t.Fatal(err)
+			}
+		} else {
+			t.L().Printf("created %d new snapshot(s) with prefix %q, using this state",
+				len(snapshots), t.SnapshotPrefix())
 		}
-		t.L().Printf("created %d new snapshot(s) with prefix %q, using this state",
-			len(snapshots), t.SnapshotPrefix())
 	} else {
 		t.L().Printf("using %d pre-existing snapshot(s) with prefix %q",
 			len(snapshots), t.SnapshotPrefix())
