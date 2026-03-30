@@ -34,7 +34,6 @@ true
 stage-exec phase=PostCommitPhase stage=:
 SELECT crdb_internal.validate_multi_region_zone_configs();
 ----
-pq: missing zone configuration for partition "us-east1" of t@t_pkey
 
 stage-exec phase=PostCommitPhase stage=:
 SELECT * from multiregion_db.public.t;
@@ -66,7 +65,6 @@ true
 stage-exec phase=PostCommitNonRevertiblePhase stage=:
 SELECT crdb_internal.validate_multi_region_zone_configs();
 ----
-pq: missing zone configuration for partition "us-east2" of t@t_pkey
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=:
 SELECT * from multiregion_db.public.t;

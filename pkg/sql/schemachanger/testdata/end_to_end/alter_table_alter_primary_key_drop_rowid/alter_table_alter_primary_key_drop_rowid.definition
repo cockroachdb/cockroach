@@ -6,7 +6,6 @@ stage-exec phase=PostCommitPhase stage=:
 INSERT INTO t VALUES($stageKey);
 INSERT INTO t VALUES($stageKey + 1);
 ----
-pq: INSERT has more expressions than target columns, 2 expressions for 1 targets
 
 # Each insert will be injected twice per stage, so we should always,
 # see a count of 2.
@@ -20,7 +19,6 @@ stage-exec phase=PostCommitNonRevertiblePhase stage=:
 INSERT INTO t VALUES($stageKey);
 INSERT INTO t VALUES($stageKey + 1);
 ----
-pq: INSERT has more expressions than target columns, 2 expressions for 1 targets
 
 # Each insert will be injected twice per stage, so we should always,
 # see a count of 2.

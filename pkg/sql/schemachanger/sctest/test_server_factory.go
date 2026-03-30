@@ -115,6 +115,7 @@ func (f SingleNodeTestClusterFactory) Start(ctx context.Context, t *testing.T) T
 			JobsTestingKnobs: newJobsKnobs(),
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				UseTransactionalDescIDGenerator: true,
+				ForceWaitForOneVersionWithJobs:  true,
 			},
 		},
 	}
