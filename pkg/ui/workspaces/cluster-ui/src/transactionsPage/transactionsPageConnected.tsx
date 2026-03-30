@@ -7,11 +7,9 @@ import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { Dispatch } from "redux";
 
-import { SqlStatsSortType, StatementsRequest } from "src/api/statementsApi";
-import { AppState, uiConfigActions } from "src/store";
-import { actions as nodesActions } from "src/store/nodes";
+import { SqlStatsSortType } from "src/api/statementsApi";
+import { AppState } from "src/store";
 import { actions as sqlStatsActions } from "src/store/sqlStats";
-import { actions as txnStatsActions } from "src/store/transactionStats";
 
 import { Filters } from "../queryFilter";
 import { actions as analyticsActions } from "../store/analytics";
@@ -20,8 +18,6 @@ import {
   updateTxnsPageLimitAction,
   updateTxnsPageReqSortAction,
 } from "../store/localStorage";
-import { nodeRegionsByIDSelector } from "../store/nodes";
-import { selectHasAdminRole, selectIsTenant } from "../store/uiConfig";
 import {
   selectTxnsPageLimit,
   selectTxnsPageReqSort,
@@ -65,29 +61,17 @@ export const TransactionsPageConnected = withRouter(
       fingerprintsPageProps: {
         ...props,
         columns: selectTxnColumns(state),
-        txnsResp: state.adminUI?.transactions,
         timeScale: selectTimeScale(state),
         filters: selectFilters(state),
-        isTenant: selectIsTenant(state),
-        nodeRegions: nodeRegionsByIDSelector(state),
         search: selectSearch(state),
         sortSetting: selectSortSetting(state),
-        hasAdminRole: selectHasAdminRole(state),
         limit: selectTxnsPageLimit(state),
         reqSortSetting: selectTxnsPageReqSort(state),
         requestTime: selectRequestTime(state),
-        oldestDataAvailable:
-          state.adminUI?.transactions?.data?.oldest_aggregated_ts_returned,
       },
     }),
     (dispatch: Dispatch) => ({
       fingerprintsPageProps: {
-        refreshData: (req: StatementsRequest) =>
-          dispatch(txnStatsActions.refresh(req)),
-        refreshNodes: () => dispatch(nodesActions.refresh()),
-        refreshUserSQLRoles: () =>
-          dispatch(uiConfigActions.refreshUserSQLRoles()),
-        resetSQLStats: () => dispatch(sqlStatsActions.reset()),
         onTimeScaleChange: (ts: TimeScale) => {
           dispatch(
             sqlStatsActions.updateTimeScale({
