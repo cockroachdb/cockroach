@@ -32,7 +32,6 @@ const cx = classNames.bind(styles);
 
 export interface ActivateDiagnosticsModalProps {
   activate: (insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest) => void;
-  refreshDiagnosticsReports: () => void;
   onOpenModal?: (statement: string, planGists: string[]) => void;
 }
 

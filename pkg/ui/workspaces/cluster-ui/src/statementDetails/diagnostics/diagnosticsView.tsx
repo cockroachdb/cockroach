@@ -6,7 +6,13 @@
 import { Button, Icon, InlineAlert } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
 import moment from "moment-timezone";
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, {
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import { Link } from "react-router-dom";
 
 import emptyListResultsImg from "src/assets/emptyState/empty-list-results.svg";
@@ -26,6 +32,7 @@ import {
 import timeScaleStyles from "src/timeScaleDropdown/timeScale.module.scss";
 
 import { StatementDiagnosticsReport, withBasePath } from "../../api";
+import { CockroachCloudContext } from "../../contexts";
 import { FormattedTimescale } from "../../timeScaleDropdown/formattedTimeScale";
 import { Timestamp } from "../../timestamp";
 import { DATE_FORMAT_24_TZ } from "../../util";
@@ -37,7 +44,6 @@ const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 
 export interface DiagnosticsViewStateProps {
   diagnosticsReports: StatementDiagnosticsReport[];
-  showDiagnosticsViewLink?: boolean;
   activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
   currentScale: TimeScale;
   requestTime: moment.Moment;
@@ -75,9 +81,9 @@ const NavButton: React.FC = props => (
 export const EmptyDiagnosticsView = ({
   statementFingerprint,
   planGists,
-  showDiagnosticsViewLink,
   activateDiagnosticsRef,
 }: DiagnosticsViewProps): React.ReactElement => {
+  const isCloud = useContext(CockroachCloudContext);
   return (
     <EmptyTable
       icon={emptyListResultsImg}
@@ -95,7 +101,7 @@ export const EmptyDiagnosticsView = ({
           >
             Activate Diagnostics
           </Button>
-          {showDiagnosticsViewLink && (
+          {!isCloud && (
             <Link
               component={NavButton}
               to="/reports/statements/diagnosticshistory"
@@ -150,7 +156,6 @@ const StmtDiagnosticLabel = ({
 
 export function DiagnosticsView({
   diagnosticsReports,
-  showDiagnosticsViewLink,
   statementFingerprint,
   activateDiagnosticsRef,
   currentScale,
@@ -162,6 +167,7 @@ export function DiagnosticsView({
   onSortingChange,
   requestTime,
 }: DiagnosticsViewProps): React.ReactElement {
+  const isCloud = useContext(CockroachCloudContext);
   const [sortSetting, setSortSetting] = useState<SortSetting>({
     ascending: true,
     columnTitle: "activatedOn",
@@ -314,7 +320,6 @@ export function DiagnosticsView({
         <SummaryCard>
           <EmptyDiagnosticsView
             diagnosticsReports={diagnosticsReports}
-            showDiagnosticsViewLink={showDiagnosticsViewLink}
             activateDiagnosticsRef={activateDiagnosticsRef}
             currentScale={currentScale}
             requestTime={requestTime}
@@ -365,7 +370,7 @@ export function DiagnosticsView({
         onChangeSortSetting={handleSortingChange}
         tableWrapperClassName={cx("sorted-table")}
       />
-      {showDiagnosticsViewLink && (
+      {!isCloud && (
         <div className={cx("crl-statements-diagnostics-view__footer")}>
           <Link
             component={NavButton}

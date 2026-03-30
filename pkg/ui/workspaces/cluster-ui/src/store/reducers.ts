@@ -19,22 +19,17 @@ import {
   reducer as databasesList,
 } from "./databasesList/databasesList.reducers";
 import {
-  reducer as statementFingerprintInsights,
-  StatementFingerprintInsightsCachedState,
-} from "./insights/statementFingerprintInsights";
-import {
   reducer as txnInsights,
   TxnInsightsState,
 } from "./insights/transactionInsights";
-import { LivenessState, reducer as liveness } from "./liveness";
+import {
+  LivenessState,
+  reducer as liveness,
+} from "./liveness/liveness.reducer";
 import { LocalStorageState, reducer as localStorage } from "./localStorage";
 import { NodesState, reducer as nodes } from "./nodes";
 import { rootActions } from "./rootActions";
 import { reducer as sqlStats, SQLStatsState } from "./sqlStats";
-import {
-  reducer as sqlDetailsStats,
-  SQLDetailsStatsReducerState,
-} from "./statementDetails";
 import {
   reducer as statementDiagnostics,
   StatementDiagnosticsState,
@@ -50,11 +45,9 @@ export type AdminUiState = {
   uiConfig: UIConfigState;
   statements: SQLStatsState;
   transactions: TxnStatsState;
-  sqlDetailsStats: SQLDetailsStatsReducerState;
   clusterLocks: ClusterLocksReqState;
   databasesList: DatabasesListState;
   txnInsights: TxnInsightsState;
-  statementFingerprintInsights: StatementFingerprintInsightsCachedState;
   clusterSettings: ClusterSettingsState;
 };
 
@@ -71,10 +64,8 @@ export const reducers = combineReducers<AdminUiState>({
   uiConfig,
   statements: sqlStats,
   transactions: txnStats,
-  sqlDetailsStats,
   clusterLocks,
   databasesList,
-  statementFingerprintInsights,
   clusterSettings,
 });
 

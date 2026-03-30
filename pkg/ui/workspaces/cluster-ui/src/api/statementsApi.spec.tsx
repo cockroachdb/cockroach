@@ -12,6 +12,7 @@ import { ClusterDetailsContext, ClusterDetailsContextType } from "../contexts";
 
 import {
   useCombinedStatementStats,
+  useStatementDetails,
   SqlStatsSortOptions,
 } from "./statementsApi";
 
@@ -116,6 +117,95 @@ describe("useCombinedStatementStats", () => {
           100,
           SqlStatsSortOptions.PCT_RUNTIME,
         ),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.error).toBeDefined();
+    });
+  });
+});
+
+const mockStatementDetailsResponse = {
+  statement: {
+    metadata: { query: "SELECT 1" },
+    stats: { count: 1 },
+  },
+};
+
+describe("useStatementDetails", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("fetches statement details and returns data", async () => {
+    mockGetCombinedStatements.mockResolvedValueOnce(
+      mockStatementDetailsResponse,
+    );
+
+    const timeScale = {
+      windowSize: moment.duration(1, "hour"),
+      sampleSize: moment.duration(30, "seconds"),
+      fixedWindowEnd: moment.utc("2024-01-01 14:00"),
+      key: "Past 1 Hour",
+    };
+
+    const { result, waitForNextUpdate } = renderHook(
+      () => useStatementDetails("abc123", "app1,app2", timeScale),
+      { wrapper },
+    );
+
+    expect(result.current.isLoading).toBe(true);
+
+    await waitForNextUpdate();
+
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.data).toBeDefined();
+    expect(result.current.error).toBeUndefined();
+    expect(mockGetCombinedStatements).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips fetch when timeScale is null", () => {
+    const { result } = renderHook(
+      () => useStatementDetails("abc123", undefined, null),
+      { wrapper },
+    );
+
+    expect(result.current.data).toBeUndefined();
+    expect(result.current.isLoading).toBe(false);
+    expect(mockGetCombinedStatements).not.toHaveBeenCalled();
+  });
+
+  it("skips fetch when fingerprintId is empty", () => {
+    const timeScale = {
+      windowSize: moment.duration(1, "hour"),
+      sampleSize: moment.duration(30, "seconds"),
+      fixedWindowEnd: moment.utc("2024-01-01 14:00"),
+      key: "Past 1 Hour",
+    };
+
+    const { result } = renderHook(
+      () => useStatementDetails("", "app1", timeScale),
+      { wrapper },
+    );
+
+    expect(result.current.data).toBeUndefined();
+    expect(result.current.isLoading).toBe(false);
+    expect(mockGetCombinedStatements).not.toHaveBeenCalled();
+  });
+
+  it("returns error when fetch fails", async () => {
+    mockGetCombinedStatements.mockRejectedValue(new Error("fetch failed"));
+
+    const timeScale = {
+      windowSize: moment.duration(1, "hour"),
+      sampleSize: moment.duration(30, "seconds"),
+      fixedWindowEnd: moment.utc("2024-01-01 14:00"),
+      key: "Past 1 Hour",
+    };
+
+    const { result, waitFor } = renderHook(
+      () => useStatementDetails("abc123", undefined, timeScale),
       { wrapper },
     );
 
