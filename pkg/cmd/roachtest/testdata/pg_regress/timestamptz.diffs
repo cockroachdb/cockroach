@@ -1755,8 +1755,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
-- THURSDAY  Thursday  thursday  THU Thu thu JANUARY   January   january   I    JAN Jan jan
-- THURSDAY  Thursday  thursday  THU Thu thu JANUARY   January   january   I    JAN Jan jan
++ SATURDAY  Saturday  saturday  SAT Sat sat NOVEMBER  November  november  XI   NOV Nov nov
++ MONDAY    Monday    monday    MON Mon mon JANUARY   January   january   I    JAN Jan jan
++ THURSDAY  Thursday  thursday  THU Thu thu JANUARY   January   january   I    JAN Jan jan
+  THURSDAY  Thursday  thursday  THU Thu thu JANUARY   January   january   I    JAN Jan jan
+  THURSDAY  Thursday  thursday  THU Thu thu JANUARY   January   january   I    JAN Jan jan
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
@@ -1783,19 +1786,19 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
 - THURSDAY  Thursday  thursday  THU Thu thu JULY      July      july      VII  JUL Jul jul
 - TUESDAY   Tuesday   tuesday   TUE Tue tue JUNE      June      june      VI   JUN Jun jun
 - MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
-- TUESDAY   Tuesday   tuesday   TUE Tue tue FEBRUARY  February  february  II   FEB Feb feb
+  TUESDAY   Tuesday   tuesday   TUE Tue tue FEBRUARY  February  february  II   FEB Feb feb
 - WEDNESDAY Wednesday wednesday WED Wed wed FEBRUARY  February  february  II   FEB Feb feb
 - THURSDAY  Thursday  thursday  THU Thu thu FEBRUARY  February  february  II   FEB Feb feb
 - FRIDAY    Friday    friday    FRI Fri fri FEBRUARY  February  february  II   FEB Feb feb
 - SATURDAY  Saturday  saturday  SAT Sat sat FEBRUARY  February  february  II   FEB Feb feb
 - SUNDAY    Sunday    sunday    SUN Sun sun FEBRUARY  February  february  II   FEB Feb feb
-- TUESDAY   Tuesday   tuesday   TUE Tue tue FEBRUARY  February  february  II   FEB Feb feb
+  TUESDAY   Tuesday   tuesday   TUE Tue tue FEBRUARY  February  february  II   FEB Feb feb
 - SATURDAY  Saturday  saturday  SAT Sat sat FEBRUARY  February  february  II   FEB Feb feb
 - THURSDAY  Thursday  thursday  THU Thu thu FEBRUARY  February  february  II   FEB Feb feb
-- TUESDAY   Tuesday   tuesday   TUE Tue tue FEBRUARY  February  february  II   FEB Feb feb
+  TUESDAY   Tuesday   tuesday   TUE Tue tue FEBRUARY  February  february  II   FEB Feb feb
 - SATURDAY  Saturday  saturday  SAT Sat sat FEBRUARY  February  february  II   FEB Feb feb
 - THURSDAY  Thursday  thursday  THU Thu thu FEBRUARY  February  february  II   FEB Feb feb
-- TUESDAY   Tuesday   tuesday   TUE Tue tue FEBRUARY  February  february  II   FEB Feb feb
+  TUESDAY   Tuesday   tuesday   TUE Tue tue FEBRUARY  February  february  II   FEB Feb feb
 - SUNDAY    Sunday    sunday    SUN Sun sun FEBRUARY  February  february  II   FEB Feb feb
 - SATURDAY  Saturday  saturday  SAT Sat sat FEBRUARY  February  february  II   FEB Feb feb
 - WEDNESDAY Wednesday wednesday WED Wed wed FEBRUARY  February  february  II   FEB Feb feb
@@ -1813,22 +1816,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
 - SUNDAY    Sunday    sunday    SUN Sun sun DECEMBER  December  december  XII  DEC Dec dec
 - MONDAY    Monday    monday    MON Mon mon JANUARY   January   january   I    JAN Jan jan
 -(66 rows)
-+ saturday  Saturday  saturday  sat Sat sat NOVEMBER  November  november  XI   NOV Nov nov
-+ monday    Monday    monday    mon Mon mon JANUARY   January   january   I    JAN Jan jan
-+ thursday  Thursday  thursday  thu Thu thu JANUARY   January   january   I    JAN Jan jan
-+ thursday  Thursday  thursday  thu Thu thu JANUARY   January   january   I    JAN Jan jan
-+ thursday  Thursday  thursday  thu Thu thu JANUARY   January   january   I    JAN Jan jan
-+ tuesday   Tuesday   tuesday   tue Tue tue FEBRUARY  February  february  II   FEB Feb feb
-+ tuesday   Tuesday   tuesday   tue Tue tue FEBRUARY  February  february  II   FEB Feb feb
-+ tuesday   Tuesday   tuesday   tue Tue tue FEBRUARY  February  february  II   FEB Feb feb
-+ tuesday   Tuesday   tuesday   tue Tue tue FEBRUARY  February  february  II   FEB Feb feb
-+ wednesday Wednesday wednesday wed Wed wed JUNE      June      june      VI   JUN Jun jun
-+ sunday    Sunday    sunday    sun Sun sun SEPTEMBER September september IX   SEP Sep sep
-+ tuesday   Tuesday   tuesday   tue Tue tue FEBRUARY  February  february  II   FEB Feb feb
-+ monday    Monday    monday    mon Mon mon FEBRUARY  February  february  II   FEB Feb feb
-+ monday    Monday    monday    mon Mon mon FEBRUARY  February  february  II   FEB Feb feb
-+ monday    Monday    monday    mon Mon mon FEBRUARY  February  february  II   FEB Feb feb
-+ thursday  Thursday  thursday  thu Thu thu JULY      July      july      VII  JUL Jul jul
++ WEDNESDAY Wednesday wednesday WED Wed wed JUNE      June      june      VI   JUN Jun jun
++ SUNDAY    Sunday    sunday    SUN Sun sun SEPTEMBER September september IX   SEP Sep sep
++ TUESDAY   Tuesday   tuesday   TUE Tue tue FEBRUARY  February  february  II   FEB Feb feb
++ MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
++ MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
++ MONDAY    Monday    monday    MON Mon mon FEBRUARY  February  february  II   FEB Feb feb
++ THURSDAY  Thursday  thursday  THU Thu thu JULY      July      july      VII  JUL Jul jul
 +(16 rows)
  
  SELECT to_char(d1, 'FMDAY FMDay FMday FMMONTH FMMonth FMmonth FMRM')
@@ -1844,8 +1838,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
 - MONDAY Monday monday FEBRUARY February february II
 - MONDAY Monday monday FEBRUARY February february II
 - MONDAY Monday monday FEBRUARY February february II
-- THURSDAY Thursday thursday JANUARY January january I
-- THURSDAY Thursday thursday JANUARY January january I
++                         to_char                          
++----------------------------------------------------------
++ SATURDAY Saturday saturday NOVEMBER November november XI
++ MONDAY Monday monday JANUARY January january I
++ THURSDAY Thursday thursday JANUARY January january I
+  THURSDAY Thursday thursday JANUARY January january I
+  THURSDAY Thursday thursday JANUARY January january I
 - MONDAY Monday monday FEBRUARY February february II
 - MONDAY Monday monday FEBRUARY February february II
 - MONDAY Monday monday FEBRUARY February february II
@@ -1872,19 +1871,19 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
 - THURSDAY Thursday thursday JULY July july VII
 - TUESDAY Tuesday tuesday JUNE June june VI
 - MONDAY Monday monday FEBRUARY February february II
-- TUESDAY Tuesday tuesday FEBRUARY February february II
+  TUESDAY Tuesday tuesday FEBRUARY February february II
 - WEDNESDAY Wednesday wednesday FEBRUARY February february II
 - THURSDAY Thursday thursday FEBRUARY February february II
 - FRIDAY Friday friday FEBRUARY February february II
 - SATURDAY Saturday saturday FEBRUARY February february II
 - SUNDAY Sunday sunday FEBRUARY February february II
-- TUESDAY Tuesday tuesday FEBRUARY February february II
+  TUESDAY Tuesday tuesday FEBRUARY February february II
 - SATURDAY Saturday saturday FEBRUARY February february II
 - THURSDAY Thursday thursday FEBRUARY February february II
-- TUESDAY Tuesday tuesday FEBRUARY February february II
+  TUESDAY Tuesday tuesday FEBRUARY February february II
 - SATURDAY Saturday saturday FEBRUARY February february II
 - THURSDAY Thursday thursday FEBRUARY February february II
-- TUESDAY Tuesday tuesday FEBRUARY February february II
+  TUESDAY Tuesday tuesday FEBRUARY February february II
 - SUNDAY Sunday sunday FEBRUARY February february II
 - SATURDAY Saturday saturday FEBRUARY February february II
 - WEDNESDAY Wednesday wednesday FEBRUARY February february II
@@ -1902,24 +1901,13 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
 - SUNDAY Sunday sunday DECEMBER December december XII
 - MONDAY Monday monday JANUARY January january I
 -(66 rows)
-+                         to_char                          
-+----------------------------------------------------------
-+ saturday Saturday saturday NOVEMBER November november XI
-+ monday Monday monday JANUARY January january I
-+ thursday Thursday thursday JANUARY January january I
-+ thursday Thursday thursday JANUARY January january I
-+ thursday Thursday thursday JANUARY January january I
-+ tuesday Tuesday tuesday FEBRUARY February february II
-+ tuesday Tuesday tuesday FEBRUARY February february II
-+ tuesday Tuesday tuesday FEBRUARY February february II
-+ tuesday Tuesday tuesday FEBRUARY February february II
-+ wednesday Wednesday wednesday JUNE June june VI
-+ sunday Sunday sunday SEPTEMBER September september IX
-+ tuesday Tuesday tuesday FEBRUARY February february II
-+ monday Monday monday FEBRUARY February february II
-+ monday Monday monday FEBRUARY February february II
-+ monday Monday monday FEBRUARY February february II
-+ thursday Thursday thursday JULY July july VII
++ WEDNESDAY Wednesday wednesday JUNE June june VI
++ SUNDAY Sunday sunday SEPTEMBER September september IX
++ TUESDAY Tuesday tuesday FEBRUARY February february II
++ MONDAY Monday monday FEBRUARY February february II
++ MONDAY Monday monday FEBRUARY February february II
++ MONDAY Monday monday FEBRUARY February february II
++ THURSDAY Thursday thursday JULY July july VII
 +(16 rows)
  
  SELECT to_char(d1, 'Y,YYY YYYY YYY YY Y CC Q MM WW DDD DD D J')
@@ -2453,20 +2441,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
 - 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
 - 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
 - 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
-- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
-- 2001 A.D. 2001 a.d. 2001 ad 06:19:20 P.M. 06:19:20 p.m. 06:19:20 pm
-- 2000 A.D. 2000 a.d. 2000 ad 08:14:01 A.M. 08:14:01 a.m. 08:14:01 am
-- 2000 A.D. 2000 a.d. 2000 ad 04:14:02 A.M. 04:14:02 a.m. 04:14:02 am
-- 2000 A.D. 2000 a.d. 2000 ad 02:14:03 A.M. 02:14:03 a.m. 02:14:03 am
-- 2000 A.D. 2000 a.d. 2000 ad 03:14:04 A.M. 03:14:04 a.m. 03:14:04 am
-- 2000 A.D. 2000 a.d. 2000 ad 01:14:05 A.M. 01:14:05 a.m. 01:14:05 am
-- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
-- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
-- 1997 A.D. 1997 a.d. 1997 ad 05:32:00 P.M. 05:32:00 p.m. 05:32:00 pm
-- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
-- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
-- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
-- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
 +                                  to_char                                  
 +---------------------------------------------------------------------------
 + 4715 B.C. 4715 b.c. 4715 bc 12:00:00 A.M. 12:00:00 a.m. 12:00:00 am
@@ -2482,13 +2456,27 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/timestamptz.out -
 + 2001 A.D. 2001 a.d. 2001 ad 01:19:20 A.M. 01:19:20 a.m. 01:19:20 am
 + 1997 A.D. 1997 a.d. 1997 ad 01:32:01 A.M. 01:32:01 a.m. 01:32:01 am
   1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
+- 2001 A.D. 2001 a.d. 2001 ad 06:19:20 P.M. 06:19:20 p.m. 06:19:20 pm
+- 2000 A.D. 2000 a.d. 2000 ad 08:14:01 A.M. 08:14:01 a.m. 08:14:01 am
+- 2000 A.D. 2000 a.d. 2000 ad 04:14:02 A.M. 04:14:02 a.m. 04:14:02 am
+- 2000 A.D. 2000 a.d. 2000 ad 02:14:03 A.M. 02:14:03 a.m. 02:14:03 am
+- 2000 A.D. 2000 a.d. 2000 ad 03:14:04 A.M. 03:14:04 a.m. 03:14:04 am
+- 2000 A.D. 2000 a.d. 2000 ad 01:14:05 A.M. 01:14:05 a.m. 01:14:05 am
+  1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
+- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
+- 1997 A.D. 1997 a.d. 1997 ad 05:32:00 P.M. 05:32:00 p.m. 05:32:00 pm
+- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
+- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
+- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
+- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
+- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
 - 1997 A.D. 1997 a.d. 1997 ad 09:32:01 A.M. 09:32:01 a.m. 09:32:01 am
 - 1997 A.D. 1997 a.d. 1997 ad 09:32:01 A.M. 09:32:01 a.m. 09:32:01 am
 - 1997 A.D. 1997 a.d. 1997 ad 09:32:01 A.M. 09:32:01 a.m. 09:32:01 am
 - 1997 A.D. 1997 a.d. 1997 ad 02:32:01 P.M. 02:32:01 p.m. 02:32:01 pm
 - 1997 A.D. 1997 a.d. 1997 ad 02:32:01 P.M. 02:32:01 p.m. 02:32:01 pm
 - 1997 A.D. 1997 a.d. 1997 ad 06:32:01 P.M. 06:32:01 p.m. 06:32:01 pm
-  1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
+- 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
 - 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
 - 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
 - 1997 A.D. 1997 a.d. 1997 ad 05:32:01 P.M. 05:32:01 p.m. 05:32:01 pm
