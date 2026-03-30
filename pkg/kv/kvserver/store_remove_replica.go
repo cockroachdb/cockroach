@@ -83,13 +83,9 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 
 	// Run sanity checks. If (nil, nil) is returned, there's nothing to do.
 	desc, err := func() (*roachpb.RangeDescriptor, error) {
-		rep.readOnlyCmdMu.Lock()
-		defer rep.readOnlyCmdMu.Unlock()
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		rep.mu.Lock()
-		defer rep.mu.Unlock()
-
+		// The destroyStatus and state.Desc checks only access shMu fields, which
+		// are safe to read under raftMu without additional locks. Only s.mu is
+		// needed for the store-level replicasByRangeID check.
 		if opts.DestroyData {
 			// Detect if we were already removed.
 			if rep.shMu.destroyStatus.Removed() {
@@ -113,7 +109,10 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		// delete random active data). Note that if the caller has !DestroyData,
 		// this means it needs to already know that the Replica is still in the
 		// Store.
-		if existing, ok := s.mu.replicasByRangeID.Load(rep.RangeID); !ok {
+		s.mu.Lock()
+		existing, ok := s.mu.replicasByRangeID.Load(rep.RangeID)
+		s.mu.Unlock()
+		if !ok {
 			return nil, errors.AssertionFailedf("cannot remove replica which does not exist in Store")
 		} else if existing != rep {
 			return nil, errors.AssertionFailedf("replica %v replaced by %v before being removed",
@@ -259,23 +258,15 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 	rep.raftMu.AssertHeld()
 
 	// Sanity check this removal.
-	func() {
-		rep.readOnlyCmdMu.Lock()
-		defer rep.readOnlyCmdMu.Unlock()
-		rep.mu.Lock()
-		defer rep.mu.Unlock()
-
-		// Detect if we were already removed, this is a fatal error
-		// because we should have already checked this under the raftMu
-		// before calling this method.
-		if rep.shMu.destroyStatus.Removed() {
-			log.KvDistribution.Fatalf(ctx, "uninitialized replica unexpectedly already removed")
-		}
-
-		if rep.IsInitialized() {
-			log.KvDistribution.Fatalf(ctx, "cannot remove initialized replica in removeUninitializedReplica: %v", rep)
-		}
-	}()
+	//
+	// These checks only access shMu fields (safe to read under raftMu) and
+	// IsInitialized (atomic), so no additional locks are needed.
+	if rep.shMu.destroyStatus.Removed() {
+		log.KvDistribution.Fatalf(ctx, "uninitialized replica unexpectedly already removed")
+	}
+	if rep.IsInitialized() {
+		log.KvDistribution.Fatalf(ctx, "cannot remove initialized replica in removeUninitializedReplica: %v", rep)
+	}
 
 	// Stage the engine work before any in-memory state changes. If the engine
 	// work fails (e.g. context cancellation, I/O error), we can return the error
