@@ -183,6 +183,9 @@ func runSurviveRegionFailure(
 	t.Status("waiting for constraint conformance after SURVIVE REGION FAILURE")
 	waitForConstraintConformance(ctx, t, conn)
 
+	t.Status("waiting for replication changes to complete")
+	waitForNoLearnerReplicas(ctx, t, conn)
+
 	t.Status("waiting for initial lease placement")
 	waitForLeasesInRegion(ctx, t, conn, topo, "test_sr.rbt_americas", "us-east1")
 	waitForLeasesInRegion(ctx, t, conn, topo, "test_sr.rbt_standalone", "europe-west2")
@@ -248,6 +251,9 @@ func runSurviveZoneFailure(
 	t.Status("waiting for constraint conformance after SURVIVE ZONE FAILURE")
 	waitForConstraintConformance(ctx, t, conn)
 
+	t.Status("waiting for replication changes to complete")
+	waitForNoLearnerReplicas(ctx, t, conn)
+
 	t.Status("waiting for initial lease placement for zone failure scenario")
 	waitForLeasesInRegion(ctx, t, conn, topo, "test_sr.rbt_americas", "us-east1")
 
@@ -290,7 +296,7 @@ func runSurviveZoneFailure(
 }
 
 // waitForConstraintConformance polls system.replication_constraint_stats until
-// there are no voter_constraint violations.
+// there are no constraint violations of any type.
 func waitForConstraintConformance(ctx context.Context, t test.Test, conn *gosql.DB) {
 	t.Helper()
 	retryOpts := retry.Options{
@@ -300,31 +306,74 @@ func waitForConstraintConformance(ctx context.Context, t test.Test, conn *gosql.
 	}
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		var count int
-		// TODO(#165087): Remove the voter_constraint filter once the underlying
-		// issue is resolved. Under SURVIVE ZONE FAILURE with super regions,
-		// non-voting replica constraints (type='constraint') are persistently
-		// violated — the zone configs require more non-voting replicas per
-		// region than the replication factor allows. All constraint types
-		// should converge.
 		err := conn.QueryRowContext(ctx,
 			`SELECT count(*) FROM system.replication_constraint_stats
-			 WHERE violating_ranges > 0
-			   AND type = 'voter_constraint'`).Scan(&count)
+			 WHERE violating_ranges > 0`).Scan(&count)
 		if err != nil {
 			t.L().Printf("error checking constraint conformance: %v", err)
 			continue
 		}
 		if count == 0 {
-			t.L().Printf("voter constraint conformance achieved")
+			t.L().Printf("constraint conformance achieved")
 			return
 		}
-		t.L().Printf("still have %d violating voter constraint entries, retrying...", count)
+		t.L().Printf("still have %d violating constraint entries, retrying...", count)
 	}
 	// Log the actual violations and replica placements before failing to aid
 	// debugging.
 	logConstraintViolations(ctx, t, conn)
 	logAllTablePlacements(ctx, t, conn)
-	t.Fatal("timed out waiting for voter constraint conformance")
+	t.Fatal("timed out waiting for constraint conformance")
+}
+
+// waitForNoLearnerReplicas waits until all ranges in the test database have
+// completed any in-progress atomic replication changes. Ranges in joint
+// configurations (VOTER_DEMOTING_LEARNER, VOTER_INCOMING, etc.) report learner
+// replicas. Killing nodes while ranges are in joint configs can cause quorum
+// loss even when constraint conformance has been achieved, because joint
+// configs require a majority in both the old and new voter sets.
+func waitForNoLearnerReplicas(ctx context.Context, t test.Test, conn *gosql.DB) {
+	t.Helper()
+	tables := []string{
+		"test_sr.rbt_americas",
+		"test_sr.rbt_standalone",
+		"test_sr.rbr",
+	}
+	retryOpts := retry.Options{
+		InitialBackoff: 10 * time.Second,
+		MaxBackoff:     15 * time.Second,
+		MaxRetries:     30,
+	}
+	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+		totalLearners := 0
+		var queryErr error
+		for _, table := range tables {
+			var count int
+			err := conn.QueryRowContext(ctx,
+				fmt.Sprintf(
+					`SELECT count(*) FROM [SHOW RANGES FROM TABLE %s WITH DETAILS]
+					 WHERE learner_replicas != '{}'`, table,
+				)).Scan(&count)
+			if err != nil {
+				queryErr = err
+				break
+			}
+			totalLearners += count
+		}
+		if queryErr != nil {
+			t.L().Printf("error checking learner replicas: %v", queryErr)
+			continue
+		}
+		if totalLearners == 0 {
+			t.L().Printf("no ranges with in-progress replication changes")
+			return
+		}
+		t.L().Printf(
+			"still have %d ranges with in-progress replication changes, retrying...",
+			totalLearners,
+		)
+	}
+	t.Fatal("timed out waiting for replication changes to complete")
 }
 
 // logConstraintViolations queries and logs the current constraint violations
