@@ -1136,9 +1136,9 @@ func TestReplicaRangefeedErrors(t *testing.T) {
 		// with Raft commands.
 		kvserver.RangefeedEnabled.Override(ctx, &store.ClusterSettings().SV, false)
 
-		// Perform a write on the range.
-		writeKey := mkKey("c")
-		pArgs := putArgs(writeKey, []byte("val2"))
+		// Perform a write on the range. This will be proposed without a logical
+		// op log, which should trigger the rangefeed to disconnect.
+		pArgs := putArgs(startKey, []byte("val"))
 		if _, pErr := kv.SendWrapped(ctx, store.TestSender(), pArgs); pErr != nil {
 			t.Fatal(pErr)
 		}
