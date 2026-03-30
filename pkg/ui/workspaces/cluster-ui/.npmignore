@@ -8,7 +8,6 @@
 src/
 .jest
 .storybook
-enzyme.setup.js
 .eslintrc.json
 
 # source maps

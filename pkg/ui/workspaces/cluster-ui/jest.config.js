@@ -34,8 +34,8 @@ module.exports = {
     "<rootDir>/"
   ],
   roots: ["<rootDir>/src"],
-  testEnvironment: "enzyme",
-  setupFilesAfterEnv: ["./enzyme.setup.js", "./src/test-utils/matchMedia.mock.js", "jest-enzyme", "jest-canvas-mock"],
+  testEnvironment: "jsdom",
+  setupFilesAfterEnv: ["./src/test-utils/matchMedia.mock.js", "jest-canvas-mock"],
   transform: {
     "^.+\\.tsx?$": "ts-jest",
     "^.+\\.jsx?$": ['babel-jest', { configFile: path.resolve(__dirname, 'babel.config.js') }],

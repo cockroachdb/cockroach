@@ -176,7 +176,6 @@ module.exports = {
   // before each test. These run after the test environment is setup for each test. This
   setupFilesAfterEnv: [
     "jest-canvas-mock",
-    "jest-enzyme",
     "<rootDir>/src/setupTests.js",
   ],
 
