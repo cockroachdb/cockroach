@@ -159,16 +159,7 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	// Mark the replica as removed. This is done after staging (which is
 	// fallible) but before committing (which is infallible), so that a staging
 	// failure leaves the replica in a clean state.
-	func() {
-		rep.readOnlyCmdMu.Lock()
-		defer rep.readOnlyCmdMu.Unlock()
-		rep.mu.Lock()
-		defer rep.mu.Unlock()
-		// NB: we hold raftMu throughout and destroyStatus is in shMu, so the destroyStatus
-		// did not change between the earlier sanity checks and here.
-		rep.shMu.destroyStatus.Set(kvpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
-			destroyReasonRemoved)
-	}()
+	rep.setDestroyStatusRemovedRaftMuLocked()
 
 	// Proceed with the removal, all errors encountered from here down are fatal.
 
@@ -303,16 +294,7 @@ func (s *Store) removeUninitializedReplicaRaftMuLocked(
 	// Mark the replica as removed. This is done after staging (which is
 	// fallible) but before committing (which is infallible), so that a staging
 	// failure leaves the replica in a clean state.
-	func() {
-		rep.readOnlyCmdMu.Lock()
-		defer rep.readOnlyCmdMu.Unlock()
-		rep.mu.Lock()
-		defer rep.mu.Unlock()
-		// NB: we hold raftMu throughout and destroyStatus is in shMu, so the
-		// destroyStatus did not change between the earlier sanity checks and here.
-		rep.shMu.destroyStatus.Set(kvpb.NewRangeNotFoundError(rep.RangeID, rep.StoreID()),
-			destroyReasonRemoved)
-	}()
+	rep.setDestroyStatusRemovedRaftMuLocked()
 
 	// Proceed with the removal.
 
