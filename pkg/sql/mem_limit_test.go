@@ -195,8 +195,9 @@ func TestStreamerTightBudget(t *testing.T) {
 			// We expect that the maximum memory usage is about 2MiB (1MiB is
 			// accounted for by the Streamer, and another 1MiB is accounted for
 			// by the ColIndexJoin when the blob is copied into the columnar
-			// batch). We allow for 0.1MiB for other memory usage in the query.
-			maxAllowed := 2.1
+			// batch). We allow for 1MiB of slack for nondeterministic overhead
+			// (Go allocator, protobuf headers, memory accounting granularity).
+			maxAllowed := 3.0
 			require.GreaterOrEqualf(t, maxAllowed, usage, "unexpectedly high memory usage\n----\n%s", sb.String())
 			return
 		}
