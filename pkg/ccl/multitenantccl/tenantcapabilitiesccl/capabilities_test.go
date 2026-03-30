@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed/rangefeedcache"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -92,6 +93,7 @@ func TestDataDriven(t *testing.T) {
 		require.NoError(t, err)
 
 		tenantSQLDB := testTenantInterface.SQLConn(t)
+		sql.PreparedTransactionsEnabled.Override(ctx, &testTenantInterface.ClusterSettings().SV, true)
 
 		lastUpdateTS := tc.Server(0).Clock().Now() // ensure watcher isn't starting out empty
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
