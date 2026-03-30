@@ -129,7 +129,7 @@ func TestSplits(t *testing.T) {
 				sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, tree.NameString(table.Name), table.Schema))
 
 				const concurrency = 10
-				if err := Split(ctx, db, table, concurrency); err != nil {
+				if err := Split(ctx, db, []workload.Table{table}, concurrency); err != nil {
 					t.Fatalf("%+v", err)
 				}
 

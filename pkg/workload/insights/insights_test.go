@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 )
 
@@ -52,7 +53,7 @@ func TestInsightsWorkload(t *testing.T) {
 			sqlDB.Exec(t, fmt.Sprintf(`DROP TABLE IF EXISTS %s`, tree.NameString(insightsTableA.Name)))
 			sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, tree.NameString(insightsTableA.Name), insightsTableA.Schema))
 
-			if err := workloadsql.Split(ctx, db, insightsTableA, 1 /* concurrency */); err != nil {
+			if err := workloadsql.Split(ctx, db, []workload.Table{insightsTableA}, 1 /* concurrency */); err != nil {
 				t.Fatalf("%+v", err)
 			}
 

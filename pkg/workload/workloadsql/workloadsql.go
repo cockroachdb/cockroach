@@ -21,8 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/version"
-	"golang.org/x/time/rate"
 )
 
 // Setup creates the given tables and fills them with initial data.
@@ -51,11 +49,9 @@ func Setup(
 
 	tables := gen.Tables()
 	log.Dev.Infof(ctx, "starting split operations for %d tables", len(tables))
-	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
-	for _, table := range tables {
-		if err := Split(ctx, db, table, splitConcurrency); err != nil {
-			return 0, err
-		}
+	const tableConcurrency = 10
+	if err := Split(ctx, db, tables, tableConcurrency); err != nil {
+		return 0, err
 	}
 	log.Dev.Infof(ctx, "finished split operations for %d tables", len(tables))
 
@@ -70,148 +66,116 @@ func Setup(
 	return bytes, nil
 }
 
-// maybeDisableMergeQueue disables the merge queue for versions prior to
-// 19.2.
-func maybeDisableMergeQueue(db *gosql.DB) error {
-	var ok bool
-	if err := db.QueryRow(
-		`SELECT count(*) > 0 FROM [ SHOW ALL CLUSTER SETTINGS ] AS _ (v) WHERE v = 'kv.range_merge.queue.enabled'`,
-	).Scan(&ok); err != nil || !ok {
-		return err
-	}
-	var versionStr string
-	err := db.QueryRow(
-		`SELECT value FROM crdb_internal.node_build_info WHERE field = 'Version'`,
-	).Scan(&versionStr)
-	if err != nil {
-		return err
-	}
-	v, err := version.Parse(versionStr)
-	// If we can't parse the error then we'll assume that we should disable the
-	// queue. This happens in testing.
-	if err == nil && v.Major().AtLeast(version.MustParseMajorVersion("v19.2")) {
-		return nil
-	}
-	_, err = db.Exec("SET CLUSTER SETTING kv.range_merge.queue.enabled = false")
-	return err
-}
-
-// Split creates the range splits defined by the given table.
-func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency int) error {
-	// Prevent the merge queue from immediately discarding our splits.
-	if err := maybeDisableMergeQueue(db); err != nil {
-		return err
-	}
-
-	if table.Splits.NumBatches <= 0 {
-		return nil
-	}
-
-	splitPoints := make([][]interface{}, 0, table.Splits.NumBatches)
+// collectSplitPoints gathers and sorts all split points for a table.
+func collectSplitPoints(table workload.Table) [][]interface{} {
+	splitPoints := make(
+		[][]interface{}, 0, table.Splits.NumBatches,
+	)
 	for splitIdx := 0; splitIdx < table.Splits.NumBatches; splitIdx++ {
-		splitPoints = append(splitPoints, table.Splits.BatchRows(splitIdx)...)
+		splitPoints = append(
+			splitPoints, table.Splits.BatchRows(splitIdx)...,
+		)
 	}
 	sort.Sort(sliceSliceInterface(splitPoints))
+	return splitPoints
+}
 
-	type pair struct {
-		lo, hi int
-	}
-	splitCh := make(chan pair, len(splitPoints)/2+1)
-	splitCh <- pair{0, len(splitPoints)}
-	doneCh := make(chan struct{})
-
-	// Check to see if we're on a tenant;
-
-	log.Dev.Infof(ctx, `starting %d splits`, len(splitPoints))
+// executeSplits performs ALTER TABLE ... SPLIT AT for all tables
+// concurrently, issuing one statement per table with all split points.
+func executeSplits(
+	ctx context.Context, db *gosql.DB, tables []workload.Table, concurrency int,
+) error {
 	g := ctxgroup.WithContext(ctx)
-	// Rate limit splitting to prevent replica imbalance.
-	r := rate.NewLimiter(128, 1)
-	for i := 0; i < concurrency; i++ {
+	g.SetLimit(concurrency)
+	for _, table := range tables {
+		pts := collectSplitPoints(table)
+		if len(pts) == 0 {
+			continue
+		}
+		name := table.Name
 		g.GoCtx(func(ctx context.Context) error {
+			log.Dev.Infof(ctx, "splitting %s into %d ranges",
+				name, len(pts))
 			var buf bytes.Buffer
-			for {
-				select {
-				case p, ok := <-splitCh:
-					if !ok {
-						return nil
-					}
-					if err := r.Wait(ctx); err != nil {
-						return err
-					}
-					m := (p.lo + p.hi) / 2
-					split := strings.Join(StringTuple(splitPoints[m]), `,`)
-
-					buf.Reset()
-					fmt.Fprintf(&buf, `ALTER TABLE %s SPLIT AT VALUES (%s)`, tree.NameString(table.Name), split)
-					// If you're investigating an error coming out of this Exec, see the
-					// HACK comment in ColBatchToRows for some context that may (or may
-					// not) help you.
-					stmt := buf.String()
-					if _, err := db.Exec(stmt); err != nil {
-						if strings.Contains(err.Error(), errorutil.UnsupportedUnderClusterVirtualizationMessage) {
-							// We don't care about split errors if we're running a workload
-							// with virtual clusters; we can't do them so we'll just continue.
-							//
-							// TODO(knz): This seems incorrect: this should be possible
-							// with the right capability. See: #109422.
-							break
-						}
-						return errors.Wrapf(err, "executing %s", stmt)
-					}
-
-					buf.Reset()
-					fmt.Fprintf(&buf, `ALTER TABLE %s SCATTER FROM (%s) TO (%s)`,
-						tree.NameString(table.Name), split, split)
-					stmt = buf.String()
-					if _, err := db.Exec(stmt); err != nil {
-						// SCATTER can collide with normal replicate queue
-						// operations and fail spuriously, so only print the
-						// error.
-						log.Dev.Warningf(ctx, `%s: %v`, stmt, err)
-					}
-
-					select {
-					case doneCh <- struct{}{}:
-					case <-ctx.Done():
-						return ctx.Err()
-					}
-
-					if p.lo < m {
-						splitCh <- pair{p.lo, m}
-					}
-					if m+1 < p.hi {
-						splitCh <- pair{m + 1, p.hi}
-					}
-				case <-ctx.Done():
-					return ctx.Err()
+			fmt.Fprintf(&buf, `ALTER TABLE %s SPLIT AT VALUES `,
+				tree.NameString(name))
+			for i, pt := range pts {
+				if i > 0 {
+					buf.WriteString(`, `)
 				}
-
+				fmt.Fprintf(&buf, `(%s)`,
+					strings.Join(StringTuple(pt), `, `))
 			}
+			// If you're investigating an error from this Exec, see
+			// the HACK comment in ColBatchToRows.
+			stmt := buf.String()
+			if _, err := db.Exec(stmt); err != nil {
+				if strings.Contains(
+					err.Error(),
+					errorutil.UnsupportedUnderClusterVirtualizationMessage,
+				) {
+					// Splits are unsupported under cluster
+					// virtualization; skip without error.
+					// TODO(knz): This should be possible with the
+					// right capability. See: #109422.
+					return nil
+				}
+				return errors.Wrapf(err, "executing split for table %s", name)
+			}
+			log.Dev.Infof(ctx, "finished splitting %s", name)
+			return nil
 		})
 	}
-	g.GoCtx(func(ctx context.Context) error {
-		finished := 0
-		for finished < len(splitPoints) {
-			select {
-			case <-doneCh:
-				finished++
-				if finished%1000 == 0 {
-					log.Dev.Infof(ctx, "finished %d of %d splits", finished, len(splitPoints))
-				}
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-		close(splitCh)
-		return nil
-	})
 	return g.Wait()
 }
 
-// StringTuple returns the given datums as strings suitable for use in directly
-// in SQL.
-//
-// TODO(dan): Remove this once SCATTER supports placeholders.
+// scatterTables runs ALTER TABLE ... SCATTER for each table
+// concurrently, bounded by the given concurrency limit.
+func scatterTables(
+	ctx context.Context, db *gosql.DB, tables []workload.Table, concurrency int,
+) error {
+	g := ctxgroup.WithContext(ctx)
+	g.SetLimit(concurrency)
+	for _, table := range tables {
+		name := table.Name
+		g.GoCtx(func(ctx context.Context) error {
+			log.Dev.Infof(ctx, "scattering %s", name)
+			stmt := fmt.Sprintf(
+				`ALTER TABLE %s SCATTER`, tree.NameString(name),
+			)
+			if _, err := db.Exec(stmt); err != nil {
+				// SCATTER can collide with replicate queue operations
+				// and fail spuriously, so only log a warning.
+				log.Dev.Warningf(ctx, `%s: %v`, stmt, err)
+			}
+			log.Dev.Infof(ctx, "finished scattering %s", name)
+			return nil
+		})
+	}
+	return g.Wait()
+}
+
+// Split creates the range splits defined by the given tables and
+// scatters them. Tables with no split points are skipped.
+func Split(ctx context.Context, db *gosql.DB, tables []workload.Table, concurrency int) error {
+	var tablesWithSplits []workload.Table
+	for _, table := range tables {
+		if table.Splits.NumBatches > 0 {
+			tablesWithSplits = append(tablesWithSplits, table)
+		}
+	}
+	if len(tablesWithSplits) == 0 {
+		return nil
+	}
+
+	if err := executeSplits(ctx, db, tablesWithSplits, concurrency); err != nil {
+		return err
+	}
+	return scatterTables(ctx, db, tablesWithSplits, concurrency)
+}
+
+// StringTuple returns the given datums as strings suitable for direct
+// use in SQL.
 func StringTuple(datums []interface{}) []string {
 	s := make([]string, len(datums))
 	for i, datum := range datums {
@@ -231,7 +195,6 @@ func StringTuple(datums []interface{}) []string {
 		case float64:
 			s[i] = fmt.Sprintf(`%f`, x)
 		case []byte:
-			// See the HACK comment in ColBatchToRows.
 			s[i] = lexbase.EscapeSQLString(string(x))
 		default:
 			panic(errors.AssertionFailedf("unsupported type %T: %v", x, x))
