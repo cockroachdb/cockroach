@@ -15,7 +15,6 @@ import { localStorageSaga } from "./localStorage";
 import { nodesSaga } from "./nodes";
 import { sqlStatsSaga } from "./sqlStats";
 import { statementsDiagnosticsSagas } from "./statementDiagnostics";
-import { txnStatsSaga } from "./transactionStats";
 import { uiConfigSaga } from "./uiConfig";
 
 export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
@@ -29,7 +28,6 @@ export function* sagas(cacheInvalidationPeriod?: number): SagaIterator {
     fork(sqlStatsSaga),
     fork(clusterLocksSaga),
     fork(uiConfigSaga, cacheInvalidationPeriod),
-    fork(txnStatsSaga),
     fork(clusterSettingsSaga),
   ]);
 }

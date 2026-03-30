@@ -201,16 +201,6 @@ const queriesReducerObj = new CachedDataReducer(
 export const invalidateStatements = queriesReducerObj.invalidateData;
 export const refreshStatements = queriesReducerObj.refresh;
 
-const txnFingerprintStatsReducerObj = new CachedDataReducer(
-  clusterUiApi.getFlushedTxnStatsApi,
-  "transactions",
-  null,
-  moment.duration(30, "m"),
-  true,
-);
-export const invalidateTxns = txnFingerprintStatsReducerObj.invalidateData;
-export const refreshTxns = txnFingerprintStatsReducerObj.refresh;
-
 export const statementDetailsRequestToID = (
   req: api.StatementDetailsRequestMessage,
 ): string =>
@@ -378,7 +368,6 @@ export interface APIReducersState {
   settings: CachedDataReducerState<api.SettingsResponseMessage>;
   stores: KeyedCachedDataReducerState<api.StoresResponseMessage>;
   statements: CachedDataReducerState<clusterUiApi.SqlStatsResponse>;
-  transactions: CachedDataReducerState<clusterUiApi.SqlStatsResponse>;
   statementDetails: KeyedCachedDataReducerState<api.StatementDetailsResponseMessage>;
   metricMetadata: CachedDataReducerState<api.MetricMetadataResponseMessage>;
   statementDiagnosticsReports: CachedDataReducerState<clusterUiApi.StatementDiagnosticsResponse>;
@@ -421,8 +410,6 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [settingsReducerObj.actionNamespace]: settingsReducerObj.reducer,
   [storesReducerObj.actionNamespace]: storesReducerObj.reducer,
   [queriesReducerObj.actionNamespace]: queriesReducerObj.reducer,
-  [txnFingerprintStatsReducerObj.actionNamespace]:
-    txnFingerprintStatsReducerObj.reducer,
   [statementDetailsReducerObj.actionNamespace]:
     statementDetailsReducerObj.reducer,
   [metricMetadataReducerObj.actionNamespace]: metricMetadataReducerObj.reducer,

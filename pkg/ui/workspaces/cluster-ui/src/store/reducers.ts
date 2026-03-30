@@ -34,7 +34,6 @@ import {
   reducer as statementDiagnostics,
   StatementDiagnosticsState,
 } from "./statementDiagnostics";
-import { reducer as txnStats, TxnStatsState } from "./transactionStats";
 import { reducer as uiConfig, UIConfigState } from "./uiConfig";
 
 export type AdminUiState = {
@@ -44,7 +43,6 @@ export type AdminUiState = {
   liveness: LivenessState;
   uiConfig: UIConfigState;
   statements: SQLStatsState;
-  transactions: TxnStatsState;
   clusterLocks: ClusterLocksReqState;
   databasesList: DatabasesListState;
   txnInsights: TxnInsightsState;
@@ -63,7 +61,6 @@ export const reducers = combineReducers<AdminUiState>({
   txnInsights,
   uiConfig,
   statements: sqlStats,
-  transactions: txnStats,
   clusterLocks,
   databasesList,
   clusterSettings,
