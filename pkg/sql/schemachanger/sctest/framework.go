@@ -687,7 +687,7 @@ var runAllCumulative = flag.Bool(
 // PrepResult contains the results from the prepare phase of backup tests.
 // It provides stage counts and metadata needed to build test cases, along with
 // variant-specific data to be passed to each test case.
-type PrepResult struct {
+type PrepResult[T any] struct {
 	// PostCommitCount is the number of PostCommit stages.
 	PostCommitCount int
 	// PostCommitNonRevertibleCount is the number of PostCommitNonRevertible stages.
@@ -699,22 +699,17 @@ type PrepResult struct {
 	// CreateDatabaseStmt is the CREATE DATABASE statement for this database.
 	CreateDatabaseStmt string
 	// PrepData is variant-specific data to pass to test cases.
-	// Type depends on the prepare function:
-	//   - backupSuccessPrepare: backupSuccessTestArgs
-	//   - backupRollbacksPrepare: backupRollbacksTestArgs
-	// Test functions must type-assert to the expected type. The use of interface{}
-	// provides flexibility for different test variants without requiring generics.
-	PrepData interface{}
+	PrepData T
 }
 
 // CumulativeTestPrepareFunc prepares the test environment and returns metadata
 // needed for cumulative tests. It is called once per test spec to determine
 // the number of post-commit stages and collect variant-specific test data.
-type CumulativeTestPrepareFunc func(t *testing.T, spec CumulativeTestSpec) PrepResult
+type CumulativeTestPrepareFunc[T any] func(t *testing.T, spec CumulativeTestSpec) PrepResult[T]
 
 // CumulativeTestStageFunc is the test function executed for each post-commit
 // stage.
-type CumulativeTestStageFunc func(t *testing.T, spec CumulativeTestCaseSpec, prepData interface{})
+type CumulativeTestStageFunc[T any] func(t *testing.T, spec CumulativeTestCaseSpec, prepData T)
 
 // CumulativeTestSamplingFunc optionally filters or samples the generated test
 // cases to reduce the number of stages executed.
@@ -722,12 +717,12 @@ type CumulativeTestSamplingFunc func([]CumulativeTestCaseSpec) []CumulativeTestC
 
 // cumulativeTestForEachPostCommitStage invokes `tf` once for each stage in the
 // PostCommitPhase.
-func cumulativeTestForEachPostCommitStage(
+func cumulativeTestForEachPostCommitStage[T any](
 	t *testing.T,
 	relTestCaseDir string,
 	factory TestServerFactory,
-	prepFn CumulativeTestPrepareFunc,
-	tf CumulativeTestStageFunc,
+	prepFn CumulativeTestPrepareFunc[T],
+	tf CumulativeTestStageFunc[T],
 	samplingFn CumulativeTestSamplingFunc,
 ) {
 	testFunc := func(t *testing.T, spec CumulativeTestSpec) {
@@ -738,12 +733,12 @@ func cumulativeTestForEachPostCommitStage(
 
 		// Call prepare function to get stage counts and test data.
 		// This eliminates the need for a throwaway cluster.
-		var result PrepResult
+		var result PrepResult[T]
 		if prepFn != nil {
 			result = prepFn(t, spec)
 		} else {
 			// If no prepFn provided, fall back to old behavior of creating throwaway cluster.
-			result = legacyPrepareWithThrowawayCluster(t, spec, factory)
+			result = legacyPrepareWithThrowawayCluster[T](t, spec, factory)
 		}
 
 		if result.PostCommitCount+result.PostCommitNonRevertibleCount == 0 {
@@ -814,10 +809,10 @@ func cumulativeTestForEachPostCommitStage(
 // These should be migrated to provide their own prepare functions that reuse
 // a single cluster, similar to how backup tests (BackupSuccess*, BackupRollbacks*)
 // have been migrated.
-func legacyPrepareWithThrowawayCluster(
+func legacyPrepareWithThrowawayCluster[T any](
 	t *testing.T, spec CumulativeTestSpec, factory TestServerFactory,
-) PrepResult {
-	var result PrepResult
+) PrepResult[T] {
+	var result PrepResult[T]
 	prepfn := func(db *gosql.DB, p scplan.Plan) {
 		for _, s := range p.Stages {
 			switch s.Phase {

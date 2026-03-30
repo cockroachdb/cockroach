@@ -47,15 +47,11 @@ func BackupSuccess(t *testing.T, path string, factory TestServerFactory) {
 	// Disable schema_locked in backup and restore tests, since the userfiles table
 	// cannot be created with schema_locked by default yet.
 	cumulativeTestForEachPostCommitStage(t, path, factory,
-		func(t *testing.T, spec CumulativeTestSpec) PrepResult {
+		func(t *testing.T, spec CumulativeTestSpec) PrepResult[backupSuccessTestArgs] {
 			result := backupSuccessPrepare(t, factory, spec)
-			var ok bool
-			backupArgs, ok = result.PrepData.(backupSuccessTestArgs)
-			if !ok {
-				t.Fatalf("PrepData has wrong type: got %T, want backupSuccessTestArgs", result.PrepData)
-			}
+			backupArgs = result.PrepData
 			return result
-		}, func(t *testing.T, cs CumulativeTestCaseSpec, prepData interface{}) {
+		}, func(t *testing.T, cs CumulativeTestCaseSpec, prepData backupSuccessTestArgs) {
 			backupSuccess(t, backupArgs, cs)
 		},
 		nil /*samplingFn */)
@@ -81,20 +77,12 @@ func BackupRollbacks(t *testing.T, path string, factory TestServerFactory) {
 		}
 	}()
 	cumulativeTestForEachPostCommitStage(t, path, factory,
-		func(t *testing.T, spec CumulativeTestSpec) PrepResult {
+		func(t *testing.T, spec CumulativeTestSpec) PrepResult[backupRollbacksTestArgs] {
 			result := backupRollbacksPrepare(t, factory, spec)
-			var ok bool
-			rollbackArgs, ok = result.PrepData.(backupRollbacksTestArgs)
-			if !ok {
-				t.Fatalf("PrepData has wrong type: got %T, want backupRollbacksTestArgs", result.PrepData)
-			}
+			rollbackArgs = result.PrepData
 			return result
-		}, func(t *testing.T, cs CumulativeTestCaseSpec, prepData interface{}) {
-			args, ok := prepData.(backupRollbacksTestArgs)
-			if !ok {
-				t.Fatalf("prepData has wrong type: got %T, want backupRollbacksTestArgs", prepData)
-			}
-			backupRollbacks(t, args, cs, false /*isMixedVersion*/)
+		}, func(t *testing.T, cs CumulativeTestCaseSpec, prepData backupRollbacksTestArgs) {
+			backupRollbacks(t, prepData, cs, false /*isMixedVersion*/)
 		},
 		nil /* samplingFn */)
 }
@@ -118,20 +106,16 @@ func BackupSuccessMixedVersion(t *testing.T, path string, factory TestServerFact
 	}()
 	// Disable schema_locked in backup and restore tests, since the userfiles table
 	// cannot be created with schema_locked by default yet.
-	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, spec CumulativeTestSpec) PrepResult {
+	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, spec CumulativeTestSpec) PrepResult[backupSuccessTestArgs] {
 		result := backupSuccessPrepare(t, factory, spec)
-		var ok bool
-		backupArgs, ok = result.PrepData.(backupSuccessTestArgs)
-		if !ok {
-			t.Fatalf("PrepData has wrong type: got %T, want backupSuccessTestArgs", result.PrepData)
-		}
+		backupArgs = result.PrepData
 		if backupArgs.isMultiRegion {
 			// Speed up the mixed version multiregion cases by excluding restores of individual
 			// tables in the mixed version state.
 			backupArgs.excludeAllTablesInDatabaseFlavor = true
 		}
 		return result
-	}, func(t *testing.T, cs CumulativeTestCaseSpec, prepData interface{}) {
+	}, func(t *testing.T, cs CumulativeTestCaseSpec, prepData backupSuccessTestArgs) {
 		backupSuccess(t, backupArgs, cs)
 	},
 		nil /* samplingFn */)
@@ -158,20 +142,12 @@ func BackupRollbacksMixedVersion(t *testing.T, path string, factory TestServerFa
 			rollbackArgs.server.Stopper(t)
 		}
 	}()
-	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, spec CumulativeTestSpec) PrepResult {
+	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, spec CumulativeTestSpec) PrepResult[backupRollbacksTestArgs] {
 		result := backupRollbacksPrepare(t, factory, spec)
-		var ok bool
-		rollbackArgs, ok = result.PrepData.(backupRollbacksTestArgs)
-		if !ok {
-			t.Fatalf("PrepData has wrong type: got %T, want backupRollbacksTestArgs", result.PrepData)
-		}
+		rollbackArgs = result.PrepData
 		return result
-	}, func(t *testing.T, cs CumulativeTestCaseSpec, prepData interface{}) {
-		args, ok := prepData.(backupRollbacksTestArgs)
-		if !ok {
-			t.Fatalf("prepData has wrong type: got %T, want backupRollbacksTestArgs", prepData)
-		}
-		backupRollbacks(t, args, cs, true /*isMixedVersion*/)
+	}, func(t *testing.T, cs CumulativeTestCaseSpec, prepData backupRollbacksTestArgs) {
+		backupRollbacks(t, prepData, cs, true /*isMixedVersion*/)
 	}, nil /* samplingFn */)
 }
 
@@ -253,7 +229,7 @@ type backupRollbacksTestArgs struct {
 // count stages before running tests.
 func backupSuccessPrepare(
 	t *testing.T, factory TestServerFactory, spec CumulativeTestSpec,
-) PrepResult {
+) PrepResult[backupSuccessTestArgs] {
 	ctx := context.Background()
 
 	backupArgs := backupSuccessTestArgs{
@@ -447,7 +423,7 @@ func backupSuccessPrepare(
 		postCommitNonRevertibleCount = mu.postCommitNonRevertibleCount
 	}()
 
-	return PrepResult{
+	return PrepResult[backupSuccessTestArgs]{
 		PostCommitCount:              postCommitCount,
 		PostCommitNonRevertibleCount: postCommitNonRevertibleCount,
 		After:                        backupArgs.after,
@@ -462,7 +438,7 @@ func backupSuccessPrepare(
 // recreating the test database for each rollback scenario.
 func backupRollbacksPrepare(
 	t *testing.T, factory TestServerFactory, spec CumulativeTestSpec,
-) PrepResult {
+) PrepResult[backupRollbacksTestArgs] {
 	ctx := context.Background()
 	args := backupRollbacksTestArgs{
 		scenarios: make(map[backupKey]rollbackScenario),
@@ -707,7 +683,7 @@ func backupRollbacksPrepare(
 		postCommitNonRevertibleCount = discovery.postCommitNonRevertibleCount
 	}()
 
-	return PrepResult{
+	return PrepResult[backupRollbacksTestArgs]{
 		PostCommitCount:              postCommitCount,
 		PostCommitNonRevertibleCount: postCommitNonRevertibleCount,
 		DatabaseName:                 dbName,
