@@ -387,9 +387,7 @@ func registerRestore(r registry.Registry) {
 			backup:          backupSpecs{cloud: spec.GCE, fixture: MediumFixture},
 			timeout:         3 * time.Hour,
 			suites:          registry.Suites(registry.Nightly),
-			fullBackupOnly:  true,
 			skipFingerprint: true,
-			skip:            "used for adhoc benchmarking against OR",
 		},
 		// TODO(msbutler): add the following tests once roachperf/grafana is hooked up and old tests are
 		// removed:

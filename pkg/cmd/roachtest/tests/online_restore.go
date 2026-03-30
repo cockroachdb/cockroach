@@ -333,6 +333,98 @@ func registerOnlineRestorePerf(r registry.Registry) {
 	}
 }
 
+func registerFastRestorePerf(r registry.Registry) {
+	// This driver creates roachtests to benchmark fast restore performance
+	// (using EXPERIMENTAL COPY) with the prefix restore/fast-restore/*.
+	for _, sp := range []onlineRestoreSpecs{
+		{
+			// 350 GB tpcc Fast Restore
+			restoreSpecs: restoreSpecs{
+				hardware: makeHardwareSpecs(hardwareSpecs{workloadNode: true}),
+				backup: backupSpecs{
+					cloud:   spec.GCE,
+					fixture: SmallFixture,
+				},
+				skipFingerprint: true,
+				timeout:         1 * time.Hour,
+				suites:          registry.Suites(registry.Nightly),
+			},
+		},
+		{
+			// 2 TiB tpcc Fast Restore
+			restoreSpecs: restoreSpecs{
+				hardware: makeHardwareSpecs(hardwareSpecs{
+					nodes: 10, volumeSize: 1500, workloadNode: true,
+				}),
+				backup: backupSpecs{
+					cloud:   spec.GCE,
+					fixture: MediumFixture,
+				},
+				skipFingerprint: true,
+				timeout:         3 * time.Hour,
+				suites:          registry.Suites(registry.Nightly),
+			},
+		},
+	} {
+		for _, useDistFlow := range []bool{true, false} {
+			clusterSettings := []string{}
+			if useDistFlow {
+				clusterSettings = append(clusterSettings,
+					"backup.restore.online_use_dist_flow.enabled=true")
+				sp.namePrefix = "fast-restore/dist-flow=true"
+			} else {
+				clusterSettings = append(clusterSettings,
+					"backup.restore.online_use_dist_flow.enabled=false")
+				sp.namePrefix = "fast-restore/dist-flow=false"
+			}
+
+			sp.initTestName()
+			r.Add(registry.TestSpec{
+				Name:      sp.testName,
+				Owner:     registry.OwnerDisasterRecovery,
+				Benchmark: true,
+				Cluster:   sp.hardware.makeClusterSpecs(r),
+				Timeout:   sp.timeout,
+				// These tests measure performance. To ensure consistent perf,
+				// disable metamorphic encryption.
+				EncryptionSupport:         registry.EncryptionAlwaysDisabled,
+				CompatibleClouds:          sp.backup.CompatibleClouds(),
+				Suites:                    sp.suites,
+				TestSelectionOptOutSuites: sp.suites,
+				SkipPostValidations:       registry.PostValidationReplicaDivergence,
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					rd := makeRestoreDriver(ctx, t, c, sp.restoreSpecs)
+					rd.prepareCluster(ctx)
+
+					db, err := rd.c.ConnE(ctx, t.L(), rd.c.Node(1)[0])
+					require.NoError(t, err)
+					defer db.Close()
+
+					// Set cluster settings
+					for _, setting := range clusterSettings {
+						_, err := db.Exec(fmt.Sprintf("SET CLUSTER SETTING %s", setting))
+						require.NoError(t, err, "failed to set cluster setting %s", setting)
+					}
+
+					opts := "WITH EXPERIMENTAL COPY"
+
+					restoreStartTime := timeutil.Now()
+					restoreCmd := rd.restoreCmd(ctx, fmt.Sprintf("DATABASE %s", sp.backup.fixture.DatabaseName()), opts)
+					t.L().Printf("Starting fast restore: %s", restoreCmd)
+					if _, err := db.ExecContext(ctx, restoreCmd); err != nil {
+						rd.markFixtureWithFailure(ctx)
+						t.Fatal(err)
+					}
+					restoreEndTime := timeutil.Now()
+
+					restoreDuration := restoreEndTime.Sub(restoreStartTime)
+					t.L().Printf("Fast restore completed in %s", restoreDuration)
+				},
+			})
+		}
+	}
+}
+
 // maybeAddSomeEmptyTables adds some empty tables to the cluster to exercise
 // prefix rewrite rules.
 func maybeAddSomeEmptyTables(ctx context.Context, rd restoreDriver) error {
