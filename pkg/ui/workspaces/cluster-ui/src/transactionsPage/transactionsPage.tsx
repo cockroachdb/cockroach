@@ -8,19 +8,26 @@ import classNames from "classnames/bind";
 import flatMap from "lodash/flatMap";
 import isString from "lodash/isString";
 import moment from "moment-timezone";
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, {
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import { RouteComponentProps } from "react-router-dom";
 
+import { useNodes } from "src/api/nodesApi";
+import { useResetSQLStats } from "src/api/sqlStatsApi";
 import {
   SqlStatsSortType,
-  createCombinedStmtsRequest,
-  StatementsRequest,
   SqlStatsSortOptions,
-  SqlStatsResponse,
+  useCombinedTransactionStats,
 } from "src/api/statementsApi";
+import { useUserSQLRoles } from "src/api/userApi";
 import { SearchCriteria } from "src/searchCriteria/searchCriteria";
 import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
-import { Timestamp, TimestampToMoment, syncHistory, unique } from "src/util";
+import { TimestampToMoment, syncHistory, unique } from "src/util";
 import {
   STATS_LONG_LOADING_DURATION,
   getSortLabel,
@@ -29,10 +36,10 @@ import {
   getReqSortColumn,
 } from "src/util/sqlActivityConstants";
 
-import { RequestState } from "../api";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
 import { isSelectedColumn } from "../columnsSelector/utils";
 import { commonStyles } from "../common";
+import { ClusterDetailsContext } from "../contexts";
 import { Delayed } from "../delayed";
 import { Loading } from "../loading";
 import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
@@ -60,12 +67,10 @@ import {
   getLabel,
   StatisticTableColumnKeys,
 } from "../statsTableUtil/statsTableUtil";
-import { UIConfigState } from "../store";
 import {
   TimeScale,
   timeScale1hMinOptions,
   getValidOption,
-  toRoundedDateRange,
 } from "../timeScaleDropdown";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import {
@@ -90,25 +95,16 @@ const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 
 export interface TransactionsPageStateProps {
   columns: string[];
-  txnsResp: RequestState<SqlStatsResponse>;
   timeScale: TimeScale;
   limit: number;
   reqSortSetting: SqlStatsSortType;
   filters: Filters;
-  isTenant?: UIConfigState["isTenant"];
-  nodeRegions: { [nodeId: string]: string };
   search: string;
   sortSetting: SortSetting;
-  hasAdminRole?: UIConfigState["hasAdminRole"];
   requestTime: moment.Moment;
-  oldestDataAvailable: Timestamp;
 }
 
 export interface TransactionsPageDispatchProps {
-  refreshData: (req: StatementsRequest) => void;
-  refreshNodes: () => void;
-  refreshUserSQLRoles: () => void;
-  resetSQLStats: () => void;
   onTimeScaleChange?: (ts: TimeScale) => void;
   onChangeLimit: (limit: number) => void;
   onChangeReqSort: (sort: SqlStatsSortType) => void;
@@ -128,43 +124,18 @@ export type TransactionsPageProps = TransactionsPageStateProps &
   TransactionsPageDispatchProps &
   RouteComponentProps;
 
-interface RequestParams {
-  timeScale: TimeScale;
-  limit: number;
-  reqSortSetting: SqlStatsSortType;
-}
-
-function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
-  const [start, end] = toRoundedDateRange(params.timeScale);
-  return createCombinedStmtsRequest({
-    start,
-    end,
-    limit: params.limit,
-    sort: params.reqSortSetting,
-  });
-}
-
 export function TransactionsPage(
   props: TransactionsPageProps,
 ): React.ReactElement {
   const {
     columns: userSelectedColumnsToShow,
-    txnsResp,
     timeScale: propsTimeScale,
     limit: propsLimit,
     reqSortSetting: propsReqSortSetting,
     filters: propsFilters,
-    isTenant,
-    nodeRegions,
     search,
     sortSetting,
-    hasAdminRole,
     requestTime,
-    oldestDataAvailable,
-    refreshData,
-    refreshNodes,
-    refreshUserSQLRoles,
-    resetSQLStats,
     onTimeScaleChange,
     onChangeLimit: propsOnChangeLimit,
     onChangeReqSort: propsOnChangeReqSort,
@@ -176,6 +147,24 @@ export function TransactionsPage(
     onRequestTimeChange,
     history,
   } = props;
+
+  const { isTenant } = useContext(ClusterDetailsContext);
+
+  const {
+    data: txnData,
+    error: txnError,
+    isLoading: txnLoading,
+  } = useCombinedTransactionStats(
+    propsTimeScale,
+    propsLimit,
+    propsReqSortSetting,
+  );
+  const { nodeRegionsByID: nodeRegions } = useNodes();
+  const { data: userRoles } = useUserSQLRoles();
+  const { reset: resetSQLStats } = useResetSQLStats();
+
+  const hasAdminRole = userRoles?.roles?.includes("ADMIN") ?? false;
+  const oldestDataAvailable = txnData?.oldest_aggregated_ts_returned;
 
   // Local state for search criteria (can differ from props until applied)
   const [localTimeScale, setLocalTimeScale] =
@@ -208,10 +197,6 @@ export function TransactionsPage(
   const propsTimeScaleRef = useRef(propsTimeScale);
   const onTimeScaleChangeRef = useRef(onTimeScaleChange);
   const onRequestTimeChangeRef = useRef(onRequestTimeChange);
-  const txnsRespRef = useRef(txnsResp);
-  const isTenantRef = useRef(isTenant);
-  const refreshNodesRef = useRef(refreshNodes);
-  const refreshUserSQLRolesRef = useRef(refreshUserSQLRoles);
 
   // Keep refs up to date on each render
   onSearchCompleteRef.current = onSearchComplete;
@@ -221,10 +206,6 @@ export function TransactionsPage(
   propsTimeScaleRef.current = propsTimeScale;
   onTimeScaleChangeRef.current = onTimeScaleChange;
   onRequestTimeChangeRef.current = onRequestTimeChange;
-  txnsRespRef.current = txnsResp;
-  isTenantRef.current = isTenant;
-  refreshNodesRef.current = refreshNodes;
-  refreshUserSQLRolesRef.current = refreshUserSQLRoles;
 
   // Initialize search from query string
   useEffect(() => {
@@ -247,24 +228,8 @@ export function TransactionsPage(
     );
   }, [history.location.search]);
 
-  const refreshDataFromState = useCallback((): void => {
-    const req = stmtsRequestFromParams({
-      timeScale: localTimeScale,
-      limit: localLimit,
-      reqSortSetting: localReqSortSetting,
-    });
-    refreshData(req);
-  }, [localTimeScale, localLimit, localReqSortSetting, refreshData]);
-
-  // Ref for mount effect
-  const refreshDataFromStateRef = useRef(refreshDataFromState);
-  refreshDataFromStateRef.current = refreshDataFromState;
-
-  const doResetSQLStats = (): void => {
-    resetSQLStats();
-  };
-
-  // componentDidMount equivalent
+  // componentDidMount equivalent — validate timeScale on mount.
+  // Data fetching is handled by SWR hooks automatically.
   useEffect(() => {
     // In case the user selected an option not available on this page,
     // force a selection of a valid option.
@@ -275,19 +240,7 @@ export function TransactionsPage(
         onTimeScaleChangeRef.current(ts);
       }
       onRequestTimeChangeRef.current(moment());
-    } else if (
-      !txnsRespRef.current.valid ||
-      !txnsRespRef.current.data ||
-      !txnsRespRef.current.lastUpdated
-    ) {
-      refreshDataFromStateRef.current();
     }
-
-    if (!isTenantRef.current) {
-      refreshNodesRef.current();
-    }
-
-    refreshUserSQLRolesRef.current();
   }, []);
 
   // Update query params when relevant state changes
@@ -317,10 +270,7 @@ export function TransactionsPage(
   // componentDidUpdate equivalent
   useEffect(() => {
     updateQueryParams();
-    if (!isTenant) {
-      refreshNodes();
-    }
-  }, [updateQueryParams, isTenant, refreshNodes]);
+  }, [updateQueryParams]);
 
   const onChangeSortSetting = useCallback(
     (ss: SortSetting): void => {
@@ -440,13 +390,6 @@ export function TransactionsPage(
     }
     onRequestTimeChange(moment());
 
-    const req = stmtsRequestFromParams({
-      timeScale: localTimeScale,
-      limit: localLimit,
-      reqSortSetting: localReqSortSetting,
-    });
-    refreshData(req);
-
     const ss: SortSetting = {
       ascending: false,
       columnTitle: getSortColumn(localReqSortSetting),
@@ -464,7 +407,6 @@ export function TransactionsPage(
     onTimeScaleChange,
     onApplySearchCriteria,
     onRequestTimeChange,
-    refreshData,
     onChangeSortSetting,
   ]);
 
@@ -501,7 +443,7 @@ export function TransactionsPage(
   };
 
   const renderTransactions = (): React.ReactElement => {
-    const data = txnsResp.data;
+    const data = txnData;
     const internalAppNamePrefix = data?.internal_app_name_prefix || "";
     const statements = data?.statements || [];
 
@@ -638,7 +580,7 @@ export function TransactionsPage(
                 )} `}
               >
                 <ClearStats
-                  resetSQLStats={doResetSQLStats}
+                  resetSQLStats={resetSQLStats}
                   tooltipType="transaction"
                 />
               </PageConfigItem>
@@ -712,22 +654,22 @@ export function TransactionsPage(
       />
       <div className={cx("table-area")}>
         <Loading
-          loading={txnsResp.inFlight}
+          loading={txnLoading}
           page={"transactions"}
-          error={txnsResp?.error}
+          error={txnError}
           render={() => renderTransactions()}
           renderError={() =>
             LoadingError({
               statsType: "transactions",
-              error: txnsResp.error,
-              sourceTables: txnsResp?.data?.txns_source_table && [
-                txnsResp?.data?.txns_source_table,
-                txnsResp?.data?.stmts_source_table,
+              error: txnError,
+              sourceTables: txnData?.txns_source_table && [
+                txnData?.txns_source_table,
+                txnData?.stmts_source_table,
               ],
             })
           }
         />
-        {txnsResp.inFlight && longLoadingMessage}
+        {txnLoading && longLoadingMessage}
       </div>
     </>
   );
