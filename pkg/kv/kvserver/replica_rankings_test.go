@@ -218,7 +218,7 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 
 	// This test is known to flake. E.g. in #160265, a request raced in after
 	// clearing the load stats and before asserting they are 0.
-	skip.UnderDeadlock(t, "timing sensitive")
+	skip.UnderDuress(t, "timing sensitive")
 
 	ctx := context.Background()
 	args := base.TestClusterArgs{
