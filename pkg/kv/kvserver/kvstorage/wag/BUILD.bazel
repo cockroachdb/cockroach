@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "wag",
     srcs = [
+        "replay.go",
         "store.go",
         "writer.go",
     ],
@@ -10,14 +11,20 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/keys",
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvstorage/wag/wagpb",
+        "//pkg/roachpb",
         "//pkg/storage",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
 go_test(
     name = "wag_test",
-    srcs = ["store_test.go"],
+    srcs = [
+        "replay_test.go",
+        "store_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":wag"],
     deps = [
