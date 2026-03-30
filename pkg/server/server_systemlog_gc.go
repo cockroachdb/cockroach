@@ -258,7 +258,23 @@ func startSystemLogsGC(ctx context.Context, sqlServer *SQLServer) error {
 		for ; ; timer.Reset(getPeriod()) {
 			select {
 			case <-timer.C:
-				// Do the work for all system tables.
+				if sqlServer.execCfg.Codec.ForSystemTenant() {
+					var isMeta1LH bool
+					var err error
+					if storeKnobs, ok := cfg.TestingKnobs.Store.(*kvserver.StoreTestingKnobs); ok && storeKnobs.SystemLogsGCIsMeta1Leaseholder != nil {
+						isMeta1LH, err = storeKnobs.SystemLogsGCIsMeta1Leaseholder()
+					} else {
+						isMeta1LH, err = sqlServer.isMeta1Leaseholder(
+							ctx, sqlServer.execCfg.Clock.NowAsClockTimestamp(),
+						)
+					}
+					if err != nil {
+						log.Dev.Warningf(ctx, "failed to check meta1 leaseholder: %v", err)
+					}
+					if !isMeta1LH {
+						continue
+					}
+				}
 				runSystemLogGC(ctx, sqlServer, st, systemLogsToGC)
 
 				// If we are in a test, coordinate with the test.

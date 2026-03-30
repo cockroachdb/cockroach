@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -140,6 +141,70 @@ func TestLogGC(t *testing.T) {
 	a.Equal(maxTS6, tm)
 	a.Equal(int64(0), rowsGCd)
 	a.Equal(5, rangeLogRowCount())
+}
+
+func TestLogGCSkipsNonMeta1Leaseholder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	a := assert.New(t)
+
+	var isMeta1 atomic.Bool
+	isMeta1.Store(false)
+
+	gcDone := make(chan struct{})
+	params := base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				SystemLogsGCGCDone: gcDone,
+				SystemLogsGCPeriod: time.Millisecond,
+				SystemLogsGCIsMeta1Leaseholder: func() (bool, error) {
+					return isMeta1.Load(), nil
+				},
+			},
+		},
+	}
+
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	if _, err := db.Exec(
+		`INSERT INTO system.rangelog (
+             timestamp, "rangeID", "storeID", "eventType"
+           ) VALUES (
+             cast(now() - interval '10s' as timestamp),
+             100, 1, $1
+          )`,
+		kvserverpb.RangeLogEventType_add_voter.String(),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := db.Exec("SET CLUSTER SETTING server.rangelog.ttl='1us'")
+	a.NoError(err)
+
+	time.Sleep(50 * time.Millisecond)
+
+	var count int
+	err = db.QueryRowContext(ctx,
+		`SELECT count(*) FROM system.rangelog WHERE "rangeID" = 100`,
+	).Scan(&count)
+	a.NoError(err)
+	a.NotEqual(0, count,
+		"expected rangelog rows to remain since node is not meta1 leaseholder")
+
+	isMeta1.Store(true)
+	<-gcDone
+	<-gcDone
+
+	err = db.QueryRowContext(ctx,
+		`SELECT count(*) FROM system.rangelog WHERE "rangeID" = 100`,
+	).Scan(&count)
+	a.NoError(err)
+	a.Equal(0, count,
+		"expected rangelog rows to be GC'd once node is meta1 leaseholder")
 }
 
 func TestLogGCTrigger(t *testing.T) {

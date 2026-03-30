@@ -310,6 +310,9 @@ type StoreTestingKnobs struct {
 	SystemLogsGCPeriod time.Duration
 	// SystemLogsGCGCDone is used to notify when system logs GC is done.
 	SystemLogsGCGCDone chan<- struct{}
+	// SystemLogsGCIsMeta1Leaseholder, if set, overrides the isMeta1Leaseholder
+	// check in the system log GC loop.
+	SystemLogsGCIsMeta1Leaseholder func() (bool, error)
 	// DontPushOnLockConflictError will propagate a lock conflict error
 	// immediately instead of utilizing the intent resolver to try to push the
 	// corresponding transaction.
