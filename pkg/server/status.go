@@ -60,6 +60,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -127,9 +128,38 @@ const (
 	updateTableMetadataCachePermissionErrMsg = "only admin users can trigger table metadata cache updates"
 )
 
+var defaultMetricsVisibility = settings.RegisterEnumSetting(
+	settings.ApplicationLevel,
+	"obs.metrics_scrape.default_visibility",
+	"controls the default metric visibility level for the metrics scrape endpoints",
+	"all",
+	map[metric.Metadata_MetricVisibility]string{
+		metric.Metadata_INTERNAL:  "all",
+		metric.Metadata_SUPPORT:   "support",
+		metric.Metadata_ESSENTIAL: "essential",
+	},
+	settings.WithPublic,
+)
+
+// parseMetricsVisibility maps a ?visibility= query parameter value to the
+// corresponding Metadata_MetricVisibility threshold. Returns the level and
+// true on success, or (0, false) if the value is not recognized.
+func parseMetricsVisibility(s string) (metric.Metadata_MetricVisibility, bool) {
+	switch strings.ToLower(s) {
+	case "all", "internal":
+		return metric.Metadata_INTERNAL, true
+	case "support":
+		return metric.Metadata_SUPPORT, true
+	case "essential":
+		return metric.Metadata_ESSENTIAL, true
+	default:
+		return 0, false
+	}
+}
+
 type metricMarshaler interface {
 	json.Marshaler
-	PrintAsText(io.Writer, expfmt.Format, bool) error
+	PrintAsText(io.Writer, expfmt.Format, bool, ...metric.ScrapeOption) error
 	ScrapeIntoPrometheus(pm *metric.PrometheusExporter)
 }
 
@@ -2497,12 +2527,40 @@ type varsHandler struct {
 	useStaticLabels bool
 }
 
+// resolveVisibility returns the visibility scrape option for this request,
+// using the query parameter if present or the cluster setting otherwise.
+func (h varsHandler) resolveVisibility(r *http.Request) ([]metric.ScrapeOption, error) {
+	if raw := r.URL.Query().Get("visibility"); raw != "" {
+		level, ok := parseMetricsVisibility(raw)
+		if !ok {
+			return nil, fmt.Errorf(
+				"invalid visibility value %q; valid values are: all, internal, support, essential",
+				raw,
+			)
+		}
+		return []metric.ScrapeOption{metric.WithMinVisibility(level)}, nil
+	}
+	level := defaultMetricsVisibility.Get(&h.st.SV)
+	if level > metric.Metadata_INTERNAL {
+		return []metric.ScrapeOption{metric.WithMinVisibility(level)}, nil
+	}
+	return nil, nil
+}
+
 func (h varsHandler) handleVars(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	extraOpts, err := h.resolveVisibility(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	contentType := expfmt.Negotiate(r.Header)
 	w.Header().Set(httputil.ContentTypeHeader, string(contentType))
-	err := h.metricSource.PrintAsText(w, contentType, h.useStaticLabels)
+	err = h.metricSource.PrintAsText(
+		w, contentType, h.useStaticLabels, extraOpts...,
+	)
 	if err != nil {
 		log.Dev.Errorf(ctx, "%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
