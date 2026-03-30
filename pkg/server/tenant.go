@@ -1400,7 +1400,7 @@ func makeTenantSQLServerArgs(
 	externalStorage := esb.makeExternalStorage
 	externalStorageFromURI := esb.makeExternalStorageFromURI
 
-	requestMetrics := rpc.NewRequestMetrics()
+	requestMetrics := rpc.NewServerRequestMetrics()
 	registry.AddMetricStruct(requestMetrics)
 
 	grpcServer, err := newGRPCServer(startupCtx, rpcContext, requestMetrics)
