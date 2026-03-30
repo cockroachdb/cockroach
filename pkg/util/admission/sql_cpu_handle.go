@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/petermattis/goid"
 )
 
@@ -98,14 +99,22 @@ type SQLCPUHandle struct {
 
 	refillMu struct {
 		syncutil.Mutex
-		// reservation and closed are accessed atomically without the lock
-		// on the fast path (CAS deduction, closed check). This is safe
-		// because the fast path only deducts from reservation (self-
-		// protecting via CAS) and reads closed (monotonic false→true).
-		// The lock serializes the slow path (Admit + Add) with Close
-		// (set closed + Swap reservation).
+		// reservation is accessed atomically without the lock on the
+		// fast path (CAS deduction) and the noWait path. This is safe
+		// because CAS is self-protecting (never drives negative).
+		// closed is read under refillMu in the slow path; the noWait
+		// path skips the closed check since BypassAdmission is safe
+		// after Close. The lock serializes the slow path (Admit + Add)
+		// with Close (set closed + Swap reservation).
 		reservation atomic.Int64
 		closed      atomic.Bool
+		// lastRefillTime is the wall-clock time of the last Admit call,
+		// used to compute the interval for adaptive sizing.
+		lastRefillTime time.Time
+		// lastHeuristic is the adaptive buffer size (in nanoseconds)
+		// to request beyond the consumed CPU on the next Admit call.
+		// The total RequestedCount is diffNanos + lastHeuristic.
+		lastHeuristic int64
 	}
 
 	mu struct {
@@ -155,26 +164,50 @@ func (h *SQLCPUHandle) tryDeductReservation(diffNanos int64) bool {
 	}
 }
 
-// maxRefillBuffer caps the reservation buffer requested per Admit call.
-// Without a cap, a large checkpoint (e.g. 100ms of CPU between two
-// CancelChecker calls) would hold 100ms of tokens idle in the reservation,
-// reducing availability for other statements until Close returns them.
-const maxRefillBuffer = int64(10 * time.Millisecond)
+const (
+	// refillGrowThreshold is the wall-clock duration below which we
+	// consider refills too frequent and double the heuristic. Below this
+	// threshold, contention on the WorkQueue mutex is the primary concern.
+	refillGrowThreshold = time.Millisecond
+	// refillDecayThreshold is the wall-clock duration above which we
+	// consider the heuristic too large and halve it. Above this threshold,
+	// overcounting in tenant.used is the primary concern. Between
+	// refillGrowThreshold and refillDecayThreshold is the acceptable
+	// deadband where the heuristic is stable.
+	refillDecayThreshold = 5 * time.Millisecond
+	// maxRefillHeuristic caps the buffer portion of the heuristic to
+	// bound overcounting. 10ms of CPU buffer per handle.
+	maxRefillHeuristic = int64(10 * time.Millisecond)
+)
 
-// refillHeuristic returns the total RequestedCount to pass to Admit: the
-// consumed CPU (diffNanos) plus a buffer for future fast-path CAS deductions.
-// The buffer is min(diffNanos, maxRefillBuffer), so the reservation portion
-// (resp.requestedCount - diffNanos) is always non-negative and bounded.
-//
-// TODO(wenyihu6): replace this simple 2x heuristic with an adaptive scheme
-// that adjusts the buffer size based on the interval between Admit calls:
-// grow the buffer when calls are too frequent (interval < 1ms), shrink it
-// when calls are infrequent (interval > 5ms), and keep it stable otherwise.
-// This would reduce Admit call overhead for steady workloads while avoiding
-// over-reservation for bursty ones.
-func (h *SQLCPUHandle) refillHeuristic(diffNanos int64) int64 {
-	buffer := min(diffNanos, maxRefillBuffer)
-	return diffNanos + buffer
+// refillHeuristicLocked returns the total RequestedCount to pass to Admit:
+// the consumed CPU (diffNanos) plus an adaptive buffer for future fast-path
+// CAS deductions. The buffer (lastHeuristic) is adjusted based on the
+// interval between Admit calls: doubled when calls are too frequent
+// (< 1ms), halved when too infrequent (> 5ms), and stable otherwise.
+// The buffer is capped at maxRefillHeuristic. The return value is always
+// >= diffNanos, so (resp.requestedCount - diffNanos) is non-negative.
+func (h *SQLCPUHandle) refillHeuristicLocked(diffNanos int64) int64 {
+	h.refillMu.AssertHeld()
+	now := timeutil.Now()
+	if h.refillMu.lastHeuristic == 0 {
+		// Bootstrap: seed buffer equal to consumed.
+		h.refillMu.lastHeuristic = diffNanos
+	} else {
+		elapsed := now.Sub(h.refillMu.lastRefillTime)
+		if elapsed < refillGrowThreshold {
+			// Came back too soon — double to reduce call frequency.
+			h.refillMu.lastHeuristic *= 2
+		} else if elapsed > refillDecayThreshold {
+			// Buffer lasted too long — halve to reduce overcounting.
+			h.refillMu.lastHeuristic /= 2
+		}
+		// else: in [1ms, 5ms] deadband — no change.
+	}
+	// Cap buffer at maxRefillHeuristic.
+	h.refillMu.lastHeuristic = min(h.refillMu.lastHeuristic, maxRefillHeuristic)
+	h.refillMu.lastRefillTime = now
+	return diffNanos + h.refillMu.lastHeuristic
 }
 
 // constructWorkInfo returns a copy of the handle's WorkInfo with the given
@@ -245,7 +278,7 @@ func (h *SQLCPUHandle) reportAndAcquireConsumedCPU(
 	// portion goes into reservation for future fast-path CAS deductions.
 	// Because the exact amount is deducted at Admit time, there is no
 	// estimate to correct, so AdmittedWorkDone is not called.
-	resp, err := h.wq.Admit(ctx, h.constructWorkInfo(h.refillHeuristic(diffNanos), false))
+	resp, err := h.wq.Admit(ctx, h.constructWorkInfo(h.refillHeuristicLocked(diffNanos), false))
 	if err != nil {
 		return err
 	}
@@ -395,8 +428,6 @@ func (h *GoroutineCPUHandle) Close(ctx context.Context) {
 // CPU time spent in the goroutine and decide whether more CPU needs to be
 // allocated. If more CPU is needed, it can block in acquiring CPU tokens.
 // Returns a non-nil error iff the context is canceled while waiting.
-//
-// TODO(sumeer): implement the measurement and admission logic.
 func (h *GoroutineCPUHandle) MeasureAndAdmit(ctx context.Context) error {
 	return h.measureAndAdmit(ctx, false /* noWait */)
 }

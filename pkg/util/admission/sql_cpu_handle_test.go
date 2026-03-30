@@ -15,11 +15,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
 
@@ -96,11 +98,9 @@ func TestSQLCPUHandleSlowPath(t *testing.T) {
 	require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 5*time.Millisecond, false))
 
 	// 5ms > 2ms reservation, so slow path runs again.
-	// heuristic = 2 * 5ms = 10ms requested. Reservation gets
-	// existing(2ms) + (10ms - 5ms) = 7ms, because the Add is on top
-	// of the existing reservation (only the CAS on fast path failed,
-	// the leftover stays).
-	require.Equal(t, int64(7*time.Millisecond), h.refillMu.reservation.Load())
+	// Elapsed < 1ms (grow): buffer = 2ms * 2 = 4ms. Total = 5ms + 4ms = 9ms.
+	// Reservation += 9ms - 5ms = 4ms, total = existing(2ms) + 4ms = 6ms.
+	require.Equal(t, int64(6*time.Millisecond), h.refillMu.reservation.Load())
 }
 
 // TestSQLCPUHandleCloseReturnsTokens verifies that Close returns unused
@@ -281,9 +281,9 @@ func TestSQLCPUHandleConcurrentFastPath(t *testing.T) {
 	h := newSQLCPUAdmissionHandle(
 		WorkInfo{TenantID: tenantID}, true /* atGateway */, provider, q)
 
-	// Seed the reservation by calling the slow path. With 50ms diff, the
-	// buffer portion is capped at maxRefillBuffer (10ms), so
-	// reservation = heuristic(60ms) - 50ms = 10ms.
+	// Seed the reservation by calling the slow path. With 50ms diff,
+	// buffer = min(50ms, maxRefillHeuristic=10ms) = 10ms. Total =
+	// 50ms + 10ms = 60ms. Reservation = 60ms - 50ms = 10ms.
 	require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 50*time.Millisecond, false))
 	require.Equal(t, int64(10*time.Millisecond), h.refillMu.reservation.Load())
 
@@ -644,6 +644,55 @@ func TestSQLCPUHandlePauseMeasuring(t *testing.T) {
 
 	gh.Close(ctx)
 	h.Close()
+}
+
+// TestRefillHeuristic exercises the adaptive buffer sizing in
+// refillHeuristicLocked using datadriven testdata.
+func TestRefillHeuristic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	h := &SQLCPUHandle{}
+	callHeuristic := func(diffNanos int64) (buffer, total int64) {
+		h.refillMu.Lock()
+		defer h.refillMu.Unlock()
+		total = h.refillHeuristicLocked(diffNanos)
+		buffer = h.refillMu.lastHeuristic
+		return buffer, total
+	}
+
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "refill_heuristic"),
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "refill":
+				var diffStr string
+				d.ScanArgs(t, "diff", &diffStr)
+				diff, err := time.ParseDuration(diffStr)
+				require.NoError(t, err)
+				buffer, total := callHeuristic(diff.Nanoseconds())
+				return fmt.Sprintf("buffer: %s, total: %s\n",
+					time.Duration(buffer), time.Duration(total))
+
+			case "set-age":
+				var ageStr string
+				d.ScanArgs(t, "age", &ageStr)
+				age, err := time.ParseDuration(ageStr)
+				require.NoError(t, err)
+				h.refillMu.lastRefillTime = timeutil.Now().Add(-age)
+				return "ok\n"
+
+			case "set-buffer":
+				var valStr string
+				d.ScanArgs(t, "val", &valStr)
+				val, err := time.ParseDuration(valStr)
+				require.NoError(t, err)
+				h.refillMu.lastHeuristic = val.Nanoseconds()
+				return "ok\n"
+
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
 }
 
 // makeBenchWorkQueue creates a WorkQueue in CTT mode for benchmarks.

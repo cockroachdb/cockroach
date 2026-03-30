@@ -1,0 +1,104 @@
+# Bootstrap: first call seeds buffer equal to consumed.
+refill diff=100µs
+----
+buffer: 100µs, total: 200µs
+
+# Grow: elapsed < 1ms (immediate successive call) → double buffer.
+refill diff=100µs
+----
+buffer: 200µs, total: 300µs
+
+# Grow again.
+refill diff=100µs
+----
+buffer: 400µs, total: 500µs
+
+# Decay: set age > 5ms → halve buffer.
+set-age age=10ms
+----
+ok
+
+refill diff=100µs
+----
+buffer: 200µs, total: 300µs
+
+# Deadband: set age in [1ms, 5ms] → no change.
+set-age age=3ms
+----
+ok
+
+refill diff=100µs
+----
+buffer: 200µs, total: 300µs
+
+# Ceiling: grow from 8ms → 16ms, capped at 10ms.
+set-buffer val=8ms
+----
+ok
+
+refill diff=100µs
+----
+buffer: 10ms, total: 10.1ms
+
+# Large diff: buffer capped at maxRefillHeuristic, total still >= diff.
+set-buffer val=0
+----
+ok
+
+refill diff=50ms
+----
+buffer: 10ms, total: 60ms
+
+# Decay to zero re-bootstraps: buffer=1ns halved to 0, next call bootstraps.
+set-buffer val=1ns
+----
+ok
+
+set-age age=10ms
+----
+ok
+
+refill diff=200µs
+----
+buffer: 0s, total: 200µs
+
+refill diff=200µs
+----
+buffer: 200µs, total: 400µs
+
+# Repeated grow converges to cap.
+set-buffer val=100µs
+----
+ok
+
+refill diff=50µs
+----
+buffer: 200µs, total: 250µs
+
+refill diff=50µs
+----
+buffer: 400µs, total: 450µs
+
+refill diff=50µs
+----
+buffer: 800µs, total: 850µs
+
+refill diff=50µs
+----
+buffer: 1.6ms, total: 1.65ms
+
+refill diff=50µs
+----
+buffer: 3.2ms, total: 3.25ms
+
+refill diff=50µs
+----
+buffer: 6.4ms, total: 6.45ms
+
+refill diff=50µs
+----
+buffer: 10ms, total: 10.05ms
+
+refill diff=50µs
+----
+buffer: 10ms, total: 10.05ms
