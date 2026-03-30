@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/ldrdecoder"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/logical/txnwriter"
+	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -28,6 +29,11 @@ type ScheduledTransaction struct {
 	ldrdecoder.Transaction
 	Dependencies []ldrdecoder.TxnID
 	EventHorizon hlc.Timestamp
+
+	// remainingDeps tracks how many dependencies are still pending before this
+	// txn can be applied. This count is hydrated and updated within the applier,
+	// while the Dependencies slice remains static.
+	remainingDeps int
 }
 
 // ApplierEvent is an event that can be sent to the Applier's input channel.
@@ -93,12 +99,10 @@ type Applier struct {
 		// received, to help with replicatedTime tracking.
 		txnIDs ring.Buffer[ldrdecoder.TxnID]
 
-		// horizonWaiting tracks transactions that have no remaining
-		// dependencies but cannot be applied yet because the global
-		// resolved time has not advanced past their EventHorizon.
-		//
-		// TODO(msbutler): consider making this a heap.
-		horizonWaiting []ldrdecoder.TxnID
+		// horizonWaiting is a min-heap of transactions that have no
+		// remaining dependencies but cannot be applied yet because the
+		// global resolved time has not advanced past their EventHorizon.
+		horizonWaiting horizonHeap
 	}
 	txnWriters []txnwriter.TransactionWriter
 
@@ -252,6 +256,7 @@ func (a *Applier) recordTransaction(transaction ScheduledTransaction) (bool, err
 		return false, err
 	}
 
+	transaction.remainingDeps = len(transaction.Dependencies)
 	a.mu.transactions[transaction.TxnID] = transaction
 	if a.mu.txnIDs.Len() != 0 && transaction.TxnID.LessEq(a.mu.txnIDs.GetLast()) {
 		return false, errors.AssertionFailedf(
@@ -277,11 +282,14 @@ func (a *Applier) recordTransaction(transaction ScheduledTransaction) (bool, err
 		a.depResolver.Wait(a.id, newRemoteDeps)
 	}
 
-	if len(transaction.Dependencies) == 0 {
+	if transaction.remainingDeps == 0 {
 		if transaction.EventHorizon.LessEq(a.getGlobalFrontierLocked()) {
 			return true, nil
 		}
-		a.mu.horizonWaiting = append(a.mu.horizonWaiting, transaction.TxnID)
+		heap.Push(&a.mu.horizonWaiting, horizonWaiter{
+			txnID:   transaction.TxnID,
+			horizon: transaction.EventHorizon,
+		})
 		a.registerHorizonWaitLocked(transaction.EventHorizon)
 	}
 	return false, nil
@@ -460,18 +468,17 @@ func (a *Applier) resolveDependencyLocked(
 			return errors.AssertionFailedf("missing transaction %+v", waitingID)
 		}
 
-		waitingTxn.Dependencies = slices.DeleteFunc(
-			waitingTxn.Dependencies,
-			func(id ldrdecoder.TxnID) bool {
-				return id == completedID
-			})
+		waitingTxn.remainingDeps--
 		a.mu.transactions[waitingID] = waitingTxn
 
-		if len(waitingTxn.Dependencies) == 0 {
+		if waitingTxn.remainingDeps == 0 {
 			if waitingTxn.EventHorizon.LessEq(a.getGlobalFrontierLocked()) {
 				readyBuffer.AddLast(waitingTxn.Transaction)
 			} else {
-				a.mu.horizonWaiting = append(a.mu.horizonWaiting, waitingID)
+				heap.Push(&a.mu.horizonWaiting, horizonWaiter{
+					txnID:   waitingID,
+					horizon: waitingTxn.EventHorizon,
+				})
 				a.registerHorizonWaitLocked(waitingTxn.EventHorizon)
 			}
 		}
@@ -506,23 +513,24 @@ func (a *Applier) registerHorizonWaitLocked(horizon hlc.Timestamp) {
 	}
 }
 
-// drainSatisfiedHorizonWaitersLocked checks all horizonWaiting txns and moves
-// any whose EventHorizon ≤ globalFrontier into readyBuffer.
+// drainSatisfiedHorizonWaitersLocked pops transactions from the
+// horizonWaiting min-heap whose EventHorizon ≤ globalFrontier and adds
+// them to readyBuffer.
 //
 // REQUIRES: a.mu is held.
 func (a *Applier) drainSatisfiedHorizonWaitersLocked(
 	readyBuffer *ring.Buffer[ldrdecoder.Transaction],
 ) {
 	globalFrontier := a.getGlobalFrontierLocked()
-	a.mu.horizonWaiting = slices.DeleteFunc(a.mu.horizonWaiting,
-		func(id ldrdecoder.TxnID) bool {
-			txn := a.mu.transactions[id]
-			if txn.EventHorizon.LessEq(globalFrontier) {
-				readyBuffer.AddLast(txn.Transaction)
-				return true
-			}
-			return false
-		})
+	for a.mu.horizonWaiting.Len() > 0 {
+		top := a.mu.horizonWaiting.peek()
+		if !top.horizon.LessEq(globalFrontier) {
+			break
+		}
+		heap.Pop(&a.mu.horizonWaiting)
+		txn := a.mu.transactions[top.txnID]
+		readyBuffer.AddLast(txn.Transaction)
+	}
 }
 
 func (a *Applier) processRemoteUpdate(
