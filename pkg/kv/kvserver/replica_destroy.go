@@ -110,10 +110,9 @@ type pendingReplicaDestruction struct {
 // rollback of those in-memory changes, adding significant complexity. If a
 // commit does fail, we are in an unrecoverable situation and must terminate.
 //
-// We sync here because we are potentially deleting sideloaded proposals from the
-// file system next. We could write the tombstone only in a synchronous batch
-// first and then delete the data alternatively, but then need to handle the case
-// in which there is both the tombstone and leftover replica data.
+// We sync here because we are potentially deleting sideloaded proposals from
+// the file system next, and don't want a crash in the middle to leave a log
+// entry with a missing sideloaded file.
 func (p *pendingReplicaDestruction) MustCommit(ctx context.Context) {
 	if err := p.batch.Commit(true /* sync */); err != nil {
 		log.KvDistribution.Fatalf(ctx, "unable to commit replica destruction batch: %v", err)
