@@ -1053,6 +1053,10 @@ func setupCircuitBreakerTest(t *testing.T, leaseType roachpb.LeaseType) *circuit
 		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
 	}
 
+	// Disable the leaderless watcher; it is tested separately and can
+	// interfere with circuit breaker assertions. See #163999.
+	kvserver.ReplicaLeaderlessUnavailableThreshold.Override(ctx, &st.SV, 0)
+
 	storeKnobs := &kvserver.StoreTestingKnobs{
 		SlowReplicationThresholdOverride: func(ba *kvpb.BatchRequest) time.Duration {
 			t.Helper()
