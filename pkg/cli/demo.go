@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clienturl"
@@ -332,6 +333,20 @@ func runDemoInternal(
 				certsDir,
 			)
 		}
+	} else if demoCtx.background {
+		// In non-interactive background mode, print connection info since
+		// the interactive block above was skipped.
+		var nodeList strings.Builder
+		c.ListDemoNodes(&nodeList, stderr, false /* justOne */, true /* verbose */)
+		fmt.Fprintf(stderr, "#\n# Connection parameters:\n#\n#   %s",
+			strings.ReplaceAll(
+				strings.TrimSuffix(nodeList.String(), "\n"), "\n", "\n#   "))
+		if !demoCtx.Insecure {
+			adminUser, adminPassword, certsDir := c.GetSQLCredentials()
+			fmt.Fprintf(stderr, "\n#\n#   Username: %q, password: %q\n", adminUser, adminPassword)
+			fmt.Fprintf(stderr, "#   Certificate directory: %s\n", certsDir)
+		}
+		fmt.Fprintln(stderr)
 	}
 
 	conn, err := sqlCtx.MakeConn(c.GetConnURL())
@@ -364,6 +379,20 @@ func runDemoInternal(
 
 	// Ensure the last few entries in the log files are flushed at the end.
 	defer log.FlushFiles()
+
+	if demoCtx.background {
+		// In background mode, skip the interactive SQL shell and block
+		// until signaled. Connection info was already printed above.
+		fmt.Fprintf(stderr, "# Demo cluster running in background.\n")
+		fmt.Fprintf(stderr, "# To shut down, send SIGINT or SIGTERM (Ctrl+C).\n#\n")
+
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, DrainSignals...)
+		<-ch
+
+		fmt.Fprintf(stderr, "\n# Shutting down demo cluster...\n")
+		return nil
+	}
 
 	return sqlCtx.Run(ctx, conn)
 }

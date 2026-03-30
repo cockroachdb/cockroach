@@ -1008,6 +1008,7 @@ func init() {
 		cliflagcfg.IntFlag(f, &demoCtx.HTTPPort, cliflags.DemoHTTPPort)
 		cliflagcfg.StringFlag(f, &demoCtx.ListeningURLFile, cliflags.ListeningURLFile)
 		cliflagcfg.StringFlag(f, &demoCtx.pidFile, cliflags.PIDFile)
+		cliflagcfg.BoolFlag(f, &demoCtx.background, cliflags.DemoBackground)
 	}
 
 	{
