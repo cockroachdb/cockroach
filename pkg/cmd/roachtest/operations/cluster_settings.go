@@ -98,7 +98,7 @@ func registerClusterSettings(r registry.Registry) {
 		{
 			Name: "storage.wal_failover.unhealthy_op_threshold",
 			Generator: timeBasedRandomValue(timeutil.Now, 20*time.Minute, func(rng *rand.Rand) string {
-				return fmt.Sprintf("%d", rng.Intn(246)+5)
+				return fmt.Sprintf("%dms", rng.Intn(151)+100)
 			}),
 			Owner: registry.OwnerStorage,
 		},
