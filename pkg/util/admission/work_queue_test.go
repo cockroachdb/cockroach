@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unicode"
@@ -734,7 +735,8 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 	stopCh := make(chan struct{})
 	errCount, totalCount := 0, 0
 	var mu syncutil.Mutex
-	go func() {
+	var wg sync.WaitGroup
+	wg.Go(func() {
 		ticker := time.NewTicker(time.Microsecond * 100)
 		done := false
 		var work *testWork
@@ -745,7 +747,9 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				work2 := &testWork{cancel: cancel}
 				tenantID++
+				wg.Add(1)
 				go func(ctx context.Context, tenantID uint64, createTime int64) {
+					defer wg.Done()
 					resp, err := q.Admit(ctx, WorkInfo{
 						TenantID:   roachpb.MustMakeTenantID(tenantID),
 						CreateTime: createTime,
@@ -786,7 +790,7 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 				buf.stringAndReset()
 			}
 		}
-	}()
+	})
 	go func() {
 		for {
 			select {
@@ -803,6 +807,7 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 	time.Sleep(time.Second)
 	close(stopCh)
 	q.close()
+	wg.Wait()
 	mu.Lock()
 	t.Logf("total: %d, err: %d", totalCount, errCount)
 	mu.Unlock()
