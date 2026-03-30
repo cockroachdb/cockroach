@@ -147,7 +147,6 @@ jest_test(
         ".eslintignore",
         ".eslintrc.json",
         "babel.config.js",
-        "enzyme.setup.js",
         "jest.config.js",
         "package.json",
         "tsconfig.json",
