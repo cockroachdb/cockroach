@@ -17,6 +17,7 @@ import Long from "long";
 import moment from "moment-timezone";
 import React, {
   useContext,
+  useMemo,
   useState,
   useEffect,
   useCallback,
@@ -25,7 +26,13 @@ import React, {
 import { Helmet } from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 
-import { SqlStatsSortType } from "src/api/statementsApi";
+import { useNodes } from "src/api/nodesApi";
+import {
+  SqlStatsSortType,
+  useCombinedTransactionStats,
+} from "src/api/statementsApi";
+import { useTxnInsights } from "src/api/txnInsightsApi";
+import { useUserSQLRoles } from "src/api/userApi";
 import { PageConfig, PageConfigItem } from "src/pageConfig";
 import {
   populateRegionNodeForStatements,
@@ -44,22 +51,11 @@ import {
   unset,
 } from "src/util";
 
-import {
-  createCombinedStmtsRequest,
-  InsightRecommendation,
-  RequestState,
-  SqlStatsResponse,
-  StatementsRequest,
-  TxnInsightsRequest,
-} from "../api";
+import { InsightRecommendation } from "../api";
 import { formatTwoPlaces } from "../barCharts";
 import { Button } from "../button";
-import { CockroachCloudContext } from "../contexts";
-import {
-  getTxnInsightRecommendations,
-  InsightType,
-  TxnInsightEvent,
-} from "../insights";
+import { ClusterDetailsContext, CockroachCloudContext } from "../contexts";
+import { getTxnInsightRecommendations, InsightType } from "../insights";
 import {
   InsightsSortedTable,
   makeInsightsColumns,
@@ -75,7 +71,6 @@ import {
 import { SqlBox } from "../sql";
 import LoadingError from "../sqlActivity/errorComponent";
 import statementsStyles from "../statementsPage/statementsPage.module.scss";
-import { UIConfigState } from "../store";
 import { SummaryCard, SummaryCardItem } from "../summaryCard";
 import summaryCardStyles from "../summaryCard/summaryCard.module.scss";
 import { TableStatistics } from "../tableStatistics";
@@ -84,8 +79,6 @@ import {
   TimeScale,
   timeScale1hMinOptions,
   TimeScaleDropdown,
-  timeScaleRangeToObj,
-  toRoundedDateRange,
 } from "../timeScaleDropdown";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 import { baseHeadingClasses } from "../transactionsPage/transactionsPageClasses";
@@ -114,21 +107,11 @@ export interface TransactionDetailsStateProps {
   timeScale: TimeScale;
   limit: number;
   reqSortSetting: SqlStatsSortType;
-  isTenant: UIConfigState["isTenant"];
-  hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
-  nodeRegions: { [nodeId: string]: string };
   transactionFingerprintId: string;
-  transactionInsights: TxnInsightEvent[];
-  hasAdminRole?: UIConfigState["hasAdminRole"];
-  txnStatsResp: RequestState<SqlStatsResponse>;
   requestTime: moment.Moment;
 }
 
 export interface TransactionDetailsDispatchProps {
-  refreshData: (req?: StatementsRequest) => void;
-  refreshNodes: () => void;
-  refreshUserSQLRoles: () => void;
-  refreshTransactionInsights: (req: TxnInsightsRequest) => void;
   onTimeScaleChange: (ts: TimeScale) => void;
   onRequestTimeChange: (t: moment.Moment) => void;
 }
@@ -144,18 +127,8 @@ export function TransactionDetails(
     timeScale,
     limit,
     reqSortSetting,
-    isTenant,
-    hasViewActivityRedactedRole,
-    nodeRegions,
     transactionFingerprintId,
-    transactionInsights,
-    hasAdminRole,
-    txnStatsResp,
     requestTime,
-    refreshData,
-    refreshNodes,
-    refreshUserSQLRoles,
-    refreshTransactionInsights,
     onTimeScaleChange,
     onRequestTimeChange,
     location,
@@ -163,13 +136,38 @@ export function TransactionDetails(
     history,
   } = props;
 
+  const { isTenant } = useContext(ClusterDetailsContext);
   const isCockroachCloud = useContext(CockroachCloudContext);
+
+  const {
+    data: txnStatsData,
+    error: txnStatsError,
+    isLoading: txnStatsLoading,
+  } = useCombinedTransactionStats(timeScale, limit, reqSortSetting);
+  const { nodeRegionsByID: nodeRegions } = useNodes();
+  const { data: userRoles } = useUserSQLRoles();
+  const { data: txnInsightsData } = useTxnInsights(timeScale);
+
+  const hasAdminRole = userRoles?.roles?.includes("ADMIN") ?? false;
+  const hasViewActivityRedactedRole =
+    userRoles?.roles?.includes("VIEWACTIVITYREDACTED") ?? false;
+
+  // Replaces Redux selector selectTxnInsightsByFingerprint
+  const transactionInsights = useMemo(() => {
+    if (!transactionFingerprintId || !txnInsightsData?.results) return null;
+    const id = FixFingerprintHexValue(
+      BigInt(transactionFingerprintId).toString(16),
+    );
+    return txnInsightsData.results.filter(
+      txn => txn.transactionFingerprintID === id,
+    );
+  }, [transactionFingerprintId, txnInsightsData]);
 
   // Initialize state from props
   const getInitialState = () => {
     const appsAsStr = queryByName(location, appNamesAttr) || null;
     const txnDetails = getTxnFromSqlStatsMemoized(
-      txnStatsResp?.data,
+      txnStatsData,
       match,
       appsAsStr,
     );
@@ -177,7 +175,7 @@ export function TransactionDetails(
     const stmts = getStatementsForTransaction(
       txnDetails?.stats_data?.transaction_fingerprint_id.toString(),
       apps,
-      txnStatsResp?.data?.statements,
+      txnStatsData?.statements,
     );
     return {
       txnDetails,
@@ -210,19 +208,9 @@ export function TransactionDetails(
     initialState.statements,
   );
 
-  // Refs to hold latest values for mount effects, avoiding stale closures
+  // Ref to hold latest value for mount effect, avoiding stale closure
   // while preserving "run once on mount" semantics.
-  const txnStatsRespRef = useRef(txnStatsResp);
-  const refreshUserSQLRolesRef = useRef(refreshUserSQLRoles);
-  const isTenantRef = useRef(isTenant);
-  const refreshNodesRef = useRef(refreshNodes);
   const timeScaleRef = useRef(timeScale);
-
-  // Keep refs up to date on each render
-  txnStatsRespRef.current = txnStatsResp;
-  refreshUserSQLRolesRef.current = refreshUserSQLRoles;
-  isTenantRef.current = isTenant;
-  refreshNodesRef.current = refreshNodes;
   timeScaleRef.current = timeScale;
 
   const changeTimeScale = useCallback(
@@ -235,34 +223,11 @@ export function TransactionDetails(
     [onRequestTimeChange, onTimeScaleChange],
   );
 
-  const doRefreshData = useCallback((): void => {
-    const insightsReq = timeScaleRangeToObj(timeScale);
-    refreshTransactionInsights(insightsReq);
-    const [start, end] = toRoundedDateRange(timeScale);
-    const req = createCombinedStmtsRequest({
-      start,
-      end,
-      limit,
-      sort: reqSortSetting,
-    });
-    refreshData(req);
-  }, [
-    timeScale,
-    limit,
-    reqSortSetting,
-    refreshData,
-    refreshTransactionInsights,
-  ]);
-
-  // Ref for mount effect
-  const doRefreshDataRef = useRef(doRefreshData);
-  doRefreshDataRef.current = doRefreshData;
-
-  // Update txnDetails when props change
+  // Update txnDetails when data changes
   const updateTxnDetails = useCallback((): void => {
     const newAppsAsStr = queryByName(location, appNamesAttr) || null;
     const newTxnDetails = getTxnFromSqlStatsMemoized(
-      txnStatsResp?.data,
+      txnStatsData,
       match,
       newAppsAsStr,
     );
@@ -270,7 +235,7 @@ export function TransactionDetails(
     const newStatements = getStatementsForTransaction(
       newTxnDetails?.stats_data?.transaction_fingerprint_id.toString(),
       newAppsAsStr?.split(",").map(s => s.trim()),
-      txnStatsResp?.data?.statements,
+      txnStatsData?.statements,
     );
 
     // Only overwrite the transaction text if it is non-null.
@@ -286,66 +251,41 @@ export function TransactionDetails(
       setTxnDetails(newTxnDetails);
       setStatements(newStatements);
     }
-  }, [location, txnStatsResp?.data, match, latestTransactionText, txnDetails]);
+  }, [location, txnStatsData, match, latestTransactionText, txnDetails]);
 
-  // componentDidMount equivalent
+  // componentDidMount equivalent — validate timeScale on mount.
+  // Data fetching is handled by SWR hooks automatically.
   useEffect(() => {
-    if (!txnStatsRespRef.current?.data || !txnStatsRespRef.current?.valid) {
-      doRefreshDataRef.current();
-    }
-    refreshUserSQLRolesRef.current();
-    if (!isTenantRef.current) {
-      refreshNodesRef.current();
-    }
-
-    // Validate timeScale and update if needed
     const ts = getValidOption(timeScaleRef.current, timeScale1hMinOptions);
     if (ts !== timeScaleRef.current) {
       changeTimeScale(ts);
     }
   }, [changeTimeScale]);
 
-  // Track previous values for componentDidUpdate logic
+  // Update txnDetails when relevant data changes.
   const prevTransactionFingerprintIdRef = React.useRef(
     transactionFingerprintId,
   );
-  const prevTxnStatsRespRef = React.useRef(txnStatsResp);
+  const prevTxnStatsDataRef = React.useRef(txnStatsData);
   const prevLocationSearchRef = React.useRef(location?.search);
-  const prevTimeScaleRef = React.useRef(timeScale);
 
   useEffect(() => {
-    if (!isTenant) {
-      refreshNodes();
-    }
-
-    // Check if we need to update txnDetails
     if (
       prevTransactionFingerprintIdRef.current !== transactionFingerprintId ||
-      prevTxnStatsRespRef.current !== txnStatsResp ||
+      prevTxnStatsDataRef.current !== txnStatsData ||
       prevLocationSearchRef.current !== location?.search
     ) {
       updateTxnDetails();
     }
 
-    // Refresh data if time scale changes
-    if (prevTimeScaleRef.current !== timeScale) {
-      doRefreshData();
-    }
-
-    // Update refs
     prevTransactionFingerprintIdRef.current = transactionFingerprintId;
-    prevTxnStatsRespRef.current = txnStatsResp;
+    prevTxnStatsDataRef.current = txnStatsData;
     prevLocationSearchRef.current = location?.search;
-    prevTimeScaleRef.current = timeScale;
   }, [
-    isTenant,
-    refreshNodes,
     transactionFingerprintId,
-    txnStatsResp,
+    txnStatsData,
     location?.search,
-    timeScale,
     updateTxnDetails,
-    doRefreshData,
   ]);
 
   const onChangeSortSetting = (ss: SortSetting): void => {
@@ -361,7 +301,7 @@ export function TransactionDetails(
   };
 
   const transaction = txnDetails;
-  const error = txnStatsResp?.error;
+  const error = txnStatsError;
   const transactionStats = transaction?.stats_data?.stats;
   const visibleApps = Array.from(
     new Set(
@@ -404,7 +344,7 @@ export function TransactionDetails(
       <Loading
         error={error}
         page={"transaction details"}
-        loading={txnStatsResp?.inFlight}
+        loading={txnStatsLoading}
         render={() => {
           if (!transaction) {
             return (
