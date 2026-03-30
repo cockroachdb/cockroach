@@ -1607,6 +1607,13 @@ func destroyCluster(
 ) error {
 	c, ok := cld.Clusters[clusterName]
 	if !ok {
+		// Best-effort: try to clean up Prometheus config even if the
+		// cluster no longer exists (e.g. VMs were preempted).
+		if cl, err := promhelperclient.NewPromClient(); err == nil {
+			if err := cl.DeleteClusterConfig(ctx, clusterName, l); err != nil {
+				l.Printf("WARNING: failed to delete prometheus config for %s: %s", clusterName, err)
+			}
+		}
 		return fmt.Errorf("cluster %s does not exist", clusterName)
 	}
 	if c.IsEmptyCluster() {
