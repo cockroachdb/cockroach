@@ -76,14 +76,16 @@ func (r *Replica) setDestroyStatusRemovedRaftMuLocked() {
 // written to Pebble.
 func (r *Replica) postDestroyRaftMuLocked(ctx context.Context) {
 	// Clearing sideloaded storage may fail (e.g. due to I/O errors), but we log
-	// and continue. The sideloaded files are keyed by the replica ID which has
-	// already been permanently tombstoned, so they will never be accessed again.
+	// and continue. We've already committed the replica removal, and any future
+	// replica instantiation will go through a snapshot path which clears the
+	// sideloaded storage.
 	// Leaking the files is preferable to crashing or having to recover from a
 	// partially-destroyed replica state.
 	//
-	// TODO(#136416): at node startup, we should remove all on-disk directories
+	// TODO(#136416): at node startup, we could remove all on-disk directories
 	// belonging to replicas which aren't present. A crash before a call to
-	// postDestroyRaftMuLocked will currently leave the files around forever.
+	// postDestroyRaftMuLocked or hitting an error below will currently leave the
+	// files around forever.
 	if err := r.logStorage.ls.Sideload.Clear(ctx); err != nil {
 		log.KvDistribution.Warningf(ctx, "failed to clear sideloaded storage: %v", err)
 		err = nil // ignore intentionally
