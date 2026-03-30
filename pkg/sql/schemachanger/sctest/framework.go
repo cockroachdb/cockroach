@@ -850,10 +850,10 @@ SELECT
 		ELSE create_statement
 	END AS create_statement
 FROM
-	( 
+	(
 		SELECT descriptor_id, create_statement, false AS needs_split FROM crdb_internal.create_schema_statements
 		UNION ALL SELECT descriptor_id, create_statement, true AS needs_split FROM crdb_internal.create_statements
-		UNION ALL SELECT descriptor_id, create_statement, false AS needs_split FROM crdb_internal.create_type_statements
+		UNION ALL SELECT descriptor_id, create_statement, true AS needs_split FROM crdb_internal.create_type_statements
     UNION ALL SELECT function_id as descriptor_id, create_statement, false AS needs_split FROM crdb_internal.create_function_statements
 	)
 WHERE descriptor_id IN (
