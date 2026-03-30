@@ -207,6 +207,8 @@ export type StatementRawFormat = {
 };
 
 export const STATEMENTS_SWR_KEY = "statements";
+export const TRANSACTIONS_SWR_KEY = "transactions";
+export const STATEMENT_DETAILS_SWR_KEY = "statementDetails";
 
 export function useCombinedStatementStats(
   timeScale: TimeScale | null,
@@ -243,8 +245,6 @@ export function useCombinedStatementStats(
   );
 }
 
-export const STATEMENT_DETAILS_SWR_KEY = "stmtDetails";
-
 export function useStatementDetails(
   fingerprintId: string,
   appNames: string | undefined,
@@ -271,6 +271,41 @@ export function useStatementDetails(
           app_names: appNames?.split(","),
           start: Long.fromNumber(startUnix),
           end: Long.fromNumber(endUnix),
+        }),
+      ),
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
+  );
+}
+
+export function useCombinedTransactionStats(
+  timeScale: TimeScale | null,
+  limit: number,
+  sort: SqlStatsSortType,
+) {
+  const timeRange = timeScale ? toRoundedDateRange(timeScale) : null;
+  const startUnix = timeRange?.[0]?.unix();
+  const endUnix = timeRange?.[1]?.unix();
+
+  return useSwrWithClusterId<SqlStatsResponse>(
+    timeScale
+      ? {
+          name: TRANSACTIONS_SWR_KEY,
+          start: startUnix,
+          end: endUnix,
+          limit,
+          sort: Number(sort),
+        }
+      : null,
+    () =>
+      getFlushedTxnStatsApi(
+        createCombinedStmtsRequest({
+          start: timeRange[0],
+          end: timeRange[1],
+          limit,
+          sort,
         }),
       ),
     {
