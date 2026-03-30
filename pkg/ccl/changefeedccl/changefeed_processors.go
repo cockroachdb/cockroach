@@ -207,36 +207,19 @@ func newChangeAggregatorProcessor(
 	}
 
 	opts := changefeedbase.MakeStatementOptions(ca.spec.Feed.Opts)
+	sv := &ca.FlowCtx.Cfg.Settings.SV
 
-	// MinCheckpointFrequency controls how frequently the changeAggregator flushes the sink
-	// and checkpoints the local frontier to changeFrontier. It is used as a rough
-	// approximation of how latency-sensitive the changefeed user is. For a high latency
-	// user, such as cloud storage sink where flushes can take much longer, it is often set
-	// as the sink's flush frequency so as not to negate the sink's batch config.
-	//
-	// If a user does not specify a 'min_checkpoint_frequency' duration, we instead default
-	// to 30s, which is hopefully long enough to account for most possible sink latencies we
-	// could see without falling too behind.
-	//
-	// NB: As long as we periodically get new span-level resolved timestamps
-	// from the poller (which should always happen, even if the watched data is
-	// not changing), then this is sufficient and we don't have to do anything
-	// fancy with timers.
-	// // TODO(casper): add test for OptMinCheckpointFrequency.
-	checkpointFreq, err := opts.GetMinCheckpointFrequency()
+	var flushFrequencySource redact.SafeValue
+	var err error
+	ca.flushFrequency, flushFrequencySource, err = getFlushFrequency(opts, sv)
 	if err != nil {
 		return nil, err
-	}
-	if checkpointFreq != nil {
-		ca.flushFrequency = *checkpointFreq
-	} else {
-		ca.flushFrequency = changefeedbase.DefaultMinCheckpointFrequency
 	}
 
 	ca.frontierFlushLimiter, err = newSaveRateLimiter(saveRateConfig{
 		name: "frontier",
 		intervalName: func() redact.SafeValue {
-			return redact.SafeString(changefeedbase.OptMinCheckpointFrequency)
+			return flushFrequencySource
 		},
 		interval: func() time.Duration {
 			return ca.flushFrequency
@@ -250,6 +233,33 @@ func newChangeAggregatorProcessor(
 	}
 
 	return ca, nil
+}
+
+// getFlushFrequency returns how often the aggregator should flush its frontier
+// to the coordinator. These flushes are used by the coordinator to persist a
+// checkpoint as well as emit resolved timestamps to the sink. The frequency is
+// derived as the minimum of the resolved timestamp interval (if set) and the
+// frontier persistence interval.
+func getFlushFrequency(
+	opts changefeedbase.StatementOptions, sv *settings.Values,
+) (time.Duration, redact.SafeValue, error) {
+	freq := changefeedbase.FrontierPersistenceInterval.Get(sv)
+	var source redact.SafeValue = changefeedbase.FrontierPersistenceInterval.Name()
+
+	resolvedInterval, isSet, err := opts.GetResolvedTimestampInterval()
+	if err != nil {
+		return 0, nil, err
+	}
+	// Bare `resolved` (no value) means "emit as often as possible", i.e. interval 0.
+	if isSet && resolvedInterval == nil {
+		return 0, redact.SafeString(changefeedbase.OptResolvedTimestamps), nil
+	}
+	if resolvedInterval != nil && *resolvedInterval < freq {
+		freq = *resolvedInterval
+		source = redact.SafeString(changefeedbase.OptResolvedTimestamps)
+	}
+
+	return freq, source, nil
 }
 
 // MustBeStreaming implements the execinfra.Processor interface.
@@ -698,8 +708,9 @@ func (ca *changeAggregator) close() {
 var aggregatorFlushJitter = settings.RegisterFloatSetting(
 	settings.ApplicationLevel,
 	"changefeed.aggregator.flush_jitter",
-	"jitter aggregator flushes as a fraction of min_checkpoint_frequency. This "+
-		"setting has no effect if min_checkpoint_frequency is set to 0.",
+	"jitter aggregator flushes as a fraction of the aggregator flush frequency, "+
+		"which is derived from min(resolved, changefeed.progress.frontier_persistence.interval). "+
+		"This setting has no effect if `resolved` is set to 0",
 	0.1, /* 10% */
 	settings.NonNegativeFloat,
 	settings.WithPublic,

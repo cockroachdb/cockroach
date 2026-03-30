@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -143,6 +144,10 @@ func alterChangefeedPlanHook(
 		)
 		if err != nil {
 			return err
+		}
+
+		for _, warning := range newOptions.DeprecationWarnings() {
+			p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
 		}
 
 		st, err := newOptions.GetInitialScanType()
