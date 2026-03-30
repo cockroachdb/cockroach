@@ -989,11 +989,11 @@ func (r *raft) appliedTo(index uint64) {
 		if err != nil {
 			panic(err)
 		}
-		// NB: this proposal can't be dropped due to size, but can be
-		// dropped if a leadership transfer is in progress. We'll keep
-		// checking this condition on each applied entry, so either the
-		// leadership transfer will succeed and the new leader will leave
-		// the joint configuration, or the leadership transfer will fail,
+		// NB: this proposal can't be dropped due to size, but can be dropped if a
+		// leadership transfer is in progress or the config change is not allowed
+		// for another reason. We'll keep checking this condition on each applied
+		// entry, so either the leadership transfer will succeed and the new leader
+		// will leave the joint configuration, or the leadership transfer will fail,
 		// and we will propose the config change on the next advance.
 		if err := r.Step(m); err != nil {
 			r.logger.Debugf("not initiating automatic transition out of joint configuration %s: %v", r.config, err)
@@ -1842,6 +1842,10 @@ func stepLeader(r *raft, m pb.Message) error {
 			return ErrProposalDropped
 		}
 
+		// Scan entries for config changes. Config change entries must be proposed
+		// alone in a MsgProp (not batched with other entries), as ensured by
+		// confChangeToMsg. This allows the leader to reject the entire MsgProp
+		// if config change validation fails.
 		for i := range m.Entries {
 			e := &m.Entries[i]
 			var cc pb.ConfChangeI
@@ -1859,6 +1863,14 @@ func stepLeader(r *raft, m pb.Message) error {
 				cc = ccc
 			}
 			if cc != nil {
+				// Config change entries must be proposed alone, not batched with
+				// other entries. See confChangeToMsg.
+				if len(m.Entries) != 1 {
+					r.logger.Panicf(
+						"%x conf change entry at index %d must be proposed alone, got %d entries",
+						r.id, i, len(m.Entries),
+					)
+				}
 				ccCtx := confchange.ValidationContext{
 					CurConfig:                         &r.config,
 					Applied:                           r.raftLog.applied,
@@ -1868,10 +1880,9 @@ func stepLeader(r *raft, m pb.Message) error {
 				}
 				if err := confchange.ValidateProp(ccCtx, cc.AsV2()); err != nil {
 					r.logger.Infof("%x ignoring conf change %v at config %s: %s", r.id, cc, r.config, err)
-					m.Entries[i] = pb.Entry{Type: pb.EntryNormal}
-				} else {
-					r.pendingConfIndex = r.raftLog.lastIndex() + uint64(i) + 1
+					return ErrProposalDropped
 				}
+				r.pendingConfIndex = r.raftLog.lastIndex() + uint64(i) + 1
 			}
 		}
 

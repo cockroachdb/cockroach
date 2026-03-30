@@ -480,30 +480,34 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 	rawNode.AckAppend(rd.Ack())
 
 	rawNode.Campaign()
-	for {
+	// Drain all Ready cycles until the leader's initial empty entry is committed
+	// and applied, so that applied index is >= pendingConfIndex and conf change
+	// proposals are not rejected.
+	for rawNode.HasReady() {
 		rd = rawNode.Ready()
 		s.Append(rd.Entries)
 		rawNode.AckAppend(rd.Ack())
 		rawNode.AckApplied(committedEntries(t, rawNode, rd))
-		if rd.HardState.Lead == rawNode.raft.id {
-			break
-		}
 	}
+	require.Equal(t, rawNode.raft.id, rawNode.raft.lead)
 
 	proposeConfChangeAndApply := func(cc pb.ConfChange) {
-		rawNode.ProposeConfChange(cc)
-		rd = rawNode.Ready()
-		s.Append(rd.Entries)
-		committed := committedEntries(t, rawNode, rd)
-		for _, entry := range committed {
-			if entry.Type == pb.EntryConfChange {
-				var cc pb.ConfChange
-				cc.Unmarshal(entry.Data)
-				rawNode.ApplyConfChange(cc)
+		require.NoError(t, rawNode.ProposeConfChange(cc))
+		// Drain all Ready cycles to ensure the conf change is committed and applied.
+		for rawNode.HasReady() {
+			rd = rawNode.Ready()
+			s.Append(rd.Entries)
+			committed := committedEntries(t, rawNode, rd)
+			for _, entry := range committed {
+				if entry.Type == pb.EntryConfChange {
+					var cc pb.ConfChange
+					cc.Unmarshal(entry.Data)
+					rawNode.ApplyConfChange(cc)
+				}
 			}
+			rawNode.AckAppend(rd.Ack())
+			rawNode.AckApplied(committed)
 		}
-		rawNode.AckAppend(rd.Ack())
-		rawNode.AckApplied(committed)
 	}
 
 	cc1 := pb.ConfChange{Type: pb.ConfChangeAddNode, NodeID: 1}
@@ -511,7 +515,7 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 	require.NoError(t, err)
 	proposeConfChangeAndApply(cc1)
 
-	// try to add the same node again
+	// Try to add the same node again. This is a no-op but still gets committed.
 	proposeConfChangeAndApply(cc1)
 
 	// the new node join should be ok
@@ -526,6 +530,7 @@ func TestRawNodeProposeAddDuplicateNode(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 3)
 	assert.Equal(t, ccdata1, entries[0].Data)
+	assert.Equal(t, ccdata1, entries[1].Data)
 	assert.Equal(t, ccdata2, entries[2].Data)
 }
 

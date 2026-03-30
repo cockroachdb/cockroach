@@ -266,9 +266,8 @@ func TestStoreMetrics(t *testing.T) {
 					StickyVFSRegistry: stickyVFSRegistry,
 				},
 				Store: &kvserver.StoreTestingKnobs{
-					DisableRaftLogQueue:                         true,
-					DisableRefreshReasonNewLeaderOrConfigChange: true, // see #166114
-					EngineKnobs: []storage.ConfigOption{storage.DisableAutomaticCompactions},
+					DisableRaftLogQueue: true,
+					EngineKnobs:         []storage.ConfigOption{storage.DisableAutomaticCompactions},
 				},
 			},
 		}
