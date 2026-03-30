@@ -8,6 +8,7 @@ package tree
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
 )
 
@@ -30,6 +31,11 @@ var _ Statement = &DoBlock{}
 // Format implements the NodeFormatter interface.
 func (n *DoBlock) Format(ctx *FmtCtx) {
 	ctx.FormatNode(n.Code)
+}
+
+// Doc implements the Docer interface.
+func (n *DoBlock) Doc(p *PrettyCfg) pretty.Doc {
+	return p.Doc(n.Code)
 }
 
 // DoBlockOptions represent a list of options for a DO statement.
