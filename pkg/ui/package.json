@@ -417,8 +417,7 @@
       "url-parse": "1.5.1",
       "db-console>yargs-parser": "20.2.9",
       "nwsapi": "2.2.0",
-      "@cockroachlabs/cluster-ui>yargs-parser": "13.1.2",
-      "analytics-node>axios-retry": "3.1.9"
+      "@cockroachlabs/cluster-ui>yargs-parser": "13.1.2"
     },
     "// patchedDependencies": {
       "topojson@3.0.2": [

@@ -103,7 +103,7 @@ module.exports = (env, argv) => {
         "buffer": require.resolve("buffer/"),
         "stream": require.resolve("stream-browserify"),
         "assert": require.resolve("assert/"),
-        "crypto": require.resolve("crypto-browserify"),
+        "crypto": false,
         "util": require.resolve("util/"),
         "events": require.resolve("events/"),
         "process": require.resolve("process/browser"),
