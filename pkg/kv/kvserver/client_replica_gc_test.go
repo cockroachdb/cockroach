@@ -205,8 +205,9 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 //  3. getOrCreateReplica — simulates a newer replica contacting the store.
 //
 // The eager self-removal path (ChangeReplicasTrigger) is not tested because it
-// fatals on error — the node must succeed at removing itself after applying the
-// trigger (and it uses DestroyData: false, so staging is not involved).
+// fatals on error and uses DestroyData: false (so staging is not involved).
+// To prevent the eager path from firing, the target node is partitioned from
+// incoming raft messages before the voter removal, so the trigger never arrives.
 func TestReplicaGCQueueHandlesStagingError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -220,9 +221,6 @@ func TestReplicaGCQueueHandlesStagingError(t *testing.T) {
 	var failCount atomic.Int32
 
 	knobs := &kvserver.StoreTestingKnobs{
-		// Force removal through the GC queue instead of the eager
-		// self-removal path (which fatals on error).
-		DisableEagerReplicaRemoval: true,
 		TestingReplicaDestroyErr: func() error {
 			if shouldFail.Load() {
 				failCount.Add(1)
@@ -248,9 +246,22 @@ func TestReplicaGCQueueHandlesStagingError(t *testing.T) {
 	store, err := ts.GetStores().(*kvserver.Stores).GetStore(ts.GetFirstStoreID())
 	require.NoError(t, err)
 
-	// Remove voter from targetNode, making the replica GC-able.
-	// With DisableEagerReplicaRemoval, the replica stays around until
-	// the GC queue picks it up.
+	// Partition the target node from incoming raft messages for this range
+	// before removing its voter, so it never receives the
+	// ChangeReplicasTrigger and doesn't fire the eager self-removal path.
+	// The voter removal still succeeds because the other two nodes form a
+	// quorum (2/3).
+	preRemovalDesc, err := tc.LookupRange(k)
+	require.NoError(t, err)
+	var fromReplicaIDs []roachpb.ReplicaID
+	for _, rd := range preRemovalDesc.Replicas().Descriptors() {
+		if rd.StoreID != store.StoreID() {
+			fromReplicaIDs = append(fromReplicaIDs, rd.ReplicaID)
+		}
+	}
+	dropRaftMessagesFrom(t, ts, preRemovalDesc, fromReplicaIDs, nil)
+
+	// Remove voter from targetNode.
 	desc := tc.RemoveVotersOrFatal(t, k, tc.Target(targetNode))
 
 	// Call RemoveReplica directly to observe the error.
