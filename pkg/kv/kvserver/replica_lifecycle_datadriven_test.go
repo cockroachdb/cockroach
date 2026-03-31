@@ -379,10 +379,8 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 					require.NoError(t, b.State().ApplyBatchRepr(ps.batchRepr, false /* sync */))
 					// Then run splitPreApply which does the apply-time tweaks and stages
 					// a WAG event in the batch.
-					splitPreApply(ctx, kvstorage.StateRW(b.State()), kvstorage.Raft{
-						RO: tc.eng.LogEngine(),
-						WO: b.Raft(),
-					}, b.WagWriter(), in)
+					rw := b.ReadWriter()
+					splitPreApply(ctx, kvstorage.StateRW(b.State()), rw.Raft, b.WagWriter(), in)
 				})
 				// If the RHS replica wasn't destroyed, it is now initialized. Update
 				// the in-memory state to reflect this.
@@ -460,13 +458,12 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				lhsRS.desc = merge.LeftDesc // update to post-merge descriptor
 				output := tc.mutate(t, func(b *kvstorage.Batch[storage.Batch]) {
 					require.NoError(t, b.State().ApplyBatchRepr(pm.batchRepr, false /* sync */))
-					require.NoError(t, kvstorage.SubsumeReplica(ctx, kvstorage.ReadWriter{
-						State: kvstorage.WrapState(b.State()),
-						Raft:  kvstorage.Raft{RO: tc.eng.LogEngine(), WO: b.Raft()},
-					}, kvstorage.DestroyReplicaInfo{
-						FullReplicaID: rhsRS.replica.FullReplicaID,
-						Keys:          rhsRS.desc.RSpan(),
-					}))
+					require.NoError(t, kvstorage.SubsumeReplica(
+						ctx, b.ReadWriter(), kvstorage.DestroyReplicaInfo{
+							FullReplicaID: rhsRS.replica.FullReplicaID,
+							Keys:          rhsRS.desc.RSpan(),
+						},
+					))
 				})
 				delete(tc.ranges, merge.RightDesc.RangeID)
 				return output
@@ -485,10 +482,9 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 				}
 
 				output := tc.mutate(t, func(b *kvstorage.Batch[storage.Batch]) {
-					require.NoError(t, kvstorage.DestroyReplica(ctx, kvstorage.ReadWriter{
-						State: kvstorage.WrapState(b.State()),
-						Raft:  kvstorage.Raft{RO: tc.eng.LogEngine(), WO: b.Raft()},
-					}, destroyInfo, rs.desc.NextReplicaID))
+					require.NoError(t, kvstorage.DestroyReplica(
+						ctx, b.ReadWriter(), destroyInfo, rs.desc.NextReplicaID,
+					))
 				})
 				rs.replica = nil // clear the replica from the range state
 				return output
