@@ -25,7 +25,7 @@ change, as they can cause merge conflicts in ongoing development.
    commit message is the primary record, not the PR description.
    Include release note annotations.
 7. Push and [create a PR](https://help.github.com/articles/creating-a-pull-request).
-8. Merge via the merge queue.
+8. Merge via `/trunk merge` (not the green button).
 
 ## Code Review
 
