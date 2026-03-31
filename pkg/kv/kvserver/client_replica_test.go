@@ -3044,21 +3044,19 @@ func TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable(t *testing.T) {
 		return nil
 	})
 
-	sendPutRequestWithTimeout := func(repl *kvserver.Replica, timeout time.Duration) (*kvpb.Error, error) {
-		ctx, cancel := context.WithTimeout(ctx, timeout)
-		defer cancel()
+	sendPutRequest := func(repl *kvserver.Replica) *kvpb.Error {
 		ba := &kvpb.BatchRequest{}
 		ba.RangeID = desc.RangeID
 		ba.Timestamp = repl.Clock().Now()
 		ba.Add(putArgs(key, []byte("foo")))
 		_, pErr := kvserver.ToSenderForTesting(repl).Send(ctx, ba)
-		return pErr, ctx.Err()
+		return pErr
 	}
 
 	// Requests should immediately return an error indicating that the range is
-	// unavailable.
-	pErr, ctxErr := sendPutRequestWithTimeout(repl, 2*time.Second)
-	require.NoError(t, ctxErr)
+	// unavailable. No timeout is used here because the leaderless watcher should
+	// cause the request to fail fast. See #161316.
+	pErr = sendPutRequest(repl)
 	require.Regexp(t, "replica has been leaderless for 10s", pErr)
 	require.True(t, errors.HasType(pErr.GoError(), (*kvpb.ReplicaUnavailableError)(nil)),
 		"expected ReplicaUnavailableError, got %v", err)
@@ -3082,15 +3080,9 @@ func TestLossQuorumCauseLeaderlessWatcherToSignalUnavailable(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		for i := range numServers {
 			repl := tc.GetFirstStoreFromServer(t, i).LookupReplica(roachpb.RKey(key))
-			pErr, ctxErr = sendPutRequestWithTimeout(repl, 2*time.Second)
-			if ctxErr == nil && pErr == nil {
+			if pErr = sendPutRequest(repl); pErr == nil {
 				return nil
 			}
-		}
-		// If we reach this point, we know that the request failed, return the
-		// error.
-		if ctxErr != nil {
-			return ctxErr
 		}
 		return pErr.GoError()
 	})
