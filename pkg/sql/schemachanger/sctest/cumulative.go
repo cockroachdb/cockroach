@@ -118,7 +118,7 @@ func Rollback(t *testing.T, relPath string, factory TestServerFactory) {
 		}
 		factory.WithSchemaChangerKnobs(knobs).Run(ctx, t, runfn)
 	}
-	cumulativeTestForEachPostCommitStage[struct{}](t, relPath, factory, nil, func(t *testing.T, cs CumulativeTestCaseSpec, _ struct{}) {
+	cumulativeTestForEachPostCommitStage[struct{}](t, relPath, factory, nil, func(t *testing.T, cs CumulativeTestCaseSpec) {
 		testRollbackCase(t, cs)
 	}, sampleAllPostCommitRevertible /* enableSampling */)
 }
@@ -338,7 +338,7 @@ func Pause(t *testing.T, path string, factory TestServerFactory) {
 	skip.UnderRace(t)
 	skip.UnderDeadlock(t)
 
-	cumulativeTestForEachPostCommitStage[struct{}](t, path, factory, nil, func(t *testing.T, cs CumulativeTestCaseSpec, _ struct{}) {
+	cumulativeTestForEachPostCommitStage[struct{}](t, path, factory, nil, func(t *testing.T, cs CumulativeTestCaseSpec) {
 		pause(t, factory, cs)
 	},
 		sampleAllPostCommitStages /* enableSampling */)
@@ -353,7 +353,7 @@ func PauseMixedVersion(t *testing.T, path string, factory TestServerFactory) {
 	skip.UnderDeadlock(t)
 
 	factory.WithMixedVersion()
-	cumulativeTestForEachPostCommitStage[struct{}](t, path, factory, nil, func(t *testing.T, cs CumulativeTestCaseSpec, _ struct{}) {
+	cumulativeTestForEachPostCommitStage[struct{}](t, path, factory, nil, func(t *testing.T, cs CumulativeTestCaseSpec) {
 		pause(t, factory, cs)
 	},
 		sampleAllPostCommitStages /* enableSampling */)

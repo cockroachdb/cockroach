@@ -721,7 +721,7 @@ type CumulativeTestPrepareFunc[T any] func(t *testing.T, spec CumulativeTestSpec
 
 // CumulativeTestStageFunc is the test function executed for each post-commit
 // stage.
-type CumulativeTestStageFunc[T any] func(t *testing.T, spec CumulativeTestCaseSpec, prepData T)
+type CumulativeTestStageFunc func(t *testing.T, spec CumulativeTestCaseSpec)
 
 // CumulativeTestSamplingFunc optionally filters or samples the generated test
 // cases to reduce the number of stages executed.
@@ -734,7 +734,7 @@ func cumulativeTestForEachPostCommitStage[T any](
 	relTestCaseDir string,
 	factory TestServerFactory,
 	prepFn CumulativeTestPrepareFunc[T],
-	tf CumulativeTestStageFunc[T],
+	tf CumulativeTestStageFunc,
 	samplingFn CumulativeTestSamplingFunc,
 ) {
 	testFunc := func(t *testing.T, spec CumulativeTestSpec) {
@@ -794,7 +794,7 @@ func cumulativeTestForEachPostCommitStage[T any](
 		var hasFailed bool
 		for _, tc := range testCases {
 			fn := func(t *testing.T) {
-				tf(t, tc, result.PrepData)
+				tf(t, tc)
 			}
 			if hasFailed {
 				fn = func(t *testing.T) {
