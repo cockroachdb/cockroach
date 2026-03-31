@@ -175,9 +175,30 @@ type WorkInfo struct {
 	// work within a (TenantID, Priority) pair -- earlier CreateTime is given
 	// preference.
 	CreateTime int64
-	// BypassAdmission allows the work to bypass admission control, but allows for
-	// it to be accounted for. It should be used for high-priority intra-KV work,
-	// and when KV work generates other KV work (to avoid deadlock).
+	// BypassAdmission allows the work to bypass admission control (it will
+	// never queue or block) while still being accounted for: the tokens are
+	// deducted via tookWithoutPermission so the token budget reflects the
+	// actual usage. This is used in three situations:
+	//
+	//  - High-priority intra-KV work whose source is OTHER (not FROM_SQL or
+	//    ROOT_KV). Blocking such work could cause deadlocks because it is
+	//    generated in the critical path of serving already-admitted requests
+	//    (e.g., Raft proposals, intent resolution, lease requests).
+	//
+	//  - Normal-and-above priority KV work when
+	//    KVBulkOnlyAdmissionControlEnabled is set. In this mode only bulk
+	//    (low-priority) work is subject to admission control; everything at
+	//    NormalPri or above bypasses.
+	//
+	//  - SQL CPU admission handles closing (noWait=true in reportCPU).
+	//    SQL CPU uses an admit-after-consume model: goroutines run
+	//    freely and retroactively deduct consumed CPU via Admit. During
+	//    execution, an exhausted token bucket blocks the goroutine until
+	//    tokens refill. At handle close (GoroutineCPUHandle.Close), a
+	//    final measureAndAdmit accounts for the last CPU burst, but
+	//    blocking serves no purpose — the work is done and there is
+	//    nothing left to throttle. BypassAdmission deducts the tokens
+	//    without blocking.
 	BypassAdmission bool
 	// RequestedCount is the requested number of tokens or slots. If unset:
 	// - For slot-based queues we treat it as an implicit request of 1;
@@ -659,7 +680,11 @@ type AdmitResponse struct {
 // relevant when error=nil, and includes info on whether admission control
 // is enabled. AdmittedWorkDone must be called iff
 // AdmitResponse.Enabled=true && error==nil, and the WorkKind for this
-// queue is KVWork.
+// queue is KVWork, UNLESS the caller explicitly set RequestedCount (i.e.,
+// the exact resource usage is already known). In that case, the estimator
+// is skipped at Admit time and there is no estimate to correct, so
+// AdmittedWorkDone should not be called. See the callerSetRequestedCount
+// logic below for details.
 func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, error) {
 	if fn := q.knobs.WorkQueueAdmitInterceptor; fn != nil {
 		fn(info)
@@ -677,6 +702,15 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	// the memory overhead of enqueueing each raft command to see whether we
 	// need to do some coalescing at this level.
 
+	// Track whether the caller explicitly set RequestedCount. When true, the
+	// caller knows the exact resource usage (e.g., SQL CPU admission uses
+	// grunning to measure actual CPU consumed) and the CPU time token
+	// estimator should not override it. Currently, only SQL CPU admission
+	// sets RequestedCount in usesCPUTimeTokens mode; above-raft KV leaves
+	// it at 0 and relies on the estimator. Below-raft KV does set
+	// RequestedCount (to the raft command byte size), but uses usesTokens
+	// mode, so it never reaches the estimator guard.
+	callerSetRequestedCount := info.RequestedCount > 0
 	if info.RequestedCount == 0 {
 		// We treat unset RequestCounts as an implicit request of 1.
 		info.RequestedCount = 1
@@ -711,7 +745,10 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (AdmitResponse, er
 	// a measurement of CPU time used servicing the request, courtesy of grunning.
 	// tenant.estimator uses past measurements from grunning to make estimates
 	// in this code path, that is, at admission time.
-	if q.mode == usesCPUTimeTokens && !q.knobs.DisableCPUTimeTokenEstimation {
+	//
+	// Skip the estimator when callerSetRequestedCount is true (see above).
+	if q.mode == usesCPUTimeTokens && !q.knobs.DisableCPUTimeTokenEstimation &&
+		!callerSetRequestedCount {
 		info.RequestedCount = tenant.cpuTimeTokenEstimator.estimateTokensToBeUsed()
 	}
 	admitResponse := AdmitResponse{
@@ -1002,7 +1039,12 @@ func recordAdmissionWorkQueueStats(
 }
 
 // AdmittedWorkDone is used to inform the WorkQueue that some admitted work is
-// finished. It must be called iff the WorkKind of this WorkQueue is for KVWork.
+// finished. It must be called iff the WorkKind of this WorkQueue is for KVWork
+// and the caller did not explicitly set RequestedCount at Admit time. When
+// RequestedCount is explicitly set (e.g., SQL CPU admission using grunning
+// measurements), the exact amount was already deducted at Admit time, so there
+// is no estimate to correct and AdmittedWorkDone must not be called.
+//
 // Note that cpuTime is an argument to AdmittedWorkDone. So, even though
 // WorkQueue supports various resources other than CPU, AdmittedWorkDone is
 // special-cased for CPU time admission control.

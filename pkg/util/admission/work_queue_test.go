@@ -714,6 +714,142 @@ func TestCPUTimeTokenEstimation(t *testing.T) {
 	checkEstimation(resp3, 250*time.Millisecond)
 }
 
+// makeCPUTimeTokenWorkQueue creates a WorkQueue in CTT mode for testing. The
+// returned testGranter has tryGet returning true by default (all Admit calls
+// succeed immediately).
+func makeCPUTimeTokenWorkQueue(t *testing.T) (q *WorkQueue, tg *testGranter, cleanup func()) {
+	var buf builderWithMu
+	tg = &testGranter{buf: &buf}
+	tg.mu.returnValueFromTryGet = true
+
+	st := cluster.MakeTestingClusterSettings()
+	metrics := makeWorkQueueMetrics("", metric.NewRegistry())
+
+	initialTime := timeutil.FromUnixMicros(
+		int64(100) * int64(time.Millisecond/time.Microsecond))
+	opts := makeWorkQueueOptions(KVWork)
+	opts.mode = usesCPUTimeTokens
+	cpuMetrics := makeCPUTimeTokenMetrics()
+	opts.perTenantAggMetrics = &tenantAggMetrics{
+		admittedCount:  cpuMetrics.AdmittedCountPerTenant[systemTenant],
+		waitTimeNanos:  cpuMetrics.WaitTimeNanosPerTenant[systemTenant],
+		tokensUsed:     cpuMetrics.TokensUsedPerTenant[systemTenant],
+		tokensReturned: cpuMetrics.TokensReturnedPerTenant[systemTenant],
+	}
+	opts.timeSource = timeutil.NewManualTime(initialTime)
+	opts.disableEpochClosingGoroutine = true
+	opts.disableGCTenantsAndResetUsed = true
+
+	q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
+		KVWork, tg, st, metrics, opts).(*WorkQueue)
+	tg.r = q
+	return q, tg, q.close
+}
+
+// TestSQLCPUAdmission verifies the SQL CPU admission integration with the CTT
+// WorkQueue. SQL CPU admission differs from KV admission: it sets
+// RequestedCount to the exact CPU consumed (from grunning), bypassing the
+// estimator, and does not call AdmittedWorkDone.
+func TestSQLCPUAdmission(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tenantID := roachpb.MustMakeTenantID(1)
+
+	t.Run("explicit-requested-count-skips-estimator", func(t *testing.T) {
+		q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+		defer cleanup()
+
+		// Train the estimator so it returns something other than 1ns.
+		info := WorkInfo{TenantID: tenantID}
+		resp, err := q.Admit(ctx, info)
+		require.NoError(t, err)
+		for i := 0; i < 100; i++ {
+			q.AdmittedWorkDone(resp, 50*time.Millisecond)
+			if i%10 == 0 {
+				q.gcTenantsResetUsedAndUpdateEstimators()
+			}
+		}
+
+		// Verify the estimator is trained.
+		resp, err = q.Admit(ctx, info)
+		require.NoError(t, err)
+		require.Greater(t, resp.requestedCount, int64(time.Millisecond),
+			"estimator should return a value >> 1ns after training")
+
+		// Admit with an explicit RequestedCount — the estimator should be
+		// skipped and the exact value preserved. This is the path taken by
+		// SQL CPU admission via reportAndAcquireConsumedCPU.
+		explicitCount := int64(12345)
+		resp, err = q.Admit(ctx, WorkInfo{
+			TenantID:       tenantID,
+			RequestedCount: explicitCount,
+		})
+		require.NoError(t, err)
+		require.Equal(t, explicitCount, resp.requestedCount,
+			"explicit RequestedCount should not be overridden by estimator")
+
+		// A subsequent Admit without RequestedCount still uses the
+		// estimator (the explicit call didn't corrupt anything).
+		resp, err = q.Admit(ctx, info)
+		require.NoError(t, err)
+		require.Greater(t, resp.requestedCount, int64(time.Millisecond),
+			"estimator should still work for callers that don't set RequestedCount")
+	})
+
+	t.Run("report-cpu-updates-counters", func(t *testing.T) {
+		q, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+		defer cleanup()
+
+		provider := &sqlCPUProviderImpl{}
+
+		// Gateway CPU.
+		h := newSQLCPUAdmissionHandle(
+			WorkInfo{TenantID: tenantID}, true /* atGateway */, provider, q)
+		require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 5*time.Millisecond, false /* noWait */))
+		gw, dist := provider.GetCumulativeSQLCPUNanos()
+		require.Equal(t, int64(5*time.Millisecond), gw)
+		require.Equal(t, int64(0), dist)
+
+		// DistSQL CPU.
+		h2 := newSQLCPUAdmissionHandle(
+			WorkInfo{TenantID: tenantID}, false /* atGateway */, provider, q)
+		require.NoError(t, h2.reportAndAcquireConsumedCPU(ctx, 10*time.Millisecond, false /* noWait */))
+		gw, dist = provider.GetCumulativeSQLCPUNanos()
+		require.Equal(t, int64(5*time.Millisecond), gw)
+		require.Equal(t, int64(10*time.Millisecond), dist)
+	})
+
+	t.Run("nil-work-queue-skips-admit", func(t *testing.T) {
+		provider := &sqlCPUProviderImpl{}
+		h := newSQLCPUAdmissionHandle(
+			WorkInfo{TenantID: tenantID}, true /* atGateway */, provider, nil /* wq */)
+		require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 5*time.Millisecond, false /* noWait */))
+		gw, _ := provider.GetCumulativeSQLCPUNanos()
+		require.Equal(t, int64(5*time.Millisecond), gw)
+	})
+
+	t.Run("context-canceled-propagates-error", func(t *testing.T) {
+		q, tg, cleanup := makeCPUTimeTokenWorkQueue(t)
+		defer cleanup()
+
+		// Make tryGet return false so Admit blocks and observes the
+		// canceled context.
+		tg.mu.Lock()
+		tg.mu.returnValueFromTryGet = false
+		tg.mu.Unlock()
+
+		provider := &sqlCPUProviderImpl{}
+		h := newSQLCPUAdmissionHandle(
+			WorkInfo{TenantID: tenantID}, true /* atGateway */, provider, q)
+		cancelCtx, cancel := context.WithCancel(ctx)
+		cancel()
+		err := h.reportAndAcquireConsumedCPU(cancelCtx, 1*time.Millisecond, false /* noWait */)
+		require.ErrorIs(t, err, context.Canceled)
+	})
+}
+
 // TestWorkQueueTokenResetRace induces racing between tenantInfo.used
 // decrements and tenantInfo.used resets that used to fail until we eliminated
 // the code that decrements tenantInfo.used for tokens. It would also trigger

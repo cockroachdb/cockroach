@@ -78,6 +78,15 @@ func (coord *CPUGrantCoordinators) GetKVWorkQueue(isSystemTenant bool) *WorkQueu
 	if !cpuTimeTokenACIsEnabled(&coord.st.SV) {
 		return coord.slotsCoord.GetWorkQueue(KVWork)
 	}
+	return coord.GetCTTWorkQueue(isSystemTenant)
+}
+
+// GetCTTWorkQueue returns the CPU time token WorkQueue unconditionally,
+// without checking whether CPU time token AC is enabled. The caller is
+// responsible for gating on the setting. This avoids a race in GetKVWorkQueue
+// where the setting can flip between the caller's check and the internal
+// re-check, returning a slot-based queue to a caller that expects a CTT queue.
+func (coord *CPUGrantCoordinators) GetCTTWorkQueue(isSystemTenant bool) *WorkQueue {
 	if isSystemTenant {
 		return coord.cpuTimeCoord.getWorkQueue(systemTenant)
 	}
