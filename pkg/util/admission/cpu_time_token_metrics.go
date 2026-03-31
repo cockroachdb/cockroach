@@ -48,6 +48,7 @@ var (
 	// suffix is appended in makeCPUTimeTokenMetrics. See the comment on
 	// cpuTimeTokenMetrics.AdmittedCountPerTenant for the rationale.
 	cpuTimeTokenAdmittedCountPerTenantMetaBase = metric.Metadata{
+		Name: "admission.cpu_time_tokens.per_tenant.admitted_count.%s",
 		Help: crstrings.UnwrapText(`
 			Cumulative number of requests admitted per tenant by CPU time
 			token admission control; use with wait_time_nanos to compute
@@ -57,6 +58,7 @@ var (
 	}
 
 	cpuTimeTokenWaitTimeNanosPerTenantMetaBase = metric.Metadata{
+		Name: "admission.cpu_time_tokens.per_tenant.wait_time_nanos.%s",
 		Help: crstrings.UnwrapText(`
 			Cumulative nanoseconds of admission queue wait time per tenant
 			in CPU time token admission control; use with admitted_count to
@@ -66,6 +68,7 @@ var (
 	}
 
 	cpuTimeTokensUsedPerTenantMetaBase = metric.Metadata{
+		Name: "admission.cpu_time_tokens.per_tenant.tokens_used.%s",
 		Help: crstrings.UnwrapText(`
 			Cumulative CPU time tokens consumed per tenant by admitted
 			work; rate() gives the per-tenant token consumption rate`),
@@ -74,6 +77,7 @@ var (
 	}
 
 	cpuTimeTokensReturnedPerTenantMetaBase = metric.Metadata{
+		Name: "admission.cpu_time_tokens.per_tenant.tokens_returned.%s",
 		Help: crstrings.UnwrapText(`
 			Cumulative CPU time tokens returned per tenant, for example
 			when actual CPU usage was lower than the initial estimate;

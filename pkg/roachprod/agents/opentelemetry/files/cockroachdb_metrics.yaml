@@ -1827,6 +1827,7 @@ obs_clustermetrics_flush_latency: obs.clustermetrics.flush.latency
 obs_clustermetrics_flush_metrics_deleted: obs.clustermetrics.flush.metrics_deleted
 obs_clustermetrics_flush_metrics_written: obs.clustermetrics.flush.metrics_written
 obs_metric_export_child_count: obs.metric_export.child.count
+obs_metric_export_codeowner_metric_count: obs.metric_export.codeowner.metric_count
 obs_metric_export_line_count: obs.metric_export.line.count
 obs_metric_export_name_count: obs.metric_export.name.count
 obs_tablemetadata_update_job_duration: obs.tablemetadata.update_job.duration
