@@ -77,6 +77,10 @@ func newKafkaSinkClientV2(
 	baseOpts := []kgo.Opt{
 		// Disable idempotency to maintain parity with the v1 sink and not add surface area for unknowns.
 		kgo.DisableIdempotentWrite(),
+		// Allow up to 5 concurrent produce requests per broker, matching the
+		// Sarama client's default. This is safe because ParallelIO handles
+		// ordering independently of franz-go.
+		kgo.MaxProduceRequestsInflightPerBroker(5),
 
 		kgo.SeedBrokers(bootstrapBrokers...),
 		kgo.WithLogger(kgoLogAdapter{ctx: ctx}),

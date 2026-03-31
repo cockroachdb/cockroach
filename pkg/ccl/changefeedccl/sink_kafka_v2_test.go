@@ -291,14 +291,15 @@ func TestKafkaSinkClientV2_Opts(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	baseExpectedOpts := map[string]any{
-		"ClientID":                 "CockroachDB",
-		"ProducerBatchCompression": []kgo.CompressionCodec{kgo.NoCompression()},
-		"RequiredAcks":             kgo.LeaderAck(),
-		"MaxVersions":              kversion.Stable(), // We don't set this but it's kgo's default.
-		"DialTLSConfig":            (*tls.Config)(nil),
-		"SASL":                     ([]sasl.Mechanism)(nil),
-		"DisableIdempotentWrite":   true,
-		"MaxBufferedRecords":       int64(1000), // This is the default that we set.
+		"ClientID":                            "CockroachDB",
+		"ProducerBatchCompression":            []kgo.CompressionCodec{kgo.NoCompression()},
+		"RequiredAcks":                        kgo.LeaderAck(),
+		"MaxVersions":                         kversion.Stable(), // We don't set this but it's kgo's default.
+		"DialTLSConfig":                       (*tls.Config)(nil),
+		"SASL":                                ([]sasl.Mechanism)(nil),
+		"DisableIdempotentWrite":              true,
+		"MaxProduceRequestsInflightPerBroker": 5,
+		"MaxBufferedRecords":                  int64(1000), // This is the default that we set.
 	}
 	baseBatchCfg := sinkBatchConfig{}
 
