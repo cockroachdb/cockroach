@@ -65,11 +65,6 @@ Events in this category are logged to the `CHANGEFEED` channel.
 
 An event of type `alter_changefeed` is an event for any ALTER CHANGEFEED statements that are run.
 
-Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
-To test compatability before this, set the cluster setting
-`log.channel_compatibility_mode.enabled` to false. This will send the
-events to `CHANGEFEED` instead of `TELEMETRY`.
-
 
 | Field | Description | Sensitive |
 |--|--|--|
@@ -92,11 +87,6 @@ events to `CHANGEFEED` instead of `TELEMETRY`.
 
 An event of type `changefeed_canceled` is an event for any changefeed cancellations.
 
-Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
-To test compatability before this, set the cluster setting
-`log.channel_compatibility_mode.enabled` to false. This will send the
-events to `CHANGEFEED` instead of `TELEMETRY`.
-
 
 
 
@@ -115,11 +105,6 @@ events to `CHANGEFEED` instead of `TELEMETRY`.
 ### `changefeed_emitted_bytes`
 
 An event of type `changefeed_emitted_bytes` is an event representing the bytes emitted by a changefeed over an interval.
-
-Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
-To test compatability before this, set the cluster setting
-`log.channel_compatibility_mode.enabled` to false. This will send the
-events to `CHANGEFEED` instead of `TELEMETRY`.
 
 
 | Field | Description | Sensitive |
@@ -147,11 +132,6 @@ events to `CHANGEFEED` instead of `TELEMETRY`.
 An event of type `changefeed_failed` is an event for any changefeed failure since the plan hook
 was triggered.
 
-Note: in version 26.1, these events will be moved to the `CHANGEFEED` channel.
-To test compatability before this, set the cluster setting
-`log.channel_compatibility_mode.enabled` to false. This will send the
-events to `CHANGEFEED` instead of `TELEMETRY`.
-
 
 | Field | Description | Sensitive |
 |--|--|--|
@@ -175,11 +155,6 @@ events to `CHANGEFEED` instead of `TELEMETRY`.
 An event of type `create_changefeed` is an event for any CREATE CHANGEFEED query that
 successfully starts running. Failed CREATE statements will show up as
 ChangefeedFailed events.
-
-Note: in version 26.1, these events moved to the `CHANGEFEED` channel.
-To test compatability prior to this, set the cluster setting
-`log.channel_compatibility_mode.enabled` to true. This will send the
-events to `TELEMETRY` instead of `CHANGEFEED`.
 
 
 | Field | Description | Sensitive |
@@ -3030,11 +3005,6 @@ Note: these events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
 
-In version 26.1, these events moved to the `SQL_EXEC` channel.
-To test compatability prior to this, set the cluster setting
-`log.channel_compatibility_mode.enabled` to true. This will send the
-events to `SQL_PERF` instead of `SQL_EXEC`.
-
 Events in this category are logged to the `SQL_EXEC` channel.
 
 
@@ -3195,11 +3165,6 @@ SQL statements.
 Note: these events are not written to `system.eventlog`, even
 when the cluster setting `system.eventlog.enabled` is set. They
 are only emitted via external logging.
-
-In version 26.1, these events moved to the `SQL_EXEC` channel.
-To test compatability prior to this, set the cluster setting
-`log.channel_compatibility_mode.enabled` to true. This will send the
-events to `SQL_INTERNAL_PERF` instead of `SQL_EXEC`.
 
 Events in this category are logged to the `SQL_EXEC` channel.
 
@@ -3502,13 +3467,8 @@ Fields in this struct should be updated in sync with apps_stats.proto.
 
 ### `sampled_query`
 
-An event of type `sampled_query` is the SQL query event logged to the telemetry channel. It
+An event of type `sampled_query` is the SQL query event logged to the SQL_EXEC channel. It
 contains common SQL event/execution details.
-
-Note: in version 26.1, these events moved to the `SQL_EXEC` channel.
-To test compatability prior to this, set the cluster setting
-`log.channel_compatibility_mode.enabled` to true. This will send the
-events to `TELEMETRY` instead of `SQL_EXEC`.
 
 
 | Field | Description | Sensitive |
@@ -3616,12 +3576,8 @@ events to `TELEMETRY` instead of `SQL_EXEC`.
 
 ### `sampled_transaction`
 
-An event of type `sampled_transaction` is the event logged to telemetry at the end of transaction execution.
-
-Note: in version 26.1, these events moved to the `SQL_EXEC` channel.
-To test compatability prior to this, set the cluster setting
-`log.channel_compatibility_mode.enabled` to true. This will send the
-events to `TELEMETRY` instead of `SQL_EXEC`.
+An event of type `sampled_transaction` is the event logged to the SQL_EXEC channel at the end of
+transaction execution.
 
 
 | Field | Description | Sensitive |

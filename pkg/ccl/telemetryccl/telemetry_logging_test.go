@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -158,8 +157,7 @@ type expectedSampleQueryEvent struct {
 }
 
 type telemetrySpy struct {
-	t  *testing.T
-	sv *settings.Values
+	t *testing.T
 
 	sampledQueries    []eventpb.SampledQuery
 	sampledQueriesRaw []logpb.Entry
@@ -167,10 +165,6 @@ type telemetrySpy struct {
 }
 
 func (l *telemetrySpy) channelsToIntercept() []log.Channel {
-	if log.ShouldMigrateEvent(l.sv) {
-		return []log.Channel{logpb.Channel_TELEMETRY}
-	}
-
 	return []log.Channel{logpb.Channel_TELEMETRY, logpb.Channel_SQL_EXEC}
 }
 
@@ -240,8 +234,7 @@ func TestBulkJobTelemetryLogging(t *testing.T) {
 	})
 
 	spy := &telemetrySpy{
-		t:  t,
-		sv: &testCluster.Server(0).ClusterSettings().SV,
+		t: t,
 	}
 
 	cleanup := log.InterceptWith(ctx, spy)
