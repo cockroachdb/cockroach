@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -305,7 +306,7 @@ func TestOrderedFeed(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 
 			var received []writeSet
-			synctest.Test(t, func(t *testing.T) {
+			timeutil.SyncTest(t, func(t *testing.T) {
 				sub := makeTestSubscription(tc.events)
 				frontier, err := span.MakeFrontier(roachpb.Span{
 					Key:    roachpb.Key("a"),
