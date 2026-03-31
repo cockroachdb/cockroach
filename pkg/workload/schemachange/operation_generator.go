@@ -4758,6 +4758,33 @@ FROM
 	return opStmt, nil
 }
 
+// collectFunctionDeps queries pg_depend to find function-to-function
+// dependencies. The query can fail with UndefinedTable (42P01) when
+// a referenced descriptor is concurrently dropped. In that case,
+// the error is transient and the operation generation should be retried.
+func (og *operationGenerator) collectFunctionDeps(
+	ctx context.Context, tx pgx.Tx,
+) (map[int64]struct{}, error) {
+	functionDeps, err := Collect(ctx, og, tx, pgx.RowToMap,
+		With([]CTE{
+			{"function_deps", functionDepsQuery},
+		},
+			`SELECT DISTINCT to_oid::INT8 FROM function_deps;`,
+		))
+	if err != nil {
+		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) &&
+			pgcode.MakeCode(pgErr.Code) == pgcode.UndefinedTable {
+			return nil, errors.Mark(err, errRunInTxnRbkSentinel)
+		}
+		return nil, err
+	}
+	functionDepsMap := make(map[int64]struct{})
+	for _, f := range functionDeps {
+		functionDepsMap[f["to_oid"].(int64)] = struct{}{}
+	}
+	return functionDepsMap, nil
+}
+
 func (og *operationGenerator) dropFunction(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
 	q := With([]CTE{
 		{"descriptors", descJSONQuery},
@@ -4782,19 +4809,9 @@ func (og *operationGenerator) dropFunction(ctx context.Context, tx pgx.Tx) (*opS
 		return nil, err
 	}
 
-	functionDeps, err := Collect(ctx, og, tx, pgx.RowToMap,
-		With([]CTE{
-			{"function_deps", functionDepsQuery},
-		},
-			`SELECT DISTINCT to_oid::INT8 FROM function_deps;`,
-		))
+	functionDepsMap, err := og.collectFunctionDeps(ctx, tx)
 	if err != nil {
 		return nil, err
-	}
-
-	functionDepsMap := make(map[int64]struct{})
-	for _, f := range functionDeps {
-		functionDepsMap[f["to_oid"].(int64)] = struct{}{}
 	}
 
 	functionWithDeps := make([]map[string]any, 0, len(functions))
@@ -4867,19 +4884,9 @@ func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx
 		return nil, err
 	}
 
-	functionDeps, err := Collect(ctx, og, tx, pgx.RowToMap,
-		With([]CTE{
-			{"function_deps", functionDepsQuery},
-		},
-			`SELECT DISTINCT to_oid::INT8 FROM function_deps;`,
-		))
+	functionDepsMap, err := og.collectFunctionDeps(ctx, tx)
 	if err != nil {
 		return nil, err
-	}
-
-	functionDepsMap := make(map[int64]struct{})
-	for _, f := range functionDeps {
-		functionDepsMap[f["to_oid"].(int64)] = struct{}{}
 	}
 
 	functionWithDeps := make([]map[string]any, 0, len(functions))
@@ -4964,19 +4971,9 @@ func (og *operationGenerator) alterFunctionSetSchema(
 		return nil, err
 	}
 
-	functionDeps, err := Collect(ctx, og, tx, pgx.RowToMap,
-		With([]CTE{
-			{"function_deps", functionDepsQuery},
-		},
-			`SELECT DISTINCT to_oid::INT8 FROM function_deps;`,
-		))
+	functionDepsMap, err := og.collectFunctionDeps(ctx, tx)
 	if err != nil {
 		return nil, err
-	}
-
-	functionDepsMap := make(map[int64]struct{})
-	for _, f := range functionDeps {
-		functionDepsMap[f["to_oid"].(int64)] = struct{}{}
 	}
 
 	functionWithDeps := make([]map[string]any, 0, len(functions))
