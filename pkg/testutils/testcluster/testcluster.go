@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -71,8 +72,13 @@ import (
 type TestCluster struct {
 	Servers []serverutils.TestServerInterface
 	Conns   []*gosql.DB
-	// reusableListeners is populated if (and only if) TestClusterArgs.reusableListeners is set.
-	reusableListeners map[int] /* idx */ *listenerutil.ReusableListener
+
+	// reusableListeners is populated iff clusterArgs.ReusableListenerReg is set.
+	reusableListeners map[int]*listenerutil.ReusableListener // idx -> listener
+
+	// partitioner allows injecting network partitions between the cluster nodes.
+	// Used only if clusterArgs.EnablePartitioner is set.
+	partitioner rpc.Partitioner
 
 	stopper *stop.Stopper
 	mu      struct {
@@ -98,6 +104,16 @@ func (tc *TestCluster) ClusterName() string {
 // NumServers is part of TestClusterInterface.
 func (tc *TestCluster) NumServers() int {
 	return len(tc.Servers)
+}
+
+// Partitioner returns the cluster's Partitioner, which can be used to inject
+// network partitions between nodes at the RPC layer. Requires EnablePartitioner
+// to be set in TestClusterArgs.
+func (tc *TestCluster) Partitioner() *rpc.Partitioner {
+	if !tc.clusterArgs.EnablePartitioner {
+		panic("Partitioner() requires EnablePartitioner in TestClusterArgs")
+	}
+	return &tc.partitioner
 }
 
 // Server is part of TestClusterInterface.
@@ -555,6 +571,16 @@ func (tc *TestCluster) Start(t serverutils.TestFataler) {
 		}
 	}
 
+	// Register node addresses with the partitioner now that all nodes are started
+	// and have their addresses assigned.
+	if tc.clusterArgs.EnablePartitioner {
+		for _, s := range tc.Servers {
+			addr := s.SystemLayer().AdvRPCAddr()
+			tc.partitioner.RegisterNodeAddr(addr, s.StorageLayer().NodeID())
+		}
+		tc.partitioner.EnablePartitions(true)
+	}
+
 	// Wait until a NodeStatus is persisted for every node (see #25488, #25649, #31574).
 	tc.WaitForNodeStatuses(t)
 	testutils.SucceedsSoon(t, func() error {
@@ -717,6 +743,20 @@ func (tc *TestCluster) AddServer(
 		serverArgs.Addr = serverArgs.Listener.Addr().String()
 	}
 
+	// Register the partitioner's RPC interceptors on this node so that CrashNode
+	// and other callers of Partitioner() can inject network partitions.
+	if tc.clusterArgs.EnablePartitioner {
+		if serverArgs.Knobs.Server == nil {
+			serverArgs.Knobs.Server = &server.TestingKnobs{}
+		}
+		sk := serverArgs.Knobs.Server.(*server.TestingKnobs)
+		// TODO(pav-kv): it's not great that we are guessing the NodeID here. This
+		// is because we need to install the testing knobs / RPC interceptors before
+		// the server is started. Find a way around this.
+		nodeID := roachpb.NodeID(len(tc.Servers) + 1)
+		tc.partitioner.RegisterTestingKnobs(nodeID, &sk.ContextTestingKnobs)
+	}
+
 	// Inject the decisions that were made about test configuration
 	// into this new server's configuration.
 	serverArgs.DefaultTestTenant = tc.defaultTestTenantOptions
@@ -742,6 +782,13 @@ func (tc *TestCluster) startServer(idx int, serverArgs base.TestServerArgs) erro
 	server := tc.Servers[idx]
 	if err := server.Start(context.Background()); err != nil {
 		return err
+	}
+
+	// Register the node's address with the partitioner if enabled, so that
+	// dynamically added nodes can also participate in partition tests.
+	if tc.clusterArgs.EnablePartitioner {
+		addr := server.SystemLayer().AdvRPCAddr()
+		tc.partitioner.RegisterNodeAddr(addr, server.StorageLayer().NodeID())
 	}
 
 	dbConn, err := server.ApplicationLayer().SQLConnE(serverutils.DBName(serverArgs.UseDatabase))
@@ -2128,43 +2175,20 @@ func (tc *TestCluster) RestartServerWithInspect(
 		})
 }
 
-// isolateNodeFromPeers trips circuit breakers on the crashed node's dialer to
-// isolate it from all peer nodes. This simulates network partition behavior
-// during a crash. The circuit breakers will automatically reset when the node
-// is restarted and connections are successfully re-established via the
-// background `AsyncProbe` mechanism; manual undo is not needed.
-func (tc *TestCluster) isolateNodeFromPeers(idx int) {
-	nodeDialer, ok := tc.Servers[idx].NodeDialer().(*nodedialer.Dialer)
-	if !ok {
-		return
-	}
-	for peerIdx := range tc.Servers {
-		if peerIdx == idx {
-			continue
-		}
-		peerNodeID := tc.Servers[peerIdx].NodeID()
-		for c := 0; c < rpcbase.NumConnectionClasses; c++ {
-			if brk, found := nodeDialer.GetCircuitBreaker(
-				peerNodeID,
-				rpcbase.ConnectionClass(c),
-			); found {
-				brk.Report(errors.New("connection terminated by crash emulation"))
-			}
-		}
-	}
-}
-
 // CrashNode emulates a crash of the server at the given index by stopping it
 // and creating a snapshot of its in-memory filesystems (capturing state at the
 // last sync point). This allows testing crash recovery scenarios. Requires all
-// stores to use sticky VFS with in-memory storage. Also reports connection
-// failures to peer nodes' circuit breakers to simulate network disconnection.
+// stores to use sticky VFS with in-memory storage. Requires EnablePartitioner
+// to be set in TestClusterArgs so the crashing node can be isolated from peers.
 func (tc *TestCluster) CrashNode(idx int) {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
 
 	if tc.mu.serverStoppers[idx] == nil {
 		tc.t.Fatalf("server %d is already stopped", idx)
+	}
+	if !tc.clusterArgs.EnablePartitioner {
+		tc.t.Fatalf("CrashNode requires EnablePartitioner in TestClusterArgs")
 	}
 
 	serverArgs := tc.serverArgs[idx]
@@ -2175,17 +2199,23 @@ func (tc *TestCluster) CrashNode(idx int) {
 			"server %d does not have sticky VFS registry; crash emulation requires sticky VFS", idx)
 	}
 
-	// Isolate the crashed node from its peers by tripping circuit breakers.
-	// This simulates network partition behavior during a crash. Circuit breakers
-	// will automatically reset when the node is restarted and connections are
-	// successfully re-established (via background probe mechanisms), so no manual
-	// undo is needed.
+	// Isolate the crashed node from its peers to prevent any messages from
+	// escaping after the CrashClone calls on VFS below. Without this, durability
+	// signals (such as MsgAppResp messages) after CrashClone could leak.
 	//
-	// This step is first because we want to prevent any message sent after the
-	// CrashClone of the VFS. Otherwise it would be able to leak false durability
-	// signal into the cluster, such as with raft messages like
-	// MsgVoteResp / MsgAppResp.
-	tc.isolateNodeFromPeers(idx)
+	// Use bidirectional partitions because the partitioner's stream interceptors
+	// block RecvMsg on existing client streams that peers have open to the
+	// crashing node, preventing them from reading responses sent by the crashing
+	// node's server-side handlers.
+	crashingNodeID := tc.Servers[idx].NodeID()
+	for peerIdx := range tc.Servers {
+		if peerIdx == idx {
+			continue
+		}
+		peerNodeID := tc.Servers[peerIdx].NodeID()
+		require.NoError(tc.t, tc.partitioner.AddPartition(crashingNodeID, peerNodeID))
+		require.NoError(tc.t, tc.partitioner.AddPartition(peerNodeID, crashingNodeID))
+	}
 
 	crashedVFSesMap := make(map[string]*vfs.MemFS)
 	for i, spec := range serverArgs.StoreSpecs {
@@ -2210,6 +2240,18 @@ func (tc *TestCluster) CrashNode(idx int) {
 	// real crash where only synced data persists.
 	for stickyID, crashFS := range crashedVFSesMap {
 		serverKnobs.StickyVFSRegistry.Set(stickyID, crashFS)
+	}
+
+	// Remove all partitions that were added above.
+	// TODO(pav-kv): this cancels any pre-existing partitions. We could fix that
+	// by remembering the previous partitions and restoring them.
+	for peerIdx := range tc.Servers {
+		if peerIdx == idx {
+			continue
+		}
+		peerNodeID := tc.Servers[peerIdx].NodeID()
+		require.NoError(tc.t, tc.partitioner.RemovePartition(crashingNodeID, peerNodeID))
+		require.NoError(tc.t, tc.partitioner.RemovePartition(peerNodeID, crashingNodeID))
 	}
 }
 
