@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/prep"
@@ -2508,6 +2509,33 @@ https://www.postgresql.org/docs/9.5/view-pg-indexes.html`,
 	},
 }
 
+// viewQueryWithoutDatabasePrefix parses the view query and re-formats it
+// without database-qualified table names (e.g. "db.public.t" becomes
+// "public.t"). PostgreSQL does not have cross-database references, so
+// view definitions should only use schema-qualified names.
+func viewQueryWithoutDatabasePrefix(viewQuery string) (string, error) {
+	stmt, err := parser.ParseOne(viewQuery)
+	if err != nil {
+		return "", err
+	}
+	fmtCtx := tree.NewFmtCtx(
+		tree.FmtSimple,
+		tree.FmtReformatTableNames(func(fCtx *tree.FmtCtx, tn *tree.TableName) {
+			// Print only schema.table, omitting the database catalog.
+			// We format the parts directly because ObjectNamePrefix.Format
+			// always includes the catalog when a tableNameFormatter is set
+			// (via alwaysFormatTablePrefix).
+			if tn.ExplicitSchema {
+				fCtx.FormatNode(&tn.SchemaName)
+				fCtx.WriteByte('.')
+			}
+			fCtx.FormatNode(&tn.ObjectName)
+		}),
+	)
+	fmtCtx.FormatNode(stmt.AST)
+	return fmtCtx.CloseAndGetString(), nil
+}
+
 // indexDefFromDescriptor creates an index definition (`CREATE INDEX ... ON (...)`) from
 // an index descriptor by reconstructing a CreateIndex parser node and calling its
 // String method. The table name is schema-qualified only (no database prefix),
@@ -2625,14 +2653,22 @@ https://www.postgresql.org/docs/9.6/view-pg-matviews.html`,
 				// while postgres would more accurately print `SELECT b AS a FROM foo`.
 				// TODO(SQL Features): Insert column aliases into view query once we
 				// have a semantic query representation to work with (#10083).
+				viewQuery := desc.GetViewQuery()
+				if sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility) {
+					var err error
+					viewQuery, err = viewQueryWithoutDatabasePrefix(viewQuery)
+					if err != nil {
+						return err
+					}
+				}
 				return addRow(
 					tree.NewDName(sc.GetName()),   // schemaname
 					tree.NewDName(desc.GetName()), // matviewname
 					owner,                         // matviewowner
 					tree.DNull,                    // tablespace
 					tree.MakeDBool(len(desc.PublicNonPrimaryIndexes()) > 0), // hasindexes
-					tree.DBoolTrue, // ispopulated,
-					tree.NewDString(desc.GetViewQuery()+";"), // definition
+					tree.DBoolTrue,                 // ispopulated
+					tree.NewDString(viewQuery+";"), // definition
 				)
 			})
 	},
@@ -5660,11 +5696,19 @@ https://www.postgresql.org/docs/9.5/view-pg-views.html`,
 				// while postgres would more accurately print `SELECT b AS a FROM foo`.
 				// TODO(SQL Features): Insert column aliases into view query once we
 				// have a semantic query representation to work with (#10083).
+				viewQuery := desc.GetViewQuery()
+				if sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility) {
+					var err error
+					viewQuery, err = viewQueryWithoutDatabasePrefix(viewQuery)
+					if err != nil {
+						return err
+					}
+				}
 				return addRow(
-					tree.NewDName(sc.GetName()),   // schemaname
-					tree.NewDName(desc.GetName()), // viewname
-					owner,                         // viewowner
-					tree.NewDString(desc.GetViewQuery()+";"), // definition
+					tree.NewDName(sc.GetName()),    // schemaname
+					tree.NewDName(desc.GetName()),  // viewname
+					owner,                          // viewowner
+					tree.NewDString(viewQuery+";"), // definition
 				)
 			})
 	},
