@@ -234,6 +234,40 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 			requiresDeprecatedWorkload: true,
 			run:                        TestLDRConflict,
 		},
+		{
+			name: "ldr/kv0/workload=source/single_key_update_benchmark",
+			clusterSpec: multiClusterSpec{
+				leftNodes:  3,
+				rightNodes: 3,
+				clusterOpts: []spec.Option{
+					spec.CPU(8),
+					spec.WorkloadNode(),
+					spec.WorkloadNodeCPU(8),
+					spec.VolumeSize(100),
+				},
+			},
+			ldrConfig: ldrConfig{
+				createTables: true,
+			},
+			run: TestLDRHotKeyUpdate,
+		},
+		{
+			name: "ldr/unique_constraint/workload=source/update_benchmark",
+			clusterSpec: multiClusterSpec{
+				leftNodes:  3,
+				rightNodes: 3,
+				clusterOpts: []spec.Option{
+					spec.CPU(8),
+					spec.WorkloadNode(),
+					spec.WorkloadNodeCPU(8),
+					spec.VolumeSize(100),
+				},
+			},
+			ldrConfig: ldrConfig{
+				createTables: true,
+			},
+			run: TestLDRUniqueConstraintUpdate,
+		},
 	}
 
 	for _, sp := range specs {
@@ -754,6 +788,140 @@ func TestLDROnNetworkPartition(
 
 	monitor.Wait()
 	VerifyCorrectness(ctx, c, t, setup, leftJobID, rightJobID, 5*time.Minute, ldrWorkload)
+}
+
+func TestLDRHotKeyUpdate(
+	ctx context.Context, t test.Test, c cluster.Cluster, setup multiClusterSetup, ldrConfig ldrConfig,
+) {
+	duration := 10 * time.Minute
+	if c.IsLocal() {
+		duration = 3 * time.Minute
+	}
+
+	ldrWorkload := LDRWorkload{
+		workload: replicateKV{
+			readPercent:             0,
+			debugRunDuration:        duration,
+			maxBlockBytes:           1024,
+			initRows:                1,
+			tolerateErrors:          true,
+			initWithSplitAndScatter: false,
+			uniform:                 true,
+		},
+		manualSchemaSetup: true,
+		dbName:            "kv",
+		tableNames:        []string{"kv"},
+	}
+
+	setup.right.sysSQL.Exec(t, "CREATE DATABASE kv")
+	c.Run(ctx,
+		option.WithNodes(setup.workloadNode),
+		ldrWorkload.workload.sourceInitCmd("system", setup.left.nodes))
+
+	_, rightJobID := setupLDR(ctx, t, c, setup, ldrWorkload, ldrConfig)
+
+	workloadDoneCh := make(chan struct{})
+	maxExpectedLatency := 10 * time.Minute
+	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
+	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, 0 /* leftJobID */, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
+
+	monitor.Go(func(ctx context.Context) error {
+		defer close(workloadDoneCh)
+		// Run workload on source cluster.
+		return c.RunE(ctx, option.WithNodes(setup.workloadNode), ldrWorkload.workload.sourceRunCmd("system", setup.left.nodes))
+	})
+
+	monitor.Wait()
+	validateLatency()
+}
+
+func TestLDRUniqueConstraintUpdate(
+	ctx context.Context, t test.Test, c cluster.Cluster, setup multiClusterSetup, ldrConfig ldrConfig,
+) {
+	duration := 10 * time.Minute
+	if c.IsLocal() {
+		duration = 3 * time.Minute
+	}
+
+	const dbName = "uniquetest"
+	const tableName = "unique_kv"
+
+	setup.right.sysSQL.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
+
+	setup.left.sysSQL.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
+	setup.left.sysSQL.Exec(t, fmt.Sprintf(`
+		CREATE TABLE %s.%s (
+			id INT PRIMARY KEY,
+			unique_val INT UNIQUE,
+			data BYTES
+		)
+	`, dbName, tableName))
+	setup.left.sysSQL.Exec(t, fmt.Sprintf(`
+		INSERT INTO %s.%s (id, unique_val, data)
+		SELECT i, i * 10, repeat('x', 1024)::BYTES
+		FROM generate_series(0, 600) AS i
+	`, dbName, tableName))
+
+	// Split the unique index across multiple ranges to stress cross-range updates.
+	setup.left.sysSQL.Exec(t, fmt.Sprintf(
+		"ALTER INDEX %s.%s@%s_unique_val_key SPLIT AT VALUES (1000), (2000), (3000), (4000), (5000)",
+		dbName, tableName, tableName,
+	))
+
+	// Scatter the unique index to distribute ranges across nodes, ensuring
+	// cross-range operations involve network hops and distributed coordination.
+	setup.left.sysSQL.Exec(t, fmt.Sprintf(
+		"ALTER INDEX %s.%s@%s_unique_val_key SCATTER",
+		dbName, tableName, tableName,
+	))
+
+	ldrWorkload := LDRWorkload{
+		manualSchemaSetup: true,
+		dbName:            dbName,
+		tableNames:        []string{tableName},
+	}
+
+	_, rightJobID := setupLDR(ctx, t, c, setup, ldrWorkload, ldrConfig)
+
+	workloadDoneCh := make(chan struct{})
+	maxExpectedLatency := 10 * time.Minute
+	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
+	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, 0 /* leftJobID */, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
+
+	// Updates the unique constraint column with random values.
+	// Random values ensure immediate distribution across range splits, stressing
+	// cross-range delete+insert patterns.
+	monitor.Go(func(ctx context.Context) error {
+		defer close(workloadDoneCh)
+
+		conn := setup.left.db
+		rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+		updateStmt := fmt.Sprintf(
+			"UPDATE %s.%s SET unique_val = $1 WHERE id = 0",
+			dbName, tableName,
+		)
+
+		startTime := timeutil.Now()
+		var updateCount int64
+		for timeutil.Since(startTime) < duration {
+			// Generate random value spanning all range splits (0-6000).
+			// Use offset to avoid collisions with pre-populated values (multiples of 10).
+			randomVal := rng.Intn(600)*10 + rng.Intn(9) + 1
+			if _, err := conn.ExecContext(ctx, updateStmt, randomVal); err != nil {
+				t.L().Printf("Update error (tolerated): %v", err)
+				continue
+			}
+			updateCount++
+			if updateCount%1000 == 0 {
+				t.L().Printf("Executed %d updates to unique constraint column", updateCount)
+			}
+		}
+		t.L().Printf("Workload complete: %d total updates to unique constraint column", updateCount)
+		return nil
+	})
+
+	monitor.Wait()
+	validateLatency()
 }
 
 type ldrJobInfo struct {
