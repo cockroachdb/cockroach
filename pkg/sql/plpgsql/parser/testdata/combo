@@ -124,15 +124,13 @@ DECLARE
 BEGIN
 	i := 0;
 	LOOP
-		IF i
-		= idx THEN
+		IF i = idx THEN
 			res := res || val;
 		ELSE
 			res := res || arr[i + 1];
 		END IF;
 		i := i + 1;
-		IF i
-		>= n THEN
+		IF i >= n THEN
 			EXIT;
 		END IF;
 	END LOOP;
