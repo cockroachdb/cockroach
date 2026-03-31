@@ -184,10 +184,7 @@ func (b *replicaAppBatch) Stage(
 }
 
 func (b *replicaAppBatch) ReadWriter() kvstorage.ReadWriter {
-	return kvstorage.ReadWriter{
-		State: kvstorage.WrapState(b.batch.State()),
-		Raft:  b.RaftRW(),
-	}
+	return b.batch.ReadWriter()
 }
 
 // changeRemovesStore returns true if any of the removals in this change have storeID.
@@ -342,7 +339,8 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 		// TODO(arul): consider passing in a kvstorage.Batch to splitPreApply
 		// instead. That way, we don't need to get the WagWriter out of the batch
 		// here, and can instead just have an AddEvent method on the type instead.
-		splitPreApply(ctx, kvstorage.StateRW(b.batch.State()), b.RaftRW(), b.batch.WagWriter(), in)
+		rw := b.batch.ReadWriter()
+		splitPreApply(ctx, kvstorage.StateRW(b.batch.State()), rw.Raft, b.batch.WagWriter(), in)
 
 		// The rangefeed processor will no longer be provided logical ops for
 		// its entire range, so it needs to be shut down and all registrations
@@ -838,15 +836,6 @@ func (b *replicaAppBatch) verifySysBytes(ctx context.Context) error {
 func (b *replicaAppBatch) Close() {
 	b.batch.Close()
 	*b = replicaAppBatch{}
-}
-
-// RaftRW returns a read/write accessor to the LogEngine. Reads from the engine,
-// writes to the batch's raft writer.
-func (b *replicaAppBatch) RaftRW() kvstorage.Raft {
-	return kvstorage.Raft{
-		RO: b.r.LogEngine(),
-		WO: b.batch.Raft(),
-	}
 }
 
 // Assert that the current command is not writing under the closed timestamp.

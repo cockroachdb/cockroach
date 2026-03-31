@@ -266,20 +266,23 @@ func (e *Engines) newWriteBatch() Batch[storage.WriteBatch] {
 	if e.Separated() {
 		return Batch[storage.WriteBatch]{
 			state:     e.StateEngine().NewWriteBatch(),
+			stateRO:   e.StateEngine(),
 			logEngine: e.LogEngine(),
 		}
 	}
 	// With a single engine, create one batch, and reference it by both pointers.
-	b := e.Engine().NewWriteBatch()
+	eng := e.Engine()
+	b := eng.NewWriteBatch()
 	if !spanset.EnableAssertions {
-		return Batch[storage.WriteBatch]{state: b, raft: b}
+		return Batch[storage.WriteBatch]{state: b, stateRO: eng, raft: b}
 	}
 	// Additionally, if assertions are enabled, enclose the batch into the
 	// corresponding per-engine wrappers. With EnableAssertions, State/LogEngine
 	// are always wrapped, so we don't use conditional type assertions.
 	return Batch[storage.WriteBatch]{
-		state: e.StateEngine().(batchWrapper).WrapWriteBatch(b),
-		raft:  e.LogEngine().(batchWrapper).WrapWriteBatch(b),
+		state:   e.StateEngine().(batchWrapper).WrapWriteBatch(b),
+		stateRO: e.StateEngine(),
+		raft:    e.LogEngine().(batchWrapper).WrapWriteBatch(b),
 	}
 }
 
@@ -288,22 +291,26 @@ func (e *Engines) newWriteBatch() Batch[storage.WriteBatch] {
 // this package should use BatchFactory.
 func (e *Engines) newBatch() Batch[storage.Batch] {
 	if e.Separated() {
+		state := e.StateEngine().NewBatch()
 		return Batch[storage.Batch]{
-			state:     e.StateEngine().NewBatch(),
+			state:     state,
+			stateRO:   state,
 			logEngine: e.LogEngine(),
 		}
 	}
 	// With a single engine, create one batch, and reference it by both pointers.
 	b := e.Engine().NewBatch()
 	if !spanset.EnableAssertions {
-		return Batch[storage.Batch]{state: b, raft: b}
+		return Batch[storage.Batch]{state: b, stateRO: b, raft: b}
 	}
 	// Additionally, if assertions are enabled, enclose the batch into the
 	// corresponding per-engine wrappers. With EnableAssertions, State/LogEngine
 	// are always wrapped, so we don't use conditional type assertions.
+	state := e.StateEngine().(batchWrapper).WrapBatch(b)
 	return Batch[storage.Batch]{
-		state: e.StateEngine().(batchWrapper).WrapBatch(b),
-		raft:  e.LogEngine().(batchWrapper).WrapWriteBatch(b),
+		state:   state,
+		stateRO: state,
+		raft:    e.LogEngine().(batchWrapper).WrapWriteBatch(b),
 	}
 }
 
@@ -348,12 +355,17 @@ func (f *BatchFactory) NewBatch() Batch[storage.Batch] {
 // that only touch the state engine.
 type Batch[B storage.WriteBatch] struct {
 	state B
+	// stateRO is the state engine reader. For Batch[storage.Batch], this is the
+	// batch itself (reads see uncommitted writes). For Batch[storage.WriteBatch],
+	// this is the state engine (reads see only committed state).
+	stateRO storage.Reader
 	// raft is the LogEngine batch. When engines are not separated, it points to
 	// the same underlying batch as state. When separated, it is lazily
 	// initialized on the first call to Raft().
 	raft storage.WriteBatch
 	// logEngine is a reference to the LogEngine, used for lazy raft batch
-	// creation. Only set when engines are separated.
+	// creation and as the raft reader in ReadWriter(). Only set when engines
+	// are separated.
 	logEngine storage.Engine
 	// w is the WAG writer for staging lifecycle events. Initialized eagerly
 	// when engines are separated; zero-value (no-op) otherwise.
@@ -381,6 +393,26 @@ func (b *Batch[B]) Raft() storage.WriteBatch {
 		b.raft = b.logEngine.NewWriteBatch()
 	}
 	return b.raft
+}
+
+// ReadWriter returns a ReadWriter. The underlying concrete Batch type dictates
+// the ReadWriters behaviour. In particular, whether the State engine batch
+// reads its own write depends on whether we're operating on a
+// storage.WriteBatch or storage.Batch, respectively. The Raft batch[*] never
+// reads its own writes.
+//
+// [*] NB: This only applies when the engines are separated; if they aren't, the
+// Raft and State engine batch point point to the same batch, so State engine
+// semantics apply.
+func (b *Batch[B]) ReadWriter() ReadWriter {
+	raftRO := b.stateRO
+	if b.separated() {
+		raftRO = b.logEngine
+	}
+	return ReadWriter{
+		State: State{RO: b.stateRO, WO: b.state},
+		Raft:  Raft{RO: raftRO, WO: b.Raft()},
+	}
 }
 
 // WagWriter returns a pointer to the batch's WAG writer. When engines are
