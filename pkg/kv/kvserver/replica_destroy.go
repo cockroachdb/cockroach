@@ -90,8 +90,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	defer batch.Close()
 
 	if err := kvstorage.DestroyReplica(
-		ctx, batch.ReadWriter(),
-		r.destroyInfoRaftMuLocked(), nextReplicaID,
+		ctx, &batch, r.destroyInfoRaftMuLocked(), nextReplicaID,
 	); err != nil {
 		return err
 	}
