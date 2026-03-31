@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -1458,4 +1459,125 @@ func TestTTLSchemaChangeFailuresRollsBackSchedule(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestFKCascadeDuringDropColumn is a regression test for #166653. It verifies
+// that a DELETE triggering an FK cascade (ON DELETE SET NULL) does not crash
+// when the child table's FK column is in WRITE_ONLY state due to a concurrent
+// DROP COLUMN.
+//
+// During a DROP COLUMN CASCADE on the child table, there is a window where:
+//   - The child's FK column is in WRITE_ONLY state (mutation).
+//   - The parent's inbound FK back-reference still exists with
+//     validity=Dropping (removed later in PostCommitNonRevertiblePhase).
+//
+// Without the fix, a DELETE on the parent during this window would set up an
+// FK cascade that dereferences a nil pointer because the WRITE_ONLY column is
+// excluded from the child table's scan scope.
+//
+// The fix skips FK constraints with validity != Validated in the optimizer's
+// initWithInboundFK, preventing cascades from being built for dropping
+// constraints.
+func TestFKCascadeDuringDropColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// Channels to synchronize between the schema change goroutine and the
+	// main test goroutine.
+	schemaChangeReady := make(chan struct{})
+	schemaChangeProceed := make(chan struct{})
+	var signaled atomic.Bool
+
+	params := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+				BeforeStage: func(p scplan.Plan, stageIdx int) error {
+					stage := p.Stages[stageIdx]
+					// Pause once at the first PostCommitPhase stage. At this
+					// point the FK column is WRITE_ONLY on the child table, but
+					// the parent's inbound FK back-reference has not been
+					// removed yet (it still has validity=Dropping).
+					if stage.Phase == scop.PostCommitPhase && !signaled.Swap(true) {
+						close(schemaChangeReady)
+						<-schemaChangeProceed
+					}
+					return nil
+				},
+			},
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+
+	// Create tables and insert data.
+	tdb.Exec(t, `CREATE TABLE parent (id INT PRIMARY KEY)`)
+	tdb.Exec(t, `CREATE TABLE child (
+		id INT PRIMARY KEY,
+		pid INT REFERENCES parent(id) ON DELETE SET NULL
+	)`)
+	tdb.Exec(t, `INSERT INTO parent VALUES (1)`)
+	tdb.Exec(t, `INSERT INTO child VALUES (1, 1)`)
+
+	// Start the schema change (DROP COLUMN pid CASCADE) in a background
+	// goroutine. CASCADE is required because the column has an FK constraint.
+	schemaChangeErr := make(chan error, 1)
+	go func() {
+		conn, err := sqlDB.Conn(ctx)
+		if err != nil {
+			schemaChangeErr <- err
+			return
+		}
+		defer func() { _ = conn.Close() }()
+		_, err = conn.ExecContext(ctx, `ALTER TABLE child DROP COLUMN pid CASCADE`)
+		schemaChangeErr <- err
+	}()
+
+	// Wait until the schema change is at PostCommitPhase (column is WRITE_ONLY,
+	// parent still has inbound FK with validity=Dropping).
+	<-schemaChangeReady
+
+	// Verify the intermediate state: the parent's inbound FK back-reference
+	// should still exist with validity=Dropping, and the child's FK column
+	// should be in mutation (WRITE_ONLY) state.
+	parentDesc := desctestutils.TestingGetPublicTableDescriptor(
+		s.DB(), s.ApplicationLayer().Codec(), "defaultdb", "parent",
+	)
+	childDesc := desctestutils.TestingGetPublicTableDescriptor(
+		s.DB(), s.ApplicationLayer().Codec(), "defaultdb", "child",
+	)
+	require.Equal(t, 1, len(parentDesc.InboundForeignKeys()),
+		"parent should still have inbound FK back-reference during PostCommitPhase")
+	require.Equal(t, descpb.ConstraintValidity_Dropping,
+		parentDesc.InboundForeignKeys()[0].GetConstraintValidity(),
+		"parent's inbound FK should have validity=Dropping")
+
+	// The FK column (pid) should be in WRITE_ONLY state.
+	var pidInMutation bool
+	for _, col := range childDesc.AllColumns() {
+		if col.WriteAndDeleteOnly() {
+			pidInMutation = true
+			break
+		}
+	}
+	require.True(t, pidInMutation, "child's FK column should be in mutation state")
+
+	// Run DELETE on the parent table. With the fix, the optimizer skips the
+	// dropping FK constraint, so no cascade is built and the DELETE succeeds.
+	// Without the fix (#166653), this would panic with nil pointer dereference.
+	conn2, err := sqlDB.Conn(ctx)
+	require.NoError(t, err)
+	defer func() { _ = conn2.Close() }()
+	_, err = conn2.ExecContext(ctx, `DELETE FROM parent WHERE id = 1`)
+	require.NoError(t, err)
+
+	// Let the schema change proceed.
+	close(schemaChangeProceed)
+
+	// Wait for the schema change to complete.
+	require.NoError(t, <-schemaChangeErr)
 }

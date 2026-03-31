@@ -534,7 +534,8 @@ type fkCheckHelper struct {
 // initWithOutboundFK initializes the helper with an outbound FK constraint.
 //
 // Returns false if the FK relation should be ignored (e.g. because the new
-// values for the FK columns are known to be always NULL).
+// values for the FK columns are known to be always NULL, or the constraint is
+// being dropped).
 func (h *fkCheckHelper) initWithOutboundFK(mb *mutationBuilder, fkOrdinal int) bool {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
@@ -543,6 +544,11 @@ func (h *fkCheckHelper) initWithOutboundFK(mb *mutationBuilder, fkOrdinal int) b
 		fk:         mb.tab.OutboundForeignKey(fkOrdinal),
 		fkOrdinal:  fkOrdinal,
 		fkOutbound: true,
+	}
+
+	// Skip FK constraints that are being dropped; see #166653.
+	if !h.fk.Validated() {
+		return false
 	}
 
 	refID := h.fk.ReferencedTableID()
@@ -586,7 +592,7 @@ func (h *fkCheckHelper) initWithOutboundFK(mb *mutationBuilder, fkOrdinal int) b
 // initWithInboundFK initializes the helper with an inbound FK constraint.
 //
 // Returns false if the FK relation should be ignored (because the other table
-// is in the process of being created).
+// is in the process of being created, or the constraint is being dropped).
 func (h *fkCheckHelper) initWithInboundFK(mb *mutationBuilder, fkOrdinal int) (ok bool) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
@@ -595,6 +601,16 @@ func (h *fkCheckHelper) initWithInboundFK(mb *mutationBuilder, fkOrdinal int) (o
 		fk:         mb.tab.InboundForeignKey(fkOrdinal),
 		fkOrdinal:  fkOrdinal,
 		fkOutbound: false,
+	}
+
+	// Skip FK constraints that are being dropped. This can happen when a
+	// concurrent schema change is dropping the FK column on the child table:
+	// the column may already be in mutation state while the FK back-reference
+	// on the parent has not yet been fully removed. Building cascades or
+	// checks against a dropping FK would fail because the FK columns may not
+	// be in the child table's scan scope. See #166653.
+	if !h.fk.Validated() {
+		return false
 	}
 
 	originID := h.fk.OriginTableID()
