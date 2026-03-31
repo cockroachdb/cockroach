@@ -426,12 +426,15 @@ func (r *opsRunner) runOperation(
 	// Run phase.
 	emitter.EmitStarted()
 	op.Status(fmt.Sprintf("running operation %s with run id %d", op.spec.Name, operationRunID))
+	runStart := timeutil.Now()
 	func() {
 		ctx, cancel := context.WithTimeout(ctx, opSpec.Timeout)
 		defer cancel()
 
 		cleanup = opSpec.Run(ctx, op, c)
 	}()
+	r.metrics.lastRunDuration.WithLabelValues(opName).
+		Set(timeutil.Since(runStart).Seconds())
 
 	opFailed := op.Failed()
 	if opFailed {

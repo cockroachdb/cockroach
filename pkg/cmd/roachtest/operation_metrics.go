@@ -53,6 +53,10 @@ type operationMetrics struct {
 
 	// pendingCleanups tracks cleanups waiting to execute.
 	pendingCleanups *prometheus.GaugeVec
+
+	// lastRunDuration records the wall-clock duration (in seconds) of
+	// the most recent run phase for each operation. Excludes cleanup.
+	lastRunDuration *prometheus.GaugeVec
 }
 
 func newOperationMetrics(factory promauto.Factory) *operationMetrics {
@@ -76,6 +80,13 @@ func newOperationMetrics(factory promauto.Factory) *operationMetrics {
 			Subsystem: "operation",
 			Name:      "pending_cleanups",
 			Help:      "Number of cleanups waiting to execute.",
+		}, []string{"operation"}),
+
+		lastRunDuration: factory.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: "roachtest",
+			Subsystem: "operation",
+			Name:      "last_run_duration_seconds",
+			Help:      "Duration of the most recent run phase for each operation, in seconds.",
 		}, []string{"operation"}),
 	}
 }
