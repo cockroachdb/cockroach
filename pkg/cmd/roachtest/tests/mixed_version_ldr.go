@@ -23,8 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -161,15 +159,7 @@ func (lm *ldrMixed) commonSetup(
 	}
 
 	node, _ := h.RandomDB(r)
-	settings := install.MakeClusterSettings()
-	addr, err := lm.c.ExternalPGUrl(ctx, l, lm.c.Node(node), roachprod.PGURLOptions{
-		VirtualClusterName: h.DefaultService().Descriptor.Name,
-	})
-	if err != nil {
-		return "", err
-	}
-
-	pgURL, err := copyPGCertsAndMakeURL(ctx, lm.t, lm.c, lm.c.Node(node), settings.PGUrlCertsDir, addr[0])
+	pgURL, err := makeInlineCertsURL(ctx, lm.t, l, lm.c, lm.c.Node(node))
 	if err != nil {
 		return "", err
 	}
