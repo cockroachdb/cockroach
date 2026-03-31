@@ -1,0 +1,88 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+// Reverse-engineered subset of EngFlow's internal ResultStore v1alpha API.
+// Only the fields we need for artifact downloading are defined; protobuf
+// silently ignores unknown fields during deserialization. Field numbers
+// were determined empirically by decoding real GetTarget responses.
+
+syntax = "proto3";
+package engflow.resultstore.v1alpha;
+
+option java_package = "com.engflow.resultstore.v1alpha";
+
+// ---- Requests ----
+
+message GetTargetRequest {
+  string instance = 1;
+  string invocation_id = 2;
+  string target_label = 3;
+}
+
+message GetTargetLabelsByStatusRequest {
+  string instance = 1;
+  string invocation_id = 2;
+  bytes status = 3;
+  uint32 limit = 4;
+}
+
+// ---- Responses ----
+
+message GetTargetLabelsByStatusResponse {
+  repeated string labels = 1;
+}
+
+message GetTargetResponse {
+  Target target = 1;
+}
+
+message Target {
+  TargetInfo info = 1;
+}
+
+message TargetInfo {
+  // field 1: TargetMetadata (not needed, ignored)
+  TestSuite test_suite = 2;
+}
+
+message TestSuite {
+  int32 overall_status = 1;  // 9 = FAILED
+  // field 2: test binary info (not needed)
+  TestActionCollection test_actions = 3;
+}
+
+message TestActionCollection {
+  // fields 1-3: counters and timing (not needed)
+  repeated TestAction actions = 4;
+  int32 total_shards = 5;
+  int32 total_entries = 6;
+}
+
+message TestAction {
+  int32 run = 1;
+  TestActionData data = 2;
+  int32 shard = 3;
+}
+
+message TestActionData {
+  int32 attempt = 1;
+  int32 status = 2;  // 2 = PASSED, 3 = FAILED
+  // field 3: start_time (epoch seconds)
+  // field 4: duration
+  // field 5: CAS URL for test output
+  CompactDigest test_xml_digest = 6;
+  repeated ArtifactRef output_files = 7;
+  ArtifactRef test_log = 8;
+}
+
+message CompactDigest {
+  bytes hash = 1;   // 32-byte SHA-256
+  uint64 size_bytes = 2;
+}
+
+message ArtifactRef {
+  string name = 1;
+  string bytestream_uri = 102;
+}
