@@ -40,6 +40,9 @@ var (
 		"24.1": {
 			Predecessor: "23.2",
 		},
+		"24.2": {
+			Predecessor: "24.1", // unreleased predecessor
+		},
 	}
 
 	// Results rely on this constant seed.
@@ -86,6 +89,12 @@ func TestLatestAndRandomPredecessor(t *testing.T) {
 		{
 			name:           "latest is pre-release",
 			v:              "v24.1.0",
+			expectedLatest: "23.2.0-beta.1",
+			expectedRandom: "23.2.0-beta.1",
+		},
+		{
+			name:           "skips unreleased predecessor",
+			v:              "v24.2.0",
 			expectedLatest: "23.2.0-beta.1",
 			expectedRandom: "23.2.0-beta.1",
 		},
@@ -179,6 +188,30 @@ func TestLatestPredecessorHistory(t *testing.T) {
 	}
 }
 
+func TestLatestPatch(t *testing.T) {
+	oldReleaseData := releaseData
+	releaseData = testReleaseData
+	defer func() { releaseData = oldReleaseData }()
+
+	t.Run("released series", func(t *testing.T) {
+		patch, err := LatestPatch("22.2")
+		require.NoError(t, err)
+		require.Equal(t, "22.2.8", patch)
+	})
+
+	t.Run("unreleased series returns error", func(t *testing.T) {
+		_, err := LatestPatch("24.1")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no releases available")
+	})
+
+	t.Run("unknown series returns error", func(t *testing.T) {
+		_, err := LatestPatch("99.9")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no release information")
+	})
+}
+
 func TestMajorReleasesBetween(t *testing.T) {
 	oldReleaseData := releaseData
 	releaseData = testReleaseData
@@ -212,7 +245,13 @@ func TestMajorReleasesBetween(t *testing.T) {
 			name:     "v1 and v2 are multiple major releases apart",
 			v1:       "19.2.3",
 			v2:       "24.1.10",
-			expected: 5,
+			expected: 4, // 24.1 is unreleased and not counted
+		},
+		{
+			name:     "skips unreleased series in count",
+			v1:       "23.2.0",
+			v2:       "24.2.0",
+			expected: 0,
 		},
 	}
 
