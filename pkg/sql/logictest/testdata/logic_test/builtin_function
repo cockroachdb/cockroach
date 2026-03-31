@@ -2424,7 +2424,7 @@ CREATE VIEW test.pg_viewdef_view AS SELECT a, b FROM test.pg_viewdef_test
 query T
 SELECT pg_catalog.pg_get_viewdef('pg_viewdef_view'::regclass::oid)
 ----
-SELECT a, b FROM test.public.pg_viewdef_test
+SELECT a, b FROM test.public.pg_viewdef_test;
 
 query T
 SELECT pg_catalog.pg_get_viewdef(0, true)
@@ -2439,12 +2439,12 @@ NULL
 query T
 SELECT pg_catalog.pg_get_viewdef('pg_viewdef_view'::regclass::oid, true)
 ----
-SELECT a, b FROM test.public.pg_viewdef_test
+SELECT a, b FROM test.public.pg_viewdef_test;
 
 query T
 SELECT pg_catalog.pg_get_viewdef('pg_viewdef_view'::regclass::oid, false)
 ----
-SELECT a, b FROM test.public.pg_viewdef_test
+SELECT a, b FROM test.public.pg_viewdef_test;
 
 statement ok
 CREATE MATERIALIZED VIEW test.pg_viewdef_mview AS SELECT b, a FROM test.pg_viewdef_test
@@ -2452,7 +2452,7 @@ CREATE MATERIALIZED VIEW test.pg_viewdef_mview AS SELECT b, a FROM test.pg_viewd
 query T
 SELECT pg_catalog.pg_get_viewdef('pg_viewdef_mview'::regclass::oid)
 ----
-SELECT b, a FROM test.public.pg_viewdef_test
+SELECT b, a FROM test.public.pg_viewdef_test;
 
 statement ok
 CREATE TABLE test.pg_constraintdef_test (
