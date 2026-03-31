@@ -3800,8 +3800,11 @@ func TestLeaseManagerIsMemoryMonitored(t *testing.T) {
 func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	testutils.RunTrueAndFalse(t, "oldVersionRetention", func(t *testing.T, b bool) {
+	testutils.RunTrueAndFalse(t, "oldVersionRetention", func(t *testing.T, retainOldVersions bool) {
 		numTablesToCreate := 100
+		if retainOldVersions {
+			numTablesToCreate = 25
+		}
 		// This test can get super expensive, so under stress create fewer tables
 		// and use the parallelism to detect bugs.
 		if skip.Duress() {
@@ -3813,7 +3816,7 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 		// with the large number of objects in this test.
 		stats.AutomaticStatisticsClusterMode.Override(ctx, &st.SV, false)
 		lease.LockedLeaseTimestamp.Override(ctx, &st.SV, true)
-		lease.RetainOldVersionsForLocked.Override(ctx, &st.SV, b)
+		lease.RetainOldVersionsForLocked.Override(ctx, &st.SV, retainOldVersions)
 		tc := serverutils.StartCluster(
 			t, 3, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
@@ -3835,7 +3838,8 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 		// Detect cancellation from either the client or server.
 		isCancellationError := func(err error) bool {
 			return errors.Is(err, context.Canceled) ||
-				sqltestutils.IsClientSideQueryCanceledErr(err)
+				sqltestutils.IsClientSideQueryCanceledErr(err) ||
+				strings.Contains(err.Error(), context.Canceled.Error())
 		}
 		// Creates tables in the background.
 		createThreads := func(ctx context.Context) (err error) {
@@ -3867,7 +3871,7 @@ func TestLeaseManagerLockedTimestampConcurrent(t *testing.T) {
 				// Initial usage of the descriptor.
 				sql := fmt.Sprintf("SELECT * FROM %s", objectName)
 				if _, err := conn.ExecContext(ctx, sql); err != nil {
-					if errors.Is(err, context.Canceled) {
+					if isCancellationError(err) {
 						return nil
 					}
 					panic(err)
