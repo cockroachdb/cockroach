@@ -61,10 +61,9 @@ func parseOne(t *testing.T, input string, p Parser) (tree.NodeFormatter, error) 
 }
 
 // VerifyParseFormat is used in datadriven parser tests. It parses the input
-// and returns the output from formatting the parsed statements with various flags.
-// It also ensures that pretty-printing round-trips by comparing the result of
-// formatting the original input statements with the result of formatting the
-// pretty-printed statements (i.e. Format(Parse(Pretty(AST))) == Format(AST)).
+// and returns the output from formatting the parsed statements with various
+// flags. It also ensures that pretty-printing round-trips (see
+// VerifyStatementPrettyRoundtrip for details).
 //
 // -reParseWithoutLiterals indicates whether the statement should be re-parsed
 // after constants are removed. This can be needed to handle cases where quotes
@@ -129,10 +128,9 @@ func VerifyParseFormat(
 	return buf.String()
 }
 
-// VerifyParsePretty is used in datadriven parser tests to pretty-print a
-// parsed statement, verify that the result round-trips through the parser
-// (Format(Parse(Pretty(AST))) == Format(AST)), and return the pretty-printed
-// output.
+// VerifyParsePretty is used in datadriven parser tests to verify that
+// the result of pretty-printing a statement round-trips through the
+// parser and then returns the pretty-printed output.
 func VerifyParsePretty(t *testing.T, input, pos string, p Parser) string {
 	stmt, err := parseOne(t, input, p)
 	if err != nil {
