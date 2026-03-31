@@ -27,10 +27,10 @@ SELECT j+1, k FROM t
 ----
 pq: column "k" does not exist
 
-stage-exec phase=PostCommitPhase stage=:
-SELECT count(i) FROM t
+stage-query phase=PostCommitPhase stage=:
+SELECT count(i)=$successfulStageCount FROM t
 ----
-$successfulStageCount
+true
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=1:2
 SELECT j+1, k FROM t
@@ -59,10 +59,10 @@ stage-exec phase=PostCommitNonRevertiblePhase stage=:
 INSERT INTO t (i) VALUES($stageKey);
 ----
 
-stage-exec phase=PostCommitNonRevertiblePhase stage=:
-SELECT count(i) FROM t
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(i)=$successfulStageCount FROM t
 ----
-$successfulStageCount
+true
 
 test
 ALTER TABLE t DROP COLUMN j CASCADE;
