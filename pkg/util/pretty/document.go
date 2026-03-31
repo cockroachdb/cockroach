@@ -38,6 +38,7 @@ func (line) isDoc()      {}
 func (softbreak) isDoc() {}
 func (hardline) isDoc()  {}
 func (nilDoc) isDoc()    {}
+func (failDoc) isDoc()   {}
 func (*concat) isDoc()   {}
 func (nestt) isDoc()     {}
 func (nests) isDoc()     {}
@@ -94,6 +95,11 @@ type hardline struct{}
 // HardLine is a newline and cannot be flattened.
 var HardLine Doc = hardline{}
 
+type failDoc struct{}
+
+// Fail signals that a document cannot be flattened (laid out on a single line).
+var Fail Doc = failDoc{}
+
 // concat represents (DOC <> DOC) :: DOC -- the concatenation of two docs.
 type concat struct {
 	a, b Doc
@@ -145,9 +151,14 @@ type union struct {
 	x, y Doc
 }
 
-// Group will format d on one line if possible.
+// Group will format d on one line if possible. If d cannot be flattened,
+// d is returned unchanged.
 func Group(d Doc) Doc {
-	return &union{flatten(d), d}
+	f := flatten(d)
+	if f == Fail {
+		return d
+	}
+	return &union{f, d}
 }
 
 var textSpace = Text(" ")
@@ -156,14 +167,34 @@ func flatten(d Doc) Doc {
 	switch t := d.(type) {
 	case nilDoc:
 		return Nil
+	case failDoc:
+		return Fail
 	case *concat:
-		return Concat(flatten(t.a), flatten(t.b))
+		a := flatten(t.a)
+		if a == Fail {
+			return Fail
+		}
+		b := flatten(t.b)
+		if b == Fail {
+			return Fail
+		}
+		return Concat(a, b)
 	case nestt:
-		return NestT(flatten(t.d))
+		inner := flatten(t.d)
+		if inner == Fail {
+			return Fail
+		}
+		return NestT(inner)
 	case nests:
-		return NestS(t.n, flatten(t.d))
-	case text, keyword, hardline:
+		inner := flatten(t.d)
+		if inner == Fail {
+			return Fail
+		}
+		return NestS(t.n, inner)
+	case text, keyword:
 		return d
+	case hardline:
+		return Fail
 	case line:
 		return textSpace
 	case softbreak:
