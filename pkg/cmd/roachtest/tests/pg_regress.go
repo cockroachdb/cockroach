@@ -509,7 +509,7 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 func registerPGRegress(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:      "pg_regress",
-		Owner:     registry.OwnerSQLQueries,
+		Owner:     registry.OwnerSQLFoundations,
 		Benchmark: false,
 		Cluster:   r.MakeClusterSpec(1 /* nodeCount */),
 		// At the moment, we have a very large deviation from postgres, also
