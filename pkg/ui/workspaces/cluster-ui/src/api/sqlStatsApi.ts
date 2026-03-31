@@ -9,7 +9,11 @@ import { useSWRConfig } from "swr";
 
 import { fetchData } from "src/api";
 
-import { STATEMENTS_SWR_KEY, STATEMENT_DETAILS_SWR_KEY } from "./statementsApi";
+import {
+  STATEMENTS_SWR_KEY,
+  STATEMENT_DETAILS_SWR_KEY,
+  TRANSACTIONS_SWR_KEY,
+} from "./statementsApi";
 
 const RESET_SQL_STATS_PATH = "_status/resetsqlstats";
 
@@ -33,7 +37,7 @@ export const resetSQLStats =
 const INVALIDATED_KEY_NAMES = [
   STATEMENTS_SWR_KEY,
   STATEMENT_DETAILS_SWR_KEY,
-  "transactions",
+  TRANSACTIONS_SWR_KEY,
 ];
 
 export function useResetSQLStats() {

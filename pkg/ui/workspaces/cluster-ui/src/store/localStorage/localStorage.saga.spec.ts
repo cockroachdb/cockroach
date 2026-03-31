@@ -8,7 +8,6 @@ import { expectSaga, testSaga } from "redux-saga-test-plan";
 
 import { actions as txnInsightActions } from "src/store/insights/transactionInsights/transactionInsights.reducer";
 import { actions as sqlStatsActions } from "src/store/sqlStats/sqlStats.reducer";
-import { actions as txnStatsActions } from "src/store/transactionStats";
 
 import { defaultTimeScaleSelected } from "../../timeScaleDropdown";
 
@@ -40,7 +39,6 @@ describe("local storage sagas", () => {
       return expectSaga(updateTimeScale, actions.updateTimeScale({ value: ts }))
         .put(sqlStatsActions.invalidated())
         .put(txnInsightActions.invalidated())
-        .put(txnStatsActions.invalidated())
         .run();
     });
   });
