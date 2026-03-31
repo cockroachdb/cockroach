@@ -1,12 +1,26 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+exports_files(
+    ["metric_owners.yaml"],
+    visibility = ["//docs/generated/metrics:__pkg__"],
+)
 
 go_library(
     name = "metricscan",
     srcs = [
+        "metric_owners_generated.go",  # keep
         "owners.go",
         "scan.go",
     ],
+    embedsrcs = ["metric_owners.yaml"],  # keep
     importpath = "github.com/cockroachdb/cockroach/pkg/internal/metricscan",
     visibility = ["//visibility:public"],
     deps = ["//pkg/util/yamlutil"],
+)
+
+go_test(
+    name = "metricscan_test",
+    srcs = ["owners_test.go"],
+    embed = [":metricscan"],
+    deps = ["@com_github_stretchr_testify//require"],
 )
