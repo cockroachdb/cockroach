@@ -571,7 +571,6 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/go-github/v27/com_github_google_go_github_v27-v27.0.4.zip": "c0bb2e2b9d8b610fd1d4b9fa8a3636a5337f19aecec33e76aecbf32ae4e192bb",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/go-github/v39/com_github_google_go_github_v39-v39.0.0.zip": "e8c6bb1c02f57d533559b4125a7f931c55901c9e2560bd688770314c27bcef4f",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/go-github/v42/com_github_google_go_github_v42-v42.0.0.zip": "250d7e937ea6b1d06a95168dba8708db6cc1f447ffe94712d0e2a82540ea01c9",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/go-github/v61/com_github_google_go_github_v61-v61.0.0.zip": "81c8199e9fae06865d65a50545ddb45a4877c33809a701da839c3a558120f62c",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/go-querystring/com_github_google_go_querystring-v1.1.0.zip": "a6aafc01f5602e6177928751074e325792a654e1d92f0e238b8e8739656dd72b",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/gofuzz/com_github_google_gofuzz-v1.2.0.zip": "5948f40af1923d8f98dc1d4191311030e40e0057fb255df19ebc0360f2faac16",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/martian/com_github_google_martian-v2.1.0+incompatible.zip": "5bdd2ebd37dda1c0cf786db27707966c8624b288641da704b0e31c96b393ce70",
