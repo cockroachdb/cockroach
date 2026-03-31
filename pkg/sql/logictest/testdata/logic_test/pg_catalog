@@ -555,6 +555,24 @@ SELECT * FROM pg_catalog.pg_matviews
 schemaname  matviewname  matviewowner  tablespace  hasindexes  ispopulated  definition
 public      mv1          root          NULL        false       true         SELECT 1;
 
+# When pg_dump_compatibility is enabled, view definitions should use
+# schema-qualified names (no database prefix).
+statement ok
+SET pg_dump_compatibility = 'postgres'
+
+query T
+SELECT definition FROM pg_catalog.pg_views WHERE viewname = 'v1'
+----
+SELECT p, a, b, c FROM public.t1;
+
+query T
+SELECT definition FROM pg_catalog.pg_matviews WHERE matviewname = 'mv1'
+----
+SELECT 1;
+
+statement ok
+SET pg_dump_compatibility = 'off'
+
 ## pg_catalog.pg_class
 
 query TTBOOOO colnames,rowsort
