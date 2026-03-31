@@ -38,9 +38,9 @@ compile_native_go_fuzzer ./pkg/util/span FuzzBtreeFrontier fuzzBtreeFrontier
 
 compile_native_go_fuzzer ./pkg/util/span FuzzLLRBFrontier fuzzLLRBFrontier
 
-compile_native_go_fuzzer ./pkg/ccl/pgcryptoccl/pgcryptocipherccl FuzzEncryptDecryptAES fuzzEncryptDecryptAES
+compile_native_go_fuzzer ./pkg/sql/pgcrypto/pgcryptocipher FuzzEncryptDecryptAES fuzzEncryptDecryptAES
 
-compile_native_go_fuzzer ./pkg/ccl/pgcryptoccl/pgcryptocipherccl FuzzNoPaddingEncryptDecryptAES fuzzNoPaddingEncryptDecryptAES
+compile_native_go_fuzzer ./pkg/sql/pgcrypto/pgcryptocipher FuzzNoPaddingEncryptDecryptAES fuzzNoPaddingEncryptDecryptAES
 
 compile_native_go_fuzzer ./pkg/storage FuzzEngineKeysInvariants fuzzEngineKeysInvariants
 
