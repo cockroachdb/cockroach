@@ -247,18 +247,9 @@ func TestDeletePreservingIndexEncodingUsesNormalDeletesInDeleteOnly(t *testing.T
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		// This test directly manipulates descriptors via KV and relies on
-		// TestingDisableTableLeases to make those changes immediately visible.
-		// This is incompatible with external process virtual clusters where
-		// the lease disable doesn't take effect.
-		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(166311),
-	})
+	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer server.Stopper().Stop(context.Background())
-
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer lease.TestingDisableTableLeases()()
+	lm := server.LeaseManager().(*lease.Manager)
 
 	setupSQL := `
 CREATE DATABASE t;
@@ -275,7 +266,7 @@ CREATE UNIQUE INDEX test_index_to_mutate ON t.test (b);
 	err = mutateIndexByName(kvDB, codec, tableDesc, "test_index_to_mutate", func(idx *descpb.IndexDescriptor) error {
 		idx.UseDeletePreservingEncoding = true
 		return nil
-	}, descpb.DescriptorMutation_DELETE_ONLY)
+	}, descpb.DescriptorMutation_DELETE_ONLY, lm)
 	require.NoError(t, err)
 
 	_, err = sqlDB.Exec(`INSERT INTO t.test VALUES (1, 1)`)
@@ -286,7 +277,7 @@ CREATE UNIQUE INDEX test_index_to_mutate ON t.test (b);
 
 	// Move index to WRITE_ONLY. The following inserts
 	// are seen by the index and deletes should be preserved.
-	err = mutateIndexByName(kvDB, codec, tableDesc, "test_index_to_mutate", nil, descpb.DescriptorMutation_WRITE_ONLY)
+	err = mutateIndexByName(kvDB, codec, tableDesc, "test_index_to_mutate", nil, descpb.DescriptorMutation_WRITE_ONLY, lm)
 	require.NoError(t, err)
 
 	_, err = sqlDB.Exec(`INSERT INTO t.test VALUES (2, 2), (3, 3)`)
@@ -317,18 +308,9 @@ func TestDeletePreservingIndexEncodingWithEmptyValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		// This test directly manipulates descriptors via KV and relies on
-		// TestingDisableTableLeases to make those changes immediately visible.
-		// This is incompatible with external process virtual clusters where
-		// the lease disable doesn't take effect.
-		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(166311),
-	})
+	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer server.Stopper().Stop(context.Background())
-
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer lease.TestingDisableTableLeases()()
+	lm := server.LeaseManager().(*lease.Manager)
 
 	setupSQL := `
 CREATE DATABASE t;
@@ -352,7 +334,7 @@ CREATE UNIQUE INDEX test_index_to_mutate ON t.test (y) STORING (z, a);
 		idx.StoreColumnIDs = []catid.ColumnID{0x1, 0x3, 0x4}
 		idx.KeySuffixColumnIDs = nil
 		return nil
-	}, descpb.DescriptorMutation_WRITE_ONLY)
+	}, descpb.DescriptorMutation_WRITE_ONLY, lm)
 	require.NoError(t, err)
 	_, err = sqlDB.Exec(`INSERT INTO t.test VALUES (1, 1, 1, 1); DELETE FROM t.test WHERE x = 1;`)
 	require.NoError(t, err)
@@ -365,6 +347,7 @@ func mutateIndexByName(
 	index string,
 	fn func(*descpb.IndexDescriptor) error,
 	state descpb.DescriptorMutation_State,
+	leaseManager *lease.Manager,
 ) error {
 	idx, err := catalog.MustFindIndexByName(tableDesc, index)
 	if err != nil {
@@ -395,11 +378,16 @@ func mutateIndexByName(
 		tableDesc.Mutations[ord] = m
 	}
 	tableDesc.Version++
-	return kvDB.Put(
+	if err := kvDB.Put(
 		context.Background(),
 		catalogkeys.MakeDescMetadataKey(codec, tableDesc.ID),
 		tableDesc.DescriptorProto(),
-	)
+	); err != nil {
+		return err
+	}
+	// Force the lease manager to acquire a fresh descriptor from the store,
+	// since we wrote it directly via KV above.
+	return leaseManager.AcquireFreshestFromStore(context.Background(), tableDesc.GetID())
 }
 
 type WrappedVersionedValues struct {
@@ -620,15 +608,9 @@ func TestMergeProcessor(t *testing.T) {
 	}
 
 	run := func(t *testing.T, test TestCase) {
-		server, tdb, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-			// This test directly manipulates descriptors via KV and relies on
-			// TestingDisableTableLeases to make those changes immediately visible.
-			// This is incompatible with external process virtual clusters where
-			// the lease disable doesn't take effect.
-			DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(166311),
-		})
+		server, tdb, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 		defer server.Stopper().Stop(context.Background())
-		defer lease.TestingDisableTableLeases()()
+		lm := server.LeaseManager().(*lease.Manager)
 
 		// Run the initial setupSQL.
 		if _, err := tdb.Exec(test.setupSQL); err != nil {
@@ -664,27 +646,27 @@ func TestMergeProcessor(t *testing.T) {
 			}
 		}
 
-		err := mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_WRITE_ONLY)
+		err := mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_WRITE_ONLY, lm)
 		require.NoError(t, err)
-		err = mutateIndexByName(kvDB, codec, tableDesc, test.srcIndex, setUseDeletePreservingEncoding(true), descpb.DescriptorMutation_DELETE_ONLY)
+		err = mutateIndexByName(kvDB, codec, tableDesc, test.srcIndex, setUseDeletePreservingEncoding(true), descpb.DescriptorMutation_DELETE_ONLY, lm)
 		require.NoError(t, err)
 
 		if _, err := tdb.Exec(test.dstDataSQL); err != nil {
 			t.Fatal(err)
 		}
 
-		err = mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_DELETE_ONLY)
+		err = mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_DELETE_ONLY, lm)
 		require.NoError(t, err)
-		err = mutateIndexByName(kvDB, codec, tableDesc, test.srcIndex, nil, descpb.DescriptorMutation_WRITE_ONLY)
+		err = mutateIndexByName(kvDB, codec, tableDesc, test.srcIndex, nil, descpb.DescriptorMutation_WRITE_ONLY, lm)
 		require.NoError(t, err)
 
 		if _, err := tdb.Exec(test.srcDataSQL); err != nil {
 			t.Fatal(err)
 		}
 
-		err = mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_WRITE_ONLY)
+		err = mutateIndexByName(kvDB, codec, tableDesc, test.dstIndex, nil, descpb.DescriptorMutation_WRITE_ONLY, lm)
 		require.NoError(t, err)
-		err = mutateIndexByName(kvDB, codec, tableDesc, test.srcIndex, nil, descpb.DescriptorMutation_DELETE_ONLY)
+		err = mutateIndexByName(kvDB, codec, tableDesc, test.srcIndex, nil, descpb.DescriptorMutation_DELETE_ONLY, lm)
 		require.NoError(t, err)
 
 		if _, err := tdb.Exec(test.dstDataSQL2); err != nil {
