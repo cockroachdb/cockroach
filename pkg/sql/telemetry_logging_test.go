@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
@@ -449,10 +448,10 @@ func TestTelemetryLogging(t *testing.T) {
 
 	// We should not see any transaction events in statement
 	// telemetry mode.
-	txnEntries := txnSpy.GetLastNLogs(getSampleQueryLoggingChannel(&s.ClusterSettings().SV), txnSpy.Count())
+	txnEntries := txnSpy.GetLastNLogs(getSampleQueryLoggingChannel(), txnSpy.Count())
 	require.Emptyf(t, txnEntries, "found unexpected transaction telemetry events: %v", txnEntries)
 
-	entries := stmtSpy.GetLastNLogs(getSampleQueryLoggingChannel(&s.ClusterSettings().SV), stmtSpy.Count())
+	entries := stmtSpy.GetLastNLogs(getSampleQueryLoggingChannel(), stmtSpy.Count())
 
 	if len(entries) == 0 {
 		t.Fatal(errors.Newf("no entries found"))
@@ -752,7 +751,7 @@ func TestTelemetryLoggingInternalEnabled(t *testing.T) {
 		`TRUNCATE TABLE system.public.transaction_statistics`,
 	}
 
-	entries := stmtSpy.GetLogs(getSampleQueryLoggingChannel(&s.ClusterSettings().SV))
+	entries := stmtSpy.GetLogs(getSampleQueryLoggingChannel())
 
 	if len(entries) == 0 {
 		t.Fatal(errors.Newf("no entries found"))
@@ -861,7 +860,7 @@ func TestTelemetryLoggingInternalConsoleEnabled(t *testing.T) {
 		db.Exec(t, query)
 		log.FlushFiles()
 
-		entries := stmtSpy.GetUnreadLogs(getSampleQueryLoggingChannel(&s.ClusterSettings().SV))
+		entries := stmtSpy.GetUnreadLogs(getSampleQueryLoggingChannel())
 		if len(entries) == 0 {
 			t.Fatal(errors.Newf("no entries found"))
 		}
@@ -960,7 +959,7 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 		db.Exec(t, tc.query)
 	}
 
-	entries := stmtSpy.GetUnreadLogs(getSampleQueryLoggingChannel(&s.ClusterSettings().SV))
+	entries := stmtSpy.GetUnreadLogs(getSampleQueryLoggingChannel())
 
 	if len(entries) == 0 {
 		t.Fatal(errors.Newf("no entries found"))
@@ -1159,7 +1158,7 @@ func TestTelemetryLogJoinTypesAndAlgorithms(t *testing.T) {
 		db.Exec(t, tc.query)
 	}
 
-	entries := stmtSpy.GetUnreadLogs(getSampleQueryLoggingChannel(&s.ClusterSettings().SV))
+	entries := stmtSpy.GetUnreadLogs(getSampleQueryLoggingChannel())
 
 	if len(entries) == 0 {
 		t.Fatal(errors.Newf("no entries found"))
@@ -1409,7 +1408,7 @@ func TestTelemetryScanCounts(t *testing.T) {
 		db.Exec(t, tc.query)
 	}
 
-	entries := stmtSpy.GetUnreadLogs(getSampleQueryLoggingChannel(&s.ClusterSettings().SV))
+	entries := stmtSpy.GetUnreadLogs(getSampleQueryLoggingChannel())
 
 	if len(entries) == 0 {
 		t.Fatal(errors.Newf("no entries found"))
@@ -1518,7 +1517,7 @@ $$`
 
 	db.Exec(t, stmt)
 
-	entries := stmtSpy.GetLogs(getSampleQueryLoggingChannel(&s.ClusterSettings().SV))
+	entries := stmtSpy.GetLogs(getSampleQueryLoggingChannel())
 
 	if len(entries) == 0 {
 		t.Fatal(errors.Newf("no entries found"))
@@ -1594,7 +1593,7 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 		`BEGIN`, `SELECT ‹1›`, `SELECT ‹2›`, `SELECT ‹3›`, `COMMIT`,
 	}
 
-	entries := stmtSpy.GetLogs(getSampleQueryLoggingChannel(&s.ClusterSettings().SV))
+	entries := stmtSpy.GetLogs(getSampleQueryLoggingChannel())
 
 	require.NotEmpty(t, entries)
 	var expectedTxnID string
@@ -1629,9 +1628,6 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 	}
 }
 
-func getSampleQueryLoggingChannel(sv *settings.Values) logpb.Channel {
-	if log.ShouldMigrateEvent(sv) {
-		return logpb.Channel_TELEMETRY
-	}
+func getSampleQueryLoggingChannel() logpb.Channel {
 	return logpb.Channel_SQL_EXEC
 }

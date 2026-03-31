@@ -131,13 +131,8 @@ message ZoneConfigAudit {
 //
 // Events in this category report sample of SQL events.
 
-// SampledQuery is the SQL query event logged to the telemetry channel. It
+// SampledQuery is the SQL query event logged to the SQL_EXEC channel. It
 // contains common SQL event/execution details.
-//
-// Note: in version 26.1, these events moved to the `SQL_EXEC` channel.
-// To test compatability prior to this, set the cluster setting
-// `log.channel_compatibility_mode.enabled` to true. This will send the
-// events to `TELEMETRY` instead of `SQL_EXEC`.
 message SampledQuery {
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
   CommonSQLEventDetails sql = 2 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
@@ -418,12 +413,8 @@ message SampledQuery {
   // Next available ID: 81.
 }
 
-// SampledTransaction is the event logged to telemetry at the end of transaction execution.
-//
-// Note: in version 26.1, these events moved to the `SQL_EXEC` channel.
-// To test compatability prior to this, set the cluster setting
-// `log.channel_compatibility_mode.enabled` to true. This will send the
-// events to `TELEMETRY` instead of `SQL_EXEC`.
+// SampledTransaction is the event logged to the SQL_EXEC channel at the end of
+// transaction execution.
 message SampledTransaction {
   // Common contains common event details shared by all log events.
   CommonEventDetails common = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "", (gogoproto.embed) = true];
@@ -639,11 +630,6 @@ message MVCCIteratorStats {
 // Note: these events are not written to `system.eventlog`, even
 // when the cluster setting `system.eventlog.enabled` is set. They
 // are only emitted via external logging.
-//
-// In version 26.1, these events moved to the `SQL_EXEC` channel.
-// To test compatability prior to this, set the cluster setting
-// `log.channel_compatibility_mode.enabled` to true. This will send the
-// events to `SQL_PERF` instead of `SQL_EXEC`.
 
 // SlowQuery is recorded when a query triggers the "slow query" condition.
 //
@@ -751,11 +737,6 @@ message TxnRowsReadLimit {
 // Note: these events are not written to `system.eventlog`, even
 // when the cluster setting `system.eventlog.enabled` is set. They
 // are only emitted via external logging.
-//
-// In version 26.1, these events moved to the `SQL_EXEC` channel.
-// To test compatability prior to this, set the cluster setting
-// `log.channel_compatibility_mode.enabled` to true. This will send the
-// events to `SQL_INTERNAL_PERF` instead of `SQL_EXEC`.
 
 // SlowQueryInternal is recorded when a query triggers the "slow query" condition,
 // and the cluster setting `sql.log.slow_query.internal_queries.enabled` is
