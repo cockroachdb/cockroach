@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -86,12 +87,15 @@ type DestroyReplicaInfo struct {
 // installs a RangeTombstone in its place. It handles both uninitialized and
 // initialized replicas uniformly.
 //
-// This call issues all writes ordered by key. This is to support a large
-// variety of uses, including SSTable generation for snapshot application.
-func DestroyReplica(
-	ctx context.Context, rw ReadWriter, info DestroyReplicaInfo, next roachpb.ReplicaID,
+// An EventDestroy WAG node is staged on the batch before the storage writes 
+// are performed if engines are separated.
+func DestroyReplica[B storage.WriteBatch](
+	ctx context.Context, b *Batch[B], info DestroyReplicaInfo, next roachpb.ReplicaID,
 ) error {
-	return destroyReplicaImpl(ctx, rw, info, next)
+	b.WagWriter().AddEvent(
+		wagpb.MakeAddr(info.FullReplicaID, info.RaftAppliedIndex), wagpb.EventDestroy,
+	)
+	return destroyReplicaImpl(ctx, b.ReadWriter(), info, next)
 }
 
 func destroyReplicaImpl(

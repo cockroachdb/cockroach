@@ -483,7 +483,7 @@ func TestReplicaLifecycleDataDriven(t *testing.T) {
 
 				output := tc.mutate(t, func(b *kvstorage.Batch[storage.Batch]) {
 					require.NoError(t, kvstorage.DestroyReplica(
-						ctx, b.ReadWriter(), destroyInfo, rs.desc.NextReplicaID,
+						ctx, b, destroyInfo, rs.desc.NextReplicaID,
 					))
 				})
 				rs.replica = nil // clear the replica from the range state
