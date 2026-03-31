@@ -274,7 +274,7 @@ func TestReplicaGCQueueHandlesStagingError(t *testing.T) {
 	// higher), which hits the injected staging error.
 	_, _, err = store.GetOrCreateReplica(
 		context.Background(), desc.RangeID,
-		repl.ReplicaID()+1, nil, /* pretend a newer replica is contacting us */
+		repl.ReplicaID()+1, /* pretend a newer replica is contacting us */
 	)
 	require.True(t, errors.Is(err, errInjected), "unexpected: %+v", err)
 	require.NotZero(t, failCount.Swap(0), "error injection was not hit")
