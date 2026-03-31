@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/internal/metricscan"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
@@ -220,6 +221,8 @@ func TestMetricsRecorderLabels(t *testing.T) {
 		},
 		// The scrape meta-metrics are updated by the PrintAsText calls above.
 		// The system recorder sees 6 metric families and 10 time series.
+		// (codeowner_count is disabled by default, so OwnerMetricCount is empty
+		// and does not contribute a family or lines.)
 		{
 			Name:   "cr.node.obs.metric_export.name.count",
 			Source: "7",
@@ -1534,4 +1537,158 @@ func TestScrapeMetrics(t *testing.T) {
 	fourthOutput := buf.String()
 	require.Regexp(t, `obs_metric_export_child_count\{[^}]*metric_name="test_agg"[^}]*\} 4`,
 		fourthOutput)
+}
+
+// TestCountFamilyMetrics verifies that countFamilyMetrics correctly
+// counts the number of individual metrics a MetricFamily produces as
+// ingested by downstream systems (histograms expand to computed
+// metrics, no HELP/TYPE overhead).
+func TestCountFamilyMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	str := func(s string) *string { return &s }
+	f64 := func(v float64) *float64 { return &v }
+	u64 := func(v uint64) *uint64 { return &v }
+	mtype := func(
+		mt prometheusgo.MetricType,
+	) *prometheusgo.MetricType {
+		return &mt
+	}
+
+	tests := []struct {
+		name     string
+		family   *prometheusgo.MetricFamily
+		expected int64
+	}{
+		{
+			name: "single gauge",
+			family: &prometheusgo.MetricFamily{
+				Name: str("test_gauge"),
+				Type: mtype(prometheusgo.MetricType_GAUGE),
+				Metric: []*prometheusgo.Metric{
+					{Gauge: &prometheusgo.Gauge{Value: f64(42)}},
+				},
+			},
+			expected: 1,
+		},
+		{
+			name: "multiple counters",
+			family: &prometheusgo.MetricFamily{
+				Name: str("test_counter"),
+				Type: mtype(prometheusgo.MetricType_COUNTER),
+				Metric: []*prometheusgo.Metric{
+					{Counter: &prometheusgo.Counter{Value: f64(1)}},
+					{Counter: &prometheusgo.Counter{Value: f64(2)}},
+					{Counter: &prometheusgo.Counter{Value: f64(3)}},
+				},
+			},
+			expected: 3,
+		},
+		{
+			name: "histogram expands to computed metrics",
+			family: &prometheusgo.MetricFamily{
+				Name: str("test_histo"),
+				Type: mtype(prometheusgo.MetricType_HISTOGRAM),
+				Metric: []*prometheusgo.Metric{
+					{Histogram: &prometheusgo.Histogram{
+						Bucket: []*prometheusgo.Bucket{
+							{UpperBound: f64(1), CumulativeCount: u64(0)},
+							{UpperBound: f64(10), CumulativeCount: u64(1)},
+							{UpperBound: f64(100), CumulativeCount: u64(1)},
+						},
+						SampleCount: u64(1),
+						SampleSum:   f64(5),
+					}},
+				},
+			},
+			expected: int64(len(metric.HistogramMetricComputers)),
+		},
+		{
+			name: "empty family",
+			family: &prometheusgo.MetricFamily{
+				Name:   str("test_empty"),
+				Type:   mtype(prometheusgo.MetricType_GAUGE),
+				Metric: []*prometheusgo.Metric{},
+			},
+			expected: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := countFamilyMetrics(tc.family)
+			require.Equal(t, tc.expected, got)
+		})
+	}
+}
+
+// TestOwnerMetricCount verifies that owner resolution produces correct
+// per-team metric counts in the OwnerMetricCount GaugeVec during a
+// scrape.
+func TestOwnerMetricCount(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	st := cluster.MakeTestingClusterSettings()
+	codeownerMetricCountEnabled.Override(context.Background(), &st.SV, true)
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 100))
+	recorder := NewMetricsRecorder(
+		roachpb.SystemTenantID,
+		roachpb.NewTenantNameContainer(""),
+		nil, nil, manual, st,
+	)
+	nodeReg := metric.NewRegistry()
+	appReg := metric.NewRegistry()
+	logReg := metric.NewRegistry()
+	sysReg := metric.NewRegistry()
+	clusterReg := metric.NewRegistry()
+	recorder.AddNode(
+		nodeReg, appReg, logReg, sysReg, clusterReg,
+		roachpb.NodeDescriptor{NodeID: 1}, 50,
+		"foo:26257", "foo:26258", "foo:5432",
+	)
+
+	// Inject known metric-to-owner mappings.
+	mo, err := metricscan.LoadMetricOwners([]byte(
+		"owners:\n  test_gauge: team-kv\n  test_counter: team-sql\n",
+	))
+	require.NoError(t, err)
+	recorder.metricOwners = mo
+
+	// Register the metrics in the node registry.
+	g := metric.NewGauge(metric.Metadata{Name: "test_gauge"})
+	nodeReg.AddMetric(g)
+	g.Update(42)
+
+	c := metric.NewCounter(metric.Metadata{Name: "test_counter"})
+	nodeReg.AddMetric(c)
+	c.Inc(7)
+
+	// First scrape: populates the OwnerMetricCount gauge internally.
+	var buf bytes.Buffer
+	require.NoError(t, recorder.PrintAsText(&buf, expfmt.FmtText, false))
+
+	// Second scrape: the first scrape's owner counts are now visible.
+	buf.Reset()
+	require.NoError(t, recorder.PrintAsText(&buf, expfmt.FmtText, false))
+	output := buf.String()
+
+	// The OwnerMetricCount metric and both team labels must appear.
+	require.Contains(t, output, "obs_metric_export_codeowner_metric_count")
+	require.Contains(t, output, `codeowner="team-kv"`)
+	require.Contains(t, output, `codeowner="team-sql"`)
+
+	// test_gauge and test_counter are simple metrics: 1 each.
+	require.Regexp(t,
+		`obs_metric_export_codeowner_metric_count\{`+
+			`[^}]*codeowner="team-kv"[^}]*\} 1`,
+		output,
+	)
+	require.Regexp(t,
+		`obs_metric_export_codeowner_metric_count\{`+
+			`[^}]*codeowner="team-sql"[^}]*\} 1`,
+		output,
+	)
+
+	// Metrics without an owner entry are counted as "unknown".
+	require.Contains(t, output, `codeowner="unknown"`)
 }
