@@ -1521,6 +1521,9 @@ func trimNonDeterministicZipOutputFiles(out string) string {
 	out = re.ReplaceAllString(out, ``)
 	re = regexp.MustCompile(`(?m).*goroutine_dump.*\.pb\.gz$` + "\n")
 	out = re.ReplaceAllString(out, ``)
+	// ASH report files have timestamps in filenames, making them non-deterministic.
+	re = regexp.MustCompile(`(?m).*ash_report.*\.(json|txt)$` + "\n")
+	out = re.ReplaceAllString(out, ``)
 	// CPU profiles are non-deterministic: stored profiles have timestamps in
 	// filenames, and live profile collection may fail producing error files.
 	re = regexp.MustCompile(`(?m).*cpuprof/cpuprof\..*\.pprof$` + "\n")
