@@ -316,6 +316,12 @@ func (u *sqlSymUnion) enumValueList() tree.EnumValueList {
 func (u *sqlSymUnion) compositeTypeList() []tree.CompositeTypeElem {
     return u.val.([]tree.CompositeTypeElem)
 }
+func (u *sqlSymUnion) domainConstraintDefs() []tree.DomainConstraintDef {
+    return u.val.([]tree.DomainConstraintDef)
+}
+func (u *sqlSymUnion) createType() *tree.CreateType {
+    return u.val.(*tree.CreateType)
+}
 func (u *sqlSymUnion) unresolvedName() *tree.UnresolvedName {
     return u.val.(*tree.UnresolvedName)
 }
@@ -1329,6 +1335,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <*tree.CheckExternalConnectionOptions> opt_with_check_external_connection_options_list check_external_connection_options_list check_external_connection_options
 
 %type <tree.Statement> create_type_stmt
+%type <tree.Statement> create_domain_stmt
 %type <tree.Statement> delete_stmt
 %type <tree.Statement> discard_stmt
 
@@ -1712,6 +1719,7 @@ func (u *sqlSymUnion) filterType() tree.FilterType {
 %type <str> explain_option_name
 %type <[]string> explain_option_list opt_enum_val_list enum_val_list
 %type <[]tree.CompositeTypeElem> composite_type_list opt_composite_type_list
+%type <*tree.CreateType> domain_constraint_list_opt
 
 %type <tree.ResolvableTypeReference> typename simple_typename cast_target
 %type <*types.T> const_typename
@@ -6202,7 +6210,6 @@ drop_unsupported:
 | DROP CAST error { return unimplemented(sqllex, "drop cast") }
 | DROP COLLATION error { return unimplemented(sqllex, "drop collation") }
 | DROP CONVERSION error { return unimplemented(sqllex, "drop conversion") }
-| DROP DOMAIN error { return unimplementedWithIssueDetail(sqllex, 27796, "drop") }
 | DROP EXTENSION IF EXISTS name error { return unimplementedWithIssueDetail(sqllex, 74777, "drop extension if exists") }
 | DROP EXTENSION name error { return unimplementedWithIssueDetail(sqllex, 74777, "drop extension") }
 | DROP FOREIGN TABLE error { return unimplemented(sqllex, "drop foreign table") }
@@ -6224,6 +6231,7 @@ create_ddl_stmt:
 // Error case for both CREATE TABLE and CREATE TABLE ... AS in one
 | CREATE opt_persistence_temp_table TABLE error   // SHOW HELP: CREATE TABLE
 | create_type_stmt     // EXTEND WITH HELP: CREATE TYPE
+| create_domain_stmt
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
 | create_sequence_stmt // EXTEND WITH HELP: CREATE SEQUENCE
 | create_func_stmt     // EXTEND WITH HELP: CREATE FUNCTION
@@ -6783,6 +6791,22 @@ drop_type_stmt:
     }
   }
 | DROP TYPE error // SHOW HELP: DROP TYPE
+| DROP DOMAIN type_name_list opt_drop_behavior
+  {
+    $$.val = &tree.DropType{
+      Names: $3.unresolvedObjectNames(),
+      IfExists: false,
+      DropBehavior: $4.dropBehavior(),
+    }
+  }
+| DROP DOMAIN IF EXISTS type_name_list opt_drop_behavior
+  {
+    $$.val = &tree.DropType{
+      Names: $5.unresolvedObjectNames(),
+      IfExists: true,
+      DropBehavior: $6.dropBehavior(),
+    }
+  }
 
 // %Help: DROP VIRTUAL CLUSTER - remove a virtual cluster
 // %Category: Experimental
@@ -12732,8 +12756,7 @@ create_type_stmt:
 | CREATE TYPE type_name '(' error         { return unimplementedWithIssueDetail(sqllex, 27793, "base") }
   // Shell types, gateway to define base types using the previous syntax.
 | CREATE TYPE type_name                   { return unimplementedWithIssueDetail(sqllex, 27793, "shell") }
-  // Domain types.
-| CREATE DOMAIN type_name error           { return unimplementedWithIssueDetail(sqllex, 27796, "create") }
+  // Domain types are handled by create_domain_stmt.
 
 opt_enum_val_list:
   enum_val_list
@@ -12783,6 +12806,57 @@ composite_type_list:
             Type: $4.typeReference(),
         },
     )
+  }
+
+create_domain_stmt:
+  CREATE DOMAIN type_name AS typename domain_constraint_list_opt
+  {
+    ct := $6.createType()
+    ct.TypeName = $3.unresolvedObjectName()
+    ct.DomainType = $5.typeReference()
+    $$.val = ct
+  }
+
+domain_constraint_list_opt:
+  /* EMPTY */
+  {
+    $$.val = &tree.CreateType{
+      Variety: tree.Domain,
+    }
+  }
+| domain_constraint_list_opt DEFAULT a_expr
+  {
+    ct := $1.createType()
+    ct.DomainDefault = $3.expr()
+    $$.val = ct
+  }
+| domain_constraint_list_opt NOT NULL
+  {
+    ct := $1.createType()
+    ct.DomainNotNull = true
+    $$.val = ct
+  }
+| domain_constraint_list_opt NULL
+  {
+    // NULL is a no-op for compatibility.
+    $$.val = $1.createType()
+  }
+| domain_constraint_list_opt CONSTRAINT name CHECK '(' a_expr ')'
+  {
+    ct := $1.createType()
+    ct.DomainConstraints = append(ct.DomainConstraints, tree.DomainConstraintDef{
+      Name: tree.Name($3),
+      Expr: $6.expr(),
+    })
+    $$.val = ct
+  }
+| domain_constraint_list_opt CHECK '(' a_expr ')'
+  {
+    ct := $1.createType()
+    ct.DomainConstraints = append(ct.DomainConstraints, tree.DomainConstraintDef{
+      Expr: $4.expr(),
+    })
+    $$.val = ct
   }
 
 // %Help: CREATE INDEX - create a new index

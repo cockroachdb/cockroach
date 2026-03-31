@@ -648,6 +648,7 @@ create_ddl_stmt ::=
 	| create_table_stmt
 	| create_table_as_stmt
 	| create_type_stmt
+	| create_domain_stmt
 	| create_view_stmt
 	| create_sequence_stmt
 	| create_func_stmt
@@ -1937,6 +1938,9 @@ create_type_stmt ::=
 	| 'CREATE' 'TYPE' type_name 'AS' '(' opt_composite_type_list ')'
 	| 'CREATE' 'TYPE' 'IF' 'NOT' 'EXISTS' type_name 'AS' '(' opt_composite_type_list ')'
 
+create_domain_stmt ::=
+	'CREATE' 'DOMAIN' type_name 'AS' typename domain_constraint_list_opt
+
 create_view_stmt ::=
 	'CREATE' opt_temp 'VIEW' view_name opt_column_list opt_view_with 'AS' select_stmt
 	| 'CREATE' 'OR' 'REPLACE' opt_temp 'VIEW' view_name opt_column_list opt_view_with 'AS' select_stmt
@@ -2067,6 +2071,8 @@ drop_schema_stmt ::=
 drop_type_stmt ::=
 	'DROP' 'TYPE' type_name_list opt_drop_behavior
 	| 'DROP' 'TYPE' 'IF' 'EXISTS' type_name_list opt_drop_behavior
+	| 'DROP' 'DOMAIN' type_name_list opt_drop_behavior
+	| 'DROP' 'DOMAIN' 'IF' 'EXISTS' type_name_list opt_drop_behavior
 
 drop_func_stmt ::=
 	'DROP' 'FUNCTION' function_with_paramtypes_list opt_drop_behavior
@@ -2838,6 +2844,9 @@ opt_enum_val_list ::=
 opt_composite_type_list ::=
 	composite_type_list
 	| 
+
+domain_constraint_list_opt ::=
+	(  ) ( ( 'DEFAULT' a_expr | 'NOT' 'NULL' | 'NULL' | 'CONSTRAINT' name 'CHECK' '(' a_expr ')' | 'CHECK' '(' a_expr ')' ) )*
 
 opt_temp ::=
 	'TEMPORARY'

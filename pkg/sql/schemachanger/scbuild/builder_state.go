@@ -1231,6 +1231,8 @@ func (b *builderState) ResolveUserDefinedTypeType(
 		b.ensureDescriptor(typ.GetID())
 	case descpb.TypeDescriptor_COMPOSITE:
 		b.ensureDescriptor(typ.GetID())
+	case descpb.TypeDescriptor_DOMAIN:
+		b.ensureDescriptor(typ.GetID())
 	case descpb.TypeDescriptor_TABLE_IMPLICIT_RECORD_TYPE:
 		// Implicit record types are not directly modifiable.
 		panic(pgerror.Newf(pgcode.DependentObjectsStillExist,

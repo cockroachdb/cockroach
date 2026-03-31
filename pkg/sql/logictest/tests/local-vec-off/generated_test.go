@@ -685,6 +685,13 @@ func TestLogic_do(
 	runLogicTest(t, "do")
 }
 
+func TestLogic_domain(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "domain")
+}
+
 func TestLogic_drop_database(
 	t *testing.T,
 ) {

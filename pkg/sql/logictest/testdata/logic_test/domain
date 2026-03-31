@@ -1,0 +1,738 @@
+# LogicTest: local local-legacy-schema-changer local-vec-off fakedist fakedist-vec-off fakedist-disk
+
+# Test CREATE DOMAIN basic operations.
+statement ok
+CREATE DOMAIN d_int AS INT
+
+statement ok
+CREATE DOMAIN d_int8 AS INT8
+
+statement ok
+CREATE DOMAIN d_text AS TEXT
+
+# Verify domain types appear in pg_type.
+query T
+SELECT typname FROM pg_type WHERE typname = 'd_int'
+----
+d_int
+
+# Domain types with constraints.
+statement ok
+CREATE DOMAIN d_small_int AS INT DEFAULT 0 NOT NULL CHECK (VALUE > 0)
+
+# CREATE DOMAIN with named constraints.
+statement ok
+CREATE DOMAIN d_bounded_int AS INT CONSTRAINT positive CHECK (VALUE > 0) CONSTRAINT small CHECK (VALUE < 100)
+
+subtest domain_not_null
+
+# Test NOT NULL enforcement via explicit CAST.
+statement ok
+CREATE DOMAIN d_nn_int AS INT NOT NULL
+
+query error pgcode 23502 domain d_nn_int does not allow null values
+SELECT CAST(NULL AS d_nn_int)
+
+# Domain casts return domain-typed values, so use T (text) comparisons.
+query T
+SELECT CAST(42 AS d_nn_int)
+----
+42
+
+subtest end
+
+subtest domain_check_constraint
+
+# Test CHECK constraint enforcement.
+statement ok
+CREATE DOMAIN d_pos_int AS INT CHECK (VALUE > 0)
+
+query error pgcode 23514 value for domain d_pos_int violates check constraint
+SELECT CAST(-1 AS d_pos_int)
+
+query error pgcode 23514 value for domain d_pos_int violates check constraint
+SELECT CAST(0 AS d_pos_int)
+
+query T
+SELECT CAST(1 AS d_pos_int)
+----
+1
+
+query T
+SELECT CAST(100 AS d_pos_int)
+----
+100
+
+# NULL should pass CHECK constraint (SQL standard: CHECK treats NULL as true).
+query T
+SELECT CAST(NULL AS d_pos_int)
+----
+NULL
+
+subtest end
+
+subtest domain_named_check
+
+# Test named CHECK constraints.
+statement ok
+CREATE DOMAIN d_bounded AS INT CONSTRAINT must_be_positive CHECK (VALUE > 0) CONSTRAINT must_be_small CHECK (VALUE < 100)
+
+query error pgcode 23514 value for domain d_bounded violates check constraint "must_be_positive"
+SELECT CAST(-5 AS d_bounded)
+
+query error pgcode 23514 value for domain d_bounded violates check constraint "must_be_small"
+SELECT CAST(200 AS d_bounded)
+
+query T
+SELECT CAST(50 AS d_bounded)
+----
+50
+
+subtest end
+
+subtest domain_not_null_and_check
+
+# Test combined NOT NULL and CHECK constraints.
+statement ok
+CREATE DOMAIN d_pos_nn AS INT NOT NULL CHECK (VALUE > 0)
+
+query error pgcode 23502 domain d_pos_nn does not allow null values
+SELECT CAST(NULL AS d_pos_nn)
+
+query error pgcode 23514 value for domain d_pos_nn violates check constraint
+SELECT CAST(-1 AS d_pos_nn)
+
+query T
+SELECT CAST(5 AS d_pos_nn)
+----
+5
+
+subtest end
+
+subtest domain_text_check
+
+# Test CHECK constraint on text domain.
+statement ok
+CREATE DOMAIN d_nonempty_text AS TEXT NOT NULL CHECK (length(VALUE) > 0)
+
+query error pgcode 23502 domain d_nonempty_text does not allow null values
+SELECT CAST(NULL AS d_nonempty_text)
+
+query error pgcode 23514 value for domain d_nonempty_text violates check constraint
+SELECT CAST('' AS d_nonempty_text)
+
+query T
+SELECT CAST('hello' AS d_nonempty_text)
+----
+hello
+
+subtest end
+
+subtest domain_cast_syntax
+
+# Test :: cast syntax with domain types.
+statement ok
+CREATE DOMAIN d_myint AS INT CHECK (VALUE >= 0)
+
+query T
+SELECT 42::d_myint
+----
+42
+
+query error pgcode 23514 value for domain d_myint violates check constraint
+SELECT (-1)::d_myint
+
+subtest end
+
+# =============================================================================
+# Table column tests: INSERT, UPDATE, DEFAULT, NOT NULL with domain types.
+# =============================================================================
+
+subtest table_insert_check
+
+# Test CHECK constraint enforcement on INSERT.
+statement ok
+CREATE DOMAIN d_tbl_pos AS INT CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_pos (a d_tbl_pos)
+
+statement ok
+INSERT INTO t_pos VALUES (1)
+
+statement ok
+INSERT INTO t_pos VALUES (42)
+
+statement error pgcode 23514 value for domain d_tbl_pos violates check constraint
+INSERT INTO t_pos VALUES (-1)
+
+statement error pgcode 23514 value for domain d_tbl_pos violates check constraint
+INSERT INTO t_pos VALUES (0)
+
+# NULL passes CHECK constraint (SQL standard).
+statement ok
+INSERT INTO t_pos VALUES (NULL)
+
+query T rowsort
+SELECT a FROM t_pos
+----
+1
+42
+NULL
+
+subtest end
+
+subtest table_insert_not_null
+
+# Test domain NOT NULL enforcement on INSERT.
+statement ok
+CREATE DOMAIN d_tbl_nn AS INT NOT NULL
+
+statement ok
+CREATE TABLE t_nn (a d_tbl_nn)
+
+statement ok
+INSERT INTO t_nn VALUES (42)
+
+statement error pgcode 23502 domain d_tbl_nn does not allow null values
+INSERT INTO t_nn VALUES (NULL)
+
+# DEFAULT VALUES with no default expression should also fail NOT NULL.
+statement error pgcode 23502 domain d_tbl_nn does not allow null values
+INSERT INTO t_nn DEFAULT VALUES
+
+query T
+SELECT a FROM t_nn
+----
+42
+
+subtest end
+
+subtest table_insert_not_null_and_check
+
+# Test combined NOT NULL and CHECK constraints on table columns.
+statement ok
+CREATE DOMAIN d_tbl_pos_nn AS INT NOT NULL CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_pos_nn (a d_tbl_pos_nn)
+
+statement ok
+INSERT INTO t_pos_nn VALUES (5)
+
+statement error pgcode 23502 domain d_tbl_pos_nn does not allow null values
+INSERT INTO t_pos_nn VALUES (NULL)
+
+statement error pgcode 23514 value for domain d_tbl_pos_nn violates check constraint
+INSERT INTO t_pos_nn VALUES (-1)
+
+query T
+SELECT a FROM t_pos_nn
+----
+5
+
+subtest end
+
+subtest table_domain_default
+
+# Test domain DEFAULT expression on table columns.
+statement ok
+CREATE DOMAIN d_tbl_def AS INT DEFAULT 42
+
+statement ok
+CREATE TABLE t_def (a d_tbl_def)
+
+statement ok
+INSERT INTO t_def DEFAULT VALUES
+
+statement ok
+INSERT INTO t_def (a) VALUES (DEFAULT)
+
+statement ok
+INSERT INTO t_def VALUES (10)
+
+query T rowsort
+SELECT a FROM t_def
+----
+42
+42
+10
+
+subtest end
+
+subtest table_column_default_overrides_domain
+
+# Column-level default should override domain default.
+statement ok
+CREATE DOMAIN d_tbl_def2 AS INT DEFAULT 42
+
+statement ok
+CREATE TABLE t_col_def (a d_tbl_def2 DEFAULT 100)
+
+statement ok
+INSERT INTO t_col_def DEFAULT VALUES
+
+query T
+SELECT a FROM t_col_def
+----
+100
+
+subtest end
+
+subtest table_domain_default_with_not_null
+
+# Test domain with both DEFAULT and NOT NULL on table columns.
+statement ok
+CREATE DOMAIN d_tbl_def_nn AS INT NOT NULL DEFAULT 0
+
+statement ok
+CREATE TABLE t_def_nn (a d_tbl_def_nn)
+
+# DEFAULT VALUES should use the domain default (0), satisfying NOT NULL.
+statement ok
+INSERT INTO t_def_nn DEFAULT VALUES
+
+# Explicit NULL should still fail.
+statement error pgcode 23502 domain d_tbl_def_nn does not allow null values
+INSERT INTO t_def_nn VALUES (NULL)
+
+query T
+SELECT a FROM t_def_nn
+----
+0
+
+subtest end
+
+subtest table_update_check
+
+# Test domain CHECK constraint enforcement on UPDATE.
+statement ok
+CREATE DOMAIN d_tbl_upd AS INT CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_upd (id INT PRIMARY KEY, val d_tbl_upd)
+
+statement ok
+INSERT INTO t_upd VALUES (1, 10)
+
+statement ok
+UPDATE t_upd SET val = 20 WHERE id = 1
+
+statement error pgcode 23514 value for domain d_tbl_upd violates check constraint
+UPDATE t_upd SET val = -1 WHERE id = 1
+
+query IT
+SELECT id, val FROM t_upd
+----
+1  20
+
+subtest end
+
+subtest table_update_not_null
+
+# Test domain NOT NULL enforcement on UPDATE.
+statement ok
+CREATE DOMAIN d_tbl_upd_nn AS INT NOT NULL
+
+statement ok
+CREATE TABLE t_upd_nn (id INT PRIMARY KEY, val d_tbl_upd_nn)
+
+statement ok
+INSERT INTO t_upd_nn VALUES (1, 10)
+
+statement error pgcode 23502 domain d_tbl_upd_nn does not allow null values
+UPDATE t_upd_nn SET val = NULL WHERE id = 1
+
+query IT
+SELECT id, val FROM t_upd_nn
+----
+1  10
+
+subtest end
+
+subtest table_multi_domain_columns
+
+# Test table with multiple domain-typed columns.
+statement ok
+CREATE DOMAIN d_tbl_name AS TEXT NOT NULL CHECK (length(VALUE) > 0)
+
+statement ok
+CREATE DOMAIN d_tbl_age AS INT CHECK (VALUE >= 0 AND VALUE <= 150)
+
+statement ok
+CREATE TABLE t_person (name d_tbl_name, age d_tbl_age)
+
+statement ok
+INSERT INTO t_person VALUES ('Alice', 30)
+
+statement error pgcode 23502 domain d_tbl_name does not allow null values
+INSERT INTO t_person VALUES (NULL, 30)
+
+statement error pgcode 23514 value for domain d_tbl_name violates check constraint
+INSERT INTO t_person VALUES ('', 30)
+
+statement error pgcode 23514 value for domain d_tbl_age violates check constraint
+INSERT INTO t_person VALUES ('Bob', -1)
+
+statement error pgcode 23514 value for domain d_tbl_age violates check constraint
+INSERT INTO t_person VALUES ('Bob', 200)
+
+# NULL age is allowed (no NOT NULL on d_tbl_age).
+statement ok
+INSERT INTO t_person VALUES ('Charlie', NULL)
+
+query TT rowsort
+SELECT name, age FROM t_person
+----
+Alice    30
+Charlie  NULL
+
+subtest end
+
+subtest domain_drop_recreate
+
+# Test that DROP TYPE followed by CREATE DOMAIN with the same name works.
+statement ok
+CREATE DOMAIN d_recreate AS INT CHECK (VALUE > 0)
+
+statement ok
+DROP TYPE d_recreate
+
+statement ok
+CREATE DOMAIN d_recreate AS INT CHECK (VALUE > 0)
+
+query T
+SELECT 5::d_recreate
+----
+5
+
+query error pgcode 23514 value for domain d_recreate violates check constraint
+SELECT (-1)::d_recreate
+
+subtest end
+
+subtest domain_of_domain
+
+# Test that CREATE DOMAIN with a domain base type is rejected (#165347).
+statement ok
+CREATE DOMAIN d_base_for_nested AS INT CHECK (VALUE > 0)
+
+statement error pgcode 0A000 unimplemented: domain of domain is not yet supported
+CREATE DOMAIN d_nested AS d_base_for_nested
+
+subtest end
+
+subtest domain_drop_syntax
+
+# Test DROP DOMAIN syntax variants.
+statement ok
+CREATE DOMAIN d_drop_test AS INT CHECK (VALUE > 0)
+
+statement ok
+DROP DOMAIN d_drop_test
+
+# DROP DOMAIN IF EXISTS on a nonexistent domain should not error.
+statement ok
+DROP DOMAIN IF EXISTS d_drop_test
+
+# DROP DOMAIN on a nonexistent domain should error.
+statement error pgcode 42704 type "d_drop_nonexistent" does not exist
+DROP DOMAIN d_drop_nonexistent
+
+# DROP DOMAIN when a table depends on it should fail without CASCADE.
+statement ok
+CREATE DOMAIN d_drop_dep AS INT CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_drop_dep (id INT PRIMARY KEY, val d_drop_dep)
+
+statement error pgcode 2BP01 cannot drop type "d_drop_dep" because other objects \(\[test.public.t_drop_dep\]\) still depend on it
+DROP DOMAIN d_drop_dep
+
+statement ok
+DROP TABLE t_drop_dep
+
+statement ok
+DROP DOMAIN d_drop_dep
+
+subtest end
+
+subtest domain_drop_database_cascade
+
+# Test DROP DATABASE CASCADE with domain types and tables using them.
+statement ok
+CREATE DATABASE d_drop_db_test
+
+statement ok
+USE d_drop_db_test
+
+statement ok
+CREATE DOMAIN d_in_db AS INT CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_in_db (id INT PRIMARY KEY, val d_in_db)
+
+statement ok
+USE test
+
+statement ok
+DROP DATABASE d_drop_db_test CASCADE
+
+subtest end
+
+subtest domain_show_create
+
+# Test crdb_internal.create_type_statements for domains.
+statement ok
+CREATE DOMAIN d_show AS INT DEFAULT 5 NOT NULL CHECK (VALUE > 0)
+
+query T
+SELECT create_statement FROM crdb_internal.create_type_statements WHERE descriptor_name = 'd_show'
+----
+CREATE DOMAIN public.d_show AS INT8 DEFAULT 5 NOT NULL CONSTRAINT d_show_check CHECK (value > 0)
+
+subtest end
+
+subtest domain_upsert
+
+# Test UPSERT and ON CONFLICT with domain columns.
+statement ok
+CREATE DOMAIN d_upsert AS INT CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_upsert (id INT PRIMARY KEY, val d_upsert)
+
+statement ok
+INSERT INTO t_upsert VALUES (1, 5)
+
+# UPSERT that violates the domain CHECK should fail.
+statement error pgcode 23514 value for domain d_upsert violates check constraint
+UPSERT INTO t_upsert VALUES (1, -1)
+
+# ON CONFLICT DO UPDATE that violates the domain CHECK should fail.
+statement error pgcode 23514 value for domain d_upsert violates check constraint
+INSERT INTO t_upsert VALUES (1, 10) ON CONFLICT (id) DO UPDATE SET val = -1
+
+# Valid UPSERT should succeed.
+statement ok
+UPSERT INTO t_upsert VALUES (1, 10)
+
+query IT
+SELECT * FROM t_upsert
+----
+1  10
+
+subtest end
+
+subtest domain_nonpublic_schema
+
+# Test domain in a non-public schema.
+statement ok
+CREATE SCHEMA myschema
+
+statement ok
+CREATE DOMAIN myschema.d_schema AS INT CHECK (VALUE > 0)
+
+query T
+SELECT 5::myschema.d_schema
+----
+5
+
+query error pgcode 23514 value for domain d_schema violates check constraint
+SELECT (-1)::myschema.d_schema
+
+subtest end
+
+subtest domain_duplicate_name
+
+# Test that creating a domain with a name that already exists errors.
+statement ok
+CREATE DOMAIN d_dup AS INT
+
+statement error pgcode 42710 type "test.public.d_dup" already exists
+CREATE DOMAIN d_dup AS TEXT
+
+subtest end
+
+subtest domain_drop_cascade
+
+# Test DROP DOMAIN with dependent table requires CASCADE.
+statement ok
+CREATE DOMAIN d_cascade AS INT CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_cascade (id INT PRIMARY KEY, val d_cascade)
+
+statement ok
+INSERT INTO t_cascade VALUES (1, 5)
+
+# DROP DOMAIN without CASCADE should fail when table depends on it.
+statement error pgcode 2BP01 cannot drop type "d_cascade" because other objects \(\[test.public.t_cascade\]\) still depend on it
+DROP DOMAIN d_cascade
+
+# Manually drop the dependent table first, then the domain.
+statement ok
+DROP TABLE t_cascade
+
+statement ok
+DROP DOMAIN d_cascade
+
+subtest end
+
+subtest domain_primary_key
+
+# Test domain type used as a primary key column.
+statement ok
+CREATE DOMAIN d_pk AS INT CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_pk (id d_pk PRIMARY KEY, name TEXT)
+
+statement ok
+INSERT INTO t_pk VALUES (1, 'alice')
+
+statement ok
+INSERT INTO t_pk VALUES (2, 'bob')
+
+# PK constraint violation.
+statement error duplicate key value violates unique constraint
+INSERT INTO t_pk VALUES (1, 'duplicate')
+
+# Domain CHECK constraint violation.
+statement error pgcode 23514 value for domain d_pk violates check constraint
+INSERT INTO t_pk VALUES (-1, 'negative')
+
+# Lookup by PK should work.
+query TT
+SELECT id, name FROM t_pk WHERE id = 1
+----
+1  alice
+
+query TT rowsort
+SELECT id, name FROM t_pk
+----
+1  alice
+2  bob
+
+statement ok
+DROP TABLE t_pk
+
+statement ok
+DROP DOMAIN d_pk
+
+subtest end
+
+subtest domain_width_precision
+
+# Test domain based on types with width/precision.
+statement ok
+CREATE DOMAIN d_vc5 AS VARCHAR(5)
+
+# Value within length should succeed.
+query T
+SELECT 'hi'::d_vc5
+----
+hi
+
+# Explicit cast truncates (matches PostgreSQL behavior for explicit casts).
+query T
+SELECT 'hello world'::d_vc5
+----
+hello
+
+# Test domain based on CHAR (blank-padded).
+statement ok
+CREATE DOMAIN d_char5 AS CHAR(5)
+
+query T
+SELECT 'hi'::d_char5
+----
+hi
+
+# Explicit cast to CHAR truncates.
+query T
+SELECT 'hello world'::d_char5
+----
+hello
+
+# Test domain based on DECIMAL with precision.
+statement ok
+CREATE DOMAIN d_dec AS DECIMAL(5, 2)
+
+query T
+SELECT 123.45::d_dec
+----
+123.45
+
+# Test domain with width used as table column (assignment cast errors on
+# overlength, unlike explicit cast which truncates).
+statement ok
+CREATE TABLE t_vc (val d_vc5)
+
+statement ok
+INSERT INTO t_vc VALUES ('hi')
+
+statement error pgcode 22001 value too long for type VARCHAR\(5\)
+INSERT INTO t_vc VALUES ('hello world')
+
+query T
+SELECT val FROM t_vc
+----
+hi
+
+statement ok
+DROP TABLE t_vc
+
+statement ok
+DROP DOMAIN d_vc5
+
+statement ok
+DROP DOMAIN d_char5
+
+statement ok
+DROP DOMAIN d_dec
+
+subtest end
+
+subtest domain_enum_base_type
+
+# Domain over enum type: creation succeeds but casting and back-references
+# don't fully work yet. The domain type inherits EnumFamily from the base
+# type but lacks the EnumData hydration metadata needed for string-to-enum
+# parsing. Back-references from the domain to the enum are also incomplete.
+# TODO(#27796): Fix domain-over-enum support (casting, back-references).
+
+subtest end
+
+subtest domain_update_atomicity
+
+# Test that UPDATE violating domain CHECK on some rows rejects the entire
+# statement atomically.
+statement ok
+CREATE DOMAIN d_atom AS INT CHECK (VALUE > 0)
+
+statement ok
+CREATE TABLE t_atom (id INT PRIMARY KEY, val d_atom)
+
+statement ok
+INSERT INTO t_atom VALUES (1, 100), (2, 5)
+
+# This UPDATE would make val=5 for id=1 (ok) but val=-95 for id=2 (violation).
+# The entire statement should be rejected.
+statement error pgcode 23514 value for domain d_atom violates check constraint
+UPDATE t_atom SET val = val - 100
+
+# Verify no rows were changed.
+query IT rowsort
+SELECT id, val FROM t_atom
+----
+1  100
+2  5
+
+statement ok
+DROP TABLE t_atom
+
+statement ok
+DROP DOMAIN d_atom
+
+subtest end

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -243,6 +244,12 @@ func CreateUserDefinedArrayTypeDesc(
 			labels[i] = e.ElementLabel
 		}
 		elemTyp = types.NewCompositeType(catid.TypeIDToOID(typDesc.GetID()), catid.TypeIDToOID(id), contents, labels)
+	case descpb.TypeDescriptor_DOMAIN:
+		elemTyp = types.MakeDomain(
+			typDesc.Domain.BaseType,
+			catid.TypeIDToOID(typDesc.GetID()),
+			catid.TypeIDToOID(id),
+		)
 	default:
 		return nil, errors.AssertionFailedf("cannot make array type for kind %s", t.String())
 	}
@@ -324,6 +331,8 @@ func (p *planner) createUserDefinedType(params runParams, n *createTypeNode) err
 		return params.p.createCompositeWithID(
 			params, id, n.n.CompositeTypeList, n.dbDesc, n.typeName,
 		)
+	case tree.Domain:
+		return params.p.createDomainWithID(params, id, n.n, n.dbDesc, n.typeName)
 	}
 	return unimplemented.NewWithIssue(25123, "CREATE TYPE")
 }
@@ -526,6 +535,114 @@ func (p *planner) createCompositeWithID(
 		return err
 	}
 	return nil
+}
+
+func (p *planner) createDomainWithID(
+	params runParams,
+	id descpb.ID,
+	n *tree.CreateType,
+	dbDesc catalog.DatabaseDescriptor,
+	typeName *tree.TypeName,
+) error {
+	if !params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V26_3) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"CREATE DOMAIN requires all nodes to be upgraded to %v",
+			clusterversion.V26_3.Version())
+	}
+	schema, err := getCreateTypeParams(params.ctx, p, typeName, dbDesc)
+	if err != nil {
+		return err
+	}
+
+	// Resolve the base type.
+	baseType, err := tree.ResolveType(params.ctx, n.DomainType, params.p.semaCtx.TypeResolver)
+	if err != nil {
+		return err
+	}
+	if err = tree.CheckUnsupportedType(params.ctx, &params.p.semaCtx, baseType); err != nil {
+		return err
+	}
+	// Reject domain-of-domain. Full nested domain support is tracked in #165347.
+	if baseType.TypeMeta.DomainData != nil {
+		return unimplemented.NewWithIssue(165347, "domain of domain is not yet supported")
+	}
+
+	// Build CHECK constraints. Each expression is validated by substituting
+	// VALUE with a typed null of the base type and type-checking as boolean.
+	// This catches invalid expressions (e.g., referencing nonexistent
+	// functions) at CREATE DOMAIN time rather than at INSERT/UPDATE time.
+	checks := make(
+		[]descpb.TypeDescriptor_Domain_CheckConstraint, len(n.DomainConstraints),
+	)
+	for i, c := range n.DomainConstraints {
+		validationExpr, err := tree.SimpleVisit(c.Expr, func(e tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+			if n, ok := e.(*tree.UnresolvedName); ok {
+				if n.NumParts == 1 && strings.EqualFold(n.Parts[0], "value") {
+					return false, tree.NewTypedCastExpr(tree.DNull, baseType), nil
+				}
+			}
+			return true, e, nil
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := tree.TypeCheck(params.ctx, validationExpr, params.p.SemaCtx(), types.Bool); err != nil {
+			return pgerror.Wrapf(err, pgcode.InvalidObjectDefinition,
+				"invalid CHECK expression for domain %s", typeName.Type())
+		}
+
+		name := string(c.Name)
+		if name == "" {
+			name = fmt.Sprintf("%s_check", typeName.Type())
+			if i > 0 {
+				name = fmt.Sprintf("%s_check%d", typeName.Type(), i+1)
+			}
+		}
+		checks[i] = descpb.TypeDescriptor_Domain_CheckConstraint{
+			Name: name,
+			Expr: tree.Serialize(c.Expr),
+		}
+	}
+
+	// Serialize default expression if present.
+	var defaultExpr string
+	if n.DomainDefault != nil {
+		defaultExpr = tree.Serialize(n.DomainDefault)
+	}
+
+	privs, err := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+		dbDesc.GetDefaultPrivilegeDescriptor(),
+		schema.GetDefaultPrivilegeDescriptor(),
+		dbDesc.GetID(),
+		params.SessionData().User(),
+		privilege.Types,
+	)
+	if err != nil {
+		return err
+	}
+
+	typeDesc := typedesc.NewBuilder(&descpb.TypeDescriptor{
+		Name:           typeName.Type(),
+		ID:             id,
+		ParentID:       dbDesc.GetID(),
+		ParentSchemaID: schema.GetID(),
+		Kind:           descpb.TypeDescriptor_DOMAIN,
+		Domain: &descpb.TypeDescriptor_Domain{
+			BaseType:         baseType,
+			NotNull:          n.DomainNotNull,
+			DefaultExpr:      defaultExpr,
+			CheckConstraints: checks,
+		},
+		Version:    1,
+		Privileges: privs,
+	}).BuildCreatedMutableType()
+
+	if err := p.finishCreateType(params.ctx, params.EvalContext(), typeName, typeDesc, dbDesc, schema); err != nil {
+		return err
+	}
+	// Install back references to types used by this domain (e.g., if the base
+	// type is a user-defined type like an enum).
+	return p.addBackRefsFromAllTypesInType(params.ctx, typeDesc)
 }
 
 func (p *planner) finishCreateType(

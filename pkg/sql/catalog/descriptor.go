@@ -955,6 +955,10 @@ type TypeDescriptor interface {
 	// TableImplicitRecordTypeDescriptor if this type is an implicit table record
 	// type, nil otherwise.
 	AsTableImplicitRecordTypeDescriptor() TableImplicitRecordTypeDescriptor
+
+	// AsDomainTypeDescriptor returns this instance cast to
+	// DomainTypeDescriptor if this type is a domain type, nil otherwise.
+	AsDomainTypeDescriptor() DomainTypeDescriptor
 }
 
 // NonAliasTypeDescriptor is the TypeDescriptor subtype for concrete user-defined
@@ -1046,6 +1050,28 @@ type TableImplicitRecordTypeDescriptor interface {
 	// UnderlyingTableDescriptor returns the table descriptor underlying this
 	// implicit type.
 	UnderlyingTableDescriptor() TableDescriptor
+}
+
+// DomainTypeDescriptor is the TypeDescriptor subtype for domain types, which
+// are user-defined types based on an existing type with optional constraints.
+type DomainTypeDescriptor interface {
+	NonAliasTypeDescriptor
+
+	// GetBaseType returns the underlying base type of the domain.
+	GetBaseType() *types.T
+	// IsNotNull returns true if the domain has a NOT NULL constraint.
+	IsNotNull() bool
+	// GetDefaultExpr returns the default expression for the domain, or an
+	// empty string if no default is specified.
+	GetDefaultExpr() string
+	// NumCheckConstraints returns the number of CHECK constraints on the domain.
+	NumCheckConstraints() int
+	// GetCheckConstraintName returns the name of the CHECK constraint at the
+	// given ordinal.
+	GetCheckConstraintName(idx int) string
+	// GetCheckConstraintExpr returns the expression of the CHECK constraint at
+	// the given ordinal.
+	GetCheckConstraintExpr(idx int) string
 }
 
 // TypeDescriptorResolver is an interface used during hydration of type

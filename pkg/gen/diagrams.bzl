@@ -108,6 +108,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:create_changefeed.html",
     "//docs/generated/sql/bnf:create_database.html",
     "//docs/generated/sql/bnf:create_ddl.html",
+    "//docs/generated/sql/bnf:create_domain.html",
     "//docs/generated/sql/bnf:create_extension.html",
     "//docs/generated/sql/bnf:create_external_connection.html",
     "//docs/generated/sql/bnf:create_func.html",

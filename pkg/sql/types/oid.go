@@ -251,6 +251,13 @@ func CalcArrayOid(elemTyp *T) oid.Oid {
 		}
 	}
 
+	// User-defined types that aren't handled by the family-specific cases above
+	// (e.g., domain types) have dynamic OIDs that won't be found in
+	// oidToArrayOid. Use the array OID from the type descriptor metadata instead.
+	if elemTyp.UserDefined() {
+		return elemTyp.UserDefinedArrayOID()
+	}
+
 	// Map the OID of the array element type to the corresponding array OID.
 	// This should always be possible for all other OIDs (checked in oid.go
 	// init method).
