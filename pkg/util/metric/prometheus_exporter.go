@@ -94,6 +94,8 @@ type scrapeOptions struct {
 	includeAggregateMetrics      bool
 	useStaticLabels              bool
 	reinitialisableBugFixEnabled bool
+	minVisibility                Metadata_MetricVisibility
+	hasVisibilityFilter          bool
 }
 
 // ScrapeOption is a function that modifies scrapeOptions
@@ -127,6 +129,17 @@ func WithReinitialisableBugFixEnabled(enabled bool) ScrapeOption {
 	}
 }
 
+// WithMinVisibility returns an option that filters out metrics whose
+// visibility is below the given threshold. The proto enum values are
+// INTERNAL=0, SUPPORT=1, ESSENTIAL=2, so a metric is included when
+// metadata.Visibility >= minVisibility.
+func WithMinVisibility(level Metadata_MetricVisibility) ScrapeOption {
+	return func(o *scrapeOptions) {
+		o.minVisibility = level
+		o.hasVisibilityFilter = true
+	}
+}
+
 // applyScrapeOptions creates a new scrapeOptions with the given options applied
 func applyScrapeOptions(options ...ScrapeOption) *scrapeOptions {
 	opts := &scrapeOptions{
@@ -147,6 +160,13 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry RegistryReader, options ..
 	labels := registry.GetLabels()
 
 	f := func(name string, v interface{}) {
+		if o.hasVisibilityFilter {
+			if iterable, ok := v.(Iterable); ok {
+				if iterable.GetMetadata().Visibility < o.minVisibility {
+					return
+				}
+			}
+		}
 		switch prom := v.(type) {
 		case PrometheusVector:
 			for _, m := range prom.ToPrometheusMetrics() {
