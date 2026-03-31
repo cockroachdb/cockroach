@@ -81,61 +81,52 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 		return nil, errors.AssertionFailedf("cannot specify both InsertPlaceholder and DestroyData")
 	}
 
-	// Run sanity checks. If (nil, nil) is returned, there's nothing to do.
-	desc, err := func() (*roachpb.RangeDescriptor, error) {
-		// The destroyStatus and state.Desc checks only access shMu fields, which
-		// are safe to read under raftMu without additional locks. Only s.mu is
-		// needed for the store-level replicasByRangeID check.
-		if opts.DestroyData {
-			// Detect if we were already removed.
-			if rep.shMu.destroyStatus.Removed() {
-				return nil, nil // already removed, noop
-			}
-		} else {
-			// If the caller doesn't want to destroy the data because it already
-			// has done so, then it must have already also set the destroyStatus.
-			if !rep.shMu.destroyStatus.Removed() {
-				return nil, errors.AssertionFailedf("replica not marked as destroyed but data already destroyed: %v", rep)
-			}
+	// Run sanity checks.
+	//
+	// All checks below access shMu fields (destroyStatus, state.Desc) or the
+	// sync-map replicasByRangeID, both of which are safe to read under raftMu
+	// without additional locks. Holding raftMu is sufficient to guarantee that
+	// the replica's store membership does not change: removal from the store
+	// also requires raftMu (later in this method), and a new Replica for the
+	// same range cannot be inserted while the current one is still present.
+	if opts.DestroyData {
+		// Detect if we were already removed.
+		if rep.shMu.destroyStatus.Removed() {
+			return nil, nil // already removed, noop
 		}
-
-		// Check if Replica is in the Store.
-		//
-		// There is a certain amount of idempotency in this method (repeat attempts
-		// to destroy an already destroyed replica are allowed when DestroyData is
-		// set, see the early return above), but if we get here then the Replica
-		// better be in the Store (since the Store enforces ownership over the
-		// keyspace, so deleting data for a Replica that's not in the Store can
-		// delete random active data). Note that if the caller has !DestroyData,
-		// this means it needs to already know that the Replica is still in the
-		// Store.
-		s.mu.Lock()
-		existing, ok := s.mu.replicasByRangeID.Load(rep.RangeID)
-		s.mu.Unlock()
-		if !ok {
-			return nil, errors.AssertionFailedf("cannot remove replica which does not exist in Store")
-		} else if existing != rep {
-			return nil, errors.AssertionFailedf("replica %v replaced by %v before being removed",
-				rep, existing)
+	} else {
+		// If the caller doesn't want to destroy the data because it already
+		// has done so, then it must have already also set the destroyStatus.
+		if !rep.shMu.destroyStatus.Removed() {
+			return nil, errors.AssertionFailedf("replica not marked as destroyed but data already destroyed: %v", rep)
 		}
-
-		// Now we know that the Store's Replica is identical to the passed-in
-		// Replica.
-		desc := rep.shMu.state.Desc
-		if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= nextReplicaID {
-			// The ReplicaID of a Replica is immutable.
-			return nil, errors.AssertionFailedf("replica descriptor's ID has changed (%s >= %s)",
-				repDesc.ReplicaID, nextReplicaID)
-		}
-
-		return desc, nil
-	}()
-	if err != nil {
-		return nil, err
 	}
-	if desc == nil {
-		// Already removed/removing, no-op.
-		return nil, nil
+
+	// Check if Replica is in the Store.
+	//
+	// There is a certain amount of idempotency in this method (repeat attempts
+	// to destroy an already destroyed replica are allowed when DestroyData is
+	// set, see the early return above), but if we get here then the Replica
+	// better be in the Store (since the Store enforces ownership over the
+	// keyspace, so deleting data for a Replica that's not in the Store can
+	// delete random active data). Note that if the caller has !DestroyData,
+	// this means it needs to already know that the Replica is still in the
+	// Store.
+	existing, ok := s.mu.replicasByRangeID.Load(rep.RangeID)
+	if !ok {
+		return nil, errors.AssertionFailedf("cannot remove replica which does not exist in Store")
+	} else if existing != rep {
+		return nil, errors.AssertionFailedf("replica %v replaced by %v before being removed",
+			rep, existing)
+	}
+
+	// Now we know that the Store's Replica is identical to the passed-in
+	// Replica.
+	desc := rep.shMu.state.Desc
+	if repDesc, ok := desc.GetReplicaDescriptor(s.StoreID()); ok && repDesc.ReplicaID >= nextReplicaID {
+		// The ReplicaID of a Replica is immutable.
+		return nil, errors.AssertionFailedf("replica descriptor's ID has changed (%s >= %s)",
+			repDesc.ReplicaID, nextReplicaID)
 	}
 
 	// Stage the engine destruction batch before any in-memory state changes.
