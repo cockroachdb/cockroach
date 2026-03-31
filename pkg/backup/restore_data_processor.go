@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -462,6 +463,7 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 			return errors.Wrap(err, "creating key rewriter from rekeys")
 		}
 
+		var lastRange lastLinkedRange
 		for {
 			done, err := func() (done bool, _ error) {
 				entry, ok := <-entries
@@ -502,7 +504,7 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 				if len(linkable) > 0 {
 					linkEntry := entry
 					linkEntry.Files = linkable
-					linkSummary, err := rd.linkFiles(ctx, kr, linkEntry)
+					linkSummary, err := rd.linkFiles(ctx, kr, linkEntry, &lastRange)
 					if err != nil {
 						return done, errors.Wrap(err, "linking files")
 					}
@@ -567,11 +569,22 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 	})
 }
 
+// lastLinkedRange tracks the range span and available capacity from the most
+// recent LinkExternalSSTable response. It is used to decide whether to split
+// before the next link to avoid overfilling a range.
+type lastLinkedRange struct {
+	span           roachpb.Span
+	availableBytes int64
+}
+
 // linkFiles links all files in the entry via LinkExternalSSTable instead of
 // downloading and ingesting them. This is used for online restore when the
 // UseLink flag is set on files.
 func (rd *restoreDataProcessor) linkFiles(
-	ctx context.Context, kr *KeyRewriter, entry execinfrapb.RestoreSpanEntry,
+	ctx context.Context,
+	kr *KeyRewriter,
+	entry execinfrapb.RestoreSpanEntry,
+	lastRange *lastLinkedRange,
 ) (kvpb.BulkOpSummary, error) {
 	ctx, sp := tracing.ChildSpan(ctx, "restore.linkFiles")
 	defer sp.Finish()
@@ -613,6 +626,24 @@ func (rd *restoreDataProcessor) linkFiles(
 		}
 
 		log.VEventf(ctx, 2, "linking file %s (file span: %s) to span %s", file.Path, file.BackupFileEntrySpan, restoringSubspan)
+
+		// If the range we last linked into is nearly full and this file would
+		// land in the same range, split at this file's start key first so it
+		// goes to a new, empty range.
+		const splitThreshold = 64 << 20 // 64 MB
+		if lastRange.availableBytes < splitThreshold &&
+			lastRange.span.Valid() && lastRange.span.ContainsKey(restoringSubspan.Key) {
+			splitAt, splitErr := keys.EnsureSafeSplitKey(restoringSubspan.Key)
+			if splitErr == nil {
+				expire := hlc.Timestamp{WallTime: timeutil.Now().Add(10 * time.Minute).UnixNano()}
+				if splitErr = kvDB.AdminSplit(ctx, splitAt, expire); splitErr != nil {
+					log.Dev.Warningf(ctx, "pre-link split at %s failed: %v", splitAt, splitErr)
+				} else {
+					log.VEventf(ctx, 2, "split range at %s before link (available %d bytes)",
+						splitAt, lastRange.availableBytes)
+				}
+			}
+		}
 
 		counts := file.BackupFileEntryCounts
 		fileSize := file.ApproximatePhysicalSize
@@ -656,12 +687,16 @@ func (rd *restoreDataProcessor) linkFiles(
 		}
 
 		linkStart := timeutil.Now()
-		if _, _, err := kvDB.LinkExternalSSTable(ctx, restoringSubspan, loc, batchTimestamp); err != nil {
+		rangeSpan, availableBytes, err := kvDB.LinkExternalSSTable(ctx, restoringSubspan, loc, batchTimestamp)
+		if err != nil {
 			return summary, errors.Wrap(err, "linking external SSTable")
 		}
 		if elapsed := timeutil.Since(linkStart); elapsed > 5*time.Second {
 			log.Dev.Infof(ctx, "slow link of file %s span %s took %s", file.Path, restoringSubspan, elapsed)
 		}
+
+		lastRange.span = rangeSpan
+		lastRange.availableBytes = availableBytes
 
 		// Call testing knob after each file link, matching the old online restore path.
 		if restoreKnobs, ok := rd.FlowCtx.TestingKnobs().BackupRestoreTestingKnobs.(*sql.BackupRestoreTestingKnobs); ok {
