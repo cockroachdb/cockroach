@@ -326,7 +326,12 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) error {
 			} else if bd.sp.fixture.CompactionThreshold > 0 {
 				bd.t.L().Printf("%d compaction jobs succeeded, %d running", len(compSuccess), len(compRunning))
 				if len(compFailed) > 0 {
-					return errors.Newf("compaction jobs failed while running incrementals: %v", compFailed)
+					const msg = "compaction jobs failed while running incrementals: %v"
+					if len(compSuccess) > 0 {
+						bd.t.L().Errorf(msg, compFailed)
+					} else {
+						return errors.Newf(msg, compFailed)
+					}
 				}
 			}
 
@@ -345,7 +350,12 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) error {
 			if len(backupFailed) > 0 {
 				return errors.Newf("backup jobs failed while waiting completion: %v", backupFailed)
 			} else if len(compFailed) > 0 {
-				return errors.Newf("compaction jobs failed while waiting completion: %v", compFailed)
+				const msg = "compaction jobs failed while waiting completion: %v"
+				if len(compSuccess) > 0 {
+					bd.t.L().Errorf(msg, compFailed)
+				} else {
+					return errors.Newf(msg, compFailed)
+				}
 			} else if len(backupRunning) > 0 {
 				bd.t.L().Printf("waiting for %d backup jobs to finish", len(backupRunning))
 			} else if len(compRunning) > 0 {
