@@ -196,7 +196,7 @@ func (etc *externalSSTTestCluster) createExternalSSTableFile(
 func (etc *externalSSTTestCluster) linkExternalSSTableToFile(
 	ctx context.Context, startKey roachpb.Key, endKey roachpb.Key, URI string, fileName string,
 ) error {
-	errLink := etc.db.LinkExternalSSTable(ctx, roachpb.Span{
+	_, _, errLink := etc.db.LinkExternalSSTable(ctx, roachpb.Span{
 		Key:    startKey,
 		EndKey: endKey,
 	}, kvpb.LinkExternalSSTableRequest_ExternalFile{

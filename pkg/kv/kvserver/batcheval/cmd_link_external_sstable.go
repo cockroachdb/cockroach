@@ -59,6 +59,10 @@ func EvalLinkExternalSSTable(
 	s.ContainsEstimates++
 	ms.Add(s)
 
+	reply := resp.(*kvpb.LinkExternalSSTableResponse)
+	reply.RangeSpan = cArgs.EvalCtx.Desc().KeySpan().AsRawSpanWithNoLocals()
+	reply.AvailableBytes = cArgs.EvalCtx.GetMaxBytes(ctx) - cArgs.EvalCtx.GetMVCCStats().Total() - s.Total()
+
 	// Eval does not check for conflicts in the existing key space, as it assumes
 	// the client has sent the request at a timestamp above any requests in the
 	// key space.

@@ -3173,7 +3173,7 @@ func TestMergeQueueWithExternalFiles(t *testing.T) {
 			size, err := extStore.Size(ctx, fileName)
 			require.NoError(t, err)
 
-			err = s.DB().LinkExternalSSTable(ctx, roachpb.Span{
+			_, _, err = s.DB().LinkExternalSSTable(ctx, roachpb.Span{
 				Key:    writeKey,
 				EndKey: writeKey.Next(),
 			}, kvpb.LinkExternalSSTableRequest_ExternalFile{

@@ -656,7 +656,7 @@ func (rd *restoreDataProcessor) linkFiles(
 		}
 
 		linkStart := timeutil.Now()
-		if err := kvDB.LinkExternalSSTable(ctx, restoringSubspan, loc, batchTimestamp); err != nil {
+		if _, _, err := kvDB.LinkExternalSSTable(ctx, restoringSubspan, loc, batchTimestamp); err != nil {
 			return summary, errors.Wrap(err, "linking external SSTable")
 		}
 		if elapsed := timeutil.Since(linkStart); elapsed > 5*time.Second {

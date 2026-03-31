@@ -853,13 +853,15 @@ func (db *DB) AddSSTable(
 	return resp.RangeSpan, resp.AvailableBytes, nil
 }
 
-// LinkExternalSSTable links an external sst into the Pebble log-structured merge-tree.
+// LinkExternalSSTable links an external sst into the Pebble log-structured
+// merge-tree. It returns the span of the range that the SSTable was linked into
+// and the approximate number of bytes available in that range.
 func (db *DB) LinkExternalSSTable(
 	ctx context.Context,
 	span roachpb.Span,
 	file kvpb.LinkExternalSSTableRequest_ExternalFile,
 	batchTimestamp hlc.Timestamp,
-) error {
+) (roachpb.Span, int64, error) {
 	b := &Batch{Header: kvpb.Header{Timestamp: batchTimestamp}}
 	b.linkExternalSSTable(span, file)
 	err := getOneErr(db.Run(ctx, b), b)
@@ -867,23 +869,24 @@ func (db *DB) LinkExternalSSTable(
 		if m := (*kvpb.RangeKeyMismatchError)(nil); errors.As(err, &m) {
 			r, err := m.MismatchedRange()
 			if err != nil {
-				return err
+				return roachpb.Span{}, 0, err
 			}
 			// TODO(dt): iterate over all of all of m.Ranges, not just first, but
 			// ensure we cover all of `span` when we do.
 			lhs := roachpb.Span{Key: span.Key, EndKey: r.Desc.EndKey.AsRawKey()}
 			rhs := roachpb.Span{Key: lhs.EndKey, EndKey: span.EndKey}
-			if err := db.LinkExternalSSTable(ctx, lhs, file, batchTimestamp); err != nil {
-				return err
+			if _, _, err := db.LinkExternalSSTable(ctx, lhs, file, batchTimestamp); err != nil {
+				return roachpb.Span{}, 0, err
 			}
 			return db.LinkExternalSSTable(ctx, rhs, file, batchTimestamp)
 		}
-		return err
+		return roachpb.Span{}, 0, err
 	}
 	if l := len(b.response.Responses); l != 1 {
-		return errors.AssertionFailedf("expected single response, got %d", l)
+		return roachpb.Span{}, 0, errors.AssertionFailedf("expected single response, got %d", l)
 	}
-	return nil
+	resp := b.response.Responses[0].GetLinkExternalSstable()
+	return resp.RangeSpan, resp.AvailableBytes, nil
 }
 
 // AddSSTableAtBatchTimestamp links a file into the Pebble log-structured

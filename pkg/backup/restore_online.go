@@ -477,8 +477,9 @@ func sendRemoteAddSSTable(
 		MVCCStats:               fileStats,
 	}
 
-	return execCtx.ExecCfg().DB.LinkExternalSSTable(
+	_, _, err = execCtx.ExecCfg().DB.LinkExternalSSTable(
 		ctx, file.BackupFileEntrySpan, loc, batchTimestamp)
+	return err
 }
 
 // checkManifestsForOnlineCompat returns an error if the set of

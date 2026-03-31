@@ -4436,7 +4436,7 @@ func TestSplitWithExternalFilesFastStats(t *testing.T) {
 			size, err := extStore.Size(ctx, fileName)
 			require.NoError(t, err)
 
-			err = s.DB().LinkExternalSSTable(ctx, roachpb.Span{
+			_, _, err = s.DB().LinkExternalSSTable(ctx, roachpb.Span{
 				Key:    roachpb.Key("a"),
 				EndKey: roachpb.Key("d"),
 			}, kvpb.LinkExternalSSTableRequest_ExternalFile{
