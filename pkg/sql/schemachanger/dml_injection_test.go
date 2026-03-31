@@ -8,6 +8,7 @@ package schemachanger_test
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -145,6 +146,11 @@ type testCase struct {
 	// Optional: If you want a query to run at each stage, you can include it here.
 	// We don't evaluate the results; we simply assert that the query executes without errors.
 	query string
+	// expectedDMLErr, when non-empty, is a regexp that matches DML errors
+	// (INSERT/DELETE/UPDATE against the original columns) that are tolerated
+	// during schema change stages. Errors not matching this pattern still
+	// fail the test.
+	expectedDMLErr string
 }
 
 // Captures testCase before t.Parallel is called.
@@ -193,6 +199,14 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			setup:        []string{"CREATE SEQUENCE seq"},
 			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col INT NOT NULL DEFAULT nextval('seq')",
 			expectedErr:  "cannot evaluate scalar expressions containing sequence operations in this context",
+		},
+		{
+			// The REGCLASS default requires a catalog lookup during backfill, which
+			// fails. During rollback the column transitions WRITE_ONLY → DELETE_ONLY
+			// → ABSENT; concurrent DML must succeed throughout.
+			desc:         "add column default regclass",
+			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col INT NOT NULL DEFAULT ('tbl'::REGCLASS)::INT",
+			expectedErr:  "cannot evaluate scalar expressions using table lookups in this context",
 		},
 		{
 			desc:         "add column default serial rowid",
@@ -300,9 +314,10 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			schemaChange: "ALTER TABLE tbl DROP COLUMN new_col",
 		},
 		{
-			desc:         "add column virtual NOT NULL",
-			schemaChange: "ALTER TABLE tbl ADD COLUMN new_col TEXT NOT NULL AS (NULL::TEXT) VIRTUAL",
-			expectedErr:  "validation of column \"new_col\" NOT NULL failed on row: insert_phase_ordinal='pre-schema-change', operation_phase_ordinal='n/a', operation='n/a', val=1, new_col=NULL",
+			desc:           "add column virtual NOT NULL",
+			schemaChange:   "ALTER TABLE tbl ADD COLUMN new_col TEXT NOT NULL AS (NULL::TEXT) VIRTUAL",
+			expectedErr:    "validation of column \"new_col\" NOT NULL failed on row: insert_phase_ordinal='pre-schema-change', operation_phase_ordinal='n/a', operation='n/a', val=1, new_col=NULL",
+			expectedDMLErr: "NOT NULL",
 		},
 		{
 			desc:         "add column virtual",
@@ -601,6 +616,10 @@ func TestAlterTableDMLInjection(t *testing.T) {
 			currentPOForBackFill.Store(phaseOrdinal{})
 			var beforeBackfillCallbackDone, afterBackfillCallbackDone atomic.Bool
 			var backfillCallback func(isAfter bool)
+			var expectedDMLRe *regexp.Regexp
+			if tc.expectedDMLErr != "" {
+				expectedDMLRe = regexp.MustCompile(tc.expectedDMLErr)
+			}
 			testCluster := serverutils.StartCluster(t, 1, base.TestClusterArgs{
 				ServerArgs: base.TestServerArgs{
 					Knobs: base.TestingKnobs{
@@ -642,8 +661,46 @@ func TestAlterTableDMLInjection(t *testing.T) {
 									return nil
 								}
 
-								// Cannot verify DML injection for unsupported schema changes.
+								// For schema changes expected to error we cannot run the
+								// full DML-verification matrix, but we still inject basic
+								// DML to ensure concurrent operations do not get unexpected
+								// errors during failure/rollback.
 								if tc.expectedErr != "" {
+									s := p.Stages[stageIdx]
+									isRollback := p.InRollback || p.CurrentState.InRollback
+									stageDesc := fmt.Sprintf(
+										"%s:%d(rollback=%t)",
+										s.Phase, s.Ordinal, isRollback,
+									)
+									reportDMLErr := func(op string, err error) {
+										if err == nil {
+											return
+										}
+										if expectedDMLRe != nil && expectedDMLRe.MatchString(err.Error()) {
+											t.Logf("%s: %s failed (expected): %v", stageDesc, op, err)
+											return
+										}
+										// Log as t.Errorf to fail the test, but continue running
+										// this goroutine to prevent hangs.
+										t.Errorf("%s: %s failed: %v", stageDesc, op, err)
+									}
+									dmlKey := fmt.Sprintf("err-dml-%s", stageDesc)
+									_, insertErr := sqlDB.DB.ExecContext(
+										ctx, insert, dmlKey, na, na, valInitial,
+									)
+									reportDMLErr("INSERT", insertErr)
+									_, deleteErr := sqlDB.DB.ExecContext(
+										ctx,
+										`DELETE FROM tbl WHERE insert_phase_ordinal = $1`,
+										dmlKey,
+									)
+									reportDMLErr("DELETE", deleteErr)
+									_, updateErr := sqlDB.DB.ExecContext(
+										ctx,
+										`UPDATE tbl SET val = val + 1 WHERE insert_phase_ordinal = $1`,
+										dmlKey,
+									)
+									reportDMLErr("UPDATE", updateErr)
 									return nil
 								}
 
