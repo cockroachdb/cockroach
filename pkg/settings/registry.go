@@ -286,6 +286,7 @@ var retiredSettings = map[InternalKey]struct{}{
 	"kvadmission.export_request_elastic_control.enabled":       {},
 	"changefeed.shutdown_checkpoint.enabled":                   {},
 	"changefeed.aggregator.heartbeat":                          {},
+	"log.channel_compatibility_mode.enabled":                   {},
 }
 
 // grandfatheredDefaultSettings is the list of "grandfathered" existing sql.defaults
