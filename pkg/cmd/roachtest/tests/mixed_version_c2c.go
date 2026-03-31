@@ -22,8 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -219,17 +217,9 @@ func (cm *c2cMixed) SetupHook(ctx context.Context) {
 
 			l.Printf("generating pgurl")
 			srcNode := cm.c.Node(1)
-			srcClusterSetting := install.MakeClusterSettings()
-			addr, err := cm.c.ExternalPGUrl(ctx, l, srcNode, roachprod.PGURLOptions{
-				VirtualClusterName: install.SystemInterfaceName,
-			})
+			pgURL, err := makeInlineCertsURL(ctx, cm.t, l, cm.c, srcNode)
 			if err != nil {
-				return err
-			}
-
-			pgURL, err := copyPGCertsAndMakeURL(ctx, cm.t, cm.c, srcNode, srcClusterSetting.PGUrlCertsDir, addr[0])
-			if err != nil {
-				return err
+				return errors.Wrap(err, "generating pgurl")
 			}
 
 			sourceInfoChan <- sourceTenantInfo{name: h.Tenant.Descriptor.Name, pgurl: pgURL}
