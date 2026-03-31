@@ -283,14 +283,8 @@ func TestReplicaGCQueueHandlesStagingError(t *testing.T) {
 	_, err = store.GetReplica(desc.RangeID)
 	require.NoError(t, err, "replica should survive failed getOrCreateReplica removal")
 
-	// Remove error injection, force a GC scan — should succeed.
+	// Remove error injection, force a GC scan — should succeed synchronously.
 	shouldFail.Store(false)
-
-	testutils.SucceedsSoon(t, func() error {
-		store.MustForceReplicaGCScanAndProcess()
-		if store.GetReplicaIfExists(desc.RangeID) != nil {
-			return errors.New("expected replica removal")
-		}
-		return nil
-	})
+	store.MustForceReplicaGCScanAndProcess()
+	require.Nil(t, store.GetReplicaIfExists(desc.RangeID), "replica should be removed")
 }
