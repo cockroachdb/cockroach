@@ -218,7 +218,7 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 
 	// This test is known to flake. E.g. in #160265, a request raced in after
 	// clearing the load stats and before asserting they are 0.
-	skip.UnderDeadlock(t, "timing sensitive")
+	skip.UnderDuress(t, "timing sensitive")
 
 	ctx := context.Background()
 	args := base.TestClusterArgs{
@@ -309,6 +309,13 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 			lhRepl.Desc().Replicas().Descriptors(),
 			lhRepl.GetLeaseAppliedIndex(),
 		))
+		// Wait for raftMu on the followers to ensure that handleRaftReady has
+		// finished, including the load stats recording that happens after the
+		// applied index bump. See #161600.
+		followerRepl1.raftMu.Lock()
+		followerRepl1.raftMu.Unlock() //lint:ignore SA2001 empty critical section
+		followerRepl2.raftMu.Lock()
+		followerRepl2.raftMu.Unlock() //lint:ignore SA2001 empty critical section
 
 		requestsAfter := lhRepl.loadStats.TestingGetSum(load.Requests)
 		lhWritesAfter := lhRepl.loadStats.TestingGetSum(load.WriteKeys)
