@@ -656,11 +656,32 @@ func (rd *restoreDataProcessor) linkFiles(
 		}
 
 		linkStart := timeutil.Now()
-		if _, _, err := kvDB.LinkExternalSSTable(ctx, restoringSubspan, loc, batchTimestamp); err != nil {
+		rangeSpan, availableBytes, err := kvDB.LinkExternalSSTable(ctx, restoringSubspan, loc, batchTimestamp)
+		if err != nil {
 			return summary, errors.Wrap(err, "linking external SSTable")
 		}
 		if elapsed := timeutil.Since(linkStart); elapsed > 5*time.Second {
 			log.Dev.Infof(ctx, "slow link of file %s span %s took %s", file.Path, restoringSubspan, elapsed)
+		}
+
+		// If the range we just linked into is nearly full and the next file would
+		// land in the same range, split at its start key so subsequent links go to
+		// a new, empty range.
+		const splitThreshold = 64 << 20 // 64 MB
+		if availableBytes < splitThreshold && i+1 < len(entry.Files) {
+			nextFile := &entry.Files[i+1]
+			nextSpan, rewriteErr := rewriteSpan(kr, nextFile.BackupFileEntrySpan.Intersect(entry.Span).Clone(), entry.ElidedPrefix)
+			if rewriteErr == nil && rangeSpan.ContainsKey(nextSpan.Key) {
+				splitAt, splitErr := keys.EnsureSafeSplitKey(nextSpan.Key)
+				if splitErr == nil {
+					expire := hlc.Timestamp{WallTime: timeutil.Now().Add(10 * time.Minute).UnixNano()}
+					if splitErr = kvDB.AdminSplit(ctx, splitAt, expire); splitErr != nil {
+						log.Dev.Warningf(ctx, "pre-link split at %s failed: %v", splitAt, splitErr)
+					} else {
+						log.VEventf(ctx, 2, "split range at %s before next file (available %d bytes)", splitAt, availableBytes)
+					}
+				}
+			}
 		}
 
 		// Call testing knob after each file link, matching the old online restore path.
