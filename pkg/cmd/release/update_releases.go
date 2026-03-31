@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/version"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
@@ -81,6 +82,16 @@ func updateReleasesFiles(_ *cobra.Command, _ []string) (retErr error) {
 	if err := validateReleaseData(result); err != nil {
 		return fmt.Errorf("failed to validate downloaded data: %w", err)
 	}
+
+	// Preserve unreleased series from the existing file before adding
+	// the current release. This prevents losing entries for development
+	// series that have been branched but don't have GA releases yet.
+	existing, err := loadExistingReleaseData()
+	if err != nil {
+		return err
+	}
+	preserveUnreleasedSeries(result, existing)
+
 	currentVersion := version.MustParse(build.BinaryVersion())
 	addCurrentRelease(result, &currentVersion)
 
@@ -89,11 +100,12 @@ func updateReleasesFiles(_ *cobra.Command, _ []string) (retErr error) {
 		return err
 	}
 	currentSeries := currentVersion.Format("%X.%Y")
-	predecessor := result[result[currentSeries].Predecessor].Latest
+	predecessor := findLatestReleasedPredecessor(result, currentSeries)
 	if predecessor == "" {
 		return fmt.Errorf("could not determine predecessor version for version %+v", currentVersion)
 	}
-	prePredecessor := result[result[result[currentSeries].Predecessor].Predecessor].Latest
+	predecessorSeries := version.MustParse("v" + predecessor).Format("%X.%Y")
+	prePredecessor := findLatestReleasedPredecessor(result, predecessorSeries)
 	if prePredecessor == "" {
 		return fmt.Errorf("could not determine predecessor's predecessor version for version %+v", currentVersion)
 	}
@@ -132,11 +144,6 @@ func processReleaseData(data []Release) map[string]release.Series {
 		if v.IsPrerelease() && !strings.HasPrefix(v.Format("%P"), "rc") {
 			continue
 		}
-		// Skip cloud-only releases, because the binaries are not yet publicly available.
-		if r.CloudOnly {
-			continue
-		}
-
 		filtered = append(filtered, r)
 	}
 
@@ -179,32 +186,122 @@ func processReleaseData(data []Release) map[string]release.Series {
 	return result
 }
 
-// addCurrentRelease adds an entry to the `data` map corresponding to
-// the binary version of the current build, if one does not exist. The
-// new entry will have no `Latest` information as, in that case, the
-// current release series is still in development.
+// addCurrentRelease adds or updates an entry in the `data` map for the
+// current binary version's release series. If the series already has
+// actual releases (non-empty Latest), it is left unchanged. Otherwise,
+// the predecessor is (re)calculated from the highest series below the
+// current version, which corrects stale predecessors from previous runs
+// and handles newly added entries.
 func addCurrentRelease(data map[string]release.Series, currentVersion *version.Version) {
 	name := currentVersion.Format("%X.%Y")
-	if _, ok := data[name]; ok {
+	if s, ok := data[name]; ok && s.Latest != "" {
+		// Series already exists with actual releases; nothing to do.
 		return
 	}
 
-	var latestVersion version.Version
-	for _, d := range data {
-		v := version.MustParse("v" + d.Latest)
-		if latestVersion.Empty() {
-			latestVersion = v
-		}
+	currentParsed := version.MustParse("v" + name + ".0")
 
-		if v.AtLeast(latestVersion) {
-			latestVersion = v
+	// Find the highest series below the current version to use as
+	// predecessor. This considers both released and unreleased series,
+	// so that intermediate unreleased series are correctly chained.
+	var predecessorName string
+	for seriesName := range data {
+		v, err := version.Parse("v" + seriesName + ".0")
+		if err != nil {
+			continue
+		}
+		if v.Compare(currentParsed) >= 0 {
+			continue
+		}
+		if predecessorName == "" {
+			predecessorName = seriesName
+			continue
+		}
+		prev := version.MustParse("v" + predecessorName + ".0")
+		if v.Compare(prev) > 0 {
+			predecessorName = seriesName
 		}
 	}
 
-	// Assume that the predecessor of the current version is the latest
-	// released series.
 	data[name] = release.Series{
-		Predecessor: latestVersion.Format("%X.%Y"),
+		Predecessor: predecessorName,
+	}
+}
+
+// findLatestReleasedPredecessor walks the predecessor chain of the
+// given series, returning the Latest version of the first released
+// predecessor found. Unreleased series (those with no Latest) are
+// skipped. Returns empty string if none is found.
+func findLatestReleasedPredecessor(data map[string]release.Series, series string) string {
+	visited := map[string]bool{}
+	for cur := series; cur != "" && !visited[cur]; {
+		visited[cur] = true
+		s, ok := data[cur]
+		if !ok {
+			return ""
+		}
+		if cur != series && s.Latest != "" {
+			return s.Latest
+		}
+		cur = s.Predecessor
+	}
+	return ""
+}
+
+// loadExistingReleaseData reads the current cockroach_releases.yaml
+// file and returns the parsed release data. Returns nil if the file
+// does not exist.
+func loadExistingReleaseData() (map[string]release.Series, error) {
+	return loadReleaseDataFromPath(releaseDataFile)
+}
+
+// loadReleaseDataFromPath reads release data from the given file path.
+// Returns nil, nil if the file does not exist.
+func loadReleaseDataFromPath(path string) (map[string]release.Series, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("could not read existing release data: %w", err)
+	}
+
+	var result map[string]release.Series
+	if err := yaml.Unmarshal(data, &result); err != nil { //nolint:yaml
+		return nil, fmt.Errorf("could not parse existing release data: %w", err)
+	}
+	return result, nil
+}
+
+// preserveUnreleasedSeries merges unreleased series entries from the
+// existing release data file into the newly generated data. This
+// prevents losing entries for development series that have been
+// branched but don't have GA releases yet.
+func preserveUnreleasedSeries(data map[string]release.Series, existing map[string]release.Series) {
+	// Iterate until no new entries are added, so that chains of
+	// unreleased series (e.g. 26.2 → 26.3 where neither has releases)
+	// are fully resolved regardless of map iteration order.
+	for changed := true; changed; {
+		changed = false
+		for name, series := range existing {
+			if _, ok := data[name]; ok {
+				continue
+			}
+			if series.Latest != "" {
+				// Has releases; should come from downloaded data.
+				continue
+			}
+			if series.Predecessor == "" {
+				continue
+			}
+			if _, ok := data[series.Predecessor]; !ok {
+				// Predecessor not yet in data; may be added in a
+				// subsequent iteration.
+				continue
+			}
+			data[name] = series
+			changed = true
+		}
 	}
 }
 
