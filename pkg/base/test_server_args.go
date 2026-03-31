@@ -325,6 +325,13 @@ type TestClusterArgs struct {
 	// that field, RestartServer will return an error to guide the developer
 	// towards a non-flaky pattern.
 	ReusableListenerReg *listenerutil.ListenerRegistry
+
+	// EnablePartitioner, when true, installs RPC interceptors on each node that
+	// allow injecting network partitions via TestCluster.Partitioner(). This is
+	// required for CrashNode and tests that use the Partitioner directly. Because
+	// the interceptors overwrite RPC ContextTestingKnobs' client interceptors,
+	// this should only be enabled by tests that need it.
+	EnablePartitioner bool
 }
 
 // DefaultTestTenantOptions specifies the conditions under which a
