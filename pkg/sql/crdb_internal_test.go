@@ -209,18 +209,8 @@ func TestOldBitColumnMetadata(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		// This test directly manipulates descriptors via KV and relies on
-		// TestingDisableTableLeases to make those changes immediately visible.
-		// This is incompatible with external process virtual clusters where
-		// the lease disable doesn't take effect.
-		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(166311),
-	})
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
-
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer lease.TestingDisableTableLeases()()
 
 	if _, err := sqlDB.Exec(`
 CREATE DATABASE t;
@@ -268,10 +258,19 @@ CREATE TABLE t.test (k INT);
 	tableDesc.PrimaryIndex.StoreColumnIDs = append(tableDesc.PrimaryIndex.StoreColumnIDs, col.ID)
 	tableDesc.PrimaryIndex.StoreColumnNames = append(tableDesc.PrimaryIndex.StoreColumnNames, col.Name)
 
-	// Write the modified descriptor.
+	// Write the modified descriptor. Bump the version so the lease manager
+	// recognizes the change.
+	tableDesc.Version++
 	if err := kvDB.Txn(context.Background(), func(ctx context.Context, txn *kv.Txn) error {
 		return txn.Put(ctx, catalogkeys.MakeDescMetadataKey(s.Codec(), tableDesc.ID), tableDesc.DescriptorProto())
 	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Force the lease manager to acquire a fresh descriptor from the store,
+	// since we wrote it directly via KV above.
+	lm := s.LeaseManager().(*lease.Manager)
+	if err := lm.AcquireFreshestFromStore(ctx, tableDesc.GetID()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -431,13 +430,7 @@ func TestInvalidObjects(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params := base.TestServerArgs{
-		// This test directly manipulates descriptors via KV and relies on
-		// TestingDisableTableLeases to make those changes immediately visible.
-		// This is incompatible with external process virtual clusters where
-		// the lease disable doesn't take effect.
-		DefaultTestTenant: base.TestDoesNotWorkWithExternalProcessMode(166311),
-	}
+	params := base.TestServerArgs{}
 	params.Knobs = base.TestingKnobs{
 		Store: &kvserver.StoreTestingKnobs{
 			DisableMergeQueue: true,
@@ -445,10 +438,6 @@ func TestInvalidObjects(t *testing.T) {
 	}
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
-
-	// The descriptor changes made must have an immediate effect
-	// so disable leases on tables.
-	defer lease.TestingDisableTableLeases()()
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
 
