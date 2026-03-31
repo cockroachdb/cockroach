@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/externalcatalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/externalcatalog/externalpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
@@ -156,7 +157,22 @@ func (r *replicationStreamManagerImpl) StartReplicationStreamForTables(
 		SourceClusterID:      r.evalCtx.ClusterID,
 		ReplicationStartTime: replicationStartTime,
 		ExternalCatalog:      externalCatalog,
+		TableDescriptors:     tableDescriptorMapFromCatalog(externalCatalog, req.TableNames),
+		TypeDescriptors:      externalCatalog.Types,
 	}, nil
+}
+
+// tableDescriptorMapFromCatalog builds the deprecated map[string]TableDescriptor
+// (proto field 7) so that 24.3 consumers can read table descriptors. The map
+// key is the table name from the request, matching the 24.3 wire format.
+func tableDescriptorMapFromCatalog(
+	catalog externalpb.ExternalCatalog, tableNames []string,
+) map[string]descpb.TableDescriptor {
+	m := make(map[string]descpb.TableDescriptor, len(catalog.Tables))
+	for i, td := range catalog.Tables {
+		m[tableNames[i]] = td
+	}
+	return m
 }
 
 func maybeAuthorizeReverseStream(
