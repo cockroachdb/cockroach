@@ -3646,6 +3646,7 @@ logical_replication_create_table_options ::=
 	| 'LABEL' '=' string_or_placeholder
 	| 'UNIDIRECTIONAL'
 	| 'BIDIRECTIONAL' 'ON' string_or_placeholder
+	| 'SKIP' 'FOREIGN' 'KEYS'
 
 check_external_connection_options ::=
 	'TRANSFER' '=' string_or_placeholder

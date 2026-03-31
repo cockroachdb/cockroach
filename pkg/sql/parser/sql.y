@@ -5033,6 +5033,10 @@ logical_replication_create_table_options:
   {
    $$.val = &tree.LogicalReplicationOptions{BidirectionalURI: $3.expr()}
   }
+| SKIP FOREIGN KEYS
+  {
+   $$.val = &tree.LogicalReplicationOptions{SkipForeignKeys: tree.MakeDBool(true)}
+  }
 
 
 // %Help: CREATE VIRTUAL CLUSTER - create a new virtual cluster

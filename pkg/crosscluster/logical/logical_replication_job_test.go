@@ -1680,6 +1680,67 @@ func TestForeignKeyConstraints(t *testing.T) {
 	})
 }
 
+func TestCreateTableSkipForeignKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	tc, srv, sqlDBs, _ := setupServerWithNumDBs(t, ctx, testClusterBaseClusterArgs, 1, 1)
+	defer tc.Stopper().Stop(ctx)
+
+	sqlA := sqlDBs[0]
+	aURL := replicationtestutils.GetExternalConnectionURI(t, srv, srv, serverutils.DBName("a"))
+
+	// Create a parent and child table with a FK constraint on the source.
+	sqlA.Exec(t, "CREATE TABLE parent(pk INT PRIMARY KEY)")
+	sqlA.Exec(t, "CREATE TABLE child(pk INT PRIMARY KEY, fk INT REFERENCES parent(pk))")
+	sqlA.Exec(t, "INSERT INTO parent VALUES (1), (2), (3)")
+	sqlA.Exec(t, "INSERT INTO child VALUES (1, 1), (2, 2)")
+
+	testutils.RunTrueAndFalse(t, "skip-fks", func(t *testing.T, skipFKs bool) {
+		dbName := "db_with_fks"
+		if skipFKs {
+			dbName = "db_skip_fks"
+		}
+		sqlA.Exec(t, fmt.Sprintf("CREATE DATABASE %s", dbName))
+		destDB := sqlutils.MakeSQLRunner(srv.SQLConn(t, serverutils.DBName(dbName)))
+
+		stmt := fmt.Sprintf(
+			"CREATE LOGICALLY REPLICATED TABLE %s.public.child FROM TABLE child ON $1 WITH UNIDIRECTIONAL",
+			dbName)
+		if skipFKs {
+			stmt += ", SKIP FOREIGN KEYS"
+		}
+
+		if !skipFKs {
+			destDB.ExpectErr(t, "invalid outbound foreign key", stmt, aURL.String())
+			return
+		}
+
+		var jobID jobspb.JobID
+		destDB.QueryRow(t, stmt, aURL.String()).Scan(&jobID)
+
+		WaitUntilReplicatedTime(t, srv.Clock().Now(), destDB, jobID)
+		destDB.CheckQueryResults(t, "SELECT * FROM child ORDER BY pk", [][]string{{"1", "1"}, {"2", "2"}})
+
+		// Verify the destination table has no FK constraints.
+		destDB.CheckQueryResults(t,
+			"SELECT count(*) FROM information_schema.table_constraints WHERE table_name = 'child' AND constraint_type = 'FOREIGN KEY'",
+			[][]string{{"0"}})
+
+		// Insert more rows on the source and verify they replicate.
+		sqlA.Exec(t, "INSERT INTO parent VALUES (4)")
+		sqlA.Exec(t, "INSERT INTO child VALUES (3, 3)")
+		WaitUntilReplicatedTime(t, srv.Clock().Now(), destDB, jobID)
+		destDB.CheckQueryResults(t, "SELECT * FROM child ORDER BY pk", [][]string{{"1", "1"}, {"2", "2"}, {"3", "3"}})
+
+		destDB.Exec(t, "CANCEL JOB $1", jobID)
+		jobutils.WaitForJobToCancel(t, destDB, jobID)
+	})
+}
+
 func setupServerWithNumDBs(
 	t *testing.T, ctx context.Context, clusterArgs base.TestClusterArgs, numNodes int, numDBs int,
 ) (
