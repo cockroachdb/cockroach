@@ -148,8 +148,7 @@ DECLARE
 BEGIN
 	x := 10;
 	WHILE x > 0
-	AND x
-		< 100 LOOP
+	AND x < 100 LOOP
 		x := x - 1;
 		x := x - 2;
 	END LOOP;
