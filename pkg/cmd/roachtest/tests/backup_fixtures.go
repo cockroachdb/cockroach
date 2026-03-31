@@ -326,7 +326,7 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) error {
 			} else if bd.sp.fixture.CompactionThreshold > 0 {
 				bd.t.L().Printf("%d compaction jobs succeeded, %d running", len(compSuccess), len(compRunning))
 				if len(compFailed) > 0 {
-					return errors.Newf("compaction jobs failed while running incrementals: %v", compFailed)
+					bd.t.L().Errorf("compaction jobs failed while running incrementals: %v", compFailed)
 				}
 			}
 
@@ -345,7 +345,7 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) error {
 			if len(backupFailed) > 0 {
 				return errors.Newf("backup jobs failed while waiting completion: %v", backupFailed)
 			} else if len(compFailed) > 0 {
-				return errors.Newf("compaction jobs failed while waiting completion: %v", compFailed)
+				bd.t.L().Errorf("compaction jobs failed while waiting completion: %v", compFailed)
 			} else if len(backupRunning) > 0 {
 				bd.t.L().Printf("waiting for %d backup jobs to finish", len(backupRunning))
 			} else if len(compRunning) > 0 {
@@ -354,6 +354,18 @@ func (bd *backupDriver) monitorBackups(ctx context.Context) error {
 				state = Done
 			}
 		}
+	}
+
+	// Do a final accounting of compactions to determine if the test as a whole should fail.
+	compSuccess, _, compFailed, err := bd.compactionJobStates(sql)
+	if err != nil {
+		return err
+	}
+	if len(compSuccess) < len(compFailed) {
+		return errors.Newf(
+			"more compaction jobs failed than succeeded (%d failed, %d succeeded), failures: %v",
+			len(compFailed), len(compSuccess), compFailed,
+		)
 	}
 	return nil
 }
