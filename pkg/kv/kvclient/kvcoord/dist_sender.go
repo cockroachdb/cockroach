@@ -447,6 +447,12 @@ var NonTransactionalWritesNotIdempotent = settings.RegisterBoolSetting(
 	false,
 )
 
+// randomizeLeaseholderOnContextErrorDuration controls the timeout after which
+// we deliberately randomize the leaseholder in a cached range descriptor after
+// seeing context errors (deadline exceeded, context canceled, etc.) to force
+// us to contact a healthy replica.
+const randomizeLeaseholderOnContextErrorDuration = 2 * time.Second
+
 // DistSenderMetrics is the set of metrics for a given distributed sender.
 type DistSenderMetrics struct {
 	BatchCount                         *metric.Counter
@@ -2403,6 +2409,25 @@ func (ds *DistSender) sendPartialBatch(
 		log.KvExec.Fatal(ctx, "exited retry loop without an error or early exit")
 	}
 
+	// If a context error occurred and the cached leaseholder hasn't been heard
+	// from in a while, randomize the leaseholder. That way, if the cached
+	// leaseholder is "bad" (overloaded, mutex deadlock, etc), future requests
+	// have a chance at discovering the actual leaseholder. Evicting the cached
+	// leaseholder or entry would not necessarily achieve this, since on the
+	// next attempt we would preferably try the nearest locality replica, which
+	// may be the non-responsive one.
+	//
+	// See the documentation for the function
+	// (*EvictionToken).RandomizeLeaseholder() for an explanation.
+	if ctx.Err() != nil && routingTok.Valid() &&
+		routingTok.SinceLeaseholderContacted() >= randomizeLeaseholderOnContextErrorDuration {
+
+		log.VEventf(ctx, 1,
+			"cached descriptor %s that last contacted leaseholder %s ago saw context error, randomizing the leaseholder",
+			routingTok.Desc(), routingTok.SinceLeaseholderContacted())
+		routingTok.RandomizeLeaseholder(ctx)
+	}
+
 	return response{pErr: pErr}
 }
 
@@ -2974,6 +2999,10 @@ func (ds *DistSender) sendToReplicas(
 						// routing information not exposed by the KV API.
 						br.RangeInfos = nil
 					}
+				} else {
+					// The request that used this range cache entry successfully
+					// contacted the leaseholder.
+					routing.MarkLeaseholderContacted()
 				}
 
 				if ds.kvInterceptor != nil {

@@ -1861,6 +1861,115 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 	}
 }
 
+// TestEventuallyRecoverFromLeaseholderContextError verifies that upon
+// encountering a context error, the DistSender will eventually randomize the
+// leaseholder for a range descriptor cache entry to try to contact a healthy
+// replica.
+func TestEventuallyRecoverFromLeaseholderContextError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClockForTesting(nil)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+	for _, n := range testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors() {
+		require.NoError(t, g.AddInfoProto(
+			gossip.MakeNodeIDKey(n.NodeID),
+			newNodeDesc(n.NodeID),
+			gossip.NodeDescriptorTTL,
+		))
+	}
+
+	var sendCtx context.Context
+	var cancel context.CancelFunc
+	originalLeaseholder := testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors()[0]
+	testFn := func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+		switch ba.Replica {
+		case originalLeaseholder:
+			// We wish to create an artificial context error in the original
+			// leaseholder replica.
+			cancel()
+			return nil, sendCtx.Err()
+		default:
+			return ba.CreateReply(), nil
+		}
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:             clock,
+		NodeDescs:         g,
+		Stopper:           stopper,
+		TransportFactory:  adaptSimpleTransport(testFn),
+		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+		Settings:          cluster.MakeTestingClusterSettings(),
+	}
+	ds := NewDistSender(cfg)
+
+	// Set the clock for the range cache to be manual.
+	manualClock := hlc.NewHybridManualClock()
+	ds.rangeCache.TestingSetManualClock(manualClock)
+
+	// Pre-populate the range cache with a known leaseholder.
+	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
+		Desc:  testUserRangeDescriptor3Replicas,
+		Lease: roachpb.Lease{Replica: originalLeaseholder, Sequence: 1},
+	})
+
+	// Do a get to try to contact a replica, this should fail with a context
+	// canceled error.
+	tracer := tracing.NewTracer()
+	logCtx, getLogs := tracing.ContextWithRecordingSpan(ctx, tracer, "send")
+	sendCtx, cancel = context.WithCancel(logCtx)
+	defer cancel()
+	get := kvpb.NewGet(roachpb.Key("a"))
+	_, pErr := kv.SendWrapped(sendCtx, ds, get)
+	require.Error(t, sendCtx.Err(), pErr.GoError())
+
+	// Check that the logs report that the leaseholder wasn't randomized.
+	logs := getLogs()
+	_, ok := logs.FindLogMessage("randomizing the leaseholder")
+	require.False(t, ok)
+
+	// Advance the clock to ensure that on the next context error, enough time
+	// would have elapsed.
+	manualClock.Increment(randomizeLeaseholderOnContextErrorDuration.Nanoseconds())
+
+	// Do a get again to try to contact a replica, this should fail with a
+	// context canceled error.
+	tracer = tracing.NewTracer()
+	logCtx, getLogs = tracing.ContextWithRecordingSpan(ctx, tracer, "send")
+	sendCtx, cancel = context.WithCancel(logCtx)
+	defer cancel()
+	get = kvpb.NewGet(roachpb.Key("a"))
+	_, pErr = kv.SendWrapped(sendCtx, ds, get)
+	require.Error(t, pErr.GoError(), sendCtx.Err())
+
+	// Check that the logs report that this time, the leaseholder was randomized.
+	logs = getLogs()
+	_, ok = logs.FindLogMessage("randomizing the leaseholder")
+	require.True(t, ok)
+
+	// Verify the cache was updated with a different speculative leaseholder.
+	rng, err := ds.rangeCache.TestingGetCached(
+		ctx, testUserRangeDescriptor3Replicas.StartKey, false, roachpb.LAG_BY_CLUSTER_SETTING)
+	require.NoError(t, err)
+	require.False(t, rng.Lease.Empty())
+	require.NotEqual(t, originalLeaseholder, rng.Lease.Replica)
+
+	// Do a get to try to contact the replica, this should succeed as we try a
+	// different replica.
+	sendCtx, cancel = context.WithCancel(ctx)
+	defer cancel()
+	get = kvpb.NewGet(roachpb.Key("a"))
+	_, pErr = kv.SendWrapped(sendCtx, ds, get)
+	require.NoError(t, pErr.GoError())
+}
+
 // TestRetryOnWrongReplicaError sets up a DistSender on a minimal gossip
 // network and a mock of Send, and verifies that the DistSender correctly
 // retries upon encountering a stale entry in its range descriptor cache.

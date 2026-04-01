@@ -9,9 +9,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/biogo/store/llrb"
@@ -22,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -143,6 +146,9 @@ type RangeCache struct {
 		syncutil.RWMutex
 		cache *cache.OrderedCache
 	}
+	// clock is the source of time for this range cache. This is mocked in unit
+	// tests to make timing dependent tests deterministic.
+	clock hlc.WallClock
 	// lookupRequests stores all inflight requests retrieving range
 	// descriptors from the database. It allows multiple RangeDescriptorDB
 	// lookup requests for the same inferred range descriptor to be
@@ -234,7 +240,7 @@ func NewRangeCache(
 	st *cluster.Settings, db RangeDescriptorDB, size func() int64, stopper *stop.Stopper,
 ) *RangeCache {
 	rdc := &RangeCache{
-		st: st, db: db, stopper: stopper,
+		st: st, db: db, stopper: stopper, clock: timeutil.DefaultTimeSource{},
 		lookupRequests: singleflight.NewGroup("range lookup", "lookup"),
 	}
 	rdc.rangeCache.cache = cache.NewOrderedCache(cache.Config{
@@ -435,7 +441,8 @@ func (et *EvictionToken) SyncTokenAndMaybeUpdateCache(
 		return false
 	}
 
-	updated, updatedLeaseholder, newEntry := cachedEntry.maybeUpdate(ctx, l, rangeDesc)
+	updated, updatedLeaseholder, newEntry := cachedEntry.maybeUpdate(
+		ctx, l, rangeDesc, rdc.clock.Now().UnixNano())
 	if !updated {
 		// The cachedEntry wasn't updated; no need to replace it with newEntry in
 		// the RangeCache.
@@ -549,6 +556,61 @@ func (et *EvictionToken) RangeInfo() roachpb.RangeInfo {
 		return roachpb.RangeInfo{}
 	}
 	return et.entry.toRangeInfo()
+}
+
+// RandomizeLeaseholder selects a random voting replica as the speculative
+// leaseholder for the range cache entry that is different from the current
+// one, if any.
+//
+// NB: this was added because there was an issue (#163393) in the DistSender
+// where it was possible that a range cache entry was never updated due to
+// stalls, timeouts, or context cancellations. Normally, the DistSender
+// ReplicaCircuitBreakers would prevent this by tripping broken replicas. But
+// they aren't considered production ready yet to be enabled for all replicas.
+// See #119919 and #121206.
+//
+// This is a simple solution for that issue on the level of the range cache.
+// The idea is: if a context cancellation occurs, check when the range cache
+// was last able to successfully evaluate a request using the current
+// leaseholder. If it was more than a certain duration, then we randomly select
+// a different replica as a speculative leaseholder that is different from the
+// current one. This makes sure that the next request for this range contacts a
+// different replica. This would force us to either discover the new leaseholder
+// if it has moved to a different replica, or learn that our cache entry is
+// stale.
+func (et *EvictionToken) RandomizeLeaseholder(ctx context.Context) {
+	if !et.Valid() || len(et.entry.desc.Replicas().VoterDescriptors()) <= 1 {
+		return
+	}
+
+	et.rdc.rangeCache.Lock()
+	defer et.rdc.rangeCache.Unlock()
+
+	stillValid, cachedEntry, rawEntry := et.syncRLocked(ctx)
+	if !stillValid {
+		return
+	}
+	newEntry := cachedEntry.randomizeLeaseholder(et.rdc.clock.Now().UnixNano())
+	et.entry = newEntry
+	et.rdc.swapEntryLocked(ctx, rawEntry, newEntry)
+}
+
+// MarkLeaseholderContacted informs the cached entry backing this token that a
+// leaseholder for this range was successfully contacted.
+func (et *EvictionToken) MarkLeaseholderContacted() {
+	if !et.Valid() {
+		return
+	}
+	et.entry.updateLastLeaseholderContacted(et.rdc.clock.Now().UnixNano())
+}
+
+// SinceLeaseholderContacted returns the time elapsed since the leaseholder for
+// this range was successfully used to evaluate a request.
+func (et *EvictionToken) SinceLeaseholderContacted() time.Duration {
+	if !et.Valid() {
+		return 0
+	}
+	return et.entry.sinceLeaseholderContacted(et.rdc.clock.Now().UnixNano())
 }
 
 // LookupWithEvictionToken attempts to locate a descriptor, and possibly also a
@@ -910,13 +972,15 @@ func tryLookupImpl(
 	// We want to insert a new cacheEntry, possibly with a speculativeDesc.
 	// Create the entry based on the lookup and try and insert it into the
 	// cache.
-	newEntry := cacheEntry{
+	currentNanos := rc.clock.Now().UnixNano()
+	newEntry := newCacheEntry(cacheEntryData{
 		desc: rs[0],
 		// We don't have any lease information.
 		lease: roachpb.Lease{},
 		// We don't know the closed timestamp policy.
 		closedts: unknownClosedTimestampPolicy,
-	}
+	}, currentNanos)
+
 	// speculativeDesc comes from intents. Being uncommitted, it is speculative.
 	// We reset its generation to indicate this fact and allow it to be easily
 	// overwritten. Putting a speculative descriptor in the cache with a
@@ -932,9 +996,12 @@ func tryLookupImpl(
 	// up-to-date information will not be clobbered - for example ranges for
 	// which the cache has the prefetched descriptor already plus a lease.
 	newEntries := make([]*cacheEntry, len(preRs)+1)
-	newEntries[0] = &newEntry
+	newEntries[0] = newEntry
 	for i, preR := range preRs {
-		newEntries[i+1] = &cacheEntry{desc: preR, closedts: unknownClosedTimestampPolicy}
+		newEntries[i+1] = newCacheEntry(cacheEntryData{
+			desc:     preR,
+			closedts: unknownClosedTimestampPolicy,
+		}, currentNanos)
 	}
 	insertedEntries := rc.insertLockedInner(ctx, newEntries)
 	// entry corresponds to rs[0], which is the descriptor covering the key
@@ -966,7 +1033,7 @@ func tryLookupImpl(
 		if consistency == ReadFromFollower {
 			return EvictionToken{}, errFailedToFindNewerDescriptor
 		}
-		entry = &newEntry
+		entry = newEntry
 	}
 	lookupRes = EvictionToken{rdc: rc, entry: entry}
 	return lookupRes, nil
@@ -1127,12 +1194,13 @@ func (rc *RangeCache) Insert(ctx context.Context, rs ...roachpb.RangeInfo) {
 // stale.
 func (rc *RangeCache) insertLocked(ctx context.Context, rs ...roachpb.RangeInfo) []*cacheEntry {
 	entries := make([]*cacheEntry, len(rs))
+	currentNanos := rc.clock.Now().UnixNano()
 	for i, r := range rs {
-		entries[i] = &cacheEntry{
+		entries[i] = newCacheEntry(cacheEntryData{
 			desc:     r.Desc,
 			lease:    r.Lease,
 			closedts: r.ClosedTimestampPolicy,
-		}
+		}, currentNanos)
 	}
 	return rc.insertLockedInner(ctx, entries)
 }
@@ -1271,6 +1339,11 @@ func (rc *RangeCache) TestingSetDB(db RangeDescriptorDB) {
 	rc.db = db
 }
 
+// TestingSetManualClock allows tests to override the clock source.
+func (rc *RangeCache) TestingSetManualClock(clock hlc.WallClock) {
+	rc.clock = clock
+}
+
 // NumInFlight allows tests to check the number of in-flight calls under the
 // given name.
 func (rc *RangeCache) NumInFlight(name string) int {
@@ -1279,10 +1352,22 @@ func (rc *RangeCache) NumInFlight(name string) int {
 
 // cacheEntry represents one cache entry.
 //
-// The cache stores *cacheEntry. Entries are immutable: cache lookups
-// returns the same *cacheEntry to multiple queriers for efficiency, but
-// nobody should modify the lookup result.
+// The cache stores *cacheEntry. Cache lookups returns the same *cacheEntry to
+// multiple queriers for efficiency, but nobody should modify the data in the
+// lookup result.
 type cacheEntry struct {
+	// The data in the cache entry is considered immutable, and should not be
+	// updated once inserted into the cache.
+	cacheEntryData
+	// lastLeaseholderContactedNanos is the timestamp (in Unix nanoseconds) when
+	// this cache entry was last used to successfully contact the leaseholder
+	// for its range. This is set to the current time when this entry is first
+	// inserted into the cache and is updated every time a request is successful.
+	lastLeaseholderContactedNanos atomic.Int64
+}
+
+// cacheEntryData is the immutable data contained in the cacheEntry.
+type cacheEntryData struct {
 	// desc is always populated.
 	desc roachpb.RangeDescriptor
 	// speculativeDesc, if not nil, is the descriptor that should replace desc if
@@ -1327,7 +1412,7 @@ func (e *cacheEntry) LeaseSpeculative() bool {
 	return e.lease.Speculative()
 }
 
-func (e cacheEntry) String() string {
+func (e *cacheEntry) String() string {
 	return fmt.Sprintf("desc:%s, lease:%s", e.desc, e.lease)
 }
 
@@ -1482,18 +1567,18 @@ func compareEntryLeases(a, b *cacheEntry) int {
 // It's expected that the supplied rangeDesc is compatible with the descriptor
 // on the cache entry.
 func (e *cacheEntry) maybeUpdate(
-	ctx context.Context, l *roachpb.Lease, rangeDesc *roachpb.RangeDescriptor,
+	ctx context.Context, l *roachpb.Lease, rangeDesc *roachpb.RangeDescriptor, currentNanos int64,
 ) (updated, updatedLease bool, newEntry *cacheEntry) {
 	if !descsCompatible(&e.desc, rangeDesc) {
 		log.Dev.Fatalf(ctx, "attempting to update by comparing non-compatible descs: %s vs %s",
 			e.desc, rangeDesc)
 	}
 
-	newEntry = &cacheEntry{
+	newEntry = newCacheEntry(cacheEntryData{
 		lease:    e.lease,
 		desc:     e.desc,
 		closedts: e.closedts,
-	}
+	}, currentNanos)
 
 	updatedLease = false
 	updatedDesc := false
@@ -1562,10 +1647,51 @@ func (e *cacheEntry) evictLeaseholder(
 	if e.lease.Replica != lh {
 		return false, e
 	}
-	return true, &cacheEntry{
+	newEntry = newCacheEntry(cacheEntryData{
 		desc:     e.desc,
 		closedts: e.closedts,
+	}, e.lastLeaseholderContactedNanos.Load())
+	return true, newEntry
+}
+
+// randomizeLeaseholder creates a new *cacheEntry with identical data to the
+// receiver, except it selects a random voting replica as a speculative
+// leaseholder.
+//
+// The caller must ensure that the underlying descriptor has at least 1 voting
+// replica.
+func (e *cacheEntry) randomizeLeaseholder(currentNanos int64) *cacheEntry {
+	replicas := e.desc.Replicas().VoterDescriptors()
+	randIdx := rand.Intn(len(replicas))
+	randLease := replicas[randIdx]
+
+	// Prevent the current leaseholder from being randomly selected as the
+	// speculative leaseholder.
+	if e.lease.Replica == randLease {
+		randLease = replicas[(randIdx+1)%len(replicas)]
 	}
+
+	return newCacheEntry(cacheEntryData{
+		desc:            e.desc,
+		speculativeDesc: e.speculativeDesc,
+		lease:           roachpb.Lease{Replica: randLease},
+		closedts:        e.closedts,
+	}, currentNanos)
+}
+
+func (e *cacheEntry) updateLastLeaseholderContacted(currentNanos int64) {
+	e.lastLeaseholderContactedNanos.Store(currentNanos)
+}
+
+func (e *cacheEntry) sinceLeaseholderContacted(currentNanos int64) time.Duration {
+	return time.Duration(currentNanos - e.lastLeaseholderContactedNanos.Load())
+}
+
+// newCacheEntry creates a new cacheEntry with the given data and timestamp.
+func newCacheEntry(data cacheEntryData, currentNanos int64) *cacheEntry {
+	entry := &cacheEntry{cacheEntryData: data}
+	entry.lastLeaseholderContactedNanos.Store(currentNanos)
+	return entry
 }
 
 // IsRangeLookupErrorRetryable returns whether the provided range lookup error
