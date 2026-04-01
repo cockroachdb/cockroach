@@ -187,6 +187,7 @@ func DefaultOptionsFromEnv() *Options {
 		goFlagsEnv             = "GOFLAGS"
 	)
 
+	branch := strings.TrimPrefix(maybeEnv(teamcityBuildBranchEnv, "branch-not-found-in-env"), "refs/heads/")
 	return &Options{
 		Token: maybeEnv(githubAPITokenEnv, ""),
 		Org:   maybeEnv(githubOrgEnv, "cockroachdb"),
@@ -196,7 +197,7 @@ func DefaultOptionsFromEnv() *Options {
 		// at least it'll be obvious that something went wrong (as an
 		// issue will be posted pointing at that SHA).
 		SHA:              maybeEnv(teamcityVCSNumberEnv, "8548987813ff9e1b8a9878023d3abfc6911c16db"),
-		Branch:           maybeEnv(teamcityBuildBranchEnv, "branch-not-found-in-env"),
+		Branch:           branch,
 		GetBinaryVersion: build.BinaryVersion,
 		TeamCityOptions: &TeamCityOptions{
 			BuildTypeID: maybeEnv(teamcityBuildTypeIDEnv, "BUILDTYPE_ID-not-found-in-env"),
