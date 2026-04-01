@@ -38,7 +38,7 @@ go_test(
         "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
         "//conditions:default": {"test.Pool": "large"},
     }),
-    shard_count = 32,
+    shard_count = 48,
     deps = [
         "//pkg/base",
         "//pkg/build/bazel",
