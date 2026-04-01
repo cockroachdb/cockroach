@@ -1253,12 +1253,12 @@ CREATE INDEX expr_idx ON expr_idx_tbl (id, (json->>'bar'), (length(id)))
 query T
 SELECT pg_get_indexdef('expr_idx'::regclass::oid)
 ----
-CREATE INDEX expr_idx ON test.public.expr_idx_tbl USING btree (id ASC, (json->>'bar'::STRING) ASC, length(id) ASC)
+CREATE INDEX expr_idx ON public.expr_idx_tbl USING btree (id ASC, (json->>'bar'::STRING) ASC, length(id) ASC)
 
 query IT
 SELECT k, pg_get_indexdef('expr_idx'::regclass::oid, k, true) FROM generate_series(0,4) k ORDER BY k
 ----
-0  CREATE INDEX expr_idx ON test.public.expr_idx_tbl USING btree (id ASC, (json->>'bar'::STRING) ASC, length(id) ASC)
+0  CREATE INDEX expr_idx ON public.expr_idx_tbl USING btree (id ASC, (json->>'bar'::STRING) ASC, length(id) ASC)
 1  id
 2  (json->>'bar'::STRING)
 3  (length(id))

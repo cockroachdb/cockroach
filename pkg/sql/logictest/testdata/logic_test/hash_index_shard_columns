@@ -44,12 +44,12 @@ SELECT indexname, indexdef FROM pg_indexes
 WHERE tablename = 'shard_columns_test' AND indexname LIKE 'idx%'
 ORDER BY indexname
 ----
-idx1  CREATE INDEX idx1 ON test.public.shard_columns_test USING btree (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=4, shard_columns=(c1, c2))
-idx2  CREATE INDEX idx2 ON test.public.shard_columns_test USING btree (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=4, shard_columns=(c1, c2))
-idx3  CREATE INDEX idx3 ON test.public.shard_columns_test USING btree (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1, c2))
-idx4  CREATE INDEX idx4 ON test.public.shard_columns_test USING btree (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1))
-idx5  CREATE INDEX idx5 ON test.public.shard_columns_test USING btree (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1))
-idx6  CREATE INDEX idx6 ON test.public.shard_columns_test USING btree (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=8)
+idx1  CREATE INDEX idx1 ON public.shard_columns_test USING btree (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=4, shard_columns=(c1, c2))
+idx2  CREATE INDEX idx2 ON public.shard_columns_test USING btree (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=4, shard_columns=(c1, c2))
+idx3  CREATE INDEX idx3 ON public.shard_columns_test USING btree (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1, c2))
+idx4  CREATE INDEX idx4 ON public.shard_columns_test USING btree (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1))
+idx5  CREATE INDEX idx5 ON public.shard_columns_test USING btree (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1))
+idx6  CREATE INDEX idx6 ON public.shard_columns_test USING btree (c1 ASC, c2 ASC, c3 ASC) USING HASH WITH (bucket_count=8)
 
 statement ok
 DROP TABLE shard_columns_test
@@ -72,9 +72,9 @@ SELECT indexname, indexdef FROM pg_indexes
 WHERE tablename = 'shard_columns_test' AND indexname LIKE 'idx%'
 ORDER BY indexname
 ----
-idx1  CREATE UNIQUE INDEX idx1 ON test.public.shard_columns_test USING btree (c1 ASC, c2 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1))
-idx2  CREATE UNIQUE INDEX idx2 ON test.public.shard_columns_test USING btree (c2 ASC, c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c2))
-idx3  CREATE INDEX idx3 ON test.public.shard_columns_test USING btree (c3 ASC, c4 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c3))
+idx1  CREATE UNIQUE INDEX idx1 ON public.shard_columns_test USING btree (c1 ASC, c2 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1))
+idx2  CREATE UNIQUE INDEX idx2 ON public.shard_columns_test USING btree (c2 ASC, c3 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c2))
+idx3  CREATE INDEX idx3 ON public.shard_columns_test USING btree (c3 ASC, c4 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c3))
 
 statement ok
 DROP TABLE shard_columns_test
@@ -97,7 +97,7 @@ SELECT indexname, indexdef FROM pg_indexes
 WHERE tablename = 'shard_columns_test' AND indexname LIKE 'idx%'
 ORDER BY indexname
 ----
-idx1  CREATE UNIQUE INDEX idx1 ON test.public.shard_columns_test USING btree (c1 ASC, c2 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1))
+idx1  CREATE UNIQUE INDEX idx1 ON public.shard_columns_test USING btree (c1 ASC, c2 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1))
 
 statement ok
 DROP TABLE shard_columns_test
@@ -114,7 +114,7 @@ query TT
 SELECT tablename, indexdef FROM pg_indexes
 WHERE tablename = 'MixedCase' AND indexname = 'IdX'
 ----
-MixedCase  CREATE INDEX "IdX" ON test.public."MixedCase" USING btree ("Col1" ASC, "Col2" ASC, "Col3" ASC) USING HASH WITH (bucket_count=4, shard_columns=("Col1", "Col2"))
+MixedCase  CREATE INDEX "IdX" ON public."MixedCase" USING btree ("Col1" ASC, "Col2" ASC, "Col3" ASC) USING HASH WITH (bucket_count=4, shard_columns=("Col1", "Col2"))
 
 statement ok
 DROP TABLE "MixedCase"
@@ -195,8 +195,8 @@ CREATE INDEX idx2 ON legacy_test (c2, c3, c4) USING HASH WITH (shard_columns=(c2
 query TT
 SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'legacy_test' AND indexname LIKE 'idx%' ORDER BY indexname
 ----
-idx1  CREATE UNIQUE INDEX idx1 ON test.public.legacy_test USING btree (c1 ASC, c2 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1))
-idx2  CREATE INDEX idx2 ON test.public.legacy_test USING btree (c2 ASC, c3 ASC, c4 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c2, c3))
+idx1  CREATE UNIQUE INDEX idx1 ON public.legacy_test USING btree (c1 ASC, c2 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c1))
+idx2  CREATE INDEX idx2 ON public.legacy_test USING btree (c2 ASC, c3 ASC, c4 ASC) USING HASH WITH (bucket_count=8, shard_columns=(c2, c3))
 
 statement ok
 DROP TABLE legacy_test
