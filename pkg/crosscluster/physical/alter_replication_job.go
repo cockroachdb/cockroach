@@ -627,6 +627,11 @@ func applyCutoverTime(
 		progress := md.Progress.GetStreamIngest()
 		details := md.Payload.GetStreamIngestion()
 		if progress.ReplicationStatus == jobspb.ReplicationFailingOver {
+			// If already failing over to the same timestamp, this is a noop.
+			if cutoverTimestamp.Equal(progress.CutoverTime) {
+				return nil
+			}
+			// Error if trying to change to a different timestamp.
 			return errors.Newf("job %d already started cutting over to timestamp %s",
 				job.ID(), progress.CutoverTime)
 		}
