@@ -546,6 +546,50 @@ SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
 SELECT a FROM ab WHERE b = _  |  SELECT a FROM ab WHERE b = _
 SELECT b FROM ab WHERE a = _  |  SELECT b FROM ab WHERE a = _
 
+# Test delete by fingerprint and database.
+
+# Add a hint scoped to a specific database.
+skipif config local-mixed-25.4 local-mixed-26.1
+let $dbhint
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@primary WHERE y = 10',
+  'mydb'
+);
+
+# Add a hint with no database scope.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM xy WHERE y = 10',
+  'SELECT * FROM xy@xy_yx WHERE y = 10'
+);
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT count(*) FROM system.statement_hints WHERE fingerprint = 'SELECT * FROM xy WHERE y = _';
+----
+2
+
+# Delete only the hint scoped to 'mydb'.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM xy WHERE y = 10', 'mydb');
+----
+1
+
+# The unscoped hint should still be there.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT count(*) FROM system.statement_hints WHERE fingerprint = 'SELECT * FROM xy WHERE y = _';
+----
+1
+
+# Clean up remaining hints.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM xy WHERE y = _');
+
 subtest end
 
 # ---- Session setting hints ----
@@ -819,5 +863,63 @@ SELECT information_schema.crdb_enable_statement_hints(true, $h1);
 
 skipif config local-mixed-25.4 local-mixed-26.1
 user root
+
+# Test enable/disable by fingerprint and database.
+
+# Add a hint scoped to a specific database.
+skipif config local-mixed-25.4 local-mixed-26.1
+let $hdb
+SELECT information_schema.crdb_rewrite_inline_hints(
+  'SELECT * FROM ab WHERE b = 5',
+  'SELECT * FROM ab@ab_b WHERE b = 5',
+  'mydb'
+);
+
+# Verify it starts enabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+query B
+SELECT enabled FROM system.statement_hints WHERE row_id = $hdb;
+----
+true
+
+# Disable by fingerprint+database — should only affect the database-scoped hint.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT information_schema.crdb_enable_statement_hints(false, 'SELECT * FROM ab WHERE b = 5', 'mydb');
+----
+1
+
+# Verify it is now disabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+query B
+SELECT enabled FROM system.statement_hints WHERE row_id = $hdb;
+----
+false
+
+# The other hints (h1, h2) should still be enabled.
+skipif config local-mixed-25.4 local-mixed-26.1
+query B rowsort
+SELECT enabled FROM system.statement_hints WHERE row_id IN ($h1, $h2);
+----
+true
+true
+
+# Re-enable by fingerprint+database.
+skipif config local-mixed-25.4 local-mixed-26.1
+query I
+SELECT information_schema.crdb_enable_statement_hints(true, 'SELECT * FROM ab WHERE b = _', 'mydb');
+----
+1
+
+skipif config local-mixed-25.4 local-mixed-26.1
+query B
+SELECT enabled FROM system.statement_hints WHERE row_id = $hdb;
+----
+true
+
+# Clean up the database-scoped hint.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT information_schema.crdb_delete_statement_hints('SELECT * FROM ab WHERE b = _', 'mydb');
 
 subtest end
