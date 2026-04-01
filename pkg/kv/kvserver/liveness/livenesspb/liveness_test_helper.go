@@ -83,6 +83,10 @@ func (tnv TestNodeVitality) ScanNodeVitalityFromCache() NodeVitalityMap {
 	return nvm
 }
 
+func (tnv TestNodeVitality) ScanAllNodeVitalityFromCache() NodeVitalityMap {
+	return tnv.ScanNodeVitalityFromCache()
+}
+
 func (tnv TestNodeVitality) AddNextNode() {
 	maxNodeID := roachpb.NodeID(0)
 	for id := range tnv.Entry {
