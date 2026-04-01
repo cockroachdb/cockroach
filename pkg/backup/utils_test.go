@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"math/rand"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -579,15 +581,24 @@ func requireRecoveryEvent(
 	})
 }
 
-// getFullBackupPaths finds all full backups in the given URI and returns their paths using SHOW BACKUPS IN
+// getFullBackupPaths finds all full backups in the given URI and returns their
+// paths in sorted order (earliest full first).
 func getFullBackupPaths(t *testing.T, sqlDB *sqlutils.SQLRunner, uri string) []string {
 	t.Helper()
-	var fullBackupPaths []string
-	rows := sqlDB.Query(t, `SELECT path FROM [SHOW BACKUPS IN $1]`, uri)
+	defer setUseBackupsWithIDs(t, sqlDB, true)()
+
+	fullPaths := make(map[string]struct{})
+	rows := sqlDB.Query(
+		t, fmt.Sprintf(`SELECT id FROM [SHOW BACKUPS IN '%s']`, uri),
+	)
+	defer rows.Close()
 	for rows.Next() {
-		var path string
-		require.NoError(t, rows.Scan(&path))
-		fullBackupPaths = append(fullBackupPaths, path)
+		var id string
+		require.NoError(t, rows.Scan(&id))
+		fullEnd, _, err := backupinfo.DecodeBackupID(id)
+		require.NoError(t, err)
+		fullPath := fullEnd.Format(backupbase.DateBasedIntoFolderName)
+		fullPaths[fullPath] = struct{}{}
 	}
-	return fullBackupPaths
+	return slices.Sorted(maps.Keys(fullPaths))
 }

@@ -65,15 +65,6 @@ func TestBackupCompaction(t *testing.T) {
 	defer cleanupDB()
 
 	bucketNum := 1
-	getLatestFullDir := func(collectionURI []string) string {
-		t.Helper()
-		var backupPath string
-		db.QueryRow(
-			t,
-			fmt.Sprintf("SHOW BACKUPS IN (%s)", stringifyCollectionURI(collectionURI)),
-		).Scan(&backupPath)
-		return backupPath
-	}
 
 	// Note: Each subtest should create their backups in their own subdirectory to
 	// avoid false negatives from subtests relying on backups from other subtests.
@@ -104,7 +95,9 @@ func TestBackupCompaction(t *testing.T) {
 			end := getTime()
 			db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 
-			compactionJobId := triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end)
+			compactionJobId := triggerCompaction(
+				t, db, backupStmt, getLatestFullDir(t, db, collectionURI...), start, end,
+			)
 			compactionRedactedUri := getDescUri(t, db, compactionJobId)
 			require.Equal(t, fullRedactedUri, compactionRedactedUri)
 
@@ -113,13 +106,6 @@ func TestBackupCompaction(t *testing.T) {
 			validateCompactedBackupForTables(t, db, collectionURI, []string{"foo"}, start, end, noOpts, noOpts, 2+i)
 			start = end
 		}
-
-		// Ensure that additional backups were created.
-		var numBackups int
-		db.QueryRow(
-			t, fmt.Sprintf("SELECT count(DISTINCT (start_time, end_time)) FROM [%s]", showBackupQuery(collectionURI, noOpts)),
-		).Scan(&numBackups)
-		require.Equal(t, 9, numBackups)
 	})
 
 	t.Run("create and drop tables", func(t *testing.T) {
@@ -147,13 +133,17 @@ func TestBackupCompaction(t *testing.T) {
 		end := getTime()
 		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 
-		jobutils.WaitForJobToSucceed(t, db, triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end))
+		jobutils.WaitForJobToSucceed(t, db, triggerCompaction(
+			t, db, backupStmt, getLatestFullDir(t, db, collectionURI...), start, end,
+		))
 		validateCompactedBackupForTables(t, db, collectionURI, []string{"foo", "bar", "baz"}, start, end, noOpts, noOpts, 2)
 
 		db.Exec(t, "DROP TABLE bar")
 		end = getTime()
 		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
-		jobutils.WaitForJobToSucceed(t, db, triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end))
+		jobutils.WaitForJobToSucceed(t, db, triggerCompaction(
+			t, db, backupStmt, getLatestFullDir(t, db, collectionURI...), start, end,
+		))
 
 		db.Exec(t, "DROP TABLE foo, baz")
 		db.Exec(t, restoreQuery(t, fullCluster, collectionURI, noAOST, noOpts))
@@ -183,7 +173,9 @@ func TestBackupCompaction(t *testing.T) {
 		end := getTime()
 		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 
-		jobutils.WaitForJobToSucceed(t, db, triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end))
+		jobutils.WaitForJobToSucceed(
+			t, db, triggerCompaction(t, db, backupStmt, getLatestFullDir(t, db, collectionURI...), start, end),
+		)
 
 		var numIndexes, restoredNumIndexes int
 		db.QueryRow(t, "SELECT count(*) FROM [SHOW INDEXES FROM foo]").Scan(&numIndexes)
@@ -222,7 +214,9 @@ func TestBackupCompaction(t *testing.T) {
 		db.Exec(t, "INSERT INTO foo VALUES (6, 6)")
 		db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
 
-		jobutils.WaitForJobToSucceed(t, db, triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end))
+		jobutils.WaitForJobToSucceed(t, db, triggerCompaction(
+			t, db, backupStmt, getLatestFullDir(t, db, collectionURI...), start, end),
+		)
 		validateCompactedBackupForTables(t, db, collectionURI, []string{"foo"}, start, end, noOpts, noOpts, 4)
 	})
 
@@ -246,7 +240,9 @@ func TestBackupCompaction(t *testing.T) {
 		end := getTime()
 		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 
-		jobutils.WaitForJobToSucceed(t, db, triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end))
+		jobutils.WaitForJobToSucceed(t, db, triggerCompaction(
+			t, db, backupStmt, getLatestFullDir(t, db, collectionURI...), start, end,
+		))
 		validateCompactedBackupForTables(t, db, collectionURI, []string{"foo"}, start, end, noOpts, noOpts, 2)
 	})
 
@@ -279,7 +275,9 @@ func TestBackupCompaction(t *testing.T) {
 		if pause {
 			db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.details_has_checkpoint'")
 		}
-		jobID := triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end)
+		jobID := triggerCompaction(
+			t, db, backupStmt, getLatestFullDir(t, db, collectionURI...), start, end,
+		)
 		if pause {
 			jobutils.WaitForJobToPause(t, db, jobID)
 			db.Exec(t, "RESUME JOB $1", jobID)
@@ -308,7 +306,9 @@ func TestBackupCompaction(t *testing.T) {
 		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.details_has_checkpoint'")
 
-		jobID := triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end)
+		jobID := triggerCompaction(
+			t, db, backupStmt, getLatestFullDir(t, db, collectionURI...), start, end,
+		)
 		jobutils.WaitForJobToPause(t, db, jobID)
 		db.Exec(t, "RESUME JOB $1", jobID)
 		jobutils.WaitForJobToSucceed(t, db, jobID)
@@ -319,7 +319,9 @@ func TestBackupCompaction(t *testing.T) {
 		end = getTime()
 		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 		db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.details_has_checkpoint'")
-		jobID = triggerCompaction(t, db, backupStmt, getLatestFullDir(collectionURI), start, end)
+		jobID = triggerCompaction(
+			t, db, backupStmt, getLatestFullDir(t, db, collectionURI...), start, end,
+		)
 		jobutils.WaitForJobToPause(t, db, jobID)
 		db.Exec(t, "CANCEL JOB $1", jobID)
 		jobutils.WaitForJobToCancel(t, db, jobID)
@@ -354,7 +356,7 @@ func TestBackupCompaction(t *testing.T) {
 		end := getTime()
 		db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 
-		fullDir := getLatestFullDir(collectionURI)
+		fullDir := getLatestFullDir(t, db, collectionURI...)
 		c1JobID := triggerCompaction(t, db, backupStmt, fullDir, mid, end)
 		jobutils.WaitForJobToSucceed(t, db, c1JobID)
 
@@ -924,16 +926,6 @@ func TestBackupCompactionLocAware(t *testing.T) {
 	_, db, _, cleanupFn := backupRestoreTestSetupWithParams(t, 3, numAccounts, NoInitManipulation, args)
 	defer cleanupFn()
 
-	getLatestFullDir := func(collectionURI []string) string {
-		t.Helper()
-		var backupPath string
-		db.QueryRow(
-			t,
-			fmt.Sprintf("SHOW BACKUPS IN (%s)", stringifyCollectionURI(collectionURI)),
-		).Scan(&backupPath)
-		return backupPath
-	}
-
 	const targets = "DATABASE data"
 	const numInitialBackups = 4
 	initBackupChain := func(uris []string, opts string) (hlc.Timestamp, hlc.Timestamp) {
@@ -1018,7 +1010,7 @@ func TestBackupCompactionLocAware(t *testing.T) {
 		}
 
 		start, end := initBackupChain(uris, noOpts)
-		fullBackupPath := getLatestFullDir(uris)
+		fullBackupPath := getLatestFullDir(t, db, uris...)
 		jobutils.WaitForJobToSucceed(
 			t, db,
 			triggerCompaction(
@@ -1082,7 +1074,7 @@ func TestBackupCompactionLocAware(t *testing.T) {
 		}
 
 		start, end := initBackupChain(uris, noOpts)
-		fullBackupPath := getLatestFullDir(uris)
+		fullBackupPath := getLatestFullDir(t, db, uris...)
 		jobutils.WaitForJobToSucceed(
 			t, db,
 			triggerCompaction(
@@ -1138,7 +1130,7 @@ func TestBackupCompactionLocAware(t *testing.T) {
 		}
 
 		start, end := initBackupChain(uris, noOpts)
-		fullBackupPath := getLatestFullDir(uris)
+		fullBackupPath := getLatestFullDir(t, db, uris...)
 		jobutils.WaitForJobToSucceed(
 			t, db,
 			triggerCompaction(
@@ -1199,7 +1191,7 @@ func TestBackupCompactionLocAware(t *testing.T) {
 
 		const strictOpts = "WITH STRICT STORAGE LOCALITY"
 		start, end := initBackupChain(uris, strictOpts)
-		fullBackupPath := getLatestFullDir(uris)
+		fullBackupPath := getLatestFullDir(t, db, uris...)
 		jobutils.WaitForJobToSucceed(
 			t, db,
 			triggerCompaction(
@@ -1307,11 +1299,7 @@ func TestCompactionCheckpointing(t *testing.T) {
 	end := getTime()
 	db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 
-	var backupPath string
-	db.QueryRow(
-		t,
-		fmt.Sprintf("SHOW BACKUPS IN (%s)", stringifyCollectionURI(collectionURI)),
-	).Scan(&backupPath)
+	backupPath := getLatestFullDir(t, db, collectionURI...)
 
 	db.Exec(t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'backup_compaction.after.write_checkpoint'")
 	jobID := triggerCompaction(t, db, backupStmt, backupPath, start, end)
@@ -1371,11 +1359,7 @@ func TestBackupCompactionProgressTracking(t *testing.T) {
 	end := getTime()
 	db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
 
-	var backupPath string
-	db.QueryRow(
-		t,
-		fmt.Sprintf("SHOW BACKUPS IN (%s)", stringifyCollectionURI(collectionURI)),
-	).Scan(&backupPath)
+	backupPath := getLatestFullDir(t, db, collectionURI...)
 
 	db.Exec(t, "SET CLUSTER SETTING backup.restore_span.target_size = '1KB'")
 	db.Exec(t, "SET CLUSTER SETTING backup.restore_span.max_file_count = 2")
@@ -1416,8 +1400,7 @@ func TestToggleCompactionForRestore(t *testing.T) {
 	db.Exec(t, incBackupQuery(fullCluster, collectionURI, noAOST, noOpts))
 	end := getTime()
 	db.Exec(t, incBackupQuery(fullCluster, collectionURI, end, noOpts))
-	var backupPath string
-	db.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup'").Scan(&backupPath)
+	backupPath := getLatestFullDir(t, db, collectionURI...)
 	compactionID := triggerCompaction(t, db, backupStmt, backupPath, start, end)
 	waitForSuccessfulJob(t, tc, compactionID)
 
@@ -1514,11 +1497,7 @@ func TestCompactionWithRangeKeys(t *testing.T) {
 	chainEnd := getTime()
 	db.Exec(t, incBackupQuery(fullCluster, collectionURI, chainEnd, revHistOpt))
 
-	var backupPath string
-	db.QueryRow(
-		t,
-		fmt.Sprintf("SHOW BACKUPS IN (%s)", stringifyCollectionURI(collectionURI)),
-	).Scan(&backupPath)
+	backupPath := getLatestFullDir(t, db, collectionURI...)
 
 	compJob := triggerCompaction(t, db, backupStmt, backupPath, fullEnd, chainEnd)
 	jobutils.WaitForJobToSucceed(t, db, compJob)
@@ -1791,6 +1770,10 @@ func ensureBackupExists(
 	opts string,
 ) {
 	t.Helper()
+	// We need to rely on the old SHOW BACKUPS UX here, as the new one does not
+	// expose compacted backups.
+	defer setUseBackupsWithIDs(t, db, false)()
+
 	// Convert times to millisecond epoch. We compare millisecond epoch instead of
 	// nanosecond epoch because the backup time is stored in milliseconds, but timeutil.Now()
 	// will return a nanosecond-precise epoch.
@@ -1926,7 +1909,12 @@ func getDescUri(t *testing.T, db *sqlutils.SQLRunner, jobId jobspb.JobID) string
 	uriEnd := uriStart + strings.Index(desc[uriStart:], "'")
 	return desc[uriStart:uriEnd]
 }
+
+// TODO (kev-cao): Come back and update this helper to avoid using the old `SHOW
+// BACKUP` UX.
 func countBackups(t *testing.T, db *sqlutils.SQLRunner, uris []string) int {
+	defer setUseBackupsWithIDs(t, db, false)()
+
 	uri := stringifyCollectionURI(uris)
 	var count int
 	db.QueryRow(

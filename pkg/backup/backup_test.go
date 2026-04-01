@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -234,10 +235,33 @@ func TestBackupRestoreMultiNodeRemote(t *testing.T) {
 	backupAndRestore(ctx, t, tc, []string{remoteFoo}, []string{localFoo}, numAccounts, nil)
 }
 
-func getLatestFullDir(t *testing.T, sqlDB *sqlutils.SQLRunner, collection string) string {
-	var fullPath string
-	sqlDB.QueryRow(t, `SELECT * FROM [SHOW BACKUPS IN $1] LIMIT 1`, collection).Scan(&fullPath)
-	return fullPath
+// setUseBackupsWithIDs temporarily sets use_backups_with_ids to the given value
+// and returns a cleanup function that restores the original setting.
+func setUseBackupsWithIDs(t *testing.T, sqlDB *sqlutils.SQLRunner, value bool) func() {
+	t.Helper()
+	oldSetting := sqlDB.QueryStr(t, "SHOW use_backups_with_ids")[0][0]
+	sqlDB.Exec(t, fmt.Sprintf("SET use_backups_with_ids = %t", value))
+	return func() { sqlDB.Exec(t, "SET use_backups_with_ids = "+oldSetting) }
+}
+
+// getLatestFullDir returns the path to the full backup of the latest backup in
+// a collection. Multiple collection URIs for locality aware backups are
+// supported.
+func getLatestFullDir(t *testing.T, sqlDB *sqlutils.SQLRunner, collectionURIs ...string) string {
+	t.Helper()
+	defer setUseBackupsWithIDs(t, sqlDB, true)()
+
+	require.NotEmpty(t, collectionURIs, "at least one collection URI must be provided")
+	var latestID string
+	collectionStr := "(" + strings.Join(util.Map(collectionURIs, func(uri string) string {
+		return "'" + uri + "'"
+	}), ", ") + ")"
+	sqlDB.QueryRow(
+		t, fmt.Sprintf(`SELECT id FROM [SHOW BACKUPS IN %s]`, collectionStr),
+	).Scan(&latestID)
+	fullEnd, _, err := backupinfo.DecodeBackupID(latestID)
+	require.NoError(t, err)
+	return fullEnd.Format(backupbase.DateBasedIntoFolderName)
 }
 
 func findSST(t *testing.T, location string) string {
@@ -572,6 +596,7 @@ func TestBackupManifestFileCount(t *testing.T) {
 	const numAccounts = 1000
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
+	sqlDB.Exec(t, `SET use_backups_with_ids = true`)
 	sqlDB.Exec(t, "BACKUP INTO 'userfile:///backup'")
 	rows := sqlDB.QueryRow(t, "SELECT count(distinct(path)) FROM [SHOW BACKUP FILES FROM LATEST IN 'userfile:///backup']")
 	var count int
@@ -1822,6 +1847,7 @@ func TestBackupRestoreResume(t *testing.T) {
 	const numAccounts = 1000
 	tc, outerDB, dir, cleanupFn := backupRestoreTestSetupWithParams(t, multiNode, numAccounts, InitManualReplication, params)
 	defer cleanupFn()
+
 	srv := tc.ApplicationLayer(0)
 	codec := keys.MakeSQLCodec(srv.RPCContext().TenantID)
 	clusterID := srv.RPCContext().LogicalClusterID.Get()
@@ -3219,9 +3245,6 @@ func checksumBankPayload(t *testing.T, sqlDB *sqlutils.SQLRunner) uint32 {
 func TestBackupRestoreIncremental(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// NB: because of rounding problems, using the end time in the AOST query is
-	// not guaranteed to work. We need to fix this.
-	skip.WithIssue(t, 86830, "restoring via AOST without revision_history is flaky")
 
 	const numAccounts = 10
 	const numBackups = 5
@@ -3229,20 +3252,15 @@ func TestBackupRestoreIncremental(t *testing.T) {
 
 	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
 	defer cleanupFn()
-	args := base.TestServerArgs{ExternalIODir: dir}
+	args := base.TestServerArgs{
+		ExternalIODir:     dir,
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	}
 	rng, _ := randutil.NewTestRand()
 
 	backupDir := "nodelocal://1/backup"
-	backupEndTimes := make([]string, 0, numBackups)
 	var checksums []uint32
 	{
-		getLatestBackupEndTime := func() string {
-			var endTime string
-			sqlDB.QueryRow(
-				t, `SELECT end_time FROM [SHOW BACKUP FROM LATEST IN $1] ORDER BY end_time DESC LIMIT 1`, backupDir,
-			).Scan(&endTime)
-			return endTime
-		}
 		for backupNum := 0; backupNum < numBackups-1; backupNum++ {
 			// In the following, windowSize is `w` and offset is `o`. The first
 			// mutation creates accounts with id [w,3w). Every mutation after
@@ -3269,7 +3287,6 @@ func TestBackupRestoreIncremental(t *testing.T) {
 			} else {
 				sqlDB.Exec(t, `BACKUP TABLE data.bank INTO LATEST IN $1`, backupDir)
 			}
-			backupEndTimes = append(backupEndTimes, getLatestBackupEndTime())
 		}
 
 		// Test a regression in RESTORE where the batch end key was not
@@ -3278,9 +3295,7 @@ func TestBackupRestoreIncremental(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO data.bank VALUES (0, -1, 'final')`)
 		checksums = append(checksums, checksumBankPayload(t, sqlDB))
 		sqlDB.Exec(t, `BACKUP TABLE data.bank INTO LATEST in $1`, backupDir)
-		backupEndTimes = append(backupEndTimes, getLatestBackupEndTime())
 	}
-	require.Len(t, backupEndTimes, numBackups)
 
 	// Start a new cluster to restore into.
 	{
@@ -3290,6 +3305,7 @@ func TestBackupRestoreIncremental(t *testing.T) {
 
 		sqlDBRestore.Exec(t, `CREATE DATABASE data`)
 		sqlDBRestore.Exec(t, `CREATE TABLE data.bank (id INT PRIMARY KEY)`)
+		sqlDBRestore.Exec(t, `SET use_backups_with_ids = true`)
 		// This "data.bank" table isn't actually the same table as the backup at all
 		// so we should not allow using a backup of the other in incremental. We
 		// usually compare IDs, but those are only meaningful in the context of a
@@ -3302,14 +3318,14 @@ func TestBackupRestoreIncremental(t *testing.T) {
 			backupDir,
 		)
 
-		for i := 0; i < len(backupEndTimes); i++ {
+		backupIDs := sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT id FROM [SHOW BACKUPS IN '%s']`, backupDir))
+		// Backup IDs are sorted in descending chronological order, but our
+		// checksums are in ascending order, so reverse the backupIDs to match them
+		// up.
+		slices.Reverse(backupIDs)
+		for i, backupID := range backupIDs {
 			sqlDBRestore.Exec(t, `DROP TABLE IF EXISTS data.bank`)
-			sqlDBRestore.Exec(
-				t,
-				`RESTORE TABLE data.bank FROM LATEST IN $1 AS OF SYSTEM TIME $2::STRING`,
-				backupDir,
-				backupEndTimes[i],
-			)
+			sqlDBRestore.Exec(t, `RESTORE TABLE data.bank FROM $1 IN $2`, backupID[0], backupDir)
 
 			checksum := checksumBankPayload(t, sqlDBRestore)
 			if checksum != checksums[i] {
@@ -4119,12 +4135,15 @@ func TestNonLinearChain(t *testing.T) {
 	// This ensures a determenistic behavior to the relative number of files we
 	// open during a restore when skipping a backup.
 	sqlDB.Exec(t, `SET CLUSTER SETTING backup.index.read.enabled = true`)
+	sqlDB.Exec(t, `SET use_backups_with_ids = true`)
 
 	// Make a table with a row in it and make a full backup of it.
 	sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO t VALUES (0)`)
 	sqlDB.Exec(t, `BACKUP TABLE defaultdb.t INTO $1`, localFoo)
-	require.Len(t, sqlDB.QueryStr(t, `SELECT DISTINCT end_time FROM [SHOW BACKUP FROM LATEST IN $1]`, localFoo), 1)
+	require.Len(
+		t, sqlDB.QueryStr(t, fmt.Sprintf(`SHOW BACKUPS IN '%s'`, localFoo)), 1,
+	)
 
 	// Write a row and note the time that includes that row.
 	var ts1, ts2 string
@@ -4149,7 +4168,7 @@ func TestNonLinearChain(t *testing.T) {
 
 	// We should see two end times now in the shown backup -- the full and this
 	// (second) inc.
-	require.Len(t, sqlDB.QueryStr(t, `SELECT DISTINCT end_time FROM [SHOW BACKUP FROM LATEST IN $1]`, localFoo), 2)
+	require.Len(t, sqlDB.QueryStr(t, fmt.Sprintf(`SHOW BACKUPS IN '%s'`, localFoo)), 2)
 
 	// Now we have a full ending at t0, an incomplete inc from t0 to t1, and a
 	// complete inc also from t0 but to t2. We will move `t` out of our way and
@@ -4169,7 +4188,7 @@ func TestNonLinearChain(t *testing.T) {
 
 	// We should see three end times now in the shown backup -- the full, the 2nd
 	// inc we saw before, but now also this first inc as well.
-	require.Len(t, sqlDB.QueryStr(t, `SELECT DISTINCT end_time FROM [SHOW BACKUP FROM LATEST IN $1]`, localFoo), 3)
+	require.Len(t, sqlDB.QueryStr(t, fmt.Sprintf(`SHOW BACKUPS IN '%s'`, localFoo)), 3)
 
 	// Restore the same thing -- t2 -- we did before but now with the extra inc
 	// spur hanging out in the chain. This should produce the same result, and we
@@ -4185,7 +4204,11 @@ func TestNonLinearChain(t *testing.T) {
 	// Finally, make sure we can restore from the tip of the spur, not just the
 	// tip of the chain.
 	sqlDB.Exec(t, `DROP TABLE t`)
-	sqlDB.Exec(t, fmt.Sprintf(`RESTORE TABLE defaultdb.t FROM LATEST IN $1 AS OF SYSTEM TIME %s`, ts1), localFoo)
+	spurID := sqlDB.QueryStr(t, fmt.Sprintf(`SHOW BACKUPS IN '%s'`, localFoo))[1][0]
+	sqlDB.Exec(
+		t, `RESTORE TABLE defaultdb.t FROM $1 IN $2`,
+		spurID, localFoo,
+	)
 	sqlDB.CheckQueryResults(t, `SELECT * FROM t`, [][]string{{"0"}, {"1"}})
 }
 
@@ -4386,6 +4409,7 @@ func TestEncryptedBackup(t *testing.T) {
 				},
 			})
 			defer cleanupFn()
+			sqlDB.Exec(t, `SET use_backups_with_ids = true`)
 
 			setupBackupEncryptedTest(ctx, t, sqlDB)
 
@@ -4415,7 +4439,7 @@ func TestEncryptedBackup(t *testing.T) {
 
 			sqlDB.Exec(t, `DROP DATABASE neverappears CASCADE`)
 
-			sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP FROM LATEST IN ($1, $2) WITH %s`, encryptionOption), backupLoc1, backupLoc2)
+			sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP FROM LATEST IN ('%s', '%s') WITH %s`, backupLoc1, backupLoc2, encryptionOption))
 
 			var expectedShowError string
 			if tc.useKMS {
@@ -4424,12 +4448,12 @@ func TestEncryptedBackup(t *testing.T) {
 				expectedShowError = `failed to decrypt — maybe incorrect key: cipher: message authentication failed`
 			}
 			sqlDB.ExpectErr(t, expectedShowError,
-				fmt.Sprintf(`SHOW BACKUP FROM LATEST IN $1 WITH %s`, incorrectEncryptionOption), backupLoc1)
+				fmt.Sprintf(`SHOW BACKUP FROM LATEST IN '%s' WITH %s`, backupLoc1, incorrectEncryptionOption))
 			sqlDB.ExpectErr(t,
 				`file appears encrypted -- try specifying one of "encryption_passphrase" or "kms"`,
-				`SHOW BACKUP FROM LATEST IN $1`, backupLoc1)
+				fmt.Sprintf(`SHOW BACKUP FROM LATEST IN '%s'`, backupLoc1))
 			sqlDB.ExpectErr(t, `could not find or read encryption information`,
-				fmt.Sprintf(`SHOW BACKUP FROM LATEST IN $1 WITH %s`, encryptionOption), plainBackupLoc1)
+				fmt.Sprintf(`SHOW BACKUP FROM LATEST IN '%s' WITH %s`, plainBackupLoc1, encryptionOption))
 
 			sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE neverappears FROM LATEST IN ($1, $2) WITH %s`,
 				encryptionOption), backupLoc1, backupLoc2)
@@ -4479,6 +4503,7 @@ func TestRegionalKMSEncryptedBackup(t *testing.T) {
 		ctx := context.Background()
 		_, sqlDB, rawDir, cleanupFn := backupRestoreTestSetup(t, multiNode, 3, InitManualReplication)
 		defer cleanupFn()
+		sqlDB.Exec(t, `SET use_backups_with_ids = true`)
 
 		setupBackupEncryptedTest(ctx, t, sqlDB)
 
@@ -4499,11 +4524,10 @@ func TestRegionalKMSEncryptedBackup(t *testing.T) {
 		checkBackupFilesEncrypted(t, rawDir)
 
 		// check that SHOW BACKUP is valid when a single kms uri is provided and when multiple are
-		sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP FROM LATEST IN $1 WITH KMS='%s'`, multiRegionKMSURIs[0]),
-			backupLoc1)
+		sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP FROM LATEST IN '%s' WITH KMS='%s'`, backupLoc1, multiRegionKMSURIs[0]))
 
-		sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP FROM LATEST IN ($1, $2) WITH %s`,
-			concatMultiRegionKMSURIs(multiRegionKMSURIs)), backupLoc1, backupLoc2)
+		sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP FROM LATEST IN ('%s', '%s') WITH %s`,
+			backupLoc1, backupLoc2, concatMultiRegionKMSURIs(multiRegionKMSURIs)))
 
 		// Attempt to RESTORE using each of the regional KMSs independently.
 		for _, uri := range multiRegionKMSURIs {
@@ -7029,6 +7053,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 	)
 	_, _ = tc, systemDB
 	defer cleanupFn()
+	systemDB.Exec(t, `SET use_backups_with_ids = true`)
 	srv := tc.Server(0)
 
 	// NB: tenant certs for 10, 11, 20 are embedded. See:
@@ -7094,7 +7119,7 @@ func TestBackupRestoreTenant(t *testing.T) {
 		systemDB.ExpectErr(t, "tenant 123 does not exist", `BACKUP TENANT 123 INTO 'nodelocal://1/t1'`)
 		systemDB.ExpectErr(t, "tenant 21 does not exist", `BACKUP TENANT 21 INTO 'nodelocal://1/t20'`)
 		systemDB.ExpectErr(t, "tenant 21 not in backup", `RESTORE TENANT 21 FROM LATEST IN 'nodelocal://1/t20'`)
-		systemDB.ExpectErr(t, "file does not exist", `RESTORE TENANT 21 FROM LATEST IN 'nodelocal://1/t21'`)
+		systemDB.ExpectErr(t, "no backups found in collection", `RESTORE TENANT 21 FROM LATEST IN 'nodelocal://1/t21'`)
 	})
 
 	t.Run("invalid", func(t *testing.T) {
@@ -9871,10 +9896,13 @@ func TestUserfileNormalizationIncrementalShowBackup(t *testing.T) {
 	const userfile = "'userfile:///a'"
 	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
 	defer cleanupFn()
+	sqlDB.Exec(t, `SET use_backups_with_ids = true`)
 
 	query := fmt.Sprintf("BACKUP bank INTO %s", userfile)
 	sqlDB.Exec(t, query)
 	query = fmt.Sprintf("BACKUP bank INTO %s", userfile)
+	sqlDB.Exec(t, query)
+	query = fmt.Sprintf("SHOW BACKUPS IN %s", userfile)
 	sqlDB.Exec(t, query)
 	query = fmt.Sprintf("SHOW BACKUP FROM LATEST IN %s", userfile)
 	sqlDB.Exec(t, query)
@@ -10321,6 +10349,7 @@ func TestBackupDoNotIncludeViewSpans(t *testing.T) {
 	tc, sqlDB, dir, cleanupFn := backupRestoreTestSetup(t, singleNode, 0, InitManualReplication)
 	defer cleanupFn()
 	kvDB := tc.ApplicationLayer(0).DB()
+	sqlDB.Exec(t, `SET use_backups_with_ids = true`)
 
 	// Generate some testdata and back it up.
 	sqlDB.Exec(t, "CREATE DATABASE d")
@@ -10329,15 +10358,18 @@ func TestBackupDoNotIncludeViewSpans(t *testing.T) {
 	sqlDB.Exec(t, "CREATE VIEW d.tview AS SELECT k, b FROM d.t")
 	sqlDB.Exec(t, `BACKUP DATABASE d INTO $1`, localFoo)
 
-	res := sqlDB.QueryStr(t, `SHOW BACKUPS IN $1`, localFoo)
+	res := sqlDB.QueryStr(t, fmt.Sprintf(`SHOW BACKUPS IN '%s'`, localFoo))
 	if len(res) != 1 {
 		t.Fatal("expected 1 backup")
 	}
+	fullEnd, _, err := backupinfo.DecodeBackupID(res[0][0])
+	require.NoError(t, err)
+	fullPath := fullEnd.Format(backupbase.DateBasedIntoFolderName)
 
 	// Read the backup manifest.
 	var backupManifest backuppb.BackupManifest
 	{
-		backupManifestBytes, err := os.ReadFile(filepath.Join(dir, "foo", res[0][0], backupbase.DeprecatedBackupManifestName))
+		backupManifestBytes, err := os.ReadFile(filepath.Join(dir, "foo", fullPath, backupbase.DeprecatedBackupManifestName))
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
@@ -10759,6 +10791,7 @@ func TestBackupRestoreForeignKeys(t *testing.T) {
 	_, sqlDB, _, cleanup := backupRestoreTestSetupWithParams(t, singleNode, numAccounts,
 		InitManualReplication, base.TestClusterArgs{ServerArgs: params})
 	defer cleanup()
+	sqlDB.Exec(t, `SET use_backups_with_ids = true`)
 
 	sqlDB.Exec(t, `CREATE DATABASE test`)
 	sqlDB.Exec(t, `SET database = test`)
@@ -10814,14 +10847,14 @@ CREATE TABLE child_pk (k INT8 PRIMARY KEY REFERENCES parent);
 			"CONSTRAINT \\w+ FOREIGN KEY \\(\\w+\\) REFERENCES public\\.parent\\(\\w+\\)",
 		},
 	} {
-		results := sqlDB.QueryStr(t, `
+		results := sqlDB.QueryStr(t, fmt.Sprintf(`
 				SELECT
 					create_statement
 				FROM
-					[SHOW BACKUP SCHEMAS FROM LATEST IN $1]
+					[SHOW BACKUP SCHEMAS FROM LATEST IN '%s']
 				WHERE
-					object_type = 'table' AND object_name = $2
-				`, localFoo, tc.table)
+					object_type = 'table' AND object_name = $1
+				`, localFoo), tc.table)
 		require.NotEmpty(t, results)
 		require.Regexp(t, regexp.MustCompile(tc.expectedForeignKeyPattern), results[0][0])
 	}
@@ -10830,19 +10863,35 @@ CREATE TABLE child_pk (k INT8 PRIMARY KEY REFERENCES parent);
 	// Test restoring different objects from the backup.
 	sqlDB.Exec(t, `CREATE DATABASE ts`)
 	sqlDB.Exec(t, `RESTORE TABLE test.rev_times FROM LATEST IN $1 WITH into_db = 'ts'`, localFoo)
-	for _, ts := range sqlDB.QueryStr(t, `SELECT logical_time FROM ts.rev_times`) {
-		sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE test FROM LATEST IN $1 AS OF SYSTEM TIME %s`, ts[0]), localFoo)
+
+	// Get all incremental backup IDs to map to revision history timestamps.
+	backupIDs := sqlDB.QueryStr(t, fmt.Sprintf(`SELECT id FROM [SHOW BACKUPS IN '%s']`, localFoo))
+	slices.Reverse(backupIDs) // Reverse backups IDs to map them with revision history timestamps
+	backupIDs = backupIDs[1:] // Ignore full
+
+	for tsIdx, ts := range sqlDB.QueryStr(t, `SELECT logical_time FROM ts.rev_times`) {
+		rhBackupID := backupIDs[tsIdx][0]
+		sqlDB.Exec(
+			t, fmt.Sprintf(`RESTORE DATABASE test FROM $1 IN $2 AS OF SYSTEM TIME %s`, ts[0]),
+			rhBackupID, localFoo,
+		)
 		// Just rendering the constraints loads and validates schema.
 		sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
 		sqlDB.Exec(t, `DROP DATABASE test`)
 
 		// Restore a couple tables, including parent but not child_pk.
 		sqlDB.Exec(t, `CREATE DATABASE test`)
-		sqlDB.Exec(t, fmt.Sprintf(`RESTORE TABLE test.circular FROM LATEST IN $1 AS OF SYSTEM TIME %s`, ts[0]), localFoo)
+		sqlDB.Exec(
+			t, fmt.Sprintf(`RESTORE TABLE test.circular FROM $1 IN $2 AS OF SYSTEM TIME %s`, ts[0]),
+			rhBackupID, localFoo,
+		)
 		require.Equal(t, [][]string{
 			{"test.public.circular", "CREATE TABLE public.circular (\n\tk INT8 NOT NULL,\n\tselfid INT8 NULL,\n\tCONSTRAINT circular_pkey PRIMARY KEY (k ASC),\n\tCONSTRAINT self_fk FOREIGN KEY (selfid) REFERENCES public.circular(selfid) NOT VALID,\n\tUNIQUE INDEX circular_selfid_key (selfid ASC)\n) WITH (schema_locked = true);"},
 		}, sqlDB.QueryStr(t, `SHOW CREATE TABLE test.circular`))
-		sqlDB.Exec(t, fmt.Sprintf(`RESTORE TABLE test.parent, test.child FROM LATEST IN $1 AS OF SYSTEM TIME %s `, ts[0]), localFoo)
+		sqlDB.Exec(
+			t, fmt.Sprintf(`RESTORE TABLE test.parent, test.child FROM $1 IN $2 AS OF SYSTEM TIME %s `, ts[0]),
+			rhBackupID, localFoo,
+		)
 		sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
 		sqlDB.Exec(t, `DROP DATABASE test`)
 
@@ -10850,9 +10899,19 @@ CREATE TABLE child_pk (k INT8 PRIMARY KEY REFERENCES parent);
 		sqlDB.Exec(t, `CREATE DATABASE test`)
 		for _, name := range []string{"child_pk", "child", "circular", "parent"} {
 			if name == "child" || name == "child_pk" {
-				sqlDB.ExpectErr(t, "cannot restore table.*without referenced table", fmt.Sprintf(`RESTORE TABLE test.%s FROM LATEST IN $1 AS OF SYSTEM TIME %s`, name, ts[0]), localFoo)
+				sqlDB.ExpectErr(
+					t, "cannot restore table.*without referenced table",
+					fmt.Sprintf(`RESTORE TABLE test.%s FROM $1 IN $2 AS OF SYSTEM TIME %s`, name, ts[0]),
+					rhBackupID, localFoo,
+				)
 			}
-			sqlDB.Exec(t, fmt.Sprintf(`RESTORE TABLE test.%s FROM LATEST IN $1 AS OF SYSTEM TIME %s WITH skip_missing_foreign_keys`, name, ts[0]), localFoo)
+			sqlDB.Exec(
+				t, fmt.Sprintf(
+					`RESTORE TABLE test.%s FROM $1 IN $2 AS OF SYSTEM TIME %s WITH skip_missing_foreign_keys`,
+					name, ts[0],
+				),
+				rhBackupID, localFoo,
+			)
 		}
 		sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
 		sqlDB.Exec(t, `DROP DATABASE test`)
@@ -10947,9 +11006,6 @@ func TestBackupIndexCreatedAfterBackup(t *testing.T) {
 	th.env.SetTime(full.NextRun().Add(time.Second))
 	require.NoError(t, th.executeSchedules())
 	th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
-
-	var backupPath string
-	th.sqlDB.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup'").Scan(&backupPath)
 
 	for range 3 {
 		inc, err = jobs.ScheduledJobDB(th.internalDB()).Load(ctx, th.env, inc.ScheduleID())
@@ -11671,6 +11727,7 @@ func TestBackupEmptyRevisionHistoryIncs(t *testing.T) {
 
 	_, sqlDB, cleanupFn := backupRestoreTestSetupEmpty(t, singleNode, "", InitManualReplication, base.TestClusterArgs{})
 	defer cleanupFn()
+	sqlDB.Exec(t, `SET use_backups_with_ids = true`)
 
 	const collectionURI = "nodelocal://1/"
 
@@ -11680,10 +11737,12 @@ func TestBackupEmptyRevisionHistoryIncs(t *testing.T) {
 		var unixTS int64
 		sqlDB.QueryRow(
 			t,
-			`WITH x AS (SHOW BACKUP FROM LATEST IN $1 WITH as_json)
-			SELECT manifest->'revisionStartTime'->>'wallTime' FROM x OFFSET 1 LIMIT 1
-			`,
-			collectionURI,
+			fmt.Sprintf(
+				`SELECT coalesce(revision_start_time::INTEGER, 0)
+				FROM [SHOW BACKUPS IN '%s' WITH REVISION START TIME]
+				ORDER BY backup_time ASC OFFSET 1 LIMIT 1`,
+				collectionURI,
+			),
 		).Scan(&unixTS)
 		return unixTS
 	}
