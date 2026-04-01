@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 export { GroupedBarChart } from "./groupedBarChart";
+export type { XScale } from "./groupedBarChart";
 export type {
   GroupedBarData,
   GroupedBarDatum,

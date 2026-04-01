@@ -21,7 +21,6 @@ import React, {
 } from "react";
 import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps } from "react-router-dom";
-import { AlignedData, Options } from "uplot";
 
 import { Anchor } from "src/anchor";
 import { Button } from "src/button";
@@ -63,8 +62,7 @@ import { useUserSQLRoles } from "../api/userApi";
 import { CockroachCloudContext, ClusterDetailsContext } from "../contexts";
 import { Delayed } from "../delayed";
 import { AxisUnits } from "../graphs";
-import { GroupedStackedBarGraphTimeSeries } from "../graphs/bargraph";
-import { GroupedBarChart } from "../graphs/groupedBarChart";
+import { GroupedBarChart, XScale } from "../graphs/groupedBarChart";
 import { getStmtInsightRecommendations, InsightType } from "../insights";
 import {
   InsightsSortedTable,
@@ -100,7 +98,7 @@ import {
   generateClientWaitTimeseries,
   generateCanaryVsStableTimeseries,
   generatePlanDistributionTimeseries,
-  generateCanaryVsStablePlanDistributionTimeseries,
+  generateCanaryVsStablePlanDistribution,
 } from "./timeseriesUtils";
 
 const { TabPane } = Tabs;
@@ -477,21 +475,9 @@ export function StatementDetails(
     const clientWaitTimeseries =
       generateClientWaitTimeseries(statsPerAggregatedTs);
 
-    const canaryVsStableTimeseries: AlignedData =
+    const canaryVsStableData =
       generateCanaryVsStableTimeseries(statsPerAggregatedTs);
-    const canaryVsStableOps: Partial<Options> = {
-      axes: [{}, { label: "Time Spent" }],
-      series: [
-        {},
-        { label: "Execution" },
-        { label: "Planning" },
-        { label: "Execution" },
-        { label: "Planning" },
-      ],
-      legend: { show: true },
-      width: cardWidth,
-    };
-    const hasCanaryData = canaryVsStableTimeseries[0].length > 0;
+    const hasCanaryData = canaryVsStableData.length > 0;
 
     const insightsColumns = makeInsightsColumns(
       isCockroachCloud,
@@ -515,7 +501,7 @@ export function StatementDetails(
 
     const duration = (v: number) => Duration(v * 1e9);
     const [chartsStart, chartsEnd] = toRoundedDateRange(timeScale);
-    const xScale = {
+    const xScale: XScale = {
       graphTsStartMillis: chartsStart.valueOf(),
       graphTsEndMillis: chartsEnd.valueOf(),
     };
@@ -717,23 +703,13 @@ export function StatementDetails(
                   data={canaryVsStableData}
                   yAxisUnits={AxisUnits.Duration}
                   title="Canary vs Stable Statement Times"
-                  alignedData={canaryVsStableTimeseries}
-                  uPlotOptions={canaryVsStableOps}
-                  yAxisUnits={AxisUnits.Duration}
-                  xScale={xScale}
-                  gistLabels={["Execution", "Planning"]}
-                  groupLabels={["Canary", "Stable"]}
-                  groupStrokeColors={["#c62828", "#1565c0"]}
                   tooltip={
                     <>
-                      Compares execution latency between canary (newest table
-                      statistics) and stable (second-newest table statistics)
-                      paths. Each bar is split into execution (bottom) and
-                      planning (top) time, matching the Statement Times chart
-                      colors. This helps identify performance regressions caused
-                      by newly collected table statistics.
+                      Compares planning and execution latency between canary
+                      (newest) and stable table statistics.
                     </>
                   }
+                  xScale={xScale}
                 />
               </Col>
             </Row>
@@ -826,51 +802,13 @@ export function StatementDetails(
         statementStatisticsPerAggregatedTsAndPlanHash || [],
       );
 
-    // Build a map from plan_gist → average run latency (seconds)
-    // for heat map coloring. If multiple plan_hashes share a gist,
-    // use a count-weighted average.
-    const latencyByGist = new Map<string, number>();
-    const countByGist = new Map<string, number>();
-    (statementStatisticsPerPlanHash || []).forEach(plan => {
-      const gist = plan.stats?.plan_gists?.[0] || "unknown";
-      const count = longToInt(plan.stats?.count) || 1;
-      const lat = plan.stats?.run_lat?.mean || 0;
-      latencyByGist.set(gist, (latencyByGist.get(gist) || 0) + count * lat);
-      countByGist.set(gist, (countByGist.get(gist) || 0) + count);
-    });
-    latencyByGist.forEach((totalLat, gist) => {
-      latencyByGist.set(gist, totalLat / (countByGist.get(gist) || 1));
-    });
-
-    const {
-      alignedData: canaryPlanDistData,
-      planGists: canaryPlanGists,
-      groupSize: canaryPlanGroupSize,
-      colourPalette: canaryColourPalette,
-      latencyRange: canaryLatencyRange,
-    } = generateCanaryVsStablePlanDistributionTimeseries(
+    const canaryPlanDistData = generateCanaryVsStablePlanDistribution(
       statementStatisticsPerAggregatedTsAndPlanHash || [],
-      latencyByGist,
     );
-    const hasCanaryPlanData = canaryPlanDistData[0].length > 0;
-    const canaryPlanDistOps: Partial<Options> = {
-      axes: [{}, { label: "Execution Count" }],
-      series: [
-        {},
-        // Canary group: one series per plan gist
-        ...canaryPlanGists.map(gist => ({
-          label: gist,
-        })),
-        // Stable group: one series per plan gist
-        ...canaryPlanGists.map(gist => ({
-          label: gist,
-        })),
-      ],
-      legend: { show: true },
-    };
+    const hasCanaryPlanData = canaryPlanDistData.length > 0;
 
     const [chartsStart, chartsEnd] = toRoundedDateRange(timeScale);
-    const xScale = {
+    const xScale: XScale = {
       graphTsStartMillis: chartsStart.valueOf(),
       graphTsEndMillis: chartsEnd.valueOf(),
     };
@@ -929,70 +867,18 @@ export function StatementDetails(
           {hasCanaryPlanData && (
             <Row gutter={24}>
               <Col className="gutter-row" span={24}>
-                <div style={{ display: "inline-flex", alignItems: "stretch" }}>
-                  <div>
-                    <GroupedStackedBarGraphTimeSeries
-                      title="Canary vs Stable Plan Distribution"
-                      tooltip={
-                        <>
-                          Compares plan distribution between canary (newest
-                          table statistics) and stable (second-newest)
-                          executions. Left bars show canary execution counts,
-                          right bars show stable. Color intensity indicates
-                          average execution latency: darker purple = higher
-                          latency, lighter purple = lower latency.
-                        </>
-                      }
-                      alignedData={canaryPlanDistData}
-                      uPlotOptions={canaryPlanDistOps}
-                      colourPalette={canaryColourPalette}
-                      gistLabels={canaryPlanGists}
-                      groupLabels={["Canary", "Stable"]}
-                      groupStrokeColors={["#c62828", "#1565c0"]}
-                      groupSize={canaryPlanGroupSize}
-                      yAxisUnits={AxisUnits.Count}
-                      xScale={xScale}
-                    />
-                  </div>
-                  {canaryLatencyRange && (
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        marginLeft: 12,
-                        paddingTop: 40,
-                        paddingBottom: 24,
-                        fontSize: 11,
-                        color: "#475872",
-                      }}
-                    >
-                      <span>{Duration(canaryLatencyRange.max * 1e9)}</span>
-                      <div
-                        style={{
-                          width: 14,
-                          flex: 1,
-                          minHeight: 60,
-                          margin: "4px 0",
-                          borderRadius: 3,
-                          background:
-                            "linear-gradient(to bottom, hsl(261,97%,35%), hsl(261,97%,85%))",
-                        }}
-                      />
-                      <span>{Duration(canaryLatencyRange.min * 1e9)}</span>
-                      <span
-                        style={{
-                          marginTop: 4,
-                          fontSize: 10,
-                          color: "#8b96a9",
-                        }}
-                      >
-                        Avg Latency
-                      </span>
-                    </div>
-                  )}
-                </div>
+                <GroupedBarChart
+                  data={canaryPlanDistData}
+                  yAxisUnits={AxisUnits.Count}
+                  title="Canary vs Stable Plan Distribution"
+                  tooltip={
+                    <>
+                      Shows plan distribution broken down by canary (newest) vs
+                      stable table statistics.
+                    </>
+                  }
+                  xScale={xScale}
+                />
               </Col>
             </Row>
           )}
