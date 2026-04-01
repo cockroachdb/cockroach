@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -4142,12 +4143,44 @@ func makeSpanStatsGenerator(
 	argSpans := tree.MustBeDArray(args[0])
 	spans := make([]roachpb.Span, 0, argSpans.Len())
 	for _, span := range argSpans.Array {
-		s := tree.MustBeDTuple(span)
+		s, ok := span.(*tree.DTuple)
+		if !ok {
+			if !buildutil.CrdbTestBuild {
+				return nil, errors.AssertionFailedf(
+					"content in array argument for span stats generator must be of *DTuple type",
+				)
+			}
+			panic(errors.AssertionFailedf(
+				"expecting content in array argument for span stats generator be *DTuple, got %T", span,
+			))
+		}
 		if len(s.D) != 2 || s.D[0] == tree.DNull || s.D[1] == tree.DNull {
 			continue
 		}
-		startKey := roachpb.Key(tree.MustBeDBytes(s.D[0]))
-		endKey := roachpb.Key(tree.MustBeDBytes(s.D[1]))
+		startKeyBytes, ok := s.D[0].(*tree.DBytes)
+		if !ok {
+			if !buildutil.CrdbTestBuild {
+				return nil, errors.AssertionFailedf(
+					"start key of span stats generator must be of *DBytes type",
+				)
+			}
+			panic(errors.AssertionFailedf(
+				"expecting start key of span stats generator be *DBytes, got %T", s.D[0],
+			))
+		}
+		endKeyBytes, ok := s.D[1].(*tree.DBytes)
+		if !ok {
+			if !buildutil.CrdbTestBuild {
+				return nil, errors.AssertionFailedf(
+					"end key of span stats generator must be of *DBytes type",
+				)
+			}
+			panic(errors.AssertionFailedf(
+				"expecting end key of span stats generator be *DBytes, got %T", s.D[1],
+			))
+		}
+		startKey := roachpb.Key(*startKeyBytes)
+		endKey := roachpb.Key(*endKeyBytes)
 		spans = append(spans, roachpb.Span{
 			Key:    startKey,
 			EndKey: endKey,
