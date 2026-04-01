@@ -301,15 +301,18 @@ func cleanupTempSchemaObjects(
 					if _, ok := tblDescsByID[d.ID]; ok {
 						return nil
 					}
-					dTableDesc, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, d.ID)
+					dTableDesc, err := descsCol.ByIDWithoutLeased(txn.KV()).
+						WithoutNonPublic().Get().Table(ctx, d.ID)
 					if err != nil {
 						return err
 					}
-					db, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Database(ctx, dTableDesc.GetParentID())
+					db, err := descsCol.ByIDWithoutLeased(txn.KV()).
+						WithoutNonPublic().Get().Database(ctx, dTableDesc.GetParentID())
 					if err != nil {
 						return err
 					}
-					sc, err := descsCol.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Schema(ctx, dTableDesc.GetParentSchemaID())
+					sc, err := descsCol.ByIDWithoutLeased(txn.KV()).
+						WithoutNonPublic().Get().Schema(ctx, dTableDesc.GetParentSchemaID())
 					if err != nil {
 						return err
 					}

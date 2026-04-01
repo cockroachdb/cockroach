@@ -3239,7 +3239,9 @@ func TestBackupRestoreIncremental(t *testing.T) {
 		getLatestBackupEndTime := func() string {
 			var endTime string
 			sqlDB.QueryRow(
-				t, `SELECT end_time FROM [SHOW BACKUP FROM LATEST IN $1] ORDER BY end_time DESC LIMIT 1`, backupDir,
+				t,
+				`SELECT end_time FROM [SHOW BACKUP FROM LATEST IN $1] ORDER BY end_time DESC LIMIT 1`,
+				backupDir,
 			).Scan(&endTime)
 			return endTime
 		}
@@ -4124,7 +4126,10 @@ func TestNonLinearChain(t *testing.T) {
 	sqlDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO t VALUES (0)`)
 	sqlDB.Exec(t, `BACKUP TABLE defaultdb.t INTO $1`, localFoo)
-	require.Len(t, sqlDB.QueryStr(t, `SELECT DISTINCT end_time FROM [SHOW BACKUP FROM LATEST IN $1]`, localFoo), 1)
+	require.Len(t,
+		sqlDB.QueryStr(t, `SELECT DISTINCT end_time FROM [SHOW BACKUP FROM LATEST IN $1]`, localFoo),
+		1,
+	)
 
 	// Write a row and note the time that includes that row.
 	var ts1, ts2 string
@@ -4149,7 +4154,10 @@ func TestNonLinearChain(t *testing.T) {
 
 	// We should see two end times now in the shown backup -- the full and this
 	// (second) inc.
-	require.Len(t, sqlDB.QueryStr(t, `SELECT DISTINCT end_time FROM [SHOW BACKUP FROM LATEST IN $1]`, localFoo), 2)
+	require.Len(t,
+		sqlDB.QueryStr(t, `SELECT DISTINCT end_time FROM [SHOW BACKUP FROM LATEST IN $1]`, localFoo),
+		2,
+	)
 
 	// Now we have a full ending at t0, an incomplete inc from t0 to t1, and a
 	// complete inc also from t0 but to t2. We will move `t` out of our way and
@@ -4169,7 +4177,10 @@ func TestNonLinearChain(t *testing.T) {
 
 	// We should see three end times now in the shown backup -- the full, the 2nd
 	// inc we saw before, but now also this first inc as well.
-	require.Len(t, sqlDB.QueryStr(t, `SELECT DISTINCT end_time FROM [SHOW BACKUP FROM LATEST IN $1]`, localFoo), 3)
+	require.Len(t,
+		sqlDB.QueryStr(t, `SELECT DISTINCT end_time FROM [SHOW BACKUP FROM LATEST IN $1]`, localFoo),
+		3,
+	)
 
 	// Restore the same thing -- t2 -- we did before but now with the extra inc
 	// spur hanging out in the chain. This should produce the same result, and we
@@ -4415,7 +4426,10 @@ func TestEncryptedBackup(t *testing.T) {
 
 			sqlDB.Exec(t, `DROP DATABASE neverappears CASCADE`)
 
-			sqlDB.Exec(t, fmt.Sprintf(`SHOW BACKUP FROM LATEST IN ($1, $2) WITH %s`, encryptionOption), backupLoc1, backupLoc2)
+			sqlDB.Exec(t,
+				fmt.Sprintf(`SHOW BACKUP FROM LATEST IN ($1, $2) WITH %s`, encryptionOption),
+				backupLoc1, backupLoc2,
+			)
 
 			var expectedShowError string
 			if tc.useKMS {
@@ -10831,18 +10845,27 @@ CREATE TABLE child_pk (k INT8 PRIMARY KEY REFERENCES parent);
 	sqlDB.Exec(t, `CREATE DATABASE ts`)
 	sqlDB.Exec(t, `RESTORE TABLE test.rev_times FROM LATEST IN $1 WITH into_db = 'ts'`, localFoo)
 	for _, ts := range sqlDB.QueryStr(t, `SELECT logical_time FROM ts.rev_times`) {
-		sqlDB.Exec(t, fmt.Sprintf(`RESTORE DATABASE test FROM LATEST IN $1 AS OF SYSTEM TIME %s`, ts[0]), localFoo)
+		sqlDB.Exec(t,
+			fmt.Sprintf(`RESTORE DATABASE test FROM LATEST IN $1 AS OF SYSTEM TIME %s`, ts[0]),
+			localFoo,
+		)
 		// Just rendering the constraints loads and validates schema.
 		sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
 		sqlDB.Exec(t, `DROP DATABASE test`)
 
 		// Restore a couple tables, including parent but not child_pk.
 		sqlDB.Exec(t, `CREATE DATABASE test`)
-		sqlDB.Exec(t, fmt.Sprintf(`RESTORE TABLE test.circular FROM LATEST IN $1 AS OF SYSTEM TIME %s`, ts[0]), localFoo)
+		sqlDB.Exec(t,
+			fmt.Sprintf(`RESTORE TABLE test.circular FROM LATEST IN $1 AS OF SYSTEM TIME %s`, ts[0]),
+			localFoo,
+		)
 		require.Equal(t, [][]string{
 			{"test.public.circular", "CREATE TABLE public.circular (\n\tk INT8 NOT NULL,\n\tselfid INT8 NULL,\n\tCONSTRAINT circular_pkey PRIMARY KEY (k ASC),\n\tCONSTRAINT self_fk FOREIGN KEY (selfid) REFERENCES public.circular(selfid) NOT VALID,\n\tUNIQUE INDEX circular_selfid_key (selfid ASC)\n) WITH (schema_locked = true);"},
 		}, sqlDB.QueryStr(t, `SHOW CREATE TABLE test.circular`))
-		sqlDB.Exec(t, fmt.Sprintf(`RESTORE TABLE test.parent, test.child FROM LATEST IN $1 AS OF SYSTEM TIME %s `, ts[0]), localFoo)
+		sqlDB.Exec(t,
+			fmt.Sprintf(`RESTORE TABLE test.parent, test.child FROM LATEST IN $1 AS OF SYSTEM TIME %s `, ts[0]),
+			localFoo,
+		)
 		sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
 		sqlDB.Exec(t, `DROP DATABASE test`)
 
@@ -10850,9 +10873,18 @@ CREATE TABLE child_pk (k INT8 PRIMARY KEY REFERENCES parent);
 		sqlDB.Exec(t, `CREATE DATABASE test`)
 		for _, name := range []string{"child_pk", "child", "circular", "parent"} {
 			if name == "child" || name == "child_pk" {
-				sqlDB.ExpectErr(t, "cannot restore table.*without referenced table", fmt.Sprintf(`RESTORE TABLE test.%s FROM LATEST IN $1 AS OF SYSTEM TIME %s`, name, ts[0]), localFoo)
+				sqlDB.ExpectErr(t, "cannot restore table.*without referenced table",
+					fmt.Sprintf(`RESTORE TABLE test.%s FROM LATEST IN $1 AS OF SYSTEM TIME %s`, name, ts[0]),
+					localFoo,
+				)
 			}
-			sqlDB.Exec(t, fmt.Sprintf(`RESTORE TABLE test.%s FROM LATEST IN $1 AS OF SYSTEM TIME %s WITH skip_missing_foreign_keys`, name, ts[0]), localFoo)
+			sqlDB.Exec(t,
+				fmt.Sprintf(
+					`RESTORE TABLE test.%s FROM LATEST IN $1 AS OF SYSTEM TIME %s WITH skip_missing_foreign_keys`,
+					name, ts[0],
+				),
+				localFoo,
+			)
 		}
 		sqlDB.Exec(t, `SELECT * FROM pg_catalog.pg_constraint`)
 		sqlDB.Exec(t, `DROP DATABASE test`)
