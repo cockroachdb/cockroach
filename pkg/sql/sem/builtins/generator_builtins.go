@@ -4146,8 +4146,20 @@ func makeSpanStatsGenerator(
 		if len(s.D) != 2 || s.D[0] == tree.DNull || s.D[1] == tree.DNull {
 			continue
 		}
-		startKey := roachpb.Key(tree.MustBeDBytes(s.D[0]))
-		endKey := roachpb.Key(tree.MustBeDBytes(s.D[1]))
+		startKeyBytes, ok := s.D[0].(*tree.DBytes)
+		if !ok {
+			return nil, errors.AssertionFailedf(
+				"start key of span stats generator must be of *DBytes type",
+			)
+		}
+		endKeyBytes, ok := s.D[1].(*tree.DBytes)
+		if !ok {
+			return nil, errors.AssertionFailedf(
+				"end key of span stats generator must be of *DBytes type",
+			)
+		}
+		startKey := roachpb.Key(*startKeyBytes)
+		endKey := roachpb.Key(*endKeyBytes)
 		spans = append(spans, roachpb.Span{
 			Key:    startKey,
 			EndKey: endKey,
