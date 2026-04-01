@@ -80,6 +80,29 @@ func (s *Store) FindTargetAndTransferLease(
 	return transferStatus == allocator.TransferOK, err
 }
 
+// GetOrCreateReplica exposes getOrCreateReplica for use in tests. On success,
+// the returned Replica's raftMu is unlocked before returning.
+func (s *Store) GetOrCreateReplica(
+	ctx context.Context, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
+) (*Replica, bool, error) {
+	repl, created, err := s.getOrCreateReplica(ctx, roachpb.FullReplicaID{
+		RangeID:   rangeID,
+		ReplicaID: replicaID,
+	}, nil /* creatingReplica */)
+	if repl != nil {
+		repl.raftMu.Unlock()
+	}
+	return repl, created, err
+}
+
+// ProcessReplicaGC directly invokes the replica GC queue's processing logic on
+// the given replica, bypassing the shouldQueue checks (lease activity,
+// inactivity threshold, etc.) that can make the full scan non-deterministic.
+func (s *Store) ProcessReplicaGC(ctx context.Context, repl *Replica) error {
+	_, err := s.replicaGCQueue.process(ctx, repl, nil /* confReader */, 0 /* priority */)
+	return err
+}
+
 // AddReplica adds the replica to the store's replica map and to the sorted
 // replicasByKey slice. To be used only by unittests.
 func (s *Store) AddReplica(repl *Replica) error {
