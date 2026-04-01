@@ -99,5 +99,6 @@ func registerGrantRole(r registry.Registry) {
 		Dependencies:       []registry.OperationDependency{registry.OperationRequiresNodes},
 		Run:                runGrantRole,
 		WaitBeforeCleanup:  1 * time.Hour,
+		DeferCleanup:       true,
 	})
 }
