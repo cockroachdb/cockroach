@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -352,6 +353,12 @@ var (
 		Measurement: "Requests",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaDistSenderLeaseholderRandomizedOnContextError = metric.Metadata{
+		Name:        "distsender.range_cache.leaseholder_randomized",
+		Help:        `Number of times the DistSender randomized the leaseholder for range cache entries upon seeing a context error`,
+		Measurement: "Count",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // metamorphicRouteToLeaseholderFirst is used to control the behavior of the
@@ -447,33 +454,41 @@ var NonTransactionalWritesNotIdempotent = settings.RegisterBoolSetting(
 	false,
 )
 
+// randomizeLeaseholderOnContextErrorDuration controls the timeout after which
+// we deliberately randomize the leaseholder in a cached range descriptor after
+// seeing context errors (deadline exceeded, context canceled, etc.) to force
+// us to contact a healthy replica.
+var randomizeLeaseholderOnContextErrorDuration = max(500*time.Millisecond,
+	envutil.EnvOrDefaultDuration("COCKROACH_RANDOMIZE_LEASEHOLDER_ON_CONTEXT_ERROR_DURATION", 2*time.Second))
+
 // DistSenderMetrics is the set of metrics for a given distributed sender.
 type DistSenderMetrics struct {
-	BatchCount                         *metric.Counter
-	PartialBatchCount                  *metric.Counter
-	ReplicaAddressedBatchRequestBytes  *metric.Counter
-	ReplicaAddressedBatchResponseBytes *metric.Counter
-	CrossRegionBatchRequestBytes       *metric.Counter
-	CrossRegionBatchResponseBytes      *metric.Counter
-	CrossZoneBatchRequestBytes         *metric.Counter
-	CrossZoneBatchResponseBytes        *metric.Counter
-	AsyncSentCount                     *metric.Counter
-	AsyncInProgress                    *metric.Gauge
-	AsyncThrottledCount                *metric.Counter
-	AsyncThrottledDuration             *metric.Counter
-	SentCount                          *metric.Counter
-	LocalSentCount                     *metric.Counter
-	NextReplicaErrCount                *metric.Counter
-	NotLeaseHolderErrCount             *metric.Counter
-	InLeaseTransferBackoffs            *metric.Counter
-	RangeLookups                       *metric.Counter
-	SlowRPCs                           *metric.Gauge
-	SlowReplicaRPCs                    *metric.Counter
-	ProxySentCount                     *metric.Counter
-	ProxyErrCount                      *metric.Counter
-	ProxyForwardSentCount              *metric.Counter
-	ProxyForwardErrCount               *metric.Counter
-	MethodCounts                       [kvpb.NumMethods]*metric.Counter
+	BatchCount                               *metric.Counter
+	PartialBatchCount                        *metric.Counter
+	ReplicaAddressedBatchRequestBytes        *metric.Counter
+	ReplicaAddressedBatchResponseBytes       *metric.Counter
+	CrossRegionBatchRequestBytes             *metric.Counter
+	CrossRegionBatchResponseBytes            *metric.Counter
+	CrossZoneBatchRequestBytes               *metric.Counter
+	CrossZoneBatchResponseBytes              *metric.Counter
+	AsyncSentCount                           *metric.Counter
+	AsyncInProgress                          *metric.Gauge
+	AsyncThrottledCount                      *metric.Counter
+	AsyncThrottledDuration                   *metric.Counter
+	SentCount                                *metric.Counter
+	LocalSentCount                           *metric.Counter
+	NextReplicaErrCount                      *metric.Counter
+	NotLeaseHolderErrCount                   *metric.Counter
+	InLeaseTransferBackoffs                  *metric.Counter
+	RangeLookups                             *metric.Counter
+	SlowRPCs                                 *metric.Gauge
+	SlowReplicaRPCs                          *metric.Counter
+	ProxySentCount                           *metric.Counter
+	ProxyErrCount                            *metric.Counter
+	ProxyForwardSentCount                    *metric.Counter
+	ProxyForwardErrCount                     *metric.Counter
+	LeaseholderRandomizedOnContextErrorCount *metric.Counter
+	MethodCounts                             [kvpb.NumMethods]*metric.Counter
 	// ErrCounts[i] can be nil if i'th error has been deprecated.
 	ErrCounts      [kvpb.NumErrors]*metric.Counter
 	CircuitBreaker DistSenderCircuitBreakerMetrics
@@ -505,32 +520,33 @@ type DistSenderRangeFeedMetrics struct {
 
 func MakeDistSenderMetrics(locality roachpb.Locality) DistSenderMetrics {
 	m := DistSenderMetrics{
-		BatchCount:                         metric.NewCounter(metaDistSenderBatchCount),
-		PartialBatchCount:                  metric.NewCounter(metaDistSenderPartialBatchCount),
-		AsyncSentCount:                     metric.NewCounter(metaDistSenderAsyncSentCount),
-		AsyncInProgress:                    metric.NewGauge(metaDistSenderAsyncInProgress),
-		AsyncThrottledCount:                metric.NewCounter(metaDistSenderAsyncThrottledCount),
-		AsyncThrottledDuration:             metric.NewCounter(metaDistSenderAsyncThrottledDuration),
-		SentCount:                          metric.NewCounter(metaTransportSentCount),
-		LocalSentCount:                     metric.NewCounter(metaTransportLocalSentCount),
-		ReplicaAddressedBatchRequestBytes:  metric.NewCounter(metaDistSenderReplicaAddressedBatchRequestBytes),
-		ReplicaAddressedBatchResponseBytes: metric.NewCounter(metaDistSenderReplicaAddressedBatchResponseBytes),
-		CrossRegionBatchRequestBytes:       metric.NewCounter(metaDistSenderCrossRegionBatchRequestBytes),
-		CrossRegionBatchResponseBytes:      metric.NewCounter(metaDistSenderCrossRegionBatchResponseBytes),
-		CrossZoneBatchRequestBytes:         metric.NewCounter(metaDistSenderCrossZoneBatchRequestBytes),
-		CrossZoneBatchResponseBytes:        metric.NewCounter(metaDistSenderCrossZoneBatchResponseBytes),
-		NextReplicaErrCount:                metric.NewCounter(metaTransportSenderNextReplicaErrCount),
-		NotLeaseHolderErrCount:             metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
-		InLeaseTransferBackoffs:            metric.NewCounter(metaDistSenderInLeaseTransferBackoffsCount),
-		RangeLookups:                       metric.NewCounter(metaDistSenderRangeLookups),
-		SlowRPCs:                           metric.NewGauge(metaDistSenderSlowRPCs),
-		SlowReplicaRPCs:                    metric.NewCounter(metaDistSenderSlowReplicaRPCs),
-		CircuitBreaker:                     makeDistSenderCircuitBreakerMetrics(),
-		ProxySentCount:                     metric.NewCounter(metaDistSenderProxySentCount),
-		ProxyErrCount:                      metric.NewCounter(metaDistSenderProxyErrCount),
-		ProxyForwardSentCount:              metric.NewCounter(metaDistSenderProxyForwardSentCount),
-		ProxyForwardErrCount:               metric.NewCounter(metaDistSenderProxyForwardErrCount),
-		DistSenderRangeFeedMetrics:         makeDistSenderRangeFeedMetrics(),
+		BatchCount:                               metric.NewCounter(metaDistSenderBatchCount),
+		PartialBatchCount:                        metric.NewCounter(metaDistSenderPartialBatchCount),
+		AsyncSentCount:                           metric.NewCounter(metaDistSenderAsyncSentCount),
+		AsyncInProgress:                          metric.NewGauge(metaDistSenderAsyncInProgress),
+		AsyncThrottledCount:                      metric.NewCounter(metaDistSenderAsyncThrottledCount),
+		AsyncThrottledDuration:                   metric.NewCounter(metaDistSenderAsyncThrottledDuration),
+		SentCount:                                metric.NewCounter(metaTransportSentCount),
+		LocalSentCount:                           metric.NewCounter(metaTransportLocalSentCount),
+		ReplicaAddressedBatchRequestBytes:        metric.NewCounter(metaDistSenderReplicaAddressedBatchRequestBytes),
+		ReplicaAddressedBatchResponseBytes:       metric.NewCounter(metaDistSenderReplicaAddressedBatchResponseBytes),
+		CrossRegionBatchRequestBytes:             metric.NewCounter(metaDistSenderCrossRegionBatchRequestBytes),
+		CrossRegionBatchResponseBytes:            metric.NewCounter(metaDistSenderCrossRegionBatchResponseBytes),
+		CrossZoneBatchRequestBytes:               metric.NewCounter(metaDistSenderCrossZoneBatchRequestBytes),
+		CrossZoneBatchResponseBytes:              metric.NewCounter(metaDistSenderCrossZoneBatchResponseBytes),
+		NextReplicaErrCount:                      metric.NewCounter(metaTransportSenderNextReplicaErrCount),
+		NotLeaseHolderErrCount:                   metric.NewCounter(metaDistSenderNotLeaseHolderErrCount),
+		InLeaseTransferBackoffs:                  metric.NewCounter(metaDistSenderInLeaseTransferBackoffsCount),
+		RangeLookups:                             metric.NewCounter(metaDistSenderRangeLookups),
+		SlowRPCs:                                 metric.NewGauge(metaDistSenderSlowRPCs),
+		SlowReplicaRPCs:                          metric.NewCounter(metaDistSenderSlowReplicaRPCs),
+		CircuitBreaker:                           makeDistSenderCircuitBreakerMetrics(),
+		ProxySentCount:                           metric.NewCounter(metaDistSenderProxySentCount),
+		ProxyErrCount:                            metric.NewCounter(metaDistSenderProxyErrCount),
+		ProxyForwardSentCount:                    metric.NewCounter(metaDistSenderProxyForwardSentCount),
+		ProxyForwardErrCount:                     metric.NewCounter(metaDistSenderProxyForwardErrCount),
+		LeaseholderRandomizedOnContextErrorCount: metric.NewCounter(metaDistSenderLeaseholderRandomizedOnContextError),
+		DistSenderRangeFeedMetrics:               makeDistSenderRangeFeedMetrics(),
 	}
 	for i := range m.MethodCounts {
 		method := kvpb.Method(i).String()
@@ -2403,6 +2419,26 @@ func (ds *DistSender) sendPartialBatch(
 		log.KvExec.Fatal(ctx, "exited retry loop without an error or early exit")
 	}
 
+	// If a context error occurred and the cached leaseholder hasn't been heard
+	// from in a while, randomize the leaseholder. That way, if the cached
+	// leaseholder is "bad" (overloaded, mutex deadlock, etc), future requests
+	// have a chance at discovering the actual leaseholder. Evicting the cached
+	// leaseholder or entry would not necessarily achieve this, since on the
+	// next attempt we would preferably try the nearest locality replica, which
+	// may be the non-responsive one.
+	//
+	// See the documentation for the function
+	// (*EvictionToken).RandomizeLeaseholder() for an explanation.
+	if ctx.Err() != nil && routingTok.Valid() &&
+		routingTok.SinceLeaseholderContacted() >= randomizeLeaseholderOnContextErrorDuration {
+
+		ds.metrics.LeaseholderRandomizedOnContextErrorCount.Inc(1)
+		log.VEventf(ctx, 1,
+			"cached descriptor %s that last contacted leaseholder %s ago saw context error, randomizing the leaseholder",
+			routingTok.Desc(), routingTok.SinceLeaseholderContacted())
+		routingTok.RandomizeLeaseholder(ctx)
+	}
+
 	return response{pErr: pErr}
 }
 
@@ -2966,6 +3002,7 @@ func (ds *DistSender) sendToReplicas(
 
 			if br.Error == nil {
 				// If the server gave us updated range info, lets update our cache with it.
+				// Note that these can be for unrelated ranges.
 				if len(br.RangeInfos) > 0 {
 					log.VEventf(ctx, 2, "received updated range info: %s", br.RangeInfos)
 					routing.EvictAndReplace(ctx, br.RangeInfos...)
@@ -2974,6 +3011,13 @@ func (ds *DistSender) sendToReplicas(
 						// routing information not exposed by the KV API.
 						br.RangeInfos = nil
 					}
+				}
+
+				// If we successfully contacted the leaseholder, record it so that
+				// the randomize-on-context-error heuristic knows the entry is
+				// healthy.
+				if lh := routing.Leaseholder(); lh != nil && curReplica == *lh {
+					routing.MarkLeaseholderContacted()
 				}
 
 				if ds.kvInterceptor != nil {
