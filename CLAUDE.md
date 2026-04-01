@@ -117,7 +117,11 @@ the `slices`, `maps`, and `cmp` packages) where appropriate.
 
 Use the `/commit-helper` skill when creating commits and PRs.
 
-- For multi-commit PRs, summarize each commit in the PR record.
+- For multi-commit PRs, describe the overall goal and the approach taken.
+  Reference individual commits only when needed for orientation (e.g.
+  "early commits are mechanical refactors; the last two hook everything up").
+  Don't repeat commit messages — they're visible in the commit list and
+  go stale as the PR evolves.
 - Do not include a test plan unless explicitly asked by the user.
 
 ### Skills
