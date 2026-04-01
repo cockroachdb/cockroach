@@ -109,3 +109,7 @@ func (m MockNodeLiveness) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap
 	}
 	return isLiveMap
 }
+
+func (m MockNodeLiveness) ScanAllNodeVitalityFromCache() livenesspb.NodeVitalityMap {
+	return m.ScanNodeVitalityFromCache()
+}
