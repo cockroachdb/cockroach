@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/lib/pq/oid"
 )
 
 // InferType derives the type of the given scalar expression. The result is
@@ -282,6 +283,11 @@ func typeIndirection(e opt.ScalarExpr) *types.T {
 		return t
 	case types.ArrayFamily:
 		return t.ArrayContents()
+	case types.StringFamily:
+		if t.Oid() == oid.T_name {
+			return types.String
+		}
+		panic(errors.AssertionFailedf("unknown type indirection type %s", t.SQLString()))
 	default:
 		panic(errors.AssertionFailedf("unknown type indirection type %s", t.SQLString()))
 	}

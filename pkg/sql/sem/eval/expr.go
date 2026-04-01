@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // Expr evaluates a TypedExpr into a Datum.
@@ -381,6 +382,28 @@ func (e *evaluator) EvalIndirectionExpr(
 			}
 		}
 		return tree.NewDJSON(curr), nil
+	case types.StringFamily:
+		if d.ResolvedType().Oid() != oid.T_name {
+			return nil, errors.AssertionFailedf("unsupported feature should have been rejected during planning")
+		}
+		for i, t := range expr.Indirection {
+			if t.Slice || i > 0 {
+				return nil, errors.AssertionFailedf("unsupported feature should have been rejected during planning")
+			}
+			beginDatum, err := t.Begin.(tree.TypedExpr).Eval(ctx, e)
+			if err != nil {
+				return nil, err
+			}
+			if beginDatum == tree.DNull {
+				return tree.DNull, nil
+			}
+			subscriptIdx = int(tree.MustBeDInt(beginDatum))
+		}
+		str := string(tree.MustBeDString(d))
+		if subscriptIdx < 0 || subscriptIdx >= len(str) {
+			return tree.DNull, nil
+		}
+		return tree.NewDString(string(str[subscriptIdx])), nil
 	}
 	return nil, errors.AssertionFailedf("unsupported feature should have been rejected during planning")
 }
