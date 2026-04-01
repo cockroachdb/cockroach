@@ -30,7 +30,6 @@ tc_end_block "Variable Setup"
 docker_login_gcr "$gcr_staged_repository" "$gcr_staged_credentials"
 docker pull --platform linux/amd64 "${gcr_staged_repository}:amd64-${version}"
 docker pull --platform linux/arm64 "${gcr_staged_repository}:arm64-${version}"
-docker pull --platform linux/s390x "${gcr_staged_repository}:s390x-${version}"
 
 cloud_release=
 for i in $(seq 1 10); do
@@ -60,18 +59,13 @@ docker tag \
 docker tag \
   "${gcr_staged_repository}:arm64-${version}" \
   "${gcr_repository}:arm64-${version_cloudonly}"
-docker tag \
-  "${gcr_staged_repository}:s390x-${version}" \
-  "${gcr_repository}:s390x-${version_cloudonly}"
 
 docker push "${gcr_repository}:amd64-${version_cloudonly}"
 docker push "${gcr_repository}:arm64-${version_cloudonly}"
-docker push "${gcr_repository}:s390x-${version_cloudonly}"
 
 create_and_push_multi_arch_manifest "$manifest" \
   "${gcr_repository}:amd64-${version_cloudonly}" \
-  "${gcr_repository}:arm64-${version_cloudonly}" \
-  "${gcr_repository}:s390x-${version_cloudonly}"
+  "${gcr_repository}:arm64-${version_cloudonly}" 
 echo "==========="
 echo "published to"
 echo "$manifest"
@@ -79,7 +73,7 @@ echo "==========="
 
 tc_start_block "Verify docker images"
 error=0
-for arch in amd64 arm64 s390x; do
+for arch in amd64 arm64; do
     tc_start_block "Verify $manifest on $arch"
     if ! verify_docker_image "$manifest" "linux/$arch" "$BUILD_VCS_NUMBER" "$version" false false; then
       error=1
