@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -214,6 +215,7 @@ func TestStatementMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	rng, _ := randutil.NewTestRand()
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 	runner := sqlutils.MakeSQLRunner(sqlDB)
@@ -256,8 +258,14 @@ func TestStatementMetrics(t *testing.T) {
 		// Expect to write 5 rows - update primary index, delete and insert two
 		// rows in "y" secondary index.
 		{query: `UPDATE db.t SET y = 100 WHERE y >= 10 AND y <= 20`, rowsRead: 4, indexRowsWritten: 6},
+		// Same scenario as above but the UPDATE is executed in a CTE.
 		{
-			query:            `UPSERT INTO db.t VALUES (6, 60, ARRAY['date'], '[100, 110]')`,
+			query:            `WITH cte (c) AS (UPDATE db.t SET y = 100 WHERE y >= 50 AND y <= 60 RETURNING x) SELECT c FROM cte`,
+			rowsRead:         4,
+			indexRowsWritten: 6,
+		},
+		{
+			query:            `UPSERT INTO db.t VALUES (6, 100, ARRAY['date'], '[100, 110]')`,
 			rowsRead:         1,
 			indexRowsWritten: 3,
 		},
@@ -289,6 +297,13 @@ func TestStatementMetrics(t *testing.T) {
 			runner.Exec(t, `INSERT INTO db.t VALUES (1, 10, ARRAY['apple', 'orange'], '[1, 2]')`)
 			runner.Exec(t, `INSERT INTO db.t VALUES (2, 20, ARRAY['banana'], '[3, 4]')`)
 			runner.Exec(t, `INSERT INTO db.t VALUES (3, 30, ARRAY['apple', 'pear', 'mango'], '[5, 6]')`)
+
+			// Randomize whether we disable txn sampling or not (if it's
+			// disabled, then we don't collect execution stats, which could have
+			// an impact on the metrics' updates).
+			if rng.Float64() < 0.5 {
+				runner.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 0`)
+			}
 
 			for _, tc := range testCases {
 				t.Run(tc.query, func(t *testing.T) {
