@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
+	"github.com/cockroachdb/cockroach/pkg/backup/backupdest"
 	"github.com/cockroachdb/cockroach/pkg/backup/backupresolver"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -410,6 +411,13 @@ func backupPlanHook(
 	}
 
 	to, err := exprEval.StringArray(ctx, tree.Exprs(backupStmt.To))
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	// We call GetURIsByLocalityKV here to validate that COCKROACH_LOCALITY is
+	// well-formed in the backup destinations.
+	_, _, err = backupdest.GetURIsByLocalityKV(to, "")
 	if err != nil {
 		return nil, nil, false, err
 	}
