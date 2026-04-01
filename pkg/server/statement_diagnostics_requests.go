@@ -97,6 +97,7 @@ func (s *statusServer) CreateStatementDiagnosticsReport(
 		req.AntiPlanGist,
 		req.SamplingProbability,
 		req.MinExecutionLatency,
+		0, // maxExecutionLatency - not yet exposed in API
 		req.ExpiresAfter,
 		req.Redacted,
 		username,

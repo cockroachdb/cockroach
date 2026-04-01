@@ -632,6 +632,11 @@ type StmtDiagnosticsRequester interface {
 	//   latency of a query that satisfies the request. In other words, queries
 	//   that ran faster than minExecutionLatency do not satisfy the condition
 	//   and the bundle is not generated for them.
+	// - maxExecutionLatency, if non-zero, determines the maximum execution
+	//   latency of a query that satisfies the request. In other words, queries
+	//   that ran slower than maxExecutionLatency do not satisfy the condition
+	//   and the bundle is not generated for them. If zero, there is no upper
+	//   bound.
 	// - expiresAfter, if non-zero, indicates for how long the request should
 	//   stay active.
 	// - redacted, if true, indicates that the redacted bundle is requested.
@@ -644,6 +649,7 @@ type StmtDiagnosticsRequester interface {
 		antiPlanGist bool,
 		samplingProbability float64,
 		minExecutionLatency time.Duration,
+		maxExecutionLatency time.Duration,
 		expiresAfter time.Duration,
 		redacted bool,
 		username string,
