@@ -4120,16 +4120,6 @@ def go_deps():
         ],
     )
     go_repository(
-        name = "com_github_google_go_github_v61",
-        build_file_proto_mode = "disable_global",
-        importpath = "github.com/google/go-github/v61",
-        sha256 = "81c8199e9fae06865d65a50545ddb45a4877c33809a701da839c3a558120f62c",
-        strip_prefix = "github.com/google/go-github/v61@v61.0.0",
-        urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/google/go-github/v61/com_github_google_go_github_v61-v61.0.0.zip",
-        ],
-    )
-    go_repository(
         name = "com_github_google_go_querystring",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/google/go-querystring",
