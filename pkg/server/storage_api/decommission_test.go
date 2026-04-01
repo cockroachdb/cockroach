@@ -915,7 +915,9 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 			_, err := c.Jobs(ctx, &serverpb.JobsRequest{})
 			return err
 		}},
-		{"Liveness", codes.PermissionDenied, func(ctx context.Context, c serverpb.RPCAdminClient) error {
+		// Liveness reads from the local cache and does not require cluster
+		// (KV) access, so it succeeds even on a decommissioned node.
+		{"Liveness", codes.OK, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.Liveness(ctx, &serverpb.LivenessRequest{})
 			return err
 		}},
