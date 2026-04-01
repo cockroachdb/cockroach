@@ -2570,6 +2570,15 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       owner: cockroachdb/kv
+    - name: distsender.range_cache.leaseholder_randomized
+      exported_name: distsender_range_cache_leaseholder_randomized
+      description: Number of times the DistSender randomized the leaseholder for range cache entries upon seeing a context error
+      y_axis_label: Count
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      owner: cockroachdb/kv
     - name: distsender.rangefeed.catchup_ranges
       exported_name: distsender_rangefeed_catchup_ranges
       description: Number of ranges with an active rangefeed that are performing a catchup scan.

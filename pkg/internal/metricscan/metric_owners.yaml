@@ -207,6 +207,7 @@ owners:
   distsender_circuit_breaker_replicas_tripped_events: cockroachdb/kv
   distsender_errors_inleasetransferbackoffs: cockroachdb/kv
   distsender_errors_notleaseholder: cockroachdb/kv
+  distsender_range_cache_leaseholder_randomized: cockroachdb/kv
   distsender_rangefeed_catchup_ranges: cockroachdb/kv
   distsender_rangefeed_catchup_ranges_waiting_client_side: cockroachdb/kv
   distsender_rangefeed_error_catchup_ranges: cockroachdb/kv
