@@ -64,6 +64,9 @@ func copySnapshotDataToNode(
 
 	// Find the snapshot for this node. Snapshot names end with a zero-padded
 	// node number, e.g. "index-backfill-tpce-100k-v24.3.0-n10-0003".
+	// NB: This only works for single-store-per-node snapshots. Multi-store
+	// snapshot names end with "-{node}-{storeIdx}" (e.g. "...-0003-01"),
+	// which won't match this suffix.
 	suffix := fmt.Sprintf("-%04d", nodeID)
 	var snap vm.VolumeSnapshot
 	for _, s := range snapshots {
