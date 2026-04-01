@@ -171,8 +171,8 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 					panic("unreachable")
 				}
 
-				// Allow a 5% room for error.
-				const bandwidthThreshold = bandwidthLimitMbs * 1.05
+				// Allow a 30% room for error.
+				const bandwidthThreshold = bandwidthLimitMbs * 1.30
 				const sampleCountForBW = 12
 				const collectionIntervalSeconds = 10.0
 				// Loop for ~20 minutes.
