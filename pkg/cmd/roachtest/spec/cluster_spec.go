@@ -395,11 +395,14 @@ func getGCEOpts(
 	bootDiskOnly bool,
 ) vm.ProviderOpts {
 	opts := gce.DefaultProviderOpts()
-	hasDifferentMachineType := machineType != "" && machineType != opts.MachineType
 	opts.MachineType = machineType
-	// Use the default CPU platform if the user has not
-	// overriden it or specified a different machine type.
-	if minCPUPlatform != "" || hasDifferentMachineType {
+	// Default to "best" so that minCPUPlatform() resolves to the latest
+	// platform available for the machine type, ensuring run-to-run
+	// consistency regardless of machine family. Tests that explicitly
+	// set GCE.MinCPUPlatform can still override this.
+	if minCPUPlatform == "" {
+		opts.MinCPUPlatform = "best"
+	} else {
 		opts.MinCPUPlatform = minCPUPlatform
 	}
 	if volumeSize != 0 {
