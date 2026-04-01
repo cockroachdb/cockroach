@@ -532,6 +532,9 @@ func ingestKvs(
 // BulkOpSummary deltas from sink flushes, and collects SST manifests for
 // the distributed merge path. Each registered BulkSink installs an OnFlush
 // callback that updates flushedRows and accumulates summaries under the lock.
+// SST manifests are collected separately in formatProgress rather than in the
+// OnFlush callback, so that they are paired with an up-to-date resume
+// position.
 //
 // Resume position is reported as the minimum flushed row across all sinks
 // for each file, since a file can only be skipped on resume if all sinks
@@ -557,8 +560,8 @@ type importProgressTracker struct {
 	// never reset. Used to report the final result.
 	totalSummary kvpb.BulkOpSummary
 
-	// manifests collects SST file metadata from sink flushes for the
-	// distributed merge path. Drained by formatProgress.
+	// manifests collects SST file metadata for the distributed merge
+	// path. Drained from sinks and reported by formatProgress.
 	manifests []jobspb.BulkSSTManifest
 
 	// nodeID identifies this processor's node in progress reports.
@@ -612,7 +615,6 @@ func (ipt *importProgressTracker) registerSink(sink bulksst.BulkSink) {
 		copy(thisSinksFlushedRows, ipt.unflushedRows)
 		ipt.summary.Add(summary)
 		ipt.totalSummary.Add(summary)
-		ipt.manifests = append(ipt.manifests, sink.ConsumeFlushManifests()...)
 	})
 }
 
@@ -644,6 +646,16 @@ func (ipt *importProgressTracker) formatProgress() (
 	ipt.summary.Reset()
 
 	prog.NodeID = ipt.nodeID
+
+	// Drain manifests from all sinks. Manifests are collected here rather
+	// than in the OnFlush callback so that they are paired with an
+	// up-to-date ResumePos. The OnFlush callback fires during auto-flush
+	// which can occur mid-batch before recordKVBatch has updated
+	// unflushedRows, so collecting manifests there would associate them
+	// with a stale position.
+	for _, s := range ipt.sinks {
+		ipt.manifests = append(ipt.manifests, s.ConsumeFlushManifests()...)
+	}
 	if len(ipt.manifests) > 0 {
 		manifests := append([]jobspb.BulkSSTManifest(nil), ipt.manifests...)
 		ipt.manifests = nil
