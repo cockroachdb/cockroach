@@ -248,9 +248,11 @@ func setupStorageParams(
 ) {
 	// Reset to defaults first, since the new PK should not inherit storage
 	// params from the old PK unless explicitly specified in the WITH clause.
-	// For RBR-to-RBR locality swaps, preserve skip_unique_checks from the old
-	// PK since the index remains implicitly partitioned.
-	if t.IsLocalitySwap && partitioning != nil && partitioning.NumImplicitColumns > 0 {
+	// For locality swaps where the new index retains implicit partitioning
+	// (e.g. RBR-to-RBR), preserve skip_unique_checks from the old PK.
+	// For transitions that remove implicit partitioning (e.g. RBR-to-GLOBAL),
+	// clear it since it's only valid on implicitly partitioned indexes.
+	if t.IsLocalitySwap && t.Partitioning != nil && len(t.Partitioning.NewImplicitColumns) > 0 {
 		final.SkipUniqueChecks = old.SkipUniqueChecks
 	} else {
 		final.SkipUniqueChecks = false
