@@ -34,6 +34,7 @@ go_test(
     srcs = [
         "main_test.go",
         "statement_diagnostics_helpers_test.go",
+        "statement_diagnostics_max_latency_test.go",
         "statement_diagnostics_test.go",
         "txn_diagnostics_helpers_test.go",
         "txn_diagnostics_test.go",
