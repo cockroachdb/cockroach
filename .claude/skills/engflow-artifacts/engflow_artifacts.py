@@ -34,11 +34,23 @@ import subprocess
 import sys
 import tempfile
 
+# Generated from resultstore.proto — the reverse-engineered subset of
+# EngFlow's internal ResultStore v1alpha API that we need for artifact
+# downloading. See the proto file for field documentation.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import resultstore_pb2 as pb
+
 
 ENGFLOW_HOST = "mesolite.cluster.engflow.com"
 ENGFLOW_URL = f"https://{ENGFLOW_HOST}"
 CAS_API = f"{ENGFLOW_URL}/api/contentaddressablestorage/v1/instances/default/blobs"
 GRPC_URL = f"{ENGFLOW_URL}/engflow.resultstore.v1alpha.ResultStore"
+
+# Artifact name mappings from EngFlow's internal names to user-facing names.
+_ARTIFACT_NAMES = {
+    "test.outputs__outputs.zip": "outputs.zip",
+    "test.outputs_manifest__MANIFEST": "manifest",
+}
 
 
 def get_curl_auth_args():
@@ -71,15 +83,24 @@ def get_curl_auth_args():
             sys.exit(1)
 
         if result.returncode != 0:
-            print(f"Error: engflow_auth export failed: {result.stderr}", file=sys.stderr)
-            print("Run: engflow_auth login mesolite.cluster.engflow.com", file=sys.stderr)
+            print(
+                f"Error: engflow_auth export failed: {result.stderr}",
+                file=sys.stderr,
+            )
+            print(
+                "Run: engflow_auth login mesolite.cluster.engflow.com",
+                file=sys.stderr,
+            )
             sys.exit(1)
 
         try:
             data = json.loads(result.stdout)
             token = data["token"]["access_token"]
         except (json.JSONDecodeError, KeyError):
-            print("Error: Failed to parse access token from engflow_auth output.", file=sys.stderr)
+            print(
+                "Error: Failed to parse access token from engflow_auth output.",
+                file=sys.stderr,
+            )
             print(
                 "Try running: engflow_auth login mesolite.cluster.engflow.com "
                 "or set ENGFLOW_TOKEN directly.",
@@ -88,47 +109,24 @@ def get_curl_auth_args():
             sys.exit(1)
 
     return [
-        "-H", f"x-engflow-auth-method: jwt-v0",
+        "-H", "x-engflow-auth-method: jwt-v0",
         "-H", f"x-engflow-auth-token: {token}",
         "-H", f"Cookie: x-engflow-auth={token}",
     ]
 
 
-def encode_varint(val):
-    """Encode an integer as a protobuf varint."""
-    result = b""
-    while val > 0x7F:
-        result += bytes([(val & 0x7F) | 0x80])
-        val >>= 7
-    result += bytes([val])
-    return result
-
-
-def encode_string_field(field_num, value):
-    """Encode a string as a protobuf field."""
-    tag = (field_num << 3) | 2
-    encoded = value.encode("utf-8")
-    return bytes([tag]) + encode_varint(len(encoded)) + encoded
-
-
-def encode_bytes_field(field_num, value):
-    """Encode bytes as a protobuf field."""
-    tag = (field_num << 3) | 2
-    return bytes([tag]) + encode_varint(len(value)) + value
-
-
-def make_grpc_frame(proto_bytes):
-    """Wrap protobuf bytes in a gRPC frame (5-byte header)."""
-    return struct.pack(">BI", 0, len(proto_bytes)) + proto_bytes
-
-
 def grpc_call(auth_args, method, proto_bytes):
     """Make a gRPC-web call via curl and return the response protobuf bytes.
 
-    Python's urllib mangles headers in a way that EngFlow's server rejects
-    (returns HTML instead of gRPC), so we shell out to curl.
+    EngFlow's gRPC-web endpoint requires HTTP/2 — it serves the web UI HTML
+    over HTTP/1.1. We use curl because it negotiates HTTP/2 via ALPN, while
+    Python's requests/urllib only speak HTTP/1.1.
+
+    The gRPC-web framing is a 5-byte header (1 byte flags + 4 byte big-endian
+    length) around each protobuf message. Large responses may span multiple
+    data frames; a trailer frame (flag 0x80) carries the gRPC status.
     """
-    frame = make_grpc_frame(proto_bytes)
+    frame = struct.pack(">BI", 0, len(proto_bytes)) + proto_bytes
     url = f"{GRPC_URL}/{method}"
 
     with tempfile.NamedTemporaryFile(suffix=".bin", delete=False) as tmp:
@@ -154,14 +152,24 @@ def grpc_call(auth_args, method, proto_bytes):
             print(f"  curl error: {result.stderr.decode()}", file=sys.stderr)
         return b""
 
-    flag = data[0]
-    payload_len = struct.unpack(">I", data[1:5])[0]
-    if flag == 0x80:
-        # Trailer-only response (error).
-        trailer = data[5:5 + payload_len].decode("utf-8", errors="replace")
-        print(f"gRPC error: {trailer}", file=sys.stderr)
-        return b""
-    return data[5:5 + payload_len]
+    # Parse gRPC-web frames. Data frames have flag=0x00; the trailer
+    # frame has flag=0x80. Large responses may span multiple data frames.
+    payload = b""
+    pos = 0
+    while pos + 5 <= len(data):
+        flag = data[pos]
+        frame_len = struct.unpack(">I", data[pos + 1:pos + 5])[0]
+        if flag == 0x80:
+            trailer = data[pos + 5:pos + 5 + frame_len].decode(
+                "utf-8", errors="replace",
+            )
+            if "grpc-status: 0" not in trailer and "grpc-status:0" not in trailer:
+                print(f"gRPC error: {trailer}", file=sys.stderr)
+                return b""
+            break
+        payload += data[pos + 5:pos + 5 + frame_len]
+        pos += 5 + frame_len
+    return payload
 
 
 def download_blob(auth_args, blob_hash, blob_size, outfile):
@@ -172,7 +180,10 @@ def download_blob(auth_args, blob_hash, blob_size, outfile):
         capture_output=True,
     )
     if result.returncode != 0:
-        print(f"  Error downloading blob: {result.stderr.decode()}", file=sys.stderr)
+        print(
+            f"  Error downloading blob: {result.stderr.decode()}",
+            file=sys.stderr,
+        )
         return 0
     return os.path.getsize(outfile)
 
@@ -180,144 +191,122 @@ def download_blob(auth_args, blob_hash, blob_size, outfile):
 def get_target_labels_by_status(auth_args, instance, invocation_id, status_code):
     """Call GetTargetLabelsByStatus and return target labels.
 
-    Status codes observed from the EngFlow UI:
-      0x08 = passed, 0x09 = failed
-    The status is encoded as a single-byte length-delimited field (field 3).
+    Status codes: 0x08 = passed, 0x09 = failed.
     """
-    proto = encode_string_field(1, instance)
-    proto += encode_string_field(2, invocation_id)
-    # Field 3 is a single-byte length-delimited value (nested enum).
-    proto += encode_bytes_field(3, bytes([status_code]))
-    # Field 4 is a varint limit.
-    proto += bytes([(4 << 3) | 0]) + encode_varint(100)
-    resp = grpc_call(auth_args, "GetTargetLabelsByStatus", proto)
-    if not resp:
+    req = pb.GetTargetLabelsByStatusRequest(
+        instance=instance,
+        invocation_id=invocation_id,
+        status=bytes([status_code]),
+        limit=100,
+    )
+    resp_bytes = grpc_call(
+        auth_args, "GetTargetLabelsByStatus", req.SerializeToString(),
+    )
+    if not resp_bytes:
         return []
-    text = resp.decode("latin-1")
-    return [s for s in re.findall(r"//[^\x00-\x1f]+", text) if not s.startswith("///")]
+    return parse_labels_response(resp_bytes)
+
+
+def parse_target_response(resp_bytes):
+    """Parse a GetTarget response into test actions keyed by (shard, run).
+
+    Returns a dict mapping (shard_number, run_number) to a dict of artifacts:
+      {(shard, run): {"test.xml": (hash, size), "test.log": (hash, size), ...}}
+    Also returns (total_shards, total_entries) as a second value.
+    """
+    resp = pb.GetTargetResponse()
+    resp.ParseFromString(resp_bytes)
+
+    collection = resp.target.info.test_suite.test_actions
+    actions = {}
+    for action in collection.actions:
+        shard_artifacts = {}
+        data = action.data
+
+        # test.xml from CompactDigest.
+        if data.test_xml_digest.size_bytes > 0:
+            shard_artifacts["test.xml"] = (
+                data.test_xml_digest.hash.hex(),
+                data.test_xml_digest.size_bytes,
+            )
+
+        # test.log.
+        if data.test_log.bytestream_uri:
+            blob_hash, size = _parse_bytestream_uri(
+                data.test_log.bytestream_uri,
+            )
+            if blob_hash:
+                shard_artifacts["test.log"] = (blob_hash, size)
+
+        # outputs.zip, manifest.
+        for ref in data.output_files:
+            name = _ARTIFACT_NAMES.get(ref.name, ref.name)
+            if ref.bytestream_uri:
+                blob_hash, size = _parse_bytestream_uri(ref.bytestream_uri)
+                if blob_hash:
+                    shard_artifacts[name] = (blob_hash, size)
+
+        actions[(action.shard, action.run)] = shard_artifacts
+
+    return actions, (collection.total_shards, collection.total_entries)
+
+
+def parse_labels_response(resp_bytes):
+    """Parse a GetTargetLabelsByStatus response into a list of target labels."""
+    resp = pb.GetTargetLabelsByStatusResponse()
+    resp.ParseFromString(resp_bytes)
+    return list(resp.labels)
 
 
 def get_target(auth_args, instance, invocation_id, target_label):
-    """Call GetTarget and return the raw protobuf response."""
-    proto = encode_string_field(1, instance)
-    proto += encode_string_field(2, invocation_id)
-    proto += encode_string_field(3, target_label)
-    return grpc_call(auth_args, "GetTarget", proto)
-
-
-def decode_varint(data, pos):
-    """Decode a protobuf varint starting at pos. Returns (value, new_pos)."""
-    val = 0
-    shift = 0
-    while pos < len(data):
-        b = data[pos]
-        val |= (b & 0x7F) << shift
-        shift += 7
-        pos += 1
-        if not (b & 0x80):
-            break
-    return val, pos
-
-
-def find_compact_digests(data):
-    """Find CompactDigest entries in raw protobuf bytes.
-
-    CompactDigest (from engflow.type.CompactDigest):
-      field 1 (tag 0x0a) = bytes, 32-byte SHA-256 hash
-      field 2 (tag 0x10) = uint64, size in bytes
-
-    Returns list of (offset, hex_hash, size) tuples.
-    """
-    results = []
-    for i in range(len(data) - 35):
-        if data[i] == 0x0a and data[i + 1] == 0x20:
-            raw_hash = data[i + 2:i + 34]
-            if i + 34 < len(data) and data[i + 34] == 0x10:
-                size_val, _ = decode_varint(data, i + 35)
-                results.append((i, raw_hash.hex(), size_val))
-    return results
-
-
-def extract_shard_artifacts(proto_bytes):
-    """Extract artifact blob references from GetTarget response.
-
-    The response interleaves two types of blob references per shard:
-      - CompactDigest (raw binary hash): used for test.xml (JUnit results)
-      - bytestream:// URL (hex hash): used for test.log, outputs.zip, manifest
-
-    The first CompactDigest is the test binary (very large); remaining ones
-    are test.xml entries, each followed by bytestream URLs for that shard.
-    """
-    text = proto_bytes.decode("latin-1")
-
-    # Collect all entries with offsets for ordering.
-    entries = []
-
-    # CompactDigest entries (test.xml).
-    for offset, hex_hash, size in find_compact_digests(proto_bytes):
-        entries.append(("test.xml", offset, hex_hash, size))
-
-    # Bytestream URL entries (test.log, outputs.zip, manifest).
-    artifact_pattern = (
-        r"(test\.log|test\.outputs__outputs\.zip|"
-        r"test\.outputs_manifest__MANIFEST)"
-        r"[^\x00]*?bytestream://[^/]+/blobs/([0-9a-f]{64})/(\d+)"
+    """Call GetTarget and return parsed test actions. See parse_target_response."""
+    req = pb.GetTargetRequest(
+        instance=instance,
+        invocation_id=invocation_id,
+        target_label=target_label,
     )
-    for m in re.finditer(artifact_pattern, text):
-        name = m.group(1)
-        if name == "test.outputs__outputs.zip":
-            key = "outputs.zip"
-        elif name == "test.outputs_manifest__MANIFEST":
-            key = "manifest"
-        else:
-            key = name
-        entries.append((key, m.start(), m.group(2), int(m.group(3))))
+    resp_bytes = grpc_call(auth_args, "GetTarget", req.SerializeToString())
+    if not resp_bytes:
+        return {}, (0, 0)
+    return parse_target_response(resp_bytes)
 
-    entries.sort(key=lambda x: x[1])
 
-    # Skip the first CompactDigest if it's much larger than the rest (test binary).
-    if entries and entries[0][0] == "test.xml" and entries[0][3] > 100_000_000:
-        entries = entries[1:]
+def _parse_bytestream_uri(uri):
+    """Extract (hash, size) from a bytestream:// URI.
 
-    # Group into shards. Each shard starts with a test.xml CompactDigest,
-    # followed by test.log (and optionally outputs.zip + manifest).
-    shards = []
-    current_shard = {}
-    for key, _, blob_hash, size in entries:
-        if key == "test.xml" and current_shard:
-            shards.append(current_shard)
-            current_shard = {}
-        current_shard[key] = (blob_hash, size)
-
-    if current_shard:
-        shards.append(current_shard)
-
-    return shards
+    Format: bytestream://host/blobs/<sha256>/<size>
+    """
+    m = re.search(r"/blobs/([0-9a-f]{64})/(\d+)", uri)
+    if not m:
+        return None, 0
+    return m.group(1), int(m.group(2))
 
 
 def parse_invocation_url(url):
     """Parse an EngFlow invocation URL into components.
 
-    Returns (invocation_id, target_label, shard_num, run_num, attempt_num).
+    Returns (invocation_id, target_label, shard, run, attempt).
     """
-    # Extract invocation ID
     inv_match = re.search(r"/invocations/default/([0-9a-f-]+)", url)
     if not inv_match:
-        print(f"Error: cannot parse invocation ID from URL: {url}", file=sys.stderr)
+        print(
+            f"Error: cannot parse invocation ID from URL: {url}",
+            file=sys.stderr,
+        )
         sys.exit(1)
     invocation_id = inv_match.group(1)
 
-    # Extract target from URL fragment
     target_label = None
     frag_match = re.search(r"#targets-([A-Za-z0-9+/=_-]+)", url)
     if frag_match:
         import base64
         try:
-            target_label = base64.b64decode(frag_match.group(1) + "==").decode("utf-8").strip("\x00")
+            target_label = base64.b64decode(
+                frag_match.group(1) + "=="
+            ).decode("utf-8").strip("\x00")
         except Exception:
             pass
 
-    # Extract shard/run/attempt from query params
     shard = None
     run = None
     attempt = None
@@ -334,20 +323,62 @@ def parse_invocation_url(url):
     return invocation_id, target_label, shard, run, attempt
 
 
+def _resolve_args(args, need_shard=False):
+    """Extract invocation_id, target_label, shard, run from args or --url."""
+    if getattr(args, "url", None):
+        invocation_id, target_label, shard, run, _ = parse_invocation_url(
+            args.url,
+        )
+        if not target_label:
+            print(
+                "Error: could not extract target from URL. "
+                "Use --target to specify it.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if args.shard is not None:
+            shard = args.shard
+        if getattr(args, "run", None) is not None:
+            run = getattr(args, "run")
+    else:
+        invocation_id = args.invocation_id
+        target_label = args.target
+        shard = args.shard
+        run = getattr(args, "run", None)
+
+    if run is None:
+        run = 1
+
+    if need_shard and shard is None:
+        print(
+            "Error: --shard is required "
+            "(or provide a URL with testReportShard param)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    return invocation_id, target_label, shard, run
+
+
 def cmd_targets(args):
     """List targets for an invocation, optionally filtered by status."""
     auth_args = get_curl_auth_args()
     invocation_id = args.invocation_id
 
     if args.all:
-        # Try both passed (0x08) and failed (0x09).
         labels = set()
         for code in [0x08, 0x09]:
-            labels.update(get_target_labels_by_status(auth_args, "default", invocation_id, code))
+            labels.update(
+                get_target_labels_by_status(
+                    auth_args, "default", invocation_id, code,
+                ),
+            )
         labels = sorted(labels)
         print(f"All targets ({len(labels)}):")
     else:
-        labels = get_target_labels_by_status(auth_args, "default", invocation_id, 0x09)
+        labels = get_target_labels_by_status(
+            auth_args, "default", invocation_id, 0x09,
+        )
         if not labels:
             print("No failed targets found. Use --all to list all targets.")
             return
@@ -360,79 +391,52 @@ def cmd_targets(args):
 def cmd_list(args):
     """List artifacts for a target."""
     auth_args = get_curl_auth_args()
+    invocation_id, target_label, filter_shard, filter_run = _resolve_args(args)
 
-    if args.url:
-        invocation_id, target_label, shard, _, _ = parse_invocation_url(args.url)
-        if not target_label:
-            print("Error: could not extract target from URL. "
-                  "Use --target to specify it.", file=sys.stderr)
-            sys.exit(1)
-    else:
-        invocation_id = args.invocation_id
-        target_label = args.target
-        shard = args.shard
-
-    proto = get_target(auth_args, "default", invocation_id, target_label)
-    if not proto:
+    actions, (total_shards, total_entries) = get_target(
+        auth_args, "default", invocation_id, target_label,
+    )
+    if not actions:
         print("Error: GetTarget returned empty response", file=sys.stderr)
         sys.exit(1)
 
-    shards = extract_shard_artifacts(proto)
+    # Collect unique shard numbers, sorted.
+    shard_nums = sorted({s for s, r in actions})
+    run_nums = sorted({r for s, r in actions})
+
     print(f"Target: {target_label}")
     print(f"Invocation: {invocation_id}")
-    print(f"Total shards with artifacts: {len(shards)}")
+    print(f"Shards: {len(shard_nums)}, Runs: {len(run_nums)}")
     print()
 
-    for i, shard_data in enumerate(shards):
-        if shard is not None and i != shard:
+    for shard_num in shard_nums:
+        if filter_shard is not None and shard_num != filter_shard:
             continue
-        print(f"Shard {i}:")
-        for name, (blob_hash, size) in sorted(shard_data.items()):
-            size_str = f"{size:,}" if size < 1048576 else f"{size/1048576:.1f}MB"
-            print(f"  {name:40s} {blob_hash} ({size_str})")
-        print()
+        for run_num in run_nums:
+            if filter_shard is not None and run_num != filter_run:
+                continue
+            key = (shard_num, run_num)
+            if key not in actions:
+                continue
+            shard_data = actions[key]
+            header = f"Shard {shard_num}"
+            if len(run_nums) > 1:
+                header += f" (run {run_num})"
+            print(f"{header}:")
+            for name, (blob_hash, size) in sorted(shard_data.items()):
+                if size < 1048576:
+                    size_str = f"{size:,}"
+                else:
+                    size_str = f"{size / 1048576:.1f}MB"
+                print(f"  {name:40s} {blob_hash} ({size_str})")
+            print()
 
 
-def cmd_download(args):
-    """Download artifacts for a target shard."""
-    auth_args = get_curl_auth_args()
-
-    if args.url:
-        invocation_id, target_label, shard, _, _ = parse_invocation_url(args.url)
-        if not target_label:
-            print("Error: could not extract target from URL. "
-                  "Use --target to specify it.", file=sys.stderr)
-            sys.exit(1)
-        if shard is None:
-            shard = args.shard
-    else:
-        invocation_id = args.invocation_id
-        target_label = args.target
-        shard = args.shard
-
-    if shard is None:
-        print("Error: --shard is required (or provide a URL with testReportShard param)",
-              file=sys.stderr)
-        sys.exit(1)
-
-    proto = get_target(auth_args, "default", invocation_id, target_label)
-    if not proto:
-        print("Error: GetTarget returned empty response", file=sys.stderr)
-        sys.exit(1)
-
-    shards = extract_shard_artifacts(proto)
-    if shard >= len(shards):
-        print(f"Error: shard {shard} not found (have {len(shards)} shards)",
-              file=sys.stderr)
-        sys.exit(1)
-
-    shard_data = shards[shard]
-    outdir = args.outdir or "/tmp/engflow-artifacts"
+def _download_shard(auth_args, shard_data, shard, outdir, artifact_names):
+    """Download artifacts for a single shard."""
     os.makedirs(outdir, exist_ok=True)
 
-    artifacts_to_download = args.artifacts or ["test.log", "test.xml", "outputs.zip"]
-
-    for name in artifacts_to_download:
+    for name in artifact_names:
         if name not in shard_data:
             print(f"  {name}: not found in shard {shard}")
             continue
@@ -442,14 +446,45 @@ def cmd_download(args):
         downloaded = download_blob(auth_args, blob_hash, size, outfile)
         print(f"  Saved to {outfile} ({downloaded:,} bytes)")
 
-    # Auto-extract outputs.zip
-    if "outputs.zip" in artifacts_to_download and "outputs.zip" in shard_data:
+    # Auto-extract outputs.zip.
+    if "outputs.zip" in artifact_names:
         zip_path = os.path.join(outdir, "outputs.zip")
         if os.path.exists(zip_path):
-            print(f"\n  Extracting outputs.zip...")
-            subprocess.run(["unzip", "-o", zip_path, "-d", outdir],
-                           capture_output=True)
+            print("\n  Extracting outputs.zip...")
+            subprocess.run(
+                ["unzip", "-o", zip_path, "-d", outdir],
+                capture_output=True,
+            )
             print(f"  Extracted to {outdir}/")
+
+
+def cmd_download(args):
+    """Download artifacts for a target shard."""
+    auth_args = get_curl_auth_args()
+    invocation_id, target_label, shard, run = _resolve_args(
+        args, need_shard=True,
+    )
+
+    actions, _ = get_target(
+        auth_args, "default", invocation_id, target_label,
+    )
+    if not actions:
+        print("Error: GetTarget returned empty response", file=sys.stderr)
+        sys.exit(1)
+
+    key = (shard, run)
+    if key not in actions:
+        available = sorted({s for s, r in actions})
+        print(
+            f"Error: shard {shard} run {run} not found "
+            f"(available shards: {available})",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    artifact_names = args.artifacts or ["test.log", "test.xml", "outputs.zip"]
+    outdir = args.outdir or "/tmp/engflow-artifacts"
+    _download_shard(auth_args, actions[key], shard, outdir, artifact_names)
 
 
 def cmd_blob(args):
@@ -466,55 +501,58 @@ def cmd_blob(args):
 def cmd_url(args):
     """Download artifacts directly from an EngFlow invocation URL."""
     auth_args = get_curl_auth_args()
-    invocation_id, target_label, shard, _, _ = parse_invocation_url(args.url)
+    invocation_id, target_label, shard, run, _ = parse_invocation_url(
+        args.url,
+    )
 
     if not target_label:
-        print("Error: could not extract target from URL fragment.", file=sys.stderr)
-        print("Provide a URL with #targets-<base64> fragment.", file=sys.stderr)
+        print(
+            "Error: could not extract target from URL fragment.",
+            file=sys.stderr,
+        )
+        print(
+            "Provide a URL with #targets-<base64> fragment.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     if shard is None:
-        print("Error: URL has no testReportShard param. Use --shard.", file=sys.stderr)
+        print(
+            "Error: URL has no testReportShard param. Use --shard.",
+            file=sys.stderr,
+        )
         sys.exit(1)
+
+    if run is None:
+        run = 1
 
     print(f"Invocation: {invocation_id}")
     print(f"Target: {target_label}")
-    print(f"Shard: {shard}")
+    print(f"Shard: {shard}, Run: {run}")
     print()
 
-    proto = get_target(auth_args, "default", invocation_id, target_label)
-    if not proto:
+    actions, _ = get_target(
+        auth_args, "default", invocation_id, target_label,
+    )
+    if not actions:
         print("Error: GetTarget returned empty response", file=sys.stderr)
         sys.exit(1)
 
-    shards = extract_shard_artifacts(proto)
-    if shard >= len(shards):
-        print(f"Error: shard {shard} not found (have {len(shards)} shards)",
-              file=sys.stderr)
+    key = (shard, run)
+    if key not in actions:
+        available = sorted({s for s, r in actions})
+        print(
+            f"Error: shard {shard} run {run} not found "
+            f"(available shards: {available})",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
-    shard_data = shards[shard]
     outdir = args.outdir or "/tmp/engflow-artifacts"
-    os.makedirs(outdir, exist_ok=True)
-
-    for name in ["test.log", "test.xml", "outputs.zip"]:
-        if name not in shard_data:
-            print(f"  {name}: not available")
-            continue
-        blob_hash, size = shard_data[name]
-        outfile = os.path.join(outdir, name)
-        print(f"  Downloading {name} ({size:,} bytes)...")
-        downloaded = download_blob(auth_args, blob_hash, size, outfile)
-        print(f"  Saved to {outfile} ({downloaded:,} bytes)")
-
-    # Auto-extract outputs.zip
-    if "outputs.zip" in shard_data:
-        zip_path = os.path.join(outdir, "outputs.zip")
-        if os.path.exists(zip_path):
-            print(f"\n  Extracting outputs.zip...")
-            subprocess.run(["unzip", "-o", zip_path, "-d", outdir],
-                           capture_output=True)
-            print(f"  Extracted to {outdir}/")
+    _download_shard(
+        auth_args, actions[key], shard, outdir,
+        ["test.log", "test.xml", "outputs.zip"],
+    )
 
 
 def main():
@@ -522,40 +560,65 @@ def main():
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # targets command
-    targets_parser = subparsers.add_parser("targets", help="List targets in an invocation")
+    targets_parser = subparsers.add_parser(
+        "targets", help="List targets in an invocation",
+    )
     targets_parser.add_argument("invocation_id", help="Invocation ID")
-    targets_parser.add_argument("--all", action="store_true", help="Show all targets, not just failed")
+    targets_parser.add_argument(
+        "--all", action="store_true",
+        help="Show all targets, not just failed",
+    )
     targets_parser.set_defaults(func=cmd_targets)
 
     # list command
-    list_parser = subparsers.add_parser("list", help="List artifacts for a target")
+    list_parser = subparsers.add_parser(
+        "list", help="List artifacts for a target",
+    )
     list_parser.add_argument("--url", help="EngFlow invocation URL")
-    list_parser.add_argument("invocation_id", nargs="?", help="Invocation ID")
+    list_parser.add_argument(
+        "invocation_id", nargs="?", help="Invocation ID",
+    )
     list_parser.add_argument("--target", help="Target label")
-    list_parser.add_argument("--shard", type=int, help="Show only this shard")
+    list_parser.add_argument(
+        "--shard", type=int, help="Show only this shard",
+    )
+    list_parser.add_argument(
+        "--run", type=int, help="Show only this run (default: 1)",
+    )
     list_parser.set_defaults(func=cmd_list)
 
     # download command
     dl_parser = subparsers.add_parser("download", help="Download artifacts")
     dl_parser.add_argument("--url", help="EngFlow invocation URL")
-    dl_parser.add_argument("invocation_id", nargs="?", help="Invocation ID")
+    dl_parser.add_argument(
+        "invocation_id", nargs="?", help="Invocation ID",
+    )
     dl_parser.add_argument("--target", help="Target label")
     dl_parser.add_argument("--shard", type=int, help="Shard number")
+    dl_parser.add_argument(
+        "--run", type=int, help="Run number (default: 1)",
+    )
     dl_parser.add_argument("--outdir", help="Output directory")
-    dl_parser.add_argument("--artifacts", nargs="+",
-                           choices=["test.log", "test.xml", "outputs.zip", "manifest"],
-                           help="Which artifacts to download")
+    dl_parser.add_argument(
+        "--artifacts", nargs="+",
+        choices=["test.log", "test.xml", "outputs.zip", "manifest"],
+        help="Which artifacts to download",
+    )
     dl_parser.set_defaults(func=cmd_download)
 
     # blob command
-    blob_parser = subparsers.add_parser("blob", help="Download a specific blob")
+    blob_parser = subparsers.add_parser(
+        "blob", help="Download a specific blob",
+    )
     blob_parser.add_argument("hash", help="Blob SHA-256 hash")
     blob_parser.add_argument("size", help="Blob size in bytes")
     blob_parser.add_argument("--outfile", help="Output file path")
     blob_parser.set_defaults(func=cmd_blob)
 
     # url command (convenience)
-    url_parser = subparsers.add_parser("url", help="Download from invocation URL")
+    url_parser = subparsers.add_parser(
+        "url", help="Download from invocation URL",
+    )
     url_parser.add_argument("url", help="Full EngFlow invocation URL")
     url_parser.add_argument("--outdir", help="Output directory")
     url_parser.set_defaults(func=cmd_url)
