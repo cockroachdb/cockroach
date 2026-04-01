@@ -726,6 +726,7 @@ func TestRestoreEntryCoverTinyFiles(t *testing.T) {
 func TestRestoreEntryCover1(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 167182, "flaky test")
 
 	runTestRestoreEntryCover(t, 1)
 }
@@ -733,6 +734,7 @@ func TestRestoreEntryCover1(t *testing.T) {
 func TestRestoreEntryCover2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 167182, "flaky test")
 
 	runTestRestoreEntryCover(t, 2)
 }
@@ -740,6 +742,7 @@ func TestRestoreEntryCover2(t *testing.T) {
 func TestRestoreEntryCover5(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 167182, "flaky test")
 
 	runTestRestoreEntryCover(t, 5)
 }
@@ -747,6 +750,7 @@ func TestRestoreEntryCover5(t *testing.T) {
 func TestRestoreEntryCover9(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 167182, "flaky test")
 
 	runTestRestoreEntryCover(t, 9)
 }
@@ -755,6 +759,7 @@ func TestRestoreEntryCover12(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "excessive memory usage")
+	skip.WithIssue(t, 167182, "flaky test")
 
 	runTestRestoreEntryCover(t, 12)
 }
@@ -763,6 +768,7 @@ func TestRestoreEntryCover20(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "excessive memory usage")
+	skip.WithIssue(t, 167182, "flaky test")
 
 	runTestRestoreEntryCover(t, 20)
 }
