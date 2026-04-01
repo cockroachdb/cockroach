@@ -223,29 +223,22 @@ export const GroupedBarChart: React.FC<GroupedBarChartProps> = ({
     return labels;
   }, [data]);
 
-  // Legend items derived from data. Deduplicated by (label, color)
-  // pair: when groups share the same colors per layer (plan
-  // distribution), entries collapse to one per layer. When groups use
-  // distinct colors (statement times), both appear with group prefix.
+  // Legend items derived from data. Deduplicated by layer label so
+  // that each toggle corresponds to exactly one visibility control.
+  // When multiple groups share the same layer labels (e.g. canary vs
+  // stable), only one entry per label appears — matching the old
+  // behavior where group 2's legend entries were hidden.
   const legendItems = useMemo(() => {
     if (data.length === 0) return [];
     const items: { label: string; color: string; layerLabel: string }[] = [];
     const seen = new Set<string>();
 
-    // Check if all groups use the same color for each layer index.
-    const groups = data[0].groups;
-    const sharedColors =
-      groups.length >= 2 &&
-      groups[0].layers.length === groups[1].layers.length &&
-      groups[0].layers.every((l, i) => groups[1].layers[i]?.color === l.color);
-
-    for (const group of groups) {
+    for (const group of data[0].groups) {
       for (const layer of group.layers) {
-        const key = `${layer.label}:${layer.color}`;
-        if (!seen.has(key)) {
-          seen.add(key);
+        if (!seen.has(layer.label)) {
+          seen.add(layer.label);
           items.push({
-            label: sharedColors ? layer.label : `${group.label} ${layer.label}`,
+            label: layer.label,
             color: layer.color,
             layerLabel: layer.label,
           });
