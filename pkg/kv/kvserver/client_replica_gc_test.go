@@ -196,7 +196,7 @@ func TestReplicaGCQueueDropReplicaGCOnScan(t *testing.T) {
 }
 
 // TestReplicaGCQueueHandlesStagingError verifies that replica removal handles
-// errors from the staging phase (stageDestroyReplica) gracefully: the error
+// errors from the staging phase (stageDestroyRaftMuLocked) gracefully: the error
 // propagates without crashing, the replica survives intact, and a retry
 // succeeds once the error clears. Three removal paths are exercised:
 //
