@@ -272,6 +272,11 @@ const (
 	V26_2
 
 	V26_3_Start
+
+	// V26_3_StmtDiagnosticsMaxLatency adds max_execution_latency column to
+	// system.statement_diagnostics_requests for bounded latency range filtering.
+	V26_3_StmtDiagnosticsMaxLatency
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -354,6 +359,9 @@ var versionTable = [numKeys]roachpb.Version{
 
 	// v26.3 versions. Internal versions must be even.
 	V26_3_Start: {Major: 26, Minor: 2, Internal: 2},
+
+	V26_3_StmtDiagnosticsMaxLatency: {Major: 26, Minor: 2, Internal: 4},
+
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// *************************************************
