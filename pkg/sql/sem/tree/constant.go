@@ -71,7 +71,16 @@ func typeCheckConstant(
 	if !desired.IsAmbiguous() {
 		for _, typ := range avail {
 			if desired.Equivalent(typ) {
-				return c.ResolveAsType(ctx, semaCtx, desired)
+				resolved, err := c.ResolveAsType(ctx, semaCtx, desired)
+				if desired.Family() == types.OidFamily &&
+					pgerror.GetPGCode(err) == pgcode.InvalidTextRepresentation {
+					// For OID family types, resolution can fail when a non-numeric
+					// string is used (e.g., 'pg_class'::regclass). In this case,
+					// fall through to resolve as the natural type (string) and let
+					// the cast handle name resolution at eval time.
+					break
+				}
+				return resolved, err
 			}
 		}
 	}
@@ -552,6 +561,8 @@ var (
 		types.AnyEnumArray,
 		types.INetArray,
 		types.VarBitArray,
+		types.Oid,
+		types.OidArray,
 		types.AnyTuple,
 		types.AnyTupleArray,
 		// TODO(#22513): Reevaluate conversions for jsonpath array.

@@ -447,6 +447,7 @@ var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.IntervalArray:    mustParseDArrayOfType(types.Interval),
 	types.INetArray:        mustParseDArrayOfType(types.INet),
 	types.VarBitArray:      mustParseDArrayOfType(types.VarBit),
+	types.OidArray:         mustParseDArrayOfType(types.Oid),
 }
 
 func typeSet(tys ...*types.T) map[*types.T]struct{} {
@@ -579,6 +580,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				types.FloatArray,
 				types.DecimalArray,
 				types.IntervalArray,
+				types.OidArray,
 				types.TSVector,
 				types.TSQuery,
 				types.RefCursor,
@@ -703,6 +705,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 				types.FloatArray,
 				types.DecimalArray,
 				types.IntervalArray,
+				types.OidArray,
 				types.VarBitArray,
 				types.TSVector,
 				types.RefCursor,
