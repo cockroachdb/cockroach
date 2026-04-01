@@ -19,8 +19,36 @@ import (
 // assist the writes of the WAG nodes in a topologically sorted order.
 type Seq struct {
 	// index is the last allocated index into the WAG nodes sequence.
-	// TODO(pav-kv): initialize it on store restarts.
 	index atomic.Uint64
+}
+
+// Init initializes the sequencer from the last WAG node index persisted in the
+// log engine, ensuring that subsequent calls to Next return indices above all
+// existing WAG nodes. Must be called before any calls to Next, typically during
+// store startup.
+func (s *Seq) Init(ctx context.Context, logEngine storage.Reader) error {
+	prefix := keys.StoreWAGPrefix()
+	prefixEnd := prefix.PrefixEnd()
+	mi, err := logEngine.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
+		LowerBound: prefix,
+		UpperBound: prefixEnd,
+	})
+	if err != nil {
+		return err
+	}
+	defer mi.Close()
+	mi.SeekLT(storage.MakeMVCCMetadataKey(prefixEnd))
+	if ok, err := mi.Valid(); err != nil {
+		return err
+	} else if !ok {
+		return nil // no WAG nodes; index stays at 0
+	}
+	index, err := keys.DecodeWAGNodeKey(mi.UnsafeKey().Key)
+	if err != nil {
+		return err
+	}
+	s.index.Store(index)
+	return nil
 }
 
 // Next allocates the given number of consecutive WAG nodes in the sequence, and
