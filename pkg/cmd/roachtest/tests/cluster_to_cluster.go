@@ -679,6 +679,39 @@ func (rd *replicationDriver) preStreamingWorkload(ctx context.Context) {
 		rd.c.Run(ctx, option.WithNodes(rd.setup.workloadNode), initCmd)
 		rd.t.L().Printf("src cluster workload initialization took %s",
 			timeutil.Since(initStart))
+
+		if _, ok := rd.rs.workload.(replicateTPCC); ok {
+			// Ensure all imported tables have stats before starting the
+			// replication stream. Without this, serialized auto-stats collection
+			// can leave some tables without stats for 15+ minutes after import,
+			// causing bad query plans and CPU saturation on the reader tenant
+			// workload. See #164639.
+			rd.t.Status("collecting table statistics on source tenant")
+			analyzeStart := timeutil.Now()
+			srcTenantConn := rd.c.Conn(
+				ctx, rd.t.L(), rd.setup.src.nodes[0],
+				option.VirtualClusterName(rd.setup.src.name),
+				option.DBName("tpcc"),
+				option.User("root"),
+				option.AuthMode(install.AuthRootCert),
+			)
+			defer srcTenantConn.Close()
+			srcTenantSQL := sqlutils.MakeSQLRunner(srcTenantConn)
+
+			rows := srcTenantSQL.QueryStr(
+				rd.t, `SELECT table_name FROM [SHOW TABLES]`,
+			)
+			for _, row := range rows {
+				tableName := row[0]
+				rd.t.L().Printf("running ANALYZE on %q", tableName)
+				srcTenantSQL.Exec(
+					rd.t, fmt.Sprintf(`ANALYZE "%s"`, tableName),
+				)
+			}
+			rd.t.L().Printf(
+				"table statistics collection took %s", timeutil.Since(analyzeStart),
+			)
+		}
 	}
 }
 
