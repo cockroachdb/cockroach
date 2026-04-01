@@ -483,11 +483,11 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 // ScrapeIntoPrometheus updates the passed-in prometheusExporter's metrics
 // snapshot.
 func (mr *MetricsRecorder) ScrapeIntoPrometheus(pm *metric.PrometheusExporter) {
-	mr.ScrapeIntoPrometheusWithStaticLabels(false)(pm)
+	mr.ScrapeIntoPrometheusWithStaticLabels(false, metric.Metadata_INTERNAL)(pm)
 }
 
 func (mr *MetricsRecorder) ScrapeIntoPrometheusWithStaticLabels(
-	useStaticLabels bool,
+	useStaticLabels bool, minVisibility metric.Metadata_MetricVisibility,
 ) func(pm *metric.PrometheusExporter) {
 	return func(pm *metric.PrometheusExporter) {
 		mr.mu.RLock()
@@ -501,6 +501,9 @@ func (mr *MetricsRecorder) ScrapeIntoPrometheusWithStaticLabels(
 			metric.WithIncludeAggregateMetrics(includeAggregateMetrics),
 			metric.WithUseStaticLabels(useStaticLabels),
 			metric.WithReinitialisableBugFixEnabled(reinitialisableBugFixEnabled),
+		}
+		if minVisibility > metric.Metadata_INTERNAL {
+			scrapeOptions = append(scrapeOptions, metric.WithMinVisibility(minVisibility))
 		}
 		if mr.mu.nodeRegistry == nil {
 			// We haven't yet processed initialization information; output nothing.
@@ -527,10 +530,15 @@ func (mr *MetricsRecorder) ScrapeIntoPrometheusWithStaticLabels(
 // We write metrics to a temporary buffer which is then copied to the writer.
 // This is to avoid hanging requests from holding the lock.
 func (mr *MetricsRecorder) PrintAsText(
-	w io.Writer, contentType expfmt.Format, useStaticLabels bool,
+	w io.Writer,
+	contentType expfmt.Format,
+	useStaticLabels bool,
+	minVisibility metric.Metadata_MetricVisibility,
 ) error {
 	var buf bytes.Buffer
-	scrapeFunc := mr.ScrapeIntoPrometheusWithStaticLabels(useStaticLabels)
+	scrapeFunc := mr.ScrapeIntoPrometheusWithStaticLabels(
+		useStaticLabels, minVisibility,
+	)
 	// For /_status/vars (useStaticLabels=false), update scrape meta-metrics
 	// after scraping. Values appear in the next scrape (first reports zeros).
 	if !useStaticLabels {
