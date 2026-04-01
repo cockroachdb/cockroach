@@ -85,7 +85,6 @@ func deleteTempTables(ctx context.Context, p *planner) error {
 	if len(p.SessionData().DatabaseIDToTempSchemaID) == 0 {
 		return nil
 	}
-	codec := p.execCfg.Codec
 	descCol := p.Descriptors()
 	// Note: grabbing all the databases here is somewhat suspect. It appears
 	// that the logic related to maintaining the set of database temp schemas
@@ -108,7 +107,7 @@ func deleteTempTables(ctx context.Context, p *planner) error {
 			continue
 		}
 		err = cleanupTempSchemaObjects(
-			ctx, p.InternalSQLTxn(), descCol, codec, db, sc,
+			ctx, p.InternalSQLTxn(), descCol, db, sc,
 		)
 		if err != nil {
 			return err
