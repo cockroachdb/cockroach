@@ -60,14 +60,21 @@ var defaultTaskLimit = envutil.EnvOrDefaultInt(
 // IntPool truncates to capacity), effectively consuming the entire budget until
 // it completes. This prevents a node from being overwhelmed by intent
 // resolution work when MVCC GC encounters many large transactions.
-const gcMaxIntentsInFlight = 1000
+var gcMaxIntentsInFlight = envutil.EnvOrDefaultInt(
+	"COCKROACH_GC_MAX_INTENTS_IN_FLIGHT", 1000,
+)
 
 // maxIntentsInFlightPerCaller is the maximum number of intents that a single
 // caller of resolveIntents may have in-flight at any time. Intents are
 // submitted to the batcher in chunks of this size, collecting responses for
 // each chunk before submitting the next.
+var maxIntentsInFlightPerCallerDefault = envutil.EnvOrDefaultInt(
+	"COCKROACH_MAX_INTENTS_IN_FLIGHT_PER_CALLER", 1000,
+)
 var maxIntentsInFlightPerCaller = metamorphic.ConstantWithTestRange(
-	"max-intents-in-flight-per-caller", 1000, 1, 1000)
+	"max-intents-in-flight-per-caller",
+	maxIntentsInFlightPerCallerDefault, 1, maxIntentsInFlightPerCallerDefault,
+)
 
 // asyncIntentResolutionTimeout is the timeout when processing a group of
 // intents asynchronously. The timeout prevents async intent resolution from
@@ -268,7 +275,7 @@ func New(c Config) *IntentResolver {
 		everyAdmissionHeaderMissing: log.Every(5 * time.Minute),
 	}
 	c.Stopper.AddCloser(ir.sem.Closer("stopper"))
-	ir.gcIntentBudget = quotapool.NewIntPool("gc intent budget", gcMaxIntentsInFlight)
+	ir.gcIntentBudget = quotapool.NewIntPool("gc intent budget", uint64(gcMaxIntentsInFlight))
 	c.Stopper.OnQuiesce(func() { ir.gcIntentBudget.Close("quiescing") })
 	ir.mu.inFlightPushes = map[uuid.UUID]int{}
 	ir.mu.inFlightTxnCleanups = map[uuid.UUID]struct{}{}
