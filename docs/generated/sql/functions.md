@@ -3688,6 +3688,8 @@ may increase either contention or retry errors, or both.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_serial_sequence"></a><code>pg_get_serial_sequence(table_name: <a href="string.html">string</a>, column_name: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the name of the sequence used by the given column_name in the table table_name.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="pg_get_statisticsobjdef"></a><code>pg_get_statisticsobjdef(statobj_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the CREATE STATISTICS command for an extended statistics object.</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_triggerdef"></a><code>pg_get_triggerdef(trigger_oid: oid) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the CREATE TRIGGER statement for the specified trigger.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="pg_get_triggerdef"></a><code>pg_get_triggerdef(trigger_oid: oid, pretty_bool: <a href="bool.html">bool</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the CREATE TRIGGER statement for the specified trigger.</p>

@@ -1491,3 +1491,67 @@ statement ok
 DROP TABLE trig_test
 
 subtest end
+
+subtest pg_get_statisticsobjdef
+
+statement ok
+CREATE TABLE stxtest (a INT, b INT, c TEXT)
+
+statement ok
+CREATE STATISTICS stxtest_stat ON a, b FROM stxtest
+
+# pg_get_statisticsobjdef returns the CREATE STATISTICS command for a stat object.
+query T
+SELECT pg_get_statisticsobjdef(oid)
+FROM pg_catalog.pg_statistic_ext
+WHERE stxname = 'stxtest_stat'
+LIMIT 1
+----
+CREATE STATISTICS public.stxtest_stat ON a, b FROM public.stxtest
+
+# NULL input returns NULL.
+query T
+SELECT pg_get_statisticsobjdef(NULL)
+----
+NULL
+
+# Non-existent OID returns NULL.
+query T
+SELECT pg_get_statisticsobjdef(0)
+----
+NULL
+
+# Column names that are keywords should be quoted.
+statement ok
+CREATE TABLE stxtest_kw ("select" INT, "from" INT, normal INT)
+
+statement ok
+CREATE STATISTICS stxtest_kw_stat ON "select", "from" FROM stxtest_kw
+
+query T
+SELECT pg_get_statisticsobjdef(oid)
+FROM pg_catalog.pg_statistic_ext
+WHERE stxname = 'stxtest_kw_stat'
+LIMIT 1
+----
+CREATE STATISTICS public.stxtest_kw_stat ON "select", "from" FROM public.stxtest_kw
+
+# Mixed keyword and non-keyword columns.
+statement ok
+CREATE STATISTICS stxtest_kw_mixed ON "select", normal FROM stxtest_kw
+
+query T
+SELECT pg_get_statisticsobjdef(oid)
+FROM pg_catalog.pg_statistic_ext
+WHERE stxname = 'stxtest_kw_mixed'
+LIMIT 1
+----
+CREATE STATISTICS public.stxtest_kw_mixed ON "select", normal FROM public.stxtest_kw
+
+statement ok
+DROP TABLE stxtest_kw
+
+statement ok
+DROP TABLE stxtest
+
+subtest end
