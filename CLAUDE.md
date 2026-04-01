@@ -123,6 +123,8 @@ Use the `/commit-helper` skill when creating commits and PRs.
   Don't repeat commit messages — they're visible in the commit list and
   go stale as the PR evolves.
 - Do not include a test plan unless explicitly asked by the user.
+- Always include an `Epic:` footer in PR descriptions. Use the epic from
+  prior context or attached issues if available, otherwise `Epic: none`.
 
 ### Skills
 
