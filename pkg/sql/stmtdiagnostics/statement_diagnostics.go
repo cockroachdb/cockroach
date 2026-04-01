@@ -122,6 +122,7 @@ type Request struct {
 	antiPlanGist        bool
 	samplingProbability float64
 	minExecutionLatency time.Duration
+	maxExecutionLatency time.Duration
 	expiresAt           time.Time
 	redacted            bool
 	username            string
@@ -143,7 +144,7 @@ func (r *Request) isExpired(now time.Time) bool {
 }
 
 func (r *Request) isConditional() bool {
-	return r.minExecutionLatency != 0
+	return r.minExecutionLatency != 0 || r.maxExecutionLatency != 0
 }
 
 // continueCollecting returns true if this request collects multiple bundles
@@ -210,6 +211,7 @@ func (r *Registry) addRequestInternalLocked(
 	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
+	maxExecutionLatency time.Duration,
 	expiresAt time.Time,
 	redacted bool,
 	username string,
@@ -227,6 +229,7 @@ func (r *Registry) addRequestInternalLocked(
 		antiPlanGist:        antiPlanGist,
 		samplingProbability: samplingProbability,
 		minExecutionLatency: minExecutionLatency,
+		maxExecutionLatency: maxExecutionLatency,
 		expiresAt:           expiresAt,
 		redacted:            redacted,
 		username:            username,
@@ -266,13 +269,14 @@ func (r *Registry) InsertRequest(
 	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
+	maxExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 	redacted bool,
 	username string,
 ) error {
 	_, err := r.insertRequestInternal(
 		ctx, stmtFingerprint, planGist, antiPlanGist, samplingProbability,
-		minExecutionLatency, expiresAfter, redacted, username,
+		minExecutionLatency, maxExecutionLatency, expiresAfter, redacted, username,
 	)
 	return err
 }
@@ -284,6 +288,7 @@ func (r *Registry) insertRequestInternal(
 	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
+	maxExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 	redacted bool,
 	username string,
@@ -299,6 +304,11 @@ func (r *Registry) insertRequestInternal(
 				"got non-zero sampling probability %f and empty min exec latency",
 				samplingProbability)
 		}
+	}
+	if maxExecutionLatency != 0 && maxExecutionLatency < minExecutionLatency {
+		return 0, errors.Newf(
+			"max_execution_latency (%s) must be greater than min_execution_latency (%s)",
+			maxExecutionLatency, minExecutionLatency)
 	}
 
 	var reqID RequestID
@@ -346,6 +356,10 @@ func (r *Registry) insertRequestInternal(
 			insertColumns += ", min_execution_latency"
 			qargs = append(qargs, minExecutionLatency) // min_execution_latency
 		}
+		if maxExecutionLatency != 0 && r.st.Version.IsActive(ctx, clusterversion.V26_3_StmtDiagnosticsMaxLatency) {
+			insertColumns += ", max_execution_latency"
+			qargs = append(qargs, maxExecutionLatency) // max_execution_latency
+		}
 		if expiresAfter != 0 {
 			insertColumns += ", expires_at"
 			expiresAt = now.Add(expiresAfter)
@@ -392,7 +406,7 @@ func (r *Registry) insertRequestInternal(
 		r.mu.epoch++
 		r.addRequestInternalLocked(
 			ctx, reqID, stmtFingerprint, planGist, antiPlanGist, samplingProbability,
-			minExecutionLatency, expiresAt, redacted, username,
+			minExecutionLatency, maxExecutionLatency, expiresAt, redacted, username,
 		)
 	}()
 
@@ -428,9 +442,17 @@ func (r *Registry) CancelRequest(ctx context.Context, requestID int64) error {
 }
 
 // IsConditionSatisfied returns whether the completed request satisfies its
-// condition.
+// condition. The condition is satisfied if execLatency is in the range
+// [minExecutionLatency, maxExecutionLatency). If maxExecutionLatency is 0,
+// there is no upper bound.
 func (r *Registry) IsConditionSatisfied(req Request, execLatency time.Duration) bool {
-	return req.minExecutionLatency <= execLatency
+	if execLatency < req.minExecutionLatency {
+		return false
+	}
+	if req.maxExecutionLatency != 0 && execLatency >= req.maxExecutionLatency {
+		return false
+	}
+	return true
 }
 
 // MaybeRemoveRequest checks whether the request needs to be removed from the
@@ -735,18 +757,31 @@ func (r *Registry) innerInsertStatementDiagnostics(
 func (r *Registry) pollStmtRequests(ctx context.Context) error {
 	var rows []tree.Datums
 
+	// Version-gated SELECT: include max_execution_latency if the cluster version supports it.
+	maxLatencySupported := r.st.Version.IsActive(ctx, clusterversion.V26_3_StmtDiagnosticsMaxLatency)
+
 	// Loop until we run the query without straddling an epoch increment.
 	for {
 		r.mu.Lock()
 		epoch := r.mu.epoch
 		r.mu.Unlock()
 
-		it, err := r.db.Executor().QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
-			sessiondata.NodeUserSessionDataOverride,
-			`SELECT id, statement_fingerprint, min_execution_latency, expires_at,
+		var query string
+		if maxLatencySupported {
+			query = `SELECT id, statement_fingerprint, min_execution_latency, expires_at,
+				sampling_probability, plan_gist, anti_plan_gist, redacted, username, max_execution_latency
+				FROM system.statement_diagnostics_requests
+				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`
+		} else {
+			query = `SELECT id, statement_fingerprint, min_execution_latency, expires_at,
 				sampling_probability, plan_gist, anti_plan_gist, redacted, username
 				FROM system.statement_diagnostics_requests
-				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`,
+				WHERE completed = false AND (expires_at IS NULL OR expires_at > now())`
+		}
+
+		it, err := r.db.Executor().QueryIteratorEx(ctx, "stmt-diag-poll", nil, /* txn */
+			sessiondata.NodeUserSessionDataOverride,
+			query,
 		)
 		if err != nil {
 			return err
@@ -777,12 +812,14 @@ func (r *Registry) pollStmtRequests(ctx context.Context) error {
 	for _, row := range rows {
 		id := RequestID(*row[0].(*tree.DInt))
 		stmtFingerprint := string(*row[1].(*tree.DString))
-		var minExecutionLatency time.Duration
+		var minExecutionLatency, maxExecutionLatency time.Duration
 		var expiresAt time.Time
 		var samplingProbability float64
 		var planGist, username string
 		var antiPlanGist, redacted bool
 
+		// Parse column values. Columns: id, fingerprint, min_execution_latency, expires_at,
+		// sampling_probability, plan_gist, anti_plan_gist, redacted, username[, max_execution_latency]
 		if minExecLatency, ok := row[2].(*tree.DInterval); ok {
 			minExecutionLatency = time.Duration(minExecLatency.Nanos())
 		}
@@ -809,11 +846,17 @@ func (r *Registry) pollStmtRequests(ctx context.Context) error {
 		if u, ok := row[8].(*tree.DString); ok {
 			username = string(*u)
 		}
+		// max_execution_latency is last column, only present if version gate is active.
+		if maxLatencySupported {
+			if maxExecLatency, ok := row[9].(*tree.DInterval); ok {
+				maxExecutionLatency = time.Duration(maxExecLatency.Nanos())
+			}
+		}
 
 		ids.Add(int(id))
 		r.addRequestInternalLocked(
 			ctx, id, stmtFingerprint, planGist, antiPlanGist,
-			samplingProbability, minExecutionLatency, expiresAt,
+			samplingProbability, minExecutionLatency, maxExecutionLatency, expiresAt,
 			redacted, username,
 		)
 	}
