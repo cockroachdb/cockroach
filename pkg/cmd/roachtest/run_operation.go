@@ -293,10 +293,10 @@ func (r *opsRunner) selectOperationToRun(
 	if opSpec.CanRunConcurrently == registry.OperationCannotRunConcurrently {
 		r.status.lockOperationSelection = true
 		// selected operation cannot run concurrently with other operations —
-		// wait for other running operations to finish.
+		// wait for other running operations and pending cleanups to finish.
 		workerLabel := strconv.Itoa(workerID)
 		for {
-			if len(r.status.running) == 0 {
+			if len(r.status.running) == 0 && len(r.status.pendingCleanup) == 0 {
 				break
 			}
 			r.setWorkerState(workerLabel, workerOperationIdle, workerStateIdle, opSpec.NamePrefix(), workerStateWaitingLock)
