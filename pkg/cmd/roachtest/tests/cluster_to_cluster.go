@@ -2119,7 +2119,8 @@ func destClusterSettings(
 	}
 
 	if rng.Intn(2) == 0 {
-		db.Exec(t, `SET CLUSTER SETTING physical_cluster_replication.reader_system_table_id_offset = 100000`)
+		// Override the default offset to 0 to test the no-offset path.
+		db.Exec(t, `SET CLUSTER SETTING physical_cluster_replication.reader_system_table_id_offset = 0`)
 	}
 }
 
