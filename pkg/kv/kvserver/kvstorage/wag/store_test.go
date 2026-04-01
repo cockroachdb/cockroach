@@ -119,3 +119,37 @@ func splitReplica(
 func writeStateMachine(w storage.Writer, k, v string) error {
 	return w.PutUnversioned(roachpb.Key(k), []byte(v))
 }
+
+func TestSeqInit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	t.Run("empty log engine", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		var seq Seq
+		require.NoError(t, seq.Init(ctx, eng))
+		require.Equal(t, uint64(1), seq.Next(1))
+	})
+
+	t.Run("resumes after last node", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		// Write 3 WAG nodes.
+		id := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
+		s := store{eng: eng}
+		b := eng.NewWriteBatch()
+		require.NoError(t, createReplica(&s, b, id))
+		require.NoError(t, initReplica(&s, b, id, 10))
+		require.NoError(t, initReplica(&s, b, id, 20))
+		require.NoError(t, b.Commit(false /* sync */))
+
+		// Re-init the sequencer from the log engine.
+		require.NoError(t, s.seq.Init(ctx, eng))
+		// Next allocation should be after the 3 existing nodes.
+		require.Equal(t, uint64(4), s.seq.Next(1))
+	})
+}
