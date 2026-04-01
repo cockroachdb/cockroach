@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/ring"
@@ -922,6 +923,11 @@ type RestrictedCommandResult interface {
 	// IMPORT, BACKUP or RESTORE.
 	GetBulkJobId() uint64
 
+	// SetOidNameResolver sets a function that resolves OID values to their
+	// display names. This is used by pgwire to format reg* type values as
+	// names rather than numeric OIDs when sending results to the client.
+	SetOidNameResolver(func(oid.Oid, *types.T) string)
+
 	// ErrAllowReleased returns the error without asserting the result is not
 	// released yet. It should be used only in clean-up stages of a pausable
 	// portal.
@@ -1212,6 +1218,10 @@ func (r *streamingCommandResult) SetError(err error) {
 // GetBulkJobId is part of the sql.RestrictedCommandResult interface.
 func (r *streamingCommandResult) GetBulkJobId() uint64 {
 	return 0
+}
+
+// SetOidNameResolver is part of the RestrictedCommandResult interface.
+func (r *streamingCommandResult) SetOidNameResolver(func(oid.Oid, *types.T) string) {
 }
 
 // Err is part of the RestrictedCommandResult interface.

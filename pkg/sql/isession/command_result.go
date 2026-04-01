@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -140,6 +141,9 @@ func (i *internalCommandResult) ErrAllowReleased() error {
 
 func (i *internalCommandResult) RevokePortalPausability() error {
 	return errors.AssertionFailedf("RevokePortalPausability is for limitedCommandResult only")
+}
+
+func (i *internalCommandResult) SetOidNameResolver(func(oid.Oid, *types.T) string) {
 }
 
 func (i *internalCommandResult) SendCopyData(ctx context.Context, data []byte, flush bool) error {

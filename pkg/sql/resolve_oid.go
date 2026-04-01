@@ -89,6 +89,43 @@ func resolveOID(
 	), true, nil
 }
 
+// MakeOidNameResolver creates a function that resolves OID values to their
+// display names by querying pg_catalog. Results are cached for the lifetime
+// of the returned function. This is used to populate DOid names during result
+// formatting so that reg* types display as names rather than numeric OIDs.
+func MakeOidNameResolver(
+	ctx context.Context, ie isql.Executor, txn *kv.Txn, database string,
+) func(oid.Oid, *types.T) string {
+	cache := make(map[oid.Oid]string)
+	override := sessiondata.InternalExecutorOverride{
+		Database: database,
+	}
+	return func(o oid.Oid, t *types.T) string {
+		if name, ok := cache[o]; ok {
+			return name
+		}
+		info, ok := regTypeInfos[t.Oid()]
+		if !ok {
+			return ""
+		}
+		q := fmt.Sprintf(
+			"SELECT %s FROM pg_catalog.%s WHERE oid = $1",
+			info.nameCol, info.tableName,
+		)
+		results, err := ie.QueryRowEx(
+			ctx, "resolveOidName", txn,
+			override, q, tree.NewDOid(o),
+		)
+		if err != nil || results == nil {
+			cache[o] = ""
+			return ""
+		}
+		name := string(tree.MustBeDString(results[0]))
+		cache[o] = name
+		return name
+	}
+}
+
 // regTypeInfo contains details on a pg_catalog table that has a reg* type.
 type regTypeInfo struct {
 	tableName string

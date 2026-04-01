@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/lib/pq/oid"
 )
 
 // FmtFlags carries options for the pretty-printer.
@@ -348,6 +349,10 @@ type FmtCtx struct {
 	// indexedTypeFormatter is an optional interceptor for formatting
 	// IDTypeReferences differently than normal.
 	indexedTypeFormatter func(*FmtCtx, *OIDTypeReference)
+	// oidNameResolver is an optional callback for resolving OID values to
+	// their display names. When set, DOid.Format will use it to look up
+	// names for OIDs that were loaded from storage without a name.
+	oidNameResolver func(oid.Oid, *types.T) string
 
 	// inPLpgSQL, if set, indicates that we're formatting a node within PLpgSQL
 	// context.
@@ -414,6 +419,14 @@ func FmtLocation(loc *time.Location) FmtCtxOption {
 	}
 }
 
+// FmtOidNameResolver modifies FmtCtx to use the provided function for
+// resolving OID values to display names.
+func FmtOidNameResolver(fn func(oid.Oid, *types.T) string) FmtCtxOption {
+	return func(ctx *FmtCtx) {
+		ctx.oidNameResolver = fn
+	}
+}
+
 // FmtInPLpgSQL modifies FmtCtx to indicate whether we're in the PLpgSQL
 // context.
 func FmtInPLpgSQL(inPLpgSQL bool) FmtCtxOption {
@@ -449,6 +462,7 @@ func (ctx *FmtCtx) Clone() *FmtCtx {
 	newCtx.placeholderFormat = ctx.placeholderFormat
 	newCtx.tableNameFormatter = ctx.tableNameFormatter
 	newCtx.indexedTypeFormatter = ctx.indexedTypeFormatter
+	newCtx.oidNameResolver = ctx.oidNameResolver
 	newCtx.inPLpgSQL = ctx.inPLpgSQL
 	return newCtx
 }
@@ -467,6 +481,15 @@ func (ctx *FmtCtx) SetDataConversionConfig(
 func (ctx *FmtCtx) SetLocation(loc *time.Location) *time.Location {
 	old := ctx.location
 	ctx.location = loc
+	return old
+}
+
+// SetOidNameResolver sets the OID name resolver on ctx and returns the old one.
+func (ctx *FmtCtx) SetOidNameResolver(
+	fn func(oid.Oid, *types.T) string,
+) func(oid.Oid, *types.T) string {
+	old := ctx.oidNameResolver
+	ctx.oidNameResolver = fn
 	return old
 }
 
