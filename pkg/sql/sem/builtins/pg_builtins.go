@@ -2677,7 +2677,7 @@ SELECT
 						username.RootUserName(),
 					} {
 						if err := appendItem(privilege.NewACLItem(
-							role, owner, def.ownerPrivs, nil,
+							role, owner, def.ownerPrivs, def.ownerPrivs,
 						)); err != nil {
 							return nil, err
 						}

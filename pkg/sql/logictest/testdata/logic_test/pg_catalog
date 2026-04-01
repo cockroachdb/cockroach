@@ -430,7 +430,7 @@ crdb_internal       3233629770  NULL
 information_schema  3233629770  NULL
 pg_catalog          3233629770  NULL
 pg_extension        3233629770  NULL
-public              1546506610  {admin=CU/root,=CU/root,root=CU/root}
+public              1546506610  {admin=C*U*/root,=CU/root,root=C*U*/root}
 
 # Verify that we can still see the schemas even if we don't have any privilege
 # on the current database.
@@ -449,7 +449,7 @@ crdb_internal       3233629770  NULL
 information_schema  3233629770  NULL
 pg_catalog          3233629770  NULL
 pg_extension        3233629770  NULL
-public              1546506610  {admin=CU/root,=CU/root,root=CU/root}
+public              1546506610  {admin=C*U*/root,=CU/root,root=C*U*/root}
 
 user root
 
@@ -476,10 +476,10 @@ FROM pg_catalog.pg_database
 ORDER BY oid
 ----
 oid  datname        datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
-1    system         -1            0              NULL          NULL        0              {admin=c/node,root=c/node}
+1    system         -1            0              NULL          NULL        0              {admin=c*/node,root=c*/node}
 100  defaultdb      -1            0              NULL          NULL        0              NULL
 102  postgres       -1            0              NULL          NULL        0              NULL
-104  test           -1            0              NULL          NULL        0              {admin=CcT/root,=c/root,root=CcT/root}
+104  test           -1            0              NULL          NULL        0              {admin=C*c*T*/root,=c/root,root=C*c*T*/root}
 108  constraint_db  -1            0              NULL          NULL        0              NULL
 
 user testuser
@@ -491,7 +491,7 @@ FROM pg_catalog.pg_database
 ORDER BY oid LIMIT 1
 ----
 oid  datname  datconnlimit  datlastsysoid  datfrozenxid  datminmxid  dattablespace  datacl
-1    system   -1            0              NULL          NULL        0              {admin=c/node,root=c/node}
+1    system   -1            0              NULL          NULL        0              {admin=c*/node,root=c*/node}
 
 user root
 
@@ -5807,7 +5807,7 @@ GRANT SELECT ON t1 TO testuser WITH GRANT OPTION
 query T
 SELECT relacl FROM pg_class WHERE relname = 't1'
 ----
-{admin=CradwDtm/root,root=CradwDtm/root,testuser=r*/root}
+{admin=C*r*a*d*w*D*t*m*/root,root=C*r*a*d*w*D*t*m*/root,testuser=r*/root}
 
 # relacl: returns to NULL after revoking back to defaults.
 statement ok
@@ -5823,7 +5823,7 @@ NULL
 query T
 SELECT nspacl FROM pg_namespace WHERE nspname = 'public'
 ----
-{admin=CU/root,=CU/root,root=CU/root}
+{admin=C*U*/root,=CU/root,root=C*U*/root}
 
 query T
 SELECT nspacl FROM pg_namespace WHERE nspname = 'pg_catalog'
@@ -5846,7 +5846,7 @@ GRANT USAGE ON SCHEMA acl_test_schema TO testuser
 query T
 SELECT nspacl FROM pg_namespace WHERE nspname = 'acl_test_schema'
 ----
-{admin=CU/root,root=CU/root,testuser=U/root}
+{admin=C*U*/root,root=C*U*/root,testuser=U/root}
 
 # nspacl: returns to NULL after revoking back to defaults.
 statement ok
@@ -5870,7 +5870,7 @@ GRANT CONNECT ON DATABASE defaultdb TO testuser
 query T
 SELECT datacl FROM pg_database WHERE datname = 'defaultdb'
 ----
-{admin=CcT/root,=cT/root,root=CcT/root,testuser=c/root}
+{admin=C*c*T*/root,=cT/root,root=C*c*T*/root,testuser=c/root}
 
 # datacl: returns to NULL after revoking back to defaults.
 statement ok
@@ -5898,7 +5898,7 @@ REVOKE EXECUTE ON FUNCTION acl_test_fn FROM public
 query T
 SELECT proacl FROM pg_proc WHERE proname = 'acl_test_fn'
 ----
-{admin=X/root,root=X/root}
+{admin=X*/root,root=X*/root}
 
 # proacl: returns to NULL after restoring defaults.
 statement ok
@@ -5935,7 +5935,7 @@ REVOKE USAGE ON TYPE acl_test_type FROM public
 query T
 SELECT typacl FROM pg_type WHERE typname = 'acl_test_type'
 ----
-{admin=U/root,root=U/root}
+{admin=U*/root,root=U*/root}
 
 # typacl: returns to NULL after restoring defaults.
 statement ok
@@ -5972,7 +5972,7 @@ GRANT SELECT ON testowner_table TO testuser
 query T
 SELECT relacl FROM pg_class WHERE relname = 'testowner_table'
 ----
-{admin=CradwDtm/testowner,root=CradwDtm/testowner,testuser=r/testowner,testowner=CradwDtm/testowner}
+{admin=C*r*a*d*w*D*t*m*/testowner,root=C*r*a*d*w*D*t*m*/testowner,testuser=r/testowner,testowner=CradwDtm/testowner}
 
 # relacl: returns to NULL after revoking back to defaults.
 statement ok

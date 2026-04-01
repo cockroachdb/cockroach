@@ -153,7 +153,7 @@ var pgDefaultPublicPrivs = map[ObjectType]List{
 // default privileges and return NULL) and by the acldefault builtin.
 //
 // The returned items follow PostgreSQL conventions:
-//   - No '*' grant option markers for admin, root, or owner (implicit).
+//   - No '*' grant option markers for the owner (implicit in PostgreSQL).
 //   - Only privileges with a PG ACL character equivalent are included.
 //   - PUBLIC entries come first.
 func DefaultACLItems(objectType ObjectType, owner username.SQLUsername) ([]ACLItem, error) {
@@ -181,15 +181,16 @@ func DefaultACLItems(objectType ObjectType, owner username.SQLUsername) ([]ACLIt
 		))
 	}
 
-	// Admin and root entries.
+	// Admin and root entries (with explicit grant options).
 	items = append(items, NewACLItem(
-		username.AdminRoleName(), owner, filtered, nil,
+		username.AdminRoleName(), owner, filtered, filtered,
 	))
 	items = append(items, NewACLItem(
-		username.RootUserName(), owner, filtered, nil,
+		username.RootUserName(), owner, filtered, filtered,
 	))
 
-	// Owner entry (if different from admin and root).
+	// Owner entry (if different from admin and root). No grant option
+	// markers — the owner's grant option is implicit in PostgreSQL.
 	if !owner.IsAdminRole() && !owner.IsRootUser() {
 		items = append(items, NewACLItem(owner, owner, filtered, nil))
 	}

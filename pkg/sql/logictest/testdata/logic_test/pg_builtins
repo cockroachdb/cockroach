@@ -96,22 +96,22 @@ LEFT JOIN pg_roles e ON e.oid = a.grantee
 ORDER BY 1, 2, 3
 ----
 grantor  grantee  privilege_type  is_grantable
-root     admin    CREATE          false
-root     admin    DELETE          false
-root     admin    INSERT          false
-root     admin    MAINTAIN        false
-root     admin    SELECT          false
-root     admin    TRIGGER         false
-root     admin    TRUNCATE        false
-root     admin    UPDATE          false
-root     root     CREATE          false
-root     root     DELETE          false
-root     root     INSERT          false
-root     root     MAINTAIN        false
-root     root     SELECT          false
-root     root     TRIGGER         false
-root     root     TRUNCATE        false
-root     root     UPDATE          false
+root     admin    CREATE          true
+root     admin    DELETE          true
+root     admin    INSERT          true
+root     admin    MAINTAIN        true
+root     admin    SELECT          true
+root     admin    TRIGGER         true
+root     admin    TRUNCATE        true
+root     admin    UPDATE          true
+root     root     CREATE          true
+root     root     DELETE          true
+root     root     INSERT          true
+root     root     MAINTAIN        true
+root     root     SELECT          true
+root     root     TRIGGER         true
+root     root     TRUNCATE        true
+root     root     UPDATE          true
 
 subtest end
 
@@ -166,38 +166,38 @@ subtest acldefault
 query T
 SELECT acldefault('r'::"char", 'root'::regrole)
 ----
-{admin=CradwDtm/root,root=CradwDtm/root}
+{admin=C*r*a*d*w*D*t*m*/root,root=C*r*a*d*w*D*t*m*/root}
 
 # Database defaults: admin and root get CREATE, CONNECT, TEMPORARY.
 # PUBLIC gets CONNECT and TEMPORARY.
 query T
 SELECT acldefault('d'::"char", 'root'::regrole)
 ----
-{=cT/root,admin=CcT/root,root=CcT/root}
+{=cT/root,admin=C*c*T*/root,root=C*c*T*/root}
 
 # Function defaults: admin and root get EXECUTE, PUBLIC gets EXECUTE.
 query T
 SELECT acldefault('f'::"char", 'root'::regrole)
 ----
-{=X/root,admin=X/root,root=X/root}
+{=X/root,admin=X*/root,root=X*/root}
 
 # Type defaults: admin and root get USAGE, PUBLIC gets USAGE.
 query T
 SELECT acldefault('T'::"char", 'root'::regrole)
 ----
-{=U/root,admin=U/root,root=U/root}
+{=U/root,admin=U*/root,root=U*/root}
 
 # Schema defaults: admin and root get USAGE and CREATE, PUBLIC gets nothing.
 query T
 SELECT acldefault('n'::"char", 'root'::regrole)
 ----
-{admin=CU/root,root=CU/root}
+{admin=C*U*/root,root=C*U*/root}
 
 # Language defaults: admin, root, and PUBLIC get USAGE.
 query T
 SELECT acldefault('l'::"char", 'root'::regrole)
 ----
-{=U/root,admin=U/root,root=U/root}
+{=U/root,admin=U*/root,root=U*/root}
 
 # Column defaults: nobody gets anything.
 query T
@@ -209,7 +209,7 @@ SELECT acldefault('c'::"char", 'root'::regrole)
 query T
 SELECT acldefault('p'::"char", 'root'::regrole)
 ----
-{admin=sA/root,root=sA/root}
+{admin=s*A*/root,root=s*A*/root}
 
 # Error on invalid type char.
 statement error unrecognized object type abbreviation: "Z"
@@ -234,12 +234,29 @@ ORDER BY 1, 2, 3
 grantor  grantee  privilege_type  is_grantable
 root     PUBLIC   CONNECT         false
 root     PUBLIC   TEMPORARY       false
-root     admin    CONNECT         false
-root     admin    CREATE          false
-root     admin    TEMPORARY       false
-root     root     CONNECT         false
-root     root     CREATE          false
-root     root     TEMPORARY       false
+root     admin    CONNECT         true
+root     admin    CREATE          true
+root     admin    TEMPORARY       true
+root     root     CONNECT         true
+root     root     CREATE          true
+root     root     TEMPORARY       true
+
+# Round-trip for LANGUAGE type: admin and root should have grant options.
+query TTTB colnames
+SELECT
+  COALESCE(g.rolname, 'PUBLIC') AS grantor,
+  COALESCE(e.rolname, 'PUBLIC') AS grantee,
+  a.privilege_type,
+  a.is_grantable
+FROM aclexplode(acldefault('l'::"char", 'root'::regrole)) a
+LEFT JOIN pg_roles g ON g.oid = a.grantor
+LEFT JOIN pg_roles e ON e.oid = a.grantee
+ORDER BY 1, 2, 3
+----
+grantor  grantee  privilege_type  is_grantable
+root     PUBLIC   USAGE           false
+root     admin    USAGE           true
+root     root     USAGE           true
 
 # Round-trip for PARAMETER type: aclexplode(acldefault('p', ...)) should return
 # SET and ALTER SYSTEM privileges. This verifies no silent data loss occurs
@@ -257,10 +274,10 @@ LEFT JOIN pg_roles e ON e.oid = a.grantee
 ORDER BY 1, 2, 3
 ----
 grantor  grantee  privilege_type  is_grantable
-root     admin    ALTER SYSTEM    false
-root     admin    SET             false
-root     root     ALTER SYSTEM    false
-root     root     SET             false
+root     admin    ALTER SYSTEM    true
+root     admin    SET             true
+root     root     ALTER SYSTEM    true
+root     root     SET             true
 
 subtest end
 

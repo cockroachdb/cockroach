@@ -1740,8 +1740,9 @@ func createDefACLItem(
 // included; CockroachDB-specific privileges (BACKUP, CHANGEFEED, etc.)
 // are silently skipped by ListToACL.
 //
-// Grant option markers ('*') are stripped for admin, root, and the owner,
-// since their grant options are implicit (matching PostgreSQL behavior).
+// Grant option markers ('*') are stripped for the owner, since the owner's
+// grant option is implicit in PostgreSQL (acldefault never includes '*' for
+// the owner).
 //
 // If the resulting ACL matches the default privileges for the object type,
 // NULL is returned (matching PostgreSQL behavior where NULL means defaults).
@@ -1769,10 +1770,12 @@ func privilegeDescriptorToACLArray(
 				return nil, err
 			}
 		}
-		// Strip grant options for admin, root, and owner — their grant
-		// options are implicit in PostgreSQL convention.
+		// Strip grant options for the owner — the owner's grant option is
+		// implicit in PostgreSQL (acldefault never includes '*' for the
+		// owner). However, root and admin always show explicit grant
+		// options since they appear in every ACL with grants.
 		var grantOptions privilege.List
-		if !grantee.IsAdminRole() && !grantee.IsRootUser() && grantee != owner {
+		if grantee != owner || grantee.IsRootUser() || grantee.IsAdminRole() {
 			grantOptions, err = privilege.ListFromBitField(
 				userPriv.WithGrantOption, objectType,
 			)
