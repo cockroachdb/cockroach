@@ -376,13 +376,13 @@ type scatterAlwaysFailsSplitScatterer struct {
 }
 
 func (t *scatterAlwaysFailsSplitScatterer) split(
-	ctx context.Context, codec keys.SQLCodec, splitKey roachpb.Key,
+	ctx context.Context, codec keys.SQLCodec, splitKey roachpb.Key, _ bool,
 ) error {
 	return t.err
 }
 
 func (t *scatterAlwaysFailsSplitScatterer) scatter(
-	ctx context.Context, codec keys.SQLCodec, scatterKey roachpb.Key,
+	ctx context.Context, codec keys.SQLCodec, scatterKey roachpb.Key, _ bool,
 ) (roachpb.NodeID, error) {
 	return 0, t.err
 }
