@@ -24,66 +24,44 @@ type cleanupRLSPolicy struct {
 	db, table       string
 	policies        []string
 	originalRLSStmt string
-	waitDuration    time.Duration
 }
 
 func (cl *cleanupRLSPolicy) Cleanup(ctx context.Context, o operation.Operation, c cluster.Cluster) {
-	o.Status(fmt.Sprintf("Scheduling cleanup to happen after %s", cl.waitDuration))
+	conn := c.Conn(ctx, o.L(), 1, option.VirtualClusterName(roachtestflags.VirtualCluster))
+	defer conn.Close()
 
-	// Start a goroutine to handle the wait and cleanup. Since this runs in the
-	// background, we also create a new context so that the background goroutine
-	// isn't aborted by the parent context.
-	go func() {
-		newCtx := context.Background()
+	// Switch to the database where the table is located.
+	o.Status(fmt.Sprintf("switching to database %s for cleanup", cl.db))
+	if _, err := conn.ExecContext(ctx, fmt.Sprintf("USE %s", cl.db)); err != nil {
+		o.Error(err)
+		return
+	}
 
-		if deadline, ok := ctx.Deadline(); ok {
-			var cancel context.CancelFunc
-			newCtx, cancel = context.WithDeadline(newCtx, deadline.Add(cl.waitDuration))
-			defer cancel()
-		}
-		ctx = newCtx
-
-		// Wait for the specified duration before performing cleanup.
-		time.Sleep(cl.waitDuration)
-
-		conn := c.Conn(ctx, o.L(), 1, option.VirtualClusterName(roachtestflags.VirtualCluster))
-		defer conn.Close()
-
-		// Switch to the database where the table is located
-		o.Status(fmt.Sprintf("switching to database %s for cleanup", cl.db))
-		if _, err := conn.ExecContext(ctx, fmt.Sprintf("USE %s", cl.db)); err != nil {
+	// Drop all policies that were created.
+	for _, policy := range cl.policies {
+		o.Status(fmt.Sprintf("dropping policy %s on table %s.%s", policy, cl.db, cl.table))
+		_, err := conn.ExecContext(ctx, fmt.Sprintf("DROP POLICY IF EXISTS %s ON %s.%s", policy, cl.db, cl.table))
+		if err != nil {
 			o.Error(err)
 			return
 		}
+	}
 
-		// Drop all policies that were created
-		for _, policy := range cl.policies {
-			o.Status(fmt.Sprintf("dropping policy %s on table %s.%s", policy, cl.db, cl.table))
-			_, err := conn.ExecContext(ctx, fmt.Sprintf("DROP POLICY IF EXISTS %s ON %s.%s", policy, cl.db, cl.table))
-			if err != nil {
-				o.Error(err)
-				return
-			}
+	// Restore original RLS state or disable it if it wasn't enabled before.
+	if cl.originalRLSStmt != "" {
+		o.Status(fmt.Sprintf("restoring original row level security state for %s.%s", cl.db, cl.table))
+		if _, err := conn.ExecContext(ctx, cl.originalRLSStmt); err != nil {
+			o.Error(err)
+			return
 		}
-
-		// Restore original RLS state or disable it if it wasn't enabled before
-		if cl.originalRLSStmt != "" {
-			// Restore the original RLS state
-			o.Status(fmt.Sprintf("restoring original row level security state for %s.%s", cl.db, cl.table))
-			if _, err := conn.ExecContext(ctx, cl.originalRLSStmt); err != nil {
-				o.Error(err)
-				return
-			}
-		} else {
-			// If the table didn't have RLS before, disable it
-			o.Status(fmt.Sprintf("disabling row level security for %s.%s", cl.db, cl.table))
-			_, err := conn.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s.%s DISABLE ROW LEVEL SECURITY, NO FORCE ROW LEVEL SECURITY", cl.db, cl.table))
-			if err != nil {
-				o.Error(err)
-				return
-			}
+	} else {
+		o.Status(fmt.Sprintf("disabling row level security for %s.%s", cl.db, cl.table))
+		_, err := conn.ExecContext(ctx, fmt.Sprintf("ALTER TABLE %s.%s DISABLE ROW LEVEL SECURITY, NO FORCE ROW LEVEL SECURITY", cl.db, cl.table))
+		if err != nil {
+			o.Error(err)
+			return
 		}
-	}()
+	}
 }
 
 func runAddRLSPolicy(
@@ -196,14 +174,11 @@ func runAddRLSPolicy(
 
 	o.Status(fmt.Sprintf("created %d RLS policies on table %s.%s", numPolicies, dbName, tableName))
 
-	// Return the cleanup struct with wait duration.
-	waitTime := time.Hour
 	return &cleanupRLSPolicy{
 		db:              dbName,
 		table:           tableName,
 		policies:        policies,
 		originalRLSStmt: originalRLSStmt,
-		waitDuration:    waitTime,
 	}
 }
 
@@ -216,5 +191,7 @@ func registerAddRLSPolicy(r registry.Registry) {
 		CanRunConcurrently: registry.OperationCanRunConcurrently,
 		Dependencies:       []registry.OperationDependency{registry.OperationRequiresPopulatedDatabase},
 		Run:                runAddRLSPolicy,
+		WaitBeforeCleanup:  1 * time.Hour,
+		DeferCleanup:       true,
 	})
 }
