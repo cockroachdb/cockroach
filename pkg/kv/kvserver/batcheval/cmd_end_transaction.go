@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 )
 
@@ -895,18 +894,13 @@ func RunCommitTrigger(
 			ctx, rec, batch, *ms, ct.SplitTrigger, txn.WriteTimestamp,
 		)
 		if err != nil {
-			if info := pebble.ExtractDataCorruptionInfo(err); info != nil {
-				// We want to handle the data corruption error here because it's possible
-				// that a file that an external SSTable references got deleted. We want to
-				// fail the split and propagate the error, but we don't want to crash the
-				// process. An excise command could be used to get out of this data
-				// corruption.
-				return result.Result{}, err
-			} else {
-				// Otherwise, failing the split is a critical error. We should crash
-				// the process and report a replica corruption.
-				return result.Result{}, kvpb.MaybeWrapReplicaCorruptionError(ctx, err)
-			}
+			// Errors from split trigger evaluation simply fail the split,
+			// which will be retried. Previously, non-data-corruption errors
+			// were wrapped in ReplicaCorruptionError (crashing the process),
+			// but this was problematic because transient I/O errors (e.g.
+			// cloud storage timeouts) would be misidentified as corruption.
+			// See #165558.
+			return result.Result{}, err
 		}
 		*ms = newMS
 		return res, nil
@@ -914,18 +908,13 @@ func RunCommitTrigger(
 	if mt := ct.GetMergeTrigger(); mt != nil {
 		res, err := mergeTrigger(ctx, rec, batch, ms, mt, txn.WriteTimestamp)
 		if err != nil {
-			if info := pebble.ExtractDataCorruptionInfo(err); info != nil {
-				// We want to handle the data corruption error here because it's
-				// possible that a file that an external SSTable references got deleted.
-				// We want to fail the merge and propagate the error, but we don't want
-				// to crash the process. An excise command could be used to get out of
-				// this data corruption.
-				return result.Result{}, err
-			} else {
-				// Otherwise, failing the merge is a critical error. We should crash
-				// the process and report a replica corruption.
-				return result.Result{}, kvpb.MaybeWrapReplicaCorruptionError(ctx, err)
-			}
+			// Errors from merge trigger evaluation simply fail the merge,
+			// which will be retried. Previously, non-data-corruption errors
+			// were wrapped in ReplicaCorruptionError (crashing the process),
+			// but this was problematic because transient I/O errors (e.g.
+			// cloud storage timeouts) would be misidentified as corruption.
+			// See #165558.
+			return result.Result{}, err
 		}
 		return res, nil
 	}
