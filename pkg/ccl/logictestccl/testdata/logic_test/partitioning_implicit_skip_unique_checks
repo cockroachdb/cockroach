@@ -404,3 +404,111 @@ query B
 SELECT create_statement LIKE '%idx_partial2%skip_unique_checks%' FROM [SHOW CREATE TABLE t_partial]
 ----
 true
+
+subtest noticetrace
+
+# Verify that setting skip_unique_checks = true emits a notice in every context.
+
+# 1. ALTER INDEX on secondary index.
+query T noticetrace
+ALTER INDEX t@idx_b SET (skip_unique_checks = true)
+----
+NOTICE: skip_unique_checks bypasses unique constraint enforcement; incorrect usage can lead to unique constraint violations
+HINT: Use INSPECT to check for constraint violations. See https://www.cockroachlabs.com/docs/.../inspect.html
+
+# 2. ALTER INDEX on primary index.
+query T noticetrace
+ALTER INDEX t@t_pkey SET (skip_unique_checks = true)
+----
+NOTICE: skip_unique_checks bypasses unique constraint enforcement; incorrect usage can lead to unique constraint violations
+HINT: Use INSPECT to check for constraint violations. See https://www.cockroachlabs.com/docs/.../inspect.html
+
+# 3. CREATE UNIQUE INDEX.
+statement ok
+ALTER TABLE t ADD COLUMN f INT
+
+query T noticetrace
+CREATE UNIQUE INDEX idx_f ON t(f) WITH (skip_unique_checks = true)
+----
+NOTICE: skip_unique_checks bypasses unique constraint enforcement; incorrect usage can lead to unique constraint violations
+HINT: Use INSPECT to check for constraint violations. See https://www.cockroachlabs.com/docs/.../inspect.html
+
+# 4. CREATE UNIQUE INDEX (partial).
+statement ok
+ALTER TABLE t ADD COLUMN g INT
+
+query T noticetrace
+CREATE UNIQUE INDEX idx_g ON t(g) WITH (skip_unique_checks = true) WHERE g > 0
+----
+NOTICE: skip_unique_checks bypasses unique constraint enforcement; incorrect usage can lead to unique constraint violations
+HINT: Use INSPECT to check for constraint violations. See https://www.cockroachlabs.com/docs/.../inspect.html
+
+# 5. ALTER TABLE ALTER PRIMARY KEY.
+statement ok
+ALTER TABLE t ADD COLUMN h INT NOT NULL DEFAULT 0
+
+query T noticetrace
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (h) WITH (skip_unique_checks = true)
+----
+NOTICE: skip_unique_checks bypasses unique constraint enforcement; incorrect usage can lead to unique constraint violations
+HINT: Use INSPECT to check for constraint violations. See https://www.cockroachlabs.com/docs/.../inspect.html
+
+# 6. CREATE TABLE with column-level PK.
+query T noticetrace
+CREATE TABLE t_notice_col_pk (
+  region STRING NOT NULL,
+  a INT PRIMARY KEY WITH (skip_unique_checks = true),
+  CHECK (region IN ('us-west', 'us-east', 'eu-west'))
+) PARTITION ALL BY LIST (region) (
+  PARTITION us_west VALUES IN (('us-west')),
+  PARTITION us_east VALUES IN (('us-east')),
+  PARTITION eu_west VALUES IN (('eu-west'))
+)
+----
+NOTICE: skip_unique_checks bypasses unique constraint enforcement; incorrect usage can lead to unique constraint violations
+HINT: Use INSPECT to check for constraint violations. See https://www.cockroachlabs.com/docs/.../inspect.html
+
+# 7. CREATE TABLE with table-level PK.
+query T noticetrace
+CREATE TABLE t_notice_tbl_pk (
+  region STRING NOT NULL,
+  a INT,
+  PRIMARY KEY (a) WITH (skip_unique_checks = true),
+  CHECK (region IN ('us-west', 'us-east', 'eu-west'))
+) PARTITION ALL BY LIST (region) (
+  PARTITION us_west VALUES IN (('us-west')),
+  PARTITION us_east VALUES IN (('us-east')),
+  PARTITION eu_west VALUES IN (('eu-west'))
+)
+----
+NOTICE: skip_unique_checks bypasses unique constraint enforcement; incorrect usage can lead to unique constraint violations
+HINT: Use INSPECT to check for constraint violations. See https://www.cockroachlabs.com/docs/.../inspect.html
+
+# 8. CREATE TABLE with inline UNIQUE INDEX.
+query T noticetrace
+CREATE TABLE t_notice_unique_idx (
+  region STRING NOT NULL,
+  a INT PRIMARY KEY,
+  b INT,
+  UNIQUE INDEX idx_b (b) WITH (skip_unique_checks = true),
+  CHECK (region IN ('us-west', 'us-east', 'eu-west'))
+) PARTITION ALL BY LIST (region) (
+  PARTITION us_west VALUES IN (('us-west')),
+  PARTITION us_east VALUES IN (('us-east')),
+  PARTITION eu_west VALUES IN (('eu-west'))
+)
+----
+NOTICE: skip_unique_checks bypasses unique constraint enforcement; incorrect usage can lead to unique constraint violations
+HINT: Use INSPECT to check for constraint violations. See https://www.cockroachlabs.com/docs/.../inspect.html
+
+# 9. SET false should not emit a notice.
+query T noticetrace
+ALTER INDEX t@idx_b SET (skip_unique_checks = false)
+----
+
+# 10. RESET should not emit a notice.
+query T noticetrace
+ALTER INDEX t@t_pkey RESET (skip_unique_checks)
+----
+
+subtest end
