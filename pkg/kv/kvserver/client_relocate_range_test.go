@@ -9,6 +9,7 @@ import (
 	"context"
 	"math/rand"
 	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -477,6 +479,7 @@ func TestReplicaRemovalDuringGet(t *testing.T) {
 func TestReplicaRemovalDuringCPut(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/166892")
 
 	ctx := context.Background()
 	tc, key, evalDuringReplicaRemoval := setupReplicaRemovalTest(t, ctx)
@@ -556,7 +559,7 @@ func setupReplicaRemovalTest(
 			resp kvpb.Response
 			err  *kvpb.Error
 		}
-		resultC := make(chan result)
+		resultC := make(chan result, 1)
 		srv := tc.Servers[0]
 		err := srv.Stopper().RunAsyncTask(ctx, "request", func(ctx context.Context) {
 			reqCtx := context.WithValue(ctx, magicKey{}, struct{}{})
@@ -565,6 +568,14 @@ func setupReplicaRemovalTest(
 		})
 		require.NoError(t, err)
 		<-requestReadyC
+
+		// Ensure the blocked request is always unblocked, even if the
+		// operations below fatal. Without this, a Fatalf triggers
+		// runtime.Goexit which runs deferred tc.Stopper().Stop(), but the
+		// stopper hangs forever waiting for the async task blocked on
+		// requestEvalC.
+		closeRequestEvalC := sync.OnceFunc(func() { close(requestEvalC) })
+		defer closeRequestEvalC()
 
 		// Transfer leaseholder to other store.
 		rangeDesc, err := tc.LookupRange(key)
@@ -591,7 +602,7 @@ func setupReplicaRemovalTest(
 		time.Sleep(500 * time.Millisecond)
 
 		// Allow request to resume, and return the result.
-		close(requestEvalC)
+		closeRequestEvalC()
 		r := <-resultC
 		return r.resp, r.err
 	}
