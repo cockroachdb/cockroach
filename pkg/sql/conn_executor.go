@@ -4384,8 +4384,10 @@ func (ex *connExecutor) runWithStatementTimeout(
 			var cancelFn context.CancelFunc
 			waitCtx, cancelFn = context.WithCancel(waitCtx)
 			queryTimeTicker := time.AfterFunc(ex.sessionData().StmtTimeout-timePassed, func() {
-				cancelFn()
+				// Before the cancellation make sure that the query
+				// is marked as timed out.
 				queryTimedout.Store(true)
+				cancelFn()
 			})
 			defer cancelFn()
 			defer queryTimeTicker.Stop()
