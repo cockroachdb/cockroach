@@ -218,8 +218,9 @@ type AlterDatabaseSetZoneConfigExtension struct {
 	// ALTER DATABASE ...
 	DatabaseName Name
 	// ALTER LOCALITY ...
-	LocalityLevel LocalityLevel
-	RegionName    Name
+	LocalityLevel   LocalityLevel
+	RegionName      Name
+	SuperRegionName Name
 	// CONFIGURE ZONE ...
 	ZoneConfigSettings
 }
@@ -240,6 +241,9 @@ func (node *AlterDatabaseSetZoneConfigExtension) Format(ctx *FmtCtx) {
 			ctx.WriteString(" IN ")
 			ctx.FormatNode(&node.RegionName)
 		}
+	case LocalityLevelSuperRegion:
+		ctx.WriteString(" SUPER REGION ")
+		ctx.FormatNode(&node.SuperRegionName)
 	default:
 		panic(fmt.Sprintf("unexpected locality: %#v", node.LocalityLevel))
 	}

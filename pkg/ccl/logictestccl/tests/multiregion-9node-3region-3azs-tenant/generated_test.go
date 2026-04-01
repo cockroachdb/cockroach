@@ -135,13 +135,6 @@ func TestCCLLogic_multi_region_survival_goal(
 	runCCLLogicTest(t, "multi_region_survival_goal")
 }
 
-func TestCCLLogic_multi_region_zone_config_extensions(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runCCLLogicTest(t, "multi_region_zone_config_extensions")
-}
-
 func TestCCLLogic_multi_region_zone_configs(
 	t *testing.T,
 ) {

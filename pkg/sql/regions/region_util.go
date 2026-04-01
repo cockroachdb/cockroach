@@ -862,6 +862,13 @@ func AddConstraintsForSuperRegion(
 			numReplicas = *ext.NumReplicas
 		}
 	}
+	if srName, ok := regionConfig.GetSuperRegionNameForRegion(affinityRegion); ok {
+		if ext, ok := exts.SuperRegion[srName]; ok && ext.NumReplicas != nil && *ext.NumReplicas > 0 {
+			if *ext.NumReplicas >= numVoters {
+				numReplicas = *ext.NumReplicas
+			}
+		}
+	}
 	if ext, ok := exts.RegionalIn[affinityRegion]; ok && ext.NumReplicas != nil && *ext.NumReplicas > 0 {
 		if *ext.NumReplicas >= numVoters {
 			numReplicas = *ext.NumReplicas
