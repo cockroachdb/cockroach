@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -100,18 +99,11 @@ func TestRestoreRetryFastFails(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.UnderRace(t, "test is flaky without extending duration of retry policy, takes too long")
-	skip.UnderDeadlock(t, "test is flaky under deadlock detector, takes too long")
-
-	// Max duration needs to be long enough such that the restore job
-	// runtime does not exceed the max duration of the retry policy, or
-	// else very few attempts will be made.
-	maxDuration := 500 * time.Millisecond
-	if skip.DevStress() {
-		// Under stress, the restore will take longer to complete, so we need to
-		// increase max duration accordingly.
-		maxDuration = 1500 * time.Millisecond
-	}
+	// Instead of using max duration as our top-level retry limit, we use max
+	// retries here and just make sure it is set to a value greater than the fast
+	// fail threshold. Duration based limits tend to be flakier in tests as they
+	// rely on timing, whereas max retries is deterministic.
+	maxRetries := maxRestoreRetryFastFail * 2
 	const numAccounts = 10
 
 	// This will run a restore job and fail it repeatedly at the start of the
@@ -135,7 +127,7 @@ func TestRestoreRetryFastFails(t *testing.T) {
 				InitialBackoff: time.Microsecond,
 				Multiplier:     2,
 				MaxBackoff:     100 * time.Millisecond,
-				MaxDuration:    maxDuration,
+				MaxRetries:     maxRetries,
 			},
 			RestoreRetryProgressThreshold: progThreshold,
 			RunBeforeRestoreFlow: func() error {
