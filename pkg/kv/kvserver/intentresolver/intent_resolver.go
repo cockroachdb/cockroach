@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -52,6 +53,21 @@ var asyncIntentResolutionDisabled = envutil.EnvOrDefaultBool(
 var defaultTaskLimit = envutil.EnvOrDefaultInt(
 	"COCKROACH_ASYNC_INTENT_RESOLVER_TASK_LIMIT", 1000,
 )
+
+// gcMaxIntentsInFlight is the maximum number of intents that may be in-flight
+// for resolution across all concurrent GC-initiated async cleanup goroutines.
+// When a transaction has more intents than this limit, it still proceeds (the
+// IntPool truncates to capacity), effectively consuming the entire budget until
+// it completes. This prevents a node from being overwhelmed by intent
+// resolution work when MVCC GC encounters many large transactions.
+const gcMaxIntentsInFlight = 1000
+
+// maxIntentsInFlightPerCaller is the maximum number of intents that a single
+// caller of resolveIntents may have in-flight at any time. Intents are
+// submitted to the batcher in chunks of this size, collecting responses for
+// each chunk before submitting the next.
+var maxIntentsInFlightPerCaller = metamorphic.ConstantWithTestRange(
+	"max-intents-in-flight-per-caller", 1000, 1, 1000)
 
 // asyncIntentResolutionTimeout is the timeout when processing a group of
 // intents asynchronously. The timeout prevents async intent resolution from
@@ -175,13 +191,14 @@ type RangeCache interface {
 type IntentResolver struct {
 	Metrics Metrics
 
-	clock        *hlc.Clock
-	db           *kv.DB
-	stopper      *stop.Stopper
-	testingKnobs kvserverbase.IntentResolverTestingKnobs
-	settings     *cluster.Settings
-	ambientCtx   log.AmbientContext
-	sem          *quotapool.IntPool // semaphore to limit async goroutines
+	clock          *hlc.Clock
+	db             *kv.DB
+	stopper        *stop.Stopper
+	testingKnobs   kvserverbase.IntentResolverTestingKnobs
+	settings       *cluster.Settings
+	ambientCtx     log.AmbientContext
+	sem            *quotapool.IntPool // semaphore to limit async goroutines
+	gcIntentBudget *quotapool.IntPool // limits in-flight intents during GC
 
 	rdc RangeCache
 
@@ -251,6 +268,8 @@ func New(c Config) *IntentResolver {
 		everyAdmissionHeaderMissing: log.Every(5 * time.Minute),
 	}
 	c.Stopper.AddCloser(ir.sem.Closer("stopper"))
+	ir.gcIntentBudget = quotapool.NewIntPool("gc intent budget", gcMaxIntentsInFlight)
+	c.Stopper.OnQuiesce(func() { ir.gcIntentBudget.Close("quiescing") })
 	ir.mu.inFlightPushes = map[uuid.UUID]int{}
 	ir.mu.inFlightTxnCleanups = map[uuid.UUID]struct{}{}
 	intentResolutionSendBatchTimeout := intentResolverSendBatchTimeout
@@ -755,6 +774,19 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 			return
 		}
 		defer release()
+		// Acquire intent budget to limit the total number of in-flight intents
+		// across all concurrent GC goroutines. For transactions with more intents
+		// than the budget capacity, the IntPool truncates the acquisition to the
+		// capacity, effectively consuming the entire budget until this goroutine
+		// completes. This truncation behavior is tested by TestQuotaPoolMaxQuota
+		// in pkg/util/quotapool.
+		if numIntents := uint64(len(txn.LockSpans)); numIntents > 0 {
+			alloc, err := ir.gcIntentBudget.Acquire(ctx, numIntents)
+			if err != nil {
+				return
+			}
+			defer alloc.Release()
+		}
 		// If the transaction is not yet finalized, but expired, push it
 		// before resolving the intents.
 		if !txn.Status.IsFinalized() {
@@ -1102,38 +1134,45 @@ func (ir *IntentResolver) resolveIntents(
 		return nil
 	}
 	// ... using their corresponding request batcher.
-	respChan := make(chan requestbatcher.Response, len(reqs))
 	batcherBypassAdmission := batchBypassAdmissionControl.Get(&ir.settings.SV)
 	if batcherBypassAdmission {
 		h = kv.AdmissionHeaderForBypass(h)
 	}
-	for _, req := range reqs {
-		var batcher *requestbatcher.RequestBatcher
-		switch req.Method() {
-		case kvpb.ResolveIntent:
-			batcher = ir.irBatcher
-		case kvpb.ResolveIntentRange:
-			batcher = ir.irRangeBatcher
-		default:
-			panic("unexpected")
-		}
-		rangeID := ir.lookupRangeID(ctx, req.Header().Key)
-		if err := batcher.SendWithChan(ctx, respChan, rangeID, req, h); err != nil {
-			return kvpb.NewError(err)
-		}
-	}
-	// Collect responses.
-	for range reqs {
-		select {
-		case resp := <-respChan:
-			if resp.Err != nil {
-				return kvpb.NewError(resp.Err)
+	// Submit intents in chunks to avoid overwhelming the node with
+	// goroutines when a transaction has many intents (e.g. 70k intents
+	// would create ~700 batcher goroutines without chunking).
+	for todoReqs := reqs; len(todoReqs) > 0; {
+		chunk := todoReqs[:min(len(todoReqs), maxIntentsInFlightPerCaller)]
+		todoReqs = todoReqs[len(chunk):]
+		respChan := make(chan requestbatcher.Response, len(chunk))
+		for _, req := range chunk {
+			var batcher *requestbatcher.RequestBatcher
+			switch req.Method() {
+			case kvpb.ResolveIntent:
+				batcher = ir.irBatcher
+			case kvpb.ResolveIntentRange:
+				batcher = ir.irRangeBatcher
+			default:
+				panic("unexpected")
 			}
-			_ = resp.Resp // ignore the response
-		case <-ctx.Done():
-			return kvpb.NewError(ctx.Err())
-		case <-ir.stopper.ShouldQuiesce():
-			return kvpb.NewError(&kvpb.NodeUnavailableError{})
+			rangeID := ir.lookupRangeID(ctx, req.Header().Key)
+			if err := batcher.SendWithChan(ctx, respChan, rangeID, req, h); err != nil {
+				return kvpb.NewError(err)
+			}
+		}
+		// Collect responses for this chunk before submitting the next.
+		for range chunk {
+			select {
+			case resp := <-respChan:
+				if resp.Err != nil {
+					return kvpb.NewError(resp.Err)
+				}
+				_ = resp.Resp // ignore the response
+			case <-ctx.Done():
+				return kvpb.NewError(ctx.Err())
+			case <-ir.stopper.ShouldQuiesce():
+				return kvpb.NewError(&kvpb.NodeUnavailableError{})
+			}
 		}
 	}
 	return nil
