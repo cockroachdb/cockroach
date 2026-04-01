@@ -396,6 +396,16 @@ func (p *partitionedStreamClient) CreateForTables(
 	if err := protoutil.Unmarshal(specBytes, spec); err != nil {
 		return nil, err
 	}
+	// Backward compatibility: if receiving from a 24.3 source that only
+	// populates the deprecated map-typed field 7, construct ExternalCatalog
+	// from it. LDR jobs always have tables, so an empty ExternalCatalog.Tables
+	// means the source is a 24.3 node that doesn't know about ExternalCatalog.
+	if len(spec.ExternalCatalog.Tables) == 0 && len(spec.TableDescriptors) > 0 {
+		for _, name := range req.TableNames {
+			spec.ExternalCatalog.Tables = append(spec.ExternalCatalog.Tables, spec.TableDescriptors[name])
+		}
+		spec.ExternalCatalog.Types = spec.TypeDescriptors
+	}
 	return spec, nil
 }
 func (p *partitionedStreamClient) ExecStatement(

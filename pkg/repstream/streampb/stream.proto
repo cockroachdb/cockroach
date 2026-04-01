@@ -46,8 +46,11 @@ message ReplicationProducerSpec {
     (gogoproto.customname) = "SourceTenantID"
   ];
   
-  reserved 7;
-  reserved 8;
+  // Deprecated in favor of external_catalog (field 9). These fields exist only
+  // for backward compatibility with 24.3 nodes. Delete these fields in versions
+  // that do not support upgrades from 24.3.
+  map<string, cockroach.sql.sqlbase.TableDescriptor> table_descriptors = 7 [(gogoproto.nullable) = false];
+  repeated cockroach.sql.sqlbase.TypeDescriptor type_descriptors = 8 [(gogoproto.nullable) = false];
   sql.catalog.externalcatalog.externalpb.ExternalCatalog external_catalog = 9 [(gogoproto.nullable) = false];
 }
 

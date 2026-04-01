@@ -46,6 +46,7 @@ go_library(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/externalcatalog",
+        "//pkg/sql/catalog/externalcatalog/externalpb",
         "//pkg/sql/catalog/resolver",
         "//pkg/sql/catalog/systemschema",
         "//pkg/sql/catalog/tabledesc",
