@@ -1,0 +1,188 @@
+# LogicTest: cockroach-go-testserver-25.4 cockroach-go-testserver-26.1
+
+# This test verifies that the TRUNCATE and MAINTAIN privileges introduced in
+# 26.2 work correctly before, during, and after upgrade from an older version.
+# These privileges have no version gate because they use backward-compatible
+# bitmasks; unknown bits are silently ignored by older nodes.
+
+# Disable the capacity check to avoid failures on low-disk-space machines.
+statement ok
+SET CLUSTER SETTING kv.bulk_io_write.min_capacity_remaining_fraction = 0.04
+
+# Set up tables before upgrade.
+statement ok
+CREATE TABLE priv_test (id INT PRIMARY KEY, data TEXT)
+
+statement ok
+CREATE TABLE mat_view_source (id INT PRIMARY KEY, val INT)
+
+statement ok
+INSERT INTO mat_view_source VALUES (1, 10), (2, 20)
+
+statement ok
+CREATE MATERIALIZED VIEW mat_view AS SELECT id, val FROM mat_view_source
+
+subtest pre_upgrade
+
+# Before upgrade, GRANT TRUNCATE and MAINTAIN should not be recognized
+# because the old binary does not have these privilege kinds in its lookup map.
+statement error not a valid privilege: "truncate"
+GRANT TRUNCATE ON TABLE priv_test TO testuser
+
+statement error not a valid privilege: "maintain"
+GRANT MAINTAIN ON TABLE mat_view TO testuser
+
+subtest end
+
+subtest mid_upgrade
+
+# Upgrade node 0 only. Nodes 1 and 2 remain on the old binary.
+upgrade 0
+
+# On the upgraded node, GRANT TRUNCATE and MAINTAIN should work even though
+# the cluster version has not been finalized. These privileges have no version
+# gate.
+user root nodeidx=0
+
+statement ok
+GRANT TRUNCATE ON TABLE priv_test TO testuser
+
+statement ok
+GRANT MAINTAIN ON TABLE mat_view TO testuser
+
+# testuser also needs SELECT on the source table to refresh the materialized
+# view.
+statement ok
+GRANT SELECT ON TABLE mat_view_source TO testuser
+
+# Verify the privileges are visible from the upgraded node.
+query TTTB colnames,nodeidx=0
+SELECT table_name, grantee, privilege_type, is_grantable
+FROM [SHOW GRANTS ON TABLE priv_test] WHERE grantee = 'testuser'
+----
+table_name  grantee   privilege_type  is_grantable
+priv_test   testuser  TRUNCATE        false
+
+query TTTB colnames,nodeidx=0
+SELECT table_name, grantee, privilege_type, is_grantable
+FROM [SHOW GRANTS ON TABLE mat_view] WHERE grantee = 'testuser'
+----
+table_name  grantee   privilege_type  is_grantable
+mat_view    testuser  MAINTAIN        false
+
+# On an old node, the privileges are stored as bitmask bits. The old node
+# silently ignores unknown bits, so SHOW GRANTS will not show the new privilege
+# names. However, the table should still be fully usable.
+user root nodeidx=2
+
+query TTTB colnames,nodeidx=2
+SELECT table_name, grantee, privilege_type, is_grantable
+FROM [SHOW GRANTS ON TABLE priv_test] WHERE grantee = 'testuser'
+----
+table_name  grantee  privilege_type  is_grantable
+
+query TTTB colnames,nodeidx=2
+SELECT table_name, grantee, privilege_type, is_grantable
+FROM [SHOW GRANTS ON TABLE mat_view] WHERE grantee = 'testuser'
+----
+table_name  grantee  privilege_type  is_grantable
+
+statement ok
+INSERT INTO priv_test VALUES (1, 'from_old_node')
+
+statement ok
+SELECT * FROM priv_test
+
+# Verify TRUNCATE privilege works on the upgraded node in the mixed state.
+user testuser nodeidx=0
+
+statement ok
+TRUNCATE TABLE priv_test
+
+# Re-insert data for further testing.
+user root nodeidx=0
+
+statement ok
+INSERT INTO priv_test VALUES (1, 'hello'), (2, 'world')
+
+# Verify MAINTAIN privilege allows REFRESH MATERIALIZED VIEW on the upgraded
+# node.
+user testuser nodeidx=0
+
+statement ok
+REFRESH MATERIALIZED VIEW mat_view
+
+subtest end
+
+subtest post_upgrade
+
+# Upgrade remaining nodes and finalize.
+upgrade 1
+
+upgrade 2
+
+user root nodeidx=0
+
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version()
+
+# After full upgrade, all nodes should see the privileges.
+query TTTB colnames
+SELECT table_name, grantee, privilege_type, is_grantable
+FROM [SHOW GRANTS ON TABLE priv_test] WHERE grantee = 'testuser'
+----
+table_name  grantee   privilege_type  is_grantable
+priv_test   testuser  TRUNCATE        false
+
+query TTTB colnames
+SELECT table_name, grantee, privilege_type, is_grantable
+FROM [SHOW GRANTS ON TABLE mat_view] WHERE grantee = 'testuser'
+----
+table_name  grantee   privilege_type  is_grantable
+mat_view    testuser  MAINTAIN        false
+
+# Verify TRUNCATE privilege allows truncation.
+user testuser
+
+statement ok
+TRUNCATE TABLE priv_test
+
+user root
+
+# Verify MAINTAIN privilege allows REFRESH MATERIALIZED VIEW.
+user testuser
+
+statement ok
+REFRESH MATERIALIZED VIEW mat_view
+
+user root
+
+# Verify revoking works.
+statement ok
+REVOKE TRUNCATE ON TABLE priv_test FROM testuser
+
+statement ok
+REVOKE MAINTAIN ON TABLE mat_view FROM testuser
+
+query TTTB colnames
+SELECT table_name, grantee, privilege_type, is_grantable
+FROM [SHOW GRANTS ON TABLE priv_test] WHERE grantee = 'testuser'
+----
+table_name  grantee  privilege_type  is_grantable
+
+query TTTB colnames
+SELECT table_name, grantee, privilege_type, is_grantable
+FROM [SHOW GRANTS ON TABLE mat_view] WHERE grantee = 'testuser'
+----
+table_name  grantee  privilege_type  is_grantable
+
+# Verify the user can no longer perform the privileged operations.
+user testuser
+
+statement error pq: user testuser does not have DROP or TRUNCATE privilege on relation priv_test
+TRUNCATE TABLE priv_test
+
+statement error pq: user testuser does not have MAINTAIN privilege on relation mat_view
+REFRESH MATERIALIZED VIEW mat_view
+
+subtest end
