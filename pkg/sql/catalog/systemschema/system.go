@@ -569,10 +569,11 @@ CREATE TABLE system.statement_diagnostics_requests(
     anti_plan_gist           BOOL        NULL,
     redacted                 BOOL        NOT NULL DEFAULT FALSE,
     username                 STRING      NOT NULL DEFAULT '',
+    max_execution_latency    INTERVAL    NULL,
     CONSTRAINT "primary" PRIMARY KEY (id),
     CONSTRAINT check_sampling_probability CHECK (sampling_probability BETWEEN 0.0 AND 1.0),
-    INDEX completed_idx_v2 (completed, id) STORING (statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username),
-    FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username)
+    INDEX completed_idx_v2 (completed, id) STORING (statement_fingerprint, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username, max_execution_latency),
+    FAMILY "primary" (id, completed, statement_fingerprint, statement_diagnostics_id, requested_at, min_execution_latency, expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted, username, max_execution_latency)
 );`
 
 	StatementDiagnosticsTableSchema = `
@@ -2848,12 +2849,13 @@ var (
 				{Name: "anti_plan_gist", ID: 10, Type: types.Bool, Nullable: true},
 				{Name: "redacted", ID: 11, Type: types.Bool, Nullable: false, DefaultExpr: &falseBoolString},
 				{Name: "username", ID: 12, Type: types.String, Nullable: false, DefaultExpr: &emptyString},
+				{Name: "max_execution_latency", ID: 13, Type: types.Interval, Nullable: true},
 			},
 			[]descpb.ColumnFamilyDescriptor{
 				{
 					Name:        "primary",
-					ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at", "min_execution_latency", "expires_at", "sampling_probability", "plan_gist", "anti_plan_gist", "redacted", "username"},
-					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12},
+					ColumnNames: []string{"id", "completed", "statement_fingerprint", "statement_diagnostics_id", "requested_at", "min_execution_latency", "expires_at", "sampling_probability", "plan_gist", "anti_plan_gist", "redacted", "username", "max_execution_latency"},
+					ColumnIDs:   []descpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13},
 				},
 			},
 			pk("id"),
@@ -2863,10 +2865,10 @@ var (
 				ID:                  2,
 				Unique:              false,
 				KeyColumnNames:      []string{"completed", "id"},
-				StoreColumnNames:    []string{"statement_fingerprint", "min_execution_latency", "expires_at", "sampling_probability", "plan_gist", "anti_plan_gist", "redacted", "username"},
+				StoreColumnNames:    []string{"statement_fingerprint", "min_execution_latency", "expires_at", "sampling_probability", "plan_gist", "anti_plan_gist", "redacted", "username", "max_execution_latency"},
 				KeyColumnIDs:        []descpb.ColumnID{2, 1},
 				KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
-				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7, 8, 9, 10, 11, 12},
+				StoreColumnIDs:      []descpb.ColumnID{3, 6, 7, 8, 9, 10, 11, 12, 13},
 				Version:             descpb.StrictIndexColumnIDGuaranteesVersion,
 			},
 		),
