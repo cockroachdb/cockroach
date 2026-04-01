@@ -45,6 +45,26 @@ SELECT pg_typeof(acldefault('r', 0::oid))
 ----
 aclitem[]
 
+# On the upgraded node, creating a table with an aclitem column should work.
+statement ok
+CREATE TABLE acl_mid_upgrade (id INT PRIMARY KEY, acl aclitem)
+
+statement ok
+INSERT INTO acl_mid_upgrade VALUES (1, 'testuser=r/root')
+
+query IT
+SELECT * FROM acl_mid_upgrade
+----
+1  testuser=r/root
+
+# On an old node, reading from a table with an aclitem column should still work.
+user root nodeidx=2
+
+query IT
+SELECT * FROM acl_mid_upgrade
+----
+1  testuser=r/root
+
 # On an old node, aclitem type should still not be recognized.
 user root nodeidx=2
 
