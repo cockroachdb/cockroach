@@ -157,10 +157,7 @@ func (s *topLevelServer) upgradeStatus(
 	if err != nil {
 		return UpgradeBlockedDueToError, err
 	}
-	vitalities, err := s.nodeLiveness.ScanNodeVitalityFromKV(ctx)
-	if err != nil {
-		return UpgradeBlockedDueToError, err
-	}
+	vitalities := s.nodeLiveness.ScanAllNodeVitalityFromCache()
 
 	var newVersion string
 	var notRunningErr error
