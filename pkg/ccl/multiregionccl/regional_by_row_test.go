@@ -954,6 +954,127 @@ USE t;
 	}
 }
 
+// TestSurvivalGoalAndPrimaryRegionRacingRegionalByRowChange tests that
+// ALTER DATABASE SURVIVE and ALTER DATABASE PRIMARY REGION are blocked when a
+// REGIONAL BY ROW transition (PK swap) is in progress on a table in the
+// database. This guards against a race where the database-level change rewrites
+// zone configs while the async PK swap reads a stale survival goal and writes
+// inconsistent partition zone configs.
+func TestSurvivalGoalAndPrimaryRegionRacingRegionalByRowChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	skip.UnderRace(t, "too slow under race")
+
+	regionalByRowChanges := []struct {
+		desc  string
+		setup string
+		cmd   string
+	}{
+		{
+			desc:  "set locality rbr",
+			setup: `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY GLOBAL`,
+			cmd:   `ALTER TABLE t.test SET LOCALITY REGIONAL BY ROW`,
+		},
+		{
+			desc:  "set locality rbt",
+			setup: `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
+			cmd:   `ALTER TABLE t.test SET LOCALITY REGIONAL BY TABLE`,
+		},
+	}
+
+	// Database-level changes that should be blocked when a REGIONAL BY ROW
+	// transition is in progress. These are synchronous operations that rewrite
+	// table zone configs, so they only need to be tested in the direction
+	// where the RBR change is started first.
+	dbChanges := []struct {
+		desc string
+		cmd  string
+	}{
+		{
+			desc: "alter survival goal",
+			cmd:  `ALTER DATABASE t SURVIVE REGION FAILURE`,
+		},
+		{
+			desc: "alter primary region",
+			cmd:  `ALTER DATABASE t PRIMARY REGION "us-east2"`,
+		},
+	}
+
+	expectedErr := "pq: cannot perform database region changes while a REGIONAL BY ROW transition is underway"
+
+	for _, rbrChange := range regionalByRowChanges {
+		for _, dbChange := range dbChanges {
+			t.Run(fmt.Sprintf("%s racing %s", rbrChange.desc, dbChange.desc), func(t *testing.T) {
+				defer log.Scope(t).Close(t)
+				interruptStartCh := make(chan struct{})
+				interruptEndCh := make(chan struct{})
+				performInterrupt := false
+
+				_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+					t,
+					3, /* numServers */
+					base.TestingKnobs{
+						SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+							RunBeforeBackfill: func() error {
+								if performInterrupt {
+									performInterrupt = false
+									close(interruptStartCh)
+									<-interruptEndCh
+								}
+								return nil
+							},
+						},
+						SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+							BeforeStage: func(p scplan.Plan, stageIdx int) error {
+								if p.Params.ExecutionPhase == scop.PostCommitPhase && performInterrupt {
+									performInterrupt = false
+									close(interruptStartCh)
+									<-interruptEndCh
+								}
+								return nil
+							},
+						},
+					},
+				)
+				defer cleanup()
+
+				// Set up database with 3 regions (required for SURVIVE REGION FAILURE).
+				_, err := sqlDB.Exec(`
+SET create_table_with_schema_locked=false;
+DROP DATABASE IF EXISTS t;
+CREATE DATABASE t PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+USE t;
+` + rbrChange.setup)
+				require.NoError(t, err)
+
+				// Perform the RBR change asynchronously; this will be interrupted.
+				rbrErrCh := make(chan error, 1)
+				performInterrupt = true
+				go func(cmd string) {
+					_, err := sqlDB.Exec(cmd)
+					rbrErrCh <- err
+				}(rbrChange.cmd)
+
+				// Wait for the backfill to start.
+				<-interruptStartCh
+
+				// Now attempt the database-level change; it should be blocked.
+				_, err = sqlDB.Exec(dbChange.cmd)
+				close(interruptEndCh)
+				require.Error(t, err)
+				require.EqualError(t, err, expectedErr)
+
+				// Ensure the RBR change completes without error.
+				require.NoError(t, <-rbrErrCh)
+
+				// Validate zone configurations are consistent.
+				_, err = sqlDB.Exec(`SELECT crdb_internal.validate_multi_region_zone_configs()`)
+				require.NoError(t, err)
+			})
+		}
+	}
+}
+
 // TestIndexDescriptorUpdateForImplicitColumns checks that the column ID slices
 // in the indexes of a table descriptor undergoing partitioning changes
 // involving implicit columns are correctly updated.

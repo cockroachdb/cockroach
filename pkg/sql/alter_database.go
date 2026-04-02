@@ -959,6 +959,10 @@ func (n *alterDatabasePrimaryRegionNode) switchPrimaryRegion(params runParams) e
 		)
 	}
 
+	if err := params.p.checkNoRegionalByRowChangeUnderway(params.ctx, n.desc); err != nil {
+		return err
+	}
+
 	// Get the type descriptor for the multi-region enum.
 	typeDesc, err := params.p.Descriptors().MutableByID(params.p.txn).Type(params.ctx, n.desc.RegionConfig.RegionEnumID)
 	if err != nil {
@@ -1391,6 +1395,10 @@ func (p *planner) alterDatabaseSurvivalGoal(
 				return errors.Wrapf(err, "super region %s only has %d region(s)", sr.SuperRegionName, len(sr.Regions))
 			}
 		}
+	}
+
+	if err := p.checkNoRegionalByRowChangeUnderway(ctx, db); err != nil {
+		return err
 	}
 
 	if err := p.validateZoneConfigForMultiRegionDatabaseWasNotModifiedByUser(
