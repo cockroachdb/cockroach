@@ -2351,6 +2351,22 @@ alter_database_alter_super_region:
       Regions: $9.nameList(),
     }
   }
+| ALTER DATABASE database_name ALTER SUPER REGION region_name survival_goal_clause
+  {
+    $$.val = &tree.AlterDatabaseAlterSuperRegionSurvivalGoal{
+      DatabaseName: tree.Name($3),
+      SuperRegionName: tree.Name($7),
+      SurvivalGoal: $8.survivalGoal(),
+    }
+  }
+| ALTER DATABASE database_name ALTER SUPER REGION region_name SURVIVE DEFAULT
+  {
+    $$.val = &tree.AlterDatabaseAlterSuperRegionSurvivalGoal{
+      DatabaseName: tree.Name($3),
+      SuperRegionName: tree.Name($7),
+      SurvivalGoal: tree.SurvivalGoalDefault,
+    }
+  }
 
 alter_database_set_secondary_region_stmt:
    ALTER DATABASE database_name SET secondary_region_clause

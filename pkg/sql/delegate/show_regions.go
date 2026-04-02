@@ -147,7 +147,7 @@ ORDER BY zones_table.region
 
 		query := fmt.Sprintf(
 			`
-SELECT database_name, super_region_name, regions
+SELECT database_name, super_region_name, regions, survival_goal
   FROM crdb_internal.super_regions
  WHERE database_name = %s`, lexbase.EscapeSQLString(string(dbName)))
 

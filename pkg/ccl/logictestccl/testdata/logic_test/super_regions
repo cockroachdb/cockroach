@@ -801,40 +801,40 @@ SELECT id, database_name, super_region_name, regions FROM crdb_internal.super_re
 137  mr3       r1             {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}
 106  oncreate  create         {ap-southeast-2,us-east-1}
 
-query TTT
+query TTTT
 SHOW SUPER REGIONS FROM DATABASE test
 ----
 
-query TTT
+query TTTT
 SHOW SUPER REGIONS FROM DATABASE db
 ----
-db  test  {ap-southeast-2,us-east-1}
+db  test  {ap-southeast-2,us-east-1}  NULL
 
-query TTT
+query TTTT
 SHOW SUPER REGIONS FROM DATABASE db2
 ----
-db2  test  {ca-central-1}
+db2  test  {ca-central-1}  NULL
 
-query TTT
+query TTTT
 SHOW SUPER REGIONS FROM DATABASE db3
 ----
-db3  test1  {us-west-1}
+db3  test1  {us-west-1}  NULL
 
-query TTT
+query TTTT
 SHOW SUPER REGIONS FROM DATABASE mr1
 ----
-mr1  test  {us-east-1}
+mr1  test  {us-east-1}  NULL
 
-query TTT rowsort
+query TTTT rowsort
 SHOW SUPER REGIONS FROM DATABASE mr2
 ----
-mr2  ca-central-sr  {ca-central-1}
-mr2  test           {ap-southeast-2,us-east-1}
+mr2  ca-central-sr  {ca-central-1}             NULL
+mr2  test           {ap-southeast-2,us-east-1}  NULL
 
-query TTT
+query TTTT
 SHOW SUPER REGIONS FROM DATABASE mr3
 ----
-mr3  r1  {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}
+mr3  r1  {ap-southeast-2,ca-central-1,us-central-1,us-east-1,us-west-1}  NULL
 
 # Verify that a secondary region outside a super region does not leak into
 # lease_preferences or voter_constraints for tables in the super region.
