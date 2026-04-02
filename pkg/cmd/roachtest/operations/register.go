@@ -37,4 +37,5 @@ func RegisterOperations(r registry.Registry) {
 	changefeeds.RegisterChangefeeds(r)
 	registerInspect(r)
 	registerTPCCCheck(r)
+	registerBankCheck(r)
 }
