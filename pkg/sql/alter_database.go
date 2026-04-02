@@ -1677,6 +1677,8 @@ func (n *alterDatabaseAddSuperRegion) startExec(params runParams) error {
 		)
 	}
 
+	telemetry.Inc(sqltelemetry.AlterDatabaseAddSuperRegionCounter)
+
 	// Check if the primary and secondary regions are members of this super region.
 	regionConfig, err := SynthesizeRegionConfig(
 		params.ctx, params.p.txn, n.desc.ID, params.p.Descriptors(),
@@ -1775,6 +1777,8 @@ func (n *alterDatabaseDropSuperRegion) startExec(params runParams) error {
 			n.n.DatabaseName.String(),
 		)
 	}
+
+	telemetry.Inc(sqltelemetry.AlterDatabaseDropSuperRegionCounter)
 
 	typeID, err := n.desc.MultiRegionEnumID()
 	if err != nil {
@@ -1905,6 +1909,8 @@ func (n *alterDatabaseAlterSuperRegion) startExec(params runParams) error {
 			n.n.DatabaseName.String(),
 		)
 	}
+
+	telemetry.Inc(sqltelemetry.AlterDatabaseAlterSuperRegionCounter)
 
 	typeID, err := n.desc.MultiRegionEnumID()
 	if err != nil {
@@ -2128,6 +2134,8 @@ func (n *alterDatabaseAlterSuperRegionSurvivalGoalNode) startExec(params runPara
 			n.n.DatabaseName.String(),
 		)
 	}
+
+	telemetry.Inc(sqltelemetry.AlterDatabaseAlterSuperRegionSurvivalGoalCounter)
 
 	if !params.p.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V26_3) {
 		return pgerror.Newf(pgcode.FeatureNotSupported,
