@@ -7,6 +7,8 @@ environment:
   CLUSTER_NODES: 6
   WORKLOAD_CLUSTER: workload-chaos-aws
   WORKLOAD_NODES: 1
+  # S3 bucket for storing scheduled backups (same bucket used by roachtest backup-restore operation)
+  BACKUP_BUCKET: cockroachdb-backup-testing
 
 dependent_file_locations:
   - artifacts/roachprod
@@ -217,6 +219,18 @@ targets:
         flags:
           warehouses: 12000
           db: cct_tpcc
+      # Create a weekly full backup schedule
+      - command: sql
+        args:
+          - $CLUSTER:1
+          - --
+          - -e
+          - |
+            CREATE SCHEDULE IF NOT EXISTS 'drt-chaos-aws-weekly-backup'
+            FOR BACKUP INTO 's3://$BACKUP_BUCKET/$CLUSTER/weekly-backup?AUTH=implicit'
+            RECURRING '0 * * * *'
+            FULL BACKUP '@weekly'
+            WITH SCHEDULE OPTIONS (first_run = 'now', on_execution_failure = 'retry', on_previous_running = 'skip');
       - script: "pkg/cmd/drtprod/scripts/generate_tpcc_run.sh"
         args:
           - cct_tpcc # suffix added to script name tpcc_run.sh
