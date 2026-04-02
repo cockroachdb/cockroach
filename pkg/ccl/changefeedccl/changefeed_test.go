@@ -9649,14 +9649,17 @@ func TestChangefeedOrderingWithErrors(t *testing.T) {
 		sqlDB.Exec(t, `UPSERT INTO foo VALUES (1, 'd')`)
 		feedJob := foo.(cdctest.EnterpriseTestFeed)
 
-		// check that running status correctly updates with retryable error
+		// Check that running status correctly updates with retryable error.
 		testutils.SucceedsSoon(t, func() error {
-			status, err := feedJob.FetchStatusMessage()
-			if err != nil {
-				return err
-			}
-			require.Regexp(t, "500 Internal Server Error", status)
-			return nil
+			var unused int
+			// QueryRowContext will return an error if the row is not found.
+			return s.DB.QueryRowContext(context.Background(), `
+				SELECT 1 FROM system.job_message
+				WHERE job_id = $1
+				  AND kind = 'status'
+				  AND message LIKE '%500 Internal Server Error%'
+				LIMIT 1
+			`, feedJob.JobID()).Scan(&unused)
 		})
 
 		webhookFoo.mockSink.SetStatusCodes([]int{http.StatusOK})
