@@ -9,10 +9,19 @@ package main
 type OutputFormat interface {
 	// Name returns the format identifier (e.g., "avro").
 	Name() string
-	// WriteFiles writes the parsed rows to output files. It receives the table
-	// definition, the parsed rows, the output directory, and the shard index.
-	WriteFiles(table TableDef, rows []map[string]interface{}, outputDir string, shardIdx int) error
+	// NewWriter creates a FormatWriter that streams batches of rows to output
+	// files. The caller must call Close on the returned writer when done.
+	NewWriter(table TableDef, outputDir string, shardIdx int) (FormatWriter, error)
 	// WriteSchema writes any format-specific schema files to the output
 	// directory. Called once per table after all shards are written.
 	WriteSchema(table TableDef, outputDir string) error
+}
+
+// FormatWriter streams batches of rows to an output file.
+type FormatWriter interface {
+	// WriteBatch writes a batch of rows. The caller retains ownership of the
+	// slice and may reuse it after WriteBatch returns.
+	WriteBatch(rows []map[string]interface{}) error
+	// Close flushes buffered data and closes underlying file(s).
+	Close() error
 }

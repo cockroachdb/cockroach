@@ -60,26 +60,37 @@ func buildAvroSchema(table TableDef) string {
 	return string(b)
 }
 
-// WriteFiles writes both an OCF file and a binary records file for the given
-// shard. The OCF file uses snappy compression and embeds the schema. The binary
-// records file contains one binary-encoded AVRO datum per line (newline
-// separated), suitable for IMPORT INTO ... WITH data_as_binary_records.
-func (a *avroFormat) WriteFiles(
-	table TableDef, rows []map[string]interface{}, outputDir string, shardIdx int,
-) error {
+// avroWriter streams batches of rows to both an OCF file and a binary records
+// file.
+type avroWriter struct {
+	table     TableDef
+	codec     *goavro.Codec
+	ocfWriter *goavro.OCFWriter
+	ocfFile   *os.File
+	binFile   *os.File
+	ocfPath   string
+	binPath   string
+	count     int
+}
+
+var _ FormatWriter = (*avroWriter)(nil)
+
+// NewWriter creates an avroWriter that writes to both an OCF file and a binary
+// records file.
+func (a *avroFormat) NewWriter(
+	table TableDef, outputDir string, shardIdx int,
+) (FormatWriter, error) {
 	schemaJSON := buildAvroSchema(table)
 	codec, err := goavro.NewCodec(schemaJSON)
 	if err != nil {
-		return fmt.Errorf("creating avro codec for %s: %w", table.Name, err)
+		return nil, fmt.Errorf("creating avro codec for %s: %w", table.Name, err)
 	}
 
-	// Write OCF file.
 	ocfPath := filepath.Join(outputDir, fmt.Sprintf("%s.%d.ocf", table.Name, shardIdx))
 	ocfFile, err := os.Create(ocfPath)
 	if err != nil {
-		return fmt.Errorf("creating %s: %w", ocfPath, err)
+		return nil, fmt.Errorf("creating %s: %w", ocfPath, err)
 	}
-	defer ocfFile.Close()
 
 	ocfWriter, err := goavro.NewOCFWriter(goavro.OCFConfig{
 		W:               ocfFile,
@@ -87,32 +98,60 @@ func (a *avroFormat) WriteFiles(
 		CompressionName: goavro.CompressionSnappyLabel,
 	})
 	if err != nil {
-		return fmt.Errorf("creating OCF writer for %s: %w", table.Name, err)
+		ocfFile.Close()
+		return nil, fmt.Errorf("creating OCF writer for %s: %w", table.Name, err)
 	}
 
-	if err := ocfWriter.Append(toNativeSlice(rows)); err != nil {
-		return fmt.Errorf("writing OCF records for %s: %w", table.Name, err)
-	}
-
-	// Write binary records file.
 	binPath := filepath.Join(outputDir, fmt.Sprintf("%s.%d.bin", table.Name, shardIdx))
 	binFile, err := os.Create(binPath)
 	if err != nil {
-		return fmt.Errorf("creating %s: %w", binPath, err)
+		ocfFile.Close()
+		return nil, fmt.Errorf("creating %s: %w", binPath, err)
 	}
-	defer binFile.Close()
+
+	return &avroWriter{
+		table:     table,
+		codec:     codec,
+		ocfWriter: ocfWriter,
+		ocfFile:   ocfFile,
+		binFile:   binFile,
+		ocfPath:   ocfPath,
+		binPath:   binPath,
+	}, nil
+}
+
+// WriteBatch writes a batch of rows to both the OCF file and the binary records
+// file.
+func (w *avroWriter) WriteBatch(rows []map[string]interface{}) error {
+	if err := w.ocfWriter.Append(toNativeSlice(rows)); err != nil {
+		return fmt.Errorf("writing OCF records for %s: %w", w.table.Name, err)
+	}
 
 	for i, row := range rows {
-		binary, err := codec.BinaryFromNative(nil, row)
+		binary, err := w.codec.BinaryFromNative(nil, row)
 		if err != nil {
-			return fmt.Errorf("encoding binary record %d for %s: %w", i, table.Name, err)
+			return fmt.Errorf("encoding binary record %d for %s: %w", w.count+i, w.table.Name, err)
 		}
-		if _, err := binFile.Write(binary); err != nil {
-			return fmt.Errorf("writing binary record %d for %s: %w", i, table.Name, err)
+		if _, err := w.binFile.Write(binary); err != nil {
+			return fmt.Errorf("writing binary record %d for %s: %w", w.count+i, w.table.Name, err)
 		}
 	}
 
-	fmt.Printf("  wrote %s (%d records) and %s\n", ocfPath, len(rows), binPath)
+	w.count += len(rows)
+	return nil
+}
+
+// Close closes the OCF and binary files, printing a summary.
+func (w *avroWriter) Close() error {
+	ocfErr := w.ocfFile.Close()
+	binErr := w.binFile.Close()
+	if ocfErr != nil {
+		return fmt.Errorf("closing OCF file %s: %w", w.ocfPath, ocfErr)
+	}
+	if binErr != nil {
+		return fmt.Errorf("closing binary file %s: %w", w.binPath, binErr)
+	}
+	fmt.Printf("  wrote %s (%d records) and %s\n", w.ocfPath, w.count, w.binPath)
 	return nil
 }
 

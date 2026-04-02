@@ -27,6 +27,10 @@ import (
 	"strings"
 )
 
+// batchSize is the number of rows parsed and written per batch. This bounds
+// peak memory usage to roughly 15-20 MB regardless of shard size.
+const batchSize = 10000
+
 var formats = map[string]OutputFormat{
 	"avro":    &avroFormat{},
 	"parquet": &parquetFormat{},
@@ -93,15 +97,23 @@ func main() {
 				log.Fatalf("opening %s: %v", filePath, err)
 			}
 
-			rows, err := parseCSV(f, tableDef)
-			f.Close()
+			writer, err := format.NewWriter(tableDef, *outputDir, shardIdx)
 			if err != nil {
-				log.Fatalf("parsing %s: %v", fileName, err)
+				f.Close()
+				log.Fatalf("creating writer for %s shard %d: %v", tableName, shardIdx, err)
 			}
 
-			if err := format.WriteFiles(tableDef, rows, *outputDir, shardIdx); err != nil {
-				log.Fatalf("writing %s shard %d: %v", tableName, shardIdx, err)
+			if _, err := processShard(f, tableDef, writer); err != nil {
+				_ = writer.Close()
+				f.Close()
+				log.Fatalf("processing %s shard %d: %v", tableName, shardIdx, err)
 			}
+
+			if err := writer.Close(); err != nil {
+				f.Close()
+				log.Fatalf("closing writer for %s shard %d: %v", tableName, shardIdx, err)
+			}
+			f.Close()
 		}
 	}
 
@@ -116,15 +128,17 @@ func availableFormats() string {
 	return strings.Join(names, ", ")
 }
 
-// parseCSV reads a pipe-delimited TPC-H file and returns parsed rows. TPC-H
-// dbgen output has a trailing pipe on every line, producing an empty final
-// field that must be stripped.
-func parseCSV(r io.Reader, table TableDef) ([]map[string]interface{}, error) {
-	var rows []map[string]interface{}
+// processShard reads a pipe-delimited TPC-H file and streams parsed rows to the
+// writer in fixed-size batches. It returns the total number of rows processed.
+func processShard(r io.Reader, table TableDef, writer FormatWriter) (int, error) {
 	scanner := bufio.NewScanner(r)
 	// Increase buffer size for lineitem which can have long lines.
 	scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
+
+	batch := make([]map[string]interface{}, 0, batchSize)
 	lineNum := 0
+	totalRows := 0
+
 	for scanner.Scan() {
 		lineNum++
 		line := scanner.Text()
@@ -137,7 +151,7 @@ func parseCSV(r io.Reader, table TableDef) ([]map[string]interface{}, error) {
 			fields = fields[:len(fields)-1]
 		}
 		if len(fields) != len(table.Columns) {
-			return nil, fmt.Errorf(
+			return totalRows, fmt.Errorf(
 				"line %d: expected %d fields for %s, got %d",
 				lineNum, len(table.Columns), table.Name, len(fields))
 		}
@@ -145,12 +159,32 @@ func parseCSV(r io.Reader, table TableDef) ([]map[string]interface{}, error) {
 		for i, col := range table.Columns {
 			val, err := col.Parse(fields[i])
 			if err != nil {
-				return nil, fmt.Errorf(
+				return totalRows, fmt.Errorf(
 					"line %d, column %s: %w", lineNum, col.Name, err)
 			}
 			row[col.Name] = val
 		}
-		rows = append(rows, row)
+		batch = append(batch, row)
+
+		if len(batch) >= batchSize {
+			if err := writer.WriteBatch(batch); err != nil {
+				return totalRows, err
+			}
+			totalRows += len(batch)
+			batch = batch[:0]
+		}
 	}
-	return rows, scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return totalRows, err
+	}
+
+	// Flush final partial batch.
+	if len(batch) > 0 {
+		if err := writer.WriteBatch(batch); err != nil {
+			return totalRows, err
+		}
+		totalRows += len(batch)
+	}
+
+	return totalRows, nil
 }
