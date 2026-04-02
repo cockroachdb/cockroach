@@ -51,3 +51,9 @@ query-sql
 SELECT count(1) FROM d2.foo
 ----
 1
+
+# Wait for all download jobs to finish
+query-sql retry
+SELECT count(*) FROM [SHOW JOBS] WHERE job_type='RESTORE' and status='succeeded';
+----
+2

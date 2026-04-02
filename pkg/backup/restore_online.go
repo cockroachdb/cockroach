@@ -39,6 +39,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/besteffort"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -46,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -80,8 +83,25 @@ var onlineRestoreUseDistFlow = settings.RegisterBoolSetting(
 	settings.WithVisibility(settings.Reserved),
 )
 
+var orDownloadRetryMaxDuration = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"backup.restore.online_download_retry_max_duration",
+	"maximum duration the online restore download phase will retry before pausing the job",
+	72*time.Hour,
+	settings.WithVisibility(settings.Reserved),
+	settings.PositiveDuration,
+)
+
+var orDownloadRetryLogRate = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"backup.restore.online_download_retry_log_rate",
+	"maximum rate at which retryable online restore download errors are logged to the job messages table",
+	5*time.Minute,
+	settings.WithVisibility(settings.Reserved),
+	settings.PositiveDuration,
+)
+
 const linkCompleteKey = "link_complete"
-const maxDownloadAttempts = 5
 
 // splitAndScatter runs through all entries produced by genSpans splitting and
 // scattering the key-space designated by the passed rewriter such that if all
@@ -849,28 +869,60 @@ func getRemainingExternalFileBytes(
 func (r *restoreResumer) doDownloadFilesWithRetry(
 	ctx context.Context, execCtx sql.JobExecContext,
 ) error {
+	maxDuration := orDownloadRetryMaxDuration.Get(&execCtx.ExecCfg().Settings.SV)
+	retryOpts := retry.Options{
+		InitialBackoff: time.Millisecond * 100,
+		MaxBackoff:     5 * time.Minute,
+		MaxDuration:    maxDuration,
+	}
+	if knobs := execCtx.ExecCfg().BackupRestoreTestingKnobs; knobs != nil &&
+		knobs.DownloadPhaseRetryPolicy != nil {
+		retryOpts = *knobs.DownloadPhaseRetryPolicy
+	}
+
+	logRate := orDownloadRetryLogRate.Get(&execCtx.ExecCfg().Settings.SV)
+	logThrottler := util.EveryMono(logRate)
+
 	var err error
 	var lastProgress float32
-	for rt := retry.StartWithCtx(ctx, retry.Options{
-		InitialBackoff: time.Millisecond * 100,
-		MaxBackoff:     time.Second,
-		MaxRetries:     maxDownloadAttempts - 1,
-	}); rt.Next(); {
+	for rt := retry.StartWithCtx(ctx, retryOpts); rt.Next(); {
 		err = r.doDownloadFiles(ctx, execCtx)
 		if err == nil {
 			return nil
 		}
+		log.Dev.Warningf(ctx, "failed attempt to download files: %v", err)
+
 		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
 			return jobs.MarkPauseRequestError(errors.UnwrapAll(err))
 		}
-		log.Dev.Warningf(ctx, "failed attempt to download files: %v", err)
+		if jobs.IsPauseSelfError(err) || jobs.IsPermanentJobError(err) {
+			return err
+		}
+
+		if logThrottler.ShouldProcess(crtime.NowMono()) {
+			besteffort.Warning(
+				ctx, "or-download-failed-log",
+				func(ctx context.Context) error {
+					return execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+						return r.job.Messages().Record(
+							ctx, txn, "error",
+							fmt.Sprintf("online restore download encountered error: %v", err),
+						)
+					})
+				},
+			)
+		}
+
 		if lastProgress != r.downloadJobProg {
 			lastProgress = r.downloadJobProg
 			rt.Reset()
 			log.Dev.Infof(ctx, "download progress has advanced since last retry, resetting retry counter")
 		}
 	}
-	return errors.Wrapf(err, "retries exhausted for downloading files")
+	if ctx.Err() != nil {
+		return errors.CombineErrors(ctx.Err(), err)
+	}
+	return jobs.MarkPauseRequestError(errors.Wrapf(err, "retries exhausted for downloading files"))
 }
 
 func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExecContext) error {
