@@ -200,9 +200,7 @@ func TestGSS(t *testing.T) {
 	}
 }
 
-func waitForSettingPropagation(
-	t *testing.T, db *gosql.DB, nameValuePairs ...string,
-) {
+func waitForSettingPropagation(t *testing.T, db *gosql.DB, nameValuePairs ...string) {
 	t.Helper()
 	if len(nameValuePairs)%2 != 0 {
 		t.Fatal("nameValuePairs must be even")
