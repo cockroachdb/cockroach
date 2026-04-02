@@ -423,6 +423,7 @@ owners:
   liveness_heartbeatsinflight: cockroachdb/kv
   liveness_heartbeatsuccesses: cockroachdb/kv
   liveness_livenodes: cockroachdb/kv
+  liveness_uncached_scans: cockroachdb/kv
   lockbytes: cockroachdb/kv
   lockcount: cockroachdb/kv
   log_buffered_messages_dropped: cockroachdb/obs-prs

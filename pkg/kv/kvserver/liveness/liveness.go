@@ -209,6 +209,12 @@ var (
 		Category:    metric.Metadata_REPLICATION,
 		HowToUse:    "If this metric exceeds 1 second, it is a sign of cluster instability.",
 	}
+	metaUncachedScans = metric.Metadata{
+		Name:        "liveness.uncached_scans",
+		Help:        "Number of non-cached scans of the node liveness range",
+		Measurement: "Scans",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics holds metrics for use with node liveness activity.
@@ -219,6 +225,7 @@ type Metrics struct {
 	HeartbeatFailures  telemetry.CounterWithMetric
 	EpochIncrements    telemetry.CounterWithMetric
 	HeartbeatLatency   metric.IHistogram
+	UncachedScans      *metric.Counter
 }
 
 // IsLiveCallback is invoked when a node's IsLive state changes to true.
@@ -366,6 +373,7 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 			Duration:     opts.HistogramWindowInterval,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
+		UncachedScans: metric.NewCounter(metaUncachedScans),
 	}
 	nl.cache.setLivenessChangedFn(nl.cacheUpdated)
 	nl.heartbeatToken <- struct{}{}
@@ -924,6 +932,7 @@ func (nl *NodeLiveness) ScanAllNodeVitalityFromCache() livenesspb.NodeVitalityMa
 func (nl *NodeLiveness) ScanNodeVitalityFromKV(
 	ctx context.Context,
 ) (livenesspb.NodeVitalityMap, error) {
+	nl.metrics.UncachedScans.Inc(1)
 	records, err := nl.storage.Scan(ctx)
 	if err != nil {
 		return nil, err

@@ -450,6 +450,37 @@ func (s *mockStorage) Scan(ctx context.Context) ([]Record, error) {
 	return []Record{mockRecord(2), mockRecord(3)}, nil
 }
 
+func TestUncachedScansMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	st := cluster.MakeTestingClusterSettings()
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(1, 0)))
+	nl := NewNodeLiveness(NodeLivenessOptions{
+		AmbientCtx:              log.MakeTestingAmbientCtxWithNewTracer(),
+		Stopper:                 stopper,
+		Cache:                   NewCache(&mockGossip{}, clock, st, nil),
+		Clock:                   clock,
+		Storage:                 &mockStorage{},
+		LivenessThreshold:       24 * time.Hour,
+		RenewalDuration:         23 * time.Hour,
+		HistogramWindowInterval: base.DefaultHistogramWindowInterval(),
+	})
+
+	require.Equal(t, int64(0), nl.Metrics().UncachedScans.Count())
+
+	_, err := nl.ScanNodeVitalityFromKV(ctx)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), nl.Metrics().UncachedScans.Count())
+
+	_, err = nl.ScanNodeVitalityFromKV(ctx)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), nl.Metrics().UncachedScans.Count())
+}
+
 func TestNodeLivenessIsLiveCallback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()

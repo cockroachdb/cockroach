@@ -1781,6 +1781,7 @@ liveness_heartbeatlatency_sum: liveness.heartbeatlatency.sum
 liveness_heartbeatsinflight: liveness.heartbeatsinflight
 liveness_heartbeatsuccesses: liveness.heartbeatsuccesses
 liveness_livenodes: liveness.livenodes
+liveness_uncached_scans: liveness.uncached_scans
 lockbytes: lockbytes
 lockcount: lockcount
 log_buffered_messages_dropped: log.buffered.messages.dropped
