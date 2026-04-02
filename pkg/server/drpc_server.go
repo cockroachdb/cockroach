@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"storj.io/drpc"
 	"storj.io/drpc/drpcerr"
+	"storj.io/drpc/drpcserver"
 )
 
 // drpcServer wraps a DRPCServer and manages its enabled state. It also tracks
@@ -30,7 +31,10 @@ type drpcServer struct {
 // newDRPCServer creates and configures a new drpcServer instance. It enables
 // DRPC if the experimental setting is on, otherwise returns a dummy server.
 func newDRPCServer(
-	ctx context.Context, rpcCtx *rpc.Context, serverRequestMetrics *rpc.ServerRequestMetrics,
+	ctx context.Context,
+	rpcCtx *rpc.Context,
+	serverRequestMetrics *rpc.ServerRequestMetrics,
+	drpcServerMetrics drpcserver.ServerMetrics,
 ) (*drpcServer, error) {
 	drpcServer := &drpcServer{}
 	drpcServer.setMode(modeInitializing)
@@ -54,13 +58,14 @@ func newDRPCServer(
 		rpc.WithDRPCMetricsUnaryServerInterceptor(
 			rpc.NewDRPCUnaryServerRequestMetricsInterceptor(serverRequestMetrics,
 				func(method string) bool {
-					return shouldRecordServerRequestMetricsDRPC(rpcCtx.Settings)
+					return rpc.ShouldRecordRequestMetricsDRPC(rpcCtx.Settings)
 				})),
 		rpc.WithDRPCMetricsStreamServerInterceptor(
 			rpc.NewDRPCStreamServerRequestMetricsInterceptor(serverRequestMetrics,
 				func(method string) bool {
-					return shouldRecordServerRequestMetricsDRPC(rpcCtx.Settings)
+					return rpc.ShouldRecordRequestMetricsDRPC(rpcCtx.Settings)
 				})),
+		rpc.WithDRPCServerMetrics(drpcServerMetrics),
 	)
 	if err != nil {
 		return nil, err

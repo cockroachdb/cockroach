@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"google.golang.org/grpc"
+	"storj.io/drpc/drpcserver"
 )
 
 func init() {
@@ -129,6 +130,7 @@ type serverOpts struct {
 	tlsCipherRestrict                   func(conn net.Conn) error
 	drpcUnaryRequestMetricsInterceptor  DRPCUnaryServerRequestMetricsInterceptor
 	drpcStreamRequestMetricsInterceptor DRPCStreamServerRequestMetricsInterceptor
+	drpcServerMetrics                   drpcserver.ServerMetrics
 }
 
 // ServerOption is a configuration option passed to NewServer.
@@ -168,7 +170,7 @@ func WithDRPCMetricsUnaryServerInterceptor(
 	}
 }
 
-// WithDRPCMetricsUnaryServerInterceptor adds a DRPCUnaryServerRequestMetricsInterceptor to the DRPC server.
+// WithDRPCMetricsStreamServerInterceptor adds a DRPCMetricsStreamServerInterceptor to the DRPC server.
 func WithDRPCMetricsStreamServerInterceptor(
 	interceptor DRPCStreamServerRequestMetricsInterceptor,
 ) ServerOption {
@@ -193,5 +195,12 @@ func WithTLSConfig(cfg *tls.Config) ServerOption {
 func WithTLSCipherRestrict(f func(conn net.Conn) error) ServerOption {
 	return func(opts *serverOpts) {
 		opts.tlsCipherRestrict = f
+	}
+}
+
+// WithDRPCServerMetrics sets the server-level metrics that the DRPC server reports into.
+func WithDRPCServerMetrics(m drpcserver.ServerMetrics) ServerOption {
+	return func(opts *serverOpts) {
+		opts.drpcServerMetrics = m
 	}
 }

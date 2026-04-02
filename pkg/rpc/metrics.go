@@ -15,6 +15,8 @@ import (
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -29,6 +31,8 @@ import (
 	"storj.io/drpc"
 	"storj.io/drpc/drpcclient"
 	"storj.io/drpc/drpcmux"
+	"storj.io/drpc/drpcpool"
+	"storj.io/drpc/drpcserver"
 )
 
 // gwRequestKey is a field set on the context to indicate a request
@@ -198,15 +202,17 @@ over this connection.
 		Unit:        metric.Unit_COUNT,
 	}
 	metaNetworkBytesEgress = metric.Metadata{
-		Name:        "rpc.client.bytes.egress",
-		Unit:        metric.Unit_BYTES,
-		Help:        `Counter of TCP bytes sent via gRPC on connections we initiated.`,
+		Name: "rpc.client.bytes.egress",
+		Unit: metric.Unit_BYTES,
+		Help: `Counter of TCP bytes sent via gRPC on connections we
+initiated.`,
 		Measurement: "Bytes",
 	}
 	metaNetworkBytesIngress = metric.Metadata{
-		Name:        "rpc.client.bytes.ingress",
-		Unit:        metric.Unit_BYTES,
-		Help:        `Counter of TCP bytes received via gRPC on connections we initiated.`,
+		Name: "rpc.client.bytes.ingress",
+		Unit: metric.Unit_BYTES,
+		Help: `Counter of TCP bytes received via gRPC on connections we
+initiated.`,
 		Measurement: "Bytes",
 	}
 	metaServerRequestDuration = metric.Metadata{
@@ -237,15 +243,46 @@ over this connection.
 		Unit:        metric.Unit_NANOSECONDS,
 		MetricType:  prometheusgo.MetricType_HISTOGRAM,
 	}
+	metaDRPCPoolSize = metric.Metadata{
+		Name:        "rpc.drpc.pool.size",
+		Unit:        metric.Unit_CONST,
+		Help:        "DRPC connection pool size.",
+		Measurement: "Size",
+		MetricType:  prometheusgo.MetricType_GAUGE,
+	}
+	metaDRPCPoolConnectionHitsTotal = metric.Metadata{
+		Name:        "rpc.drpc.pool.hits.total",
+		Unit:        metric.Unit_COUNT,
+		Help:        "DRPC connection pool cache hits.",
+		Measurement: "Connections",
+		MetricType:  prometheusgo.MetricType_COUNTER,
+	}
+	metaDRPCPoolConnectionMissesTotal = metric.Metadata{
+		Name:        "rpc.drpc.pool.miss.total",
+		Unit:        metric.Unit_COUNT,
+		Help:        "DRPC connection pool cache misses.",
+		Measurement: "Connections",
+		MetricType:  prometheusgo.MetricType_COUNTER,
+	}
 	metaDRPCEnabled = metric.Metadata{
 		Name:        "rpc.drpc.enabled",
 		Help:        "1 if this node is using DRPC for internode RPC, 0 otherwise.",
 		Measurement: "Enabled",
 		Unit:        metric.Unit_CONST,
+		MetricType:  prometheusgo.MetricType_GAUGE,
+	}
+	metaDRPCTLSHandshakeErrors = metric.Metadata{
+		Name:        "rpc.drpc.tls.handshake.errors",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Errors",
+		Help:        "Number of TLS handshake errors for DRPC connections.",
+		MetricType:  prometheusgo.MetricType_COUNTER,
 	}
 )
 
-func (m *Metrics) makeLabels(k peerKey, remoteLocality roachpb.Locality) []string {
+func (m *Metrics) makeLabels(
+	k peerKey, remoteLocality roachpb.Locality, rpcProtocol string,
+) []string {
 	localLen := len(m.locality.Tiers)
 
 	// length is the shorter of the two, however we always need to fill localLen "slots"
@@ -254,7 +291,7 @@ func (m *Metrics) makeLabels(k peerKey, remoteLocality roachpb.Locality) []strin
 		length = len(remoteLocality.Tiers)
 	}
 
-	childLabels := []string{}
+	childLabels := []string{rpcProtocol}
 
 	matching := true
 	for i := 0; i < length; i++ {
@@ -279,7 +316,7 @@ func (m *Metrics) makeLabels(k peerKey, remoteLocality roachpb.Locality) []strin
 
 func newMetrics(locality roachpb.Locality) *Metrics {
 	childLabels := []string{"remote_node_id", "remote_addr", "class", "protocol"}
-	localityLabels := []string{}
+	localityLabels := []string{"protocol"}
 	for _, tier := range locality.Tiers {
 		localityLabels = append(localityLabels, "source_"+tier.Key)
 		localityLabels = append(localityLabels, "destination_"+tier.Key)
@@ -348,6 +385,7 @@ type Metrics struct {
 	ConnectionTCPRTTVar           *aggmetric.AggGauge
 	DRPCEnabled                   *metric.Gauge
 	clientRequestMetrics          *ClientRequestMetrics
+	drpcPoolMetrics               drpcpool.PoolMetrics
 	mu                            struct {
 		syncutil.Mutex
 		// peerMetrics is a map of peerKey to peerMetrics.
@@ -448,7 +486,7 @@ func (m *Metrics) acquire(
 		m.mu.peerMetrics[labelKey] = pm
 	}
 
-	localityLabels := m.makeLabels(k, l)
+	localityLabels := m.makeLabels(k, l, rpcProtocol)
 	localityKey := strings.Join(localityLabels, ",")
 	lm, ok := m.mu.localityMetrics[localityKey]
 	if !ok {
@@ -463,6 +501,37 @@ func (m *Metrics) acquire(
 	// We temporarily increment the inactive count until we actually connect.
 	pm.ConnectionInactive.Inc(1)
 	return pm, lm
+}
+
+const (
+	ServerPrefix = "/cockroach.server"
+	TsdbPrefix   = "/cockroach.ts"
+)
+
+// ServerRPCRequestMetricsEnabled is a cluster setting that enables the
+// collection of gRPC and DRPC request duration metrics. This uses export only
+// metrics so the metrics are only exported to external sources such as
+// /_status/vars and DataDog.
+var ServerRPCRequestMetricsEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"server.rpc.request_metrics.enabled",
+	"enables the collection of rpc metrics",
+	false, /* defaultValue */
+	settings.WithRetiredName("server.grpc.request_metrics.enabled"),
+)
+
+// ShouldRecordRequestDuration returns true if request duration metrics should
+// be recorded for the given RPC method.
+func ShouldRecordRequestDuration(settings *cluster.Settings, method string) bool {
+	return ServerRPCRequestMetricsEnabled.Get(&settings.SV) &&
+		(strings.HasPrefix(method, ServerPrefix) ||
+			strings.HasPrefix(method, TsdbPrefix))
+}
+
+// ShouldRecordRequestMetricsDRPC returns true if DRPC request metrics should
+// be recorded.
+func ShouldRecordRequestMetricsDRPC(settings *cluster.Settings) bool {
+	return ServerRPCRequestMetricsEnabled.Get(&settings.SV)
 }
 
 const (
@@ -557,6 +626,12 @@ func NewServerRequestMetrics() *ServerRequestMetrics {
 	}
 }
 
+func NewDRPCServerMetrics() drpcserver.ServerMetrics {
+	return drpcserver.ServerMetrics{
+		TLSHandshakeErrors: metric.NewCounter(metaDRPCTLSHandshakeErrors),
+	}
+}
+
 // DRPCUnaryServerRequestMetricsInterceptor is a DRPC unary server interceptor
 // that records request metrics.
 type DRPCUnaryServerRequestMetricsInterceptor drpcmux.UnaryServerInterceptor
@@ -579,7 +654,7 @@ func NewDRPCUnaryServerRequestMetricsInterceptor(
 		rpc string,
 		handler drpcmux.UnaryHandler,
 	) (resp any, err error) {
-		if !shouldRecord(rpc) {
+		if shouldRecord == nil || !shouldRecord(rpc) || serverMetrics == nil {
 			return handler(ctx, req)
 		}
 		startTime := serverMetrics.recordMetricsPreCall(rpc)
@@ -602,7 +677,7 @@ func NewDRPCStreamServerRequestMetricsInterceptor(
 		rpc string,
 		handler drpcmux.StreamHandler,
 	) (resp interface{}, err error) {
-		if !shouldRecord(rpc) {
+		if shouldRecord == nil || !shouldRecord(rpc) || serverMetrics == nil {
 			return handler(stream)
 		}
 		startTime := serverMetrics.recordMetricsPreCall(rpc)
@@ -648,14 +723,20 @@ func NewClientRequestMetrics() *ClientRequestMetrics {
 	}
 }
 
-// TODO: use to filter out apis we don't want to record metrics for.
-func shouldRecordClientMetrics(rpc string) bool {
-	return true
+func NewDRPCPoolMetrics() drpcpool.PoolMetrics {
+	labels := []string{"target", "class"}
+	return drpcpool.PoolMetrics{
+		PoolSize: metric.NewExportedGaugeVec(metaDRPCPoolSize, labels),
+		ConnectionHitsTotal: metric.NewExportedCounterVec(metaDRPCPoolConnectionHitsTotal,
+			labels),
+		ConnectionMissesTotal: metric.NewExportedCounterVec(
+			metaDRPCPoolConnectionMissesTotal, labels),
+	}
 }
 
 // NewDRPCUnaryClientRequestMetricsInterceptor reports unary DRPC client metrics.
 func NewDRPCUnaryClientRequestMetricsInterceptor(
-	clientMetrics *ClientRequestMetrics,
+	clientMetrics *ClientRequestMetrics, shouldRecord func(rpc string) bool,
 ) drpcclient.UnaryClientInterceptor {
 	return func(
 		ctx context.Context,
@@ -665,7 +746,7 @@ func NewDRPCUnaryClientRequestMetricsInterceptor(
 		cc *drpcclient.ClientConn,
 		invoker drpcclient.UnaryInvoker,
 	) (err error) {
-		if !shouldRecordClientMetrics(rpc) {
+		if shouldRecord == nil || !shouldRecord(rpc) || clientMetrics == nil {
 			return invoker(ctx, rpc, enc, in, out, cc)
 		}
 		startTime := clientMetrics.recordMetricsPreCall(rpc)
@@ -676,7 +757,7 @@ func NewDRPCUnaryClientRequestMetricsInterceptor(
 
 // NewDRPCStreamClientRequestMetricsInterceptor reports streaming DRPC client metrics.
 func NewDRPCStreamClientRequestMetricsInterceptor(
-	clientMetrics *ClientRequestMetrics,
+	clientMetrics *ClientRequestMetrics, shouldRecord func(rpc string) bool,
 ) drpcclient.StreamClientInterceptor {
 	return func(
 		ctx context.Context,
@@ -685,7 +766,7 @@ func NewDRPCStreamClientRequestMetricsInterceptor(
 		cc *drpcclient.ClientConn,
 		streamer drpcclient.Streamer,
 	) (str drpc.Stream, err error) {
-		if !shouldRecordClientMetrics(rpc) {
+		if shouldRecord == nil || !shouldRecord(rpc) || clientMetrics == nil {
 			return streamer(ctx, rpc, enc, cc)
 		}
 		startTime := clientMetrics.recordMetricsPreCall(rpc)
