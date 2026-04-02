@@ -14,16 +14,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 )
 
-// EmbeddedTenantIDs lists the tenants we embed certs for.
-// See 'test_certs/regenerate.sh'.
-func EmbeddedTenantIDs() []uint64 { return []uint64{10, 11, 20, 3} }
+// EmbeddedTenantIDs lists the tenants we generate certs for.
+// See certgen.go for the generation logic.
+func EmbeddedTenantIDs() []uint64 { return []uint64{10, 11, 20, 3, 2} }
 
 // CreateTestCerts populates the test certificates in the given directory.
 func CreateTestCerts(certsDir string) (cleanup func() error) {
-	// Copy these assets to disk from embedded strings, so this test can
-	// run from a standalone binary.
-	// Disable embedded certs, or the security library will try to load
-	// our real files as embedded assets.
+	// Copy runtime-generated certs to disk, so this test can run from a
+	// standalone binary. Disable the loader so the security library reads
+	// the on-disk files instead of the in-memory generated assets.
 	securityassets.ResetLoader()
 
 	assets := []string{
