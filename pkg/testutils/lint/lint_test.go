@@ -2518,6 +2518,10 @@ func TestLint(t *testing.T) {
 		require.NoError(t, err)
 		const verbose = false
 		codeowners.LintEverythingIsOwned(t, verbose, co, crdbDir, "pkg")
+		if stale := codeowners.LintNoStalePaths(co, crdbDir); len(stale) > 0 {
+			t.Errorf("stale paths in CODEOWNERS (no longer exist in repo):\n%s",
+				strings.Join(stale, "\n"))
+		}
 	})
 
 	t.Run("cookie construction is forbidden", func(t *testing.T) {

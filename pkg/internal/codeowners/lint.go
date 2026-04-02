@@ -8,6 +8,7 @@ package codeowners
 import (
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -187,4 +188,64 @@ Remove the '-noreview' suffix if the team should be requested for Github reviews
 
 %s`, buf.String())
 	}
+}
+
+// LintNoStalePaths checks that every path pattern in the CODEOWNERS file
+// corresponds to something that actually exists in the repository. It returns
+// a list of stale patterns.
+func LintNoStalePaths(co *CodeOwners, repoRoot string) []string {
+	var stale []string
+	for _, rule := range co.rules {
+		pattern := rule.Pattern
+		if !pathPatternExists(pattern, repoRoot) {
+			stale = append(stale, pattern)
+		}
+	}
+	return stale
+}
+
+// pathPatternExists checks whether a CODEOWNERS path pattern matches
+// anything in the repository.
+func pathPatternExists(pattern, repoRoot string) bool {
+	if strings.Contains(pattern, "**") {
+		// Double-star pattern (e.g. **.pb.go, **/BUILD.bazel): extract the
+		// filename suffix after the last / and search recursively.
+		filename := filepath.Base(pattern)
+		// Strip leading stars to get the suffix, e.g. "**.pb.go" -> ".pb.go".
+		suffix := strings.TrimLeft(filename, "*")
+		if suffix == "" {
+			// A pattern like "**" matches everything.
+			return true
+		}
+		found := false
+		err := filepath.WalkDir(repoRoot, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if !d.IsDir() && strings.HasSuffix(d.Name(), suffix) {
+				found = true
+				return filepath.SkipAll
+			}
+			return nil
+		})
+		return found && err == nil
+	}
+
+	if strings.Contains(pattern, "*") {
+		// Single-star glob: expand relative to repo root.
+		full := filepath.Join(repoRoot, pattern)
+		matches, _ := filepath.Glob(full)
+		return len(matches) > 0
+	}
+
+	full := filepath.Join(repoRoot, pattern)
+	if strings.HasSuffix(pattern, "/") {
+		// Directory path.
+		info, err := os.Stat(full)
+		return err == nil && info.IsDir()
+	}
+
+	// File or directory without trailing slash.
+	_, err := os.Stat(full)
+	return err == nil
 }
