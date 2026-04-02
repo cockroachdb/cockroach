@@ -131,7 +131,7 @@ func syncAppliedState(r *Replica) error {
 		// node committing to its removal.
 		return nil
 	}
-	if err := wag.Write(b, s.wagSeq.Next(1), wagpb.Node{
+	if err := wag.Write(b, s.wagSeq.Next(), wagpb.Node{
 		Events: []wagpb.Event{{
 			Addr: wagpb.MakeAddr(r.ID(), r.shMu.state.RaftAppliedIndex),
 			Type: wagpb.EventApply,
