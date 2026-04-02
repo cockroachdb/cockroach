@@ -1387,10 +1387,7 @@ func (h *hasher) IsUDFDefinitionEqual(l, r *UDFDefinition) bool {
 			return false
 		}
 	}
-	if l.DefinerUser != r.DefinerUser {
-		return false
-	}
-	return true
+	return l.DefinerUser == r.DefinerUser
 }
 
 func (h *hasher) IsStoredProcTxnOpEqual(l, r tree.StoredProcTxnOp) bool {

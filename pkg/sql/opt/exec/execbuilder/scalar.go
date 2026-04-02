@@ -1243,7 +1243,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 			body, bodyProps, newParams := bld.BuildSQLRoutineBodyFromASTs(
 				def.BodyASTs, def.ParamTypes, def.ParamNames,
 				def.Typ, def.SetReturning, def.InsideDataSource,
-				def.DefinerUser,
+				def.DefinerUser, def.RoutineType, def.StmtTreeInitFn,
 			)
 			stmts = body
 			stmtProps = bodyProps

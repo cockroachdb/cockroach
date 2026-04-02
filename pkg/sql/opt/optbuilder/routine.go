@@ -492,10 +492,6 @@ func (b *Builder) buildRoutine(
 				} else {
 					bodyTags[i] = stmts[i].AST.StatementTag()
 				}
-				// Register mutation targets from the AST in the
-				// statementTree so that the multiple-mutation safety
-				// check works even though we skip full body building.
-				b.checkMultipleMutationsFromAST(stmts[i].AST)
 			}
 		}
 
@@ -565,6 +561,7 @@ func (b *Builder) buildRoutine(
 				MultiColDataSource: multiColDataSource,
 				RoutineType:        o.Type,
 				RoutineLang:        o.Language,
+				StmtTreeInitFn:     b.stmtTree.GetInitFnForDeferredRoutine(),
 				Body:               body,
 				BodyProps:          bodyProps,
 				BodyStmts:          bodyStmts,
@@ -642,7 +639,14 @@ func (b *Builder) BuildSQLRoutineBodyFromASTs(
 	isSetReturning bool,
 	insideDataSource bool,
 	definerUser string,
+	routineType tree.RoutineType,
+	stmtTreeInitFn any,
 ) (body []memo.RelExpr, bodyProps []*physical.Required, params opt.ColList) {
+	// Builtins should have access to unsafe internals (e.g. system tables).
+	if routineType == tree.BuiltinRoutine {
+		defer b.DisableUnsafeInternalCheck()()
+	}
+
 	// Set up builder state for building inside a SQL routine.
 	defer func(
 		origUDF, origSQLRoutine, origDS, origTrackDeps bool,
@@ -671,6 +675,13 @@ func (b *Builder) BuildSQLRoutineBodyFromASTs(
 		b.executePrivilegeUserOverride = user
 	}
 
+	// Initialize the statement tree with mutations from the outer query. This
+	// allows the normal checkMultipleMutations calls during body building to
+	// detect cross-query mutation conflicts.
+	if stmtTreeInitFn != nil {
+		b.stmtTree = stmtTreeInitFn.(func() statementTree)()
+	}
+
 	// Create body scope with parameter columns.
 	bodyScope := b.allocScope()
 	params = make(opt.ColList, len(paramTypes))
@@ -691,6 +702,14 @@ func (b *Builder) BuildSQLRoutineBodyFromASTs(
 	for i, ast := range stmtASTs {
 		stmtScope := b.buildStmtAtRootWithScope(ast, nil /* desiredTypes */, bodyScope)
 		if i == len(stmtASTs)-1 {
+			// Validate that the body's result type is compatible with the declared
+			// return type. In the eager build path this is done inside
+			// finalizeRoutineReturnType; we replicate it here for the deferred
+			// path so that incompatible types produce a user-facing error rather
+			// than an internal assertion in maybeAddRoutineAssignmentCasts.
+			if err := validateReturnType(b.ctx, b.semaCtx, rTyp, stmtScope.cols); err != nil {
+				panic(err)
+			}
 			stmtScope = b.finishRoutineReturnStmt(
 				stmtScope, isSetReturning, insideDataSource, rTyp,
 			)

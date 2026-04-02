@@ -758,6 +758,12 @@ type UDFDefinition struct {
 	// INVOKER (the default).
 	DefinerUser string
 
+	// StmtTreeInitFn, when non-nil, returns an optbuilder statementTree
+	// initialized with mutations from the outer query. Used for deferred-build
+	// routines to detect cross-query mutation conflicts at execution time.
+	// Typed as any to avoid an import cycle (actual type: func() statementTree).
+	StmtTreeInitFn any
+
 	// Body contains a relational expression for each statement in the function
 	// body. It is unset during construction of a recursive UDF.
 	Body []RelExpr

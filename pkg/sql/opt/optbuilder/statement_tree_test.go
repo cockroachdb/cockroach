@@ -21,6 +21,8 @@ func TestStatementTree(t *testing.T) {
 		post
 		getInit
 		init
+		getInitDeferred
+		initDeferred
 		t1
 		t2
 		fail
@@ -587,11 +589,245 @@ func TestStatementTree(t *testing.T) {
 				mut | t1 | fail,
 			},
 		},
+		// 29.
+		// Deferred routine: capture when no mutations exist, then add a
+		// mutation to the current node after capture. The deferred init
+		// should see the mutation via the captured pointer.
+		//
+		// Original:
+		// Push
+		//     GetInitFnForDeferredRoutine()  -- captures rootStmt (no mutations yet)
+		//     CanMutateTable(t1, default)    -- adds t1 to rootStmt
+		// Pop
+		//
+		// Deferred:
+		// initDeferredFn()
+		// Push
+		//     CanMutateTable(t1, default) FAIL  -- t1 visible from captured rootStmt
+		{
+			cmds: []cmd{
+				push,
+				getInitDeferred,
+				mut | t1,
+				pop,
+				initDeferred,
+				push,
+				mut | t1 | fail,
+			},
+		},
+		// 30.
+		// Deferred routine: capture includes the current node. Mutation at
+		// the current level (simulating a CTE mutation) is visible.
+		//
+		// Original:
+		// Push
+		//     CanMutateTable(t1, default)
+		//     GetInitFnForDeferredRoutine()
+		// Pop
+		//
+		// Deferred:
+		// initDeferredFn()
+		// Push
+		//     CanMutateTable(t1, default) FAIL
+		{
+			cmds: []cmd{
+				push,
+				mut | t1,
+				getInitDeferred,
+				pop,
+				initDeferred,
+				push,
+				mut | t1 | fail,
+			},
+		},
+		// 31.
+		// Deferred routine: no conflict when mutating a different table.
+		//
+		// Original:
+		// Push
+		//     CanMutateTable(t1, default)
+		//     GetInitFnForDeferredRoutine()
+		// Pop
+		//
+		// Deferred:
+		// initDeferredFn()
+		// Push
+		//     CanMutateTable(t2, default)
+		// Pop
+		{
+			cmds: []cmd{
+				push,
+				mut | t1,
+				getInitDeferred,
+				pop,
+				initDeferred,
+				push,
+				mut | t2,
+				pop,
+			},
+		},
+		// 32.
+		// Deferred routine: captures nested ancestors. Parent mutation
+		// is visible through the deferred init.
+		//
+		// Original:
+		// Push
+		//     CanMutateTable(t1, default)
+		//     Push
+		//         GetInitFnForDeferredRoutine()
+		//     Pop
+		// Pop
+		//
+		// Deferred:
+		// initDeferredFn()
+		// Push
+		//     CanMutateTable(t1, default) FAIL
+		{
+			cmds: []cmd{
+				push,
+				mut | t1,
+				push,
+				getInitDeferred,
+				pop,
+				pop,
+				initDeferred,
+				push,
+				mut | t1 | fail,
+			},
+		},
+		// 33.
+		// Deferred routine with sibling mutations: mutations added after
+		// capture at the same level are visible (CTE sibling scenario).
+		//
+		// Original:
+		// Push
+		//     GetInitFnForDeferredRoutine()  -- captures rootStmt
+		//     CanMutateTable(t1, default)    -- sibling CTE adds mutation
+		//     CanMutateTable(t2, default)    -- another sibling
+		// Pop
+		//
+		// Deferred:
+		// initDeferredFn()
+		// Push
+		//     CanMutateTable(t1, default) FAIL  -- conflict with sibling
+		{
+			cmds: []cmd{
+				push,
+				getInitDeferred,
+				mut | t1,
+				mut | t2,
+				pop,
+				initDeferred,
+				push,
+				mut | t1 | fail,
+			},
+		},
+		// 34.
+		// Deferred routine: simpleInsert on same table as ancestor
+		// simpleInsert is OK.
+		//
+		// Original:
+		// Push
+		//     CanMutateTable(t1, simpleInsert)
+		//     GetInitFnForDeferredRoutine()
+		// Pop
+		//
+		// Deferred:
+		// initDeferredFn()
+		// Push
+		//     CanMutateTable(t1, simpleInsert)
+		// Pop
+		{
+			cmds: []cmd{
+				push,
+				mut | t1 | simple,
+				getInitDeferred,
+				pop,
+				initDeferred,
+				push,
+				mut | t1 | simple,
+				pop,
+			},
+		},
+		// 35.
+		// Deferred routine: generalMutation on same table as ancestor
+		// simpleInsert FAILs.
+		//
+		// Original:
+		// Push
+		//     CanMutateTable(t1, simpleInsert)
+		//     GetInitFnForDeferredRoutine()
+		// Pop
+		//
+		// Deferred:
+		// initDeferredFn()
+		// Push
+		//     CanMutateTable(t1, default) FAIL
+		{
+			cmds: []cmd{
+				push,
+				mut | t1 | simple,
+				getInitDeferred,
+				pop,
+				initDeferred,
+				push,
+				mut | t1 | fail,
+			},
+		},
+		// 36.
+		// Deferred routine: empty stack returns nil initFn.
+		//
+		// Deferred (no original):
+		// initDeferredFn() -- nil, creates empty tree
+		// Push
+		//     CanMutateTable(t1, default) -- OK, no ancestors
+		// Pop
+		{
+			cmds: []cmd{
+				initDeferred,
+				push,
+				mut | t1,
+				pop,
+			},
+		},
+		// 37.
+		// Deferred routine with multiple body statements: sibling body
+		// mutations within the deferred routine do NOT conflict with each
+		// other (children mutations are not copied).
+		//
+		// Original:
+		// Push
+		//     GetInitFnForDeferredRoutine()
+		// Pop
+		//
+		// Deferred:
+		// initDeferredFn()
+		// Push                              -- body stmt 1
+		//     CanMutateTable(t1, default)
+		// Pop
+		// Push                              -- body stmt 2
+		//     CanMutateTable(t1, default)   -- allowed: sibling, not ancestor
+		// Pop
+		{
+			cmds: []cmd{
+				push,
+				getInitDeferred,
+				pop,
+				initDeferred,
+				push,
+				mut | t1,
+				pop,
+				push,
+				mut | t1,
+				pop,
+			},
+		},
 	}
 
 	for i, tc := range testCases {
 		var mt statementTree
 		var pqTreeFn func() statementTree
+		var deferredTreeFn func() statementTree
 		for j, c := range tc.cmds {
 			switch {
 			case c&push == push:
@@ -599,6 +835,19 @@ func TestStatementTree(t *testing.T) {
 
 			case c&pop == pop:
 				mt.Pop()
+
+			case c&getInitDeferred == getInitDeferred:
+				if deferredTreeFn != nil {
+					t.Fatalf("test case %d: GetInitFnForDeferredRoutine called twice", i)
+				}
+				deferredTreeFn = mt.GetInitFnForDeferredRoutine()
+
+			case c&initDeferred == initDeferred:
+				if deferredTreeFn == nil {
+					mt = statementTree{}
+				} else {
+					mt = deferredTreeFn()
+				}
 
 			case c&getInit == getInit:
 				if pqTreeFn != nil {

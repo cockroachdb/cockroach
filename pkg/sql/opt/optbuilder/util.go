@@ -580,64 +580,6 @@ func (b *Builder) checkMultipleMutationsCascade(
 	}
 }
 
-// checkMultipleMutationsFromAST extracts the mutation target table from a
-// statement AST and registers it in the statementTree. This is used for
-// deferred-build SQL routine bodies where we skip full body building at plan
-// time but still need to detect multiple mutations of the same table across
-// the outer query and the routine body.
-//
-// Each body statement is wrapped in a Push/Pop to mirror the nesting that
-// buildStmtAtRootWithScope would create during eager building.
-func (b *Builder) checkMultipleMutationsFromAST(ast tree.Statement) {
-	var tableExpr tree.TableExpr
-	var typ mutationType
-	switch stmt := ast.(type) {
-	case *tree.Update:
-		tableExpr = stmt.Table
-		typ = generalMutation
-	case *tree.Delete:
-		tableExpr = stmt.Table
-		typ = generalMutation
-	case *tree.Insert:
-		tableExpr = stmt.Table
-		if stmt.OnConflict == nil {
-			typ = simpleInsert
-		} else {
-			typ = generalMutation
-		}
-	default:
-		return
-	}
-
-	// Extract the table name from the TableExpr.
-	if ate, ok := tableExpr.(*tree.AliasedTableExpr); ok {
-		tableExpr = ate.Expr
-	}
-	tn, ok := tableExpr.(*tree.TableName)
-	if !ok {
-		// TableRef or other forms — skip. The check will run at execution
-		// time during deferred body building.
-		return
-	}
-
-	// Resolve the table without privilege checks. Privileges will be
-	// checked at execution time when the body is actually built.
-	ds, _, err := b.catalog.ResolveDataSource(b.ctx, cat.Flags{}, tn)
-	if err != nil {
-		// If resolution fails, skip the check. The error will surface at
-		// execution time during deferred body building.
-		return
-	}
-	tab, ok := ds.(cat.Table)
-	if !ok {
-		return
-	}
-
-	b.stmtTree.Push()
-	defer b.stmtTree.Pop()
-	b.checkMultipleMutations(tab, typ)
-}
-
 // resolveTableForMutation is a helper method for building mutations. It returns
 // the table in the catalog that matches the given TableExpr, along with the
 // table's MDDepName and alias, and the IDs of any columns explicitly specified
