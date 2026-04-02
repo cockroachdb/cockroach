@@ -8,6 +8,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "bulkmerge",
     srcs = [
+        "doc.go",
         "instance_availability.go",
         "merge.go",
         "merge_coordinator.go",
