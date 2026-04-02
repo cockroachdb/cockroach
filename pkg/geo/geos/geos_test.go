@@ -6,6 +6,7 @@
 package geos
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -48,4 +49,47 @@ func TestEnsureInit(t *testing.T) {
 
 	_, err = ensureInit(EnsureInitErrorDisplayPublic, "", "")
 	require.Equal(t, errors.Newf("geos: this operation is not available").Error(), err.Error())
+}
+
+// TestClipByRectNaNInf is a regression test for issue #166976.
+// GEOS hangs when ClipByRect is called with NaN or Inf bounding box
+// coordinates.
+func TestClipByRectNaNInf(t *testing.T) {
+	ewkb := []byte("\x01\x02\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00$@\x00\x00\x00\x00\x00\x00$@")
+
+	t.Run("rejects NaN coordinates", func(t *testing.T) {
+		_, err := ClipByRect(ewkb, math.NaN(), 0, 5, 5)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "value out of range: overflow")
+
+		_, err = ClipByRect(ewkb, 0, math.NaN(), 5, 5)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "value out of range: overflow")
+
+		_, err = ClipByRect(ewkb, 0, 0, math.NaN(), 5)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "value out of range: overflow")
+
+		_, err = ClipByRect(ewkb, 0, 0, 5, math.NaN())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "value out of range: overflow")
+	})
+
+	t.Run("rejects Inf coordinates", func(t *testing.T) {
+		_, err := ClipByRect(ewkb, math.Inf(1), 0, 5, 5)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "value out of range: overflow")
+
+		_, err = ClipByRect(ewkb, 0, math.Inf(-1), 5, 5)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "value out of range: overflow")
+
+		_, err = ClipByRect(ewkb, 0, 0, math.Inf(1), 5)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "value out of range: overflow")
+
+		_, err = ClipByRect(ewkb, 0, 0, 5, math.Inf(-1))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "value out of range: overflow")
+	})
 }
