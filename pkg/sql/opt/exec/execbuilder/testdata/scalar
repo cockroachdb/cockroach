@@ -1095,7 +1095,7 @@ vectorized: true
   columns: (oid, typname, typnamespace, typowner, typlen, typbyval, typtype, typcategory, typispreferred, typisdefined, typdelim, typrelid, typelem, typarray, typinput, typoutput, typreceive, typsend, typmodin, typmodout, typanalyze, typalign, typstorage, typnotnull, typbasetype, typtypmod, typndims, typcollation, typdefaultbin, typdefault, typacl)
   estimated row count: 10 (missing stats)
   table: pg_type@pg_type_oid_idx
-  spans: [/status - /status]
+  spans: [/public.status - /public.status]
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM pg_type WHERE oid = 'bool'::regtype

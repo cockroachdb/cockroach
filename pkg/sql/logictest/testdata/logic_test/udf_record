@@ -450,7 +450,7 @@ $$
 query TBT
 SELECT imp_const_tup(), (11,22,'b')::imp = imp_const_tup(), pg_typeof(imp_const_tup())
 ----
-(11,22,b)  true  imp
+(11,22,b)  true  public.imp
 
 statement ok
 CREATE FUNCTION imp_const_cast() RETURNS imp LANGUAGE SQL AS $$
@@ -460,7 +460,7 @@ $$
 query TBT
 SELECT imp_const_cast(), (11,22,'b')::imp = imp_const_cast(), pg_typeof(imp_const_cast())
 ----
-(11,22,b)  true  imp
+(11,22,b)  true  public.imp
 
 statement ok
 CREATE FUNCTION imp_const() RETURNS imp LANGUAGE SQL AS $$
@@ -470,7 +470,7 @@ $$
 query TBT
 SELECT imp_const(), (11,22,'b')::imp = imp_const(), pg_typeof(imp_const())
 ----
-(11,22,b)  true  imp
+(11,22,b)  true  public.imp
 
 statement ok
 CREATE FUNCTION imp_const_unnamed() RETURNS imp LANGUAGE SQL AS $$
@@ -480,7 +480,7 @@ $$
 query TBT
 SELECT imp_const_unnamed(), (11,22,'b')::imp = imp_const_unnamed(), pg_typeof(imp_const_unnamed())
 ----
-(11,22,b)  true  imp
+(11,22,b)  true  public.imp
 
 statement ok
 CREATE FUNCTION imp_tup() RETURNS imp LANGUAGE SQL AS $$
@@ -573,7 +573,7 @@ $$
 query TBT
 SELECT imp_cast(), (1,2,'3') = imp_cast(), pg_typeof(imp_cast())
 ----
-(1,2,3)  true  imp
+(1,2,3)  true  public.imp
 
 # Note: postgres returns error code 42846 (cannot cast type) here instead due to
 # implementation differences.
