@@ -169,12 +169,7 @@ var VirtualIntentResolution = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.concurrency.virtual_intent_resolution.enabled",
 	"whether read-only, non-locking requests should virtually resolve intents",
-	false,
-	// TODO(ssd): Re-enable after
-	// https://github.com/cockroachdb/cockroach/issues/164175 is diagnosed and
-	// solved.
-	// metamorphic.ConstantWithTestBool("kv.concurrency.virtual_intent_resolution.enabled",
-	// false),
+	metamorphic.ConstantWithTestBool("kv.concurrency.virtual_intent_resolution.enabled", false),
 )
 
 // PushUsingCachedClockObservation controls whether we allow intents from
