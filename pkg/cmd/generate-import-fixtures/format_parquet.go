@@ -81,38 +81,52 @@ func dateToDays(dateStr string) (int32, error) {
 	return int32(t.Sub(unixEpoch).Hours() / 24), nil
 }
 
-// WriteFiles writes a Parquet file for the given shard with Snappy compression.
-// The output file is named {table}.parquet.{shardIdx}.
-func (p *parquetFormat) WriteFiles(
-	table TableDef, rows []map[string]interface{}, outputDir string, shardIdx int,
-) error {
+// parquetWriter streams batches of rows to a Parquet file. Each call to
+// WriteBatch creates a new row group.
+type parquetWriter struct {
+	table   TableDef
+	outPath string
+	writer  *file.Writer
+	count   int
+}
+
+var _ FormatWriter = (*parquetWriter)(nil)
+
+// NewWriter creates a parquetWriter that writes to a Parquet file with Snappy
+// compression.
+func (p *parquetFormat) NewWriter(
+	table TableDef, outputDir string, shardIdx int,
+) (FormatWriter, error) {
 	sch, err := buildParquetSchema(table)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	outPath := filepath.Join(outputDir, fmt.Sprintf("%s.parquet.%d", table.Name, shardIdx))
 	f, err := os.Create(outPath)
 	if err != nil {
-		return fmt.Errorf("creating %s: %w", outPath, err)
+		return nil, fmt.Errorf("creating %s: %w", outPath, err)
 	}
-	defer f.Close()
 
 	props := parquet.NewWriterProperties(
 		parquet.WithCreatedBy("cockroachdb"),
 		parquet.WithCompression(compress.Codecs.Snappy),
 	)
 	writer := file.NewParquetWriter(f, sch.Root(), file.WithWriterProps(props))
-	defer func() {
-		// Close is idempotent; the deferred call handles cleanup on error paths
-		// while the explicit call below checks the error on success.
-		_ = writer.Close()
-	}()
 
-	rowGroup := writer.AppendBufferedRowGroup()
+	return &parquetWriter{
+		table:   table,
+		outPath: outPath,
+		writer:  writer,
+	}, nil
+}
+
+// WriteBatch writes a batch of rows as a single Parquet row group.
+func (w *parquetWriter) WriteBatch(rows []map[string]interface{}) error {
+	rowGroup := w.writer.AppendBufferedRowGroup()
 	numRows := len(rows)
 
-	for colIdx, col := range table.Columns {
+	for colIdx, col := range w.table.Columns {
 		cw, err := rowGroup.Column(colIdx)
 		if err != nil {
 			return fmt.Errorf("getting column writer for %s: %w", col.Name, err)
@@ -124,8 +138,8 @@ func (p *parquetFormat) WriteFiles(
 			for i, row := range rows {
 				values[i] = row[col.Name].(int64)
 			}
-			w := cw.(*file.Int64ColumnChunkWriter)
-			if _, err := w.WriteBatch(values, nil, nil); err != nil {
+			chunkWriter := cw.(*file.Int64ColumnChunkWriter)
+			if _, err := chunkWriter.WriteBatch(values, nil, nil); err != nil {
 				return fmt.Errorf("writing int64 column %s: %w", col.Name, err)
 			}
 		case Double:
@@ -133,8 +147,8 @@ func (p *parquetFormat) WriteFiles(
 			for i, row := range rows {
 				values[i] = row[col.Name].(float64)
 			}
-			w := cw.(*file.Float64ColumnChunkWriter)
-			if _, err := w.WriteBatch(values, nil, nil); err != nil {
+			chunkWriter := cw.(*file.Float64ColumnChunkWriter)
+			if _, err := chunkWriter.WriteBatch(values, nil, nil); err != nil {
 				return fmt.Errorf("writing float64 column %s: %w", col.Name, err)
 			}
 		case String:
@@ -142,8 +156,8 @@ func (p *parquetFormat) WriteFiles(
 			for i, row := range rows {
 				values[i] = parquet.ByteArray(row[col.Name].(string))
 			}
-			w := cw.(*file.ByteArrayColumnChunkWriter)
-			if _, err := w.WriteBatch(values, nil, nil); err != nil {
+			chunkWriter := cw.(*file.ByteArrayColumnChunkWriter)
+			if _, err := chunkWriter.WriteBatch(values, nil, nil); err != nil {
 				return fmt.Errorf("writing string column %s: %w", col.Name, err)
 			}
 		case Date:
@@ -155,18 +169,25 @@ func (p *parquetFormat) WriteFiles(
 				}
 				values[i] = days
 			}
-			w := cw.(*file.Int32ColumnChunkWriter)
-			if _, err := w.WriteBatch(values, nil, nil); err != nil {
+			chunkWriter := cw.(*file.Int32ColumnChunkWriter)
+			if _, err := chunkWriter.WriteBatch(values, nil, nil); err != nil {
 				return fmt.Errorf("writing date column %s: %w", col.Name, err)
 			}
 		}
 	}
 
-	if err := writer.Close(); err != nil {
-		return fmt.Errorf("closing parquet writer for %s: %w", table.Name, err)
-	}
+	w.count += numRows
+	return nil
+}
 
-	fmt.Printf("  wrote %s (%d records)\n", outPath, numRows)
+// Close closes the Parquet writer and underlying file, printing a summary.
+// The parquet writer's Close method closes the underlying sink (os.File), so
+// we must not close it again ourselves.
+func (w *parquetWriter) Close() error {
+	if err := w.writer.Close(); err != nil {
+		return fmt.Errorf("closing parquet writer for %s: %w", w.table.Name, err)
+	}
+	fmt.Printf("  wrote %s (%d records)\n", w.outPath, w.count)
 	return nil
 }
 
