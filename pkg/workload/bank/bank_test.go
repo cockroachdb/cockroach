@@ -8,6 +8,7 @@ package bank
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -15,8 +16,68 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
 )
+
+func TestCheckConsistency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(
+		t, base.TestServerArgs{UseDatabase: `test`},
+	)
+	defer srv.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE DATABASE test`)
+
+	gen := FromConfig(
+		10 /* rows */, 10 /* batchSize */, defaultPayloadBytes, 1, /* ranges */
+	)
+	hooks := gen.(workload.Hookser).Hooks()
+
+	setup := func(t *testing.T) {
+		t.Helper()
+		sqlDB.Exec(t, `DROP TABLE IF EXISTS bank`)
+		sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE bank %s`, bankSchema))
+		for i := 0; i < 10; i++ {
+			sqlDB.Exec(t, `INSERT INTO bank (id, balance, payload) VALUES ($1, 0, 'x')`, i)
+		}
+	}
+
+	t.Run("happy-path", func(t *testing.T) {
+		setup(t)
+		if err := hooks.CheckConsistency(ctx, db); err != nil {
+			t.Fatalf("unexpected error: %+v", err)
+		}
+	})
+
+	t.Run("balance-violation", func(t *testing.T) {
+		setup(t)
+		sqlDB.Exec(t, `UPDATE bank SET balance = 100 WHERE id = 0`)
+		err := hooks.CheckConsistency(ctx, db)
+		if err == nil {
+			t.Fatal("expected error for balance violation, got nil")
+		}
+		if !strings.Contains(err.Error(), "balance invariant violated") {
+			t.Fatalf("unexpected error message: %v", err)
+		}
+	})
+
+	t.Run("row-deleted", func(t *testing.T) {
+		setup(t)
+		sqlDB.Exec(t, `DELETE FROM bank WHERE id = 5`)
+		err := hooks.CheckConsistency(ctx, db)
+		if err == nil {
+			t.Fatal("expected error for row integrity violation, got nil")
+		}
+		if !strings.Contains(err.Error(), "row integrity violated") {
+			t.Fatalf("unexpected error message: %v", err)
+		}
+	})
+}
 
 func TestBank(t *testing.T) {
 	defer leaktest.AfterTest(t)()
