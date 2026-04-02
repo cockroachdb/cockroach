@@ -4,6 +4,7 @@ go_library(
     name = "vtable",
     srcs = [
         "crdb_internal.go",
+        "doc.go",
         "information_schema.go",
         "information_schema_crdb.go",
         "pg_catalog.go",
