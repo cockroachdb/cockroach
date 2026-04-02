@@ -3,17 +3,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "securitytest",
     srcs = [
+        "certgen.go",
         "securitytest.go",
         "testcerts.go",
     ],
-    # keep
-    embedsrcs = glob(
-        ["test_certs/*"],
-        exclude = [
-            "test_certs/README.md",
-            "test_certs/regenerate.sh",
-        ],
-    ),
     importpath = "github.com/cockroachdb/cockroach/pkg/security/securitytest",
     visibility = ["//visibility:public"],
     deps = [

@@ -1094,6 +1094,9 @@ func TestLint(t *testing.T) {
 			":!cmd/dev/**",
 			":!cmd/tsdump2duck/**",
 			":!cmd/roachtest/tests/gorm_helpers.go",
+			// certgen.go cannot use timeutil due to a dependency cycle:
+			// securitytest -> security -> ... -> securitytest
+			":!security/securitytest/certgen.go",
 		)
 		if err != nil {
 			t.Fatal(err)
