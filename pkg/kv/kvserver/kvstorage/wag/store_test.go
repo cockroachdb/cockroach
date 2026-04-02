@@ -119,3 +119,40 @@ func splitReplica(
 func writeStateMachine(w storage.Writer, k, v string) error {
 	return w.PutUnversioned(roachpb.Key(k), []byte(v))
 }
+
+func TestSeqInit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	t.Run("empty log engine", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		var seq Seq
+		require.NoError(t, seq.Init(ctx, eng))
+		require.Equal(t, uint64(1), seq.Next(1))
+	})
+
+	t.Run("resumes after last node", func(t *testing.T) {
+		eng := storage.NewDefaultInMemForTesting()
+		defer eng.Close()
+
+		// Write 3 WAG nodes with a gap in the sequence.
+		id := roachpb.FullReplicaID{RangeID: 1, ReplicaID: 1}
+		rhsID := roachpb.FullReplicaID{RangeID: 2, ReplicaID: 1}
+		s := store{eng: eng}
+		b := eng.NewWriteBatch()
+		require.NoError(t, createReplica(&s, b, id))
+		require.NoError(t, initReplica(&s, b, id, 10))
+		s.seq.Next(3) // skip indices 3-5
+		require.NoError(t, splitReplica(&s, b, id, rhsID, 20))
+		require.NoError(t, b.Commit(false /* sync */))
+
+		// Init a fresh sequencer from the log engine.
+		var seq2 Seq
+		require.NoError(t, seq2.Init(ctx, eng))
+		// Next allocation should be after the last persisted index (6).
+		require.Equal(t, uint64(7), seq2.Next(1))
+	})
+}
