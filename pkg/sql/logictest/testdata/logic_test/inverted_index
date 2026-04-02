@@ -2142,7 +2142,7 @@ ANALYZE t151995;
 statement ok
 SELECT crdb_internal.clear_table_stats_cache();
 
-statement error geos error: IllegalArgumentException: BufferOp::getResultGeometry distance must be a finite value
+statement error pq: Buffer: parameter distance must be a finite value
 SELECT *
   FROM t151995 AS t1
   JOIN t151995 AS t2 ON st_dfullywithinexclusive(t2.c1, t1.c1, '+Inf');
