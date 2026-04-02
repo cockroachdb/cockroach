@@ -961,7 +961,7 @@ DISTDIR_FILES = {
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/stretchr/objx/com_github_stretchr_objx-v0.5.2.zip": "3c22c1d1c4c4024eb16a12f0187775640bf35d51b0a06649febc7797119451c0",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/stretchr/testify/com_github_stretchr_testify-v1.11.1.zip": "b7325b561ead5304b72b9f32aebc871ff49b3823667d530a49fd6c8f3adfc96e",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/subosito/gotenv/com_github_subosito_gotenv-v1.2.0.zip": "21474df92536f36de6f91dfbf466995289445cc4e5a5900d9c40ae8776b8b0cf",
-    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/suj-krishnan/drpc/com_github_suj_krishnan_drpc-v0.0.0-20260402083912-357974f308b1.zip": "5fb2d21eb0416215ff1411e690c5d9e1930e7b60db2bf01652cd90fe3653208f",
+    "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/suj-krishnan/drpc/com_github_suj_krishnan_drpc-v0.0.0-20260402162500-6f017ef92cc2.zip": "14da9a3ace5e0e7efac60b8a5fa8242a37f3c804eaa9ddbdb21c39e7b81fd2af",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/swaggo/swag/com_github_swaggo_swag-v1.16.6.zip": "0e0e48e9fb9b90caa181f9faa427d81c67fd5a71ca310dd1ee283217ed7cf44d",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/syndtr/gocapability/com_github_syndtr_gocapability-v0.0.0-20200815063812-42c35b437635.zip": "91ff91da1936e17aa68fc13756e40ba4db1d7c9375a4ef0969fe19c9aa281195",
     "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/tchap/go-patricia/com_github_tchap_go_patricia-v2.2.6+incompatible.zip": "948494017eae153a8c2d4ae9b450fd42abcb2578211f1c28e69ab71a2f27814d",
