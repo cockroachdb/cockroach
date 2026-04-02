@@ -6,6 +6,7 @@
 package geos
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -44,8 +45,35 @@ func TestEnsureInit(t *testing.T) {
 
 	geosOnce.err = fakeErr
 	_, err = ensureInit(EnsureInitErrorDisplayPrivate, "", "")
-	require.Contains(t, err.Error(), fakeErr.Error())
+	require.ErrorContains(t, err, fakeErr.Error())
 
 	_, err = ensureInit(EnsureInitErrorDisplayPublic, "", "")
 	require.Equal(t, errors.Newf("geos: this operation is not available").Error(), err.Error())
+}
+
+// TestClipByRectNaNInf is a regression test for issue #166976.
+// GEOS hangs when ClipByRect is called with NaN or Inf bounding box
+// coordinates.
+func TestClipByRectNaNInf(t *testing.T) {
+	ewkb := []byte("\x01\x02\x00\x00\x00\x02\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00$@\x00\x00\x00\x00\x00\x00$@")
+
+	t.Run("rejects NaN coordinates", func(t *testing.T) {
+		_, err := ClipByRect(ewkb, math.NaN(), 0, 5, 5)
+		require.ErrorContains(t, err, "ClipByRect")
+		require.ErrorContains(t, err, "must be a finite value")
+	})
+
+	t.Run("rejects Inf coordinates", func(t *testing.T) {
+		_, err := ClipByRect(ewkb, math.Inf(1), 0, 5, 5)
+		require.ErrorContains(t, err, "ClipByRect")
+		require.ErrorContains(t, err, "must be a finite value")
+
+	})
+
+	t.Run("error is deterministic", func(t *testing.T) {
+		_, err := ClipByRect(ewkb, math.Inf(1), math.Inf(1), math.Inf(1), math.Inf(1))
+		require.ErrorContains(t, err, "ClipByRect")
+		require.ErrorContains(t, err, "must be a finite value")
+		require.ErrorContains(t, err, "xMax")
+	})
 }
