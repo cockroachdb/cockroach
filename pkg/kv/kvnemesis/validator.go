@@ -497,20 +497,16 @@ func (v *validator) processOp(op Operation) {
 			Value: roachpb.MakeValueFromString(t.Value()),
 		}
 		var shouldObserveWrite bool
-		// Consider two cases based on whether the CPut hit a ConditionFailedError.
+		// If the CPut hit a ConditionFailedError, we don't observe the read or
+		// the write. The CPut's condition-check read is not added to the txn's
+		// read refresh spans and no write lock is acquired, so nothing protects
+		// this read from becoming stale if the txn's write timestamp is later
+		// pushed.
+		//
+		// If the CPut succeeded, the expected value is observed, and the CPut's
+		// write is also observed.
 		err := errorFromResult(t.Result)
-		if e := (*kvpb.ConditionFailedError)(nil); errors.As(err, &e) {
-			// If the CPut failed, the actual value (in the ConditionFailedError) is
-			// observed, and the CPut's write is not observed.
-			observedVal := roachpb.Value{}
-			if e.ActualValue != nil {
-				observedVal.RawBytes = e.ActualValue.RawBytes
-			}
-			readObservation.Value = observedVal
-			shouldObserveRead = true
-		} else {
-			// If the CPut succeeded, the expected value is observed, and the CPut's
-			// write is also observed.
+		if !errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
 			if !t.AllowIfDoesNotExist {
 				// If AllowIfDoesNotExist == true, we don't know if the read found the
 				// expected value or no value, so we can't add a read observation.
