@@ -304,7 +304,10 @@ func (sc *SchemaChanger) refreshMaterializedView(
 	// data only to the new desired indexes. In SchemaChanger.done(), we'll swap
 	// the indexes from the old versions into the new ones.
 	tableToRefresh := refresh.TableWithNewIndexes(table)
-	return sc.backfillQueryIntoTable(ctx, tableToRefresh, table.GetViewQuery(), refresh.AsOf(), "refreshView")
+	// Use the view owner's identity for the backfill query (definer semantics),
+	// matching PostgreSQL behavior where REFRESH always uses the owner's
+	// privileges regardless of who invokes it.
+	return sc.backfillQueryIntoTable(ctx, tableToRefresh, table.GetViewQuery(), refresh.AsOf(), "refreshView", table.GetPrivileges().Owner())
 }
 
 const schemaChangerBackfillTxnDebugName = "schemaChangerBackfill"
@@ -365,6 +368,7 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 	query string,
 	ts hlc.Timestamp,
 	opName redact.SafeString,
+	backfillAsUser username.SQLUsername,
 ) (err error) {
 	if fn := sc.testingKnobs.RunBeforeQueryBackfill; fn != nil {
 		if err := fn(); err != nil {
@@ -403,13 +407,14 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 		// Create an internal planner as the planner used to serve the user query
 		// would have committed by this point.
 		//
-		// Note: the planner is created using the session’s user. This is important
-		// for row-level security (RLS), ensuring that the backfill query runs with
-		// the same visibility and access restrictions as the user who initiated it.
+		// Note: the planner is created using backfillAsUser, which determines the
+		// identity for privilege checks and row-level security (RLS) policy
+		// evaluation. Callers pass the view owner for definer-semantics contexts,
+		// or the session user for invoker-semantics contexts.
 		p, cleanup := NewInternalPlanner(
 			opName,
 			txn.KV(),
-			sc.sessionData.User(),
+			backfillAsUser,
 			&MemoryMetrics{},
 			sc.execCfg,
 			sd,
@@ -585,7 +590,7 @@ func (sc *SchemaChanger) maybeBackfillCreateTableAs(
 		return nil
 	}
 	log.Dev.Infof(ctx, "starting backfill for CREATE TABLE AS with query %q", table.GetCreateQuery())
-	return sc.backfillQueryIntoTable(ctx, table, table.GetCreateQuery(), table.GetCreateAsOfTime(), "ctasBackfill")
+	return sc.backfillQueryIntoTable(ctx, table, table.GetCreateQuery(), table.GetCreateAsOfTime(), "ctasBackfill", sc.sessionData.User())
 }
 
 // maybeUpdateScheduledJobsForRowLevelTTL ensures the scheduled jobs related to the
@@ -625,7 +630,7 @@ func (sc *SchemaChanger) maybeBackfillMaterializedView(
 	}
 	log.Dev.Infof(ctx, "starting backfill for CREATE MATERIALIZED VIEW with query %q", table.GetViewQuery())
 
-	return sc.backfillQueryIntoTable(ctx, table, table.GetViewQuery(), table.GetCreateAsOfTime(), "materializedViewBackfill")
+	return sc.backfillQueryIntoTable(ctx, table, table.GetViewQuery(), table.GetCreateAsOfTime(), "materializedViewBackfill", sc.sessionData.User())
 }
 
 // maybe make a table PUBLIC if it's in the ADD state.
