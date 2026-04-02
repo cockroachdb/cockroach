@@ -482,7 +482,7 @@ func TestBatchedTempObjectCleanup(t *testing.T) {
 
 // TestBatchedTempCleanupWithMixedObjectTypes verifies that batching respects
 // dependency ordering (views -> tables -> sequences) and handles the
-// cleanupTempSequenceDeps preHook correctly across batch boundaries.
+// cleanupTempSequenceDeps correctly across batch boundaries.
 func TestBatchedTempCleanupWithMixedObjectTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -569,7 +569,7 @@ func TestBatchedTempCleanupWithMixedObjectTypes(t *testing.T) {
 	require.NoError(t, rows.Close())
 
 	// Verify the default expression on the permanent table was cleared
-	// (the temp sequence it referenced was dropped by the preHook).
+	// (the temp sequence it referenced was dropped by cleanupTempSequenceDeps).
 	var colDefault gosql.NullString
 	err = db.QueryRow(
 		`SELECT column_default FROM information_schema.columns
