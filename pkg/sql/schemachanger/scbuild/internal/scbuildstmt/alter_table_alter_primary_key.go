@@ -55,11 +55,6 @@ type alterPrimaryKeySpec struct {
 	Name          tree.Name
 	StorageParams tree.StorageParams
 	Partitioning  *partitioningSpec
-	// IsLocalitySwap is true when the ALTER PRIMARY KEY is triggered by an ALTER
-	// TABLE SET LOCALITY that changes between RBR variants. When true,
-	// skip_unique_checks is preserved from old indexes if the new indexes retain
-	// implicit partitioning.
-	IsLocalitySwap bool
 }
 
 // partitioningSpec specifies partitioning to apply during ALTER PRIMARY KEY.
@@ -248,9 +243,11 @@ func setupStorageParams(
 ) {
 	// Reset to defaults first, since the new PK should not inherit storage
 	// params from the old PK unless explicitly specified in the WITH clause.
-	// For RBR-to-RBR locality swaps, preserve skip_unique_checks from the old
-	// PK since the index remains implicitly partitioned.
-	if t.IsLocalitySwap && partitioning != nil && partitioning.NumImplicitColumns > 0 {
+	// For locality swaps where the new index retains implicit partitioning
+	// (e.g. RBR-to-RBR), preserve skip_unique_checks from the old PK.
+	// For transitions that remove implicit partitioning (e.g. RBR-to-GLOBAL),
+	// clear it since it's only valid on implicitly partitioned indexes.
+	if t.Partitioning != nil && len(t.Partitioning.NewImplicitColumns) > 0 {
 		final.SkipUniqueChecks = old.SkipUniqueChecks
 	} else {
 		final.SkipUniqueChecks = false

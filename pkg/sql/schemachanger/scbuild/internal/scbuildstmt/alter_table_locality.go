@@ -247,12 +247,11 @@ func alterPrimaryKeyForRegionalByRowTable(
 	// Step 4: Build the alterPrimaryKeySpec
 	partSpec := getTablePartitioningSpec(b, tableID, targetLocality)
 	spec := alterPrimaryKeySpec{
-		n:              t,
-		Columns:        cols,
-		Sharded:        sharded,
-		Name:           tree.Name(currentPKName.Name),
-		Partitioning:   &partSpec,
-		IsLocalitySwap: true,
+		n:            t,
+		Columns:      cols,
+		Sharded:      sharded,
+		Name:         tree.Name(currentPKName.Name),
+		Partitioning: &partSpec,
 	}
 
 	// Step 5: Call alterPrimaryKey
