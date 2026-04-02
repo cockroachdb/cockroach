@@ -28,11 +28,12 @@ import (
 )
 
 var formats = map[string]OutputFormat{
-	"avro": &avroFormat{},
+	"avro":    &avroFormat{},
+	"parquet": &parquetFormat{},
 }
 
 func main() {
-	formatName := flag.String("format", "avro", "output format (avro)")
+	formatName := flag.String("format", "avro", "output format (avro, parquet)")
 	inputDir := flag.String("input-dir", "", "local directory containing TPC-H .tbl files (required)")
 	outputDir := flag.String("output-dir", "", "local directory to write output files (required)")
 	tablesFlag := flag.String("tables", "", "comma-separated list of tables (default: all)")
