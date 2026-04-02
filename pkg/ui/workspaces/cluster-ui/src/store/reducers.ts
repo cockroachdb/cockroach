@@ -6,47 +6,15 @@
 import { createReducer } from "@reduxjs/toolkit";
 import { combineReducers, createStore } from "redux";
 
-import {
-  ClusterLocksReqState,
-  reducer as clusterLocks,
-} from "./clusterLocks/clusterLocks.reducer";
-import {
-  ClusterSettingsState,
-  reducer as clusterSettings,
-} from "./clusterSettings/clusterSettings.reducer";
-import {
-  DatabasesListState,
-  reducer as databasesList,
-} from "./databasesList/databasesList.reducers";
-import {
-  reducer as txnInsights,
-  TxnInsightsState,
-} from "./insights/transactionInsights";
-import {
-  LivenessState,
-  reducer as liveness,
-} from "./liveness/liveness.reducer";
 import { LocalStorageState, reducer as localStorage } from "./localStorage";
-import { NodesState, reducer as nodes } from "./nodes";
 import { rootActions } from "./rootActions";
 import { reducer as sqlStats, SQLStatsState } from "./sqlStats";
-import {
-  reducer as statementDiagnostics,
-  StatementDiagnosticsState,
-} from "./statementDiagnostics";
 import { reducer as uiConfig, UIConfigState } from "./uiConfig";
 
 export type AdminUiState = {
-  statementDiagnostics: StatementDiagnosticsState;
   localStorage: LocalStorageState;
-  nodes: NodesState;
-  liveness: LivenessState;
   uiConfig: UIConfigState;
   statements: SQLStatsState;
-  clusterLocks: ClusterLocksReqState;
-  databasesList: DatabasesListState;
-  txnInsights: TxnInsightsState;
-  clusterSettings: ClusterSettingsState;
 };
 
 export type AppState = {
@@ -55,15 +23,8 @@ export type AppState = {
 
 export const reducers = combineReducers<AdminUiState>({
   localStorage,
-  statementDiagnostics,
-  nodes,
-  liveness,
-  txnInsights,
   uiConfig,
   statements: sqlStats,
-  clusterLocks,
-  databasesList,
-  clusterSettings,
 });
 
 /**
