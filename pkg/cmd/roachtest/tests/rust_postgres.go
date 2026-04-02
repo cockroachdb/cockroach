@@ -78,9 +78,8 @@ func registerRustPostgres(r registry.Registry) {
 			t,
 			c,
 			node,
-			"install rust and cargo",
-			`curl https://sh.rustup.rs -sSf | sh -s -- -y
-`,
+			"install and verify rust and cargo",
+			`bash -o pipefail -c 'curl https://sh.rustup.rs -sSf | sh -s -- -y && /home/ubuntu/.cargo/bin/cargo --version'`,
 		); err != nil {
 			t.Fatal(err)
 		}
