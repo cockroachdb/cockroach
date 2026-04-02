@@ -638,6 +638,11 @@ func performCastWithoutPrecisionTruncation(
 		case *tree.DArray:
 			switch d.ParamTyp.Family() {
 			case types.FloatFamily, types.IntFamily, types.DecimalFamily:
+				if len(d.Array) == 0 {
+					return nil, pgerror.Newf(pgcode.DataException,
+						"vector must have at least 1 dimension")
+				}
+
 				if d.HasNulls() {
 					return nil, pgerror.Newf(pgcode.NullValueNotAllowed,
 						"array must not contain nulls")
@@ -648,7 +653,19 @@ func performCastWithoutPrecisionTruncation(
 					if err != nil {
 						return nil, err
 					}
-					v[i] = float32(*datum.(*tree.DFloat))
+
+					val := float32(*datum.(*tree.DFloat))
+					if math.IsInf(float64(val), 0) {
+						return nil, pgerror.Newf(pgcode.DataException,
+							"infinite value not allowed in vector")
+					}
+
+					if math.IsNaN(float64(val)) {
+						return nil, pgerror.Newf(pgcode.DataException,
+							"NaN not allowed in vector")
+					}
+
+					v[i] = val
 				}
 				return tree.NewDPGVector(v), nil
 			}
