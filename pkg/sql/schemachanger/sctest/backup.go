@@ -51,7 +51,7 @@ func BackupSuccess(t *testing.T, path string, factory TestServerFactory) {
 			result := backupSuccessPrepare(t, factory, spec)
 			backupArgs = result.PrepData
 			return result
-		}, func(t *testing.T, cs CumulativeTestCaseSpec, prepData backupSuccessTestArgs) {
+		}, func(t *testing.T, cs CumulativeTestCaseSpec) {
 			backupSuccess(t, backupArgs, cs)
 		},
 		nil /*samplingFn */)
@@ -81,8 +81,8 @@ func BackupRollbacks(t *testing.T, path string, factory TestServerFactory) {
 			result := backupRollbacksPrepare(t, factory, spec)
 			rollbackArgs = result.PrepData
 			return result
-		}, func(t *testing.T, cs CumulativeTestCaseSpec, prepData backupRollbacksTestArgs) {
-			backupRollbacks(t, prepData, cs, false /*isMixedVersion*/)
+		}, func(t *testing.T, cs CumulativeTestCaseSpec) {
+			backupRollbacks(t, rollbackArgs, cs, false /*isMixedVersion*/)
 		},
 		nil /* samplingFn */)
 }
@@ -115,7 +115,7 @@ func BackupSuccessMixedVersion(t *testing.T, path string, factory TestServerFact
 			backupArgs.excludeAllTablesInDatabaseFlavor = true
 		}
 		return result
-	}, func(t *testing.T, cs CumulativeTestCaseSpec, prepData backupSuccessTestArgs) {
+	}, func(t *testing.T, cs CumulativeTestCaseSpec) {
 		backupSuccess(t, backupArgs, cs)
 	},
 		nil /* samplingFn */)
@@ -146,8 +146,8 @@ func BackupRollbacksMixedVersion(t *testing.T, path string, factory TestServerFa
 		result := backupRollbacksPrepare(t, factory, spec)
 		rollbackArgs = result.PrepData
 		return result
-	}, func(t *testing.T, cs CumulativeTestCaseSpec, prepData backupRollbacksTestArgs) {
-		backupRollbacks(t, prepData, cs, true /*isMixedVersion*/)
+	}, func(t *testing.T, cs CumulativeTestCaseSpec) {
+		backupRollbacks(t, rollbackArgs, cs, true /*isMixedVersion*/)
 	}, nil /* samplingFn */)
 }
 
@@ -212,7 +212,7 @@ type backupSuccessTestArgs struct {
 
 // rollbackScenario contains all data for testing one rollback scenario
 type rollbackScenario struct {
-	databaseName string     // Unique database for this scenario
+	databaseName string     // database containing the schema change
 	urls         []string   // Backup URLs taken during rollback
 	expected     [][]string // Expected descriptor state after rollback
 }
@@ -320,12 +320,18 @@ func backupSuccessPrepare(
 	}
 	// Setup a server for the backup test cases.
 	backupArgs.server = factory.WithSchemaChangerKnobs(knobs).Start(ctx, t)
+	// Register cleanup immediately after server creation. This is necessary
+	// because if the prepare function exits early (e.g. skip or require failure),
+	// the caller's backupArgs closure variable is never hydrated, so the caller's
+	// defer will not stop the server. Stopper.Stop is idempotent, so it is safe
+	// for the caller's defer to also call it on the normal path.
 	t.Cleanup(func() {
 		if backupArgs.server.Stopper != nil {
 			backupArgs.server.Stopper(t)
 		}
 	})
 	db := backupArgs.server.DB
+	db.SetMaxOpenConns(1)
 	dbForBackup.Store(db)
 	tdb := sqlutils.MakeSQLRunner(db)
 	// Setup the test cluster.
@@ -545,12 +551,18 @@ func backupRollbacksPrepare(
 
 	// Create one long-lived cluster for discovery + all rollback scenarios.
 	args.server = factory.WithSchemaChangerKnobs(knobs).Start(ctx, t)
+	// Register cleanup immediately after server creation. This is necessary
+	// because if the prepare function exits early (e.g. skip or require failure),
+	// the caller's rollbackArgs closure variable is never hydrated, so the
+	// caller's defer will not stop the server. Stopper.Stop is idempotent, so it
+	// is safe for the caller's defer to also call it on the normal path.
 	t.Cleanup(func() {
 		if args.server.Stopper != nil {
 			args.server.Stopper(t)
 		}
 	})
 	db := args.server.DB
+	db.SetMaxOpenConns(1)
 	tdb := sqlutils.MakeSQLRunner(db)
 
 	// Create backups database for userfile before discovery.
@@ -601,9 +613,9 @@ func backupRollbacksPrepare(
 		// Switch to system database before dropping the test database.
 		tdb.Exec(t, "USE system")
 
-		// Reset use_declarative_schema_changer on all pool connections.
-		// executeSchemaChangeTxn sets 'unsafe_always' which persists on returned
-		// pool connections and breaks setupSchemaChange's CREATE TABLE.
+		// Reset use_declarative_schema_changer for subsequent operations.
+		// executeSchemaChangeTxn sets 'unsafe_always' which persists on the
+		// connection and breaks setupSchemaChange's CREATE TABLE.
 		tdb.Exec(t, "SET use_declarative_schema_changer = 'on'")
 
 		// Drop the database from the previous iteration and let setupSchemaChange recreate it.
