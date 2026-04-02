@@ -35,7 +35,7 @@ func newGRPCServer(
 			return s.intercept(path)
 		}), rpc.WithMetricsServerInterceptor(
 			rpc.NewRequestMetricsInterceptor(requestMetrics, func(method string) bool {
-				return shouldRecordRequestDuration(rpcCtx.Settings, method)
+				return rpc.ShouldRecordRequestDuration(rpcCtx.Settings, method)
 			},
 			)))
 	if err != nil {
