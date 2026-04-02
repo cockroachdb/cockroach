@@ -88,8 +88,6 @@ export const getStatementInsightPropsFixture =
         fixedWindowEnd: moment.utc("2021-12-12"),
         key: "Custom",
       },
-      hasAdminRole: true,
       setTimeScale: noop,
-      refreshUserSQLRoles: noop,
     };
   };
