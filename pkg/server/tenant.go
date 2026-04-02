@@ -1400,14 +1400,18 @@ func makeTenantSQLServerArgs(
 	externalStorage := esb.makeExternalStorage
 	externalStorageFromURI := esb.makeExternalStorageFromURI
 
-	requestMetrics := rpc.NewServerRequestMetrics()
-	registry.AddMetricStruct(requestMetrics)
+	serverRequestMetrics := rpc.NewServerRequestMetrics()
+	registry.AddMetricStruct(serverRequestMetrics)
+	if rpcContext.UseDRPC {
+		registry.AddMetricStruct(rpcContext.ClientRequestMetrics())
+		registry.AddMetricStruct(rpcContext.DRPCPoolMetrics())
+	}
 
-	grpcServer, err := newGRPCServer(startupCtx, rpcContext, requestMetrics)
+	grpcServer, err := newGRPCServer(startupCtx, rpcContext, serverRequestMetrics)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
-	drpcServer, err := newDRPCServer(startupCtx, rpcContext, requestMetrics)
+	drpcServer, err := newDRPCServer(startupCtx, rpcContext, serverRequestMetrics)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}

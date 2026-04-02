@@ -29,6 +29,7 @@ import (
 	"storj.io/drpc"
 	"storj.io/drpc/drpcclient"
 	"storj.io/drpc/drpcmux"
+	"storj.io/drpc/drpcpool"
 )
 
 // gwRequestKey is a field set on the context to indicate a request
@@ -200,13 +201,13 @@ over this connection.
 	metaNetworkBytesEgress = metric.Metadata{
 		Name:        "rpc.client.bytes.egress",
 		Unit:        metric.Unit_BYTES,
-		Help:        `Counter of TCP bytes sent via gRPC on connections we initiated.`,
+		Help:        `Counter of TCP bytes sent via RPC on connections we initiated.`,
 		Measurement: "Bytes",
 	}
 	metaNetworkBytesIngress = metric.Metadata{
 		Name:        "rpc.client.bytes.ingress",
 		Unit:        metric.Unit_BYTES,
-		Help:        `Counter of TCP bytes received via gRPC on connections we initiated.`,
+		Help:        `Counter of TCP bytes received via RPC on connections we initiated.`,
 		Measurement: "Bytes",
 	}
 	metaServerRequestDuration = metric.Metadata{
@@ -237,15 +238,39 @@ over this connection.
 		Unit:        metric.Unit_NANOSECONDS,
 		MetricType:  prometheusgo.MetricType_HISTOGRAM,
 	}
+	metaDRPCPoolSize = metric.Metadata{
+		Name:        "rpc.drpc.pool.size",
+		Unit:        metric.Unit_CONST,
+		Help:        "DRPC connection pool size.",
+		Measurement: "Size",
+		MetricType:  prometheusgo.MetricType_GAUGE,
+	}
+	metaDRPCPoolConnectionHitsTotal = metric.Metadata{
+		Name:        "rpc.drpc.pool.hits.total",
+		Unit:        metric.Unit_COUNT,
+		Help:        "DRPC connection pool cache hits.",
+		Measurement: "Connections",
+		MetricType:  prometheusgo.MetricType_COUNTER,
+	}
+	metaDRPCPoolConnectionMissesTotal = metric.Metadata{
+		Name:        "rpc.drpc.pool.miss.total",
+		Unit:        metric.Unit_COUNT,
+		Help:        "DRPC connection pool cache misses.",
+		Measurement: "Connections",
+		MetricType:  prometheusgo.MetricType_COUNTER,
+	}
 	metaDRPCEnabled = metric.Metadata{
 		Name:        "rpc.drpc.enabled",
 		Help:        "1 if this node is using DRPC for internode RPC, 0 otherwise.",
 		Measurement: "Enabled",
 		Unit:        metric.Unit_CONST,
+		MetricType:  prometheusgo.MetricType_GAUGE,
 	}
 )
 
-func (m *Metrics) makeLabels(k peerKey, remoteLocality roachpb.Locality) []string {
+func (m *Metrics) makeLabels(
+	k peerKey, remoteLocality roachpb.Locality, rpcProtocol string,
+) []string {
 	localLen := len(m.locality.Tiers)
 
 	// length is the shorter of the two, however we always need to fill localLen "slots"
@@ -254,7 +279,7 @@ func (m *Metrics) makeLabels(k peerKey, remoteLocality roachpb.Locality) []strin
 		length = len(remoteLocality.Tiers)
 	}
 
-	childLabels := []string{}
+	childLabels := []string{rpcProtocol}
 
 	matching := true
 	for i := 0; i < length; i++ {
@@ -279,7 +304,7 @@ func (m *Metrics) makeLabels(k peerKey, remoteLocality roachpb.Locality) []strin
 
 func newMetrics(locality roachpb.Locality) *Metrics {
 	childLabels := []string{"remote_node_id", "remote_addr", "class", "protocol"}
-	localityLabels := []string{}
+	localityLabels := []string{"protocol"}
 	for _, tier := range locality.Tiers {
 		localityLabels = append(localityLabels, "source_"+tier.Key)
 		localityLabels = append(localityLabels, "destination_"+tier.Key)
@@ -348,6 +373,7 @@ type Metrics struct {
 	ConnectionTCPRTTVar           *aggmetric.AggGauge
 	DRPCEnabled                   *metric.Gauge
 	clientRequestMetrics          *ClientRequestMetrics
+	drpcPoolMetrics               *drpcpool.PoolMetrics
 	mu                            struct {
 		syncutil.Mutex
 		// peerMetrics is a map of peerKey to peerMetrics.
@@ -448,7 +474,7 @@ func (m *Metrics) acquire(
 		m.mu.peerMetrics[labelKey] = pm
 	}
 
-	localityLabels := m.makeLabels(k, l)
+	localityLabels := m.makeLabels(k, l, rpcProtocol)
 	localityKey := strings.Join(localityLabels, ",")
 	lm, ok := m.mu.localityMetrics[localityKey]
 	if !ok {
@@ -648,7 +674,18 @@ func NewClientRequestMetrics() *ClientRequestMetrics {
 	}
 }
 
-// TODO: use to filter out apis we don't want to record metrics for.
+func NewDRPCPoolMetrics() *drpcpool.PoolMetrics {
+	labels := []string{"target", "class"}
+	return &drpcpool.PoolMetrics{
+		PoolSize: metric.NewExportedGaugeVec(metaDRPCPoolSize, labels),
+		ConnectionHitsTotal: metric.NewExportedCounterVec(metaDRPCPoolConnectionHitsTotal,
+			labels),
+		ConnectionMissesTotal: metric.NewExportedCounterVec(
+			metaDRPCPoolConnectionMissesTotal, labels),
+	}
+}
+
+// TODO (sujatha): use to filter out apis we don't want to record metrics for.
 func shouldRecordClientMetrics(rpc string) bool {
 	return true
 }

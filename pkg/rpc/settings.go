@@ -152,6 +152,8 @@ func WithInterceptor(f func(fullMethod string) error) ServerOption {
 	}
 }
 
+
+
 // WithMetricsServerInterceptor adds a RequestMetricsInterceptor to the grpc server.
 func WithMetricsServerInterceptor(interceptor RequestMetricsInterceptor) ServerOption {
 	return func(opts *serverOpts) {
@@ -168,7 +170,7 @@ func WithDRPCMetricsUnaryServerInterceptor(
 	}
 }
 
-// WithDRPCMetricsUnaryServerInterceptor adds a DRPCUnaryServerRequestMetricsInterceptor to the DRPC server.
+// WithDRPCMetricsStreamServerInterceptor adds a DRPCMetricsStreamServerInterceptor to the DRPC server.
 func WithDRPCMetricsStreamServerInterceptor(
 	interceptor DRPCStreamServerRequestMetricsInterceptor,
 ) ServerOption {

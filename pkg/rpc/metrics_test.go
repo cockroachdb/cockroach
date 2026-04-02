@@ -97,7 +97,7 @@ func TestMetricsRelease(t *testing.T) {
 	// Acquire the same peer and locality with drpc protocol
 	pm5, lm5 := m.acquire(k1, l1, rpcProtocolDRPC)
 	require.NotEqual(t, pm, pm5)
-	require.Equal(t, lm, lm5)
+	require.NotEqual(t, lm, lm5)
 }
 
 func TestDRPCServerRequestInterceptor(t *testing.T) {

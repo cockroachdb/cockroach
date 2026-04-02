@@ -428,6 +428,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	appRegistry.AddMetricStruct(serverRequestMetrics)
 	if rpcContext.UseDRPC {
 		appRegistry.AddMetricStruct(rpcContext.ClientRequestMetrics())
+		appRegistry.AddMetricStruct(rpcContext.DRPCPoolMetrics())
 	}
 
 	grpcServer, err := newGRPCServer(ctx, rpcContext, serverRequestMetrics)
