@@ -378,6 +378,9 @@ func (m *AlterRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_A
 func (m *CreateRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_ADMIN }
 
 // LoggingChannel implements the EventPayload interface.
+func (m *DropProvisionedRoles) LoggingChannel() logpb.Channel { return logpb.Channel_USER_ADMIN }
+
+// LoggingChannel implements the EventPayload interface.
 func (m *DropRole) LoggingChannel() logpb.Channel { return logpb.Channel_USER_ADMIN }
 
 // LoggingChannel implements the EventPayload interface.
