@@ -97,7 +97,7 @@ func checkZeroUnavailableRanges(
 	conn := c.Conn(ctx, l, 1, option.VirtualClusterName("system"))
 	defer conn.Close()
 
-	rangesCur, err := conn.QueryContext(ctx, "SELECT sum(unavailable_ranges) FROM system.replication_stats")
+	rangesCur, err := conn.QueryContext(ctx, "SELECT COALESCE(sum(unavailable_ranges), 0) FROM system.replication_stats")
 	if err != nil {
 		return false, err
 	}
@@ -117,7 +117,7 @@ func checkZeroUnderreplicatedRanges(
 	conn := c.Conn(ctx, l, 1, option.VirtualClusterName("system"))
 	defer conn.Close()
 
-	rangesCur, err := conn.QueryContext(ctx, "SELECT sum(under_replicated_ranges) FROM system.replication_stats")
+	rangesCur, err := conn.QueryContext(ctx, "SELECT COALESCE(sum(under_replicated_ranges), 0) FROM system.replication_stats")
 	if err != nil {
 		return false, err
 	}

@@ -12,6 +12,7 @@ go_library(
         "cancel_job.go",
         "cluster_settings.go",
         "debug_zip.go",
+        "disk_fill.go",
         "disk_stall.go",
         "grant_revoke_all.go",
         "grant_role.go",
