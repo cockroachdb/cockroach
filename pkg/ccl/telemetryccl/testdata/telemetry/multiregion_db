@@ -86,3 +86,33 @@ feature-usage
 ALTER DATABASE d SURVIVE ZONE FAILURE
 ----
 sql.multiregion.alter_database.survival_goal.survive_zone_failure
+
+# Super region telemetry counters.
+
+exec
+ALTER DATABASE d ADD REGION "us-east-1"
+----
+
+exec
+ALTER DATABASE d ADD REGION "ap-southeast-2"
+----
+
+feature-usage
+ALTER DATABASE d ADD SUPER REGION "sr1" VALUES "us-east-1", "ap-southeast-2"
+----
+sql.multiregion.add_super_region
+
+feature-usage
+ALTER DATABASE d ALTER SUPER REGION "sr1" VALUES "us-east-1", "ca-central-1"
+----
+sql.multiregion.alter_super_region
+
+feature-usage
+ALTER DATABASE d ALTER SUPER REGION "sr1" SURVIVE ZONE FAILURE
+----
+sql.multiregion.alter_super_region.survival_goal
+
+feature-usage
+ALTER DATABASE d DROP SUPER REGION "sr1"
+----
+sql.multiregion.drop_super_region
