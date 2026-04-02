@@ -3441,6 +3441,354 @@ REVOKE CREATE ON SCHEMA public FROM bob, alice;
 statement ok
 DROP ROLE alice, bob;
 
+subtest refresh_mv_rls_definer_semantics
+
+# Regression tests for #167327: REFRESH MATERIALIZED VIEW uses the invoker's
+# RLS policies instead of the view owner's (definer semantics).
+#
+# In PostgreSQL, REFRESH MATERIALIZED VIEW uses definer semantics: the view
+# owner's privileges determine which rows are materialized, regardless of who
+# runs REFRESH. This test confirms CockroachDB uses the same semantics.
+
+statement ok
+CREATE ROLE mv_alice LOGIN;
+
+statement ok
+CREATE ROLE mv_bob LOGIN;
+
+statement ok
+CREATE TABLE rls_docs (
+    id INT PRIMARY KEY,
+    visible_to TEXT NOT NULL,
+    content TEXT NOT NULL
+);
+
+statement ok
+INSERT INTO rls_docs (id, visible_to, content) VALUES
+  (1, 'mv_alice', 'Alice secret 1'),
+  (2, 'mv_alice', 'Alice secret 2'),
+  (3, 'mv_bob',   'Bob secret 1'),
+  (4, 'everyone', 'Public doc');
+
+statement ok
+GRANT SELECT ON rls_docs TO mv_alice;
+
+statement ok
+GRANT SELECT ON rls_docs TO mv_bob;
+
+statement ok
+GRANT CREATE ON SCHEMA public TO mv_alice;
+
+statement ok
+GRANT CREATE ON SCHEMA public TO mv_bob;
+
+statement ok
+ALTER TABLE rls_docs ENABLE ROW LEVEL SECURITY;
+
+statement ok
+CREATE POLICY see_alice ON rls_docs TO mv_alice
+  USING (visible_to = 'mv_alice' OR visible_to = 'everyone');
+
+statement ok
+CREATE POLICY see_bob ON rls_docs TO mv_bob
+  USING (visible_to = 'mv_bob' OR visible_to = 'everyone');
+
+# Verify that mv_bob sees only their rows (3, 4).
+statement ok
+SET ROLE mv_bob;
+
+query ITT
+SELECT * FROM rls_docs ORDER BY id;
+----
+3  mv_bob    Bob secret 1
+4  everyone  Public doc
+
+# mv_bob creates a materialized view. The MV should contain only the rows
+# visible to mv_bob through RLS (rows 3 and 4).
+statement ok
+CREATE MATERIALIZED VIEW mv_bob_view AS SELECT * FROM rls_docs;
+
+query ITT
+SELECT * FROM mv_bob_view ORDER BY id;
+----
+3  mv_bob    Bob secret 1
+4  everyone  Public doc
+
+# Create a second MV for the non-owner refresh test below.
+statement ok
+CREATE MATERIALIZED VIEW mv_bob_view2 AS SELECT * FROM rls_docs;
+
+query ITT
+SELECT * FROM mv_bob_view2 ORDER BY id;
+----
+3  mv_bob    Bob secret 1
+4  everyone  Public doc
+
+statement ok
+RESET ROLE;
+
+# Run the refresh as root (admin). The row visibility should match the owner
+# mv_bob's RLS policies, not the admin invoker's (which would see all rows).
+statement ok
+REFRESH MATERIALIZED VIEW mv_bob_view;
+
+query ITT
+SELECT * FROM mv_bob_view ORDER BY id;
+----
+3  mv_bob    Bob secret 1
+4  everyone  Public doc
+
+# Non-owner (mv_alice) refresh uses owner's (mv_bob) RLS policies.
+#
+# Grant MAINTAIN on mv_bob_view2 to mv_alice so she can refresh it.
+statement ok
+GRANT MAINTAIN ON mv_bob_view2 TO mv_alice;
+
+# Verify the MV still has mv_bob's rows before the refresh.
+query ITT
+SELECT * FROM mv_bob_view2 ORDER BY id;
+----
+3  mv_bob    Bob secret 1
+4  everyone  Public doc
+
+statement ok
+SET ROLE mv_alice;
+
+# Verify mv_alice sees different rows than mv_bob.
+query ITT
+SELECT * FROM rls_docs ORDER BY id;
+----
+1  mv_alice  Alice secret 1
+2  mv_alice  Alice secret 2
+4  everyone  Public doc
+
+# mv_alice refreshes mv_bob's MV using MAINTAIN privilege.
+statement ok
+REFRESH MATERIALIZED VIEW mv_bob_view2;
+
+statement ok
+RESET ROLE;
+
+# The MV still contains mv_bob's rows because REFRESH uses definer semantics
+# (the view owner mv_bob's RLS policies apply, not mv_alice's).
+query ITT
+SELECT * FROM mv_bob_view2 ORDER BY id;
+----
+3  mv_bob    Bob secret 1
+4  everyone  Public doc
+
+# Cleanup.
+statement ok
+DROP MATERIALIZED VIEW mv_bob_view;
+
+statement ok
+DROP MATERIALIZED VIEW mv_bob_view2;
+
+statement ok
+DROP TABLE rls_docs;
+
+statement ok
+REVOKE CREATE ON SCHEMA public FROM mv_alice, mv_bob;
+
+statement ok
+DROP ROLE mv_alice, mv_bob;
+
+subtest refresh_mv_rls_table_owner_exemption
+
+# When the MV owner is also the table owner, they are exempt from RLS
+# (unless FORCE ROW LEVEL SECURITY is set). REFRESH should use definer
+# semantics, and the owner exemption should apply -- all rows are
+# materialized regardless of policies.
+
+statement ok
+CREATE ROLE mv_tblowner LOGIN;
+
+statement ok
+CREATE ROLE mv_helper LOGIN;
+
+statement ok
+GRANT CREATE ON SCHEMA public TO mv_tblowner;
+
+statement ok
+SET ROLE mv_tblowner;
+
+statement ok
+CREATE TABLE rls_owned (
+    id INT PRIMARY KEY,
+    category TEXT NOT NULL,
+    content TEXT NOT NULL
+);
+
+statement ok
+INSERT INTO rls_owned VALUES
+  (1, 'public', 'Public doc 1'),
+  (2, 'secret', 'Secret doc 1'),
+  (3, 'public', 'Public doc 2'),
+  (4, 'secret', 'Secret doc 2');
+
+statement ok
+ALTER TABLE rls_owned ENABLE ROW LEVEL SECURITY;
+
+# Create a restrictive policy, but as table owner mv_tblowner is exempt.
+statement ok
+CREATE POLICY public_only ON rls_owned TO mv_tblowner
+  USING (category = 'public');
+
+# mv_tblowner sees all rows despite the policy (table owner exemption).
+query ITT
+SELECT * FROM rls_owned ORDER BY id;
+----
+1  public  Public doc 1
+2  secret  Secret doc 1
+3  public  Public doc 2
+4  secret  Secret doc 2
+
+statement ok
+CREATE MATERIALIZED VIEW mv_owned_view AS SELECT * FROM rls_owned;
+
+query ITT
+SELECT * FROM mv_owned_view ORDER BY id;
+----
+1  public  Public doc 1
+2  secret  Secret doc 1
+3  public  Public doc 2
+4  secret  Secret doc 2
+
+statement ok
+RESET ROLE;
+
+# Grant MAINTAIN to mv_helper so they can refresh.
+statement ok
+GRANT MAINTAIN ON mv_owned_view TO mv_helper;
+
+statement ok
+SET ROLE mv_helper;
+
+statement ok
+REFRESH MATERIALIZED VIEW mv_owned_view;
+
+statement ok
+RESET ROLE;
+
+# MV still has all rows because definer semantics uses mv_tblowner's
+# identity, and mv_tblowner is exempt from RLS as the table owner.
+query ITT
+SELECT * FROM mv_owned_view ORDER BY id;
+----
+1  public  Public doc 1
+2  secret  Secret doc 1
+3  public  Public doc 2
+4  secret  Secret doc 2
+
+# Cleanup.
+statement ok
+DROP MATERIALIZED VIEW mv_owned_view;
+
+statement ok
+DROP TABLE rls_owned;
+
+statement ok
+REVOKE CREATE ON SCHEMA public FROM mv_tblowner;
+
+statement ok
+DROP ROLE mv_tblowner, mv_helper;
+
+subtest refresh_mv_rls_force_overrides_owner_exemption
+
+# When FORCE ROW LEVEL SECURITY is set, even the table owner is subject to
+# RLS policies. REFRESH should apply the owner's policies via definer
+# semantics, so only policy-filtered rows are materialized.
+
+statement ok
+CREATE ROLE mv_forcedowner LOGIN;
+
+statement ok
+CREATE ROLE mv_forcehelper LOGIN;
+
+statement ok
+GRANT CREATE ON SCHEMA public TO mv_forcedowner;
+
+statement ok
+SET ROLE mv_forcedowner;
+
+statement ok
+CREATE TABLE rls_forced (
+    id INT PRIMARY KEY,
+    category TEXT NOT NULL,
+    content TEXT NOT NULL
+);
+
+statement ok
+INSERT INTO rls_forced VALUES
+  (1, 'public', 'Public doc 1'),
+  (2, 'secret', 'Secret doc 1'),
+  (3, 'public', 'Public doc 2'),
+  (4, 'secret', 'Secret doc 2');
+
+statement ok
+ALTER TABLE rls_forced ENABLE ROW LEVEL SECURITY;
+
+statement ok
+ALTER TABLE rls_forced FORCE ROW LEVEL SECURITY;
+
+# Create a policy that only shows public rows to the owner.
+statement ok
+CREATE POLICY public_only ON rls_forced TO mv_forcedowner
+  USING (category = 'public');
+
+# Despite being the table owner, FORCE RLS makes policies apply.
+query ITT
+SELECT * FROM rls_forced ORDER BY id;
+----
+1  public  Public doc 1
+3  public  Public doc 2
+
+statement ok
+CREATE MATERIALIZED VIEW mv_forced_view AS SELECT * FROM rls_forced;
+
+query ITT
+SELECT * FROM mv_forced_view ORDER BY id;
+----
+1  public  Public doc 1
+3  public  Public doc 2
+
+statement ok
+RESET ROLE;
+
+# Grant MAINTAIN to helper so they can refresh.
+statement ok
+GRANT MAINTAIN ON mv_forced_view TO mv_forcehelper;
+
+statement ok
+SET ROLE mv_forcehelper;
+
+statement ok
+REFRESH MATERIALIZED VIEW mv_forced_view;
+
+statement ok
+RESET ROLE;
+
+# MV has only public rows because FORCE RLS applies to the owner
+# through definer semantics.
+query ITT
+SELECT * FROM mv_forced_view ORDER BY id;
+----
+1  public  Public doc 1
+3  public  Public doc 2
+
+# Cleanup.
+statement ok
+DROP MATERIALIZED VIEW mv_forced_view;
+
+statement ok
+DROP TABLE rls_forced;
+
+statement ok
+REVOKE CREATE ON SCHEMA public FROM mv_forcedowner;
+
+statement ok
+DROP ROLE mv_forcedowner, mv_forcehelper;
+
 subtest show_policies_edge_cases
 
 statement error pq: relation "nonexistent_table" does not exist
