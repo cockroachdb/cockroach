@@ -5,12 +5,13 @@
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Row, Col, Tabs } from "antd";
 import classNames from "classnames/bind";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import Helmet from "react-helmet";
 import { RouteComponentProps } from "react-router-dom";
 
 import { getExplainPlanFromGist } from "src/api/decodePlanGistApi";
 import { useStmtInsightDetails } from "src/api/stmtInsightsApi";
+import { useUserSQLRoles } from "src/api/userApi";
 import { Button } from "src/button";
 import { commonStyles } from "src/common";
 import insightsDetailsStyles from "src/insights/workloadInsightDetails/insightsDetails.module.scss";
@@ -32,12 +33,10 @@ enum TabKeysEnum {
 }
 export interface StatementInsightDetailsStateProps {
   timeScale?: TimeScale;
-  hasAdminRole: boolean;
 }
 
 export interface StatementInsightDetailsDispatchProps {
   setTimeScale: (ts: TimeScale) => void;
-  refreshUserSQLRoles: () => void;
 }
 
 export type StatementInsightDetailsProps = StatementInsightDetailsStateProps &
@@ -52,7 +51,7 @@ type ExplainPlanState = {
 
 export const StatementInsightDetails: React.FC<
   StatementInsightDetailsProps
-> = ({ history, match, timeScale, hasAdminRole, refreshUserSQLRoles }) => {
+> = ({ history, match, timeScale }) => {
   const [explainPlanState, setExplainPlanState] = useState<ExplainPlanState>({
     explainPlan: null,
     loaded: false,
@@ -62,14 +61,12 @@ export const StatementInsightDetails: React.FC<
   const executionID = getMatchParamByName(match, idAttr);
   const { data: stmtInsightsResp, error: stmtInsightsErr } =
     useStmtInsightDetails(executionID, timeScale);
+  const { data: userRoles } = useUserSQLRoles();
+  const hasAdminRole = userRoles?.roles?.includes("ADMIN") ?? false;
 
   const details = stmtInsightsResp?.results.length
     ? stmtInsightsResp.results[0]
     : null;
-
-  useEffect(() => {
-    refreshUserSQLRoles();
-  }, [refreshUserSQLRoles]);
 
   const prevPage = (): void => history.goBack();
 
